@@ -1,0 +1,302 @@
+[sources]
+enabled = ["alpaca", "reddit", "seeking_alpha", "sec"]
+
+[universe]
+asset_class = "us_equity"
+status = "active"
+exchanges = ["NYSE", "NASDAQ", "AMEX"]
+tradable_only = true
+price_min = 5.0
+avg_dollar_volume_min = 10000000
+
+[reddit]
+subreddits = ["stocks", "investing", "SecurityAnalysis", "wallstreetbets"]
+limit_per_subreddit = 50
+search_time_filter = "year"
+include_post_comments = true
+comments_per_post = 25
+ticker_false_positive_stoplist = ["A", "AI", "ALL", "ARE", "AT", "BE", "BY", "CAN", "FOR", "GO", "HAS", "HE", "IN", "IT", "NOW", "ON", "OR", "SO", "TO"]
+
+[seeking_alpha]
+rapidapi_host = "seeking-alpha.p.rapidapi.com"
+monthly_request_limit = 10000
+usage_file = "data/usage/rapidapi_usage.json"
+cache_dir = "data/cache/seeking_alpha"
+fail_when_monthly_limit_reached = true
+access_token_endpoint = "/accounts/get-access-token"
+access_token_cache_hours = 12
+
+[[seeking_alpha.event_feeds]]
+name = "analysis"
+endpoint = "/analysis/v2/list"
+params = "id={ticker_lower}&size=40&number=1"
+cache_hours = 24
+limit = 40
+
+[[seeking_alpha.event_feeds]]
+name = "news_by_symbol"
+endpoint = "/news/v2/list-by-symbol"
+params = "id={ticker_lower}&size=20&number=1"
+cache_hours = 24
+limit = 20
+
+[[seeking_alpha.event_feeds]]
+name = "press_releases"
+endpoint = "/press-releases/v2/list"
+params = "id={ticker_lower}&size=20&number=1"
+cache_hours = 24
+limit = 20
+
+[[seeking_alpha.event_feeds]]
+name = "news_trending"
+endpoint = "/news/v2/list-trending"
+params = "size=20"
+cache_hours = 1
+limit = 20
+market_context = true
+
+[[seeking_alpha.event_feeds]]
+name = "articles_trending"
+endpoint = "/articles/v2/list-trending"
+params = "size=20"
+cache_hours = 1
+limit = 20
+market_context = true
+
+[[seeking_alpha.event_feeds]]
+name = "articles_latest"
+endpoint = "/articles/v2/list"
+params = "size=20&number=1&category=latest-article"
+cache_hours = 1
+limit = 20
+market_context = true
+
+[[seeking_alpha.event_feeds]]
+name = "wall_street_breakfast"
+endpoint = "/articles/list-wall-street-breakfast"
+params = ""
+cache_hours = 6
+limit = 20
+market_context = true
+
+[[seeking_alpha.event_feeds]]
+name = "market_news"
+endpoint = "/news/v2/list"
+params = "size=20&category=market-news::all&number=1"
+cache_hours = 1
+limit = 20
+market_context = true
+
+[[seeking_alpha.snapshot_feeds]]
+name = "metadata"
+endpoint = "/symbols/get-meta-data"
+params = "symbol={ticker}"
+cache_hours = 24
+
+[[seeking_alpha.snapshot_feeds]]
+name = "symbol_data"
+endpoint = "/symbols/get-data"
+params = "symbol={ticker}"
+cache_hours = 24
+
+[[seeking_alpha.snapshot_feeds]]
+name = "profile"
+endpoint = "/symbols/get-profile"
+params = "symbols={ticker_lower}"
+cache_hours = 24
+
+[[seeking_alpha.snapshot_feeds]]
+name = "ratings"
+endpoint = "/symbols/get-ratings"
+params = "symbol={ticker}"
+cache_hours = 24
+
+[[seeking_alpha.snapshot_feeds]]
+name = "earnings"
+endpoint = "/symbols/get-earnings"
+params = "symbol={ticker}"
+cache_hours = 24
+
+[[seeking_alpha.snapshot_feeds]]
+name = "earnings_quarterly"
+endpoint = "/symbols/get-earnings"
+params = "ticker_ids={ticker_id}&period_type=quarterly&relative_periods=-3,-2,-1,0,1,2,3&estimates_data_items=eps_gaap_actual,eps_gaap_consensus_mean,eps_normalized_actual,eps_normalized_consensus_mean,revenue_actual,revenue_consensus_mean&revisions_data_items=eps_normalized_actual,eps_normalized_consensus_mean,revenue_consensus_mean"
+cache_hours = 24
+requires = ["ticker_id"]
+
+[[seeking_alpha.snapshot_feeds]]
+name = "estimated_earnings"
+endpoint = "/symbols/get-estimated-earning-announces"
+params = "symbol={ticker}"
+cache_hours = 24
+
+[[seeking_alpha.snapshot_feeds]]
+name = "financials_income_annual"
+endpoint = "/symbols/get-financials"
+params = "symbol={ticker}&target_currency=USD&period_type=annual&statement_type=income-statement"
+cache_hours = 24
+
+[[seeking_alpha.snapshot_feeds]]
+name = "analyst_recommendations"
+endpoint = "/symbols/get-analyst-recommendations"
+params = "ticker_ids={ticker_id}&return_window=3&group_by_month=true"
+cache_hours = 24
+requires = ["ticker_id"]
+
+[[seeking_alpha.snapshot_feeds]]
+name = "analyst_price_target"
+endpoint = "/symbols/get-analyst-price-target"
+params = "ticker_ids={ticker_id}&return_window=1&group_by_month=false"
+cache_hours = 24
+requires = ["ticker_id"]
+
+[[seeking_alpha.snapshot_feeds]]
+name = "chart_total_revenue"
+endpoint = "/symbols/v2/get-chart"
+params = "symbols={ticker_lower}&start=2021-06-25&end=2022-07-01&metrics=total_revenue"
+cache_hours = 24
+
+[[seeking_alpha.snapshot_feeds]]
+name = "sa_sec_filings"
+endpoint = "/symbols/get-sec-filings"
+params = "symbol={ticker_lower}&filing_category=all&number=1&size=20"
+cache_hours = 24
+
+[[seeking_alpha.snapshot_feeds]]
+name = "sector_metrics"
+endpoint = "/symbols/get-sector-metrics"
+params = "symbol={ticker_lower}&fields=gross_margin,ebit_margin,ebitda_margin,net_margin,levered_fcf_margin,rtn_on_common_equity,return_on_total_capital,return_on_avg_tot_assets,capex_to_sales,assets_turnover,cash_from_operations_as_reported,net_inc_per_employee"
+cache_hours = 24
+
+[[seeking_alpha.snapshot_feeds]]
+name = "metric_grades"
+endpoint = "/symbols/get-metric-grades"
+params = "symbol={ticker_lower}&fields=gross_margin,ebit_margin,ebitda_margin,net_margin,levered_fcf_margin,rtn_on_common_equity,return_on_total_capital,return_on_avg_tot_assets,capex_to_sales,assets_turnover,cash_from_operations_as_reported,net_inc_per_employee&algos=main_quant,dividends"
+cache_hours = 24
+
+[[seeking_alpha.snapshot_feeds]]
+name = "historical_prices_week"
+endpoint = "/symbols/get-historical-prices"
+params = "symbol={ticker_lower}&show_by=week&sort=as_of_date"
+cache_hours = 24
+
+[model]
+default_horizon_days = 1
+next_week_horizon_days = 5
+
+[performance]
+max_workers = 6
+finbert_batch_size = 32
+torch_num_threads = 0
+
+[swing_universe]
+seed_tickers = ["RGTI", "POET", "NVTS", "MXL", "RDW", "LASE", "MRVL"]
+candidates = [
+  "SPY", "QQQ", "XLK", "SMH", "XBI", "IBB",
+  "XAR", "ITA", "ARKF", "BITO", "IWM", "ARKK",
+  "DIA", "RSP", "TLT", "HYG", "LQD", "UUP",
+  "GLD", "USO", "KWEB",
+  "AAPL", "MSFT", "AMZN", "GOOGL", "META", "NFLX",
+  "ORCL", "CRM", "NOW", "ADBE",
+  "BABA",
+  "NVDA", "AMD", "AVGO", "MRVL", "INTC", "MU",
+  "QCOM", "SMCI", "CRDO", "ALAB", "ANET", "VRT",
+  "DELL", "HPE", "CLS", "SMTC", "ON", "TXN",
+  "MCHP", "MPWR", "KLAC", "LRCX", "AMAT", "TER",
+  "SNPS", "CDNS", "LSCC", "AMKR", "AEHR", "AMBA",
+  "FORM", "COHR", "KEYS", "MXL", "NVTS", "INDI",
+  "WOLF", "ENVX", "SKYT", "ASML", "TSM",
+  "RGTI", "IONQ", "QBTS", "QUBT", "ARQQ", "RDW",
+  "LUNR", "RKLB", "ASTS", "ACHR", "JOBY", "IRDM",
+  "GSAT", "SPCE", "OUST", "KTOS", "AVAV", "LMT",
+  "NOC", "RTX", "BA", "VSAT", "SATS", "SERV",
+  "SYM", "FJET",
+  "BDTX", "CRSP", "EDIT", "NTLA", "BEAM", "RXRX",
+  "DNA", "SANA", "IBRX", "VKTX", "TERN", "ALT",
+  "MDGL", "CYTK", "BBIO", "SRPT", "ARWR", "RNA",
+  "TGTX", "IOVA", "KURA", "IMNM", "APLS", "ACAD",
+  "FOLD", "PTCT", "RCKT", "AXSM", "KRYS", "DNLI",
+  "HALO", "CPRX", "CYCN", "TARS", "JANX", "CRNX",
+  "MSTR", "COIN", "MARA", "RIOT", "CLSK", "CIFR",
+  "WULF", "CORZ", "HOOD", "SOFI", "AFRM", "UPST",
+  "APP",
+  "GME", "AMC", "PLUG", "CVNA", "RIVN", "LCID",
+  "NIO",
+  "OPEN", "CHPT", "BLNK", "QS", "LASE", "ONDS",
+  "BMNR", "PPCB", "RKDA", "WTO", "MTEN", "ELAB",
+  "ADIL", "QH", "MNTS", "AMPG", "INHD", "SUNE",
+  "AZI", "ASTC", "DSY", "VSME", "STI", "HUBC",
+  "MASK", "ATER", "IMPP", "APLD", "BBAI", "SOUN",
+  "PL", "SATL", "QMCO"
+]
+
+[market_benchmarks]
+market = "SPY"
+
+[sector_benchmarks]
+mega_cap_tech = "QQQ"
+ai_semis_infra = "SMH"
+space_quantum_defense = "XAR"
+biotech_catalyst = "XBI"
+crypto_fintech = "ARKF"
+smallcap_momentum = "IWM"
+
+[sector_tickers]
+mega_cap_tech = [
+  "AAPL", "MSFT", "AMZN", "GOOGL", "META", "NFLX",
+  "ORCL", "CRM", "NOW", "ADBE", "BABA", "QQQ", "XLK", "KWEB"
+]
+ai_semis_infra = [
+  "NVDA", "AMD", "AVGO", "MRVL", "INTC", "MU",
+  "QCOM", "SMCI", "CRDO", "ALAB", "ANET", "VRT",
+  "DELL", "HPE", "CLS", "SMTC", "ON", "TXN",
+  "MCHP", "MPWR", "KLAC", "LRCX", "AMAT", "TER",
+  "SNPS", "CDNS", "LSCC", "AMKR", "AEHR", "AMBA",
+  "FORM", "COHR", "KEYS", "MXL", "NVTS", "INDI",
+  "WOLF", "ENVX", "SKYT", "ASML", "TSM", "SMH"
+]
+space_quantum_defense = [
+  "RGTI", "IONQ", "QBTS", "QUBT", "ARQQ", "RDW",
+  "LUNR", "RKLB", "ASTS", "ACHR", "JOBY", "IRDM",
+  "GSAT", "SPCE", "OUST", "KTOS", "AVAV", "LMT",
+  "NOC", "RTX", "BA", "VSAT", "SATS", "SERV",
+  "SYM", "FJET", "XAR", "ITA"
+]
+biotech_catalyst = [
+  "BDTX", "CRSP", "EDIT", "NTLA", "BEAM", "RXRX",
+  "DNA", "SANA", "IBRX", "VKTX", "TERN", "ALT",
+  "MDGL", "CYTK", "BBIO", "SRPT", "ARWR", "RNA",
+  "TGTX", "IOVA", "KURA", "IMNM", "APLS", "ACAD",
+  "FOLD", "PTCT", "RCKT", "AXSM", "KRYS", "DNLI",
+  "HALO", "CPRX", "CYCN", "TARS", "JANX", "CRNX",
+  "XBI", "IBB"
+]
+crypto_fintech = [
+  "MSTR", "COIN", "MARA", "RIOT", "CLSK", "CIFR",
+  "WULF", "CORZ", "HOOD", "SOFI", "AFRM", "UPST",
+  "APP", "ARKF", "BITO"
+]
+smallcap_momentum = [
+  "GME", "AMC", "PLUG", "CVNA", "RIVN", "LCID",
+  "NIO", "OPEN", "CHPT", "BLNK", "QS", "LASE", "ONDS",
+  "BMNR", "PPCB", "RKDA", "WTO", "MTEN", "ELAB",
+  "ADIL", "QH", "MNTS", "AMPG", "INHD", "SUNE",
+  "AZI", "ASTC", "DSY", "VSME", "STI", "HUBC",
+  "MASK", "ATER", "IMPP", "APLD", "BBAI", "SOUN",
+  "PL", "SATL", "QMCO", "IWM", "ARKK"
+]
+
+[watch_score_weights]
+sentiment_mean = 1.2
+reddit_sentiment_mean = 1.0
+news_count = 0.25
+reddit_count = 0.25
+reddit_score_sum = 0.002
+reddit_comments_sum = 0.003
+positive_volume_z20 = 0.35
+return_1d = 0.75
+return_5d_past = 0.5
+quant_rating_above_neutral = 0.6
+momentum_above_neutral = 0.4
+eps_revision_above_neutral = 0.35
+positive_eps_surprise = 0.2

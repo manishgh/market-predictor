@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "RapidAPI Hub - Seeking Alpha": {
+      "command": "npx",
+      "args": [
+        "mcp-remote",
+        "https://mcp.rapidapi.com",
+        "--header",
+        "x-api-host: seeking-alpha.p.rapidapi.com",
+        "--header",
+        "x-api-key: ${RAPIDAPI_KEY}"
+      ]
+    }
+  }
+}
