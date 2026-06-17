@@ -11,6 +11,12 @@ Python starter project for ticker-level market prediction using:
 
 This is research tooling, not investment advice and not an automated trading system.
 
+## Architecture Documents
+
+- [Implementation guide](docs/implementation_guide.md)
+- [Azure deployment plan](docs/azure_deployment_plan.md)
+- [Catalyst-confirmation swing architecture](docs/catalyst_confirmation_architecture.md)
+
 ## Source Strategy
 
 Primary:
