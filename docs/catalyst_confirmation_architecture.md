@@ -1,54 +1,131 @@
-# Catalyst-Confirmation Swing System: Architecture and State Management
+# Swing Prediction Intelligence Architecture
 
-This document specifies how the system sources data, manages the tradable universe, warms up indicator state, and distributes work across machines.
+This document defines the operational design for `market-predictor` as a prediction intelligence system.
+
+The system produces swing and daily momentum predictions from catalysts, news, filings, sentiment, market context, and price behavior. It does not own final trade execution, portfolio state, order routing, position sizing, stops, or exits.
 
 Scope:
 
-- US-listed equities
-- Mid/small-cap focus
-- Long-only swing trading
-- Operational architecture only
-- No entry, exit, or sizing rules
+- US-listed equities and ETFs
+- Mid/small-cap swing and momentum prediction, with large-cap/ETF context
+- Long-side prediction signals and watchlist ranking
+- Historical and recent catalyst analysis
+- Model training, validation, promotion, and audit reporting
 
-This is the operational counterpart to the strategy logic specification.
+Out of scope:
 
-## 1. Design Principles
+- Broker order execution
+- Live portfolio/risk state
+- Final trade sizing
+- Stop/target management
+- Backtesting engine ownership
+- Production websocket ownership when `trading_flow` is the live market-data runtime
 
-### Warm-Up Is Backfill, Not Waiting
+## 1. System Responsibility
 
-Indicator state for a newly added ticker must be reconstructed from historical bars through REST backfill.
+`market-predictor` answers:
 
-The live stream must never be used to slowly accumulate initial state. Waiting for live bars loses the early part of a move and defeats the purpose of catalyst-confirmation scanning.
+- Which tickers have relevant catalysts?
+- How did similar catalyst plus price setups behave historically?
+- Is current data complete enough to trust a prediction?
+- What is the next-day or next-swing probability?
+- Which names deserve watchlist attention?
+- What data, model, and source evidence produced the score?
 
-### One Data Connection
+The output is prediction intelligence, not an order instruction.
 
-The market-data provider permits one concurrent websocket connection per account. The architecture must fan data out internally from one ingestion point. It must not open parallel provider websocket connections to scale.
+## 2. Boundary With trading_flow
 
-### Distribute By Function, Not By Splitting Symbols
+`trading_flow` is the execution, backtesting, and portfolio runtime.
 
-Scanning is computationally light. Machines are added for redundancy and separation of concerns, not because symbol scanning needs horizontal partitioning.
+`market-predictor` owns:
 
-Splitting the symbol set across nodes is a last resort reserved for provider connection-capacity exhaustion, and only through strict disjoint shards.
+- Alpaca/Seeking Alpha/SEC/Reddit/Finviz data collection for ML and prediction
+- Historical candles and event datasets for model features
+- Feature engineering
+- FinBERT sentiment scoring
+- Model training and validation
+- Prediction reports
+- Model artifact publishing
+- Data-readiness and audit reports
 
-### Separate Daily And Intraday State
+`trading_flow` owns:
 
-Slow trend and regime gates live on the daily timeframe. Entry timing lives on the intraday timeframe.
+- Strategy orchestration
+- Backtesting
+- Position state
+- Portfolio risk
+- Entry and exit rules
+- Stop/target logic
+- Broker order lifecycle
+- Trade logs and PnL
+- Production live market-data stream if that is already centralized there
 
-These require separate state stores and separate warm-up depths because their lookback requirements differ by roughly two orders of magnitude.
+Integration contract:
 
-## 2. Universe Management
+- `market-predictor` publishes prediction reports or a prediction API response.
+- `trading_flow` consumes those predictions and decides whether, when, and how to trade.
+- Both systems must not independently open production market-data streams for the same account unless provider limits and symbol ownership are explicitly managed.
 
-The universe is maintained at two levels: a broad superset and a narrow active set.
+## 3. Prediction Output Contract
+
+Every prediction output should include enough metadata to audit the score later.
+
+Required fields:
+
+| Field | Meaning |
+| --- | --- |
+| `ticker` | Symbol being scored |
+| `as_of` | Timestamp or date the prediction was generated |
+| `horizon` | Prediction horizon, for example `1d`, `5d`, or `10d` |
+| `signal` | Human-readable direction bucket such as `bullish`, `lean_bullish`, `neutral`, `lean_bearish`, `bearish`, or `no_signal` |
+| `probability_up` | Model probability for upward movement over the horizon |
+| `confidence` | Confidence bucket derived from probability spread, model agreement, data quality, and catalyst strength |
+| `data_readiness_status` | `valid`, `warn`, or `invalid` |
+| `data_readiness_reasons` | List of failed or warning gates |
+| `model_name` | Model artifact or registry name |
+| `model_version` | Version, date, commit, or artifact identifier |
+| `feature_schema_version` | Feature schema used for scoring |
+| `daily_bar_count` | Number of daily bars available for slow technical state |
+| `intraday_bar_count` | Number of intraday bars available if intraday features are used |
+| `latest_price_date` | Latest candle date used |
+| `recent_event_count` | Number of recent catalyst/news/filing/social events used |
+| `source_families` | Sources present, such as `alpaca`, `seeking_alpha`, `sec`, `reddit` |
+| `top_catalysts` | Short list of the most important recent catalysts |
+| `sector` | Configured or inferred sector bucket |
+| `sector_benchmark` | Sector ETF or benchmark used |
+| `market_benchmark` | Broad benchmark, normally `SPY` |
+| `audit_id` | Identifier linking prediction to data/model audit artifacts |
+
+Optional fields:
+
+- `probability_down`
+- `expected_move_bucket`
+- `daily_model_probability_up`
+- `event_model_probability_up`
+- `heuristic_watch_score`
+- `market_cap`
+- `market_cap_bucket`
+- `average_recent_sentiment`
+- `volume_z_score`
+- `relative_strength_vs_spy`
+- `relative_strength_vs_sector`
+- `news_candle_alignment_status`
+
+## 4. Universe Management
+
+The system maintains two universe layers for prediction readiness.
 
 ### Superset
 
-The superset is the full pool of names that could plausibly qualify for trading.
+The superset is the broad pool of tickers that could plausibly become prediction candidates.
 
-Target size:
+Target:
 
-- Approximately 1,500-2,000 symbols
-- US-listed mid/small caps
-- Basic listing, liquidity, and tradability filters
+- Approximately 1,500-2,000 US-listed symbols
+- Mid/small-cap focus
+- Basic liquidity, listing, and tradability filters
+- ETFs and large-cap names may be included as benchmarks and market context
 
 Refresh cadence:
 
@@ -56,319 +133,256 @@ Refresh cadence:
 
 Purpose:
 
-- Maintain daily-timeframe state in advance
-- Ensure any ticker surfaced intraday is already warm on slow gates
+- Keep daily technical state ready for potential candidates
+- Support audit visibility across sectors and market-cap buckets
 
-### Active Set
+### Active Candidate Set
 
-The active set contains names eligible to trade today.
+The active candidate set is the narrower list scored for current prediction.
 
-Source:
+Sources:
 
-- Finviz Elite screen
-- Quality, trend, liquidity, and relative-volume filters
+- Finviz Elite screens
+- User-provided watchlists
+- Alpaca active/tradable universe filters
+- Catalyst-driven candidates
+- Sector or theme lists
 
-Target size:
+Typical size:
 
-- Approximately 100 names
+- Around 100 names for daily operation
+- Larger batches are acceptable for offline prediction and training
 
-Refresh cadence:
+The active candidate set should usually be a subset of the superset. If it is not, the miss should be logged and the ticker should receive a backfill/audit status before predictions are trusted.
 
-- Pre-open
-- Intraday intervals
+## 5. Data Sources
 
-The active set must always be a subset of the superset. If a screened ticker is not present in the superset, treat it as a superset miss, backfill it, and log the miss.
+Primary sources:
 
-### Rationale
+- Alpaca premium news and market bars
+- Seeking Alpha via RapidAPI for SA news, analysis, ratings/quant-like snapshots, earnings, and symbol data
+- SEC EDGAR filings and company facts
+- Reddit API for community attention and chatter where credentials are configured
+- Finviz Elite for candidate discovery and screening
 
-Maintaining daily state for the full superset is cheap because it requires one bar per symbol per day. That makes every screened ticker daily-warm.
+Market context sources:
 
-The expensive on-demand work, intraday backfill, is limited to the active set only.
+- SPY
+- QQQ
+- Sector ETFs
+- Theme ETFs when relevant
+- Broad market/global news feeds
 
-## 3. Data Source And Tier Requirements
+Feed-quality requirement:
 
-### Real-Time Stream
+- Volume-sensitive features should only be trusted when feed coverage is known.
+- SIP/full consolidated coverage is required for production-grade volume features.
+- IEX-only or unknown partial-feed volume should set readiness to `warn` or `invalid` for volume-heavy predictions.
 
-Use a single websocket subscription carrying the active set.
+## 6. Warm-Up And Feature Readiness
 
-The provider connection limit is hard. The system must respect it absolutely.
+Warm-up is a backfill problem, not a waiting problem.
 
-### Feed Tier
+The system should reconstruct indicator state from historical bars. It should not wait for live bars to slowly accumulate enough history before making a prediction.
 
-Full consolidated SIP coverage is required.
+### Daily Warm-Up
 
-IEX-only or single-exchange feeds are insufficient because relative-volume and breakout logic depend on total market volume. A partial feed understates volume and corrupts volume-based filters.
+Daily features support swing trend, regime, relative strength, volatility, and context.
 
-Required tier:
+Minimum:
 
-- Algo Trader Plus, or equivalent full-coverage tier
-- Equivalent access through an Elite-balance waiver is acceptable if it provides full SIP coverage
-
-### Historical REST Endpoint
-
-REST historical bars are used for all warm-up backfill.
-
-The endpoint should support multi-symbol requests so active-set backfill can be done in a small number of batched calls.
-
-Action item:
-
-- Confirm the selected data tier provides at least the daily warm-up depth required in section 4.
-
-## 4. Warm-Up Depth
-
-Warm-up length equals the longest-lookback indicator on the timeframe, plus stabilization margin for recursive indicators such as EMA, RSI, MACD, and ATR.
-
-Use 3-5x the relevant recursive period as a practical convergence margin.
-
-### Daily Timeframe
-
-Used for:
-
-- Trend gates
-- Regime gates
-- SMA50
-- SMA200
-- 200-day slope
-
-Requirements:
-
-- SMA200 needs 200 daily bars before a value exists.
-- The 200-day slope check compares current SMA200 to approximately 20 bars prior.
-- Required warm-up depth is at least 250 daily bars, approximately one full trading year.
-
-Correction:
-
-- Six months, approximately 126 trading days, is insufficient.
-- Any daily-gate warm-up using only six months of history is a defect because SMA200 is undefined or biased.
-
-### Intraday Timeframe
-
-Used for:
-
-- Entry timing
-- EMA10
-- EMA20
-- MACD 12/26/9
-- RSI14
-- ATR14
-
-Requirements:
-
-- MACD's longest base period is 26 bars.
-- Stable MACD signal/histogram state needs roughly 5x that depth.
-- Required warm-up depth is approximately 130 intraday bars.
-
-At a five-minute bar size, this is a few trading days.
-
-### Rule
-
-Never apply the daily depth to intraday state or the intraday depth to daily state. They are independent.
-
-## 5. State Stores
-
-### Daily Superset Store
-
-Persistent rolling store of daily bars for every superset symbol.
-
-Retention:
-
-- At least 250 daily bars
-- Prefer a margin beyond 250 for safety
-
-Update cadence:
-
-- Once after each session close
-- Append the new daily bar
-- Drop bars beyond the retention window
-
-Purpose:
-
-- Daily indicators are instantly available for any superset name.
-- Intraday discovery does not create a daily warm-up delay.
-
-### Intraday Active Store
-
-In-memory indicator state for the active set only.
-
-Creation:
-
-- Built through REST backfill when a ticker enters the active set
-- Maintained by live stream after subscription
-
-Persistence:
-
-- Not persisted for the full universe
-- Reconstructed on demand
+- `daily_bar_count >= 250`
 
 Reason:
 
-- Storing intraday bars for thousands of names is wasteful.
-- REST backfill is fast enough for active-set activation.
+- SMA200 requires 200 daily bars before it exists.
+- A 200-day slope check needs additional prior bars.
+- Six months of daily bars is insufficient for daily gates using SMA200 or 200-day slope.
 
-### Cache / Blob Layer
+### Intraday Warm-Up
 
-Use a cache or blob/database layer to avoid redundant history fetches when a ticker leaves and later re-enters the active set.
+Intraday features are optional for this repo. They are useful when the prediction includes same-day momentum confirmation, premarket movement, or intraday reaction behavior.
 
-Rules:
+Minimum:
 
-- Cache is an optimization, not the source of truth.
-- Entries have a deployment-defined TTL.
-- Re-validate stale entries against REST.
-- Scope the cache to recently active names, not the entire superset.
+- `intraday_bar_count >= configured_intraday_warmup`
+- Default recommendation: approximately 130 bars for MACD 12/26/9 stabilization.
 
-## 6. Ticker Lifecycle
+If intraday features are not part of a model, intraday warm-up should not block daily-only prediction.
 
-### 1. Superset Membership
+## 7. Data-Readiness Gates
 
-The symbol qualifies for the superset.
+Prediction quality depends on data validity. The model should not hide bad input behind a probability.
 
-Daily state is maintained continuously through the post-close daily update. The symbol is daily-warm before it ever appears in the active set.
+Required gates:
 
-### 2. Activation
+| Gate | Required condition | Failure behavior |
+| --- | --- | --- |
+| Daily bars | `daily_bar_count >= 250` when daily technical features are used | `invalid` |
+| Intraday bars | `intraday_bar_count >= configured_intraday_warmup` when intraday features are used | `invalid` or `warn`, depending on model |
+| News/candle alignment | Event timestamps map to actual ticker trading dates/candles | `invalid` |
+| Cache freshness | Cached bars/events are inside configured TTL or revalidated | `invalid` |
+| Feed type | Feed type is known for volume-sensitive features | `warn` if unknown, `invalid` if known partial and feature requires SIP |
+| Event relevance | Recent news must be ticker-relevant or explicitly market/sector-context tagged | `warn` or exclude event |
+| Source coverage | At least one valid recent source for catalyst-dependent predictions | `no_signal` |
+| Model/schema match | Feature schema matches model expectation | `invalid` |
 
-Finviz says `ADD`.
+Output must include `data_readiness_status` and `data_readiness_reasons`.
 
-The symbol enters the active set.
+## 8. News And Candle Alignment
 
-### 3. Intraday Backfill
-
-A batched REST call pulls the few days of intraday bars needed.
-
-Intraday indicators are computed immediately. Daily indicators are already present from superset state.
-
-### 4. Subscription
-
-The symbol is added to the single live websocket subscription.
-
-The stream continues from the backfill endpoint without waiting for warm-up.
-
-### 5. Maintenance
-
-Incoming bars or ticks update state incrementally.
-
-Gates and entry conditions are evaluated continuously.
-
-### 6. Deactivation
-
-Finviz says `DROP`.
-
-The symbol is unsubscribed from the stream. Intraday state is released, and a snapshot is written to cache for possible fast reactivation.
-
-Daily state persists as long as the symbol remains in the superset.
-
-### Outcome
-
-Between activation and subscription, the symbol becomes fully warm in milliseconds. No multi-day waiting is allowed.
-
-## 7. Distribution And Redundancy
-
-### Ingestion Node
-
-Exactly one active ingestion node holds the provider websocket and live state.
-
-Responsibilities:
-
-- Maintain provider connection
-- Normalize ticks/bars
-- Maintain live state
-- Re-broadcast internal events to downstream services
-
-### Functional Services
-
-Scanning, catalyst matching, execution, reporting, and logging run as separate services.
-
-They may live on separate machines, but they consume the internal broadcast. They must not open provider websocket connections.
-
-### Redundancy
-
-A hot-standby ingestion node is the highest-value redundancy.
+Event timing must map to the next valid trading candle for that ticker.
 
 Rules:
 
-- The standby must be able to assume the one permitted connection on failover.
-- Primary and standby must never connect simultaneously with the same provider account.
+- Pre-market events map to the current trading date if the market has not opened.
+- Intraday events map to the current trading date.
+- After-hours events map to the next actual trading date.
+- Weekend and holiday events map to the next actual trading date.
+- Events with no matching historical candle inside the scoring window are excluded or marked invalid.
 
-### Symbol Sharding
+Audit checks:
 
-Symbol sharding is a last resort.
+- No historical event should have a missing feature row after alignment.
+- News counts by ticker/date should match between event input and generated features.
+- Prediction reports should expose alignment status when available.
 
-Only implement it if the active universe exceeds what one provider connection can carry.
+## 9. Model Registry
 
-Rules:
+Model artifacts must be classified by lifecycle state.
 
-- Use multiple provider accounts/keys.
-- Each account owns a disjoint symbol set.
-- No symbol overlap is allowed.
-- Enforce a global dedup key on `(symbol, signal, time_bucket)`.
+### Baseline Models
 
-For the expected active set of approximately 100 names, sharding is not required and should not be implemented preemptively.
+Stable reference models used for comparison.
 
-## 8. Operational Hazards
+Examples:
 
-### Daily Under-Warm-Up
+- Last known clean daily model
+- Last known clean event model
+- Simple heuristic baseline
 
-Feeding SMA200 or slope checks from fewer than 250 daily bars yields wrong or null gates.
+Baseline models are not necessarily the live promoted models. They provide a floor for validation.
 
-Validation:
+### Candidate Models
 
-- Check daily bar count before allowing a symbol to pass any daily gate.
+Newly trained models not yet trusted for default prediction.
 
-### Partial-Feed Volume Error
+Candidate models must include:
 
-IEX-only feeds understate volume.
+- Training dataset path or artifact ID
+- Training date
+- Feature schema version
+- Target definition
+- Validation metrics
+- Known limitations
+- Whether post-event reaction features are included
 
-Validation:
+### Promoted Models
 
-- Verify full SIP feed at startup.
+Models approved for default prediction use.
 
-### Connection Contention
+Promotion requires:
 
-Two processes attempting the provider websocket creates authentication errors and data gaps.
+- Validation meets or beats baseline gates
+- No data-readiness audit failures
+- Feature schema is compatible with prediction pipeline
+- No leakage flags
+- Human-readable model registry entry
 
-Validation:
+### Deprecated Models
 
-- Enforce single-writer connection ownership.
+Models retained only for comparison or historical reproducibility.
 
-### Duplicate Signals
+Deprecated models should not be used by default prediction commands.
 
-A symbol observed by more than one node can produce double alerts.
+Common reasons:
 
-Validation:
+- Superseded feature schema
+- Known leakage risk
+- Old data alignment logic
+- Reaction features included where pre-trade prediction is required
+- Narrow experimental dataset
 
-- Maintain strict disjoint ownership if sharding is ever used.
-- Apply global deduplication on `(symbol, signal, time_bucket)`.
+## 10. Current Model Families
 
-### Cache Staleness
+The repo currently contains several useful families. Their intended roles should be documented in the model registry.
 
-Stale cached backfill can start a symbol with outdated bars.
+| Family | Intended use | Status guidance |
+| --- | --- | --- |
+| Daily market-context models | Daily 1D/5D direction from price, news, sentiment, sector, and SPY context | Baseline or promoted if validation gates pass |
+| Event market-context pre-reaction models | Event-level 1D/5D probability using catalyst features before future reaction is known | Baseline or promoted |
+| Calendar-safe plus-Finviz candidate models | Broader training set with corrected event-to-candle alignment | Candidate until promoted |
+| Reaction-feature event models | Analysis after some reaction has already occurred | Not clean for pre-trade prediction |
+| Finviz-only expansion models | Research models trained on candidate expansion set | Candidate/research only |
+| Older clean/sector/swing models | Earlier iterations | Deprecated unless explicitly revalidated |
 
-Validation:
+## 11. Audit Report Specification
 
-- Enforce TTL.
-- Re-validate on reactivation.
+The system should generate an audit report before model training, promotion, or production prediction review.
 
-### Backfill / Stream Boundary
+Required fields:
 
-The first live bar must continue cleanly from the last backfilled bar.
+| Field | Meaning |
+| --- | --- |
+| `ticker` | Symbol audited |
+| `raw_source_directory` | Raw event source directory used |
+| `first_news_date` | Earliest event timestamp/date |
+| `last_news_date` | Latest event timestamp/date |
+| `months_covered` | Approximate event coverage window |
+| `event_count` | Raw/sanitized event count |
+| `source_families` | Source families represented |
+| `feature_rows_1d` | Daily feature rows available for 1D model |
+| `feature_rows_5d` | Daily feature rows available for 5D model |
+| `event_feature_rows` | Event-level feature rows available |
+| `daily_bar_count` | Available daily bars |
+| `intraday_bar_count` | Available intraday bars if applicable |
+| `news_candle_alignment_status` | Alignment result |
+| `missing_historical_feature_rows` | Count of expected event dates missing from feature set |
+| `dates_with_news_count_mismatch` | Count of ticker/date news-count mismatches |
+| `feed_type` | SIP/IEX/unknown |
+| `cache_status` | Fresh/stale/not_used |
+| `model_eligibility` | Eligible/ineligible/warn |
+| `eligibility_reasons` | Explanation for ineligible or warning status |
 
-Validation:
+Initial known audit shape:
 
-- Detect duplicate first live bar.
-- Detect gap between last backfilled bar and first streamed bar.
+- Main cleaned two-year raw event set: 187 tickers, approximately 164k events, median coverage about 23.7 months.
+- Finviz expansion set through 2026-06-12: 185 tickers, approximately 21k events, median coverage about 5.7 months.
+- Calendar-safe daily final features: 372 tickers and approximately 213k rows per horizon.
+- Calendar-safe event final features: 369 tickers and approximately 185k rows.
 
-## 9. Parameter Summary
+Implementation note:
+
+- The audit CSV command is intentionally not part of this document change.
+- Add it later only after the report contract is accepted.
+
+## 12. Prediction Workflow
+
+Recommended flow:
+
+1. Build or load candidate universe.
+2. Collect recent catalysts and required market context.
+3. Sanitize and deduplicate events.
+4. Verify event relevance and timestamp quality.
+5. Build feature rows.
+6. Run data-readiness gates.
+7. Score promoted models.
+8. Combine daily, event, and heuristic outputs into a prediction package.
+9. Write readable report, raw report, field dictionary, and audit ID.
+10. Let `trading_flow` consume the prediction package for trade decisions.
+
+## 13. Parameter Summary
 
 | Parameter | Value / Cadence | Notes |
 | --- | --- | --- |
-| Superset size | ~1,500-2,000 symbols | US mid/small caps with basic liquidity |
-| Superset refresh | Daily or weekly | Slow-changing universe |
-| Active set size | ~100 symbols | Output of Finviz Elite screen |
-| Active set refresh | Pre-open + intraday | Drives subscriptions |
-| Daily warm-up depth | >= 250 daily bars | Satisfies SMA200 + slope |
-| Intraday warm-up depth | ~130 intraday bars | Satisfies MACD 12/26/9 stabilization |
-| Daily store update | Once post-close | Append and trim rolling window |
-| Intraday store | On-demand REST backfill | Active set only, not broadly persisted |
-| Provider connections | 1 hard limit | Fan out internally |
-| Data tier | Full SIP coverage | IEX-only is insufficient |
-| Cache TTL | Deployment-defined | Re-validate on reactivation |
-| Active ingestion nodes | 1 primary + hot standby | Single-writer connection ownership |
+| Superset size | ~1,500-2,000 symbols | Broad prediction-readiness universe |
+| Superset refresh | Daily or weekly | Slow-changing |
+| Active candidate size | ~100 typical | Finviz/user/catalyst driven |
+| Active candidate refresh | Pre-open + intraday or scheduled batch | Drives prediction workload |
+| Daily warm-up depth | >= 250 daily bars | Required for SMA200/slope features |
+| Intraday warm-up depth | Configured, default ~130 bars | Only required when intraday features are used |
+| Provider websocket ownership | Prefer `trading_flow` in production | `market-predictor` should avoid duplicate live streams |
+| Feed tier | SIP/full coverage for volume-sensitive features | Unknown/partial feed reduces readiness |
+| Cache TTL | Deployment-defined | Revalidate stale cache |
+| Model states | Baseline, candidate, promoted, deprecated | Required registry language |
+| Audit output | CSV/report artifact | Implement after contract approval |

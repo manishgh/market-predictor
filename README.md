@@ -1,21 +1,23 @@
 # Market Predictor
 
-Python starter project for ticker-level market prediction using:
+Python prediction-intelligence project for ticker-level swing and daily momentum scoring using:
 
 - Alpaca premium news, ticker universe, and market bars as the primary live source.
 - Reddit API crawling as the required attention/community signal.
 - Seeking Alpha via RapidAPI for SA news/analysis, earnings, and quant/rating snapshots.
 - SEC company facts for keyless EPS/fundamental snapshots.
 - Market-wide context from SPY/QQQ/sector ETF/news proxy events so global news can affect predictions even when it is not ticker-specific.
-- FinBERT sentiment features plus price movement labels for a next-1-week prediction target.
+- FinBERT sentiment features plus price movement labels for next-day and swing-horizon prediction targets.
 
-This is research tooling, not investment advice and not an automated trading system.
+This is research and prediction tooling, not investment advice and not an automated trading system.
+
+The repository produces prediction intelligence: probabilities, catalyst summaries, feature/audit context, and watchlist rankings. It does not own broker execution, portfolio state, final sizing, stops, exits, or order lifecycle. Those responsibilities belong in a trading/runtime system such as `trading_flow`.
 
 ## Architecture Documents
 
 - [Implementation guide](docs/implementation_guide.md)
 - [Azure deployment plan](docs/azure_deployment_plan.md)
-- [Catalyst-confirmation swing architecture](docs/catalyst_confirmation_architecture.md)
+- [Swing prediction intelligence architecture](docs/catalyst_confirmation_architecture.md)
 
 ## Source Strategy
 
