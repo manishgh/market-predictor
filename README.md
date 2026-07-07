@@ -346,6 +346,48 @@ market-predictor score-volatile-latest `
 
 The volatile mover schema is separate from the large-cap swing schema. It keeps news/catalyst features, source counts, sentiment, market context, price/volume pressure, and theme buckets, then labels next-day and next-week big-move outcomes.
 
+## Entry / Exit Path Models
+
+Direction models answer whether a stock is likely to move. Entry/exit path models answer whether a long setup is tradable from the next bar's open: does price hit an ATR profit target before an ATR stop inside the configured horizon?
+
+Build swing entry/exit labels from daily feature rows:
+
+```powershell
+market-predictor build-entry-exit-dataset `
+  --input data/features/volatile_mover_daily_20260704.parquet `
+  --horizon-bars 5 `
+  --take-profit-atr 1.5 `
+  --stop-loss-atr 1.0 `
+  --bar-kind swing `
+  --out data/features/entry_exit_swing_5b_20260704.parquet `
+  --audit-out data/reports/entry_exit_swing_5b_audit_20260704.csv
+```
+
+Train separate entry and exit-risk models:
+
+```powershell
+market-predictor train-entry-exit-model `
+  --dataset data/features/entry_exit_swing_5b_20260704.parquet `
+  --target-col target_entry_success_5b `
+  --model-out models/entry_exit_swing_entry_success_5b_20260704_candidate.joblib
+
+market-predictor train-entry-exit-model `
+  --dataset data/features/entry_exit_swing_5b_20260704.parquet `
+  --target-col target_exit_risk_5b `
+  --model-out models/entry_exit_swing_exit_risk_5b_20260704_candidate.joblib
+```
+
+Score the latest row per ticker:
+
+```powershell
+market-predictor score-entry-exit-latest `
+  --dataset data/features/entry_exit_swing_5b_20260704.parquet `
+  --model models/entry_exit_swing_entry_success_5b_20260704_candidate.joblib `
+  --out data/reports/entry_exit_swing_entry_latest_20260704.csv
+```
+
+The same commands work for intraday datasets when the input rows are hourly or 5-minute OHLCV features; set `--bar-kind hourly` or `--bar-kind 5min` and choose a horizon in bars, for example `--horizon-bars 12` for roughly one trading day on 30-minute bars. Labels always enter at the next bar open and evaluate only future high/low bars, which prevents same-bar leakage.
+
 Retrain only when enough matured live labels exist:
 
 ```powershell

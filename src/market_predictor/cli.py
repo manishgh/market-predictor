@@ -16,6 +16,12 @@ from rich.console import Console
 from market_predictor.alerts import AlertConfig, backtest_indicator_alerts, generate_indicator_alerts
 from market_predictor.config import get_settings
 from market_predictor.data_quality import sanitize_events_frame
+from market_predictor.entry_exit import (
+    EntryExitLabelConfig,
+    build_entry_exit_dataset,
+    score_entry_exit_frame,
+    train_entry_exit_model,
+)
 from market_predictor.features import (
     add_event_taxonomy,
     add_finbert,
@@ -2284,6 +2290,169 @@ def score_volatile_latest(
     scored[keep].to_csv(out, index=False)
     console.print(scored[keep].head(50))
     console.print(f"Wrote volatile latest scores to {out}")
+
+
+@app.command("build-entry-exit-dataset")
+def build_entry_exit_dataset_command(
+    input_path: Path = typer.Option(
+        Path("data/features/volatile_mover_daily_20260704.parquet"),
+        "--input",
+        help="Input feature parquet/CSV with ticker, date, OHLCV, and optional news/model features.",
+    ),
+    out: Path = typer.Option(
+        Path("data/features/entry_exit_swing_5b_20260704.parquet"),
+        help="Output entry/exit labeled dataset.",
+    ),
+    audit_out: Path = typer.Option(
+        Path("data/reports/entry_exit_swing_5b_audit_20260704.csv"),
+        help="Per-ticker entry/exit readiness audit CSV.",
+    ),
+    horizon_bars: int = typer.Option(5, help="Number of bars after next open to evaluate target/stop path."),
+    take_profit_atr: float = typer.Option(1.5, help="ATR multiple for target from next open."),
+    stop_loss_atr: float = typer.Option(1.0, help="ATR multiple for stop from next open."),
+    min_rows_per_ticker: int = typer.Option(120, help="Minimum rows per ticker."),
+    min_labeled_rows_per_ticker: int = typer.Option(40, help="Minimum non-null path labels per ticker."),
+    bar_kind: str = typer.Option("swing", help="Human label for bar type: swing, daily, hourly, 5min, etc."),
+) -> None:
+    """Build leak-safe entry/exit path labels from OHLCV feature rows."""
+    if not input_path.exists():
+        raise typer.BadParameter(f"Missing input dataset: {input_path}")
+    if input_path.is_dir():
+        files = sorted(path for path in input_path.rglob("*.parquet") if not path.name.startswith("_"))
+        if not files:
+            raise typer.BadParameter(f"No parquet files found under input directory: {input_path}")
+        frame = pd.concat((pd.read_parquet(path) for path in files), ignore_index=True)
+    else:
+        frame = pd.read_parquet(input_path) if input_path.suffix.lower() == ".parquet" else pd.read_csv(input_path)
+    config = EntryExitLabelConfig(
+        horizon_bars=horizon_bars,
+        take_profit_atr=take_profit_atr,
+        stop_loss_atr=stop_loss_atr,
+        min_rows_per_ticker=min_rows_per_ticker,
+        min_labeled_rows_per_ticker=min_labeled_rows_per_ticker,
+        bar_kind=bar_kind,
+    )
+    dataset, audit = build_entry_exit_dataset(frame, config=config)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    audit_out.parent.mkdir(parents=True, exist_ok=True)
+    dataset.to_parquet(out, index=False)
+    audit.to_csv(audit_out, index=False)
+    suffix = f"{horizon_bars}b"
+    summary = {
+        "schema": "entry_exit.v1",
+        "bar_kind": bar_kind,
+        "rows": len(dataset),
+        "tickers": int(dataset["ticker"].nunique()) if not dataset.empty else 0,
+        "first_date": str(dataset["date"].min()) if not dataset.empty else None,
+        "last_date": str(dataset["date"].max()) if not dataset.empty else None,
+        "target_columns": [
+            f"target_entry_success_{suffix}",
+            f"target_exit_risk_{suffix}",
+            f"target_timeout_positive_{suffix}",
+        ],
+        "out": str(out),
+        "audit": str(audit_out),
+    }
+    console.print(summary)
+    console.print(audit.sort_values(["model_eligible", "rows"], ascending=[True, False]).head(30))
+
+
+@app.command("train-entry-exit-model")
+def train_entry_exit_model_command(
+    dataset: Path = typer.Option(
+        Path("data/features/entry_exit_swing_5b_20260704.parquet"),
+        help="Entry/exit dataset produced by build-entry-exit-dataset.",
+    ),
+    target_col: str = typer.Option("target_entry_success_5b", help="Target column to train."),
+    model_out: Path = typer.Option(
+        Path("models/entry_exit_swing_entry_success_5b_20260704_candidate.joblib"),
+        help="Output model artifact.",
+    ),
+    predictions_out: Path = typer.Option(
+        Path("data/reports/entry_exit_swing_entry_success_5b_oos_predictions_20260704.csv"),
+        help="Out-of-sample prediction audit CSV.",
+    ),
+    metrics_out: Path = typer.Option(
+        Path("data/reports/entry_exit_swing_entry_success_5b_metrics_20260704.csv"),
+        help="Model metrics/model-card CSV.",
+    ),
+    max_iter: int = typer.Option(350, help="Maximum boosting iterations."),
+    learning_rate: float = typer.Option(0.04, help="Boosting learning rate."),
+    embargo_rows: int | None = typer.Option(None, help="Purged walk-forward embargo rows. Defaults from target horizon."),
+) -> None:
+    """Train an entry/exit path classifier."""
+    if not dataset.exists():
+        raise typer.BadParameter(f"Missing entry/exit dataset: {dataset}")
+    frame = pd.read_parquet(dataset)
+    report, metrics, _ = train_entry_exit_model(
+        frame,
+        target_col=target_col,
+        model_out=model_out,
+        predictions_out=predictions_out,
+        metrics_out=metrics_out,
+        max_iter=max_iter,
+        learning_rate=learning_rate,
+        embargo_rows=embargo_rows,
+    )
+    console.print(report)
+    console.print(metrics)
+
+
+@app.command("score-entry-exit-latest")
+def score_entry_exit_latest(
+    dataset: Path = typer.Option(
+        Path("data/features/entry_exit_swing_5b_20260704.parquet"),
+        help="Entry/exit feature dataset.",
+    ),
+    model: Path = typer.Option(
+        Path("models/entry_exit_swing_entry_success_5b_20260704_candidate.joblib"),
+        help="Entry/exit model artifact.",
+    ),
+    tickers: str | None = typer.Option(None, help="Optional comma-separated ticker subset."),
+    out: Path = typer.Option(
+        Path("data/reports/entry_exit_swing_latest_scores_20260704.csv"),
+        help="Latest per-ticker entry/exit model scores.",
+    ),
+) -> None:
+    """Score latest rows with an entry/exit model."""
+    if not dataset.exists():
+        raise typer.BadParameter(f"Missing entry/exit dataset: {dataset}")
+    if not model.exists():
+        raise typer.BadParameter(f"Missing entry/exit model: {model}")
+    frame = pd.read_parquet(dataset)
+    symbols = _parse_tickers(tickers, []) if tickers else []
+    if symbols:
+        frame = frame[frame["ticker"].astype(str).str.upper().isin(symbols)].copy()
+    latest = frame.sort_values(["ticker", "date"]).groupby("ticker", as_index=False).tail(1)
+    scored = score_entry_exit_frame(latest, model)
+    probability_cols = [col for col in scored.columns if col.endswith("_probability")]
+    sort_col = probability_cols[-1] if probability_cols else "ticker"
+    scored = scored.sort_values(sort_col, ascending=False)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    scored.to_csv(out, index=False)
+    keep = [
+        col
+        for col in [
+            "ticker",
+            "date",
+            "close",
+            "return_1d",
+            "volume_z20",
+            "news_count",
+            "event_count",
+            "rsi_14",
+            "macd_signal_diff",
+            "entry_stop_pct",
+            "entry_target_pct",
+            sort_col,
+            sort_col.replace("probability", "prediction"),
+            "entry_exit_model_target",
+            "entry_exit_model_schema",
+        ]
+        if col in scored.columns
+    ]
+    console.print(scored[keep].head(50))
+    console.print(f"Wrote entry/exit latest scores to {out}")
 
 
 @app.command("live-once")
