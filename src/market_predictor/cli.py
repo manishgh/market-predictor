@@ -13,12 +13,14 @@ import requests
 import typer
 from rich.console import Console
 
+from market_predictor.alerts import AlertConfig, backtest_indicator_alerts, generate_indicator_alerts
 from market_predictor.config import get_settings
 from market_predictor.data_quality import sanitize_events_frame
 from market_predictor.features import (
     add_event_taxonomy,
     add_finbert,
     add_finbert_with_scorer,
+    add_price_features,
     align_events_to_trading_dates,
     build_daily_dataset,
     build_event_swing_dataset,
@@ -37,8 +39,15 @@ from market_predictor.model import (
 from market_predictor.azure_store import AzureBlobStore
 from market_predictor.price import fetch_daily_prices
 from market_predictor.price import fetch_hourly_prices
-from market_predictor.sources import AlpacaSource, RedditSource, SeekingAlphaRapidApiSource
+from market_predictor.sources import AlpacaSource, FinvizSource, RedditSource, SeekingAlphaRapidApiSource
 from market_predictor.sources.sec import SecSource
+from market_predictor.volatile import (
+    VolatileLabelConfig,
+    build_volatile_dataset,
+    load_volatile_universe,
+    score_volatile_frame,
+    train_volatile_model,
+)
 
 app = typer.Typer(help="Collect news, build features, and train next-week market direction models.")
 console = Console()
@@ -92,6 +101,7 @@ def collect_events_for_ticker(
     *,
     end: datetime | None = None,
     no_reddit: bool = False,
+    no_finviz: bool = False,
     no_seeking_alpha: bool = False,
     no_sec: bool = False,
     score: bool = True,
@@ -121,6 +131,14 @@ def collect_events_for_ticker(
             console.print(f"[yellow]{ticker}: Reddit collection failed: {exc}[/yellow]")
     elif not no_reddit:
         console.print(f"[yellow]{ticker}: skipping Reddit because credentials are not configured.[/yellow]")
+
+    if not no_finviz:
+        try:
+            console.print(f"{ticker}: collecting Finviz ticker news...")
+            events.extend(event.to_record() for event in FinvizSource().fetch_news(ticker, start, end=end, limit=100))
+        except Exception as exc:
+            errors.append(f"finviz:{exc}")
+            console.print(f"[yellow]{ticker}: Finviz news collection failed: {exc}[/yellow]")
 
     if not no_seeking_alpha and settings.has_seeking_alpha_rapidapi:
         try:
@@ -1955,6 +1973,319 @@ def azure_publish_models(
         uploaded.append(store.upload_file(models_dir / str(row["name"]), str(row["relative_blob"])))
     uploaded.append(store.upload_file(manifest_path, f"{blob_prefix}/_active_models_manifest.csv"))
     console.print({"uploaded_models": len(manifest_rows), "manifest": f"{settings.azure_prefix}/{blob_prefix}/_active_models_manifest.csv"})
+
+
+def _alert_config(
+    min_score: float,
+    volume_confirm_z: float,
+    strong_volume_z: float,
+    rsi_oversold: float,
+    rsi_overbought: float,
+) -> AlertConfig:
+    return AlertConfig(
+        min_score=min_score,
+        volume_confirm_z=volume_confirm_z,
+        strong_volume_z=strong_volume_z,
+        rsi_oversold=rsi_oversold,
+        rsi_overbought=rsi_overbought,
+    )
+
+
+def _collect_latest_indicator_alerts(
+    symbols: list[str],
+    *,
+    days: int,
+    settings: object,
+    config: AlertConfig,
+) -> pd.DataFrame:
+    start = datetime.now(timezone.utc) - timedelta(days=days)
+    rows = []
+    for symbol in symbols:
+        prices = fetch_daily_prices(symbol, start, None, settings)
+        if prices.empty:
+            rows.append(
+                {
+                    "ticker": symbol,
+                    "date": None,
+                    "alert_type": "no_price_data",
+                    "direction": "none",
+                    "severity": "low",
+                    "score": 0.0,
+                    "close": None,
+                    "volume_z20": None,
+                    "rsi_14": None,
+                    "macd_signal_diff": None,
+                    "details": "No daily price bars available for alert evaluation.",
+                }
+            )
+            continue
+        features = add_price_features(prices)
+        features["ticker"] = symbol
+        alerts = generate_indicator_alerts(features, config=config, latest_only=True)
+        if alerts.empty:
+            latest = features.sort_values("date").iloc[-1]
+            rows.append(
+                {
+                    "ticker": symbol,
+                    "date": latest.get("date"),
+                    "alert_type": "no_active_alert",
+                    "direction": "none",
+                    "severity": "low",
+                    "score": 0.0,
+                    "close": latest.get("close"),
+                    "volume_z20": latest.get("volume_z20"),
+                    "rsi_14": latest.get("rsi_14"),
+                    "macd_signal_diff": latest.get("macd_signal_diff"),
+                    "details": "No configured indicator alert fired on the latest daily bar.",
+                }
+            )
+        else:
+            rows.extend(alerts.to_dict("records"))
+    return pd.DataFrame(rows)
+
+
+@app.command("monitor-alerts")
+def monitor_alerts(
+    tickers: str | None = typer.Option(None, help="Comma-separated symbols. Defaults to configured swing universe."),
+    days: int = typer.Option(180, help="Daily bar lookback for indicator warm-up."),
+    poll_seconds: int = typer.Option(0, help="Repeat every N seconds. Use 0 to run once."),
+    out: Path = typer.Option(Path("data/live/alerts/latest_alerts.csv"), help="Latest alert CSV."),
+    history_out: Path = typer.Option(Path("data/live/alerts/alert_history.csv"), help="Append-only alert history CSV."),
+    min_score: float = typer.Option(2.0, help="Minimum alert score to emit."),
+    volume_confirm_z: float = typer.Option(0.75, help="Volume z-score that confirms a move."),
+    strong_volume_z: float = typer.Option(1.5, help="Volume z-score for high-conviction confirmation."),
+    rsi_oversold: float = typer.Option(30.0, help="RSI oversold threshold."),
+    rsi_overbought: float = typer.Option(70.0, help="RSI overbought threshold."),
+) -> None:
+    """Monitor a watchlist for MACD/EMA/RSI/volume technical alerts."""
+    if poll_seconds and poll_seconds < 60:
+        raise typer.BadParameter("poll_seconds must be 0 or at least 60 to avoid API abuse.")
+    settings = get_settings()
+    symbols = _parse_tickers(tickers, settings.swing_candidate_tickers)
+    if not symbols:
+        raise typer.BadParameter("No tickers configured or supplied.")
+    config = _alert_config(min_score, volume_confirm_z, strong_volume_z, rsi_oversold, rsi_overbought)
+
+    while True:
+        run_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+        alerts = _collect_latest_indicator_alerts(symbols, days=days, settings=settings, config=config)
+        alerts.insert(0, "run_id", run_id)
+        alerts.insert(1, "checked_at_utc", datetime.now(timezone.utc).isoformat())
+        out.parent.mkdir(parents=True, exist_ok=True)
+        history_out.parent.mkdir(parents=True, exist_ok=True)
+        alerts.to_csv(out, index=False)
+        append_history = history_out.exists()
+        alerts.to_csv(history_out, mode="a" if append_history else "w", header=not append_history, index=False)
+        display_cols = [
+            col
+            for col in ["ticker", "date", "alert_type", "direction", "severity", "score", "close", "volume_z20", "details"]
+            if col in alerts.columns
+        ]
+        console.print(alerts[display_cols].sort_values(["severity", "score"], ascending=[True, False]).head(80))
+        console.print(f"Wrote latest alerts to {out}")
+        console.print(f"Appended alert history to {history_out}")
+        if not poll_seconds:
+            return
+        time_module.sleep(poll_seconds)
+
+
+@app.command("backtest-alerts")
+def backtest_alerts(
+    dataset: Path = typer.Option(
+        Path("data/features/largecap_50b_news_volume_combined_2y_20260630_1d.parquet"),
+        help="Historical feature parquet with ticker/date and future-return labels.",
+    ),
+    horizon_days: int = typer.Option(1, help="Forward return horizon to evaluate."),
+    tickers: str | None = typer.Option(None, help="Optional comma-separated ticker subset."),
+    out: Path = typer.Option(Path("data/reports/indicator_alert_backtest_alerts.csv"), help="Per-alert backtest rows."),
+    summary_out: Path = typer.Option(Path("data/reports/indicator_alert_backtest_summary.csv"), help="Grouped backtest summary."),
+    min_score: float = typer.Option(2.0, help="Minimum alert score to include."),
+    volume_confirm_z: float = typer.Option(0.75, help="Volume z-score that confirms a move."),
+    strong_volume_z: float = typer.Option(1.5, help="Volume z-score for high-conviction confirmation."),
+    rsi_oversold: float = typer.Option(30.0, help="RSI oversold threshold."),
+    rsi_overbought: float = typer.Option(70.0, help="RSI overbought threshold."),
+) -> None:
+    """Backtest MACD/EMA/RSI/volume alerts against historical forward returns."""
+    if horizon_days == 5 and str(dataset).endswith("_1d.parquet"):
+        fallback = Path(str(dataset).replace("_1d.parquet", "_5d.parquet"))
+        if fallback.exists():
+            dataset = fallback
+    if not dataset.exists():
+        raise typer.BadParameter(f"Missing dataset: {dataset}")
+    frame = pd.read_parquet(dataset)
+    symbols = _parse_tickers(tickers, []) if tickers else []
+    if symbols:
+        frame = frame[frame["ticker"].astype(str).str.upper().isin(symbols)].copy()
+    future_col = f"future_return_{horizon_days}d"
+    target_col = f"target_up_{horizon_days}d"
+    missing = [col for col in ["ticker", "date", "close", future_col, target_col] if col not in frame.columns]
+    if missing:
+        raise typer.BadParameter(f"Dataset is missing required columns: {', '.join(missing)}")
+    config = _alert_config(min_score, volume_confirm_z, strong_volume_z, rsi_oversold, rsi_overbought)
+    alerts, summary = backtest_indicator_alerts(frame, horizon_days=horizon_days, config=config)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    summary_out.parent.mkdir(parents=True, exist_ok=True)
+    alerts.to_csv(out, index=False)
+    summary.to_csv(summary_out, index=False)
+    console.print(summary.head(30))
+    console.print(f"Wrote alert backtest rows to {out}")
+    console.print(f"Wrote alert backtest summary to {summary_out}")
+
+
+@app.command("build-volatile-dataset")
+def build_volatile_dataset_command(
+    daily_1d: Path = typer.Option(
+        Path("data/features/largecap_50b_news_volume_combined_2y_20260630_1d.parquet"),
+        help="Daily feature parquet containing 1-day forward labels.",
+    ),
+    daily_5d: Path = typer.Option(
+        Path("data/features/largecap_50b_news_volume_combined_2y_20260630_5d.parquet"),
+        help="Daily feature parquet containing 5-day forward labels.",
+    ),
+    universe: Path = typer.Option(
+        Path("data/universe/volatile_mover_research_universe_20260704.csv"),
+        help="Volatile mover universe CSV with ticker/theme metadata.",
+    ),
+    out: Path = typer.Option(
+        Path("data/features/volatile_mover_daily_20260704.parquet"),
+        help="Output volatile mover training dataset.",
+    ),
+    audit_out: Path = typer.Option(
+        Path("data/reports/volatile_mover_dataset_audit_20260704.csv"),
+        help="Per-ticker readiness/audit CSV.",
+    ),
+    min_rows_per_ticker: int = typer.Option(120, help="Minimum historical daily rows per ticker."),
+    min_news_rows_per_ticker: int = typer.Option(3, help="Minimum rows with ticker-linked news/catalysts per ticker."),
+    next_day_big_move_threshold: float = typer.Option(0.03, help="Absolute 1-day return threshold for big-move labels."),
+    next_week_big_move_threshold: float = typer.Option(0.08, help="Absolute 5-day return threshold for big-move labels."),
+) -> None:
+    """Build a news+volume+technical volatile mover dataset with auditable labels."""
+    if not daily_1d.exists():
+        raise typer.BadParameter(f"Missing 1-day dataset: {daily_1d}")
+    one = pd.read_parquet(daily_1d)
+    five = pd.read_parquet(daily_5d) if daily_5d.exists() else None
+    universe_frame = load_volatile_universe(universe)
+    config = VolatileLabelConfig(
+        next_day_big_move_threshold=next_day_big_move_threshold,
+        next_week_big_move_threshold=next_week_big_move_threshold,
+        min_rows_per_ticker=min_rows_per_ticker,
+        min_news_rows_per_ticker=min_news_rows_per_ticker,
+    )
+    dataset, audit = build_volatile_dataset(one, daily_5d=five, universe=universe_frame, config=config)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    audit_out.parent.mkdir(parents=True, exist_ok=True)
+    dataset.to_parquet(out, index=False)
+    audit.to_csv(audit_out, index=False)
+    target_cols = [col for col in dataset.columns if col.startswith("target_next_")]
+    summary = {
+        "schema": "volatile_mover.v1",
+        "rows": len(dataset),
+        "tickers": int(dataset["ticker"].nunique()) if not dataset.empty else 0,
+        "first_date": str(dataset["date"].min()) if not dataset.empty else None,
+        "last_date": str(dataset["date"].max()) if not dataset.empty else None,
+        "target_columns": target_cols,
+        "out": str(out),
+        "audit": str(audit_out),
+    }
+    console.print(summary)
+    console.print(audit.sort_values(["model_eligible", "rows"], ascending=[True, False]).head(30))
+
+
+@app.command("train-volatile-model")
+def train_volatile_model_command(
+    dataset: Path = typer.Option(
+        Path("data/features/volatile_mover_daily_20260704.parquet"),
+        help="Volatile mover dataset produced by build-volatile-dataset.",
+    ),
+    target_col: str = typer.Option("target_next_week_big_up", help="Target column to train."),
+    model_out: Path = typer.Option(
+        Path("models/volatile_mover_next_week_big_up_20260704_candidate.joblib"),
+        help="Output model artifact.",
+    ),
+    predictions_out: Path = typer.Option(
+        Path("data/reports/volatile_mover_next_week_big_up_oos_predictions_20260704.csv"),
+        help="Out-of-sample prediction audit CSV.",
+    ),
+    metrics_out: Path = typer.Option(
+        Path("data/reports/volatile_mover_next_week_big_up_metrics_20260704.csv"),
+        help="Model metrics/model-card CSV.",
+    ),
+    max_iter: int = typer.Option(400, help="Maximum boosting iterations."),
+    learning_rate: float = typer.Option(0.035, help="Boosting learning rate."),
+    embargo_rows: int = typer.Option(5, help="Purged walk-forward embargo rows."),
+) -> None:
+    """Train a production-audited volatile mover classifier."""
+    if not dataset.exists():
+        raise typer.BadParameter(f"Missing volatile dataset: {dataset}")
+    frame = pd.read_parquet(dataset)
+    report, metrics, _ = train_volatile_model(
+        frame,
+        target_col=target_col,
+        model_out=model_out,
+        predictions_out=predictions_out,
+        metrics_out=metrics_out,
+        max_iter=max_iter,
+        learning_rate=learning_rate,
+        embargo_rows=embargo_rows,
+    )
+    console.print(report)
+    console.print(metrics)
+
+
+@app.command("score-volatile-latest")
+def score_volatile_latest(
+    dataset: Path = typer.Option(
+        Path("data/features/volatile_mover_daily_20260704.parquet"),
+        help="Volatile mover feature dataset.",
+    ),
+    model: Path = typer.Option(
+        Path("models/volatile_mover_next_week_big_up_20260704_candidate.joblib"),
+        help="Volatile mover model artifact.",
+    ),
+    tickers: str | None = typer.Option(None, help="Optional comma-separated ticker subset."),
+    out: Path = typer.Option(
+        Path("data/reports/volatile_mover_latest_scores_20260704.csv"),
+        help="Latest per-ticker volatile model scores.",
+    ),
+) -> None:
+    """Score the latest row per ticker with a volatile mover model."""
+    if not dataset.exists():
+        raise typer.BadParameter(f"Missing volatile dataset: {dataset}")
+    if not model.exists():
+        raise typer.BadParameter(f"Missing volatile model: {model}")
+    frame = pd.read_parquet(dataset)
+    symbols = _parse_tickers(tickers, []) if tickers else []
+    if symbols:
+        frame = frame[frame["ticker"].astype(str).str.upper().isin(symbols)].copy()
+    latest = frame.sort_values(["ticker", "date"]).groupby("ticker", as_index=False).tail(1)
+    scored = score_volatile_frame(latest, model)
+    scored = scored.sort_values("volatile_model_probability", ascending=False)
+    keep = [
+        col
+        for col in [
+            "ticker",
+            "date",
+            "theme_bucket",
+            "close",
+            "return_1d",
+            "volume_z20",
+            "news_count",
+            "event_count",
+            "sentiment_mean",
+            "volatile_setup_score",
+            "volatile_model_probability",
+            "volatile_model_prediction",
+            "volatile_model_target",
+            "volatile_model_schema",
+        ]
+        if col in scored.columns
+    ]
+    out.parent.mkdir(parents=True, exist_ok=True)
+    scored[keep].to_csv(out, index=False)
+    console.print(scored[keep].head(50))
+    console.print(f"Wrote volatile latest scores to {out}")
+
+
 @app.command("live-once")
 def live_once(
     tickers: str | None = typer.Option(None, help="Comma-separated symbols. Defaults to configured swing universe."),
@@ -2402,7 +2733,7 @@ def collect_seeking_alpha_universe(
         row: dict[str, object] = {"ticker": symbol, "status": "ok", "events": 0, "snapshot_fields": 0}
         try:
             if include_events:
-                events = source.fetch_events(symbol, start)
+                events, event_errors = source.fetch_events_with_errors(symbol, start)
                 event_frame = pd.DataFrame([event.to_record() for event in events])
                 if "raw" in event_frame.columns:
                     event_frame["raw"] = event_frame["raw"].map(
@@ -2412,6 +2743,7 @@ def collect_seeking_alpha_universe(
                 event_frame.to_parquet(event_path, index=False)
                 row["events"] = len(event_frame)
                 row["events_path"] = str(event_path)
+                row["event_errors"] = " | ".join(event_errors)
             if include_snapshots:
                 snapshot = source.fetch_quant_snapshot(symbol)
                 snapshot_frame = pd.DataFrame([snapshot])

@@ -21,6 +21,55 @@ Out of scope:
 - Backtesting engine ownership
 - Production websocket ownership when `trading_flow` is the live market-data runtime
 
+## 0. Implementation Status (2026-07)
+
+This document has two layers:
+
+- **Target design** (sections 3-13): the full contract this system is aiming at.
+  Treat it as the north star, not a description of current behavior.
+- **Near-term contract** (section 0.1 below): the subset that is actually
+  implemented or being implemented now.
+
+As of this revision, the shipped prediction path (`predict-watchlist`,
+`live-once`) does **not** yet emit the full section-3 contract, has no model
+registry (section 9), and no audit report command (section 11). The
+superset/active-candidate universe management (section 4) is also not built.
+Those remain planned. Do not assume a field exists in output just because it is
+listed in the target design; check the field dictionary the command writes.
+
+### 0.1 Near-Term Prediction Readiness Contract (v0)
+
+Phase 1 adds provenance and data-readiness metadata to every scored row so a
+consumer (including `trading_flow`) can tell whether a probability is
+trustworthy. The v0 fields are:
+
+| Field | Meaning |
+| --- | --- |
+| `as_of` | UTC timestamp the prediction row was generated |
+| `audit_id` | Identifier shared by all rows from one prediction run |
+| `data_readiness_status` | `valid`, `warn`, or `invalid` |
+| `data_readiness_reasons` | Semicolon-joined list of gate results that were not `valid` |
+| `daily_bar_count` | Number of daily bars behind the scored row |
+| `latest_price_date` | Latest daily candle date used |
+| `price_feed` | `alpaca`, `yfinance`, `none`, or `unknown` — provenance of the bars |
+| `benchmark_status` | `present` or `missing` (SPY/sector benchmark features) |
+| `market_context_status` | `present` or `missing` (market-context feature file) |
+| `model_name_*` | Resolved artifact filename for each scored model |
+
+v0 gate rules (implemented in `readiness.py`):
+
+- `daily_bar_count < 60` -> `invalid` (too little history for technical state).
+- `60 <= daily_bar_count < 250` -> `warn` (SMA200 / 52-week features unreliable).
+- `price_feed` not `alpaca` -> `warn` (volume-sensitive features degraded; not SIP-grade).
+- benchmark features fell back to zero -> `warn` (market/sector context missing).
+- market-context feature file missing -> `warn` (global context treated as zero).
+- no latest price date -> `invalid`.
+
+`warn` still emits a probability; the caller decides whether to trust it.
+`invalid` means the probability should not be used for a trade decision. The
+full section-7 gate set (news/candle alignment, cache freshness, explicit feed
+tier, schema match) is still planned and will extend, not replace, these rules.
+
 ## 1. System Responsibility
 
 `market-predictor` answers:

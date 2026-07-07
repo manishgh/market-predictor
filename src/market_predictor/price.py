@@ -9,11 +9,21 @@ from market_predictor.config import Settings
 from market_predictor.sources.alpaca import AlpacaSource
 
 
+def _tag_feed(frame: pd.DataFrame, feed: str) -> pd.DataFrame:
+    """Record bar provenance so downstream readiness gates can see it.
+
+    ``DataFrame.attrs`` is preserved through ``copy``/``sort_values`` but not
+    through merges, so callers should read the tag right after fetching.
+    """
+    frame.attrs["price_feed"] = feed
+    return frame
+
+
 def fetch_daily_prices(ticker: str, start: datetime, end: datetime | None, settings: Settings) -> pd.DataFrame:
     if settings.has_alpaca:
         bars = AlpacaSource(settings).fetch_daily_bars(ticker, start, end)
         if not bars.empty:
-            return bars
+            return _tag_feed(bars, "alpaca")
 
     yf_frame = yf.download(
         ticker,
@@ -24,17 +34,20 @@ def fetch_daily_prices(ticker: str, start: datetime, end: datetime | None, setti
         threads=False,
     )
     if yf_frame.empty:
-        return pd.DataFrame(columns=["date", "open", "high", "low", "close", "volume"])
+        return _tag_feed(pd.DataFrame(columns=["date", "open", "high", "low", "close", "volume"]), "none")
     yf_frame = yf_frame.reset_index()
-    return pd.DataFrame(
-        {
-            "date": pd.to_datetime(yf_frame["Date"]).dt.date,
-            "open": yf_frame["Open"],
-            "high": yf_frame["High"],
-            "low": yf_frame["Low"],
-            "close": yf_frame["Close"],
-            "volume": yf_frame["Volume"],
-        }
+    return _tag_feed(
+        pd.DataFrame(
+            {
+                "date": pd.to_datetime(yf_frame["Date"]).dt.date,
+                "open": yf_frame["Open"],
+                "high": yf_frame["High"],
+                "low": yf_frame["Low"],
+                "close": yf_frame["Close"],
+                "volume": yf_frame["Volume"],
+            }
+        ),
+        "yfinance",
     )
 
 

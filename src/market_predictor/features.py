@@ -658,6 +658,10 @@ def add_price_features(prices: pd.DataFrame) -> pd.DataFrame:
     frame["macd"] = ema12 - ema26
     frame["macd_signal"] = frame["macd"].ewm(span=9, adjust=False).mean()
     frame["macd_signal_diff"] = frame["macd"] - frame["macd_signal"]
+    for window in [10, 20, 50]:
+        ema = frame["close"].ewm(span=window, adjust=False).mean()
+        frame[f"ema_{window}"] = ema
+        frame[f"dist_ema_{window}"] = frame["close"] / ema - 1.0
     for window in [20, 50]:
         sma = frame["close"].rolling(window).mean()
         frame[f"sma_{window}"] = sma

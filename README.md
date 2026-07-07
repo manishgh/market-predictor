@@ -300,6 +300,52 @@ Run continuously in the foreground:
 market-predictor live-run --poll-seconds 3600 --lookback-days 3 --workers 8
 ```
 
+Monitor a watchlist for technical indicator alerts:
+
+```powershell
+market-predictor monitor-alerts --tickers "MSFT,NVDA,RGTI" --days 180 --poll-seconds 900
+```
+
+This writes the latest alert state to `data/live/alerts/latest_alerts.csv` and appends every run to `data/live/alerts/alert_history.csv`. Alert rules currently cover MACD signal-line crosses, EMA20 reclaim/loss, EMA20/EMA50 crosses, RSI oversold/overbought reversals, and volume-confirmed breakouts/breakdowns.
+
+Backtest indicator alerts against existing labeled feature data:
+
+```powershell
+market-predictor backtest-alerts --horizon-days 1
+market-predictor backtest-alerts --horizon-days 5
+```
+
+## Volatile Mover Research Pipeline
+
+Build a news-aware daily/weekly volatile mover dataset from an audited universe:
+
+```powershell
+market-predictor build-volatile-dataset `
+  --universe data/universe/volatile_mover_research_universe_20260704.csv `
+  --out data/features/volatile_mover_daily_20260704.parquet `
+  --audit-out data/reports/volatile_mover_dataset_audit_20260704.csv
+```
+
+Train a target-specific candidate model with purged walk-forward validation:
+
+```powershell
+market-predictor train-volatile-model `
+  --target-col target_next_week_big_up `
+  --model-out models/volatile_mover_next_week_big_up_20260704_candidate.joblib `
+  --predictions-out data/reports/volatile_mover_next_week_big_up_oos_predictions_20260704.csv `
+  --metrics-out data/reports/volatile_mover_next_week_big_up_metrics_20260704.csv
+```
+
+Score the latest row per ticker:
+
+```powershell
+market-predictor score-volatile-latest `
+  --model models/volatile_mover_next_week_big_up_20260704_candidate.joblib `
+  --out data/reports/volatile_mover_latest_scores_20260704.csv
+```
+
+The volatile mover schema is separate from the large-cap swing schema. It keeps news/catalyst features, source counts, sentiment, market context, price/volume pressure, and theme buckets, then labels next-day and next-week big-move outcomes.
+
 Retrain only when enough matured live labels exist:
 
 ```powershell

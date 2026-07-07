@@ -137,10 +137,19 @@ class SeekingAlphaRapidApiSource:
         return f"https://{self.settings.seeking_alpha_rapidapi_host}"
 
     def fetch_events(self, ticker: str, start: datetime) -> list[NewsEvent]:
+        events, _errors = self.fetch_events_with_errors(ticker, start)
+        return events
+
+    def fetch_events_with_errors(self, ticker: str, start: datetime) -> tuple[list[NewsEvent], list[str]]:
         events: list[NewsEvent] = []
+        errors: list[str] = []
         for feed in self.settings.seeking_alpha_event_feeds:
-            events.extend(self._fetch_event_feed(ticker, start, feed))
-        return self._dedupe_events(events)
+            name = str(feed.get("name", "event"))
+            try:
+                events.extend(self._fetch_event_feed(ticker, start, feed))
+            except Exception as exc:
+                errors.append(f"{name}:{exc}")
+        return self._dedupe_events(events), errors
 
     def fetch_market_context_events(self, start: datetime) -> list[NewsEvent]:
         events: list[NewsEvent] = []
