@@ -231,7 +231,17 @@ def _add_volatile_features(data: pd.DataFrame) -> pd.DataFrame:
     sentiment_abs = frame["sentiment_mean"].abs()
     frame["sentiment_abs_mean"] = sentiment_abs
     frame["news_volume_attention"] = frame["news_count"].fillna(0) * (1.0 + frame["volume_z20"].fillna(0).clip(lower=0))
-    source_cols = [col for col in ["source_count_alpaca", "source_count_reddit", "source_count_seeking_alpha", "source_count_sec"] if col in frame.columns]
+    source_cols = [
+        col
+        for col in [
+            "source_count_alpaca",
+            "source_count_reddit",
+            "source_count_seeking_alpha",
+            "source_count_sec",
+            "source_count_finviz",
+        ]
+        if col in frame.columns
+    ]
     frame["catalyst_pressure"] = frame["event_count"].fillna(0)
     if source_cols:
         frame["catalyst_pressure"] += frame[source_cols].apply(lambda series: pd.to_numeric(series, errors="coerce")).fillna(0).sum(axis=1)

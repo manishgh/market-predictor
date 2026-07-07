@@ -32,6 +32,7 @@ from market_predictor.features import (
     build_event_swing_dataset,
     events_to_frame,
     feature_date_for_timestamp,
+    source_family_for_source,
 )
 from market_predictor.model import (
     DEFAULT_FEATURES,
@@ -149,7 +150,9 @@ def collect_events_for_ticker(
     if not no_seeking_alpha and settings.has_seeking_alpha_rapidapi:
         try:
             console.print(f"{ticker}: collecting Seeking Alpha news/analysis via RapidAPI...")
-            events.extend(event.to_record() for event in SeekingAlphaRapidApiSource(settings).fetch_events(ticker, start))
+            sa_events, sa_errors = SeekingAlphaRapidApiSource(settings).fetch_events_with_errors(ticker, start)
+            events.extend(event.to_record() for event in sa_events)
+            errors.extend(f"seeking_alpha:{error}" for error in sa_errors)
         except Exception as exc:
             errors.append(f"seeking_alpha:{exc}")
             console.print(f"[yellow]{ticker}: Seeking Alpha collection failed: {exc}[/yellow]")
@@ -962,6 +965,7 @@ def collect_swing(
     end_date: str | None = typer.Option(None, help="Inclusive UTC end date as YYYY-MM-DD. Defaults to today/now."),
     out_dir: Path = typer.Option(Path("data/raw/swing"), help="Directory for per-ticker event parquet files."),
     no_reddit: bool = typer.Option(False, help="Disable Reddit enrichment."),
+    no_finviz: bool = typer.Option(False, help="Disable Finviz ticker-news enrichment."),
     no_seeking_alpha: bool = typer.Option(False, help="Disable Seeking Alpha enrichment."),
     no_sec: bool = typer.Option(False, help="Disable SEC filing enrichment."),
     score: bool = typer.Option(False, help="Run FinBERT during collection. Default false keeps API download separate."),
@@ -983,6 +987,7 @@ def collect_swing(
                 days,
                 end=end,
                 no_reddit=no_reddit,
+                no_finviz=no_finviz,
                 no_seeking_alpha=no_seeking_alpha,
                 no_sec=no_sec,
                 score=score,
@@ -1161,7 +1166,7 @@ def audit_swing_alignment(
             events["missing_historical_feature_row"] = (~events["has_feature_row"]) & (
                 ~events["pending_after_latest_feature_date"]
             )
-            source_counts = events["source"].astype(str).str.split(":").str[0].value_counts().to_dict()
+            source_counts = events["source"].map(source_family_for_source).value_counts().to_dict()
             grouped_events = events.groupby("date").size().rename("event_count_raw")
             grouped_dataset = dataset.copy()
             grouped_dataset["date"] = pd.to_datetime(grouped_dataset["date"]).dt.date
@@ -1185,6 +1190,7 @@ def audit_swing_alignment(
                     "alpaca_events": int(source_counts.get("alpaca", 0)),
                     "seeking_alpha_events": int(source_counts.get("seeking_alpha", 0)),
                     "reddit_events": int(source_counts.get("reddit", 0)),
+                    "finviz_events": int(source_counts.get("finviz", 0)),
                     "events_without_feature_row": int((~events["has_feature_row"]).sum()),
                     "pending_after_latest_feature_date": int(events["pending_after_latest_feature_date"].sum()),
                     "missing_historical_feature_rows": int(events["missing_historical_feature_row"].sum()),
@@ -3118,7 +3124,7 @@ def behavior(
     ),
     refresh: bool = typer.Option(False, help="Ignore cached raw files and collect only fresh recent events."),
     no_reddit: bool = typer.Option(False, help="Disable Reddit enrichment during refresh/live fallback."),
-    no_seeking_alpha: bool = typer.Option(True, help="Disable Seeking Alpha during refresh/live fallback."),
+    no_seeking_alpha: bool = typer.Option(False, help="Disable Seeking Alpha during refresh/live fallback."),
 ) -> None:
     """Explain recent news/reaction behavior for a short ticker list."""
     from market_predictor.sentiment import FinbertScorer

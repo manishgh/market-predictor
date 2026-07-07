@@ -45,6 +45,21 @@ def events_to_frame(events: list[dict]) -> pd.DataFrame:
     return frame
 
 
+def source_family_for_source(value: object) -> str:
+    raw = str(value or "").strip().lower()
+    if raw.startswith("seeking_alpha"):
+        return "seeking_alpha"
+    if raw.startswith("alpaca"):
+        return "alpaca"
+    if raw.startswith("reddit"):
+        return "reddit"
+    if raw.startswith("sec"):
+        return "sec"
+    if raw.startswith("finviz"):
+        return "finviz"
+    return raw.split(":", 1)[0] if raw else "unknown"
+
+
 def feature_date_for_timestamp(timestamp: pd.Timestamp | datetime) -> date:
     """Assign a public event to the trading feature date that could use it.
 
@@ -146,7 +161,7 @@ def build_daily_dataset(
     if events.empty:
         raise ValueError(f"No events in {events_path} matched an available trading candle for {ticker}.")
 
-    events["source_family"] = events["source"].astype(str).str.split(":").str[0]
+    events["source_family"] = events["source"].map(source_family_for_source)
     events = add_event_taxonomy(events)
     text_daily = events.groupby("date").agg(
         news_count=("title", "count"),
@@ -198,6 +213,7 @@ def build_daily_dataset(
         "source_count_reddit",
         "source_count_seeking_alpha",
         "source_count_sec",
+        "source_count_finviz",
         "reddit_mentions",
         "reddit_velocity_7d",
         "reddit_newly_trending",
@@ -320,7 +336,7 @@ def build_event_swing_dataset(
     events["text"] = events["text"].fillna(events["summary"]).fillna(events["title"]).fillna("")
     if "sentiment_numeric" not in events.columns:
         events["sentiment_numeric"] = 0.0
-    events["source_family"] = events["source"].astype(str).str.split(":").str[0]
+    events["source_family"] = events["source"].map(source_family_for_source)
     events = add_event_taxonomy(events)
 
     start = events["timestamp"].min().to_pydatetime() - timedelta(days=420)
@@ -414,7 +430,7 @@ def build_event_swing_dataset(
             if pd.notna(record["next_1d_return"])
             else np.nan
         )
-        for family in ["alpaca", "reddit", "seeking_alpha", "sec"]:
+        for family in ["alpaca", "reddit", "seeking_alpha", "sec", "finviz"]:
             record[f"source_is_{family}"] = float(record["source_family"] == family)
         for bucket in ["pre_market", "intraday", "after_hours"]:
             record[f"time_is_{bucket}"] = float(record["event_time_bucket"] == bucket)

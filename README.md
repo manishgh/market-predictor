@@ -230,7 +230,7 @@ market-predictor collect-swing --tickers "POET,MXL,RDW,LASE,RGTI,MRVL,IONQ,QBTS"
 
 Stage separation:
 
-- `collect-swing`: API/data download only by default. Alpaca, Reddit, and Seeking Alpha failures are isolated per source and per ticker. Uses parallel workers for I/O.
+- `collect-swing`: API/data download only by default. Alpaca, Finviz, Reddit, Seeking Alpha, and SEC failures are isolated per source and per ticker. Uses parallel workers for I/O. Seeking Alpha is enabled by default when RapidAPI credentials are configured; use `--no-seeking-alpha` only for an explicit quota outage or diagnostic run.
 - `score-swing`: FinBERT scoring only. Loads the model once, uses GPU if PyTorch detects CUDA, scores all ticker texts in batches, then writes per-ticker files.
 - `build-swing-datasets`: daily/hourly price joins, event reaction features, technical features, and labels. Uses parallel workers per ticker.
 - `rank-swing`: latest watch ranking across built datasets.

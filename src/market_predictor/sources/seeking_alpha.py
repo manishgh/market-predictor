@@ -148,7 +148,10 @@ class SeekingAlphaRapidApiSource:
             try:
                 events.extend(self._fetch_event_feed(ticker, start, feed))
             except Exception as exc:
-                errors.append(f"{name}:{exc}")
+                message = f"{name}:{exc}"
+                errors.append(message)
+                if "status=429" in message and "MONTHLY quota" in message:
+                    break
         return self._dedupe_events(events), errors
 
     def fetch_market_context_events(self, start: datetime) -> list[NewsEvent]:

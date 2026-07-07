@@ -5,10 +5,28 @@ import unittest
 
 import pandas as pd
 
+from market_predictor.features import events_to_frame, source_family_for_source
 from market_predictor.volatile import VolatileLabelConfig, build_volatile_dataset
 
 
 class VolatileDatasetTests(unittest.TestCase):
+    def test_source_family_normalizes_seeking_alpha_and_finviz(self) -> None:
+        self.assertEqual(source_family_for_source("seeking_alpha:rapidapi_news"), "seeking_alpha")
+        self.assertEqual(source_family_for_source("finviz"), "finviz")
+        events = events_to_frame(
+            [
+                {
+                    "ticker": "MXL",
+                    "timestamp": "2026-07-01T12:00:00Z",
+                    "source": "seeking_alpha:rapidapi_news",
+                    "title": "MXL news",
+                    "summary": "",
+                    "text": "",
+                }
+            ]
+        )
+        self.assertEqual(events.iloc[0]["source"], "seeking_alpha:rapidapi_news")
+
     def test_builds_news_and_big_move_labels_without_filling_missing_future(self) -> None:
         rows = []
         start = date(2026, 1, 1)
