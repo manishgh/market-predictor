@@ -72,6 +72,12 @@ Top-level predictions are persisted by `prediction_snapshot.py` as content-addre
 
 `POST /v1/replays/investment` is snapshot-driven and does not accept filesystem paths. This prevents an API client from selecting arbitrary local artifacts and ensures that every replay can be traced to a served prediction. Non-actionable signals return `not_entered`; `force_entry` is only a research override and cannot bypass invalid readiness or future-model checks.
 
+`feature_store.py` owns the live inference handoff. Collection and feature jobs publish rolling swing or intraday Parquet files atomically with a sidecar manifest containing generation time, source watermarks, feed tier, row/ticker counts, and artifact SHA-256. `PredictionRequest.data_source="live"` can only read these registered paths. Missing, modified, future-generated, or stale snapshots fail before model scoring. This keeps external API calls and FinBERT latency outside the request path.
+
+`live-once` now derives volatile-schema swing rows from each ticker's sanitized event store and daily feature history, then publishes their combined rolling snapshot to `data/live/features/swing.parquet`. The 5-minute pipeline publishes its final enriched table with `publish-live-features --mode intraday`. Both paths use the same manifest and integrity contract.
+
+`catalyst_overlay.py` is deliberately separate from estimator inference. It classifies recent evidence as confirmed, conflicting, veto, mixed, or absent. The original model probability is never modified. A separate `decision_score` adds a small confirmation bonus or conflict/veto penalty for ranking, and the API records the complete catalyst assessment so its incremental value can be ablated later.
+
 Historical event model build:
 
 ```powershell

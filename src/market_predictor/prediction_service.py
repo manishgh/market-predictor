@@ -6,11 +6,18 @@ from typing import Any
 
 import pandas as pd
 
+from market_predictor.catalyst_overlay import (
+    CatalystAssessment,
+    assess_catalyst_overlay,
+    overlay_decision_score,
+)
 from market_predictor.entry_exit import score_entry_exit_frame
+from market_predictor.feature_store import LiveFeatureStore
 from market_predictor.global_context import build_sector_theme_monitor
 from market_predictor.prediction_contracts import (
     GlobalContextInfo,
     IntradayPrediction,
+    CatalystConfirmationInfo,
     ModelInfo,
     PredictionRequest,
     PredictionResponse,
@@ -59,12 +66,14 @@ class PredictionService:
         root: Path | str = Path("."),
         *,
         snapshot_store: PredictionSnapshotStore | None = None,
+        live_feature_store: LiveFeatureStore | None = None,
         persist_snapshots: bool = True,
     ) -> None:
         self.root = Path(root)
         self.snapshot_store = snapshot_store or PredictionSnapshotStore(
             self.root / "data/predictions/snapshots"
         )
+        self.live_feature_store = live_feature_store or LiveFeatureStore(self.root)
         self.persist_snapshots = persist_snapshots
 
     def predict(self, request: PredictionRequest) -> PredictionResponse:
@@ -87,7 +96,7 @@ class PredictionService:
             bar_timeframe="1Day",
         )
         frame = self._feature_frame(
-            self._read_frame(dataset_path),
+            self._load_feature_source("swing", dataset_path, request),
             request=request,
             timeframe="daily",
         )
@@ -108,7 +117,7 @@ class PredictionService:
             bar_timeframe="5Min",
         )
         frame = self._feature_frame(
-            self._read_frame(dataset_path),
+            self._load_feature_source("intraday", dataset_path, request),
             request=request,
             timeframe="intraday",
         )
@@ -164,6 +173,7 @@ class PredictionService:
             )
         return PredictionResponse(
             mode="unified",
+            data_source=request.data_source,
             horizon=request.horizon,
             resolved_horizons=resolved_horizons,
             models=models,
@@ -214,7 +224,22 @@ class PredictionService:
         model_status: str,
         request: PredictionRequest,
     ) -> list[SwingPrediction]:
-        rows = scored.sort_values("volatile_model_probability", ascending=False).reset_index(drop=True)
+        rows = scored.copy()
+        rows["_catalyst_assessment"] = rows.apply(
+            lambda row: assess_catalyst_overlay(
+                row,
+                model_probability=_float_or_none(row.get("volatile_model_probability")),
+            ),
+            axis=1,
+        )
+        rows["_decision_score"] = rows.apply(
+            lambda row: overlay_decision_score(
+                _float_or_none(row.get("volatile_model_probability")),
+                row["_catalyst_assessment"],
+            ),
+            axis=1,
+        )
+        rows = rows.sort_values("_decision_score", ascending=False).reset_index(drop=True)
         daily_counts = (
             source_frame.assign(
                 ticker=source_frame["ticker"].astype(str).str.upper(),
@@ -226,14 +251,16 @@ class PredictionService:
         predictions: list[SwingPrediction] = []
         for idx, row in rows.iterrows():
             ticker = str(row["ticker"]).upper()
+            catalyst = row["_catalyst_assessment"]
             readiness = self._daily_readiness(row, daily_counts.get(ticker, 0), model_status)
             predictions.append(
                 SwingPrediction(
                     ticker=ticker,
                     date=_string_or_none(row.get("date")),
                     probability=_float_or_none(row.get("volatile_model_probability")),
+                    decision_score=_float_or_none(row.get("_decision_score")),
                     model_prediction=_int_or_none(row.get("volatile_model_prediction")),
-                    signal=str(row.get("monitor_signal") or _swing_signal(row.get("volatile_model_probability"))),
+                    signal=_swing_signal(row.get("volatile_model_probability"), catalyst),
                     rank=idx + 1,
                     close=_float_or_none(row.get("close")),
                     return_1d=_float_or_none(row.get("return_1d")),
@@ -247,6 +274,7 @@ class PredictionService:
                         positive_impact=float(row.get("global_positive_impact", 0.0) or 0.0),
                         negative_impact=float(row.get("global_negative_impact", 0.0) or 0.0),
                     ),
+                    catalyst=_catalyst_info(catalyst),
                     readiness=readiness,
                     drivers=_drivers(
                         row,
@@ -278,7 +306,22 @@ class PredictionService:
         if probability_col is None:
             raise ValueError("entry/exit scorer did not produce a probability column")
         prediction_col = probability_col.replace("probability", "prediction")
-        rows = scored.sort_values(probability_col, ascending=False).reset_index(drop=True)
+        rows = scored.copy()
+        rows["_catalyst_assessment"] = rows.apply(
+            lambda row: assess_catalyst_overlay(
+                row,
+                model_probability=_float_or_none(row.get(probability_col)),
+            ),
+            axis=1,
+        )
+        rows["_decision_score"] = rows.apply(
+            lambda row: overlay_decision_score(
+                _float_or_none(row.get(probability_col)),
+                row["_catalyst_assessment"],
+            ),
+            axis=1,
+        )
+        rows = rows.sort_values("_decision_score", ascending=False).reset_index(drop=True)
         intraday_counts = (
             source_frame.assign(ticker=source_frame["ticker"].astype(str).str.upper())
             .groupby("ticker")
@@ -287,15 +330,17 @@ class PredictionService:
         predictions: list[IntradayPrediction] = []
         for idx, row in rows.iterrows():
             ticker = str(row["ticker"]).upper()
+            catalyst = row["_catalyst_assessment"]
             readiness = self._intraday_readiness(row, intraday_counts.get(ticker, 0), model_status)
             predictions.append(
                 IntradayPrediction(
                     ticker=ticker,
                     date=_string_or_none(row.get("date")),
                     probability=_float_or_none(row.get(probability_col)),
+                    decision_score=_float_or_none(row.get("_decision_score")),
                     model_prediction=_int_or_none(row.get(prediction_col)),
                     probability_field=probability_col,
-                    signal=_intraday_signal(row.get(probability_col)),
+                    signal=_intraday_signal(row.get(probability_col), catalyst),
                     rank=idx + 1,
                     close=_float_or_none(row.get("close")),
                     return_1d=_float_or_none(row.get("return_1d")),
@@ -304,6 +349,7 @@ class PredictionService:
                     macd_signal_diff=_float_or_none(row.get("macd_signal_diff")),
                     entry_stop_pct=_float_or_none(row.get("entry_stop_pct")),
                     entry_target_pct=_float_or_none(row.get("entry_target_pct")),
+                    catalyst=_catalyst_info(catalyst),
                     readiness=readiness,
                     drivers=_drivers(
                         row,
@@ -536,6 +582,7 @@ class PredictionService:
             )
         return PredictionResponse(
             mode=request.mode,
+            data_source=request.data_source,
             horizon=request.horizon,
             resolved_horizons={
                 name: info.resolved_horizon
@@ -554,6 +601,19 @@ class PredictionService:
         if path.suffix.lower() == ".csv":
             return pd.read_csv(path)
         raise ValueError(f"unsupported dataset format: {path}")
+
+    def _load_feature_source(
+        self,
+        mode: str,
+        curated_path: Path,
+        request: PredictionRequest,
+    ) -> pd.DataFrame:
+        if request.data_source == "curated":
+            return self._read_frame(curated_path)
+        custom_dataset = request.swing_dataset if mode == "swing" else request.intraday_dataset
+        if custom_dataset is not None:
+            raise ValueError("custom dataset paths cannot be combined with data_source=live")
+        return self.live_feature_store.load(mode, as_of=request.as_of)  # type: ignore[arg-type]
 
     def _optional_frame(self, path: Path | None) -> pd.DataFrame | None:
         if path is None:
@@ -601,7 +661,13 @@ def _final_signal(swing: SwingPrediction | None, intraday: IntradayPrediction | 
         return "swing_only_intraday_not_ready" if swing is not None else "not_ready"
     swing_prob = swing.probability if swing else None
     intra_prob = intraday.probability if intraday else None
+    if intraday is not None and intraday.catalyst.status == "veto":
+        return "avoid_entry_catalyst_veto"
+    if intraday is not None and intraday.catalyst.status == "conflicting" and intra_prob is not None and intra_prob >= 0.55:
+        return "wait_catalyst_conflict"
     if swing_prob is not None and swing_prob >= 0.30 and (intra_prob is None or intra_prob >= 0.55):
+        if intraday is not None and intraday.catalyst.status == "confirmed":
+            return "high_conviction_watch_confirmed"
         return "high_conviction_watch"
     if swing_prob is not None and swing_prob >= 0.18 and (intra_prob is None or intra_prob >= 0.50):
         return "watch_for_entry"
@@ -612,26 +678,42 @@ def _final_signal(swing: SwingPrediction | None, intraday: IntradayPrediction | 
     return "neutral"
 
 
-def _swing_signal(probability: Any) -> str:
+def _swing_signal(probability: Any, catalyst: CatalystAssessment | None = None) -> str:
     value = _float_or_none(probability)
     if value is None:
         return "not_scored"
+    if catalyst is not None and catalyst.status == "veto" and value >= 0.18:
+        return "bullish_model_catalyst_veto"
+    if catalyst is not None and catalyst.status == "conflicting" and value >= 0.18:
+        return "bullish_model_catalyst_conflict"
     if value >= 0.30:
+        if catalyst is not None and catalyst.status == "confirmed":
+            return "strong_bullish_watch_confirmed"
         return "strong_bullish_watch"
     if value >= 0.18:
+        if catalyst is not None and catalyst.status == "confirmed":
+            return "bullish_watch_confirmed"
         return "bullish_watch"
     if value <= 0.05:
         return "low_probability"
     return "neutral"
 
 
-def _intraday_signal(probability: Any) -> str:
+def _intraday_signal(probability: Any, catalyst: CatalystAssessment | None = None) -> str:
     value = _float_or_none(probability)
     if value is None:
         return "not_scored"
+    if catalyst is not None and catalyst.status == "veto" and value >= 0.55:
+        return "avoid_entry_catalyst_veto"
+    if catalyst is not None and catalyst.status == "conflicting" and value >= 0.55:
+        return "wait_catalyst_conflict"
     if value >= 0.70:
+        if catalyst is not None and catalyst.status == "confirmed":
+            return "entry_candidate_confirmed"
         return "entry_candidate"
     if value >= 0.55:
+        if catalyst is not None and catalyst.status == "confirmed":
+            return "watch_for_entry_confirmed"
         return "watch_for_confirmation"
     if value <= 0.40:
         return "avoid_entry"
@@ -645,6 +727,10 @@ def _drivers(row: pd.Series, columns: list[str]) -> dict[str, float | int | str 
             value = row.get(column)
             output[column] = _json_value(value)
     return output
+
+
+def _catalyst_info(assessment: CatalystAssessment) -> CatalystConfirmationInfo:
+    return CatalystConfirmationInfo.model_validate(assessment.as_record())
 
 
 def _daily_availability_utc(values: pd.Series) -> pd.Series:

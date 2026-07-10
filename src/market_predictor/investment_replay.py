@@ -17,8 +17,13 @@ from market_predictor.sources.alpaca import AlpacaSource
 
 
 ACTIONABLE_SIGNALS = {
-    "swing": {"bullish_watch", "strong_bullish_watch"},
-    "intraday": {"entry_candidate"},
+    "swing": {
+        "bullish_watch",
+        "bullish_watch_confirmed",
+        "strong_bullish_watch",
+        "strong_bullish_watch_confirmed",
+    },
+    "intraday": {"entry_candidate", "entry_candidate_confirmed"},
 }
 
 

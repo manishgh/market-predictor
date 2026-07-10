@@ -213,6 +213,7 @@ Example request:
 {
   "tickers": ["MSFT", "NVDA"],
   "mode": "unified",
+  "data_source": "live",
   "horizon": "auto",
   "as_of": "2026-07-09T20:15:00Z",
   "require_promoted": true
@@ -224,6 +225,20 @@ Example request:
 Use `horizon: "auto"` for unified prediction so each model resolves its native horizon. Current built-in routes are `1d` and `5d` for swing and `12b` for the 5-minute intraday entry model. An explicit horizon is rejected when it conflicts with the selected model target. Responses include `resolved_horizons` and each model's `resolved_horizon` for auditability.
 
 The unified response returns separate `swing` and `intraday` model views plus a final orchestration signal. It does not average unrelated model probabilities into one opaque number. Readiness reports daily and intraday history separately and treats unknown feed tiers as unproven; only explicit SIP/consolidated provenance satisfies the full-volume gate.
+
+`data_source: "curated"` scores registered research datasets. `data_source: "live"` scores only the registered snapshots at `data/live/features/swing.parquet` and `data/live/features/intraday.parquet`. Live snapshots require a matching sidecar manifest, SHA-256 integrity, explicit feed provenance, and a generation time within the configured freshness window. Arbitrary filesystem paths are not accepted with live mode.
+
+The nightly `live-once` cycle publishes the rolling swing snapshot after source-isolated collection, sanitization, FinBERT scoring, daily feature construction, and volatile-schema enrichment. Publish an audited intraday feature table from the 5-minute pipeline with:
+
+```powershell
+market-predictor publish-live-features `
+  --mode intraday `
+  --input-path data/features/intraday_latest_enriched.parquet `
+  --live-dir data/live `
+  --price-feed sip
+```
+
+Catalyst evidence is returned separately from the model probability. `probability` is the unmodified model output; `decision_score` applies only a transparent ranking adjustment. The `catalyst` object reports confirmation, conflict, veto, mixed, or absent evidence using relevance, sentiment, recency, source diversity, generic-headline rate, and material-event taxonomy. This preserves technical-model auditability while allowing strong negative material catalysts to block a long entry.
 
 Every prediction served through the top-level API is written as an immutable, content-addressed JSON snapshot under `data/predictions/snapshots/`. The response returns `snapshot_id` and `snapshot_sha256`; both identify the exact request, response, model hashes, resolved horizons, feature cutoff, and generation time used for later outcome evaluation.
 

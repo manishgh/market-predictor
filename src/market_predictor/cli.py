@@ -22,6 +22,7 @@ from market_predictor.entry_exit import (
     score_entry_exit_frame,
     train_entry_exit_model,
 )
+from market_predictor.feature_store import LiveFeatureStore, LiveFeatureStoreConfig
 from market_predictor.features import (
     add_event_taxonomy,
     add_finbert,
@@ -86,6 +87,36 @@ def serve_api(
     except ImportError as exc:
         raise typer.BadParameter("uvicorn is not installed. Run `python -m pip install -e .` first.") from exc
     uvicorn.run("market_predictor.api:app", host=host, port=port, reload=reload)
+
+
+@app.command("publish-live-features")
+def publish_live_features(
+    mode: str = typer.Option(..., help="Feature mode: swing or intraday."),
+    input_path: Path = typer.Option(..., help="Curated rolling feature parquet to publish."),
+    live_dir: Path = typer.Option(Path("data/live"), help="Managed live feature root."),
+    price_feed: str = typer.Option("sip", help="Explicit feed tier recorded in the manifest."),
+) -> None:
+    """Atomically publish an integrity-checked feature snapshot for API serving."""
+    normalized_mode = mode.strip().lower()
+    if normalized_mode not in {"swing", "intraday"}:
+        raise typer.BadParameter("mode must be swing or intraday")
+    if not input_path.exists() or input_path.suffix.lower() != ".parquet":
+        raise typer.BadParameter("input_path must be an existing parquet file")
+    frame = pd.read_parquet(input_path)
+    store = LiveFeatureStore(
+        Path("."),
+        LiveFeatureStoreConfig(
+            swing_path=live_dir / "features/swing.parquet",
+            intraday_path=live_dir / "features/intraday.parquet",
+        ),
+    )
+    manifest = store.publish(
+        normalized_mode,  # type: ignore[arg-type]
+        frame,
+        price_feed=price_feed,
+        source_watermarks={"published_from": str(input_path)},
+    )
+    console.print(manifest)
 
 
 def _daily_training_columns(frame: pd.DataFrame, horizon_days: int) -> list[str]:
@@ -610,6 +641,14 @@ def _score_live_ticker(
             horizon_days=1,
             market_context_path=DEFAULT_MARKET_CONTEXT_PATH,
         )
+        live_swing, live_swing_audit = build_volatile_dataset(daily_1d)
+        if not live_swing.empty:
+            live_swing_path = feature_dir / f"{symbol}_swing_live.parquet"
+            live_swing.to_parquet(live_swing_path, index=False)
+            record["live_swing_feature_path"] = str(live_swing_path)
+            record["live_swing_feature_rows"] = int(len(live_swing))
+        elif not live_swing_audit.empty:
+            record["live_swing_readiness"] = live_swing_audit.to_dict(orient="records")
         record["watch_score"] = heuristic_watch_score(daily_1d, weights=settings.watch_score_weights).get("watch_score")
         if daily_model_1d:
             pred = predict_latest(daily_1d, daily_model_1d)
@@ -3027,6 +3066,34 @@ def live_once(
     predictions.to_csv(prediction_out, index=False)
     pd.DataFrame(collection_summary).to_csv(prediction_dir / "collection_summary.csv", index=False)
 
+    live_feature_manifest: dict[str, object] = {}
+    current_live_paths = (
+        [Path(value) for value in predictions.get("live_swing_feature_path", pd.Series(dtype="object")).dropna()]
+        if not predictions.empty
+        else []
+    )
+    live_swing_frames = [
+        pd.read_parquet(path)
+        for path in current_live_paths
+        if path.exists() and path.is_file()
+    ]
+    if live_swing_frames:
+        live_swing_frame = pd.concat(live_swing_frames, ignore_index=True)
+        live_swing_frame = live_swing_frame.drop_duplicates(["ticker", "date"], keep="last")
+        store = LiveFeatureStore(
+            Path("."),
+            LiveFeatureStoreConfig(
+                swing_path=feature_dir / "swing.parquet",
+                intraday_path=feature_dir / "intraday.parquet",
+            ),
+        )
+        live_feature_manifest = store.publish(
+            "swing",
+            live_swing_frame,
+            price_feed=settings.alpaca_stock_feed,
+            source_watermarks={"event_collection_run_id": run_id},
+        )
+
     curated = _curate_live_training_set(feature_dir, curated_out) if curate_training else {}
     state = {
         "last_run_id": run_id,
@@ -3036,6 +3103,7 @@ def live_once(
         "prediction_summary": str(prediction_out),
         "collection_summary": str(prediction_dir / "collection_summary.csv"),
         "curated_training": curated,
+        "live_feature_manifest": live_feature_manifest,
         "models": {
             "event_1d": str(event_model_1d) if event_model_1d else None,
             "event_5d": str(event_model_5d) if event_model_5d else None,

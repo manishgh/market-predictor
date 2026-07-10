@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field, field_validator
 
 PredictionMode = Literal["swing", "intraday", "unified"]
 PredictionView = Literal["swing", "intraday"]
+PredictionDataSource = Literal["curated", "live"]
 
 _HORIZON_ALIASES = {
     "tomorrow": "1d",
@@ -33,6 +34,7 @@ class PredictionRequest(BaseModel):
 
     tickers: list[str] = Field(..., min_length=1)
     mode: PredictionMode = "unified"
+    data_source: PredictionDataSource = "curated"
     horizon: str = "auto"
     as_of: datetime | None = None
     swing_dataset: Path | None = None
@@ -105,10 +107,24 @@ class GlobalContextInfo(BaseModel):
     active_flashpoints: list[str] = Field(default_factory=list)
 
 
+class CatalystConfirmationInfo(BaseModel):
+    status: Literal["confirmed", "conflicting", "veto", "mixed", "absent"] = "absent"
+    direction: Literal["positive", "negative", "mixed", "none"] = "none"
+    score: float = 0.0
+    event_count: int = 0
+    source_diversity: int = 0
+    sentiment: float = 0.0
+    relevance: float = 0.0
+    minutes_since_latest: float | None = None
+    material_event_count: int = 0
+    reasons: list[str] = Field(default_factory=list)
+
+
 class SwingPrediction(BaseModel):
     ticker: str
     date: str | None = None
     probability: float | None = None
+    decision_score: float | None = None
     model_prediction: int | None = None
     signal: str
     rank: int | None = None
@@ -120,6 +136,7 @@ class SwingPrediction(BaseModel):
     sentiment_mean: float | None = None
     monitor_theme: str | None = None
     global_context: GlobalContextInfo = Field(default_factory=GlobalContextInfo)
+    catalyst: CatalystConfirmationInfo = Field(default_factory=CatalystConfirmationInfo)
     readiness: ReadinessInfo
     drivers: dict[str, float | int | str | None] = Field(default_factory=dict)
 
@@ -128,6 +145,7 @@ class IntradayPrediction(BaseModel):
     ticker: str
     date: str | None = None
     probability: float | None = None
+    decision_score: float | None = None
     model_prediction: int | None = None
     probability_field: str | None = None
     signal: str
@@ -139,6 +157,7 @@ class IntradayPrediction(BaseModel):
     macd_signal_diff: float | None = None
     entry_stop_pct: float | None = None
     entry_target_pct: float | None = None
+    catalyst: CatalystConfirmationInfo = Field(default_factory=CatalystConfirmationInfo)
     readiness: ReadinessInfo
     drivers: dict[str, float | int | str | None] = Field(default_factory=dict)
 
@@ -156,6 +175,7 @@ class PredictionResponse(BaseModel):
     request_id: str = Field(default_factory=lambda: str(uuid4()))
     generated_at_utc: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     mode: PredictionMode
+    data_source: PredictionDataSource = "curated"
     horizon: str
     resolved_horizons: dict[str, str] = Field(default_factory=dict)
     models: dict[str, ModelInfo] = Field(default_factory=dict)

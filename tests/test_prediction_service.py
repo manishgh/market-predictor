@@ -11,6 +11,7 @@ import pandas as pd
 
 from market_predictor.prediction_contracts import PredictionRequest
 from market_predictor.prediction_service import PredictionService
+from market_predictor.feature_store import LiveFeatureStore
 from market_predictor.registry import write_model_manifest
 
 
@@ -207,6 +208,62 @@ class PredictionServiceTests(unittest.TestCase):
             self.assertIsNotNone(response.snapshot_id)
             self.assertEqual(response.snapshot_id, response.snapshot_sha256)
             self.assertTrue(service.snapshot_store.path_for(response.snapshot_id or "").exists())
+
+    def test_intraday_catalyst_overlay_changes_decision_not_model_probability(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            dataset = root / "intraday.parquet"
+            model = root / "intraday.joblib"
+            features = ["return_1d", "volume_z20"]
+            frame = _intraday_frame("MSFT", rows=150)
+            frame["news_count_2h"] = 2
+            frame["sentiment_mean_2h"] = 0.40
+            frame["event_relevance_mean_2h"] = 1.2
+            frame["source_count_alpaca_2h"] = 1
+            frame["source_count_sec_2h"] = 1
+            frame["event_contract_count_2h"] = 1
+            frame.to_parquet(dataset, index=False)
+            _write_model(model, features, target_col="target_entry_success_12b", status="promoted", probability=0.72)
+
+            response = PredictionService(root).predict_intraday(
+                PredictionRequest(
+                    tickers=["MSFT"],
+                    mode="intraday",
+                    intraday_dataset=dataset,
+                    intraday_model=model,
+                )
+            )
+
+            prediction = response.predictions[0].intraday
+            assert prediction is not None
+            self.assertAlmostEqual(prediction.probability or 0.0, 0.72)
+            self.assertAlmostEqual(prediction.decision_score or 0.0, 0.76)
+            self.assertEqual(prediction.catalyst.status, "confirmed")
+            self.assertEqual(prediction.signal, "entry_candidate_confirmed")
+
+    def test_live_data_source_uses_registered_feature_store(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            model = root / "swing.joblib"
+            features = ["return_1d", "volume_z20"]
+            frame = _swing_frame(["MSFT"], features, rows=260)
+            _write_model(model, features, target_col="target_next_week_big_up", status="promoted", probability=0.73)
+            store = LiveFeatureStore(root)
+            store.publish("swing", frame, price_feed="sip")
+
+            response = PredictionService(root, live_feature_store=store).predict_swing(
+                PredictionRequest(
+                    tickers=["MSFT"],
+                    mode="swing",
+                    data_source="live",
+                    swing_model=model,
+                )
+            )
+
+            self.assertEqual(response.data_source, "live")
+            prediction = response.predictions[0].swing
+            assert prediction is not None
+            self.assertAlmostEqual(prediction.probability or 0.0, 0.73)
 
 
 def _write_model(
