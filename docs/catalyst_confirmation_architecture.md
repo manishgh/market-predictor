@@ -1,13 +1,14 @@
-# Swing Prediction Intelligence Architecture
+# Market Prediction Intelligence Architecture
 
 This document defines the operational design for `market-predictor` as a prediction intelligence system.
 
-The system produces swing and daily momentum predictions from catalysts, news, filings, sentiment, market context, and price behavior. It does not own final trade execution, portfolio state, order routing, position sizing, stops, or exits.
+The system produces swing, daily momentum, and intraday setup predictions from catalysts, news, filings, sentiment, market context, and price behavior. It does not own final trade execution, portfolio state, order routing, position sizing, stops, or exits.
 
 Scope:
 
 - US-listed equities and ETFs
-- Mid/small-cap swing and momentum prediction, with large-cap/ETF context
+- Swing and daily momentum prediction, with large-cap/ETF context
+- Five-minute intraday setup ranking, entry-path probability, and exit-risk probability
 - Long-side prediction signals and watchlist ranking
 - Historical and recent catalyst analysis
 - Model training, validation, promotion, and audit reporting
@@ -29,6 +30,8 @@ Out of scope:
 - How did similar catalyst plus price setups behave historically?
 - Is current data complete enough to trust a prediction?
 - What is the next-day or next-swing probability?
+- Is a completed intraday setup likely to reach its target before its stop?
+- What is the separate stop-first risk for that setup?
 - Which names deserve watchlist attention?
 - What data, model, and source evidence produced the score?
 
@@ -201,14 +204,14 @@ Reason:
 
 ### Intraday Warm-Up
 
-Intraday features are optional for this repo. They are useful when the prediction includes same-day momentum confirmation, premarket movement, or intraday reaction behavior.
+Intraday prediction is a supported model view. Its readiness gates apply only when an intraday route is requested; they must not block a daily-only swing response.
 
 Minimum:
 
 - `intraday_bar_count >= configured_intraday_warmup`
 - Default recommendation: approximately 130 bars for MACD 12/26/9 stabilization.
 
-If intraday features are not part of a model, intraday warm-up should not block daily-only prediction.
+The production 5-minute route also requires point-in-time session features, consecutive raw bars for label construction, known feed coverage, and a promoted intraday manifest. If intraday features are not part of a requested model view, intraday warm-up does not block daily-only prediction.
 
 ## 7. Data-Readiness Gates
 
@@ -319,12 +322,43 @@ The repo currently contains several useful families. Their intended roles should
 
 | Family | Intended use | Status guidance |
 | --- | --- | --- |
+| S&P 500 volatile-mover 5D model | Rank unusually large positive moves over the next week | Formally promoted on 2026-07-08 under earlier gates; conditional until current profitability/regime/catalyst audits pass |
+| S&P 500 volatile-mover 1D model | Rank unusually large next-day positive moves | Candidate; not available when `require_promoted=true` |
+| Intraday 5-minute technical entry-path model | Estimate target-before-stop probability over 12 bars | Candidate; current API artifact fails AUC/lift promotion gates |
+| Intraday opening V2 models | Non-overlapping, cost-aware 09:30-11:30 ET setup experiments | Candidate artifacts with rejected promotion decision; not production-serving models |
 | Daily market-context models | Daily 1D/5D direction from price, news, sentiment, sector, and SPY context | Baseline or promoted if validation gates pass |
 | Event market-context pre-reaction models | Event-level 1D/5D probability using catalyst features before future reaction is known | Baseline or promoted |
 | Calendar-safe plus-Finviz candidate models | Broader training set with corrected event-to-candle alignment | Candidate until promoted |
 | Reaction-feature event models | Analysis after some reaction has already occurred | Not clean for pre-trade prediction |
 | Finviz-only expansion models | Research models trained on candidate expansion set | Candidate/research only |
 | Older clean/sector/swing models | Earlier iterations | Deprecated unless explicitly revalidated |
+
+### Current Deployment State (2026-07-10)
+
+The manifest, not the filename, is authoritative.
+
+| Route / artifact | Manifest state | Validation summary | Operational decision |
+| --- | --- | --- | --- |
+| Swing 5D, `sp500_6m_next_week_big_up_v2_20260708_candidate.joblib` | `promoted` | 499 tickers; 45,908 OOS rows; ROC AUC 0.7126; top-decile lift 2.5936 | API-eligible, but grandfathered from the earlier gate set. Re-audit profitability, drawdown, regime, and catalyst behavior before real-capital use. |
+| Swing 1D, `sp500_6m_next_day_big_up_v2_20260708_candidate.joblib` | `candidate` | ROC AUC 0.6657; top-decile lift 2.4850 | Research only; production API rejects it. |
+| Intraday 12-bar API default, 2026-07-09 technical ablation | `candidate` | ROC AUC 0.6014; top-decile lift 1.4719 | Research only; fails current 0.65 AUC and 2.0 lift gates. |
+| Intraday opening V2 exact-path histogram model | `candidate` | 47,543 labeled rows; 196 tickers; ROC AUC 0.5806; lift 1.1764 | Promotion rejected. |
+| Intraday opening V2 Extra Trees | `candidate` | ROC AUC 0.5783; lift 1.1442 | Promotion rejected. |
+| Intraday opening V2 logistic baseline | `candidate` | ROC AUC 0.5641; lift 1.1836 | Promotion rejected. |
+| Intraday opening V2 net-positive direction model | `candidate` | ROC AUC 0.4890; lift 0.9162 | Promotion rejected. |
+| Legacy daily/event `*_max.joblib` artifacts without manifests | No registry state | Older validation only | Baseline/research, never assume promoted. |
+
+The V2 structural dataset itself is valid for continued research: 47,614 rows, 196 eligible tickers, 122 sessions, exact 09:30-11:25 ET bar timestamps, no duplicate ticker/timestamp keys, and no cooldown gaps below 13 bars. Catalyst context covered 21.44% of rows; market context covered 87.28%. Reddit coverage was zero in this historical V2 table, so Reddit cannot be claimed as a trained intraday signal yet.
+
+Selected-trade economics are the decisive V2 failure: 558 capped OOS trades produced -0.184% average net realized return, 35.13% win rate, 0.7076 profit factor, 30.28% maximum drawdown, and 64.44% negative periods. All three market regimes were represented, so the rejection is not caused by missing regime coverage.
+
+Serving rules:
+
+- `require_promoted=true` is mandatory for production requests.
+- No route may silently substitute a candidate model.
+- Unified responses may be partial and must include explicit per-view errors.
+- Catalyst/news remains an intraday confirmation and ranking overlay until a predeclared ablation on fresh data proves incremental model value.
+- The next intraday promotion trial must use matured observations after 2026-07-08 as an untouched shadow interval.
 
 ## 11. Audit Report Specification
 
@@ -361,10 +395,12 @@ Initial known audit shape:
 - Calendar-safe daily final features: 372 tickers and approximately 213k rows per horizon.
 - Calendar-safe event final features: 369 tickers and approximately 185k rows.
 
-Implementation note:
+Implemented audit surfaces:
 
-- The audit CSV command is intentionally not part of this document change.
-- Add it later only after the report contract is accepted.
+- `audit-swing-alignment` verifies historical event-to-candle mapping and news-count consistency.
+- Dataset builders write per-ticker eligibility/readiness audit CSVs.
+- `audit-promotion-readiness` writes profitability, selected-trade, regime, regime-profitability, and catalyst audit files.
+- `promote-model` consumes those audit artifacts and leaves a failing artifact in candidate state.
 
 ## 12. Prediction Workflow
 

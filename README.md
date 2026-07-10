@@ -1,6 +1,6 @@
 # Market Predictor
 
-Python prediction-intelligence project for ticker-level swing and daily momentum scoring using:
+Python prediction-intelligence project for ticker-level swing, daily momentum, and intraday setup scoring using:
 
 - Alpaca premium news, ticker universe, and market bars as the primary live source.
 - Reddit API crawling as the required attention/community signal.
@@ -13,11 +13,33 @@ This is research and prediction tooling, not investment advice and not an automa
 
 The repository produces prediction intelligence: probabilities, catalyst summaries, feature/audit context, and watchlist rankings. It does not own broker execution, portfolio state, final sizing, stops, exits, or order lifecycle. Those responsibilities belong in a trading/runtime system such as `trading_flow`.
 
+## Current Model State (2026-07-10)
+
+Model lifecycle state comes from each artifact's `.manifest.json`; a filename such as `*_max.joblib` does not mean promoted.
+
+| Serving view | Artifact / family | State | Current evidence |
+| --- | --- | --- | --- |
+| Swing 5D | `sp500_6m_next_week_big_up_v2_20260708_candidate.joblib` | **Promoted, conditional** | 499 tickers, 45,908 OOS rows, ROC AUC 0.7126, top-decile lift 2.5936. Promoted on 2026-07-08 under the earlier classification/alignment gates; must be re-audited under the newer profitability, drawdown, regime, and catalyst gates before real-capital use. |
+| Swing 1D | `sp500_6m_next_day_big_up_v2_20260708_candidate.joblib` | Candidate | ROC AUC 0.6657 and top-decile lift 2.4850. Not promoted. |
+| Intraday 12 bars, API default | 2026-07-09 technical ablation | Candidate | ROC AUC 0.6014 and lift 1.4719. Fails current AUC/lift gates. |
+| Intraday opening V2 | 2026-07-10 non-overlapping, cost-aware experiment | Candidate; promotion rejected | Best exact-path AUC 0.5806, lift 1.1764, selected net return -0.184% per trade, profit factor 0.7076, max drawdown 30.28%. |
+| Older daily/event `*_max.joblib` files | Legacy swing/event families | Baseline/research | These artifacts predate registry manifests and current promotion gates. They are not formally promoted. |
+
+Production API implications:
+
+- `require_promoted: true` permits the default 5D swing route because its manifest is promoted.
+- The 1D swing and intraday routes are rejected as candidates; there is no silent fallback.
+- Unified mode may return the promoted swing view plus an explicit intraday error until an intraday model passes promotion.
+- Candidate scoring requires an explicit research override and must not be treated as a live trade instruction.
+
+The next valid intraday promotion attempt requires new matured shadow data after 2026-07-08, predeclared model/threshold choices, and all current promotion audits. See [Intraday model promotion](docs/intraday_model_promotion.md).
+
 ## Architecture Documents
 
 - [Implementation guide](docs/implementation_guide.md)
 - [Azure deployment plan](docs/azure_deployment_plan.md)
-- [Swing prediction intelligence architecture](docs/catalyst_confirmation_architecture.md)
+- [Market prediction intelligence architecture](docs/catalyst_confirmation_architecture.md)
+- [Intraday model promotion](docs/intraday_model_promotion.md)
 
 ## Source Strategy
 

@@ -42,8 +42,12 @@ Do not lower gates or select a model after repeatedly inspecting the same OOS in
 
 ## 2026-07-10 V2 Result
 
+Lifecycle status: **candidate artifacts; promotion decision rejected**. No V2 model is eligible for the production intraday API while `require_promoted=true`.
+
 The six-month opening-session experiment produced 47,614 non-overlapping setup rows across 196 eligible tickers and 122 sessions. Structural validation found no duplicate ticker/timestamp keys and no cooldown gaps below 13 bars.
 
 The strongest tested exact-path candidate did not pass: ROC AUC 0.5806, top-decile lift 1.1764, selected net realized return -0.184% per trade, profit factor 0.7076, and max drawdown 30.28%. Extra Trees and logistic baselines did not improve ranking. The net-positive direction companion reached ROC AUC 0.4890 and was also rejected.
+
+The selected stream contained 558 capped OOS trades with a 35.13% win rate and 64.44% negative periods. Regime coverage passed across risk-on, neutral, and risk-off observations. Catalyst features were present, but only 21.44% of rows had ticker events and historical Reddit coverage was zero. These facts prohibit claims that Reddit contributed to this trained intraday result.
 
 Monthly entry-success AUC varied materially, from approximately 0.497 in March to 0.645 in June and 0.578 in early July. This is evidence of regime instability, not a production-ready invariant edge. The next valid promotion attempt requires new matured shadow data after 2026-07-08 plus predeclared model and threshold choices.
