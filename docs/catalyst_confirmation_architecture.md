@@ -15,6 +15,7 @@ Scope:
 
 Out of scope:
 
+- User-visible alerts, alert persistence/deduplication, acknowledgement, and notifications
 - Broker order execution
 - Live portfolio/risk state
 - Final trade sizing
@@ -54,6 +55,7 @@ The output is prediction intelligence, not an order instruction.
 
 `trading_flow` owns:
 
+- Wishlist observation, alerts, deduplication, acknowledgement, and web/mobile notifications
 - Strategy orchestration
 - Backtesting
 - Position state
@@ -68,7 +70,12 @@ Integration contract:
 
 - `market-predictor` publishes prediction reports or a prediction API response.
 - `trading_flow` consumes those predictions and decides whether, when, and how to trade.
+- Predictions are evidence, not TradingFlow `ExternalSignal` messages; they contain no order action, side, stop, target, or size.
+- The TradingFlow order path reads cached prediction evidence and never blocks on remote model inference.
+- The projects do not share databases or OHLCV storage.
 - Both systems must not independently open production market-data streams for the same account unless provider limits and symbol ownership are explicitly managed.
+
+The phased contract, failure policy, alert migration, backtest handoff, and live completed-bar design are defined in [TradingFlow integration plan](trading_flow_integration_plan.md).
 
 ## 3. Prediction Output Contract
 

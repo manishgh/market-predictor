@@ -40,6 +40,7 @@ The next valid intraday promotion attempt requires new matured shadow data after
 - [Azure deployment plan](docs/azure_deployment_plan.md)
 - [Market prediction intelligence architecture](docs/catalyst_confirmation_architecture.md)
 - [Intraday model promotion](docs/intraday_model_promotion.md)
+- [TradingFlow integration plan](docs/trading_flow_integration_plan.md)
 
 ## Source Strategy
 
@@ -394,20 +395,22 @@ Run continuously in the foreground:
 market-predictor live-run --poll-seconds 3600 --lookback-days 3 --workers 8
 ```
 
-Monitor a watchlist for technical indicator alerts:
+Legacy alert commands are deprecated and must not be scheduled in new deployments:
 
 ```powershell
 market-predictor monitor-alerts --tickers "MSFT,NVDA,RGTI" --days 180 --poll-seconds 900
 ```
 
-This writes the latest alert state to `data/live/alerts/latest_alerts.csv` and appends every run to `data/live/alerts/alert_history.csv`. Alert rules currently cover MACD signal-line crosses, EMA20 reclaim/loss, EMA20/EMA50 crosses, RSI oversold/overbought reversals, and volume-confirmed breakouts/breakdowns.
+These commands remain temporarily for migration verification only. Runtime alerting, persistence, deduplication, acknowledgement, and web/mobile notification belong to `trading_flow`. The commands and `alerts.py` are scheduled for removal after rule parity is verified in TradingFlow.
 
-Backtest indicator alerts against existing labeled feature data:
+Legacy research comparison commands:
 
 ```powershell
 market-predictor backtest-alerts --horizon-days 1
 market-predictor backtest-alerts --horizon-days 5
 ```
+
+Do not build new alert behavior in this repository. See [TradingFlow integration plan](docs/trading_flow_integration_plan.md).
 
 ## Volatile Mover Research Pipeline
 
