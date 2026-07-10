@@ -205,6 +205,7 @@ Endpoints:
 - `POST /v1/predictions/swing`
 - `POST /v1/predictions/intraday`
 - `POST /v1/predictions/unified`
+- `POST /v1/replays/investment`
 
 Example request:
 
@@ -223,6 +224,27 @@ Example request:
 Use `horizon: "auto"` for unified prediction so each model resolves its native horizon. Current built-in routes are `1d` and `5d` for swing and `12b` for the 5-minute intraday entry model. An explicit horizon is rejected when it conflicts with the selected model target. Responses include `resolved_horizons` and each model's `resolved_horizon` for auditability.
 
 The unified response returns separate `swing` and `intraday` model views plus a final orchestration signal. It does not average unrelated model probabilities into one opaque number. Readiness reports daily and intraday history separately and treats unknown feed tiers as unproven; only explicit SIP/consolidated provenance satisfies the full-volume gate.
+
+Every prediction served through the top-level API is written as an immutable, content-addressed JSON snapshot under `data/predictions/snapshots/`. The response returns `snapshot_id` and `snapshot_sha256`; both identify the exact request, response, model hashes, resolved horizons, feature cutoff, and generation time used for later outcome evaluation.
+
+Replay an investment from a stored prediction:
+
+```json
+{
+  "snapshot_id": "<64-character snapshot SHA-256>",
+  "ticker": "MSFT",
+  "model_view": "swing",
+  "evaluation_as_of": "2026-07-17T21:00:00Z",
+  "initial_capital": 10000,
+  "slippage_bps": 5,
+  "commission_bps": 0,
+  "force_entry": false
+}
+```
+
+The replay uses Alpaca adjusted bars, enters at the next tradable bar open, exits at the last completed bar at `evaluation_as_of`, applies configured slippage and commissions on both sides, and evaluates SPY and QQQ over the stock's exact entry/exit window. It returns ending value, P&L, return, and excess return versus both benchmarks.
+
+Replay refuses to invest when the snapshot has invalid readiness, missing model identity, a model created after the decision time, or training data extending beyond the decision time. A neutral signal returns `not_entered`; `force_entry` is available for explicit what-if research but cannot override invalid readiness or temporal leakage gates.
 
 ## Swing Engine Workflow
 

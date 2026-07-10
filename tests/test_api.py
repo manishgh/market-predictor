@@ -1,11 +1,17 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
 import unittest
 
 from fastapi.testclient import TestClient
 
 from market_predictor.api import create_app
-from market_predictor.prediction_contracts import PredictionRequest, PredictionResponse
+from market_predictor.prediction_contracts import (
+    InvestmentReplayRequest,
+    InvestmentReplayResponse,
+    PredictionRequest,
+    PredictionResponse,
+)
 
 
 class StubPredictionService:
@@ -15,6 +21,20 @@ class StubPredictionService:
     def predict(self, request: PredictionRequest) -> PredictionResponse:
         self.last_request = request
         return PredictionResponse(mode=request.mode, horizon=request.horizon, predictions=[])
+
+
+class StubReplayService:
+    def replay(self, request: InvestmentReplayRequest) -> InvestmentReplayResponse:
+        now = datetime.now(timezone.utc)
+        return InvestmentReplayResponse(
+            snapshot_id=request.snapshot_id,
+            ticker=request.ticker,
+            model_view=request.model_view,
+            decision_time=now,
+            evaluation_time=now,
+            prediction_signal="neutral",
+            status="not_entered",
+        )
 
 
 class PredictionApiTests(unittest.TestCase):
@@ -41,6 +61,20 @@ class PredictionApiTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 422)
         self.assertIn("explicit UTC offset or timezone", response.text)
+
+    def test_investment_replay_endpoint_uses_configured_service(self) -> None:
+        client = TestClient(  # type: ignore[arg-type]
+            create_app(StubPredictionService(), replay_service=StubReplayService())
+        )
+
+        response = client.post(
+            "/v1/replays/investment",
+            json={"snapshot_id": "a" * 64, "ticker": "msft"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["ticker"], "MSFT")
+        self.assertEqual(response.json()["status"], "not_entered")
 
 
 if __name__ == "__main__":

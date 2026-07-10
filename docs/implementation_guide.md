@@ -66,6 +66,12 @@ Prediction API requests are point-in-time contracts. `PredictionRequest.as_of`, 
 
 Daily and intraday readiness are separate gates. Daily models require daily-history depth; intraday models require intraday-bar warm-up. Feed provider and feed coverage are not interchangeable: `alpaca` alone does not prove consolidated coverage, while an explicit `sip`/consolidated value does. IEX invalidates volume-sensitive production readiness.
 
+Top-level predictions are persisted by `prediction_snapshot.py` as content-addressed immutable records. The SHA-256 identifier covers the normalized request, response, model metadata, cutoff, and recording time. Loading a snapshot recomputes the hash and rejects modified content. Generated snapshot files belong under `data/predictions/snapshots/` and are runtime audit artifacts, not repository source files.
+
+`investment_replay.py` evaluates a stored prediction against subsequently available Alpaca bars. It enters the stock, SPY, and QQQ at an aligned next-bar open and exits them at the same completed-bar boundary. Slippage and commission assumptions apply on entry and exit. Replay validates model creation time, training-data end time, prediction readiness, and snapshot integrity before requesting price data. Historical requests made with a model that did not yet exist are invalid, even if the underlying feature row can be reconstructed.
+
+`POST /v1/replays/investment` is snapshot-driven and does not accept filesystem paths. This prevents an API client from selecting arbitrary local artifacts and ensures that every replay can be traced to a served prediction. Non-actionable signals return `not_entered`; `force_entry` is only a research override and cannot bypass invalid readiness or future-model checks.
+
 Historical event model build:
 
 ```powershell

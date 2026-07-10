@@ -185,6 +185,29 @@ class PredictionServiceTests(unittest.TestCase):
             self.assertEqual(prediction.readiness.daily_bar_count, 0)
             self.assertEqual(response.resolved_horizons, {"intraday": "12b"})
 
+    def test_top_level_predict_persists_immutable_snapshot(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            dataset = root / "features.parquet"
+            model = root / "swing.joblib"
+            features = ["return_1d", "volume_z20"]
+            _swing_frame(["MSFT"], features, rows=260).to_parquet(dataset, index=False)
+            _write_model(model, features, target_col="target_next_week_big_up", status="promoted", probability=0.73)
+            service = PredictionService(root)
+
+            response = service.predict(
+                PredictionRequest(
+                    tickers=["MSFT"],
+                    mode="swing",
+                    swing_dataset=dataset,
+                    swing_model=model,
+                )
+            )
+
+            self.assertIsNotNone(response.snapshot_id)
+            self.assertEqual(response.snapshot_id, response.snapshot_sha256)
+            self.assertTrue(service.snapshot_store.path_for(response.snapshot_id or "").exists())
+
 
 def _write_model(
     path: Path,

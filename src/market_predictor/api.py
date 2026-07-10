@@ -2,7 +2,14 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from market_predictor.prediction_contracts import PredictionRequest, PredictionResponse
+from market_predictor.config import get_settings
+from market_predictor.investment_replay import AlpacaReplayPriceProvider, InvestmentReplayService
+from market_predictor.prediction_contracts import (
+    InvestmentReplayRequest,
+    InvestmentReplayResponse,
+    PredictionRequest,
+    PredictionResponse,
+)
 from market_predictor.prediction_service import PredictionService
 
 try:
@@ -12,10 +19,19 @@ except ImportError:  # pragma: no cover - exercised only in minimal installs
     HTTPException = None  # type: ignore[assignment]
 
 
-def create_app(service: PredictionService | None = None) -> "FastAPI":
+def create_app(
+    service: PredictionService | None = None,
+    replay_service: InvestmentReplayService | None = None,
+) -> "FastAPI":
     if FastAPI is None:
         raise RuntimeError("FastAPI is not installed. Install the api extras/dependencies before serving.")
     prediction_service = service or PredictionService(Path("."))
+    configured_replay_service = replay_service
+    if configured_replay_service is None and isinstance(prediction_service, PredictionService):
+        configured_replay_service = InvestmentReplayService(
+            snapshot_store=prediction_service.snapshot_store,
+            price_provider=AlpacaReplayPriceProvider(get_settings()),
+        )
     app = FastAPI(
         title="Market Predictor API",
         version="0.1.0",
@@ -38,12 +54,30 @@ def create_app(service: PredictionService | None = None) -> "FastAPI":
     def predict_unified(request: PredictionRequest) -> PredictionResponse:
         return _run_prediction(prediction_service, request.model_copy(update={"mode": "unified"}))
 
+    @app.post("/v1/replays/investment", response_model=InvestmentReplayResponse)
+    def replay_investment(request: InvestmentReplayRequest) -> InvestmentReplayResponse:
+        if configured_replay_service is None:
+            raise HTTPException(status_code=503, detail="investment replay service is not configured")
+        return _run_replay(configured_replay_service, request)
+
     return app
 
 
 def _run_prediction(service: PredictionService, request: PredictionRequest) -> PredictionResponse:
     try:
         return service.predict(request)
+    except Exception as exc:
+        if HTTPException is None:
+            raise
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+def _run_replay(
+    service: InvestmentReplayService,
+    request: InvestmentReplayRequest,
+) -> InvestmentReplayResponse:
+    try:
+        return service.replay(request)
     except Exception as exc:
         if HTTPException is None:
             raise

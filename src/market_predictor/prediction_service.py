@@ -18,6 +18,7 @@ from market_predictor.prediction_contracts import (
     SwingPrediction,
     UnifiedTickerPrediction,
 )
+from market_predictor.prediction_snapshot import PredictionSnapshotStore
 from market_predictor.readiness import (
     INVALID,
     VALID,
@@ -53,15 +54,29 @@ DEFAULT_MODE_HORIZONS = {"swing": "5d", "intraday": "12b"}
 class PredictionService:
     """Production serving boundary for promoted market prediction models."""
 
-    def __init__(self, root: Path | str = Path(".")) -> None:
+    def __init__(
+        self,
+        root: Path | str = Path("."),
+        *,
+        snapshot_store: PredictionSnapshotStore | None = None,
+        persist_snapshots: bool = True,
+    ) -> None:
         self.root = Path(root)
+        self.snapshot_store = snapshot_store or PredictionSnapshotStore(
+            self.root / "data/predictions/snapshots"
+        )
+        self.persist_snapshots = persist_snapshots
 
     def predict(self, request: PredictionRequest) -> PredictionResponse:
         if request.mode == "swing":
-            return self.predict_swing(request)
-        if request.mode == "intraday":
-            return self.predict_intraday(request)
-        return self.predict_unified(request)
+            response = self.predict_swing(request)
+        elif request.mode == "intraday":
+            response = self.predict_intraday(request)
+        else:
+            response = self.predict_unified(request)
+        if not self.persist_snapshots:
+            return response
+        return self.snapshot_store.record(request, response)
 
     def predict_swing(self, request: PredictionRequest) -> PredictionResponse:
         dataset_path, model_path, resolved_horizon = self._serving_route("swing", request)
@@ -69,6 +84,7 @@ class PredictionService:
             model_path,
             require_promoted=request.require_promoted,
             resolved_horizon=resolved_horizon,
+            bar_timeframe="1Day",
         )
         frame = self._feature_frame(
             self._read_frame(dataset_path),
@@ -89,6 +105,7 @@ class PredictionService:
             model_path,
             require_promoted=request.require_promoted,
             resolved_horizon=resolved_horizon,
+            bar_timeframe="5Min",
         )
         frame = self._feature_frame(
             self._read_frame(dataset_path),
@@ -471,11 +488,13 @@ class PredictionService:
         *,
         require_promoted: bool,
         resolved_horizon: str,
+        bar_timeframe: str,
     ) -> ModelInfo:
         manifest = load_model_manifest(model_path)
         status = str(manifest.get("status", "unknown"))
         if require_promoted and status != MODEL_STATUS_PROMOTED:
             raise ValueError(f"model must be promoted for API prediction; {model_path} is {status}")
+        dataset = manifest.get("dataset") if isinstance(manifest.get("dataset"), dict) else {}
         return ModelInfo(
             path=str(model_path),
             status=status,
@@ -485,6 +504,10 @@ class PredictionService:
             validation_split=_optional_str(manifest.get("validation_split")),
             artifact_sha256=_optional_str(manifest.get("artifact_sha256")),
             resolved_horizon=resolved_horizon,
+            bar_timeframe=bar_timeframe,
+            created_at_utc=_optional_str(manifest.get("created_at_utc")),
+            training_data_start=_optional_str(dataset.get("first_date")),
+            training_data_end=_optional_str(dataset.get("last_date")),
         )
 
     def _response(

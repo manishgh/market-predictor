@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field, field_validator
 
 
 PredictionMode = Literal["swing", "intraday", "unified"]
+PredictionView = Literal["swing", "intraday"]
 
 _HORIZON_ALIASES = {
     "tomorrow": "1d",
@@ -76,6 +77,10 @@ class ModelInfo(BaseModel):
     validation_split: str | None = None
     artifact_sha256: str | None = None
     resolved_horizon: str | None = None
+    bar_timeframe: str | None = None
+    created_at_utc: str | None = None
+    training_data_start: str | None = None
+    training_data_end: str | None = None
 
 
 class ReadinessInfo(BaseModel):
@@ -156,3 +161,65 @@ class PredictionResponse(BaseModel):
     models: dict[str, ModelInfo] = Field(default_factory=dict)
     predictions: list[UnifiedTickerPrediction] = Field(default_factory=list)
     errors: list[str] = Field(default_factory=list)
+    snapshot_id: str | None = None
+    snapshot_sha256: str | None = None
+
+
+class InvestmentReplayRequest(BaseModel):
+    snapshot_id: str = Field(..., pattern=r"^[0-9a-f]{64}$")
+    ticker: str = Field(..., min_length=1, max_length=16)
+    model_view: PredictionView = "swing"
+    evaluation_as_of: datetime | None = None
+    initial_capital: float = Field(10_000.0, gt=0.0, le=1_000_000_000.0)
+    slippage_bps: float = Field(5.0, ge=0.0, le=500.0)
+    commission_bps: float = Field(0.0, ge=0.0, le=100.0)
+    force_entry: bool = False
+
+    @field_validator("ticker")
+    @classmethod
+    def normalize_replay_ticker(cls, ticker: str) -> str:
+        normalized = ticker.strip().upper()
+        if not normalized:
+            raise ValueError("ticker is required")
+        return normalized
+
+    @field_validator("evaluation_as_of")
+    @classmethod
+    def require_timezone_aware_evaluation(cls, value: datetime | None) -> datetime | None:
+        if value is not None and value.utcoffset() is None:
+            raise ValueError("evaluation_as_of must include an explicit UTC offset or timezone")
+        return value
+
+
+class InvestmentLegResult(BaseModel):
+    ticker: str
+    entry_time: datetime
+    entry_price: float
+    exit_time: datetime
+    exit_price: float
+    shares: float
+    initial_capital: float
+    ending_value: float
+    pnl: float
+    return_pct: float
+
+
+class InvestmentReplayResponse(BaseModel):
+    replay_id: str = Field(default_factory=lambda: str(uuid4()))
+    generated_at_utc: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    snapshot_id: str
+    ticker: str
+    model_view: PredictionView
+    model_path: str | None = None
+    model_artifact_sha256: str | None = None
+    model_training_data_end: str | None = None
+    decision_time: datetime
+    evaluation_time: datetime
+    prediction_signal: str
+    prediction_readiness_status: Literal["valid", "warn", "invalid"] | None = None
+    status: Literal["completed", "not_entered", "invalid"]
+    reasons: list[str] = Field(default_factory=list)
+    stock: InvestmentLegResult | None = None
+    benchmarks: dict[str, InvestmentLegResult] = Field(default_factory=dict)
+    excess_return_vs_spy: float | None = None
+    excess_return_vs_qqq: float | None = None
