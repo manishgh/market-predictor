@@ -60,6 +60,12 @@ Watchlist prediction:
 market-predictor predict-watchlist --tickers "LUNR,MXL,RGTI" --out data/reports/watchlist_latest.csv
 ```
 
+Prediction API requests are point-in-time contracts. `PredictionRequest.as_of`, when present, must be timezone-aware. The serving service filters daily feature rows by their 16:00 America/New_York availability time and intraday rows by inferred bar-close time. It does not interpret a bar's start timestamp as the moment its closing price and volume became known.
+
+`PredictionRequest.horizon` defaults to `auto`. In that mode, the service resolves the horizon from an explicitly selected model target or from the mode's registered default. Explicit horizons are validated against the model manifest. `PredictionResponse.resolved_horizons` records the actual horizon used by each model, which is required for replay and downstream `trading_flow` audit records.
+
+Daily and intraday readiness are separate gates. Daily models require daily-history depth; intraday models require intraday-bar warm-up. Feed provider and feed coverage are not interchangeable: `alpaca` alone does not prove consolidated coverage, while an explicit `sip`/consolidated value does. IEX invalidates volume-sensitive production readiness.
+
 Historical event model build:
 
 ```powershell

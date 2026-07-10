@@ -34,6 +34,10 @@ from market_predictor.features import (
     feature_date_for_timestamp,
     source_family_for_source,
 )
+from market_predictor.global_context import build_sector_theme_monitor, score_flashpoints
+from market_predictor.intraday_confirmation import build_intraday_decision_report
+from market_predictor.intraday_enrichment import build_enriched_intraday_dataset
+from market_predictor.intraday_universe import build_intraday_candidate_universe
 from market_predictor.model import (
     DEFAULT_FEATURES,
     heuristic_watch_score,
@@ -45,8 +49,17 @@ from market_predictor.model import (
 )
 from market_predictor.azure_store import AzureBlobStore
 from market_predictor.price import fetch_daily_prices
-from market_predictor.price import fetch_hourly_prices
-from market_predictor.sources import AlpacaSource, FinvizSource, RedditSource, SeekingAlphaRapidApiSource
+from market_predictor.price import fetch_intraday_prices
+from market_predictor.promotion_audit import (
+    ProfitabilityAuditConfig,
+    build_catalyst_news_audit,
+    build_market_regime_audit,
+    build_walk_forward_profitability_audit,
+    read_audit_record,
+)
+from market_predictor.registry import promote_model_manifest
+from market_predictor.sources import AlpacaSource, FinvizSource, GdeltSource, RedditSource, SeekingAlphaRapidApiSource
+from market_predictor.sources.gdelt import DEFAULT_GDELT_CONTEXT_QUERIES
 from market_predictor.sources.sec import SecSource
 from market_predictor.volatile import (
     VolatileLabelConfig,
@@ -59,6 +72,20 @@ from market_predictor.volatile import (
 app = typer.Typer(help="Collect news, build features, and train next-week market direction models.")
 console = Console()
 DEFAULT_MARKET_CONTEXT_PATH = Path("data/external/market_context/market_context_events_scored.parquet")
+
+
+@app.command("serve-api")
+def serve_api(
+    host: str = typer.Option("127.0.0.1", help="API bind host."),
+    port: int = typer.Option(8000, help="API bind port."),
+    reload: bool = typer.Option(False, help="Enable uvicorn reload for local development."),
+) -> None:
+    """Serve the typed prediction API for swing, intraday, and unified views."""
+    try:
+        import uvicorn
+    except ImportError as exc:
+        raise typer.BadParameter("uvicorn is not installed. Run `python -m pip install -e .` first.") from exc
+    uvicorn.run("market_predictor.api:app", host=host, port=port, reload=reload)
 
 
 def _daily_training_columns(frame: pd.DataFrame, horizon_days: int) -> list[str]:
@@ -85,6 +112,12 @@ def _parse_tickers(tickers: str | None, fallback: list[str]) -> list[str]:
         values = [item.strip().upper() for item in tickers.replace(";", ",").split(",")]
         return [item for item in dict.fromkeys(values) if item]
     return fallback
+
+
+def _parse_path_list(value: str | None) -> list[Path]:
+    if not value:
+        return []
+    return [Path(item.strip()) for item in value.replace(";", ",").split(",") if item.strip()]
 
 
 def _parse_end_date(value: str | None) -> datetime | None:
@@ -956,6 +989,48 @@ def download_finviz_screeners(
     pd.DataFrame(summary).to_csv(out.with_suffix(".summary.csv"), index=False)
     console.print({"screens": len(summary), "unique_candidates": len(result), "new_tickers": len(tickers), "out": str(out)})
     console.print(result.head(80))
+
+
+@app.command("build-intraday-universe")
+def build_intraday_universe_command(
+    raw: Path = typer.Option(
+        Path("data/external/finviz/nasdaq200/nasdaq_liquid_raw_20260707.csv"),
+        help="Raw Finviz export CSV.",
+    ),
+    out: Path = typer.Option(
+        Path("data/universe/intraday_nasdaq_activity_latest.csv"),
+        help="Ranked intraday candidate CSV.",
+    ),
+    tickers_out: Path = typer.Option(
+        Path("data/universe/intraday_nasdaq_activity_latest_tickers.txt"),
+        help="Comma-separated ticker output.",
+    ),
+    top_n: int = typer.Option(200, help="Number of candidates to keep."),
+    min_price: float = typer.Option(2.0, help="Minimum stock price."),
+    min_volume: int = typer.Option(500_000, help="Minimum current volume."),
+    min_abs_change_pct: float = typer.Option(0.5, help="Minimum absolute day change percent."),
+    min_market_cap_m: float = typer.Option(100.0, help="Minimum market cap in millions."),
+) -> None:
+    """Rank NASDAQ Finviz rows for volatile/high-volume intraday candidates."""
+    if not raw.exists():
+        raise typer.BadParameter(f"Missing raw Finviz CSV: {raw}")
+    frame = pd.read_csv(raw)
+    candidates = build_intraday_candidate_universe(
+        frame,
+        top_n=top_n,
+        min_price=min_price,
+        min_volume=min_volume,
+        min_abs_change_pct=min_abs_change_pct,
+        min_market_cap_m=min_market_cap_m,
+    )
+    if candidates.empty:
+        raise typer.BadParameter("No intraday candidates matched the requested filters.")
+    out.parent.mkdir(parents=True, exist_ok=True)
+    tickers_out.parent.mkdir(parents=True, exist_ok=True)
+    candidates.to_csv(out, index=False)
+    tickers_out.write_text(",".join(candidates["ticker"].astype(str)), encoding="utf-8")
+    console.print({"raw_rows": len(frame), "candidates": len(candidates), "out": str(out)})
+    console.print(candidates.head(50))
 
 
 @app.command("collect-swing")
@@ -1878,7 +1953,7 @@ def predict_watchlist(
 def export_ohlcv_artifacts(
     tickers: str | None = typer.Option(None, help="Comma-separated symbols. Defaults to configured swing universe."),
     days: int = typer.Option(730, help="Calendar days of bars to export."),
-    timeframes: str = typer.Option("1d,1h", help="Comma-separated timeframes: 1d,1h."),
+    timeframes: str = typer.Option("1d,1h", help="Comma-separated timeframes: 1d,1h,5m,1m."),
     out_dir: Path = typer.Option(Path("data/artifacts/ohlcv"), help="Local OHLCV artifact output root."),
     workers: int | None = typer.Option(None, help="Parallel export workers."),
 ) -> None:
@@ -1886,7 +1961,7 @@ def export_ohlcv_artifacts(
     settings = get_settings()
     symbols = _parse_tickers(tickers, settings.swing_candidate_tickers)
     requested = {item.strip().lower() for item in timeframes.split(",") if item.strip()}
-    valid = {"1d", "1h"}
+    valid = {"1d", "1h", "5m", "1m"}
     unknown = requested - valid
     if unknown:
         raise typer.BadParameter(f"Unsupported timeframes: {sorted(unknown)}")
@@ -1904,13 +1979,15 @@ def export_ohlcv_artifacts(
             path.parent.mkdir(parents=True, exist_ok=True)
             normalized.to_parquet(path, index=False)
             rows.append({"ticker": symbol, "timeframe": "1d", "rows": len(normalized), "path": str(path)})
-        if "1h" in requested:
-            hourly = fetch_hourly_prices(symbol, start, end, settings)
-            normalized = _normalize_ohlcv(symbol, hourly, "1h")
-            path = out_dir / "1h" / f"{symbol}.parquet"
+        for timeframe in ["1h", "5m", "1m"]:
+            if timeframe not in requested:
+                continue
+            intraday = fetch_intraday_prices(symbol, start, end, settings, timeframe=timeframe)
+            normalized = _normalize_ohlcv(symbol, intraday, timeframe)
+            path = out_dir / timeframe / f"{symbol}.parquet"
             path.parent.mkdir(parents=True, exist_ok=True)
             normalized.to_parquet(path, index=False)
-            rows.append({"ticker": symbol, "timeframe": "1h", "rows": len(normalized), "path": str(path)})
+            rows.append({"ticker": symbol, "timeframe": timeframe, "rows": len(normalized), "path": str(path)})
         return rows
 
     summary = []
@@ -2244,6 +2321,152 @@ def train_volatile_model_command(
     console.print(metrics)
 
 
+@app.command("audit-promotion-readiness")
+def audit_promotion_readiness(
+    dataset: Path = typer.Option(..., help="Feature dataset used by the candidate model."),
+    predictions: Path = typer.Option(..., help="Out-of-sample predictions CSV from training."),
+    target_col: str | None = typer.Option(None, help="Target column. Defaults to target_entry_success_* when available."),
+    alignment_audit: Path | None = typer.Option(None, help="Optional existing news/candle alignment audit CSV."),
+    out_prefix: Path = typer.Option(Path("data/reports/model_promotion_audit"), help="Output prefix for audit files."),
+    probability_col: str = typer.Option("oos_probability", help="OOS probability column."),
+    top_fraction: float = typer.Option(0.10, help="Top probability fraction to simulate as trades."),
+    min_probability: float | None = typer.Option(None, help="Optional minimum probability floor for selected trades."),
+    max_trades_per_period: int | None = typer.Option(
+        None,
+        help="Optional cap on selected trades per session/day for drawdown-aware selection.",
+    ),
+) -> None:
+    """Build promotion audits for catalyst alignment, regime coverage, and OOS trade economics."""
+    if not dataset.exists():
+        raise typer.BadParameter(f"Missing dataset: {dataset}")
+    if not predictions.exists():
+        raise typer.BadParameter(f"Missing predictions CSV: {predictions}")
+    frame = pd.read_parquet(dataset)
+    prediction_frame = pd.read_csv(predictions)
+    alignment_frame = pd.read_csv(alignment_audit) if alignment_audit is not None and alignment_audit.exists() else None
+    summary, trades, regime_profit = build_walk_forward_profitability_audit(
+        dataset=frame,
+        predictions=prediction_frame,
+        target_col=target_col,
+        config=ProfitabilityAuditConfig(
+            probability_col=probability_col,
+            top_fraction=top_fraction,
+            min_probability=min_probability,
+            max_trades_per_period=max_trades_per_period,
+        ),
+    )
+    regime = build_market_regime_audit(
+        dataset=frame,
+        predictions=prediction_frame,
+        probability_col=probability_col,
+        top_fraction=top_fraction,
+    )
+    catalyst = build_catalyst_news_audit(dataset=frame, alignment_audit=alignment_frame)
+    out_prefix.parent.mkdir(parents=True, exist_ok=True)
+    profitability_out = out_prefix.with_name(out_prefix.name + "_profitability.csv")
+    trades_out = out_prefix.with_name(out_prefix.name + "_selected_trades.csv")
+    regime_out = out_prefix.with_name(out_prefix.name + "_regime.csv")
+    regime_profit_out = out_prefix.with_name(out_prefix.name + "_regime_profitability.csv")
+    catalyst_out = out_prefix.with_name(out_prefix.name + "_catalyst.csv")
+    summary.to_csv(profitability_out, index=False)
+    trades.to_csv(trades_out, index=False)
+    regime.to_csv(regime_out, index=False)
+    regime_profit.to_csv(regime_profit_out, index=False)
+    catalyst.to_csv(catalyst_out, index=False)
+    console.print({"profitability": str(profitability_out), "selected_trades": str(trades_out), "regime": str(regime_out), "catalyst": str(catalyst_out)})
+    console.print(summary.iloc[0].to_dict())
+    console.print(regime.iloc[0].to_dict())
+    console.print(catalyst.iloc[0].to_dict())
+
+
+@app.command("promote-model")
+def promote_model_command(
+    model: Path = typer.Option(..., help="Model artifact to promote."),
+    metrics: Path = typer.Option(..., help="Metrics CSV produced by the model training command."),
+    alignment_audit: Path | None = typer.Option(
+        None,
+        help="Alignment audit CSV from audit-swing-alignment. Required by default.",
+    ),
+    profitability_audit: Path | None = typer.Option(None, help="Profitability audit CSV from audit-promotion-readiness."),
+    regime_audit: Path | None = typer.Option(None, help="Market-regime audit CSV from audit-promotion-readiness."),
+    catalyst_audit: Path | None = typer.Option(None, help="Catalyst/news audit CSV from audit-promotion-readiness."),
+    report_out: Path | None = typer.Option(
+        None,
+        help="Promotion/rejection JSON report. Defaults beside the model manifest.",
+    ),
+    min_roc_auc: float = typer.Option(0.65, help="Minimum out-of-sample ROC AUC."),
+    min_top_decile_lift: float = typer.Option(2.0, help="Minimum top-decile lift."),
+    min_validated_rows: int = typer.Option(20_000, help="Minimum out-of-sample validated rows."),
+    min_tickers: int = typer.Option(200, help="Minimum distinct tickers in the training set."),
+    max_alignment_errors: int = typer.Option(0, help="Maximum allowed alignment audit errors/mismatches."),
+    require_alignment_audit: bool = typer.Option(True, help="Reject if alignment audit is not supplied."),
+    min_selected_trades: int = typer.Option(100, help="Minimum selected OOS trades in profitability audit."),
+    min_avg_trade_return: float = typer.Option(0.0, help="Minimum average return of selected OOS trades."),
+    min_profit_factor: float = typer.Option(1.05, help="Minimum selected-trade profit factor."),
+    max_strategy_drawdown: float = typer.Option(0.25, help="Maximum selected-trade cumulative drawdown."),
+    min_return_drawdown_ratio: float = typer.Option(0.5, help="Minimum selected-trade cumulative return to drawdown ratio."),
+    max_negative_period_rate: float = typer.Option(0.55, help="Maximum share of selected periods with negative average return."),
+    require_profitability_audit: bool = typer.Option(True, help="Reject if profitability audit is not supplied."),
+    min_regime_count: int = typer.Option(3, help="Minimum number of market regimes represented."),
+    max_single_regime_share: float = typer.Option(0.85, help="Maximum training rows allowed in one market regime."),
+    require_regime_audit: bool = typer.Option(True, help="Reject if regime audit is not supplied."),
+    max_low_relevance_event_rate: float = typer.Option(0.25, help="Maximum low-relevance event rate in catalyst audit."),
+    require_catalyst_audit: bool = typer.Option(True, help="Reject if catalyst/news audit is not supplied."),
+) -> None:
+    """Promote a candidate model only after production audit gates pass."""
+    if not model.exists():
+        raise typer.BadParameter(f"Missing model artifact: {model}")
+    if not metrics.exists():
+        raise typer.BadParameter(f"Missing metrics CSV: {metrics}")
+    metric_frame = pd.read_csv(metrics)
+    if metric_frame.empty:
+        raise typer.BadParameter(f"Metrics CSV has no rows: {metrics}")
+    metric_record = metric_frame.iloc[0].to_dict()
+    audit_frame = None
+    if alignment_audit is not None:
+        if not alignment_audit.exists():
+            raise typer.BadParameter(f"Missing alignment audit CSV: {alignment_audit}")
+        audit_frame = pd.read_csv(alignment_audit)
+    profitability_frame = read_audit_record(profitability_audit)
+    regime_frame = read_audit_record(regime_audit)
+    catalyst_frame = read_audit_record(catalyst_audit)
+    if report_out is None:
+        report_out = model.with_suffix(model.suffix + ".promotion_report.json")
+    result = promote_model_manifest(
+        model_path=model,
+        metrics=metric_record,
+        alignment_audit=audit_frame,
+        profitability_audit=profitability_frame,
+        regime_audit=regime_frame,
+        catalyst_audit=catalyst_frame,
+        min_roc_auc=min_roc_auc,
+        min_top_decile_lift=min_top_decile_lift,
+        min_validated_rows=min_validated_rows,
+        min_tickers=min_tickers,
+        max_alignment_errors=max_alignment_errors,
+        require_alignment_audit=require_alignment_audit,
+        min_selected_trades=min_selected_trades,
+        min_avg_trade_return=min_avg_trade_return,
+        min_profit_factor=min_profit_factor,
+        max_strategy_drawdown=max_strategy_drawdown,
+        min_return_drawdown_ratio=min_return_drawdown_ratio,
+        max_negative_period_rate=max_negative_period_rate,
+        require_profitability_audit=require_profitability_audit,
+        min_regime_count=min_regime_count,
+        max_single_regime_share=max_single_regime_share,
+        require_regime_audit=require_regime_audit,
+        max_low_relevance_event_rate=max_low_relevance_event_rate,
+        require_catalyst_audit=require_catalyst_audit,
+        report_path=report_out,
+    )
+    if not result["passed"]:
+        console.print("[red]Model promotion rejected[/red]")
+        console.print(result)
+        raise typer.Exit(code=1)
+    console.print("[green]Model promoted[/green]")
+    console.print(result)
+
+
 @app.command("score-volatile-latest")
 def score_volatile_latest(
     dataset: Path = typer.Option(
@@ -2298,6 +2521,109 @@ def score_volatile_latest(
     console.print(f"Wrote volatile latest scores to {out}")
 
 
+@app.command("score-flashpoints")
+def score_flashpoints_command(
+    events: Path = typer.Option(
+        DEFAULT_MARKET_CONTEXT_PATH,
+        help="Global/market-context events parquet or CSV.",
+    ),
+    out: Path = typer.Option(
+        Path("data/reports/global_flashpoints_latest.csv"),
+        help="Output flashpoint score CSV.",
+    ),
+    lookback_hours: int = typer.Option(48, help="Lookback window for flashpoint scoring."),
+) -> None:
+    """Score global flashpoint and commodity-channel risk from market-context news."""
+    if not events.exists():
+        raise typer.BadParameter(f"Missing events file: {events}")
+    frame = pd.read_parquet(events) if events.suffix.lower() == ".parquet" else pd.read_csv(events)
+    scored = score_flashpoints(frame, lookback_hours=lookback_hours)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    scored.to_csv(out, index=False)
+    console.print(scored.head(30))
+    console.print(f"Wrote flashpoint scores to {out}")
+
+
+@app.command("monitor-sector-themes")
+def monitor_sector_themes(
+    dataset: Path = typer.Option(
+        Path("data/features/sp500_6m_volatile_daily_20260708.parquet"),
+        help="Volatile feature dataset with latest ticker rows.",
+    ),
+    universe: Path = typer.Option(
+        Path("data/universe/sp500_current_20260708.csv"),
+        help="Universe CSV with ticker, sector, industry, and company columns.",
+    ),
+    model: Path = typer.Option(
+        Path("models/sp500_6m_next_week_big_up_v2_20260708_candidate.joblib"),
+        help="Promoted volatile model artifact.",
+    ),
+    flashpoints: Path | None = typer.Option(
+        None,
+        help="Optional flashpoint CSV from score-flashpoints.",
+    ),
+    sector_out: Path = typer.Option(
+        Path("data/reports/sector_theme_monitor_latest.csv"),
+        help="Output sector/theme monitor CSV.",
+    ),
+    ticker_out: Path = typer.Option(
+        Path("data/reports/sector_theme_monitor_tickers_latest.csv"),
+        help="Output ticker-level monitor CSV.",
+    ),
+    allow_candidate_model: bool = typer.Option(False, help="Allow non-promoted model for research only."),
+) -> None:
+    """Monitor sectors/themes using the promoted model plus global flashpoint context."""
+    if not dataset.exists():
+        raise typer.BadParameter(f"Missing dataset: {dataset}")
+    if not universe.exists():
+        raise typer.BadParameter(f"Missing universe: {universe}")
+    if not model.exists():
+        raise typer.BadParameter(f"Missing model: {model}")
+    feature_frame = pd.read_parquet(dataset) if dataset.suffix.lower() == ".parquet" else pd.read_csv(dataset)
+    universe_frame = pd.read_csv(universe)
+    flashpoint_frame = None
+    if flashpoints is not None:
+        if not flashpoints.exists():
+            raise typer.BadParameter(f"Missing flashpoint CSV: {flashpoints}")
+        flashpoint_frame = pd.read_csv(flashpoints)
+    sector_report, ticker_report = build_sector_theme_monitor(
+        dataset=feature_frame,
+        universe=universe_frame,
+        model_path=model,
+        flashpoints=flashpoint_frame,
+        require_promoted=not allow_candidate_model,
+    )
+    sector_out.parent.mkdir(parents=True, exist_ok=True)
+    ticker_out.parent.mkdir(parents=True, exist_ok=True)
+    sector_report.to_csv(sector_out, index=False)
+    ticker_keep = [
+        col
+        for col in [
+            "ticker",
+            "date",
+            "monitor_theme",
+            "monitor_signal",
+            "monitor_score",
+            "volatile_model_probability",
+            "global_net_impact",
+            "global_positive_impact",
+            "global_negative_impact",
+            "volume_z20",
+            "news_count",
+            "event_count",
+            "return_1d",
+            "sector_return_1d",
+            "rel_return_1d_vs_sector",
+        ]
+        if col in ticker_report.columns
+    ]
+    ticker_report[ticker_keep].to_csv(ticker_out, index=False)
+    console.print(sector_report.head(30))
+    console.print(ticker_report[ticker_keep].head(50))
+    console.print(f"Wrote sector/theme monitor to {sector_out}")
+    console.print(f"Wrote ticker monitor to {ticker_out}")
+
+
 @app.command("build-entry-exit-dataset")
 def build_entry_exit_dataset_command(
     input_path: Path = typer.Option(
@@ -2319,6 +2645,7 @@ def build_entry_exit_dataset_command(
     min_rows_per_ticker: int = typer.Option(120, help="Minimum rows per ticker."),
     min_labeled_rows_per_ticker: int = typer.Option(40, help="Minimum non-null path labels per ticker."),
     bar_kind: str = typer.Option("swing", help="Human label for bar type: swing, daily, hourly, 5min, etc."),
+    allow_overnight: bool = typer.Option(False, help="Allow intraday path labels to cross session boundaries."),
 ) -> None:
     """Build leak-safe entry/exit path labels from OHLCV feature rows."""
     if not input_path.exists():
@@ -2337,6 +2664,7 @@ def build_entry_exit_dataset_command(
         min_rows_per_ticker=min_rows_per_ticker,
         min_labeled_rows_per_ticker=min_labeled_rows_per_ticker,
         bar_kind=bar_kind,
+        allow_overnight=allow_overnight,
     )
     dataset, audit = build_entry_exit_dataset(frame, config=config)
     out.parent.mkdir(parents=True, exist_ok=True)
@@ -2347,6 +2675,7 @@ def build_entry_exit_dataset_command(
     summary = {
         "schema": "entry_exit.v1",
         "bar_kind": bar_kind,
+        "allow_overnight": allow_overnight,
         "rows": len(dataset),
         "tickers": int(dataset["ticker"].nunique()) if not dataset.empty else 0,
         "first_date": str(dataset["date"].min()) if not dataset.empty else None,
@@ -2385,6 +2714,7 @@ def train_entry_exit_model_command(
     max_iter: int = typer.Option(350, help="Maximum boosting iterations."),
     learning_rate: float = typer.Option(0.04, help="Boosting learning rate."),
     embargo_rows: int | None = typer.Option(None, help="Purged walk-forward embargo rows. Defaults from target horizon."),
+    feature_set: str = typer.Option("all", help="Feature ablation set: all, technical, or catalyst."),
 ) -> None:
     """Train an entry/exit path classifier."""
     if not dataset.exists():
@@ -2399,9 +2729,64 @@ def train_entry_exit_model_command(
         max_iter=max_iter,
         learning_rate=learning_rate,
         embargo_rows=embargo_rows,
+        feature_set=feature_set,
     )
     console.print(report)
     console.print(metrics)
+
+
+@app.command("build-intraday-enriched-dataset")
+def build_intraday_enriched_dataset_command(
+    input_path: Path = typer.Option(..., "--input", help="5m entry/exit dataset parquet."),
+    out: Path = typer.Option(..., help="Output enriched training parquet."),
+    audit_out: Path = typer.Option(..., help="Output enrichment audit CSV."),
+    candidates: Path | None = typer.Option(None, help="Optional Finviz intraday candidate CSV."),
+    one_minute_dir: Path | None = typer.Option(None, help="Optional 1m OHLCV parquet directory."),
+    benchmark_dir: Path | None = typer.Option(None, help="Optional 5m benchmark OHLCV directory containing QQQ/SPY."),
+    event_dirs: str | None = typer.Option(None, help="Comma-separated event directories containing SYMBOL_events.parquet files."),
+    market_context: Path | None = typer.Option(
+        DEFAULT_MARKET_CONTEXT_PATH,
+        help="Optional global market-context events parquet for intraday catalyst features.",
+    ),
+    setup_only: bool = typer.Option(True, help="Keep only rows passing setup-candidate filters."),
+    min_setup_score: float = typer.Option(2.0, help="Minimum setup-candidate score when setup-only is true."),
+) -> None:
+    """Create setup-filtered, market-relative, 1m-confirmed intraday training rows."""
+    if not input_path.exists():
+        raise typer.BadParameter(f"Missing input dataset: {input_path}")
+    frame = pd.read_parquet(input_path)
+    candidate_frame = pd.read_csv(candidates) if candidates is not None and candidates.exists() else None
+    enriched, audit = build_enriched_intraday_dataset(
+        frame,
+        candidates=candidate_frame,
+        one_minute_dir=one_minute_dir,
+        benchmark_dir=benchmark_dir,
+        event_dirs=_parse_path_list(event_dirs),
+        market_context_path=market_context,
+        setup_only=setup_only,
+        min_setup_score=min_setup_score,
+    )
+    out.parent.mkdir(parents=True, exist_ok=True)
+    audit_out.parent.mkdir(parents=True, exist_ok=True)
+    enriched.to_parquet(out, index=False)
+    audit.to_csv(audit_out, index=False)
+    summary = {
+        "input_rows": len(frame),
+        "input_tickers": int(frame["ticker"].nunique()) if "ticker" in frame.columns else 0,
+        "output_rows": len(enriched),
+        "output_tickers": int(enriched["ticker"].nunique()) if not enriched.empty else 0,
+        "setup_only": setup_only,
+        "min_setup_score": min_setup_score,
+        "event_dirs": event_dirs,
+        "market_context": str(market_context) if market_context else None,
+        "target_entry_success_rate": float(pd.to_numeric(enriched.get("target_entry_success_12b"), errors="coerce").mean())
+        if not enriched.empty and "target_entry_success_12b" in enriched.columns
+        else None,
+        "out": str(out),
+        "audit": str(audit_out),
+    }
+    console.print(summary)
+    console.print(audit.sort_values("rows", ascending=False).head(30))
 
 
 @app.command("score-entry-exit-latest")
@@ -2459,6 +2844,48 @@ def score_entry_exit_latest(
     ]
     console.print(scored[keep].head(50))
     console.print(f"Wrote entry/exit latest scores to {out}")
+
+
+@app.command("build-intraday-decision-report")
+def build_intraday_decision_report_command(
+    scores: Path = typer.Option(..., help="Latest 5m entry/exit score CSV."),
+    one_minute_dir: Path = typer.Option(..., help="Directory containing 1m OHLCV parquet files."),
+    candidates: Path | None = typer.Option(None, help="Optional Finviz intraday candidate CSV."),
+    out: Path = typer.Option(Path("data/reports/intraday_decision_latest.csv"), help="Output decision report CSV."),
+) -> None:
+    """Merge 5m entry model scores with latest 1m confirmation features."""
+    if not scores.exists():
+        raise typer.BadParameter(f"Missing scores CSV: {scores}")
+    if not one_minute_dir.exists():
+        raise typer.BadParameter(f"Missing 1m directory: {one_minute_dir}")
+    score_frame = pd.read_csv(scores)
+    candidate_frame = pd.read_csv(candidates) if candidates is not None and candidates.exists() else None
+    report = build_intraday_decision_report(
+        scores=score_frame,
+        one_minute_dir=one_minute_dir,
+        candidates=candidate_frame,
+    )
+    out.parent.mkdir(parents=True, exist_ok=True)
+    report.to_csv(out, index=False)
+    display_cols = [
+        col
+        for col in [
+            "ticker",
+            "intraday_decision",
+            "entry_model_probability",
+            "entry_model_rank",
+            "one_minute_confirmation_signal",
+            "one_minute_dist_vwap",
+            "one_minute_return_15m",
+            "one_minute_volume_burst_15m",
+            "above_opening_range",
+            "intraday_theme",
+            "intraday_candidate_score",
+        ]
+        if col in report.columns
+    ]
+    console.print(report[display_cols].head(80))
+    console.print(f"Wrote intraday decision report to {out}")
 
 
 @app.command("live-once")
@@ -2956,6 +3383,8 @@ def collect_market_context(
         help="Output market context events parquet.",
     ),
     score_sentiment: bool = typer.Option(True, help="Run FinBERT on global market/news context rows."),
+    include_gdelt: bool = typer.Option(True, help="Include GDELT global flashpoint/news context."),
+    gdelt_max_records_per_query: int = typer.Option(75, help="Maximum GDELT articles per configured query."),
 ) -> None:
     """Collect broad market/global news that can affect all tickers without being ticker-specific."""
     from market_predictor.sentiment import FinbertScorer
@@ -2969,6 +3398,16 @@ def collect_market_context(
             rows.extend([event.to_record() for event in SeekingAlphaRapidApiSource(settings).fetch_market_context_events(start)])
         except Exception as exc:
             errors.append(f"seeking_alpha_market_context:{exc}")
+    if include_gdelt:
+        try:
+            gdelt_events, gdelt_errors = GdeltSource().fetch_context_events_with_errors(
+                start,
+                max_records_per_query=gdelt_max_records_per_query,
+            )
+            rows.extend([event.to_record() for event in gdelt_events])
+            errors.extend(f"gdelt_context:{error}" for error in gdelt_errors)
+        except Exception as exc:
+            errors.append(f"gdelt_context:{exc}")
     frame = pd.DataFrame(rows)
     if frame.empty:
         frame = pd.DataFrame(columns=["ticker", "timestamp", "source", "title", "url", "summary", "text", "raw"])
@@ -2990,6 +3429,58 @@ def collect_market_context(
         "out": str(out),
     }
     (out.parent / "market_context_summary.json").write_text(json.dumps(summary, indent=2, sort_keys=True), encoding="utf-8")
+    console.print(summary)
+
+
+@app.command("collect-gdelt-context")
+def collect_gdelt_context(
+    days: int = typer.Option(2, help="Global flashpoint lookback window in calendar days."),
+    out: Path = typer.Option(
+        Path("data/external/market_context/gdelt_context_events.parquet"),
+        help="Output GDELT context events parquet.",
+    ),
+    max_records_per_query: int = typer.Option(75, help="Maximum GDELT articles per configured query."),
+    query: str | None = typer.Option(None, help="Optional single GDELT DOC query for one flashpoint family."),
+    request_pause_seconds: float = typer.Option(5.5, help="Pause/retry backoff for GDELT public rate limits."),
+    request_retries: int = typer.Option(2, help="HTTP retries per GDELT query."),
+    score_sentiment: bool = typer.Option(False, help="Run FinBERT on GDELT context rows."),
+) -> None:
+    """Collect real global flashpoint news from GDELT into the market-context schema."""
+    from market_predictor.sentiment import FinbertScorer
+
+    settings = get_settings()
+    start = datetime.now(timezone.utc) - timedelta(days=days)
+    queries = (query,) if query else None
+    source = GdeltSource(request_pause_seconds=request_pause_seconds, request_retries=request_retries)
+    events, errors = source.fetch_context_events_with_errors(
+        start,
+        queries=queries or DEFAULT_GDELT_CONTEXT_QUERIES,
+        max_records_per_query=max_records_per_query,
+    )
+    frame = pd.DataFrame([event.to_record() for event in events])
+    if frame.empty:
+        frame = pd.DataFrame(columns=["ticker", "timestamp", "source", "title", "url", "summary", "text", "raw"])
+    else:
+        frame = sanitize_events_frame(frame)[0]
+        if score_sentiment:
+            scorer = FinbertScorer(settings.finbert_model, torch_num_threads=settings.torch_num_threads)
+            frame = add_finbert_with_scorer(frame, scorer, batch_size=settings.finbert_batch_size)
+        if "raw" in frame.columns:
+            frame["raw"] = frame["raw"].map(
+                lambda value: json.dumps(value, ensure_ascii=True, sort_keys=True) if isinstance(value, dict) else value
+            )
+    out.parent.mkdir(parents=True, exist_ok=True)
+    frame.to_parquet(out, index=False)
+    summary = {
+        "rows": len(frame),
+        "sources": frame["source"].value_counts().to_dict() if "source" in frame else {},
+        "out": str(out),
+        "days": days,
+        "max_records_per_query": max_records_per_query,
+        "query": query,
+        "errors": errors,
+    }
+    (out.parent / "gdelt_context_summary.json").write_text(json.dumps(summary, indent=2, sort_keys=True), encoding="utf-8")
     console.print(summary)
 
 

@@ -14,6 +14,8 @@ from sklearn.metrics import classification_report
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 
+from market_predictor.registry import write_model_manifest
+
 
 DEFAULT_FEATURES = [
     "return_1d",
@@ -264,6 +266,71 @@ class PurgedWalkForwardSplit:
         return sum(1 for _ in self.split(x, y, groups))
 
 
+class DateGroupedPurgedWalkForwardSplit:
+    """Walk-forward splitter that keeps each timestamp/date group in one fold.
+
+    Row-count embargoes are not sufficient for multi-symbol trading data because
+    a single market day can contain hundreds of adjacent rows. This splitter
+    treats the supplied ``groups`` values as ordered time buckets and embargoes
+    whole buckets.
+    """
+
+    def __init__(self, n_splits: int = 5, embargo_groups: int = 1, min_train_size: int = 40) -> None:
+        if n_splits < 1:
+            raise ValueError("n_splits must be >= 1.")
+        if embargo_groups < 0:
+            raise ValueError("embargo_groups must be >= 0.")
+        self.n_splits = n_splits
+        self.embargo_groups = embargo_groups
+        self.min_train_size = min_train_size
+
+    def split(
+        self,
+        x: pd.DataFrame,
+        y: pd.Series | None = None,
+        groups: object | None = None,
+    ) -> Iterator[tuple[np.ndarray, np.ndarray]]:
+        if groups is None:
+            raise ValueError("DateGroupedPurgedWalkForwardSplit requires groups.")
+        n_rows = len(x)
+        group_series = pd.Series(groups).reset_index(drop=True)
+        if len(group_series) != n_rows:
+            raise ValueError("groups length must match x length.")
+        normalized = self._normalize_groups(group_series)
+        ordered_groups = list(pd.Index(normalized.dropna().unique()).sort_values())
+        if len(ordered_groups) < self.n_splits + 1:
+            return
+        fold_size = max(1, len(ordered_groups) // (self.n_splits + 1))
+        for split_num in range(self.n_splits):
+            test_start_group = min(len(ordered_groups), self.min_train_groups(ordered_groups, fold_size) + split_num * fold_size)
+            test_end_group = min(test_start_group + fold_size, len(ordered_groups))
+            train_end_group = max(0, test_start_group - self.embargo_groups)
+            if test_start_group >= len(ordered_groups) or test_end_group <= test_start_group:
+                continue
+            train_groups = set(ordered_groups[:train_end_group])
+            test_groups = set(ordered_groups[test_start_group:test_end_group])
+            train_idx = np.flatnonzero(normalized.isin(train_groups).to_numpy())
+            test_idx = np.flatnonzero(normalized.isin(test_groups).to_numpy())
+            if len(train_idx) < self.min_train_size or len(test_idx) == 0:
+                continue
+            yield train_idx, test_idx
+
+    def get_n_splits(self, x: pd.DataFrame | None = None, y: pd.Series | None = None, groups: object | None = None) -> int:
+        if x is None:
+            return self.n_splits
+        return sum(1 for _ in self.split(x, y, groups))
+
+    def min_train_groups(self, ordered_groups: list[object], fold_size: int) -> int:
+        return min(max(1, fold_size), max(1, len(ordered_groups) // 3))
+
+    @staticmethod
+    def _normalize_groups(groups: pd.Series) -> pd.Series:
+        converted = pd.to_datetime(groups, errors="coerce", utc=True)
+        if converted.notna().any():
+            return converted.dt.tz_convert(None)
+        return groups.astype("string")
+
+
 def train_direction_model(
     dataset: pd.DataFrame,
     model_out: Path,
@@ -299,11 +366,16 @@ def train_direction_model(
 
     splits = min(5, max(2, len(data) // 30))
     embargo = int(horizon_days or 5)
-    cv = PurgedWalkForwardSplit(n_splits=splits, embargo=embargo, min_train_size=min(60, max(30, len(data) // 3)))
-    if cv.get_n_splits(x, y) < 2:
+    cv = DateGroupedPurgedWalkForwardSplit(
+        n_splits=splits,
+        embargo_groups=embargo,
+        min_train_size=min(60, max(30, len(data) // 3)),
+    )
+    validation_groups = data["date"]
+    if cv.get_n_splits(x, y, groups=validation_groups) < 2:
         raise ValueError("Not enough rows for purged walk-forward validation after applying embargo.")
     predictions = pd.Series(index=y.index, dtype="float")
-    for train_idx, test_idx in cv.split(x, y):
+    for train_idx, test_idx in cv.split(x, y, groups=validation_groups):
         fold_model = clone(model)
         fold_model.fit(x.iloc[train_idx], y.iloc[train_idx])
         predictions.iloc[test_idx] = fold_model.predict(x.iloc[test_idx])
@@ -311,20 +383,40 @@ def train_direction_model(
     report = classification_report(y[scored], predictions[scored].astype(int), digits=3)
     model.fit(x, y)
     model_out.parent.mkdir(parents=True, exist_ok=True)
-    joblib.dump(
-        {
-            "model": model,
-            "features": features,
-            "horizon_days": horizon_days,
-            "target_col": target_col,
-            "max_iter": max_iter,
-            "learning_rate": learning_rate,
+    payload = {
+        "model": model,
+        "features": features,
+        "horizon_days": horizon_days,
+        "target_col": target_col,
+        "model_type": "direction",
+        "schema_version": "direction.v1",
+        "max_iter": max_iter,
+        "learning_rate": learning_rate,
+        "validation_split": "date_grouped_purged_walk_forward",
+        "embargo_groups": embargo,
+    }
+    joblib.dump(payload, model_out)
+    write_model_manifest(
+        model_path=model_out,
+        model_type="direction",
+        schema_version="direction.v1",
+        target_col=target_col,
+        features=features,
+        training_data=data,
+        metrics={
+            "train_rows": int(len(data)),
+            "validated_rows": int(scored.sum()),
+            "features": int(len(features)),
+            "validation_split": payload["validation_split"],
+            "embargo_groups": embargo,
         },
-        model_out,
+        validation_split=payload["validation_split"],
+        extra={"horizon_days": horizon_days, "max_iter": max_iter, "learning_rate": learning_rate},
     )
     return (
         f"target={target_col}\n"
-        f"embargo_rows={embargo}\n"
+        f"validation_split=date_grouped_purged_walk_forward\n"
+        f"embargo_groups={embargo}\n"
         f"max_iter={max_iter}\n"
         f"learning_rate={learning_rate}\n"
         f"features={len(features)}\n{report}"
@@ -394,11 +486,16 @@ def train_event_swing_model_with_metrics(
         ]
     )
     splits = min(5, max(2, len(data) // 200))
-    cv = PurgedWalkForwardSplit(n_splits=splits, embargo=10, min_train_size=min(500, max(80, len(data) // 3)))
-    if cv.get_n_splits(x, y) < 2:
+    cv = DateGroupedPurgedWalkForwardSplit(
+        n_splits=splits,
+        embargo_groups=10,
+        min_train_size=min(500, max(80, len(data) // 3)),
+    )
+    validation_groups = pd.to_datetime(data["event_timestamp"], errors="coerce", utc=True).dt.date
+    if cv.get_n_splits(x, y, groups=validation_groups) < 2:
         raise ValueError("Not enough event rows for purged walk-forward validation after applying embargo.")
     predictions = pd.Series(index=y.index, dtype="float")
-    for train_idx, test_idx in cv.split(x, y):
+    for train_idx, test_idx in cv.split(x, y, groups=validation_groups):
         fold_model = clone(model)
         fold_model.fit(x.iloc[train_idx], y.iloc[train_idx])
         predictions.iloc[test_idx] = fold_model.predict(x.iloc[test_idx])
@@ -407,18 +504,19 @@ def train_event_swing_model_with_metrics(
     accuracy = float(accuracy_score(y[scored], predictions[scored].astype(int)))
     model.fit(x, y)
     model_out.parent.mkdir(parents=True, exist_ok=True)
-    joblib.dump(
-        {
-            "model": model,
-            "features": features,
-            "target_col": target_col,
-            "include_reaction_features": include_reaction_features,
-            "model_type": "event_swing",
-            "max_iter": max_iter,
-            "learning_rate": learning_rate,
-        },
-        model_out,
-    )
+    payload = {
+        "model": model,
+        "features": features,
+        "target_col": target_col,
+        "include_reaction_features": include_reaction_features,
+        "model_type": "event_swing",
+        "schema_version": "event_swing.v1",
+        "max_iter": max_iter,
+        "learning_rate": learning_rate,
+        "validation_split": "date_grouped_purged_walk_forward",
+        "embargo_groups": 10,
+    }
+    joblib.dump(payload, model_out)
     metrics = {
         "target_col": target_col,
         "include_reaction_features": include_reaction_features,
@@ -428,12 +526,32 @@ def train_event_swing_model_with_metrics(
         "train_rows": int(len(data)),
         "validated_rows": int(scored.sum()),
         "accuracy": accuracy,
+        "validation_split": "date_grouped_purged_walk_forward",
+        "embargo_groups": 10,
         "model_out": str(model_out),
     }
+    manifest = write_model_manifest(
+        model_path=model_out,
+        model_type="event_swing",
+        schema_version="event_swing.v1",
+        target_col=target_col,
+        features=features,
+        training_data=data,
+        metrics=metrics,
+        validation_split=payload["validation_split"],
+        extra={
+            "include_reaction_features": include_reaction_features,
+            "max_iter": max_iter,
+            "learning_rate": learning_rate,
+        },
+    )
+    metrics["manifest_path"] = str(model_out.with_suffix(model_out.suffix + ".manifest.json"))
+    metrics["artifact_sha256"] = manifest["artifact_sha256"]
     return (
         f"target={target_col}\n"
         f"include_reaction_features={include_reaction_features}\n"
-        f"embargo_rows=10\n"
+        f"validation_split=date_grouped_purged_walk_forward\n"
+        f"embargo_groups=10\n"
         f"max_iter={max_iter}\n"
         f"learning_rate={learning_rate}\n"
         f"features={len(features)}\n{report}"

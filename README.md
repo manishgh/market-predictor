@@ -95,6 +95,12 @@ Predict a watchlist using the active clean models:
 market-predictor predict-watchlist --tickers "LUNR,MXL,RGTI" --out data/reports/watchlist_latest.csv
 ```
 
+Start the prediction API:
+
+```powershell
+market-predictor serve-api --host 127.0.0.1 --port 8000
+```
+
 Export project-owned OHLCV artifacts for Azure upload:
 
 ```powershell
@@ -188,6 +194,35 @@ market-predictor predict AAPL --model models/aapl_direction_5d.joblib --days 30
 ```
 
 The prediction label uses a tradable next-session open entry reference, not same-day close. Use `--horizon-days 1` for tomorrow/swing watch work and `--horizon-days 5` for a next-week view.
+
+## Prediction API
+
+The API is a serving layer over promoted model artifacts and curated feature datasets. It does not train models, collect live news, place trades, or bypass promotion gates.
+
+Endpoints:
+
+- `GET /v1/health`
+- `POST /v1/predictions/swing`
+- `POST /v1/predictions/intraday`
+- `POST /v1/predictions/unified`
+
+Example request:
+
+```json
+{
+  "tickers": ["MSFT", "NVDA"],
+  "mode": "unified",
+  "horizon": "auto",
+  "as_of": "2026-07-09T20:15:00Z",
+  "require_promoted": true
+}
+```
+
+`as_of` is optional, but when supplied it must include a timezone or UTC offset. Daily close-derived rows are available only from 16:00 America/New_York on their trading date. Intraday rows are available only after the inferred bar closes. These rules also apply to historical replay, preventing a request from reading a feature row that was not tradable at the requested time.
+
+Use `horizon: "auto"` for unified prediction so each model resolves its native horizon. Current built-in routes are `1d` and `5d` for swing and `12b` for the 5-minute intraday entry model. An explicit horizon is rejected when it conflicts with the selected model target. Responses include `resolved_horizons` and each model's `resolved_horizon` for auditability.
+
+The unified response returns separate `swing` and `intraday` model views plus a final orchestration signal. It does not average unrelated model probabilities into one opaque number. Readiness reports daily and intraday history separately and treats unknown feed tiers as unproven; only explicit SIP/consolidated provenance satisfies the full-volume gate.
 
 ## Swing Engine Workflow
 
@@ -387,6 +422,17 @@ market-predictor score-entry-exit-latest `
 ```
 
 The same commands work for intraday datasets when the input rows are hourly or 5-minute OHLCV features; set `--bar-kind hourly` or `--bar-kind 5min` and choose a horizon in bars, for example `--horizon-bars 12` for roughly one trading day on 30-minute bars. Labels always enter at the next bar open and evaluate only future high/low bars, which prevents same-bar leakage.
+
+Before promotion, build production-readiness audits from the feature table and out-of-sample predictions:
+
+```powershell
+market-predictor audit-promotion-readiness `
+  --dataset data/features/entry_exit_swing_5b_20260704.parquet `
+  --predictions data/reports/entry_exit_swing_entry_success_5b_oos_predictions_20260704.csv `
+  --out-prefix data/reports/entry_exit_swing_entry_success_5b_promotion_20260704
+```
+
+The audit writes separate profitability, selected-trade, market-regime, and catalyst/news CSVs. `promote-model` can require those files so a model is not promoted on ROC AUC alone. The default gate checks out-of-sample selected-trade return, profit factor, drawdown, market-regime coverage, catalyst/news presence, and news/candle alignment.
 
 Retrain only when enough matured live labels exist:
 

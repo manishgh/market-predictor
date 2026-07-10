@@ -145,10 +145,20 @@ class AlpacaSource:
         return frame[["date", "open", "high", "low", "close", "volume"]].sort_values("date")
 
     def fetch_hourly_bars(self, ticker: str, start: datetime, end: datetime | None = None) -> pd.DataFrame:
+        return self.fetch_intraday_bars(ticker, start, end, timeframe="1Hour")
+
+    def fetch_intraday_bars(
+        self,
+        ticker: str,
+        start: datetime,
+        end: datetime | None = None,
+        *,
+        timeframe: str,
+    ) -> pd.DataFrame:
         end = end or datetime.now(timezone.utc)
         params = {
             "symbols": ticker.upper(),
-            "timeframe": "1Hour",
+            "timeframe": timeframe,
             "start": start.isoformat(),
             "end": end.isoformat(),
             "feed": self.settings.alpaca_stock_feed,

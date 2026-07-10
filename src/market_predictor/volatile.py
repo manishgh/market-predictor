@@ -15,7 +15,8 @@ from sklearn.metrics import accuracy_score, classification_report, precision_rec
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 
-from market_predictor.model import DEFAULT_FEATURES, PurgedWalkForwardSplit
+from market_predictor.model import DEFAULT_FEATURES, DateGroupedPurgedWalkForwardSplit
+from market_predictor.registry import write_model_manifest
 
 
 VOLATILE_SCHEMA_VERSION = "volatile_mover.v1"
@@ -127,13 +128,18 @@ def train_volatile_model(
             ),
         ]
     )
-    splits = min(5, max(2, len(data) // 500))
-    cv = PurgedWalkForwardSplit(n_splits=splits, embargo=embargo_rows, min_train_size=min(5000, max(500, len(data) // 3)))
-    if cv.get_n_splits(x, y) < 2:
+    splits = min(5, max(2, data["date"].nunique() // 25))
+    cv = DateGroupedPurgedWalkForwardSplit(
+        n_splits=splits,
+        embargo_groups=embargo_rows,
+        min_train_size=min(5000, max(500, len(data) // 3)),
+    )
+    validation_groups = data["date"]
+    if cv.get_n_splits(x, y, groups=validation_groups) < 2:
         raise ValueError("Not enough rows for purged walk-forward validation.")
     probabilities = pd.Series(index=y.index, dtype="float")
     predictions = pd.Series(index=y.index, dtype="float")
-    for train_idx, test_idx in cv.split(x, y):
+    for train_idx, test_idx in cv.split(x, y, groups=validation_groups):
         fold_model = clone(model)
         fold_model.fit(x.iloc[train_idx], y.iloc[train_idx])
         probabilities.iloc[test_idx] = fold_model.predict_proba(x.iloc[test_idx])[:, 1]
@@ -159,7 +165,8 @@ def train_volatile_model(
         "model_type": "volatile_mover",
         "max_iter": max_iter,
         "learning_rate": learning_rate,
-        "embargo_rows": embargo_rows,
+        "embargo_groups": embargo_rows,
+        "validation_split": "date_grouped_purged_walk_forward",
         "trained_at_utc": datetime.now(timezone.utc).isoformat(),
     }
     joblib.dump(payload, model_out)
@@ -180,9 +187,28 @@ def train_volatile_model(
         "top_decile_positive_rate": lift["top_decile_positive_rate"],
         "base_positive_rate": lift["base_positive_rate"],
         "top_decile_lift": lift["top_decile_lift"],
+        "validation_split": payload["validation_split"],
+        "embargo_groups": int(embargo_rows),
         "model_out": str(model_out),
         "trained_at_utc": payload["trained_at_utc"],
     }
+    manifest = write_model_manifest(
+        model_path=model_out,
+        model_type="volatile_mover",
+        schema_version=VOLATILE_SCHEMA_VERSION,
+        target_col=target_col,
+        features=features,
+        training_data=data,
+        metrics=metrics,
+        validation_split=payload["validation_split"],
+        extra={
+            "max_iter": max_iter,
+            "learning_rate": learning_rate,
+            "embargo_groups": embargo_rows,
+        },
+    )
+    metrics["manifest_path"] = str(model_out.with_suffix(model_out.suffix + ".manifest.json"))
+    metrics["artifact_sha256"] = manifest["artifact_sha256"]
     oos = data.loc[scored, ["ticker", "date", target_col]].copy()
     oos["oos_probability"] = prob_scored.to_numpy()
     oos["oos_prediction"] = pred_scored.to_numpy()
@@ -197,6 +223,7 @@ def train_volatile_model(
         f"target={target_col}\n"
         f"schema={VOLATILE_SCHEMA_VERSION}\n"
         f"rows={len(data)} tickers={data['ticker'].nunique()} features={len(features)}\n"
+        f"validation_split={payload['validation_split']} embargo_groups={embargo_rows}\n"
         f"accuracy={metrics['accuracy']:.4f} precision={metrics['precision']:.4f} "
         f"recall={metrics['recall']:.4f} roc_auc={metrics['roc_auc']:.4f} "
         f"top_decile_lift={metrics['top_decile_lift']:.4f}\n"
