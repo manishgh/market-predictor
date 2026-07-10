@@ -9,21 +9,23 @@ import joblib
 import numpy as np
 import pandas as pd
 from sklearn.base import clone
-from sklearn.ensemble import HistGradientBoostingClassifier
+from sklearn.ensemble import ExtraTreesClassifier, HistGradientBoostingClassifier
 from sklearn.impute import SimpleImputer
+from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import accuracy_score, classification_report, precision_recall_fscore_support, roc_auc_score
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 
 from market_predictor.features import add_price_features
 from market_predictor.intraday_catalysts import INTRADAY_CATALYST_FEATURES
+from market_predictor.intraday_enrichment import add_intraday_technical_features
 from market_predictor.market_regime import MARKET_REGIME_FEATURES, add_market_regime_labels
 from market_predictor.model import DEFAULT_FEATURES, DateGroupedPurgedWalkForwardSplit
 from market_predictor.registry import write_model_manifest
 from market_predictor.volatile import VOLATILE_EXTRA_FEATURES
 
 
-ENTRY_EXIT_SCHEMA_VERSION = "entry_exit.v1"
+ENTRY_EXIT_SCHEMA_VERSION = "entry_exit.v2"
 
 ENTRY_EXIT_EXTRA_FEATURES = [
     "ema_10",
@@ -51,6 +53,9 @@ ENTRY_EXIT_EXTRA_FEATURES = [
     "session_minute_sin",
     "session_minute_cos",
     "dist_session_vwap",
+    "session_vwap_slope_3bar",
+    "session_vwap_slope_6bar",
+    "opening_range_width_pct",
     "dist_opening_range_high",
     "dist_opening_range_low",
     "above_opening_range",
@@ -59,7 +64,9 @@ ENTRY_EXIT_EXTRA_FEATURES = [
     "return_3bar",
     "return_6bar",
     "return_12bar",
+    "return_acceleration_3v6",
     "volume_burst_20bar",
+    "relative_volume_same_minute_20d",
     "ema10_gt_ema20",
     "ema20_gt_ema50",
     "close_gt_ema20",
@@ -169,6 +176,10 @@ class EntryExitLabelConfig:
     ambiguous_policy: str = "stop"
     bar_kind: str = "swing"
     allow_overnight: bool = False
+    session_scope: str = "all"
+    setup_cooldown_bars: int = 0
+    round_trip_cost_bps: float = 0.0
+    min_setup_score: float | None = None
 
 
 def build_entry_exit_dataset(
@@ -183,6 +194,14 @@ def build_entry_exit_dataset(
         raise ValueError("ATR target/stop multipliers must be positive.")
     if config.ambiguous_policy not in {"stop", "target", "ignore"}:
         raise ValueError("ambiguous_policy must be one of: stop, target, ignore.")
+    if config.session_scope not in {"all", "premarket", "opening", "regular"}:
+        raise ValueError("session_scope must be one of: all, premarket, opening, regular.")
+    if config.setup_cooldown_bars < 0:
+        raise ValueError("setup_cooldown_bars must be >= 0.")
+    if config.round_trip_cost_bps < 0:
+        raise ValueError("round_trip_cost_bps must be >= 0.")
+    if config.min_setup_score is not None and config.min_setup_score < 0:
+        raise ValueError("min_setup_score must be >= 0 when provided.")
     data = frame.copy()
     if "ticker" not in data.columns:
         if "symbol" in data.columns:
@@ -201,12 +220,46 @@ def build_entry_exit_dataset(
     data["date"] = data["_mp_timestamp"].dt.tz_convert(None)
     data["_mp_session_date"] = data["_mp_timestamp"].dt.tz_convert("America/New_York").dt.date
     data = data.dropna(subset=["ticker"]).sort_values(["ticker", "_mp_timestamp"]).reset_index(drop=True)
+    data["_mp_session_bar_index"] = data.groupby(["ticker", "_mp_session_date"], sort=False).cumcount()
     data = _ensure_price_state(data)
     data = _prepare_entry_exit_indicators(data)
+    if _is_intraday_config(config):
+        data["timestamp"] = data["_mp_timestamp"]
+        data = add_intraday_technical_features(data)
     data = _add_entry_exit_features(data, config)
     data = _add_path_labels(data, config)
+    data = _apply_session_and_overlap_scope(data, config)
     data, audit = _apply_entry_exit_readiness(data, config)
     return data.reset_index(drop=True), audit
+
+
+def merge_entry_exit_context(dataset: pd.DataFrame, context: pd.DataFrame) -> pd.DataFrame:
+    """Join approved point-in-time model features without replacing labels or OHLCV."""
+    if dataset.empty or context.empty:
+        return dataset.copy()
+    required = {"ticker"}
+    if not required.issubset(dataset.columns) or not required.issubset(context.columns):
+        raise ValueError("Entry/exit context merge requires ticker in both frames.")
+    left = dataset.copy()
+    right = context.copy()
+    left_time = left.get("_mp_timestamp", left.get("timestamp", left.get("date")))
+    right_time = right.get("_mp_timestamp", right.get("timestamp", right.get("date")))
+    if left_time is None or right_time is None:
+        raise ValueError("Entry/exit context merge requires a timestamp/date in both frames.")
+    left["_context_timestamp"] = pd.to_datetime(left_time, errors="coerce", utc=True)
+    right["_context_timestamp"] = pd.to_datetime(right_time, errors="coerce", utc=True)
+    left["_context_ticker"] = left["ticker"].astype(str).str.upper().str.strip()
+    right["_context_ticker"] = right["ticker"].astype(str).str.upper().str.strip()
+    if left["_context_timestamp"].isna().any() or right["_context_timestamp"].isna().any():
+        raise ValueError("Entry/exit context merge contains invalid timestamps.")
+    keys = ["_context_ticker", "_context_timestamp"]
+    if right.duplicated(keys).any():
+        raise ValueError("Entry/exit context contains duplicate ticker/timestamp rows.")
+    approved = [column for column in ENTRY_EXIT_FEATURES if column in right.columns and column not in left.columns]
+    if not approved:
+        return left.drop(columns=keys)
+    merged = left.merge(right[[*keys, *approved]], on=keys, how="left", validate="one_to_one")
+    return merged.drop(columns=keys)
 
 
 def train_entry_exit_model(
@@ -220,24 +273,30 @@ def train_entry_exit_model(
     learning_rate: float = 0.04,
     embargo_rows: int | None = None,
     feature_set: str = "all",
+    estimator: str = "hist_gradient_boosting",
 ) -> tuple[str, dict[str, Any], pd.DataFrame]:
     if target_col not in dataset.columns:
         raise ValueError(f"Dataset missing target column: {target_col}")
     feature_set = feature_set.strip().lower()
     if feature_set not in ENTRY_EXIT_FEATURE_SETS:
         raise ValueError(f"feature_set must be one of {sorted(ENTRY_EXIT_FEATURE_SETS)}")
+    estimator = estimator.strip().lower()
+    if estimator not in {"hist_gradient_boosting", "extra_trees", "logistic"}:
+        raise ValueError("estimator must be one of: hist_gradient_boosting, extra_trees, logistic")
     data = add_market_regime_labels(dataset).sort_values(["date", "ticker"]).dropna(subset=[target_col]).copy()
     if len(data) < 200:
         raise ValueError("Need at least 200 labeled rows to train an entry/exit model.")
     y = data[target_col].astype(int)
+    classifier = _entry_exit_classifier(
+        estimator=estimator,
+        max_iter=max_iter,
+        learning_rate=learning_rate,
+    )
     model = Pipeline(
         steps=[
             ("imputer", SimpleImputer(strategy="median")),
             ("scaler", StandardScaler()),
-            (
-                "classifier",
-                HistGradientBoostingClassifier(max_iter=max_iter, learning_rate=learning_rate, random_state=42),
-            ),
+            ("classifier", classifier),
         ]
     )
     embargo = int(embargo_rows if embargo_rows is not None else max(1, min(20, _infer_horizon_from_target(target_col))))
@@ -291,6 +350,7 @@ def train_entry_exit_model(
         "schema_version": ENTRY_EXIT_SCHEMA_VERSION,
         "model_type": "entry_path",
         "feature_set": feature_set,
+        "estimator": estimator,
         "max_iter": max_iter,
         "learning_rate": learning_rate,
         "embargo_groups": embargo,
@@ -303,6 +363,7 @@ def train_entry_exit_model(
         "model_type": "entry_path",
         "target_col": target_col,
         "feature_set": feature_set,
+        "estimator": estimator,
         "rows": int(len(data)),
         "tickers": int(data["ticker"].nunique()),
         "features": int(len(features)),
@@ -337,6 +398,7 @@ def train_entry_exit_model(
             "learning_rate": learning_rate,
             "embargo_groups": embargo,
             "feature_set": feature_set,
+            "estimator": estimator,
             "excluded_fold_sparse_features": excluded_fold_sparse,
         },
     )
@@ -357,6 +419,7 @@ def train_entry_exit_model(
         f"target={target_col}\n"
         f"schema={ENTRY_EXIT_SCHEMA_VERSION}\n"
         f"feature_set={feature_set}\n"
+        f"estimator={estimator}\n"
         f"rows={len(data)} tickers={data['ticker'].nunique()} features={len(features)}\n"
         f"candidate_features={len(candidate_features)} excluded_fold_sparse_features={len(excluded_fold_sparse)}\n"
         f"validation_split={payload['validation_split']} embargo_groups={embargo}\n"
@@ -366,6 +429,32 @@ def train_entry_exit_model(
         f"{report}"
     )
     return summary, metrics, oos
+
+
+def _entry_exit_classifier(*, estimator: str, max_iter: int, learning_rate: float) -> Any:
+    if estimator == "hist_gradient_boosting":
+        return HistGradientBoostingClassifier(
+            max_iter=max_iter,
+            learning_rate=learning_rate,
+            class_weight="balanced",
+            l2_regularization=1.0,
+            random_state=42,
+        )
+    if estimator == "extra_trees":
+        return ExtraTreesClassifier(
+            n_estimators=max_iter,
+            min_samples_leaf=12,
+            max_features="sqrt",
+            class_weight="balanced",
+            n_jobs=-1,
+            random_state=42,
+        )
+    return LogisticRegression(
+        max_iter=max_iter,
+        C=max(0.01, min(1.0, learning_rate * 5.0)),
+        class_weight="balanced",
+        random_state=42,
+    )
 
 
 def score_entry_exit_frame(dataset: pd.DataFrame, model_path: Path) -> pd.DataFrame:
@@ -428,6 +517,9 @@ def _oos_audit_columns(data: pd.DataFrame, target_col: str) -> list[str]:
         f"max_favorable_excursion_{suffix}b",
         f"max_adverse_excursion_{suffix}b",
         f"horizon_return_from_entry_{suffix}b",
+        f"net_horizon_return_from_entry_{suffix}b",
+        f"realized_return_from_entry_{suffix}b",
+        f"net_realized_return_from_entry_{suffix}b",
         f"target_exit_risk_{suffix}b",
         f"target_timeout_positive_{suffix}b",
     ]
@@ -444,6 +536,8 @@ def _oos_audit_columns(data: pd.DataFrame, target_col: str) -> list[str]:
         "source_count_finviz",
         "volume_z20",
         "setup_candidate_score",
+        "entry_session_scope",
+        "setup_event_selected",
         "dist_session_vwap",
         "one_minute_dist_vwap",
         "one_minute_volume_burst_15m",
@@ -534,7 +628,11 @@ def _add_path_labels_for_ticker(group: pd.DataFrame, config: EntryExitLabelConfi
     success = np.full(n_rows, np.nan)
     stop_first = np.full(n_rows, np.nan)
     timeout_positive = np.full(n_rows, np.nan)
+    net_positive = np.full(n_rows, np.nan)
     horizon_return = np.full(n_rows, np.nan)
+    net_horizon_return = np.full(n_rows, np.nan)
+    realized_return = np.full(n_rows, np.nan)
+    net_realized_return = np.full(n_rows, np.nan)
     outcomes = np.full(n_rows, None, dtype=object)
 
     row_index = np.arange(n_rows)
@@ -544,7 +642,9 @@ def _add_path_labels_for_ticker(group: pd.DataFrame, config: EntryExitLabelConfi
     entry[has_entry_row] = open_values[entry_index[has_entry_row]]
     atr = atr_values
     valid_setup = has_entry_row & np.isfinite(entry) & np.isfinite(atr) & (atr > 0)
-    target = entry + config.take_profit_atr * atr
+    round_trip_cost = config.round_trip_cost_bps / 10_000.0
+    per_side_cost = round_trip_cost / 2.0
+    target = entry * (1.0 + round_trip_cost) + config.take_profit_atr * atr
     stop = entry - config.stop_loss_atr * atr
 
     window_count = np.zeros(n_rows, dtype="int")
@@ -608,8 +708,32 @@ def _add_path_labels_for_ticker(group: pd.DataFrame, config: EntryExitLabelConfi
     mfe[finite_entry] = max_high[finite_entry] / entry[finite_entry] - 1.0
     mae[finite_entry] = min_low[finite_entry] / entry[finite_entry] - 1.0
     horizon_return[finite_entry] = final_close[finite_entry] / entry[finite_entry] - 1.0
+    net_horizon_return[finite_entry] = (
+        final_close[finite_entry] * (1.0 - per_side_cost)
+        / (entry[finite_entry] * (1.0 + per_side_cost))
+        - 1.0
+    )
 
     ambiguous = outcomes == "ambiguous"
+    realized_exit = final_close.copy()
+    target_outcome = outcomes == "target_first"
+    stop_outcome = outcomes == "stop_first"
+    if config.ambiguous_policy == "target":
+        target_outcome |= ambiguous
+    elif config.ambiguous_policy == "stop":
+        stop_outcome |= ambiguous
+    else:
+        realized_exit[ambiguous] = np.nan
+    realized_exit[target_outcome] = target[target_outcome]
+    realized_exit[stop_outcome] = stop[stop_outcome]
+    finite_realized = finite_entry & np.isfinite(realized_exit)
+    realized_return[finite_realized] = realized_exit[finite_realized] / entry[finite_realized] - 1.0
+    net_realized_return[finite_realized] = (
+        realized_exit[finite_realized] * (1.0 - per_side_cost)
+        / (entry[finite_realized] * (1.0 + per_side_cost))
+        - 1.0
+    )
+
     success[has_window] = 0.0
     stop_first[has_window] = 0.0
     success[(outcomes == "target_first") | (ambiguous & (config.ambiguous_policy == "target"))] = 1.0
@@ -618,7 +742,9 @@ def _add_path_labels_for_ticker(group: pd.DataFrame, config: EntryExitLabelConfi
         success[ambiguous] = np.nan
         stop_first[ambiguous] = np.nan
     timeout_positive[has_window] = 0.0
-    timeout_positive[timeout & np.isfinite(horizon_return) & (horizon_return > 0)] = 1.0
+    timeout_positive[timeout & np.isfinite(net_horizon_return) & (net_horizon_return > 0)] = 1.0
+    net_positive[has_window & np.isfinite(net_horizon_return)] = 0.0
+    net_positive[has_window & np.isfinite(net_horizon_return) & (net_horizon_return > 0)] = 1.0
 
     frame[f"entry_price_next_open_{suffix}"] = entry_prices
     frame[f"entry_target_price_{suffix}"] = target_prices
@@ -628,11 +754,22 @@ def _add_path_labels_for_ticker(group: pd.DataFrame, config: EntryExitLabelConfi
     frame[f"max_favorable_excursion_{suffix}"] = mfe
     frame[f"max_adverse_excursion_{suffix}"] = mae
     frame[f"horizon_return_from_entry_{suffix}"] = horizon_return
+    frame[f"net_horizon_return_from_entry_{suffix}"] = net_horizon_return
+    frame[f"realized_return_from_entry_{suffix}"] = realized_return
+    frame[f"net_realized_return_from_entry_{suffix}"] = net_realized_return
     frame[f"target_entry_success_{suffix}"] = pd.Series(success, index=frame.index, dtype="float")
     frame[f"target_exit_risk_{suffix}"] = pd.Series(stop_first, index=frame.index, dtype="float")
     frame[f"target_timeout_positive_{suffix}"] = pd.Series(timeout_positive, index=frame.index, dtype="float")
+    frame[f"target_net_positive_{suffix}"] = pd.Series(net_positive, index=frame.index, dtype="float")
     tail = frame.index[-config.horizon_bars :]
-    label_cols = [col for col in frame.columns if col.endswith(suffix) and col.startswith(("target_", "horizon_", "max_", "bars_to_", "entry_"))]
+    label_cols = [
+        col
+        for col in frame.columns
+        if col.endswith(suffix)
+        and col.startswith(
+            ("target_", "horizon_", "net_horizon_", "realized_", "net_realized_", "max_", "bars_to_", "entry_")
+        )
+    ]
     frame.loc[tail, label_cols] = np.nan
     return frame
 
@@ -642,10 +779,61 @@ def _add_entry_exit_features(data: pd.DataFrame, config: EntryExitLabelConfig) -
     close = pd.to_numeric(frame.get("close"), errors="coerce")
     atr = pd.to_numeric(frame.get("atr_14"), errors="coerce")
     frame["setup_stop_pct"] = (config.stop_loss_atr * atr).div(close).replace([np.inf, -np.inf], np.nan)
-    frame["setup_target_pct"] = (config.take_profit_atr * atr).div(close).replace([np.inf, -np.inf], np.nan)
+    frame["setup_target_pct"] = (
+        (config.take_profit_atr * atr).div(close) + config.round_trip_cost_bps / 10_000.0
+    ).replace([np.inf, -np.inf], np.nan)
     frame["setup_risk_reward"] = frame["setup_target_pct"].div(frame["setup_stop_pct"]).replace([np.inf, -np.inf], np.nan)
     frame["entry_horizon_bars"] = float(config.horizon_bars)
     return frame
+
+
+def _apply_session_and_overlap_scope(
+    data: pd.DataFrame,
+    config: EntryExitLabelConfig,
+) -> pd.DataFrame:
+    frame = data.copy()
+    frame["entry_session_scope"] = config.session_scope
+    frame["setup_event_selected"] = 1
+    if config.session_scope != "all":
+        if not _is_intraday_config(config):
+            raise ValueError("session_scope other than all requires an intraday bar_kind")
+        eastern = pd.to_datetime(frame["_mp_timestamp"], errors="coerce", utc=True).dt.tz_convert(
+            "America/New_York"
+        )
+        minute = eastern.dt.hour * 60 + eastern.dt.minute
+        bounds = {
+            "premarket": (4 * 60, 9 * 60 + 30),
+            "opening": (9 * 60 + 30, 11 * 60 + 30),
+            "regular": (9 * 60 + 30, 16 * 60),
+        }
+        start, end = bounds[config.session_scope]
+        frame = frame[minute.between(start, end - 1)].copy()
+
+    if config.min_setup_score is not None:
+        if "setup_candidate_score" not in frame.columns:
+            raise ValueError("min_setup_score requires setup_candidate_score.")
+        score = pd.to_numeric(frame["setup_candidate_score"], errors="coerce")
+        frame = frame[score.ge(config.min_setup_score)].copy()
+
+    if config.setup_cooldown_bars <= 0 or frame.empty:
+        return frame
+
+    effective_cooldown = max(config.setup_cooldown_bars, config.horizon_bars + 1)
+    frame["setup_event_selected"] = 0
+    group_columns = ["ticker"]
+    if "_mp_session_date" in frame.columns:
+        group_columns.append("_mp_session_date")
+    selected_indices: list[int] = []
+    for _, group in frame.sort_values([*group_columns, "_mp_timestamp"]).groupby(group_columns, sort=False):
+        last_selected_position: int | None = None
+        for index, row in group.iterrows():
+            position = int(row.get("_mp_session_bar_index", 0))
+            if last_selected_position is not None and position - last_selected_position < effective_cooldown:
+                continue
+            selected_indices.append(index)
+            last_selected_position = position
+    frame.loc[selected_indices, "setup_event_selected"] = 1
+    return frame[frame["setup_event_selected"].eq(1)].copy()
 
 
 def _apply_entry_exit_readiness(data: pd.DataFrame, config: EntryExitLabelConfig) -> tuple[pd.DataFrame, pd.DataFrame]:

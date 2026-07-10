@@ -86,6 +86,36 @@ class PromotionAuditTests(unittest.TestCase):
         self.assertEqual(trades.groupby("_mp_session_date").size().max(), 1)
         self.assertIn("return_drawdown_ratio", summary.columns)
 
+    def test_profitability_audit_prefers_cost_adjusted_realized_returns(self) -> None:
+        dates = pd.date_range("2026-07-01 13:30:00Z", periods=4, freq="5min")
+        dataset = pd.DataFrame(
+            {
+                "ticker": ["MSFT"] * 4,
+                "date": dates,
+                "target_entry_success_12b": [1] * 4,
+                "horizon_return_from_entry_12b": [0.50] * 4,
+                "net_horizon_return_from_entry_12b": [0.40] * 4,
+                "realized_return_from_entry_12b": [0.02] * 4,
+                "net_realized_return_from_entry_12b": [0.01] * 4,
+            }
+        )
+        predictions = pd.DataFrame(
+            {
+                "ticker": ["MSFT"] * 4,
+                "date": dates.tz_convert(None).astype(str),
+                "oos_probability": [0.9, 0.8, 0.7, 0.6],
+            }
+        )
+
+        summary, trades, _ = build_walk_forward_profitability_audit(
+            dataset=dataset,
+            predictions=predictions,
+            config=ProfitabilityAuditConfig(top_fraction=1.0),
+        )
+
+        self.assertEqual(summary.iloc[0]["return_col"], "net_realized_return_from_entry_12b")
+        self.assertAlmostEqual(float(trades["net_realized_return_from_entry_12b"].mean()), 0.01)
+
     def test_regime_audit_reports_coverage(self) -> None:
         dataset = pd.DataFrame(
             {

@@ -17,8 +17,10 @@ from market_predictor.alerts import AlertConfig, backtest_indicator_alerts, gene
 from market_predictor.config import get_settings
 from market_predictor.data_quality import sanitize_events_frame
 from market_predictor.entry_exit import (
+    ENTRY_EXIT_SCHEMA_VERSION,
     EntryExitLabelConfig,
     build_entry_exit_dataset,
+    merge_entry_exit_context,
     score_entry_exit_frame,
     train_entry_exit_model,
 )
@@ -2685,6 +2687,30 @@ def build_entry_exit_dataset_command(
     min_labeled_rows_per_ticker: int = typer.Option(40, help="Minimum non-null path labels per ticker."),
     bar_kind: str = typer.Option("swing", help="Human label for bar type: swing, daily, hourly, 5min, etc."),
     allow_overnight: bool = typer.Option(False, help="Allow intraday path labels to cross session boundaries."),
+    session_scope: str = typer.Option(
+        "all",
+        help="Intraday setup window: all, premarket, opening (09:30-11:30 ET), or regular.",
+    ),
+    setup_cooldown_bars: int = typer.Option(
+        0,
+        min=0,
+        help="Minimum bars between setup events per ticker/session; horizon+1 is enforced when enabled.",
+    ),
+    round_trip_cost_bps: float = typer.Option(
+        0.0,
+        min=0.0,
+        help="Round-trip fees and slippage in basis points included in labels and realized returns.",
+    ),
+    min_setup_score: float | None = typer.Option(
+        None,
+        min=0.0,
+        help="Optional minimum point-in-time setup score, applied after path labels are built.",
+    ),
+    context_path: Path | None = typer.Option(
+        None,
+        "--context",
+        help="Optional point-in-time enriched parquet; only approved missing model features are joined.",
+    ),
 ) -> None:
     """Build leak-safe entry/exit path labels from OHLCV feature rows."""
     if not input_path.exists():
@@ -2704,17 +2730,31 @@ def build_entry_exit_dataset_command(
         min_labeled_rows_per_ticker=min_labeled_rows_per_ticker,
         bar_kind=bar_kind,
         allow_overnight=allow_overnight,
+        session_scope=session_scope.strip().lower(),
+        setup_cooldown_bars=setup_cooldown_bars,
+        round_trip_cost_bps=round_trip_cost_bps,
+        min_setup_score=min_setup_score,
     )
     dataset, audit = build_entry_exit_dataset(frame, config=config)
+    if context_path is not None:
+        if not context_path.exists():
+            raise typer.BadParameter(f"Missing context dataset: {context_path}")
+        context = pd.read_parquet(context_path) if context_path.suffix.lower() == ".parquet" else pd.read_csv(context_path)
+        dataset = merge_entry_exit_context(dataset, context)
     out.parent.mkdir(parents=True, exist_ok=True)
     audit_out.parent.mkdir(parents=True, exist_ok=True)
     dataset.to_parquet(out, index=False)
     audit.to_csv(audit_out, index=False)
     suffix = f"{horizon_bars}b"
     summary = {
-        "schema": "entry_exit.v1",
+        "schema": ENTRY_EXIT_SCHEMA_VERSION,
         "bar_kind": bar_kind,
         "allow_overnight": allow_overnight,
+        "session_scope": session_scope,
+        "setup_cooldown_bars": setup_cooldown_bars,
+        "round_trip_cost_bps": round_trip_cost_bps,
+        "min_setup_score": min_setup_score,
+        "context": str(context_path) if context_path else None,
         "rows": len(dataset),
         "tickers": int(dataset["ticker"].nunique()) if not dataset.empty else 0,
         "first_date": str(dataset["date"].min()) if not dataset.empty else None,
@@ -2723,6 +2763,7 @@ def build_entry_exit_dataset_command(
             f"target_entry_success_{suffix}",
             f"target_exit_risk_{suffix}",
             f"target_timeout_positive_{suffix}",
+            f"target_net_positive_{suffix}",
         ],
         "out": str(out),
         "audit": str(audit_out),
@@ -2754,6 +2795,10 @@ def train_entry_exit_model_command(
     learning_rate: float = typer.Option(0.04, help="Boosting learning rate."),
     embargo_rows: int | None = typer.Option(None, help="Purged walk-forward embargo rows. Defaults from target horizon."),
     feature_set: str = typer.Option("all", help="Feature ablation set: all, technical, or catalyst."),
+    estimator: str = typer.Option(
+        "hist_gradient_boosting",
+        help="Estimator family: hist_gradient_boosting, extra_trees, or logistic.",
+    ),
 ) -> None:
     """Train an entry/exit path classifier."""
     if not dataset.exists():
@@ -2769,6 +2814,7 @@ def train_entry_exit_model_command(
         learning_rate=learning_rate,
         embargo_rows=embargo_rows,
         feature_set=feature_set,
+        estimator=estimator,
     )
     console.print(report)
     console.print(metrics)

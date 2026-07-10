@@ -19,8 +19,11 @@ INTRADAY_ENRICHED_FEATURES = [
     "session_minute_cos",
     "session_vwap",
     "dist_session_vwap",
+    "session_vwap_slope_3bar",
+    "session_vwap_slope_6bar",
     "opening_range_high",
     "opening_range_low",
+    "opening_range_width_pct",
     "dist_opening_range_high",
     "dist_opening_range_low",
     "above_opening_range",
@@ -29,7 +32,9 @@ INTRADAY_ENRICHED_FEATURES = [
     "return_3bar",
     "return_6bar",
     "return_12bar",
+    "return_acceleration_3v6",
     "volume_burst_20bar",
+    "relative_volume_same_minute_20d",
     "ema10_gt_ema20",
     "ema20_gt_ema50",
     "close_gt_ema20",
@@ -83,8 +88,7 @@ def build_enriched_intraday_dataset(
     data["ticker"] = data["ticker"].astype(str).str.upper().str.strip()
     data["timestamp"] = pd.to_datetime(data.get("timestamp", data.get("date")), errors="coerce", utc=True)
     data = data.dropna(subset=["ticker", "timestamp"]).sort_values(["ticker", "timestamp"]).reset_index(drop=True)
-    data = _add_session_features(data)
-    data = _add_setup_features(data)
+    data = add_intraday_technical_features(data)
     data = _merge_candidate_metadata(data, candidates)
     data = _merge_benchmark_features(data, benchmark_dir)
     data = _merge_one_minute_features(data, one_minute_dir)
@@ -103,6 +107,24 @@ def build_enriched_intraday_dataset(
     if not catalyst_audit.empty:
         audit = audit.merge(catalyst_audit, on="ticker", how="left", suffixes=("", "_catalyst"))
     return data.reset_index(drop=True), audit
+
+
+def add_intraday_technical_features(frame: pd.DataFrame) -> pd.DataFrame:
+    """Build point-in-time intraday technical features for training and live parity."""
+    if frame.empty:
+        return frame.copy()
+    data = frame.copy()
+    if "timestamp" not in data.columns:
+        if "date" not in data.columns:
+            raise ValueError("Intraday technical features require timestamp or date.")
+        data["timestamp"] = data["date"]
+    data["timestamp"] = pd.to_datetime(data["timestamp"], errors="coerce", utc=True)
+    if data["timestamp"].isna().any():
+        raise ValueError("Intraday technical features contain invalid timestamps.")
+    if "volume" not in data.columns:
+        data["volume"] = np.nan
+    data = data.sort_values(["ticker", "timestamp"]).reset_index(drop=True)
+    return _add_setup_features(_add_session_features(data))
 
 
 def _add_session_features(data: pd.DataFrame) -> pd.DataFrame:
@@ -129,16 +151,26 @@ def _add_session_features(data: pd.DataFrame) -> pd.DataFrame:
     frame["session_vwap"] = (cum_dollar / cum_volume.replace(0, np.nan)).replace([np.inf, -np.inf], np.nan)
     close = pd.to_numeric(frame["close"], errors="coerce")
     frame["dist_session_vwap"] = close / frame["session_vwap"] - 1.0
-    opening = frame[frame["session_minutes_from_open"].between(0, 30)].copy()
-    if not opening.empty:
-        opening_ranges = opening.groupby(["ticker", "_session_date"]).agg(
-            opening_range_high=("high", "max"),
-            opening_range_low=("low", "min"),
-        )
-        frame = frame.merge(opening_ranges, on=["ticker", "_session_date"], how="left")
-    else:
-        frame["opening_range_high"] = np.nan
-        frame["opening_range_low"] = np.nan
+    frame["session_vwap_slope_3bar"] = grouped["session_vwap"].pct_change(3)
+    frame["session_vwap_slope_6bar"] = grouped["session_vwap"].pct_change(6)
+
+    # The opening range must grow bar by bar. A full-window aggregate would leak
+    # the 09:35-10:00 highs and lows into the 09:30 feature row.
+    opening_mask = frame["session_minutes_from_open"].between(0, 30)
+    opening_high = pd.to_numeric(frame["high"], errors="coerce").where(opening_mask)
+    opening_low = pd.to_numeric(frame["low"], errors="coerce").where(opening_mask)
+    frame["opening_range_high"] = opening_high.groupby(
+        [frame["ticker"], frame["_session_date"]], sort=False
+    ).cummax()
+    frame["opening_range_low"] = opening_low.groupby(
+        [frame["ticker"], frame["_session_date"]], sort=False
+    ).cummin()
+    frame[["opening_range_high", "opening_range_low"]] = grouped[
+        ["opening_range_high", "opening_range_low"]
+    ].ffill()
+    frame["opening_range_width_pct"] = (
+        frame["opening_range_high"] - frame["opening_range_low"]
+    ) / close.replace(0, np.nan)
     frame["dist_opening_range_high"] = close / frame["opening_range_high"] - 1.0
     frame["dist_opening_range_low"] = close / frame["opening_range_low"] - 1.0
     frame["above_opening_range"] = close.gt(frame["opening_range_high"]).astype(int)
@@ -153,8 +185,15 @@ def _add_setup_features(data: pd.DataFrame) -> pd.DataFrame:
     volume = pd.to_numeric(frame["volume"], errors="coerce")
     for bars in [1, 3, 6, 12]:
         frame[f"return_{bars}bar"] = grouped["close"].pct_change(bars)
+    frame["return_acceleration_3v6"] = frame["return_3bar"] - (frame["return_6bar"] / 2.0)
     rolling_volume = grouped["volume"].transform(lambda series: pd.to_numeric(series, errors="coerce").rolling(20, min_periods=5).median())
     frame["volume_burst_20bar"] = volume / rolling_volume.replace(0, np.nan)
+    eastern = frame["timestamp"].dt.tz_convert("America/New_York")
+    minute_slot = eastern.dt.hour * 60 + eastern.dt.minute
+    same_minute_baseline = volume.groupby([frame["ticker"], minute_slot], sort=False).transform(
+        lambda series: series.shift(1).rolling(20, min_periods=5).median()
+    )
+    frame["relative_volume_same_minute_20d"] = volume / same_minute_baseline.replace(0, np.nan)
     frame["ema10_gt_ema20"] = (pd.to_numeric(frame.get("ema_10"), errors="coerce") > pd.to_numeric(frame.get("ema_20"), errors="coerce")).astype(int)
     frame["ema20_gt_ema50"] = (pd.to_numeric(frame.get("ema_20"), errors="coerce") > pd.to_numeric(frame.get("ema_50"), errors="coerce")).astype(int)
     frame["close_gt_ema20"] = (close > pd.to_numeric(frame.get("ema_20"), errors="coerce")).astype(int)
@@ -163,7 +202,10 @@ def _add_setup_features(data: pd.DataFrame) -> pd.DataFrame:
     ).astype(int)
     score = pd.Series(0.0, index=frame.index)
     score += pd.to_numeric(frame["volume_burst_20bar"], errors="coerce").ge(1.3).astype(float)
-    score += pd.to_numeric(frame.get("volume_z20"), errors="coerce").ge(0.5).astype(float)
+    volume_z20 = pd.to_numeric(
+        frame.get("volume_z20", pd.Series(np.nan, index=frame.index)), errors="coerce"
+    )
+    score += volume_z20.ge(0.5).astype(float)
     score += frame["close_gt_ema20"].astype(float)
     score += frame["ema10_gt_ema20"].astype(float)
     score += frame["macd_improving"].astype(float)

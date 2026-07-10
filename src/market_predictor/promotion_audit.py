@@ -387,11 +387,24 @@ def _infer_target_col(frame: pd.DataFrame) -> str | None:
 def _infer_return_col(frame: pd.DataFrame, target_col: str | None) -> str | None:
     if target_col:
         suffix = target_col.rsplit("_", 1)[-1]
-        candidate = f"horizon_return_from_entry_{suffix}"
-        if candidate in frame.columns:
-            return candidate
-    candidates = [col for col in frame.columns if col.startswith("horizon_return_from_entry_")]
-    return sorted(candidates)[-1] if candidates else None
+        for candidate in [
+            f"net_realized_return_from_entry_{suffix}",
+            f"realized_return_from_entry_{suffix}",
+            f"net_horizon_return_from_entry_{suffix}",
+            f"horizon_return_from_entry_{suffix}",
+        ]:
+            if candidate in frame.columns:
+                return candidate
+    for prefix in [
+        "net_realized_return_from_entry_",
+        "realized_return_from_entry_",
+        "net_horizon_return_from_entry_",
+        "horizon_return_from_entry_",
+    ]:
+        candidates = [col for col in frame.columns if col.startswith(prefix)]
+        if candidates:
+            return sorted(candidates)[-1]
+    return None
 
 
 def _matching_col(frame: pd.DataFrame, prefix: str, target_col: str | None) -> str | None:

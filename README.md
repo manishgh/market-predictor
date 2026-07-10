@@ -458,7 +458,38 @@ market-predictor score-entry-exit-latest `
   --out data/reports/entry_exit_swing_entry_latest_20260704.csv
 ```
 
-The same commands work for intraday datasets when the input rows are hourly or 5-minute OHLCV features; set `--bar-kind hourly` or `--bar-kind 5min` and choose a horizon in bars, for example `--horizon-bars 12` for roughly one trading day on 30-minute bars. Labels always enter at the next bar open and evaluate only future high/low bars, which prevents same-bar leakage.
+The same commands work for intraday datasets when the input rows are hourly or 5-minute OHLCV features. Labels always enter at the next bar open and evaluate only future high/low bars, which prevents same-bar leakage. Build labels from the complete consecutive bar stream, never from an already setup-filtered table.
+
+Opening-session V2 example for a 60-minute horizon on 5-minute bars:
+
+```powershell
+market-predictor build-entry-exit-dataset `
+  --input data/features/intraday_full_5m.parquet `
+  --context data/features/intraday_point_in_time_context.parquet `
+  --horizon-bars 12 `
+  --bar-kind 5min `
+  --session-scope opening `
+  --min-setup-score 2 `
+  --setup-cooldown-bars 13 `
+  --round-trip-cost-bps 10 `
+  --out data/features/entry_exit_intraday_opening_v2.parquet `
+  --audit-out data/reports/entry_exit_intraday_opening_v2_audit.csv
+```
+
+`--session-scope opening` means 09:30 through 11:29 ET. Cooldown is measured in original bars, not filtered row positions, and is never shorter than `horizon_bars + 1`. The optional context join only adds approved missing model features; it cannot replace OHLCV or labels. V2 emits raw and cost-adjusted horizon returns, modeled target/stop/timeout realized returns, `target_entry_success_*`, `target_exit_risk_*`, and `target_net_positive_*`.
+
+Controlled estimator comparisons use the same purged walk-forward folds:
+
+```powershell
+market-predictor train-entry-exit-model `
+  --dataset data/features/entry_exit_intraday_opening_v2.parquet `
+  --target-col target_entry_success_12b `
+  --feature-set technical `
+  --estimator hist_gradient_boosting `
+  --model-out models/intraday_opening_candidate.joblib
+```
+
+Supported estimators are `hist_gradient_boosting`, `extra_trees`, and `logistic`. Selecting the best estimator on an inspected OOS interval does not make it promotable; it still requires an untouched shadow interval and all promotion gates.
 
 Before promotion, build production-readiness audits from the feature table and out-of-sample predictions:
 
