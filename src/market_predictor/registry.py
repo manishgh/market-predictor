@@ -22,8 +22,14 @@ def feature_schema_hash(features: list[str]) -> str:
 
 
 def dataset_fingerprint(data: pd.DataFrame, *, target_col: str, features: list[str]) -> dict[str, Any]:
-    dates = pd.to_datetime(data["date"], errors="coerce") if "date" in data.columns else pd.Series(dtype="datetime64[ns]")
+    date_column = next(
+        (column for column in ("date", "decision_time_utc", "session_date_et") if column in data.columns),
+        None,
+    )
+    dates = pd.to_datetime(data[date_column], errors="coerce", utc=True) if date_column else pd.Series(dtype="datetime64[ns]")
     target = pd.to_numeric(data[target_col], errors="coerce") if target_col in data.columns else pd.Series(dtype="float")
+    target_values = set(target.dropna().unique())
+    is_binary = bool(target_values) and target_values.issubset({0, 1})
     return {
         "rows": int(len(data)),
         "columns": int(len(data.columns)),
@@ -31,7 +37,9 @@ def dataset_fingerprint(data: pd.DataFrame, *, target_col: str, features: list[s
         "first_date": _date_value(dates.min()) if not dates.empty else None,
         "last_date": _date_value(dates.max()) if not dates.empty else None,
         "target_col": target_col,
-        "positive_rate": float(target.mean()) if target.notna().any() else None,
+        "target_non_null_rows": int(target.notna().sum()),
+        "target_mean": float(target.mean()) if target.notna().any() else None,
+        "positive_rate": float(target.mean()) if is_binary else None,
         "feature_count": int(len(features)),
         "feature_schema_hash": feature_schema_hash(features),
     }
@@ -79,7 +87,10 @@ def load_model_manifest(model_path: Path) -> dict[str, Any]:
     path = manifest_path_for(model_path)
     if not path.exists():
         raise FileNotFoundError(f"Missing model manifest: {path}")
-    return json.loads(path.read_text(encoding="utf-8"))
+    loaded = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(loaded, dict):
+        raise ValueError(f"Model manifest must contain a JSON object: {path}")
+    return {str(key): value for key, value in loaded.items()}
 
 
 def promote_model_manifest(
@@ -405,8 +416,10 @@ def _catalyst_failures(
 
 def _float_metric(metrics: dict[str, Any], key: str) -> float | None:
     value = metrics.get(key)
+    if value is None:
+        return None
     try:
-        converted = float(value)
+        converted = float(str(value))
     except (TypeError, ValueError):
         return None
     if pd.isna(converted):
@@ -431,7 +444,7 @@ def _write_report_if_requested(report_path: Path | None, report: dict[str, Any])
 def _date_value(value: Any) -> str | None:
     if pd.isna(value):
         return None
-    return pd.Timestamp(value).isoformat()
+    return str(pd.Timestamp(value).isoformat())
 
 
 def _json_safe(value: Any) -> Any:

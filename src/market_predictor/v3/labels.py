@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import json
 from collections.abc import Iterable
 from typing import Literal, Self
 
@@ -101,6 +103,8 @@ def _label_session(
     output: list[dict[str, object]] = []
     cost = config.round_trip_cost_bps / 10_000.0
     qqq = "QQQ"
+    label_config_json = json.dumps(config.model_dump(mode="json"), separators=(",", ":"), sort_keys=True)
+    label_config_hash = hashlib.sha256(label_config_json.encode()).hexdigest()
     for decision_index in range(len(session) - maximum_horizon):
         decision = session.iloc[decision_index]
         entry_index = decision_index + 1
@@ -120,8 +124,10 @@ def _label_session(
             "decision_group_id": pd.Timestamp(decision["timestamp"]).isoformat(),
             "universe_snapshot_id": decision["universe_snapshot_id"],
             "price_feed": str(decision["price_feed"]).lower().strip(),
-            "feature_schema_version": ML_V3_SCHEMA_VERSION,
+            "feature_schema_version": decision.get("feature_schema_version", ML_V3_SCHEMA_VERSION),
             "label_schema_version": config.schema_version,
+            "label_config_json": label_config_json,
+            "label_config_hash": label_config_hash,
             "entry_price": entry_price,
             "primary_benchmark": str(decision["primary_benchmark"]).upper().strip(),
             "_source_decision_index": decision_index,

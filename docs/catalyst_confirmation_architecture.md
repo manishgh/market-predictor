@@ -335,6 +335,7 @@ The repo currently contains several useful families. Their intended roles should
 | S&P 500 volatile-mover 1D model | Rank unusually large next-day positive moves | Candidate; not available when `require_promoted=true` |
 | Intraday 5-minute technical entry-path model | Estimate target-before-stop probability over 12 bars | Candidate; current API artifact fails AUC/lift promotion gates |
 | Intraday opening V2 models | Non-overlapping, cost-aware 09:30-11:30 ET setup experiments | Candidate artifacts with rejected promotion decision; not production-serving models |
+| ML V3 B0/B1/B2/R1/D1 families | Cross-sectional opportunity ranking plus separate downside risk | C1-C6 implementation complete; candidate training adapters verified, but no V3 family is promoted or production-serving |
 | Daily market-context models | Daily 1D/5D direction from price, news, sentiment, sector, and SPY context | Baseline or promoted if validation gates pass |
 | Event market-context pre-reaction models | Event-level 1D/5D probability using catalyst features before future reaction is known | Baseline or promoted |
 | Calendar-safe plus-Finviz candidate models | Broader training set with corrected event-to-candle alignment | Candidate until promoted |
@@ -342,7 +343,7 @@ The repo currently contains several useful families. Their intended roles should
 | Finviz-only expansion models | Research models trained on candidate expansion set | Candidate/research only |
 | Older clean/sector/swing models | Earlier iterations | Deprecated unless explicitly revalidated |
 
-### Current Deployment State (2026-07-10)
+### Current Deployment State (2026-07-11)
 
 The manifest, not the filename, is authoritative.
 
@@ -370,6 +371,8 @@ Serving rules:
 - The next intraday promotion trial must use matured observations after 2026-07-08 as an untouched shadow interval.
 
 The data, target, ranking, validation, cleanup, and Git checkpoint sequence for the next model generation is defined in [ML Model V3 Improvement Plan](ml_model_v3_plan.md).
+
+V3 checkpoints C1-C6 now provide strict point-in-time contracts, immutable development/shadow partitioning, exact next-open labels and costs, batch/live feature parity, cross-sectional ranks, session-purged walk-forward validation, deterministic ticker holdout, and candidate adapters for B0/B1/B2/R1/D1. This changes research capability only. V3 artifacts remain outside production serving until calibration, economic audits, gate freeze, and the one-time shadow evaluation are completed.
 
 ## 11. Audit Report Specification
 

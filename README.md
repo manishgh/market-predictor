@@ -13,7 +13,7 @@ This is research and prediction tooling, not investment advice and not an automa
 
 The repository produces prediction intelligence: probabilities, catalyst summaries, feature/audit context, and watchlist rankings. It does not own broker execution, portfolio state, final sizing, stops, exits, or order lifecycle. Those responsibilities belong in a trading/runtime system such as `trading_flow`.
 
-## Current Model State (2026-07-10)
+## Current Model State (2026-07-11)
 
 Model lifecycle state comes from each artifact's `.manifest.json`; a filename such as `*_max.joblib` does not mean promoted.
 
@@ -33,6 +33,8 @@ Production API implications:
 - Candidate scoring requires an explicit research override and must not be treated as a live trade instruction.
 
 The next valid intraday promotion attempt requires new matured shadow data after 2026-07-08, predeclared model/threshold choices, and all current promotion audits. See [Intraday model promotion](docs/intraday_model_promotion.md).
+
+ML V3 checkpoints C1-C6 are implemented. The V3 artifacts produced by `train-v3-models` are candidates only: B0 is a deterministic technical floor, B1 is logistic, B2 is histogram gradient boosting, R1 is the optional XGBoost grouped ranker, and D1 is a separate downside classifier. No V3 family is promoted or served until calibration/economic audits and the frozen shadow process are complete.
 
 ## Architecture Documents
 
@@ -70,6 +72,12 @@ python -m pip install -e .
 Copy-Item .env.example .env
 ```
 
+Install the optional grouped-ranking dependency for R1 training:
+
+```powershell
+python -m pip install -e ".[ranking]"
+```
+
 Fill `.env` with Alpaca keys and any optional service keys.
 
 Minimum runtime:
@@ -85,6 +93,16 @@ Verify the CLI:
 ```powershell
 market-predictor --help
 ```
+
+V3 development workflow after the raw data audit passes:
+
+```powershell
+market-predictor build-v3-features --bars data/curated/v3_bars.parquet --benchmarks data/curated/v3_benchmarks.parquet --source-availability data/curated/v3_source_availability.parquet --out data/features/v3_features_latest.parquet
+market-predictor build-v3-labels --bars data/features/v3_features_latest.parquet --benchmarks data/curated/v3_benchmarks.parquet --out data/features/v3_training_latest.parquet
+market-predictor train-v3-models --dataset data/features/v3_training_latest.parquet --output-dir models/v3/candidates
+```
+
+The training command refuses shadow rows, non-SIP volume provenance, future feature availability, cross-session labels, malformed ranking groups, and stale feature schemas. It writes per-family candidate manifests, walk-forward OOF predictions, deterministic ticker-holdout evidence, and a fold feature-coverage audit. One family failure is reported without discarding successful families; the command exits nonzero if any requested family failed.
 
 ## Repository Artifact Policy
 

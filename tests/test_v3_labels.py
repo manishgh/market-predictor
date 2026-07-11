@@ -66,6 +66,14 @@ class V3LabelTests(unittest.TestCase):
         with self.assertRaises(DataReadinessError):
             build_v3_labels(self.bars, benchmarks, config=self.config)
 
+    def test_label_builder_preserves_frozen_feature_schema(self) -> None:
+        bars = self.bars.copy()
+        bars["feature_schema_version"] = "ml_v3.features.v1"
+        labeled = build_v3_labels(bars, self.benchmarks, config=self.config)
+        self.assertTrue(labeled["feature_schema_version"].eq("ml_v3.features.v1").all())
+        self.assertEqual(labeled["label_config_hash"].nunique(), 1)
+        self.assertEqual(labeled["label_config_json"].nunique(), 1)
+
 
 def _ticker_bars(times: pd.DatetimeIndex) -> pd.DataFrame:
     rows: list[dict[str, object]] = []

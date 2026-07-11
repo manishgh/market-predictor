@@ -627,6 +627,8 @@ Build V3 cross-sectional features
 
 ### C6 - Ranking and baseline model adapters
 
+Status: completed on 2026-07-11.
+
 Scope:
 
 - Add B0/B1/B2/R1/D1 training adapters.

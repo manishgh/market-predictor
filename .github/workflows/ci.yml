@@ -35,3 +35,22 @@ jobs:
 
       - name: Unit tests
         run: python -m unittest discover -s tests
+
+  ranking-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install ranking extra
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev,ranking]"
+
+      - name: Run grouped ranker smoke test
+        run: python -m unittest tests.test_v3_models.V3ModelTests.test_optional_r1_ranker_produces_grouped_oof_evidence

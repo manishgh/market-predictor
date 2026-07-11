@@ -17,6 +17,7 @@ from market_predictor.commands.ranking import register_ranking_commands
 from market_predictor.commands.v3_data import register_v3_data_commands
 from market_predictor.commands.v3_features import register_v3_feature_commands
 from market_predictor.commands.v3_labels import register_v3_label_commands
+from market_predictor.commands.v3_models import register_v3_model_commands
 from market_predictor.config import get_settings
 from market_predictor.data_quality import sanitize_events_frame
 from market_predictor.entry_exit import (
@@ -82,6 +83,7 @@ register_ranking_commands(app, console)
 register_v3_data_commands(app, console)
 register_v3_feature_commands(app, console)
 register_v3_label_commands(app, console)
+register_v3_model_commands(app, console)
 
 
 @app.command("serve-api")

@@ -30,6 +30,9 @@ dev = [
     "mypy>=1.15,<2",
     "ruff>=0.11,<1",
 ]
+ranking = [
+    "xgboost>=3.0,<4",
+]
 
 [project.scripts]
 market-predictor = "market_predictor.cli:app"
@@ -55,5 +58,5 @@ strict = true
 plugins = ["pydantic.mypy"]
 
 [[tool.mypy.overrides]]
-module = ["pandas.*"]
+module = ["joblib.*", "pandas.*", "sklearn.*"]
 ignore_missing_imports = true
