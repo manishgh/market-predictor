@@ -182,6 +182,45 @@ def build_monthly_development_dataset(
     return report
 
 
+def load_verified_development_dataset(directory: Path) -> tuple[pd.DataFrame, dict[str, Any]]:
+    """Load a completed monthly dataset only after validating its frozen manifest."""
+    manifest_path = directory / "_build_manifest.json"
+    if not directory.is_dir() or not manifest_path.exists():
+        raise DataReadinessError(f"Missing completed development dataset manifest: {manifest_path}")
+    try:
+        manifest = cast(dict[str, Any], json.loads(manifest_path.read_text(encoding="utf-8")))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise DataReadinessError(f"Development dataset manifest is unreadable: {manifest_path}") from exc
+    if manifest.get("schema") != DEVELOPMENT_BUILDER_SCHEMA:
+        raise DataReadinessError(f"Unsupported development dataset schema: {manifest.get('schema')}")
+    months = manifest.get("months")
+    summary = manifest.get("summary")
+    if not isinstance(months, list) or not months or not isinstance(summary, dict):
+        raise DataReadinessError("Development dataset manifest is incomplete")
+    expected_paths: list[Path] = []
+    for item in months:
+        month = str(item.get("month", ""))
+        artifact = directory / f"{month}.parquet"
+        if not artifact.exists() or file_sha256(artifact) != item.get("sha256"):
+            raise DataReadinessError(f"Development dataset shard is missing or hash-invalid: {artifact}")
+        expected_paths.append(artifact)
+    actual_paths = sorted(directory.glob("*.parquet"))
+    if {path.resolve() for path in actual_paths} != {path.resolve() for path in expected_paths}:
+        raise DataReadinessError("Development dataset contains unregistered parquet shards")
+    fingerprint_payload = {
+        "builder_schema": DEVELOPMENT_BUILDER_SCHEMA,
+        "config": manifest.get("config"),
+        "months": [{"month": item["month"], "sha256": item["sha256"]} for item in months],
+    }
+    fingerprint = hashlib.sha256(json.dumps(fingerprint_payload, sort_keys=True).encode("utf-8")).hexdigest()
+    if fingerprint != manifest.get("dataset_fingerprint"):
+        raise DataReadinessError("Development dataset fingerprint does not match its manifest")
+    dataset = pd.read_parquet(directory)
+    if len(dataset) != int(summary.get("label_rows", -1)):
+        raise DataReadinessError("Development dataset physical row count does not match its manifest")
+    return dataset, manifest
+
+
 def _build_all_ticker_shards(
     *,
     bar_files: list[Path],

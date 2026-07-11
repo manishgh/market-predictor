@@ -47,6 +47,7 @@ class V3TrainingConfig(FrozenContract):
     learning_rate: float = Field(default=0.05, gt=0, le=1)
     xgboost_max_depth: int = Field(default=5, ge=1, le=16)
     xgboost_n_jobs: int = Field(default=1, ge=1)
+    training_dataset_fingerprint: str | None = Field(default=None, min_length=64, max_length=64)
     continue_on_family_error: bool = True
     schema_version: str = ML_V3_SCHEMA_VERSION
 
@@ -284,6 +285,7 @@ def _train_family(
             "run_id": run_id,
             "family": family,
             "random_seed": config.random_seed,
+            "training_dataset_fingerprint": config.training_dataset_fingerprint,
             "label_schema_version": str(final_data["label_schema_version"].iloc[0]),
             "label_config_hash": str(final_data["label_config_hash"].iloc[0]),
             "label_config": json.loads(str(final_data["label_config_json"].iloc[0])),

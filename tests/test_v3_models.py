@@ -32,6 +32,7 @@ class V3ModelTests(unittest.TestCase):
             ticker_holdout_fraction=0.2,
             top_k=3,
             max_iter=20,
+            training_dataset_fingerprint="a" * 64,
         )
 
     def test_fold_feature_coverage_removes_early_sparse_feature(self) -> None:
@@ -64,6 +65,7 @@ class V3ModelTests(unittest.TestCase):
                 self.assertEqual(manifest["status"], "candidate")
                 self.assertEqual(manifest["validation_split"], "v3_session_grouped_purged_walk_forward")
                 self.assertEqual(manifest["extra"]["random_seed"], 42)
+                self.assertEqual(manifest["extra"]["training_dataset_fingerprint"], "a" * 64)
                 self.assertEqual(manifest["extra"]["label_config"]["bar_minutes"], 5)
                 self.assertEqual(len(manifest["extra"]["universe_snapshot_ids"]), 16)
 

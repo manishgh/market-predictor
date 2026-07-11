@@ -7,7 +7,11 @@ from pathlib import Path
 
 import pandas as pd
 
-from market_predictor.v3.development import DevelopmentDatasetConfig, build_monthly_development_dataset
+from market_predictor.v3.development import (
+    DevelopmentDatasetConfig,
+    build_monthly_development_dataset,
+    load_verified_development_dataset,
+)
 from market_predictor.v3.errors import DataReadinessError
 
 
@@ -89,6 +93,7 @@ class V3DevelopmentDatasetTests(unittest.TestCase):
                     decision_start_date=date(2026, 7, 8),
                 ),
             )
+            verified, verified_manifest = load_verified_development_dataset(output_dir)
         self.assertGreater(len(dataset), 0)
         self.assertEqual(report["summary"]["tickers"], 2)
         self.assertTrue(dataset.groupby("decision_group_id")["ticker"].nunique().eq(2).all())
@@ -96,6 +101,43 @@ class V3DevelopmentDatasetTests(unittest.TestCase):
         self.assertTrue(resumed["technical_reused"])
         self.assertEqual(resumed["dataset_fingerprint"], report["dataset_fingerprint"])
         self.assertEqual(resumed_in_place["dataset_fingerprint"], report["dataset_fingerprint"])
+        self.assertEqual(len(verified), report["summary"]["label_rows"])
+        self.assertEqual(verified_manifest["dataset_fingerprint"], report["dataset_fingerprint"])
+
+    def test_verified_loader_rejects_modified_month(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            bars_dir = root / "bars"
+            benchmark_dir = root / "benchmarks"
+            bars_dir.mkdir()
+            benchmark_dir.mkdir()
+            times = pd.date_range("2026-07-08 13:30:00Z", periods=40, freq="5min")
+            for ticker in ("AAA", "BBB"):
+                _raw_bars(ticker, times, 0.1).to_parquet(bars_dir / f"{ticker}.parquet", index=False)
+            for ticker in ("SPY", "QQQ", "XLK"):
+                _raw_bars(ticker, times, 0.03).to_parquet(benchmark_dir / f"{ticker}.parquet", index=False)
+            memberships_path = root / "memberships.parquet"
+            _memberships().to_parquet(memberships_path, index=False)
+            output = root / "output"
+            build_monthly_development_dataset(
+                bars_directory=bars_dir,
+                benchmark_directory=benchmark_dir,
+                memberships_path=memberships_path,
+                technical_directory=root / "technical",
+                output_directory=output,
+                config=DevelopmentDatasetConfig(
+                    minimum_cross_section=2,
+                    workers=2,
+                    horizons_bars=(1, 2),
+                    primary_horizon_bars=2,
+                    decision_stride_bars=3,
+                    decision_start_date=date(2026, 7, 8),
+                ),
+            )
+            shard = next(output.glob("*.parquet"))
+            shard.write_bytes(shard.read_bytes() + b"tampered")
+            with self.assertRaisesRegex(DataReadinessError, "hash-invalid"):
+                load_verified_development_dataset(output)
 
     def test_equity_prints_after_early_close_are_excluded_by_market_grid(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

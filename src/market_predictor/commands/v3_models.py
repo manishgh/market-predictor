@@ -8,6 +8,8 @@ import pandas as pd
 import typer
 from rich.console import Console
 
+from market_predictor.v3.development import load_verified_development_dataset
+from market_predictor.v3.errors import DataReadinessError
 from market_predictor.v3.models import MODEL_FAMILIES, ModelFamily, V3TrainingConfig, train_v3_model_suite
 
 
@@ -29,6 +31,7 @@ def register_v3_model_commands(app: typer.Typer, console: Console) -> None:
     ) -> None:
         """Train V3 baselines, ranker, and downside model with purged OOF evidence."""
         parsed = _parse_families(families)
+        training_data, dataset_fingerprint = _read_dataset(dataset)
         config = V3TrainingConfig(
             families=parsed,
             n_splits=n_splits,
@@ -36,9 +39,10 @@ def register_v3_model_commands(app: typer.Typer, console: Console) -> None:
             min_train_sessions=min_train_sessions,
             min_train_rows=min_train_rows,
             ticker_holdout_fraction=ticker_holdout_fraction,
+            training_dataset_fingerprint=dataset_fingerprint,
         )
         report, predictions, feature_audit = train_v3_model_suite(
-            _read_dataset(dataset),
+            training_data,
             output_dir,
             config=config,
             overwrite=overwrite,
@@ -68,11 +72,17 @@ def _parse_families(value: str) -> tuple[ModelFamily, ...]:
     return cast(tuple[ModelFamily, ...], parsed)
 
 
-def _read_dataset(path: Path) -> pd.DataFrame:
+def _read_dataset(path: Path) -> tuple[pd.DataFrame, str | None]:
     if not path.exists():
         raise typer.BadParameter(f"Missing dataset: {path}")
+    if path.is_dir():
+        try:
+            dataset, manifest = load_verified_development_dataset(path)
+        except DataReadinessError as exc:
+            raise typer.BadParameter(str(exc)) from exc
+        return dataset, str(manifest["dataset_fingerprint"])
     if path.suffix.lower() == ".parquet":
-        return pd.read_parquet(path)
+        return pd.read_parquet(path), None
     if path.suffix.lower() == ".csv":
-        return pd.read_csv(path)
+        return pd.read_csv(path), None
     raise typer.BadParameter(f"Unsupported dataset format: {path.suffix}")
