@@ -125,6 +125,7 @@ def _training_data() -> pd.DataFrame:
                         "decision_time_utc": decision,
                         "feature_available_at_utc": decision,
                         "entry_time_utc": decision + timedelta(minutes=5),
+                        "primary_exit_time_utc": decision + timedelta(minutes=15),
                         "session_date_et": session,
                         "decision_group_id": query_id,
                         "universe_snapshot_id": f"snapshot-{session.isoformat()}",

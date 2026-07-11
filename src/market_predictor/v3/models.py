@@ -215,6 +215,7 @@ def _train_family(
     if artifact_path.exists() and not overwrite:
         raise FileExistsError(f"candidate artifact already exists: {artifact_path}")
     target_column = _target_column(family)
+    run_id = _run_id(data, family, features, target_column, config)
     eligible = data[target_column].notna()
     if family == "R1":
         eligible &= data["ranking_group_size"].ge(2)
@@ -226,7 +227,9 @@ def _train_family(
             raise DataReadinessError(f"{family} fold {fold.fold} has no eligible train or test rows")
         model = _new_model(family, config)
         _fit(model, family, train, features, target_column)
-        predictions.append(_prediction_frame(model, family, test, features, target_column, fold.fold, "walk_forward"))
+        predictions.append(
+            _prediction_frame(model, family, test, features, target_column, fold.fold, "walk_forward", run_id)
+        )
         holdout_train = train[~train["ticker"].isin(holdout)].copy()
         holdout_test = test[test["ticker"].isin(holdout)].copy()
         if holdout_train.empty or holdout_test.empty:
@@ -234,7 +237,16 @@ def _train_family(
         holdout_model = _new_model(family, config)
         _fit(holdout_model, family, holdout_train, features, target_column)
         predictions.append(
-            _prediction_frame(holdout_model, family, holdout_test, features, target_column, fold.fold, "ticker_holdout")
+            _prediction_frame(
+                holdout_model,
+                family,
+                holdout_test,
+                features,
+                target_column,
+                fold.fold,
+                "ticker_holdout",
+                run_id,
+            )
         )
     oof = pd.concat(predictions, ignore_index=True)
     main_metrics = _model_metrics(oof[oof["audit_scope"] == "walk_forward"], family=family, top_k=config.top_k)
@@ -242,7 +254,6 @@ def _train_family(
     final_data = data.loc[eligible].copy()
     final_model = _new_model(family, config)
     _fit(final_model, family, final_data, features, target_column)
-    run_id = _run_id(data, family, features, target_column, config)
     payload = {
         "schema_version": V3_MODEL_SCHEMA_VERSION,
         "family": family,
@@ -369,25 +380,39 @@ def _prediction_frame(
     target_column: str,
     fold: int,
     audit_scope: str,
+    model_run_id: str,
 ) -> pd.DataFrame:
     if family in {"B1", "B2", "D1"}:
         score = np.asarray(model.predict_proba(data[features]))[:, 1]
     else:
         score = np.asarray(model.predict(data[features]), dtype=float)
-    output = data[
-        [
-            "ticker",
-            "decision_time_utc",
-            "session_date_et",
-            "decision_group_id",
-            "ranking_target",
-            "ranking_grade",
-            "stop_before_target",
-        ]
-    ].copy()
+    columns = [
+        "ticker",
+        "decision_time_utc",
+        "entry_time_utc",
+        "primary_exit_time_utc",
+        "session_date_et",
+        "decision_group_id",
+        "ranking_target",
+        "ranking_grade",
+        "stop_before_target",
+    ]
+    columns.extend(
+        column
+        for column in (
+            "path_realized_return_net",
+            "independent_event_id",
+            "concurrent_label_count",
+            "cooldown_bars",
+            "market_regime",
+        )
+        if column in data.columns
+    )
+    output = data[columns].copy()
     output["family"] = family
     output["fold"] = fold
     output["audit_scope"] = audit_scope
+    output["model_run_id"] = model_run_id
     output["target_col"] = target_column
     output["target"] = pd.to_numeric(data[target_column], errors="coerce").to_numpy()
     output["score"] = score
@@ -440,6 +465,7 @@ def _prepare_training_data(dataset: pd.DataFrame) -> pd.DataFrame:
         "decision_time_utc",
         "feature_available_at_utc",
         "entry_time_utc",
+        "primary_exit_time_utc",
         "session_date_et",
         "decision_group_id",
         "universe_snapshot_id",
@@ -461,19 +487,26 @@ def _prepare_training_data(dataset: pd.DataFrame) -> pd.DataFrame:
     data["decision_time_utc"] = data["decision_time_utc"].map(_aware_timestamp)
     data["feature_available_at_utc"] = data["feature_available_at_utc"].map(_aware_timestamp)
     data["entry_time_utc"] = data["entry_time_utc"].map(_aware_timestamp)
-    if bool(data[["decision_time_utc", "feature_available_at_utc", "entry_time_utc"]].isna().any(axis=None)):
+    data["primary_exit_time_utc"] = data["primary_exit_time_utc"].map(_aware_timestamp)
+    time_columns = ["decision_time_utc", "feature_available_at_utc", "entry_time_utc", "primary_exit_time_utc"]
+    if bool(data[time_columns].isna().any(axis=None)):
         raise DataReadinessError("V3 training contains invalid decision, availability, or entry timestamps")
     if bool((data["feature_available_at_utc"] > data["decision_time_utc"]).any()):
         raise DataReadinessError("V3 training contains features unavailable at decision time")
     if bool((data["entry_time_utc"] <= data["decision_time_utc"]).any()):
         raise DataReadinessError("V3 training entry must follow the completed decision bar")
+    if bool((data["primary_exit_time_utc"] < data["entry_time_utc"]).any()):
+        raise DataReadinessError("V3 primary exit cannot precede entry")
     declared_session = pd.to_datetime(data["session_date_et"], errors="coerce").dt.date
     decision_session = data["decision_time_utc"].dt.tz_convert("America/New_York").dt.date
     entry_session = data["entry_time_utc"].dt.tz_convert("America/New_York").dt.date
+    exit_session = data["primary_exit_time_utc"].dt.tz_convert("America/New_York").dt.date
     if bool(declared_session.isna().any() | declared_session.ne(decision_session).any()):
         raise DataReadinessError("session_date_et does not match the decision timestamp")
     if bool(pd.Series(entry_session).ne(declared_session).any()):
         raise DataReadinessError("V3 training labels cannot cross Eastern sessions")
+    if bool(pd.Series(exit_session).ne(declared_session).any()):
+        raise DataReadinessError("V3 primary exits cannot cross Eastern sessions")
     assert_development_only(
         data,
         policy=DevelopmentShadowPolicy(timestamp_column="decision_time_utc"),

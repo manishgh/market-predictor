@@ -120,6 +120,7 @@ def _label_session(
             "decision_time_utc": decision["timestamp"],
             "feature_available_at_utc": decision["timestamp"],
             "entry_time_utc": entry["timestamp"],
+            "primary_exit_time_utc": session.iloc[decision_index + config.primary_horizon_bars]["timestamp"],
             "session_date_et": decision["_session_date_et"],
             "decision_group_id": pd.Timestamp(decision["timestamp"]).isoformat(),
             "universe_snapshot_id": decision["universe_snapshot_id"],

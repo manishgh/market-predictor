@@ -34,7 +34,7 @@ Production API implications:
 
 The next valid intraday promotion attempt requires new matured shadow data after 2026-07-08, predeclared model/threshold choices, and all current promotion audits. See [Intraday model promotion](docs/intraday_model_promotion.md).
 
-ML V3 checkpoints C1-C6 are implemented. The V3 artifacts produced by `train-v3-models` are candidates only: B0 is a deterministic technical floor, B1 is logistic, B2 is histogram gradient boosting, R1 is the optional XGBoost grouped ranker, and D1 is a separate downside classifier. No V3 family is promoted or served until calibration/economic audits and the frozen shadow process are complete.
+ML V3 checkpoints C1-C7 are implemented. The V3 artifacts produced by `train-v3-models` are candidates only: B0 is a deterministic technical floor, B1 is logistic, B2 is histogram gradient boosting, R1 is the optional XGBoost grouped ranker, and D1 is a separate downside classifier. C7 adds disjoint classifier calibration, whole-session bootstrap intervals, independent-event top-k economics, and multi-output opportunity/downside evidence. No V3 family is promoted or served until the gate freeze and shadow process are complete.
 
 ## Architecture Documents
 
@@ -100,9 +100,12 @@ V3 development workflow after the raw data audit passes:
 market-predictor build-v3-features --bars data/curated/v3_bars.parquet --benchmarks data/curated/v3_benchmarks.parquet --source-availability data/curated/v3_source_availability.parquet --out data/features/v3_features_latest.parquet
 market-predictor build-v3-labels --bars data/features/v3_features_latest.parquet --benchmarks data/curated/v3_benchmarks.parquet --out data/features/v3_training_latest.parquet
 market-predictor train-v3-models --dataset data/features/v3_training_latest.parquet --output-dir models/v3/candidates
+market-predictor audit-v3-ranking --predictions data/reports/v3_oof_predictions_latest.parquet --opportunity-family R1 --downside-family D1
 ```
 
 The training command refuses shadow rows, non-SIP volume provenance, future feature availability, cross-session labels, malformed ranking groups, and stale feature schemas. It writes per-family candidate manifests, walk-forward OOF predictions, deterministic ticker-holdout evidence, and a fold feature-coverage audit. One family failure is reported without discarding successful families; the command exits nonzero if any requested family failed.
+
+`audit-v3-ranking` fits the chosen D1 calibrator on earlier OOF sessions and evaluates top-k economics only on later sessions. It requires calibrated downside probabilities and independent event IDs, and resamples whole sessions for confidence intervals. The calibration method, candidate family, risk threshold, and promotion thresholds must be frozen in C8 before the audit can be used for model selection or shadow evaluation.
 
 ## Repository Artifact Policy
 

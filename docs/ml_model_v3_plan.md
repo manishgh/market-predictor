@@ -651,6 +651,8 @@ Add V3 ranking model baselines
 
 ### C7 - Calibration, uncertainty, and economics
 
+Status: completed on 2026-07-11.
+
 Scope:
 
 - Add disjoint calibration workflow.
