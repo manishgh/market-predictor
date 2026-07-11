@@ -116,6 +116,15 @@ market-predictor audit-v3-development-readiness --bars data/artifacts/ohlcv/v3_s
 
 The universe builder hashes official S&P Global add/drop announcements, joins Alpaca name-change events, and reverses those events from the frozen constituent anchor. As of 2026-07-11, the local development audit passes with 546 point-in-time symbols, 501 sessions, SIP provenance, non-overlapping membership windows, bars for every historical member, and all 13 market/sector benchmarks. This establishes data readiness only; no V3 candidate is selected or promoted by this audit.
 
+Build the monthly development rows through the hash-verified, XNYS-calendar-aware path, then train only from that registered directory:
+
+```powershell
+market-predictor build-v3-development-dataset --bars-dir data/artifacts/ohlcv/v3_sp500_current_730d_20260708/5m --benchmark-dir data/artifacts/ohlcv/v3_development_benchmarks_730d_20260708/5m --memberships data/universe/sp500_point_in_time_20240709_20260708.parquet --technical-dir data/work/v3_c8_technical_20260711 --out-dir data/features/v3_c8_development_20260711_v9 --decision-start-date 2024-08-09 --minimum-cross-section 300 --decision-stride-bars 12 --reuse-technical
+market-predictor train-v3-models --dataset data/features/v3_c8_development_20260711_v9 --families B0
+```
+
+The loader rejects missing, modified, or unregistered monthly shards and carries the dataset fingerprint into training evidence. The completed C8 dataset has 1,063,587 rows across 24 months. B0 was evaluated and rejected as a promotion candidate because both walk-forward and ticker-holdout top-10 excess returns were negative; see [the B0 model card](docs/model_cards/v3_c8_b0_20260711.md).
+
 ## Repository Artifact Policy
 
 The repository contains source code, configuration examples, scripts, and documentation only. Runtime secrets, downloaded market data, feature tables, trained model binaries, cached API responses, and generated reports stay out of Git.

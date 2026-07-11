@@ -673,7 +673,9 @@ Audit V3 calibration and ranking economics
 
 ### C8 - Development training run and gate freeze
 
-Status: in progress as of 2026-07-11. Data readiness is complete, but no C8 model-selection run has been performed. The frozen development inputs now pass with 546 point-in-time symbols, 501 sessions, SIP provenance, valid non-overlapping membership windows, historical-member bar coverage, and all required market/sector ETFs. The point-in-time universe is reconstructed from hashed official S&P Global add/drop releases plus Alpaca name-change events; it is not a current-list backfill.
+Status: in progress as of 2026-07-11. The versioned development dataset is complete with 1,063,587 rows, 546 point-in-time symbols, 478 labeled sessions, 24 monthly hash-verified shards, SIP provenance, and XNYS-calendar session boundaries. Its fingerprint is `ae17ce380ce0765dbbfcb0e0e07a3dda2598c1bd3482a3bd6abaa5018183e098`.
+
+The B0 deterministic floor has been run on this frozen input and rejected: mean top-10 excess return is -0.09868% walk-forward and -0.09387% on deterministic ticker holdout. B0 remains the comparison floor only. Learned model ablations and candidate selection have not yet completed.
 
 Scope:
 
