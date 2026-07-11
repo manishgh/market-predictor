@@ -753,6 +753,21 @@ def _normalize_ohlcv(ticker: str, frame: pd.DataFrame, timeframe: str, *, price_
     return normalized[columns].dropna(subset=["timestamp", "open", "high", "low", "close"]).sort_values("timestamp")
 
 
+def _merge_ohlcv_manifest(
+    existing: pd.DataFrame,
+    summary: pd.DataFrame,
+    *,
+    symbols: list[str],
+    timeframes: set[str],
+) -> pd.DataFrame:
+    if not {"ticker", "timeframe"}.issubset(existing.columns):
+        return summary
+    replace = existing["ticker"].astype(str).isin(symbols) & existing["timeframe"].astype(str).isin(timeframes)
+    merged = pd.concat([existing.loc[~replace], summary], ignore_index=True, sort=False)
+    order = [column for column in ["ticker", "timeframe", "rows", "path", "error"] if column in merged.columns]
+    return merged.sort_values(["ticker", "timeframe"], na_position="last", kind="stable")[order]
+
+
 def _write_artifact_manifest(path: Path, payload: dict[str, object]) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
@@ -2061,8 +2076,11 @@ def export_ohlcv_artifacts(
             except Exception as exc:
                 summary.append({"ticker": symbol, "error": str(exc)})
                 console.print(f"[red]{symbol}: OHLCV export failed: {exc}[/red]")
-    summary_frame = pd.DataFrame(summary)
     summary_path = out_dir / "_ohlcv_manifest.csv"
+    summary_frame = pd.DataFrame(summary)
+    if summary_path.exists():
+        existing = pd.read_csv(summary_path)
+        summary_frame = _merge_ohlcv_manifest(existing, summary_frame, symbols=symbols, timeframes=requested)
     summary_frame.to_csv(summary_path, index=False)
     contract = {
         "schema_version": "ohlcv.v1",

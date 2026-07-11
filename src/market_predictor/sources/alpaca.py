@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, date, datetime
 from typing import Any
 
 import pandas as pd
@@ -13,6 +13,7 @@ from market_predictor.sources.http import HttpClient
 class AlpacaSource:
     news_url = "https://data.alpaca.markets/v1beta1/news"
     bars_url = "https://data.alpaca.markets/v2/stocks/bars"
+    corporate_actions_url = "https://data.alpaca.markets/v1/corporate-actions"
 
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
@@ -82,6 +83,31 @@ class AlpacaSource:
             assets = assets[assets["tradable"] == True]  # noqa: E712
         return assets.sort_values("symbol").reset_index(drop=True)
 
+    def fetch_name_changes(self, start: date, end: date) -> pd.DataFrame:
+        """Fetch point-in-time US symbol changes used to preserve security continuity."""
+        params: dict[str, Any] = {
+            "types": "name_change",
+            "region": "us",
+            "start": start.isoformat(),
+            "end": end.isoformat(),
+            "limit": 1000,
+            "sort": "asc",
+        }
+        rows: list[dict[str, Any]] = []
+        while True:
+            payload = self.client.get_json(self.corporate_actions_url, params=params, headers=self.headers)
+            rows.extend(payload.get("corporate_actions", {}).get("name_changes", []))
+            token = payload.get("next_page_token")
+            if not token:
+                break
+            params["page_token"] = token
+        columns = ["id", "process_date", "old_symbol", "new_symbol", "old_cusip", "new_cusip"]
+        if not rows:
+            return pd.DataFrame(columns=columns)
+        frame = pd.DataFrame(rows)
+        keep = [column for column in columns if column in frame.columns]
+        return frame[keep].sort_values(["process_date", "old_symbol"], kind="stable").reset_index(drop=True)
+
     def fetch_news(
         self,
         ticker: str,
@@ -91,7 +117,7 @@ class AlpacaSource:
         include_content: bool = True,
         limit: int = 50,
     ) -> list[NewsEvent]:
-        end = end or datetime.now(timezone.utc)
+        end = end or datetime.now(UTC)
         params: dict[str, Any] = {
             "symbols": ticker.upper(),
             "start": start.isoformat(),
@@ -125,7 +151,7 @@ class AlpacaSource:
         return events
 
     def fetch_daily_bars(self, ticker: str, start: datetime, end: datetime | None = None) -> pd.DataFrame:
-        end = end or datetime.now(timezone.utc)
+        end = end or datetime.now(UTC)
         params = {
             "symbols": ticker.upper(),
             "timeframe": "1Day",
@@ -155,7 +181,7 @@ class AlpacaSource:
         *,
         timeframe: str,
     ) -> pd.DataFrame:
-        end = end or datetime.now(timezone.utc)
+        end = end or datetime.now(UTC)
         params = {
             "symbols": ticker.upper(),
             "timeframe": timeframe,

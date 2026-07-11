@@ -53,6 +53,7 @@ def audit_development_readiness(
     checks.extend(_bar_checks(bar_summary, config))
     universe_summary = _scan_universe(universe_path)
     checks.extend(_universe_checks(universe_summary, config))
+    checks.extend(_universe_bar_checks(universe_summary, bar_summary))
     benchmark_summary = _scan_benchmarks(benchmark_dir, config.required_benchmarks)
     checks.extend(_benchmark_checks(benchmark_summary, bar_summary, config))
     failures = [check.name for check in checks if check.status == "fail"]
@@ -119,6 +120,7 @@ def _scan_bars(path: Path) -> dict[str, Any]:
         "missing_columns": [],
         "rows": rows,
         "tickers": len(tickers),
+        "ticker_values": sorted(tickers),
         "ticker_sample": sorted(tickers)[:20],
         "sessions": len(sessions),
         "first_timestamp_utc": first.isoformat() if first is not None else None,
@@ -137,12 +139,39 @@ def _scan_universe(path: Path) -> dict[str, Any]:
     frame = pd.read_parquet(path) if path.suffix.lower() == ".parquet" else pd.read_csv(path)
     columns = set(frame.columns)
     ticker_column = "ticker" if "ticker" in columns else "Ticker" if "Ticker" in columns else None
-    tickers = int(frame[ticker_column].nunique()) if ticker_column else 0
+    ticker_values = sorted(frame[ticker_column].dropna().astype(str).str.upper().str.strip().unique()) if ticker_column else []
+    tickers = len(ticker_values)
+    invalid_windows = 0
+    overlapping_windows = 0
+    if {"effective_from_utc", "effective_to_utc"}.issubset(columns) and ticker_column:
+        windows = frame[[ticker_column, "effective_from_utc", "effective_to_utc"]].copy()
+        windows["effective_from_utc"] = pd.to_datetime(windows["effective_from_utc"], utc=True, errors="coerce")
+        windows["effective_to_utc"] = pd.to_datetime(windows["effective_to_utc"], utc=True, errors="coerce")
+        invalid_windows = int(
+            (
+                windows["effective_from_utc"].isna()
+                | (
+                    windows["effective_to_utc"].notna()
+                    & (windows["effective_to_utc"] <= windows["effective_from_utc"])
+                )
+            ).sum()
+        )
+        for _, group in windows.sort_values([ticker_column, "effective_from_utc"]).groupby(ticker_column):
+            previous_end: pd.Timestamp | None = None
+            for row in group.itertuples(index=False):
+                start = row.effective_from_utc
+                end = row.effective_to_utc
+                if previous_end is not None and pd.notna(start) and start < previous_end:
+                    overlapping_windows += 1
+                previous_end = pd.Timestamp.max.tz_localize("UTC") if pd.isna(end) else end
     return {
         "path": str(path),
         "exists": True,
         "rows": len(frame),
         "tickers": tickers,
+        "ticker_values": ticker_values,
+        "invalid_windows": invalid_windows,
+        "overlapping_windows": overlapping_windows,
         "columns": sorted(columns),
         "missing_columns": sorted(POINT_IN_TIME_UNIVERSE_COLUMNS.difference(columns)),
     }
@@ -192,7 +221,21 @@ def _universe_checks(summary: dict[str, Any], config: DevelopmentReadinessConfig
     return [
         _check("point_in_time_universe_schema", not missing, missing, "all effective membership columns"),
         _check("universe_minimum_tickers", tickers >= config.minimum_tickers, tickers, config.minimum_tickers),
+        _check("universe_effective_windows", int(summary.get("invalid_windows", 0)) == 0, summary.get("invalid_windows", 0), 0),
+        _check(
+            "universe_non_overlapping_windows",
+            int(summary.get("overlapping_windows", 0)) == 0,
+            summary.get("overlapping_windows", 0),
+            0,
+        ),
     ]
+
+
+def _universe_bar_checks(universe: dict[str, Any], bars: dict[str, Any]) -> list[ReadinessCheck]:
+    universe_tickers = set(universe.get("ticker_values", []))
+    bar_tickers = set(bars.get("ticker_values", []))
+    missing = sorted(universe_tickers.difference(bar_tickers))
+    return [_check("point_in_time_universe_bar_coverage", not missing, missing, "bars for every historical member")]
 
 
 def _benchmark_checks(

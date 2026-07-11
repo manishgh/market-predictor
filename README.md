@@ -110,10 +110,11 @@ The training command refuses shadow rows, non-SIP volume provenance, future feat
 Before C8, run the fail-closed development gate:
 
 ```powershell
-market-predictor audit-v3-development-readiness --bars data/artifacts/ohlcv/v3_sp500_current_730d_20260708/5m --universe data/universe/sp500_point_in_time.parquet --benchmark-dir data/artifacts/ohlcv/v3_development_benchmarks_730d_20260708/5m
+market-predictor build-v3-sp500-point-in-time-universe --current-snapshot data/universe/sp500_current_20260708.csv --start-date 2024-07-09 --cutoff-date 2026-07-08 --out data/universe/sp500_point_in_time_20240709_20260708.parquet --raw-dir data/raw/index_membership/spglobal_20240709_20260708 --audit-out data/reports/sp500_point_in_time_20240709_20260708_audit.json
+market-predictor audit-v3-development-readiness --bars data/artifacts/ohlcv/v3_sp500_current_730d_20260708/5m --universe data/universe/sp500_point_in_time_20240709_20260708.parquet --benchmark-dir data/artifacts/ohlcv/v3_development_benchmarks_730d_20260708/5m --out data/reports/v3_development_readiness_pit_20260711.json
 ```
 
-The local frozen-cutoff bars and benchmarks pass, but C8 remains blocked until a licensed or otherwise auditable historical membership source provides `effective_from_utc` and `effective_to_utc`. Do not assign the current S&P list across two years; that would create survivorship bias.
+The universe builder hashes official S&P Global add/drop announcements, joins Alpaca name-change events, and reverses those events from the frozen constituent anchor. As of 2026-07-11, the local development audit passes with 546 point-in-time symbols, 501 sessions, SIP provenance, non-overlapping membership windows, bars for every historical member, and all 13 market/sector benchmarks. This establishes data readiness only; no V3 candidate is selected or promoted by this audit.
 
 ## Repository Artifact Policy
 

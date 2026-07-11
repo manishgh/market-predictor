@@ -673,7 +673,7 @@ Audit V3 calibration and ranking economics
 
 ### C8 - Development training run and gate freeze
 
-Status: blocked by point-in-time universe membership as of 2026-07-11; no C8 model-selection run has been performed. A new frozen-cutoff export now passes the bar and benchmark gates with 503 tickers, 501 sessions, SIP provenance, and all required market/sector ETFs. The remaining current-constituent file lacks effective membership windows and cannot be relabeled as historical membership without introducing survivorship bias.
+Status: in progress as of 2026-07-11. Data readiness is complete, but no C8 model-selection run has been performed. The frozen development inputs now pass with 546 point-in-time symbols, 501 sessions, SIP provenance, valid non-overlapping membership windows, historical-member bar coverage, and all required market/sector ETFs. The point-in-time universe is reconstructed from hashed official S&P Global add/drop releases plus Alpaca name-change events; it is not a current-list backfill.
 
 Scope:
 

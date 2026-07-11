@@ -374,7 +374,7 @@ The data, target, ranking, validation, cleanup, and Git checkpoint sequence for 
 
 V3 checkpoints C1-C7 now provide strict point-in-time contracts, immutable development/shadow partitioning, exact next-open labels and costs, batch/live feature parity, cross-sectional ranks, session-purged walk-forward validation, deterministic ticker holdout, candidate adapters for B0/B1/B2/R1/D1, disjoint classifier calibration, and session-blocked independent-event economics. This changes research capability only. V3 artifacts remain outside production serving until the gate freeze and one-time shadow evaluation are completed.
 
-C8 readiness currently passes for the frozen 503-symbol, 501-session SIP bar export and all required market/sector ETF benchmarks. It fails only because the available S&P universe is a current snapshot without effective membership dates. Candidate selection remains prohibited until that point-in-time universe is supplied from an auditable source.
+C8 data readiness passes for 546 point-in-time S&P symbols over 501 sessions. Membership is reconstructed from hashed official S&P Global effective add/drop rows and Alpaca name-change events; 43 former constituents were backfilled with frozen-cutoff SIP bars. Membership windows, historical-symbol bar coverage, cutoff, feed provenance, and all required market/sector ETF benchmarks pass. Candidate selection and promotion remain separate, later gates.
 
 ## 11. Audit Report Specification
 

@@ -63,6 +63,48 @@ class V3DevelopmentReadinessTests(unittest.TestCase):
         self.assertIn("point_in_time_universe_schema", report["failures"])
         self.assertIn("required_benchmarks", report["failures"])
 
+    def test_historical_member_without_bars_fails(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            bars_path = root / "bars.parquet"
+            _bars().to_parquet(bars_path, index=False)
+            universe = pd.concat(
+                [
+                    _universe(),
+                    pd.DataFrame(
+                        {
+                            "ticker": ["OLD"],
+                            "effective_from_utc": ["2026-01-01T00:00:00Z"],
+                            "effective_to_utc": ["2026-06-01T00:00:00Z"],
+                            "sector": ["Industrials"],
+                            "industry": ["Machinery"],
+                            "market_cap_bucket": ["large"],
+                            "liquidity_bucket": ["high"],
+                            "primary_benchmark": ["SPY"],
+                            "universe_snapshot_id": ["snapshot-1"],
+                        }
+                    ),
+                ],
+                ignore_index=True,
+            )
+            universe_path = root / "universe.csv"
+            universe.to_csv(universe_path, index=False)
+            benchmark_dir = root / "benchmarks"
+            benchmark_dir.mkdir()
+            for symbol in ("SPY", "QQQ"):
+                benchmark = _bars()[lambda frame: frame["ticker"] == "AAA"].copy()
+                benchmark["ticker"] = symbol
+                benchmark.to_parquet(benchmark_dir / f"{symbol}.parquet", index=False)
+            report = audit_development_readiness(
+                bars_path=bars_path,
+                universe_path=universe_path,
+                benchmark_dir=benchmark_dir,
+                config=DevelopmentReadinessConfig(minimum_tickers=2, minimum_sessions=2, required_benchmarks=("SPY", "QQQ")),
+            )
+        self.assertIn("point_in_time_universe_bar_coverage", report["failures"])
+        check = next(item for item in report["checks"] if item["name"] == "point_in_time_universe_bar_coverage")
+        self.assertEqual(check["observed"], ["OLD"])
+
 
 def _bars() -> pd.DataFrame:
     rows: list[dict[str, object]] = []
