@@ -579,6 +579,8 @@ Add V3 point-in-time data contracts
 
 ### C4 - V3 targets and overlap weighting
 
+Status: completed on 2026-07-11.
+
 Scope:
 
 - Add continuous, excess-return, MFE/MAE, and path labels.

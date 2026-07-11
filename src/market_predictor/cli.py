@@ -15,6 +15,7 @@ from rich.console import Console
 
 from market_predictor.commands.ranking import register_ranking_commands
 from market_predictor.commands.v3_data import register_v3_data_commands
+from market_predictor.commands.v3_labels import register_v3_label_commands
 from market_predictor.config import get_settings
 from market_predictor.data_quality import sanitize_events_frame
 from market_predictor.entry_exit import (
@@ -78,6 +79,7 @@ console = Console()
 DEFAULT_MARKET_CONTEXT_PATH = Path("data/external/market_context/market_context_events_scored.parquet")
 register_ranking_commands(app, console)
 register_v3_data_commands(app, console)
+register_v3_label_commands(app, console)
 
 
 @app.command("serve-api")

@@ -7,6 +7,7 @@ from market_predictor.v3.errors import (
     PromotionGateError,
     SchemaMismatchError,
 )
+from market_predictor.v3.labels import V3LabelConfig, build_v3_labels
 from market_predictor.v3.schema import ML_V3_SCHEMA_VERSION, FrozenContract, SchemaIdentity
 
 __all__ = [
@@ -22,4 +23,6 @@ __all__ = [
     "SchemaMismatchError",
     "SourceAvailability",
     "UniverseMembership",
+    "V3LabelConfig",
+    "build_v3_labels",
 ]
