@@ -555,6 +555,8 @@ Enforce predictor code quality gates
 
 ### C3 - V3 data contracts and audits
 
+Status: completed on 2026-07-11.
+
 Scope:
 
 - Add point-in-time universe schema.

@@ -1,3 +1,4 @@
+from market_predictor.v3.contracts import DecisionRowIdentity, SourceAvailability, UniverseMembership
 from market_predictor.v3.errors import (
     ArtifactIntegrityError,
     DataReadinessError,
@@ -11,6 +12,7 @@ from market_predictor.v3.schema import ML_V3_SCHEMA_VERSION, FrozenContract, Sch
 __all__ = [
     "ArtifactIntegrityError",
     "DataReadinessError",
+    "DecisionRowIdentity",
     "FrozenContract",
     "LeakageAuditError",
     "ML_V3_SCHEMA_VERSION",
@@ -18,4 +20,6 @@ __all__ = [
     "PromotionGateError",
     "SchemaIdentity",
     "SchemaMismatchError",
+    "SourceAvailability",
+    "UniverseMembership",
 ]
