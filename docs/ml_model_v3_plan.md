@@ -673,6 +673,8 @@ Audit V3 calibration and ranking economics
 
 ### C8 - Development training run and gate freeze
 
+Status: blocked by point-in-time universe membership as of 2026-07-11; no C8 model-selection run has been performed. A new frozen-cutoff export now passes the bar and benchmark gates with 503 tickers, 501 sessions, SIP provenance, and all required market/sector ETFs. The remaining current-constituent file lacks effective membership windows and cannot be relabeled as historical membership without introducing survivorship bias.
+
 Scope:
 
 - Build development dataset through the frozen cutoff.

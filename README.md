@@ -107,6 +107,14 @@ The training command refuses shadow rows, non-SIP volume provenance, future feat
 
 `audit-v3-ranking` fits the chosen D1 calibrator on earlier OOF sessions and evaluates top-k economics only on later sessions. It requires calibrated downside probabilities and independent event IDs, and resamples whole sessions for confidence intervals. The calibration method, candidate family, risk threshold, and promotion thresholds must be frozen in C8 before the audit can be used for model selection or shadow evaluation.
 
+Before C8, run the fail-closed development gate:
+
+```powershell
+market-predictor audit-v3-development-readiness --bars data/artifacts/ohlcv/v3_sp500_current_730d_20260708/5m --universe data/universe/sp500_point_in_time.parquet --benchmark-dir data/artifacts/ohlcv/v3_development_benchmarks_730d_20260708/5m
+```
+
+The local frozen-cutoff bars and benchmarks pass, but C8 remains blocked until a licensed or otherwise auditable historical membership source provides `effective_from_utc` and `effective_to_utc`. Do not assign the current S&P list across two years; that would create survivorship bias.
+
 ## Repository Artifact Policy
 
 The repository contains source code, configuration examples, scripts, and documentation only. Runtime secrets, downloaded market data, feature tables, trained model binaries, cached API responses, and generated reports stay out of Git.

@@ -58,5 +58,5 @@ strict = true
 plugins = ["pydantic.mypy"]
 
 [[tool.mypy.overrides]]
-module = ["joblib.*", "pandas.*", "sklearn.*"]
+module = ["joblib.*", "pandas.*", "pyarrow.*", "sklearn.*"]
 ignore_missing_imports = true

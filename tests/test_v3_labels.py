@@ -74,6 +74,24 @@ class V3LabelTests(unittest.TestCase):
         self.assertEqual(labeled["label_config_hash"].nunique(), 1)
         self.assertEqual(labeled["label_config_json"].nunique(), 1)
 
+    def test_regular_session_decisions_never_use_after_hours_bars(self) -> None:
+        times = pd.date_range("2026-07-08 19:50:00Z", periods=5, freq="5min")
+        bars = _ticker_bars(times)
+        benchmarks = _benchmark_bars(times)
+        config = V3LabelConfig(
+            horizons_bars=(1,),
+            primary_horizon_bars=1,
+            bar_minutes=5,
+            minimum_ranking_group=3,
+        )
+        labeled = build_v3_labels(bars, benchmarks, config=config)
+        decision_minute = pd.to_datetime(labeled["decision_time_utc"], utc=True).dt.tz_convert("America/New_York")
+        entry_minute = pd.to_datetime(labeled["entry_time_utc"], utc=True).dt.tz_convert("America/New_York")
+        exit_minute = pd.to_datetime(labeled["primary_exit_time_utc"], utc=True).dt.tz_convert("America/New_York")
+        self.assertTrue((decision_minute.dt.hour * 60 + decision_minute.dt.minute < 16 * 60).all())
+        self.assertTrue((entry_minute.dt.hour * 60 + entry_minute.dt.minute < 16 * 60).all())
+        self.assertTrue((exit_minute.dt.hour * 60 + exit_minute.dt.minute < 16 * 60).all())
+
 
 def _ticker_bars(times: pd.DatetimeIndex) -> pd.DataFrame:
     rows: list[dict[str, object]] = []

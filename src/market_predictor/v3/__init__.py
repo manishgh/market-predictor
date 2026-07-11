@@ -18,12 +18,14 @@ from market_predictor.v3.evaluation import (
 from market_predictor.v3.features import V3_FEATURE_SCHEMA_VERSION, build_v3_features, core_feature_columns
 from market_predictor.v3.labels import V3LabelConfig, build_v3_labels
 from market_predictor.v3.models import MODEL_FAMILIES, V3_MODEL_SCHEMA_VERSION, V3TrainingConfig, train_v3_model_suite
+from market_predictor.v3.readiness import DevelopmentReadinessConfig, audit_development_readiness
 from market_predictor.v3.schema import ML_V3_SCHEMA_VERSION, FrozenContract, SchemaIdentity
 
 __all__ = [
     "ArtifactIntegrityError",
     "DataReadinessError",
     "DecisionRowIdentity",
+    "DevelopmentReadinessConfig",
     "FrozenContract",
     "LeakageAuditError",
     "ML_V3_SCHEMA_VERSION",
@@ -40,6 +42,7 @@ __all__ = [
     "V3_FEATURE_SCHEMA_VERSION",
     "build_v3_labels",
     "build_v3_features",
+    "audit_development_readiness",
     "core_feature_columns",
     "build_multi_output_evidence",
     "evaluate_ranking_economics",

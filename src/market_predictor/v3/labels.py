@@ -24,6 +24,8 @@ class V3LabelConfig(FrozenContract):
     minimum_ranking_group: int = Field(default=20, ge=2)
     ranking_grades: int = Field(default=5, ge=2, le=10)
     evaluation_cooldown_bars: int = Field(default=0, ge=0)
+    decision_start_minute_et: int = Field(default=9 * 60 + 30, ge=0, le=1_439)
+    decision_end_minute_et: int = Field(default=16 * 60, ge=1, le=1_440)
     ambiguous_barrier_policy: Literal["stop", "target"] = "stop"
     schema_version: str = ML_V3_SCHEMA_VERSION
 
@@ -39,6 +41,8 @@ class V3LabelConfig(FrozenContract):
     def validate_primary_horizon(self) -> Self:
         if self.primary_horizon_bars not in self.horizons_bars:
             raise ValueError("primary_horizon_bars must be present in horizons_bars")
+        if self.decision_end_minute_et <= self.decision_start_minute_et:
+            raise ValueError("decision session end must be later than its start")
         return self
 
 
@@ -105,10 +109,23 @@ def _label_session(
     qqq = "QQQ"
     label_config_json = json.dumps(config.model_dump(mode="json"), separators=(",", ":"), sort_keys=True)
     label_config_hash = hashlib.sha256(label_config_json.encode()).hexdigest()
+    eastern = session["timestamp"].dt.tz_convert("America/New_York")
+    minute_et = eastern.dt.hour * 60 + eastern.dt.minute
+    regular_indices = np.flatnonzero(
+        minute_et.between(config.decision_start_minute_et, config.decision_end_minute_et - 1).to_numpy()
+    )
+    if len(regular_indices) == 0:
+        return []
+    regular_close_index = int(regular_indices[-1])
     for decision_index in range(len(session) - maximum_horizon):
+        if not config.decision_start_minute_et <= int(minute_et.iloc[decision_index]) < config.decision_end_minute_et:
+            continue
         decision = session.iloc[decision_index]
         entry_index = decision_index + 1
         entry = session.iloc[entry_index]
+        maximum_exit_index = decision_index + maximum_horizon
+        if int(minute_et.iloc[maximum_exit_index]) >= config.decision_end_minute_et:
+            continue
         entry_price = float(entry["open"])
         if entry_price <= 0 or float(decision["atr_14"]) <= 0:
             continue
@@ -163,7 +180,7 @@ def _label_session(
             record[f"mae_{suffix}"] = float(adverse.min())
             record[f"bars_to_mfe_{suffix}"] = int(np.argmax(favorable.to_numpy())) + 1
             record[f"bars_to_mae_{suffix}"] = int(np.argmin(adverse.to_numpy())) + 1
-        session_close_bar = session.iloc[-1]
+        session_close_bar = session.iloc[regular_close_index]
         session_close = float(session_close_bar["close"])
         net_return_to_close = session_close / entry_price - 1.0 - cost
         record["net_return_to_close"] = net_return_to_close

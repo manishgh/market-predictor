@@ -19,6 +19,7 @@ from market_predictor.commands.v3_features import register_v3_feature_commands
 from market_predictor.commands.v3_evaluation import register_v3_evaluation_commands
 from market_predictor.commands.v3_labels import register_v3_label_commands
 from market_predictor.commands.v3_models import register_v3_model_commands
+from market_predictor.commands.v3_readiness import register_v3_readiness_commands
 from market_predictor.config import get_settings
 from market_predictor.data_quality import sanitize_events_frame
 from market_predictor.entry_exit import (
@@ -86,6 +87,7 @@ register_v3_feature_commands(app, console)
 register_v3_evaluation_commands(app, console)
 register_v3_label_commands(app, console)
 register_v3_model_commands(app, console)
+register_v3_readiness_commands(app, console)
 
 
 @app.command("serve-api")
@@ -720,7 +722,7 @@ def _curate_live_training_set(feature_dir: Path, out: Path) -> dict[str, object]
     }
 
 
-def _normalize_ohlcv(ticker: str, frame: pd.DataFrame, timeframe: str) -> pd.DataFrame:
+def _normalize_ohlcv(ticker: str, frame: pd.DataFrame, timeframe: str, *, price_feed: str) -> pd.DataFrame:
     normalized = frame.copy()
     if timeframe == "1d":
         normalized["timestamp"] = pd.to_datetime(normalized["date"], utc=True)
@@ -729,6 +731,7 @@ def _normalize_ohlcv(ticker: str, frame: pd.DataFrame, timeframe: str) -> pd.Dat
     normalized["symbol"] = ticker.upper()
     normalized["timeframe"] = timeframe
     normalized["source"] = "alpaca"
+    normalized["price_feed"] = price_feed.strip().lower()
     normalized["adjustment"] = "all"
     normalized["ingested_at_utc"] = pd.Timestamp.now(tz="UTC")
     columns = [
@@ -741,6 +744,7 @@ def _normalize_ohlcv(ticker: str, frame: pd.DataFrame, timeframe: str) -> pd.Dat
         "close",
         "volume",
         "source",
+        "price_feed",
         "adjustment",
         "ingested_at_utc",
     ]
@@ -2008,6 +2012,7 @@ def export_ohlcv_artifacts(
     timeframes: str = typer.Option("1d,1h", help="Comma-separated timeframes: 1d,1h,5m,1m."),
     out_dir: Path = typer.Option(Path("data/artifacts/ohlcv"), help="Local OHLCV artifact output root."),
     workers: int | None = typer.Option(None, help="Parallel export workers."),
+    end_date: str | None = typer.Option(None, help="Inclusive UTC end date YYYY-MM-DD; freezes development exports."),
 ) -> None:
     """Export project-owned OHLCV parquet artifacts for this ML pipeline."""
     settings = get_settings()
@@ -2017,8 +2022,10 @@ def export_ohlcv_artifacts(
     unknown = requested - valid
     if unknown:
         raise typer.BadParameter(f"Unsupported timeframes: {sorted(unknown)}")
-    start = datetime.now(timezone.utc) - timedelta(days=days)
-    end = datetime.now(timezone.utc)
+    if days < 1:
+        raise typer.BadParameter("days must be positive")
+    end = _parse_end_date(end_date) or datetime.now(timezone.utc)
+    start = end - timedelta(days=days)
     out_dir.mkdir(parents=True, exist_ok=True)
     max_workers = _worker_count(workers, settings.max_workers, len(symbols))
 
@@ -2026,7 +2033,7 @@ def export_ohlcv_artifacts(
         rows = []
         if "1d" in requested:
             daily = fetch_daily_prices(symbol, start, end, settings)
-            normalized = _normalize_ohlcv(symbol, daily, "1d")
+            normalized = _normalize_ohlcv(symbol, daily, "1d", price_feed=settings.alpaca_stock_feed)
             path = out_dir / "1d" / f"{symbol}.parquet"
             path.parent.mkdir(parents=True, exist_ok=True)
             normalized.to_parquet(path, index=False)
@@ -2035,7 +2042,7 @@ def export_ohlcv_artifacts(
             if timeframe not in requested:
                 continue
             intraday = fetch_intraday_prices(symbol, start, end, settings, timeframe=timeframe)
-            normalized = _normalize_ohlcv(symbol, intraday, timeframe)
+            normalized = _normalize_ohlcv(symbol, intraday, timeframe, price_feed=settings.alpaca_stock_feed)
             path = out_dir / timeframe / f"{symbol}.parquet"
             path.parent.mkdir(parents=True, exist_ok=True)
             normalized.to_parquet(path, index=False)
@@ -2060,10 +2067,26 @@ def export_ohlcv_artifacts(
     contract = {
         "schema_version": "ohlcv.v1",
         "generated_at_utc": datetime.now(timezone.utc).isoformat(),
-        "columns": ["symbol", "timeframe", "timestamp", "open", "high", "low", "close", "volume", "source", "adjustment", "ingested_at_utc"],
+        "columns": [
+            "symbol",
+            "timeframe",
+            "timestamp",
+            "open",
+            "high",
+            "low",
+            "close",
+            "volume",
+            "source",
+            "price_feed",
+            "adjustment",
+            "ingested_at_utc",
+        ],
         "timeframes": sorted(requested),
         "source": "alpaca",
+        "price_feed": settings.alpaca_stock_feed,
         "adjustment": "all",
+        "start_utc": start.isoformat(),
+        "end_utc": end.isoformat(),
         "manifest": str(summary_path),
     }
     _write_artifact_manifest(out_dir / "_schema.json", contract)
