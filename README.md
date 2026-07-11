@@ -123,7 +123,7 @@ market-predictor build-v3-development-dataset --bars-dir data/artifacts/ohlcv/v3
 market-predictor train-v3-models --dataset data/features/v3_c8_development_20260711_v9 --families B0
 ```
 
-The loader rejects missing, modified, or unregistered monthly shards and carries the dataset fingerprint into training evidence. The completed C8 dataset has 1,063,587 rows across 24 months. B0 was evaluated and rejected as a promotion candidate because both walk-forward and ticker-holdout top-10 excess returns were negative; see [the B0 model card](docs/model_cards/v3_c8_b0_20260711.md).
+The loader rejects missing, modified, or unregistered monthly shards and carries the dataset fingerprint into training evidence. The completed C8 dataset has 1,063,587 rows across 24 months. B0 and B1 were evaluated and rejected as promotion candidates because both walk-forward and ticker-holdout top-10 excess returns were negative; see the [B0](docs/model_cards/v3_c8_b0_20260711.md) and [B1](docs/model_cards/v3_c8_b1_20260711.md) model cards.
 
 ## Repository Artifact Policy
 
