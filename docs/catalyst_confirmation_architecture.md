@@ -376,7 +376,7 @@ V3 checkpoints C1-C7 now provide strict point-in-time contracts, immutable devel
 
 C8 data readiness passes for 546 point-in-time S&P symbols over 501 source sessions. The labeled development artifact contains 1,063,587 rows over 478 eligible sessions and 24 hash-verified monthly shards. XNYS schedules define normal and early-close session boundaries; QQQ, SPY, and every required sector ETF must cover each expected 5-minute timestamp. Training accepts this directory only after validating all shard hashes, physical row count, builder schema, and dataset fingerprint.
 
-The B0 deterministic floor and B1 logistic baseline are rejected because their top-10 cost-adjusted excess returns are negative in both purged walk-forward and deterministic ticker-holdout evidence. B1 improves AUC and lift but does not cross the economic floor. They remain research comparisons, not production models. Candidate selection and promotion remain separate later gates.
+The B0 deterministic floor, B1 logistic baseline, and B2 nonlinear baseline are rejected because their top-10 cost-adjusted excess returns are negative in both purged walk-forward and deterministic ticker-holdout evidence. B1 improves AUC and lift; B2 improves walk-forward economics but not holdout economics. None crosses the economic floor. They remain research comparisons, not production models. Candidate selection and promotion remain separate later gates.
 
 ## 11. Audit Report Specification
 

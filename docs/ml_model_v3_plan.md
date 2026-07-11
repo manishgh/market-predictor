@@ -675,7 +675,7 @@ Audit V3 calibration and ranking economics
 
 Status: in progress as of 2026-07-11. The versioned development dataset is complete with 1,063,587 rows, 546 point-in-time symbols, 478 labeled sessions, 24 monthly hash-verified shards, SIP provenance, and XNYS-calendar session boundaries. Its fingerprint is `ae17ce380ce0765dbbfcb0e0e07a3dda2598c1bd3482a3bd6abaa5018183e098`.
 
-The B0 deterministic floor and B1 logistic baseline have been run on this frozen input and rejected. B0 mean top-10 excess return is -0.09868% walk-forward and -0.09387% on deterministic ticker holdout. B1 improves AUC to 0.53258/0.53341 and top-decile lift to 1.1376x/1.1395x, but top-10 excess return remains negative at -0.07974%/-0.07763%. B0 remains the comparison floor; B1 remains an unpromoted research artifact. Further learned ablations and candidate selection have not completed.
+The B0, B1, and B2 baselines have been run on this frozen input and rejected. B0 mean top-10 excess return is -0.09868% walk-forward and -0.09387% on deterministic ticker holdout. B1 improves AUC to 0.53258/0.53341, but top-10 excess return remains -0.07974%/-0.07763%. B2 reaches -0.06558% walk-forward but remains -0.07807% on ticker holdout and does not consistently beat B1. All remain unpromoted research artifacts. Further ranker/downside ablations and candidate selection have not completed.
 
 Scope:
 
