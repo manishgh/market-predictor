@@ -602,6 +602,8 @@ Add V3 ranking targets and overlap weights
 
 ### C5 - Cross-sectional feature pipeline
 
+Status: completed on 2026-07-11.
+
 Scope:
 
 - Add point-in-time ranks/z-scores.
@@ -614,6 +616,8 @@ Tests:
 - Sector/benchmark mapping is as-of safe.
 - Opening range and same-minute volume remain leak-safe.
 - Feature parity between offline and live builders.
+
+CI smoke budget: a deterministic 480-row, 60-symbol feature build must complete in under eight seconds. This catches algorithmic regressions; deployment-scale peak-memory and throughput qualification remains a separate release gate on the target Azure compute profile.
 
 Suggested commit:
 

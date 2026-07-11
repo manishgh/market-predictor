@@ -22,7 +22,7 @@ jobs:
           python -m pip install -e ".[dev]"
 
       - name: Lint V3 and command modules
-        run: ruff check src/market_predictor/v3 src/market_predictor/commands tests/test_v3_foundation.py tests/test_architecture_boundaries.py
+        run: ruff check src/market_predictor/v3 src/market_predictor/commands tests/test_v3_*.py tests/test_architecture_boundaries.py
 
       - name: Type check V3 contracts
         run: mypy src/market_predictor/v3

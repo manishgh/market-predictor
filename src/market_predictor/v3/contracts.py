@@ -122,4 +122,6 @@ class SourceAvailability(FrozenContract):
             raise ValueError("available sources require first and last timestamps")
         if self.first_available_at_utc and self.last_available_at_utc and self.first_available_at_utc > self.last_available_at_utc:
             raise ValueError("source coverage timestamps are reversed")
+        if self.last_available_at_utc and self.last_available_at_utc > self.collected_at_utc:
+            raise ValueError("source coverage cannot extend beyond collection time")
         return self
