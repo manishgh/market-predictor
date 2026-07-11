@@ -367,6 +367,8 @@ Serving rules:
 - Catalyst/news remains an intraday confirmation and ranking overlay until a predeclared ablation on fresh data proves incremental model value.
 - The next intraday promotion trial must use matured observations after 2026-07-08 as an untouched shadow interval.
 
+The data, target, ranking, validation, cleanup, and Git checkpoint sequence for the next model generation is defined in [ML Model V3 Improvement Plan](ml_model_v3_plan.md).
+
 ## 11. Audit Report Specification
 
 The system should generate an audit report before model training, promotion, or production prediction review.

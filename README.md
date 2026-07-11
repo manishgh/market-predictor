@@ -40,6 +40,7 @@ The next valid intraday promotion attempt requires new matured shadow data after
 - [Azure deployment plan](docs/azure_deployment_plan.md)
 - [Market prediction intelligence architecture](docs/catalyst_confirmation_architecture.md)
 - [Intraday model promotion](docs/intraday_model_promotion.md)
+- [ML model V3 improvement plan](docs/ml_model_v3_plan.md)
 - [TradingFlow integration plan](docs/trading_flow_integration_plan.md)
 
 ## Source Strategy

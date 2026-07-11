@@ -325,6 +325,7 @@ Exit gate: explicit operational approval after paper and shadow evidence.
 ### Phase 5: Intraday ML
 
 - Promote an intraday model on fresh shadow data first.
+- Follow the frozen development/shadow and checkpoint sequence in [ML Model V3 Improvement Plan](ml_model_v3_plan.md).
 - Add completed-bar event handoff from TradingFlow.
 - Validate feature parity and bar timing.
 - Repeat Phases 1-4 for the intraday view; do not inherit swing thresholds.

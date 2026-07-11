@@ -51,3 +51,5 @@ The strongest tested exact-path candidate did not pass: ROC AUC 0.5806, top-deci
 The selected stream contained 558 capped OOS trades with a 35.13% win rate and 64.44% negative periods. Regime coverage passed across risk-on, neutral, and risk-off observations. Catalyst features were present, but only 21.44% of rows had ticker events and historical Reddit coverage was zero. These facts prohibit claims that Reddit contributed to this trained intraday result.
 
 Monthly entry-success AUC varied materially, from approximately 0.497 in March to 0.645 in June and 0.578 in early July. This is evidence of regime instability, not a production-ready invariant edge. The next valid promotion attempt requires new matured shadow data after 2026-07-08 plus predeclared model and threshold choices.
+
+The implementation sequence for that next attempt is frozen in [ML Model V3 Improvement Plan](ml_model_v3_plan.md).
