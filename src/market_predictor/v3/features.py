@@ -42,13 +42,53 @@ def build_v3_features(
     """Build the same completed-bar feature schema for batch and live callers."""
     if minimum_cross_section < 2:
         raise ValueError("minimum_cross_section must be at least 2")
+    technical = build_v3_ticker_features(bars, source_availability=source_availability)
+    return finalize_v3_cross_sectional_features(
+        technical,
+        benchmarks,
+        minimum_cross_section=minimum_cross_section,
+    )
+
+
+def build_v3_ticker_features(
+    bars: pd.DataFrame,
+    *,
+    source_availability: pd.DataFrame | None = None,
+) -> pd.DataFrame:
+    """Build ticker-local state so large universes can be processed in bounded shards."""
     data = _prepare_bars(bars, require_context=True)
-    benchmark_data = _prepare_bars(benchmarks, require_context=False)
     data = _add_technical_features(data)
-    data = _add_benchmark_features(data, benchmark_data)
-    data = _add_market_and_breadth_features(data)
     data = _add_source_availability(data, source_availability)
     data = _add_microstructure_features(data)
+    return data.sort_values(["decision_time_utc", "ticker"]).reset_index(drop=True)
+
+
+def finalize_v3_cross_sectional_features(
+    technical_features: pd.DataFrame,
+    benchmarks: pd.DataFrame,
+    *,
+    minimum_cross_section: int = 3,
+) -> pd.DataFrame:
+    """Add exact benchmark, breadth, regime, and point-in-time cross-sectional features."""
+    if minimum_cross_section < 2:
+        raise ValueError("minimum_cross_section must be at least 2")
+    required = {
+        "ticker",
+        "timestamp",
+        "decision_time_utc",
+        "decision_group_id",
+        "primary_benchmark",
+        "universe_snapshot_id",
+        "price_feed",
+        "_session_date_et",
+    }
+    missing = sorted(required.difference(technical_features.columns))
+    if missing:
+        raise SchemaMismatchError(f"technical feature shards missing columns: {', '.join(missing)}")
+    data = technical_features.copy()
+    benchmark_data = _prepare_bars(benchmarks, require_context=False)
+    data = _add_benchmark_features(data, benchmark_data)
+    data = _add_market_and_breadth_features(data)
     data = _add_cross_sectional_features(data, minimum_group=minimum_cross_section)
     data["feature_schema_version"] = V3_FEATURE_SCHEMA_VERSION
     return data.sort_values(["decision_time_utc", "ticker"]).reset_index(drop=True)
@@ -118,7 +158,10 @@ def _prepare_bars(frame: pd.DataFrame, *, require_context: bool) -> pd.DataFrame
         raise SchemaMismatchError(f"feature bars missing columns: {', '.join(missing)}")
     data = frame.copy()
     data["ticker"] = data["ticker"].astype(str).str.upper().str.strip()
-    data["timestamp"] = data["timestamp"].map(_aware_timestamp)
+    if isinstance(data["timestamp"].dtype, pd.DatetimeTZDtype):
+        data["timestamp"] = data["timestamp"].dt.tz_convert("UTC")
+    else:
+        data["timestamp"] = data["timestamp"].map(_aware_timestamp)
     if bool(data["timestamp"].isna().any()):
         raise DataReadinessError("feature bars contain invalid or timezone-naive timestamps")
     numeric = ["open", "high", "low", "close", "volume"]
@@ -251,9 +294,14 @@ def _add_benchmark_features(data: pd.DataFrame, benchmarks: pd.DataFrame) -> pd.
     benchmark = _add_benchmark_returns(benchmarks)
     output = data.copy()
     for symbol in ("QQQ", "SPY"):
-        selected = benchmark[benchmark["ticker"] == symbol][["timestamp", *_return_columns()]].copy()
+        selected_columns = ["timestamp", *_return_columns()]
+        if symbol == "QQQ":
+            selected_columns.append("volatility_12bar")
+        selected = benchmark[benchmark["ticker"] == symbol][selected_columns].copy()
         selected[f"_{symbol.lower()}_present"] = 1
         selected = selected.rename(columns={column: f"{symbol.lower()}_{column}" for column in _return_columns()})
+        if symbol == "QQQ":
+            selected = selected.rename(columns={"volatility_12bar": "_qqq_volatility_12bar"})
         output = output.merge(selected, on="timestamp", how="left", validate="many_to_one")
         if bool(output[f"_{symbol.lower()}_present"].isna().any()):
             raise DataReadinessError(f"missing exact {symbol} benchmark timestamps")
@@ -291,13 +339,11 @@ def _add_market_and_breadth_features(data: pd.DataFrame) -> pd.DataFrame:
     output["eligible_breadth_positive_1bar"] = group["return_1bar"].transform(lambda values: values.gt(0).mean())
     output["eligible_breadth_above_vwap"] = group["dist_session_vwap"].transform(lambda values: values.gt(0).mean())
     qqq_momentum = output["qqq_return_6bar"]
-    qqq_volatility = output["qqq_return_1bar"].groupby(output["ticker"], sort=False).transform(
-        lambda values: values.rolling(12, min_periods=4).std()
-    )
+    qqq_volatility = output["_qqq_volatility_12bar"]
     output["regime_risk_on"] = (qqq_momentum > 0.002).astype(int)
     output["regime_risk_off"] = (qqq_momentum < -0.002).astype(int)
     output["regime_high_volatility"] = (qqq_volatility > 0.005).astype(int)
-    return output
+    return output.drop(columns="_qqq_volatility_12bar")
 
 
 def _add_source_availability(data: pd.DataFrame, availability: pd.DataFrame | None) -> pd.DataFrame:
@@ -372,8 +418,8 @@ def _add_cross_sectional_features(data: pd.DataFrame, *, minimum_group: int) -> 
         rank = grouped.rank(method="average")
         output[f"xs_rank_{feature}"] = ((rank - 1) / (count - 1).replace(0, np.nan)).where(count.ge(minimum_group))
         median = grouped.transform("median")
-        q75 = grouped.transform(lambda group: group.quantile(0.75))
-        q25 = grouped.transform(lambda group: group.quantile(0.25))
+        q75 = grouped.transform("quantile", q=0.75)
+        q25 = grouped.transform("quantile", q=0.25)
         robust_scale = ((q75 - q25) / 1.349).replace(0, np.nan)
         robust_z = (values - median) / robust_scale
         output[f"xs_robust_z_{feature}"] = robust_z.replace([np.inf, -np.inf], np.nan).where(count.ge(minimum_group))

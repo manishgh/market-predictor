@@ -6,7 +6,13 @@ from time import perf_counter
 import pandas as pd
 
 from market_predictor.v3.errors import DataReadinessError
-from market_predictor.v3.features import V3_MICROSTRUCTURE_FEATURES, build_v3_features, core_feature_columns
+from market_predictor.v3.features import (
+    V3_MICROSTRUCTURE_FEATURES,
+    build_v3_features,
+    build_v3_ticker_features,
+    core_feature_columns,
+    finalize_v3_cross_sectional_features,
+)
 
 
 class V3FeatureTests(unittest.TestCase):
@@ -100,6 +106,16 @@ class V3FeatureTests(unittest.TestCase):
         elapsed = perf_counter() - started
         self.assertEqual(len(features), len(bars))
         self.assertLess(elapsed, 8.0, f"480-row V3 feature smoke build took {elapsed:.2f}s")
+
+    def test_sharded_feature_stages_match_single_pass(self) -> None:
+        expected = build_v3_features(self.bars, self.benchmarks, minimum_cross_section=3)
+        shards = [build_v3_ticker_features(group) for _, group in self.bars.groupby("ticker", sort=False)]
+        actual = finalize_v3_cross_sectional_features(
+            pd.concat(shards, ignore_index=True),
+            self.benchmarks,
+            minimum_cross_section=3,
+        )
+        pd.testing.assert_frame_equal(expected, actual)
 
 
 def _ticker_bars(times: pd.DatetimeIndex) -> pd.DataFrame:

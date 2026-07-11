@@ -8,10 +8,52 @@ import typer
 from rich.console import Console
 
 from market_predictor.v3.audits import build_data_audit
+from market_predictor.v3.development import DevelopmentDatasetConfig, build_monthly_development_dataset
 from market_predictor.v3.partitions import partition_development_shadow, write_shadow_partition
 
 
 def register_v3_data_commands(app: typer.Typer, console: Console) -> None:
+    @app.command("build-v3-development-dataset")
+    def build_v3_development_dataset(
+        bars_dir: Path = typer.Option(..., help="Directory of audited per-symbol 5-minute parquets."),
+        benchmark_dir: Path = typer.Option(..., help="Directory of exact-timestamp market and sector ETF parquets."),
+        memberships: Path = typer.Option(..., help="Audited point-in-time universe parquet."),
+        technical_dir: Path = typer.Option(..., help="New bounded-build technical shard directory."),
+        out_dir: Path = typer.Option(..., help="New monthly development-label dataset directory."),
+        decision_start_date: str = typer.Option(..., help="First eligible label date after warm-up (YYYY-MM-DD)."),
+        source_availability: Path | None = typer.Option(None, help="Optional point-in-time source availability table."),
+        minimum_cross_section: int = typer.Option(300, min=2, help="Minimum eligible symbols at each decision timestamp."),
+        workers: int = typer.Option(4, min=1, max=16, help="Parallel ticker-local feature workers."),
+        decision_stride_bars: int = typer.Option(12, min=1, help="Bars between training decisions; 12 means hourly at 5 minutes."),
+        reuse_technical: bool = typer.Option(False, help="Reuse a hash-validated completed technical stage."),
+        resume_output: bool = typer.Option(False, help="Resume hash-validated monthly output; requires --reuse-technical."),
+    ) -> None:
+        """Build a memory-bounded, point-in-time V3 development dataset."""
+        try:
+            start = pd.Timestamp(decision_start_date).date()
+        except ValueError as exc:
+            raise typer.BadParameter("decision-start-date must use YYYY-MM-DD") from exc
+        report = build_monthly_development_dataset(
+            bars_directory=bars_dir,
+            benchmark_directory=benchmark_dir,
+            memberships_path=memberships,
+            technical_directory=technical_dir,
+            output_directory=out_dir,
+            source_availability_path=source_availability,
+            reuse_technical=reuse_technical,
+            resume_output=resume_output,
+            config=DevelopmentDatasetConfig(
+                minimum_cross_section=minimum_cross_section,
+                workers=workers,
+                decision_stride_bars=decision_stride_bars,
+                decision_start_date=start,
+            ),
+        )
+        summary = report["summary"]
+        console.print(
+            f"Wrote {summary['label_rows']:,} V3 development rows across {summary['months']} months to {out_dir}"
+        )
+
     @app.command("audit-v3-data")
     def audit_v3_data(
         bars: Path = typer.Option(..., help="Curated OHLCV CSV or parquet."),

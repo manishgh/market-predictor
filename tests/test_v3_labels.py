@@ -92,6 +92,24 @@ class V3LabelTests(unittest.TestCase):
         self.assertTrue((entry_minute.dt.hour * 60 + entry_minute.dt.minute < 16 * 60).all())
         self.assertTrue((exit_minute.dt.hour * 60 + exit_minute.dt.minute < 16 * 60).all())
 
+    def test_rotating_stride_keeps_cross_section_groups_and_reduces_overlap(self) -> None:
+        times = pd.date_range("2026-07-08 14:30:00Z", periods=20, freq="5min")
+        bars = _ticker_bars_extended(times)
+        benchmarks = _benchmark_bars_extended(times)
+        config = V3LabelConfig(
+            horizons_bars=(2,),
+            primary_horizon_bars=2,
+            bar_minutes=5,
+            minimum_ranking_group=3,
+            decision_stride_bars=3,
+            rotate_decision_offset_by_session=True,
+        )
+        labeled = build_v3_labels(bars, benchmarks, config=config)
+        self.assertTrue(labeled.groupby("decision_group_id")["ticker"].nunique().eq(3).all())
+        aaa = labeled[labeled["ticker"] == "AAA"].sort_values("decision_time_utc")
+        gaps = pd.to_datetime(aaa["decision_time_utc"], utc=True).diff().dropna()
+        self.assertTrue(gaps.ge(pd.Timedelta(minutes=15)).all())
+
 
 def _ticker_bars(times: pd.DatetimeIndex) -> pd.DataFrame:
     rows: list[dict[str, object]] = []
@@ -132,6 +150,48 @@ def _benchmark_bars(times: pd.DatetimeIndex) -> pd.DataFrame:
                     "ticker": ticker,
                     "timestamp": timestamp,
                     "open": 100.0 if index == 1 else close,
+                    "high": close,
+                    "low": close,
+                    "close": close,
+                    "volume": 10_000,
+                }
+            )
+    return pd.DataFrame(rows)
+
+
+def _ticker_bars_extended(times: pd.DatetimeIndex) -> pd.DataFrame:
+    rows: list[dict[str, object]] = []
+    for ticker, move in {"AAA": 0.2, "BBB": 0.1, "CCC": -0.1}.items():
+        for index, timestamp in enumerate(times):
+            close = 100 + move * index
+            rows.append(
+                {
+                    "ticker": ticker,
+                    "timestamp": timestamp,
+                    "open": close,
+                    "high": close + 0.5,
+                    "low": close - 0.5,
+                    "close": close,
+                    "volume": 1_000,
+                    "atr_14": 1.0,
+                    "primary_benchmark": "XLK",
+                    "universe_snapshot_id": "snapshot-1",
+                    "price_feed": "sip",
+                }
+            )
+    return pd.DataFrame(rows)
+
+
+def _benchmark_bars_extended(times: pd.DatetimeIndex) -> pd.DataFrame:
+    rows: list[dict[str, object]] = []
+    for ticker, move in {"QQQ": 0.05, "XLK": 0.04}.items():
+        for index, timestamp in enumerate(times):
+            close = 100 + move * index
+            rows.append(
+                {
+                    "ticker": ticker,
+                    "timestamp": timestamp,
+                    "open": close,
                     "high": close,
                     "low": close,
                     "close": close,
