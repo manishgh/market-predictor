@@ -25,6 +25,12 @@ dependencies = [
     "uvicorn[standard]>=0.30.0"
 ]
 
+[project.optional-dependencies]
+dev = [
+    "mypy>=1.15,<2",
+    "ruff>=0.11,<1",
+]
+
 [project.scripts]
 market-predictor = "market_predictor.cli:app"
 
@@ -34,3 +40,20 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/market_predictor"]
+
+[tool.ruff]
+line-length = 140
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+ignore = ["B008"] # Typer declares CLI metadata through Option/Argument defaults.
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+plugins = ["pydantic.mypy"]
+
+[[tool.mypy.overrides]]
+module = ["pandas.*"]
+ignore_missing_imports = true

@@ -530,6 +530,8 @@ Remove predictor-owned alert runtime
 
 ### C2 - Code quality foundation
 
+Status: completed on 2026-07-11.
+
 Scope:
 
 - Split CLI, dataset, label, model, and validation responsibilities incrementally.
