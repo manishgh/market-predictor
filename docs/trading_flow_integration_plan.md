@@ -27,17 +27,11 @@ A prediction is not an alert, trade signal, order instruction, stop, target, or 
 
 There is no shared database and no shared OHLCV repository. Each project retains its own storage. Only versioned API messages and, later, completed-bar events cross the boundary.
 
-## 3. Alert Removal From market-predictor
+## 3. Alert Ownership
 
-Runtime alerting is out of scope for `market-predictor`. The repository currently contains legacy alert code and commands from an earlier design. They must be retired in a controlled migration:
+Runtime alerting is out of scope for `market-predictor`. ML V3 checkpoint C1 removed the legacy alert module, CLI commands, polling, backtesting command, and alert CSV ownership. The former rules and TradingFlow parity gaps are preserved in [Legacy Alert Rule Parity](legacy_alert_rule_parity.md).
 
-1. Mark `monitor-alerts` and `backtest-alerts` deprecated and prevent their use in deployment schedules.
-2. Verify equivalent technical rules are represented by `trading_flow`'s `WishlistBreakoutEvaluator`, `WishlistMarketMonitor`, and strategy tests.
-3. Move any still-useful rule tests or research findings to `trading_flow`.
-4. Remove `alerts.py`, its CLI imports/commands, and `data/live/alerts` output ownership from `market-predictor`.
-5. Rename prediction-only "monitor" reports, such as sector/theme ranking, so they cannot be confused with notifications.
-
-After migration, `market-predictor` may return fields named `signal` as model classifications, but it must not persist alerts, deduplicate notifications, acknowledge alerts, send webhooks/push messages, or trigger automation.
+`market-predictor` may return fields named `signal` as model classifications, but it does not persist alerts, deduplicate notifications, acknowledge alerts, send webhooks/push messages, or trigger automation. Prediction-only sector/theme analysis is exposed as ranking rather than monitoring.
 
 ## 4. Current Integration Readiness
 
@@ -278,12 +272,12 @@ Retries occur in the asynchronous refresh service. The order path is cache-only 
 
 ### Phase 0: Ownership Cleanup
 
-- Freeze Market Predictor alert development.
-- Deprecate its alert CLI schedules and document TradingFlow as alert owner.
-- Inventory/migrate useful alert rules, then remove predictor alert runtime code.
-- Add architecture tests or static checks preventing predictor-to-broker and predictor-to-notification dependencies.
+- Market Predictor alert development is frozen.
+- Predictor alert CLI/runtime ownership has been removed.
+- Legacy technical rules and TradingFlow parity gaps are documented.
+- Architecture tests prevent predictor alert/execution API routes from returning.
 
-Exit gate: only TradingFlow creates persisted/user-visible alerts.
+Exit gate met on the predictor side: only TradingFlow creates persisted/user-visible alerts. Any future TradingFlow rule additions remain strategy-owned and require their own tests.
 
 ### Phase 1: Contract And Shadow Display
 

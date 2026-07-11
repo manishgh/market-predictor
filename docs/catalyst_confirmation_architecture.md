@@ -77,6 +77,8 @@ Integration contract:
 
 The phased contract, failure policy, alert migration, backtest handoff, and live completed-bar design are defined in [TradingFlow integration plan](trading_flow_integration_plan.md).
 
+The removed predictor alert rules and TradingFlow parity decisions are recorded in [Legacy Alert Rule Parity](legacy_alert_rule_parity.md).
+
 ## 3. Prediction Output Contract
 
 Every prediction output should include enough metadata to audit the score later.

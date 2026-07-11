@@ -42,6 +42,7 @@ The next valid intraday promotion attempt requires new matured shadow data after
 - [Intraday model promotion](docs/intraday_model_promotion.md)
 - [ML model V3 improvement plan](docs/ml_model_v3_plan.md)
 - [TradingFlow integration plan](docs/trading_flow_integration_plan.md)
+- [Legacy alert rule parity](docs/legacy_alert_rule_parity.md)
 
 ## Source Strategy
 
@@ -396,22 +397,7 @@ Run continuously in the foreground:
 market-predictor live-run --poll-seconds 3600 --lookback-days 3 --workers 8
 ```
 
-Legacy alert commands are deprecated and must not be scheduled in new deployments:
-
-```powershell
-market-predictor monitor-alerts --tickers "MSFT,NVDA,RGTI" --days 180 --poll-seconds 900
-```
-
-These commands remain temporarily for migration verification only. Runtime alerting, persistence, deduplication, acknowledgement, and web/mobile notification belong to `trading_flow`. The commands and `alerts.py` are scheduled for removal after rule parity is verified in TradingFlow.
-
-Legacy research comparison commands:
-
-```powershell
-market-predictor backtest-alerts --horizon-days 1
-market-predictor backtest-alerts --horizon-days 5
-```
-
-Do not build new alert behavior in this repository. See [TradingFlow integration plan](docs/trading_flow_integration_plan.md).
+Market Predictor has no runtime alert commands or alert persistence. Alert evaluation, deduplication, acknowledgement, and web/mobile delivery belong to `trading_flow`. The removed rule behavior is preserved in [Legacy alert rule parity](docs/legacy_alert_rule_parity.md). Do not build new alert behavior in this repository.
 
 ## Volatile Mover Research Pipeline
 

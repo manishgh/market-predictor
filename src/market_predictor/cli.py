@@ -13,7 +13,6 @@ import requests
 import typer
 from rich.console import Console
 
-from market_predictor.alerts import AlertConfig, backtest_indicator_alerts, generate_indicator_alerts
 from market_predictor.config import get_settings
 from market_predictor.data_quality import sanitize_events_frame
 from market_predictor.entry_exit import (
@@ -2105,163 +2104,6 @@ def azure_publish_models(
     console.print({"uploaded_models": len(manifest_rows), "manifest": f"{settings.azure_prefix}/{blob_prefix}/_active_models_manifest.csv"})
 
 
-def _alert_config(
-    min_score: float,
-    volume_confirm_z: float,
-    strong_volume_z: float,
-    rsi_oversold: float,
-    rsi_overbought: float,
-) -> AlertConfig:
-    return AlertConfig(
-        min_score=min_score,
-        volume_confirm_z=volume_confirm_z,
-        strong_volume_z=strong_volume_z,
-        rsi_oversold=rsi_oversold,
-        rsi_overbought=rsi_overbought,
-    )
-
-
-def _collect_latest_indicator_alerts(
-    symbols: list[str],
-    *,
-    days: int,
-    settings: object,
-    config: AlertConfig,
-) -> pd.DataFrame:
-    start = datetime.now(timezone.utc) - timedelta(days=days)
-    rows = []
-    for symbol in symbols:
-        prices = fetch_daily_prices(symbol, start, None, settings)
-        if prices.empty:
-            rows.append(
-                {
-                    "ticker": symbol,
-                    "date": None,
-                    "alert_type": "no_price_data",
-                    "direction": "none",
-                    "severity": "low",
-                    "score": 0.0,
-                    "close": None,
-                    "volume_z20": None,
-                    "rsi_14": None,
-                    "macd_signal_diff": None,
-                    "details": "No daily price bars available for alert evaluation.",
-                }
-            )
-            continue
-        features = add_price_features(prices)
-        features["ticker"] = symbol
-        alerts = generate_indicator_alerts(features, config=config, latest_only=True)
-        if alerts.empty:
-            latest = features.sort_values("date").iloc[-1]
-            rows.append(
-                {
-                    "ticker": symbol,
-                    "date": latest.get("date"),
-                    "alert_type": "no_active_alert",
-                    "direction": "none",
-                    "severity": "low",
-                    "score": 0.0,
-                    "close": latest.get("close"),
-                    "volume_z20": latest.get("volume_z20"),
-                    "rsi_14": latest.get("rsi_14"),
-                    "macd_signal_diff": latest.get("macd_signal_diff"),
-                    "details": "No configured indicator alert fired on the latest daily bar.",
-                }
-            )
-        else:
-            rows.extend(alerts.to_dict("records"))
-    return pd.DataFrame(rows)
-
-
-@app.command("monitor-alerts")
-def monitor_alerts(
-    tickers: str | None = typer.Option(None, help="Comma-separated symbols. Defaults to configured swing universe."),
-    days: int = typer.Option(180, help="Daily bar lookback for indicator warm-up."),
-    poll_seconds: int = typer.Option(0, help="Repeat every N seconds. Use 0 to run once."),
-    out: Path = typer.Option(Path("data/live/alerts/latest_alerts.csv"), help="Latest alert CSV."),
-    history_out: Path = typer.Option(Path("data/live/alerts/alert_history.csv"), help="Append-only alert history CSV."),
-    min_score: float = typer.Option(2.0, help="Minimum alert score to emit."),
-    volume_confirm_z: float = typer.Option(0.75, help="Volume z-score that confirms a move."),
-    strong_volume_z: float = typer.Option(1.5, help="Volume z-score for high-conviction confirmation."),
-    rsi_oversold: float = typer.Option(30.0, help="RSI oversold threshold."),
-    rsi_overbought: float = typer.Option(70.0, help="RSI overbought threshold."),
-) -> None:
-    """Monitor a watchlist for MACD/EMA/RSI/volume technical alerts."""
-    if poll_seconds and poll_seconds < 60:
-        raise typer.BadParameter("poll_seconds must be 0 or at least 60 to avoid API abuse.")
-    settings = get_settings()
-    symbols = _parse_tickers(tickers, settings.swing_candidate_tickers)
-    if not symbols:
-        raise typer.BadParameter("No tickers configured or supplied.")
-    config = _alert_config(min_score, volume_confirm_z, strong_volume_z, rsi_oversold, rsi_overbought)
-
-    while True:
-        run_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-        alerts = _collect_latest_indicator_alerts(symbols, days=days, settings=settings, config=config)
-        alerts.insert(0, "run_id", run_id)
-        alerts.insert(1, "checked_at_utc", datetime.now(timezone.utc).isoformat())
-        out.parent.mkdir(parents=True, exist_ok=True)
-        history_out.parent.mkdir(parents=True, exist_ok=True)
-        alerts.to_csv(out, index=False)
-        append_history = history_out.exists()
-        alerts.to_csv(history_out, mode="a" if append_history else "w", header=not append_history, index=False)
-        display_cols = [
-            col
-            for col in ["ticker", "date", "alert_type", "direction", "severity", "score", "close", "volume_z20", "details"]
-            if col in alerts.columns
-        ]
-        console.print(alerts[display_cols].sort_values(["severity", "score"], ascending=[True, False]).head(80))
-        console.print(f"Wrote latest alerts to {out}")
-        console.print(f"Appended alert history to {history_out}")
-        if not poll_seconds:
-            return
-        time_module.sleep(poll_seconds)
-
-
-@app.command("backtest-alerts")
-def backtest_alerts(
-    dataset: Path = typer.Option(
-        Path("data/features/largecap_50b_news_volume_combined_2y_20260630_1d.parquet"),
-        help="Historical feature parquet with ticker/date and future-return labels.",
-    ),
-    horizon_days: int = typer.Option(1, help="Forward return horizon to evaluate."),
-    tickers: str | None = typer.Option(None, help="Optional comma-separated ticker subset."),
-    out: Path = typer.Option(Path("data/reports/indicator_alert_backtest_alerts.csv"), help="Per-alert backtest rows."),
-    summary_out: Path = typer.Option(Path("data/reports/indicator_alert_backtest_summary.csv"), help="Grouped backtest summary."),
-    min_score: float = typer.Option(2.0, help="Minimum alert score to include."),
-    volume_confirm_z: float = typer.Option(0.75, help="Volume z-score that confirms a move."),
-    strong_volume_z: float = typer.Option(1.5, help="Volume z-score for high-conviction confirmation."),
-    rsi_oversold: float = typer.Option(30.0, help="RSI oversold threshold."),
-    rsi_overbought: float = typer.Option(70.0, help="RSI overbought threshold."),
-) -> None:
-    """Backtest MACD/EMA/RSI/volume alerts against historical forward returns."""
-    if horizon_days == 5 and str(dataset).endswith("_1d.parquet"):
-        fallback = Path(str(dataset).replace("_1d.parquet", "_5d.parquet"))
-        if fallback.exists():
-            dataset = fallback
-    if not dataset.exists():
-        raise typer.BadParameter(f"Missing dataset: {dataset}")
-    frame = pd.read_parquet(dataset)
-    symbols = _parse_tickers(tickers, []) if tickers else []
-    if symbols:
-        frame = frame[frame["ticker"].astype(str).str.upper().isin(symbols)].copy()
-    future_col = f"future_return_{horizon_days}d"
-    target_col = f"target_up_{horizon_days}d"
-    missing = [col for col in ["ticker", "date", "close", future_col, target_col] if col not in frame.columns]
-    if missing:
-        raise typer.BadParameter(f"Dataset is missing required columns: {', '.join(missing)}")
-    config = _alert_config(min_score, volume_confirm_z, strong_volume_z, rsi_oversold, rsi_overbought)
-    alerts, summary = backtest_indicator_alerts(frame, horizon_days=horizon_days, config=config)
-    out.parent.mkdir(parents=True, exist_ok=True)
-    summary_out.parent.mkdir(parents=True, exist_ok=True)
-    alerts.to_csv(out, index=False)
-    summary.to_csv(summary_out, index=False)
-    console.print(summary.head(30))
-    console.print(f"Wrote alert backtest rows to {out}")
-    console.print(f"Wrote alert backtest summary to {summary_out}")
-
-
 @app.command("build-volatile-dataset")
 def build_volatile_dataset_command(
     daily_1d: Path = typer.Option(
@@ -2585,8 +2427,8 @@ def score_flashpoints_command(
     console.print(f"Wrote flashpoint scores to {out}")
 
 
-@app.command("monitor-sector-themes")
-def monitor_sector_themes(
+@app.command("rank-sector-themes")
+def rank_sector_themes(
     dataset: Path = typer.Option(
         Path("data/features/sp500_6m_volatile_daily_20260708.parquet"),
         help="Volatile feature dataset with latest ticker rows.",
@@ -2604,16 +2446,16 @@ def monitor_sector_themes(
         help="Optional flashpoint CSV from score-flashpoints.",
     ),
     sector_out: Path = typer.Option(
-        Path("data/reports/sector_theme_monitor_latest.csv"),
-        help="Output sector/theme monitor CSV.",
+        Path("data/reports/sector_theme_ranking_latest.csv"),
+        help="Output sector/theme ranking CSV.",
     ),
     ticker_out: Path = typer.Option(
-        Path("data/reports/sector_theme_monitor_tickers_latest.csv"),
-        help="Output ticker-level monitor CSV.",
+        Path("data/reports/sector_theme_ranking_tickers_latest.csv"),
+        help="Output ticker-level ranking CSV.",
     ),
     allow_candidate_model: bool = typer.Option(False, help="Allow non-promoted model for research only."),
 ) -> None:
-    """Monitor sectors/themes using the promoted model plus global flashpoint context."""
+    """Rank sectors/themes using the promoted model plus global flashpoint context."""
     if not dataset.exists():
         raise typer.BadParameter(f"Missing dataset: {dataset}")
     if not universe.exists():
@@ -2661,8 +2503,8 @@ def monitor_sector_themes(
     ticker_report[ticker_keep].to_csv(ticker_out, index=False)
     console.print(sector_report.head(30))
     console.print(ticker_report[ticker_keep].head(50))
-    console.print(f"Wrote sector/theme monitor to {sector_out}")
-    console.print(f"Wrote ticker monitor to {ticker_out}")
+    console.print(f"Wrote sector/theme ranking to {sector_out}")
+    console.print(f"Wrote ticker ranking to {ticker_out}")
 
 
 @app.command("build-entry-exit-dataset")

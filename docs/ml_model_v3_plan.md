@@ -507,6 +507,8 @@ Exit criteria:
 
 ### C1 - Remove predictor alert ownership
 
+Status: completed on 2026-07-11.
+
 Scope:
 
 - Preserve a technical-rule parity matrix for TradingFlow.
