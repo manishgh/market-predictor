@@ -36,6 +36,7 @@ class O1OverlayConfig(FrozenContract):
     minimum_global_veto_events: int = Field(default=3, ge=1)
     minimum_ticker_file_coverage: float = Field(default=0.90, ge=0, le=1)
     minimum_sentiment_coverage: float = Field(default=0.95, ge=0, le=1)
+    maximum_market_context_boundary_gap_hours: float = Field(default=24.0, ge=0)
     minimum_decision_rows: int = Field(default=10_000, ge=1)
 
     @field_validator("coverage_start_utc", "coverage_end_utc")
@@ -213,6 +214,14 @@ def build_o1_overlay_evidence(
         readiness_failures.append(f"future catalyst matches detected: {future_matches}")
     if market_context_path is not None and float(market_audit["sentiment_coverage"]) < config.minimum_sentiment_coverage:
         readiness_failures.append("market-context sentiment coverage is incomplete")
+    if market_context_path is not None:
+        maximum_gap = pd.Timedelta(hours=config.maximum_market_context_boundary_gap_hours)
+        first_market_event = _optional_timestamp(market_audit.get("first_available_at_utc"))
+        last_market_event = _optional_timestamp(market_audit.get("last_available_at_utc"))
+        if first_market_event is None or first_market_event > coverage_start + maximum_gap:
+            readiness_failures.append("market-context archive does not cover the declared start boundary")
+        if last_market_event is None or last_market_event < coverage_end - maximum_gap:
+            readiness_failures.append("market-context archive does not cover the declared end boundary")
 
     audit = {
         "schema": "ml_v3.o1_catalyst_readiness.v1",
@@ -639,6 +648,13 @@ def _timestamp_ns(series: pd.Series) -> np.ndarray:
 
 def _utc_series(series: pd.Series) -> pd.Series:
     return pd.Series(pd.to_datetime(series, errors="coerce", utc=True), index=series.index)
+
+
+def _optional_timestamp(value: object) -> pd.Timestamp | None:
+    if value is None:
+        return None
+    timestamp = pd.to_datetime(value, errors="coerce", utc=True)
+    return None if pd.isna(timestamp) else pd.Timestamp(timestamp)
 
 
 def _session_bootstrap_interval(

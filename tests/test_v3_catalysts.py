@@ -85,6 +85,29 @@ class V3CatalystOverlayTests(unittest.TestCase):
         self.assertFalse(audit["ready"])
         self.assertIn("sentiment coverage", " ".join(audit["readiness_failures"]))
 
+    def test_stale_market_context_fails_declared_coverage_boundary(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            event_dir = root / "events"
+            event_dir.mkdir()
+            for ticker in ("AAA", "BBB", "CCC"):
+                _events(ticker, sentiment=0.5, available_at="2026-01-05T13:30:00Z").to_parquet(
+                    event_dir / f"{ticker}_events.parquet", index=False
+                )
+            market_context = root / "market.parquet"
+            _events("MARKET", sentiment=-0.5, available_at="2026-01-02T12:00:00Z").to_parquet(
+                market_context, index=False
+            )
+            _, audit = build_o1_overlay_evidence(
+                _predictions(),
+                event_directories=[event_dir],
+                market_context_path=market_context,
+                config=_overlay_config(),
+            )
+
+        self.assertFalse(audit["ready"])
+        self.assertIn("end boundary", " ".join(audit["readiness_failures"]))
+
     def test_o1_ablation_uses_paired_scopes_and_improves_synthetic_ranking(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             event_dir = Path(directory)
