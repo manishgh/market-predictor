@@ -9,6 +9,13 @@ import typer
 from rich.console import Console
 
 from market_predictor.registry import file_sha256
+from market_predictor.v3.catalysts import (
+    O1AuditConfig,
+    O1OverlayConfig,
+    build_o1_overlay_evidence,
+    evaluate_o1_ablation,
+)
+from market_predictor.v3.errors import DataReadinessError
 from market_predictor.v3.evaluation import (
     RankingAuditConfig,
     build_multi_output_evidence,
@@ -18,6 +25,71 @@ from market_predictor.v3.evaluation import (
 
 
 def register_v3_evaluation_commands(app: typer.Typer, console: Console) -> None:
+    @app.command("audit-v3-o1-overlay")
+    def audit_v3_o1_overlay(
+        predictions: Path = typer.Option(..., help="Frozen R1 OOF prediction parquet."),
+        event_dir: list[Path] = typer.Option(..., "--event-dir", help="Ticker event directory; repeat to merge sources."),
+        coverage_start: str = typer.Option(..., help="Declared event-source coverage start, ISO-8601 UTC."),
+        coverage_end: str = typer.Option(..., help="Declared event-source coverage end, ISO-8601 UTC."),
+        market_context: Path | None = typer.Option(None, help="Optional scored global market-context event parquet."),
+        availability_policy: str = typer.Option(
+            "strict_ingestion",
+            help="strict_ingestion or provider_publication_backfill.",
+        ),
+        top_k: int = typer.Option(10, min=1, help="Names selected per decision group."),
+        bootstrap_iterations: int = typer.Option(1_000, min=100, help="Session-blocked paired bootstrap iterations."),
+        report_out: Path = typer.Option(Path("data/reports/v3_o1_ablation_latest.json"), help="O1 audit JSON."),
+        evidence_out: Path = typer.Option(Path("data/reports/v3_o1_evidence_latest.parquet"), help="Joined O1 evidence."),
+        selected_out: Path = typer.Option(Path("data/reports/v3_o1_selected_latest.parquet"), help="R1/O1 selections."),
+        overwrite: bool = typer.Option(False, help="Explicitly replace O1 audit artifacts."),
+    ) -> None:
+        """Audit a fixed catalyst confirmation overlay against identical R1 OOF groups."""
+        if availability_policy not in {"strict_ingestion", "provider_publication_backfill"}:
+            raise typer.BadParameter("availability-policy must be strict_ingestion or provider_publication_backfill")
+        for path in (report_out, evidence_out, selected_out):
+            if path.exists() and not overwrite:
+                raise typer.BadParameter(f"Output already exists; pass --overwrite to replace it: {path}")
+        try:
+            overlay_config = O1OverlayConfig(
+                coverage_start_utc=pd.Timestamp(coverage_start).to_pydatetime(),
+                coverage_end_utc=pd.Timestamp(coverage_end).to_pydatetime(),
+                availability_policy=availability_policy,
+            )
+            evidence, readiness = build_o1_overlay_evidence(
+                _read_predictions(predictions),
+                event_directories=event_dir,
+                market_context_path=market_context,
+                config=overlay_config,
+            )
+        except (DataReadinessError, ValueError) as exc:
+            raise typer.BadParameter(str(exc)) from exc
+        report: dict[str, object] = {
+            "schema": "ml_v3.o1_combined_audit.v1",
+            "catalyst_readiness": readiness,
+        }
+        report_out.parent.mkdir(parents=True, exist_ok=True)
+        if not readiness["ready"]:
+            report["ablation"] = None
+            report_out.write_text(json.dumps(report, indent=2, sort_keys=True), encoding="utf-8")
+            console.print(f"[red]O1 readiness failed; wrote audit to {report_out}[/red]")
+            raise typer.Exit(code=2)
+        ablation, selected = evaluate_o1_ablation(
+            evidence,
+            config=O1AuditConfig(top_k=top_k, bootstrap_iterations=bootstrap_iterations),
+        )
+        evidence_out.parent.mkdir(parents=True, exist_ok=True)
+        selected_out.parent.mkdir(parents=True, exist_ok=True)
+        evidence.to_parquet(evidence_out, index=False)
+        selected.to_parquet(selected_out, index=False)
+        report["ablation"] = ablation
+        report["artifacts"] = {
+            "evidence": {"path": str(evidence_out), "sha256": file_sha256(evidence_out)},
+            "selected": {"path": str(selected_out), "sha256": file_sha256(selected_out)},
+        }
+        report_out.write_text(json.dumps(report, indent=2, sort_keys=True), encoding="utf-8")
+        console.print(f"Wrote O1 audit to {report_out}")
+        console.print(f"Wrote {len(evidence)} joined rows and {len(selected)} selected rows")
+
     @app.command("audit-v3-ranking")
     def audit_v3_ranking(
         predictions: Path = typer.Option(..., help="Combined V3 OOF prediction parquet."),
