@@ -117,10 +117,18 @@ def add_finbert(events: pd.DataFrame, model_name: str) -> pd.DataFrame:
     return add_finbert_with_scorer(events, scorer)
 
 
-def add_finbert_with_scorer(events: pd.DataFrame, scorer: object, *, batch_size: int = 16) -> pd.DataFrame:
+def add_finbert_with_scorer(
+    events: pd.DataFrame,
+    scorer: object,
+    *,
+    batch_size: int = 16,
+    text_column: str = "text",
+) -> pd.DataFrame:
     if events.empty:
         return events
-    scores = scorer.score_texts(events["text"].astype(str).tolist(), batch_size=batch_size)
+    if text_column not in events.columns:
+        raise ValueError(f"FinBERT input column {text_column!r} is missing.")
+    scores = scorer.score_texts(events[text_column].astype(str).tolist(), batch_size=batch_size)
     existing_score_cols = [col for col in scores.columns if col in events.columns]
     events = events.drop(columns=existing_score_cols, errors="ignore")
     return pd.concat([events.reset_index(drop=True), scores.reset_index(drop=True)], axis=1)

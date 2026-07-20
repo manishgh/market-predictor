@@ -1222,24 +1222,67 @@ def score_swing_events(
         Path("data/raw/uslisted_6sector_2y_clean_scored"),
         help="Directory for FinBERT-scored per-ticker event parquet files.",
     ),
+    text_mode: str = typer.Option(
+        "title_summary",
+        help="FinBERT input: title, title_summary, or text. Title-summary is recommended for catalyst scoring.",
+    ),
+    max_length: int = typer.Option(128, min=1, max=512, help="Maximum FinBERT input tokens."),
+    batch_size: int | None = typer.Option(None, min=1, help="Inference batch size. Defaults to configuration."),
     force: bool = typer.Option(False, help="Rescore even if an output file already exists."),
 ) -> None:
     """Run FinBERT on existing downloaded events without calling news APIs."""
-    from market_predictor.sentiment import FinbertScorer
+    from market_predictor.sentiment import (
+        SENTIMENT_INPUT_MODES,
+        FinbertScorer,
+        build_sentiment_inputs,
+    )
 
     settings = get_settings()
+    text_mode = text_mode.strip().lower()
+    if text_mode not in SENTIMENT_INPUT_MODES:
+        raise typer.BadParameter(f"text-mode must be one of: {', '.join(SENTIMENT_INPUT_MODES)}")
+    effective_batch_size = int(batch_size or settings.finbert_batch_size)
     symbols = _parse_tickers(tickers, settings.swing_candidate_tickers)
     out_dir.mkdir(parents=True, exist_ok=True)
-    scorer = FinbertScorer(settings.finbert_model, torch_num_threads=settings.torch_num_threads)
+    scorer = FinbertScorer(
+        settings.finbert_model,
+        torch_num_threads=settings.torch_num_threads,
+        max_length=max_length,
+    )
     summary = []
     for symbol in symbols:
         source = raw_dir / f"{symbol}_events.parquet"
         target = out_dir / f"{symbol}_events.parquet"
         if target.exists() and not force:
             frame = pd.read_parquet(target)
-            summary.append({"ticker": symbol, "events": len(frame), "path": str(target), "skipped": True})
-            console.print(f"{symbol}: scored file exists, skipped")
-            continue
+            provenance_columns = {
+                "sentiment_label",
+                "sentiment_score",
+                "sentiment_numeric",
+                "sentiment_input_mode",
+                "sentiment_model",
+                "sentiment_max_length",
+            }
+            compatible = (
+                provenance_columns <= set(frame.columns)
+                and frame["sentiment_input_mode"].eq(text_mode).all()
+                and frame["sentiment_model"].eq(settings.finbert_model).all()
+                and pd.to_numeric(frame["sentiment_max_length"], errors="coerce").eq(max_length).all()
+            )
+            if compatible:
+                summary.append(
+                    {
+                        "ticker": symbol,
+                        "events": len(frame),
+                        "path": str(target),
+                        "skipped": True,
+                        "text_mode": text_mode,
+                        "max_length": max_length,
+                    }
+                )
+                console.print(f"{symbol}: compatible scored file exists, skipped")
+                continue
+            console.print(f"[yellow]{symbol}: existing scored file has incompatible provenance; rescoring.[/yellow]")
         if not source.exists():
             summary.append({"ticker": symbol, "events": 0, "error": f"missing {source}"})
             console.print(f"[red]{symbol}: missing {source}[/red]")
@@ -1255,7 +1298,16 @@ def score_swing_events(
                 columns=["sentiment_label", "sentiment_score", "sentiment_numeric"],
                 errors="ignore",
             )
-            frame = add_finbert_with_scorer(frame, scorer, batch_size=settings.finbert_batch_size)
+            frame["_sentiment_input"] = build_sentiment_inputs(frame, mode=text_mode)
+            frame = add_finbert_with_scorer(
+                frame,
+                scorer,
+                batch_size=effective_batch_size,
+                text_column="_sentiment_input",
+            ).drop(columns="_sentiment_input")
+            frame["sentiment_input_mode"] = text_mode
+            frame["sentiment_model"] = settings.finbert_model
+            frame["sentiment_max_length"] = max_length
             frame.to_parquet(target, index=False)
             summary.append(
                 {
@@ -1264,6 +1316,9 @@ def score_swing_events(
                     "path": str(target),
                     "missing_required_rows_removed": report.missing_required_rows_removed,
                     "duplicate_rows_removed": report.duplicate_rows_removed,
+                    "text_mode": text_mode,
+                    "max_length": max_length,
+                    "batch_size": effective_batch_size,
                 }
             )
             console.print(f"{symbol}: scored {len(frame)} events to {target}")
