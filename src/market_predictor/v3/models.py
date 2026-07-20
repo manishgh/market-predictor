@@ -80,7 +80,7 @@ class V3TrainingConfig(FrozenContract):
     max_iter: int = Field(default=150, ge=10)
     learning_rate: float = Field(default=0.05, gt=0, le=1)
     xgboost_max_depth: int = Field(default=5, ge=1, le=16)
-    xgboost_max_bin: int = Field(default=128, ge=32, le=1024)
+    xgboost_max_bin: int = Field(default=64, ge=32, le=1024)
     xgboost_n_jobs: int = Field(default=1, ge=1)
     max_training_memory_gb: float = Field(default=4.0, ge=1.0, le=256.0)
     memory_guard_headroom_gb: float = Field(default=0.25, ge=0.1, le=2.0)
@@ -232,6 +232,8 @@ def train_v3_model_suite(
         reports[family] = result
         predictions.append(family_predictions)
     failed_families = [family for family, result in reports.items() if result.get("status") == "failed"]
+    combined = pd.concat(predictions, ignore_index=True) if predictions else pd.DataFrame()
+    _assert_memory_budget(config, "OOF evidence assembly")
     report: dict[str, Any] = {
         "schema": "ml_v3.training_report.v1",
         "config": config.model_dump(mode="json"),
@@ -244,8 +246,8 @@ def train_v3_model_suite(
         "status": "partial_failure" if failed_families else "complete",
         "failed_families": failed_families,
         "models": reports,
+        "memory": _memory_audit(config),
     }
-    combined = pd.concat(predictions, ignore_index=True) if predictions else pd.DataFrame()
     return report, combined, feature_audit
 
 
@@ -291,7 +293,7 @@ def _train_family(
             )
         )
         del model
-        gc.collect()
+        _release_training_memory()
         ticker = data["ticker"]
         holdout_train_indices = train_indices[~ticker.iloc[train_indices].isin(holdout).to_numpy()]
         holdout_test_indices = test_indices[ticker.iloc[test_indices].isin(holdout).to_numpy()]
@@ -321,8 +323,11 @@ def _train_family(
             )
         )
         del holdout_model
-        gc.collect()
+        _release_training_memory()
     oof = pd.concat(predictions, ignore_index=True)
+    predictions.clear()
+    _release_training_memory()
+    _assert_memory_budget(config, f"{family} OOF evidence")
     main_metrics = _model_metrics(oof[oof["audit_scope"] == "walk_forward"], family=family, top_k=config.top_k)
     holdout_metrics = _model_metrics(oof[oof["audit_scope"] == "ticker_holdout"], family=family, top_k=config.top_k)
     final_indices = np.flatnonzero(eligible_values)
@@ -380,6 +385,8 @@ def _train_family(
             "code_commit": _code_commit(),
         },
     )
+    del payload, final_model, metadata
+    _release_training_memory()
     result = {
         "family": family,
         "status": "complete",
@@ -454,6 +461,7 @@ def _fit(
     _assert_memory_budget(config, f"{family} fit preflight")
     fit_columns = list(dict.fromkeys([*features, target_column, "overlap_weight", "decision_group_id", "ticker"]))
     selected = data.loc[:, fit_columns].iloc[row_indices]
+    _assert_memory_budget(config, f"{family} selected rows")
     x = selected[features]
     y = pd.to_numeric(selected[target_column], errors="raise")
     weights = pd.to_numeric(selected["overlap_weight"], errors="raise").clip(lower=1e-6)
@@ -473,7 +481,7 @@ def _fit(
         weight_values = weights.to_numpy(dtype=np.float32, copy=False)
         group_weights = np.add.reduceat(weight_values, starts) / counts
         matrix = x.to_numpy(dtype=np.float32, copy=False)
-        _assert_memory_budget(config, "R1 compact matrix", reserve_bytes=matrix.nbytes)
+        _assert_memory_budget(config, "R1 compact matrix")
         try:
             model.fit(
                 matrix,
@@ -585,7 +593,9 @@ def _prepare_training_data(dataset: pd.DataFrame) -> pd.DataFrame:
     missing = sorted(V3_TRAINING_REQUIRED_COLUMNS.difference(dataset.columns))
     if missing:
         raise DataReadinessError(f"V3 training dataset missing columns: {', '.join(missing)}")
-    data = dataset.copy(deep=False)
+    # The trainer owns this projected frame and normalizes it in place to avoid
+    # retaining the original float64/string blocks alongside compact storage.
+    data = dataset
     data["decision_time_utc"] = data["decision_time_utc"].map(_aware_timestamp)
     data["feature_available_at_utc"] = data["feature_available_at_utc"].map(_aware_timestamp)
     data["entry_time_utc"] = data["entry_time_utc"].map(_aware_timestamp)
@@ -747,22 +757,24 @@ def _memory_guard_callback(xgboost: Any, config: V3TrainingConfig) -> Any:
 def _assert_memory_budget(
     config: V3TrainingConfig,
     stage: str,
-    *,
-    reserve_bytes: int = 0,
 ) -> None:
     rss = _current_process_rss_bytes()
     if rss is None:
         return
     limit = int((config.max_training_memory_gb - config.memory_guard_headroom_gb) * 1024**3)
-    projected = rss + max(0, reserve_bytes)
-    if projected > limit:
+    if rss > limit:
         raise DataReadinessError(
-            f"training memory guard stopped {stage}: projected RSS {_gib(projected):.2f} GiB exceeds "
+            f"training memory guard stopped {stage}: RSS {_gib(rss):.2f} GiB exceeds "
             f"the {_gib(limit):.2f} GiB safety threshold for the {config.max_training_memory_gb:.2f} GiB hard budget"
         )
 
 
 def _current_process_rss_bytes() -> int | None:
+    snapshot = _process_memory_snapshot()
+    return snapshot[0] if snapshot is not None else None
+
+
+def _process_memory_snapshot() -> tuple[int, int] | None:
     if os.name == "nt":
         class ProcessMemoryCounters(ctypes.Structure):
             _fields_ = [
@@ -790,7 +802,7 @@ def _current_process_rss_bytes() -> int | None:
         ]
         get_process_memory_info.restype = ctypes.c_int
         if get_process_memory_info(get_current_process(), ctypes.byref(counters), counters.cb):
-            return int(counters.WorkingSetSize)
+            return int(counters.WorkingSetSize), int(counters.PeakWorkingSetSize)
         return None
     statm = Path("/proc/self/statm")
     if statm.exists():
@@ -799,8 +811,31 @@ def _current_process_rss_bytes() -> int | None:
         if not callable(sysconf):
             return None
         page_size = int(sysconf("SC_PAGE_SIZE"))
-        return resident_pages * page_size
+        rss = resident_pages * page_size
+        return rss, rss
     return None
+
+
+def _release_training_memory() -> None:
+    gc.collect()
+    if os.name != "nt":
+        return
+    get_current_process = ctypes.windll.kernel32.GetCurrentProcess
+    get_current_process.restype = ctypes.c_void_p
+    empty_working_set = ctypes.windll.psapi.EmptyWorkingSet
+    empty_working_set.argtypes = [ctypes.c_void_p]
+    empty_working_set.restype = ctypes.c_int
+    empty_working_set(get_current_process())
+
+
+def _memory_audit(config: V3TrainingConfig) -> dict[str, float | None]:
+    snapshot = _process_memory_snapshot()
+    return {
+        "hard_budget_gib": config.max_training_memory_gb,
+        "safety_threshold_gib": config.max_training_memory_gb - config.memory_guard_headroom_gb,
+        "current_working_set_gib": _gib(snapshot[0]) if snapshot is not None else None,
+        "peak_working_set_gib": _gib(snapshot[1]) if snapshot is not None else None,
+    }
 
 
 def _gib(value: int) -> float:
