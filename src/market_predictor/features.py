@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-from bisect import bisect_left
-from datetime import date, datetime, time, timedelta, timezone
-from pathlib import Path
 import re
+from bisect import bisect_left
+from datetime import UTC, date, datetime, time, timedelta
+from pathlib import Path
+from typing import Any, Protocol, cast
 from zoneinfo import ZoneInfo
 
 import numpy as np
@@ -13,7 +14,6 @@ from market_predictor.config import Settings
 from market_predictor.price import fetch_daily_prices, fetch_hourly_prices
 from market_predictor.sources.sec import SecSource
 from market_predictor.sources.seeking_alpha import SeekingAlphaQuantCsvSource
-
 
 NY_TZ = ZoneInfo("America/New_York")
 MARKET_CLOSE = time(16, 0)
@@ -31,7 +31,11 @@ EVENT_KEYWORDS = {
 }
 
 
-def events_to_frame(events: list[dict]) -> pd.DataFrame:
+class SentimentScorer(Protocol):
+    def score_texts(self, texts: list[str], batch_size: int = 16) -> pd.DataFrame: ...
+
+
+def events_to_frame(events: list[dict[str, object]]) -> pd.DataFrame:
     if not events:
         return pd.DataFrame(columns=["ticker", "timestamp", "source", "title", "url", "summary", "text"])
     frame = pd.DataFrame(events)
@@ -68,9 +72,9 @@ def feature_date_for_timestamp(timestamp: pd.Timestamp | datetime) -> date:
     """
     ts = pd.Timestamp(timestamp)
     if ts.tzinfo is None:
-        ts = ts.tz_localize(timezone.utc)
+        ts = ts.tz_localize(UTC)
     local = ts.tz_convert(NY_TZ)
-    assigned = local.date()
+    assigned = cast(date, local.date())
     if local.time() > MARKET_CLOSE:
         assigned = _next_weekday(assigned)
     elif local.weekday() >= 5:
@@ -89,7 +93,7 @@ def align_events_to_trading_dates(events: pd.DataFrame, trading_dates: pd.Series
     """Assign each event to the first actual price candle date it could affect."""
     if events.empty:
         return events
-    dates = sorted({pd.Timestamp(value).date() for value in trading_dates if pd.notna(value)})
+    dates: list[date] = sorted({cast(date, pd.Timestamp(value).date()) for value in trading_dates if pd.notna(value)})
     if not dates:
         output = events.copy()
         output["date"] = pd.NaT
@@ -119,7 +123,7 @@ def add_finbert(events: pd.DataFrame, model_name: str) -> pd.DataFrame:
 
 def add_finbert_with_scorer(
     events: pd.DataFrame,
-    scorer: object,
+    scorer: SentimentScorer,
     *,
     batch_size: int = 16,
     text_column: str = "text",
@@ -156,7 +160,7 @@ def build_daily_dataset(
 
     start = events["timestamp"].min().to_pydatetime()
     price_start = start - timedelta(days=420)
-    end = end or datetime.now(timezone.utc)
+    end = end or datetime.now(UTC)
     prices = fetch_daily_prices(ticker, price_start, end, settings)
     if prices.empty:
         raise ValueError(f"No price data returned for {ticker}.")
@@ -348,7 +352,7 @@ def build_event_swing_dataset(
     events = add_event_taxonomy(events)
 
     start = events["timestamp"].min().to_pydatetime() - timedelta(days=420)
-    end = end or datetime.now(timezone.utc)
+    end = end or datetime.now(UTC)
     daily = fetch_daily_prices(ticker, start, end, settings)
     if daily.empty:
         raise ValueError(f"No daily price data returned for {ticker}.")
@@ -376,10 +380,10 @@ def build_event_swing_dataset(
 
     rows: list[dict[str, object]] = []
     for event in events.sort_values("timestamp").itertuples(index=False):
-        event_ts = pd.Timestamp(getattr(event, "timestamp"))
+        event_ts = pd.Timestamp(event.timestamp)
         if event_ts.tzinfo is None:
-            event_ts = event_ts.tz_localize(timezone.utc)
-        event_date = getattr(event, "date")
+            event_ts = event_ts.tz_localize(UTC)
+        event_date = event.date
         if event_date not in daily_by_date.index:
             continue
         event_day = daily_by_date.loc[event_date]
@@ -428,15 +432,12 @@ def build_event_swing_dataset(
             "target_next_1d_up": event_day.get("target_event_next_1d_up"),
             f"target_next_{horizon_days}d_up": event_day.get(f"target_event_next_{horizon_days}d_up"),
         }
+        next_return = _safe_float(record["next_1d_return"], default=np.nan)
         record["target_positive_fade_1d"] = (
-            float(sentiment >= 0.15 and (record["next_1d_return"] or 0) < 0)
-            if pd.notna(record["next_1d_return"])
-            else np.nan
+            float(sentiment >= 0.15 and next_return < 0) if pd.notna(next_return) else np.nan
         )
         record["target_negative_absorbed_1d"] = (
-            float(sentiment <= -0.15 and (record["next_1d_return"] or 0) >= 0)
-            if pd.notna(record["next_1d_return"])
-            else np.nan
+            float(sentiment <= -0.15 and next_return >= 0) if pd.notna(next_return) else np.nan
         )
         for family in ["alpaca", "reddit", "seeking_alpha", "sec", "finviz"]:
             record[f"source_is_{family}"] = float(record["source_family"] == family)
@@ -599,7 +600,7 @@ def _safe_float(value: object, default: float = 0.0) -> float:
     try:
         if pd.isna(value):
             return default
-        return float(value)
+        return float(cast(Any, value))
     except (TypeError, ValueError):
         return default
 
@@ -954,7 +955,7 @@ def build_event_reaction_features(
     daily_by_date = daily.set_index("date")
     rows: list[dict[str, object]] = []
     for event in events.sort_values("timestamp").itertuples(index=False):
-        event_date = getattr(event, "date")
+        event_date = event.date
         bucket = getattr(event, "event_time_bucket", "")
         day = daily_by_date.loc[event_date] if event_date in daily_by_date.index else None
         row: dict[str, object] = {
@@ -982,9 +983,9 @@ def build_event_reaction_features(
                 )
                 row["afterhours_next_day_return"] = close_price / open_price - 1.0
         if not hourly.empty:
-            event_ts = pd.Timestamp(getattr(event, "timestamp"))
+            event_ts = pd.Timestamp(event.timestamp)
             if event_ts.tzinfo is None:
-                event_ts = event_ts.tz_localize(timezone.utc)
+                event_ts = event_ts.tz_localize(UTC)
             window = hourly[(hourly["timestamp"] >= event_ts) & (hourly["timestamp"] <= event_ts + pd.Timedelta(hours=2))]
             if not window.empty:
                 reaction = float(window.iloc[-1]["close"]) / float(window.iloc[0]["open"]) - 1.0

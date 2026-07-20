@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Any, cast
+
 import pandas as pd
 
 SENTIMENT_INPUT_MODES = ("title", "title_summary", "text")
@@ -53,10 +55,10 @@ class FinbertScorer:
                 f"FinBERT model {model_name!r} is not available in the local cache; "
                 "run `market-predictor download-model` before offline inference."
             ) from exc
-        self.classifier = pipeline(
-            "sentiment-analysis",
+        self.classifier: Any = pipeline(
+            "text-classification",
             model=model,
-            tokenizer=tokenizer,
+            tokenizer=cast(Any, tokenizer),
             device=device,
             truncation=True,
             max_length=self.max_length,

@@ -673,9 +673,13 @@ Audit V3 calibration and ranking economics
 
 ### C8 - Development training run and gate freeze
 
-Status: in progress as of 2026-07-20. The versioned development dataset is complete with 1,063,587 rows, 546 point-in-time symbols, 478 labeled sessions, 24 monthly hash-verified shards, SIP provenance, and XNYS-calendar session boundaries. Its fingerprint is `ae17ce380ce0765dbbfcb0e0e07a3dda2598c1bd3482a3bd6abaa5018183e098`.
+Status: completed without a selected candidate on 2026-07-21. The versioned development dataset contains 1,063,587 rows, 546 point-in-time symbols, 478 labeled sessions, 24 monthly hash-verified shards, SIP provenance, and XNYS-calendar session boundaries. Its fingerprint is `ae17ce380ce0765dbbfcb0e0e07a3dda2598c1bd3482a3bd6abaa5018183e098`.
 
-The B0, B1, B2, R1, and D1 families have been run on this frozen input and rejected. B0 mean top-10 excess return is -0.09868% walk-forward and -0.09387% on deterministic ticker holdout. B1 improves AUC to 0.53258/0.53341, but top-10 excess return remains -0.07974%/-0.07763%. B2 reaches -0.06558% walk-forward but remains -0.07807% on ticker holdout. R1 reaches NDCG@10 of 0.49302/0.51234, but top-10 excess return remains -0.07153%/-0.07644%. D1 downside AUC is only 0.51390/0.51231 with approximately 1.01x lift, so it cannot serve as a risk gate. All remain unpromoted research artifacts. R2/O1 ablations and candidate selection have not completed.
+The B0, B1, B2, R1, and D1 families have been run on this frozen input and rejected. B0 mean top-10 excess return is -0.09868% walk-forward and -0.09387% on deterministic ticker holdout. B1 improves AUC to 0.53258/0.53341, but top-10 excess return remains -0.07974%/-0.07763%. B2 reaches -0.06558% walk-forward but remains -0.07807% on ticker holdout. R1 reaches NDCG@10 of 0.49302/0.51234, but top-10 excess return remains -0.07153%/-0.07644%. D1 downside AUC is only 0.51390/0.51231 with approximately 1.01x lift, so it cannot serve as a risk gate. All remain unpromoted research artifacts.
+
+O1 evaluates a fixed catalyst overlay outside R1 on the six-month news interval. Its 322,291 joined rows cover 503 tickers and 72,818 relevant, fully scored events with zero future joins. Walk-forward top-10 excess return moves from -0.05744% to -0.04871%, while ticker holdout moves from -0.06423% to -0.06690%. Both paired confidence intervals include zero, so O1 is rejected. Provider publication-time backfill makes this evidence research-only. Stale global context was excluded by a fail-closed coverage gate.
+
+R2 is not runnable on C8: all 1,063,587 rows have `microstructure_available = 0`, and spread, quote-imbalance, and average-trade-size inputs are entirely null. Treating missing microstructure as zero would invalidate the ablation. Candidate selection therefore closes with no candidate, and C9 must not open on this dataset.
 
 R1 training uses a verified column projection, `float32` feature storage, 64-bin CPU histograms, explicit fold-model release, and a 4 GiB process working-set budget. The completed run recorded a 3.781 GiB peak working set and produced 1,069,740 finite OOF scores under one model run ID.
 
@@ -698,6 +702,8 @@ Freeze V3 candidate and promotion gates
 ```
 
 ### C9 - Shadow evaluation
+
+Status: not started. Blocked by design because C8 selected no candidate; shadow data remains unopened.
 
 Scope:
 

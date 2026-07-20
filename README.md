@@ -24,6 +24,7 @@ Model lifecycle state comes from each artifact's `.manifest.json`; a filename su
 | Intraday 12 bars, API default | 2026-07-09 technical ablation | Candidate | ROC AUC 0.6014 and lift 1.4719. Fails current AUC/lift gates. |
 | Intraday opening V2 | 2026-07-10 non-overlapping, cost-aware experiment | Candidate; promotion rejected | Best exact-path AUC 0.5806, lift 1.1764, selected net return -0.184% per trade, profit factor 0.7076, max drawdown 30.28%. |
 | Intraday V3 R1 | 2026-07-20 grouped XGBoost ranker | Candidate; promotion rejected | Walk-forward/holdout NDCG@10 0.4930/0.5123, but top-10 cost-adjusted excess return is -0.0715%/-0.0764%. |
+| Intraday V3 O1 | 2026-07-21 fixed ticker-catalyst overlay on R1 | Research ablation; rejected | Walk-forward top-10 excess return improves from -0.0574% to -0.0487%, but ticker holdout worsens from -0.0642% to -0.0669%; both paired confidence intervals include zero. |
 | Older daily/event `*_max.joblib` files | Legacy swing/event families | Baseline/research | These artifacts predate registry manifests and current promotion gates. They are not formally promoted. |
 
 Production API implications:
@@ -35,7 +36,7 @@ Production API implications:
 
 The next valid intraday promotion attempt requires new matured shadow data after 2026-07-08, predeclared model/threshold choices, and all current promotion audits. See [Intraday model promotion](docs/intraday_model_promotion.md).
 
-ML V3 checkpoints C1-C7 and the frozen C8 B0/B1/B2/R1/D1 runs are complete. Every completed C8 family is rejected: all completed opportunity families have negative cost-adjusted top-10 excess return, and D1 is near-random as a downside gate. R2 and O1 remain unrun ablations; there is no selected V3 candidate to promote or serve.
+ML V3 checkpoints C1-C8 are complete with no selected candidate. B0/B1/B2/R1 and the fixed O1 catalyst overlay all have negative cost-adjusted top-10 excess return, while D1 is near-random as a downside gate. R2 is unavailable because every frozen C8 row lacks microstructure inputs; the system does not impute them. O1 is rejected on paired walk-forward and ticker-holdout evidence. C9 shadow evaluation remains closed because there is no candidate to promote or serve.
 
 ## Architecture Documents
 
@@ -124,7 +125,16 @@ market-predictor build-v3-development-dataset --bars-dir data/artifacts/ohlcv/v3
 market-predictor train-v3-models --dataset data/features/v3_c8_development_20260711_v9 --families R1 --max-training-memory-gb 4
 ```
 
-The loader rejects missing, modified, or unregistered monthly shards and carries the dataset fingerprint into training evidence. It projects only required training/audit columns; the trainer compacts features to `float32`, releases fold models, and enforces a configurable process-memory guard. The completed C8 dataset has 1,063,587 rows across 24 months. B0, B1, B2, R1, and D1 were evaluated and rejected; opportunity economics remained negative and D1 downside discrimination was near random. See the [B0](docs/model_cards/v3_c8_b0_20260711.md), [B1](docs/model_cards/v3_c8_b1_20260711.md), [B2](docs/model_cards/v3_c8_b2_20260711.md), [R1](docs/model_cards/v3_c8_r1_20260720.md), and [D1](docs/model_cards/v3_c8_d1_20260711.md) model cards.
+The loader rejects missing, modified, or unregistered monthly shards and carries the dataset fingerprint into training evidence. It projects only required training/audit columns; the trainer compacts features to `float32`, releases fold models, and enforces a configurable process-memory guard. The completed C8 dataset has 1,063,587 rows across 24 months. B0, B1, B2, R1, D1, and the external O1 catalyst overlay were evaluated and rejected; R2 could not be evaluated because the frozen rows contain no microstructure observations. See the [B0](docs/model_cards/v3_c8_b0_20260711.md), [B1](docs/model_cards/v3_c8_b1_20260711.md), [B2](docs/model_cards/v3_c8_b2_20260711.md), [R1](docs/model_cards/v3_c8_r1_20260720.md), [D1](docs/model_cards/v3_c8_d1_20260711.md), and [O1](docs/model_cards/v3_c8_o1_20260721.md) model cards.
+
+O1 remains outside the estimator. Historical catalyst scoring is resumable and provenance-bound:
+
+```powershell
+market-predictor score-swing-events --tickers $tickers --raw-dir data/raw/sp500_6m_20260708 --out-dir data/raw/sp500_6m_20260708_scored --text-mode title_summary --max-length 128 --batch-size 64
+market-predictor audit-v3-o1-overlay --predictions data/reports/v3_c8_r1_oof_20260720.parquet --event-dir data/raw/sp500_6m_20260708_scored --coverage-start 2026-01-09T00:00:00Z --coverage-end 2026-07-08T23:59:59Z --availability-policy provider_publication_backfill
+```
+
+Publication-time backfill is always research-only. A global-context file is accepted only when its first and last available events cover the declared interval within the configured boundary tolerance.
 
 ## Repository Artifact Policy
 
