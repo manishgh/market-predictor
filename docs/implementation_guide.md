@@ -119,6 +119,8 @@ Key command groups:
 
 V3 orchestration is registered through focused modules under `src/market_predictor/commands/`: `v3_data.py`, `v3_features.py`, `v3_labels.py`, `v3_models.py`, and `v3_evaluation.py`. The corresponding implementation under `src/market_predictor/v3/` owns strict contracts, immutable development/shadow partitioning, exact labels, batch/live feature parity, session-purged validation, deterministic ticker holdout, B0/B1/B2/R1/D1 candidate training, disjoint calibration, and session-blocked ranking economics. These candidates and audit calibrators are research artifacts and are not connected to the promoted serving registry until later V3 promotion checkpoints pass.
 
+`train-v3-models` loads versioned datasets through a hash-verified column projection. The trainer compacts selected features to `float32`, uses single-worker XGBoost histograms for R1, releases each fold/holdout model before the next fit, and records current/peak working set against `--max-training-memory-gb`. A guard violation fails the family without publishing a model artifact.
+
 `v3_readiness.py` scans large Parquet datasets in batches before C8. It rejects inadequate symbol/session coverage, post-cutoff rows, undeclared or non-SIP volume, current-only universe files, missing sector ETFs, and benchmark coverage gaps. `export-ohlcv-artifacts --end-date YYYY-MM-DD` creates reproducible frozen-cutoff exports and persists `price_feed` in every row and manifest.
 
 ### Configuration

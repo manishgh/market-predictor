@@ -13,7 +13,7 @@ This is research and prediction tooling, not investment advice and not an automa
 
 The repository produces prediction intelligence: probabilities, catalyst summaries, feature/audit context, and watchlist rankings. It does not own broker execution, portfolio state, final sizing, stops, exits, or order lifecycle. Those responsibilities belong in a trading/runtime system such as `trading_flow`.
 
-## Current Model State (2026-07-11)
+## Current Model State (2026-07-20)
 
 Model lifecycle state comes from each artifact's `.manifest.json`; a filename such as `*_max.joblib` does not mean promoted.
 
@@ -23,6 +23,7 @@ Model lifecycle state comes from each artifact's `.manifest.json`; a filename su
 | Swing 1D | `sp500_6m_next_day_big_up_v2_20260708_candidate.joblib` | Candidate | ROC AUC 0.6657 and top-decile lift 2.4850. Not promoted. |
 | Intraday 12 bars, API default | 2026-07-09 technical ablation | Candidate | ROC AUC 0.6014 and lift 1.4719. Fails current AUC/lift gates. |
 | Intraday opening V2 | 2026-07-10 non-overlapping, cost-aware experiment | Candidate; promotion rejected | Best exact-path AUC 0.5806, lift 1.1764, selected net return -0.184% per trade, profit factor 0.7076, max drawdown 30.28%. |
+| Intraday V3 R1 | 2026-07-20 grouped XGBoost ranker | Candidate; promotion rejected | Walk-forward/holdout NDCG@10 0.4930/0.5123, but top-10 cost-adjusted excess return is -0.0715%/-0.0764%. |
 | Older daily/event `*_max.joblib` files | Legacy swing/event families | Baseline/research | These artifacts predate registry manifests and current promotion gates. They are not formally promoted. |
 
 Production API implications:
@@ -34,7 +35,7 @@ Production API implications:
 
 The next valid intraday promotion attempt requires new matured shadow data after 2026-07-08, predeclared model/threshold choices, and all current promotion audits. See [Intraday model promotion](docs/intraday_model_promotion.md).
 
-ML V3 checkpoints C1-C7 are implemented. The V3 artifacts produced by `train-v3-models` are candidates only: B0 is a deterministic technical floor, B1 is logistic, B2 is histogram gradient boosting, R1 is the optional XGBoost grouped ranker, and D1 is a separate downside classifier. C7 adds disjoint classifier calibration, whole-session bootstrap intervals, independent-event top-k economics, and multi-output opportunity/downside evidence. No V3 family is promoted or served until the gate freeze and shadow process are complete.
+ML V3 checkpoints C1-C7 and the frozen C8 B0/B1/B2/R1/D1 runs are complete. Every completed C8 family is rejected: all completed opportunity families have negative cost-adjusted top-10 excess return, and D1 is near-random as a downside gate. R2 and O1 remain unrun ablations; there is no selected V3 candidate to promote or serve.
 
 ## Architecture Documents
 
@@ -120,10 +121,10 @@ Build the monthly development rows through the hash-verified, XNYS-calendar-awar
 
 ```powershell
 market-predictor build-v3-development-dataset --bars-dir data/artifacts/ohlcv/v3_sp500_current_730d_20260708/5m --benchmark-dir data/artifacts/ohlcv/v3_development_benchmarks_730d_20260708/5m --memberships data/universe/sp500_point_in_time_20240709_20260708.parquet --technical-dir data/work/v3_c8_technical_20260711 --out-dir data/features/v3_c8_development_20260711_v9 --decision-start-date 2024-08-09 --minimum-cross-section 300 --decision-stride-bars 12 --reuse-technical
-market-predictor train-v3-models --dataset data/features/v3_c8_development_20260711_v9 --families B0
+market-predictor train-v3-models --dataset data/features/v3_c8_development_20260711_v9 --families R1 --max-training-memory-gb 4
 ```
 
-The loader rejects missing, modified, or unregistered monthly shards and carries the dataset fingerprint into training evidence. The completed C8 dataset has 1,063,587 rows across 24 months. B0, B1, B2, and D1 were evaluated and rejected; opportunity economics remained negative and D1 downside discrimination was near random. See the [B0](docs/model_cards/v3_c8_b0_20260711.md), [B1](docs/model_cards/v3_c8_b1_20260711.md), [B2](docs/model_cards/v3_c8_b2_20260711.md), and [D1](docs/model_cards/v3_c8_d1_20260711.md) model cards.
+The loader rejects missing, modified, or unregistered monthly shards and carries the dataset fingerprint into training evidence. It projects only required training/audit columns; the trainer compacts features to `float32`, releases fold models, and enforces a configurable process-memory guard. The completed C8 dataset has 1,063,587 rows across 24 months. B0, B1, B2, R1, and D1 were evaluated and rejected; opportunity economics remained negative and D1 downside discrimination was near random. See the [B0](docs/model_cards/v3_c8_b0_20260711.md), [B1](docs/model_cards/v3_c8_b1_20260711.md), [B2](docs/model_cards/v3_c8_b2_20260711.md), [R1](docs/model_cards/v3_c8_r1_20260720.md), and [D1](docs/model_cards/v3_c8_d1_20260711.md) model cards.
 
 ## Repository Artifact Policy
 

@@ -376,7 +376,9 @@ V3 checkpoints C1-C7 now provide strict point-in-time contracts, immutable devel
 
 C8 data readiness passes for 546 point-in-time S&P symbols over 501 source sessions. The labeled development artifact contains 1,063,587 rows over 478 eligible sessions and 24 hash-verified monthly shards. XNYS schedules define normal and early-close session boundaries; QQQ, SPY, and every required sector ETF must cover each expected 5-minute timestamp. Training accepts this directory only after validating all shard hashes, physical row count, builder schema, and dataset fingerprint.
 
-The B0 deterministic floor, B1 logistic baseline, and B2 nonlinear baseline are rejected because their top-10 cost-adjusted excess returns are negative in both purged walk-forward and deterministic ticker-holdout evidence. B1 improves AUC and lift; B2 improves walk-forward economics but not holdout economics. None crosses the economic floor. They remain research comparisons, not production models. Candidate selection and promotion remain separate later gates.
+The B0 deterministic floor, B1 logistic baseline, B2 nonlinear baseline, and R1 grouped ranker are rejected because their top-10 cost-adjusted excess returns are negative in both purged walk-forward and deterministic ticker-holdout evidence. R1 improves ranking NDCG but still returns -0.07153%/-0.07644% in the two scopes. D1 is also rejected as a downside gate. None crosses the economic floor. They remain research comparisons, not production models. Candidate selection and promotion remain separate later gates.
+
+Large V3 training reads only verified required columns, compacts selected features to `float32`, trains one deterministic CPU model at a time, and releases each fold model before the next fit. R1 records current and peak process working set and fails closed at a configurable memory guard; the C8 run stayed below its 4 GiB hard budget with a 3.781 GiB measured peak.
 
 ## 11. Audit Report Specification
 
