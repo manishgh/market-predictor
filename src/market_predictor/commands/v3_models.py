@@ -10,7 +10,13 @@ from rich.console import Console
 
 from market_predictor.v3.development import load_verified_development_dataset
 from market_predictor.v3.errors import DataReadinessError
-from market_predictor.v3.models import MODEL_FAMILIES, ModelFamily, V3TrainingConfig, train_v3_model_suite
+from market_predictor.v3.models import (
+    MODEL_FAMILIES,
+    ModelFamily,
+    V3TrainingConfig,
+    train_v3_model_suite,
+    training_input_columns,
+)
 
 
 def register_v3_model_commands(app: typer.Typer, console: Console) -> None:
@@ -27,11 +33,12 @@ def register_v3_model_commands(app: typer.Typer, console: Console) -> None:
         min_train_sessions: int = typer.Option(20, min=2, help="Minimum initial training sessions."),
         min_train_rows: int = typer.Option(500, min=1, help="Minimum training rows per fold."),
         ticker_holdout_fraction: float = typer.Option(0.2, min=0.01, max=0.99, help="Deterministic symbol holdout fraction."),
+        max_training_memory_gb: float = typer.Option(4.0, min=1.0, help="Hard RSS budget for the training worker."),
         overwrite: bool = typer.Option(False, help="Explicitly replace candidate artifacts."),
     ) -> None:
         """Train V3 baselines, ranker, and downside model with purged OOF evidence."""
         parsed = _parse_families(families)
-        training_data, dataset_fingerprint = _read_dataset(dataset)
+        training_data, dataset_fingerprint = _read_dataset(dataset, columns=training_input_columns())
         config = V3TrainingConfig(
             families=parsed,
             n_splits=n_splits,
@@ -39,6 +46,7 @@ def register_v3_model_commands(app: typer.Typer, console: Console) -> None:
             min_train_sessions=min_train_sessions,
             min_train_rows=min_train_rows,
             ticker_holdout_fraction=ticker_holdout_fraction,
+            max_training_memory_gb=max_training_memory_gb,
             training_dataset_fingerprint=dataset_fingerprint,
         )
         report, predictions, feature_audit = train_v3_model_suite(
@@ -72,17 +80,17 @@ def _parse_families(value: str) -> tuple[ModelFamily, ...]:
     return cast(tuple[ModelFamily, ...], parsed)
 
 
-def _read_dataset(path: Path) -> tuple[pd.DataFrame, str | None]:
+def _read_dataset(path: Path, *, columns: list[str] | None = None) -> tuple[pd.DataFrame, str | None]:
     if not path.exists():
         raise typer.BadParameter(f"Missing dataset: {path}")
     if path.is_dir():
         try:
-            dataset, manifest = load_verified_development_dataset(path)
+            dataset, manifest = load_verified_development_dataset(path, columns=columns)
         except DataReadinessError as exc:
             raise typer.BadParameter(str(exc)) from exc
         return dataset, str(manifest["dataset_fingerprint"])
     if path.suffix.lower() == ".parquet":
-        return pd.read_parquet(path), None
+        return pd.read_parquet(path, columns=columns), None
     if path.suffix.lower() == ".csv":
-        return pd.read_csv(path), None
+        return pd.read_csv(path, usecols=(lambda name: columns is None or name in columns)), None
     raise typer.BadParameter(f"Unsupported dataset format: {path.suffix}")

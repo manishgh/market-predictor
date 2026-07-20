@@ -11,6 +11,7 @@ from typing import Any, cast
 
 import exchange_calendars as xcals
 import pandas as pd
+import pyarrow.parquet as pq
 from pydantic import Field
 
 from market_predictor.registry import file_sha256
@@ -182,7 +183,11 @@ def build_monthly_development_dataset(
     return report
 
 
-def load_verified_development_dataset(directory: Path) -> tuple[pd.DataFrame, dict[str, Any]]:
+def load_verified_development_dataset(
+    directory: Path,
+    *,
+    columns: list[str] | None = None,
+) -> tuple[pd.DataFrame, dict[str, Any]]:
     """Load a completed monthly dataset only after validating its frozen manifest."""
     manifest_path = directory / "_build_manifest.json"
     if not directory.is_dir() or not manifest_path.exists():
@@ -215,7 +220,14 @@ def load_verified_development_dataset(directory: Path) -> tuple[pd.DataFrame, di
     fingerprint = hashlib.sha256(json.dumps(fingerprint_payload, sort_keys=True).encode("utf-8")).hexdigest()
     if fingerprint != manifest.get("dataset_fingerprint"):
         raise DataReadinessError("Development dataset fingerprint does not match its manifest")
-    dataset = pd.read_parquet(directory)
+    projected_columns = columns
+    if columns is not None:
+        available = set(cast(Any, pq.read_schema)(expected_paths[0]).names)
+        projected_columns = [column for column in columns if column in available]
+    try:
+        dataset = pd.read_parquet(directory, columns=projected_columns)
+    except (KeyError, ValueError) as exc:
+        raise DataReadinessError("Development dataset does not contain the requested training projection") from exc
     if len(dataset) != int(summary.get("label_rows", -1)):
         raise DataReadinessError("Development dataset physical row count does not match its manifest")
     return dataset, manifest

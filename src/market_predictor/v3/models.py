@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import ctypes
+import gc
 import hashlib
 import importlib
 import importlib.metadata
@@ -31,6 +33,38 @@ ModelFamily = Literal["B0", "B1", "B2", "R1", "D1"]
 MODEL_FAMILIES: tuple[ModelFamily, ...] = ("B0", "B1", "B2", "R1", "D1")
 V3_MODEL_SCHEMA_VERSION = "ml_v3.model.v1"
 
+V3_TRAINING_REQUIRED_COLUMNS = frozenset(
+    {
+        "ticker",
+        "decision_time_utc",
+        "feature_available_at_utc",
+        "entry_time_utc",
+        "primary_exit_time_utc",
+        "session_date_et",
+        "decision_group_id",
+        "universe_snapshot_id",
+        "price_feed",
+        "ranking_target",
+        "ranking_grade",
+        "ranking_group_size",
+        "stop_before_target",
+        "overlap_weight",
+        "feature_schema_version",
+        "label_schema_version",
+        "label_config_json",
+        "label_config_hash",
+    }
+)
+V3_PREDICTION_AUDIT_COLUMNS = frozenset(
+    {
+        "path_realized_return_net",
+        "independent_event_id",
+        "concurrent_label_count",
+        "cooldown_bars",
+        "market_regime",
+    }
+)
+
 
 class V3TrainingConfig(FrozenContract):
     families: tuple[ModelFamily, ...] = MODEL_FAMILIES
@@ -46,7 +80,10 @@ class V3TrainingConfig(FrozenContract):
     max_iter: int = Field(default=150, ge=10)
     learning_rate: float = Field(default=0.05, gt=0, le=1)
     xgboost_max_depth: int = Field(default=5, ge=1, le=16)
+    xgboost_max_bin: int = Field(default=128, ge=32, le=1024)
     xgboost_n_jobs: int = Field(default=1, ge=1)
+    max_training_memory_gb: float = Field(default=4.0, ge=1.0, le=256.0)
+    memory_guard_headroom_gb: float = Field(default=0.25, ge=0.1, le=2.0)
     training_dataset_fingerprint: str | None = Field(default=None, min_length=64, max_length=64)
     continue_on_family_error: bool = True
     schema_version: str = ML_V3_SCHEMA_VERSION
@@ -63,7 +100,14 @@ class V3TrainingConfig(FrozenContract):
     def validate_holdout_capacity(self) -> Self:
         if self.top_k > self.min_train_rows:
             raise ValueError("top_k cannot exceed min_train_rows")
+        if self.memory_guard_headroom_gb >= self.max_training_memory_gb:
+            raise ValueError("memory_guard_headroom_gb must be lower than max_training_memory_gb")
         return self
+
+
+def training_input_columns() -> list[str]:
+    """Return the bounded column projection required by the V3 trainer."""
+    return sorted(V3_TRAINING_REQUIRED_COLUMNS | V3_PREDICTION_AUDIT_COLUMNS | set(core_feature_columns()))
 
 
 class DeterministicTechnicalRanker:
@@ -103,7 +147,8 @@ def audit_feature_coverage(
     records: list[dict[str, object]] = []
     selected: list[str] = []
     for feature in candidates:
-        fold_rates = [float(pd.to_numeric(data.iloc[fold.train_indices][feature], errors="coerce").notna().mean()) for fold in folds]
+        values = pd.to_numeric(data[feature], errors="coerce")
+        fold_rates = [float(values.iloc[fold.train_indices].notna().mean()) for fold in folds]
         minimum = min(fold_rates)
         eligible = minimum >= minimum_rate
         records.append(
@@ -137,6 +182,7 @@ def train_v3_model_suite(
     overwrite: bool = False,
 ) -> tuple[dict[str, Any], pd.DataFrame, pd.DataFrame]:
     data = _prepare_training_data(dataset)
+    _assert_memory_budget(config, "validated dataset")
     splitter = V3PurgedWalkForwardSplit(
         n_splits=config.n_splits,
         embargo_sessions=config.embargo_sessions,
@@ -151,6 +197,8 @@ def train_v3_model_suite(
     )
     if len(features) < config.min_features:
         raise DataReadinessError(f"only {len(features)} features pass every training fold; require {config.min_features}")
+    _compact_feature_storage(data, features)
+    _assert_memory_budget(config, "compacted feature matrix")
     holdout = deterministic_ticker_holdout(
         data["ticker"],
         fraction=config.ticker_holdout_fraction,
@@ -221,40 +269,75 @@ def _train_family(
     if family == "R1":
         eligible &= data["ranking_group_size"].ge(2)
     predictions: list[pd.DataFrame] = []
+    eligible_values = eligible.to_numpy(dtype=bool)
     for fold in folds:
-        train = data.iloc[fold.train_indices].loc[eligible.iloc[fold.train_indices]].copy()
-        test = data.iloc[fold.test_indices].loc[eligible.iloc[fold.test_indices]].copy()
-        if train.empty or test.empty:
+        train_indices = fold.train_indices[eligible_values[fold.train_indices]]
+        test_indices = fold.test_indices[eligible_values[fold.test_indices]]
+        if len(train_indices) == 0 or len(test_indices) == 0:
             raise DataReadinessError(f"{family} fold {fold.fold} has no eligible train or test rows")
         model = _new_model(family, config)
-        _fit(model, family, train, features, target_column)
+        _fit(model, family, data, features, target_column, config=config, row_indices=train_indices)
         predictions.append(
-            _prediction_frame(model, family, test, features, target_column, fold.fold, "walk_forward", run_id)
+            _prediction_frame(
+                model,
+                family,
+                data,
+                features,
+                target_column,
+                fold.fold,
+                "walk_forward",
+                run_id,
+                row_indices=test_indices,
+            )
         )
-        holdout_train = train[~train["ticker"].isin(holdout)].copy()
-        holdout_test = test[test["ticker"].isin(holdout)].copy()
-        if holdout_train.empty or holdout_test.empty:
+        del model
+        gc.collect()
+        ticker = data["ticker"]
+        holdout_train_indices = train_indices[~ticker.iloc[train_indices].isin(holdout).to_numpy()]
+        holdout_test_indices = test_indices[ticker.iloc[test_indices].isin(holdout).to_numpy()]
+        if len(holdout_train_indices) == 0 or len(holdout_test_indices) == 0:
             raise DataReadinessError(f"{family} fold {fold.fold} cannot produce ticker-holdout evidence")
         holdout_model = _new_model(family, config)
-        _fit(holdout_model, family, holdout_train, features, target_column)
+        _fit(
+            holdout_model,
+            family,
+            data,
+            features,
+            target_column,
+            config=config,
+            row_indices=holdout_train_indices,
+        )
         predictions.append(
             _prediction_frame(
                 holdout_model,
                 family,
-                holdout_test,
+                data,
                 features,
                 target_column,
                 fold.fold,
                 "ticker_holdout",
                 run_id,
+                row_indices=holdout_test_indices,
             )
         )
+        del holdout_model
+        gc.collect()
     oof = pd.concat(predictions, ignore_index=True)
     main_metrics = _model_metrics(oof[oof["audit_scope"] == "walk_forward"], family=family, top_k=config.top_k)
     holdout_metrics = _model_metrics(oof[oof["audit_scope"] == "ticker_holdout"], family=family, top_k=config.top_k)
-    final_data = data.loc[eligible].copy()
+    final_indices = np.flatnonzero(eligible_values)
     final_model = _new_model(family, config)
-    _fit(final_model, family, final_data, features, target_column)
+    _fit(final_model, family, data, features, target_column, config=config, row_indices=final_indices)
+    metadata_columns = [
+        "ticker",
+        "decision_time_utc",
+        "label_schema_version",
+        "label_config_hash",
+        "label_config_json",
+        "universe_snapshot_id",
+        target_column,
+    ]
+    metadata = data.loc[:, metadata_columns].iloc[final_indices]
     payload = {
         "schema_version": V3_MODEL_SCHEMA_VERSION,
         "family": family,
@@ -265,10 +348,10 @@ def _train_family(
         "feature_schema_version": V3_FEATURE_SCHEMA_VERSION,
         "feature_schema_hash": feature_schema_hash(features),
         "run_id": run_id,
-        "label_schema_version": str(final_data["label_schema_version"].iloc[0]),
-        "label_config_hash": str(final_data["label_config_hash"].iloc[0]),
-        "label_config": json.loads(str(final_data["label_config_json"].iloc[0])),
-        "universe_snapshot_ids": sorted(final_data["universe_snapshot_id"].astype(str).unique()),
+        "label_schema_version": str(metadata["label_schema_version"].iloc[0]),
+        "label_config_hash": str(metadata["label_config_hash"].iloc[0]),
+        "label_config": json.loads(str(metadata["label_config_json"].iloc[0])),
+        "universe_snapshot_ids": sorted(metadata["universe_snapshot_id"].astype(str).unique()),
         "config": config.model_dump(mode="json"),
     }
     joblib.dump(payload, artifact_path)
@@ -278,7 +361,7 @@ def _train_family(
         schema_version=V3_MODEL_SCHEMA_VERSION,
         target_col=target_column,
         features=features,
-        training_data=final_data,
+        training_data=metadata[["ticker", "decision_time_utc", target_column]],
         metrics={"walk_forward": main_metrics, "ticker_holdout": holdout_metrics},
         validation_split="v3_session_grouped_purged_walk_forward",
         extra={
@@ -286,10 +369,10 @@ def _train_family(
             "family": family,
             "random_seed": config.random_seed,
             "training_dataset_fingerprint": config.training_dataset_fingerprint,
-            "label_schema_version": str(final_data["label_schema_version"].iloc[0]),
-            "label_config_hash": str(final_data["label_config_hash"].iloc[0]),
-            "label_config": json.loads(str(final_data["label_config_json"].iloc[0])),
-            "universe_snapshot_ids": sorted(final_data["universe_snapshot_id"].astype(str).unique()),
+            "label_schema_version": str(metadata["label_schema_version"].iloc[0]),
+            "label_config_hash": str(metadata["label_config_hash"].iloc[0]),
+            "label_config": json.loads(str(metadata["label_config_json"].iloc[0])),
+            "universe_snapshot_ids": sorted(metadata["universe_snapshot_id"].astype(str).unique()),
             "ticker_holdout": sorted(holdout),
             "folds": [fold.audit_record() for fold in folds],
             "dependency_versions": _dependency_versions(family),
@@ -350,24 +433,56 @@ def _new_model(family: ModelFamily, config: V3TrainingConfig) -> Any:
         n_estimators=config.max_iter,
         learning_rate=config.learning_rate,
         max_depth=config.xgboost_max_depth,
+        max_bin=config.xgboost_max_bin,
         tree_method="hist",
         random_state=config.random_seed,
         n_jobs=config.xgboost_n_jobs,
+        callbacks=[_memory_guard_callback(xgboost, config)],
     )
 
 
-def _fit(model: Any, family: ModelFamily, data: pd.DataFrame, features: list[str], target_column: str) -> None:
-    x = data[features]
-    y = pd.to_numeric(data[target_column], errors="raise")
-    weights = pd.to_numeric(data["overlap_weight"], errors="raise").clip(lower=1e-6)
+def _fit(
+    model: Any,
+    family: ModelFamily,
+    data: pd.DataFrame,
+    features: list[str],
+    target_column: str,
+    *,
+    config: V3TrainingConfig,
+    row_indices: np.ndarray,
+) -> None:
+    _assert_memory_budget(config, f"{family} fit preflight")
+    fit_columns = list(dict.fromkeys([*features, target_column, "overlap_weight", "decision_group_id", "ticker"]))
+    selected = data.loc[:, fit_columns].iloc[row_indices]
+    x = selected[features]
+    y = pd.to_numeric(selected[target_column], errors="raise")
+    weights = pd.to_numeric(selected["overlap_weight"], errors="raise").clip(lower=1e-6)
     if family == "B0":
         model.fit(x, y)
         return
     if family == "R1":
-        ordered = data.assign(_target=y).sort_values(["decision_group_id", "ticker"])
-        query_id = pd.factorize(ordered["decision_group_id"], sort=False)[0]
-        group_weights = ordered.groupby("decision_group_id", sort=False)["overlap_weight"].mean().to_numpy()
-        model.fit(ordered[features], ordered["_target"].astype(int), qid=query_id, sample_weight=group_weights)
+        row_order = _ranking_row_order(selected)
+        if row_order is not None:
+            selected = selected.iloc[row_order]
+            x = selected[features]
+            y = pd.to_numeric(selected[target_column], errors="raise")
+            weights = pd.to_numeric(selected["overlap_weight"], errors="raise").clip(lower=1e-6)
+        query_id = pd.factorize(selected["decision_group_id"], sort=False)[0].astype(np.int32, copy=False)
+        starts = np.r_[0, np.flatnonzero(query_id[1:] != query_id[:-1]) + 1]
+        counts = np.diff(np.r_[starts, len(query_id)])
+        weight_values = weights.to_numpy(dtype=np.float32, copy=False)
+        group_weights = np.add.reduceat(weight_values, starts) / counts
+        matrix = x.to_numpy(dtype=np.float32, copy=False)
+        _assert_memory_budget(config, "R1 compact matrix", reserve_bytes=matrix.nbytes)
+        try:
+            model.fit(
+                matrix,
+                y.to_numpy(dtype=np.int16, copy=False),
+                qid=query_id,
+                sample_weight=group_weights.astype(np.float32, copy=False),
+            )
+        finally:
+            model.set_params(callbacks=None)
         return
     if y.nunique() < 2:
         raise DataReadinessError(f"{family} training target has only one class")
@@ -383,11 +498,16 @@ def _prediction_frame(
     fold: int,
     audit_scope: str,
     model_run_id: str,
+    *,
+    row_indices: np.ndarray,
 ) -> pd.DataFrame:
+    selected = data.iloc[row_indices]
     if family in {"B1", "B2", "D1"}:
-        score = np.asarray(model.predict_proba(data[features]))[:, 1]
+        score = np.asarray(model.predict_proba(selected[features]))[:, 1]
+    elif family == "R1":
+        score = np.asarray(model.predict(selected[features].to_numpy(dtype=np.float32, copy=False)), dtype=float)
     else:
-        score = np.asarray(model.predict(data[features]), dtype=float)
+        score = np.asarray(model.predict(selected[features]), dtype=float)
     columns = [
         "ticker",
         "decision_time_utc",
@@ -408,15 +528,15 @@ def _prediction_frame(
             "cooldown_bars",
             "market_regime",
         )
-        if column in data.columns
+        if column in selected.columns
     )
-    output = data[columns].copy()
+    output = selected[columns].copy()
     output["family"] = family
     output["fold"] = fold
     output["audit_scope"] = audit_scope
     output["model_run_id"] = model_run_id
     output["target_col"] = target_column
-    output["target"] = pd.to_numeric(data[target_column], errors="coerce").to_numpy()
+    output["target"] = pd.to_numeric(selected[target_column], errors="coerce").to_numpy()
     output["score"] = score
     output["opportunity_score"] = 1.0 - score if family == "D1" else score
     return output
@@ -462,30 +582,10 @@ def _model_metrics(predictions: pd.DataFrame, *, family: ModelFamily, top_k: int
 
 
 def _prepare_training_data(dataset: pd.DataFrame) -> pd.DataFrame:
-    required = {
-        "ticker",
-        "decision_time_utc",
-        "feature_available_at_utc",
-        "entry_time_utc",
-        "primary_exit_time_utc",
-        "session_date_et",
-        "decision_group_id",
-        "universe_snapshot_id",
-        "price_feed",
-        "ranking_target",
-        "ranking_grade",
-        "ranking_group_size",
-        "stop_before_target",
-        "overlap_weight",
-        "feature_schema_version",
-        "label_schema_version",
-        "label_config_json",
-        "label_config_hash",
-    }
-    missing = sorted(required.difference(dataset.columns))
+    missing = sorted(V3_TRAINING_REQUIRED_COLUMNS.difference(dataset.columns))
     if missing:
         raise DataReadinessError(f"V3 training dataset missing columns: {', '.join(missing)}")
-    data = dataset.copy()
+    data = dataset.copy(deep=False)
     data["decision_time_utc"] = data["decision_time_utc"].map(_aware_timestamp)
     data["feature_available_at_utc"] = data["feature_available_at_utc"].map(_aware_timestamp)
     data["entry_time_utc"] = data["entry_time_utc"].map(_aware_timestamp)
@@ -559,7 +659,20 @@ def _prepare_training_data(dataset: pd.DataFrame) -> pd.DataFrame:
         raise DataReadinessError("ranking_grade must contain non-negative integers or null")
     data["ticker"] = data["ticker"].astype(str).str.upper().str.strip()
     data["target_positive_excess"] = ranking_target.gt(0).where(ranking_target.notna(), pd.NA).astype("Int64")
-    return data.sort_values(["session_date_et", "decision_time_utc", "ticker"]).reset_index(drop=True)
+    for column in (
+        "ticker",
+        "decision_group_id",
+        "universe_snapshot_id",
+        "price_feed",
+        "feature_schema_version",
+        "label_schema_version",
+        "label_config_json",
+        "label_config_hash",
+    ):
+        data[column] = data[column].astype("category")
+    if not data["decision_time_utc"].is_monotonic_increasing:
+        data = data.sort_values(["session_date_et", "decision_time_utc", "ticker"])
+    return data.reset_index(drop=True) if not isinstance(data.index, pd.RangeIndex) else data
 
 
 def _target_column(family: ModelFamily) -> str:
@@ -578,18 +691,18 @@ def _run_id(
     config: V3TrainingConfig,
 ) -> str:
     digest = hashlib.sha256()
-    identity = data[
-        [
-            "ticker",
-            "decision_group_id",
-            "universe_snapshot_id",
-            "feature_schema_version",
-            "label_config_hash",
-            target_column,
-            *features,
-        ]
+    identity_columns = [
+        "ticker",
+        "decision_group_id",
+        "universe_snapshot_id",
+        "feature_schema_version",
+        "label_config_hash",
+        target_column,
+        *features,
     ]
-    digest.update(pd.util.hash_pandas_object(identity, index=True).to_numpy().tobytes())
+    for start in range(0, len(data), 50_000):
+        chunk = data.loc[:, identity_columns].iloc[start : start + 50_000]
+        digest.update(pd.util.hash_pandas_object(chunk, index=True).to_numpy().tobytes())
     digest.update(
         json.dumps(
             {
@@ -601,6 +714,97 @@ def _run_id(
         ).encode()
     )
     return digest.hexdigest()[:24]
+
+
+def _compact_feature_storage(data: pd.DataFrame, features: list[str]) -> None:
+    for feature in features:
+        data[feature] = pd.to_numeric(data[feature], errors="coerce").astype(np.float32)
+
+
+def _ranking_row_order(data: pd.DataFrame) -> np.ndarray | None:
+    query_id = pd.factorize(data["decision_group_id"], sort=False)[0]
+    starts = np.r_[0, np.flatnonzero(query_id[1:] != query_id[:-1]) + 1]
+    if len(starts) == len(np.unique(query_id)):
+        return None
+    group = data["decision_group_id"].astype(str).to_numpy()
+    ticker = data["ticker"].astype(str).to_numpy()
+    return np.lexsort((ticker, group))
+
+
+def _memory_guard_callback(xgboost: Any, config: V3TrainingConfig) -> Any:
+    def after_iteration(self: Any, model: Any, epoch: int, evals_log: dict[str, Any]) -> bool:
+        _assert_memory_budget(config, f"R1 boosting iteration {epoch}")
+        return False
+
+    callback_type = type(
+        "MemoryGuard",
+        (xgboost.callback.TrainingCallback,),
+        {"after_iteration": after_iteration},
+    )
+    return callback_type()
+
+
+def _assert_memory_budget(
+    config: V3TrainingConfig,
+    stage: str,
+    *,
+    reserve_bytes: int = 0,
+) -> None:
+    rss = _current_process_rss_bytes()
+    if rss is None:
+        return
+    limit = int((config.max_training_memory_gb - config.memory_guard_headroom_gb) * 1024**3)
+    projected = rss + max(0, reserve_bytes)
+    if projected > limit:
+        raise DataReadinessError(
+            f"training memory guard stopped {stage}: projected RSS {_gib(projected):.2f} GiB exceeds "
+            f"the {_gib(limit):.2f} GiB safety threshold for the {config.max_training_memory_gb:.2f} GiB hard budget"
+        )
+
+
+def _current_process_rss_bytes() -> int | None:
+    if os.name == "nt":
+        class ProcessMemoryCounters(ctypes.Structure):
+            _fields_ = [
+                ("cb", ctypes.c_ulong),
+                ("PageFaultCount", ctypes.c_ulong),
+                ("PeakWorkingSetSize", ctypes.c_size_t),
+                ("WorkingSetSize", ctypes.c_size_t),
+                ("QuotaPeakPagedPoolUsage", ctypes.c_size_t),
+                ("QuotaPagedPoolUsage", ctypes.c_size_t),
+                ("QuotaPeakNonPagedPoolUsage", ctypes.c_size_t),
+                ("QuotaNonPagedPoolUsage", ctypes.c_size_t),
+                ("PagefileUsage", ctypes.c_size_t),
+                ("PeakPagefileUsage", ctypes.c_size_t),
+            ]
+
+        counters = ProcessMemoryCounters()
+        counters.cb = ctypes.sizeof(counters)
+        get_current_process = ctypes.windll.kernel32.GetCurrentProcess
+        get_current_process.restype = ctypes.c_void_p
+        get_process_memory_info = ctypes.windll.psapi.GetProcessMemoryInfo
+        get_process_memory_info.argtypes = [
+            ctypes.c_void_p,
+            ctypes.POINTER(ProcessMemoryCounters),
+            ctypes.c_ulong,
+        ]
+        get_process_memory_info.restype = ctypes.c_int
+        if get_process_memory_info(get_current_process(), ctypes.byref(counters), counters.cb):
+            return int(counters.WorkingSetSize)
+        return None
+    statm = Path("/proc/self/statm")
+    if statm.exists():
+        resident_pages = int(statm.read_text(encoding="ascii").split()[1])
+        sysconf = os.__dict__.get("sysconf")
+        if not callable(sysconf):
+            return None
+        page_size = int(sysconf("SC_PAGE_SIZE"))
+        return resident_pages * page_size
+    return None
+
+
+def _gib(value: int) -> float:
+    return value / 1024**3
 
 
 def _dependency_versions(family: ModelFamily) -> dict[str, str | None]:

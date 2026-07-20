@@ -94,6 +94,10 @@ class V3DevelopmentDatasetTests(unittest.TestCase):
                 ),
             )
             verified, verified_manifest = load_verified_development_dataset(output_dir)
+            projected, projected_manifest = load_verified_development_dataset(
+                output_dir,
+                columns=["ticker", "decision_time_utc"],
+            )
         self.assertGreater(len(dataset), 0)
         self.assertEqual(report["summary"]["tickers"], 2)
         self.assertTrue(dataset.groupby("decision_group_id")["ticker"].nunique().eq(2).all())
@@ -103,6 +107,9 @@ class V3DevelopmentDatasetTests(unittest.TestCase):
         self.assertEqual(resumed_in_place["dataset_fingerprint"], report["dataset_fingerprint"])
         self.assertEqual(len(verified), report["summary"]["label_rows"])
         self.assertEqual(verified_manifest["dataset_fingerprint"], report["dataset_fingerprint"])
+        self.assertEqual(list(projected.columns), ["ticker", "decision_time_utc"])
+        self.assertEqual(len(projected), report["summary"]["label_rows"])
+        self.assertEqual(projected_manifest["dataset_fingerprint"], report["dataset_fingerprint"])
 
     def test_verified_loader_rejects_modified_month(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

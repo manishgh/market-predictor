@@ -14,7 +14,12 @@ import pandas as pd
 from market_predictor.registry import manifest_path_for
 from market_predictor.v3.errors import DataReadinessError
 from market_predictor.v3.features import V3_FEATURE_SCHEMA_VERSION
-from market_predictor.v3.models import V3TrainingConfig, audit_feature_coverage, train_v3_model_suite
+from market_predictor.v3.models import (
+    V3TrainingConfig,
+    _current_process_rss_bytes,
+    audit_feature_coverage,
+    train_v3_model_suite,
+)
 from market_predictor.v3.validation import V3PurgedWalkForwardSplit
 
 
@@ -47,6 +52,16 @@ class V3ModelTests(unittest.TestCase):
         self.assertNotIn("ema_50", selected)
         sparse = audit[audit["feature"] == "ema_50"].iloc[0]
         self.assertFalse(bool(sparse["eligible"]))
+
+    def test_memory_budget_reserves_headroom_below_hard_limit(self) -> None:
+        config = V3TrainingConfig(max_training_memory_gb=4.0, memory_guard_headroom_gb=0.25)
+        self.assertEqual(config.max_training_memory_gb, 4.0)
+        self.assertEqual(config.memory_guard_headroom_gb, 0.25)
+        with self.assertRaisesRegex(ValueError, "headroom"):
+            V3TrainingConfig(max_training_memory_gb=1.0, memory_guard_headroom_gb=1.0)
+        rss = _current_process_rss_bytes()
+        self.assertIsNotNone(rss)
+        self.assertGreater(rss or 0, 0)
 
     def test_baseline_suite_writes_candidate_manifests_and_holdout_evidence(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
