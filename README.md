@@ -13,7 +13,7 @@ This is research and prediction tooling, not investment advice and not an automa
 
 The repository produces prediction intelligence: probabilities, catalyst summaries, feature/audit context, and watchlist rankings. It does not own broker execution, portfolio state, final sizing, stops, exits, or order lifecycle. Those responsibilities belong in a trading/runtime system such as `trading_flow`.
 
-## Current Model State (2026-07-20)
+## Current Model State (2026-07-21)
 
 Model lifecycle state comes from each artifact's `.manifest.json`; a filename such as `*_max.joblib` does not mean promoted.
 
@@ -25,6 +25,7 @@ Model lifecycle state comes from each artifact's `.manifest.json`; a filename su
 | Intraday opening V2 | 2026-07-10 non-overlapping, cost-aware experiment | Candidate; promotion rejected | Best exact-path AUC 0.5806, lift 1.1764, selected net return -0.184% per trade, profit factor 0.7076, max drawdown 30.28%. |
 | Intraday V3 R1 | 2026-07-20 grouped XGBoost ranker | Candidate; promotion rejected | Walk-forward/holdout NDCG@10 0.4930/0.5123, but top-10 cost-adjusted excess return is -0.0715%/-0.0764%. |
 | Intraday V3 O1 | 2026-07-21 fixed ticker-catalyst overlay on R1 | Research ablation; rejected | Walk-forward top-10 excess return improves from -0.0574% to -0.0487%, but ticker holdout worsens from -0.0642% to -0.0669%; both paired confidence intervals include zero. |
+| Intraday V4-H1 120m | 2026-07-21 exact-path B0/R1 experiment | Research candidates; rejected | R1 top-10 cost-adjusted excess return is -0.0802%/-0.0629% walk-forward/holdout. The longer horizon does not cover costs. |
 | Older daily/event `*_max.joblib` files | Legacy swing/event families | Baseline/research | These artifacts predate registry manifests and current promotion gates. They are not formally promoted. |
 
 Production API implications:
@@ -34,11 +35,13 @@ Production API implications:
 - Unified mode may return the promoted swing view plus an explicit intraday error until an intraday model passes promotion.
 - Candidate scoring requires an explicit research override and must not be treated as a live trade instruction.
 
-The next valid intraday promotion attempt requires new matured shadow data after 2026-07-08, predeclared model/threshold choices, and all current promotion audits. See [Intraday model promotion](docs/intraday_model_promotion.md).
+The next valid intraday promotion attempt requires a new predeclared development hypothesis that first passes both economic scopes, followed by matured shadow data after 2026-07-08 and all current promotion audits. See [Intraday model promotion](docs/intraday_model_promotion.md).
 
 ML V3 checkpoints C1-C8 are complete with no selected candidate. B0/B1/B2/R1 and the fixed O1 catalyst overlay all have negative cost-adjusted top-10 excess return, while D1 is near-random as a downside gate. R2 is unavailable because every frozen C8 row lacks microstructure inputs; the system does not impute them. O1 is rejected on paired walk-forward and ticker-holdout evidence. C9 shadow evaluation remains closed because there is no candidate to promote or serve.
 
-The post-C8 failure-attribution audit joins all 1,069,740 R1 OOF rows back to the hash-verified development labels without reading shadow data. It finds near-zero cross-sectional rank correlation and an edge too small to cover costs, with no stable positive time/regime/sector/liquidity filter across both scopes. The only consistent structural pattern is improving relative performance at longer horizons. The next frozen development hypothesis is therefore V4-H1: a 120-minute primary target and 120-minute decision stride with the same universe, features, costs, and R1 family. See the [failure-attribution card](docs/model_cards/v3_c8_failure_attribution_20260721.md).
+The post-C8 failure-attribution audit motivated V4-H1: a 120-minute primary target and decision stride with the same universe, features, costs, and R1 family. Its first dataset audit exposed 11,781 rank-eligible rows whose 24 observed bars spanned more than 120 wall-clock minutes. The labeler now requires a contiguous exact five-minute path and persists `ml_v3.labels.v2`; the invalid v1 dataset was never trained.
+
+The corrected V4-H1 fingerprint contains 505,049 physical rows and 495,513 rank-eligible rows over 474 sessions. B0 and R1 remain negative after costs in both development scopes, so V4-H1 is rejected and shadow remains closed. See the [failure-attribution card](docs/model_cards/v3_c8_failure_attribution_20260721.md) and [V4-H1 card](docs/model_cards/v4_h1_120m_20260721.md).
 
 ## Architecture Documents
 
@@ -107,7 +110,7 @@ market-predictor train-v3-models --dataset data/features/v3_training_latest.parq
 market-predictor audit-v3-ranking --predictions data/reports/v3_oof_predictions_latest.parquet --opportunity-family R1 --downside-family D1
 ```
 
-The training command refuses shadow rows, non-SIP volume provenance, future feature availability, cross-session labels, malformed ranking groups, and stale feature schemas. It writes per-family candidate manifests, walk-forward OOF predictions, deterministic ticker-holdout evidence, and a fold feature-coverage audit. One family failure is reported without discarding successful families; the command exits nonzero if any requested family failed.
+The label builder drops any decision whose maximum configured path is not contiguous at the declared bar interval. The training command refuses shadow rows, non-SIP volume provenance, future feature availability, cross-session labels, malformed ranking groups, and stale feature schemas. It writes per-family candidate manifests, walk-forward OOF predictions, deterministic ticker-holdout evidence, and a fold feature-coverage audit. One family failure is reported without discarding successful families; the command exits nonzero if any requested family failed.
 
 `audit-v3-ranking` fits the chosen D1 calibrator on earlier OOF sessions and evaluates top-k economics only on later sessions. It requires calibrated downside probabilities and independent event IDs, and resamples whole sessions for confidence intervals. The calibration method, candidate family, risk threshold, and promotion thresholds must be frozen in C8 before the audit can be used for model selection or shadow evaluation.
 
@@ -128,6 +131,8 @@ market-predictor train-v3-models --dataset data/features/v3_c8_development_20260
 ```
 
 The loader rejects missing, modified, or unregistered monthly shards and carries the dataset fingerprint into training evidence. It projects only required training/audit columns; the trainer compacts features to `float32`, releases fold models, and enforces a configurable process-memory guard. The completed C8 dataset has 1,063,587 rows across 24 months. B0, B1, B2, R1, D1, and the external O1 catalyst overlay were evaluated and rejected; R2 could not be evaluated because the frozen rows contain no microstructure observations. See the [B0](docs/model_cards/v3_c8_b0_20260711.md), [B1](docs/model_cards/v3_c8_b1_20260711.md), [B2](docs/model_cards/v3_c8_b2_20260711.md), [R1](docs/model_cards/v3_c8_r1_20260720.md), [D1](docs/model_cards/v3_c8_d1_20260711.md), and [O1](docs/model_cards/v3_c8_o1_20260721.md) model cards.
+
+V4-H1 was built with `--horizons 6,12,24 --primary-horizon-bars 24 --decision-stride-bars 24`. The corrected v2 dataset fingerprint is `c2906f10b543327cc265798ecd81e019c5365dc9ede3e432b33ba881970cc612`. Its audit verifies all 24 shard hashes, exact 120-minute exits on every row, exact 120-minute eligible decision cadence, SIP provenance, PIT groups, and the development cutoff. B0/R1 training stayed below 1.96 GiB; both candidates were rejected without opening shadow data.
 
 O1 remains outside the estimator. Historical catalyst scoring is resumable and provenance-bound:
 

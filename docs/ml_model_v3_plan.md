@@ -691,15 +691,16 @@ No time, regime, liquidity, volatility, or sector stratum is positive and stable
 
 ### V4-H1 - Fixed longer-horizon hypothesis
 
-Status: frozen for development execution; shadow remains closed.
+Status: completed and rejected on 2026-07-21; shadow remains closed.
 
-- Rebuild labels with a 120-minute (`24` bar) primary ranking horizon.
-- Use a 120-minute (`24` bar) decision stride.
-- Keep the point-in-time universe, feature schema, costs, cutoff, R1 parameters, and top-k unchanged.
-- Run B0 and R1 on identical new decision groups.
-- Require positive cost-adjusted top-10 excess return in walk-forward and ticker holdout before considering a candidate.
-- Do not add month, sector, regime, catalyst, or liquidity filters from the inspected attribution report.
-- Do not open C9 if V4-H1 fails.
+- Primary ranking horizon and decision stride were both fixed at 120 minutes (`24` five-minute bars).
+- The first build was rejected before training because 11,781 rank-eligible rows used 24 observed bars spanning more than 120 wall-clock minutes.
+- Label schema `ml_v3.labels.v2` now requires a contiguous exact path through the maximum configured horizon. No interpolation or shifted exit is allowed.
+- The corrected dataset has 505,049 rows, 495,513 rank-eligible rows, 474 sessions, 24 verified shards, and fingerprint `c2906f10b543327cc265798ecd81e019c5365dc9ede3e432b33ba881970cc612`.
+- B0 top-10 excess return is -0.09191% walk-forward and -0.07904% on ticker holdout.
+- R1 top-10 excess return is -0.08015% walk-forward and -0.06285% on ticker holdout, with NDCG@10 of 0.48677/0.51310.
+- R1 improves B0 by 1.18/1.62 bps, but both session-bootstrap paired confidence intervals include zero.
+- No month, sector, regime, catalyst, or liquidity filter was added. V4-H1 failed its predeclared positive-economics gate, so C9 did not open.
 
 R1 training uses a verified column projection, `float32` feature storage, 64-bin CPU histograms, explicit fold-model release, and a 4 GiB process working-set budget. The completed run recorded a 3.781 GiB peak working set and produced 1,069,740 finite OOF scores under one model run ID.
 

@@ -336,6 +336,7 @@ The repo currently contains several useful families. Their intended roles should
 | Intraday 5-minute technical entry-path model | Estimate target-before-stop probability over 12 bars | Candidate; current API artifact fails AUC/lift promotion gates |
 | Intraday opening V2 models | Non-overlapping, cost-aware 09:30-11:30 ET setup experiments | Candidate artifacts with rejected promotion decision; not production-serving models |
 | ML V3 B0/B1/B2/R1/D1 and O1 overlay | Cross-sectional opportunity ranking, separate downside risk, and external catalyst confirmation | C8 development evaluation complete; all available families/overlays rejected, R2 unavailable without microstructure, and no V3 artifact is production-serving |
+| ML V4-H1 120-minute B0/R1 | Test whether longer exact paths and lower decision turnover cover costs | Development experiment complete and rejected; no artifact is production-serving |
 | Daily market-context models | Daily 1D/5D direction from price, news, sentiment, sector, and SPY context | Baseline or promoted if validation gates pass |
 | Event market-context pre-reaction models | Event-level 1D/5D probability using catalyst features before future reaction is known | Baseline or promoted |
 | Calendar-safe plus-Finviz candidate models | Broader training set with corrected event-to-candle alignment | Candidate until promoted |
@@ -343,7 +344,7 @@ The repo currently contains several useful families. Their intended roles should
 | Finviz-only expansion models | Research models trained on candidate expansion set | Candidate/research only |
 | Older clean/sector/swing models | Earlier iterations | Deprecated unless explicitly revalidated |
 
-### Current Deployment State (2026-07-11)
+### Current Deployment State (2026-07-21)
 
 The manifest, not the filename, is authoritative.
 
@@ -356,6 +357,7 @@ The manifest, not the filename, is authoritative.
 | Intraday opening V2 Extra Trees | `candidate` | ROC AUC 0.5783; lift 1.1442 | Promotion rejected. |
 | Intraday opening V2 logistic baseline | `candidate` | ROC AUC 0.5641; lift 1.1836 | Promotion rejected. |
 | Intraday opening V2 net-positive direction model | `candidate` | ROC AUC 0.4890; lift 0.9162 | Promotion rejected. |
+| Intraday V4-H1 exact 120-minute R1 | `candidate` | NDCG@10 0.4868/0.5131; top-10 excess -0.0802%/-0.0629% | Promotion rejected; shadow not opened. |
 | Legacy daily/event `*_max.joblib` artifacts without manifests | No registry state | Older validation only | Baseline/research, never assume promoted. |
 
 The V2 structural dataset itself is valid for continued research: 47,614 rows, 196 eligible tickers, 122 sessions, exact 09:30-11:25 ET bar timestamps, no duplicate ticker/timestamp keys, and no cooldown gaps below 13 bars. Catalyst context covered 21.44% of rows; market context covered 87.28%. Reddit coverage was zero in this historical V2 table, so Reddit cannot be claimed as a trained intraday signal yet.
@@ -368,7 +370,7 @@ Serving rules:
 - No route may silently substitute a candidate model.
 - Unified responses may be partial and must include explicit per-view errors.
 - Catalyst/news remains an intraday confirmation and ranking overlay until a predeclared ablation on fresh data proves incremental model value.
-- The next intraday promotion trial must use matured observations after 2026-07-08 as an untouched shadow interval.
+- A new intraday hypothesis must first pass both development economics scopes; only then may matured observations after 2026-07-08 be used as an untouched shadow interval.
 
 The data, target, ranking, validation, cleanup, and Git checkpoint sequence for the next model generation is defined in [ML Model V3 Improvement Plan](ml_model_v3_plan.md).
 
@@ -382,7 +384,11 @@ O1 keeps catalyst evidence outside the estimator and applies one fixed ranking a
 
 Historical sentiment inference uses locally cached FinBERT weights and immutable headline plus provider-summary inputs. Scored files carry model, input-mode, and token-limit provenance, and resume only when that tuple matches. Publication-time backfill remains research-only. Optional global context must cover both declared interval boundaries; a stale archive fails readiness instead of becoming zero-valued context.
 
-The development-only R1 failure-attribution audit projects all available 30/60/120-minute and close outcomes from the verified C8 shards, preserves fixed top-10 groups, and reports score deciles plus month/fold/time/regime/sector/liquidity/volatility strata. It never reads shadow data and cannot promote a model. C8 shows near-zero rank correlation, no stable positive filter across both scopes, and an edge that improves with horizon but remains below costs. V4-H1 therefore changes only the primary horizon and decision stride to 120 minutes; C9 remains closed.
+The development-only R1 failure-attribution audit projects all available 30/60/120-minute and close outcomes from the verified C8 shards, preserves fixed top-10 groups, and reports score deciles plus month/fold/time/regime/sector/liquidity/volatility strata. It never reads shadow data and cannot promote a model. C8 shows near-zero rank correlation, no stable positive filter across both scopes, and an edge that improves with horizon but remains below costs.
+
+V4-H1 changed the primary horizon and decision stride to 120 minutes. Its initial audit found that 2.32% of rank-eligible rows counted 24 observed bars across ticker-level candle gaps. The production label contract now rejects such rows and records `ml_v3.labels.v2`; it never fills or re-times bars. The corrected dataset has fingerprint `c2906f10b543327cc265798ecd81e019c5365dc9ede3e432b33ba881970cc612`, 505,049 rows, exact 120-minute exits, and 24 hash-verified shards.
+
+On identical corrected groups, R1 improves B0 but remains negative after costs: -0.08015% walk-forward and -0.06285% ticker holdout. Both paired improvement intervals cross zero. V4-H1 is rejected, no serving manifest is promoted, and C9 remains closed.
 
 Large V3 training reads only verified required columns, compacts selected features to `float32`, trains one deterministic CPU model at a time, and releases each fold model before the next fit. R1 records current and peak process working set and fails closed at a configurable memory guard; the C8 run stayed below its 4 GiB hard budget with a 3.781 GiB measured peak.
 
