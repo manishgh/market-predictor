@@ -681,6 +681,26 @@ O1 evaluates a fixed catalyst overlay outside R1 on the six-month news interval.
 
 R2 is not runnable on C8: all 1,063,587 rows have `microstructure_available = 0`, and spread, quote-imbalance, and average-trade-size inputs are entirely null. Treating missing microstructure as zero would invalidate the ablation. Candidate selection therefore closes with no candidate, and C9 must not open on this dataset.
 
+### Post-C8 failure attribution
+
+Status: completed on 2026-07-21 without opening shadow data.
+
+The diagnostic joins 1,069,740 R1 OOF rows to the hash-verified C8 dataset and preserves the fixed top-10 selection in both scopes. Mean cross-sectional rank correlation is 0.0064 walk-forward and 0.0147 on ticker holdout. The 60-minute top-10 selection improves on the average group by only 0.0300 and 0.0229 percentage points, respectively, leaving cost-adjusted excess return negative.
+
+No time, regime, liquidity, volatility, or sector stratum is positive and stable across both scopes. Positive recent-month rows are inspected diagnostics and cannot become filters. Selected excess return becomes less negative from 30 minutes through close in both scopes, which supports one new development hypothesis rather than a filter search.
+
+### V4-H1 - Fixed longer-horizon hypothesis
+
+Status: frozen for development execution; shadow remains closed.
+
+- Rebuild labels with a 120-minute (`24` bar) primary ranking horizon.
+- Use a 120-minute (`24` bar) decision stride.
+- Keep the point-in-time universe, feature schema, costs, cutoff, R1 parameters, and top-k unchanged.
+- Run B0 and R1 on identical new decision groups.
+- Require positive cost-adjusted top-10 excess return in walk-forward and ticker holdout before considering a candidate.
+- Do not add month, sector, regime, catalyst, or liquidity filters from the inspected attribution report.
+- Do not open C9 if V4-H1 fails.
+
 R1 training uses a verified column projection, `float32` feature storage, 64-bin CPU histograms, explicit fold-model release, and a 4 GiB process working-set budget. The completed run recorded a 3.781 GiB peak working set and produced 1,069,740 finite OOF scores under one model run ID.
 
 Scope:

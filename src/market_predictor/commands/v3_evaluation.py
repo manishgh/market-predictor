@@ -15,7 +15,13 @@ from market_predictor.v3.catalysts import (
     build_o1_overlay_evidence,
     evaluate_o1_ablation,
 )
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.v3.development import load_verified_development_dataset
+from market_predictor.v3.diagnostics import (
+    FAILURE_ATTRIBUTION_DATASET_COLUMNS,
+    FailureAttributionConfig,
+    build_failure_attribution,
+)
+from market_predictor.v3.errors import DataReadinessError, MarketPredictorError
 from market_predictor.v3.evaluation import (
     RankingAuditConfig,
     build_multi_output_evidence,
@@ -25,6 +31,61 @@ from market_predictor.v3.evaluation import (
 
 
 def register_v3_evaluation_commands(app: typer.Typer, console: Console) -> None:
+    @app.command("audit-v3-failure-attribution")
+    def audit_v3_failure_attribution(
+        predictions: Path = typer.Option(..., help="Frozen model OOF prediction parquet."),
+        dataset: Path = typer.Option(..., help="Hash-verified V3 development dataset directory."),
+        family: str = typer.Option("R1", help="Rejected family to diagnose."),
+        top_k: int = typer.Option(10, min=1, help="Fixed selected names per decision group."),
+        bootstrap_iterations: int = typer.Option(1_000, min=100, help="Session-blocked bootstrap iterations."),
+        report_out: Path = typer.Option(
+            Path("data/reports/v3_failure_attribution_latest.json"),
+            help="Compact diagnostic JSON.",
+        ),
+        strata_out: Path = typer.Option(
+            Path("data/reports/v3_failure_attribution_strata_latest.csv"),
+            help="Complete diagnostic strata CSV.",
+        ),
+        selected_out: Path = typer.Option(
+            Path("data/reports/v3_failure_attribution_selected_latest.parquet"),
+            help="Fixed top-k evidence parquet.",
+        ),
+        overwrite: bool = typer.Option(False, help="Explicitly replace diagnostic artifacts."),
+    ) -> None:
+        """Explain a rejected V3 ranker using development evidence only."""
+        for path in (report_out, strata_out, selected_out):
+            if path.exists() and not overwrite:
+                raise typer.BadParameter(f"Output already exists; pass --overwrite to replace it: {path}")
+        try:
+            development, manifest = load_verified_development_dataset(
+                dataset,
+                columns=FAILURE_ATTRIBUTION_DATASET_COLUMNS,
+            )
+            report, strata, selected = build_failure_attribution(
+                _read_predictions(predictions),
+                development,
+                dataset_fingerprint=str(manifest["dataset_fingerprint"]),
+                config=FailureAttributionConfig(
+                    family=family,
+                    top_k=top_k,
+                    bootstrap_iterations=bootstrap_iterations,
+                ),
+            )
+        except MarketPredictorError as exc:
+            raise typer.BadParameter(str(exc)) from exc
+        report_out.parent.mkdir(parents=True, exist_ok=True)
+        strata_out.parent.mkdir(parents=True, exist_ok=True)
+        selected_out.parent.mkdir(parents=True, exist_ok=True)
+        strata.to_csv(strata_out, index=False)
+        selected.to_parquet(selected_out, index=False)
+        report["artifacts"] = {
+            "strata": {"path": str(strata_out), "sha256": file_sha256(strata_out)},
+            "selected": {"path": str(selected_out), "sha256": file_sha256(selected_out)},
+        }
+        report_out.write_text(json.dumps(report, indent=2, sort_keys=True), encoding="utf-8")
+        console.print(f"Wrote failure-attribution audit to {report_out}")
+        console.print(f"Wrote {len(strata)} strata and {len(selected)} fixed top-k rows")
+
     @app.command("audit-v3-o1-overlay")
     def audit_v3_o1_overlay(
         predictions: Path = typer.Option(..., help="Frozen R1 OOF prediction parquet."),

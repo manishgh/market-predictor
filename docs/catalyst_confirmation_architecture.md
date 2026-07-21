@@ -382,6 +382,8 @@ O1 keeps catalyst evidence outside the estimator and applies one fixed ranking a
 
 Historical sentiment inference uses locally cached FinBERT weights and immutable headline plus provider-summary inputs. Scored files carry model, input-mode, and token-limit provenance, and resume only when that tuple matches. Publication-time backfill remains research-only. Optional global context must cover both declared interval boundaries; a stale archive fails readiness instead of becoming zero-valued context.
 
+The development-only R1 failure-attribution audit projects all available 30/60/120-minute and close outcomes from the verified C8 shards, preserves fixed top-10 groups, and reports score deciles plus month/fold/time/regime/sector/liquidity/volatility strata. It never reads shadow data and cannot promote a model. C8 shows near-zero rank correlation, no stable positive filter across both scopes, and an edge that improves with horizon but remains below costs. V4-H1 therefore changes only the primary horizon and decision stride to 120 minutes; C9 remains closed.
+
 Large V3 training reads only verified required columns, compacts selected features to `float32`, trains one deterministic CPU model at a time, and releases each fold model before the next fit. R1 records current and peak process working set and fails closed at a configurable memory guard; the C8 run stayed below its 4 GiB hard budget with a 3.781 GiB measured peak.
 
 ## 11. Audit Report Specification

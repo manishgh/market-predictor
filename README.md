@@ -38,6 +38,8 @@ The next valid intraday promotion attempt requires new matured shadow data after
 
 ML V3 checkpoints C1-C8 are complete with no selected candidate. B0/B1/B2/R1 and the fixed O1 catalyst overlay all have negative cost-adjusted top-10 excess return, while D1 is near-random as a downside gate. R2 is unavailable because every frozen C8 row lacks microstructure inputs; the system does not impute them. O1 is rejected on paired walk-forward and ticker-holdout evidence. C9 shadow evaluation remains closed because there is no candidate to promote or serve.
 
+The post-C8 failure-attribution audit joins all 1,069,740 R1 OOF rows back to the hash-verified development labels without reading shadow data. It finds near-zero cross-sectional rank correlation and an edge too small to cover costs, with no stable positive time/regime/sector/liquidity filter across both scopes. The only consistent structural pattern is improving relative performance at longer horizons. The next frozen development hypothesis is therefore V4-H1: a 120-minute primary target and 120-minute decision stride with the same universe, features, costs, and R1 family. See the [failure-attribution card](docs/model_cards/v3_c8_failure_attribution_20260721.md).
+
 ## Architecture Documents
 
 - [Implementation guide](docs/implementation_guide.md)

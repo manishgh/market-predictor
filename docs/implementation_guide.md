@@ -127,6 +127,8 @@ V3 orchestration is registered through focused modules under `src/market_predict
 
 `score-swing-events` keeps raw provider text unchanged and writes sentiment to a separate per-ticker directory. For catalyst research, `--text-mode title_summary --max-length 128` bounds inference to the immutable headline and provider summary. Every output row carries the FinBERT model, input mode, and token limit; an existing file is resumed only when all provenance fields match. Model inference loads the previously downloaded local cache and does not make hidden network requests.
 
+`audit-v3-failure-attribution` is a development-only diagnostic for a rejected ranker. It loads only registered, hash-verified monthly shards; validates exact OOF-to-label identities; rejects shadow timestamps; and writes fixed top-k horizon, score-decile, and stratum evidence. Its session bootstrap is vectorized over session sums/counts, preserving block-resampling semantics without repeated DataFrame concatenation. The report is explicitly non-promotional and cannot justify filters on the inspected strata.
+
 ### Configuration
 
 `src/market_predictor/config.py`
