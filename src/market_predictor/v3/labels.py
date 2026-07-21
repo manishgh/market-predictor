@@ -12,6 +12,8 @@ from market_predictor.v3.errors import DataReadinessError, SchemaMismatchError
 from market_predictor.v3.partitions import DevelopmentShadowPolicy, assert_development_only
 from market_predictor.v3.schema import ML_V3_SCHEMA_VERSION, FrozenContract
 
+V3_LABEL_SCHEMA_VERSION = "ml_v3.labels.v2"
+
 
 class V3LabelConfig(FrozenContract):
     horizons_bars: tuple[int, ...] = (6, 12, 24)
@@ -28,7 +30,7 @@ class V3LabelConfig(FrozenContract):
     decision_start_minute_et: int = Field(default=9 * 60 + 30, ge=0, le=1_439)
     decision_end_minute_et: int = Field(default=16 * 60, ge=1, le=1_440)
     ambiguous_barrier_policy: Literal["stop", "target"] = "stop"
-    schema_version: str = ML_V3_SCHEMA_VERSION
+    schema_version: str = V3_LABEL_SCHEMA_VERSION
 
     @field_validator("horizons_bars")
     @classmethod
@@ -131,6 +133,13 @@ def _label_session(
         return pd.DataFrame()
     maximum_exit_indices = decision_indices + maximum_horizon
     decision_indices = decision_indices[minute_et[maximum_exit_indices] < config.decision_end_minute_et]
+    if len(decision_indices) == 0:
+        return pd.DataFrame()
+    timestamp_ns = pd.DatetimeIndex(session["timestamp"]).as_unit("ns").asi8
+    maximum_exit_indices = decision_indices + maximum_horizon
+    expected_horizon_ns = maximum_horizon * config.bar_minutes * 60 * 1_000_000_000
+    exact_interval = timestamp_ns[maximum_exit_indices] - timestamp_ns[decision_indices] == expected_horizon_ns
+    decision_indices = decision_indices[exact_interval]
     if len(decision_indices) == 0:
         return pd.DataFrame()
 

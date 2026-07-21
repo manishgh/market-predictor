@@ -66,6 +66,20 @@ class V3LabelTests(unittest.TestCase):
         with self.assertRaises(DataReadinessError):
             build_v3_labels(self.bars, benchmarks, config=self.config)
 
+    def test_ticker_gap_drops_non_exact_horizon(self) -> None:
+        bars = self.bars[~((self.bars["ticker"] == "AAA") & (self.bars["timestamp"] == self.times[1]))].copy()
+
+        labeled = build_v3_labels(bars, self.benchmarks, config=self.config)
+        elapsed = pd.to_datetime(labeled["primary_exit_time_utc"], utc=True) - pd.to_datetime(
+            labeled["decision_time_utc"],
+            utc=True,
+        )
+
+        self.assertTrue(elapsed.eq(pd.Timedelta(minutes=10)).all())
+        self.assertFalse(
+            bool(((labeled["ticker"] == "AAA") & (labeled["decision_time_utc"] == self.times[0])).any())
+        )
+
     def test_label_builder_preserves_frozen_feature_schema(self) -> None:
         bars = self.bars.copy()
         bars["feature_schema_version"] = "ml_v3.features.v1"
