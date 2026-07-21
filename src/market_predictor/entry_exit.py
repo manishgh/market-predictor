@@ -149,7 +149,6 @@ CATALYST_FEATURE_NAMES.update(
         "afterhours_next_day_return_mean",
         "buzz_spike_x_volume_z",
         "sentiment_x_news_attention",
-        "earnings_x_eps_surprise",
         "catalyst_x_volume_z",
         "reaction_x_sentiment",
         "premarket_gap_x_sentiment",

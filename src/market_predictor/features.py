@@ -12,8 +12,6 @@ import pandas as pd
 
 from market_predictor.config import Settings
 from market_predictor.price import fetch_daily_prices, fetch_hourly_prices
-from market_predictor.sources.sec import SecSource
-from market_predictor.sources.seeking_alpha import SeekingAlphaQuantCsvSource
 
 NY_TZ = ZoneInfo("America/New_York")
 MARKET_CLOSE = time(16, 0)
@@ -127,6 +125,7 @@ def add_finbert_with_scorer(
     *,
     batch_size: int = 16,
     text_column: str = "text",
+    scored_at_utc: datetime | pd.Timestamp | None = None,
 ) -> pd.DataFrame:
     if events.empty:
         return events
@@ -135,7 +134,9 @@ def add_finbert_with_scorer(
     scores = scorer.score_texts(events[text_column].astype(str).tolist(), batch_size=batch_size)
     existing_score_cols = [col for col in scores.columns if col in events.columns]
     events = events.drop(columns=existing_score_cols, errors="ignore")
-    return pd.concat([events.reset_index(drop=True), scores.reset_index(drop=True)], axis=1)
+    output = pd.concat([events.reset_index(drop=True), scores.reset_index(drop=True)], axis=1)
+    output["sentiment_scored_at_utc"] = pd.Timestamp(scored_at_utc or datetime.now(UTC))
+    return output
 
 
 def build_daily_dataset(
@@ -144,7 +145,6 @@ def build_daily_dataset(
     settings: Settings,
     *,
     horizon_days: int = 5,
-    seeking_alpha_path: Path | None = None,
     market_context_path: Path | None = None,
     end: datetime | None = None,
 ) -> pd.DataFrame:
@@ -258,65 +258,6 @@ def build_daily_dataset(
             dataset[col] = 0.0
         dataset[col] = dataset[col].fillna(0.0)
     dataset["has_news"] = (dataset["news_count"] > 0).astype(int)
-
-    if seeking_alpha_path:
-        sa = SeekingAlphaQuantCsvSource(seeking_alpha_path).load(ticker)
-        if not sa.empty:
-            sa["date"] = sa["timestamp"].dt.date
-            sa_daily = sa.sort_values("timestamp").drop_duplicates("date", keep="last").drop(columns=["timestamp"])
-            dataset = dataset.merge(sa_daily, on=["date"], how="left")
-            quant_cols = [
-                "quant_rating",
-                "valuation",
-                "growth",
-                "profitability",
-                "momentum",
-                "eps_revision",
-                "eps_actual",
-                "eps_estimate",
-                "revenue_actual",
-                "revenue_estimate",
-                "earnings_date",
-                "fiscal_period",
-            ]
-            for col in quant_cols:
-                if col not in dataset.columns:
-                    dataset[col] = np.nan
-            dataset[quant_cols] = dataset[quant_cols].ffill()
-            for col in [
-                "quant_rating",
-                "valuation",
-                "growth",
-                "profitability",
-                "momentum",
-                "eps_revision",
-            ]:
-                dataset[f"{col}_score"] = dataset[col].map(_rating_to_numeric)
-            dataset["eps_surprise"] = pd.to_numeric(dataset["eps_actual"], errors="coerce") - pd.to_numeric(
-                dataset["eps_estimate"],
-                errors="coerce",
-            )
-            dataset["revenue_surprise"] = pd.to_numeric(dataset["revenue_actual"], errors="coerce") - pd.to_numeric(
-                dataset["revenue_estimate"],
-                errors="coerce",
-            )
-            earnings_dates = pd.to_datetime(dataset["earnings_date"], errors="coerce", utc=True).dt.date
-            dataset["days_to_earnings"] = [
-                (earnings_date - current_date).days if pd.notna(earnings_date) else np.nan
-                for earnings_date, current_date in zip(earnings_dates, dataset["date"], strict=False)
-            ]
-
-    try:
-        sec = SecSource(settings).latest_company_facts(ticker)
-        dataset["sec_eps_diluted_recent"] = sec.eps_diluted_recent
-        dataset["sec_eps_basic_recent"] = sec.eps_basic_recent
-        dataset["sec_revenue_recent"] = sec.revenue_recent
-        dataset["sec_net_income_recent"] = sec.net_income_recent
-    except Exception:
-        dataset["sec_eps_diluted_recent"] = np.nan
-        dataset["sec_eps_basic_recent"] = np.nan
-        dataset["sec_revenue_recent"] = np.nan
-        dataset["sec_net_income_recent"] = np.nan
 
     dataset = add_interaction_features(dataset)
     dataset = dataset.replace([np.inf, -np.inf], np.nan)
@@ -610,19 +551,13 @@ def add_interaction_features(dataset: pd.DataFrame) -> pd.DataFrame:
     sentiment = _feature_series(frame, "sentiment_mean")
     news_count_z = _feature_series(frame, "news_count_z30")
     event_count = _feature_series(frame, "event_count")
-    earnings_count = _feature_series(frame, "event_earnings_count")
-    eps_surprise = _feature_series(frame, "eps_surprise")
     reaction_2h = _feature_series(frame, "event_reaction_2h_mean")
     premarket_gap = _feature_series(frame, "premarket_gap_mean")
-    eps_revision = _feature_series(frame, "eps_revision_score")
-    days_to_earnings = _feature_series(frame, "days_to_earnings", default=np.nan)
     frame["buzz_spike_x_volume_z"] = reddit_velocity * volume_z.clip(lower=0)
     frame["sentiment_x_news_attention"] = sentiment * news_count_z
-    frame["earnings_x_eps_surprise"] = earnings_count * eps_surprise
     frame["catalyst_x_volume_z"] = event_count * volume_z.clip(lower=0)
     frame["reaction_x_sentiment"] = reaction_2h * sentiment
     frame["premarket_gap_x_sentiment"] = premarket_gap * sentiment
-    frame["revision_x_days_to_earnings"] = eps_revision * (1.0 / (1.0 + days_to_earnings.abs()))
     return frame
 
 
@@ -708,46 +643,3 @@ def build_event_reaction_features(
         afterhours_next_open_gap_mean=("afterhours_next_open_gap", "mean"),
         afterhours_next_day_return_mean=("afterhours_next_day_return", "mean"),
     )
-
-
-def _rating_to_numeric(value: object) -> float | None:
-    if value is None or pd.isna(value):
-        return None
-    text = str(value).strip().lower()
-    if not text:
-        return None
-    try:
-        return float(text)
-    except ValueError:
-        pass
-    named = {
-        "strong buy": 5.0,
-        "buy": 4.0,
-        "hold": 3.0,
-        "sell": 2.0,
-        "strong sell": 1.0,
-        "very bullish": 5.0,
-        "bullish": 4.0,
-        "neutral": 3.0,
-        "bearish": 2.0,
-        "very bearish": 1.0,
-    }
-    if text in named:
-        return named[text]
-    letter = text.upper()
-    letter_scores = {
-        "A+": 5.0,
-        "A": 4.8,
-        "A-": 4.6,
-        "B+": 4.2,
-        "B": 4.0,
-        "B-": 3.8,
-        "C+": 3.2,
-        "C": 3.0,
-        "C-": 2.8,
-        "D+": 2.2,
-        "D": 2.0,
-        "D-": 1.8,
-        "F": 1.0,
-    }
-    return letter_scores.get(letter)

@@ -1,0 +1,320 @@
+from __future__ import annotations
+
+from collections.abc import Mapping, Sequence
+
+import numpy as np
+import pandas as pd
+
+from market_predictor.canonical.contracts import CANONICAL_SCHEMA_VERSION
+from market_predictor.v3.errors import DataReadinessError, SchemaMismatchError
+
+DEFAULT_EVENT_WINDOWS: Mapping[str, pd.Timedelta] = {
+    "2h": pd.Timedelta(hours=2),
+    "1d": pd.Timedelta(days=1),
+    "3d": pd.Timedelta(days=3),
+}
+MEMBERSHIP_VALUE_COLUMNS = (
+    "sector",
+    "industry",
+    "market_cap_bucket",
+    "liquidity_bucket",
+    "primary_benchmark",
+    "universe_snapshot_id",
+    "source",
+)
+
+
+def decisions_from_completed_bars(bars: pd.DataFrame) -> pd.DataFrame:
+    """Create decision identities at bar availability, never at the provider's left edge."""
+
+    required = {
+        "ticker",
+        "timeframe",
+        "bar_start_utc",
+        "bar_end_utc",
+        "available_at_utc",
+        "price_feed",
+        "schema_version",
+    }
+    missing = sorted(required.difference(bars.columns))
+    if missing:
+        raise SchemaMismatchError(f"canonical bars missing decision columns: {', '.join(missing)}")
+    output = bars.copy()
+    output["decision_time_utc"] = _utc_series(output["available_at_utc"])
+    output["feature_available_at_utc"] = output["decision_time_utc"]
+    if bool(output["decision_time_utc"].isna().any()):
+        raise DataReadinessError("canonical bars contain invalid availability timestamps")
+    output["decision_group_id"] = output["decision_time_utc"].map(lambda value: value.isoformat())
+    output["session_date_et"] = output["bar_start_utc"].dt.tz_convert("America/New_York").dt.date
+    output["canonical_schema_version"] = CANONICAL_SCHEMA_VERSION
+    return output.sort_values(["decision_time_utc", "ticker"]).reset_index(drop=True)
+
+
+def join_universe_membership(decisions: pd.DataFrame, memberships: pd.DataFrame) -> pd.DataFrame:
+    """Attach the single effective membership snapshot known at each decision."""
+
+    decision_required = {"ticker", "decision_time_utc"}
+    membership_required = {
+        "ticker",
+        "effective_from_utc",
+        "effective_to_utc",
+        "available_at_utc",
+        *MEMBERSHIP_VALUE_COLUMNS,
+    }
+    missing_decisions = sorted(decision_required.difference(decisions.columns))
+    missing_memberships = sorted(membership_required.difference(memberships.columns))
+    if missing_decisions or missing_memberships:
+        raise SchemaMismatchError(
+            f"membership join missing decisions={missing_decisions}, memberships={missing_memberships}"
+        )
+    output = decisions.copy()
+    output["ticker"] = output["ticker"].astype(str).str.upper().str.strip()
+    output["decision_time_utc"] = _utc_series(output["decision_time_utc"])
+    if bool(output["decision_time_utc"].isna().any()):
+        raise DataReadinessError("decision rows contain invalid timestamps")
+    prepared = memberships.copy()
+    prepared["ticker"] = prepared["ticker"].astype(str).str.upper().str.strip()
+    prepared["effective_from_utc"] = _utc_series(prepared["effective_from_utc"])
+    prepared["effective_to_utc"] = _utc_series(prepared["effective_to_utc"])
+    prepared["available_at_utc"] = _utc_series(prepared["available_at_utc"])
+    invalid_required = prepared[["effective_from_utc", "available_at_utc"]].isna().any(axis=1)
+    invalid_end = memberships["effective_to_utc"].notna() & prepared["effective_to_utc"].isna()
+    if bool((invalid_required | invalid_end).any()):
+        raise DataReadinessError("universe memberships contain invalid or timezone-naive timestamps")
+
+    matches = pd.Series(0, index=output.index, dtype="int64")
+    output["membership_effective_from_utc"] = pd.Series(pd.NaT, index=output.index, dtype="datetime64[ns, UTC]")
+    output["membership_effective_to_utc"] = pd.Series(pd.NaT, index=output.index, dtype="datetime64[ns, UTC]")
+    output["membership_available_at_utc"] = pd.Series(pd.NaT, index=output.index, dtype="datetime64[ns, UTC]")
+    for column in MEMBERSHIP_VALUE_COLUMNS:
+        output[column] = pd.NA
+
+    for ticker, membership_part in prepared.groupby("ticker", sort=False):
+        decision_indices = output.index[output["ticker"].eq(ticker)]
+        if decision_indices.empty:
+            continue
+        decision_times = output.loc[decision_indices, "decision_time_utc"]
+        for membership in membership_part.to_dict(orient="records"):
+            eligible = decision_times.ge(membership["effective_from_utc"]) & decision_times.ge(
+                membership["available_at_utc"]
+            )
+            if pd.notna(membership["effective_to_utc"]):
+                eligible &= decision_times.lt(membership["effective_to_utc"])
+            selected = decision_indices[eligible.to_numpy()]
+            if selected.empty:
+                continue
+            matches.loc[selected] += 1
+            output.loc[selected, "membership_effective_from_utc"] = membership["effective_from_utc"]
+            output.loc[selected, "membership_effective_to_utc"] = membership["effective_to_utc"]
+            output.loc[selected, "membership_available_at_utc"] = membership["available_at_utc"]
+            for column in MEMBERSHIP_VALUE_COLUMNS:
+                output.loc[selected, column] = membership[column]
+
+    uncovered = int(matches.eq(0).sum())
+    ambiguous = int(matches.gt(1).sum())
+    if uncovered or ambiguous:
+        raise DataReadinessError(
+            f"point-in-time universe membership failed: uncovered={uncovered}, ambiguous={ambiguous}"
+        )
+    return output.sort_values(["decision_time_utc", "ticker"]).reset_index(drop=True)
+
+
+def aggregate_event_features(
+    decisions: pd.DataFrame,
+    events: pd.DataFrame,
+    *,
+    windows: Mapping[str, pd.Timedelta] = DEFAULT_EVENT_WINDOWS,
+    require_observed: bool = True,
+) -> pd.DataFrame:
+    """Join event counts and sentiment using feature availability, not publication time."""
+
+    decision_required = {"ticker", "decision_time_utc"}
+    event_required = {
+        "ticker",
+        "source_family",
+        "feature_available_at_utc",
+        "availability_policy",
+        "event_id",
+    }
+    missing_decisions = sorted(decision_required.difference(decisions.columns))
+    missing_events = sorted(event_required.difference(events.columns))
+    if missing_decisions or missing_events:
+        raise SchemaMismatchError(f"event join missing decisions={missing_decisions}, events={missing_events}")
+    if require_observed and bool(events["availability_policy"].astype(str).ne("observed").any()):
+        raise DataReadinessError("production event features reject provider publication proxy history")
+    output = decisions.copy()
+    output["ticker"] = output["ticker"].astype(str).str.upper().str.strip()
+    output["decision_time_utc"] = _utc_series(output["decision_time_utc"])
+    if bool(output["decision_time_utc"].isna().any()):
+        raise DataReadinessError("decision rows contain invalid or timezone-naive timestamps")
+    clean = events.copy()
+    clean["ticker"] = clean["ticker"].astype(str).str.upper().str.strip()
+    clean["feature_available_at_utc"] = _utc_series(clean["feature_available_at_utc"])
+    if bool(clean["feature_available_at_utc"].isna().any()):
+        raise DataReadinessError("events contain invalid feature availability timestamps")
+    clean = clean.sort_values(["ticker", "feature_available_at_utc"]).drop_duplicates("event_id", keep="first")
+    clean["sentiment_numeric"] = pd.to_numeric(clean.get("sentiment_numeric"), errors="coerce")
+    clean["relevance"] = pd.to_numeric(clean.get("relevance"), errors="coerce").fillna(1.0).clip(lower=0)
+    source_families = sorted(clean["source_family"].astype(str).str.lower().unique())
+    parts: list[pd.DataFrame] = []
+    for ticker, decision_part in output.groupby("ticker", sort=False):
+        event_part = clean[clean["ticker"] == ticker].sort_values("feature_available_at_utc")
+        parts.append(_aggregate_ticker_events(decision_part, event_part, windows=windows, source_families=source_families))
+    return pd.concat(parts, ignore_index=True).sort_values(["decision_time_utc", "ticker"]).reset_index(drop=True)
+
+
+def join_source_collection_status(
+    decisions: pd.DataFrame,
+    collections: pd.DataFrame,
+    *,
+    source_families: Sequence[str],
+) -> pd.DataFrame:
+    """Attach the latest completed source attempt known at each decision time."""
+
+    required = {"ticker", "source_family", "completed_at_utc", "status", "row_count"}
+    missing = sorted(required.difference(collections.columns))
+    if missing:
+        raise SchemaMismatchError(f"source collections missing columns: {', '.join(missing)}")
+    output = decisions.copy()
+    output["ticker"] = output["ticker"].astype(str).str.upper().str.strip()
+    output["decision_time_utc"] = _utc_series(output["decision_time_utc"])
+    attempts = collections.copy()
+    attempts["ticker"] = attempts["ticker"].astype(str).str.upper().str.strip()
+    attempts["source_family"] = attempts["source_family"].astype(str).str.lower().str.strip()
+    attempts["completed_at_utc"] = _utc_series(attempts["completed_at_utc"])
+    if bool(attempts["completed_at_utc"].isna().any()):
+        raise DataReadinessError("source collections contain invalid completion timestamps")
+    output["source_state_available_at_utc"] = pd.Series(pd.NaT, index=output.index, dtype="datetime64[ns, UTC]")
+    for family in source_families:
+        normalized_family = family.strip().lower()
+        status_column = f"source_status_{normalized_family}"
+        rows_column = f"source_observed_rows_{normalized_family}"
+        available_column = f"source_status_available_at_utc_{normalized_family}"
+        output[status_column] = "not_collected"
+        output[rows_column] = 0
+        output[available_column] = pd.Series(pd.NaT, index=output.index, dtype="datetime64[ns, UTC]")
+        family_attempts = attempts[attempts["source_family"] == normalized_family]
+        for ticker, indices in output.groupby("ticker", sort=False).groups.items():
+            ticker_attempts = family_attempts[family_attempts["ticker"] == ticker].sort_values("completed_at_utc")
+            if ticker_attempts.empty:
+                continue
+            decision_part = output.loc[indices].sort_values("decision_time_utc")
+            joined = pd.merge_asof(
+                decision_part[["decision_time_utc"]],
+                ticker_attempts[["completed_at_utc", "status", "row_count"]],
+                left_on="decision_time_utc",
+                right_on="completed_at_utc",
+                direction="backward",
+                allow_exact_matches=True,
+            )
+            output.loc[decision_part.index, status_column] = joined["status"].fillna("not_collected").to_numpy()
+            output.loc[decision_part.index, rows_column] = joined["row_count"].fillna(0).astype(int).to_numpy()
+            output.loc[decision_part.index, available_column] = joined["completed_at_utc"].array
+    available_columns = [f"source_status_available_at_utc_{family.strip().lower()}" for family in source_families]
+    output["source_state_available_at_utc"] = output[available_columns].max(axis=1)
+    return output
+
+
+def join_fundamentals_asof(
+    decisions: pd.DataFrame,
+    facts: pd.DataFrame,
+    *,
+    metrics: Sequence[str],
+    require_observed: bool = True,
+) -> pd.DataFrame:
+    """Join the latest filed fact version known at each decision without snapshot backfill."""
+
+    required = {"ticker", "metric", "value", "available_at_utc", "availability_policy", "fact_id"}
+    missing = sorted(required.difference(facts.columns))
+    if missing:
+        raise SchemaMismatchError(f"fundamental facts missing columns: {', '.join(missing)}")
+    if require_observed and bool(facts["availability_policy"].astype(str).ne("observed").any()):
+        raise DataReadinessError("production fundamental features reject proxy availability")
+    output = decisions.copy()
+    output["ticker"] = output["ticker"].astype(str).str.upper().str.strip()
+    output["decision_time_utc"] = _utc_series(output["decision_time_utc"])
+    prepared = facts.copy()
+    prepared["ticker"] = prepared["ticker"].astype(str).str.upper().str.strip()
+    prepared["metric"] = prepared["metric"].astype(str).str.lower().str.strip()
+    prepared["available_at_utc"] = _utc_series(prepared["available_at_utc"])
+    prepared = prepared.sort_values("available_at_utc").drop_duplicates("fact_id", keep="last")
+    for metric in metrics:
+        normalized_metric = metric.strip().lower()
+        value_column = f"fundamental_{normalized_metric}"
+        available_column = f"fundamental_available_at_utc_{normalized_metric}"
+        output[value_column] = np.nan
+        output[available_column] = pd.Series(pd.NaT, index=output.index, dtype="datetime64[ns, UTC]")
+        selected = prepared[prepared["metric"] == normalized_metric]
+        for ticker, indices in output.groupby("ticker", sort=False).groups.items():
+            ticker_facts = selected[selected["ticker"] == ticker].sort_values("available_at_utc")
+            if ticker_facts.empty:
+                continue
+            decision_part = output.loc[indices].sort_values("decision_time_utc")
+            joined = pd.merge_asof(
+                decision_part[["decision_time_utc"]],
+                ticker_facts[["available_at_utc", "value"]],
+                left_on="decision_time_utc",
+                right_on="available_at_utc",
+                direction="backward",
+                allow_exact_matches=True,
+            )
+            output.loc[decision_part.index, value_column] = joined["value"].to_numpy()
+            output.loc[decision_part.index, available_column] = joined["available_at_utc"].array
+    return output
+
+
+def _aggregate_ticker_events(
+    decisions: pd.DataFrame,
+    events: pd.DataFrame,
+    *,
+    windows: Mapping[str, pd.Timedelta],
+    source_families: Sequence[str],
+) -> pd.DataFrame:
+    output = decisions.sort_values("decision_time_utc").copy()
+    decision_ns = pd.DatetimeIndex(output["decision_time_utc"]).as_unit("ns").asi8
+    event_ns = pd.DatetimeIndex(events["feature_available_at_utc"]).as_unit("ns").asi8 if not events.empty else np.array([], dtype=np.int64)
+    end = np.searchsorted(event_ns, decision_ns, side="right")
+    sentiment = events["sentiment_numeric"].fillna(0.0).to_numpy(dtype=float)
+    sentiment_present = events["sentiment_numeric"].notna().to_numpy(dtype=float)
+    relevance = events["relevance"].to_numpy(dtype=float)
+    for name, window in windows.items():
+        start = np.searchsorted(event_ns, decision_ns - int(window.value), side="left")
+        count = end - start
+        output[f"event_count_{name}"] = count
+        weighted = _window_sum(sentiment * relevance, start, end)
+        weight = _window_sum(relevance * sentiment_present, start, end)
+        output[f"sentiment_mean_{name}"] = np.divide(weighted, weight, out=np.zeros(len(output)), where=weight > 0)
+        output[f"sentiment_coverage_{name}"] = np.divide(
+            _window_sum(sentiment_present, start, end),
+            count,
+            out=np.zeros(len(output)),
+            where=count > 0,
+        )
+        for family in source_families:
+            mask = events["source_family"].astype(str).str.lower().eq(family).to_numpy(dtype=float)
+            output[f"source_count_{family}_{name}"] = _window_sum(mask, start, end)
+    latest = end - 1
+    has_latest = latest >= 0
+    values = np.full(len(output), np.datetime64("NaT"), dtype="datetime64[ns]")
+    if has_latest.any():
+        values[has_latest] = events["feature_available_at_utc"].to_numpy(dtype="datetime64[ns]")[latest[has_latest]]
+    output["latest_event_feature_available_at_utc"] = pd.to_datetime(values, utc=True)
+    return output
+
+
+def _window_sum(values: np.ndarray, start: np.ndarray, end: np.ndarray) -> np.ndarray:
+    cumulative = np.concatenate(([0.0], np.cumsum(values, dtype=float)))
+    return np.asarray(cumulative[end] - cumulative[start], dtype=float)
+
+
+def _utc_series(values: pd.Series) -> pd.Series:
+    def parse(value: object) -> pd.Timestamp:
+        try:
+            timestamp = pd.Timestamp(value)
+        except (TypeError, ValueError):
+            return pd.NaT
+        if pd.isna(timestamp) or timestamp.tzinfo is None:
+            return pd.NaT
+        return timestamp.tz_convert("UTC")
+
+    return pd.to_datetime(values.map(parse), utc=True)

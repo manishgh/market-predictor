@@ -3,11 +3,12 @@ from __future__ import annotations
 import json
 import re
 import time as time_module
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import UTC, date, datetime, time, timedelta
 from pathlib import Path
 from urllib.parse import urlsplit, urlunsplit
+from uuid import uuid4
 
 import pandas as pd
 import requests
@@ -15,6 +16,8 @@ import typer
 from rich.console import Console
 
 from market_predictor.azure_store import AzureBlobStore
+from market_predictor.canonical.contracts import SourceCollection
+from market_predictor.commands.canonical_data import register_canonical_data_commands
 from market_predictor.commands.ranking import register_ranking_commands
 from market_predictor.commands.v3_data import register_v3_data_commands
 from market_predictor.commands.v3_evaluation import register_v3_evaluation_commands
@@ -62,6 +65,7 @@ from market_predictor.registry import (
     promote_model_manifest,
     verify_model_artifact,
 )
+from market_predictor.schemas import NewsEvent
 from market_predictor.sources import AlpacaSource, FinvizSource, GdeltSource, RedditSource, SeekingAlphaRapidApiSource
 from market_predictor.sources.gdelt import DEFAULT_GDELT_CONTEXT_QUERIES
 from market_predictor.sources.sec import SecSource
@@ -77,6 +81,7 @@ app = typer.Typer(help="Build and serve audited swing and intraday market predic
 console = Console()
 DEFAULT_MARKET_CONTEXT_PATH = Path("data/external/market_context/market_context_events_scored.parquet")
 register_ranking_commands(app, console)
+register_canonical_data_commands(app, console)
 register_v3_data_commands(app, console)
 register_v3_feature_commands(app, console)
 register_v3_evaluation_commands(app, console)
@@ -186,52 +191,164 @@ def collect_events_for_ticker(
     no_seeking_alpha: bool = False,
     no_sec: bool = False,
     score: bool = True,
-) -> tuple[pd.DataFrame, list[str]]:
+) -> tuple[pd.DataFrame, pd.DataFrame, list[str]]:
     settings = get_settings()
     end = end or datetime.now(UTC)
     start = end - timedelta(days=days)
     events: list[dict[str, object]] = []
+    collections: list[dict[str, object]] = []
     errors: list[str] = []
 
+    def record_collection(
+        source_family: str,
+        *,
+        started_at: datetime,
+        completed_at: datetime,
+        status: str,
+        row_count: int = 0,
+        error_type: str | None = None,
+    ) -> None:
+        collection = SourceCollection(
+            collection_id=f"{ticker.upper()}-{source_family}-{uuid4().hex}",
+            ticker=ticker,
+            source_family=source_family,
+            requested_start_utc=start,
+            requested_end_utc=end,
+            started_at_utc=started_at,
+            completed_at_utc=completed_at,
+            status=status,
+            row_count=row_count,
+            error_type=error_type,
+        )
+        collections.append(collection.model_dump())
+
+    def append_events(fetched: Sequence[NewsEvent], *, ingested_at: datetime) -> None:
+        for event in fetched:
+            record = event.to_record()
+            record["ingested_at_utc"] = ingested_at
+            record["availability_policy"] = "observed"
+            events.append(record)
+
     if settings.has_alpaca:
+        started_at = datetime.now(UTC)
         try:
             console.print(f"{ticker}: collecting Alpaca premium news...")
-            events.extend(event.to_record() for event in AlpacaSource(settings).fetch_news(ticker, start, end=end, limit=50))
+            fetched = AlpacaSource(settings).fetch_news(ticker, start, end=end, limit=50)
+            completed_at = datetime.now(UTC)
+            append_events(fetched, ingested_at=completed_at)
+            record_collection(
+                "alpaca",
+                started_at=started_at,
+                completed_at=completed_at,
+                status="observed" if fetched else "observed_empty",
+                row_count=len(fetched),
+            )
         except Exception as exc:
+            record_collection(
+                "alpaca",
+                started_at=started_at,
+                completed_at=datetime.now(UTC),
+                status="failed",
+                error_type=type(exc).__name__,
+            )
             errors.append(f"alpaca:{exc}")
             console.print(f"[yellow]{ticker}: Alpaca collection failed: {exc}[/yellow]")
     else:
+        now = datetime.now(UTC)
+        record_collection("alpaca", started_at=now, completed_at=now, status="disabled")
         console.print(f"[yellow]{ticker}: skipping Alpaca because keys are not configured.[/yellow]")
 
     if not no_reddit and settings.has_reddit:
+        started_at = datetime.now(UTC)
         try:
             console.print(f"{ticker}: collecting Reddit mentions and comments...")
-            events.extend(event.to_record() for event in RedditSource(settings).fetch_mentions(ticker, start))
+            fetched = RedditSource(settings).fetch_mentions(ticker, start)
+            completed_at = datetime.now(UTC)
+            append_events(fetched, ingested_at=completed_at)
+            record_collection(
+                "reddit",
+                started_at=started_at,
+                completed_at=completed_at,
+                status="observed" if fetched else "observed_empty",
+                row_count=len(fetched),
+            )
         except Exception as exc:
+            record_collection(
+                "reddit",
+                started_at=started_at,
+                completed_at=datetime.now(UTC),
+                status="failed",
+                error_type=type(exc).__name__,
+            )
             errors.append(f"reddit:{exc}")
             console.print(f"[yellow]{ticker}: Reddit collection failed: {exc}[/yellow]")
-    elif not no_reddit:
-        console.print(f"[yellow]{ticker}: skipping Reddit because credentials are not configured.[/yellow]")
+    else:
+        now = datetime.now(UTC)
+        record_collection("reddit", started_at=now, completed_at=now, status="disabled")
+        if not no_reddit:
+            console.print(f"[yellow]{ticker}: skipping Reddit because credentials are not configured.[/yellow]")
 
     if not no_finviz:
+        started_at = datetime.now(UTC)
         try:
             console.print(f"{ticker}: collecting Finviz ticker news...")
-            events.extend(event.to_record() for event in FinvizSource().fetch_news(ticker, start, end=end, limit=100))
+            fetched = FinvizSource().fetch_news(ticker, start, end=end, limit=100)
+            completed_at = datetime.now(UTC)
+            append_events(fetched, ingested_at=completed_at)
+            record_collection(
+                "finviz",
+                started_at=started_at,
+                completed_at=completed_at,
+                status="observed" if fetched else "observed_empty",
+                row_count=len(fetched),
+            )
         except Exception as exc:
+            record_collection(
+                "finviz",
+                started_at=started_at,
+                completed_at=datetime.now(UTC),
+                status="failed",
+                error_type=type(exc).__name__,
+            )
             errors.append(f"finviz:{exc}")
             console.print(f"[yellow]{ticker}: Finviz news collection failed: {exc}[/yellow]")
+    else:
+        now = datetime.now(UTC)
+        record_collection("finviz", started_at=now, completed_at=now, status="disabled")
 
     if not no_seeking_alpha and settings.has_seeking_alpha_rapidapi:
+        started_at = datetime.now(UTC)
         try:
             console.print(f"{ticker}: collecting Seeking Alpha news/analysis via RapidAPI...")
             sa_events, sa_errors = SeekingAlphaRapidApiSource(settings).fetch_events_with_errors(ticker, start)
-            events.extend(event.to_record() for event in sa_events)
+            completed_at = datetime.now(UTC)
+            append_events(sa_events, ingested_at=completed_at)
+            status = "partial" if sa_errors and sa_events else "failed" if sa_errors else "observed" if sa_events else "observed_empty"
+            record_collection(
+                "seeking_alpha",
+                started_at=started_at,
+                completed_at=completed_at,
+                status=status,
+                row_count=len(sa_events),
+                error_type="ProviderFeedError" if sa_errors else None,
+            )
             errors.extend(f"seeking_alpha:{error}" for error in sa_errors)
         except Exception as exc:
+            record_collection(
+                "seeking_alpha",
+                started_at=started_at,
+                completed_at=datetime.now(UTC),
+                status="failed",
+                error_type=type(exc).__name__,
+            )
             errors.append(f"seeking_alpha:{exc}")
             console.print(f"[yellow]{ticker}: Seeking Alpha collection failed: {exc}[/yellow]")
+    else:
+        now = datetime.now(UTC)
+        record_collection("seeking_alpha", started_at=now, completed_at=now, status="disabled")
 
     if not no_sec:
+        started_at = datetime.now(UTC)
         try:
             console.print(f"{ticker}: collecting SEC filing events...")
             sec_forms = {
@@ -248,10 +365,29 @@ def collect_events_for_ticker(
                 "SC 13D",
                 "4",
             }
-            events.extend(event.to_record() for event in SecSource(settings).fetch_filings(ticker, start, end=end, forms=sec_forms))
+            fetched = SecSource(settings).fetch_filings(ticker, start, end=end, forms=sec_forms)
+            completed_at = datetime.now(UTC)
+            append_events(fetched, ingested_at=completed_at)
+            record_collection(
+                "sec",
+                started_at=started_at,
+                completed_at=completed_at,
+                status="observed" if fetched else "observed_empty",
+                row_count=len(fetched),
+            )
         except Exception as exc:
+            record_collection(
+                "sec",
+                started_at=started_at,
+                completed_at=datetime.now(UTC),
+                status="failed",
+                error_type=type(exc).__name__,
+            )
             errors.append(f"sec:{exc}")
             console.print(f"[yellow]{ticker}: SEC filing collection failed: {exc}[/yellow]")
+    else:
+        now = datetime.now(UTC)
+        record_collection("sec", started_at=now, completed_at=now, status="disabled")
 
     frame = events_to_frame(events)
     frame = _filter_events_until(frame, end)
@@ -269,7 +405,7 @@ def collect_events_for_ticker(
         errors.append(f"sanitize:removed_duplicates={report.duplicate_rows_removed}")
     if report.future_timestamp_rows:
         errors.append(f"sanitize:removed_future_timestamps={report.future_timestamp_rows}")
-    return frame, errors
+    return frame, pd.DataFrame(collections), errors
 
 
 def collect_events_frame(
@@ -280,7 +416,7 @@ def collect_events_frame(
     no_reddit: bool = False,
     score: bool = True,
 ) -> pd.DataFrame:
-    frame, _ = collect_events_for_ticker(ticker, days, end=end, no_reddit=no_reddit, score=score)
+    frame, _, _ = collect_events_for_ticker(ticker, days, end=end, no_reddit=no_reddit, score=score)
     return frame
 
 
@@ -406,7 +542,7 @@ def collect(
 ) -> None:
     """Collect raw events for a ticker and score them with FinBERT."""
     end = _parse_end_date(end_date)
-    frame, _ = collect_events_for_ticker(
+    frame, collections, _ = collect_events_for_ticker(
         ticker,
         days,
         end=end,
@@ -420,8 +556,11 @@ def collect(
     frame, report = sanitize_events_frame(frame)
     out.parent.mkdir(parents=True, exist_ok=True)
     frame.to_parquet(out, index=False)
+    collection_path = out.with_name(f"{out.stem}_source_collections.parquet")
+    collections.to_parquet(collection_path, index=False)
     console.print({"verification": report.to_record()})
     console.print(f"Wrote {len(frame)} events to {out}")
+    console.print(f"Wrote {len(collections)} source collection records to {collection_path}")
 
 
 @app.command("swing-universe")
@@ -708,7 +847,7 @@ def collect_swing(
 
     def run_symbol(symbol: str) -> dict[str, object]:
         try:
-            frame, errors = collect_events_for_ticker(
+            frame, collections, errors = collect_events_for_ticker(
                 symbol,
                 days,
                 end=end,
@@ -719,12 +858,15 @@ def collect_swing(
                 score=score,
             )
             path = out_dir / f"{symbol}_events.parquet"
+            collection_path = out_dir / f"{symbol}_source_collections.parquet"
             frame.to_parquet(path, index=False)
+            collections.to_parquet(collection_path, index=False)
             _, verify = sanitize_events_frame(frame)
             return {
                 "ticker": symbol,
                 "events": len(frame),
                 "path": str(path),
+                "source_collections_path": str(collection_path),
                 "errors": " | ".join(errors),
                 "sources": verify.sources,
             }
@@ -742,6 +884,13 @@ def collect_swing(
             else:
                 console.print(f"{symbol}: wrote {record['events']} events to {record['path']}")
     pd.DataFrame(summary).to_csv(out_dir / "_collection_summary.csv", index=False)
+    collection_frames = [
+        pd.read_parquet(Path(str(record["source_collections_path"])))
+        for record in summary
+        if record.get("source_collections_path")
+    ]
+    if collection_frames:
+        pd.concat(collection_frames, ignore_index=True).to_parquet(out_dir / "_source_collections.parquet", index=False)
 
 
 @app.command("verify-events")
@@ -1005,7 +1154,6 @@ def build_swing_datasets(
     out_dir: Path = typer.Option(Path("data/features/swing"), help="Directory for per-ticker datasets."),
     horizon_days: int = typer.Option(1, help="Forward trading-day target horizon."),
     end_date: str | None = typer.Option(None, help="Inclusive UTC end date as YYYY-MM-DD for price/features."),
-    with_seeking_alpha: bool = typer.Option(True, help="Fetch/cache Seeking Alpha quant snapshots when configured."),
     workers: int | None = typer.Option(None, help="Parallel dataset build workers. Defaults to config performance.max_workers."),
 ) -> None:
     """Build daily feature/label datasets for the swing universe."""
@@ -1022,18 +1170,11 @@ def build_swing_datasets(
         if not events_path.exists():
             return {"ticker": symbol, "rows": 0, "error": f"missing {events_path}"}
         try:
-            sa_path = None
-            if with_seeking_alpha and settings.has_seeking_alpha_rapidapi:
-                try:
-                    sa_path = write_seeking_alpha_snapshot(symbol, out_dir / f"{symbol}_seeking_alpha_quant.csv")
-                except Exception as exc:
-                    console.print(f"[yellow]{symbol}: Seeking Alpha snapshot failed; building without quant: {exc}[/yellow]")
             dataset = build_daily_dataset(
                 symbol,
                 events_path,
                 settings,
                 horizon_days=horizon_days,
-                seeking_alpha_path=sa_path,
                 market_context_path=DEFAULT_MARKET_CONTEXT_PATH,
                 end=end,
             )

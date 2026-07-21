@@ -4,7 +4,7 @@ This document explains how `market-predictor` is designed, which files own each 
 
 ## Design Goals
 
-- Predict swing behavior, not intraday execution.
+- Predict swing behavior and intraday setups, not trade execution.
 - Learn from event timing: pre-market, regular-hours, after-hours, and post-event price reaction.
 - Keep API download, sentiment scoring, feature building, model training, and prediction as separate stages.
 - Isolate failures by ticker and source. One failed ticker, Reddit request, or Seeking Alpha endpoint should not stop the rest of the run.
@@ -28,9 +28,10 @@ For training:
 
 ```text
 historical events and bars
-  -> verify event timestamps and ticker relevance
+  -> canonicalize bar intervals, availability, source attempts, and universe membership
+  -> verify event timestamps, first-seen time, scoring time, and ticker relevance
   -> score sentiment
-  -> build market-wide context from SPY/sector/ETF proxy event streams
+  -> perform strict as-of joins to observed market/sector/event/fundamental context
   -> build event-level rows
   -> align prior price context and future labels
   -> train with purged walk-forward validation
@@ -83,6 +84,20 @@ market-predictor verify-swing --raw-dir data/raw/swing --rewrite
 market-predictor score-swing-events --raw-dir data/raw/swing --out-dir data/raw/swing_scored
 ```
 
+Canonical data publication and decision build:
+
+```powershell
+market-predictor canonicalize-bars --input-path data/raw/bars.parquet --out data/canonical/bars.parquet --timeframe 5m --price-feed sip
+market-predictor canonicalize-event-directory --input-dir data/raw/swing_scored --out data/canonical/events.parquet
+market-predictor canonicalize-source-collections --input-path data/raw/swing/_source_collections.parquet --out data/canonical/source_collections.parquet
+market-predictor canonicalize-memberships --input-path data/raw/universe_memberships.parquet --out data/canonical/memberships.parquet
+market-predictor build-canonical-decisions --bars data/canonical/bars.parquet --events data/canonical/events.parquet --source-collections data/canonical/source_collections.parquet --memberships data/canonical/memberships.parquet --out data/canonical/decisions.parquet
+```
+
+Each canonical output has a sidecar manifest containing its SHA-256, input hashes, row/column identity, availability range, audit evidence, and production-readiness state. A consumer verifies the manifest and hash before reading the table. Production decisions fail when any required source was not successfully observed by that decision, when membership is unknown or ambiguous, when volume is not SIP, or when a joined feature is from the future.
+
+Historical provider backfills normally know publication time but not when this system first observed the item. Such events are publication-time proxies and are research-only. They must not be relabeled as observed history. The same rule applies to SEC and Seeking Alpha current snapshots: only versioned facts with explicit availability can enter historical production features.
+
 Azure artifact publishing:
 
 ```powershell
@@ -112,6 +127,10 @@ Key command groups:
 - Training/scoring: `train-volatile-model`, `train-entry-exit-model`, V3 training/evaluation, and manifest-verified research scorers.
 - Serving: `publish-live-features` and `serve-api`.
 - Azure: `export-ohlcv-artifacts`, `azure-upload-artifacts`, `azure-publish-models`.
+
+Canonical orchestration is registered by `src/market_predictor/commands/canonical_data.py`. `src/market_predictor/canonical/contracts.py` owns immutable schemas; `normalize.py` converts provider timestamps and provenance; `joins.py` performs strict as-of event, source, membership, and fundamental joins; `audits.py` implements fail-closed readiness; and `store.py` publishes hash-verified artifacts with manifests written last.
+
+`build-swing-datasets` remains a research builder while C4 replaces swing feature engineering on the canonical decision table. It no longer fetches or forward-fills a current Seeking Alpha quant snapshot and no longer copies latest SEC company facts into historical rows.
 
 V3 orchestration is registered through focused modules under `src/market_predictor/commands/`: `v3_data.py`, `v3_features.py`, `v3_labels.py`, `v3_models.py`, and `v3_evaluation.py`. The corresponding implementation under `src/market_predictor/v3/` owns strict contracts, immutable development/shadow partitioning, exact labels, batch/live feature parity, session-purged validation, deterministic ticker holdout, B0/B1/B2/R1/D1 candidate training, disjoint calibration, and session-blocked ranking economics. Label schema `ml_v3.labels.v2` requires the maximum configured path to be contiguous at `bar_minutes`; decisions spanning a missing ticker candle are dropped rather than interpolated or shifted. These candidates and audit calibrators are research artifacts and are not connected to the promoted serving registry until later promotion checkpoints pass.
 

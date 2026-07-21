@@ -45,6 +45,7 @@ The corrected V4-H1 fingerprint contains 505,049 physical rows and 495,513 rank-
 ## Architecture Documents
 
 - [Implementation guide](docs/implementation_guide.md)
+- [Production ML rebuild plan](docs/production_ml_rebuild_plan.md)
 - [Azure deployment plan](docs/azure_deployment_plan.md)
 - [Market prediction intelligence architecture](docs/catalyst_confirmation_architecture.md)
 - [Intraday model promotion](docs/intraday_model_promotion.md)
@@ -360,7 +361,7 @@ Stage separation:
 
 - `collect-swing`: API/data download only by default. Alpaca, Finviz, Reddit, Seeking Alpha, and SEC failures are isolated per source and per ticker. Uses parallel workers for I/O. Seeking Alpha is enabled by default when RapidAPI credentials are configured; use `--no-seeking-alpha` only for an explicit quota outage or diagnostic run.
 - `score-swing-events`: FinBERT scoring only. Loads the model once, uses GPU if PyTorch detects CUDA, records inference provenance, then writes per-ticker files.
-- `build-swing-datasets`: daily/hourly price joins, event reaction features, technical features, and labels. Uses parallel workers per ticker.
+- `build-swing-datasets`: research-only daily/hourly joins, event reaction features, technical features, and labels. It never injects current Seeking Alpha or SEC snapshots into historical rows. Production training uses the canonical point-in-time path below.
 
 Performance knobs live in `configs/default.toml`:
 
@@ -375,7 +376,7 @@ Override workers per command:
 ```powershell
 market-predictor collect-swing --days 180 --workers 8
 market-predictor score-swing-events --batch-size 64
-market-predictor build-swing-datasets --horizon-days 1 --workers 8 --no-with-seeking-alpha
+market-predictor build-swing-datasets --horizon-days 1 --workers 8
 ```
 
 The engine separates event timing buckets:
@@ -390,7 +391,30 @@ Hourly reaction features require Alpaca bars. If hourly bars are unavailable, th
 
 The former four-model watchlist average, heuristic watch/behavior commands, event/daily baseline trainers, `live-once`, `live-run`, and accuracy-only `live-train-event` path were removed. They mixed incompatible horizons, accepted unregistered artifacts, and could republish research features as live data. The API is the only operational prediction surface; research scorers require a registered, hash-matching candidate or promoted model.
 
-There is intentionally no automatic live swing publisher until the canonical point-in-time data pipeline is complete. `/v1/health/ready` remains HTTP 503 when the audited live snapshot is absent.
+The canonical point-in-time data boundary is implemented, but automatic model-specific swing and intraday feature publication remains disabled until the C4/C5 rebuilds consume it. `/v1/health/ready` remains HTTP 503 when the audited live snapshot is absent.
+
+## Canonical Point-In-Time Data
+
+Production model inputs are immutable, hash-verified Parquet artifacts. The normal path is:
+
+```powershell
+market-predictor canonicalize-bars --input-path data/raw/bars.parquet --out data/canonical/bars.parquet --timeframe 5m --price-feed sip
+market-predictor canonicalize-event-directory --input-dir data/raw/swing_scored --out data/canonical/events.parquet
+market-predictor canonicalize-source-collections --input-path data/raw/swing/_source_collections.parquet --out data/canonical/source_collections.parquet
+market-predictor canonicalize-memberships --input-path data/raw/universe_memberships.parquet --out data/canonical/memberships.parquet
+market-predictor build-canonical-decisions --bars data/canonical/bars.parquet --events data/canonical/events.parquet --source-collections data/canonical/source_collections.parquet --memberships data/canonical/memberships.parquet --out data/canonical/decisions.parquet
+```
+
+Canonical guarantees:
+
+- Alpaca bar timestamps are treated as interval starts. A five-minute bar is unavailable until its interval ends plus the configured finalization delay; daily bars use the actual XNYS close, including early closes.
+- Event features use `feature_available_at_utc`, which includes provider updates, first observation, and FinBERT scoring time.
+- Every required source is `observed` or `observed_empty` by each production decision. `failed`, `partial`, `disabled`, and `not_collected` are distinct and fail readiness.
+- Universe sector, industry, market-cap bucket, liquidity bucket, and benchmark are joined only from an effective membership snapshot already available at the decision time.
+- SEC/quant facts are joined by versioned availability. A current snapshot is never copied backward over historical rows.
+- SIP is mandatory for production volume features. IEX and unknown feed provenance fail the production bar audit.
+
+A historical news pull performed today does not recreate historical first-seen time. Publication-time proxy backfills must be marked `--research`; they cannot be loaded by a production decision build. This permits controlled research while preventing the same artifact from being presented as live-valid evidence.
 
 Market Predictor has no runtime alert commands or alert persistence. Alert evaluation, deduplication, acknowledgement, and web/mobile delivery belong to `trading_flow`. The removed rule behavior is preserved in [Legacy alert rule parity](docs/legacy_alert_rule_parity.md). Do not build new alert behavior in this repository.
 

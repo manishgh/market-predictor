@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
 import hashlib
 import json
-from pathlib import Path
 import re
-from typing import Any
+from collections.abc import Iterator
+from datetime import UTC, datetime, timedelta
+from pathlib import Path
+from typing import Any, cast
 from urllib.parse import parse_qsl
 
 import pandas as pd
@@ -14,96 +15,6 @@ from market_predictor.config import Settings
 from market_predictor.quota import MonthlyQuotaTracker, QuotaStatus
 from market_predictor.schemas import NewsEvent
 from market_predictor.sources.http import HttpClient
-
-
-class SeekingAlphaQuantCsvSource:
-    expected_columns = {
-        "timestamp",
-        "ticker",
-        "quant_rating",
-        "valuation",
-        "growth",
-        "profitability",
-        "momentum",
-        "eps_revision",
-        "eps_actual",
-        "eps_estimate",
-    }
-
-    def __init__(self, path: str | Path) -> None:
-        self.path = Path(path)
-
-    def load(self, ticker: str) -> pd.DataFrame:
-        if not self.path.exists():
-            return pd.DataFrame(columns=sorted(self.expected_columns))
-        frame = pd.read_csv(self.path)
-        if "timestamp" not in frame.columns:
-            frame["timestamp"] = pd.NaT
-        if "ticker" not in frame.columns:
-            frame["ticker"] = ticker.upper()
-        frame = self._add_compatibility_columns(frame, ticker)
-        frame["timestamp"] = pd.to_datetime(frame["timestamp"], utc=True)
-        keep = sorted(
-            self.expected_columns
-            | {
-                "revenue_actual",
-                "revenue_estimate",
-                "earnings_date",
-                "fiscal_period",
-            }
-        )
-        return frame.loc[frame["ticker"].str.upper() == ticker.upper(), keep].sort_values("timestamp")
-
-    @classmethod
-    def _add_compatibility_columns(cls, frame: pd.DataFrame, ticker: str) -> pd.DataFrame:
-        """Keep newer wide RapidAPI snapshots compatible with legacy quant features.
-
-        The expanded Seeking Alpha pull intentionally preserves many raw endpoint fields.
-        Older model features only consume a small canonical subset, so missing values are
-        filled rather than failing the whole ticker build.
-        """
-        frame = frame.copy()
-        frame["ticker"] = frame["ticker"].fillna(ticker.upper()).astype(str).str.upper()
-
-        if "eps_actual" not in frame.columns:
-            frame["eps_actual"] = cls._first_existing(
-                frame,
-                [
-                    "profile_eps",
-                    f"estimated_earnings_{ticker.upper()}_eps_actual",
-                    f"estimated_earnings_{ticker}_eps_actual",
-                ],
-            )
-        if "eps_estimate" not in frame.columns:
-            frame["eps_estimate"] = cls._first_existing(
-                frame,
-                [
-                    "profile_estimateEps",
-                    "profile_data_first_attributes_estimateEps",
-                    f"estimated_earnings_{ticker.upper()}_eps_estimate",
-                    f"estimated_earnings_{ticker}_eps_estimate",
-                ],
-            )
-        if "earnings_date" not in frame.columns:
-            frame["earnings_date"] = cls._first_existing(
-                frame,
-                [
-                    f"estimated_earnings_{ticker.upper()}_release_date",
-                    f"estimated_earnings_{ticker}_release_date",
-                ],
-            )
-
-        for column in cls.expected_columns | {"revenue_actual", "revenue_estimate", "earnings_date", "fiscal_period"}:
-            if column not in frame.columns:
-                frame[column] = pd.NA
-        return frame
-
-    @staticmethod
-    def _first_existing(frame: pd.DataFrame, columns: list[str]) -> pd.Series:
-        for column in columns:
-            if column in frame.columns:
-                return frame[column]
-        return pd.Series([pd.NA] * len(frame), index=frame.index)
 
 
 class SeekingAlphaRapidApiSource:
@@ -197,7 +108,8 @@ class SeekingAlphaRapidApiSource:
         tag_symbols = self._tag_symbol_map(payload)
         for item in self._iter_event_items(payload):
             title = self._pick(item, ["title", "headline"])
-            nested = item.get("attributes") if isinstance(item.get("attributes"), dict) else {}
+            raw_nested = item.get("attributes")
+            nested = cast(dict[str, Any], raw_nested) if isinstance(raw_nested, dict) else {}
             if not title and nested:
                 title = self._pick(nested, ["title", "headline"])
             if not title:
@@ -208,7 +120,7 @@ class SeekingAlphaRapidApiSource:
             )
             if timestamp is None:
                 continue
-            if timestamp < start.astimezone(timezone.utc):
+            if timestamp < start.astimezone(UTC):
                 continue
             summary = self._pick(item, ["summary", "commentary"]) or self._pick(nested, ["summary", "commentary"])
             item_symbols = self._item_symbols(item, tag_symbols)
@@ -233,7 +145,7 @@ class SeekingAlphaRapidApiSource:
 
     def fetch_quant_snapshot(self, ticker: str) -> dict[str, Any]:
         snapshot = {
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
             "ticker": ticker.upper(),
         }
         template_values: dict[str, str] = {}
@@ -339,8 +251,8 @@ class SeekingAlphaRapidApiSource:
     def _read_cache(path: Path, cache_hours: int) -> Any | None:
         if cache_hours <= 0 or not path.exists():
             return None
-        modified = datetime.fromtimestamp(path.stat().st_mtime, tz=timezone.utc)
-        if datetime.now(timezone.utc) - modified > timedelta(hours=cache_hours):
+        modified = datetime.fromtimestamp(path.stat().st_mtime, tz=UTC)
+        if datetime.now(UTC) - modified > timedelta(hours=cache_hours):
             return None
         return json.loads(path.read_text(encoding="utf-8"))
 
@@ -362,7 +274,7 @@ class SeekingAlphaRapidApiSource:
             self.settings.seeking_alpha_access_token_cache_file,
             {
                 "access_token": token,
-                "cached_at": datetime.now(timezone.utc).isoformat(),
+                "cached_at": datetime.now(UTC).isoformat(),
                 "raw_keys": sorted(raw_payload.keys()) if isinstance(raw_payload, dict) else [],
             },
         )
@@ -406,9 +318,9 @@ class SeekingAlphaRapidApiSource:
         return params
 
     @classmethod
-    def _iter_dicts(cls, value: Any):
+    def _iter_dicts(cls, value: Any) -> Iterator[dict[str, Any]]:
         if isinstance(value, dict):
-            yield value
+            yield cast(dict[str, Any], value)
             for child in value.values():
                 yield from cls._iter_dicts(child)
         elif isinstance(value, list):
@@ -416,11 +328,11 @@ class SeekingAlphaRapidApiSource:
                 yield from cls._iter_dicts(child)
 
     @staticmethod
-    def _iter_event_items(payload: Any):
+    def _iter_event_items(payload: Any) -> Iterator[dict[str, Any]]:
         if isinstance(payload, dict) and isinstance(payload.get("data"), list):
             for item in payload["data"]:
                 if isinstance(item, dict):
-                    yield item
+                    yield cast(dict[str, Any], item)
             return
         yield from SeekingAlphaRapidApiSource._iter_dicts(payload)
 
@@ -432,8 +344,10 @@ class SeekingAlphaRapidApiSource:
         for item in payload["included"]:
             if not isinstance(item, dict) or item.get("type") != "tag":
                 continue
+            item = cast(dict[str, Any], item)
             tag_id = item.get("id")
-            attributes = item.get("attributes") if isinstance(item.get("attributes"), dict) else {}
+            raw_attributes = item.get("attributes")
+            attributes = cast(dict[str, Any], raw_attributes) if isinstance(raw_attributes, dict) else {}
             symbol = (
                 attributes.get("name")
                 or attributes.get("slug")
@@ -446,7 +360,8 @@ class SeekingAlphaRapidApiSource:
 
     @classmethod
     def _item_symbols(cls, item: dict[str, Any], tag_symbols: dict[str, str]) -> set[str]:
-        relationships = item.get("relationships") if isinstance(item.get("relationships"), dict) else {}
+        raw_relationships = item.get("relationships")
+        relationships = cast(dict[str, Any], raw_relationships) if isinstance(raw_relationships, dict) else {}
         symbols: set[str] = set()
         for key in ["primaryTickers", "secondaryTickers"]:
             relationship = relationships.get(key)
@@ -480,11 +395,13 @@ class SeekingAlphaRapidApiSource:
 
     @classmethod
     def _url_from_item(cls, item: dict[str, Any]) -> Any:
-        nested = item.get("attributes") if isinstance(item.get("attributes"), dict) else {}
+        raw_nested = item.get("attributes")
+        nested = cast(dict[str, Any], raw_nested) if isinstance(raw_nested, dict) else {}
         url = cls._pick(item, ["url"]) or cls._pick(nested, ["url"])
         if url:
             return url
-        links = item.get("links") if isinstance(item.get("links"), dict) else {}
+        raw_links = item.get("links")
+        links = cast(dict[str, Any], raw_links) if isinstance(raw_links, dict) else {}
         return links.get("self") or links.get("canonical") or links.get("uri")
 
     @staticmethod
@@ -504,7 +421,7 @@ class SeekingAlphaRapidApiSource:
             return None
         if pd.isna(parsed):
             return None
-        return parsed.to_pydatetime()
+        return cast(datetime, parsed.to_pydatetime())
 
     @classmethod
     def _flatten_first_rating(cls, payload: Any) -> dict[str, Any]:
@@ -546,36 +463,42 @@ class SeekingAlphaRapidApiSource:
             flat.update(cls._flatten_nested_scalars(payload, max_fields=80))
             return flat
         record = cls._first_payload_record(payload)
-        flat: dict[str, Any] = {}
+        fallback_flat: dict[str, Any] = {}
         if record:
             for key, value in record.items():
                 if key == "attributes" and isinstance(value, dict):
-                    flat.update(value)
+                    fallback_flat.update(value)
                 elif cls._is_scalar(value):
-                    flat[str(key)] = value
+                    fallback_flat[str(key)] = value
             attributes = record.get("attributes")
             if isinstance(attributes, dict):
                 for key, value in attributes.items():
                     if cls._is_scalar(value):
-                        flat[str(key)] = value
-        flat.update({key: value for key, value in cls._flatten_nested_scalars(payload, max_fields=80).items() if key not in flat})
-        return flat
+                        fallback_flat[str(key)] = value
+        fallback_flat.update(
+            {
+                key: value
+                for key, value in cls._flatten_nested_scalars(payload, max_fields=80).items()
+                if key not in fallback_flat
+            }
+        )
+        return fallback_flat
 
     @classmethod
     def _first_payload_record(cls, payload: Any) -> dict[str, Any]:
         if isinstance(payload, dict):
             data = payload.get("data")
             if isinstance(data, dict):
-                return data
+                return cast(dict[str, Any], data)
             if isinstance(data, list):
                 for item in data:
                     if isinstance(item, dict):
-                        return item
-            return payload
+                        return cast(dict[str, Any], item)
+            return cast(dict[str, Any], payload)
         if isinstance(payload, list):
             for item in payload:
                 if isinstance(item, dict):
-                    return item
+                    return cast(dict[str, Any], item)
         for item in cls._iter_dicts(payload):
             if item:
                 return item

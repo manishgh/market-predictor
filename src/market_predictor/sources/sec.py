@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
+from typing import Any
+from zoneinfo import ZoneInfo
 
 import pandas as pd
 
@@ -60,11 +62,11 @@ class SecSource:
     ) -> list[NewsEvent]:
         """Fetch recent SEC submissions as timestamped events.
 
-        SEC submissions use ET-style acceptance timestamps without a timezone suffix.
-        We treat them as UTC for a conservative, stable feature timestamp; the filing
-        date remains available in raw metadata.
+        SEC acceptance timestamps are Eastern clock times without a timezone suffix.
+        The collector records first-seen time separately because SEC does not publish
+        an exact first-available-on-sec.gov timestamp.
         """
-        end = end or datetime.now(timezone.utc)
+        end = end or datetime.now(UTC)
         ticker_upper = ticker.upper()
         cik = self.cik_for_ticker(ticker_upper)
         payload = self.client.get_json(self.submissions_url.format(cik=cik))
@@ -78,7 +80,7 @@ class SecSource:
             wanted = {form.upper() for form in forms}
             frame = frame[frame["form"].astype(str).str.upper().isin(wanted)]
         if "acceptanceDateTime" in frame.columns:
-            timestamps = pd.to_datetime(frame["acceptanceDateTime"], errors="coerce", utc=True)
+            timestamps = frame["acceptanceDateTime"].map(self._acceptance_time_utc)
         else:
             timestamps = pd.to_datetime(frame.get("filingDate"), errors="coerce", utc=True)
         frame = frame.assign(_timestamp=timestamps).dropna(subset=["_timestamp"])
@@ -124,7 +126,7 @@ class SecSource:
         return events
 
     @staticmethod
-    def _latest_numeric(facts: dict, tag: str, unit: str) -> float | None:
+    def _latest_numeric(facts: dict[str, Any], tag: str, unit: str) -> float | None:
         entries = facts.get(tag, {}).get("units", {}).get(unit, [])
         if not entries:
             return None
@@ -135,3 +137,15 @@ class SecSource:
         if frame.empty:
             return None
         return float(frame.iloc[-1]["val"])
+
+    @staticmethod
+    def _acceptance_time_utc(value: object) -> pd.Timestamp:
+        try:
+            timestamp = pd.Timestamp(value)
+        except (TypeError, ValueError):
+            return pd.NaT
+        if pd.isna(timestamp):
+            return pd.NaT
+        if timestamp.tzinfo is None:
+            timestamp = timestamp.tz_localize(ZoneInfo("America/New_York"))
+        return timestamp.tz_convert("UTC")

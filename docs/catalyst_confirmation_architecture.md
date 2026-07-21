@@ -182,6 +182,19 @@ Market context sources:
 - Theme ETFs when relevant
 - Broad market/global news feeds
 
+### Canonical Point-In-Time Boundary
+
+All production training and inference inputs pass through `src/market_predictor/canonical/` before model-specific feature engineering.
+
+- Bars carry interval start, interval end, availability, ingestion, feed, adjustment, and schema provenance. Provider timestamps are treated as left edges; closing OHLCV is never available at the left edge.
+- Events carry publication, provider update, first-seen, raw availability, sentiment-scoring availability, and final feature availability. Joins use final feature availability.
+- Source attempts carry typed `observed`, `observed_empty`, `partial`, `failed`, `disabled`, and `not_collected` state. Zero events is evidence only when the source was successfully queried.
+- Universe memberships carry effective windows and snapshot availability. A decision must have exactly one membership that was both effective and known.
+- Fundamental and quant facts require versioned availability. Current snapshots cannot be backfilled over historical rows.
+- Artifacts are written immutably with SHA-256 input/output identities and audit evidence; the manifest is published last.
+
+Production requires observed history. Provider publication-time history collected after the fact is an explicit research proxy and cannot be promoted or served as production-ready data.
+
 Feed-quality requirement:
 
 - Volume-sensitive features should only be trusted when feed coverage is known.
@@ -234,26 +247,30 @@ Required gates:
 | Feed type | Feed type is known for volume-sensitive features | `warn` if unknown, `invalid` if known partial and feature requires SIP |
 | Event relevance | Recent news must be ticker-relevant or explicitly market/sector-context tagged | `warn` or exclude event |
 | Source coverage | At least one valid recent source for catalyst-dependent predictions | `no_signal` |
+| Required source state | Every configured source is `observed` or `observed_empty` by the decision time | `invalid` |
+| Universe membership | Exactly one effective and already-known snapshot per decision | `invalid` |
+| Fundamental timing | Fact version was available by decision time; no current-snapshot backfill | `invalid` |
 | Model/schema match | Feature schema matches model expectation | `invalid` |
 
 Output must include `data_readiness_status` and `data_readiness_reasons`.
 
 ## 8. News And Candle Alignment
 
-Event timing must map to the next valid trading candle for that ticker.
+Event features must be joined to a completed candle only when the event-derived feature was available.
 
 Rules:
 
-- Pre-market events map to the current trading date if the market has not opened.
-- Intraday events map to the current trading date.
-- After-hours events map to the next actual trading date.
-- Weekend and holiday events map to the next actual trading date.
+- Intraday decisions use explicit bar-end plus finalization availability, never the provider's left-edge timestamp.
+- Event inclusion uses `feature_available_at_utc <= decision_time_utc`; publication time alone is insufficient.
+- Pre-market, intraday, after-hours, weekend, and holiday buckets remain explanatory metadata, not permission to bypass the as-of join.
+- Daily research rows may map events to the next valid exchange session, but production still requires observed availability and a declared decision time.
 - Events with no matching historical candle inside the scoring window are excluded or marked invalid.
 
 Audit checks:
 
 - No historical event should have a missing feature row after alignment.
 - News counts by ticker/date should match between event input and generated features.
+- No joined bar, event, sentiment score, source status, membership, or fundamental timestamp may exceed the decision time.
 - Prediction reports should expose alignment status when available.
 
 ## 9. Model Registry
@@ -372,6 +389,8 @@ Serving rules:
 - A new intraday hypothesis must first pass both development economics scopes; only then may matured observations after 2026-07-08 be used as an untouched shadow interval.
 
 The data, target, ranking, validation, cleanup, and Git checkpoint sequence for the next model generation is defined in [ML Model V3 Improvement Plan](ml_model_v3_plan.md).
+
+The production serving, cleanup, canonical-data, swing, intraday, deployment, and release sequence is defined in [Production ML Rebuild Plan](production_ml_rebuild_plan.md).
 
 V3 checkpoints C1-C7 now provide strict point-in-time contracts, immutable development/shadow partitioning, exact next-open labels and costs, batch/live feature parity, cross-sectional ranks, session-purged walk-forward validation, deterministic ticker holdout, candidate adapters for B0/B1/B2/R1/D1, disjoint classifier calibration, and session-blocked independent-event economics. This changes research capability only. V3 artifacts remain outside production serving until the gate freeze and one-time shadow evaluation are completed.
 
