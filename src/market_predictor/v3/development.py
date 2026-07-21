@@ -7,12 +7,12 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import UTC, date, datetime
 from importlib.metadata import version
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, Self, cast
 
 import exchange_calendars as xcals
 import pandas as pd
 import pyarrow.parquet as pq
-from pydantic import Field
+from pydantic import Field, field_validator, model_validator
 
 from market_predictor.registry import file_sha256
 from market_predictor.v3.errors import DataReadinessError
@@ -33,6 +33,20 @@ class DevelopmentDatasetConfig(FrozenContract):
     bar_minutes: int = 5
     round_trip_cost_bps: float = 10.0
     decision_start_date: date
+
+    @field_validator("horizons_bars")
+    @classmethod
+    def validate_horizons(cls, value: tuple[int, ...]) -> tuple[int, ...]:
+        normalized = tuple(sorted(set(value)))
+        if not normalized or any(horizon < 1 for horizon in normalized):
+            raise ValueError("horizons_bars must contain positive integers")
+        return normalized
+
+    @model_validator(mode="after")
+    def validate_primary_horizon(self) -> Self:
+        if self.primary_horizon_bars not in self.horizons_bars:
+            raise ValueError("primary_horizon_bars must be present in horizons_bars")
+        return self
 
 
 def build_monthly_development_dataset(

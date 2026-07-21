@@ -7,6 +7,7 @@ import pandas as pd
 import typer
 from rich.console import Console
 
+from market_predictor.commands.v3_labels import parse_horizons
 from market_predictor.v3.audits import build_data_audit
 from market_predictor.v3.development import DevelopmentDatasetConfig, build_monthly_development_dataset
 from market_predictor.v3.partitions import partition_development_shadow, write_shadow_partition
@@ -25,6 +26,8 @@ def register_v3_data_commands(app: typer.Typer, console: Console) -> None:
         minimum_cross_section: int = typer.Option(300, min=2, help="Minimum eligible symbols at each decision timestamp."),
         workers: int = typer.Option(4, min=1, max=16, help="Parallel ticker-local feature workers."),
         decision_stride_bars: int = typer.Option(12, min=1, help="Bars between training decisions; 12 means hourly at 5 minutes."),
+        horizons: str = typer.Option("6,12,24", help="Comma-separated forward-return horizons in bars."),
+        primary_horizon_bars: int = typer.Option(12, min=1, help="Primary target horizon in bars; must be in --horizons."),
         reuse_technical: bool = typer.Option(False, help="Reuse a hash-validated completed technical stage."),
         resume_output: bool = typer.Option(False, help="Resume hash-validated monthly output; requires --reuse-technical."),
     ) -> None:
@@ -33,6 +36,9 @@ def register_v3_data_commands(app: typer.Typer, console: Console) -> None:
             start = pd.Timestamp(decision_start_date).date()
         except ValueError as exc:
             raise typer.BadParameter("decision-start-date must use YYYY-MM-DD") from exc
+        parsed_horizons = parse_horizons(horizons)
+        if primary_horizon_bars not in parsed_horizons:
+            raise typer.BadParameter("primary-horizon-bars must be present in horizons")
         report = build_monthly_development_dataset(
             bars_directory=bars_dir,
             benchmark_directory=benchmark_dir,
@@ -46,6 +52,8 @@ def register_v3_data_commands(app: typer.Typer, console: Console) -> None:
                 minimum_cross_section=minimum_cross_section,
                 workers=workers,
                 decision_stride_bars=decision_stride_bars,
+                horizons_bars=parsed_horizons,
+                primary_horizon_bars=primary_horizon_bars,
                 decision_start_date=start,
             ),
         )

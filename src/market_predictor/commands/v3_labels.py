@@ -24,7 +24,7 @@ def register_v3_label_commands(app: typer.Typer, console: Console) -> None:
         overwrite: bool = typer.Option(False, help="Explicitly replace an existing derived label artifact."),
     ) -> None:
         """Build exact-interval V3 return, path, rank, and overlap labels."""
-        parsed_horizons = _parse_horizons(horizons)
+        parsed_horizons = parse_horizons(horizons)
         if partition not in {"development", "shadow"}:
             raise typer.BadParameter("partition must be development or shadow")
         if out.exists() and not overwrite:
@@ -49,7 +49,7 @@ def register_v3_label_commands(app: typer.Typer, console: Console) -> None:
         console.print(f"Wrote {len(labeled)} V3 label rows to {out}")
 
 
-def _parse_horizons(value: str) -> tuple[int, ...]:
+def parse_horizons(value: str) -> tuple[int, ...]:
     try:
         horizons = tuple(int(part.strip()) for part in value.split(",") if part.strip())
     except ValueError as exc:

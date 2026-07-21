@@ -6,7 +6,9 @@ from datetime import date
 from pathlib import Path
 
 import pandas as pd
+import typer
 
+from market_predictor.commands.v3_labels import parse_horizons
 from market_predictor.v3.development import (
     DevelopmentDatasetConfig,
     build_monthly_development_dataset,
@@ -16,6 +18,27 @@ from market_predictor.v3.errors import DataReadinessError
 
 
 class V3DevelopmentDatasetTests(unittest.TestCase):
+    def test_development_config_normalizes_horizons(self) -> None:
+        config = DevelopmentDatasetConfig(
+            horizons_bars=(24, 6, 12, 24),
+            primary_horizon_bars=24,
+            decision_start_date=date(2026, 7, 8),
+        )
+
+        self.assertEqual(config.horizons_bars, (6, 12, 24))
+
+    def test_development_config_rejects_primary_outside_horizons(self) -> None:
+        with self.assertRaisesRegex(ValueError, "primary_horizon_bars must be present"):
+            DevelopmentDatasetConfig(
+                horizons_bars=(6, 12),
+                primary_horizon_bars=24,
+                decision_start_date=date(2026, 7, 8),
+            )
+
+    def test_horizon_parser_rejects_non_positive_values(self) -> None:
+        with self.assertRaises(typer.BadParameter):
+            parse_horizons("6,0,24")
+
     def test_builds_monthly_point_in_time_dataset_without_loading_whole_universe(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
