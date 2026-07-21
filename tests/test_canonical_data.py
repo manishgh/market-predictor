@@ -281,10 +281,25 @@ class CanonicalJoinAndAuditTests(unittest.TestCase):
         )
         joined = join_source_collection_status(decisions, collections, source_families=["reddit"])
         self.assertEqual(joined["source_status_reddit"].tolist(), ["not_collected", "observed_empty"])
+        self.assertEqual(joined.loc[1, "source_coverage_end_utc_reddit"], pd.Timestamp("2026-07-21T10:00:00Z"))
         self.assertTrue(all(check.status == "pass" for check in audit_source_collections(collections)))
         coverage = audit_decision_source_coverage(joined, required_sources=["reddit"])
         self.assertEqual(coverage[0].status, "fail")
         self.assertEqual(coverage[0].failures, 1)
+
+        stale = join_source_collection_status(
+            pd.DataFrame(
+                {
+                    "ticker": ["MSFT"],
+                    "decision_time_utc": [pd.Timestamp("2026-07-21T11:01:00Z")],
+                }
+            ),
+            collections,
+            source_families=["reddit"],
+        )
+        stale_coverage = audit_decision_source_coverage(stale, required_sources=["reddit"])
+        self.assertEqual(stale_coverage[0].status, "fail")
+        self.assertEqual(stale_coverage[0].failures, 1)
 
     def test_fundamental_join_uses_fact_availability_not_current_snapshot(self) -> None:
         decisions = pd.DataFrame(

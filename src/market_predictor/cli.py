@@ -19,6 +19,7 @@ from market_predictor.azure_store import AzureBlobStore
 from market_predictor.canonical.contracts import SourceCollection
 from market_predictor.commands.canonical_data import register_canonical_data_commands
 from market_predictor.commands.ranking import register_ranking_commands
+from market_predictor.commands.swing_model import register_swing_model_commands
 from market_predictor.commands.v3_data import register_v3_data_commands
 from market_predictor.commands.v3_evaluation import register_v3_evaluation_commands
 from market_predictor.commands.v3_features import register_v3_feature_commands
@@ -69,19 +70,13 @@ from market_predictor.schemas import NewsEvent
 from market_predictor.sources import AlpacaSource, FinvizSource, GdeltSource, RedditSource, SeekingAlphaRapidApiSource
 from market_predictor.sources.gdelt import DEFAULT_GDELT_CONTEXT_QUERIES
 from market_predictor.sources.sec import SecSource
-from market_predictor.volatile import (
-    VolatileLabelConfig,
-    build_volatile_dataset,
-    load_volatile_universe,
-    score_volatile_frame,
-    train_volatile_model,
-)
 
 app = typer.Typer(help="Build and serve audited swing and intraday market predictions.")
 console = Console()
 DEFAULT_MARKET_CONTEXT_PATH = Path("data/external/market_context/market_context_events_scored.parquet")
 register_ranking_commands(app, console)
 register_canonical_data_commands(app, console)
+register_swing_model_commands(app, console)
 register_v3_data_commands(app, console)
 register_v3_feature_commands(app, console)
 register_v3_evaluation_commands(app, console)
@@ -1398,106 +1393,6 @@ def azure_publish_models(
     )
 
 
-@app.command("build-volatile-dataset")
-def build_volatile_dataset_command(
-    daily_1d: Path = typer.Option(
-        Path("data/features/largecap_50b_news_volume_combined_2y_20260630_1d.parquet"),
-        help="Daily feature parquet containing 1-day forward labels.",
-    ),
-    daily_5d: Path = typer.Option(
-        Path("data/features/largecap_50b_news_volume_combined_2y_20260630_5d.parquet"),
-        help="Daily feature parquet containing 5-day forward labels.",
-    ),
-    universe: Path = typer.Option(
-        Path("data/universe/volatile_mover_research_universe_20260704.csv"),
-        help="Volatile mover universe CSV with ticker/theme metadata.",
-    ),
-    out: Path = typer.Option(
-        Path("data/features/volatile_mover_daily_20260704.parquet"),
-        help="Output volatile mover training dataset.",
-    ),
-    audit_out: Path = typer.Option(
-        Path("data/reports/volatile_mover_dataset_audit_20260704.csv"),
-        help="Per-ticker readiness/audit CSV.",
-    ),
-    min_rows_per_ticker: int = typer.Option(120, help="Minimum historical daily rows per ticker."),
-    min_news_rows_per_ticker: int = typer.Option(3, help="Minimum rows with ticker-linked news/catalysts per ticker."),
-    next_day_big_move_threshold: float = typer.Option(0.03, help="Absolute 1-day return threshold for big-move labels."),
-    next_week_big_move_threshold: float = typer.Option(0.08, help="Absolute 5-day return threshold for big-move labels."),
-) -> None:
-    """Build a news+volume+technical volatile mover dataset with auditable labels."""
-    if not daily_1d.exists():
-        raise typer.BadParameter(f"Missing 1-day dataset: {daily_1d}")
-    one = pd.read_parquet(daily_1d)
-    five = pd.read_parquet(daily_5d) if daily_5d.exists() else None
-    universe_frame = load_volatile_universe(universe)
-    config = VolatileLabelConfig(
-        next_day_big_move_threshold=next_day_big_move_threshold,
-        next_week_big_move_threshold=next_week_big_move_threshold,
-        min_rows_per_ticker=min_rows_per_ticker,
-        min_news_rows_per_ticker=min_news_rows_per_ticker,
-    )
-    dataset, audit = build_volatile_dataset(one, daily_5d=five, universe=universe_frame, config=config)
-    out.parent.mkdir(parents=True, exist_ok=True)
-    audit_out.parent.mkdir(parents=True, exist_ok=True)
-    dataset.to_parquet(out, index=False)
-    audit.to_csv(audit_out, index=False)
-    target_cols = [col for col in dataset.columns if col.startswith("target_next_")]
-    summary = {
-        "schema": "volatile_mover.v1",
-        "rows": len(dataset),
-        "tickers": int(dataset["ticker"].nunique()) if not dataset.empty else 0,
-        "first_date": str(dataset["date"].min()) if not dataset.empty else None,
-        "last_date": str(dataset["date"].max()) if not dataset.empty else None,
-        "target_columns": target_cols,
-        "out": str(out),
-        "audit": str(audit_out),
-    }
-    console.print(summary)
-    console.print(audit.sort_values(["model_eligible", "rows"], ascending=[True, False]).head(30))
-
-
-@app.command("train-volatile-model")
-def train_volatile_model_command(
-    dataset: Path = typer.Option(
-        Path("data/features/volatile_mover_daily_20260704.parquet"),
-        help="Volatile mover dataset produced by build-volatile-dataset.",
-    ),
-    target_col: str = typer.Option("target_next_week_big_up", help="Target column to train."),
-    model_out: Path = typer.Option(
-        Path("models/volatile_mover_next_week_big_up_20260704_candidate.joblib"),
-        help="Output model artifact.",
-    ),
-    predictions_out: Path = typer.Option(
-        Path("data/reports/volatile_mover_next_week_big_up_oos_predictions_20260704.csv"),
-        help="Out-of-sample prediction audit CSV.",
-    ),
-    metrics_out: Path = typer.Option(
-        Path("data/reports/volatile_mover_next_week_big_up_metrics_20260704.csv"),
-        help="Model metrics/model-card CSV.",
-    ),
-    max_iter: int = typer.Option(400, help="Maximum boosting iterations."),
-    learning_rate: float = typer.Option(0.035, help="Boosting learning rate."),
-    embargo_rows: int = typer.Option(5, help="Purged walk-forward embargo rows."),
-) -> None:
-    """Train a production-audited volatile mover classifier."""
-    if not dataset.exists():
-        raise typer.BadParameter(f"Missing volatile dataset: {dataset}")
-    frame = pd.read_parquet(dataset)
-    report, metrics, _ = train_volatile_model(
-        frame,
-        target_col=target_col,
-        model_out=model_out,
-        predictions_out=predictions_out,
-        metrics_out=metrics_out,
-        max_iter=max_iter,
-        learning_rate=learning_rate,
-        embargo_rows=embargo_rows,
-    )
-    console.print(report)
-    console.print(metrics)
-
-
 @app.command("audit-promotion-readiness")
 def audit_promotion_readiness(
     dataset: Path = typer.Option(..., help="Feature dataset used by the candidate model."),
@@ -1649,60 +1544,6 @@ def promote_model_command(
         raise typer.Exit(code=1)
     console.print("[green]Model promoted[/green]")
     console.print(result)
-
-
-@app.command("score-volatile-latest")
-def score_volatile_latest(
-    dataset: Path = typer.Option(
-        Path("data/features/volatile_mover_daily_20260704.parquet"),
-        help="Volatile mover feature dataset.",
-    ),
-    model: Path = typer.Option(
-        Path("models/volatile_mover_next_week_big_up_20260704_candidate.joblib"),
-        help="Volatile mover model artifact.",
-    ),
-    tickers: str | None = typer.Option(None, help="Optional comma-separated ticker subset."),
-    out: Path = typer.Option(
-        Path("data/reports/volatile_mover_latest_scores_20260704.csv"),
-        help="Latest per-ticker volatile model scores.",
-    ),
-) -> None:
-    """Score the latest row per ticker with a volatile mover model."""
-    if not dataset.exists():
-        raise typer.BadParameter(f"Missing volatile dataset: {dataset}")
-    if not model.exists():
-        raise typer.BadParameter(f"Missing volatile model: {model}")
-    frame = pd.read_parquet(dataset)
-    symbols = _parse_tickers(tickers, []) if tickers else []
-    if symbols:
-        frame = frame[frame["ticker"].astype(str).str.upper().isin(symbols)].copy()
-    latest = frame.sort_values(["ticker", "date"]).groupby("ticker", as_index=False).tail(1)
-    scored = score_volatile_frame(latest, model)
-    scored = scored.sort_values("volatile_model_probability", ascending=False)
-    keep = [
-        col
-        for col in [
-            "ticker",
-            "date",
-            "theme_bucket",
-            "close",
-            "return_1d",
-            "volume_z20",
-            "news_count",
-            "event_count",
-            "sentiment_mean",
-            "volatile_setup_score",
-            "volatile_model_probability",
-            "volatile_model_prediction",
-            "volatile_model_target",
-            "volatile_model_schema",
-        ]
-        if col in scored.columns
-    ]
-    out.parent.mkdir(parents=True, exist_ok=True)
-    scored[keep].to_csv(out, index=False)
-    console.print(scored[keep].head(50))
-    console.print(f"Wrote volatile latest scores to {out}")
 
 
 @app.command("score-flashpoints")

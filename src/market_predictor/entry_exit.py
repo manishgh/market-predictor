@@ -22,7 +22,6 @@ from market_predictor.intraday_enrichment import add_intraday_technical_features
 from market_predictor.market_regime import MARKET_REGIME_FEATURES, add_market_regime_labels
 from market_predictor.model import DEFAULT_FEATURES, DateGroupedPurgedWalkForwardSplit
 from market_predictor.registry import verify_model_artifact, write_model_manifest
-from market_predictor.volatile import VOLATILE_EXTRA_FEATURES
 
 ENTRY_EXIT_SCHEMA_VERSION = "entry_exit.v2"
 
@@ -101,7 +100,7 @@ ENTRY_EXIT_EXTRA_FEATURES = [
     *INTRADAY_CATALYST_FEATURES,
 ]
 
-ENTRY_EXIT_FEATURES = list(dict.fromkeys([*DEFAULT_FEATURES, *VOLATILE_EXTRA_FEATURES, *ENTRY_EXIT_EXTRA_FEATURES]))
+ENTRY_EXIT_FEATURES = list(dict.fromkeys([*DEFAULT_FEATURES, *ENTRY_EXIT_EXTRA_FEATURES]))
 
 ENTRY_EXIT_FEATURE_SETS = {"all", "technical", "catalyst"}
 

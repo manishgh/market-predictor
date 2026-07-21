@@ -11,6 +11,7 @@ class ArchitectureBoundaryTests(unittest.TestCase):
     def test_predictor_has_no_runtime_alert_module_or_cli_commands(self) -> None:
         package_root = Path(__file__).resolve().parents[1] / "src" / "market_predictor"
         self.assertFalse((package_root / "alerts.py").exists())
+        self.assertFalse((package_root / "volatile.py").exists())
 
         command_names = {command.name for command in app.registered_commands}
         self.assertNotIn("monitor-alerts", command_names)
@@ -19,6 +20,7 @@ class ArchitectureBoundaryTests(unittest.TestCase):
             "behavior",
             "build-dataset",
             "build-event-swing-datasets",
+            "build-volatile-dataset",
             "combine-event-swing-datasets",
             "live-once",
             "live-run",
@@ -30,11 +32,16 @@ class ArchitectureBoundaryTests(unittest.TestCase):
             "score-event-swing",
             "score-events",
             "score-swing",
+            "score-volatile-latest",
             "train",
             "train-event-swing",
+            "train-volatile-model",
             "watch",
         }
         self.assertTrue(obsolete_prediction_commands.isdisjoint(command_names))
+        self.assertTrue(
+            {"build-swing-dataset", "train-swing-model", "promote-swing-model"}.issubset(command_names)
+        )
         self.assertIn("rank-sector-themes", command_names)
 
     def test_prediction_api_exposes_no_alert_or_execution_routes(self) -> None:

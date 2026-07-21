@@ -13,16 +13,16 @@ def register_ranking_commands(app: typer.Typer, console: Console) -> None:
     @app.command("rank-sector-themes")
     def rank_sector_themes(
         dataset: Path = typer.Option(
-            Path("data/features/sp500_volatile_daily_latest.parquet"),
-            help="Volatile feature dataset with latest ticker rows.",
+            Path("data/features/swing/latest.parquet"),
+            help="Canonical swing feature dataset with latest ticker rows.",
         ),
         universe: Path = typer.Option(
             Path("data/universe/sp500_current_latest.csv"),
             help="Universe CSV with ticker, sector, industry, and company columns.",
         ),
         model: Path = typer.Option(
-            Path("models/sp500_next_week_big_up_promoted.joblib"),
-            help="Promoted volatile model artifact.",
+            Path("models/swing/promoted/swing_5d.joblib"),
+            help="Promoted canonical swing model artifact.",
         ),
         flashpoints: Path | None = typer.Option(
             None,
@@ -70,13 +70,12 @@ def register_ranking_commands(app: typer.Typer, console: Console) -> None:
                 "monitor_theme",
                 "monitor_signal",
                 "monitor_score",
-                "volatile_model_probability",
+                "swing_model_probability",
                 "global_net_impact",
                 "global_positive_impact",
                 "global_negative_impact",
                 "volume_z20",
-                "news_count",
-                "event_count",
+                "event_count_3d",
                 "return_1d",
                 "sector_return_1d",
                 "rel_return_1d_vs_sector",

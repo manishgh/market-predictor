@@ -19,8 +19,8 @@ Model lifecycle state comes from each artifact's `.manifest.json`; unregistered 
 
 | Serving view | Artifact / family | State | Current evidence |
 | --- | --- | --- | --- |
-| Swing 5D | `sp500_6m_next_week_big_up_v2_20260708_candidate.joblib` | **Promoted, conditional** | 499 tickers, 45,908 OOS rows, ROC AUC 0.7126, top-decile lift 2.5936. Promoted on 2026-07-08 under the earlier classification/alignment gates; must be re-audited under the newer profitability, drawdown, regime, and catalyst gates before real-capital use. |
-| Swing 1D | `sp500_6m_next_day_big_up_v2_20260708_candidate.joblib` | Candidate | ROC AUC 0.6657 and top-decile lift 2.4850. Not promoted. |
+| Swing 5D | Canonical `swing.model.v1` | Implementation complete; no promoted artifact | Point-in-time dataset, exact five-session labels, purged walk-forward, unseen-ticker holdout, calibration, economics, drawdown, catalyst, alignment, provenance, and 4 GiB gates are implemented. Real-data training and promotion have not passed yet. |
+| Legacy swing 1D/5D volatile models | Pre-C4 artifacts | Deprecated and not serveable | Their feature/target schemas do not satisfy the canonical C4 contract, regardless of an older manifest status. |
 | Intraday 12 bars, API default | 2026-07-09 technical ablation | Candidate | ROC AUC 0.6014 and lift 1.4719. Fails current AUC/lift gates. |
 | Intraday opening V2 | 2026-07-10 non-overlapping, cost-aware experiment | Candidate; promotion rejected | Best exact-path AUC 0.5806, lift 1.1764, selected net return -0.184% per trade, profit factor 0.7076, max drawdown 30.28%. |
 | Intraday V3 R1 | 2026-07-20 grouped XGBoost ranker | Candidate; promotion rejected | Walk-forward/holdout NDCG@10 0.4930/0.5123, but top-10 cost-adjusted excess return is -0.0715%/-0.0764%. |
@@ -30,8 +30,8 @@ Model lifecycle state comes from each artifact's `.manifest.json`; unregistered 
 Production API implications:
 
 - Production routes are server-owned and always require a promoted, hash-verified artifact.
-- The 1D swing and intraday candidates are not registered as production routes; there is no silent fallback.
-- Unified mode may return the promoted swing view plus an explicit intraday error until an intraday model passes promotion.
+- The configured swing route is deliberately not ready until a real canonical candidate passes every C4 promotion gate; there is no legacy fallback.
+- Unified mode may return explicit swing and intraday errors until each requested view has its own promoted canonical artifact.
 - Candidate scoring is available only through research commands or an explicitly constructed test service, never through the HTTP request contract.
 
 The next valid intraday promotion attempt requires a new predeclared development hypothesis that first passes both economic scopes, followed by matured shadow data after 2026-07-08 and all current promotion audits. See [Intraday model promotion](docs/intraday_model_promotion.md).
@@ -391,7 +391,7 @@ Hourly reaction features require Alpaca bars. If hourly bars are unavailable, th
 
 The former four-model watchlist average, heuristic watch/behavior commands, event/daily baseline trainers, `live-once`, `live-run`, and accuracy-only `live-train-event` path were removed. They mixed incompatible horizons, accepted unregistered artifacts, and could republish research features as live data. The API is the only operational prediction surface; research scorers require a registered, hash-matching candidate or promoted model.
 
-The canonical point-in-time data boundary is implemented, but automatic model-specific swing and intraday feature publication remains disabled until the C4/C5 rebuilds consume it. `/v1/health/ready` remains HTTP 503 when the audited live snapshot is absent.
+The canonical point-in-time data boundary and C4 swing model pipeline are implemented. Automatic live swing publication and the C5 intraday rebuild are not complete. `/v1/health/ready` remains HTTP 503 while a promoted canonical model or audited live snapshot is absent.
 
 ## Canonical Point-In-Time Data
 
@@ -409,7 +409,7 @@ Canonical guarantees:
 
 - Alpaca bar timestamps are treated as interval starts. A five-minute bar is unavailable until its interval ends plus the configured finalization delay; daily bars use the actual XNYS close, including early closes.
 - Event features use `feature_available_at_utc`, which includes provider updates, first observation, and FinBERT scoring time.
-- Every required source is `observed` or `observed_empty` by each production decision. `failed`, `partial`, `disabled`, and `not_collected` are distinct and fail readiness.
+- Every required source is `observed` or `observed_empty` by each production decision, and its request coverage end must be within the configured freshness limit. A past successful pull cannot be carried forward indefinitely. `failed`, `partial`, `disabled`, `not_collected`, and stale coverage fail readiness.
 - Universe sector, industry, market-cap bucket, liquidity bucket, and benchmark are joined only from an effective membership snapshot already available at the decision time.
 - SEC/quant facts are joined by versioned availability. A current snapshot is never copied backward over historical rows.
 - SIP is mandatory for production volume features. IEX and unknown feed provenance fail the production bar audit.
@@ -418,36 +418,34 @@ A historical news pull performed today does not recreate historical first-seen t
 
 Market Predictor has no runtime alert commands or alert persistence. Alert evaluation, deduplication, acknowledgement, and web/mobile delivery belong to `trading_flow`. The removed rule behavior is preserved in [Legacy alert rule parity](docs/legacy_alert_rule_parity.md). Do not build new alert behavior in this repository.
 
-## Volatile Mover Research Pipeline
+## Canonical Swing Model Pipeline
 
-Build a news-aware daily/weekly volatile mover dataset from an audited universe:
-
-```powershell
-market-predictor build-volatile-dataset `
-  --universe data/universe/volatile_mover_research_universe_20260704.csv `
-  --out data/features/volatile_mover_daily_20260704.parquet `
-  --audit-out data/reports/volatile_mover_dataset_audit_20260704.csv
-```
-
-Train a target-specific candidate model with purged walk-forward validation:
+The production swing path consumes only hash-verified canonical artifacts. SPY, QQQ, and every sector ETF used by a membership row must be present in `benchmark_bars`.
 
 ```powershell
-market-predictor train-volatile-model `
-  --target-col target_next_week_big_up `
-  --model-out models/volatile_mover_next_week_big_up_20260704_candidate.joblib `
-  --predictions-out data/reports/volatile_mover_next_week_big_up_oos_predictions_20260704.csv `
-  --metrics-out data/reports/volatile_mover_next_week_big_up_metrics_20260704.csv
+market-predictor build-swing-dataset `
+  --decisions data/canonical/decisions.parquet `
+  --benchmark-bars data/canonical/benchmark_daily_bars.parquet `
+  --global-events data/canonical/global_events.parquet `
+  --global-source-collections data/canonical/global_source_collections.parquet `
+  --config configs/swing_dataset.toml `
+  --out data/features/swing/swing_5d.parquet
+
+market-predictor train-swing-model `
+  --dataset data/features/swing/swing_5d.parquet `
+  --config configs/swing_training.toml `
+  --model-out models/swing/candidates/swing_5d.joblib `
+  --evidence-dir data/reports/swing_5d_candidate
+
+market-predictor promote-swing-model `
+  --model models/swing/candidates/swing_5d.joblib `
+  --evidence-dir data/reports/swing_5d_candidate `
+  --config configs/swing_promotion.toml
 ```
 
-Score the latest row per ticker:
+`build-swing-dataset` uses a post-close decision, next-session-open entry, and fifth-session-close exit. It writes exact entry/exit/label timestamps, costs, stock and benchmark returns, MFE/MAE, and eligibility evidence. `train-swing-model` publishes a candidate plus a hash inventory for every promotion file. `promote-swing-model` verifies that inventory and the candidate hash before applying frozen gates. Editing a metrics or audit file invalidates the bundle.
 
-```powershell
-market-predictor score-volatile-latest `
-  --model models/volatile_mover_next_week_big_up_20260704_candidate.joblib `
-  --out data/reports/volatile_mover_latest_scores_20260704.csv
-```
-
-The volatile mover schema is separate from the large-cap swing schema. It keeps news/catalyst features, source counts, sentiment, market context, price/volume pressure, and theme buckets, then labels next-day and next-week big-move outcomes.
+The removed `build-volatile-dataset`, `train-volatile-model`, and `score-volatile-latest` commands are not compatibility aliases. Old volatile artifacts cannot be loaded by the production swing API.
 
 ## Entry / Exit Path Models
 

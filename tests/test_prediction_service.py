@@ -9,6 +9,7 @@ import joblib
 import numpy as np
 import pandas as pd
 
+from market_predictor.entry_exit import ENTRY_EXIT_SCHEMA_VERSION
 from market_predictor.feature_store import LiveFeatureStore
 from market_predictor.prediction_contracts import PredictionDataSource, PredictionRequest
 from market_predictor.prediction_service import (
@@ -17,6 +18,11 @@ from market_predictor.prediction_service import (
     serving_routes_from_config,
 )
 from market_predictor.registry import write_model_manifest
+from market_predictor.swing.contracts import (
+    SWING_FEATURE_SCHEMA_VERSION,
+    SWING_MODEL_SCHEMA_VERSION,
+    SWING_MODEL_TYPE,
+)
 
 
 class FixedProbabilityModel:
@@ -41,7 +47,6 @@ class PredictionServiceTests(unittest.TestCase):
                         "swing": {
                             "5d": {
                                 "model": "models/swing.joblib",
-                                "universe": "data/universe.csv",
                                 "bar_timeframe": "1Day",
                             }
                         }
@@ -51,7 +56,6 @@ class PredictionServiceTests(unittest.TestCase):
         )
 
         self.assertEqual(routes["swing"]["5d"].model, Path("models/swing.joblib"))
-        self.assertEqual(routes["swing"]["5d"].universe, Path("data/universe.csv"))
 
     def test_swing_prediction_uses_promoted_model_and_returns_contract(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -60,7 +64,7 @@ class PredictionServiceTests(unittest.TestCase):
             model = root / "swing.joblib"
             features = ["return_1d", "volume_z20"]
             _swing_frame(["MSFT"], features, rows=260).to_parquet(dataset, index=False)
-            _write_model(model, features, target_col="target_next_week_big_up", status="promoted", probability=0.73)
+            _write_model(model, features, target_col="target_net_positive_5d", status="promoted", probability=0.73)
 
             response = _service(root, swing=(dataset, model)).predict_swing(
                 PredictionRequest(tickers=["MSFT"], mode="swing")
@@ -73,7 +77,7 @@ class PredictionServiceTests(unittest.TestCase):
             assert prediction is not None
             self.assertEqual(prediction.ticker, "MSFT")
             self.assertAlmostEqual(prediction.probability or 0.0, 0.73)
-            self.assertEqual(prediction.signal, "strong_bullish_watch")
+            self.assertEqual(prediction.signal, "strong_bullish_watch_confirmed")
             self.assertEqual(prediction.readiness.status, "valid")
 
     def test_swing_prediction_rejects_candidate_model_by_default(self) -> None:
@@ -83,7 +87,7 @@ class PredictionServiceTests(unittest.TestCase):
             model = root / "swing.joblib"
             features = ["return_1d", "volume_z20"]
             _swing_frame(["MSFT"], features, rows=260).to_parquet(dataset, index=False)
-            _write_model(model, features, target_col="target_next_week_big_up", status="candidate", probability=0.73)
+            _write_model(model, features, target_col="target_net_positive_5d", status="candidate", probability=0.73)
 
             with self.assertRaisesRegex(ValueError, "status candidate is not allowed"):
                 _service(root, swing=(dataset, model)).predict_swing(
@@ -100,7 +104,7 @@ class PredictionServiceTests(unittest.TestCase):
             features = ["return_1d", "volume_z20"]
             _swing_frame(["MSFT"], features, rows=260).to_parquet(swing_dataset, index=False)
             _swing_frame(["MSFT"], features, rows=260).to_parquet(intraday_dataset, index=False)
-            _write_model(swing_model, features, target_col="target_next_week_big_up", status="promoted", probability=0.31)
+            _write_model(swing_model, features, target_col="target_net_positive_5d", status="promoted", probability=0.70)
             _write_model(intraday_model, features, target_col="entry_success", status="candidate", probability=0.80)
 
             response = _service(
@@ -126,7 +130,7 @@ class PredictionServiceTests(unittest.TestCase):
             features = ["return_1d", "volume_z20"]
             frame = _swing_frame(["MSFT"], features, rows=260)
             frame.to_parquet(dataset, index=False)
-            _write_model(model, features, target_col="target_next_week_big_up", status="promoted", probability=0.73)
+            _write_model(model, features, target_col="target_net_positive_5d", status="promoted", probability=0.73)
             final_date = frame["date"].iloc[-1]
             cutoff = datetime.fromisoformat(f"{final_date.isoformat()}T15:59:00-04:00")
 
@@ -150,7 +154,7 @@ class PredictionServiceTests(unittest.TestCase):
             model = root / "swing.joblib"
             features = ["return_1d", "volume_z20"]
             _swing_frame(["MSFT"], features, rows=260).to_parquet(dataset, index=False)
-            _write_model(model, features, target_col="target_next_week_big_up", status="promoted", probability=0.73)
+            _write_model(model, features, target_col="target_net_positive_5d", status="promoted", probability=0.73)
 
             with self.assertRaisesRegex(ValueError, "incompatible with model target horizon 5d"):
                 _service(root, swing=(dataset, model), swing_horizon="1d").predict_swing(
@@ -198,7 +202,7 @@ class PredictionServiceTests(unittest.TestCase):
             model = root / "swing.joblib"
             features = ["return_1d", "volume_z20"]
             _swing_frame(["MSFT"], features, rows=260).to_parquet(dataset, index=False)
-            _write_model(model, features, target_col="target_next_week_big_up", status="promoted", probability=0.73)
+            _write_model(model, features, target_col="target_net_positive_5d", status="promoted", probability=0.73)
             service = _service(root, swing=(dataset, model))
 
             response = service.predict(
@@ -242,7 +246,7 @@ class PredictionServiceTests(unittest.TestCase):
             model = root / "swing.joblib"
             features = ["return_1d", "volume_z20"]
             frame = _swing_frame(["MSFT"], features, rows=260)
-            _write_model(model, features, target_col="target_next_week_big_up", status="promoted", probability=0.73)
+            _write_model(model, features, target_col="target_net_positive_5d", status="promoted", probability=0.73)
             store = LiveFeatureStore(root)
             generated = datetime(2025, 9, 17, 20, 30, tzinfo=UTC)
             store.publish("swing", frame, price_feed="sip", generated_at=generated)
@@ -275,7 +279,7 @@ class PredictionServiceTests(unittest.TestCase):
             _write_model(
                 model,
                 features,
-                target_col="target_next_week_big_up",
+                target_col="target_net_positive_5d",
                 status="promoted",
                 probability=0.73,
             )
@@ -299,7 +303,7 @@ class PredictionServiceTests(unittest.TestCase):
             _write_model(
                 model,
                 features,
-                target_col="target_next_week_big_up",
+                target_col="target_net_positive_5d",
                 status="promoted",
                 probability=0.73,
             )
@@ -325,7 +329,7 @@ class PredictionServiceTests(unittest.TestCase):
             _write_model(
                 model,
                 features,
-                target_col="target_next_week_big_up",
+                target_col="target_net_positive_5d",
                 status="promoted",
                 probability=0.73,
             )
@@ -389,19 +393,31 @@ def _write_model(
     status: str,
     probability: float,
 ) -> None:
+    is_swing = target_col.startswith("target_net_positive_")
+    model_type = SWING_MODEL_TYPE if is_swing else "entry_path"
+    schema_version = SWING_MODEL_SCHEMA_VERSION if is_swing else ENTRY_EXIT_SCHEMA_VERSION
     payload = {
         "model": FixedProbabilityModel(probability),
         "features": features,
         "target_col": target_col,
-        "schema_version": "unit.v1",
+        "schema_version": schema_version,
+        "model_type": model_type,
     }
+    if is_swing:
+        payload.update(
+            {
+                "calibrator": None,
+                "horizon_sessions": 5,
+                "feature_schema_version": SWING_FEATURE_SCHEMA_VERSION,
+            }
+        )
     joblib.dump(payload, path)
     training = _swing_frame(["MSFT", "AAPL"], features, rows=300)
     training["target"] = [idx % 2 for idx in range(len(training))]
     write_model_manifest(
         model_path=path,
-        model_type="unit_test",
-        schema_version="unit.v1",
+        model_type=model_type,
+        schema_version=schema_version,
         target_col=target_col,
         features=features,
         training_data=training.assign(**{target_col: training["target"]}),
@@ -411,7 +427,11 @@ def _write_model(
             "validated_rows": 250,
             "tickers": 2,
         },
-        validation_split="date_grouped_purged_walk_forward",
+        validation_split=(
+            "session_purged_walk_forward_and_ticker_holdout"
+            if is_swing
+            else "date_grouped_purged_walk_forward"
+        ),
         status=status,
     )
 
@@ -421,9 +441,17 @@ def _swing_frame(tickers: list[str], features: list[str], *, rows: int) -> pd.Da
     records = []
     for ticker in tickers:
         for idx in range(rows):
+            session_date = start + timedelta(days=idx)
+            feature_available = (
+                pd.Timestamp(session_date).tz_localize("America/New_York")
+                + pd.Timedelta(hours=16, minutes=15)
+            ).tz_convert("UTC")
             record = {
                 "ticker": ticker,
-                "date": start + timedelta(days=idx),
+                "date": session_date,
+                "session_date_et": session_date,
+                "feature_available_at_utc": feature_available,
+                "swing_feature_schema_version": SWING_FEATURE_SCHEMA_VERSION,
                 "close": 100.0 + idx,
                 "price_feed": "sip",
                 "return_1d": 0.01,
@@ -433,6 +461,11 @@ def _swing_frame(tickers: list[str], features: list[str], *, rows: int) -> pd.Da
                 "sentiment_mean": 0.2,
                 "sector_return_1d": 0.005,
                 "global_net_impact": 0.0,
+                "global_event_count_1d": 1.0,
+                "event_count_3d": 3.0,
+                "sentiment_mean_3d": 0.2,
+                "event_relevance_mean_3d": 0.8,
+                "source_count_alpaca_3d": 1.0,
             }
             for feature in features:
                 record.setdefault(feature, float(idx % 5))

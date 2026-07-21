@@ -287,6 +287,5 @@ smallcap_momentum = [
 ]
 
 [prediction_serving.routes.swing."5d"]
-model = "models/sp500_6m_next_week_big_up_v2_20260708_candidate.joblib"
-universe = "data/universe/sp500_current_20260708.csv"
+model = "models/swing/promoted/swing_5d.joblib"
 bar_timeframe = "1Day"

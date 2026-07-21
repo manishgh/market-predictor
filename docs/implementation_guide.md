@@ -54,7 +54,7 @@ market-predictor collect-swing --tickers "LUNR,MXL,RGTI" --days 30 --out-dir dat
 market-predictor score-swing-events --tickers "LUNR,MXL,RGTI" --raw-dir data/raw/research --out-dir data/raw/research_scored
 ```
 
-Prediction API requests are point-in-time contracts. `PredictionRequest.as_of`, when present, must be timezone-aware. The serving service filters daily feature rows by their 16:00 America/New_York availability time and intraday rows by inferred bar-close time. It does not interpret a bar's start timestamp as the moment its closing price and volume became known.
+Prediction API requests are point-in-time contracts. `PredictionRequest.as_of`, when present, must be timezone-aware. Canonical daily inference requires `feature_available_at_utc` and filters directly on that timestamp; it does not reconstruct availability from a date. The current intraday path uses explicit availability when present and otherwise infers completed-bar availability until C5 replaces that path.
 
 `PredictionRequest.horizon` defaults to `auto`. In that mode, the service resolves the horizon from the mode's server-owned route. Explicit horizons are validated against the registered model manifest. API clients cannot select a model, dataset, source mode, universe file, or promotion policy. `PredictionResponse.resolved_horizons` records the actual horizon used by each model, which is required for replay and downstream `trading_flow` audit records.
 
@@ -68,7 +68,7 @@ Top-level predictions are persisted by `prediction_snapshot.py` as content-addre
 
 `feature_store.py` owns the live inference handoff. Collection and feature jobs publish rolling swing or intraday Parquet files atomically with a sidecar manifest containing generation time, source watermarks, feed tier, row/ticker counts, latest feature time, and artifact SHA-256. Production serving always reads these registered paths. Missing, modified, future-generated, stale snapshots, and snapshots containing stale feature rows fail before model scoring. This keeps external API calls and FinBERT latency outside the request path.
 
-`prediction_service.py` owns serving routes and enforces promoted status, target/horizon compatibility, and model artifact SHA-256 before any model is deserialized. Readiness is fail-closed: `warn` and `invalid` rows retain diagnostics but cannot emit an actionable signal, decision score, model decision, or rank. `/v1/health/live` is process liveness; `/v1/health/ready` checks route artifacts and feature snapshots and returns 503 when serving is not ready.
+`prediction_service.py` owns serving routes and enforces promoted status, target/horizon compatibility, model type/schema, and artifact SHA-256 before deserialization. Swing routes accept only `canonical_swing` / `swing.model.v1`; old volatile artifacts are not grandfathered. Readiness is fail-closed: `warn` and `invalid` rows retain diagnostics but cannot emit an actionable signal, decision score, model decision, or rank. `/v1/health/live` is process liveness; `/v1/health/ready` checks route artifacts and feature snapshots and returns 503 when serving is not ready.
 
 `configs/default.toml` declares production routes under `[prediction_serving.routes.<mode>."<horizon>"]`. Only promoted routes belong there. The HTTP process parses this registry at startup and fails when it is absent or malformed; candidate routes are injected only by research/test code.
 
@@ -94,7 +94,17 @@ market-predictor canonicalize-memberships --input-path data/raw/universe_members
 market-predictor build-canonical-decisions --bars data/canonical/bars.parquet --events data/canonical/events.parquet --source-collections data/canonical/source_collections.parquet --memberships data/canonical/memberships.parquet --out data/canonical/decisions.parquet
 ```
 
-Each canonical output has a sidecar manifest containing its SHA-256, input hashes, row/column identity, availability range, audit evidence, and production-readiness state. A consumer verifies the manifest and hash before reading the table. Production decisions fail when any required source was not successfully observed by that decision, when membership is unknown or ambiguous, when volume is not SIP, or when a joined feature is from the future.
+Each canonical output has a sidecar manifest containing its SHA-256, input hashes, row/column identity, availability range, audit evidence, and production-readiness state. A consumer verifies the manifest and hash before reading the table. Production decisions fail when any required source was not successfully observed through a fresh request coverage end, when membership is unknown or ambiguous, when volume is not SIP, or when a joined feature is from the future.
+
+Canonical swing build, training, and promotion:
+
+```powershell
+market-predictor build-swing-dataset --decisions data/canonical/decisions.parquet --benchmark-bars data/canonical/benchmark_daily_bars.parquet --global-events data/canonical/global_events.parquet --global-source-collections data/canonical/global_source_collections.parquet --config configs/swing_dataset.toml --out data/features/swing/swing_5d.parquet
+market-predictor train-swing-model --dataset data/features/swing/swing_5d.parquet --config configs/swing_training.toml --model-out models/swing/candidates/swing_5d.joblib --evidence-dir data/reports/swing_5d_candidate
+market-predictor promote-swing-model --model models/swing/candidates/swing_5d.joblib --evidence-dir data/reports/swing_5d_candidate --config configs/swing_promotion.toml
+```
+
+`src/market_predictor/swing/contracts.py` freezes feature/model schemas and typed configs. `dataset.py` owns technical, benchmark-relative, catalyst/global, membership, cross-sectional, and exact future-path construction. `audits.py` owns fail-closed eligibility. `model.py` owns purged folds, unseen-ticker holdout, calibration, memory enforcement, immutable candidate registration, and scoring. `evaluation.py` owns classification, ranking-economics, regime, and catalyst validation. `promotion.py` owns hash-bound evidence bundles and fail-closed promotion gates. `commands/swing_model.py` is the only production CLI entry point for those stages.
 
 Historical provider backfills normally know publication time but not when this system first observed the item. Such events are publication-time proxies and are research-only. They must not be relabeled as observed history. The same rule applies to SEC and Seeking Alpha current snapshots: only versioned facts with explicit availability can enter historical production features.
 
@@ -123,14 +133,14 @@ Key command groups:
 - Collection: `collect`, `collect-swing`, `collect-seeking-alpha`, `alpaca-tickers`.
 - Verification: `verify-events`, `verify-swing`, `audit-swing-alignment`.
 - Sentiment: `download-model`, `score-swing-events`.
-- Feature building: `build-swing-datasets`, `build-volatile-dataset`, `build-entry-exit-dataset`, and V3 builders.
-- Training/scoring: `train-volatile-model`, `train-entry-exit-model`, V3 training/evaluation, and manifest-verified research scorers.
+- Feature building: canonical `build-swing-dataset`, research-only `build-swing-datasets`, the current pre-C5 `build-entry-exit-dataset`, and V3 research builders.
+- Training/scoring: canonical `train-swing-model` / `promote-swing-model`, the current pre-C5 entry-path commands, and V3 research evaluation.
 - Serving: `publish-live-features` and `serve-api`.
 - Azure: `export-ohlcv-artifacts`, `azure-upload-artifacts`, `azure-publish-models`.
 
 Canonical orchestration is registered by `src/market_predictor/commands/canonical_data.py`. `src/market_predictor/canonical/contracts.py` owns immutable schemas; `normalize.py` converts provider timestamps and provenance; `joins.py` performs strict as-of event, source, membership, and fundamental joins; `audits.py` implements fail-closed readiness; and `store.py` publishes hash-verified artifacts with manifests written last.
 
-`build-swing-datasets` remains a research builder while C4 replaces swing feature engineering on the canonical decision table. It no longer fetches or forward-fills a current Seeking Alpha quant snapshot and no longer copies latest SEC company facts into historical rows.
+`build-swing-datasets` remains research-only. Production swing feature engineering is `build-swing-dataset` on the canonical decision table. The production path never fetches while building features, never forward-fills current Seeking Alpha/SEC snapshots, and never accepts publication-proxy history.
 
 V3 orchestration is registered through focused modules under `src/market_predictor/commands/`: `v3_data.py`, `v3_features.py`, `v3_labels.py`, `v3_models.py`, and `v3_evaluation.py`. The corresponding implementation under `src/market_predictor/v3/` owns strict contracts, immutable development/shadow partitioning, exact labels, batch/live feature parity, session-purged validation, deterministic ticker holdout, B0/B1/B2/R1/D1 candidate training, disjoint calibration, and session-blocked ranking economics. Label schema `ml_v3.labels.v2` requires the maximum configured path to be contiguous at `bar_minutes`; decisions spanning a missing ticker candle are dropped rather than interpolated or shifted. These candidates and audit calibrators are research artifacts and are not connected to the promoted serving registry until later promotion checkpoints pass.
 

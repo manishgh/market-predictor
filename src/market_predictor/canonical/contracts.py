@@ -252,6 +252,8 @@ class SourceCollection(CanonicalContract):
             raise ValueError("source collection request window is reversed")
         if self.completed_at_utc < self.started_at_utc:
             raise ValueError("source collection completion precedes start")
+        if self.requested_end_utc > self.completed_at_utc:
+            raise ValueError("source collection cannot complete before its requested coverage end")
         if self.status in {"observed", "partial"} and self.row_count == 0:
             raise ValueError("observed or partial source collection requires rows")
         if self.status not in {"observed", "partial"} and self.row_count != 0:

@@ -34,7 +34,7 @@ Status: complete on 2026-07-21 (`2becc3a`).
 
 ### C3 - Canonical Point-In-Time Data Boundary
 
-Status: complete on 2026-07-21.
+Status: complete on 2026-07-21 (`5ebfa83`).
 
 - Normalize left-edge bars into explicit interval-end and availability timestamps using the XNYS calendar.
 - Record event publication, provider update, first-seen, sentiment-scoring, and final feature availability.
@@ -55,20 +55,30 @@ Exit evidence:
 
 ### C4 - Canonical Swing Model Rebuild
 
-Status: next.
+Status: complete on 2026-07-21 (C4 checkpoint).
 
-- Define one decision time and entry reference for each swing horizon.
-- Build daily technical, market, sector, catalyst, and point-in-time fundamental features from canonical decisions.
-- Require at least 250 daily bars for slow indicators.
-- Create cost-aware forward return, excess-return, drawdown, and path labels.
-- Compare deterministic baselines, calibrated classifiers/regressors, and ranking models.
-- Use purged walk-forward, unseen-ticker holdout, regime slices, and independent-event economics.
-- Freeze promotion gates before opening shadow evidence.
-- Publish a candidate only when all data, leakage, calibration, stability, economics, and drawdown audits pass.
+- One post-close decision predicts net-positive return from the next session open through the fifth session close.
+- Daily technical, SPY/QQQ/sector-relative, catalyst, observed global-context, membership, and as-of fundamental features are frozen as `swing.features.v1`.
+- Feature eligibility requires at least 250 daily bars, SIP/all-adjusted bars, exact benchmark coverage, fresh successful source coverage, and the configured cross section.
+- Labels retain gross/net return, SPY/QQQ/sector excess return, MFE/MAE, exact consecutive-session path, entry, exit, and label-availability timestamps.
+- Training supports logistic and histogram-gradient-boosting baselines with `float32` matrices and a hard 4 GiB process-memory gate.
+- Validation uses horizon-purged expanding walk-forward folds, cross-fitted calibration, and deterministic unseen-ticker holdout.
+- Promotion requires classification, unseen-ticker lift, conservative phase economics, drawdown, regime, catalyst, alignment, memory, and run-provenance gates.
+- Training evidence is hash inventoried and bound to the candidate artifact; modified evidence is rejected before promotion.
+- Production serving accepts only `canonical_swing` / `swing.model.v1` promoted artifacts and explicit feature-availability timestamps.
+
+Exit evidence:
+
+- Focused canonical swing, CLI, evidence-integrity, promotion, global-context, and serving tests pass.
+- Strict typing passes on the C4 production surface.
+- Scoped Ruff passes.
+- Legacy volatile build/train/score commands and volatile production serving were removed.
+
+No canonical C4 model has been trained or promoted from the real production dataset yet. The configured swing route intentionally remains not-ready until a candidate passes the frozen gates.
 
 ### C5 - Canonical Intraday Model Rebuild
 
-Status: pending C4 data/registry interfaces.
+Status: next; C4 data/registry interfaces are complete.
 
 - Build completed-bar 1-minute and 5-minute features with exact next-bar entry semantics.
 - Require consecutive paths, session boundaries, SIP volume, warm-up depth, and exact benchmark bars.

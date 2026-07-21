@@ -1,0 +1,16 @@
+family = "hist_gradient_boosting"
+n_splits = 4
+min_train_sessions = 120
+min_train_rows = 5000
+min_training_tickers = 100
+min_features = 25
+min_feature_non_null_rate = 0.05
+ticker_holdout_fraction = 0.20
+top_k = 10
+max_iter = 250
+learning_rate = 0.04
+l2_regularization = 1.0
+random_seed = 42
+max_training_memory_gb = 4.0
+memory_guard_headroom_gb = 0.25
+schema_version = "swing.model.v1"

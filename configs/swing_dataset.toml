@@ -1,0 +1,11 @@
+horizon_sessions = 5
+round_trip_cost_bps = 10.0
+min_daily_bars = 250
+required_price_feed = "sip"
+required_adjustment = "all"
+broad_benchmark = "SPY"
+growth_benchmark = "QQQ"
+required_global_sources = ["alpaca", "gdelt"]
+source_coverage_max_age_minutes = 60
+minimum_cross_section = 20
+schema_version = "swing.features.v1"

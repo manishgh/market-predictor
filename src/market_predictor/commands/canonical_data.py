@@ -240,6 +240,11 @@ def register_canonical_data_commands(app: typer.Typer, console: Any) -> None:
             "alpaca,reddit,seeking_alpha,sec,finviz",
             help="Sources that must be observed for every ticker in production.",
         ),
+        source_max_age_minutes: int = typer.Option(
+            60,
+            min=0,
+            help="Maximum gap from a source request coverage end to a decision.",
+        ),
         production: bool = typer.Option(True, "--production/--research"),
     ) -> None:
         """Build a fail-closed point-in-time decision table from canonical inputs."""
@@ -306,7 +311,13 @@ def register_canonical_data_commands(app: typer.Typer, console: Any) -> None:
             inputs[str(fundamentals)] = file_sha256(fundamentals)
         checks.extend(audit_decision_availability(decisions, feature_timestamp_columns=feature_timestamps))
         if production:
-            checks.extend(audit_decision_source_coverage(decisions, required_sources=sources))
+            checks.extend(
+                audit_decision_source_coverage(
+                    decisions,
+                    required_sources=sources,
+                    max_coverage_age=pd.Timedelta(minutes=source_max_age_minutes),
+                )
+            )
         audit = CanonicalAuditReport(checks=tuple(checks))
         manifest = write_canonical_artifact(
             decisions,

@@ -296,27 +296,40 @@ def audit_decision_source_coverage(
     frame: pd.DataFrame,
     *,
     required_sources: Iterable[str],
+    max_coverage_age: pd.Timedelta = pd.Timedelta(minutes=60),
 ) -> tuple[CanonicalAuditCheck, ...]:
     sources = [str(source).strip().lower() for source in required_sources]
     required_columns = {
         column
         for source in sources
-        for column in (f"source_status_{source}", f"source_status_available_at_utc_{source}")
+        for column in (
+            f"source_status_{source}",
+            f"source_status_available_at_utc_{source}",
+            f"source_coverage_end_utc_{source}",
+        )
     }
     missing = sorted(required_columns.difference(frame.columns))
     if missing:
         return (_fail("decision_source_coverage_schema", len(frame), f"missing columns: {', '.join(missing)}"),)
     failures = 0
+    decision = _utc_series(frame["decision_time_utc"])
     for source in sources:
         statuses = frame[f"source_status_{source}"].astype(str).str.lower().str.strip()
         available = _utc_series(frame[f"source_status_available_at_utc_{source}"], allow_null=True)
-        failures += int((~statuses.isin({"observed", "observed_empty"}) | available.isna()).sum())
+        coverage = _utc_series(frame[f"source_coverage_end_utc_{source}"], allow_null=True)
+        stale = (
+            coverage.isna()
+            | coverage.gt(available)
+            | coverage.gt(decision)
+            | decision.sub(coverage).gt(max_coverage_age)
+        )
+        failures += int((~statuses.isin({"observed", "observed_empty"}) | available.isna() | stale).sum())
     return (
         _check(
             "decision_source_coverage",
             failures,
             len(frame) * len(sources),
-            "every required source was successfully observed by every decision",
+            "every required source was successfully observed through a fresh coverage end",
         ),
     )
 

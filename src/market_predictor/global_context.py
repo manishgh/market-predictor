@@ -1,15 +1,14 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
 import re
+from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
 import pandas as pd
 
-from market_predictor.registry import MODEL_STATUS_PROMOTED, load_model_manifest
-from market_predictor.volatile import score_volatile_frame
+from market_predictor.swing.model import score_swing_frame
 
 
 @dataclass(frozen=True)
@@ -96,7 +95,7 @@ def score_flashpoints(
         frame["timestamp"] = pd.to_datetime(frame["timestamp"], errors="coerce", utc=True)
     else:
         frame["timestamp"] = pd.NaT
-    current = now or datetime.now(timezone.utc)
+    current = now or datetime.now(UTC)
     cutoff = pd.Timestamp(current - timedelta(hours=lookback_hours))
     if frame["timestamp"].notna().any():
         frame = frame[frame["timestamp"].ge(cutoff)].copy()
@@ -148,11 +147,11 @@ def build_sector_theme_monitor(
     flashpoints: pd.DataFrame | None = None,
     require_promoted: bool = True,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
-    manifest = load_model_manifest(model_path)
-    if require_promoted and manifest.get("status") != MODEL_STATUS_PROMOTED:
-        raise ValueError(f"Model must be promoted for live monitoring; found {manifest.get('status', 'unknown')}")
-    latest = dataset.sort_values(["ticker", "date"]).groupby("ticker", as_index=False).tail(1).copy()
-    scored = score_volatile_frame(latest, model_path)
+    date_column = "session_date_et" if "session_date_et" in dataset.columns else "date"
+    if date_column not in dataset.columns:
+        raise ValueError("sector ranking dataset has no decision date")
+    latest = dataset.sort_values(["ticker", date_column]).groupby("ticker", as_index=False).tail(1).copy()
+    scored = score_swing_frame(latest, model_path, require_promoted=require_promoted)
     universe_themes = classify_universe_themes(universe)
     scored = scored.merge(universe_themes, on="ticker", how="left")
     scored["monitor_theme"] = scored["monitor_theme"].fillna("other")
@@ -160,10 +159,10 @@ def build_sector_theme_monitor(
     scored["global_negative_impact"] = scored["monitor_theme"].map(lambda theme: _theme_impact(theme, flashpoints, "negative")).fillna(0.0)
     scored["global_net_impact"] = scored["global_positive_impact"] - scored["global_negative_impact"]
     scored["monitor_score"] = (
-        pd.to_numeric(scored["volatile_model_probability"], errors="coerce").fillna(0.0)
+        pd.to_numeric(scored["swing_model_probability"], errors="coerce").fillna(0.0)
         + 0.10 * scored["global_net_impact"]
         + 0.02 * _numeric_feature(scored, "volume_z20").clip(lower=0.0, upper=5.0)
-        + 0.01 * _numeric_feature(scored, "news_count_z30").clip(lower=0.0, upper=5.0)
+        + 0.01 * _numeric_feature(scored, "event_count_3d").clip(lower=0.0, upper=5.0)
     )
     scored["monitor_signal"] = scored.apply(_monitor_signal, axis=1)
     ticker_report = scored.sort_values("monitor_score", ascending=False).reset_index(drop=True)
@@ -185,11 +184,17 @@ def classify_universe_themes(universe: pd.DataFrame) -> pd.DataFrame:
     ).str.lower()
     frame["monitor_theme"] = "other"
     frame.loc[text.str.contains("biotechnology|life sciences|pharmaceutical", regex=True), "monitor_theme"] = "healthcare_biotech"
-    frame.loc[text.str.contains("health care equipment|health care supplies|managed health|health care provider", regex=True), "monitor_theme"] = "healthcare_devices_services"
+    frame.loc[
+        text.str.contains("health care equipment|health care supplies|managed health|health care provider", regex=True), "monitor_theme"
+    ] = "healthcare_devices_services"
     frame.loc[text.str.contains("semiconductor|semiconductors", regex=True), "monitor_theme"] = "semis_ai_hardware"
     frame.loc[text.str.contains("software|application software|systems software", regex=True), "monitor_theme"] = "software"
-    frame.loc[text.str.contains("interactive media|communication|telecom|movies|broadcasting", regex=True), "monitor_theme"] = "communication_services"
-    frame.loc[text.str.contains("data center|cloud|internet services|it consulting|technology hardware", regex=True), "monitor_theme"] = "ai_data_centers"
+    frame.loc[text.str.contains("interactive media|communication|telecom|movies|broadcasting", regex=True), "monitor_theme"] = (
+        "communication_services"
+    )
+    frame.loc[text.str.contains("data center|cloud|internet services|it consulting|technology hardware", regex=True), "monitor_theme"] = (
+        "ai_data_centers"
+    )
     frame.loc[text.str.contains("oil|gas|energy|drilling|refining|exploration", regex=True), "monitor_theme"] = "energy_oil_gas"
     frame.loc[text.str.contains("aerospace|defense", regex=True), "monitor_theme"] = "defense_aerospace"
     frame.loc[text.str.contains("airline|hotel|resort|cruise|travel", regex=True), "monitor_theme"] = "airlines_travel"
@@ -201,12 +206,12 @@ def classify_universe_themes(universe: pd.DataFrame) -> pd.DataFrame:
 def _sector_report(ticker_report: pd.DataFrame) -> pd.DataFrame:
     numeric_cols = {
         "tickers": ("ticker", "nunique"),
-        "avg_model_probability": ("volatile_model_probability", "mean"),
-        "max_model_probability": ("volatile_model_probability", "max"),
+        "avg_model_probability": ("swing_model_probability", "mean"),
+        "max_model_probability": ("swing_model_probability", "max"),
         "avg_monitor_score": ("monitor_score", "mean"),
         "avg_global_net_impact": ("global_net_impact", "mean"),
         "avg_volume_z20": ("volume_z20", "mean"),
-        "avg_news_count": ("news_count", "mean"),
+        "avg_news_count": ("event_count_3d", "mean"),
         "top_candidates": ("ticker", lambda values: ",".join(list(values.head(8)))),
     }
     grouped = ticker_report.sort_values("monitor_score", ascending=False).groupby("monitor_theme").agg(**numeric_cols)
@@ -233,13 +238,13 @@ def _theme_impact(theme: str, flashpoints: pd.DataFrame | None, side: str) -> fl
 
 
 def _monitor_signal(row: pd.Series) -> str:
-    prob = float(row.get("volatile_model_probability", 0.0) or 0.0)
+    prob = float(row.get("swing_model_probability", 0.0) or 0.0)
     net = float(row.get("global_net_impact", 0.0) or 0.0)
-    if prob >= 0.18 and net >= 0.15:
+    if prob >= 0.55 and net >= 0.15:
         return "bullish_with_global_tailwind"
-    if prob >= 0.18 and net <= -0.15:
+    if prob >= 0.55 and net <= -0.15:
         return "model_positive_but_global_headwind"
-    if prob >= 0.18:
+    if prob >= 0.55:
         return "bullish_watch"
     if net <= -0.35:
         return "global_downside_risk"

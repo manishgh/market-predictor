@@ -14,9 +14,8 @@ from market_predictor.catalyst_overlay import (
     assess_catalyst_overlay,
     overlay_decision_score,
 )
-from market_predictor.entry_exit import score_entry_exit_frame
+from market_predictor.entry_exit import ENTRY_EXIT_SCHEMA_VERSION, score_entry_exit_frame
 from market_predictor.feature_store import LiveFeatureStore
-from market_predictor.global_context import build_sector_theme_monitor
 from market_predictor.prediction_contracts import (
     CatalystConfirmationInfo,
     GlobalContextInfo,
@@ -38,7 +37,8 @@ from market_predictor.readiness import (
     assess_intraday_readiness,
 )
 from market_predictor.registry import MODEL_STATUS_PROMOTED, verify_model_artifact
-from market_predictor.volatile import score_volatile_frame
+from market_predictor.swing.contracts import SWING_MODEL_SCHEMA_VERSION, SWING_MODEL_TYPE
+from market_predictor.swing.model import score_swing_frame
 
 DEFAULT_MODE_HORIZONS = {"swing": "5d", "intraday": "12b"}
 
@@ -49,8 +49,6 @@ class ServingRoute:
 
     model: Path
     curated_dataset: Path | None = None
-    universe: Path | None = None
-    flashpoints: Path | None = None
     bar_timeframe: str = "unknown"
 
 
@@ -77,8 +75,6 @@ def serving_routes_from_config(config: Mapping[str, Any]) -> dict[str, dict[str,
                 raise ValueError(f"prediction serving route {mode}.{horizon} is missing model")
             parsed[str(horizon).strip().lower()] = ServingRoute(
                 model=Path(model),
-                universe=_optional_path(raw_route.get("universe")),
-                flashpoints=_optional_path(raw_route.get("flashpoints")),
                 bar_timeframe=str(raw_route.get("bar_timeframe", "unknown")).strip()
                 or "unknown",
             )
@@ -130,6 +126,8 @@ class PredictionService:
             model_path,
             resolved_horizon=resolved_horizon,
             bar_timeframe=route.bar_timeframe,
+            expected_model_type=SWING_MODEL_TYPE,
+            expected_schema_version=SWING_MODEL_SCHEMA_VERSION,
         )
         frame = self._feature_frame(
             self._load_feature_source("swing", route, request),
@@ -139,7 +137,6 @@ class PredictionService:
         scored = self._score_swing_frame(
             frame=frame,
             model_path=model_path,
-            route=route,
         )
         predictions = self._swing_predictions(scored, frame, model.status, request)
         return self._response(request, models={"swing": model}, swing_predictions=predictions)
@@ -150,6 +147,8 @@ class PredictionService:
             model_path,
             resolved_horizon=resolved_horizon,
             bar_timeframe=route.bar_timeframe,
+            expected_model_type="entry_path",
+            expected_schema_version=ENTRY_EXIT_SCHEMA_VERSION,
         )
         frame = self._feature_frame(
             self._load_feature_source("intraday", route, request),
@@ -230,6 +229,10 @@ class PredictionService:
                         self._resolve(route.model),
                         resolved_horizon=horizon,
                         bar_timeframe=route.bar_timeframe,
+                        expected_model_type=(SWING_MODEL_TYPE if mode == "swing" else "entry_path"),
+                        expected_schema_version=(
+                            SWING_MODEL_SCHEMA_VERSION if mode == "swing" else ENTRY_EXIT_SCHEMA_VERSION
+                        ),
                     )
                     components[name] = {
                         "status": "ready",
@@ -283,26 +286,9 @@ class PredictionService:
         *,
         frame: pd.DataFrame,
         model_path: Path,
-        route: ServingRoute,
     ) -> pd.DataFrame:
-        feature_frame = frame.copy()
-        universe_path = self._resolve(route.universe) if route.universe is not None else None
-        if universe_path is not None and universe_path.exists():
-            flashpoints = self._optional_frame(route.flashpoints)
-            universe = pd.read_csv(universe_path)
-            _, ticker_report = build_sector_theme_monitor(
-                dataset=feature_frame,
-                universe=universe,
-                model_path=model_path,
-                flashpoints=flashpoints,
-                require_promoted=True,
-            )
-            return ticker_report
-        latest = self._latest_rows(feature_frame)
-        scored = score_volatile_frame(latest, model_path)
-        scored["monitor_signal"] = scored["volatile_model_probability"].map(_swing_signal)
-        scored["monitor_score"] = scored["volatile_model_probability"]
-        return scored
+        latest = self._latest_rows(frame)
+        return score_swing_frame(latest, model_path, require_promoted=True)
 
     def _score_intraday_frame(
         self,
@@ -325,13 +311,13 @@ class PredictionService:
         rows["_catalyst_assessment"] = rows.apply(
             lambda row: assess_catalyst_overlay(
                 row,
-                model_probability=_float_or_none(row.get("volatile_model_probability")),
+                model_probability=_float_or_none(row.get("swing_model_probability")),
             ),
             axis=1,
         )
         rows["_decision_score"] = rows.apply(
             lambda row: overlay_decision_score(
-                _float_or_none(row.get("volatile_model_probability")),
+                _float_or_none(row.get("swing_model_probability")),
                 row["_catalyst_assessment"],
             ),
             axis=1,
@@ -355,15 +341,15 @@ class PredictionService:
                 SwingPrediction(
                     ticker=ticker,
                     date=_string_or_none(row.get("date")),
-                    probability=_float_or_none(row.get("volatile_model_probability")),
+                    probability=_float_or_none(row.get("swing_model_probability")),
                     decision_score=(
                         _float_or_none(row.get("_decision_score")) if is_ready else None
                     ),
                     model_prediction=(
-                        _int_or_none(row.get("volatile_model_prediction")) if is_ready else None
+                        _int_or_none(row.get("swing_model_prediction")) if is_ready else None
                     ),
                     signal=(
-                        _swing_signal(row.get("volatile_model_probability"), catalyst)
+                        _swing_signal(row.get("swing_model_probability"), catalyst)
                         if is_ready
                         else "not_ready"
                     ),
@@ -371,9 +357,9 @@ class PredictionService:
                     close=_float_or_none(row.get("close")),
                     return_1d=_float_or_none(row.get("return_1d")),
                     volume_z20=_float_or_none(row.get("volume_z20")),
-                    news_count=_float_or_none(row.get("news_count")),
-                    event_count=_float_or_none(row.get("event_count")),
-                    sentiment_mean=_float_or_none(row.get("sentiment_mean")),
+                    news_count=_float_or_none(row.get("event_count_3d")),
+                    event_count=_float_or_none(row.get("event_count_3d")),
+                    sentiment_mean=_float_or_none(row.get("sentiment_mean_3d")),
                     monitor_theme=_string_or_none(row.get("monitor_theme")),
                     global_context=GlobalContextInfo(
                         net_impact=float(row.get("global_net_impact", 0.0) or 0.0),
@@ -385,12 +371,10 @@ class PredictionService:
                     drivers=_drivers(
                         row,
                         [
-                            "volatile_setup_score",
                             "volume_z20",
-                            "news_count",
-                            "news_count_z30",
-                            "event_count",
-                            "sentiment_mean",
+                            "event_count_3d",
+                            "sentiment_mean_3d",
+                            "event_relevance_mean_3d",
                             "return_1d",
                             "sector_return_1d",
                             "rel_return_1d_vs_sector",
@@ -488,7 +472,12 @@ class PredictionService:
         )
         market_context_present = _has_any_value(
             row,
-            ["global_net_impact", "market_context_score", "market_context_event_count"],
+            [
+                "global_event_count_1d",
+                "global_event_count_3d",
+                "global_sentiment_mean_1d",
+                "global_net_impact",
+            ],
         )
         price_feed = str(row.get("price_feed", "unknown") or "unknown")
         assessed = assess_daily_readiness(
@@ -587,20 +576,25 @@ class PredictionService:
         request: PredictionRequest,
         timeframe: str,
     ) -> pd.DataFrame:
-        if "ticker" not in frame.columns or "date" not in frame.columns:
-            raise ValueError("feature dataset must contain ticker and date")
+        if "ticker" not in frame.columns:
+            raise ValueError("feature dataset must contain ticker")
         symbols = set(request.tickers)
         working = frame.copy()
+        if "date" not in working.columns:
+            if timeframe == "daily" and "session_date_et" in working.columns:
+                working["date"] = working["session_date_et"]
+            elif timeframe == "intraday" and "bar_start_utc" in working.columns:
+                working["date"] = working["bar_start_utc"]
+            else:
+                raise ValueError("feature dataset has no canonical decision date")
         working["ticker"] = working["ticker"].astype(str).str.upper().str.strip()
         working = working[working["ticker"].isin(symbols)].copy()
         if working.empty:
             raise ValueError(f"no {timeframe} feature rows found for requested tickers")
-        if request.as_of is None:
-            return working
-
-        cutoff = pd.Timestamp(request.as_of).tz_convert("UTC")
-        if timeframe == "daily":
-            availability = _daily_availability_utc(working["date"])
+        if "feature_available_at_utc" in working.columns:
+            availability = pd.to_datetime(working["feature_available_at_utc"], errors="coerce", utc=True)
+        elif timeframe == "daily":
+            raise ValueError("daily feature dataset must contain feature_available_at_utc")
         elif timeframe == "intraday":
             timestamps = pd.to_datetime(working["date"], errors="coerce", utc=True)
             bar_duration = _infer_intraday_bar_duration(timestamps, working["ticker"])
@@ -610,6 +604,10 @@ class PredictionService:
         if availability.isna().any():
             raise ValueError(f"{timeframe} feature dataset contains invalid timestamps")
         working["_feature_available_at_utc"] = availability
+        if request.as_of is None:
+            return working
+
+        cutoff = pd.Timestamp(request.as_of).tz_convert("UTC")
         working = working[working["_feature_available_at_utc"] <= cutoff].copy()
         if working.empty:
             raise ValueError(
@@ -623,12 +621,23 @@ class PredictionService:
         *,
         resolved_horizon: str,
         bar_timeframe: str,
+        expected_model_type: str,
+        expected_schema_version: str,
     ) -> ModelInfo:
         manifest = verify_model_artifact(
             model_path,
             allowed_statuses={MODEL_STATUS_PROMOTED},
         )
         status = str(manifest.get("status", "unknown"))
+        if manifest.get("model_type") != expected_model_type:
+            raise ValueError(
+                f"model type {manifest.get('model_type', 'unknown')} is incompatible with {expected_model_type} serving"
+            )
+        if manifest.get("schema_version") != expected_schema_version:
+            raise ValueError(
+                f"model schema {manifest.get('schema_version', 'unknown')} is incompatible with "
+                f"{expected_schema_version} serving"
+            )
         target = _optional_str(manifest.get("target_col"))
         target_horizon = _target_horizon(target)
         if target_horizon != resolved_horizon:
@@ -711,14 +720,6 @@ class PredictionService:
             return self._read_frame(self._resolve(route.curated_dataset))
         return self.live_feature_store.load(mode, as_of=request.as_of)  # type: ignore[arg-type]
 
-    def _optional_frame(self, path: Path | None) -> pd.DataFrame | None:
-        if path is None:
-            return None
-        resolved = self._resolve(path)
-        if not resolved.exists():
-            return None
-        return self._read_frame(resolved)
-
     def _resolve(self, path: Path) -> Path:
         return path if path.is_absolute() else self.root / path
 
@@ -761,15 +762,15 @@ def _final_signal(swing: SwingPrediction | None, intraday: IntradayPrediction | 
         return "avoid_entry_catalyst_veto"
     if intraday is not None and intraday.catalyst.status == "conflicting" and intra_prob is not None and intra_prob >= 0.55:
         return "wait_catalyst_conflict"
-    if swing_prob is not None and swing_prob >= 0.30 and (intra_prob is None or intra_prob >= 0.55):
+    if swing_prob is not None and swing_prob >= 0.65 and (intra_prob is None or intra_prob >= 0.55):
         if intraday is not None and intraday.catalyst.status == "confirmed":
             return "high_conviction_watch_confirmed"
         return "high_conviction_watch"
-    if swing_prob is not None and swing_prob >= 0.18 and (intra_prob is None or intra_prob >= 0.50):
+    if swing_prob is not None and swing_prob >= 0.55 and (intra_prob is None or intra_prob >= 0.50):
         return "watch_for_entry"
     if intra_prob is not None and intra_prob >= 0.65 and swing_prob is None:
         return "intraday_watch"
-    if swing_prob is not None and swing_prob >= 0.18 and intra_prob is not None and intra_prob < 0.50:
+    if swing_prob is not None and swing_prob >= 0.55 and intra_prob is not None and intra_prob < 0.50:
         return "swing_positive_wait_for_intraday"
     return "neutral"
 
@@ -778,19 +779,19 @@ def _swing_signal(probability: Any, catalyst: CatalystAssessment | None = None) 
     value = _float_or_none(probability)
     if value is None:
         return "not_scored"
-    if catalyst is not None and catalyst.status == "veto" and value >= 0.18:
+    if catalyst is not None and catalyst.status == "veto" and value >= 0.55:
         return "bullish_model_catalyst_veto"
-    if catalyst is not None and catalyst.status == "conflicting" and value >= 0.18:
+    if catalyst is not None and catalyst.status == "conflicting" and value >= 0.55:
         return "bullish_model_catalyst_conflict"
-    if value >= 0.30:
+    if value >= 0.65:
         if catalyst is not None and catalyst.status == "confirmed":
             return "strong_bullish_watch_confirmed"
         return "strong_bullish_watch"
-    if value >= 0.18:
+    if value >= 0.55:
         if catalyst is not None and catalyst.status == "confirmed":
             return "bullish_watch_confirmed"
         return "bullish_watch"
-    if value <= 0.05:
+    if value <= 0.40:
         return "low_probability"
     return "neutral"
 
@@ -829,18 +830,6 @@ def _catalyst_info(assessment: CatalystAssessment) -> CatalystConfirmationInfo:
     return CatalystConfirmationInfo.model_validate(assessment.as_record())
 
 
-def _daily_availability_utc(values: pd.Series) -> pd.Series:
-    """Daily close-derived features become available at the regular-session close."""
-    date_text = values.astype(str).str.slice(0, 10)
-    local_dates = pd.to_datetime(date_text, errors="coerce")
-    local_close = local_dates.dt.tz_localize(
-        "America/New_York",
-        ambiguous="NaT",
-        nonexistent="shift_forward",
-    ) + pd.Timedelta(hours=16)
-    return local_close.dt.tz_convert("UTC")
-
-
 def _infer_intraday_bar_duration(timestamps: pd.Series, tickers: pd.Series) -> pd.Timedelta:
     ordered = pd.DataFrame({"timestamp": timestamps, "ticker": tickers}).sort_values(
         ["ticker", "timestamp"]
@@ -870,11 +859,6 @@ def _target_horizon(target_col: str | None) -> str | None:
 
 def _has_any_value(row: pd.Series, columns: list[str]) -> bool:
     return any(column in row.index and not pd.isna(row.get(column)) for column in columns)
-
-
-def _optional_path(value: Any) -> Path | None:
-    text = _optional_str(value)
-    return Path(text) if text else None
 
 
 def _json_value(value: Any) -> float | int | str | None:

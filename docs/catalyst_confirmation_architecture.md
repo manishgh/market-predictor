@@ -188,7 +188,7 @@ All production training and inference inputs pass through `src/market_predictor/
 
 - Bars carry interval start, interval end, availability, ingestion, feed, adjustment, and schema provenance. Provider timestamps are treated as left edges; closing OHLCV is never available at the left edge.
 - Events carry publication, provider update, first-seen, raw availability, sentiment-scoring availability, and final feature availability. Joins use final feature availability.
-- Source attempts carry typed `observed`, `observed_empty`, `partial`, `failed`, `disabled`, and `not_collected` state. Zero events is evidence only when the source was successfully queried.
+- Source attempts carry typed `observed`, `observed_empty`, `partial`, `failed`, `disabled`, and `not_collected` state plus request coverage end and completion availability. Zero events is evidence only when the source was successfully queried. A successful state expires when its coverage end is older than the configured decision-time limit.
 - Universe memberships carry effective windows and snapshot availability. A decision must have exactly one membership that was both effective and known.
 - Fundamental and quant facts require versioned availability. Current snapshots cannot be backfilled over historical rows.
 - Artifacts are written immutably with SHA-256 input/output identities and audit evidence; the manifest is published last.
@@ -221,6 +221,21 @@ Reason:
 - A 200-day slope check needs additional prior bars.
 - Six months of daily bars is insufficient for daily gates using SMA200 or 200-day slope.
 
+### Canonical Swing Model
+
+The production C4 swing contract is `swing.features.v1` -> `swing.model.v1`.
+
+- Decision: after the completed daily bar and all required feature/source timestamps.
+- Entry reference: next exchange session open.
+- Primary horizon: fifth exchange session close.
+- Target: stock return after configured round-trip costs is positive.
+- Retained outcomes: gross/net return, SPY/QQQ/sector excess return, MFE, MAE, exact path, and label availability.
+- Features: daily technical state, SPY/QQQ/sector regime and relative strength, ticker catalysts, observed global context, point-in-time membership, optional as-of fundamentals, and decision-group cross-sectional ranks.
+- Validation: horizon-purged expanding walk-forward, cross-fitted probability calibration, deterministic unseen-ticker holdout, and non-overlapping horizon-phase top-k economics.
+- Promotion: both validation scopes, conservative economics, drawdown, regime, catalyst, alignment, memory, model hash, evidence hashes, and one matching `model_run_id` must pass.
+
+Catalyst assessment remains an explanation and ranking overlay at serving time. It does not overwrite the estimator probability. Production serving rejects every older volatile schema even if an older registry manifest says `promoted`.
+
 ### Intraday Warm-Up
 
 Intraday prediction is a supported model view. Its readiness gates apply only when an intraday route is requested; they must not block a daily-only swing response.
@@ -247,7 +262,7 @@ Required gates:
 | Feed type | Feed type is known for volume-sensitive features | `warn` if unknown, `invalid` if known partial and feature requires SIP |
 | Event relevance | Recent news must be ticker-relevant or explicitly market/sector-context tagged | `warn` or exclude event |
 | Source coverage | At least one valid recent source for catalyst-dependent predictions | `no_signal` |
-| Required source state | Every configured source is `observed` or `observed_empty` by the decision time | `invalid` |
+| Required source state | Every configured source is `observed` or `observed_empty`, completed by the decision, and fresh by request coverage end | `invalid` |
 | Universe membership | Exactly one effective and already-known snapshot per decision | `invalid` |
 | Fundamental timing | Fact version was available by decision time; no current-snapshot backfill | `invalid` |
 | Model/schema match | Feature schema matches model expectation | `invalid` |
@@ -345,8 +360,8 @@ The repo currently contains several useful families. Their intended roles should
 
 | Family | Intended use | Status guidance |
 | --- | --- | --- |
-| S&P 500 volatile-mover 5D model | Rank unusually large positive moves over the next week | Formally promoted on 2026-07-08 under earlier gates; conditional until current profitability/regime/catalyst audits pass |
-| S&P 500 volatile-mover 1D model | Rank unusually large next-day positive moves | Candidate; not registered for production serving |
+| Canonical swing 5D model | Estimate cost-adjusted net-positive return from next open to fifth close | C4 implementation complete; no real-data artifact promoted yet |
+| Pre-C4 volatile 1D/5D models | Historical comparison only | Deprecated and rejected by canonical production serving |
 | Intraday 5-minute technical entry-path model | Estimate target-before-stop probability over 12 bars | Candidate; current API artifact fails AUC/lift promotion gates |
 | Intraday opening V2 models | Non-overlapping, cost-aware 09:30-11:30 ET setup experiments | Candidate artifacts with rejected promotion decision; not production-serving models |
 | ML V3 B0/B1/B2/R1/D1 and O1 overlay | Cross-sectional opportunity ranking, separate downside risk, and external catalyst confirmation | C8 development evaluation complete; all available families/overlays rejected, R2 unavailable without microstructure, and no V3 artifact is production-serving |
@@ -364,8 +379,8 @@ The manifest, not the filename, is authoritative.
 
 | Route / artifact | Manifest state | Validation summary | Operational decision |
 | --- | --- | --- | --- |
-| Swing 5D, `sp500_6m_next_week_big_up_v2_20260708_candidate.joblib` | `promoted` | 499 tickers; 45,908 OOS rows; ROC AUC 0.7126; top-decile lift 2.5936 | API-eligible, but grandfathered from the earlier gate set. Re-audit profitability, drawdown, regime, and catalyst behavior before real-capital use. |
-| Swing 1D, `sp500_6m_next_day_big_up_v2_20260708_candidate.joblib` | `candidate` | ROC AUC 0.6657; top-decile lift 2.4850 | Research only; production API rejects it. |
+| Swing 5D, `canonical_swing` / `swing.model.v1` | no promoted artifact | C4 code and frozen gates are verified; real-data metrics do not yet exist | Route remains not-ready until a hash-bound candidate passes every C4 gate. |
+| Pre-C4 volatile swing artifacts | historical manifests only | Earlier reported classification metrics are not comparable to the new target and gates | Production API rejects their type/schema; no grandfathering. |
 | Intraday 12-bar API default, 2026-07-09 technical ablation | `candidate` | ROC AUC 0.6014; top-decile lift 1.4719 | Research only; fails current 0.65 AUC and 2.0 lift gates. |
 | Intraday opening V2 exact-path histogram model | `candidate` | 47,543 labeled rows; 196 tickers; ROC AUC 0.5806; lift 1.1764 | Promotion rejected. |
 | Intraday opening V2 Extra Trees | `candidate` | ROC AUC 0.5783; lift 1.1442 | Promotion rejected. |
@@ -448,9 +463,10 @@ Initial known audit shape:
 Implemented audit surfaces:
 
 - `audit-swing-alignment` verifies historical event-to-candle mapping and news-count consistency.
-- Dataset builders write per-ticker eligibility/readiness audit CSVs.
-- `audit-promotion-readiness` writes profitability, selected-trade, regime, regime-profitability, and catalyst audit files.
-- `promote-model` consumes those audit artifacts and leaves a failing artifact in candidate state.
+- `build-swing-dataset` publishes a hash-verified feature/label artifact only after timing, warm-up, benchmark, SIP, adjustment, source-freshness, cross-section, and exact-path checks pass.
+- `train-swing-model` writes purged predictions, unseen-ticker predictions, folds, profitability, regime, catalyst, alignment, metrics, and an evidence hash manifest tied to the candidate.
+- `promote-swing-model` verifies the candidate and every evidence hash, then leaves any failing artifact in candidate state with a rejection report.
+- The older `audit-promotion-readiness` / `promote-model` path remains only for pre-C5 intraday research and cannot promote a canonical swing model.
 
 ## 12. Prediction Workflow
 
@@ -479,6 +495,7 @@ Recommended flow:
 | Intraday warm-up depth | Configured, default ~130 bars | Only required when intraday features are used |
 | Provider websocket ownership | Prefer `trading_flow` in production | `market-predictor` should avoid duplicate live streams |
 | Feed tier | SIP/full coverage for volume-sensitive features | Unknown/partial feed reduces readiness |
+| Source coverage age | 60 minutes by default | Decision minus request coverage end; stale success is invalid |
 | Cache TTL | Deployment-defined | Revalidate stale cache |
 | Model states | Baseline, candidate, promoted, deprecated | Required registry language |
 | Audit output | CSV/report artifact | Implement after contract approval |

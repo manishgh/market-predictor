@@ -171,7 +171,14 @@ def join_source_collection_status(
 ) -> pd.DataFrame:
     """Attach the latest completed source attempt known at each decision time."""
 
-    required = {"ticker", "source_family", "completed_at_utc", "status", "row_count"}
+    required = {
+        "ticker",
+        "source_family",
+        "requested_end_utc",
+        "completed_at_utc",
+        "status",
+        "row_count",
+    }
     missing = sorted(required.difference(collections.columns))
     if missing:
         raise SchemaMismatchError(f"source collections missing columns: {', '.join(missing)}")
@@ -182,17 +189,20 @@ def join_source_collection_status(
     attempts["ticker"] = attempts["ticker"].astype(str).str.upper().str.strip()
     attempts["source_family"] = attempts["source_family"].astype(str).str.lower().str.strip()
     attempts["completed_at_utc"] = _utc_series(attempts["completed_at_utc"])
-    if bool(attempts["completed_at_utc"].isna().any()):
-        raise DataReadinessError("source collections contain invalid completion timestamps")
+    attempts["requested_end_utc"] = _utc_series(attempts["requested_end_utc"])
+    if bool(attempts[["completed_at_utc", "requested_end_utc"]].isna().any(axis=1).any()):
+        raise DataReadinessError("source collections contain invalid coverage or completion timestamps")
     output["source_state_available_at_utc"] = pd.Series(pd.NaT, index=output.index, dtype="datetime64[ns, UTC]")
     for family in source_families:
         normalized_family = family.strip().lower()
         status_column = f"source_status_{normalized_family}"
         rows_column = f"source_observed_rows_{normalized_family}"
         available_column = f"source_status_available_at_utc_{normalized_family}"
+        coverage_column = f"source_coverage_end_utc_{normalized_family}"
         output[status_column] = "not_collected"
         output[rows_column] = 0
         output[available_column] = pd.Series(pd.NaT, index=output.index, dtype="datetime64[ns, UTC]")
+        output[coverage_column] = pd.Series(pd.NaT, index=output.index, dtype="datetime64[ns, UTC]")
         family_attempts = attempts[attempts["source_family"] == normalized_family]
         for ticker, indices in output.groupby("ticker", sort=False).groups.items():
             ticker_attempts = family_attempts[family_attempts["ticker"] == ticker].sort_values("completed_at_utc")
@@ -201,7 +211,7 @@ def join_source_collection_status(
             decision_part = output.loc[indices].sort_values("decision_time_utc")
             joined = pd.merge_asof(
                 decision_part[["decision_time_utc"]],
-                ticker_attempts[["completed_at_utc", "status", "row_count"]],
+                ticker_attempts[["completed_at_utc", "requested_end_utc", "status", "row_count"]],
                 left_on="decision_time_utc",
                 right_on="completed_at_utc",
                 direction="backward",
@@ -210,6 +220,7 @@ def join_source_collection_status(
             output.loc[decision_part.index, status_column] = joined["status"].fillna("not_collected").to_numpy()
             output.loc[decision_part.index, rows_column] = joined["row_count"].fillna(0).astype(int).to_numpy()
             output.loc[decision_part.index, available_column] = joined["completed_at_utc"].array
+            output.loc[decision_part.index, coverage_column] = joined["requested_end_utc"].array
     available_columns = [f"source_status_available_at_utc_{family.strip().lower()}" for family in source_families]
     output["source_state_available_at_utc"] = output[available_columns].max(axis=1)
     return output
@@ -286,6 +297,18 @@ def _aggregate_ticker_events(
         output[f"sentiment_mean_{name}"] = np.divide(weighted, weight, out=np.zeros(len(output)), where=weight > 0)
         output[f"sentiment_coverage_{name}"] = np.divide(
             _window_sum(sentiment_present, start, end),
+            count,
+            out=np.zeros(len(output)),
+            where=count > 0,
+        )
+        output[f"event_relevance_mean_{name}"] = np.divide(
+            _window_sum(relevance, start, end),
+            count,
+            out=np.zeros(len(output)),
+            where=count > 0,
+        )
+        output[f"low_relevance_event_fraction_{name}"] = np.divide(
+            _window_sum((relevance < 0.5).astype(float), start, end),
             count,
             out=np.zeros(len(output)),
             where=count > 0,

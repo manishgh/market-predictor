@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
-from pathlib import Path
 import tempfile
 import unittest
+from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 import joblib
 import numpy as np
@@ -11,11 +11,16 @@ import pandas as pd
 
 from market_predictor.global_context import build_sector_theme_monitor, classify_universe_themes, score_flashpoints
 from market_predictor.registry import write_model_manifest
+from market_predictor.swing.contracts import (
+    SWING_FEATURE_SCHEMA_VERSION,
+    SWING_MODEL_SCHEMA_VERSION,
+    SWING_MODEL_TYPE,
+)
 
 
 class GlobalContextTests(unittest.TestCase):
     def test_scores_oil_chokepoint_flashpoint(self) -> None:
-        now = datetime(2026, 7, 8, tzinfo=timezone.utc)
+        now = datetime(2026, 7, 8, tzinfo=UTC)
         events = pd.DataFrame(
             [
                 {
@@ -60,7 +65,18 @@ class GlobalContextTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             model_path = Path(tmp) / "model.joblib"
             model = _FakeProbabilityModel()
-            joblib.dump({"model": model, "features": ["feature"], "target_col": "target_next_week_big_up"}, model_path)
+            joblib.dump(
+                {
+                    "model": model,
+                    "calibrator": None,
+                    "features": ["feature"],
+                    "target_col": "target_net_positive_5d",
+                    "model_type": SWING_MODEL_TYPE,
+                    "schema_version": SWING_MODEL_SCHEMA_VERSION,
+                    "feature_schema_version": SWING_FEATURE_SCHEMA_VERSION,
+                },
+                model_path,
+            )
             training = pd.DataFrame(
                 [
                     {"ticker": "XOM", "date": "2026-07-01", "feature": 0.1, "target": 1},
@@ -69,19 +85,33 @@ class GlobalContextTests(unittest.TestCase):
             )
             write_model_manifest(
                 model_path=model_path,
-                model_type="volatile_mover",
-                schema_version="volatile_mover.v1",
-                target_col="target",
+                model_type=SWING_MODEL_TYPE,
+                schema_version=SWING_MODEL_SCHEMA_VERSION,
+                target_col="target_net_positive_5d",
                 features=["feature"],
-                training_data=training,
+                training_data=training.assign(target_net_positive_5d=training["target"]),
                 metrics={"roc_auc": 0.7},
-                validation_split="date_grouped_purged_walk_forward",
+                validation_split="session_purged_walk_forward_and_ticker_holdout",
                 status="promoted",
             )
             dataset = pd.DataFrame(
                 [
-                    {"ticker": "XOM", "date": "2026-07-08", "feature": 0.1, "volume_z20": 1.0, "news_count": 2},
-                    {"ticker": "DAL", "date": "2026-07-08", "feature": 0.2, "volume_z20": 1.0, "news_count": 2},
+                    {
+                        "ticker": "XOM",
+                        "date": "2026-07-08",
+                        "feature": 0.1,
+                        "volume_z20": 1.0,
+                        "event_count_3d": 2,
+                        "swing_feature_schema_version": SWING_FEATURE_SCHEMA_VERSION,
+                    },
+                    {
+                        "ticker": "DAL",
+                        "date": "2026-07-08",
+                        "feature": 0.2,
+                        "volume_z20": 1.0,
+                        "event_count_3d": 2,
+                        "swing_feature_schema_version": SWING_FEATURE_SCHEMA_VERSION,
+                    },
                 ]
             )
             universe = pd.DataFrame(

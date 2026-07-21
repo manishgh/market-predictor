@@ -1,12 +1,11 @@
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
 import math
-from typing import Any
+from dataclasses import asdict, dataclass
+from typing import Any, cast
 
 import numpy as np
 import pandas as pd
-
 
 SOURCE_FAMILIES = ["alpaca", "reddit", "seeking_alpha", "sec", "finviz"]
 MATERIAL_EVENT_TYPES = ["earnings", "guidance", "analyst", "ma", "fda", "contract", "offering", "insider"]
@@ -31,14 +30,34 @@ class CatalystAssessment:
 
 
 def assess_catalyst_overlay(row: pd.Series, *, model_probability: float | None) -> CatalystAssessment:
-    event_count = int(max(0.0, _first_number(row, ["news_count_2h", "news_count_1d", "event_count", "news_count"])))
+    event_count = int(
+        max(
+            0.0,
+            _first_number(
+                row,
+                ["news_count_2h", "event_count_1d", "event_count_3d", "news_count_1d", "event_count", "news_count"],
+            ),
+        )
+    )
     sentiment = _first_number(
         row,
-        ["sentiment_mean_2h", "latest_catalyst_sentiment", "sentiment_mean_1d", "sentiment_mean"],
+        [
+            "sentiment_mean_2h",
+            "latest_catalyst_sentiment",
+            "sentiment_mean_1d",
+            "sentiment_mean_3d",
+            "sentiment_mean",
+        ],
     )
     relevance = _first_number(
         row,
-        ["event_relevance_mean_2h", "latest_catalyst_relevance", "event_relevance_mean_1d", "event_relevance_score"],
+        [
+            "event_relevance_mean_2h",
+            "latest_catalyst_relevance",
+            "event_relevance_mean_1d",
+            "event_relevance_mean_3d",
+            "event_relevance_score",
+        ],
     )
     generic_count = _first_number(row, ["generic_movers_count_2h", "generic_movers_count_1d"])
     minutes_since = _optional_number(row.get("minutes_since_last_catalyst"))
@@ -136,6 +155,7 @@ def _source_diversity(row: pd.Series) -> int:
             [
                 f"source_count_{family}_2h",
                 f"source_count_{family}_1d",
+                f"source_count_{family}_3d",
                 f"source_count_{family}",
             ],
         )
@@ -166,7 +186,7 @@ def _first_number(row: pd.Series, columns: list[str]) -> float:
 
 def _optional_number(value: object) -> float | None:
     try:
-        converted = float(value)
+        converted = float(cast(Any, value))
     except (TypeError, ValueError):
         return None
     return converted if np.isfinite(converted) else None
