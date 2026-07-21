@@ -11,40 +11,46 @@ from market_predictor.canonical.store import (
     write_canonical_artifact,
 )
 from market_predictor.commands.configuration import load_typed_config
+from market_predictor.intraday.contracts import (
+    IntradayDatasetConfig,
+    IntradayPromotionConfig,
+    IntradayTrainingConfig,
+)
+from market_predictor.intraday.dataset import build_intraday_dataset
+from market_predictor.intraday.model import train_intraday_model
+from market_predictor.intraday.promotion import (
+    load_intraday_training_evidence,
+    promote_intraday_model,
+    write_intraday_training_evidence,
+)
 from market_predictor.registry import manifest_path_for
-from market_predictor.swing.contracts import (
-    SwingDatasetConfig,
-    SwingPromotionConfig,
-    SwingTrainingConfig,
-)
-from market_predictor.swing.dataset import build_swing_dataset
-from market_predictor.swing.model import train_swing_model
-from market_predictor.swing.promotion import (
-    load_swing_training_evidence,
-    promote_swing_model,
-    write_swing_training_evidence,
-)
 
 
-def register_swing_model_commands(app: typer.Typer, console: Console) -> None:
-    @app.command("build-swing-dataset")
-    def build_swing_dataset_command(
-        decisions: Path = typer.Option(..., help="Hash-verified canonical decision artifact."),
-        benchmark_bars: Path = typer.Option(..., help="Hash-verified SPY, QQQ, and sector daily bars."),
+def register_intraday_model_commands(app: typer.Typer, console: Console) -> None:
+    @app.command("build-intraday-dataset")
+    def build_intraday_dataset_command(
+        decisions: Path = typer.Option(..., help="Hash-verified canonical 5m decision artifact."),
+        one_minute_bars: Path = typer.Option(..., help="Hash-verified canonical 1m stock and benchmark bars."),
+        benchmark_bars: Path = typer.Option(..., help="Hash-verified canonical 5m SPY, QQQ, and sector bars."),
         global_events: Path = typer.Option(..., help="Hash-verified canonical MARKET event artifact."),
         global_source_collections: Path = typer.Option(
             ...,
             help="Hash-verified source collection states for ticker MARKET.",
         ),
-        out: Path = typer.Option(..., help="Immutable canonical swing dataset parquet."),
-        config_path: Path | None = typer.Option(None, "--config", help="Swing dataset JSON or TOML config."),
+        out: Path = typer.Option(..., help="Immutable canonical intraday dataset parquet."),
+        config_path: Path | None = typer.Option(None, "--config", help="Intraday dataset JSON or TOML config."),
         production: bool = typer.Option(True, "--production/--research"),
     ) -> None:
-        """Build an audited point-in-time daily swing feature and label artifact."""
+        """Build audited 5m decisions with exact subsequent 1m path labels."""
 
         decision_frame, _ = load_canonical_artifact(
             decisions,
             expected_type="decisions",
+            allow_research=not production,
+        )
+        one_minute_frame, _ = load_canonical_artifact(
+            one_minute_bars,
+            expected_type="bars",
             allow_research=not production,
         )
         benchmark_frame, _ = load_canonical_artifact(
@@ -62,19 +68,29 @@ def register_swing_model_commands(app: typer.Typer, console: Console) -> None:
             expected_type="source_collections",
             allow_research=not production,
         )
-        config = load_typed_config(config_path, SwingDatasetConfig)
-        dataset, audit = build_swing_dataset(
+        config = load_typed_config(config_path, IntradayDatasetConfig)
+        dataset, audit = build_intraday_dataset(
             decision_frame,
+            one_minute_frame,
             benchmark_frame,
             global_events=global_event_frame,
             global_source_collections=global_collection_frame,
             config=config,
         )
-        inputs = {str(path): file_sha256(path) for path in (decisions, benchmark_bars, global_events, global_source_collections)}
+        inputs = {
+            str(path): file_sha256(path)
+            for path in (
+                decisions,
+                one_minute_bars,
+                benchmark_bars,
+                global_events,
+                global_source_collections,
+            )
+        }
         manifest = write_canonical_artifact(
             dataset,
             out,
-            artifact_type="swing_dataset",
+            artifact_type="intraday_dataset",
             audit=audit,
             inputs=inputs,
             production_ready=production,
@@ -83,21 +99,22 @@ def register_swing_model_commands(app: typer.Typer, console: Console) -> None:
             {
                 "rows": len(dataset),
                 "eligible_rows": int(dataset["label_eligible"].fillna(False).sum()),
+                "catalyst_eligible_rows": int(dataset["catalyst_eligible"].fillna(False).sum()),
                 "out": str(out),
                 "sha256": manifest["artifact_sha256"],
             }
         )
 
-    @app.command("train-swing-model")
-    def train_swing_model_command(
-        dataset: Path = typer.Option(..., help="Hash-verified canonical swing dataset."),
-        model_out: Path = typer.Option(..., help="New candidate model artifact path."),
+    @app.command("train-intraday-model")
+    def train_intraday_model_command(
+        dataset: Path = typer.Option(..., help="Hash-verified canonical intraday dataset."),
+        model_out: Path = typer.Option(..., help="New atomic dual-model candidate artifact."),
         evidence_dir: Path = typer.Option(..., help="New directory for promotion evidence."),
-        config_path: Path | None = typer.Option(None, "--config", help="Swing training JSON or TOML config."),
+        config_path: Path | None = typer.Option(None, "--config", help="Intraday training JSON or TOML config."),
         production: bool = typer.Option(True, "--production/--research"),
         overwrite: bool = typer.Option(False, help="Explicitly replace model and evidence outputs."),
     ) -> None:
-        """Train a candidate with purged walk-forward and unseen-ticker validation."""
+        """Train opportunity and downside estimators with independent validation."""
 
         if not overwrite and (model_out.exists() or manifest_path_for(model_out).exists()):
             raise typer.BadParameter(f"model output already exists: {model_out}")
@@ -105,43 +122,42 @@ def register_swing_model_commands(app: typer.Typer, console: Console) -> None:
             raise typer.BadParameter(f"evidence directory is not empty: {evidence_dir}")
         frame, manifest = load_canonical_artifact(
             dataset,
-            expected_type="swing_dataset",
+            expected_type="intraday_dataset",
             allow_research=not production,
         )
-        config = load_typed_config(config_path, SwingTrainingConfig)
-        result = train_swing_model(
+        result = train_intraday_model(
             frame,
             model_out=model_out,
             dataset_sha256=str(manifest["artifact_sha256"]),
-            config=config,
+            config=load_typed_config(config_path, IntradayTrainingConfig),
             overwrite=overwrite,
         )
-        evidence = write_swing_training_evidence(result, evidence_dir, overwrite=overwrite)
+        evidence = write_intraday_training_evidence(result, evidence_dir, overwrite=overwrite)
         console.print(
             {
                 "model": str(model_out),
                 "status": result.manifest["status"],
                 "model_run_id": result.metrics["model_run_id"],
-                "roc_auc": result.metrics["roc_auc"],
-                "ticker_holdout_roc_auc": result.metrics["ticker_holdout_roc_auc"],
+                "opportunity_roc_auc": result.metrics["opportunity_roc_auc"],
+                "downside_roc_auc": result.metrics["downside_roc_auc"],
                 "evidence": {name: str(path) for name, path in evidence.items()},
             }
         )
 
-    @app.command("promote-swing-model")
-    def promote_swing_model_command(
-        model: Path = typer.Option(..., help="Candidate canonical swing model."),
+    @app.command("promote-intraday-model")
+    def promote_intraday_model_command(
+        model: Path = typer.Option(..., help="Candidate canonical intraday dual-model artifact."),
         evidence_dir: Path = typer.Option(..., help="Evidence directory produced by training."),
         config_path: Path | None = typer.Option(None, "--config", help="Promotion gate JSON or TOML config."),
         report_out: Path | None = typer.Option(None, help="Optional promotion report path."),
     ) -> None:
-        """Promote a candidate only when all independent production gates pass."""
+        """Promote both intraday estimators atomically when every gate passes."""
 
-        evidence = load_swing_training_evidence(evidence_dir, model)
-        result = promote_swing_model(
+        evidence = load_intraday_training_evidence(evidence_dir, model)
+        result = promote_intraday_model(
             model_path=model,
             evidence=evidence,
-            config=load_typed_config(config_path, SwingPromotionConfig),
+            config=load_typed_config(config_path, IntradayPromotionConfig),
             report_path=report_out,
         )
         console.print(result)

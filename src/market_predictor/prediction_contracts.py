@@ -136,15 +136,16 @@ class SwingPrediction(BaseModel):
 class IntradayPrediction(BaseModel):
     ticker: str
     date: str | None = None
-    probability: float | None = None
+    opportunity_probability: float | None = None
+    downside_probability: float | None = None
     decision_score: float | None = None
-    model_prediction: int | None = None
-    probability_field: str | None = None
+    opportunity_prediction: int | None = None
+    downside_prediction: int | None = None
     signal: str
     rank: int | None = None
     close: float | None = None
-    return_1d: float | None = None
-    volume_z20: float | None = None
+    return_15m: float | None = None
+    relative_volume: float | None = None
     rsi_14: float | None = None
     macd_signal_diff: float | None = None
     entry_stop_pct: float | None = None

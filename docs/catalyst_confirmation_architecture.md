@@ -245,7 +245,7 @@ Minimum:
 - `intraday_bar_count >= configured_intraday_warmup`
 - Default recommendation: approximately 130 bars for MACD 12/26/9 stabilization.
 
-The production 5-minute route also requires point-in-time session features, consecutive raw bars for label construction, known feed coverage, and a promoted intraday manifest. If intraday features are not part of a requested model view, intraday warm-up does not block daily-only prediction.
+The canonical 60-minute intraday route requires at least 130 completed 5-minute bars and 130 completed 1-minute bars, point-in-time session features, exact consecutive 1-minute label paths, SIP/all-adjusted feed provenance, exact benchmark intervals, and a promoted `intraday.model.v1` manifest. If intraday features are not part of a requested model view, intraday warm-up does not block daily-only prediction.
 
 ## 7. Data-Readiness Gates
 
@@ -362,7 +362,8 @@ The repo currently contains several useful families. Their intended roles should
 | --- | --- | --- |
 | Canonical swing 5D model | Estimate cost-adjusted net-positive return from next open to fifth close | C4 implementation complete; no real-data artifact promoted yet |
 | Pre-C4 volatile 1D/5D models | Historical comparison only | Deprecated and rejected by canonical production serving |
-| Intraday 5-minute technical entry-path model | Estimate target-before-stop probability over 12 bars | Candidate; current API artifact fails AUC/lift promotion gates |
+| Canonical intraday 60m dual model | Estimate target-before-stop opportunity and stop-before-target downside from completed 5-minute decisions using exact 1-minute paths | C5 implementation complete; no real-data artifact promoted yet |
+| Pre-C5 intraday 12-bar technical model | Historical comparison only | Candidate; rejected by canonical production serving |
 | Intraday opening V2 models | Non-overlapping, cost-aware 09:30-11:30 ET setup experiments | Candidate artifacts with rejected promotion decision; not production-serving models |
 | ML V3 B0/B1/B2/R1/D1 and O1 overlay | Cross-sectional opportunity ranking, separate downside risk, and external catalyst confirmation | C8 development evaluation complete; all available families/overlays rejected, R2 unavailable without microstructure, and no V3 artifact is production-serving |
 | ML V4-H1 120-minute B0/R1 | Test whether longer exact paths and lower decision turnover cover costs | Development experiment complete and rejected; no artifact is production-serving |
@@ -381,6 +382,7 @@ The manifest, not the filename, is authoritative.
 | --- | --- | --- | --- |
 | Swing 5D, `canonical_swing` / `swing.model.v1` | no promoted artifact | C4 code and frozen gates are verified; real-data metrics do not yet exist | Route remains not-ready until a hash-bound candidate passes every C4 gate. |
 | Pre-C4 volatile swing artifacts | historical manifests only | Earlier reported classification metrics are not comparable to the new target and gates | Production API rejects their type/schema; no grandfathering. |
+| Intraday 60m, `canonical_intraday` / `intraday.model.v1` | no promoted artifact | C5 code and frozen dual-model/economic gates are verified; real-data metrics do not yet exist | No route is registered until one atomic candidate passes every C5 gate. |
 | Intraday 12-bar API default, 2026-07-09 technical ablation | `candidate` | ROC AUC 0.6014; top-decile lift 1.4719 | Research only; fails current 0.65 AUC and 2.0 lift gates. |
 | Intraday opening V2 exact-path histogram model | `candidate` | 47,543 labeled rows; 196 tickers; ROC AUC 0.5806; lift 1.1764 | Promotion rejected. |
 | Intraday opening V2 Extra Trees | `candidate` | ROC AUC 0.5783; lift 1.1442 | Promotion rejected. |
@@ -466,7 +468,10 @@ Implemented audit surfaces:
 - `build-swing-dataset` publishes a hash-verified feature/label artifact only after timing, warm-up, benchmark, SIP, adjustment, source-freshness, cross-section, and exact-path checks pass.
 - `train-swing-model` writes purged predictions, unseen-ticker predictions, folds, profitability, regime, catalyst, alignment, metrics, and an evidence hash manifest tied to the candidate.
 - `promote-swing-model` verifies the candidate and every evidence hash, then leaves any failing artifact in candidate state with a rejection report.
-- The older `audit-promotion-readiness` / `promote-model` path remains only for pre-C5 intraday research and cannot promote a canonical swing model.
+- `build-intraday-dataset` publishes completed 5-minute decisions with exact subsequent 1-minute paths only after timing, dual warm-up, benchmark, SIP, adjustment, source-freshness, cross-section, and memory checks pass.
+- `train-intraday-model` writes separate opportunity/downside validation, unseen-ticker, economics, regime, catalyst, alignment, fold, memory, and provenance evidence in one hash-bound candidate bundle.
+- `promote-intraday-model` verifies every evidence hash and promotes both estimators atomically only when all frozen gates pass.
+- The older `audit-promotion-readiness` / `promote-model` path remains research-only and cannot promote a canonical C4 or C5 artifact.
 
 ## 12. Prediction Workflow
 

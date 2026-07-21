@@ -21,7 +21,8 @@ Model lifecycle state comes from each artifact's `.manifest.json`; unregistered 
 | --- | --- | --- | --- |
 | Swing 5D | Canonical `swing.model.v1` | Implementation complete; no promoted artifact | Point-in-time dataset, exact five-session labels, purged walk-forward, unseen-ticker holdout, calibration, economics, drawdown, catalyst, alignment, provenance, and 4 GiB gates are implemented. Real-data training and promotion have not passed yet. |
 | Legacy swing 1D/5D volatile models | Pre-C4 artifacts | Deprecated and not serveable | Their feature/target schemas do not satisfy the canonical C4 contract, regardless of an older manifest status. |
-| Intraday 12 bars, API default | 2026-07-09 technical ablation | Candidate | ROC AUC 0.6014 and lift 1.4719. Fails current AUC/lift gates. |
+| Intraday 60m | Canonical `intraday.model.v1` | Implementation complete; no promoted artifact | Completed 5-minute decisions, exact next-available 1-minute entry/path labels, separate opportunity/downside estimators, purged walk-forward, unseen-ticker holdout, calibration, economics, drawdown, catalyst-overlay, alignment, provenance, and 4 GiB gates are implemented. Real-data training and promotion have not passed yet. |
+| Legacy intraday 12 bars | 2026-07-09 technical ablation | Candidate; not serveable | ROC AUC 0.6014 and lift 1.4719. It predates the canonical C5 contract and fails its historical gates. |
 | Intraday opening V2 | 2026-07-10 non-overlapping, cost-aware experiment | Candidate; promotion rejected | Best exact-path AUC 0.5806, lift 1.1764, selected net return -0.184% per trade, profit factor 0.7076, max drawdown 30.28%. |
 | Intraday V3 R1 | 2026-07-20 grouped XGBoost ranker | Candidate; promotion rejected | Walk-forward/holdout NDCG@10 0.4930/0.5123, but top-10 cost-adjusted excess return is -0.0715%/-0.0764%. |
 | Intraday V3 O1 | 2026-07-21 fixed ticker-catalyst overlay on R1 | Research ablation; rejected | Walk-forward top-10 excess return improves from -0.0574% to -0.0487%, but ticker holdout worsens from -0.0642% to -0.0669%; both paired confidence intervals include zero. |
@@ -289,7 +290,7 @@ Example request:
 
 `as_of` is optional, but when supplied it must include a timezone or UTC offset. Daily close-derived rows are available only from 16:00 America/New_York on their trading date. Intraday rows are available only after the inferred bar closes. These rules also apply to historical replay, preventing a request from reading a feature row that was not tradable at the requested time.
 
-Use `horizon: "auto"` for unified prediction so each server route resolves its native horizon. The only current production route is `5d` swing. The `1d` swing and `12b` intraday candidates remain unregistered until they pass promotion. An explicit unsupported horizon is rejected; a registered model whose target conflicts with its route is also rejected. Responses include `resolved_horizons` and each model's `resolved_horizon` for auditability.
+Use `horizon: "auto"` for unified prediction so each server route resolves its native horizon. The only configured production route is `5d` swing, and it remains not-ready until a real artifact is promoted. Canonical intraday uses a `60m` horizon and remains unregistered until a real C5 candidate passes promotion. An explicit unsupported horizon is rejected; a registered model whose target conflicts with its route is also rejected. Responses include `resolved_horizons` and each model's `resolved_horizon` for auditability.
 
 The unified response returns separate `swing` and `intraday` model views plus a final orchestration signal. It does not average unrelated model probabilities into one opaque number. Readiness reports daily and intraday history separately and treats unknown feed tiers as unproven; only explicit SIP/consolidated provenance satisfies the full-volume gate. A `warn` or `invalid` view is diagnostic only and returns `signal: "not_ready"` with no decision score, model decision, or rank.
 
@@ -309,7 +310,7 @@ market-predictor publish-live-features `
   --price-feed sip
 ```
 
-Catalyst evidence is returned separately from the model probability. `probability` is the unmodified model output; `decision_score` applies only a transparent ranking adjustment. The `catalyst` object reports confirmation, conflict, veto, mixed, or absent evidence using relevance, sentiment, recency, source diversity, generic-headline rate, and material-event taxonomy. This preserves technical-model auditability while allowing strong negative material catalysts to block a long entry.
+Catalyst evidence is returned separately from model probabilities. Swing exposes its unmodified probability. Canonical intraday exposes independent `opportunity_probability` and `downside_probability`; its `decision_score` applies a transparent ranking adjustment to their risk-adjusted combination. The `catalyst` object reports confirmation, conflict, veto, mixed, or absent evidence using relevance, sentiment, recency, source diversity, generic-headline rate, and material-event taxonomy. Catalyst can confirm or veto a decision, but it does not modify either intraday estimator probability.
 
 Every prediction served through the top-level API is written as an immutable, content-addressed JSON snapshot under `data/predictions/snapshots/`. The response returns `snapshot_id` and `snapshot_sha256`; both identify the exact request, response, model hashes, resolved horizons, feature cutoff, and generation time used for later outcome evaluation.
 
@@ -391,7 +392,7 @@ Hourly reaction features require Alpaca bars. If hourly bars are unavailable, th
 
 The former four-model watchlist average, heuristic watch/behavior commands, event/daily baseline trainers, `live-once`, `live-run`, and accuracy-only `live-train-event` path were removed. They mixed incompatible horizons, accepted unregistered artifacts, and could republish research features as live data. The API is the only operational prediction surface; research scorers require a registered, hash-matching candidate or promoted model.
 
-The canonical point-in-time data boundary and C4 swing model pipeline are implemented. Automatic live swing publication and the C5 intraday rebuild are not complete. `/v1/health/ready` remains HTTP 503 while a promoted canonical model or audited live snapshot is absent.
+The canonical point-in-time data boundary, C4 swing pipeline, and C5 intraday pipeline are implemented. Automatic live publication and deployment wiring are C6 work. `/v1/health/ready` remains HTTP 503 while a promoted canonical model or audited live snapshot is absent.
 
 ## Canonical Point-In-Time Data
 
@@ -446,6 +447,36 @@ market-predictor promote-swing-model `
 `build-swing-dataset` uses a post-close decision, next-session-open entry, and fifth-session-close exit. It writes exact entry/exit/label timestamps, costs, stock and benchmark returns, MFE/MAE, and eligibility evidence. `train-swing-model` publishes a candidate plus a hash inventory for every promotion file. `promote-swing-model` verifies that inventory and the candidate hash before applying frozen gates. Editing a metrics or audit file invalidates the bundle.
 
 The removed `build-volatile-dataset`, `train-volatile-model`, and `score-volatile-latest` commands are not compatibility aliases. Old volatile artifacts cannot be loaded by the production swing API.
+
+## Canonical Intraday Model Pipeline
+
+The production intraday path consumes hash-verified canonical 5-minute decisions, 1-minute stock/benchmark bars, 5-minute benchmark bars, and global context. Dataset construction and training fail before the configured 4 GiB process limit; input windows must be sized accordingly until C6 adds bounded multi-artifact orchestration.
+
+```powershell
+market-predictor build-intraday-dataset `
+  --decisions data/canonical/intraday_decisions_5m.parquet `
+  --one-minute-bars data/canonical/intraday_bars_1m.parquet `
+  --benchmark-bars data/canonical/intraday_benchmarks_5m.parquet `
+  --global-events data/canonical/global_events.parquet `
+  --global-source-collections data/canonical/global_source_collections.parquet `
+  --config configs/intraday_dataset.toml `
+  --out data/features/intraday/intraday_60m.parquet
+
+market-predictor train-intraday-model `
+  --dataset data/features/intraday/intraday_60m.parquet `
+  --config configs/intraday_training.toml `
+  --model-out models/intraday/candidates/intraday_60m.joblib `
+  --evidence-dir data/reports/intraday_60m_candidate
+
+market-predictor promote-intraday-model `
+  --model models/intraday/candidates/intraday_60m.joblib `
+  --evidence-dir data/reports/intraday_60m_candidate `
+  --config configs/intraday_promotion.toml
+```
+
+Each decision is made only after a completed 5-minute bar. Entry is the first subsequent 1-minute open. The default 60-minute path uses exact consecutive 1-minute bars, a 1 ATR target, a 0.75 ATR stop, and stop-first resolution when both barriers occur in one bar. SPY, QQQ, and sector returns use the same actual entry/exit interval. Missing ticker or benchmark bars invalidate the row; they are never shifted or filled.
+
+The candidate contains two estimators and is promoted atomically: opportunity estimates target-before-stop, while downside estimates stop-before-target. Catalyst/news features are audited and returned as a confirmation/ranking overlay, but are deliberately excluded from both estimators until fresh ablation evidence proves incremental value. No real C5 candidate has been promoted, so no canonical intraday route belongs in `configs/default.toml` yet.
 
 ## Entry / Exit Path Models
 

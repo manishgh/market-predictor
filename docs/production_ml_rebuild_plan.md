@@ -55,7 +55,7 @@ Exit evidence:
 
 ### C4 - Canonical Swing Model Rebuild
 
-Status: complete on 2026-07-21 (C4 checkpoint).
+Status: complete on 2026-07-21 (`53c51c2`).
 
 - One post-close decision predicts net-positive return from the next session open through the fifth session close.
 - Daily technical, SPY/QQQ/sector-relative, catalyst, observed global-context, membership, and as-of fundamental features are frozen as `swing.features.v1`.
@@ -78,7 +78,7 @@ No canonical C4 model has been trained or promoted from the real production data
 
 ### C5 - Canonical Intraday Model Rebuild
 
-Status: next; C4 data/registry interfaces are complete.
+Status: complete on 2026-07-21 (C5 checkpoint).
 
 - Build completed-bar 1-minute and 5-minute features with exact next-bar entry semantics.
 - Require consecutive paths, session boundaries, SIP volume, warm-up depth, and exact benchmark bars.
@@ -86,6 +86,19 @@ Status: next; C4 data/registry interfaces are complete.
 - Train opportunity and downside models separately.
 - Evaluate top-k cost-adjusted excess return, turnover, drawdown, calibration, and unseen-ticker stability.
 - Do not promote the currently rejected V3/V4 research artifacts.
+
+Exit evidence:
+
+- Canonical `intraday.features.v1` and atomic `intraday.model.v1` contracts replace the old serving scorer.
+- Completed 5-minute decisions use the latest fully available 1-minute state and exact subsequent 1-minute entry/path labels; missing ticker or benchmark intervals fail closed.
+- Opportunity and downside estimators use session-purged walk-forward folds, deterministic unseen-ticker holdout, cross-fitted calibration, overlap weights, and non-overlapping top-k economics.
+- Catalyst/news remains outside both estimators and is measured as a confirmation/ranking overlay.
+- Dataset construction and training enforce configurable 4 GiB memory guards.
+- Candidate and all promotion evidence are hash-bound to one model run; promotion is atomic and fail-closed.
+- Focused dataset, model, evidence-integrity, promotion, serving, and architecture tests pass.
+- Strict typing, scoped Ruff, source compilation, and the full repository suite pass.
+
+No canonical C5 model has been trained or promoted from the real production dataset yet. No intraday production route is registered until one candidate passes every frozen gate.
 
 ### C6 - Deployment, Observability, And Resource Controls
 

@@ -54,7 +54,7 @@ market-predictor collect-swing --tickers "LUNR,MXL,RGTI" --days 30 --out-dir dat
 market-predictor score-swing-events --tickers "LUNR,MXL,RGTI" --raw-dir data/raw/research --out-dir data/raw/research_scored
 ```
 
-Prediction API requests are point-in-time contracts. `PredictionRequest.as_of`, when present, must be timezone-aware. Canonical daily inference requires `feature_available_at_utc` and filters directly on that timestamp; it does not reconstruct availability from a date. The current intraday path uses explicit availability when present and otherwise infers completed-bar availability until C5 replaces that path.
+Prediction API requests are point-in-time contracts. `PredictionRequest.as_of`, when present, must be timezone-aware. Canonical daily and intraday inference require `feature_available_at_utc` and filter directly on that timestamp; neither reconstructs availability from a date or bar label.
 
 `PredictionRequest.horizon` defaults to `auto`. In that mode, the service resolves the horizon from the mode's server-owned route. Explicit horizons are validated against the registered model manifest. API clients cannot select a model, dataset, source mode, universe file, or promotion policy. `PredictionResponse.resolved_horizons` records the actual horizon used by each model, which is required for replay and downstream `trading_flow` audit records.
 
@@ -68,7 +68,7 @@ Top-level predictions are persisted by `prediction_snapshot.py` as content-addre
 
 `feature_store.py` owns the live inference handoff. Collection and feature jobs publish rolling swing or intraday Parquet files atomically with a sidecar manifest containing generation time, source watermarks, feed tier, row/ticker counts, latest feature time, and artifact SHA-256. Production serving always reads these registered paths. Missing, modified, future-generated, stale snapshots, and snapshots containing stale feature rows fail before model scoring. This keeps external API calls and FinBERT latency outside the request path.
 
-`prediction_service.py` owns serving routes and enforces promoted status, target/horizon compatibility, model type/schema, and artifact SHA-256 before deserialization. Swing routes accept only `canonical_swing` / `swing.model.v1`; old volatile artifacts are not grandfathered. Readiness is fail-closed: `warn` and `invalid` rows retain diagnostics but cannot emit an actionable signal, decision score, model decision, or rank. `/v1/health/live` is process liveness; `/v1/health/ready` checks route artifacts and feature snapshots and returns 503 when serving is not ready.
+`prediction_service.py` owns serving routes and enforces promoted status, target/horizon compatibility, model type/schema, and artifact SHA-256 before deserialization. Swing routes accept only `canonical_swing` / `swing.model.v1`; intraday routes accept only `canonical_intraday` / `intraday.model.v1`. Old volatile and entry-path artifacts are not grandfathered. Readiness is fail-closed: `warn` and `invalid` rows retain diagnostics but cannot emit an actionable signal, decision score, model decision, or rank. `/v1/health/live` is process liveness; `/v1/health/ready` checks route artifacts and feature snapshots and returns 503 when serving is not ready.
 
 `configs/default.toml` declares production routes under `[prediction_serving.routes.<mode>."<horizon>"]`. Only promoted routes belong there. The HTTP process parses this registry at startup and fails when it is absent or malformed; candidate routes are injected only by research/test code.
 
@@ -106,6 +106,18 @@ market-predictor promote-swing-model --model models/swing/candidates/swing_5d.jo
 
 `src/market_predictor/swing/contracts.py` freezes feature/model schemas and typed configs. `dataset.py` owns technical, benchmark-relative, catalyst/global, membership, cross-sectional, and exact future-path construction. `audits.py` owns fail-closed eligibility. `model.py` owns purged folds, unseen-ticker holdout, calibration, memory enforcement, immutable candidate registration, and scoring. `evaluation.py` owns classification, ranking-economics, regime, and catalyst validation. `promotion.py` owns hash-bound evidence bundles and fail-closed promotion gates. `commands/swing_model.py` is the only production CLI entry point for those stages.
 
+Canonical intraday build, training, and promotion:
+
+```powershell
+market-predictor build-intraday-dataset --decisions data/canonical/intraday_decisions_5m.parquet --one-minute-bars data/canonical/intraday_bars_1m.parquet --benchmark-bars data/canonical/intraday_benchmarks_5m.parquet --global-events data/canonical/global_events.parquet --global-source-collections data/canonical/global_source_collections.parquet --config configs/intraday_dataset.toml --out data/features/intraday/intraday_60m.parquet
+market-predictor train-intraday-model --dataset data/features/intraday/intraday_60m.parquet --config configs/intraday_training.toml --model-out models/intraday/candidates/intraday_60m.joblib --evidence-dir data/reports/intraday_60m_candidate
+market-predictor promote-intraday-model --model models/intraday/candidates/intraday_60m.joblib --evidence-dir data/reports/intraday_60m_candidate --config configs/intraday_promotion.toml
+```
+
+`src/market_predictor/intraday/contracts.py` freezes the 5-minute decision, 1-minute execution, feature, model, and typed configuration contracts. `dataset.py` owns completed-bar technical state, the latest fully available 1-minute confirmation state, and benchmark/global/membership/cross-sectional context. `labels.py` owns exact subsequent 1-minute target/stop paths, benchmark returns over the same interval, overlap weights, and independent-event identities. `audits.py` rejects future features, under-warm rows, non-SIP/partially adjusted bars, stale source state, missing paths, and missing benchmark intervals. `model.py` trains opportunity and downside estimators atomically with session-purged walk-forward validation, deterministic unseen-ticker holdout, cross-fitted calibration, overlap weights, `float32` matrices, and a 4 GiB guard. `evaluation.py` owns classification and non-overlapping top-k economics. `promotion.py` verifies candidate/evidence hashes and applies the dual-model, economics, drawdown, regime, catalyst-coverage, alignment, memory, and provenance gates. `commands/intraday_model.py` is the only canonical C5 CLI entry point.
+
+The canonical intraday horizon is `60m`. Opportunity means target-before-stop; downside means stop-before-target. Catalyst/news is an external confirmation and ranking overlay and is not included in either estimator feature list. No real canonical intraday artifact is promoted yet.
+
 Historical provider backfills normally know publication time but not when this system first observed the item. Such events are publication-time proxies and are research-only. They must not be relabeled as observed history. The same rule applies to SEC and Seeking Alpha current snapshots: only versioned facts with explicit availability can enter historical production features.
 
 Azure artifact publishing:
@@ -133,8 +145,8 @@ Key command groups:
 - Collection: `collect`, `collect-swing`, `collect-seeking-alpha`, `alpaca-tickers`.
 - Verification: `verify-events`, `verify-swing`, `audit-swing-alignment`.
 - Sentiment: `download-model`, `score-swing-events`.
-- Feature building: canonical `build-swing-dataset`, research-only `build-swing-datasets`, the current pre-C5 `build-entry-exit-dataset`, and V3 research builders.
-- Training/scoring: canonical `train-swing-model` / `promote-swing-model`, the current pre-C5 entry-path commands, and V3 research evaluation.
+- Feature building: canonical `build-swing-dataset` / `build-intraday-dataset`, research-only `build-swing-datasets` / `build-entry-exit-dataset`, and V3 research builders.
+- Training/scoring: canonical swing and intraday train/promote commands, research-only entry-path commands, and V3 research evaluation.
 - Serving: `publish-live-features` and `serve-api`.
 - Azure: `export-ohlcv-artifacts`, `azure-upload-artifacts`, `azure-publish-models`.
 
@@ -330,11 +342,12 @@ Keeping them separate gives:
 
 ## Adding a New Model
 
-1. Build or extend a dataset in `features.py`.
-2. Add training to the owning model family (`volatile.py`, `entry_exit.py`, or `v3/`) if the target or validation differs.
-3. Add a CLI command or extend an existing one in `cli.py`.
-4. Write outputs to `models/` and metrics to `data/reports/`.
-5. Do not promote until walk-forward validation is acceptable.
+1. Define a new immutable feature, target, model, and availability contract in the owning canonical package.
+2. Build labels from the unsampled exact future path and audit every excluded row before estimator filtering.
+3. Add purged time validation, unseen-ticker validation, calibration, benchmark-relative economics, drawdown, regime, alignment, provenance, and resource evidence.
+4. Publish a hash-verified candidate and hash-bound evidence bundle through a focused command module.
+5. Add a frozen promotion configuration; serving must reject the model type/schema until every gate passes and an operator registers the promoted route.
+6. Keep research families under `v3/` or another explicitly research-only package; they cannot reuse the canonical registry type without satisfying its complete contract.
 
 ## Practical Debugging
 

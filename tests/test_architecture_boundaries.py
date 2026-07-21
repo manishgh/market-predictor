@@ -39,10 +39,18 @@ class ArchitectureBoundaryTests(unittest.TestCase):
             "watch",
         }
         self.assertTrue(obsolete_prediction_commands.isdisjoint(command_names))
+        self.assertTrue({"build-swing-dataset", "train-swing-model", "promote-swing-model"}.issubset(command_names))
         self.assertTrue(
-            {"build-swing-dataset", "train-swing-model", "promote-swing-model"}.issubset(command_names)
+            {
+                "build-intraday-dataset",
+                "train-intraday-model",
+                "promote-intraday-model",
+            }.issubset(command_names)
         )
         self.assertIn("rank-sector-themes", command_names)
+
+        prediction_service = (package_root / "prediction_service.py").read_text(encoding="utf-8")
+        self.assertNotIn("market_predictor.entry_exit", prediction_service)
 
     def test_prediction_api_exposes_no_alert_or_execution_routes(self) -> None:
         route_paths = {route.path.lower() for route in create_app().routes}

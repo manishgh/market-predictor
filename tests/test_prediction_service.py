@@ -9,8 +9,12 @@ import joblib
 import numpy as np
 import pandas as pd
 
-from market_predictor.entry_exit import ENTRY_EXIT_SCHEMA_VERSION
 from market_predictor.feature_store import LiveFeatureStore
+from market_predictor.intraday.contracts import (
+    INTRADAY_FEATURE_SCHEMA_VERSION,
+    INTRADAY_MODEL_SCHEMA_VERSION,
+    INTRADAY_MODEL_TYPE,
+)
 from market_predictor.prediction_contracts import PredictionDataSource, PredictionRequest
 from market_predictor.prediction_service import (
     PredictionService,
@@ -66,9 +70,7 @@ class PredictionServiceTests(unittest.TestCase):
             _swing_frame(["MSFT"], features, rows=260).to_parquet(dataset, index=False)
             _write_model(model, features, target_col="target_net_positive_5d", status="promoted", probability=0.73)
 
-            response = _service(root, swing=(dataset, model)).predict_swing(
-                PredictionRequest(tickers=["MSFT"], mode="swing")
-            )
+            response = _service(root, swing=(dataset, model)).predict_swing(PredictionRequest(tickers=["MSFT"], mode="swing"))
 
             self.assertEqual(response.mode, "swing")
             self.assertEqual(response.models["swing"].status, "promoted")
@@ -90,9 +92,7 @@ class PredictionServiceTests(unittest.TestCase):
             _write_model(model, features, target_col="target_net_positive_5d", status="candidate", probability=0.73)
 
             with self.assertRaisesRegex(ValueError, "status candidate is not allowed"):
-                _service(root, swing=(dataset, model)).predict_swing(
-                    PredictionRequest(tickers=["MSFT"], mode="swing")
-                )
+                _service(root, swing=(dataset, model)).predict_swing(PredictionRequest(tickers=["MSFT"], mode="swing"))
 
     def test_unified_response_keeps_swing_when_intraday_model_is_not_promoted(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -105,15 +105,19 @@ class PredictionServiceTests(unittest.TestCase):
             _swing_frame(["MSFT"], features, rows=260).to_parquet(swing_dataset, index=False)
             _swing_frame(["MSFT"], features, rows=260).to_parquet(intraday_dataset, index=False)
             _write_model(swing_model, features, target_col="target_net_positive_5d", status="promoted", probability=0.70)
-            _write_model(intraday_model, features, target_col="entry_success", status="candidate", probability=0.80)
+            _write_model(
+                intraday_model,
+                features,
+                target_col="target_before_stop_60m",
+                status="candidate",
+                probability=0.80,
+            )
 
             response = _service(
                 root,
                 swing=(swing_dataset, swing_model),
                 intraday=(intraday_dataset, intraday_model),
-            ).predict_unified(
-                PredictionRequest(tickers=["MSFT"], mode="unified")
-            )
+            ).predict_unified(PredictionRequest(tickers=["MSFT"], mode="unified"))
 
             self.assertEqual(response.mode, "unified")
             self.assertTrue(response.errors)
@@ -173,7 +177,13 @@ class PredictionServiceTests(unittest.TestCase):
             features = ["return_1d", "volume_z20"]
             frame = _intraday_frame("MSFT", rows=150)
             frame.to_parquet(dataset, index=False)
-            _write_model(model, features, target_col="target_entry_success_12b", status="promoted", probability=0.72)
+            _write_model(
+                model,
+                features,
+                target_col="target_before_stop_60m",
+                status="promoted",
+                probability=0.72,
+            )
             cutoff = pd.Timestamp(frame["date"].iloc[-1], tz="UTC") + pd.Timedelta(minutes=2)
 
             response = _service(root, intraday=(dataset, model)).predict_intraday(
@@ -193,7 +203,7 @@ class PredictionServiceTests(unittest.TestCase):
             self.assertEqual(prediction.readiness.timeframe, "intraday")
             self.assertGreaterEqual(prediction.readiness.intraday_bar_count, 130)
             self.assertEqual(prediction.readiness.daily_bar_count, 0)
-            self.assertEqual(response.resolved_horizons, {"intraday": "12b"})
+            self.assertEqual(response.resolved_horizons, {"intraday": "60m"})
 
     def test_top_level_predict_persists_immutable_snapshot(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -205,9 +215,7 @@ class PredictionServiceTests(unittest.TestCase):
             _write_model(model, features, target_col="target_net_positive_5d", status="promoted", probability=0.73)
             service = _service(root, swing=(dataset, model))
 
-            response = service.predict(
-                PredictionRequest(tickers=["MSFT"], mode="swing")
-            )
+            response = service.predict(PredictionRequest(tickers=["MSFT"], mode="swing"))
 
             self.assertIsNotNone(response.snapshot_id)
             self.assertEqual(response.snapshot_id, response.snapshot_sha256)
@@ -227,16 +235,21 @@ class PredictionServiceTests(unittest.TestCase):
             frame["source_count_sec_2h"] = 1
             frame["event_contract_count_2h"] = 1
             frame.to_parquet(dataset, index=False)
-            _write_model(model, features, target_col="target_entry_success_12b", status="promoted", probability=0.72)
-
-            response = _service(root, intraday=(dataset, model)).predict_intraday(
-                PredictionRequest(tickers=["MSFT"], mode="intraday")
+            _write_model(
+                model,
+                features,
+                target_col="target_before_stop_60m",
+                status="promoted",
+                probability=0.72,
             )
+
+            response = _service(root, intraday=(dataset, model)).predict_intraday(PredictionRequest(tickers=["MSFT"], mode="intraday"))
 
             prediction = response.predictions[0].intraday
             assert prediction is not None
-            self.assertAlmostEqual(prediction.probability or 0.0, 0.72)
-            self.assertAlmostEqual(prediction.decision_score or 0.0, 0.76)
+            self.assertAlmostEqual(prediction.opportunity_probability or 0.0, 0.72)
+            self.assertAlmostEqual(prediction.downside_probability or 0.0, 0.20)
+            self.assertAlmostEqual(prediction.decision_score or 0.0, 0.608)
             self.assertEqual(prediction.catalyst.status, "confirmed")
             self.assertEqual(prediction.signal, "entry_candidate_confirmed")
 
@@ -287,9 +300,7 @@ class PredictionServiceTests(unittest.TestCase):
                 handle.write(b"tampered")
 
             with self.assertRaisesRegex(ValueError, "artifact integrity check failed"):
-                _service(root, swing=(dataset, model)).predict_swing(
-                    PredictionRequest(tickers=["MSFT"], mode="swing")
-                )
+                _service(root, swing=(dataset, model)).predict_swing(PredictionRequest(tickers=["MSFT"], mode="swing"))
 
     def test_warning_readiness_is_never_returned_as_actionable(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -308,9 +319,7 @@ class PredictionServiceTests(unittest.TestCase):
                 probability=0.73,
             )
 
-            response = _service(root, swing=(dataset, model)).predict_swing(
-                PredictionRequest(tickers=["MSFT"], mode="swing")
-            )
+            response = _service(root, swing=(dataset, model)).predict_swing(PredictionRequest(tickers=["MSFT"], mode="swing"))
 
             prediction = response.predictions[0].swing
             assert prediction is not None
@@ -371,7 +380,7 @@ def _service(
     if intraday is not None:
         dataset, model = intraday
         routes["intraday"] = {
-            "12b": ServingRoute(
+            "60m": ServingRoute(
                 model=model,
                 curated_dataset=dataset,
                 bar_timeframe="5Min",
@@ -394,21 +403,35 @@ def _write_model(
     probability: float,
 ) -> None:
     is_swing = target_col.startswith("target_net_positive_")
-    model_type = SWING_MODEL_TYPE if is_swing else "entry_path"
-    schema_version = SWING_MODEL_SCHEMA_VERSION if is_swing else ENTRY_EXIT_SCHEMA_VERSION
-    payload = {
-        "model": FixedProbabilityModel(probability),
+    model_type = SWING_MODEL_TYPE if is_swing else INTRADAY_MODEL_TYPE
+    schema_version = SWING_MODEL_SCHEMA_VERSION if is_swing else INTRADAY_MODEL_SCHEMA_VERSION
+    payload: dict[str, object] = {
         "features": features,
-        "target_col": target_col,
-        "schema_version": schema_version,
         "model_type": model_type,
     }
     if is_swing:
         payload.update(
             {
+                "model": FixedProbabilityModel(probability),
+                "target_col": target_col,
                 "calibrator": None,
                 "horizon_sessions": 5,
                 "feature_schema_version": SWING_FEATURE_SCHEMA_VERSION,
+            }
+        )
+    else:
+        downside_target = "stop_before_target_60m"
+        payload.update(
+            {
+                "models": {
+                    target_col: FixedProbabilityModel(probability),
+                    downside_target: FixedProbabilityModel(0.20),
+                },
+                "calibrators": {target_col: None, downside_target: None},
+                "opportunity_target_col": target_col,
+                "downside_target_col": downside_target,
+                "horizon_minutes": 60,
+                "feature_schema_version": INTRADAY_FEATURE_SCHEMA_VERSION,
             }
         )
     joblib.dump(payload, path)
@@ -428,9 +451,7 @@ def _write_model(
             "tickers": 2,
         },
         validation_split=(
-            "session_purged_walk_forward_and_ticker_holdout"
-            if is_swing
-            else "date_grouped_purged_walk_forward"
+            "session_purged_walk_forward_and_ticker_holdout" if is_swing else "session_purged_walk_forward_and_ticker_holdout"
         ),
         status=status,
     )
@@ -443,8 +464,7 @@ def _swing_frame(tickers: list[str], features: list[str], *, rows: int) -> pd.Da
         for idx in range(rows):
             session_date = start + timedelta(days=idx)
             feature_available = (
-                pd.Timestamp(session_date).tz_localize("America/New_York")
-                + pd.Timedelta(hours=16, minutes=15)
+                pd.Timestamp(session_date).tz_localize("America/New_York") + pd.Timedelta(hours=16, minutes=15)
             ).tz_convert("UTC")
             record = {
                 "ticker": ticker,
@@ -479,6 +499,10 @@ def _intraday_frame(ticker: str, *, rows: int) -> pd.DataFrame:
         {
             "ticker": ticker,
             "date": timestamps.tz_convert(None),
+            "bar_start_utc": timestamps,
+            "feature_available_at_utc": timestamps + pd.Timedelta(minutes=5),
+            "intraday_feature_schema_version": INTRADAY_FEATURE_SCHEMA_VERSION,
+            "five_minute_bar_count": np.arange(1, rows + 1),
             "open": 100.0,
             "high": 101.0,
             "low": 99.5,
@@ -487,8 +511,8 @@ def _intraday_frame(ticker: str, *, rows: int) -> pd.DataFrame:
             "price_feed": "sip",
             "return_1d": 0.01,
             "volume_z20": 1.5,
-            "qqq_return_1bar": 0.001,
-            "market_context_intraday_shock_score_2h": 0.0,
+            "qqq_return_1bar_5m": 0.001,
+            "global_event_count_2h": 1.0,
         }
     )
 

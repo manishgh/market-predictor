@@ -14,8 +14,12 @@ from market_predictor.catalyst_overlay import (
     assess_catalyst_overlay,
     overlay_decision_score,
 )
-from market_predictor.entry_exit import ENTRY_EXIT_SCHEMA_VERSION, score_entry_exit_frame
 from market_predictor.feature_store import LiveFeatureStore
+from market_predictor.intraday.contracts import (
+    INTRADAY_MODEL_SCHEMA_VERSION,
+    INTRADAY_MODEL_TYPE,
+)
+from market_predictor.intraday.model import score_intraday_frame
 from market_predictor.prediction_contracts import (
     CatalystConfirmationInfo,
     GlobalContextInfo,
@@ -40,7 +44,7 @@ from market_predictor.registry import MODEL_STATUS_PROMOTED, verify_model_artifa
 from market_predictor.swing.contracts import SWING_MODEL_SCHEMA_VERSION, SWING_MODEL_TYPE
 from market_predictor.swing.model import score_swing_frame
 
-DEFAULT_MODE_HORIZONS = {"swing": "5d", "intraday": "12b"}
+DEFAULT_MODE_HORIZONS = {"swing": "5d", "intraday": "60m"}
 
 
 @dataclass(frozen=True)
@@ -75,8 +79,7 @@ def serving_routes_from_config(config: Mapping[str, Any]) -> dict[str, dict[str,
                 raise ValueError(f"prediction serving route {mode}.{horizon} is missing model")
             parsed[str(horizon).strip().lower()] = ServingRoute(
                 model=Path(model),
-                bar_timeframe=str(raw_route.get("bar_timeframe", "unknown")).strip()
-                or "unknown",
+                bar_timeframe=str(raw_route.get("bar_timeframe", "unknown")).strip() or "unknown",
             )
         if parsed:
             routes[normalized_mode] = parsed
@@ -99,9 +102,7 @@ class PredictionService:
         data_source: PredictionDataSource = "live",
     ) -> None:
         self.root = Path(root)
-        self.snapshot_store = snapshot_store or PredictionSnapshotStore(
-            self.root / "data/predictions/snapshots"
-        )
+        self.snapshot_store = snapshot_store or PredictionSnapshotStore(self.root / "data/predictions/snapshots")
         self.live_feature_store = live_feature_store or LiveFeatureStore(self.root)
         self.persist_snapshots = persist_snapshots
         if not routes:
@@ -147,15 +148,15 @@ class PredictionService:
             model_path,
             resolved_horizon=resolved_horizon,
             bar_timeframe=route.bar_timeframe,
-            expected_model_type="entry_path",
-            expected_schema_version=ENTRY_EXIT_SCHEMA_VERSION,
+            expected_model_type=INTRADAY_MODEL_TYPE,
+            expected_schema_version=INTRADAY_MODEL_SCHEMA_VERSION,
         )
         frame = self._feature_frame(
             self._load_feature_source("intraday", route, request),
             request=request,
             timeframe="intraday",
         )
-        scored = self._score_intraday_frame(frame=frame, model_path=model_path, request=request)
+        scored = self._score_intraday_frame(frame=frame, model_path=model_path)
         predictions = self._intraday_predictions(scored, frame, model.status)
         return self._response(request, models={"intraday": model}, intraday_predictions=predictions)
 
@@ -179,9 +180,7 @@ class PredictionService:
             intraday_response = self.predict_intraday(request.model_copy(update={"mode": "intraday"}))
             models.update(intraday_response.models)
             resolved_horizons.update(intraday_response.resolved_horizons)
-            intraday = {
-                row.ticker: row.intraday for row in intraday_response.predictions if row.intraday is not None
-            }
+            intraday = {row.ticker: row.intraday for row in intraday_response.predictions if row.intraday is not None}
             errors.extend(intraday_response.errors)
         except Exception as exc:
             errors.append(f"intraday prediction failed: {exc}")
@@ -229,10 +228,8 @@ class PredictionService:
                         self._resolve(route.model),
                         resolved_horizon=horizon,
                         bar_timeframe=route.bar_timeframe,
-                        expected_model_type=(SWING_MODEL_TYPE if mode == "swing" else "entry_path"),
-                        expected_schema_version=(
-                            SWING_MODEL_SCHEMA_VERSION if mode == "swing" else ENTRY_EXIT_SCHEMA_VERSION
-                        ),
+                        expected_model_type=(SWING_MODEL_TYPE if mode == "swing" else INTRADAY_MODEL_TYPE),
+                        expected_schema_version=(SWING_MODEL_SCHEMA_VERSION if mode == "swing" else INTRADAY_MODEL_SCHEMA_VERSION),
                     )
                     components[name] = {
                         "status": "ready",
@@ -266,9 +263,7 @@ class PredictionService:
                         if not dataset_path.exists():
                             missing.append(str(dataset_path))
                     if missing:
-                        raise FileNotFoundError(
-                            f"configured curated {mode} feature datasets are unavailable: {missing}"
-                        )
+                        raise FileNotFoundError(f"configured curated {mode} feature datasets are unavailable: {missing}")
                     components[name] = {"status": "ready", "source": "curated"}
             except Exception as exc:
                 ready = False
@@ -295,10 +290,9 @@ class PredictionService:
         *,
         frame: pd.DataFrame,
         model_path: Path,
-        request: PredictionRequest,
     ) -> pd.DataFrame:
         latest = self._latest_rows(frame)
-        return score_entry_exit_frame(latest, model_path)
+        return score_intraday_frame(latest, model_path, require_promoted=True)
 
     def _swing_predictions(
         self,
@@ -342,17 +336,9 @@ class PredictionService:
                     ticker=ticker,
                     date=_string_or_none(row.get("date")),
                     probability=_float_or_none(row.get("swing_model_probability")),
-                    decision_score=(
-                        _float_or_none(row.get("_decision_score")) if is_ready else None
-                    ),
-                    model_prediction=(
-                        _int_or_none(row.get("swing_model_prediction")) if is_ready else None
-                    ),
-                    signal=(
-                        _swing_signal(row.get("swing_model_probability"), catalyst)
-                        if is_ready
-                        else "not_ready"
-                    ),
+                    decision_score=(_float_or_none(row.get("_decision_score")) if is_ready else None),
+                    model_prediction=(_int_or_none(row.get("swing_model_prediction")) if is_ready else None),
+                    signal=(_swing_signal(row.get("swing_model_probability"), catalyst) if is_ready else "not_ready"),
                     rank=idx + 1 if is_ready else None,
                     close=_float_or_none(row.get("close")),
                     return_1d=_float_or_none(row.get("return_1d")),
@@ -391,59 +377,59 @@ class PredictionService:
         source_frame: pd.DataFrame,
         model_status: str,
     ) -> list[IntradayPrediction]:
-        probability_cols = [col for col in scored.columns if col.endswith("_probability")]
-        probability_col = probability_cols[-1] if probability_cols else None
-        if probability_col is None:
-            raise ValueError("entry/exit scorer did not produce a probability column")
-        prediction_col = probability_col.replace("probability", "prediction")
+        opportunity_col = "intraday_opportunity_probability"
+        downside_col = "intraday_downside_probability"
+        if opportunity_col not in scored or downside_col not in scored:
+            raise ValueError("canonical intraday scorer did not produce both probabilities")
         rows = scored.copy()
         rows["_catalyst_assessment"] = rows.apply(
             lambda row: assess_catalyst_overlay(
                 row,
-                model_probability=_float_or_none(row.get(probability_col)),
+                model_probability=_float_or_none(row.get(opportunity_col)),
             ),
             axis=1,
         )
         rows["_decision_score"] = rows.apply(
-            lambda row: overlay_decision_score(
-                _float_or_none(row.get(probability_col)),
-                row["_catalyst_assessment"],
-            ),
+            lambda row: _risk_adjusted_intraday_score(row, opportunity_col, downside_col),
             axis=1,
         )
         rows = rows.sort_values("_decision_score", ascending=False).reset_index(drop=True)
-        intraday_counts = (
-            source_frame.assign(ticker=source_frame["ticker"].astype(str).str.upper())
-            .groupby("ticker")
-            .size()
-        )
+        intraday_counts = source_frame.assign(ticker=source_frame["ticker"].astype(str).str.upper()).groupby("ticker").size()
         predictions: list[IntradayPrediction] = []
         for idx, row in rows.iterrows():
             ticker = str(row["ticker"]).upper()
             catalyst = row["_catalyst_assessment"]
-            readiness = self._intraday_readiness(row, intraday_counts.get(ticker, 0), model_status)
+            warm_count = _int_or_none(row.get("five_minute_bar_count"))
+            readiness = self._intraday_readiness(
+                row,
+                warm_count if warm_count is not None else intraday_counts.get(ticker, 0),
+                model_status,
+            )
             is_ready = readiness.status == VALID
             predictions.append(
                 IntradayPrediction(
                     ticker=ticker,
                     date=_string_or_none(row.get("date")),
-                    probability=_float_or_none(row.get(probability_col)),
-                    decision_score=(
-                        _float_or_none(row.get("_decision_score")) if is_ready else None
-                    ),
-                    model_prediction=_int_or_none(row.get(prediction_col)) if is_ready else None,
-                    probability_field=probability_col,
+                    opportunity_probability=_float_or_none(row.get(opportunity_col)),
+                    downside_probability=_float_or_none(row.get(downside_col)),
+                    decision_score=(_float_or_none(row.get("_decision_score")) if is_ready else None),
+                    opportunity_prediction=(_int_or_none(row.get("intraday_opportunity_prediction")) if is_ready else None),
+                    downside_prediction=(_int_or_none(row.get("intraday_downside_prediction")) if is_ready else None),
                     signal=(
-                        _intraday_signal(row.get(probability_col), catalyst)
+                        _intraday_signal(
+                            row.get(opportunity_col),
+                            row.get(downside_col),
+                            catalyst,
+                        )
                         if is_ready
                         else "not_ready"
                     ),
                     rank=idx + 1 if is_ready else None,
                     close=_float_or_none(row.get("close")),
-                    return_1d=_float_or_none(row.get("return_1d")),
-                    volume_z20=_float_or_none(row.get("volume_z20")),
-                    rsi_14=_float_or_none(row.get("rsi_14")),
-                    macd_signal_diff=_float_or_none(row.get("macd_signal_diff")),
+                    return_15m=_float_or_none(row.get("return_3bar_5m")),
+                    relative_volume=_float_or_none(row.get("relative_volume_same_slot_20d_5m")),
+                    rsi_14=_float_or_none(row.get("rsi_14_5m")),
+                    macd_signal_diff=_float_or_none(row.get("macd_signal_diff_pct_5m")),
                     entry_stop_pct=_float_or_none(row.get("entry_stop_pct")),
                     entry_target_pct=_float_or_none(row.get("entry_target_pct")),
                     catalyst=_catalyst_info(catalyst),
@@ -451,14 +437,16 @@ class PredictionService:
                     drivers=_drivers(
                         row,
                         [
-                            "volume_z20",
-                            "return_1d",
-                            "rsi_14",
-                            "macd_signal_diff",
+                            "return_3bar_5m",
+                            "relative_volume_same_slot_20d_5m",
+                            "rsi_14_5m",
+                            "macd_signal_diff_pct_5m",
+                            "dist_session_vwap_5m",
+                            "rel_return_3bar_vs_qqq_5m",
                             "entry_stop_pct",
                             "entry_target_pct",
-                            "news_count",
-                            "event_count",
+                            "event_count_2h",
+                            "sentiment_mean_2h",
                         ],
                     ),
                 )
@@ -514,17 +502,17 @@ class PredictionService:
         benchmark_present = _has_any_value(
             row,
             [
-                "qqq_return_1bar",
-                "qqq_return_3bar",
-                "qqq_return_6bar",
-                "spy_return_1bar",
-                "spy_return_3bar",
-                "spy_return_6bar",
+                "qqq_return_1bar_5m",
+                "qqq_return_3bar_5m",
+                "qqq_return_6bar_5m",
+                "spy_return_1bar_5m",
+                "spy_return_3bar_5m",
+                "spy_return_6bar_5m",
             ],
         )
         market_context_present = _has_any_value(
             row,
-            ["market_context_intraday_shock_score_2h", "market_context_event_count_2h", "global_net_impact"],
+            ["global_event_count_2h", "global_sentiment_mean_2h", "global_net_impact"],
         )
         price_feed = str(row.get("price_feed", "unknown") or "unknown")
         assessed = assess_intraday_readiness(
@@ -560,9 +548,7 @@ class PredictionService:
         if mode not in DEFAULT_MODE_HORIZONS:
             raise ValueError(f"unsupported prediction mode: {mode}")
         routes = self.routes.get(mode, {})
-        resolved_horizon = (
-            DEFAULT_MODE_HORIZONS[mode] if request.horizon == "auto" else request.horizon
-        )
+        resolved_horizon = DEFAULT_MODE_HORIZONS[mode] if request.horizon == "auto" else request.horizon
         if resolved_horizon not in routes:
             supported = ", ".join(sorted(routes))
             raise ValueError(f"unsupported {mode} horizon {resolved_horizon}; supported horizons: {supported}")
@@ -610,9 +596,7 @@ class PredictionService:
         cutoff = pd.Timestamp(request.as_of).tz_convert("UTC")
         working = working[working["_feature_available_at_utc"] <= cutoff].copy()
         if working.empty:
-            raise ValueError(
-                f"no {timeframe} feature rows are available at or before {request.as_of.isoformat()}"
-            )
+            raise ValueError(f"no {timeframe} feature rows are available at or before {request.as_of.isoformat()}")
         return working
 
     def _model_info(
@@ -630,20 +614,16 @@ class PredictionService:
         )
         status = str(manifest.get("status", "unknown"))
         if manifest.get("model_type") != expected_model_type:
-            raise ValueError(
-                f"model type {manifest.get('model_type', 'unknown')} is incompatible with {expected_model_type} serving"
-            )
+            raise ValueError(f"model type {manifest.get('model_type', 'unknown')} is incompatible with {expected_model_type} serving")
         if manifest.get("schema_version") != expected_schema_version:
             raise ValueError(
-                f"model schema {manifest.get('schema_version', 'unknown')} is incompatible with "
-                f"{expected_schema_version} serving"
+                f"model schema {manifest.get('schema_version', 'unknown')} is incompatible with {expected_schema_version} serving"
             )
         target = _optional_str(manifest.get("target_col"))
         target_horizon = _target_horizon(target)
         if target_horizon != resolved_horizon:
             raise ValueError(
-                f"requested model horizon {resolved_horizon} is incompatible with model target horizon "
-                f"{target_horizon or 'unknown'}"
+                f"requested model horizon {resolved_horizon} is incompatible with model target horizon {target_horizon or 'unknown'}"
             )
         dataset_value = manifest.get("dataset")
         dataset = dataset_value if isinstance(dataset_value, dict) else {}
@@ -690,11 +670,7 @@ class PredictionService:
             mode=request.mode,
             data_source=self.data_source,
             horizon=request.horizon,
-            resolved_horizons={
-                name: info.resolved_horizon
-                for name, info in models.items()
-                if info.resolved_horizon is not None
-            },
+            resolved_horizons={name: info.resolved_horizon for name, info in models.items() if info.resolved_horizon is not None},
             models=models,
             predictions=rows,
         )
@@ -757,18 +733,20 @@ def _final_signal(swing: SwingPrediction | None, intraday: IntradayPrediction | 
     if intraday is not None and intraday.readiness.status != VALID:
         return "not_ready"
     swing_prob = swing.probability if swing else None
-    intra_prob = intraday.probability if intraday else None
+    intra_prob = intraday.opportunity_probability if intraday else None
+    intra_downside = intraday.downside_probability if intraday else None
     if intraday is not None and intraday.catalyst.status == "veto":
         return "avoid_entry_catalyst_veto"
     if intraday is not None and intraday.catalyst.status == "conflicting" and intra_prob is not None and intra_prob >= 0.55:
         return "wait_catalyst_conflict"
-    if swing_prob is not None and swing_prob >= 0.65 and (intra_prob is None or intra_prob >= 0.55):
+    intraday_supports_entry = intra_prob is None or (intra_prob >= 0.55 and (intra_downside is None or intra_downside <= 0.45))
+    if swing_prob is not None and swing_prob >= 0.65 and intraday_supports_entry:
         if intraday is not None and intraday.catalyst.status == "confirmed":
             return "high_conviction_watch_confirmed"
         return "high_conviction_watch"
-    if swing_prob is not None and swing_prob >= 0.55 and (intra_prob is None or intra_prob >= 0.50):
+    if swing_prob is not None and swing_prob >= 0.55 and intraday_supports_entry:
         return "watch_for_entry"
-    if intra_prob is not None and intra_prob >= 0.65 and swing_prob is None:
+    if intra_prob is not None and intra_prob >= 0.65 and (intra_downside is None or intra_downside <= 0.40) and swing_prob is None:
         return "intraday_watch"
     if swing_prob is not None and swing_prob >= 0.55 and intra_prob is not None and intra_prob < 0.50:
         return "swing_positive_wait_for_intraday"
@@ -796,25 +774,45 @@ def _swing_signal(probability: Any, catalyst: CatalystAssessment | None = None) 
     return "neutral"
 
 
-def _intraday_signal(probability: Any, catalyst: CatalystAssessment | None = None) -> str:
-    value = _float_or_none(probability)
-    if value is None:
+def _intraday_signal(
+    opportunity_probability: Any,
+    downside_probability: Any,
+    catalyst: CatalystAssessment | None = None,
+) -> str:
+    opportunity = _float_or_none(opportunity_probability)
+    downside = _float_or_none(downside_probability)
+    if opportunity is None or downside is None:
         return "not_scored"
-    if catalyst is not None and catalyst.status == "veto" and value >= 0.55:
+    if downside >= 0.55:
+        return "avoid_entry_downside_risk"
+    if catalyst is not None and catalyst.status == "veto" and opportunity >= 0.55:
         return "avoid_entry_catalyst_veto"
-    if catalyst is not None and catalyst.status == "conflicting" and value >= 0.55:
+    if catalyst is not None and catalyst.status == "conflicting" and opportunity >= 0.55:
         return "wait_catalyst_conflict"
-    if value >= 0.70:
+    if opportunity >= 0.70 and downside <= 0.35:
         if catalyst is not None and catalyst.status == "confirmed":
             return "entry_candidate_confirmed"
         return "entry_candidate"
-    if value >= 0.55:
+    if opportunity >= 0.55 and downside <= 0.45:
         if catalyst is not None and catalyst.status == "confirmed":
             return "watch_for_entry_confirmed"
         return "watch_for_confirmation"
-    if value <= 0.40:
+    if opportunity <= 0.40 or downside > 0.50:
         return "avoid_entry"
     return "neutral"
+
+
+def _risk_adjusted_intraday_score(
+    row: pd.Series,
+    opportunity_column: str,
+    downside_column: str,
+) -> float:
+    opportunity = _float_or_none(row.get(opportunity_column))
+    downside = _float_or_none(row.get(downside_column))
+    overlaid = overlay_decision_score(opportunity, row["_catalyst_assessment"])
+    if overlaid is None or downside is None:
+        return float("-inf")
+    return max(0.0, min(1.0, overlaid * (1.0 - downside)))
 
 
 def _drivers(row: pd.Series, columns: list[str]) -> dict[str, float | int | str | None]:
@@ -831,9 +829,7 @@ def _catalyst_info(assessment: CatalystAssessment) -> CatalystConfirmationInfo:
 
 
 def _infer_intraday_bar_duration(timestamps: pd.Series, tickers: pd.Series) -> pd.Timedelta:
-    ordered = pd.DataFrame({"timestamp": timestamps, "ticker": tickers}).sort_values(
-        ["ticker", "timestamp"]
-    )
+    ordered = pd.DataFrame({"timestamp": timestamps, "ticker": tickers}).sort_values(["ticker", "timestamp"])
     differences = ordered.groupby("ticker")["timestamp"].diff()
     usable = differences[(differences > pd.Timedelta(0)) & (differences <= pd.Timedelta(hours=6))]
     if usable.empty:
@@ -850,7 +846,7 @@ def _target_horizon(target_col: str | None) -> str | None:
         return "5d"
     if "next_day" in normalized:
         return "1d"
-    matches = re.findall(r"(?:^|_)(\d+)([db])(?:_|$)", normalized)
+    matches = re.findall(r"(?:^|_)(\d+)([dbm])(?:_|$)", normalized)
     if not matches:
         return None
     amount, unit = matches[-1]
