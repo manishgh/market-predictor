@@ -78,7 +78,7 @@ No canonical C4 model has been trained or promoted from the real production data
 
 ### C5 - Canonical Intraday Model Rebuild
 
-Status: complete on 2026-07-21 (C5 checkpoint).
+Status: complete on 2026-07-21 (`a844fdd`).
 
 - Build completed-bar 1-minute and 5-minute features with exact next-bar entry semantics.
 - Require consecutive paths, session boundaries, SIP volume, warm-up depth, and exact benchmark bars.
