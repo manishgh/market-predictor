@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -21,9 +21,8 @@ from market_predictor.intraday_catalysts import INTRADAY_CATALYST_FEATURES
 from market_predictor.intraday_enrichment import add_intraday_technical_features
 from market_predictor.market_regime import MARKET_REGIME_FEATURES, add_market_regime_labels
 from market_predictor.model import DEFAULT_FEATURES, DateGroupedPurgedWalkForwardSplit
-from market_predictor.registry import write_model_manifest
+from market_predictor.registry import verify_model_artifact, write_model_manifest
 from market_predictor.volatile import VOLATILE_EXTRA_FEATURES
-
 
 ENTRY_EXIT_SCHEMA_VERSION = "entry_exit.v2"
 
@@ -355,7 +354,7 @@ def train_entry_exit_model(
         "learning_rate": learning_rate,
         "embargo_groups": embargo,
         "validation_split": "date_grouped_purged_walk_forward",
-        "trained_at_utc": datetime.now(timezone.utc).isoformat(),
+        "trained_at_utc": datetime.now(UTC).isoformat(),
     }
     joblib.dump(payload, model_out)
     metrics = {
@@ -458,6 +457,7 @@ def _entry_exit_classifier(*, estimator: str, max_iter: int, learning_rate: floa
 
 
 def score_entry_exit_frame(dataset: pd.DataFrame, model_path: Path) -> pd.DataFrame:
+    verify_model_artifact(model_path)
     payload = joblib.load(model_path)
     features = payload["features"]
     dataset = add_market_regime_labels(dataset)
@@ -896,6 +896,6 @@ def _num(value: object) -> float:
     try:
         if value is None or pd.isna(value):
             return float("nan")
-        return float(value)
+        return float(str(value))
     except (TypeError, ValueError):
         return float("nan")

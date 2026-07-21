@@ -1,18 +1,46 @@
 from __future__ import annotations
 
-from datetime import date, timedelta
 import json
-from pathlib import Path
 import tempfile
 import unittest
+from datetime import date, timedelta
+from pathlib import Path
 
 import joblib
 import pandas as pd
 
-from market_predictor.registry import feature_schema_hash, manifest_path_for, promote_model_manifest, write_model_manifest
+from market_predictor.registry import (
+    feature_schema_hash,
+    manifest_path_for,
+    promote_model_manifest,
+    verify_model_artifact,
+    write_model_manifest,
+)
 
 
 class ModelRegistryTests(unittest.TestCase):
+    def test_verification_rejects_unregistered_and_modified_artifacts(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "model.joblib"
+            joblib.dump({"model": "placeholder"}, path)
+            with self.assertRaisesRegex(FileNotFoundError, "Missing model manifest"):
+                verify_model_artifact(path)
+
+            write_model_manifest(
+                model_path=path,
+                model_type="unit_test",
+                schema_version="unit.v1",
+                target_col="target",
+                features=["return_1d"],
+                training_data=_training_frame(["return_1d"], rows=10, tickers=2),
+                metrics={},
+                validation_split="date_grouped_purged_walk_forward",
+            )
+            with path.open("ab") as handle:
+                handle.write(b"modified")
+            with self.assertRaisesRegex(ValueError, "integrity check failed"):
+                verify_model_artifact(path)
+
     def test_writes_manifest_with_artifact_hash_and_feature_schema(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "model.joblib"

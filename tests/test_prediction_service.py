@@ -85,7 +85,7 @@ class PredictionServiceTests(unittest.TestCase):
             _swing_frame(["MSFT"], features, rows=260).to_parquet(dataset, index=False)
             _write_model(model, features, target_col="target_next_week_big_up", status="candidate", probability=0.73)
 
-            with self.assertRaisesRegex(ValueError, "model must be promoted"):
+            with self.assertRaisesRegex(ValueError, "status candidate is not allowed"):
                 _service(root, swing=(dataset, model)).predict_swing(
                     PredictionRequest(tickers=["MSFT"], mode="swing")
                 )
@@ -282,7 +282,7 @@ class PredictionServiceTests(unittest.TestCase):
             with model.open("ab") as handle:
                 handle.write(b"tampered")
 
-            with self.assertRaisesRegex(ValueError, "model artifact integrity check failed"):
+            with self.assertRaisesRegex(ValueError, "artifact integrity check failed"):
                 _service(root, swing=(dataset, model)).predict_swing(
                     PredictionRequest(tickers=["MSFT"], mode="swing")
                 )

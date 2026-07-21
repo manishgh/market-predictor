@@ -22,8 +22,8 @@ The workload is mostly scheduled batch work:
 - validate and deduplicate events
 - align news timestamps with price bars for ML features
 - score sentiment
-- score the current watchlist
-- retrain only when enough matured labels exist
+- publish audited point-in-time feature snapshots
+- evaluate candidate models only when enough matured labels exist
 - publish this project's artifacts, reports, and models to Blob Storage
 
 Container Apps Jobs fit this because they can run manual, scheduled, or event-triggered jobs. The nightly runs should stay small, observable, and isolated. One ticker or API failure should fail only that unit of work, not the whole platform.
@@ -35,9 +35,10 @@ Azure ML GPU compute or an on-demand GPU VM should be used only when FinBERT bat
 | Component | Azure Service | Purpose |
 | --- | --- | --- |
 | ML artifact storage | Azure Blob Storage | Stores this project's raw snapshots, curated datasets, reports, and active models. |
-| Nightly collection | Azure Container Apps Job | Runs `live-once`, validates data, scores new events, writes predictions. |
+| Nightly collection | Azure Container Apps Job | Collects sources into isolated raw artifacts; it does not score predictions. |
+| Feature publication | Azure Container Apps Job | Builds the canonical point-in-time table, validates it, then runs `publish-live-features`. Not enabled until the canonical builder is complete. |
 | Artifact export | Azure Container Apps Job | Runs `export-ohlcv-artifacts` and `azure-upload-artifacts` for this project only. |
-| Guarded retraining | Azure Container Apps Job | Runs `live-train-event`; promotes only if validation passes. |
+| Guarded retraining | Azure ML job | Runs the registered training, shadow evaluation, and promotion workflow. Prediction traffic never triggers it. |
 | Heavy sentiment/retraining | Azure ML compute cluster or GPU VM | Used on demand, not always running. |
 
 ## Artifact Layout
@@ -80,18 +81,19 @@ Berlin midnight is not always the same UTC time because of daylight saving time.
 Recommended daily sequence:
 
 ```text
-02:00 UTC  live collection + prediction
-02:30 UTC  artifact export + blob upload
-03:00 UTC  guarded event-model retrain
-03:30 UTC  publish active models
+02:00 UTC  source-isolated collection
+02:30 UTC  canonical feature build + validation + publication
+03:00 UTC  artifact export + blob upload
+weekly/on demand  candidate training and shadow evaluation
 ```
 
 ## Container Commands
 
-Collection:
+Research collection:
 
 ```powershell
-market-predictor live-once --lookback-days 3 --workers 8
+market-predictor collect-swing --days 3 --workers 8 --out-dir data/raw/nightly
+market-predictor score-swing-events --raw-dir data/raw/nightly --out-dir data/raw/nightly_scored
 ```
 
 Artifact export:
@@ -101,10 +103,10 @@ market-predictor export-ohlcv-artifacts --days 730 --timeframes 1d,1h --workers 
 market-predictor azure-upload-artifacts --root data/artifacts
 ```
 
-Guarded retraining:
+Feature publication, after canonical builder validation:
 
 ```powershell
-market-predictor live-train-event --live-dir data/live
+market-predictor publish-live-features --mode swing --input-path <audited-parquet> --price-feed sip
 ```
 
 Publish models:
@@ -112,6 +114,10 @@ Publish models:
 ```powershell
 market-predictor azure-publish-models --models-dir models
 ```
+
+This command publishes only promoted, integrity-checked artifacts referenced by the server-owned production routes. Each model and registry sidecar is written beneath its mode/horizon prefix, then `_production_routes_manifest.json` is uploaded last as the deployment commit point.
+
+The removed `live-once` and `live-train-event` commands must not be recreated as deployment wrappers. They blended incompatible models and promoted on insufficient gates. Until the canonical feature and training jobs exist, the production readiness endpoint is expected to return 503 for missing live features.
 
 ## VM vs AKS Decision
 

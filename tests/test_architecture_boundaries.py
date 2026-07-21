@@ -15,6 +15,26 @@ class ArchitectureBoundaryTests(unittest.TestCase):
         command_names = {command.name for command in app.registered_commands}
         self.assertNotIn("monitor-alerts", command_names)
         self.assertNotIn("backtest-alerts", command_names)
+        obsolete_prediction_commands = {
+            "behavior",
+            "build-dataset",
+            "build-event-swing-datasets",
+            "combine-event-swing-datasets",
+            "live-once",
+            "live-run",
+            "live-train-event",
+            "negative-reaction",
+            "predict",
+            "predict-watchlist",
+            "rank-swing",
+            "score-event-swing",
+            "score-events",
+            "score-swing",
+            "train",
+            "train-event-swing",
+            "watch",
+        }
+        self.assertTrue(obsolete_prediction_commands.isdisjoint(command_names))
         self.assertIn("rank-sector-themes", command_names)
 
     def test_prediction_api_exposes_no_alert_or_execution_routes(self) -> None:

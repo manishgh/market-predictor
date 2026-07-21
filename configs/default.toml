@@ -286,20 +286,6 @@ smallcap_momentum = [
   "PL", "SATL", "QMCO", "IWM", "ARKK"
 ]
 
-[watch_score_weights]
-sentiment_mean = 1.2
-reddit_sentiment_mean = 1.0
-news_count = 0.25
-reddit_count = 0.25
-reddit_score_sum = 0.002
-reddit_comments_sum = 0.003
-positive_volume_z20 = 0.35
-return_1d = 0.75
-return_5d_past = 0.5
-quant_rating_above_neutral = 0.6
-momentum_above_neutral = 0.4
-eps_revision_above_neutral = 0.35
-positive_eps_surprise = 0.2
 [prediction_serving.routes.swing."5d"]
 model = "models/sp500_6m_next_week_big_up_v2_20260708_candidate.joblib"
 universe = "data/universe/sp500_current_20260708.csv"

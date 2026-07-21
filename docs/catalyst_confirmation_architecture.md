@@ -113,9 +113,6 @@ Optional fields:
 
 - `probability_down`
 - `expected_move_bucket`
-- `daily_model_probability_up`
-- `event_model_probability_up`
-- `heuristic_watch_score`
 - `market_cap`
 - `market_cap_bucket`
 - `average_recent_sentiment`
@@ -358,14 +355,13 @@ The manifest, not the filename, is authoritative.
 | Intraday opening V2 logistic baseline | `candidate` | ROC AUC 0.5641; lift 1.1836 | Promotion rejected. |
 | Intraday opening V2 net-positive direction model | `candidate` | ROC AUC 0.4890; lift 0.9162 | Promotion rejected. |
 | Intraday V4-H1 exact 120-minute R1 | `candidate` | NDCG@10 0.4868/0.5131; top-10 excess -0.0802%/-0.0629% | Promotion rejected; shadow not opened. |
-| Legacy daily/event `*_max.joblib` artifacts without manifests | No registry state | Older validation only | Baseline/research, never assume promoted. |
-
 The V2 structural dataset itself is valid for continued research: 47,614 rows, 196 eligible tickers, 122 sessions, exact 09:30-11:25 ET bar timestamps, no duplicate ticker/timestamp keys, and no cooldown gaps below 13 bars. Catalyst context covered 21.44% of rows; market context covered 87.28%. Reddit coverage was zero in this historical V2 table, so Reddit cannot be claimed as a trained intraday signal yet.
 
 Selected-trade economics are the decisive V2 failure: 558 capped OOS trades produced -0.184% average net realized return, 35.13% win rate, 0.7076 profit factor, 30.28% maximum drawdown, and 64.44% negative periods. All three market regimes were represented, so the rejection is not caused by missing regime coverage.
 
 Serving rules:
 
+- Each prediction view is produced by exactly one registered model artifact. Probabilities from different targets or horizons are never averaged.
 - Model routes, feature sources, universes, and promotion policy are server-owned; they are not API request fields.
 - Every serving route requires a promoted manifest and a matching model artifact SHA-256 before deserialization.
 - No route may silently substitute a candidate model.

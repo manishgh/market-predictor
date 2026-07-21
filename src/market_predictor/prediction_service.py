@@ -37,7 +37,7 @@ from market_predictor.readiness import (
     assess_daily_readiness,
     assess_intraday_readiness,
 )
-from market_predictor.registry import MODEL_STATUS_PROMOTED, file_sha256, load_model_manifest
+from market_predictor.registry import MODEL_STATUS_PROMOTED, verify_model_artifact
 from market_predictor.volatile import score_volatile_frame
 
 DEFAULT_MODE_HORIZONS = {"swing": "5d", "intraday": "12b"}
@@ -624,13 +624,11 @@ class PredictionService:
         resolved_horizon: str,
         bar_timeframe: str,
     ) -> ModelInfo:
-        manifest = load_model_manifest(model_path)
+        manifest = verify_model_artifact(
+            model_path,
+            allowed_statuses={MODEL_STATUS_PROMOTED},
+        )
         status = str(manifest.get("status", "unknown"))
-        if status != MODEL_STATUS_PROMOTED:
-            raise ValueError(f"model must be promoted for API prediction; {model_path} is {status}")
-        expected_hash = _optional_str(manifest.get("artifact_sha256"))
-        if not expected_hash or file_sha256(model_path) != expected_hash:
-            raise ValueError(f"model artifact integrity check failed: {model_path}")
         target = _optional_str(manifest.get("target_col"))
         target_horizon = _target_horizon(target)
         if target_horizon != resolved_horizon:

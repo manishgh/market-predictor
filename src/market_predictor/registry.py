@@ -2,12 +2,11 @@ from __future__ import annotations
 
 import hashlib
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 import pandas as pd
-
 
 MODEL_STATUS_CANDIDATE = "candidate"
 MODEL_STATUS_PROMOTED = "promoted"
@@ -70,7 +69,7 @@ def write_model_manifest(
         "target_col": target_col,
         "artifact_path": str(model_path),
         "artifact_sha256": file_sha256(model_path),
-        "created_at_utc": datetime.now(timezone.utc).isoformat(),
+        "created_at_utc": datetime.now(UTC).isoformat(),
         "validation_split": validation_split,
         "dataset": dataset_fingerprint(training_data, target_col=target_col, features=features),
         "metrics": _json_safe(metrics),
@@ -91,6 +90,30 @@ def load_model_manifest(model_path: Path) -> dict[str, Any]:
     if not isinstance(loaded, dict):
         raise ValueError(f"Model manifest must contain a JSON object: {path}")
     return {str(key): value for key, value in loaded.items()}
+
+
+def verify_model_artifact(
+    model_path: Path,
+    *,
+    allowed_statuses: set[str] | None = None,
+) -> dict[str, Any]:
+    """Verify registry state and artifact integrity before model deserialization."""
+
+    if not model_path.exists():
+        raise FileNotFoundError(f"Model artifact does not exist: {model_path}")
+    manifest = load_model_manifest(model_path)
+    if manifest.get("schema") != "model_registry_manifest.v1":
+        raise ValueError(f"Unsupported model manifest schema: {model_path}")
+    status = str(manifest.get("status", "unknown"))
+    accepted = allowed_statuses or {MODEL_STATUS_CANDIDATE, MODEL_STATUS_PROMOTED}
+    if status not in accepted:
+        raise ValueError(
+            f"Model status {status} is not allowed; expected one of {sorted(accepted)}"
+        )
+    expected_hash = str(manifest.get("artifact_sha256", ""))
+    if not expected_hash or file_sha256(model_path) != expected_hash:
+        raise ValueError(f"Model artifact integrity check failed: {model_path}")
+    return manifest
 
 
 def promote_model_manifest(
@@ -154,7 +177,7 @@ def promote_model_manifest(
         "model_path": str(model_path),
         "manifest_path": str(manifest_path_for(model_path)),
         "previous_status": manifest.get("status", "unknown"),
-        "requested_at_utc": datetime.now(timezone.utc).isoformat(),
+        "requested_at_utc": datetime.now(UTC).isoformat(),
         "passed": not failures,
         "failures": failures,
         "thresholds": {
@@ -183,7 +206,7 @@ def promote_model_manifest(
         _write_report_if_requested(report_path, result)
         return result
 
-    promoted_at = datetime.now(timezone.utc).isoformat()
+    promoted_at = datetime.now(UTC).isoformat()
     history = list(manifest.get("promotion_history", []))
     history.append(
         {

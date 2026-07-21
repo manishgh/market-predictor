@@ -1,12 +1,11 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 import joblib
-import numpy as np
 import pandas as pd
 from sklearn.base import clone
 from sklearn.ensemble import HistGradientBoostingClassifier
@@ -16,8 +15,7 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 
 from market_predictor.model import DEFAULT_FEATURES, DateGroupedPurgedWalkForwardSplit
-from market_predictor.registry import write_model_manifest
-
+from market_predictor.registry import verify_model_artifact, write_model_manifest
 
 VOLATILE_SCHEMA_VERSION = "volatile_mover.v1"
 
@@ -79,7 +77,18 @@ def build_volatile_dataset(
         five = daily_5d.copy()
         five["ticker"] = five["ticker"].astype(str).str.upper().str.strip()
         five["date"] = pd.to_datetime(five["date"], errors="coerce").dt.date
-        merge_cols = [col for col in ["ticker", "date", "entry_next_open_5d", "future_return_5d", "target_up_5d", "target_bucket_5d"] if col in five.columns]
+        merge_cols = [
+            col
+            for col in [
+                "ticker",
+                "date",
+                "entry_next_open_5d",
+                "future_return_5d",
+                "target_up_5d",
+                "target_bucket_5d",
+            ]
+            if col in five.columns
+        ]
         data = data.drop(columns=[col for col in merge_cols if col not in {"ticker", "date"} and col in data.columns], errors="ignore")
         data = data.merge(five[merge_cols].drop_duplicates(["ticker", "date"]), on=["ticker", "date"], how="left")
 
@@ -167,7 +176,7 @@ def train_volatile_model(
         "learning_rate": learning_rate,
         "embargo_groups": embargo_rows,
         "validation_split": "date_grouped_purged_walk_forward",
-        "trained_at_utc": datetime.now(timezone.utc).isoformat(),
+        "trained_at_utc": datetime.now(UTC).isoformat(),
     }
     joblib.dump(payload, model_out)
     metrics = {
@@ -233,6 +242,7 @@ def train_volatile_model(
 
 
 def score_volatile_frame(dataset: pd.DataFrame, model_path: Path) -> pd.DataFrame:
+    verify_model_artifact(model_path)
     payload = joblib.load(model_path)
     features = payload["features"]
     missing = [col for col in features if col not in dataset.columns]

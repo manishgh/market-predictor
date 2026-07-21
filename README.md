@@ -15,7 +15,7 @@ The repository produces prediction intelligence: probabilities, catalyst summari
 
 ## Current Model State (2026-07-21)
 
-Model lifecycle state comes from each artifact's `.manifest.json`; a filename such as `*_max.joblib` does not mean promoted.
+Model lifecycle state comes from each artifact's `.manifest.json`; unregistered or hash-mismatched artifacts cannot be scored.
 
 | Serving view | Artifact / family | State | Current evidence |
 | --- | --- | --- | --- |
@@ -26,7 +26,6 @@ Model lifecycle state comes from each artifact's `.manifest.json`; a filename su
 | Intraday V3 R1 | 2026-07-20 grouped XGBoost ranker | Candidate; promotion rejected | Walk-forward/holdout NDCG@10 0.4930/0.5123, but top-10 cost-adjusted excess return is -0.0715%/-0.0764%. |
 | Intraday V3 O1 | 2026-07-21 fixed ticker-catalyst overlay on R1 | Research ablation; rejected | Walk-forward top-10 excess return improves from -0.0574% to -0.0487%, but ticker holdout worsens from -0.0642% to -0.0669%; both paired confidence intervals include zero. |
 | Intraday V4-H1 120m | 2026-07-21 exact-path B0/R1 experiment | Research candidates; rejected | R1 top-10 cost-adjusted excess return is -0.0802%/-0.0629% walk-forward/holdout. The longer horizon does not cover costs. |
-| Older daily/event `*_max.joblib` files | Legacy swing/event families | Baseline/research | These artifacts predate registry manifests and current promotion gates. They are not formally promoted. |
 
 Production API implications:
 
@@ -165,16 +164,11 @@ Download FinBERT once:
 market-predictor download-model
 ```
 
-Run one live collection/scoring cycle for a small watchlist:
+Collect and sentiment-score a small research universe:
 
 ```powershell
-market-predictor live-once --tickers "LUNR,MXL,RGTI" --lookback-days 3 --workers 4
-```
-
-Predict a watchlist using the active clean models:
-
-```powershell
-market-predictor predict-watchlist --tickers "LUNR,MXL,RGTI" --out data/reports/watchlist_latest.csv
+market-predictor collect-swing --tickers "LUNR,MXL,RGTI" --days 30 --out-dir data/raw/research --workers 4
+market-predictor score-swing-events --tickers "LUNR,MXL,RGTI" --raw-dir data/raw/research --out-dir data/raw/research_scored
 ```
 
 Start the prediction API:
@@ -195,6 +189,8 @@ Upload project artifacts to Azure Blob Storage after Azure env vars are configur
 market-predictor azure-upload-artifacts --root data/artifacts
 market-predictor azure-publish-models --models-dir models
 ```
+
+Model publication reads the server-owned prediction routes, verifies that every referenced artifact is promoted and hash-matches its registry manifest, and uploads the artifact plus sidecar under a mode/horizon path. The deployment manifest is uploaded last; unregistered, candidate, deprecated, or out-of-root artifacts are never published by this command.
 
 For implementation details and file responsibilities, read:
 
@@ -262,20 +258,9 @@ The default model is `ProsusAI/finbert`. Override with `FINBERT_MODEL`.
 market-predictor alpaca-tickers --out data/universe/alpaca_tickers.csv
 market-predictor collect AAPL --days 90 --out data/raw/aapl_events.parquet
 market-predictor collect-seeking-alpha AAPL --out data/external/seeking_alpha_quant.csv
-market-predictor build-dataset AAPL --events data/raw/aapl_events.parquet --out data/features/aapl_daily_1d.parquet --horizon-days 1 --seeking-alpha data/external/seeking_alpha_quant.csv
-market-predictor train --dataset data/features/aapl_daily_1d.parquet --model-out models/aapl_direction_1d.joblib --horizon-days 1
-market-predictor watch AAPL --model models/aapl_direction_1d.joblib --horizon-days 1
 ```
 
-For a next-week model:
-
-```powershell
-market-predictor build-dataset AAPL --events data/raw/aapl_events.parquet --out data/features/aapl_daily_5d.parquet --horizon-days 5 --seeking-alpha data/external/seeking_alpha_quant.csv
-market-predictor train --dataset data/features/aapl_daily_5d.parquet --model-out models/aapl_direction_5d.joblib --horizon-days 5
-market-predictor predict AAPL --model models/aapl_direction_5d.joblib --days 30
-```
-
-The prediction label uses a tradable next-session open entry reference, not same-day close. Use `--horizon-days 1` for tomorrow/swing watch work and `--horizon-days 5` for a next-week view.
+Data collection is separate from training and serving. Use the volatile-mover or V3 workflows below for model research; use the prediction API only after an audited live feature snapshot has been published.
 
 ## Prediction API
 
@@ -313,7 +298,7 @@ Production model routes are declared under `[prediction_serving.routes]` in `con
 
 `/v1/health/live` reports process liveness. `/v1/health/ready` validates every registered model manifest/status/hash and each live feature snapshot; it returns HTTP 503 whenever any serving component is unavailable or stale.
 
-The nightly `live-once` cycle publishes the rolling swing snapshot after source-isolated collection, sanitization, FinBERT scoring, daily feature construction, and volatile-schema enrichment. Publish an audited intraday feature table from the 5-minute pipeline with:
+Publish an audited feature table from the appropriate completed pipeline with:
 
 ```powershell
 market-predictor publish-live-features `
@@ -361,22 +346,8 @@ Bulk workflow:
 ```powershell
 market-predictor swing-universe --out data/universe/swing_candidates.csv
 market-predictor collect-swing --days 180 --out-dir data/raw/swing
-market-predictor score-swing --raw-dir data/raw/swing
+market-predictor score-swing-events --raw-dir data/raw/swing --out-dir data/raw/swing_scored
 market-predictor build-swing-datasets --horizon-days 1 --raw-dir data/raw/swing --out-dir data/features/swing
-market-predictor rank-swing --horizon-days 1 --feature-dir data/features/swing --out data/reports/swing_watch_rank.csv
-```
-
-Current redesigned training artifacts use two years of data and market-context features:
-
-```powershell
-market-predictor build-market-context-from-proxies --raw-dir data/raw/uslisted_6sector_2y_clean --out data/external/market_context/market_context_events.parquet
-market-predictor score-events --events data/external/market_context/market_context_events.parquet --out data/external/market_context/market_context_events_scored.parquet
-market-predictor build-swing-datasets --horizon-days 1 --raw-dir data/raw/uslisted_6sector_2y_clean --out-dir data/features/daily_swing_2y_market_context --workers 8
-market-predictor build-swing-datasets --horizon-days 5 --raw-dir data/raw/uslisted_6sector_2y_clean --out-dir data/features/daily_swing_2y_market_context --workers 8
-market-predictor combine-swing-datasets --feature-dir data/features/daily_swing_2y_market_context --horizon-days 1 --out data/features/daily_swing_combined_2y_market_context_1d.parquet
-market-predictor combine-swing-datasets --feature-dir data/features/daily_swing_2y_market_context --horizon-days 5 --out data/features/daily_swing_combined_2y_market_context_5d.parquet
-market-predictor train --dataset data/features/daily_swing_combined_2y_market_context_1d.parquet --model-out models/daily_swing_2y_market_context_1d_candidate.joblib --horizon-days 1 --max-iter 320 --learning-rate 0.035
-market-predictor train --dataset data/features/daily_swing_combined_2y_market_context_5d.parquet --model-out models/daily_swing_2y_market_context_5d_candidate.joblib --horizon-days 5 --max-iter 320 --learning-rate 0.035
 ```
 
 Use a custom list:
@@ -388,9 +359,8 @@ market-predictor collect-swing --tickers "POET,MXL,RDW,LASE,RGTI,MRVL,IONQ,QBTS"
 Stage separation:
 
 - `collect-swing`: API/data download only by default. Alpaca, Finviz, Reddit, Seeking Alpha, and SEC failures are isolated per source and per ticker. Uses parallel workers for I/O. Seeking Alpha is enabled by default when RapidAPI credentials are configured; use `--no-seeking-alpha` only for an explicit quota outage or diagnostic run.
-- `score-swing`: FinBERT scoring only. Loads the model once, uses GPU if PyTorch detects CUDA, scores all ticker texts in batches, then writes per-ticker files.
+- `score-swing-events`: FinBERT scoring only. Loads the model once, uses GPU if PyTorch detects CUDA, records inference provenance, then writes per-ticker files.
 - `build-swing-datasets`: daily/hourly price joins, event reaction features, technical features, and labels. Uses parallel workers per ticker.
-- `rank-swing`: latest watch ranking across built datasets.
 
 Performance knobs live in `configs/default.toml`:
 
@@ -404,7 +374,7 @@ Override workers per command:
 
 ```powershell
 market-predictor collect-swing --days 180 --workers 8
-market-predictor score-swing --batch-size 64
+market-predictor score-swing-events --batch-size 64
 market-predictor build-swing-datasets --horizon-days 1 --workers 8 --no-with-seeking-alpha
 ```
 
@@ -416,46 +386,11 @@ The engine separates event timing buckets:
 
 Hourly reaction features require Alpaca bars. If hourly bars are unavailable, the daily gap/day-return features still build.
 
-The active watchlist defaults now use:
+## Removed Legacy Paths
 
-```text
-models/daily_swing_2y_market_context_1d_max.joblib
-models/daily_swing_2y_market_context_5d_max.joblib
-models/event_swing_2y_market_context_1d_prereaction_max.joblib
-models/event_swing_2y_market_context_5d_prereaction_max.joblib
-```
+The former four-model watchlist average, heuristic watch/behavior commands, event/daily baseline trainers, `live-once`, `live-run`, and accuracy-only `live-train-event` path were removed. They mixed incompatible horizons, accepted unregistered artifacts, and could republish research features as live data. The API is the only operational prediction surface; research scorers require a registered, hash-matching candidate or promoted model.
 
-The latest `predict-watchlist` output writes three files: a readable CSV, a raw CSV, and a field-definition CSV explaining each probability column.
-
-## Event Swing Model Workflow
-
-This is the cleaner event-level workflow for learning how news/chatter/fundamental events map to next-day and next-week moves.
-
-```powershell
-market-predictor collect-swing --days 730 --out-dir data/raw/swing --workers 8
-market-predictor verify-swing --raw-dir data/raw/swing --rewrite
-market-predictor score-swing-events --raw-dir data/raw/swing --out-dir data/raw/swing_scored
-market-predictor build-event-swing-datasets --raw-dir data/raw/swing_scored --out-dir data/features/event_swing --workers 8
-market-predictor combine-event-swing-datasets --feature-dir data/features/event_swing --out data/features/event_swing_all.parquet
-market-predictor train-event-swing --dataset data/features/event_swing_all.parquet --model-out models/event_swing_1d.joblib --target-col target_next_1d_up
-market-predictor score-event-swing --dataset data/features/event_swing_all.parquet --model models/event_swing_1d.joblib --out data/reports/event_swing_scores.csv
-```
-
-The active production-style command for daily use is usually `predict-watchlist`, which collects the recent 2-3 day context, joins latest bars/profile/news/chatter features, and scores the clean active models.
-
-## Live Nightly Pipeline
-
-Run one managed live cycle:
-
-```powershell
-market-predictor live-once --lookback-days 3 --workers 8
-```
-
-Run continuously in the foreground:
-
-```powershell
-market-predictor live-run --poll-seconds 3600 --lookback-days 3 --workers 8
-```
+There is intentionally no automatic live swing publisher until the canonical point-in-time data pipeline is complete. `/v1/health/ready` remains HTTP 503 when the audited live snapshot is absent.
 
 Market Predictor has no runtime alert commands or alert persistence. Alert evaluation, deduplication, acknowledgement, and web/mobile delivery belong to `trading_flow`. The removed rule behavior is preserved in [Legacy alert rule parity](docs/legacy_alert_rule_parity.md). Do not build new alert behavior in this repository.
 
@@ -574,23 +509,7 @@ market-predictor audit-promotion-readiness `
 
 The audit writes separate profitability, selected-trade, market-regime, and catalyst/news CSVs. `promote-model` can require those files so a model is not promoted on ROC AUC alone. The default gate checks out-of-sample selected-trade return, profit factor, drawdown, market-regime coverage, catalyst/news presence, and news/candle alignment.
 
-Retrain only when enough matured live labels exist:
-
-```powershell
-market-predictor live-train-event --live-dir data/live
-```
-
-Register Windows scheduled tasks:
-
-```powershell
-.\scripts\register_live_midnight_task.ps1
-.\scripts\register_live_train_task.ps1
-```
-
-The intended schedule is:
-
-- `00:00` local time: collect, validate, score sentiment, build live features, and write predictions.
-- `00:45` local time: guarded retraining if enough matured labels exist.
+Automated retraining remains disabled until the canonical dataset builder, shadow evaluator, and promotion workflow are connected end to end. Model retraining is never triggered from prediction traffic.
 
 ## Azure
 
@@ -604,12 +523,6 @@ Recommended deployment is:
 
 ```text
 Azure Blob Storage + Azure Container Apps Jobs + Azure ML GPU compute on demand
-```
-
-The container entrypoint script is:
-
-```text
-scripts/azure_nightly.sh
 ```
 
 Build context files:

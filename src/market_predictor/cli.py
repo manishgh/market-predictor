@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import date, datetime, time, timedelta, timezone
 import json
-from pathlib import Path
 import re
 import time as time_module
+from collections.abc import Mapping
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from datetime import UTC, date, datetime, time, timedelta
+from pathlib import Path
 from urllib.parse import urlsplit, urlunsplit
 
 import pandas as pd
@@ -13,14 +14,15 @@ import requests
 import typer
 from rich.console import Console
 
+from market_predictor.azure_store import AzureBlobStore
 from market_predictor.commands.ranking import register_ranking_commands
 from market_predictor.commands.v3_data import register_v3_data_commands
-from market_predictor.commands.v3_features import register_v3_feature_commands
 from market_predictor.commands.v3_evaluation import register_v3_evaluation_commands
+from market_predictor.commands.v3_features import register_v3_feature_commands
 from market_predictor.commands.v3_labels import register_v3_label_commands
 from market_predictor.commands.v3_models import register_v3_model_commands
 from market_predictor.commands.v3_readiness import register_v3_readiness_commands
-from market_predictor.config import get_settings
+from market_predictor.config import Settings, get_settings
 from market_predictor.data_quality import sanitize_events_frame
 from market_predictor.entry_exit import (
     ENTRY_EXIT_SCHEMA_VERSION,
@@ -35,30 +37,18 @@ from market_predictor.features import (
     add_event_taxonomy,
     add_finbert,
     add_finbert_with_scorer,
-    add_price_features,
     align_events_to_trading_dates,
     build_daily_dataset,
-    build_event_swing_dataset,
     events_to_frame,
-    feature_date_for_timestamp,
     source_family_for_source,
 )
 from market_predictor.global_context import score_flashpoints
 from market_predictor.intraday_confirmation import build_intraday_decision_report
 from market_predictor.intraday_enrichment import build_enriched_intraday_dataset
 from market_predictor.intraday_universe import build_intraday_candidate_universe
-from market_predictor.model import (
-    DEFAULT_FEATURES,
-    heuristic_watch_score,
-    predict_event_swing_frame,
-    predict_latest,
-    train_direction_model,
-    train_event_swing_model,
-    train_event_swing_model_with_metrics,
-)
-from market_predictor.azure_store import AzureBlobStore
-from market_predictor.price import fetch_daily_prices
-from market_predictor.price import fetch_intraday_prices
+from market_predictor.model import DEFAULT_FEATURES
+from market_predictor.prediction_service import serving_routes_from_config
+from market_predictor.price import fetch_daily_prices, fetch_intraday_prices
 from market_predictor.promotion_audit import (
     ProfitabilityAuditConfig,
     build_catalyst_news_audit,
@@ -66,7 +56,12 @@ from market_predictor.promotion_audit import (
     build_walk_forward_profitability_audit,
     read_audit_record,
 )
-from market_predictor.registry import promote_model_manifest
+from market_predictor.registry import (
+    MODEL_STATUS_PROMOTED,
+    manifest_path_for,
+    promote_model_manifest,
+    verify_model_artifact,
+)
 from market_predictor.sources import AlpacaSource, FinvizSource, GdeltSource, RedditSource, SeekingAlphaRapidApiSource
 from market_predictor.sources.gdelt import DEFAULT_GDELT_CONTEXT_QUERIES
 from market_predictor.sources.sec import SecSource
@@ -78,7 +73,7 @@ from market_predictor.volatile import (
     train_volatile_model,
 )
 
-app = typer.Typer(help="Collect news, build features, and train next-week market direction models.")
+app = typer.Typer(help="Build and serve audited swing and intraday market predictions.")
 console = Console()
 DEFAULT_MARKET_CONTEXT_PATH = Path("data/external/market_context/market_context_events_scored.parquet")
 register_ranking_commands(app, console)
@@ -169,7 +164,7 @@ def _parse_path_list(value: str | None) -> list[Path]:
 def _parse_end_date(value: str | None) -> datetime | None:
     if not value:
         return None
-    parsed = datetime.combine(date.fromisoformat(value), time(23, 59, 59), tzinfo=timezone.utc)
+    parsed = datetime.combine(date.fromisoformat(value), time(23, 59, 59), tzinfo=UTC)
     return parsed
 
 
@@ -193,9 +188,9 @@ def collect_events_for_ticker(
     score: bool = True,
 ) -> tuple[pd.DataFrame, list[str]]:
     settings = get_settings()
-    end = end or datetime.now(timezone.utc)
+    end = end or datetime.now(UTC)
     start = end - timedelta(days=days)
-    events = []
+    events: list[dict[str, object]] = []
     errors: list[str] = []
 
     if settings.has_alpaca:
@@ -289,439 +284,6 @@ def collect_events_frame(
     return frame
 
 
-def _recent_events_for_behavior(
-    ticker: str,
-    days: int,
-    *,
-    raw_dir: Path,
-    refresh: bool,
-    no_reddit: bool,
-    no_seeking_alpha: bool,
-) -> tuple[pd.DataFrame, list[str]]:
-    now = datetime.now(timezone.utc)
-    cutoff = now - timedelta(days=days)
-    errors: list[str] = []
-    frame = pd.DataFrame()
-    path = raw_dir / f"{ticker}_events.parquet"
-    if path.exists() and not refresh:
-        try:
-            frame = pd.read_parquet(path)
-        except Exception as exc:
-            errors.append(f"cache_read:{exc}")
-    if frame.empty or refresh:
-        frame, collect_errors = collect_events_for_ticker(
-            ticker,
-            days,
-            no_reddit=no_reddit,
-            no_seeking_alpha=no_seeking_alpha,
-            score=False,
-        )
-        errors.extend(collect_errors)
-    frame, verify = sanitize_events_frame(frame)
-    if verify.rows_out:
-        frame["timestamp"] = pd.to_datetime(frame["timestamp"], utc=True)
-        frame = frame[frame["timestamp"] >= cutoff].copy()
-    if verify.duplicate_rows_removed:
-        errors.append(f"sanitize:removed_duplicates={verify.duplicate_rows_removed}")
-    if verify.future_timestamp_rows:
-        errors.append(f"sanitize:removed_future_timestamps={verify.future_timestamp_rows}")
-    return frame, errors
-
-
-def _reaction_behavior_label(row: pd.Series) -> str:
-    news_count = float(row.get("news_count", 0) or 0)
-    sentiment = float(row.get("sentiment_mean", 0) or 0)
-    return_1d = float(row.get("return_1d", 0) or 0)
-    volume_z = float(row.get("volume_z20", 0) or 0)
-    intraday_reaction = float(row.get("intraday_reaction_2h_mean", 0) or 0)
-    premarket_gap = float(row.get("premarket_gap_mean", 0) or 0)
-    afterhours_gap = float(row.get("afterhours_next_open_gap_mean", 0) or 0)
-    reaction = max(intraday_reaction, premarket_gap, afterhours_gap, key=abs)
-
-    if news_count <= 0:
-        if abs(return_1d) >= 0.04 and volume_z > 1.0:
-            return "price-led move; news catalyst not found"
-        return "quiet/no recent catalyst"
-    if sentiment >= 0.15 and (return_1d > 0.01 or reaction > 0.005):
-        return "positive news confirmed by price"
-    if sentiment >= 0.15 and return_1d < -0.01:
-        return "positive news faded or sold"
-    if sentiment <= -0.15 and return_1d >= 0:
-        return "negative news absorbed"
-    if sentiment <= -0.15 and return_1d < -0.01:
-        return "negative news confirmed by price"
-    if volume_z > 1.5 and abs(return_1d) >= 0.03:
-        return "high-volume reaction, sentiment mixed"
-    return "mixed/needs confirmation"
-
-
-def _recent_headlines(events: pd.DataFrame, limit: int = 3) -> str:
-    if events.empty or "title" not in events.columns:
-        return ""
-    values = (
-        events.sort_values("timestamp", ascending=False)["title"]
-        .dropna()
-        .astype(str)
-        .map(lambda value: value.strip())
-    )
-    values = [value for value in values if value]
-    return " || ".join(values[:limit])
-
-
-def _model_path(preferred: Path, fallback: Path | None = None) -> Path | None:
-    if preferred.exists():
-        return preferred
-    if fallback and fallback.exists():
-        return fallback
-    return None
-
-
-def _market_cap_bucket(market_cap: float | None) -> str:
-    if market_cap is None or pd.isna(market_cap) or market_cap <= 0:
-        return "unknown"
-    if market_cap < 300_000_000:
-        return "micro_cap"
-    if market_cap < 2_000_000_000:
-        return "small_cap"
-    if market_cap < 10_000_000_000:
-        return "mid_cap"
-    if market_cap < 200_000_000_000:
-        return "large_cap"
-    return "mega_cap"
-
-
-def _lookup_market_profile(ticker: str) -> dict[str, object]:
-    try:
-        import yfinance as yf
-
-        info = yf.Ticker(ticker).fast_info
-        market_cap = info.get("marketCap") if hasattr(info, "get") else None
-        market_cap_value = float(market_cap) if market_cap not in (None, "") else None
-        return {
-            "market_cap": market_cap_value,
-            "cap_bucket": _market_cap_bucket(market_cap_value),
-        }
-    except Exception as exc:
-        return {"market_cap": None, "cap_bucket": "unknown", "profile_error": str(exc)}
-
-
-def _signal_from_probability(probability: float | None) -> str:
-    if probability is None or pd.isna(probability):
-        return "no_model_signal"
-    if probability >= 0.62:
-        return "bullish_watch"
-    if probability >= 0.55:
-        return "lean_bullish"
-    if probability <= 0.38:
-        return "bearish_or_fade_watch"
-    if probability <= 0.45:
-        return "lean_bearish"
-    return "neutral"
-
-
-def _latest_price_snapshot(ticker: str, settings: object) -> dict[str, object]:
-    try:
-        prices = fetch_daily_prices(ticker, datetime.now(timezone.utc) - timedelta(days=45), datetime.now(timezone.utc), settings)
-        if prices.empty:
-            return {}
-        prices = prices.sort_values("date")
-        latest = prices.iloc[-1]
-        previous_close = float(prices.iloc[-2]["close"]) if len(prices) > 1 else None
-        close = float(latest["close"])
-        return {
-            "latest_bar_date": latest["date"],
-            "latest_open": float(latest["open"]),
-            "latest_close": close,
-            "latest_volume": float(latest["volume"]),
-            "latest_return_1d": close / previous_close - 1.0 if previous_close else None,
-        }
-    except Exception as exc:
-        return {"price_error": str(exc)}
-
-
-WATCHLIST_COLUMN_TITLES = {
-    "ticker": "Ticker",
-    "signal": "Overall Signal",
-    "combined_probability_up": "Combined Probability Up",
-    "daily_model_1d_probability_up": "Daily Model: Next-Day Up Probability",
-    "daily_model_1d_prediction": "Daily Model: Next-Day Direction",
-    "daily_model_5d_probability_up": "Daily Model: Next-5-Trading-Days Up Probability",
-    "daily_model_5d_prediction": "Daily Model: Next-5-Trading-Days Direction",
-    "event_model_1d_latest_probability_up": "Latest Event Model: Next-Day Up Probability",
-    "event_model_1d_max_probability_up": "Strongest Recent Event: Next-Day Up Probability",
-    "event_model_1d_mean_probability_up": "Average Recent Event: Next-Day Up Probability",
-    "event_model_5d_latest_probability_up": "Latest Event Model: Next-5-Trading-Days Up Probability",
-    "event_model_5d_max_probability_up": "Strongest Recent Event: Next-5-Trading-Days Up Probability",
-    "event_model_5d_mean_probability_up": "Average Recent Event: Next-5-Trading-Days Up Probability",
-    "recent_event_count": "Recent Catalyst Count",
-    "alpaca_event_count": "Alpaca News Count",
-    "reddit_event_count": "Reddit Chatter Count",
-    "seeking_alpha_event_count": "Seeking Alpha Event Count",
-    "sec_event_count": "SEC Filing Count",
-    "latest_bar_date": "Latest Price Bar Date",
-    "latest_open": "Latest Open",
-    "latest_close": "Latest Close",
-    "latest_return_1d": "Latest 1-Day Return",
-    "latest_volume": "Latest Volume",
-    "daily_return_1d": "Daily Feature 1-Day Return",
-    "volume_z20": "20-Day Volume Z-Score",
-    "cap_bucket": "Market-Cap Bucket",
-    "market_cap": "Market Cap",
-    "sector": "Configured Sector",
-    "sector_benchmark": "Sector Benchmark ETF",
-    "market_benchmark": "Market Benchmark ETF",
-    "sentiment_mean_recent": "Average Recent News Sentiment",
-    "watch_score": "Heuristic Watch Score",
-    "recent_headlines": "Recent Headlines Used",
-    "errors": "Collection or Scoring Notes",
-    "lookback_days": "News Lookback Days",
-    "status": "Status",
-}
-
-
-WATCHLIST_FIELD_DEFINITIONS = {
-    "Combined Probability Up": "Average of available clean daily and event model probabilities. This is a ranking score, not a guaranteed trading probability.",
-    "Daily Model: Next-Day Up Probability": "Probability from the daily ticker model that the stock closes up over the next trading day, using recent aggregated news, daily bars, SPY, and sector ETF context.",
-    "Daily Model: Next-5-Trading-Days Up Probability": "Probability from the daily ticker model that the stock is up over the next 5 trading days.",
-    "Latest Event Model: Next-Day Up Probability": "Probability from the event-level model using the most recent catalyst/news item. It asks: based on this event, prior price pattern, sector/SPY context, and event metadata, did similar historical events lead to a positive next-day move?",
-    "Strongest Recent Event: Next-Day Up Probability": "Highest next-day event-model probability among all events found in the lookback window.",
-    "Average Recent Event: Next-Day Up Probability": "Average next-day event-model probability across all recent events in the lookback window.",
-    "Latest Event Model: Next-5-Trading-Days Up Probability": "Same as latest event probability, but target is the next 5 trading days.",
-    "Overall Signal": "Bucketed interpretation of Combined Probability Up: bullish_watch, lean_bullish, neutral, lean_bearish, or bearish_or_fade_watch.",
-    "Recent Catalyst Count": "Number of recent news/SEC/Reddit/Seeking Alpha events collected for the ticker.",
-    "20-Day Volume Z-Score": "How unusual current volume is versus the recent 20-day baseline. Positive means above normal.",
-    "Average Recent News Sentiment": "FinBERT sentiment average across recent collected event text: positive above 0, negative below 0.",
-    "Heuristic Watch Score": "Rule-based score using news count, sentiment, volume, and price reaction. It is separate from ML probabilities.",
-}
-
-
-def _humanize_watchlist_report(report: pd.DataFrame) -> pd.DataFrame:
-    preferred = [
-        "ticker",
-        "signal",
-        "combined_probability_up",
-        "daily_model_1d_probability_up",
-        "daily_model_5d_probability_up",
-        "event_model_1d_latest_probability_up",
-        "event_model_5d_latest_probability_up",
-        "event_model_1d_max_probability_up",
-        "event_model_5d_max_probability_up",
-        "recent_event_count",
-        "alpaca_event_count",
-        "reddit_event_count",
-        "seeking_alpha_event_count",
-        "sec_event_count",
-        "latest_bar_date",
-        "latest_open",
-        "latest_close",
-        "latest_return_1d",
-        "latest_volume",
-        "cap_bucket",
-        "market_cap",
-        "sector",
-        "sector_benchmark",
-        "sentiment_mean_recent",
-        "watch_score",
-        "recent_headlines",
-        "errors",
-    ]
-    ordered = [col for col in preferred if col in report.columns]
-    ordered.extend([col for col in report.columns if col not in ordered])
-    human = report[ordered].rename(columns=WATCHLIST_COLUMN_TITLES)
-    return human
-
-
-def _write_watchlist_dictionary(path: Path) -> None:
-    rows = [
-        {"Field": field, "Meaning": meaning}
-        for field, meaning in WATCHLIST_FIELD_DEFINITIONS.items()
-    ]
-    pd.DataFrame(rows).to_csv(path, index=False)
-
-
-def _event_identity_columns(frame: pd.DataFrame) -> list[str]:
-    return [col for col in ["ticker", "timestamp", "source", "title", "url"] if col in frame.columns]
-
-
-def _upsert_events(existing_path: Path, new_events: pd.DataFrame) -> tuple[pd.DataFrame, int]:
-    if existing_path.exists():
-        existing = pd.read_parquet(existing_path)
-    else:
-        existing = pd.DataFrame()
-    before = len(existing)
-    combined = pd.concat([existing, new_events], ignore_index=True) if not existing.empty else new_events.copy()
-    combined, _ = sanitize_events_frame(combined)
-    identity = _event_identity_columns(combined)
-    if identity:
-        combined = combined.sort_values("timestamp").drop_duplicates(identity, keep="last")
-    combined = combined.sort_values("timestamp").reset_index(drop=True)
-    added = max(0, len(combined) - before)
-    existing_path.parent.mkdir(parents=True, exist_ok=True)
-    combined.to_parquet(existing_path, index=False)
-    return combined, added
-
-
-def _score_unscored_events(frame: pd.DataFrame, scorer: object, settings: object) -> pd.DataFrame:
-    if frame.empty:
-        return frame
-    if "sentiment_numeric" in frame.columns and frame["sentiment_numeric"].notna().all():
-        return frame
-    scored = frame.copy()
-    needs_score = (
-        scored["sentiment_numeric"].isna()
-        if "sentiment_numeric" in scored.columns
-        else pd.Series(True, index=scored.index)
-    )
-    if not needs_score.any():
-        return scored
-    for col in ["title", "summary", "text"]:
-        if col not in scored.columns:
-            scored[col] = ""
-    scored["text"] = scored["text"].fillna(scored["summary"]).fillna(scored["title"]).fillna("")
-    score_input = scored.loc[needs_score].drop(
-        columns=["sentiment_label", "sentiment_score", "sentiment_numeric"],
-        errors="ignore",
-    )
-    score_output = add_finbert_with_scorer(score_input, scorer, batch_size=settings.finbert_batch_size)
-    for col in ["sentiment_label", "sentiment_score", "sentiment_numeric"]:
-        if col not in scored.columns:
-            scored[col] = pd.NA
-        scored.loc[needs_score, col] = score_output[col].to_numpy()
-    return scored
-
-
-def _score_live_ticker(
-    symbol: str,
-    events_path: Path,
-    feature_dir: Path,
-    predictions_dir: Path,
-    settings: object,
-    *,
-    run_id: str,
-    lookback_days: int,
-    event_model_1d: Path | None,
-    event_model_5d: Path | None,
-    daily_model_1d: Path | None,
-    daily_model_5d: Path | None,
-) -> dict[str, object]:
-    events = pd.read_parquet(events_path)
-    event_features = build_event_swing_dataset(
-        symbol,
-        events_path,
-        settings,
-        horizon_days=5,
-        market_context_path=DEFAULT_MARKET_CONTEXT_PATH,
-    )
-    feature_path = feature_dir / f"{symbol}_event_swing.parquet"
-    feature_path.parent.mkdir(parents=True, exist_ok=True)
-    event_features.to_parquet(feature_path, index=False)
-    cutoff = pd.Timestamp.now(tz="UTC") - pd.Timedelta(days=lookback_days)
-    recent_features = event_features[pd.to_datetime(event_features["event_timestamp"], utc=True) >= cutoff].copy()
-    if recent_features.empty and not event_features.empty:
-        recent_features = event_features.sort_values("event_timestamp").tail(3).copy()
-
-    record: dict[str, object] = {
-        "run_id": run_id,
-        "ticker": symbol,
-        "event_store_rows": len(events),
-        "event_feature_rows": len(event_features),
-        "recent_event_rows": len(recent_features),
-        "feature_path": str(feature_path),
-        "latest_headlines": _recent_headlines(events, limit=5),
-        "sector": settings.sector_for_ticker(symbol) or "unknown",
-        "sector_benchmark": settings.sector_benchmark_for_ticker(symbol),
-        **_latest_price_snapshot(symbol, settings),
-    }
-
-    if not recent_features.empty and event_model_1d:
-        scored = predict_event_swing_frame(recent_features, event_model_1d)
-        scored_path = predictions_dir / f"{symbol}_recent_event_scores_1d.csv"
-        scored.to_csv(scored_path, index=False)
-        record["event_1d_latest_probability_up"] = float(scored.sort_values("event_timestamp").iloc[-1]["model_probability_up"])
-        record["event_1d_max_probability_up"] = float(scored["model_probability_up"].max())
-        record["event_1d_mean_probability_up"] = float(scored["model_probability_up"].mean())
-    if not recent_features.empty and event_model_5d:
-        scored = predict_event_swing_frame(recent_features, event_model_5d)
-        scored_path = predictions_dir / f"{symbol}_recent_event_scores_5d.csv"
-        scored.to_csv(scored_path, index=False)
-        record["event_5d_latest_probability_up"] = float(scored.sort_values("event_timestamp").iloc[-1]["model_probability_up"])
-        record["event_5d_max_probability_up"] = float(scored["model_probability_up"].max())
-        record["event_5d_mean_probability_up"] = float(scored["model_probability_up"].mean())
-
-    try:
-        daily_1d = build_daily_dataset(
-            symbol,
-            events_path,
-            settings,
-            horizon_days=1,
-            market_context_path=DEFAULT_MARKET_CONTEXT_PATH,
-        )
-        live_swing, live_swing_audit = build_volatile_dataset(daily_1d)
-        if not live_swing.empty:
-            live_swing_path = feature_dir / f"{symbol}_swing_live.parquet"
-            live_swing.to_parquet(live_swing_path, index=False)
-            record["live_swing_feature_path"] = str(live_swing_path)
-            record["live_swing_feature_rows"] = int(len(live_swing))
-        elif not live_swing_audit.empty:
-            record["live_swing_readiness"] = live_swing_audit.to_dict(orient="records")
-        record["watch_score"] = heuristic_watch_score(daily_1d, weights=settings.watch_score_weights).get("watch_score")
-        if daily_model_1d:
-            pred = predict_latest(daily_1d, daily_model_1d)
-            record["daily_1d_probability_up"] = pred["probability_up"]
-        if daily_model_5d:
-            daily_5d = build_daily_dataset(
-                symbol,
-                events_path,
-                settings,
-                horizon_days=5,
-                market_context_path=DEFAULT_MARKET_CONTEXT_PATH,
-            )
-            pred = predict_latest(daily_5d, daily_model_5d)
-            record["daily_5d_probability_up"] = pred["probability_up"]
-    except Exception as exc:
-        record["daily_error"] = str(exc)
-
-    probs = [
-        record.get("event_1d_latest_probability_up"),
-        record.get("event_5d_latest_probability_up"),
-        record.get("daily_1d_probability_up"),
-        record.get("daily_5d_probability_up"),
-    ]
-    usable = [float(value) for value in probs if value is not None and not pd.isna(value)]
-    record["combined_probability_up"] = sum(usable) / len(usable) if usable else None
-    record["signal"] = _signal_from_probability(record["combined_probability_up"])
-    return record
-
-
-def _curate_live_training_set(feature_dir: Path, out: Path) -> dict[str, object]:
-    frames = []
-    for path in feature_dir.glob("*_event_swing.parquet"):
-        frame = pd.read_parquet(path)
-        if frame.empty:
-            continue
-        labeled = frame[
-            frame["target_next_1d_up"].notna() | frame["target_next_5d_up"].notna()
-        ].copy()
-        if not labeled.empty:
-            frames.append(labeled)
-    out.parent.mkdir(parents=True, exist_ok=True)
-    if not frames:
-        empty = pd.DataFrame()
-        empty.to_parquet(out, index=False)
-        return {"curated_rows": 0, "curated_tickers": 0, "path": str(out)}
-    combined = pd.concat(frames, ignore_index=True)
-    identity = [col for col in ["ticker", "event_timestamp", "source", "title"] if col in combined.columns]
-    if identity:
-        combined = combined.drop_duplicates(identity, keep="last")
-    combined = combined.sort_values(["event_timestamp", "ticker"]).reset_index(drop=True)
-    combined.to_parquet(out, index=False)
-    return {
-        "curated_rows": len(combined),
-        "curated_tickers": int(combined["ticker"].nunique()) if "ticker" in combined.columns else 0,
-        "path": str(out),
-    }
-
-
 def _normalize_ohlcv(ticker: str, frame: pd.DataFrame, timeframe: str, *, price_feed: str) -> pd.DataFrame:
     normalized = frame.copy()
     if timeframe == "1d":
@@ -768,7 +330,7 @@ def _merge_ohlcv_manifest(
     return merged.sort_values(["ticker", "timeframe"], na_position="last", kind="stable")[order]
 
 
-def _write_artifact_manifest(path: Path, payload: dict[str, object]) -> Path:
+def _write_artifact_manifest(path: Path, payload: Mapping[str, object]) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
     return path
@@ -790,6 +352,24 @@ def write_seeking_alpha_snapshot(ticker: str, out: Path) -> Path:
 
 def _worker_count(requested: int | None, configured: int, total: int) -> int:
     return max(1, min(int(requested or configured), max(1, total)))
+
+
+def _count_nonzero_feature_days(
+    events: pd.DataFrame,
+    daily_features: pd.DataFrame,
+    column: str,
+    bucket: str | None = None,
+) -> int:
+    dates = set(
+        events["date"]
+        if bucket is None
+        else events.loc[events["event_time_bucket"] == bucket, "date"]
+    )
+    if column not in daily_features.columns or not dates:
+        return 0
+    matching_dates = daily_features.index.intersection(dates)
+    series = pd.to_numeric(daily_features.loc[matching_dates, column], errors="coerce")
+    return int((series.fillna(0).abs() > 1e-12).sum())
 
 
 @app.command("download-model")
@@ -858,7 +438,7 @@ def swing_universe(
     console.print(f"Wrote {len(frame)} swing tickers to {out}")
 
 
-def _finviz_candidates_from_values(values: list[str], settings: object) -> pd.DataFrame:
+def _finviz_candidates_from_values(values: list[str], settings: Settings) -> pd.DataFrame:
     cleaned = []
     for value in values:
         symbol = str(value).strip().upper()
@@ -1007,7 +587,7 @@ def download_finviz_screeners(
     extras = [item.strip() for item in extra_filters.split(",") if item.strip()]
     raw_dir.mkdir(parents=True, exist_ok=True)
     rows = []
-    summary = []
+    summary: list[dict[str, object]] = []
     for sector_name, sector_filter in selected_sectors.items():
         for cap_name, cap_filter in selected_caps.items():
             filters = [sector_filter, cap_filter, *extras]
@@ -1122,11 +702,11 @@ def collect_swing(
     symbols = _parse_tickers(tickers, settings.swing_candidate_tickers)
     end = _parse_end_date(end_date)
     out_dir.mkdir(parents=True, exist_ok=True)
-    summary = []
+    summary: list[dict[str, object]] = []
     max_workers = _worker_count(workers, settings.max_workers, len(symbols))
     console.print(f"Collecting {len(symbols)} tickers with {max_workers} worker(s).")
 
-    def run_symbol(symbol: str) -> dict:
+    def run_symbol(symbol: str) -> dict[str, object]:
         try:
             frame, errors = collect_events_for_ticker(
                 symbol,
@@ -1187,7 +767,7 @@ def verify_swing(
     """Bulk verify swing event files with per-ticker isolation."""
     settings = get_settings()
     symbols = _parse_tickers(tickers, settings.swing_candidate_tickers)
-    rows = []
+    rows: list[dict[str, object]] = []
     for symbol in symbols:
         path = raw_dir / f"{symbol}_events.parquet"
         if not path.exists():
@@ -1249,7 +829,7 @@ def score_swing_events(
         torch_num_threads=settings.torch_num_threads,
         max_length=max_length,
     )
-    summary = []
+    summary: list[dict[str, object]] = []
     for symbol in symbols:
         source = raw_dir / f"{symbol}_events.parquet"
         target = out_dir / f"{symbol}_events.parquet"
@@ -1339,7 +919,7 @@ def audit_swing_alignment(
     """Audit news timing assignment and daily/hourly candle feature matching."""
     settings = get_settings()
     symbols = _parse_tickers(tickers, settings.swing_candidate_tickers)
-    rows = []
+    rows: list[dict[str, object]] = []
     for symbol in symbols:
         events_path = raw_dir / f"{symbol}_events.parquet"
         features_path = feature_dir / f"{symbol}_daily_{horizon_days}d.parquet"
@@ -1376,13 +956,6 @@ def audit_swing_alignment(
             joined["news_count_diff"] = joined["event_count_raw"] - joined["news_count"].fillna(0)
             event_dates = events.groupby("event_time_bucket")["date"].nunique().to_dict()
 
-            def nonzero_days(column: str, bucket: str | None = None) -> int:
-                dates = set(events["date"] if bucket is None else events.loc[events["event_time_bucket"] == bucket, "date"])
-                if column not in grouped_dataset.columns or not dates:
-                    return 0
-                series = pd.to_numeric(grouped_dataset.loc[grouped_dataset.index.intersection(dates), column], errors="coerce")
-                return int((series.fillna(0).abs() > 1e-12).sum())
-
             rows.append(
                 {
                     "ticker": symbol,
@@ -1400,9 +973,18 @@ def audit_swing_alignment(
                     "pre_market_event_dates": int(event_dates.get("pre_market", 0)),
                     "intraday_event_dates": int(event_dates.get("intraday", 0)),
                     "after_hours_event_dates": int(event_dates.get("after_hours", 0)),
-                    "premarket_gap_matched_days": nonzero_days("premarket_gap_mean", "pre_market"),
-                    "intraday_2h_reaction_matched_days": nonzero_days("intraday_reaction_2h_mean", "intraday"),
-                    "afterhours_gap_matched_days": nonzero_days("afterhours_next_open_gap_mean", "after_hours"),
+                    "premarket_gap_matched_days": _count_nonzero_feature_days(
+                        events, grouped_dataset, "premarket_gap_mean", "pre_market"
+                    ),
+                    "intraday_2h_reaction_matched_days": _count_nonzero_feature_days(
+                        events, grouped_dataset, "intraday_reaction_2h_mean", "intraday"
+                    ),
+                    "afterhours_gap_matched_days": _count_nonzero_feature_days(
+                        events,
+                        grouped_dataset,
+                        "afterhours_next_open_gap_mean",
+                        "after_hours",
+                    ),
                     "sanitized_rows_out": verify.rows_out,
                 }
             )
@@ -1414,80 +996,6 @@ def audit_swing_alignment(
     frame.to_csv(out, index=False)
     console.print(frame.head(60))
     console.print(f"Wrote alignment audit to {out}")
-
-
-@app.command("score-events")
-def score_events(
-    events: Path = typer.Option(..., help="Input raw events parquet."),
-    out: Path | None = typer.Option(None, help="Output scored parquet. Defaults to overwriting input."),
-) -> None:
-    """Run FinBERT scoring for one raw event file."""
-    settings = get_settings()
-    frame = pd.read_parquet(events)
-    frame, verify = sanitize_events_frame(frame)
-    if frame.empty:
-        raise typer.BadParameter(f"No events found in {events}")
-    scored = add_finbert(frame, settings.finbert_model)
-    scored, _ = sanitize_events_frame(scored)
-    target = out or events
-    target.parent.mkdir(parents=True, exist_ok=True)
-    scored.to_parquet(target, index=False)
-    console.print({"input_verification": verify.to_record()})
-    console.print(f"Scored {len(scored)} events into {target}")
-
-
-@app.command("score-swing")
-def score_swing(
-    tickers: str | None = typer.Option(None, help="Comma-separated symbols. Defaults to configured swing universe."),
-    raw_dir: Path = typer.Option(Path("data/raw/swing"), help="Directory containing per-ticker event parquet files."),
-    out_dir: Path | None = typer.Option(None, help="Output directory. Defaults to overwriting raw_dir files."),
-    batch_size: int | None = typer.Option(None, help="FinBERT batch size. Defaults to config performance.finbert_batch_size."),
-) -> None:
-    """Bulk FinBERT scoring with one GPU-aware model load and per-ticker writes."""
-    from market_predictor.sentiment import FinbertScorer
-
-    settings = get_settings()
-    symbols = _parse_tickers(tickers, settings.swing_candidate_tickers)
-    target_dir = out_dir or raw_dir
-    target_dir.mkdir(parents=True, exist_ok=True)
-    summary = []
-    frames = []
-    for symbol in symbols:
-        source = raw_dir / f"{symbol}_events.parquet"
-        if not source.exists():
-            summary.append({"ticker": symbol, "events": 0, "error": f"missing {source}"})
-            console.print(f"[yellow]{symbol}: missing {source}; skipping scoring.[/yellow]")
-            continue
-        try:
-            frame = pd.read_parquet(source)
-            frame, verify = sanitize_events_frame(frame)
-            if frame.empty:
-                summary.append({"ticker": symbol, "events": 0, "error": "empty events"})
-                continue
-            frame["_score_symbol"] = symbol
-            frame["_score_row"] = range(len(frame))
-            frames.append(frame)
-            summary.append({"ticker": symbol, "events": len(frame), "sources": verify.sources})
-        except Exception as exc:
-            summary.append({"ticker": symbol, "events": 0, "error": str(exc)})
-            console.print(f"[red]{symbol}: staging failed: {exc}[/red]")
-
-    if frames:
-        combined = pd.concat(frames, ignore_index=True)
-        effective_batch = int(batch_size or settings.finbert_batch_size)
-        console.print(
-            f"Scoring {len(combined)} events from {combined['_score_symbol'].nunique()} ticker(s) "
-            f"with one FinBERT model, batch_size={effective_batch}."
-        )
-        scorer = FinbertScorer(settings.finbert_model, torch_num_threads=settings.torch_num_threads)
-        scored_all = add_finbert_with_scorer(combined, scorer, batch_size=effective_batch)
-        for symbol, scored in scored_all.groupby("_score_symbol", sort=False):
-            target = target_dir / f"{symbol}_events.parquet"
-            scored = scored.drop(columns=["_score_symbol", "_score_row"], errors="ignore")
-            scored, _ = sanitize_events_frame(scored)
-            scored.to_parquet(target, index=False)
-            console.print(f"{symbol}: scored {len(scored)} events into {target}")
-    pd.DataFrame(summary).to_csv(target_dir / "_scoring_summary.csv", index=False)
 
 
 @app.command("build-swing-datasets")
@@ -1505,11 +1013,11 @@ def build_swing_datasets(
     symbols = _parse_tickers(tickers, settings.swing_candidate_tickers)
     end = _parse_end_date(end_date)
     out_dir.mkdir(parents=True, exist_ok=True)
-    summary = []
+    summary: list[dict[str, object]] = []
     max_workers = _worker_count(workers, settings.max_workers, len(symbols))
     console.print(f"Building {len(symbols)} datasets with {max_workers} worker(s).")
 
-    def run_symbol(symbol: str) -> dict:
+    def run_symbol(symbol: str) -> dict[str, object]:
         events_path = raw_dir / f"{symbol}_events.parquet"
         if not events_path.exists():
             return {"ticker": symbol, "rows": 0, "error": f"missing {events_path}"}
@@ -1548,109 +1056,6 @@ def build_swing_datasets(
     pd.DataFrame(summary).to_csv(out_dir / "_dataset_summary.csv", index=False)
 
 
-@app.command("rank-swing")
-def rank_swing(
-    tickers: str | None = typer.Option(None, help="Comma-separated symbols. Defaults to configured swing universe."),
-    feature_dir: Path = typer.Option(Path("data/features/swing"), help="Directory containing per-ticker datasets."),
-    horizon_days: int = typer.Option(1, help="Dataset horizon to rank."),
-    model: Path | None = typer.Option(None, help="Optional trained model to add probability_up."),
-    out: Path = typer.Option(Path("data/reports/swing_watch_rank.csv"), help="Output rank CSV."),
-) -> None:
-    """Rank latest watch scores across the swing universe."""
-    settings = get_settings()
-    symbols = _parse_tickers(tickers, settings.swing_candidate_tickers)
-    rows = []
-    for symbol in symbols:
-        path = feature_dir / f"{symbol}_daily_{horizon_days}d.parquet"
-        if not path.exists():
-            continue
-        dataset = pd.read_parquet(path)
-        score = heuristic_watch_score(dataset, weights=settings.watch_score_weights)
-        if model:
-            try:
-                prediction = predict_latest(dataset, model)
-                score["model_probability_up"] = prediction["probability_up"]
-                score["model_prediction"] = prediction["prediction"]
-            except Exception as exc:
-                score["model_error"] = str(exc)
-        score["ticker"] = symbol
-        rows.append(score)
-    if not rows:
-        raise typer.BadParameter("No feature datasets found to rank.")
-    frame = pd.DataFrame(rows).sort_values(["watch_score", "event_count", "news_count"], ascending=False)
-    out.parent.mkdir(parents=True, exist_ok=True)
-    frame.to_csv(out, index=False)
-    console.print(frame.head(30))
-    console.print(f"Wrote ranked swing watchlist to {out}")
-
-
-@app.command("negative-reaction")
-def negative_reaction(
-    tickers: str | None = typer.Option(None, help="Comma-separated symbols. Defaults to configured swing universe."),
-    feature_dir: Path = typer.Option(
-        Path("data/features/uslisted_6sector_2y_clean"),
-        help="Directory containing per-ticker datasets.",
-    ),
-    horizon_days: int = typer.Option(1, help="Dataset horizon to scan."),
-    lookback_rows: int = typer.Option(5, help="Recent trading rows to inspect."),
-    out: Path = typer.Option(Path("data/reports/negative_reaction_candidates.csv"), help="Output CSV."),
-) -> None:
-    """Find recent candidates where news/catalyst attention was met with weak price reaction."""
-    settings = get_settings()
-    symbols = _parse_tickers(tickers, settings.swing_candidate_tickers)
-    rows = []
-    for symbol in symbols:
-        path = feature_dir / f"{symbol}_daily_{horizon_days}d.parquet"
-        if not path.exists():
-            continue
-        try:
-            dataset = pd.read_parquet(path).sort_values("date").tail(lookback_rows).copy()
-            if dataset.empty:
-                continue
-            for row in dataset.itertuples(index=False):
-                record = row._asdict()
-                news_count = float(record.get("news_count", 0) or 0)
-                event_count = float(record.get("event_count", 0) or 0)
-                sentiment = float(record.get("sentiment_mean", 0) or 0)
-                rel_spy = float(record.get("rel_return_1d_vs_spy", record.get("return_1d", 0)) or 0)
-                rel_sector = float(record.get("rel_return_1d_vs_sector", record.get("return_1d", 0)) or 0)
-                reaction = float(record.get("event_reaction_2h_mean", 0) or 0)
-                volume_z = float(record.get("volume_z20", 0) or 0)
-                if news_count + event_count <= 0:
-                    continue
-                if rel_spy >= 0 and rel_sector >= 0 and reaction >= 0:
-                    continue
-                attention = min(news_count + event_count, 20)
-                mismatch = max(-rel_spy, 0) + max(-rel_sector, 0) + max(-reaction, 0)
-                score = attention * (0.5 + max(sentiment, 0)) + 10.0 * mismatch + max(volume_z, 0) * 0.25
-                rows.append(
-                    {
-                        "ticker": symbol,
-                        "date": record.get("date"),
-                        "negative_reaction_score": round(float(score), 4),
-                        "news_count": news_count,
-                        "event_count": event_count,
-                        "sentiment_mean": sentiment,
-                        "return_1d": float(record.get("return_1d", 0) or 0),
-                        "rel_return_1d_vs_spy": rel_spy,
-                        "rel_return_1d_vs_sector": rel_sector,
-                        "event_reaction_2h_mean": reaction,
-                        "volume_z20": volume_z,
-                        "sector": record.get("sector_name", settings.sector_for_ticker(symbol) or ""),
-                        "sector_benchmark": record.get("sector_benchmark", settings.sector_benchmark_for_ticker(symbol)),
-                    }
-                )
-        except Exception as exc:
-            rows.append({"ticker": symbol, "error": str(exc)})
-    if not rows:
-        raise typer.BadParameter("No negative reaction candidates found.")
-    frame = pd.DataFrame(rows).sort_values("negative_reaction_score", ascending=False)
-    out.parent.mkdir(parents=True, exist_ok=True)
-    frame.to_csv(out, index=False)
-    console.print(frame.head(40))
-    console.print(f"Wrote negative reaction candidates to {out}")
-
-
 @app.command("combine-swing-datasets")
 def combine_swing_datasets(
     tickers: str | None = typer.Option(None, help="Comma-separated symbols. Defaults to configured swing universe."),
@@ -1662,7 +1067,7 @@ def combine_swing_datasets(
     settings = get_settings()
     symbols = _parse_tickers(tickers, settings.swing_candidate_tickers)
     frames = []
-    summary = []
+    summary: list[dict[str, object]] = []
     for symbol in symbols:
         path = feature_dir / f"{symbol}_daily_{horizon_days}d.parquet"
         if not path.exists():
@@ -1685,396 +1090,6 @@ def combine_swing_datasets(
     console.print(f"Wrote {len(combined)} rows across {len(frames)} tickers to {out}")
 
 
-@app.command("build-event-swing-datasets")
-def build_event_swing_datasets(
-    tickers: str | None = typer.Option(None, help="Comma-separated symbols. Defaults to configured swing universe."),
-    raw_dir: Path = typer.Option(
-        Path("data/raw/uslisted_6sector_2y_clean"),
-        help="Directory containing per-ticker event parquet files.",
-    ),
-    out_dir: Path = typer.Option(
-        Path("data/features/event_swing_2y_clean"),
-        help="Directory for per-ticker event-level datasets.",
-    ),
-    horizon_days: int = typer.Option(5, help="Forward trading-day swing horizon."),
-    end_date: str | None = typer.Option(None, help="Inclusive UTC end date as YYYY-MM-DD for price/features."),
-    workers: int | None = typer.Option(None, help="Parallel feature workers. Defaults to config performance.max_workers."),
-) -> None:
-    """Build one row per news/filing/chatter event with bar reaction features."""
-    settings = get_settings()
-    symbols = _parse_tickers(tickers, settings.swing_candidate_tickers)
-    end = _parse_end_date(end_date)
-    out_dir.mkdir(parents=True, exist_ok=True)
-    max_workers = _worker_count(workers, settings.max_workers, len(symbols))
-    console.print(f"Building {len(symbols)} event-swing datasets with {max_workers} worker(s).")
-
-    def run_symbol(symbol: str) -> dict:
-        path = raw_dir / f"{symbol}_events.parquet"
-        if not path.exists():
-            return {"ticker": symbol, "rows": 0, "error": f"missing {path}"}
-        try:
-            dataset = build_event_swing_dataset(
-                symbol,
-                path,
-                settings,
-                horizon_days=horizon_days,
-                market_context_path=DEFAULT_MARKET_CONTEXT_PATH,
-                end=end,
-            )
-            out = out_dir / f"{symbol}_event_swing.parquet"
-            dataset.to_parquet(out, index=False)
-            return {
-                "ticker": symbol,
-                "rows": len(dataset),
-                "path": str(out),
-                "label_1d_rows": int(dataset["target_next_1d_up"].notna().sum()) if "target_next_1d_up" in dataset else 0,
-                f"label_{horizon_days}d_rows": int(dataset[f"target_next_{horizon_days}d_up"].notna().sum())
-                if f"target_next_{horizon_days}d_up" in dataset
-                else 0,
-            }
-        except Exception as exc:
-            return {"ticker": symbol, "rows": 0, "error": str(exc)}
-
-    summary = []
-    with ThreadPoolExecutor(max_workers=max_workers) as pool:
-        futures = {pool.submit(run_symbol, symbol): symbol for symbol in symbols}
-        for future in as_completed(futures):
-            symbol = futures[future]
-            record = future.result()
-            summary.append(record)
-            if record.get("error"):
-                console.print(f"[red]{symbol}: event dataset build failed: {record['error']}[/red]")
-            else:
-                console.print(f"{symbol}: wrote {record['rows']} event rows to {record['path']}")
-    pd.DataFrame(summary).to_csv(out_dir / "_event_dataset_summary.csv", index=False)
-
-
-@app.command("combine-event-swing-datasets")
-def combine_event_swing_datasets(
-    tickers: str | None = typer.Option(None, help="Comma-separated symbols. Defaults to configured swing universe."),
-    feature_dir: Path = typer.Option(
-        Path("data/features/event_swing_2y_clean"),
-        help="Directory containing per-ticker event-level datasets.",
-    ),
-    out: Path = typer.Option(
-        Path("data/features/event_swing_combined_2y_clean.parquet"),
-        help="Combined output parquet.",
-    ),
-) -> None:
-    """Combine per-ticker event-swing datasets for event-level model training."""
-    settings = get_settings()
-    symbols = _parse_tickers(tickers, settings.swing_candidate_tickers)
-    frames = []
-    summary = []
-    for symbol in symbols:
-        path = feature_dir / f"{symbol}_event_swing.parquet"
-        if not path.exists():
-            summary.append({"ticker": symbol, "rows": 0, "error": f"missing {path}"})
-            continue
-        try:
-            frame = pd.read_parquet(path)
-            frames.append(frame)
-            summary.append({"ticker": symbol, "rows": len(frame), "path": str(path)})
-        except Exception as exc:
-            summary.append({"ticker": symbol, "rows": 0, "error": str(exc)})
-    if not frames:
-        raise typer.BadParameter("No event-swing datasets found to combine.")
-    combined = pd.concat(frames, ignore_index=True).sort_values(["event_timestamp", "ticker"]).reset_index(drop=True)
-    out.parent.mkdir(parents=True, exist_ok=True)
-    combined.to_parquet(out, index=False)
-    pd.DataFrame(summary).to_csv(out.with_suffix(".summary.csv"), index=False)
-    console.print(f"Wrote {len(combined)} event rows across {len(frames)} tickers to {out}")
-
-
-@app.command("train-event-swing")
-def train_event_swing(
-    dataset: Path = typer.Option(..., help="Combined event-swing dataset parquet."),
-    model_out: Path = typer.Option(Path("models/event_swing.joblib"), help="Output model path."),
-    target_col: str = typer.Option("target_next_1d_up", help="Target column to train."),
-    include_reaction_features: bool = typer.Option(
-        True,
-        help="Use post-event 1h/2h/4h reaction features. Disable for pre-reaction prediction.",
-    ),
-    max_iter: int = typer.Option(250, help="Maximum boosting iterations."),
-    learning_rate: float = typer.Option(0.04, help="Boosting learning rate."),
-) -> None:
-    """Train an event-level continuation/fade model."""
-    frame = pd.read_parquet(dataset)
-    report = train_event_swing_model(
-        frame,
-        model_out,
-        target_col=target_col,
-        include_reaction_features=include_reaction_features,
-        max_iter=max_iter,
-        learning_rate=learning_rate,
-    )
-    console.print(report)
-    console.print(f"Wrote event-swing model to {model_out}")
-
-
-@app.command("score-event-swing")
-def score_event_swing(
-    tickers: str | None = typer.Option(None, help="Comma-separated symbols. Defaults to configured swing universe."),
-    feature_dir: Path = typer.Option(
-        Path("data/features/event_swing_2y_clean"),
-        help="Directory containing per-ticker event-level datasets.",
-    ),
-    model: Path = typer.Option(
-        Path("models/event_swing_2y_market_context_1d_prereaction_max.joblib"),
-        help="Event-swing model path.",
-    ),
-    days: int = typer.Option(14, help="Recent calendar-day event lookback."),
-    min_probability: float = typer.Option(0.0, help="Optional minimum probability_up filter."),
-    out: Path = typer.Option(Path("data/reports/event_swing_scores_latest.csv"), help="Output scored event CSV."),
-) -> None:
-    """Score recent event/news rows for continuation/fade watch decisions."""
-    settings = get_settings()
-    symbols = _parse_tickers(tickers, settings.swing_candidate_tickers)
-    cutoff = pd.Timestamp.now(tz="UTC") - pd.Timedelta(days=days)
-    rows = []
-    for symbol in symbols:
-        path = feature_dir / f"{symbol}_event_swing.parquet"
-        if not path.exists():
-            continue
-        try:
-            dataset = pd.read_parquet(path)
-            dataset["event_timestamp"] = pd.to_datetime(dataset["event_timestamp"], utc=True)
-            recent = dataset[dataset["event_timestamp"] >= cutoff].copy()
-            if recent.empty:
-                recent = dataset.sort_values("event_timestamp").tail(3).copy()
-            scored = predict_event_swing_frame(recent, model)
-            rows.append(scored)
-        except Exception as exc:
-            rows.append(pd.DataFrame([{"ticker": symbol, "error": str(exc)}]))
-    if not rows:
-        raise typer.BadParameter("No event-swing datasets found to score.")
-    frame = pd.concat(rows, ignore_index=True)
-    if "model_probability_up" in frame.columns and min_probability > 0:
-        frame = frame[frame["model_probability_up"] >= min_probability].copy()
-    sort_cols = [col for col in ["model_probability_up", "event_timestamp"] if col in frame.columns]
-    if sort_cols:
-        frame = frame.sort_values(sort_cols, ascending=[False, False][: len(sort_cols)])
-    out.parent.mkdir(parents=True, exist_ok=True)
-    frame.to_csv(out, index=False)
-    display_cols = [
-        col
-        for col in [
-            "ticker",
-            "event_timestamp",
-            "source",
-            "event_time_bucket",
-            "model_probability_up",
-            "model_prediction",
-            "sentiment_numeric",
-            "reaction_2h",
-            "next_1d_return",
-            "title",
-            "error",
-        ]
-        if col in frame.columns
-    ]
-    console.print(frame[display_cols].head(40))
-    console.print(f"Wrote scored event-swing rows to {out}")
-
-
-@app.command("predict-watchlist")
-def predict_watchlist(
-    tickers: str = typer.Option(..., help="Comma-separated symbols to analyze."),
-    days: int = typer.Option(3, help="Fresh news/chatter lookback window in calendar days."),
-    out: Path = typer.Option(Path("data/reports/watchlist_predictions_latest.csv"), help="Output prediction CSV."),
-    daily_model_1d: Path = typer.Option(
-        Path("models/daily_swing_2y_market_context_1d_max.joblib"),
-        help="Market-context daily 1-day model path.",
-    ),
-    daily_model_5d: Path = typer.Option(
-        Path("models/daily_swing_2y_market_context_5d_max.joblib"),
-        help="Market-context daily 5-day model path.",
-    ),
-    event_model_1d: Path = typer.Option(
-        Path("models/event_swing_2y_market_context_1d_prereaction_max.joblib"),
-        help="Clean event-level 1-day model path.",
-    ),
-    event_model_5d: Path = typer.Option(
-        Path("models/event_swing_2y_market_context_5d_prereaction_max.joblib"),
-        help="Clean event-level 5-day model path.",
-    ),
-    no_reddit: bool = typer.Option(False, help="Disable Reddit collection."),
-    no_seeking_alpha: bool = typer.Option(False, help="Disable Seeking Alpha collection."),
-    no_sec: bool = typer.Option(False, help="Disable SEC filing collection."),
-    no_profile: bool = typer.Option(False, help="Skip yfinance market-cap lookup."),
-) -> None:
-    """Fetch latest catalysts for a ticker list and score clean swing models."""
-    from market_predictor.sentiment import FinbertScorer
-
-    settings = get_settings()
-    symbols = _parse_tickers(tickers, [])
-    if not symbols:
-        raise typer.BadParameter("Provide at least one ticker.")
-
-    resolved_daily_1d = _model_path(daily_model_1d, Path("models/uslisted_6sector_direction_2y_clean_1d.joblib"))
-    resolved_daily_5d = _model_path(daily_model_5d, Path("models/uslisted_6sector_direction_2y_clean_5d.joblib"))
-    resolved_event_1d = _model_path(event_model_1d, Path("models/event_swing_2y_clean_1d_prereaction.joblib"))
-    resolved_event_5d = _model_path(event_model_5d, Path("models/event_swing_2y_clean_5d_prereaction.joblib"))
-
-    staged: list[pd.DataFrame] = []
-    errors_by_symbol: dict[str, list[str]] = {}
-    for symbol in symbols:
-        frame, errors = collect_events_for_ticker(
-            symbol,
-            days,
-            no_reddit=no_reddit,
-            no_seeking_alpha=no_seeking_alpha,
-            no_sec=no_sec,
-            score=False,
-        )
-        if not frame.empty:
-            frame["_watch_symbol"] = symbol
-            staged.append(frame)
-        errors_by_symbol[symbol] = errors
-
-    scored_by_symbol: dict[str, pd.DataFrame] = {}
-    if staged:
-        combined = pd.concat(staged, ignore_index=True)
-        scorer = FinbertScorer(settings.finbert_model, torch_num_threads=settings.torch_num_threads)
-        combined = add_finbert_with_scorer(combined, scorer, batch_size=settings.finbert_batch_size)
-        for symbol, frame in combined.groupby("_watch_symbol", sort=False):
-            scored_by_symbol[symbol] = frame.drop(columns=["_watch_symbol"], errors="ignore")
-
-    tmp_dir = Path("data/tmp/watchlist")
-    tmp_dir.mkdir(parents=True, exist_ok=True)
-    rows = []
-    for symbol in symbols:
-        events = scored_by_symbol.get(symbol, pd.DataFrame())
-        profile = {} if no_profile else _lookup_market_profile(symbol)
-        price = _latest_price_snapshot(symbol, settings)
-        sector = settings.sector_for_ticker(symbol) or "unknown"
-        sector_benchmark = settings.sector_benchmark_for_ticker(symbol)
-        record: dict[str, object] = {
-            "ticker": symbol,
-            "lookback_days": days,
-            "sector": sector,
-            "sector_benchmark": sector_benchmark,
-            "market_benchmark": settings.market_benchmark_ticker,
-            "recent_event_count": len(events),
-            "recent_headlines": _recent_headlines(events, limit=5),
-            "errors": " | ".join(errors_by_symbol.get(symbol, [])),
-            **profile,
-            **price,
-        }
-        if not events.empty:
-            events["source_family"] = events["source"].astype(str).str.split(":").str[0]
-            source_counts = events["source_family"].value_counts()
-            for source_name in ["alpaca", "reddit", "seeking_alpha", "sec"]:
-                record[f"{source_name}_event_count"] = int(source_counts.get(source_name, 0))
-            record["sentiment_mean_recent"] = float(pd.to_numeric(events["sentiment_numeric"], errors="coerce").mean())
-            events_path = tmp_dir / f"{symbol}_events.parquet"
-            events.to_parquet(events_path, index=False)
-            try:
-                daily_1d = build_daily_dataset(
-                    symbol,
-                    events_path,
-                    settings,
-                    horizon_days=1,
-                    market_context_path=DEFAULT_MARKET_CONTEXT_PATH,
-                )
-                latest_daily = daily_1d.sort_values("date").iloc[-1]
-                record["watch_score"] = heuristic_watch_score(daily_1d, weights=settings.watch_score_weights).get("watch_score")
-                record["daily_return_1d"] = float(latest_daily.get("return_1d", 0) or 0)
-                record["volume_z20"] = float(latest_daily.get("volume_z20", 0) or 0)
-                if resolved_daily_1d:
-                    pred = predict_latest(daily_1d, resolved_daily_1d)
-                    record["daily_model_1d_probability_up"] = pred["probability_up"]
-                    record["daily_model_1d_prediction"] = pred["prediction"]
-                if resolved_daily_5d:
-                    daily_5d = build_daily_dataset(
-                        symbol,
-                        events_path,
-                        settings,
-                        horizon_days=5,
-                        market_context_path=DEFAULT_MARKET_CONTEXT_PATH,
-                    )
-                    pred = predict_latest(daily_5d, resolved_daily_5d)
-                    record["daily_model_5d_probability_up"] = pred["probability_up"]
-                    record["daily_model_5d_prediction"] = pred["prediction"]
-            except Exception as exc:
-                record["daily_model_error"] = str(exc)
-            try:
-                event_dataset = build_event_swing_dataset(
-                    symbol,
-                    events_path,
-                    settings,
-                    horizon_days=5,
-                    market_context_path=DEFAULT_MARKET_CONTEXT_PATH,
-                )
-                if not event_dataset.empty and resolved_event_1d:
-                    scored = predict_event_swing_frame(event_dataset, resolved_event_1d)
-                    record["event_model_1d_latest_probability_up"] = float(
-                        scored.sort_values("event_timestamp").iloc[-1]["model_probability_up"]
-                    )
-                    record["event_model_1d_max_probability_up"] = float(scored["model_probability_up"].max())
-                    record["event_model_1d_mean_probability_up"] = float(scored["model_probability_up"].mean())
-                if not event_dataset.empty and resolved_event_5d:
-                    scored = predict_event_swing_frame(event_dataset, resolved_event_5d)
-                    record["event_model_5d_latest_probability_up"] = float(
-                        scored.sort_values("event_timestamp").iloc[-1]["model_probability_up"]
-                    )
-                    record["event_model_5d_max_probability_up"] = float(scored["model_probability_up"].max())
-                    record["event_model_5d_mean_probability_up"] = float(scored["model_probability_up"].mean())
-            except Exception as exc:
-                record["event_model_error"] = str(exc)
-        else:
-            record["status"] = "no_recent_events"
-
-        probability_inputs = [
-            record.get("daily_model_1d_probability_up"),
-            record.get("daily_model_5d_probability_up"),
-            record.get("event_model_1d_latest_probability_up"),
-            record.get("event_model_5d_latest_probability_up"),
-        ]
-        usable = [float(value) for value in probability_inputs if value is not None and not pd.isna(value)]
-        record["combined_probability_up"] = sum(usable) / len(usable) if usable else None
-        record["signal"] = _signal_from_probability(record["combined_probability_up"])
-        rows.append(record)
-
-    report = pd.DataFrame(rows).sort_values(
-        ["combined_probability_up", "recent_event_count"],
-        ascending=[False, False],
-        na_position="last",
-    )
-    out.parent.mkdir(parents=True, exist_ok=True)
-    raw_out = out.with_name(f"{out.stem}_raw{out.suffix}")
-    dictionary_out = out.with_name(f"{out.stem}_fields{out.suffix}")
-    report.to_csv(raw_out, index=False)
-    human_report = _humanize_watchlist_report(report)
-    human_report.to_csv(out, index=False)
-    _write_watchlist_dictionary(dictionary_out)
-    display_cols = [
-        col
-        for col in [
-            "Ticker",
-            "Overall Signal",
-            "Combined Probability Up",
-            "Daily Model: Next-Day Up Probability",
-            "Daily Model: Next-5-Trading-Days Up Probability",
-            "Latest Event Model: Next-Day Up Probability",
-            "Latest Event Model: Next-5-Trading-Days Up Probability",
-            "Recent Catalyst Count",
-            "Reddit Chatter Count",
-            "Latest Close",
-            "Latest 1-Day Return",
-            "Market-Cap Bucket",
-            "Configured Sector",
-            "Recent Headlines Used",
-            "Collection or Scoring Notes",
-        ]
-        if col in human_report.columns
-    ]
-    console.print(human_report[display_cols])
-    console.print(f"Wrote readable watchlist predictions to {out}")
-    console.print(f"Wrote raw watchlist predictions to {raw_out}")
-    console.print(f"Wrote field definitions to {dictionary_out}")
-
-
 @app.command("export-ohlcv-artifacts")
 def export_ohlcv_artifacts(
     tickers: str | None = typer.Option(None, help="Comma-separated symbols. Defaults to configured swing universe."),
@@ -2094,7 +1109,7 @@ def export_ohlcv_artifacts(
         raise typer.BadParameter(f"Unsupported timeframes: {sorted(unknown)}")
     if days < 1:
         raise typer.BadParameter("days must be positive")
-    end = _parse_end_date(end_date) or datetime.now(timezone.utc)
+    end = _parse_end_date(end_date) or datetime.now(UTC)
     start = end - timedelta(days=days)
     out_dir.mkdir(parents=True, exist_ok=True)
     max_workers = _worker_count(workers, settings.max_workers, len(symbols))
@@ -2119,7 +1134,7 @@ def export_ohlcv_artifacts(
             rows.append({"ticker": symbol, "timeframe": timeframe, "rows": len(normalized), "path": str(path)})
         return rows
 
-    summary = []
+    summary: list[dict[str, object]] = []
     with ThreadPoolExecutor(max_workers=max_workers) as pool:
         futures = {pool.submit(run_symbol, symbol): symbol for symbol in symbols}
         for future in as_completed(futures):
@@ -2127,7 +1142,7 @@ def export_ohlcv_artifacts(
             try:
                 rows = future.result()
                 summary.extend(rows)
-                console.print(f"{symbol}: exported {sum(int(row['rows']) for row in rows)} OHLCV rows")
+                console.print(f"{symbol}: exported {sum(int(str(row['rows'])) for row in rows)} OHLCV rows")
             except Exception as exc:
                 summary.append({"ticker": symbol, "error": str(exc)})
                 console.print(f"[red]{symbol}: OHLCV export failed: {exc}[/red]")
@@ -2137,9 +1152,9 @@ def export_ohlcv_artifacts(
         existing = pd.read_csv(summary_path)
         summary_frame = _merge_ohlcv_manifest(existing, summary_frame, symbols=symbols, timeframes=requested)
     summary_frame.to_csv(summary_path, index=False)
-    contract = {
+    contract: dict[str, object] = {
         "schema_version": "ohlcv.v1",
-        "generated_at_utc": datetime.now(timezone.utc).isoformat(),
+        "generated_at_utc": datetime.now(UTC).isoformat(),
         "columns": [
             "symbol",
             "timeframe",
@@ -2184,32 +1199,62 @@ def azure_upload_artifacts(
 
 @app.command("azure-publish-models")
 def azure_publish_models(
-    models_dir: Path = typer.Option(Path("models"), help="Local active models directory."),
+    models_dir: Path = typer.Option(Path("models"), help="Allowed root for configured production model artifacts."),
     blob_prefix: str = typer.Option("models/active", help="Blob prefix for active models."),
 ) -> None:
-    """Publish active clean model artifacts and a manifest to Azure Blob."""
+    """Publish only configured, promoted, integrity-checked production models."""
     settings = get_settings()
-    manifest_rows = []
-    for path in sorted(models_dir.glob("*.joblib")):
-        manifest_rows.append(
-            {
-                "name": path.name,
-                "relative_blob": f"{blob_prefix}/{path.name}",
-                "bytes": path.stat().st_size,
-                "modified_utc": datetime.fromtimestamp(path.stat().st_mtime, tz=timezone.utc).isoformat(),
-            }
-        )
+    routes = serving_routes_from_config(settings.app_config)
+    allowed_root = models_dir.resolve()
+    manifest_rows: list[dict[str, object]] = []
+    uploads: list[tuple[Path, str]] = []
+    for mode, mode_routes in sorted(routes.items()):
+        for horizon, route in sorted(mode_routes.items()):
+            model_path = route.model.resolve()
+            if not model_path.is_relative_to(allowed_root):
+                raise typer.BadParameter(f"Configured model is outside allowed root {allowed_root}: {model_path}")
+            registry_manifest = verify_model_artifact(
+                model_path,
+                allowed_statuses={MODEL_STATUS_PROMOTED},
+            )
+            registry_path = manifest_path_for(model_path)
+            route_prefix = f"{blob_prefix.strip('/')}/{mode}/{horizon}"
+            model_blob = f"{route_prefix}/{model_path.name}"
+            registry_blob = f"{route_prefix}/{registry_path.name}"
+            uploads.extend(((model_path, model_blob), (registry_path, registry_blob)))
+            manifest_rows.append(
+                {
+                    "mode": mode,
+                    "horizon": horizon,
+                    "model_blob": model_blob,
+                    "registry_manifest_blob": registry_blob,
+                    "artifact_sha256": registry_manifest["artifact_sha256"],
+                    "target_col": registry_manifest["target_col"],
+                    "schema_version": registry_manifest["schema_version"],
+                }
+            )
     if not manifest_rows:
-        raise typer.BadParameter(f"No .joblib models found in {models_dir}")
-    manifest = pd.DataFrame(manifest_rows)
-    manifest_path = models_dir / "_active_models_manifest.csv"
-    manifest.to_csv(manifest_path, index=False)
+        raise typer.BadParameter("No configured production model routes were found")
+    manifest_path = models_dir / "_production_routes_manifest.json"
+    _write_artifact_manifest(
+        manifest_path,
+        {
+            "schema": "production_model_routes.v1",
+            "generated_at_utc": datetime.now(UTC).isoformat(),
+            "routes": manifest_rows,
+        },
+    )
     store = AzureBlobStore(settings)
-    uploaded = []
-    for row in manifest_rows:
-        uploaded.append(store.upload_file(models_dir / str(row["name"]), str(row["relative_blob"])))
-    uploaded.append(store.upload_file(manifest_path, f"{blob_prefix}/_active_models_manifest.csv"))
-    console.print({"uploaded_models": len(manifest_rows), "manifest": f"{settings.azure_prefix}/{blob_prefix}/_active_models_manifest.csv"})
+    for local_path, blob_path in uploads:
+        store.upload_file(local_path, blob_path)
+    deployment_manifest_blob = f"{blob_prefix.strip('/')}/_production_routes_manifest.json"
+    store.upload_file(manifest_path, deployment_manifest_blob)
+    console.print(
+        {
+            "uploaded_models": len(manifest_rows),
+            "manifest": f"{settings.azure_prefix}/{deployment_manifest_blob}",
+        }
+    )
 
 
 @app.command("build-volatile-dataset")
@@ -2364,7 +1409,14 @@ def audit_promotion_readiness(
     regime.to_csv(regime_out, index=False)
     regime_profit.to_csv(regime_profit_out, index=False)
     catalyst.to_csv(catalyst_out, index=False)
-    console.print({"profitability": str(profitability_out), "selected_trades": str(trades_out), "regime": str(regime_out), "catalyst": str(catalyst_out)})
+    console.print(
+        {
+            "profitability": str(profitability_out),
+            "selected_trades": str(trades_out),
+            "regime": str(regime_out),
+            "catalyst": str(catalyst_out),
+        }
+    )
     console.print(summary.iloc[0].to_dict())
     console.print(regime.iloc[0].to_dict())
     console.print(catalyst.iloc[0].to_dict())
@@ -2843,447 +1895,6 @@ def build_intraday_decision_report_command(
     console.print(f"Wrote intraday decision report to {out}")
 
 
-@app.command("live-once")
-def live_once(
-    tickers: str | None = typer.Option(None, help="Comma-separated symbols. Defaults to configured swing universe."),
-    live_dir: Path = typer.Option(Path("data/live"), help="Managed live-pipeline state directory."),
-    lookback_days: int = typer.Option(3, help="News/chatter lookback window for each collection cycle."),
-    workers: int | None = typer.Option(None, help="Parallel API collection workers."),
-    score_sentiment: bool = typer.Option(True, help="Run FinBERT on newly collected/unscored events."),
-    no_reddit: bool = typer.Option(False, help="Disable Reddit collection."),
-    no_seeking_alpha: bool = typer.Option(False, help="Disable Seeking Alpha collection."),
-    no_sec: bool = typer.Option(False, help="Disable SEC filing collection."),
-    curate_training: bool = typer.Option(True, help="Refresh the labeled live training parquet after scoring."),
-    out: Path | None = typer.Option(None, help="Optional run prediction summary CSV."),
-) -> None:
-    """Run one managed live-data cycle: collect, validate, curate, and score."""
-    from market_predictor.sentiment import FinbertScorer
-
-    settings = get_settings()
-    symbols = _parse_tickers(tickers, settings.swing_candidate_tickers)
-    if not symbols:
-        raise typer.BadParameter("No tickers configured or supplied.")
-    run_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    event_dir = live_dir / "events_scored"
-    feature_dir = live_dir / "features"
-    prediction_dir = live_dir / "predictions" / run_id
-    curated_out = live_dir / "curated" / "event_swing_labeled.parquet"
-    state_path = live_dir / "state.json"
-    for directory in [event_dir, feature_dir, prediction_dir, curated_out.parent]:
-        directory.mkdir(parents=True, exist_ok=True)
-
-    max_workers = _worker_count(workers, settings.max_workers, len(symbols))
-    console.print(f"Live cycle {run_id}: collecting {len(symbols)} tickers with {max_workers} worker(s).")
-
-    def collect_symbol(symbol: str) -> dict[str, object]:
-        try:
-            frame, errors = collect_events_for_ticker(
-                symbol,
-                lookback_days,
-                no_reddit=no_reddit,
-                no_seeking_alpha=no_seeking_alpha,
-                no_sec=no_sec,
-                score=False,
-            )
-            return {"ticker": symbol, "frame": frame, "errors": errors}
-        except Exception as exc:
-            return {"ticker": symbol, "frame": pd.DataFrame(), "errors": [str(exc)]}
-
-    collected = []
-    with ThreadPoolExecutor(max_workers=max_workers) as pool:
-        futures = {pool.submit(collect_symbol, symbol): symbol for symbol in symbols}
-        for future in as_completed(futures):
-            record = future.result()
-            collected.append(record)
-            console.print(
-                f"{record['ticker']}: collected {len(record['frame'])} events"
-                + (f" ({' | '.join(record['errors'])})" if record["errors"] else "")
-            )
-
-    scorer = None
-    if score_sentiment and any(len(record["frame"]) for record in collected):
-        scorer = FinbertScorer(settings.finbert_model, torch_num_threads=settings.torch_num_threads)
-
-    event_model_1d = _model_path(Path("models/event_swing_2y_market_context_1d_prereaction_max.joblib"))
-    event_model_5d = _model_path(Path("models/event_swing_2y_market_context_5d_prereaction_max.joblib"))
-    daily_model_1d = _model_path(Path("models/daily_swing_2y_market_context_1d_max.joblib"))
-    daily_model_5d = _model_path(Path("models/daily_swing_2y_market_context_5d_max.joblib"))
-    rows = []
-    collection_summary = []
-    for record in collected:
-        symbol = str(record["ticker"])
-        frame = record["frame"]
-        errors = list(record["errors"])
-        event_path = event_dir / f"{symbol}_events.parquet"
-        try:
-            if not frame.empty:
-                frame, verify = sanitize_events_frame(frame)
-                if verify.rows_out and scorer:
-                    frame = _score_unscored_events(frame, scorer, settings)
-                store, added = _upsert_events(event_path, frame)
-            elif event_path.exists():
-                store = pd.read_parquet(event_path)
-                if scorer:
-                    store = _score_unscored_events(store, scorer, settings)
-                    store.to_parquet(event_path, index=False)
-                added = 0
-            else:
-                store = pd.DataFrame()
-                added = 0
-            collection_summary.append(
-                {
-                    "run_id": run_id,
-                    "ticker": symbol,
-                    "new_events_collected": len(frame),
-                    "new_events_added_to_store": added,
-                    "event_store_rows": len(store),
-                    "errors": " | ".join(errors),
-                }
-            )
-            if store.empty:
-                rows.append(
-                    {
-                        "run_id": run_id,
-                        "ticker": symbol,
-                        "status": "no_events_in_store",
-                        "signal": "quiet/no_recent_catalyst",
-                        "sector": settings.sector_for_ticker(symbol) or "unknown",
-                        "sector_benchmark": settings.sector_benchmark_for_ticker(symbol),
-                        **_latest_price_snapshot(symbol, settings),
-                        "errors": " | ".join(errors),
-                    }
-                )
-                continue
-            score = _score_live_ticker(
-                symbol,
-                event_path,
-                feature_dir,
-                prediction_dir,
-                settings,
-                run_id=run_id,
-                lookback_days=lookback_days,
-                event_model_1d=event_model_1d,
-                event_model_5d=event_model_5d,
-                daily_model_1d=daily_model_1d,
-                daily_model_5d=daily_model_5d,
-            )
-            score["errors"] = " | ".join(errors)
-            rows.append(score)
-        except Exception as exc:
-            rows.append({"run_id": run_id, "ticker": symbol, "status": "failed", "errors": " | ".join([*errors, str(exc)])})
-
-    predictions = pd.DataFrame(rows).sort_values(
-        ["combined_probability_up", "recent_event_rows"],
-        ascending=[False, False],
-        na_position="last",
-    )
-    prediction_out = out or (prediction_dir / "summary.csv")
-    prediction_out.parent.mkdir(parents=True, exist_ok=True)
-    predictions.to_csv(prediction_out, index=False)
-    pd.DataFrame(collection_summary).to_csv(prediction_dir / "collection_summary.csv", index=False)
-
-    live_feature_manifest: dict[str, object] = {}
-    current_live_paths = (
-        [Path(value) for value in predictions.get("live_swing_feature_path", pd.Series(dtype="object")).dropna()]
-        if not predictions.empty
-        else []
-    )
-    live_swing_frames = [
-        pd.read_parquet(path)
-        for path in current_live_paths
-        if path.exists() and path.is_file()
-    ]
-    if live_swing_frames:
-        live_swing_frame = pd.concat(live_swing_frames, ignore_index=True)
-        live_swing_frame = live_swing_frame.drop_duplicates(["ticker", "date"], keep="last")
-        store = LiveFeatureStore(
-            Path("."),
-            LiveFeatureStoreConfig(
-                swing_path=feature_dir / "swing.parquet",
-                intraday_path=feature_dir / "intraday.parquet",
-            ),
-        )
-        live_feature_manifest = store.publish(
-            "swing",
-            live_swing_frame,
-            price_feed=settings.alpaca_stock_feed,
-            source_watermarks={"event_collection_run_id": run_id},
-        )
-
-    curated = _curate_live_training_set(feature_dir, curated_out) if curate_training else {}
-    state = {
-        "last_run_id": run_id,
-        "last_run_utc": datetime.now(timezone.utc).isoformat(),
-        "tickers": symbols,
-        "lookback_days": lookback_days,
-        "prediction_summary": str(prediction_out),
-        "collection_summary": str(prediction_dir / "collection_summary.csv"),
-        "curated_training": curated,
-        "live_feature_manifest": live_feature_manifest,
-        "models": {
-            "event_1d": str(event_model_1d) if event_model_1d else None,
-            "event_5d": str(event_model_5d) if event_model_5d else None,
-            "daily_1d": str(daily_model_1d) if daily_model_1d else None,
-            "daily_5d": str(daily_model_5d) if daily_model_5d else None,
-        },
-    }
-    state_path.parent.mkdir(parents=True, exist_ok=True)
-    state_path.write_text(json.dumps(state, indent=2, sort_keys=True), encoding="utf-8")
-    display_cols = [
-        col
-        for col in [
-            "ticker",
-            "signal",
-            "combined_probability_up",
-            "daily_1d_probability_up",
-            "daily_5d_probability_up",
-            "event_1d_latest_probability_up",
-            "event_5d_latest_probability_up",
-            "recent_event_rows",
-            "latest_close",
-            "latest_return_1d",
-            "sector",
-            "latest_headlines",
-            "errors",
-        ]
-        if col in predictions.columns
-    ]
-    console.print(predictions[display_cols].head(50))
-    console.print(f"Wrote live prediction summary to {prediction_out}")
-    if curated:
-        console.print({"curated_training": curated})
-    console.print(f"Wrote live state to {state_path}")
-
-
-@app.command("live-run")
-def live_run(
-    tickers: str | None = typer.Option(None, help="Comma-separated symbols. Defaults to configured swing universe."),
-    live_dir: Path = typer.Option(Path("data/live"), help="Managed live-pipeline state directory."),
-    lookback_days: int = typer.Option(3, help="News/chatter lookback window per cycle."),
-    poll_seconds: int = typer.Option(1800, help="Seconds to sleep between live cycles."),
-    workers: int | None = typer.Option(None, help="Parallel API collection workers."),
-    no_reddit: bool = typer.Option(False, help="Disable Reddit collection."),
-    no_seeking_alpha: bool = typer.Option(False, help="Disable Seeking Alpha collection."),
-    no_sec: bool = typer.Option(False, help="Disable SEC filing collection."),
-) -> None:
-    """Keep collecting live data in a foreground process until stopped."""
-    if poll_seconds < 60:
-        raise typer.BadParameter("poll_seconds must be at least 60 to avoid API abuse.")
-    console.print(f"Starting live pipeline. Poll interval: {poll_seconds}s. Stop with Ctrl+C.")
-    while True:
-        try:
-            live_once(
-                tickers=tickers,
-                live_dir=live_dir,
-                lookback_days=lookback_days,
-                workers=workers,
-                score_sentiment=True,
-                no_reddit=no_reddit,
-                no_seeking_alpha=no_seeking_alpha,
-                no_sec=no_sec,
-                curate_training=True,
-                out=None,
-            )
-        except KeyboardInterrupt:
-            console.print("Live pipeline stopped.")
-            raise typer.Exit(0)
-        except Exception as exc:
-            console.print(f"[red]Live cycle failed: {exc}[/red]")
-        time_module.sleep(poll_seconds)
-
-
-@app.command("live-train-event")
-def live_train_event(
-    live_dir: Path = typer.Option(Path("data/live"), help="Managed live-pipeline state directory."),
-    base_dataset: Path = typer.Option(
-        Path("data/features/event_swing_combined_2y_clean.parquet"),
-        help="Base historical event-swing training parquet.",
-    ),
-    min_live_rows: int = typer.Option(1000, help="Minimum matured live rows required before retraining."),
-    min_accuracy: float = typer.Option(0.505, help="Minimum walk-forward accuracy required for promotion."),
-    candidate_dir: Path | None = typer.Option(None, help="Optional candidate model output directory."),
-    promote: bool = typer.Option(True, help="Promote candidates to active model names if validation passes."),
-    max_iter: int = typer.Option(900, help="Maximum boosting iterations."),
-    learning_rate: float = typer.Option(0.025, help="Boosting learning rate."),
-) -> None:
-    """Retrain event models from historical data plus matured live labels, with promotion gates."""
-    curated = live_dir / "curated" / "event_swing_labeled.parquet"
-    if not base_dataset.exists():
-        raise typer.BadParameter(f"Missing base dataset: {base_dataset}")
-    if not curated.exists():
-        raise typer.BadParameter(f"Missing curated live dataset: {curated}. Run live-once first.")
-
-    base = pd.read_parquet(base_dataset)
-    live = pd.read_parquet(curated)
-    if live.empty or len(live) < min_live_rows:
-        state = {
-            "status": "skipped",
-            "reason": "not_enough_matured_live_rows",
-            "live_rows": int(len(live)),
-            "min_live_rows": min_live_rows,
-            "base_rows": int(len(base)),
-            "checked_at_utc": datetime.now(timezone.utc).isoformat(),
-        }
-        out = live_dir / "training" / "last_train_state.json"
-        out.parent.mkdir(parents=True, exist_ok=True)
-        out.write_text(json.dumps(state, indent=2, sort_keys=True), encoding="utf-8")
-        console.print(state)
-        return
-
-    combined = pd.concat([base, live], ignore_index=True, sort=False)
-    identity = [col for col in ["ticker", "event_timestamp", "source", "title"] if col in combined.columns]
-    if identity:
-        combined = combined.drop_duplicates(identity, keep="last")
-    combined = combined.sort_values(["event_timestamp", "ticker"]).reset_index(drop=True)
-
-    run_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    candidate_root = candidate_dir or (live_dir / "training" / run_id)
-    candidate_root.mkdir(parents=True, exist_ok=True)
-    combined_path = candidate_root / "combined_training.parquet"
-    combined.to_parquet(combined_path, index=False)
-
-    jobs = [
-        {
-            "name": "event_swing_2y_clean_1d_prereaction_max.joblib",
-            "target_col": "target_next_1d_up",
-            "include_reaction_features": False,
-        },
-        {
-            "name": "event_swing_2y_clean_5d_prereaction_max.joblib",
-            "target_col": "target_next_5d_up",
-            "include_reaction_features": False,
-        },
-        {
-            "name": "event_swing_2y_clean_1d_reaction_max.joblib",
-            "target_col": "target_next_1d_up",
-            "include_reaction_features": True,
-        },
-        {
-            "name": "event_swing_2y_clean_5d_reaction_max.joblib",
-            "target_col": "target_next_5d_up",
-            "include_reaction_features": True,
-        },
-    ]
-    metrics_rows = []
-    reports = {}
-    for job in jobs:
-        model_out = candidate_root / str(job["name"])
-        report, metrics = train_event_swing_model_with_metrics(
-            combined,
-            model_out,
-            target_col=str(job["target_col"]),
-            include_reaction_features=bool(job["include_reaction_features"]),
-            max_iter=max_iter,
-            learning_rate=learning_rate,
-        )
-        metrics["name"] = job["name"]
-        metrics["passed"] = bool(float(metrics["accuracy"]) >= min_accuracy)
-        metrics_rows.append(metrics)
-        reports[str(job["name"])] = report
-        (candidate_root / f"{Path(str(job['name'])).stem}_report.txt").write_text(report, encoding="utf-8")
-
-    metrics_frame = pd.DataFrame(metrics_rows)
-    metrics_path = candidate_root / "metrics.csv"
-    metrics_frame.to_csv(metrics_path, index=False)
-    all_passed = bool(metrics_frame["passed"].all())
-    promoted = []
-    if promote and all_passed:
-        models_dir = Path("models")
-        models_dir.mkdir(parents=True, exist_ok=True)
-        for job in jobs:
-            src = candidate_root / str(job["name"])
-            dst = models_dir / str(job["name"])
-            dst.write_bytes(src.read_bytes())
-            promoted.append(str(dst))
-
-    train_state = {
-        "status": "promoted" if promoted else "trained_not_promoted",
-        "run_id": run_id,
-        "base_rows": int(len(base)),
-        "live_rows": int(len(live)),
-        "combined_rows": int(len(combined)),
-        "min_live_rows": min_live_rows,
-        "min_accuracy": min_accuracy,
-        "candidate_dir": str(candidate_root),
-        "combined_training": str(combined_path),
-        "metrics": str(metrics_path),
-        "all_passed": all_passed,
-        "promoted_models": promoted,
-        "checked_at_utc": datetime.now(timezone.utc).isoformat(),
-    }
-    state_path = live_dir / "training" / "last_train_state.json"
-    state_path.parent.mkdir(parents=True, exist_ok=True)
-    state_path.write_text(json.dumps(train_state, indent=2, sort_keys=True), encoding="utf-8")
-    console.print(metrics_frame[["name", "target_col", "include_reaction_features", "accuracy", "passed"]])
-    console.print(train_state)
-
-
-@app.command("build-dataset")
-def build_dataset(
-    ticker: str,
-    events: Path = typer.Option(..., help="Input events parquet from collect."),
-    out: Path = typer.Option(Path("data/features/daily.parquet"), help="Output dataset parquet."),
-    horizon_days: int = typer.Option(5, help="Forward trading-day target horizon."),
-    seeking_alpha: Path | None = typer.Option(None, help="Optional Seeking Alpha quant CSV export."),
-    market_context: Path | None = typer.Option(DEFAULT_MARKET_CONTEXT_PATH, help="Optional global market-news context parquet."),
-    end_date: str | None = typer.Option(None, help="Inclusive UTC end date as YYYY-MM-DD for price/features."),
-) -> None:
-    """Join events, prices, SEC facts, optional quant data, and labels."""
-    settings = get_settings()
-    end = _parse_end_date(end_date)
-    dataset = build_daily_dataset(
-        ticker,
-        events,
-        settings,
-        horizon_days=horizon_days,
-        seeking_alpha_path=seeking_alpha,
-        market_context_path=market_context,
-        end=end,
-    )
-    out.parent.mkdir(parents=True, exist_ok=True)
-    dataset.to_parquet(out, index=False)
-    console.print(f"Wrote {len(dataset)} daily rows to {out}")
-
-
-@app.command()
-def train(
-    dataset: Path = typer.Option(..., help="Daily dataset parquet."),
-    model_out: Path = typer.Option(Path("models/direction.joblib"), help="Output model path."),
-    horizon_days: int | None = typer.Option(None, help="Horizon used when building the dataset."),
-    max_iter: int = typer.Option(200, help="Maximum boosting iterations."),
-    learning_rate: float = typer.Option(0.05, help="Boosting learning rate."),
-) -> None:
-    """Train a baseline next-week direction classifier."""
-    frame = pd.read_parquet(dataset)
-    report = train_direction_model(
-        frame,
-        model_out,
-        horizon_days=horizon_days,
-        max_iter=max_iter,
-        learning_rate=learning_rate,
-    )
-    console.print(report)
-    console.print(f"Wrote model to {model_out}")
-
-
-@app.command()
-def predict(
-    ticker: str,
-    model: Path = typer.Option(..., help="Trained model path."),
-    days: int = typer.Option(30, help="Recent collection window for latest feature row."),
-) -> None:
-    """Collect current data, rebuild recent features, and predict next-week direction."""
-    settings = get_settings()
-    tmp_events = Path("data/tmp") / f"{ticker.upper()}_events.parquet"
-    tmp_dataset = Path("data/tmp") / f"{ticker.upper()}_daily.parquet"
-    tmp_sa = Path("data/tmp") / f"{ticker.upper()}_seeking_alpha_quant.csv"
-    sa_path = write_seeking_alpha_snapshot(ticker, tmp_sa) if settings.has_seeking_alpha_rapidapi else None
-    collect(ticker, days=days, out=tmp_events, no_reddit=False)
-    build_dataset(ticker, events=tmp_events, out=tmp_dataset, horizon_days=5, seeking_alpha=sa_path)
-    result = predict_latest(pd.read_parquet(tmp_dataset), model)
-    console.print(result)
-
-
 @app.command("collect-seeking-alpha")
 def collect_seeking_alpha(
     ticker: str,
@@ -3311,7 +1922,7 @@ def collect_seeking_alpha_universe(
     if not symbols:
         raise typer.BadParameter("No tickers configured or supplied.")
     out_dir.mkdir(parents=True, exist_ok=True)
-    start = datetime.now(timezone.utc) - timedelta(days=days)
+    start = datetime.now(UTC) - timedelta(days=days)
     source = SeekingAlphaRapidApiSource(settings)
     summary_rows = []
     snapshot_rows = []
@@ -3374,7 +1985,7 @@ def collect_market_context(
     from market_predictor.sentiment import FinbertScorer
 
     settings = get_settings()
-    start = datetime.now(timezone.utc) - timedelta(days=days)
+    start = datetime.now(UTC) - timedelta(days=days)
     rows = []
     errors = []
     if settings.has_seeking_alpha_rapidapi:
@@ -3433,7 +2044,7 @@ def collect_gdelt_context(
     from market_predictor.sentiment import FinbertScorer
 
     settings = get_settings()
-    start = datetime.now(timezone.utc) - timedelta(days=days)
+    start = datetime.now(UTC) - timedelta(days=days)
     queries = (query,) if query else None
     source = GdeltSource(request_pause_seconds=request_pause_seconds, request_retries=request_retries)
     events, errors = source.fetch_context_events_with_errors(
@@ -3556,181 +2167,3 @@ def seeking_alpha_token_status() -> None:
     settings = get_settings()
     source = SeekingAlphaRapidApiSource(settings)
     console.print(source.account_token_status())
-
-
-@app.command()
-def watch(
-    ticker: str,
-    model: Path | None = typer.Option(None, help="Optional trained 1-day or 5-day model path."),
-    days: int = typer.Option(45, help="Recent collection window for the watch score."),
-    horizon_days: int = typer.Option(1, help="Forward trading-day horizon for the temporary feature set."),
-) -> None:
-    """Build a tomorrow/swing watch report for a ticker."""
-    settings = get_settings()
-    tmp_events = Path("data/tmp") / f"{ticker.upper()}_watch_events.parquet"
-    tmp_dataset = Path("data/tmp") / f"{ticker.upper()}_watch_daily.parquet"
-    tmp_sa = Path("data/tmp") / f"{ticker.upper()}_watch_seeking_alpha_quant.csv"
-    sa_path = write_seeking_alpha_snapshot(ticker, tmp_sa) if settings.has_seeking_alpha_rapidapi else None
-    collect(ticker, days=days, out=tmp_events, no_reddit=False)
-    build_dataset(ticker, events=tmp_events, out=tmp_dataset, horizon_days=horizon_days, seeking_alpha=sa_path)
-    dataset = pd.read_parquet(tmp_dataset)
-    result = heuristic_watch_score(dataset, weights=settings.watch_score_weights)
-    if model:
-        result["model_prediction"] = predict_latest(dataset, model)
-    console.print(result)
-
-
-@app.command("behavior")
-def behavior(
-    tickers: str = typer.Option(..., help="Comma-separated symbols to analyze, for example MTNL,LUNR."),
-    days: int = typer.Option(3, help="Recent news lookback window in calendar days."),
-    raw_dir: Path = typer.Option(
-        Path("data/raw/uslisted_6sector_2y_clean"),
-        help="Cached raw event directory to use before live API calls.",
-    ),
-    out: Path = typer.Option(Path("data/reports/behavior_latest.csv"), help="Output behavior report CSV."),
-    model_1d: Path | None = typer.Option(
-        Path("models/uslisted_6sector_direction_2y_clean_1d_max.joblib"),
-        help="Optional 1-day model path.",
-    ),
-    model_5d: Path | None = typer.Option(
-        Path("models/uslisted_6sector_direction_2y_clean_5d_max.joblib"),
-        help="Optional 5-day model path.",
-    ),
-    refresh: bool = typer.Option(False, help="Ignore cached raw files and collect only fresh recent events."),
-    no_reddit: bool = typer.Option(False, help="Disable Reddit enrichment during refresh/live fallback."),
-    no_seeking_alpha: bool = typer.Option(False, help="Disable Seeking Alpha during refresh/live fallback."),
-) -> None:
-    """Explain recent news/reaction behavior for a short ticker list."""
-    from market_predictor.sentiment import FinbertScorer
-
-    settings = get_settings()
-    symbols = _parse_tickers(tickers, [])
-    if not symbols:
-        raise typer.BadParameter("Provide at least one ticker.")
-
-    staged: list[pd.DataFrame] = []
-    errors_by_symbol: dict[str, list[str]] = {}
-    for symbol in symbols:
-        frame, errors = _recent_events_for_behavior(
-            symbol,
-            days,
-            raw_dir=raw_dir,
-            refresh=refresh,
-            no_reddit=no_reddit,
-            no_seeking_alpha=no_seeking_alpha,
-        )
-        if not frame.empty:
-            frame["_behavior_symbol"] = symbol
-            staged.append(frame)
-        errors_by_symbol[symbol] = errors
-
-    scored_by_symbol: dict[str, pd.DataFrame] = {}
-    if staged:
-        combined = pd.concat(staged, ignore_index=True)
-        scorer = FinbertScorer(settings.finbert_model, torch_num_threads=settings.torch_num_threads)
-        combined = add_finbert_with_scorer(combined, scorer, batch_size=settings.finbert_batch_size)
-        for symbol, frame in combined.groupby("_behavior_symbol", sort=False):
-            scored_by_symbol[symbol] = frame.drop(columns=["_behavior_symbol"], errors="ignore")
-
-    tmp_dir = Path("data/tmp/behavior")
-    tmp_dir.mkdir(parents=True, exist_ok=True)
-    rows = []
-    for symbol in symbols:
-        events = scored_by_symbol.get(symbol, pd.DataFrame())
-        if events.empty:
-            rows.append(
-                {
-                    "ticker": symbol,
-                    "lookback_days": days,
-                    "status": "no_recent_events",
-                    "behavior": "quiet/no recent catalyst",
-                    "errors": " | ".join(errors_by_symbol.get(symbol, [])),
-                }
-            )
-            continue
-        events_path = tmp_dir / f"{symbol}_behavior_events.parquet"
-        events.to_parquet(events_path, index=False)
-        try:
-            dataset_1d = build_daily_dataset(
-                symbol,
-                events_path,
-                settings,
-                horizon_days=1,
-                market_context_path=DEFAULT_MARKET_CONTEXT_PATH,
-            )
-            score = heuristic_watch_score(dataset_1d, weights=settings.watch_score_weights)
-            latest = dataset_1d.sort_values("date").iloc[-1]
-            record = {
-                "ticker": symbol,
-                "lookback_days": days,
-                "status": "ok",
-                "date": score.get("date"),
-                "behavior": _reaction_behavior_label(latest),
-                "watch_score": score.get("watch_score"),
-                "signal": score.get("signal"),
-                "latest_close": score.get("latest_close"),
-                "news_count_latest_day": score.get("news_count"),
-                "recent_event_count": len(events),
-                "sentiment_mean": score.get("sentiment_mean"),
-                "return_1d": float(latest.get("return_1d", 0) or 0),
-                "return_5d_past": float(latest.get("return_5d_past", 0) or 0),
-                "volume_z20": float(latest.get("volume_z20", 0) or 0),
-                "premarket_gap_mean": score.get("premarket_gap_mean"),
-                "intraday_reaction_2h_mean": score.get("intraday_reaction_2h_mean"),
-                "afterhours_next_open_gap_mean": score.get("afterhours_next_open_gap_mean"),
-                "recent_headlines": _recent_headlines(events),
-                "errors": " | ".join(errors_by_symbol.get(symbol, [])),
-            }
-            if model_1d and model_1d.exists():
-                prediction = predict_latest(dataset_1d, model_1d)
-                record["model_1d_probability_up"] = prediction["probability_up"]
-                record["model_1d_prediction"] = prediction["prediction"]
-            if model_5d and model_5d.exists():
-                dataset_5d = build_daily_dataset(
-                    symbol,
-                    events_path,
-                    settings,
-                    horizon_days=5,
-                    market_context_path=DEFAULT_MARKET_CONTEXT_PATH,
-                )
-                prediction = predict_latest(dataset_5d, model_5d)
-                record["model_5d_probability_up"] = prediction["probability_up"]
-                record["model_5d_prediction"] = prediction["prediction"]
-            rows.append(record)
-        except Exception as exc:
-            rows.append(
-                {
-                    "ticker": symbol,
-                    "lookback_days": days,
-                    "status": "failed",
-                    "recent_event_count": len(events),
-                    "recent_headlines": _recent_headlines(events),
-                    "errors": " | ".join([*errors_by_symbol.get(symbol, []), str(exc)]),
-                }
-            )
-
-    report = pd.DataFrame(rows)
-    out.parent.mkdir(parents=True, exist_ok=True)
-    report.to_csv(out, index=False)
-    display_cols = [
-        col
-        for col in [
-            "ticker",
-            "status",
-            "date",
-            "behavior",
-            "watch_score",
-            "signal",
-            "model_1d_probability_up",
-            "model_5d_probability_up",
-            "recent_event_count",
-            "news_count_latest_day",
-            "sentiment_mean",
-            "return_1d",
-            "volume_z20",
-        ]
-        if col in report.columns
-    ]
-    console.print(report[display_cols])
-    console.print(f"Wrote behavior report to {out}")

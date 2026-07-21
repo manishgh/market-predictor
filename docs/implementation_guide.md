@@ -13,17 +13,15 @@ This document explains how `market-predictor` is designed, which files own each 
 
 ## Main Runtime Flow
 
-For daily use:
+For operational prediction:
 
 ```text
-input tickers
-  -> collect recent Alpaca/Reddit/Seeking Alpha/SEC events
-  -> sanitize and deduplicate events
-  -> score event sentiment with FinBERT
-  -> fetch latest daily/hourly bars and market-context features
-  -> build event and watchlist features
-  -> score active models
-  -> write readable prediction reports
+audited upstream feature job
+  -> atomically publish registered live feature snapshot
+  -> readiness verifies feature and model manifests/hashes/freshness
+  -> API filters by point-in-time cutoff
+  -> score one server-registered promoted model per view
+  -> persist immutable prediction snapshot
 ```
 
 For training:
@@ -48,16 +46,11 @@ python -m pip install -e .
 market-predictor download-model
 ```
 
-Live prediction cycle:
+Research collection and sentiment scoring:
 
 ```powershell
-market-predictor live-once --tickers "LUNR,MXL,RGTI" --lookback-days 3 --workers 4
-```
-
-Watchlist prediction:
-
-```powershell
-market-predictor predict-watchlist --tickers "LUNR,MXL,RGTI" --out data/reports/watchlist_latest.csv
+market-predictor collect-swing --tickers "LUNR,MXL,RGTI" --days 30 --out-dir data/raw/research --workers 4
+market-predictor score-swing-events --tickers "LUNR,MXL,RGTI" --raw-dir data/raw/research --out-dir data/raw/research_scored
 ```
 
 Prediction API requests are point-in-time contracts. `PredictionRequest.as_of`, when present, must be timezone-aware. The serving service filters daily feature rows by their 16:00 America/New_York availability time and intraday rows by inferred bar-close time. It does not interpret a bar's start timestamp as the moment its closing price and volume became known.
@@ -78,19 +71,16 @@ Top-level predictions are persisted by `prediction_snapshot.py` as content-addre
 
 `configs/default.toml` declares production routes under `[prediction_serving.routes.<mode>."<horizon>"]`. Only promoted routes belong there. The HTTP process parses this registry at startup and fails when it is absent or malformed; candidate routes are injected only by research/test code.
 
-`live-once` now derives volatile-schema swing rows from each ticker's sanitized event store and daily feature history, then publishes their combined rolling snapshot to `data/live/features/swing.parquet`. The 5-minute pipeline publishes its final enriched table with `publish-live-features --mode intraday`. Both paths use the same manifest and integrity contract.
+The previous `live-once` publisher was removed because it also scored four incompatible legacy model families and averaged their probabilities. Until the canonical point-in-time builder is connected, an audited job must explicitly call `publish-live-features`; otherwise readiness remains 503.
 
 `catalyst_overlay.py` is deliberately separate from estimator inference. It classifies recent evidence as confirmed, conflicting, veto, mixed, or absent. The original model probability is never modified. A separate `decision_score` adds a small confirmation bonus or conflict/veto penalty for ranking, and the API records the complete catalyst assessment so its incremental value can be ablated later.
 
-Historical event model build:
+Historical event collection and sentiment build:
 
 ```powershell
 market-predictor collect-swing --days 730 --out-dir data/raw/swing --workers 8
 market-predictor verify-swing --raw-dir data/raw/swing --rewrite
 market-predictor score-swing-events --raw-dir data/raw/swing --out-dir data/raw/swing_scored
-market-predictor build-event-swing-datasets --raw-dir data/raw/swing_scored --out-dir data/features/event_swing --workers 8
-market-predictor combine-event-swing-datasets --feature-dir data/features/event_swing --out data/features/event_swing_all.parquet
-market-predictor train-event-swing --dataset data/features/event_swing_all.parquet --model-out models/event_swing_1d.joblib --target-col target_next_1d_up
 ```
 
 Azure artifact publishing:
@@ -100,6 +90,8 @@ market-predictor export-ohlcv-artifacts --days 730 --timeframes 1d,1h --workers 
 market-predictor azure-upload-artifacts --root data/artifacts
 market-predictor azure-publish-models --models-dir models
 ```
+
+`azure-publish-models` does not scan and upload arbitrary model files. It resolves the server-owned routes from TOML, accepts only promoted hash-verified artifacts under `--models-dir`, uploads each registry sidecar, and publishes `_production_routes_manifest.json` last.
 
 ## File Responsibilities
 
@@ -115,10 +107,10 @@ Key command groups:
 
 - Collection: `collect`, `collect-swing`, `collect-seeking-alpha`, `alpaca-tickers`.
 - Verification: `verify-events`, `verify-swing`, `audit-swing-alignment`.
-- Sentiment: `download-model`, `score-events`, `score-swing-events`, `score-swing`.
-- Feature building: `build-dataset`, `build-swing-datasets`, `build-event-swing-datasets`.
-- Training/scoring: `train`, `train-event-swing`, `score-event-swing`, `predict-watchlist`.
-- Live operation: `live-once`, `live-run`, `live-train-event`.
+- Sentiment: `download-model`, `score-swing-events`.
+- Feature building: `build-swing-datasets`, `build-volatile-dataset`, `build-entry-exit-dataset`, and V3 builders.
+- Training/scoring: `train-volatile-model`, `train-entry-exit-model`, V3 training/evaluation, and manifest-verified research scorers.
+- Serving: `publish-live-features` and `serve-api`.
 - Azure: `export-ohlcv-artifacts`, `azure-upload-artifacts`, `azure-publish-models`.
 
 V3 orchestration is registered through focused modules under `src/market_predictor/commands/`: `v3_data.py`, `v3_features.py`, `v3_labels.py`, `v3_models.py`, and `v3_evaluation.py`. The corresponding implementation under `src/market_predictor/v3/` owns strict contracts, immutable development/shadow partitioning, exact labels, batch/live feature parity, session-purged validation, deterministic ticker holdout, B0/B1/B2/R1/D1 candidate training, disjoint calibration, and session-blocked ranking economics. Label schema `ml_v3.labels.v2` requires the maximum configured path to be contiguous at `bar_minutes`; decisions spanning a missing ticker candle are dropped rather than interpolated or shifted. These candidates and audit calibrators are research artifacts and are not connected to the promoted serving registry until later promotion checkpoints pass.
@@ -235,7 +227,7 @@ Important design choices:
 - Supports daily direction models and event-level swing models.
 - Returns metrics that the guarded live trainer can use before promotion.
 
-`PurgedWalkForwardSplit` keeps validation later in time than training and leaves an embargo gap between train and test windows.
+`DateGroupedPurgedWalkForwardSplit` keeps validation later in time than training and leaves an embargo gap between train and test sessions.
 
 ### Quota and Azure
 
@@ -270,58 +262,11 @@ Do not treat `data/features` or `data/live` as public contracts. They are intern
 
 The clean active model set lives in `models/`.
 
-Current model types:
+Every scoreable Joblib artifact has a `model_registry_manifest.v1` sidecar. Candidate and promoted research scorers verify the manifest and SHA-256 before deserialization; production routes additionally require `promoted`. The current evidence and route state are maintained in the README and model cards rather than inferred from filenames.
 
-- `daily_swing_2y_market_context_1d_max.joblib`: daily ticker direction, next trading day.
-- `daily_swing_2y_market_context_5d_max.joblib`: daily ticker direction, next 5 trading days.
-- `event_swing_2y_market_context_1d_prereaction_max.joblib`: event swing, next trading day, excludes post-event reaction fields.
-- `event_swing_2y_market_context_5d_prereaction_max.joblib`: event swing, next 5 trading days, excludes post-event reaction fields.
+## Live Pipeline State
 
-The watchlist predictor combines model probabilities with recent catalysts, sentiment, price movement, sector/cap profile, and source coverage.
-
-Latest verified training shape:
-
-- Daily combined datasets: 143,456 rows across 187 historical tickers.
-- Event combined dataset: 161,369 event rows across 187 historical tickers.
-- Seeking Alpha full pull: 188 configured symbols, 11,315 SA events, 188 snapshot rows.
-- Market-context proxy events: 31,539 FinBERT-scored rows.
-- Daily 1-day validation: accuracy 0.524, 96 features.
-- Daily 5-day validation: accuracy 0.513, 96 features.
-- Event 1-day pre-reaction validation: accuracy 0.519, 64 features.
-- Event 5-day pre-reaction validation: accuracy 0.517, 64 features.
-
-These are modest statistical edges, not high-confidence forecasts. Treat the model output as a ranking/watchlist signal and combine it with risk controls, liquidity checks, and catalyst review.
-
-## Live Pipeline Design
-
-`live-once` is the normal production-style unit of work.
-
-It does:
-
-1. Collect recent events per ticker and per source.
-2. Sanitize and deduplicate.
-3. Score missing sentiment.
-4. Build event features.
-5. Score available active market-context daily and event models.
-6. Curate matured labeled rows for future retraining.
-7. Write run state and predictions.
-
-`live-train-event` is guarded. It does not blindly retrain every night. It checks whether enough matured live rows exist, trains candidates, compares validation metrics, and promotes only when gates pass.
-
-## Scheduling
-
-Local Windows scheduling:
-
-```powershell
-.\scripts\register_live_midnight_task.ps1
-.\scripts\register_live_train_task.ps1
-```
-
-Scripts:
-
-- `scripts/run_live_midnight.ps1`: runs the midnight live collection/scoring cycle.
-- `scripts/run_live_train_event.ps1`: runs guarded event-model retraining.
-- `scripts/azure_nightly.sh`: container-friendly nightly sequence for Azure.
+Automatic live feature construction and retraining are deliberately disabled while the canonical point-in-time data component is being rebuilt. This is fail-closed: the API can be live but not ready, and no stale research dataset is substituted. Scheduling is reintroduced only after the canonical builder, independent shadow evaluation, promotion, and rollback path are connected.
 
 ## Azure Deployment
 
@@ -357,7 +302,7 @@ Keeping them separate gives:
 ## Adding a New Model
 
 1. Build or extend a dataset in `features.py`.
-2. Add a training function in `model.py` if the target or validation differs.
+2. Add training to the owning model family (`volatile.py`, `entry_exit.py`, or `v3/`) if the target or validation differs.
 3. Add a CLI command or extend an existing one in `cli.py`.
 4. Write outputs to `models/` and metrics to `data/reports/`.
 5. Do not promote until walk-forward validation is acceptable.
@@ -375,12 +320,6 @@ Check event quality:
 
 ```powershell
 market-predictor verify-events data/raw/debug_lunr.parquet --rewrite
-```
-
-Check a watchlist:
-
-```powershell
-market-predictor predict-watchlist --tickers "LUNR,MXL" --out data/reports/debug_watchlist.csv
 ```
 
 Check Azure storage configuration:

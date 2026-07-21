@@ -1,12 +1,12 @@
 from functools import lru_cache
 from pathlib import Path
+from typing import Any
 
 from dotenv import load_dotenv
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from market_predictor.app_config import config_get, load_app_config
-
 
 load_dotenv()
 
@@ -59,7 +59,7 @@ class Settings(BaseSettings):
         return self.azure_blob_prefix.strip("/")
 
     @property
-    def app_config(self) -> dict:
+    def app_config(self) -> dict[str, Any]:
         return load_app_config(self.app_config_path)
 
     @property
@@ -144,10 +144,6 @@ class Settings(BaseSettings):
     @property
     def seeking_alpha_ratings_params(self) -> str:
         return str(config_get(self.app_config, "seeking_alpha.ratings_params", "symbol={ticker}"))
-
-    @property
-    def watch_score_weights(self) -> dict:
-        return dict(config_get(self.app_config, "watch_score_weights", {}))
 
     @property
     def swing_seed_tickers(self) -> list[str]:
@@ -239,7 +235,7 @@ class Settings(BaseSettings):
         return int(config_get(self.app_config, "seeking_alpha.access_token_cache_hours", 12))
 
     @property
-    def seeking_alpha_event_feeds(self) -> list[dict]:
+    def seeking_alpha_event_feeds(self) -> list[dict[str, Any]]:
         return list(
             config_get(
                 self.app_config,
@@ -257,7 +253,7 @@ class Settings(BaseSettings):
         )
 
     @property
-    def seeking_alpha_snapshot_feeds(self) -> list[dict]:
+    def seeking_alpha_snapshot_feeds(self) -> list[dict[str, Any]]:
         return list(
             config_get(
                 self.app_config,
