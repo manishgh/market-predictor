@@ -72,7 +72,8 @@ The order path reads a local TradingFlow cache. It does not wait on a Python HTT
 
 Use the existing HTTP endpoints as the first transport:
 
-- `GET /v1/health`
+- `GET /v1/health/live`
+- `GET /v1/health/ready`
 - `POST /v1/predictions/swing`
 - `POST /v1/predictions/intraday`
 - `POST /v1/predictions/unified`
@@ -90,9 +91,9 @@ Required integration fields:
 | `mode` | Explicit `swing`, `intraday`, or `unified`. Do not infer from strategy names. |
 | `horizon` | Explicit and compatible with the configured strategy. |
 | `as_of` | Timezone-aware decision cutoff. No prediction may use information after this timestamp. |
-| `data_source` | `live` for operational use, `curated` for controlled research. |
-| `require_promoted` | Always `true` for paper/live. Candidate use is an explicit backtest/research override. |
 | `correlation_id` | Planned addition supplied by TradingFlow and retained end to end. |
+
+The server owns model paths, live feature paths, source mode, and promotion policy. TradingFlow cannot override them. It must still verify the returned model status/hash and reject any response whose readiness is not `valid`.
 
 ### PredictionEvidenceV1
 
@@ -162,7 +163,7 @@ prediction_confirmation:
   view: swing
   horizon: 5d
   policy: observe          # observe | optional | required
-  require_promoted: true
+  required_model_status: promoted
   allowed_readiness: valid
   max_age_minutes: <strategy-specific>
   minimum_probability: <backtested-value>
@@ -330,7 +331,7 @@ Exit gate: explicit operational approval after paper and shadow evidence.
 - [ ] Exactly one production Alpaca websocket, owned by TradingFlow.
 - [ ] No shared database or shared OHLCV storage.
 - [ ] Stable versioned prediction and completed-bar contracts.
-- [ ] `require_promoted=true` enforced in paper/live.
+- [ ] Promoted status and manifest artifact SHA-256 enforced by the prediction server and rechecked by TradingFlow.
 - [ ] Order path reads local cached evidence only.
 - [ ] Every decision stores model SHA, prediction timestamp, readiness, and request/snapshot IDs.
 - [ ] Historical replay is point-in-time and deterministic.

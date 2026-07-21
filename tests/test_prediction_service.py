@@ -1,17 +1,21 @@
 from __future__ import annotations
 
-from datetime import date, datetime, timedelta
-from pathlib import Path
 import tempfile
 import unittest
+from datetime import UTC, date, datetime, timedelta
+from pathlib import Path
 
 import joblib
 import numpy as np
 import pandas as pd
 
-from market_predictor.prediction_contracts import PredictionRequest
-from market_predictor.prediction_service import PredictionService
 from market_predictor.feature_store import LiveFeatureStore
+from market_predictor.prediction_contracts import PredictionDataSource, PredictionRequest
+from market_predictor.prediction_service import (
+    PredictionService,
+    ServingRoute,
+    serving_routes_from_config,
+)
 from market_predictor.registry import write_model_manifest
 
 
@@ -29,6 +33,26 @@ class FixedProbabilityModel:
 
 
 class PredictionServiceTests(unittest.TestCase):
+    def test_serving_routes_are_loaded_from_server_configuration(self) -> None:
+        routes = serving_routes_from_config(
+            {
+                "prediction_serving": {
+                    "routes": {
+                        "swing": {
+                            "5d": {
+                                "model": "models/swing.joblib",
+                                "universe": "data/universe.csv",
+                                "bar_timeframe": "1Day",
+                            }
+                        }
+                    }
+                }
+            }
+        )
+
+        self.assertEqual(routes["swing"]["5d"].model, Path("models/swing.joblib"))
+        self.assertEqual(routes["swing"]["5d"].universe, Path("data/universe.csv"))
+
     def test_swing_prediction_uses_promoted_model_and_returns_contract(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -38,13 +62,8 @@ class PredictionServiceTests(unittest.TestCase):
             _swing_frame(["MSFT"], features, rows=260).to_parquet(dataset, index=False)
             _write_model(model, features, target_col="target_next_week_big_up", status="promoted", probability=0.73)
 
-            response = PredictionService(root).predict_swing(
-                PredictionRequest(
-                    tickers=["MSFT"],
-                    mode="swing",
-                    swing_dataset=dataset,
-                    swing_model=model,
-                )
+            response = _service(root, swing=(dataset, model)).predict_swing(
+                PredictionRequest(tickers=["MSFT"], mode="swing")
             )
 
             self.assertEqual(response.mode, "swing")
@@ -67,13 +86,8 @@ class PredictionServiceTests(unittest.TestCase):
             _write_model(model, features, target_col="target_next_week_big_up", status="candidate", probability=0.73)
 
             with self.assertRaisesRegex(ValueError, "model must be promoted"):
-                PredictionService(root).predict_swing(
-                    PredictionRequest(
-                        tickers=["MSFT"],
-                        mode="swing",
-                        swing_dataset=dataset,
-                        swing_model=model,
-                    )
+                _service(root, swing=(dataset, model)).predict_swing(
+                    PredictionRequest(tickers=["MSFT"], mode="swing")
                 )
 
     def test_unified_response_keeps_swing_when_intraday_model_is_not_promoted(self) -> None:
@@ -89,15 +103,12 @@ class PredictionServiceTests(unittest.TestCase):
             _write_model(swing_model, features, target_col="target_next_week_big_up", status="promoted", probability=0.31)
             _write_model(intraday_model, features, target_col="entry_success", status="candidate", probability=0.80)
 
-            response = PredictionService(root).predict_unified(
-                PredictionRequest(
-                    tickers=["MSFT"],
-                    mode="unified",
-                    swing_dataset=swing_dataset,
-                    swing_model=swing_model,
-                    intraday_dataset=intraday_dataset,
-                    intraday_model=intraday_model,
-                )
+            response = _service(
+                root,
+                swing=(swing_dataset, swing_model),
+                intraday=(intraday_dataset, intraday_model),
+            ).predict_unified(
+                PredictionRequest(tickers=["MSFT"], mode="unified")
             )
 
             self.assertEqual(response.mode, "unified")
@@ -119,13 +130,11 @@ class PredictionServiceTests(unittest.TestCase):
             final_date = frame["date"].iloc[-1]
             cutoff = datetime.fromisoformat(f"{final_date.isoformat()}T15:59:00-04:00")
 
-            response = PredictionService(root).predict_swing(
+            response = _service(root, swing=(dataset, model)).predict_swing(
                 PredictionRequest(
                     tickers=["MSFT"],
                     mode="swing",
                     as_of=cutoff,
-                    swing_dataset=dataset,
-                    swing_model=model,
                 )
             )
 
@@ -144,13 +153,11 @@ class PredictionServiceTests(unittest.TestCase):
             _write_model(model, features, target_col="target_next_week_big_up", status="promoted", probability=0.73)
 
             with self.assertRaisesRegex(ValueError, "incompatible with model target horizon 5d"):
-                PredictionService(root).predict_swing(
+                _service(root, swing=(dataset, model), swing_horizon="1d").predict_swing(
                     PredictionRequest(
                         tickers=["MSFT"],
                         mode="swing",
                         horizon="1d",
-                        swing_dataset=dataset,
-                        swing_model=model,
                     )
                 )
 
@@ -165,13 +172,11 @@ class PredictionServiceTests(unittest.TestCase):
             _write_model(model, features, target_col="target_entry_success_12b", status="promoted", probability=0.72)
             cutoff = pd.Timestamp(frame["date"].iloc[-1], tz="UTC") + pd.Timedelta(minutes=2)
 
-            response = PredictionService(root).predict_intraday(
+            response = _service(root, intraday=(dataset, model)).predict_intraday(
                 PredictionRequest(
                     tickers=["MSFT"],
                     mode="intraday",
                     as_of=cutoff.to_pydatetime(),
-                    intraday_dataset=dataset,
-                    intraday_model=model,
                 )
             )
 
@@ -194,15 +199,10 @@ class PredictionServiceTests(unittest.TestCase):
             features = ["return_1d", "volume_z20"]
             _swing_frame(["MSFT"], features, rows=260).to_parquet(dataset, index=False)
             _write_model(model, features, target_col="target_next_week_big_up", status="promoted", probability=0.73)
-            service = PredictionService(root)
+            service = _service(root, swing=(dataset, model))
 
             response = service.predict(
-                PredictionRequest(
-                    tickers=["MSFT"],
-                    mode="swing",
-                    swing_dataset=dataset,
-                    swing_model=model,
-                )
+                PredictionRequest(tickers=["MSFT"], mode="swing")
             )
 
             self.assertIsNotNone(response.snapshot_id)
@@ -225,13 +225,8 @@ class PredictionServiceTests(unittest.TestCase):
             frame.to_parquet(dataset, index=False)
             _write_model(model, features, target_col="target_entry_success_12b", status="promoted", probability=0.72)
 
-            response = PredictionService(root).predict_intraday(
-                PredictionRequest(
-                    tickers=["MSFT"],
-                    mode="intraday",
-                    intraday_dataset=dataset,
-                    intraday_model=model,
-                )
+            response = _service(root, intraday=(dataset, model)).predict_intraday(
+                PredictionRequest(tickers=["MSFT"], mode="intraday")
             )
 
             prediction = response.predictions[0].intraday
@@ -249,14 +244,19 @@ class PredictionServiceTests(unittest.TestCase):
             frame = _swing_frame(["MSFT"], features, rows=260)
             _write_model(model, features, target_col="target_next_week_big_up", status="promoted", probability=0.73)
             store = LiveFeatureStore(root)
-            store.publish("swing", frame, price_feed="sip")
+            generated = datetime(2025, 9, 17, 20, 30, tzinfo=UTC)
+            store.publish("swing", frame, price_feed="sip", generated_at=generated)
 
-            response = PredictionService(root, live_feature_store=store).predict_swing(
+            response = _service(
+                root,
+                swing=(None, model),
+                data_source="live",
+                live_feature_store=store,
+            ).predict_swing(
                 PredictionRequest(
                     tickers=["MSFT"],
                     mode="swing",
-                    data_source="live",
-                    swing_model=model,
+                    as_of=generated,
                 )
             )
 
@@ -264,6 +264,121 @@ class PredictionServiceTests(unittest.TestCase):
             prediction = response.predictions[0].swing
             assert prediction is not None
             self.assertAlmostEqual(prediction.probability or 0.0, 0.73)
+
+    def test_rejects_model_when_artifact_no_longer_matches_manifest(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            dataset = root / "features.parquet"
+            model = root / "swing.joblib"
+            features = ["return_1d", "volume_z20"]
+            _swing_frame(["MSFT"], features, rows=260).to_parquet(dataset, index=False)
+            _write_model(
+                model,
+                features,
+                target_col="target_next_week_big_up",
+                status="promoted",
+                probability=0.73,
+            )
+            with model.open("ab") as handle:
+                handle.write(b"tampered")
+
+            with self.assertRaisesRegex(ValueError, "model artifact integrity check failed"):
+                _service(root, swing=(dataset, model)).predict_swing(
+                    PredictionRequest(tickers=["MSFT"], mode="swing")
+                )
+
+    def test_warning_readiness_is_never_returned_as_actionable(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            dataset = root / "features.parquet"
+            model = root / "swing.joblib"
+            features = ["return_1d", "volume_z20"]
+            frame = _swing_frame(["MSFT"], features, rows=260)
+            frame["price_feed"] = "unknown"
+            frame.to_parquet(dataset, index=False)
+            _write_model(
+                model,
+                features,
+                target_col="target_next_week_big_up",
+                status="promoted",
+                probability=0.73,
+            )
+
+            response = _service(root, swing=(dataset, model)).predict_swing(
+                PredictionRequest(tickers=["MSFT"], mode="swing")
+            )
+
+            prediction = response.predictions[0].swing
+            assert prediction is not None
+            self.assertEqual(prediction.readiness.status, "warn")
+            self.assertEqual(prediction.signal, "not_ready")
+            self.assertIsNone(prediction.decision_score)
+            self.assertIsNone(prediction.model_prediction)
+            self.assertEqual(response.predictions[0].final_signal, "not_ready")
+
+    def test_health_checks_registered_model_and_live_feature_artifacts(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            model = root / "swing.joblib"
+            features = ["return_1d", "volume_z20"]
+            frame = _swing_frame(["MSFT"], features, rows=260)
+            _write_model(
+                model,
+                features,
+                target_col="target_next_week_big_up",
+                status="promoted",
+                probability=0.73,
+            )
+            generated = datetime(2025, 9, 17, 20, 30, tzinfo=UTC)
+            store = LiveFeatureStore(root)
+            store.publish("swing", frame, price_feed="sip", generated_at=generated)
+            service = _service(
+                root,
+                swing=(None, model),
+                data_source="live",
+                live_feature_store=store,
+            )
+
+            result = service.health(as_of=generated)
+
+            self.assertEqual(result["status"], "ready")
+            self.assertEqual(result["data_source"], "live")
+
+
+def _service(
+    root: Path,
+    *,
+    swing: tuple[Path | None, Path] | None = None,
+    swing_horizon: str = "5d",
+    intraday: tuple[Path | None, Path] | None = None,
+    data_source: PredictionDataSource = "curated",
+    live_feature_store: LiveFeatureStore | None = None,
+) -> PredictionService:
+    routes: dict[str, dict[str, ServingRoute]] = {}
+    if swing is not None:
+        dataset, model = swing
+        routes["swing"] = {
+            swing_horizon: ServingRoute(
+                model=model,
+                curated_dataset=dataset,
+                bar_timeframe="1Day",
+            )
+        }
+    if intraday is not None:
+        dataset, model = intraday
+        routes["intraday"] = {
+            "12b": ServingRoute(
+                model=model,
+                curated_dataset=dataset,
+                bar_timeframe="5Min",
+            )
+        }
+    return PredictionService(
+        root,
+        routes=routes,
+        data_source=data_source,
+        live_feature_store=live_feature_store,
+    )
 
 
 def _write_model(

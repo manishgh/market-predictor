@@ -1,7 +1,10 @@
 from __future__ import annotations
 
-from pathlib import Path
 import re
+from collections.abc import Mapping
+from dataclasses import dataclass
+from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 
 import pandas as pd
@@ -15,10 +18,11 @@ from market_predictor.entry_exit import score_entry_exit_frame
 from market_predictor.feature_store import LiveFeatureStore
 from market_predictor.global_context import build_sector_theme_monitor
 from market_predictor.prediction_contracts import (
+    CatalystConfirmationInfo,
     GlobalContextInfo,
     IntradayPrediction,
-    CatalystConfirmationInfo,
     ModelInfo,
+    PredictionDataSource,
     PredictionRequest,
     PredictionResponse,
     ReadinessInfo,
@@ -33,29 +37,56 @@ from market_predictor.readiness import (
     assess_daily_readiness,
     assess_intraday_readiness,
 )
-from market_predictor.registry import MODEL_STATUS_PROMOTED, load_model_manifest
+from market_predictor.registry import MODEL_STATUS_PROMOTED, file_sha256, load_model_manifest
 from market_predictor.volatile import score_volatile_frame
 
-
-DEFAULT_SWING_DATASET = Path("data/features/sp500_6m_volatile_daily_20260708.parquet")
-DEFAULT_SWING_MODEL = Path("models/sp500_6m_next_week_big_up_v2_20260708_candidate.joblib")
-DEFAULT_INTRADAY_DATASET = Path("data/features/intraday_nasdaq_activity_5m_12b_enriched_catalyst_20260709.parquet")
-DEFAULT_INTRADAY_MODEL = Path(
-    "models/entry_exit_intraday_5m_entry_success_12b_ablation_technical_20260709_candidate.joblib"
-)
-DEFAULT_UNIVERSE = Path("data/universe/sp500_current_20260708.csv")
-
-SWING_ROUTES = {
-    "1d": (
-        DEFAULT_SWING_DATASET,
-        Path("models/sp500_6m_next_day_big_up_v2_20260708_candidate.joblib"),
-    ),
-    "5d": (DEFAULT_SWING_DATASET, DEFAULT_SWING_MODEL),
-}
-INTRADAY_ROUTES = {
-    "12b": (DEFAULT_INTRADAY_DATASET, DEFAULT_INTRADAY_MODEL),
-}
 DEFAULT_MODE_HORIZONS = {"swing": "5d", "intraday": "12b"}
+
+
+@dataclass(frozen=True)
+class ServingRoute:
+    """Server-owned route from a prediction horizon to registered artifacts."""
+
+    model: Path
+    curated_dataset: Path | None = None
+    universe: Path | None = None
+    flashpoints: Path | None = None
+    bar_timeframe: str = "unknown"
+
+
+def serving_routes_from_config(config: Mapping[str, Any]) -> dict[str, dict[str, ServingRoute]]:
+    """Parse and validate server-owned serving routes from application config."""
+
+    serving = config.get("prediction_serving")
+    route_config = serving.get("routes") if isinstance(serving, dict) else None
+    if not isinstance(route_config, dict):
+        raise ValueError("prediction_serving.routes must be configured")
+    routes: dict[str, dict[str, ServingRoute]] = {}
+    for mode, raw_mode_routes in route_config.items():
+        normalized_mode = str(mode).strip().lower()
+        if normalized_mode not in DEFAULT_MODE_HORIZONS:
+            raise ValueError(f"unsupported configured prediction mode: {mode}")
+        if not isinstance(raw_mode_routes, dict):
+            raise ValueError(f"prediction_serving.routes.{mode} must be a table")
+        parsed: dict[str, ServingRoute] = {}
+        for horizon, raw_route in raw_mode_routes.items():
+            if not isinstance(raw_route, dict):
+                raise ValueError(f"prediction serving route {mode}.{horizon} must be a table")
+            model = str(raw_route.get("model", "")).strip()
+            if not model:
+                raise ValueError(f"prediction serving route {mode}.{horizon} is missing model")
+            parsed[str(horizon).strip().lower()] = ServingRoute(
+                model=Path(model),
+                universe=_optional_path(raw_route.get("universe")),
+                flashpoints=_optional_path(raw_route.get("flashpoints")),
+                bar_timeframe=str(raw_route.get("bar_timeframe", "unknown")).strip()
+                or "unknown",
+            )
+        if parsed:
+            routes[normalized_mode] = parsed
+    if not routes:
+        raise ValueError("at least one production prediction serving route is required")
+    return routes
 
 
 class PredictionService:
@@ -68,6 +99,8 @@ class PredictionService:
         snapshot_store: PredictionSnapshotStore | None = None,
         live_feature_store: LiveFeatureStore | None = None,
         persist_snapshots: bool = True,
+        routes: Mapping[str, Mapping[str, ServingRoute]],
+        data_source: PredictionDataSource = "live",
     ) -> None:
         self.root = Path(root)
         self.snapshot_store = snapshot_store or PredictionSnapshotStore(
@@ -75,6 +108,10 @@ class PredictionService:
         )
         self.live_feature_store = live_feature_store or LiveFeatureStore(self.root)
         self.persist_snapshots = persist_snapshots
+        if not routes:
+            raise ValueError("at least one prediction serving route is required")
+        self.routes = {mode: dict(mode_routes) for mode, mode_routes in routes.items()}
+        self.data_source = data_source
 
     def predict(self, request: PredictionRequest) -> PredictionResponse:
         if request.mode == "swing":
@@ -88,36 +125,34 @@ class PredictionService:
         return self.snapshot_store.record(request, response)
 
     def predict_swing(self, request: PredictionRequest) -> PredictionResponse:
-        dataset_path, model_path, resolved_horizon = self._serving_route("swing", request)
+        route, model_path, resolved_horizon = self._serving_route("swing", request)
         model = self._model_info(
             model_path,
-            require_promoted=request.require_promoted,
             resolved_horizon=resolved_horizon,
-            bar_timeframe="1Day",
+            bar_timeframe=route.bar_timeframe,
         )
         frame = self._feature_frame(
-            self._load_feature_source("swing", dataset_path, request),
+            self._load_feature_source("swing", route, request),
             request=request,
             timeframe="daily",
         )
         scored = self._score_swing_frame(
             frame=frame,
             model_path=model_path,
-            request=request,
+            route=route,
         )
         predictions = self._swing_predictions(scored, frame, model.status, request)
         return self._response(request, models={"swing": model}, swing_predictions=predictions)
 
     def predict_intraday(self, request: PredictionRequest) -> PredictionResponse:
-        dataset_path, model_path, resolved_horizon = self._serving_route("intraday", request)
+        route, model_path, resolved_horizon = self._serving_route("intraday", request)
         model = self._model_info(
             model_path,
-            require_promoted=request.require_promoted,
             resolved_horizon=resolved_horizon,
-            bar_timeframe="5Min",
+            bar_timeframe=route.bar_timeframe,
         )
         frame = self._feature_frame(
-            self._load_feature_source("intraday", dataset_path, request),
+            self._load_feature_source("intraday", route, request),
             request=request,
             timeframe="intraday",
         )
@@ -173,7 +208,7 @@ class PredictionService:
             )
         return PredictionResponse(
             mode="unified",
-            data_source=request.data_source,
+            data_source=self.data_source,
             horizon=request.horizon,
             resolved_horizons=resolved_horizons,
             models=models,
@@ -181,24 +216,86 @@ class PredictionService:
             errors=errors,
         )
 
+    def health(self, *, as_of: datetime | None = None) -> dict[str, object]:
+        """Return deployment readiness without deserializing model artifacts."""
+
+        checked_at = as_of or datetime.now(UTC)
+        components: dict[str, dict[str, object]] = {}
+        ready = True
+        for mode, mode_routes in self.routes.items():
+            for horizon, route in mode_routes.items():
+                name = f"model:{mode}:{horizon}"
+                try:
+                    info = self._model_info(
+                        self._resolve(route.model),
+                        resolved_horizon=horizon,
+                        bar_timeframe=route.bar_timeframe,
+                    )
+                    components[name] = {
+                        "status": "ready",
+                        "model_status": info.status,
+                        "artifact_sha256": info.artifact_sha256,
+                    }
+                except Exception as exc:
+                    ready = False
+                    components[name] = {"status": "not_ready", "reason": str(exc)}
+
+        for mode, mode_routes in self.routes.items():
+            if not mode_routes:
+                continue
+            name = f"features:{mode}"
+            try:
+                if self.data_source == "live":
+                    manifest = self.live_feature_store.validate(mode, as_of=checked_at)  # type: ignore[arg-type]
+                    components[name] = {
+                        "status": "ready",
+                        "generated_at_utc": manifest.get("generated_at_utc"),
+                        "last_feature_time": manifest.get("last_feature_time"),
+                        "price_feed": manifest.get("price_feed"),
+                    }
+                else:
+                    missing = []
+                    for route in mode_routes.values():
+                        if route.curated_dataset is None:
+                            missing.append("<not configured>")
+                            continue
+                        dataset_path = self._resolve(route.curated_dataset)
+                        if not dataset_path.exists():
+                            missing.append(str(dataset_path))
+                    if missing:
+                        raise FileNotFoundError(
+                            f"configured curated {mode} feature datasets are unavailable: {missing}"
+                        )
+                    components[name] = {"status": "ready", "source": "curated"}
+            except Exception as exc:
+                ready = False
+                components[name] = {"status": "not_ready", "reason": str(exc)}
+
+        return {
+            "status": "ready" if ready else "not_ready",
+            "checked_at_utc": checked_at.astimezone(UTC).isoformat(),
+            "data_source": self.data_source,
+            "components": components,
+        }
+
     def _score_swing_frame(
         self,
         *,
         frame: pd.DataFrame,
         model_path: Path,
-        request: PredictionRequest,
+        route: ServingRoute,
     ) -> pd.DataFrame:
         feature_frame = frame.copy()
-        universe_path = self._resolve(request.universe or DEFAULT_UNIVERSE)
-        if universe_path.exists():
-            flashpoints = self._optional_frame(request.flashpoints)
+        universe_path = self._resolve(route.universe) if route.universe is not None else None
+        if universe_path is not None and universe_path.exists():
+            flashpoints = self._optional_frame(route.flashpoints)
             universe = pd.read_csv(universe_path)
             _, ticker_report = build_sector_theme_monitor(
                 dataset=feature_frame,
                 universe=universe,
                 model_path=model_path,
                 flashpoints=flashpoints,
-                require_promoted=request.require_promoted,
+                require_promoted=True,
             )
             return ticker_report
         latest = self._latest_rows(feature_frame)
@@ -253,15 +350,24 @@ class PredictionService:
             ticker = str(row["ticker"]).upper()
             catalyst = row["_catalyst_assessment"]
             readiness = self._daily_readiness(row, daily_counts.get(ticker, 0), model_status)
+            is_ready = readiness.status == VALID
             predictions.append(
                 SwingPrediction(
                     ticker=ticker,
                     date=_string_or_none(row.get("date")),
                     probability=_float_or_none(row.get("volatile_model_probability")),
-                    decision_score=_float_or_none(row.get("_decision_score")),
-                    model_prediction=_int_or_none(row.get("volatile_model_prediction")),
-                    signal=_swing_signal(row.get("volatile_model_probability"), catalyst),
-                    rank=idx + 1,
+                    decision_score=(
+                        _float_or_none(row.get("_decision_score")) if is_ready else None
+                    ),
+                    model_prediction=(
+                        _int_or_none(row.get("volatile_model_prediction")) if is_ready else None
+                    ),
+                    signal=(
+                        _swing_signal(row.get("volatile_model_probability"), catalyst)
+                        if is_ready
+                        else "not_ready"
+                    ),
+                    rank=idx + 1 if is_ready else None,
                     close=_float_or_none(row.get("close")),
                     return_1d=_float_or_none(row.get("return_1d")),
                     volume_z20=_float_or_none(row.get("volume_z20")),
@@ -332,16 +438,23 @@ class PredictionService:
             ticker = str(row["ticker"]).upper()
             catalyst = row["_catalyst_assessment"]
             readiness = self._intraday_readiness(row, intraday_counts.get(ticker, 0), model_status)
+            is_ready = readiness.status == VALID
             predictions.append(
                 IntradayPrediction(
                     ticker=ticker,
                     date=_string_or_none(row.get("date")),
                     probability=_float_or_none(row.get(probability_col)),
-                    decision_score=_float_or_none(row.get("_decision_score")),
-                    model_prediction=_int_or_none(row.get(prediction_col)),
+                    decision_score=(
+                        _float_or_none(row.get("_decision_score")) if is_ready else None
+                    ),
+                    model_prediction=_int_or_none(row.get(prediction_col)) if is_ready else None,
                     probability_field=probability_col,
-                    signal=_intraday_signal(row.get(probability_col), catalyst),
-                    rank=idx + 1,
+                    signal=(
+                        _intraday_signal(row.get(probability_col), catalyst)
+                        if is_ready
+                        else "not_ready"
+                    ),
+                    rank=idx + 1 if is_ready else None,
                     close=_float_or_none(row.get("close")),
                     return_1d=_float_or_none(row.get("return_1d")),
                     volume_z20=_float_or_none(row.get("volume_z20")),
@@ -388,20 +501,19 @@ class PredictionService:
             news_candle_mismatch_count=int(row.get("news_candle_mismatch_count", 0) or 0),
             stale_cache=bool(row.get("stale_cache", False)),
         )
-        record = assessed.as_record()
         return ReadinessInfo(
-            status=str(record["data_readiness_status"]),  # type: ignore[arg-type]
-            reasons=[reason.strip() for reason in str(record["data_readiness_reasons"]).split(";") if reason.strip()],
+            status=assessed.status,
+            reasons=assessed.reasons,
             timeframe="daily",
-            daily_bar_count=int(record["daily_bar_count"]),
-            intraday_bar_count=int(record["intraday_bar_count"]),
-            required_bar_count=int(record["required_bar_count"]),
-            latest_price_date=_string_or_none(record["latest_price_date"]),
-            price_feed=str(record["price_feed"]),
-            benchmark_status=str(record["benchmark_status"]),
-            market_context_status=str(record["market_context_status"]),
-            model_status=str(record["model_status"]),
-            source_status=str(record["source_status"]),
+            daily_bar_count=assessed.daily_bar_count,
+            intraday_bar_count=assessed.intraday_bar_count,
+            required_bar_count=assessed.required_bar_count,
+            latest_price_date=assessed.latest_price_date,
+            price_feed=assessed.price_feed,
+            benchmark_status=assessed.benchmark_status,
+            market_context_status=assessed.market_context_status,
+            model_status=assessed.model_status,
+            source_status=assessed.source_status,
         )
 
     def _intraday_readiness(
@@ -436,60 +548,37 @@ class PredictionService:
             news_candle_mismatch_count=int(row.get("news_candle_mismatch_count", 0) or 0),
             stale_cache=bool(row.get("stale_cache", False)),
         )
-        record = assessed.as_record()
         return ReadinessInfo(
-            status=str(record["data_readiness_status"]),  # type: ignore[arg-type]
-            reasons=[reason.strip() for reason in str(record["data_readiness_reasons"]).split(";") if reason.strip()],
+            status=assessed.status,
+            reasons=assessed.reasons,
             timeframe="intraday",
-            daily_bar_count=int(record["daily_bar_count"]),
-            intraday_bar_count=int(record["intraday_bar_count"]),
-            required_bar_count=int(record["required_bar_count"]),
-            latest_price_date=_string_or_none(record["latest_price_date"]),
-            price_feed=str(record["price_feed"]),
-            benchmark_status=str(record["benchmark_status"]),
-            market_context_status=str(record["market_context_status"]),
-            model_status=str(record["model_status"]),
-            source_status=str(record["source_status"]),
+            daily_bar_count=assessed.daily_bar_count,
+            intraday_bar_count=assessed.intraday_bar_count,
+            required_bar_count=assessed.required_bar_count,
+            latest_price_date=assessed.latest_price_date,
+            price_feed=assessed.price_feed,
+            benchmark_status=assessed.benchmark_status,
+            market_context_status=assessed.market_context_status,
+            model_status=assessed.model_status,
+            source_status=assessed.source_status,
         )
 
     def _serving_route(
         self,
         mode: str,
         request: PredictionRequest,
-    ) -> tuple[Path, Path, str]:
+    ) -> tuple[ServingRoute, Path, str]:
         if mode not in DEFAULT_MODE_HORIZONS:
             raise ValueError(f"unsupported prediction mode: {mode}")
-        custom_model = request.swing_model if mode == "swing" else request.intraday_model
-        custom_dataset = request.swing_dataset if mode == "swing" else request.intraday_dataset
-        routes = SWING_ROUTES if mode == "swing" else INTRADAY_ROUTES
-
-        requested_horizon = request.horizon
-        inferred_horizon: str | None = None
-        if custom_model is not None:
-            custom_model_path = self._resolve(custom_model)
-            manifest = load_model_manifest(custom_model_path)
-            inferred_horizon = _target_horizon(_optional_str(manifest.get("target_col")))
-
+        routes = self.routes.get(mode, {})
         resolved_horizon = (
-            inferred_horizon or DEFAULT_MODE_HORIZONS[mode]
-            if requested_horizon == "auto"
-            else requested_horizon
+            DEFAULT_MODE_HORIZONS[mode] if request.horizon == "auto" else request.horizon
         )
-        if resolved_horizon not in routes and custom_model is None:
+        if resolved_horizon not in routes:
             supported = ", ".join(sorted(routes))
             raise ValueError(f"unsupported {mode} horizon {resolved_horizon}; supported horizons: {supported}")
-        if inferred_horizon is not None and inferred_horizon != resolved_horizon:
-            raise ValueError(
-                f"requested {mode} horizon {resolved_horizon} is incompatible with model target horizon {inferred_horizon}"
-            )
-
-        route_dataset, route_model = routes.get(
-            resolved_horizon,
-            routes[DEFAULT_MODE_HORIZONS[mode]],
-        )
-        dataset_path = self._resolve(custom_dataset or route_dataset)
-        model_path = self._resolve(custom_model or route_model)
-        return dataset_path, model_path, resolved_horizon
+        route = routes[resolved_horizon]
+        return route, self._resolve(route.model), resolved_horizon
 
     def _feature_frame(
         self,
@@ -532,21 +621,31 @@ class PredictionService:
         self,
         model_path: Path,
         *,
-        require_promoted: bool,
         resolved_horizon: str,
         bar_timeframe: str,
     ) -> ModelInfo:
         manifest = load_model_manifest(model_path)
         status = str(manifest.get("status", "unknown"))
-        if require_promoted and status != MODEL_STATUS_PROMOTED:
+        if status != MODEL_STATUS_PROMOTED:
             raise ValueError(f"model must be promoted for API prediction; {model_path} is {status}")
-        dataset = manifest.get("dataset") if isinstance(manifest.get("dataset"), dict) else {}
+        expected_hash = _optional_str(manifest.get("artifact_sha256"))
+        if not expected_hash or file_sha256(model_path) != expected_hash:
+            raise ValueError(f"model artifact integrity check failed: {model_path}")
+        target = _optional_str(manifest.get("target_col"))
+        target_horizon = _target_horizon(target)
+        if target_horizon != resolved_horizon:
+            raise ValueError(
+                f"requested model horizon {resolved_horizon} is incompatible with model target horizon "
+                f"{target_horizon or 'unknown'}"
+            )
+        dataset_value = manifest.get("dataset")
+        dataset = dataset_value if isinstance(dataset_value, dict) else {}
         return ModelInfo(
             path=str(model_path),
             status=status,
             model_type=_optional_str(manifest.get("model_type")),
             schema_version=_optional_str(manifest.get("schema_version")),
-            target=_optional_str(manifest.get("target_col")),
+            target=target,
             validation_split=_optional_str(manifest.get("validation_split")),
             artifact_sha256=_optional_str(manifest.get("artifact_sha256")),
             resolved_horizon=resolved_horizon,
@@ -582,7 +681,7 @@ class PredictionService:
             )
         return PredictionResponse(
             mode=request.mode,
-            data_source=request.data_source,
+            data_source=self.data_source,
             horizon=request.horizon,
             resolved_horizons={
                 name: info.resolved_horizon
@@ -605,14 +704,13 @@ class PredictionService:
     def _load_feature_source(
         self,
         mode: str,
-        curated_path: Path,
+        route: ServingRoute,
         request: PredictionRequest,
     ) -> pd.DataFrame:
-        if request.data_source == "curated":
-            return self._read_frame(curated_path)
-        custom_dataset = request.swing_dataset if mode == "swing" else request.intraday_dataset
-        if custom_dataset is not None:
-            raise ValueError("custom dataset paths cannot be combined with data_source=live")
+        if self.data_source == "curated":
+            if route.curated_dataset is None:
+                raise ValueError(f"no curated {mode} dataset is configured for this serving route")
+            return self._read_frame(self._resolve(route.curated_dataset))
         return self.live_feature_store.load(mode, as_of=request.as_of)  # type: ignore[arg-type]
 
     def _optional_frame(self, path: Path | None) -> pd.DataFrame | None:
@@ -655,10 +753,10 @@ def _combined_readiness(
 def _final_signal(swing: SwingPrediction | None, intraday: IntradayPrediction | None) -> str:
     if swing is None and intraday is None:
         return "not_ready"
-    if swing is not None and swing.readiness.status == INVALID:
+    if swing is not None and swing.readiness.status != VALID:
         return "not_ready"
-    if intraday is not None and intraday.readiness.status == INVALID:
-        return "swing_only_intraday_not_ready" if swing is not None else "not_ready"
+    if intraday is not None and intraday.readiness.status != VALID:
+        return "not_ready"
     swing_prob = swing.probability if swing else None
     intra_prob = intraday.probability if intraday else None
     if intraday is not None and intraday.catalyst.status == "veto":
@@ -774,6 +872,11 @@ def _target_horizon(target_col: str | None) -> str | None:
 
 def _has_any_value(row: pd.Series, columns: list[str]) -> bool:
     return any(column in row.index and not pd.isna(row.get(column)) for column in columns)
+
+
+def _optional_path(value: Any) -> Path | None:
+    text = _optional_str(value)
+    return Path(text) if text else None
 
 
 def _json_value(value: Any) -> float | int | str | None:

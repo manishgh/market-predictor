@@ -1,13 +1,11 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
-from pathlib import Path
 import re
+from datetime import UTC, datetime
 from typing import Literal
 from uuid import uuid4
 
-from pydantic import BaseModel, Field, field_validator
-
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 PredictionMode = Literal["swing", "intraday", "unified"]
 PredictionView = Literal["swing", "intraday"]
@@ -28,22 +26,16 @@ _HORIZON_ALIASES = {
 class PredictionRequest(BaseModel):
     """Typed request used by CLI, API, and tests.
 
-    Training and collection stay outside this contract. Serving starts from
-    already curated feature datasets and promoted model artifacts.
+    Training and collection stay outside this contract. Model artifacts,
+    feature sources, and promotion policy are owned by the server.
     """
+
+    model_config = ConfigDict(extra="forbid")
 
     tickers: list[str] = Field(..., min_length=1)
     mode: PredictionMode = "unified"
-    data_source: PredictionDataSource = "curated"
     horizon: str = "auto"
     as_of: datetime | None = None
-    swing_dataset: Path | None = None
-    swing_model: Path | None = None
-    intraday_dataset: Path | None = None
-    intraday_model: Path | None = None
-    universe: Path | None = None
-    flashpoints: Path | None = None
-    require_promoted: bool = True
 
     @field_validator("tickers")
     @classmethod
@@ -173,9 +165,9 @@ class UnifiedTickerPrediction(BaseModel):
 
 class PredictionResponse(BaseModel):
     request_id: str = Field(default_factory=lambda: str(uuid4()))
-    generated_at_utc: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    generated_at_utc: datetime = Field(default_factory=lambda: datetime.now(UTC))
     mode: PredictionMode
-    data_source: PredictionDataSource = "curated"
+    data_source: PredictionDataSource = "live"
     horizon: str
     resolved_horizons: dict[str, str] = Field(default_factory=dict)
     models: dict[str, ModelInfo] = Field(default_factory=dict)
@@ -226,7 +218,7 @@ class InvestmentLegResult(BaseModel):
 
 class InvestmentReplayResponse(BaseModel):
     replay_id: str = Field(default_factory=lambda: str(uuid4()))
-    generated_at_utc: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    generated_at_utc: datetime = Field(default_factory=lambda: datetime.now(UTC))
     snapshot_id: str
     ticker: str
     model_view: PredictionView

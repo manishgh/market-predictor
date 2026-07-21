@@ -30,10 +30,10 @@ Model lifecycle state comes from each artifact's `.manifest.json`; a filename su
 
 Production API implications:
 
-- `require_promoted: true` permits the default 5D swing route because its manifest is promoted.
-- The 1D swing and intraday routes are rejected as candidates; there is no silent fallback.
+- Production routes are server-owned and always require a promoted, hash-verified artifact.
+- The 1D swing and intraday candidates are not registered as production routes; there is no silent fallback.
 - Unified mode may return the promoted swing view plus an explicit intraday error until an intraday model passes promotion.
-- Candidate scoring requires an explicit research override and must not be treated as a live trade instruction.
+- Candidate scoring is available only through research commands or an explicitly constructed test service, never through the HTTP request contract.
 
 The next valid intraday promotion attempt requires a new predeclared development hypothesis that first passes both economic scopes, followed by matured shadow data after 2026-07-08 and all current promotion audits. See [Intraday model promotion](docs/intraday_model_promotion.md).
 
@@ -279,11 +279,12 @@ The prediction label uses a tradable next-session open entry reference, not same
 
 ## Prediction API
 
-The API is a serving layer over promoted model artifacts and curated feature datasets. It does not train models, collect live news, place trades, or bypass promotion gates.
+The API is a serving layer over server-registered promoted model artifacts and live feature snapshots. It does not train models, collect live news, place trades, or bypass promotion gates.
 
 Endpoints:
 
-- `GET /v1/health`
+- `GET /v1/health/live`
+- `GET /v1/health/ready`
 - `POST /v1/predictions/swing`
 - `POST /v1/predictions/intraday`
 - `POST /v1/predictions/unified`
@@ -295,20 +296,22 @@ Example request:
 {
   "tickers": ["MSFT", "NVDA"],
   "mode": "unified",
-  "data_source": "live",
   "horizon": "auto",
-  "as_of": "2026-07-09T20:15:00Z",
-  "require_promoted": true
+  "as_of": "2026-07-09T20:15:00Z"
 }
 ```
 
 `as_of` is optional, but when supplied it must include a timezone or UTC offset. Daily close-derived rows are available only from 16:00 America/New_York on their trading date. Intraday rows are available only after the inferred bar closes. These rules also apply to historical replay, preventing a request from reading a feature row that was not tradable at the requested time.
 
-Use `horizon: "auto"` for unified prediction so each model resolves its native horizon. Current built-in routes are `1d` and `5d` for swing and `12b` for the 5-minute intraday entry model. An explicit horizon is rejected when it conflicts with the selected model target. Responses include `resolved_horizons` and each model's `resolved_horizon` for auditability.
+Use `horizon: "auto"` for unified prediction so each server route resolves its native horizon. The only current production route is `5d` swing. The `1d` swing and `12b` intraday candidates remain unregistered until they pass promotion. An explicit unsupported horizon is rejected; a registered model whose target conflicts with its route is also rejected. Responses include `resolved_horizons` and each model's `resolved_horizon` for auditability.
 
-The unified response returns separate `swing` and `intraday` model views plus a final orchestration signal. It does not average unrelated model probabilities into one opaque number. Readiness reports daily and intraday history separately and treats unknown feed tiers as unproven; only explicit SIP/consolidated provenance satisfies the full-volume gate.
+The unified response returns separate `swing` and `intraday` model views plus a final orchestration signal. It does not average unrelated model probabilities into one opaque number. Readiness reports daily and intraday history separately and treats unknown feed tiers as unproven; only explicit SIP/consolidated provenance satisfies the full-volume gate. A `warn` or `invalid` view is diagnostic only and returns `signal: "not_ready"` with no decision score, model decision, or rank.
 
-`data_source: "curated"` scores registered research datasets. `data_source: "live"` scores only the registered snapshots at `data/live/features/swing.parquet` and `data/live/features/intraday.parquet`. Live snapshots require a matching sidecar manifest, SHA-256 integrity, explicit feed provenance, and a generation time within the configured freshness window. Arbitrary filesystem paths are not accepted with live mode.
+The production service reads only the server-registered snapshots at `data/live/features/swing.parquet` and `data/live/features/intraday.parquet`. Live snapshots require a matching sidecar manifest, SHA-256 integrity, explicit feed provenance, a fresh generation time, and a fresh latest feature timestamp. Model artifacts must also match the SHA-256 recorded in their promoted manifest before deserialization. The request schema rejects filesystem paths, data-source overrides, and promotion overrides.
+
+Production model routes are declared under `[prediction_serving.routes]` in `configs/default.toml`. A route is added only after promotion; changing the model, universe, or timeframe is an operator configuration change followed by readiness verification, not a client request option.
+
+`/v1/health/live` reports process liveness. `/v1/health/ready` validates every registered model manifest/status/hash and each live feature snapshot; it returns HTTP 503 whenever any serving component is unavailable or stale.
 
 The nightly `live-once` cycle publishes the rolling swing snapshot after source-isolated collection, sanitization, FinBERT scoring, daily feature construction, and volatile-schema enrichment. Publish an audited intraday feature table from the 5-minute pipeline with:
 

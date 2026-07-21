@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
-from pathlib import Path
 import tempfile
 import unittest
+from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 import pandas as pd
 
@@ -15,7 +15,7 @@ class LiveFeatureStoreTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             store = LiveFeatureStore(root)
-            generated = datetime(2026, 7, 10, 12, 0, tzinfo=timezone.utc)
+            generated = datetime(2026, 7, 10, 12, 0, tzinfo=UTC)
             frame = _frame()
 
             manifest = store.publish("swing", frame, price_feed="sip", generated_at=generated)
@@ -31,7 +31,7 @@ class LiveFeatureStoreTests(unittest.TestCase):
             root = Path(tmp)
             config = LiveFeatureStoreConfig(swing_max_age=timedelta(hours=2))
             store = LiveFeatureStore(root, config)
-            generated = datetime(2026, 7, 10, 12, 0, tzinfo=timezone.utc)
+            generated = datetime(2026, 7, 10, 12, 0, tzinfo=UTC)
             store.publish("swing", _frame(), price_feed="sip", generated_at=generated)
 
             with self.assertRaisesRegex(ValueError, "is stale"):
@@ -41,7 +41,7 @@ class LiveFeatureStoreTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             store = LiveFeatureStore(root)
-            generated = datetime(2026, 7, 10, 12, 0, tzinfo=timezone.utc)
+            generated = datetime(2026, 7, 10, 12, 0, tzinfo=UTC)
             store.publish("swing", _frame(), price_feed="sip", generated_at=generated)
             path = root / "data/live/features/swing.parquet"
             modified = _frame().assign(close=999.0)
@@ -49,6 +49,16 @@ class LiveFeatureStoreTests(unittest.TestCase):
 
             with self.assertRaisesRegex(ValueError, "integrity check failed"):
                 store.load("swing", as_of=generated + timedelta(hours=1))
+
+    def test_rejects_freshly_published_snapshot_with_stale_feature_rows(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            store = LiveFeatureStore(root)
+            generated = datetime(2026, 7, 20, 12, 0, tzinfo=UTC)
+            store.publish("swing", _frame(), price_feed="sip", generated_at=generated)
+
+            with self.assertRaisesRegex(ValueError, "feature rows are stale"):
+                store.validate("swing", as_of=generated + timedelta(hours=1))
 
 
 def _frame() -> pd.DataFrame:

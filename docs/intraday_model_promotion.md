@@ -42,7 +42,7 @@ Do not lower gates or select a model after repeatedly inspecting the same OOS in
 
 ## 2026-07-10 V2 Result
 
-Lifecycle status: **candidate artifacts; promotion decision rejected**. No V2 model is eligible for the production intraday API while `require_promoted=true`.
+Lifecycle status: **candidate artifacts; promotion decision rejected**. No V2 model is eligible for a production intraday serving route.
 
 The six-month opening-session experiment produced 47,614 non-overlapping setup rows across 196 eligible tickers and 122 sessions. Structural validation found no duplicate ticker/timestamp keys and no cooldown gaps below 13 bars.
 

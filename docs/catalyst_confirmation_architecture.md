@@ -332,7 +332,7 @@ The repo currently contains several useful families. Their intended roles should
 | Family | Intended use | Status guidance |
 | --- | --- | --- |
 | S&P 500 volatile-mover 5D model | Rank unusually large positive moves over the next week | Formally promoted on 2026-07-08 under earlier gates; conditional until current profitability/regime/catalyst audits pass |
-| S&P 500 volatile-mover 1D model | Rank unusually large next-day positive moves | Candidate; not available when `require_promoted=true` |
+| S&P 500 volatile-mover 1D model | Rank unusually large next-day positive moves | Candidate; not registered for production serving |
 | Intraday 5-minute technical entry-path model | Estimate target-before-stop probability over 12 bars | Candidate; current API artifact fails AUC/lift promotion gates |
 | Intraday opening V2 models | Non-overlapping, cost-aware 09:30-11:30 ET setup experiments | Candidate artifacts with rejected promotion decision; not production-serving models |
 | ML V3 B0/B1/B2/R1/D1 and O1 overlay | Cross-sectional opportunity ranking, separate downside risk, and external catalyst confirmation | C8 development evaluation complete; all available families/overlays rejected, R2 unavailable without microstructure, and no V3 artifact is production-serving |
@@ -366,9 +366,12 @@ Selected-trade economics are the decisive V2 failure: 558 capped OOS trades prod
 
 Serving rules:
 
-- `require_promoted=true` is mandatory for production requests.
+- Model routes, feature sources, universes, and promotion policy are server-owned; they are not API request fields.
+- Every serving route requires a promoted manifest and a matching model artifact SHA-256 before deserialization.
 - No route may silently substitute a candidate model.
 - Unified responses may be partial and must include explicit per-view errors.
+- A view with `warn` or `invalid` readiness is diagnostic only and emits `not_ready`, never an actionable signal.
+- Readiness checks both snapshot generation time and the latest feature timestamp; republishing stale rows does not make them fresh.
 - Catalyst/news remains an intraday confirmation and ranking overlay until a predeclared ablation on fresh data proves incremental model value.
 - A new intraday hypothesis must first pass both development economics scopes; only then may matured observations after 2026-07-08 be used as an untouched shadow interval.
 

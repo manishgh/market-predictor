@@ -10,22 +10,30 @@ from market_predictor.prediction_contracts import (
     PredictionRequest,
     PredictionResponse,
 )
-from market_predictor.prediction_service import PredictionService
+from market_predictor.prediction_service import PredictionService, serving_routes_from_config
 
 try:
     from fastapi import FastAPI, HTTPException
+    from fastapi.responses import JSONResponse
 except ImportError:  # pragma: no cover - exercised only in minimal installs
-    FastAPI = None  # type: ignore[assignment]
-    HTTPException = None  # type: ignore[assignment]
+    FastAPI = None  # type: ignore[misc, assignment]
+    HTTPException = None  # type: ignore[misc, assignment]
+    JSONResponse = None  # type: ignore[misc, assignment]
 
 
 def create_app(
     service: PredictionService | None = None,
     replay_service: InvestmentReplayService | None = None,
-) -> "FastAPI":
+) -> FastAPI:
     if FastAPI is None:
         raise RuntimeError("FastAPI is not installed. Install the api extras/dependencies before serving.")
-    prediction_service = service or PredictionService(Path("."))
+    prediction_service = service
+    if prediction_service is None:
+        settings = get_settings()
+        prediction_service = PredictionService(
+            Path("."),
+            routes=serving_routes_from_config(settings.app_config),
+        )
     configured_replay_service = replay_service
     if configured_replay_service is None and isinstance(prediction_service, PredictionService):
         configured_replay_service = InvestmentReplayService(
@@ -38,9 +46,20 @@ def create_app(
         description="Production prediction API for swing and intraday market models.",
     )
 
-    @app.get("/v1/health")
-    def health() -> dict[str, str]:
+    @app.get("/v1/health/live")
+    def liveness() -> dict[str, str]:
         return {"status": "ok"}
+
+    @app.get("/v1/health/ready")
+    def readiness() -> JSONResponse:
+        health_check = getattr(prediction_service, "health", None)
+        result = (
+            health_check()
+            if callable(health_check)
+            else {"status": "not_ready", "reason": "prediction readiness is not configured"}
+        )
+        status_code = 200 if result.get("status") == "ready" else 503
+        return JSONResponse(status_code=status_code, content=result)
 
     @app.post("/v1/predictions/swing", response_model=PredictionResponse)
     def predict_swing(request: PredictionRequest) -> PredictionResponse:

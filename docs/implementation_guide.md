@@ -62,7 +62,7 @@ market-predictor predict-watchlist --tickers "LUNR,MXL,RGTI" --out data/reports/
 
 Prediction API requests are point-in-time contracts. `PredictionRequest.as_of`, when present, must be timezone-aware. The serving service filters daily feature rows by their 16:00 America/New_York availability time and intraday rows by inferred bar-close time. It does not interpret a bar's start timestamp as the moment its closing price and volume became known.
 
-`PredictionRequest.horizon` defaults to `auto`. In that mode, the service resolves the horizon from an explicitly selected model target or from the mode's registered default. Explicit horizons are validated against the model manifest. `PredictionResponse.resolved_horizons` records the actual horizon used by each model, which is required for replay and downstream `trading_flow` audit records.
+`PredictionRequest.horizon` defaults to `auto`. In that mode, the service resolves the horizon from the mode's server-owned route. Explicit horizons are validated against the registered model manifest. API clients cannot select a model, dataset, source mode, universe file, or promotion policy. `PredictionResponse.resolved_horizons` records the actual horizon used by each model, which is required for replay and downstream `trading_flow` audit records.
 
 Daily and intraday readiness are separate gates. Daily models require daily-history depth; intraday models require intraday-bar warm-up. Feed provider and feed coverage are not interchangeable: `alpaca` alone does not prove consolidated coverage, while an explicit `sip`/consolidated value does. IEX invalidates volume-sensitive production readiness.
 
@@ -72,7 +72,11 @@ Top-level predictions are persisted by `prediction_snapshot.py` as content-addre
 
 `POST /v1/replays/investment` is snapshot-driven and does not accept filesystem paths. This prevents an API client from selecting arbitrary local artifacts and ensures that every replay can be traced to a served prediction. Non-actionable signals return `not_entered`; `force_entry` is only a research override and cannot bypass invalid readiness or future-model checks.
 
-`feature_store.py` owns the live inference handoff. Collection and feature jobs publish rolling swing or intraday Parquet files atomically with a sidecar manifest containing generation time, source watermarks, feed tier, row/ticker counts, and artifact SHA-256. `PredictionRequest.data_source="live"` can only read these registered paths. Missing, modified, future-generated, or stale snapshots fail before model scoring. This keeps external API calls and FinBERT latency outside the request path.
+`feature_store.py` owns the live inference handoff. Collection and feature jobs publish rolling swing or intraday Parquet files atomically with a sidecar manifest containing generation time, source watermarks, feed tier, row/ticker counts, latest feature time, and artifact SHA-256. Production serving always reads these registered paths. Missing, modified, future-generated, stale snapshots, and snapshots containing stale feature rows fail before model scoring. This keeps external API calls and FinBERT latency outside the request path.
+
+`prediction_service.py` owns serving routes and enforces promoted status, target/horizon compatibility, and model artifact SHA-256 before any model is deserialized. Readiness is fail-closed: `warn` and `invalid` rows retain diagnostics but cannot emit an actionable signal, decision score, model decision, or rank. `/v1/health/live` is process liveness; `/v1/health/ready` checks route artifacts and feature snapshots and returns 503 when serving is not ready.
+
+`configs/default.toml` declares production routes under `[prediction_serving.routes.<mode>."<horizon>"]`. Only promoted routes belong there. The HTTP process parses this registry at startup and fails when it is absent or malformed; candidate routes are injected only by research/test code.
 
 `live-once` now derives volatile-schema swing rows from each ticker's sanitized event store and daily feature history, then publishes their combined rolling snapshot to `data/live/features/swing.parquet`. The 5-minute pipeline publishes its final enriched table with `publish-live-features --mode intraday`. Both paths use the same manifest and integrity contract.
 
