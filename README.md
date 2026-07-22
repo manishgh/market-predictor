@@ -35,6 +35,7 @@ Production API implications:
 - Unified mode may return explicit swing and intraday errors until each requested view has its own promoted canonical artifact.
 - Candidate scoring is available only through research commands or an explicitly constructed test service, never through the HTTP request contract.
 - C6 serving infrastructure is complete: canonical label-free inference builds, atomic live snapshots, immutable Azure releases, rollback, startup sync, drift/resource telemetry, and the non-root API image are implemented. This does not change the model state above; no real canonical model has passed promotion.
+- The C7 repository cleanup checkpoint is complete: repository-wide Ruff and strict mypy pass, and the full 199-test suite is green. Real Azure deployment and disaster-recovery rehearsal remain required before a production release tag.
 
 The next valid intraday promotion attempt requires a new predeclared development hypothesis that first passes both economic scopes, followed by matured shadow data after 2026-07-08 and all current promotion audits. See [Intraday model promotion](docs/intraday_model_promotion.md).
 

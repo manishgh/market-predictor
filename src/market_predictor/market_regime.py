@@ -3,7 +3,6 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-
 MARKET_REGIME_FEATURES = [
     "benchmark_context_return",
     "benchmark_context_abs_return",

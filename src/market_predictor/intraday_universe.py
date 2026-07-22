@@ -1,11 +1,9 @@
 from __future__ import annotations
 
-import re
 from typing import Any
 
 import numpy as np
 import pandas as pd
-
 
 INTRADAY_THEME_KEYWORDS = {
     "semis_ai_hardware": ["semiconductor", "semiconductors", "electronic components", "communication equipment"],

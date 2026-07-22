@@ -113,17 +113,32 @@ Status: implementation complete 2026-07-22; real C4/C5 model promotion remains i
 
 C6 tests use synthetic promoted artifacts and an in-memory Blob protocol. A real Azure identity/network deployment rehearsal and disaster-recovery exercise remain C7 acceptance work. No canonical model is promoted merely because the deployment path exists.
 
-C6 checkpoint verification: 198 repository tests pass; Ruff and strict mypy pass on all C6 production modules; source/test compilation and credential scanning pass; the final process audit measured 0.182 GiB against the 4 GiB hard budget. The separate C7 cleanup baseline is 48 repository-wide Ruff findings and 13 strict-mypy findings in older research/source modules; these are not in the C6 production surface and are not being hidden as completed work.
+C6 checkpoint verification: 198 repository tests pass; Ruff and strict mypy pass on all C6 production modules; source/test compilation and credential scanning pass; the final process audit measured 0.182 GiB against the 4 GiB hard budget. The C7 cleanup baseline was 48 repository-wide Ruff findings and 13 strict-mypy findings in older research/source modules; the cleanup checkpoint below resolves that debt.
 
 ### C7 - Repository Cleanup And Release Audit
 
-Status: pending after C6; baseline captured above.
+Status: repository lint/type cleanup complete on 2026-07-22; release rehearsal remains pending.
 
 - Remove superseded builders, adapters, commands, configuration, tests, and docs.
 - Resolve repository-wide lint and type debt.
 - Verify secret scanning, dependency locking, container health, startup failure modes, and disaster recovery.
 - Run complete tests, replay tests, artifact-integrity tests, and deployment smoke tests.
 - Tag the production-ready release only when both serving and data pipelines fail closed.
+
+Cleanup checkpoint evidence:
+
+- Repository-wide Ruff passes with no ignored cleanup baseline.
+- Strict mypy passes all 93 source files; narrow missing-stub overrides remain only for external libraries without usable type information.
+- All 199 repository tests pass, including replay, artifact-integrity, deployment, canonical swing, and canonical intraday tests.
+- Source and test compilation, whitespace validation, and supplied-credential scanning pass.
+- Final process audit found no resident Python process, leaving the full 4 GiB working-set budget available.
+
+Remaining C7 acceptance work:
+
+- Lock production dependencies and verify a clean-environment installation from that lock.
+- Exercise Azure publication, startup synchronization, rollback, and identity/network failure paths against the real deployment environment.
+- Verify the built container health and fail-closed startup behavior in that environment.
+- Create a production release tag only after those deployment and disaster-recovery checks pass.
 
 ## Checkpoint Policy
 

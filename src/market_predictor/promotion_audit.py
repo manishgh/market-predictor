@@ -9,7 +9,6 @@ import pandas as pd
 
 from market_predictor.market_regime import add_market_regime_labels
 
-
 CATALYST_COLUMNS = [
     "news_count",
     "news_count_2h",
@@ -343,7 +342,11 @@ def _regime_audit_record(frame: pd.DataFrame, selected: pd.DataFrame) -> dict[st
             "selected_regimes_present": 0,
         }
     counts = frame["market_regime"].fillna("unknown").value_counts()
-    selected_counts = selected["market_regime"].fillna("unknown").value_counts() if "market_regime" in selected.columns else pd.Series(dtype="int")
+    selected_counts = (
+        selected["market_regime"].fillna("unknown").value_counts()
+        if "market_regime" in selected.columns
+        else pd.Series(dtype="int")
+    )
     return {
         "rows": int(len(frame)),
         "regimes_present": int(counts.size),
@@ -377,10 +380,14 @@ def _selection_period(frame: pd.DataFrame) -> pd.Series:
 
 
 def _infer_target_col(frame: pd.DataFrame) -> str | None:
-    candidates = [col for col in frame.columns if col.startswith("target_entry_success_") and not col.endswith("_dataset")]
+    candidates = [
+        str(col)
+        for col in frame.columns
+        if str(col).startswith("target_entry_success_") and not str(col).endswith("_dataset")
+    ]
     if candidates:
         return sorted(candidates)[-1]
-    candidates = [col for col in frame.columns if col.startswith("target_") and frame[col].notna().any()]
+    candidates = [str(col) for col in frame.columns if str(col).startswith("target_") and frame[col].notna().any()]
     return sorted(candidates)[-1] if candidates else None
 
 
@@ -401,7 +408,7 @@ def _infer_return_col(frame: pd.DataFrame, target_col: str | None) -> str | None
         "net_horizon_return_from_entry_",
         "horizon_return_from_entry_",
     ]:
-        candidates = [col for col in frame.columns if col.startswith(prefix)]
+        candidates = [str(col) for col in frame.columns if str(col).startswith(prefix)]
         if candidates:
             return sorted(candidates)[-1]
     return None

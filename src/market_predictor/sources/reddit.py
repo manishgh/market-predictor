@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
 import re
+from datetime import UTC, datetime
+
 import pandas as pd
 import requests
 
@@ -66,7 +67,7 @@ class RedditSource:
             for child in payload.get("data", {}).get("children", []):
                 data = child.get("data", {})
                 created = pd.to_datetime(data.get("created_utc"), unit="s", utc=True).to_pydatetime()
-                if created < start.astimezone(timezone.utc):
+                if created < start.astimezone(UTC):
                     continue
                 events.append(
                     NewsEvent(
@@ -130,7 +131,7 @@ class RedditSource:
             if not body or not self._mentions_ticker(body, ticker):
                 continue
             created = pd.to_datetime(data.get("created_utc"), unit="s", utc=True).to_pydatetime()
-            if created < start.astimezone(timezone.utc):
+            if created < start.astimezone(UTC):
                 continue
             events.append(
                 NewsEvent(

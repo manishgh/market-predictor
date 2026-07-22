@@ -10,7 +10,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-
 VALID = "valid"
 WARN = "warn"
 INVALID = "invalid"

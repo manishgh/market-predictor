@@ -3,14 +3,13 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-from datetime import datetime, timezone
-from pathlib import Path
 import re
+from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
 from market_predictor.prediction_contracts import PredictionRequest, PredictionResponse
-
 
 SNAPSHOT_SCHEMA = "market_predictor.prediction_snapshot.v1"
 _SNAPSHOT_ID = re.compile(r"^[0-9a-f]{64}$")
@@ -24,7 +23,7 @@ class PredictionSnapshotStore:
 
     def record(self, request: PredictionRequest, response: PredictionResponse) -> PredictionResponse:
         content = {
-            "recorded_at_utc": datetime.now(timezone.utc).isoformat(),
+            "recorded_at_utc": datetime.now(UTC).isoformat(),
             "request": request.model_dump(mode="json"),
             "response": response.model_dump(
                 mode="json",

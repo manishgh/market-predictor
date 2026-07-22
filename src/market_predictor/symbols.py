@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-
 PROVIDER_ALPACA = "alpaca"
 PROVIDER_YAHOO = "yahoo"
 PROVIDER_FINVIZ = "finviz"

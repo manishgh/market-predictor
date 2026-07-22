@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
-from typing import Callable, Protocol
+from collections.abc import Callable
+from datetime import UTC, datetime, timedelta
+from typing import Literal, Protocol
 
 import pandas as pd
 
@@ -15,7 +16,6 @@ from market_predictor.prediction_contracts import (
 from market_predictor.prediction_snapshot import PredictionSnapshotStore
 from market_predictor.sources.alpaca import AlpacaSource
 
-
 ACTIONABLE_SIGNALS = {
     "swing": {
         "bullish_watch",
@@ -25,6 +25,8 @@ ACTIONABLE_SIGNALS = {
     },
     "intraday": {"entry_candidate", "entry_candidate_confirmed"},
 }
+ReplayReadinessStatus = Literal["valid", "warn", "invalid"]
+ReplayStatus = Literal["completed", "not_entered", "invalid"]
 
 
 class ReplayPriceProvider(Protocol):
@@ -65,7 +67,7 @@ class InvestmentReplayService:
     ) -> None:
         self.snapshot_store = snapshot_store
         self.price_provider = price_provider
-        self.now = now or (lambda: datetime.now(timezone.utc))
+        self.now = now or (lambda: datetime.now(UTC))
 
     def replay(self, request: InvestmentReplayRequest) -> InvestmentReplayResponse:
         prediction_request, prediction_response, _ = self.snapshot_store.load(request.snapshot_id)
@@ -319,7 +321,7 @@ def _training_data_available_at(model: ModelInfo) -> datetime | None:
     if model.bar_timeframe == "1Day":
         date_text = str(model.training_data_end)[:10]
         local = pd.Timestamp(date_text, tz="America/New_York") + pd.Timedelta(hours=16)
-        return local.tz_convert("UTC").to_pydatetime()
+        return _timestamp_datetime(local.tz_convert("UTC"))
     return _parse_utc(model.training_data_end)
 
 
@@ -329,8 +331,8 @@ def _response(
     decision_time: datetime,
     evaluation_time: datetime,
     signal: str,
-    readiness_status: str | None,
-    status: str,
+    readiness_status: ReplayReadinessStatus | None,
+    status: ReplayStatus,
     reasons: list[str],
     model: ModelInfo | None,
     stock: InvestmentLegResult | None = None,
@@ -347,8 +349,8 @@ def _response(
         decision_time=decision_time,
         evaluation_time=evaluation_time,
         prediction_signal=signal,
-        prediction_readiness_status=readiness_status,  # type: ignore[arg-type]
-        status=status,  # type: ignore[arg-type]
+        prediction_readiness_status=readiness_status,
+        status=status,
         reasons=reasons,
         stock=stock,
         benchmarks=benchmark_results,
@@ -371,21 +373,28 @@ def _parse_utc(value: str) -> datetime:
         timestamp = timestamp.tz_localize("UTC")
     else:
         timestamp = timestamp.tz_convert("UTC")
-    return timestamp.to_pydatetime()
+    return _timestamp_datetime(timestamp)
 
 
 def _utc(value: datetime) -> datetime:
     timestamp = pd.Timestamp(value)
     if timestamp.tzinfo is None:
         raise ValueError("timestamp must be timezone-aware")
-    return timestamp.tz_convert("UTC").to_pydatetime()
+    return _timestamp_datetime(timestamp.tz_convert("UTC"))
 
 
 def _positive_price(value: object, *, ticker: str, field: str) -> float:
     try:
-        price = float(value)
+        price = float(str(value))
     except (TypeError, ValueError) as exc:
         raise ValueError(f"invalid {field} for {ticker}") from exc
     if not pd.notna(price) or price <= 0:
         raise ValueError(f"invalid {field} for {ticker}")
     return price
+
+
+def _timestamp_datetime(timestamp: pd.Timestamp) -> datetime:
+    converted = timestamp.to_pydatetime()
+    if not isinstance(converted, datetime):
+        raise ValueError("timestamp conversion did not produce a datetime")
+    return converted

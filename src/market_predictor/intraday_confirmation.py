@@ -6,7 +6,6 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-
 REGULAR_OPEN = "09:30:00"
 REGULAR_CLOSE = "16:00:00"
 
@@ -161,9 +160,11 @@ def _decision_rank_score(row: pd.Series) -> float:
 
 
 def _probability_col(frame: pd.DataFrame) -> str | None:
-    cols = [col for col in frame.columns if col.endswith("_probability")]
+    cols = [str(col) for col in frame.columns if str(col).endswith("_probability")]
     preferred = [col for col in cols if "entry_success" in col]
-    return (preferred or cols or [None])[-1]
+    if preferred:
+        return preferred[-1]
+    return cols[-1] if cols else None
 
 
 def _window_return(values: pd.Series, minutes: int) -> float:

@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
 import tempfile
 import unittest
+from pathlib import Path
 
 from market_predictor.prediction_contracts import PredictionRequest, PredictionResponse
 from market_predictor.prediction_snapshot import PredictionSnapshotStore

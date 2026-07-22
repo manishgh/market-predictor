@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
 import unittest
+from datetime import UTC, datetime
 
 from market_predictor.sources.gdelt import GdeltSource
 
@@ -48,7 +48,7 @@ class GdeltSourceTests(unittest.TestCase):
         source = GdeltSource(client=client, endpoint="https://example.com/gdelt", request_pause_seconds=0)
 
         events, errors = source.fetch_context_events_with_errors(
-            datetime(2026, 7, 8, tzinfo=timezone.utc),
+            datetime(2026, 7, 8, tzinfo=UTC),
             queries=("ok", "bad"),
             max_records_per_query=1,
         )

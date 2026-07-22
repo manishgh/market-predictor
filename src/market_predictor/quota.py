@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-from datetime import datetime, timezone
 import json
+from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -49,7 +49,7 @@ class MonthlyQuotaTracker:
         source_record = data.setdefault(self.source, {})
         record = source_record.setdefault(month, {"used": 0, "calls": [], "last_headers": {}})
         record["used"] = int(record.get("used", 0)) + 1
-        record.setdefault("calls", []).append(datetime.now(timezone.utc).isoformat())
+        record.setdefault("calls", []).append(datetime.now(UTC).isoformat())
         if headers:
             record["last_headers"] = {
                 key: value
@@ -62,7 +62,10 @@ class MonthlyQuotaTracker:
     def _load(self) -> dict[str, Any]:
         if not self.path.exists():
             return {}
-        return json.loads(self.path.read_text(encoding="utf-8"))
+        loaded = json.loads(self.path.read_text(encoding="utf-8"))
+        if not isinstance(loaded, dict):
+            raise ValueError(f"quota state must contain a JSON object: {self.path}")
+        return {str(key): value for key, value in loaded.items()}
 
     def _save(self, data: dict[str, Any]) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
@@ -70,4 +73,4 @@ class MonthlyQuotaTracker:
 
     @staticmethod
     def _month_key() -> str:
-        return datetime.now(timezone.utc).strftime("%Y-%m")
+        return datetime.now(UTC).strftime("%Y-%m")

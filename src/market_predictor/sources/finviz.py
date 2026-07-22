@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from datetime import datetime, time, timezone
 import re
+from datetime import UTC, datetime
 from zoneinfo import ZoneInfo
 
-from bs4 import BeautifulSoup
 import requests
+from bs4 import BeautifulSoup
 
 from market_predictor.schemas import NewsEvent
 
@@ -36,8 +36,8 @@ class FinvizSource:
         rows = soup.select("table.fullview-news-outer tr")
         events: list[NewsEvent] = []
         last_date: datetime | None = None
-        start_utc = start.astimezone(timezone.utc)
-        end_utc = (end or datetime.now(timezone.utc)).astimezone(timezone.utc)
+        start_utc = start.astimezone(UTC)
+        end_utc = (end or datetime.now(UTC)).astimezone(UTC)
         for row in rows[:limit]:
             cells = row.select("td")
             link = row.select_one("a")
@@ -73,12 +73,12 @@ class FinvizSource:
         try:
             if re.match(r"^[A-Z][a-z]{2}-\d{2}-\d{2}\s+", value):
                 parsed = datetime.strptime(value, "%b-%d-%y %I:%M%p").replace(tzinfo=eastern)
-                return parsed.astimezone(timezone.utc), parsed
+                return parsed.astimezone(UTC), parsed
             if last_date is None:
                 return None, last_date
             parsed_time = datetime.strptime(value, "%I:%M%p").time()
             parsed = datetime.combine(last_date.date(), parsed_time, tzinfo=eastern)
-            return parsed.astimezone(timezone.utc), last_date
+            return parsed.astimezone(UTC), last_date
         except ValueError:
             return None, last_date
 

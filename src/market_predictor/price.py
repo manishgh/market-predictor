@@ -9,7 +9,6 @@ from market_predictor.config import Settings
 from market_predictor.sources.alpaca import AlpacaSource
 from market_predictor.symbols import PROVIDER_ALPACA, PROVIDER_YAHOO, provider_symbol
 
-
 INTRADAY_TIMEFRAMES = {
     "1m": {"alpaca": "1Min", "yfinance": "1m"},
     "5m": {"alpaca": "5Min", "yfinance": "5m"},

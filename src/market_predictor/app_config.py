@@ -1,10 +1,9 @@
 from __future__ import annotations
 
+import tomllib
 from functools import lru_cache
 from pathlib import Path
-import tomllib
 from typing import Any
-
 
 DEFAULT_CONFIG_PATH = Path("configs/default.toml")
 

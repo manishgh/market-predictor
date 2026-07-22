@@ -1,15 +1,14 @@
 from __future__ import annotations
 
-from pathlib import Path
 import re
-from typing import Iterable
+from collections.abc import Iterable
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
 
 from market_predictor.data_quality import sanitize_events_frame
 from market_predictor.features import EVENT_KEYWORDS, add_event_taxonomy, source_family_for_source
-
 
 CATALYST_WINDOWS = {
     "30m": pd.Timedelta(minutes=30),
@@ -267,17 +266,25 @@ def _numeric_event_columns(events: pd.DataFrame) -> dict[str, np.ndarray]:
     values["sentiment_positive"] = (values["sentiment_numeric"] > 0.15).astype(float)
     values["sentiment_negative"] = (values["sentiment_numeric"] < -0.15).astype(float)
     values["event_relevance_score"] = pd.to_numeric(events["event_relevance_score"], errors="coerce").fillna(0.0).to_numpy(dtype="float")
-    values["generic_movers_headline"] = pd.to_numeric(events["generic_movers_headline"], errors="coerce").fillna(0.0).to_numpy(dtype="float")
+    values["generic_movers_headline"] = (
+        pd.to_numeric(events["generic_movers_headline"], errors="coerce")
+        .fillna(0.0)
+        .to_numpy(dtype="float")
+    )
     for source in SOURCE_FAMILIES:
         values[f"source_is_{source}"] = events["source_family"].eq(source).astype(float).to_numpy()
     for event_name in EVENT_KEYWORDS:
-        values[f"event_{event_name}"] = pd.to_numeric(events.get(f"event_{event_name}", 0), errors="coerce").fillna(0.0).to_numpy(dtype="float")
+        values[f"event_{event_name}"] = (
+            pd.to_numeric(events.get(f"event_{event_name}", 0), errors="coerce")
+            .fillna(0.0)
+            .to_numpy(dtype="float")
+        )
     return values
 
 
 def _window_sum(values: np.ndarray, start_idx: np.ndarray, end_idx: np.ndarray) -> np.ndarray:
     cumulative = np.concatenate([[0.0], np.cumsum(values)])
-    return cumulative[end_idx] - cumulative[start_idx]
+    return np.asarray(cumulative[end_idx] - cumulative[start_idx], dtype=float)
 
 
 def _event_text(frame: pd.DataFrame) -> pd.Series:

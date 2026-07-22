@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from datetime import datetime
-from pathlib import Path
 import tempfile
 import unittest
+from datetime import datetime
+from pathlib import Path
 
 import pandas as pd
 
@@ -204,8 +204,8 @@ def _daily_bars(opens: list[float], closes: list[float]) -> pd.DataFrame:
         {
             "date": ["2026-07-02", "2026-07-03"],
             "open": opens,
-            "high": [max(open_price, close_price) for open_price, close_price in zip(opens, closes)],
-            "low": [min(open_price, close_price) for open_price, close_price in zip(opens, closes)],
+            "high": [max(open_price, close_price) for open_price, close_price in zip(opens, closes, strict=True)],
+            "low": [min(open_price, close_price) for open_price, close_price in zip(opens, closes, strict=True)],
             "close": closes,
             "volume": [1_000_000, 1_000_000],
         }

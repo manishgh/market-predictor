@@ -8,7 +8,6 @@ import pandas as pd
 from market_predictor.intraday_catalysts import INTRADAY_CATALYST_FEATURES, add_intraday_catalyst_features
 from market_predictor.market_regime import MARKET_REGIME_FEATURES, add_market_regime_labels
 
-
 INTRADAY_ENRICHED_FEATURES = [
     "session_minutes_from_open",
     "session_progress",
@@ -194,8 +193,14 @@ def _add_setup_features(data: pd.DataFrame) -> pd.DataFrame:
         lambda series: series.shift(1).rolling(20, min_periods=5).median()
     )
     frame["relative_volume_same_minute_20d"] = volume / same_minute_baseline.replace(0, np.nan)
-    frame["ema10_gt_ema20"] = (pd.to_numeric(frame.get("ema_10"), errors="coerce") > pd.to_numeric(frame.get("ema_20"), errors="coerce")).astype(int)
-    frame["ema20_gt_ema50"] = (pd.to_numeric(frame.get("ema_20"), errors="coerce") > pd.to_numeric(frame.get("ema_50"), errors="coerce")).astype(int)
+    frame["ema10_gt_ema20"] = (
+        pd.to_numeric(frame.get("ema_10"), errors="coerce")
+        > pd.to_numeric(frame.get("ema_20"), errors="coerce")
+    ).astype(int)
+    frame["ema20_gt_ema50"] = (
+        pd.to_numeric(frame.get("ema_20"), errors="coerce")
+        > pd.to_numeric(frame.get("ema_50"), errors="coerce")
+    ).astype(int)
     frame["close_gt_ema20"] = (close > pd.to_numeric(frame.get("ema_20"), errors="coerce")).astype(int)
     frame["macd_improving"] = (
         pd.to_numeric(frame.get("macd_signal_diff"), errors="coerce") > pd.to_numeric(frame.get("prior_macd_signal_diff"), errors="coerce")

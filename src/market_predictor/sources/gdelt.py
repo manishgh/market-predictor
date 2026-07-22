@@ -1,14 +1,13 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
 import time
+from datetime import UTC, datetime
 from typing import Any
 
 import pandas as pd
 
 from market_predictor.schemas import NewsEvent
 from market_predictor.sources.http import HttpClient
-
 
 GDELT_DOC_ENDPOINT = "https://api.gdeltproject.org/api/v2/doc/doc"
 
@@ -67,7 +66,7 @@ class GdeltSource:
         queries: tuple[str, ...] = DEFAULT_GDELT_CONTEXT_QUERIES,
         max_records_per_query: int = 75,
     ) -> tuple[list[NewsEvent], list[str]]:
-        end = end or datetime.now(timezone.utc)
+        end = end or datetime.now(UTC)
         events: list[NewsEvent] = []
         errors: list[str] = []
         for index, query in enumerate(queries):
@@ -132,14 +131,15 @@ class GdeltSource:
 
 
 def _gdelt_datetime(value: datetime) -> str:
-    return value.astimezone(timezone.utc).strftime("%Y%m%d%H%M%S")
+    return value.astimezone(UTC).strftime("%Y%m%d%H%M%S")
 
 
 def _parse_gdelt_timestamp(value: Any) -> datetime | None:
     parsed = pd.to_datetime(value, errors="coerce", utc=True)
-    if pd.isna(parsed):
+    if not isinstance(parsed, pd.Timestamp) or pd.isna(parsed):
         return None
-    return parsed.to_pydatetime()
+    converted = parsed.to_pydatetime()
+    return converted if isinstance(converted, datetime) else None
 
 
 def _dedupe_events(events: list[NewsEvent]) -> list[NewsEvent]:
