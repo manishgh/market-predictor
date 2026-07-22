@@ -11,7 +11,6 @@ import numpy as np
 import pandas as pd
 from sklearn.ensemble import HistGradientBoostingClassifier
 from sklearn.impute import SimpleImputer
-from sklearn.isotonic import IsotonicRegression
 from sklearn.linear_model import LogisticRegression
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
@@ -20,6 +19,7 @@ from market_predictor.drift import build_feature_reference_profile
 from market_predictor.registry import (
     MODEL_STATUS_CANDIDATE,
     MODEL_STATUS_PROMOTED,
+    feature_schema_hash,
     manifest_path_for,
     verify_model_artifact,
     write_model_manifest,
@@ -42,8 +42,21 @@ from market_predictor.swing.evaluation import (
     prediction_evidence,
     regime_audit,
 )
+from market_predictor.v3.calibration import (
+    CausalCalibrationFit,
+    apply_isotonic,
+    fit_final_isotonic,
+    fit_prior_isotonic,
+)
 from market_predictor.v3.errors import DataReadinessError, SchemaMismatchError
-from market_predictor.v3.validation import V3PurgedWalkForwardSplit, deterministic_ticker_holdout
+from market_predictor.v3.validation import (
+    V3Fold,
+    V3PurgedWalkForwardSplit,
+    causal_fold_training_indices,
+    deterministic_stratified_ticker_holdout,
+    identity_set_sha256,
+    validation_row_identities,
+)
 
 
 class ProbabilityEstimator(Protocol):
@@ -85,21 +98,35 @@ def train_swing_model(
         raise DataReadinessError(
             f"swing training needs at least {config.min_training_tickers} tickers; found {ticker_count}"
         )
-    holdout_tickers = deterministic_ticker_holdout(
-        data["ticker"],
-        fraction=config.ticker_holdout_fraction,
-        seed=config.random_seed,
-    )
-    development = data[~data["ticker"].isin(holdout_tickers)].reset_index(drop=True)
-    holdout = data[data["ticker"].isin(holdout_tickers)].reset_index(drop=True)
     splitter = V3PurgedWalkForwardSplit(
         n_splits=config.n_splits,
         embargo_sessions=horizon,
         min_train_sessions=config.min_train_sessions,
         min_train_rows=config.min_train_rows,
     )
+    data["validation_row_identity"] = validation_row_identities(data)
+    assignment_folds = splitter.split(data)
+    assignment_indices, _, _ = causal_fold_training_indices(
+        data,
+        candidate_indices=assignment_folds[0].train_indices,
+        test_indices=assignment_folds[0].test_indices,
+    )
+    holdout_plan = deterministic_stratified_ticker_holdout(
+        data.iloc[assignment_indices],
+        label_columns=[target],
+        fraction=config.ticker_holdout_fraction,
+        seed=config.random_seed,
+    )
+    holdout_tickers = holdout_plan.holdout_tickers
+    development = data[~data["ticker"].isin(holdout_tickers)].reset_index(drop=True)
+    holdout = data[data["ticker"].isin(holdout_tickers)].reset_index(drop=True)
     folds = splitter.split(development)
-    features = _select_features(development, folds, config)
+    first_train_indices, _, _ = causal_fold_training_indices(
+        development,
+        candidate_indices=folds[0].train_indices,
+        test_indices=folds[0].test_indices,
+    )
+    features = _select_features(development.iloc[first_train_indices], config)
     if len(features) < config.min_features:
         raise DataReadinessError(f"only {len(features)} swing features pass fold coverage; need {config.min_features}")
     assert_memory_budget(
@@ -108,16 +135,86 @@ def train_swing_model(
         stage="swing training input",
     )
 
-    oof_raw = np.full(len(development), np.nan, dtype=np.float64)
+    feature_set_sha256 = feature_schema_hash(features)
+    walk_forward_parts: list[pd.DataFrame] = []
+    holdout_parts: list[pd.DataFrame] = []
+    calibration_raw: list[np.ndarray] = []
+    calibration_target: list[np.ndarray] = []
+    calibration_availability: list[pd.Series] = []
     fold_records: list[dict[str, object]] = []
+    calibration_seed_folds_excluded = 0
     for fold in folds:
-        train = development.iloc[fold.train_indices]
-        validation = development.iloc[fold.test_indices]
+        train_indices, max_train_label, min_test_decision = causal_fold_training_indices(
+            development,
+            candidate_indices=fold.train_indices,
+            test_indices=fold.test_indices,
+        )
+        train = development.iloc[train_indices]
+        validation = development.iloc[fold.test_indices].reset_index(drop=True)
+        test_sessions = set(pd.to_datetime(validation["session_date_et"]).dt.date)
+        ticker_validation = holdout[
+            pd.to_datetime(holdout["session_date_et"]).dt.date.isin(test_sessions)
+        ].reset_index(drop=True)
+        if ticker_validation.empty:
+            raise DataReadinessError(f"fold {fold.fold} has no held-out ticker test rows")
         _require_binary_target(train[target], f"fold {fold.fold} training")
         estimator = _estimator(config)
         estimator.fit(_matrix(train, features), train[target].astype(int))
-        oof_raw[fold.test_indices] = estimator.predict_proba(_matrix(validation, features))[:, 1]
-        fold_records.append(fold.audit_record())
+        validation_raw = estimator.predict_proba(_matrix(validation, features))[:, 1]
+        ticker_raw = estimator.predict_proba(_matrix(ticker_validation, features))[:, 1]
+
+        calibration_fit: CausalCalibrationFit | None = None
+        if calibration_raw:
+            calibration_fit = fit_prior_isotonic(
+                np.concatenate(calibration_raw),
+                np.concatenate(calibration_target),
+                pd.concat(calibration_availability, ignore_index=True),
+                before_utc=min_test_decision,
+            )
+        if calibration_fit is not None:
+            walk_forward_parts.append(
+                _swing_fold_evidence(
+                    validation,
+                    raw_probability=validation_raw,
+                    probability=apply_isotonic(calibration_fit.calibrator, validation_raw),
+                    scope="walk_forward",
+                    horizon=horizon,
+                    fold=fold.fold,
+                    calibration_fit=calibration_fit,
+                )
+            )
+            holdout_parts.append(
+                _swing_fold_evidence(
+                    ticker_validation,
+                    raw_probability=ticker_raw,
+                    probability=apply_isotonic(calibration_fit.calibrator, ticker_raw),
+                    scope="ticker_holdout",
+                    horizon=horizon,
+                    fold=fold.fold,
+                    calibration_fit=calibration_fit,
+                )
+            )
+        else:
+            calibration_seed_folds_excluded += 1
+        for scope, test_frame in (
+            ("walk_forward", validation),
+            ("ticker_holdout", ticker_validation),
+        ):
+            fold_records.append(
+                _fold_evidence_record(
+                    fold,
+                    scope=scope,
+                    train=train,
+                    test=test_frame,
+                    max_train_label=max_train_label,
+                    min_test_decision=min_test_decision,
+                    feature_set_sha256=feature_set_sha256,
+                    calibration_fit=calibration_fit,
+                )
+            )
+        calibration_raw.append(validation_raw)
+        calibration_target.append(validation[target].astype(int).to_numpy())
+        calibration_availability.append(validation["label_available_at_utc"])
         del estimator
         release_process_memory()
         assert_memory_budget(
@@ -126,38 +223,18 @@ def train_swing_model(
             stage=f"swing fold {fold.fold}",
         )
 
-    oof_mask = np.isfinite(oof_raw)
-    if int(oof_mask.sum()) < max(100, config.min_train_rows // 4):
-        raise DataReadinessError("insufficient purged walk-forward predictions")
-    cross_fitted = _cross_fitted_calibration(
-        oof_raw[oof_mask],
-        development.loc[oof_mask, target].astype(int).to_numpy(),
-        development.loc[oof_mask, "session_date_et"],
+    if not walk_forward_parts or not holdout_parts:
+        raise DataReadinessError("no calibrated outer folds remain after the calibration seed")
+    oof = pd.concat(walk_forward_parts, ignore_index=True)
+    holdout_evidence = pd.concat(holdout_parts, ignore_index=True)
+    if len(oof) < max(100, config.min_train_rows // 4):
+        raise DataReadinessError("insufficient calibrated purged walk-forward predictions")
+    calibrator = fit_final_isotonic(
+        np.concatenate(calibration_raw),
+        np.concatenate(calibration_target),
     )
-    calibrator = _fit_calibrator(oof_raw[oof_mask], development.loc[oof_mask, target].astype(int).to_numpy())
-
-    _require_binary_target(development[target], "ticker holdout training")
-    holdout_estimator = _estimator(config)
-    holdout_estimator.fit(_matrix(development, features), development[target].astype(int))
-    holdout_raw = holdout_estimator.predict_proba(_matrix(holdout, features))[:, 1]
-    holdout_probability = _apply_calibrator(calibrator, holdout_raw)
-    del holdout_estimator
-    release_process_memory()
-
-    oof = prediction_evidence(
-        development.loc[oof_mask].reset_index(drop=True),
-        raw_probability=oof_raw[oof_mask],
-        probability=cross_fitted,
-        scope="walk_forward",
-        horizon=horizon,
-    )
-    holdout_evidence = prediction_evidence(
-        holdout,
-        raw_probability=holdout_raw,
-        probability=holdout_probability,
-        scope="ticker_holdout",
-        horizon=horizon,
-    )
+    if calibrator is None:
+        raise DataReadinessError("final swing calibrator lacks sufficient causal OOF evidence")
     oof_metrics = classification_metrics(oof[target], oof["swing_probability"])
     holdout_metrics = classification_metrics(
         holdout_evidence[target],
@@ -192,7 +269,8 @@ def train_swing_model(
     )
     for evidence in (oof, holdout_evidence, profitability, regime, catalyst, alignment):
         evidence["model_run_id"] = model_run_id
-    fold_audit = pd.DataFrame(fold_records)
+    representation = holdout_plan.representation_audit.copy()
+    fold_audit = pd.concat([pd.DataFrame(fold_records), representation], ignore_index=True, sort=False)
     fold_audit["model_run_id"] = model_run_id
 
     final_estimator = _estimator(config)
@@ -214,6 +292,7 @@ def train_swing_model(
         "feature_schema_version": SWING_FEATURE_SCHEMA_VERSION,
         "family": config.family,
         "model_run_id": model_run_id,
+        "calibration_method": "isotonic_prior_outer_folds",
         "decision_semantics": "post_close_decision_next_session_open_entry",
         "trained_at_utc": datetime.now(UTC).isoformat(),
     }
@@ -248,6 +327,19 @@ def train_swing_model(
         "ticker_holdout_roc_auc": holdout_metrics["roc_auc"],
         "ticker_holdout_top_decile_lift": holdout_metrics["top_decile_lift"],
         "ticker_holdout_brier_score": holdout_metrics["brier_score"],
+        "calibration_method": "isotonic_prior_outer_folds",
+        "calibration_seed_folds_excluded": calibration_seed_folds_excluded,
+        "holdout_assignment_cutoff_utc": holdout_plan.assignment_cutoff_utc,
+        "holdout_ticker_summary_sha256": holdout_plan.ticker_summary_sha256,
+        "holdout_required_strata": int(
+            holdout_plan.representation_audit["required"].astype(bool).sum()
+        ),
+        "holdout_unrepresented_required_strata": int(
+            (
+                holdout_plan.representation_audit["required"].astype(bool)
+                & ~holdout_plan.representation_audit["represented"].astype(bool)
+            ).sum()
+        ),
         "robust_avg_trade_return": robust["avg_trade_return"],
         "robust_profit_factor": robust["profit_factor"],
         "robust_max_drawdown": robust["max_drawdown"],
@@ -276,6 +368,10 @@ def train_swing_model(
             "family": config.family,
             "model_run_id": model_run_id,
             "holdout_tickers": sorted(holdout_tickers),
+            "holdout_assignment_cutoff_utc": holdout_plan.assignment_cutoff_utc,
+            "holdout_ticker_summary_sha256": holdout_plan.ticker_summary_sha256,
+            "calibration_method": "isotonic_prior_outer_folds",
+            "feature_set_sha256": feature_set_sha256,
             "training_config": config.model_dump(),
         },
     )
@@ -317,7 +413,7 @@ def score_swing_frame(
         raise SchemaMismatchError("swing scoring feature schema mismatch")
     estimator = cast(ProbabilityEstimator, payload["model"])
     raw = estimator.predict_proba(_matrix(frame, features))[:, 1]
-    probability = _apply_calibrator(payload.get("calibrator"), raw)
+    probability = apply_isotonic(payload.get("calibrator"), raw)
     output = frame.copy()
     output["swing_model_probability"] = probability
     output["swing_model_raw_probability"] = raw
@@ -334,6 +430,7 @@ def _training_rows(dataset: pd.DataFrame) -> tuple[pd.DataFrame, int, str]:
         "decision_group_id",
         "decision_time_utc",
         "feature_available_at_utc",
+        "label_available_at_utc",
         "label_eligible",
         "horizon_sessions",
         "swing_feature_schema_version",
@@ -355,27 +452,25 @@ def _training_rows(dataset: pd.DataFrame) -> tuple[pd.DataFrame, int, str]:
     data = data.dropna(subset=[target]).sort_values(["session_date_et", "ticker"]).reset_index(drop=True)
     decision = pd.to_datetime(data["decision_time_utc"], utc=True, errors="coerce")
     feature = pd.to_datetime(data["feature_available_at_utc"], utc=True, errors="coerce")
-    if bool(decision.isna().any() | feature.isna().any() | feature.gt(decision).any()):
-        raise DataReadinessError("swing training rows contain future or invalid features")
+    label = pd.to_datetime(data["label_available_at_utc"], utc=True, errors="coerce")
+    invalid = decision.isna() | feature.isna() | label.isna() | feature.gt(decision) | label.le(decision)
+    if bool(invalid.any()):
+        raise DataReadinessError("swing training rows contain future or invalid timestamps")
     _require_binary_target(data[target], "swing training")
     return data, horizon, target
 
 
 def _select_features(
-    data: pd.DataFrame,
-    folds: list[Any],
+    training_data: pd.DataFrame,
     config: SwingTrainingConfig,
 ) -> list[str]:
     selected: list[str] = []
     for feature in SWING_FEATURES:
-        if feature not in data.columns:
+        if feature not in training_data.columns:
             continue
-        if pd.to_numeric(data[feature], errors="coerce").notna().mean() < config.min_feature_non_null_rate:
-            continue
-        if any(
-            pd.to_numeric(data.iloc[fold.train_indices][feature], errors="coerce").notna().mean()
+        if (
+            pd.to_numeric(training_data[feature], errors="coerce").notna().mean()
             < config.min_feature_non_null_rate
-            for fold in folds
         ):
             continue
         selected.append(feature)
@@ -425,43 +520,65 @@ def _matrix(frame: pd.DataFrame, features: list[str]) -> pd.DataFrame:
     return frame.loc[:, features].apply(pd.to_numeric, errors="coerce").astype("float32")
 
 
-def _fit_calibrator(probability: np.ndarray, target: np.ndarray) -> IsotonicRegression | None:
-    finite = np.isfinite(probability)
-    if int(finite.sum()) < 100 or len(np.unique(target[finite])) < 2:
-        return None
-    calibrator = IsotonicRegression(out_of_bounds="clip", y_min=0.0, y_max=1.0)
-    calibrator.fit(probability[finite], target[finite])
-    return calibrator
-
-
-def _cross_fitted_calibration(
+def _swing_fold_evidence(
+    frame: pd.DataFrame,
+    *,
+    raw_probability: np.ndarray,
     probability: np.ndarray,
-    target: np.ndarray,
-    sessions: pd.Series,
-) -> np.ndarray:
-    calibrated = probability.astype(float).copy()
-    ordered = sorted(pd.to_datetime(sessions).dt.date.unique())
-    chunks = [chunk for chunk in np.array_split(np.asarray(ordered, dtype=object), 4) if len(chunk)]
-    session_values = pd.to_datetime(sessions).dt.date.to_numpy()
-    prior_sessions = np.asarray([], dtype=object)
-    for chunk in chunks:
-        current = np.isin(session_values, chunk)
-        prior = np.isin(session_values, prior_sessions)
-        if int(prior.sum()) >= 100 and len(np.unique(target[prior])) >= 2:
-            calibrator = _fit_calibrator(probability[prior], target[prior])
-            calibrated[current] = _apply_calibrator(calibrator, probability[current])
-        prior_sessions = np.concatenate([prior_sessions, chunk])
-    return calibrated
-
-
-def _apply_calibrator(calibrator: object, probability: np.ndarray) -> np.ndarray:
-    if calibrator is None:
-        return cast(np.ndarray, np.clip(probability.astype(float), 0.0, 1.0))
-    predictor = cast(IsotonicRegression, calibrator)
-    return cast(
-        np.ndarray,
-        np.clip(np.asarray(predictor.predict(probability), dtype=float), 0.0, 1.0),
+    scope: str,
+    horizon: int,
+    fold: int,
+    calibration_fit: CausalCalibrationFit,
+) -> pd.DataFrame:
+    evidence = prediction_evidence(
+        frame,
+        raw_probability=raw_probability,
+        probability=probability,
+        scope=scope,
+        horizon=horizon,
     )
+    evidence["validation_fold"] = fold
+    evidence["calibration_method"] = calibration_fit.method
+    evidence["calibration_train_cutoff_utc"] = calibration_fit.train_cutoff_utc.isoformat()
+    evidence["row_identity"] = frame["validation_row_identity"].astype(str).to_numpy()
+    return evidence
+
+
+def _fold_evidence_record(
+    fold: V3Fold,
+    *,
+    scope: str,
+    train: pd.DataFrame,
+    test: pd.DataFrame,
+    max_train_label: pd.Timestamp,
+    min_test_decision: pd.Timestamp,
+    feature_set_sha256: str,
+    calibration_fit: CausalCalibrationFit | None,
+) -> dict[str, object]:
+    return {
+        **fold.audit_record(),
+        "record_type": "validation_fold",
+        "validation_scope": scope,
+        "validation_status": (
+            "included" if calibration_fit is not None else "calibration_seed_excluded"
+        ),
+        "train_rows": len(train),
+        "test_rows": len(test),
+        "max_train_label_available_at_utc": max_train_label.isoformat(),
+        "min_test_decision_time_utc": min_test_decision.isoformat(),
+        "train_ticker_count": int(train["ticker"].nunique()),
+        "test_ticker_count": int(test["ticker"].nunique()),
+        "train_ticker_set_sha256": identity_set_sha256(train["ticker"].unique()),
+        "test_ticker_set_sha256": identity_set_sha256(test["ticker"].unique()),
+        "train_row_identity_sha256": identity_set_sha256(train["validation_row_identity"]),
+        "test_row_identity_sha256": identity_set_sha256(test["validation_row_identity"]),
+        "feature_set_sha256": feature_set_sha256,
+        "calibration_method": calibration_fit.method if calibration_fit else "seed_only_not_scored",
+        "calibration_train_cutoff_utc": (
+            calibration_fit.train_cutoff_utc.isoformat() if calibration_fit else ""
+        ),
+        "calibration_training_rows": calibration_fit.training_rows if calibration_fit else 0,
+    }
 
 
 def _require_binary_target(values: pd.Series, name: str) -> None:

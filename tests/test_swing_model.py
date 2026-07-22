@@ -117,6 +117,42 @@ class SwingModelTests(unittest.TestCase):
             self.assertIn("feature_reference_profile", result.metrics)
             self.assertTrue(result.oof_predictions["swing_probability"].between(0, 1).all())
             self.assertTrue(result.ticker_holdout_predictions["swing_probability"].between(0, 1).all())
+            for evidence in (result.oof_predictions, result.ticker_holdout_predictions):
+                self.assertTrue(
+                    {
+                        "validation_fold",
+                        "validation_scope",
+                        "calibration_method",
+                        "calibration_train_cutoff_utc",
+                        "row_identity",
+                    }.issubset(evidence.columns)
+                )
+                cutoff = pd.to_datetime(evidence["calibration_train_cutoff_utc"], utc=True)
+                decision = pd.to_datetime(evidence["decision_time_utc"], utc=True)
+                self.assertTrue(cutoff.lt(decision).all())
+            validation_folds = result.fold_audit[
+                result.fold_audit["record_type"].eq("validation_fold")
+            ]
+            self.assertTrue(
+                pd.to_datetime(validation_folds["max_train_label_available_at_utc"], utc=True)
+                .lt(pd.to_datetime(validation_folds["min_test_decision_time_utc"], utc=True))
+                .all()
+            )
+            self.assertIn("calibration_seed_excluded", set(validation_folds["validation_status"]))
+            excluded_folds = validation_folds.loc[
+                validation_folds["validation_status"].eq("calibration_seed_excluded"),
+                "fold",
+            ].nunique()
+            self.assertEqual(result.metrics["calibration_seed_folds_excluded"], excluded_folds)
+            self.assertEqual(
+                set(validation_folds["feature_set_sha256"]),
+                {result.manifest["dataset"]["feature_schema_hash"]},
+            )
+            representation = result.fold_audit[
+                result.fold_audit["record_type"].eq("holdout_representation")
+            ]
+            required = representation["required"].fillna(False).astype(bool)
+            self.assertTrue(representation.loc[required, "represented"].astype(bool).all())
             self.assertEqual(result.profitability_audit.iloc[0]["phase"], "conservative")
             paths = write_swing_training_evidence(result, Path(temp_dir) / "evidence")
             self.assertTrue(all(path.exists() for path in paths.values()))
@@ -176,6 +212,56 @@ class SwingModelTests(unittest.TestCase):
                 ),
             )
 
+    def test_future_poison_cannot_change_earlier_causal_probabilities_or_features(self) -> None:
+        baseline = _training_dataset()
+        poison_start = sorted(baseline["session_date_et"].unique())[-25]
+        poisoned = baseline.copy()
+        future = poisoned["session_date_et"].ge(poison_start)
+        poisoned.loc[future, "target_net_positive_5d"] = (
+            1 - poisoned.loc[future, "target_net_positive_5d"].astype(int)
+        )
+        poisoned.loc[future, SWING_FEATURES[0]] = (
+            pd.to_numeric(poisoned.loc[future, SWING_FEATURES[0]]) + 10_000.0
+        )
+        poisoned.loc[future, SWING_FEATURES[1]] = np.nan
+
+        with TemporaryDirectory() as first_dir, TemporaryDirectory() as second_dir:
+            first = train_swing_model(
+                baseline,
+                model_out=Path(first_dir) / "baseline.joblib",
+                dataset_sha256="c" * 64,
+                config=_training_config(),
+            )
+            second = train_swing_model(
+                poisoned,
+                model_out=Path(second_dir) / "poisoned.joblib",
+                dataset_sha256="d" * 64,
+                config=_training_config(),
+            )
+
+        self.assertEqual(
+            first.manifest["extra"]["feature_set_sha256"],
+            second.manifest["extra"]["feature_set_sha256"],
+        )
+        for left, right in (
+            (first.oof_predictions, second.oof_predictions),
+            (first.ticker_holdout_predictions, second.ticker_holdout_predictions),
+        ):
+            earlier = left[left["session_date_et"].lt(poison_start)]
+            compare = earlier[["row_identity", "swing_probability"]].merge(
+                right[["row_identity", "swing_probability"]],
+                on="row_identity",
+                suffixes=("_baseline", "_poisoned"),
+                validate="one_to_one",
+            )
+            self.assertFalse(compare.empty)
+            np.testing.assert_allclose(
+                compare["swing_probability_baseline"],
+                compare["swing_probability_poisoned"],
+                rtol=0.0,
+                atol=0.0,
+            )
+
 
 def _training_dataset() -> pd.DataFrame:
     rng = np.random.default_rng(42)
@@ -199,11 +285,14 @@ def _training_dataset() -> pd.DataFrame:
                     "decision_group_id": decision_time.isoformat(),
                     "decision_time_utc": decision_time,
                     "feature_available_at_utc": decision_time,
+                    "label_available_at_utc": decision_time + pd.offsets.BDay(5),
                     "label_eligible": True,
                     "horizon_sessions": 5,
                     "swing_feature_schema_version": SWING_FEATURE_SCHEMA_VERSION,
                     "market_regime": regime,
                     "sector": "Technology" if ticker_index % 2 == 0 else "Healthcare",
+                    "market_cap_bucket": "large" if ticker_index < 6 else "mid",
+                    "liquidity_bucket": "high" if ticker_index % 3 else "medium",
                     "primary_benchmark": "XLK" if ticker_index % 2 == 0 else "XLV",
                     "event_count_3d": max(0.0, feature_map["event_count_3d"]),
                     "event_relevance_mean_3d": 0.8,

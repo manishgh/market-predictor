@@ -1,12 +1,19 @@
 from __future__ import annotations
 
 import unittest
-from datetime import date, timedelta
+from datetime import UTC, date, datetime, timedelta
 
+import numpy as np
 import pandas as pd
 
 from market_predictor.v3.errors import DataReadinessError
-from market_predictor.v3.validation import V3PurgedWalkForwardSplit, deterministic_ticker_holdout
+from market_predictor.v3.validation import (
+    V3PurgedWalkForwardSplit,
+    causal_fold_training_indices,
+    deterministic_stratified_ticker_holdout,
+    deterministic_ticker_holdout,
+    validation_row_identities,
+)
 
 
 class V3ValidationTests(unittest.TestCase):
@@ -42,6 +49,79 @@ class V3ValidationTests(unittest.TestCase):
         self.assertEqual(first, second)
         self.assertEqual(len(first), 4)
 
+    def test_stratified_holdout_is_deterministic_and_represents_available_strata(self) -> None:
+        frame = _stratification_frame()
+        first = deterministic_stratified_ticker_holdout(
+            frame,
+            label_columns=["target"],
+            fraction=0.25,
+            seed=17,
+        )
+        second = deterministic_stratified_ticker_holdout(
+            frame.sample(frac=1, random_state=9),
+            label_columns=["target"],
+            fraction=0.25,
+            seed=17,
+        )
+        self.assertEqual(first.holdout_tickers, second.holdout_tickers)
+        self.assertEqual(first.ticker_summary_sha256, second.ticker_summary_sha256)
+        required = first.representation_audit["required"].astype(bool)
+        self.assertTrue(first.representation_audit.loc[required, "represented"].astype(bool).all())
+        self.assertEqual(len(first.holdout_tickers), 3)
+
+    def test_stratified_holdout_fails_when_whole_tickers_cannot_represent_strata(self) -> None:
+        decision = pd.Timestamp("2026-01-05T15:00:00Z")
+        frame = pd.DataFrame(
+            {
+                "ticker": ["A", "B", "C"],
+                "decision_time_utc": [decision] * 3,
+                "sector": ["pair_ab", "pair_ab", "singleton"],
+                "market_cap_bucket": ["singleton", "pair_bc", "pair_bc"],
+                "liquidity_bucket": ["pair_ac", "singleton", "pair_ac"],
+            }
+        )
+        with self.assertRaisesRegex(DataReadinessError, "cannot represent required strata"):
+            deterministic_stratified_ticker_holdout(
+                frame,
+                label_columns=[],
+                fraction=0.34,
+                seed=3,
+            )
+
+    def test_causal_fold_filters_unmatured_labels_and_persists_unique_row_ids(self) -> None:
+        frame = _validation_frame(sessions=12, queries_per_session=1, tickers=3)
+        decision = pd.to_datetime(frame["session_date_et"], utc=True) + pd.Timedelta(hours=15)
+        frame["decision_time_utc"] = decision
+        frame["label_available_at_utc"] = decision + pd.Timedelta(days=2)
+        frame["row_identity"] = validation_row_identities(frame)
+        self.assertTrue(frame["row_identity"].is_unique)
+        splitter = V3PurgedWalkForwardSplit(
+            n_splits=2,
+            embargo_sessions=1,
+            min_train_sessions=5,
+            min_train_rows=10,
+        )
+        fold = splitter.split(frame)[0]
+        train, max_label, min_test = causal_fold_training_indices(
+            frame,
+            candidate_indices=fold.train_indices,
+            test_indices=fold.test_indices,
+        )
+        self.assertGreater(len(train), 0)
+        self.assertLess(max_label, min_test)
+        poisoned = frame.copy()
+        poisoned.loc[fold.test_indices, "label_available_at_utc"] = pd.Timestamp(
+            datetime(2030, 1, 1, tzinfo=UTC)
+        )
+        poisoned_train, poisoned_max, poisoned_min = causal_fold_training_indices(
+            poisoned,
+            candidate_indices=fold.train_indices,
+            test_indices=fold.test_indices,
+        )
+        np.testing.assert_array_equal(train, poisoned_train)
+        self.assertEqual(max_label, poisoned_max)
+        self.assertEqual(min_test, poisoned_min)
+
 
 def _validation_frame(*, sessions: int, queries_per_session: int, tickers: int) -> pd.DataFrame:
     rows: list[dict[str, object]] = []
@@ -58,6 +138,25 @@ def _validation_frame(*, sessions: int, queries_per_session: int, tickers: int) 
                         "decision_group_id": query_id,
                     }
                 )
+    return pd.DataFrame(rows)
+
+
+def _stratification_frame() -> pd.DataFrame:
+    rows: list[dict[str, object]] = []
+    decision = pd.Timestamp("2026-01-05T15:00:00Z")
+    for ticker_index in range(12):
+        for observation in range(4):
+            rows.append(
+                {
+                    "ticker": f"T{ticker_index:02d}",
+                    "decision_time_utc": decision + pd.Timedelta(days=observation),
+                    "sector": "technology" if ticker_index % 2 == 0 else "healthcare",
+                    "market_cap_bucket": "large" if ticker_index < 6 else "mid",
+                    "liquidity_bucket": "high" if ticker_index % 3 else "medium",
+                    "target": int((ticker_index + observation) % 3 == 0),
+                    "event_count_3d": int((ticker_index + observation) % 4 == 0),
+                }
+            )
     return pd.DataFrame(rows)
 
 

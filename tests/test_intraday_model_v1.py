@@ -53,6 +53,36 @@ class IntradayModelV1Tests(unittest.TestCase):
         self.assertIn("intraday_downside_probability", scored.columns)
         self.assertTrue(scored["intraday_opportunity_probability"].between(0, 1).all())
         self.assertTrue(scored["intraday_downside_probability"].between(0, 1).all())
+        for evidence in (result.oof_predictions, result.ticker_holdout_predictions):
+            self.assertTrue(
+                {
+                    "validation_fold",
+                    "validation_scope",
+                    "calibration_method",
+                    "calibration_train_cutoff_utc",
+                    "row_identity",
+                }.issubset(evidence.columns)
+            )
+            cutoff = pd.to_datetime(evidence["calibration_train_cutoff_utc"], utc=True)
+            decision = pd.to_datetime(evidence["decision_time_utc"], utc=True)
+            self.assertTrue(cutoff.lt(decision).all())
+        validation_folds = result.fold_audit[
+            result.fold_audit["record_type"].eq("validation_fold")
+        ]
+        self.assertTrue(
+            pd.to_datetime(validation_folds["max_train_label_available_at_utc"], utc=True)
+            .lt(pd.to_datetime(validation_folds["min_test_decision_time_utc"], utc=True))
+            .all()
+        )
+        excluded_folds = validation_folds.loc[
+            validation_folds["validation_status"].eq("calibration_seed_excluded"),
+            "fold",
+        ].nunique()
+        self.assertEqual(result.metrics["calibration_seed_folds_excluded"], excluded_folds)
+        self.assertEqual(
+            set(validation_folds["feature_set_sha256"]),
+            {result.manifest["dataset"]["feature_schema_hash"]},
+        )
         self.assertEqual(result.catalyst_audit.iloc[0]["included_in_estimators"], False)
         self.assertLess(float(result.metrics["memory"]["peak_working_set_gib"]), 4.0)
 
@@ -97,7 +127,7 @@ class IntradayModelV1Tests(unittest.TestCase):
                 config=IntradayPromotionConfig(
                     min_validated_rows=100,
                     min_tickers=6,
-                    min_selected_trades=20,
+                    min_selected_trades=1,
                     min_catalyst_coverage_rate=0.10,
                 ),
             )
@@ -140,6 +170,60 @@ class IntradayModelV1Tests(unittest.TestCase):
 
         self.assertEqual(int(result.alignment_audit.iloc[0]["label_path_mismatches"]), 1)
         self.assertEqual(int(result.alignment_audit.iloc[0]["alignment_error_total"]), 1)
+
+    def test_future_poison_cannot_change_earlier_causal_probabilities_or_features(self) -> None:
+        baseline = _training_dataset()
+        poison_start = sorted(baseline["session_date_et"].unique())[-3]
+        poisoned = baseline.copy()
+        future = poisoned["session_date_et"].ge(poison_start)
+        for target in (opportunity_target_column(60), downside_target_column(60)):
+            poisoned.loc[future, target] = 1 - poisoned.loc[future, target].astype(int)
+        poisoned.loc[future, INTRADAY_MODEL_FEATURES[0]] = (
+            pd.to_numeric(poisoned.loc[future, INTRADAY_MODEL_FEATURES[0]]) + 10_000.0
+        )
+        poisoned.loc[future, INTRADAY_MODEL_FEATURES[1]] = np.nan
+
+        with tempfile.TemporaryDirectory() as first_dir, tempfile.TemporaryDirectory() as second_dir:
+            first = train_intraday_model(
+                baseline,
+                model_out=Path(first_dir) / "baseline.joblib",
+                dataset_sha256="f" * 64,
+                config=_training_config(),
+            )
+            second = train_intraday_model(
+                poisoned,
+                model_out=Path(second_dir) / "poisoned.joblib",
+                dataset_sha256="0" * 64,
+                config=_training_config(),
+            )
+
+        self.assertEqual(
+            first.manifest["extra"]["feature_set_sha256"],
+            second.manifest["extra"]["feature_set_sha256"],
+        )
+        probability_columns = [
+            "intraday_opportunity_probability",
+            "intraday_downside_probability",
+        ]
+        for left, right in (
+            (first.oof_predictions, second.oof_predictions),
+            (first.ticker_holdout_predictions, second.ticker_holdout_predictions),
+        ):
+            earlier = left[left["session_date_et"].lt(poison_start)]
+            compare = earlier[["row_identity", *probability_columns]].merge(
+                right[["row_identity", *probability_columns]],
+                on="row_identity",
+                suffixes=("_baseline", "_poisoned"),
+                validate="one_to_one",
+            )
+            self.assertFalse(compare.empty)
+            for column in probability_columns:
+                np.testing.assert_allclose(
+                    compare[f"{column}_baseline"],
+                    compare[f"{column}_poisoned"],
+                    rtol=0.0,
+                    atol=0.0,
+                )
 
 
 def _training_config() -> IntradayTrainingConfig:
@@ -205,6 +289,8 @@ def _training_dataset() -> pd.DataFrame:
                     "intraday_feature_schema_version": INTRADAY_FEATURE_SCHEMA_VERSION,
                     "market_regime": ["risk_on", "risk_off", "neutral"][session_index % 3],
                     "sector": "Technology",
+                    "market_cap_bucket": "large" if ticker_index < 5 else "mid",
+                    "liquidity_bucket": "high" if ticker_index % 2 else "medium",
                     "primary_benchmark": "XLK",
                     "catalyst_eligible": session_index % 2 == 0,
                     "event_count_2h": int(session_index % 5 == 0),
