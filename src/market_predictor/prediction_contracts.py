@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 from datetime import UTC, datetime
-from typing import Literal
+from typing import ClassVar, Literal
 from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -10,6 +10,57 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 PredictionMode = Literal["swing", "intraday", "unified"]
 PredictionView = Literal["swing", "intraday"]
 PredictionDataSource = Literal["curated", "live"]
+
+PREDICTION_CONTRACT_VERSION = "market_predictor.prediction.v1"
+PREDICTION_EVIDENCE_CONTRACT_VERSION = "market_predictor.prediction_evidence.v1"
+
+
+class PredictionServiceError(Exception):
+    """Base class for stable, non-leaking service failures."""
+
+    code: ClassVar[str] = "prediction_service_error"
+    status_code: ClassVar[int] = 500
+    retryable: ClassVar[bool] = False
+    public_message: ClassVar[str] = "The prediction request could not be completed."
+
+
+class PredictionValidationError(PredictionServiceError):
+    code = "prediction_validation_error"
+    status_code = 422
+    public_message = "The prediction request is invalid."
+
+
+class PredictionNotFoundError(PredictionServiceError):
+    code = "prediction_not_found"
+    status_code = 404
+    public_message = "The requested prediction resource was not found."
+
+
+class PredictionConflictError(PredictionServiceError):
+    code = "prediction_conflict"
+    status_code = 409
+    public_message = "The prediction resource is in conflict with the requested operation."
+
+
+class PredictionThrottledError(PredictionServiceError):
+    code = "prediction_throttled"
+    status_code = 429
+    retryable = True
+    public_message = "Prediction capacity is temporarily exhausted."
+
+
+class PredictionReadinessError(PredictionServiceError):
+    code = "prediction_not_ready"
+    status_code = 503
+    retryable = True
+    public_message = "Prediction inputs or models are not ready."
+
+
+class PredictionDependencyError(PredictionServiceError):
+    code = "prediction_dependency_unavailable"
+    status_code = 503
+    retryable = True
+    public_message = "A required prediction dependency is unavailable."
 
 _HORIZON_ALIASES = {
     "tomorrow": "1d",
@@ -19,7 +70,7 @@ _HORIZON_ALIASES = {
     "week": "5d",
     "next_week": "5d",
     "next-week": "5d",
-    "60m": "1h",
+    "1h": "60m",
 }
 
 
@@ -36,6 +87,7 @@ class PredictionRequest(BaseModel):
     mode: PredictionMode = "unified"
     horizon: str = "auto"
     as_of: datetime | None = None
+    correlation_id: str | None = Field(default=None, min_length=1, max_length=128, pattern=r"^[A-Za-z0-9._:-]+$")
 
     @field_validator("tickers")
     @classmethod
@@ -75,6 +127,80 @@ class ModelInfo(BaseModel):
     created_at_utc: str | None = None
     training_data_start: str | None = None
     training_data_end: str | None = None
+
+
+class FeatureArtifactIdentityV1(BaseModel):
+    mode: PredictionView
+    artifact_sha256: str = Field(..., pattern=r"^[0-9a-f]{64}$")
+    source_artifact_sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+    source_artifact_type: str | None = None
+    feature_schema_version: str | None = None
+
+
+class PredictionRowEvidenceV1(BaseModel):
+    ticker: str
+    view: PredictionView
+    decision_time_utc: datetime
+    feature_available_at_utc: datetime
+
+    @field_validator("decision_time_utc", "feature_available_at_utc")
+    @classmethod
+    def require_aware_row_timestamp(cls, value: datetime) -> datetime:
+        if value.utcoffset() is None:
+            raise ValueError("prediction evidence timestamps must be timezone-aware")
+        return value.astimezone(UTC)
+
+
+class PredictionEvidenceV1(BaseModel):
+    """Immutable identities and point-in-time evidence for one served response."""
+
+    contract_version: Literal["market_predictor.prediction_evidence.v1"] = "market_predictor.prediction_evidence.v1"
+    request_id: str = Field(..., min_length=1, max_length=128)
+    correlation_id: str = Field(..., min_length=1, max_length=128)
+    prediction_cutoff_utc: datetime
+    row_feature_availability: list[PredictionRowEvidenceV1] = Field(default_factory=list)
+    feature_artifacts: dict[str, FeatureArtifactIdentityV1] = Field(default_factory=dict)
+    release_id: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+    model_artifact_sha256: dict[str, str] = Field(default_factory=dict)
+    source_watermarks: dict[str, dict[str, str]] = Field(default_factory=dict)
+    resolved_horizons: dict[str, str] = Field(default_factory=dict)
+    view_prediction_cutoffs_utc: dict[str, datetime] = Field(default_factory=dict)
+    serving_policy_id: str
+    serving_policy_sha256: str = Field(..., pattern=r"^[0-9a-f]{64}$")
+    identity_status: Literal["complete", "incomplete", "research_only"]
+    identity_gaps: list[str] = Field(default_factory=list)
+
+    @field_validator("prediction_cutoff_utc")
+    @classmethod
+    def require_aware_prediction_cutoff(cls, value: datetime) -> datetime:
+        if value.utcoffset() is None:
+            raise ValueError("prediction_cutoff_utc must be timezone-aware")
+        return value.astimezone(UTC)
+
+    @field_validator("view_prediction_cutoffs_utc")
+    @classmethod
+    def require_aware_view_cutoffs(cls, value: dict[str, datetime]) -> dict[str, datetime]:
+        if any(timestamp.utcoffset() is None for timestamp in value.values()):
+            raise ValueError("view prediction cutoffs must be timezone-aware")
+        return {view: timestamp.astimezone(UTC) for view, timestamp in value.items()}
+
+    @field_validator("model_artifact_sha256")
+    @classmethod
+    def require_model_hashes(cls, value: dict[str, str]) -> dict[str, str]:
+        if any(not re.fullmatch(r"[0-9a-f]{64}", digest) for digest in value.values()):
+            raise ValueError("model artifact identities must be lowercase SHA-256 values")
+        return value
+
+
+class PredictionApiError(BaseModel):
+    code: str
+    message: str
+    correlation_id: str
+    retryable: bool = False
+
+
+class PredictionApiErrorEnvelope(BaseModel):
+    error: PredictionApiError
 
 
 class ReadinessInfo(BaseModel):
@@ -165,6 +291,7 @@ class UnifiedTickerPrediction(BaseModel):
 
 
 class PredictionResponse(BaseModel):
+    contract_version: Literal["market_predictor.prediction.v1"] = "market_predictor.prediction.v1"
     request_id: str = Field(default_factory=lambda: str(uuid4()))
     generated_at_utc: datetime = Field(default_factory=lambda: datetime.now(UTC))
     mode: PredictionMode
@@ -174,6 +301,7 @@ class PredictionResponse(BaseModel):
     models: dict[str, ModelInfo] = Field(default_factory=dict)
     predictions: list[UnifiedTickerPrediction] = Field(default_factory=list)
     errors: list[str] = Field(default_factory=list)
+    evidence: PredictionEvidenceV1 | None = None
     snapshot_id: str | None = None
     snapshot_sha256: str | None = None
 

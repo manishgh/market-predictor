@@ -27,8 +27,10 @@ DECISION_REQUIRED_COLUMNS = {
     "bar_start_utc",
     "bar_end_utc",
     "available_at_utc",
+    "bar_available_at_utc",
     "decision_time_utc",
     "feature_available_at_utc",
+    "prediction_cutoff_policy_id",
     "decision_group_id",
     "session_date_et",
     "open",
@@ -157,6 +159,7 @@ def _prepare_daily_rows(frame: pd.DataFrame, *, name: str) -> pd.DataFrame:
         "bar_start_utc",
         "bar_end_utc",
         "available_at_utc",
+        "bar_available_at_utc",
         "decision_time_utc",
         "feature_available_at_utc",
     ]:

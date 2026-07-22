@@ -1,18 +1,21 @@
 from __future__ import annotations
 
+import hashlib
+import json
 import re
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
+from uuid import uuid4
 
 import pandas as pd
 
+from market_predictor.canonical.cutoffs import SWING_NIGHTLY_CUTOFF
 from market_predictor.catalyst_overlay import (
     CatalystAssessment,
     assess_catalyst_overlay,
-    overlay_decision_score,
 )
 from market_predictor.drift import audit_feature_drift
 from market_predictor.feature_store import LiveFeatureStore
@@ -23,12 +26,19 @@ from market_predictor.intraday.contracts import (
 from market_predictor.intraday.model import score_intraday_frame
 from market_predictor.prediction_contracts import (
     CatalystConfirmationInfo,
+    FeatureArtifactIdentityV1,
     GlobalContextInfo,
     IntradayPrediction,
     ModelInfo,
     PredictionDataSource,
+    PredictionDependencyError,
+    PredictionEvidenceV1,
+    PredictionReadinessError,
     PredictionRequest,
     PredictionResponse,
+    PredictionRowEvidenceV1,
+    PredictionServiceError,
+    PredictionValidationError,
     ReadinessInfo,
     SwingPrediction,
     UnifiedTickerPrediction,
@@ -41,12 +51,55 @@ from market_predictor.readiness import (
     assess_daily_readiness,
     assess_intraday_readiness,
 )
-from market_predictor.registry import MODEL_STATUS_PROMOTED, verify_model_artifact
+from market_predictor.registry import MODEL_STATUS_PROMOTED, file_sha256, verify_model_artifact
 from market_predictor.resources import memory_audit
 from market_predictor.swing.contracts import SWING_MODEL_SCHEMA_VERSION, SWING_MODEL_TYPE
 from market_predictor.swing.model import score_swing_frame
 
 DEFAULT_MODE_HORIZONS = {"swing": "5d", "intraday": "60m"}
+SERVING_POLICY_ID = "market_predictor.serving_policy.r1_a.v1"
+_SWING_STRONG = 0.65
+_SWING_WATCH = 0.55
+_SWING_LOW = 0.40
+_INTRADAY_DOWNSIDE_VETO = 0.55
+_INTRADAY_ENTRY = 0.70
+_INTRADAY_ENTRY_MAX_DOWNSIDE = 0.35
+_INTRADAY_WATCH = 0.55
+_INTRADAY_WATCH_MAX_DOWNSIDE = 0.45
+_INTRADAY_LOW = 0.40
+_INTRADAY_AVOID_DOWNSIDE = 0.50
+_SERVING_POLICY = {
+    "actionable_readiness": "valid",
+    "intraday_rank": "opportunity_probability * (1 - downside_probability)",
+    "intraday_signal": {
+        "avoid_downside_at_or_above": _INTRADAY_DOWNSIDE_VETO,
+        "entry_opportunity_at_or_above": _INTRADAY_ENTRY,
+        "entry_max_downside": _INTRADAY_ENTRY_MAX_DOWNSIDE,
+        "watch_opportunity_at_or_above": _INTRADAY_WATCH,
+        "watch_max_downside": _INTRADAY_WATCH_MAX_DOWNSIDE,
+        "avoid_opportunity_at_or_below": _INTRADAY_LOW,
+        "avoid_downside_above": _INTRADAY_AVOID_DOWNSIDE,
+    },
+    "swing_rank": "model_probability",
+    "swing_signal": {
+        "strong_at_or_above": _SWING_STRONG,
+        "watch_at_or_above": _SWING_WATCH,
+        "low_at_or_below": _SWING_LOW,
+    },
+    "unified_signal": {
+        "high_conviction_swing_at_or_above": _SWING_STRONG,
+        "watch_swing_at_or_above": _SWING_WATCH,
+        "intraday_support_opportunity_at_or_above": _INTRADAY_WATCH,
+        "intraday_support_max_downside": _INTRADAY_WATCH_MAX_DOWNSIDE,
+        "intraday_only_at_or_above": _SWING_STRONG,
+        "intraday_only_max_downside": _SWING_LOW,
+        "swing_wait_intraday_below": 0.50,
+    },
+    "catalyst_role": "explanation_only",
+}
+SERVING_POLICY_SHA256 = hashlib.sha256(
+    json.dumps(_SERVING_POLICY, sort_keys=True, separators=(",", ":")).encode("utf-8")
+).hexdigest()
 
 
 @dataclass(frozen=True)
@@ -56,6 +109,17 @@ class ServingRoute:
     model: Path
     curated_dataset: Path | None = None
     bar_timeframe: str = "unknown"
+
+
+@dataclass(frozen=True)
+class _FeatureSource:
+    frame: pd.DataFrame
+    artifact_sha256: str | None
+    source_artifact_sha256: str | None = None
+    source_artifact_type: str | None = None
+    feature_schema_version: str | None = None
+    source_watermarks: dict[str, str] | None = None
+    release_id: str | None = None
 
 
 def serving_routes_from_config(config: Mapping[str, Any]) -> dict[str, dict[str, ServingRoute]]:
@@ -79,7 +143,10 @@ def serving_routes_from_config(config: Mapping[str, Any]) -> dict[str, dict[str,
             model = str(raw_route.get("model", "")).strip()
             if not model:
                 raise ValueError(f"prediction serving route {mode}.{horizon} is missing model")
-            parsed[str(horizon).strip().lower()] = ServingRoute(
+            canonical_horizon = _canonical_horizon(str(horizon))
+            if canonical_horizon in parsed:
+                raise ValueError(f"duplicate prediction serving route after horizon normalization: {mode}.{canonical_horizon}")
+            parsed[canonical_horizon] = ServingRoute(
                 model=Path(model),
                 bar_timeframe=str(raw_route.get("bar_timeframe", "unknown")).strip() or "unknown",
             )
@@ -146,54 +213,83 @@ class PredictionService:
         self.memory_headroom_gib = memory_headroom_gib
 
     def predict(self, request: PredictionRequest) -> PredictionResponse:
-        if request.mode == "swing":
-            response = self.predict_swing(request)
-        elif request.mode == "intraday":
-            response = self.predict_intraday(request)
-        else:
-            response = self.predict_unified(request)
-        if not self.persist_snapshots:
-            return response
-        return self.snapshot_store.record(request, response)
+        try:
+            if request.mode == "swing":
+                response = self.predict_swing(request)
+            elif request.mode == "intraday":
+                response = self.predict_intraday(request)
+            else:
+                response = self.predict_unified(request)
+            if not self.persist_snapshots:
+                return response
+            return self.snapshot_store.record(request, response)
+        except PredictionServiceError:
+            raise
+        except OSError as exc:
+            raise PredictionDependencyError from exc
 
     def predict_swing(self, request: PredictionRequest) -> PredictionResponse:
-        route, model_path, resolved_horizon = self._serving_route("swing", request)
-        model = self._model_info(
-            model_path,
-            resolved_horizon=resolved_horizon,
-            bar_timeframe=route.bar_timeframe,
-            expected_model_type=SWING_MODEL_TYPE,
-            expected_schema_version=SWING_MODEL_SCHEMA_VERSION,
-        )
-        frame = self._feature_frame(
-            self._load_feature_source("swing", route, request),
-            request=request,
-            timeframe="daily",
-        )
-        scored = self._score_swing_frame(
-            frame=frame,
-            model_path=model_path,
-        )
-        predictions = self._swing_predictions(scored, frame, model.status, request)
-        return self._response(request, models={"swing": model}, swing_predictions=predictions)
+        try:
+            route, model_path, resolved_horizon = self._serving_route("swing", request)
+            model = self._model_info(
+                model_path,
+                resolved_horizon=resolved_horizon,
+                bar_timeframe=route.bar_timeframe,
+                expected_model_type=SWING_MODEL_TYPE,
+                expected_schema_version=SWING_MODEL_SCHEMA_VERSION,
+            )
+            source = self._load_feature_source("swing", route, request)
+            frame = self._feature_frame(
+                source.frame,
+                request=request,
+                timeframe="daily",
+            )
+            scored = self._score_swing_frame(
+                frame=frame,
+                model_path=model_path,
+            )
+            predictions = self._swing_predictions(scored, frame, model.status)
+            return self._response(
+                request,
+                models={"swing": model},
+                feature_sources={"swing": source},
+                feature_frames={"swing": frame},
+                swing_predictions=predictions,
+            )
+        except PredictionServiceError:
+            raise
+        except (FileNotFoundError, KeyError, OSError, TypeError, ValueError) as exc:
+            raise PredictionReadinessError from exc
 
     def predict_intraday(self, request: PredictionRequest) -> PredictionResponse:
-        route, model_path, resolved_horizon = self._serving_route("intraday", request)
-        model = self._model_info(
-            model_path,
-            resolved_horizon=resolved_horizon,
-            bar_timeframe=route.bar_timeframe,
-            expected_model_type=INTRADAY_MODEL_TYPE,
-            expected_schema_version=INTRADAY_MODEL_SCHEMA_VERSION,
-        )
-        frame = self._feature_frame(
-            self._load_feature_source("intraday", route, request),
-            request=request,
-            timeframe="intraday",
-        )
-        scored = self._score_intraday_frame(frame=frame, model_path=model_path)
-        predictions = self._intraday_predictions(scored, frame, model.status)
-        return self._response(request, models={"intraday": model}, intraday_predictions=predictions)
+        try:
+            route, model_path, resolved_horizon = self._serving_route("intraday", request)
+            model = self._model_info(
+                model_path,
+                resolved_horizon=resolved_horizon,
+                bar_timeframe=route.bar_timeframe,
+                expected_model_type=INTRADAY_MODEL_TYPE,
+                expected_schema_version=INTRADAY_MODEL_SCHEMA_VERSION,
+            )
+            source = self._load_feature_source("intraday", route, request)
+            frame = self._feature_frame(
+                source.frame,
+                request=request,
+                timeframe="intraday",
+            )
+            scored = self._score_intraday_frame(frame=frame, model_path=model_path)
+            predictions = self._intraday_predictions(scored, frame, model.status)
+            return self._response(
+                request,
+                models={"intraday": model},
+                feature_sources={"intraday": source},
+                feature_frames={"intraday": frame},
+                intraday_predictions=predictions,
+            )
+        except PredictionServiceError:
+            raise
+        except (FileNotFoundError, KeyError, OSError, TypeError, ValueError) as exc:
+            raise PredictionReadinessError from exc
 
     def predict_unified(self, request: PredictionRequest) -> PredictionResponse:
         errors: list[str] = []
@@ -201,24 +297,32 @@ class PredictionService:
         swing: dict[str, SwingPrediction] = {}
         intraday: dict[str, IntradayPrediction] = {}
         resolved_horizons: dict[str, str] = {}
+        evidence_parts: list[PredictionEvidenceV1] = []
 
         try:
             swing_response = self.predict_swing(request.model_copy(update={"mode": "swing"}))
             models.update(swing_response.models)
             resolved_horizons.update(swing_response.resolved_horizons)
             swing = {row.ticker: row.swing for row in swing_response.predictions if row.swing is not None}
+            if swing_response.evidence is not None:
+                evidence_parts.append(swing_response.evidence)
             errors.extend(swing_response.errors)
-        except Exception as exc:
-            errors.append(f"swing prediction failed: {exc}")
+        except PredictionServiceError as exc:
+            errors.append(f"swing prediction failed: {exc.public_message}")
 
         try:
             intraday_response = self.predict_intraday(request.model_copy(update={"mode": "intraday"}))
             models.update(intraday_response.models)
             resolved_horizons.update(intraday_response.resolved_horizons)
             intraday = {row.ticker: row.intraday for row in intraday_response.predictions if row.intraday is not None}
+            if intraday_response.evidence is not None:
+                evidence_parts.append(intraday_response.evidence)
             errors.extend(intraday_response.errors)
-        except Exception as exc:
-            errors.append(f"intraday prediction failed: {exc}")
+        except PredictionServiceError as exc:
+            errors.append(f"intraday prediction failed: {exc.public_message}")
+
+        if not swing and not intraday:
+            raise PredictionReadinessError
 
         rows: list[UnifiedTickerPrediction] = []
         for ticker in request.tickers:
@@ -239,7 +343,10 @@ class PredictionService:
                     errors=row_errors,
                 )
             )
+        request_id = str(uuid4())
+        evidence = _combine_evidence(request, request_id=request_id, evidence_parts=evidence_parts, data_source=self.data_source)
         return PredictionResponse(
+            request_id=request_id,
             mode="unified",
             data_source=self.data_source,
             horizon=request.horizon,
@@ -247,6 +354,7 @@ class PredictionService:
             models=models,
             predictions=rows,
             errors=errors,
+            evidence=evidence,
         )
 
     def health(self, *, as_of: datetime | None = None) -> dict[str, object]:
@@ -373,7 +481,6 @@ class PredictionService:
         scored: pd.DataFrame,
         source_frame: pd.DataFrame,
         model_status: str,
-        request: PredictionRequest,
     ) -> list[SwingPrediction]:
         rows = scored.copy()
         rows["_catalyst_assessment"] = rows.apply(
@@ -383,28 +490,35 @@ class PredictionService:
             ),
             axis=1,
         )
-        rows["_decision_score"] = rows.apply(
-            lambda row: overlay_decision_score(
-                _float_or_none(row.get("swing_model_probability")),
-                row["_catalyst_assessment"],
-            ),
-            axis=1,
-        )
-        rows = rows.sort_values("_decision_score", ascending=False).reset_index(drop=True)
-        daily_counts = (
-            source_frame.assign(
-                ticker=source_frame["ticker"].astype(str).str.upper(),
-                _trading_date=pd.to_datetime(source_frame["date"], errors="coerce").dt.date,
+        rows["_decision_score"] = rows["swing_model_probability"].map(_float_or_none)
+        rows = rows.sort_values("_decision_score", ascending=False, na_position="last").reset_index(drop=True)
+        daily_counts = pd.Series(dtype="int64")
+        if self.data_source == "curated":
+            daily_counts = (
+                source_frame.assign(
+                    ticker=source_frame["ticker"].astype(str).str.upper(),
+                    _trading_date=pd.to_datetime(source_frame["date"], errors="coerce").dt.date,
+                )
+                .groupby("ticker")["_trading_date"]
+                .nunique()
             )
-            .groupby("ticker")["_trading_date"]
-            .nunique()
-        )
         predictions: list[SwingPrediction] = []
-        for idx, row in rows.iterrows():
+        ready_rank = 0
+        for _, row in rows.iterrows():
             ticker = str(row["ticker"]).upper()
             catalyst = row["_catalyst_assessment"]
-            readiness = self._daily_readiness(row, daily_counts.get(ticker, 0), model_status)
+            audited_count = _int_or_none(row.get("daily_bar_count"))
+            research_fallback = self.data_source == "curated" and audited_count is None
+            daily_bar_count = int(daily_counts.get(ticker, 0)) if research_fallback else audited_count
+            readiness = self._daily_readiness(
+                row,
+                daily_bar_count,
+                model_status,
+                missing_audited_count=audited_count is None and self.data_source == "live",
+            )
             is_ready = readiness.status == VALID
+            if is_ready:
+                ready_rank += 1
             predictions.append(
                 SwingPrediction(
                     ticker=ticker,
@@ -412,8 +526,8 @@ class PredictionService:
                     probability=_float_or_none(row.get("swing_model_probability")),
                     decision_score=(_float_or_none(row.get("_decision_score")) if is_ready else None),
                     model_prediction=(_int_or_none(row.get("swing_model_prediction")) if is_ready else None),
-                    signal=(_swing_signal(row.get("swing_model_probability"), catalyst) if is_ready else "not_ready"),
-                    rank=idx + 1 if is_ready else None,
+                    signal=(_swing_signal(row.get("swing_model_probability")) if is_ready else "not_ready"),
+                    rank=ready_rank if is_ready else None,
                     close=_float_or_none(row.get("close")),
                     return_1d=_float_or_none(row.get("return_1d")),
                     volume_z20=_float_or_none(row.get("volume_z20")),
@@ -470,7 +584,8 @@ class PredictionService:
         rows = rows.sort_values("_decision_score", ascending=False).reset_index(drop=True)
         intraday_counts = source_frame.assign(ticker=source_frame["ticker"].astype(str).str.upper()).groupby("ticker").size()
         predictions: list[IntradayPrediction] = []
-        for idx, row in rows.iterrows():
+        ready_rank = 0
+        for _, row in rows.iterrows():
             ticker = str(row["ticker"]).upper()
             catalyst = row["_catalyst_assessment"]
             warm_count = _int_or_none(row.get("five_minute_bar_count"))
@@ -480,6 +595,8 @@ class PredictionService:
                 model_status,
             )
             is_ready = readiness.status == VALID
+            if is_ready:
+                ready_rank += 1
             predictions.append(
                 IntradayPrediction(
                     ticker=ticker,
@@ -493,12 +610,11 @@ class PredictionService:
                         _intraday_signal(
                             row.get(opportunity_col),
                             row.get(downside_col),
-                            catalyst,
                         )
                         if is_ready
                         else "not_ready"
                     ),
-                    rank=idx + 1 if is_ready else None,
+                    rank=ready_rank if is_ready else None,
                     close=_float_or_none(row.get("close")),
                     return_15m=_float_or_none(row.get("return_3bar_5m")),
                     relative_volume=_float_or_none(row.get("relative_volume_same_slot_20d_5m")),
@@ -527,7 +643,14 @@ class PredictionService:
             )
         return predictions
 
-    def _daily_readiness(self, row: pd.Series, daily_bar_count: int, model_status: str) -> ReadinessInfo:
+    def _daily_readiness(
+        self,
+        row: pd.Series,
+        daily_bar_count: int | None,
+        model_status: str,
+        *,
+        missing_audited_count: bool = False,
+    ) -> ReadinessInfo:
         benchmark_present = _has_any_value(
             row,
             ["sector_return_1d", "rel_return_1d_vs_sector", "spy_return_1d"],
@@ -543,7 +666,7 @@ class PredictionService:
         )
         price_feed = str(row.get("price_feed", "unknown") or "unknown")
         assessed = assess_daily_readiness(
-            daily_bar_count=int(daily_bar_count),
+            daily_bar_count=int(daily_bar_count or 0),
             latest_price_date=_string_or_none(row.get("date")),
             price_feed=price_feed,
             benchmark_present=benchmark_present,
@@ -552,9 +675,12 @@ class PredictionService:
             news_candle_mismatch_count=int(row.get("news_candle_mismatch_count", 0) or 0),
             stale_cache=bool(row.get("stale_cache", False)),
         )
+        reasons = list(assessed.reasons)
+        if missing_audited_count:
+            reasons.insert(0, "live feature row is missing audited daily_bar_count")
         return ReadinessInfo(
             status=assessed.status,
-            reasons=assessed.reasons,
+            reasons=reasons,
             timeframe="daily",
             daily_bar_count=assessed.daily_bar_count,
             intraday_bar_count=assessed.intraday_bar_count,
@@ -620,12 +746,11 @@ class PredictionService:
         request: PredictionRequest,
     ) -> tuple[ServingRoute, Path, str]:
         if mode not in DEFAULT_MODE_HORIZONS:
-            raise ValueError(f"unsupported prediction mode: {mode}")
+            raise PredictionValidationError
         routes = self.routes.get(mode, {})
-        resolved_horizon = DEFAULT_MODE_HORIZONS[mode] if request.horizon == "auto" else request.horizon
+        resolved_horizon = DEFAULT_MODE_HORIZONS[mode] if request.horizon == "auto" else _canonical_horizon(request.horizon)
         if resolved_horizon not in routes:
-            supported = ", ".join(sorted(routes))
-            raise ValueError(f"unsupported {mode} horizon {resolved_horizon}; supported horizons: {supported}")
+            raise PredictionValidationError
         route = routes[resolved_horizon]
         return route, self._resolve(route.model), resolved_horizon
 
@@ -664,11 +789,33 @@ class PredictionService:
         if availability.isna().any():
             raise ValueError(f"{timeframe} feature dataset contains invalid timestamps")
         working["_feature_available_at_utc"] = availability
+        if timeframe == "daily" and self.data_source == "live":
+            cutoff_columns = {"bar_available_at_utc", "decision_time_utc", "prediction_cutoff_policy_id"}
+            missing_cutoff = sorted(cutoff_columns.difference(working.columns))
+            if missing_cutoff:
+                raise ValueError(f"live swing feature identity is incomplete: {', '.join(missing_cutoff)}")
+            decision = _strict_utc_series(working["decision_time_utc"])
+            bar_available = _strict_utc_series(working["bar_available_at_utc"])
+            if bool(decision.isna().any() | bar_available.isna().any() | bar_available.gt(decision).any()):
+                raise ValueError("live swing cutoff timestamps are invalid")
+            if bool(
+                working["prediction_cutoff_policy_id"]
+                .astype(str)
+                .ne(SWING_NIGHTLY_CUTOFF.policy_id)
+                .any()
+            ):
+                raise ValueError("live swing cutoff policy identity is invalid")
         if request.as_of is None:
             return working
 
         cutoff = pd.Timestamp(request.as_of).tz_convert("UTC")
-        working = working[working["_feature_available_at_utc"] <= cutoff].copy()
+        eligible = working["_feature_available_at_utc"] <= cutoff
+        if "decision_time_utc" in working.columns:
+            decision_times = pd.to_datetime(working["decision_time_utc"], errors="coerce", utc=True)
+            if decision_times.isna().any():
+                raise ValueError(f"{timeframe} feature dataset contains invalid decision timestamps")
+            eligible &= decision_times <= cutoff
+        working = working[eligible].copy()
         if working.empty:
             raise ValueError(f"no {timeframe} feature rows are available at or before {request.as_of.isoformat()}")
         return working
@@ -727,11 +874,27 @@ class PredictionService:
         request: PredictionRequest,
         *,
         models: dict[str, ModelInfo],
+        feature_sources: dict[str, _FeatureSource],
+        feature_frames: dict[str, pd.DataFrame],
         swing_predictions: list[SwingPrediction] | None = None,
         intraday_predictions: list[IntradayPrediction] | None = None,
     ) -> PredictionResponse:
-        swing_by_ticker = {row.ticker: row for row in swing_predictions or []}
-        intraday_by_ticker = {row.ticker: row for row in intraday_predictions or []}
+        request_id = str(uuid4())
+        evidence = self._prediction_evidence(
+            request,
+            request_id=request_id,
+            models=models,
+            feature_sources=feature_sources,
+            feature_frames=feature_frames,
+        )
+        swing_rows = swing_predictions or []
+        intraday_rows = intraday_predictions or []
+        if self.data_source == "live" and evidence.identity_status != "complete":
+            reason = "live prediction identity is incomplete"
+            swing_rows = [_suppress_swing_prediction(row, reason) for row in swing_rows]
+            intraday_rows = [_suppress_intraday_prediction(row, reason) for row in intraday_rows]
+        swing_by_ticker = {row.ticker: row for row in swing_rows}
+        intraday_by_ticker = {row.ticker: row for row in intraday_rows}
         rows = []
         for ticker in request.tickers:
             swing_row = swing_by_ticker.get(ticker)
@@ -747,12 +910,116 @@ class PredictionService:
                 )
             )
         return PredictionResponse(
+            request_id=request_id,
             mode=request.mode,
             data_source=self.data_source,
-            horizon=request.horizon,
+            horizon=_response_horizon(request, models),
             resolved_horizons={name: info.resolved_horizon for name, info in models.items() if info.resolved_horizon is not None},
             models=models,
             predictions=rows,
+            evidence=evidence,
+        )
+
+    def _prediction_evidence(
+        self,
+        request: PredictionRequest,
+        *,
+        request_id: str,
+        models: dict[str, ModelInfo],
+        feature_sources: dict[str, _FeatureSource],
+        feature_frames: dict[str, pd.DataFrame],
+    ) -> PredictionEvidenceV1:
+        rows: list[PredictionRowEvidenceV1] = []
+        gaps: list[str] = []
+        cutoffs: list[datetime] = []
+        feature_artifacts: dict[str, FeatureArtifactIdentityV1] = {}
+        source_watermarks: dict[str, dict[str, str]] = {}
+        release_ids: set[str] = set()
+
+        for mode, frame in feature_frames.items():
+            latest = self._latest_rows(frame)
+            for _, row in latest.iterrows():
+                decision = _aware_datetime_or_none(row.get("decision_time_utc"))
+                availability = _aware_datetime_or_none(
+                    row.get("_feature_available_at_utc", row.get("feature_available_at_utc"))
+                )
+                ticker = str(row.get("ticker", "")).upper()
+                if decision is None or availability is None or not ticker:
+                    gaps.append(f"{mode} row availability identity is missing")
+                    continue
+                if availability > decision:
+                    gaps.append(f"{mode} feature availability exceeds prediction cutoff")
+                    continue
+                rows.append(
+                    PredictionRowEvidenceV1(
+                        ticker=ticker,
+                        view=mode,
+                        decision_time_utc=decision,
+                        feature_available_at_utc=availability,
+                    )
+                )
+                cutoffs.append(decision)
+
+            source = feature_sources[mode]
+            if _is_sha256(source.artifact_sha256):
+                feature_artifacts[mode] = FeatureArtifactIdentityV1(
+                    mode=mode,
+                    artifact_sha256=str(source.artifact_sha256),
+                    source_artifact_sha256=(
+                        str(source.source_artifact_sha256) if _is_sha256(source.source_artifact_sha256) else None
+                    ),
+                    source_artifact_type=source.source_artifact_type,
+                    feature_schema_version=source.feature_schema_version,
+                )
+            else:
+                gaps.append(f"{mode} feature artifact identity is missing")
+            source_watermarks[mode] = dict(source.source_watermarks or {})
+            if self.data_source == "live" and not source_watermarks[mode]:
+                gaps.append(f"{mode} source coverage watermarks are missing")
+            if source.release_id is not None:
+                if _is_sha256(source.release_id):
+                    release_ids.add(source.release_id)
+                else:
+                    gaps.append(f"{mode} release identity is invalid")
+
+        model_hashes: dict[str, str] = {}
+        for mode, model in models.items():
+            if _is_sha256(model.artifact_sha256):
+                model_hashes[mode] = str(model.artifact_sha256)
+            else:
+                gaps.append(f"{mode} model artifact identity is missing")
+
+        if not cutoffs:
+            raise PredictionReadinessError
+        if len(release_ids) > 1:
+            gaps.append("feature sources belong to different serving releases")
+        release_id = next(iter(release_ids)) if len(release_ids) == 1 else None
+        identity_status = "research_only" if self.data_source == "curated" else ("incomplete" if gaps else "complete")
+        return PredictionEvidenceV1(
+            request_id=request_id,
+            correlation_id=request.correlation_id or request_id,
+            prediction_cutoff_utc=max(cutoffs),
+            row_feature_availability=rows,
+            feature_artifacts=feature_artifacts,
+            release_id=release_id,
+            model_artifact_sha256=model_hashes,
+            source_watermarks=source_watermarks,
+            resolved_horizons={
+                name: info.resolved_horizon for name, info in models.items() if info.resolved_horizon is not None
+            },
+            view_prediction_cutoffs_utc={
+                mode: max(
+                    row.decision_time_utc
+                    for row in rows
+                    if row.view == mode
+                )
+                for mode in feature_frames
+                if any(row.view == mode for row in rows)
+            },
+            serving_policy_id=SERVING_POLICY_ID,
+            serving_policy_sha256=SERVING_POLICY_SHA256,
+            identity_status=identity_status,
+            identity_gaps=sorted(set(gaps)),
         )
 
     def _read_frame(self, path: Path) -> pd.DataFrame:
@@ -769,12 +1036,42 @@ class PredictionService:
         mode: str,
         route: ServingRoute,
         request: PredictionRequest,
-    ) -> pd.DataFrame:
+    ) -> _FeatureSource:
         if self.data_source == "curated":
             if route.curated_dataset is None:
-                raise ValueError(f"no curated {mode} dataset is configured for this serving route")
-            return self._read_frame(self._resolve(route.curated_dataset))
-        return self.live_feature_store.load(mode, as_of=request.as_of)  # type: ignore[arg-type]
+                raise PredictionReadinessError
+            path = self._resolve(route.curated_dataset)
+            return _FeatureSource(
+                frame=self._read_frame(path),
+                artifact_sha256=file_sha256(path),
+                source_artifact_type="curated_feature_dataset",
+            )
+        manifest = self.live_feature_store.validate(mode, as_of=request.as_of)  # type: ignore[arg-type]
+        watermarks_raw = manifest.get("source_watermarks")
+        watermarks = (
+            {str(key): str(value) for key, value in watermarks_raw.items()}
+            if isinstance(watermarks_raw, dict)
+            else {}
+        )
+        return _FeatureSource(
+            frame=self.live_feature_store.load(mode, as_of=request.as_of),  # type: ignore[arg-type]
+            artifact_sha256=_optional_str(manifest.get("artifact_sha256")),
+            source_artifact_sha256=_optional_str(manifest.get("source_artifact_sha256")),
+            source_artifact_type=_optional_str(manifest.get("source_artifact_type")),
+            feature_schema_version=_optional_str(manifest.get("feature_schema_version")),
+            source_watermarks=watermarks,
+            release_id=self._active_release_id(),
+        )
+
+    def _active_release_id(self) -> str | None:
+        marker = self.root / "data/live/.active_release.json"
+        if not marker.exists():
+            return None
+        loaded = json.loads(marker.read_text(encoding="utf-8"))
+        release_id = loaded.get("release_id") if isinstance(loaded, dict) else None
+        if not _is_sha256(release_id):
+            raise ValueError("active release identity is invalid")
+        return str(release_id)
 
     def _resolve(self, path: Path) -> Path:
         return path if path.is_absolute() else self.root / path
@@ -815,41 +1112,35 @@ def _final_signal(swing: SwingPrediction | None, intraday: IntradayPrediction | 
     swing_prob = swing.probability if swing else None
     intra_prob = intraday.opportunity_probability if intraday else None
     intra_downside = intraday.downside_probability if intraday else None
-    if intraday is not None and intraday.catalyst.status == "veto":
-        return "avoid_entry_catalyst_veto"
-    if intraday is not None and intraday.catalyst.status == "conflicting" and intra_prob is not None and intra_prob >= 0.55:
-        return "wait_catalyst_conflict"
-    intraday_supports_entry = intra_prob is None or (intra_prob >= 0.55 and (intra_downside is None or intra_downside <= 0.45))
-    if swing_prob is not None and swing_prob >= 0.65 and intraday_supports_entry:
-        if intraday is not None and intraday.catalyst.status == "confirmed":
-            return "high_conviction_watch_confirmed"
+    intraday_supports_entry = intra_prob is None or (
+        intra_prob >= _INTRADAY_WATCH
+        and (intra_downside is None or intra_downside <= _INTRADAY_WATCH_MAX_DOWNSIDE)
+    )
+    if swing_prob is not None and swing_prob >= _SWING_STRONG and intraday_supports_entry:
         return "high_conviction_watch"
-    if swing_prob is not None and swing_prob >= 0.55 and intraday_supports_entry:
+    if swing_prob is not None and swing_prob >= _SWING_WATCH and intraday_supports_entry:
         return "watch_for_entry"
-    if intra_prob is not None and intra_prob >= 0.65 and (intra_downside is None or intra_downside <= 0.40) and swing_prob is None:
+    if (
+        intra_prob is not None
+        and intra_prob >= _SWING_STRONG
+        and (intra_downside is None or intra_downside <= _SWING_LOW)
+        and swing_prob is None
+    ):
         return "intraday_watch"
-    if swing_prob is not None and swing_prob >= 0.55 and intra_prob is not None and intra_prob < 0.50:
+    if swing_prob is not None and swing_prob >= _SWING_WATCH and intra_prob is not None and intra_prob < 0.50:
         return "swing_positive_wait_for_intraday"
     return "neutral"
 
 
-def _swing_signal(probability: Any, catalyst: CatalystAssessment | None = None) -> str:
+def _swing_signal(probability: Any) -> str:
     value = _float_or_none(probability)
     if value is None:
         return "not_scored"
-    if catalyst is not None and catalyst.status == "veto" and value >= 0.55:
-        return "bullish_model_catalyst_veto"
-    if catalyst is not None and catalyst.status == "conflicting" and value >= 0.55:
-        return "bullish_model_catalyst_conflict"
-    if value >= 0.65:
-        if catalyst is not None and catalyst.status == "confirmed":
-            return "strong_bullish_watch_confirmed"
+    if value >= _SWING_STRONG:
         return "strong_bullish_watch"
-    if value >= 0.55:
-        if catalyst is not None and catalyst.status == "confirmed":
-            return "bullish_watch_confirmed"
+    if value >= _SWING_WATCH:
         return "bullish_watch"
-    if value <= 0.40:
+    if value <= _SWING_LOW:
         return "low_probability"
     return "neutral"
 
@@ -857,27 +1148,18 @@ def _swing_signal(probability: Any, catalyst: CatalystAssessment | None = None) 
 def _intraday_signal(
     opportunity_probability: Any,
     downside_probability: Any,
-    catalyst: CatalystAssessment | None = None,
 ) -> str:
     opportunity = _float_or_none(opportunity_probability)
     downside = _float_or_none(downside_probability)
     if opportunity is None or downside is None:
         return "not_scored"
-    if downside >= 0.55:
+    if downside >= _INTRADAY_DOWNSIDE_VETO:
         return "avoid_entry_downside_risk"
-    if catalyst is not None and catalyst.status == "veto" and opportunity >= 0.55:
-        return "avoid_entry_catalyst_veto"
-    if catalyst is not None and catalyst.status == "conflicting" and opportunity >= 0.55:
-        return "wait_catalyst_conflict"
-    if opportunity >= 0.70 and downside <= 0.35:
-        if catalyst is not None and catalyst.status == "confirmed":
-            return "entry_candidate_confirmed"
+    if opportunity >= _INTRADAY_ENTRY and downside <= _INTRADAY_ENTRY_MAX_DOWNSIDE:
         return "entry_candidate"
-    if opportunity >= 0.55 and downside <= 0.45:
-        if catalyst is not None and catalyst.status == "confirmed":
-            return "watch_for_entry_confirmed"
+    if opportunity >= _INTRADAY_WATCH and downside <= _INTRADAY_WATCH_MAX_DOWNSIDE:
         return "watch_for_confirmation"
-    if opportunity <= 0.40 or downside > 0.50:
+    if opportunity <= _INTRADAY_LOW or downside > _INTRADAY_AVOID_DOWNSIDE:
         return "avoid_entry"
     return "neutral"
 
@@ -889,10 +1171,144 @@ def _risk_adjusted_intraday_score(
 ) -> float:
     opportunity = _float_or_none(row.get(opportunity_column))
     downside = _float_or_none(row.get(downside_column))
-    overlaid = overlay_decision_score(opportunity, row["_catalyst_assessment"])
-    if overlaid is None or downside is None:
+    if opportunity is None or downside is None:
         return float("-inf")
-    return max(0.0, min(1.0, overlaid * (1.0 - downside)))
+    return opportunity * (1.0 - downside)
+
+
+def _suppress_swing_prediction(row: SwingPrediction, reason: str) -> SwingPrediction:
+    readiness = row.readiness.model_copy(
+        update={
+            "status": INVALID,
+            "reasons": list(dict.fromkeys([*row.readiness.reasons, reason])),
+        }
+    )
+    return row.model_copy(
+        update={
+            "decision_score": None,
+            "model_prediction": None,
+            "signal": "not_ready",
+            "rank": None,
+            "readiness": readiness,
+        }
+    )
+
+
+def _suppress_intraday_prediction(row: IntradayPrediction, reason: str) -> IntradayPrediction:
+    readiness = row.readiness.model_copy(
+        update={
+            "status": INVALID,
+            "reasons": list(dict.fromkeys([*row.readiness.reasons, reason])),
+        }
+    )
+    return row.model_copy(
+        update={
+            "decision_score": None,
+            "opportunity_prediction": None,
+            "downside_prediction": None,
+            "signal": "not_ready",
+            "rank": None,
+            "readiness": readiness,
+        }
+    )
+
+
+def _combine_evidence(
+    request: PredictionRequest,
+    *,
+    request_id: str,
+    evidence_parts: list[PredictionEvidenceV1],
+    data_source: PredictionDataSource,
+) -> PredictionEvidenceV1:
+    if not evidence_parts:
+        raise PredictionReadinessError
+    rows = [row for evidence in evidence_parts for row in evidence.row_feature_availability]
+    artifacts = {
+        mode: artifact
+        for evidence in evidence_parts
+        for mode, artifact in evidence.feature_artifacts.items()
+    }
+    model_hashes = {
+        mode: digest
+        for evidence in evidence_parts
+        for mode, digest in evidence.model_artifact_sha256.items()
+    }
+    watermarks = {
+        mode: values
+        for evidence in evidence_parts
+        for mode, values in evidence.source_watermarks.items()
+    }
+    horizons = {
+        mode: horizon
+        for evidence in evidence_parts
+        for mode, horizon in evidence.resolved_horizons.items()
+    }
+    gaps = [gap for evidence in evidence_parts for gap in evidence.identity_gaps]
+    policy_hashes = {evidence.serving_policy_sha256 for evidence in evidence_parts}
+    if policy_hashes != {SERVING_POLICY_SHA256}:
+        gaps.append("serving policy identities do not match")
+    release_ids = {evidence.release_id for evidence in evidence_parts if evidence.release_id is not None}
+    if len(release_ids) > 1:
+        gaps.append("prediction views belong to different serving releases")
+    if data_source == "curated":
+        identity_status = "research_only"
+    elif gaps or any(evidence.identity_status != "complete" for evidence in evidence_parts):
+        identity_status = "incomplete"
+    else:
+        identity_status = "complete"
+    return PredictionEvidenceV1(
+        request_id=request_id,
+        correlation_id=request.correlation_id or request_id,
+        prediction_cutoff_utc=max(evidence.prediction_cutoff_utc for evidence in evidence_parts),
+        row_feature_availability=rows,
+        feature_artifacts=artifacts,
+        release_id=next(iter(release_ids)) if len(release_ids) == 1 else None,
+        model_artifact_sha256=model_hashes,
+        source_watermarks=watermarks,
+        resolved_horizons=horizons,
+        view_prediction_cutoffs_utc={
+            mode: cutoff
+            for evidence in evidence_parts
+            for mode, cutoff in evidence.view_prediction_cutoffs_utc.items()
+        },
+        serving_policy_id=SERVING_POLICY_ID,
+        serving_policy_sha256=SERVING_POLICY_SHA256,
+        identity_status=identity_status,
+        identity_gaps=sorted(set(gaps)),
+    )
+
+
+def _response_horizon(request: PredictionRequest, models: dict[str, ModelInfo]) -> str:
+    resolved = {model.resolved_horizon for model in models.values() if model.resolved_horizon is not None}
+    if len(resolved) == 1:
+        return next(iter(resolved))
+    return request.horizon
+
+
+def _canonical_horizon(value: str) -> str:
+    normalized = value.strip().lower()
+    return "60m" if normalized == "1h" else normalized
+
+
+def _aware_datetime_or_none(value: Any) -> datetime | None:
+    if value is None:
+        return None
+    try:
+        timestamp = pd.Timestamp(value)
+    except (TypeError, ValueError):
+        return None
+    if pd.isna(timestamp) or timestamp.tzinfo is None:
+        return None
+    return cast(datetime, timestamp.tz_convert("UTC").to_pydatetime())
+
+
+def _strict_utc_series(values: pd.Series) -> pd.Series:
+    return pd.to_datetime(values.map(_aware_datetime_or_none), utc=True)
+
+
+def _is_sha256(value: Any) -> bool:
+    text = str(value or "").lower()
+    return len(text) == 64 and all(character in "0123456789abcdef" for character in text)
 
 
 def _drivers(row: pd.Series, columns: list[str]) -> dict[str, float | int | str | None]:

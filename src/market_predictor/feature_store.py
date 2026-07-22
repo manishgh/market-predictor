@@ -11,6 +11,7 @@ from uuid import uuid4
 
 import pandas as pd
 
+from market_predictor.canonical.cutoffs import SWING_NIGHTLY_CUTOFF, swing_prediction_cutoffs
 from market_predictor.live_features import (
     LIVE_ARTIFACT_TYPES,
     LIVE_SCHEMA_VERSIONS,
@@ -100,6 +101,14 @@ class LiveFeatureStore:
             raise ValueError("cannot publish an empty live feature snapshot")
         required = {"ticker", "date", "decision_time_utc", "feature_available_at_utc", "price_feed"}
         required.update(live_feature_columns(mode))
+        if mode == "swing":
+            required.update(
+                {
+                    "bar_available_at_utc",
+                    "daily_bar_count",
+                    "prediction_cutoff_policy_id",
+                }
+            )
         missing = sorted(required.difference(frame.columns))
         if missing:
             raise ValueError(f"live feature snapshot missing columns: {', '.join(missing)}")
@@ -122,10 +131,25 @@ class LiveFeatureStore:
         decision_times = pd.to_datetime(frame["decision_time_utc"], errors="coerce", utc=True)
         if bool(decision_times.isna().any()) or decision_times.nunique() != 1:
             raise ValueError("live feature snapshot must contain one coherent decision time")
+        if mode == "swing":
+            policy_ids = set(frame["prediction_cutoff_policy_id"].astype(str).str.strip())
+            if policy_ids != {SWING_NIGHTLY_CUTOFF.policy_id}:
+                raise ValueError("live swing features do not use the frozen prediction cutoff policy")
+            expected_cutoffs = swing_prediction_cutoffs(frame["date"])
+            if bool(decision_times.ne(expected_cutoffs).any()):
+                raise ValueError("live swing decision_time_utc does not match the frozen calendar cutoff")
+            bar_available = pd.to_datetime(frame["bar_available_at_utc"], errors="coerce", utc=True)
+            if bool(bar_available.isna().any() | bar_available.gt(decision_times).any()):
+                raise ValueError("live swing bar availability is invalid or after the prediction cutoff")
+            daily_bar_count = pd.to_numeric(frame["daily_bar_count"], errors="coerce")
+            if bool(daily_bar_count.isna().any() | daily_bar_count.lt(1).any()):
+                raise ValueError("live swing features require an audited positive daily_bar_count")
         tickers = frame["ticker"].astype(str).str.upper().str.strip()
         if bool(tickers.eq("").any()) or bool(tickers.duplicated().any()):
             raise ValueError("live feature snapshot contains invalid or duplicate tickers")
         generated = _utc(generated_at or datetime.now(UTC))
+        if bool((decision_times > generated).any()):
+            raise ValueError("live feature snapshot cannot be published before its decision cutoff")
         availability = pd.to_datetime(frame["feature_available_at_utc"], errors="coerce", utc=True)
         if bool(availability.isna().any()):
             raise ValueError("live feature snapshot contains invalid feature availability")
@@ -137,6 +161,14 @@ class LiveFeatureStore:
         feature_max_age = self.config.swing_feature_max_age if mode == "swing" else self.config.intraday_feature_max_age
         if bool(((generated - availability) > feature_max_age).any()):
             raise ValueError(f"live {mode} feature snapshot contains stale rows at publication")
+        watermarks = _source_watermarks(frame, decision_times)
+        for source, value in (source_watermarks or {}).items():
+            timestamp = _parse_utc(value)
+            if timestamp > cast(datetime, decision_times.iloc[0].to_pydatetime()):
+                raise ValueError(f"source watermark {source} is after the prediction cutoff")
+            watermarks[str(source)] = timestamp.isoformat()
+        if not watermarks:
+            raise ValueError("live feature snapshot requires source coverage watermarks")
         path = self._path(mode)
         path.parent.mkdir(parents=True, exist_ok=True)
         temporary = path.with_name(f".{path.name}.{uuid4().hex}.tmp")
@@ -160,7 +192,7 @@ class LiveFeatureStore:
                 "first_feature_time": availability.min().isoformat(),
                 "last_feature_time": latest_feature.isoformat(),
                 "price_feed": normalized_feed,
-                "source_watermarks": source_watermarks or {},
+                "source_watermarks": watermarks,
             }
             manifest_tmp.write_text(json.dumps(manifest, indent=2, sort_keys=True), encoding="utf-8")
             os.replace(temporary, path)
@@ -190,6 +222,14 @@ class LiveFeatureStore:
         columns = manifest.get("columns")
         required_columns = {"ticker", "date", "decision_time_utc", "feature_available_at_utc", "price_feed"}
         required_columns.update(live_feature_columns(mode))
+        if mode == "swing":
+            required_columns.update(
+                {
+                    "bar_available_at_utc",
+                    "daily_bar_count",
+                    "prediction_cutoff_policy_id",
+                }
+            )
         if not isinstance(columns, list) or not required_columns.issubset(set(columns)):
             raise ValueError(f"live {mode} feature manifest has an invalid column contract")
         forbidden = forbidden_live_columns(str(column) for column in columns)
@@ -197,6 +237,11 @@ class LiveFeatureStore:
             raise ValueError(f"live {mode} feature manifest contains labels or future paths")
         if str(manifest.get("price_feed", "")).lower() not in {"sip", "consolidated"}:
             raise ValueError(f"live {mode} feature manifest has invalid price-feed provenance")
+        watermarks = manifest.get("source_watermarks")
+        if not isinstance(watermarks, dict) or not watermarks:
+            raise ValueError(f"live {mode} feature manifest is missing source coverage watermarks")
+        for value in watermarks.values():
+            _parse_utc(str(value))
         expected_hash = str(manifest.get("artifact_sha256", ""))
         if not expected_hash or _file_sha256(path) != expected_hash:
             raise ValueError(f"live {mode} feature snapshot integrity check failed")
@@ -235,6 +280,28 @@ def _manifest_path(path: Path) -> Path:
     return path.with_suffix(path.suffix + ".manifest.json")
 
 
+def _source_watermarks(frame: pd.DataFrame, decision_times: pd.Series) -> dict[str, str]:
+    watermarks: dict[str, str] = {}
+    prefixes = (
+        ("source_coverage_end_utc_", "ticker:"),
+        ("global_source_coverage_end_utc_", "global:"),
+    )
+    for column in frame.columns:
+        matched = next(
+            ((prefix, namespace) for prefix, namespace in prefixes if column.startswith(prefix)),
+            None,
+        )
+        if matched is None:
+            continue
+        prefix, namespace = matched
+        values = pd.to_datetime(frame[column], errors="coerce", utc=True)
+        if bool(values.isna().any() | values.gt(decision_times).any()):
+            raise ValueError(f"source coverage watermark column is invalid: {column}")
+        conservative = cast(datetime, values.min().to_pydatetime())
+        watermarks[f"{namespace}{column.removeprefix(prefix)}"] = conservative.isoformat()
+    return watermarks
+
+
 def _file_sha256(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as handle:
@@ -250,9 +317,8 @@ def _is_sha256(value: str) -> bool:
 def _parse_utc(value: str) -> datetime:
     timestamp = pd.Timestamp(value)
     if timestamp.tzinfo is None:
-        timestamp = timestamp.tz_localize("UTC")
-    else:
-        timestamp = timestamp.tz_convert("UTC")
+        raise ValueError("live feature manifest timestamps must be timezone-aware")
+    timestamp = timestamp.tz_convert("UTC")
     return cast(datetime, timestamp.to_pydatetime())
 
 

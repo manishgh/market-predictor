@@ -16,8 +16,14 @@ from market_predictor.intraday.contracts import (
     INTRADAY_MODEL_TYPE,
 )
 from market_predictor.live_features import live_feature_columns
-from market_predictor.prediction_contracts import PredictionDataSource, PredictionRequest
+from market_predictor.prediction_contracts import (
+    PredictionDataSource,
+    PredictionReadinessError,
+    PredictionRequest,
+)
 from market_predictor.prediction_service import (
+    SERVING_POLICY_ID,
+    SERVING_POLICY_SHA256,
     PredictionService,
     ServingRoute,
     serving_routes_from_config,
@@ -80,8 +86,15 @@ class PredictionServiceTests(unittest.TestCase):
             assert prediction is not None
             self.assertEqual(prediction.ticker, "MSFT")
             self.assertAlmostEqual(prediction.probability or 0.0, 0.73)
-            self.assertEqual(prediction.signal, "strong_bullish_watch_confirmed")
+            self.assertEqual(prediction.signal, "strong_bullish_watch")
+            self.assertAlmostEqual(prediction.decision_score or 0.0, 0.73)
             self.assertEqual(prediction.readiness.status, "valid")
+            self.assertEqual(response.horizon, "5d")
+            self.assertIsNotNone(response.evidence)
+            assert response.evidence is not None
+            self.assertEqual(response.evidence.serving_policy_id, SERVING_POLICY_ID)
+            self.assertEqual(response.evidence.serving_policy_sha256, SERVING_POLICY_SHA256)
+            self.assertEqual(response.evidence.identity_status, "research_only")
 
     def test_swing_prediction_rejects_candidate_model_by_default(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -92,7 +105,7 @@ class PredictionServiceTests(unittest.TestCase):
             _swing_frame(["MSFT"], features, rows=260).to_parquet(dataset, index=False)
             _write_model(model, features, target_col="target_net_positive_5d", status="candidate", probability=0.73)
 
-            with self.assertRaisesRegex(ValueError, "status candidate is not allowed"):
+            with self.assertRaises(PredictionReadinessError):
                 _service(root, swing=(dataset, model)).predict_swing(PredictionRequest(tickers=["MSFT"], mode="swing"))
 
     def test_unified_response_keeps_swing_when_intraday_model_is_not_promoted(self) -> None:
@@ -161,7 +174,7 @@ class PredictionServiceTests(unittest.TestCase):
             _swing_frame(["MSFT"], features, rows=260).to_parquet(dataset, index=False)
             _write_model(model, features, target_col="target_net_positive_5d", status="promoted", probability=0.73)
 
-            with self.assertRaisesRegex(ValueError, "incompatible with model target horizon 5d"):
+            with self.assertRaises(PredictionReadinessError):
                 _service(root, swing=(dataset, model), swing_horizon="1d").predict_swing(
                     PredictionRequest(
                         tickers=["MSFT"],
@@ -169,6 +182,33 @@ class PredictionServiceTests(unittest.TestCase):
                         horizon="1d",
                     )
                 )
+
+    def test_intraday_60m_wire_horizon_accepts_60m_1h_and_auto(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            dataset = root / "intraday.parquet"
+            model = root / "intraday.joblib"
+            features = ["return_1d", "volume_z20"]
+            _intraday_frame("MSFT", rows=150).to_parquet(dataset, index=False)
+            _write_model(
+                model,
+                features,
+                target_col="target_before_stop_60m",
+                status="promoted",
+                probability=0.72,
+            )
+            service = _service(root, intraday=(dataset, model))
+
+            for requested in ("60m", "1h", "auto"):
+                with self.subTest(requested=requested):
+                    response = service.predict_intraday(
+                        PredictionRequest(tickers=["MSFT"], mode="intraday", horizon=requested)
+                    )
+                    self.assertEqual(response.horizon, "60m")
+                    self.assertEqual(response.resolved_horizons, {"intraday": "60m"})
+                    self.assertIsNotNone(response.evidence)
+                    assert response.evidence is not None
+                    self.assertEqual(response.evidence.resolved_horizons, {"intraday": "60m"})
 
     def test_intraday_as_of_waits_for_bar_close_and_uses_intraday_readiness(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -222,7 +262,7 @@ class PredictionServiceTests(unittest.TestCase):
             self.assertEqual(response.snapshot_id, response.snapshot_sha256)
             self.assertTrue(service.snapshot_store.path_for(response.snapshot_id or "").exists())
 
-    def test_intraday_catalyst_overlay_changes_decision_not_model_probability(self) -> None:
+    def test_intraday_catalyst_is_metadata_only_and_exact_policy_is_served(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             dataset = root / "intraday.parquet"
@@ -250,9 +290,9 @@ class PredictionServiceTests(unittest.TestCase):
             assert prediction is not None
             self.assertAlmostEqual(prediction.opportunity_probability or 0.0, 0.72)
             self.assertAlmostEqual(prediction.downside_probability or 0.0, 0.20)
-            self.assertAlmostEqual(prediction.decision_score or 0.0, 0.608)
+            self.assertAlmostEqual(prediction.decision_score or 0.0, 0.72 * (1.0 - 0.20))
             self.assertEqual(prediction.catalyst.status, "confirmed")
-            self.assertEqual(prediction.signal, "entry_candidate_confirmed")
+            self.assertEqual(prediction.signal, "entry_candidate")
 
     def test_live_data_source_uses_registered_feature_store(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -262,7 +302,7 @@ class PredictionServiceTests(unittest.TestCase):
             frame = _swing_frame(["MSFT"], features, rows=260)
             _write_model(model, features, target_col="target_net_positive_5d", status="promoted", probability=0.73)
             store = LiveFeatureStore(root)
-            generated = datetime(2025, 9, 17, 20, 30, tzinfo=UTC)
+            generated = datetime(2025, 9, 17, 22, 5, tzinfo=UTC)
             _publish_live_swing(store, frame, generated)
 
             response = _service(
@@ -282,6 +322,87 @@ class PredictionServiceTests(unittest.TestCase):
             prediction = response.predictions[0].swing
             assert prediction is not None
             self.assertAlmostEqual(prediction.probability or 0.0, 0.73)
+            self.assertEqual(prediction.readiness.daily_bar_count, 260)
+            self.assertEqual(prediction.readiness.status, "valid")
+            self.assertEqual(prediction.signal, "strong_bullish_watch")
+            self.assertIsNotNone(response.evidence)
+            assert response.evidence is not None
+            self.assertEqual(response.evidence.identity_status, "complete")
+            self.assertIn("swing", response.evidence.feature_artifacts)
+            self.assertEqual(response.evidence.model_artifact_sha256["swing"], response.models["swing"].artifact_sha256)
+            expected_cutoff = pd.to_datetime(frame["decision_time_utc"], utc=True).max().to_pydatetime()
+            self.assertEqual(response.evidence.prediction_cutoff_utc, expected_cutoff)
+            self.assertEqual(response.evidence.view_prediction_cutoffs_utc, {"swing": expected_cutoff})
+            self.assertIn("ticker:alpaca", response.evidence.source_watermarks["swing"])
+
+    def test_live_swing_fails_closed_for_under_warm_or_missing_audited_count(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            daily_bar_count = 249
+            with self.subTest(daily_bar_count=daily_bar_count):
+                root = Path(tmp)
+                model = root / "swing.joblib"
+                features = ["return_1d", "volume_z20"]
+                frame = _swing_frame(["MSFT"], features, rows=260)
+                _write_model(
+                    model,
+                    features,
+                    target_col="target_net_positive_5d",
+                    status="promoted",
+                    probability=0.73,
+                )
+                store = LiveFeatureStore(root)
+                generated = datetime(2025, 9, 17, 22, 5, tzinfo=UTC)
+                _publish_live_swing(store, frame, generated, daily_bar_count=daily_bar_count)
+
+                response = _service(
+                    root,
+                    swing=(None, model),
+                    data_source="live",
+                    live_feature_store=store,
+                ).predict_swing(PredictionRequest(tickers=["MSFT"], mode="swing", as_of=generated))
+
+                prediction = response.predictions[0].swing
+                assert prediction is not None
+                self.assertEqual(prediction.readiness.status, "warn")
+                self.assertEqual(prediction.signal, "not_ready")
+                self.assertIsNone(prediction.rank)
+                self.assertIsNone(prediction.decision_score)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            store = LiveFeatureStore(root)
+            frame = _swing_frame(["MSFT"], ["return_1d", "volume_z20"], rows=260)
+            with self.assertRaisesRegex(ValueError, "daily_bar_count"):
+                _publish_live_swing(
+                    store,
+                    frame,
+                    datetime(2025, 9, 17, 22, 5, tzinfo=UTC),
+                    daily_bar_count=None,
+                )
+
+    def test_negative_catalyst_does_not_modify_swing_score_signal_or_rank(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            dataset = root / "features.parquet"
+            model = root / "swing.joblib"
+            features = ["return_1d", "volume_z20"]
+            frame = _swing_frame(["MSFT"], features, rows=260)
+            frame["sentiment_mean_3d"] = -0.60
+            frame["event_relevance_mean_3d"] = 1.5
+            frame["event_offering_count_1d"] = 1.0
+            frame.to_parquet(dataset, index=False)
+            _write_model(model, features, target_col="target_net_positive_5d", status="promoted", probability=0.73)
+
+            response = _service(root, swing=(dataset, model)).predict_swing(
+                PredictionRequest(tickers=["MSFT"], mode="swing")
+            )
+
+            prediction = response.predictions[0].swing
+            assert prediction is not None
+            self.assertEqual(prediction.catalyst.status, "veto")
+            self.assertAlmostEqual(prediction.decision_score or 0.0, 0.73)
+            self.assertEqual(prediction.signal, "strong_bullish_watch")
+            self.assertEqual(prediction.rank, 1)
 
     def test_rejects_model_when_artifact_no_longer_matches_manifest(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -300,7 +421,7 @@ class PredictionServiceTests(unittest.TestCase):
             with model.open("ab") as handle:
                 handle.write(b"tampered")
 
-            with self.assertRaisesRegex(ValueError, "artifact integrity check failed"):
+            with self.assertRaises(PredictionReadinessError):
                 _service(root, swing=(dataset, model)).predict_swing(PredictionRequest(tickers=["MSFT"], mode="swing"))
 
     def test_warning_readiness_is_never_returned_as_actionable(self) -> None:
@@ -343,7 +464,7 @@ class PredictionServiceTests(unittest.TestCase):
                 status="promoted",
                 probability=0.73,
             )
-            generated = datetime(2025, 9, 17, 20, 30, tzinfo=UTC)
+            generated = datetime(2025, 9, 17, 22, 5, tzinfo=UTC)
             store = LiveFeatureStore(root)
             _publish_live_swing(store, frame, generated)
             service = _service(
@@ -462,6 +583,8 @@ def _publish_live_swing(
     store: LiveFeatureStore,
     frame: pd.DataFrame,
     generated: datetime,
+    *,
+    daily_bar_count: int | None = 260,
 ) -> dict[str, object]:
     complete = frame.copy()
     latest_decision = pd.to_datetime(complete["decision_time_utc"], utc=True).max()
@@ -472,6 +595,10 @@ def _publish_live_swing(
         if column not in complete
     }
     complete = pd.concat([complete, pd.DataFrame(missing)], axis=1)
+    if daily_bar_count is None:
+        complete = complete.drop(columns=["daily_bar_count"], errors="ignore")
+    else:
+        complete["daily_bar_count"] = daily_bar_count
     return store.publish(
         "swing",
         complete,
@@ -489,16 +616,24 @@ def _swing_frame(tickers: list[str], features: list[str], *, rows: int) -> pd.Da
     for ticker in tickers:
         for idx in range(rows):
             session_date = start + timedelta(days=idx)
-            feature_available = (
+            bar_available = (
                 pd.Timestamp(session_date).tz_localize("America/New_York") + pd.Timedelta(hours=16, minutes=15)
             ).tz_convert("UTC")
+            decision_time = (
+                pd.Timestamp(session_date).tz_localize("America/New_York") + pd.Timedelta(hours=18)
+            ).tz_convert("UTC")
+            feature_available = decision_time - pd.Timedelta(minutes=10)
             record = {
                 "ticker": ticker,
                 "date": session_date,
                 "session_date_et": session_date,
-                "decision_time_utc": feature_available,
+                "decision_time_utc": decision_time,
                 "feature_available_at_utc": feature_available,
+                "bar_available_at_utc": bar_available,
+                "prediction_cutoff_policy_id": "xnys_1800_america_new_york_v1",
+                "source_coverage_end_utc_alpaca": decision_time - pd.Timedelta(minutes=15),
                 "swing_feature_schema_version": SWING_FEATURE_SCHEMA_VERSION,
+                "daily_bar_count": idx + 1,
                 "close": 100.0 + idx,
                 "price_feed": "sip",
                 "return_1d": 0.01,
@@ -528,6 +663,7 @@ def _intraday_frame(ticker: str, *, rows: int) -> pd.DataFrame:
             "date": timestamps.tz_convert(None),
             "bar_start_utc": timestamps,
             "feature_available_at_utc": timestamps + pd.Timedelta(minutes=5),
+            "decision_time_utc": timestamps + pd.Timedelta(minutes=5),
             "intraday_feature_schema_version": INTRADAY_FEATURE_SCHEMA_VERSION,
             "five_minute_bar_count": np.arange(1, rows + 1),
             "open": 100.0,

@@ -9,9 +9,16 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
-from market_predictor.prediction_contracts import PredictionRequest, PredictionResponse
+from market_predictor.prediction_contracts import (
+    PredictionConflictError,
+    PredictionDependencyError,
+    PredictionNotFoundError,
+    PredictionRequest,
+    PredictionResponse,
+    PredictionValidationError,
+)
 
-SNAPSHOT_SCHEMA = "market_predictor.prediction_snapshot.v1"
+SNAPSHOT_SCHEMA = "market_predictor.prediction_snapshot.v2"
 _SNAPSHOT_ID = re.compile(r"^[0-9a-f]{64}$")
 
 
@@ -38,45 +45,61 @@ class PredictionSnapshotStore:
             "content": content,
         }
         path = self.path_for(digest)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        encoded = json.dumps(envelope, indent=2, sort_keys=True, ensure_ascii=True)
-        if path.exists():
-            existing = json.loads(path.read_text(encoding="utf-8"))
-            self._validate_envelope(existing, expected_id=digest)
-        else:
-            temporary = path.with_name(f".{path.name}.{uuid4().hex}.tmp")
-            temporary.write_text(encoded, encoding="utf-8")
-            os.replace(temporary, path)
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            encoded = json.dumps(envelope, indent=2, sort_keys=True, ensure_ascii=True)
+            if path.exists():
+                existing = json.loads(path.read_text(encoding="utf-8"))
+                self._validate_envelope(existing, expected_id=digest)
+            else:
+                temporary = path.with_name(f".{path.name}.{uuid4().hex}.tmp")
+                temporary.write_text(encoded, encoding="utf-8")
+                os.replace(temporary, path)
+        except PredictionConflictError:
+            raise
+        except (json.JSONDecodeError, TypeError, ValueError) as exc:
+            raise PredictionConflictError from exc
+        except OSError as exc:
+            raise PredictionDependencyError from exc
         return response.model_copy(update={"snapshot_id": digest, "snapshot_sha256": digest})
 
     def load(self, snapshot_id: str) -> tuple[PredictionRequest, PredictionResponse, dict[str, Any]]:
         path = self.path_for(snapshot_id)
         if not path.exists():
-            raise FileNotFoundError(f"prediction snapshot does not exist: {snapshot_id}")
-        envelope = json.loads(path.read_text(encoding="utf-8"))
-        self._validate_envelope(envelope, expected_id=snapshot_id)
-        content = envelope["content"]
-        request = PredictionRequest.model_validate(content["request"])
-        response = PredictionResponse.model_validate(content["response"]).model_copy(
-            update={"snapshot_id": snapshot_id, "snapshot_sha256": snapshot_id}
-        )
+            raise PredictionNotFoundError
+        try:
+            envelope = json.loads(path.read_text(encoding="utf-8"))
+            self._validate_envelope(envelope, expected_id=snapshot_id)
+            content = envelope["content"]
+            request = PredictionRequest.model_validate(content["request"])
+            response = PredictionResponse.model_validate(content["response"]).model_copy(
+                update={"snapshot_id": snapshot_id, "snapshot_sha256": snapshot_id}
+            )
+        except PredictionConflictError:
+            raise
+        except (json.JSONDecodeError, KeyError, TypeError, ValueError) as exc:
+            raise PredictionConflictError from exc
+        except OSError as exc:
+            raise PredictionDependencyError from exc
+        if response.evidence is not None:
+            request = request.model_copy(update={"as_of": response.evidence.prediction_cutoff_utc})
         return request, response, envelope
 
     def path_for(self, snapshot_id: str) -> Path:
         normalized = snapshot_id.strip().lower()
         if not _SNAPSHOT_ID.fullmatch(normalized):
-            raise ValueError("snapshot_id must be a 64-character lowercase SHA-256 value")
+            raise PredictionValidationError
         return self.root / normalized[:2] / f"{normalized}.json"
 
     @staticmethod
     def _validate_envelope(envelope: dict[str, Any], *, expected_id: str) -> None:
         if envelope.get("schema") != SNAPSHOT_SCHEMA:
-            raise ValueError("unsupported prediction snapshot schema")
+            raise PredictionConflictError
         snapshot_id = str(envelope.get("snapshot_id", ""))
         content_sha256 = str(envelope.get("content_sha256", ""))
         actual = _content_sha256(envelope.get("content"))
         if snapshot_id != expected_id or content_sha256 != expected_id or actual != expected_id:
-            raise ValueError("prediction snapshot integrity check failed")
+            raise PredictionConflictError
 
 
 def _content_sha256(value: Any) -> str:

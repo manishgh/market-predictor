@@ -9,8 +9,15 @@ from market_predictor.api import create_app
 from market_predictor.prediction_contracts import (
     InvestmentReplayRequest,
     InvestmentReplayResponse,
+    PredictionConflictError,
+    PredictionDependencyError,
+    PredictionNotFoundError,
+    PredictionReadinessError,
     PredictionRequest,
     PredictionResponse,
+    PredictionServiceError,
+    PredictionThrottledError,
+    PredictionValidationError,
 )
 from market_predictor.telemetry import RuntimeTelemetry
 
@@ -30,6 +37,16 @@ class StubPredictionService:
 class NotReadyPredictionService(StubPredictionService):
     def health(self) -> dict[str, object]:
         return {"status": "not_ready", "components": {"swing": {"status": "not_ready"}}}
+
+
+class FailingPredictionService(StubPredictionService):
+    def __init__(self, error: Exception) -> None:
+        super().__init__()
+        self.error = error
+
+    def predict(self, request: PredictionRequest) -> PredictionResponse:
+        del request
+        raise self.error
 
 
 class StubReplayService:
@@ -69,7 +86,8 @@ class PredictionApiTests(unittest.TestCase):
         )
 
         self.assertEqual(response.status_code, 422)
-        self.assertIn("explicit UTC offset or timezone", response.text)
+        self.assertEqual(response.json()["error"]["code"], "request_validation_error")
+        self.assertNotIn("explicit UTC offset or timezone", response.text)
 
     def test_prediction_request_rejects_server_owned_artifact_fields(self) -> None:
         client = TestClient(create_app(StubPredictionService()))  # type: ignore[arg-type]
@@ -80,7 +98,59 @@ class PredictionApiTests(unittest.TestCase):
         )
 
         self.assertEqual(response.status_code, 422)
-        self.assertIn("extra_forbidden", response.text)
+        self.assertEqual(response.json()["error"]["code"], "request_validation_error")
+        self.assertNotIn("extra_forbidden", response.text)
+
+    def test_correlation_identity_is_propagated(self) -> None:
+        service = StubPredictionService()
+        client = TestClient(create_app(service))  # type: ignore[arg-type]
+
+        response = client.post(
+            "/v1/predictions/swing",
+            json={"tickers": ["MSFT"]},
+            headers={"x-correlation-id": "trading-flow:request-42"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.headers["x-correlation-id"], "trading-flow:request-42")
+        assert service.last_request is not None
+        self.assertEqual(service.last_request.correlation_id, "trading-flow:request-42")
+
+    def test_typed_prediction_errors_use_stable_status_and_opaque_envelope(self) -> None:
+        cases: list[tuple[type[PredictionServiceError], int, str]] = [
+            (PredictionValidationError, 422, "prediction_validation_error"),
+            (PredictionNotFoundError, 404, "prediction_not_found"),
+            (PredictionConflictError, 409, "prediction_conflict"),
+            (PredictionThrottledError, 429, "prediction_throttled"),
+            (PredictionReadinessError, 503, "prediction_not_ready"),
+            (PredictionDependencyError, 503, "prediction_dependency_unavailable"),
+        ]
+        for error_type, status_code, code in cases:
+            with self.subTest(error=error_type.__name__):
+                client = TestClient(create_app(FailingPredictionService(error_type())))  # type: ignore[arg-type]
+                response = client.post(
+                    "/v1/predictions/swing",
+                    json={"tickers": ["MSFT"]},
+                    headers={"x-correlation-id": "test-correlation"},
+                )
+                self.assertEqual(response.status_code, status_code)
+                self.assertEqual(response.json()["error"]["code"], code)
+                self.assertEqual(response.json()["error"]["correlation_id"], "test-correlation")
+                self.assertNotIn("detail", response.json())
+
+    def test_unexpected_error_is_opaque(self) -> None:
+        secret_text = r"C:\private\models\candidate.joblib api_key=should-not-leak"
+        client = TestClient(  # type: ignore[arg-type]
+            create_app(FailingPredictionService(RuntimeError(secret_text))),
+            raise_server_exceptions=False,
+        )
+
+        response = client.post("/v1/predictions/swing", json={"tickers": ["MSFT"]})
+
+        self.assertEqual(response.status_code, 500)
+        self.assertEqual(response.json()["error"]["code"], "internal_server_error")
+        self.assertNotIn("candidate.joblib", response.text)
+        self.assertNotIn("should-not-leak", response.text)
 
     def test_health_separates_liveness_from_readiness(self) -> None:
         live_client = TestClient(create_app(NotReadyPredictionService()))  # type: ignore[arg-type]

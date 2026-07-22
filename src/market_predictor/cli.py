@@ -148,10 +148,6 @@ def publish_live_features(
         feature_schema_version=expected_schema,
         source_artifact_sha256=str(canonical_manifest["artifact_sha256"]),
         source_artifact_type=expected_type,
-        source_watermarks={
-            "published_from": str(input_path),
-            "canonical_created_at_utc": str(canonical_manifest.get("created_at_utc", "")),
-        },
     )
     console.print(manifest)
 

@@ -4,7 +4,7 @@ import hashlib
 import json
 import tempfile
 import unittest
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import joblib
@@ -82,7 +82,7 @@ class InMemoryBlobStore:
 
 class ServingDeploymentTests(unittest.TestCase):
     def test_publish_rollback_and_sync_use_complete_immutable_releases(self) -> None:
-        generated = datetime(2026, 7, 22, 14, 0, tzinfo=UTC)
+        generated = datetime(2026, 7, 22, 22, 5, tzinfo=UTC)
         store = InMemoryBlobStore()
         with tempfile.TemporaryDirectory() as source_dir, tempfile.TemporaryDirectory() as target_dir:
             source = Path(source_dir)
@@ -128,7 +128,7 @@ class ServingDeploymentTests(unittest.TestCase):
             self.assertTrue((target / "data/live/.active_release.json").exists())
 
     def test_rollback_rejects_incomplete_release(self) -> None:
-        generated = datetime(2026, 7, 22, 14, 0, tzinfo=UTC)
+        generated = datetime(2026, 7, 22, 22, 5, tzinfo=UTC)
         store = InMemoryBlobStore()
         with tempfile.TemporaryDirectory() as source_dir:
             source = Path(source_dir)
@@ -160,7 +160,7 @@ class ServingDeploymentTests(unittest.TestCase):
                 rollback_serving_release(store, release_id=release_id, activated_at=generated)
 
     def test_publish_resumes_verified_partial_release_assets(self) -> None:
-        generated = datetime(2026, 7, 22, 14, 0, tzinfo=UTC)
+        generated = datetime(2026, 7, 22, 22, 5, tzinfo=UTC)
         store = InMemoryBlobStore()
         with tempfile.TemporaryDirectory() as source_dir:
             source = Path(source_dir)
@@ -192,7 +192,7 @@ class ServingDeploymentTests(unittest.TestCase):
         self.assertIn(release_blob, store.blobs)
 
     def test_active_pointer_is_published_after_release_manifest(self) -> None:
-        generated = datetime(2026, 7, 22, 14, 0, tzinfo=UTC)
+        generated = datetime(2026, 7, 22, 22, 5, tzinfo=UTC)
         store = InMemoryBlobStore()
         with tempfile.TemporaryDirectory() as source_dir:
             source = Path(source_dir)
@@ -210,7 +210,7 @@ class ServingDeploymentTests(unittest.TestCase):
         self.assertIn(str(pointer["release_manifest_blob"]), store.blobs)
 
     def test_publish_rejects_model_target_incompatible_with_route(self) -> None:
-        generated = datetime(2026, 7, 22, 14, 0, tzinfo=UTC)
+        generated = datetime(2026, 7, 22, 22, 5, tzinfo=UTC)
         store = InMemoryBlobStore()
         with tempfile.TemporaryDirectory() as source_dir:
             source = Path(source_dir)
@@ -255,12 +255,17 @@ def _write_promoted_model(root: Path, *, marker: str) -> Path:
 
 def _write_live_features(root: Path, generated: datetime) -> LiveFeatureStore:
     store = LiveFeatureStore(root)
+    cutoff = generated - timedelta(minutes=5)
     frame = pd.DataFrame(
         {
             "ticker": ["AAA", "BBB"],
             "date": [generated.date(), generated.date()],
-            "decision_time_utc": [generated, generated],
-            "feature_available_at_utc": [generated, generated],
+            "decision_time_utc": [cutoff, cutoff],
+            "feature_available_at_utc": [cutoff - timedelta(minutes=5)] * 2,
+            "bar_available_at_utc": [cutoff - timedelta(hours=1, minutes=45)] * 2,
+            "prediction_cutoff_policy_id": ["xnys_1800_america_new_york_v1"] * 2,
+            "daily_bar_count": [250, 250],
+            "source_coverage_end_utc_alpaca": [cutoff - timedelta(minutes=10)] * 2,
             "price_feed": ["sip", "sip"],
         }
     )

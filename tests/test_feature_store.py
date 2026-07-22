@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import tempfile
 import unittest
 from datetime import UTC, datetime, timedelta
@@ -18,7 +19,7 @@ class LiveFeatureStoreTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             store = LiveFeatureStore(root)
-            generated = datetime(2026, 7, 10, 21, 0, tzinfo=UTC)
+            generated = datetime(2026, 7, 10, 22, 5, tzinfo=UTC)
             frame = _frame()
 
             manifest = _publish(store, frame, generated)
@@ -34,7 +35,7 @@ class LiveFeatureStoreTests(unittest.TestCase):
             root = Path(tmp)
             config = LiveFeatureStoreConfig(swing_max_age=timedelta(hours=2))
             store = LiveFeatureStore(root, config)
-            generated = datetime(2026, 7, 10, 21, 0, tzinfo=UTC)
+            generated = datetime(2026, 7, 10, 22, 5, tzinfo=UTC)
             _publish(store, _frame(), generated)
 
             with self.assertRaisesRegex(ValueError, "is stale"):
@@ -44,13 +45,26 @@ class LiveFeatureStoreTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             store = LiveFeatureStore(root)
-            generated = datetime(2026, 7, 10, 21, 0, tzinfo=UTC)
+            generated = datetime(2026, 7, 10, 22, 5, tzinfo=UTC)
             _publish(store, _frame(), generated)
             path = root / "data/live/features/swing.parquet"
             modified = _frame().assign(close=999.0)
             modified.to_parquet(path, index=False)
 
             with self.assertRaisesRegex(ValueError, "integrity check failed"):
+                store.load("swing", as_of=generated + timedelta(hours=1))
+
+    def test_rejects_timezone_naive_manifest_timestamp(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            store = LiveFeatureStore(Path(tmp))
+            generated = datetime(2026, 7, 10, 22, 5, tzinfo=UTC)
+            _publish(store, _frame(), generated)
+            _, manifest_path = store.paths("swing")
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            manifest["generated_at_utc"] = "2026-07-10T22:05:00"
+            manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+            with self.assertRaisesRegex(ValueError, "timezone-aware"):
                 store.load("swing", as_of=generated + timedelta(hours=1))
 
     def test_rejects_stale_feature_rows_at_publication(self) -> None:
@@ -64,7 +78,7 @@ class LiveFeatureStoreTests(unittest.TestCase):
     def test_rejects_one_stale_row_and_any_future_derived_column(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             store = LiveFeatureStore(Path(tmp))
-            generated = datetime(2026, 7, 10, 21, 0, tzinfo=UTC)
+            generated = datetime(2026, 7, 10, 22, 5, tzinfo=UTC)
             mixed_freshness = _frame()
             mixed_freshness.loc[0, "feature_available_at_utc"] = pd.Timestamp("2026-07-01T20:00:00Z")
             with self.assertRaisesRegex(ValueError, "contains stale rows"):
@@ -136,7 +150,7 @@ class LiveFeatureStoreTests(unittest.TestCase):
         self.assertEqual(policy_check.status, "fail")
 
     def test_live_swing_audit_rejects_missing_cutoff_identity(self) -> None:
-        frame = _frame()
+        frame = _frame().drop(columns=["bar_available_at_utc", "prediction_cutoff_policy_id"])
         frame["session_date_et"] = pd.Timestamp("2026-07-10").date()
         frame["feature_eligible"] = True
         frame["cross_section_eligible"] = True
@@ -161,20 +175,33 @@ class LiveFeatureStoreTests(unittest.TestCase):
         self.assertIn("bar_available_at_utc", schema_check.detail)
         self.assertIn("prediction_cutoff_policy_id", schema_check.detail)
 
+    def test_store_rejects_publication_before_cutoff_or_without_audited_warmup(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            store = LiveFeatureStore(Path(tmp))
+            with self.assertRaisesRegex(ValueError, "before its decision cutoff"):
+                _publish(store, _frame(), datetime(2026, 7, 10, 21, 59, tzinfo=UTC))
+            with self.assertRaisesRegex(ValueError, "daily_bar_count"):
+                _publish(
+                    store,
+                    _frame().drop(columns=["daily_bar_count"]),
+                    datetime(2026, 7, 10, 22, 5, tzinfo=UTC),
+                )
+
 
 def _frame() -> pd.DataFrame:
     frame = pd.DataFrame(
         {
             "ticker": ["MSFT", "AAPL"],
             "date": ["2026-07-10", "2026-07-10"],
-            "decision_time_utc": [
-                pd.Timestamp("2026-07-10T20:00:00Z"),
-                pd.Timestamp("2026-07-10T20:00:00Z"),
-            ],
+            "decision_time_utc": [pd.Timestamp("2026-07-10T22:00:00Z")] * 2,
             "feature_available_at_utc": [
-                pd.Timestamp("2026-07-10T20:00:00Z"),
-                pd.Timestamp("2026-07-10T20:00:00Z"),
+                pd.Timestamp("2026-07-10T21:30:00Z"),
+                pd.Timestamp("2026-07-10T21:30:00Z"),
             ],
+            "bar_available_at_utc": [pd.Timestamp("2026-07-10T20:15:00Z")] * 2,
+            "prediction_cutoff_policy_id": [SWING_NIGHTLY_CUTOFF.policy_id] * 2,
+            "daily_bar_count": [250, 250],
+            "source_coverage_end_utc_alpaca": [pd.Timestamp("2026-07-10T21:30:00Z")] * 2,
             "price_feed": ["sip", "sip"],
             "open": [100.0, 101.0],
             "high": [102.0, 103.0],

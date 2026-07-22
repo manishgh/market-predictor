@@ -5,12 +5,14 @@ from datetime import UTC, datetime
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
+import exchange_calendars as xcals
 import numpy as np
 import pandas as pd
 from typer.testing import CliRunner
 
 from market_predictor.canonical.audits import CanonicalAuditCheck, CanonicalAuditReport
 from market_predictor.canonical.contracts import CanonicalEvent, SourceCollection
+from market_predictor.canonical.cutoffs import SWING_NIGHTLY_CUTOFF, swing_prediction_cutoffs
 from market_predictor.canonical.store import load_canonical_artifact, write_canonical_artifact
 from market_predictor.cli import app
 from market_predictor.swing.contracts import SwingDatasetConfig
@@ -202,7 +204,8 @@ class SwingDatasetTests(unittest.TestCase):
 
 
 def _inputs() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
-    sessions = pd.bdate_range("2025-01-02", periods=265, tz="UTC")
+    calendar = xcals.get_calendar("XNYS")
+    sessions = calendar.sessions_in_range("2025-01-02", "2026-03-31")[:265].tz_localize("UTC")
     decisions = pd.concat(
         [_daily_rows(ticker, sessions, offset) for ticker, offset in (("AAA", 0.0), ("BBB", 8.0))],
         ignore_index=True,
@@ -288,9 +291,12 @@ def _daily_rows(
     )
     if not decision:
         return frame
-    frame["decision_time_utc"] = available
+    cutoffs = swing_prediction_cutoffs(pd.Series(sessions.date, index=frame.index))
+    frame["bar_available_at_utc"] = available
+    frame["decision_time_utc"] = cutoffs
     frame["feature_available_at_utc"] = available
-    frame["decision_group_id"] = available.astype(str)
+    frame["prediction_cutoff_policy_id"] = SWING_NIGHTLY_CUTOFF.policy_id
+    frame["decision_group_id"] = cutoffs.astype(str)
     frame["primary_benchmark"] = "XLK"
     frame["sector"] = "Technology"
     frame["industry"] = "Software"
@@ -302,8 +308,8 @@ def _daily_rows(
     frame["sentiment_mean_3d"] = 0.0
     frame["latest_event_feature_available_at_utc"] = pd.NaT
     frame["source_status_alpaca"] = "observed"
-    frame["source_status_available_at_utc_alpaca"] = available
-    frame["source_coverage_end_utc_alpaca"] = available - pd.Timedelta(minutes=1)
+    frame["source_status_available_at_utc_alpaca"] = cutoffs
+    frame["source_coverage_end_utc_alpaca"] = cutoffs - pd.Timedelta(minutes=1)
     return frame
 
 
