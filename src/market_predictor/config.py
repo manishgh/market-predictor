@@ -42,6 +42,8 @@ class Settings(BaseSettings):
     azure_storage_account_url: str | None = Field(default=None, alias="AZURE_STORAGE_ACCOUNT_URL")
     azure_storage_container: str = Field(default="market-data", alias="AZURE_STORAGE_CONTAINER")
     azure_blob_prefix: str = Field(default="market-predictor", alias="AZURE_BLOB_PREFIX")
+    runtime_memory_budget_gib: float = Field(default=4.0, alias="RUNTIME_MEMORY_BUDGET_GIB", gt=0)
+    runtime_memory_headroom_gib: float = Field(default=0.25, alias="RUNTIME_MEMORY_HEADROOM_GIB", gt=0)
     data_dir: Path = Path("data")
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")

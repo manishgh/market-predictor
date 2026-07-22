@@ -12,6 +12,7 @@ from market_predictor.prediction_contracts import (
     PredictionRequest,
     PredictionResponse,
 )
+from market_predictor.telemetry import RuntimeTelemetry
 
 
 class StubPredictionService:
@@ -105,6 +106,31 @@ class PredictionApiTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["ticker"], "MSFT")
         self.assertEqual(response.json()["status"], "not_entered")
+
+    def test_metrics_report_bounded_request_prediction_and_outcome_counters(self) -> None:
+        telemetry = RuntimeTelemetry()
+        client = TestClient(  # type: ignore[arg-type]
+            create_app(
+                StubPredictionService(),
+                replay_service=StubReplayService(),
+                telemetry=telemetry,
+            )
+        )
+
+        client.post("/v1/predictions/swing", json={"tickers": ["MSFT"]})
+        client.post(
+            "/v1/replays/investment",
+            json={"snapshot_id": "a" * 64, "ticker": "MSFT"},
+        )
+        response = client.get("/v1/metrics")
+
+        self.assertEqual(response.status_code, 200)
+        metrics = response.json()
+        self.assertEqual(metrics["schema"], "market_predictor.runtime_metrics.v1")
+        self.assertEqual(metrics["requests"]["POST /v1/predictions/swing"]["count"], 1)
+        self.assertEqual(metrics["predictions"]["swing"]["requests"], 1)
+        self.assertEqual(metrics["prediction_outcomes"]["not_entered"], 1)
+        self.assertLess(float(metrics["memory"]["current_working_set_gib"]), 4.0)
 
 
 if __name__ == "__main__":

@@ -15,6 +15,7 @@ from market_predictor.intraday.contracts import (
     INTRADAY_MODEL_SCHEMA_VERSION,
     INTRADAY_MODEL_TYPE,
 )
+from market_predictor.live_features import live_feature_columns
 from market_predictor.prediction_contracts import PredictionDataSource, PredictionRequest
 from market_predictor.prediction_service import (
     PredictionService,
@@ -262,7 +263,7 @@ class PredictionServiceTests(unittest.TestCase):
             _write_model(model, features, target_col="target_net_positive_5d", status="promoted", probability=0.73)
             store = LiveFeatureStore(root)
             generated = datetime(2025, 9, 17, 20, 30, tzinfo=UTC)
-            store.publish("swing", frame, price_feed="sip", generated_at=generated)
+            _publish_live_swing(store, frame, generated)
 
             response = _service(
                 root,
@@ -344,7 +345,7 @@ class PredictionServiceTests(unittest.TestCase):
             )
             generated = datetime(2025, 9, 17, 20, 30, tzinfo=UTC)
             store = LiveFeatureStore(root)
-            store.publish("swing", frame, price_feed="sip", generated_at=generated)
+            _publish_live_swing(store, frame, generated)
             service = _service(
                 root,
                 swing=(None, model),
@@ -457,6 +458,31 @@ def _write_model(
     )
 
 
+def _publish_live_swing(
+    store: LiveFeatureStore,
+    frame: pd.DataFrame,
+    generated: datetime,
+) -> dict[str, object]:
+    complete = frame.copy()
+    latest_decision = pd.to_datetime(complete["decision_time_utc"], utc=True).max()
+    complete = complete[pd.to_datetime(complete["decision_time_utc"], utc=True).eq(latest_decision)].copy()
+    missing = {
+        column: pd.Series(0.0, index=complete.index)
+        for column in live_feature_columns("swing")
+        if column not in complete
+    }
+    complete = pd.concat([complete, pd.DataFrame(missing)], axis=1)
+    return store.publish(
+        "swing",
+        complete,
+        price_feed="sip",
+        feature_schema_version=SWING_FEATURE_SCHEMA_VERSION,
+        source_artifact_sha256="a" * 64,
+        source_artifact_type="swing_inference_features",
+        generated_at=generated,
+    )
+
+
 def _swing_frame(tickers: list[str], features: list[str], *, rows: int) -> pd.DataFrame:
     start = date(2025, 1, 1)
     records = []
@@ -470,6 +496,7 @@ def _swing_frame(tickers: list[str], features: list[str], *, rows: int) -> pd.Da
                 "ticker": ticker,
                 "date": session_date,
                 "session_date_et": session_date,
+                "decision_time_utc": feature_available,
                 "feature_available_at_utc": feature_available,
                 "swing_feature_schema_version": SWING_FEATURE_SCHEMA_VERSION,
                 "close": 100.0 + idx,

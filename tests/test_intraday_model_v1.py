@@ -46,6 +46,7 @@ class IntradayModelV1Tests(unittest.TestCase):
 
         self.assertEqual(manifest["model_type"], "canonical_intraday")
         self.assertEqual(result.metrics["validation_split"], "session_purged_walk_forward_and_ticker_holdout")
+        self.assertIn("feature_reference_profile", result.metrics)
         self.assertFalse(result.oof_predictions.empty)
         self.assertFalse(result.ticker_holdout_predictions.empty)
         self.assertIn("intraday_opportunity_probability", scored.columns)

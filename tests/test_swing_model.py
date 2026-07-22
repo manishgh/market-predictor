@@ -114,6 +114,7 @@ class SwingModelTests(unittest.TestCase):
             self.assertEqual(manifest["model_type"], SWING_MODEL_TYPE)
             self.assertGreater(result.metrics["validated_rows"], 100)
             self.assertGreater(result.metrics["ticker_holdout_rows"], 100)
+            self.assertIn("feature_reference_profile", result.metrics)
             self.assertTrue(result.oof_predictions["swing_probability"].between(0, 1).all())
             self.assertTrue(result.ticker_holdout_predictions["swing_probability"].between(0, 1).all())
             self.assertEqual(result.profitability_audit.iloc[0]["phase"], "conservative")

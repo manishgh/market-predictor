@@ -16,6 +16,7 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 
+from market_predictor.drift import build_feature_reference_profile
 from market_predictor.registry import (
     MODEL_STATUS_CANDIDATE,
     MODEL_STATUS_PROMOTED,
@@ -251,6 +252,7 @@ def train_swing_model(
         "robust_profit_factor": robust["profit_factor"],
         "robust_max_drawdown": robust["max_drawdown"],
         "dataset_sha256": dataset_sha256,
+        "feature_reference_profile": build_feature_reference_profile(data, features),
         "memory": memory_audit(
             hard_budget_gib=config.max_training_memory_gb,
             headroom_gib=config.memory_guard_headroom_gb,

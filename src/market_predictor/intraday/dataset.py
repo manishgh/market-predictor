@@ -15,6 +15,7 @@ from market_predictor.intraday.contracts import (
     IntradayDatasetConfig,
 )
 from market_predictor.intraday.labels import add_exact_one_minute_labels, add_overlap_metadata
+from market_predictor.live_features import select_and_audit_live_features
 from market_predictor.resources import assert_memory_budget
 from market_predictor.v3.errors import DataReadinessError, SchemaMismatchError
 
@@ -71,6 +72,76 @@ def build_intraday_dataset(
     """Build completed-5m decisions and exact subsequent-1m path labels."""
 
     config = config or IntradayDatasetConfig()
+    decisions, one_minute = _build_intraday_feature_history(
+        five_minute_decisions,
+        one_minute_bars,
+        benchmark_five_minute_bars,
+        global_events=global_events,
+        global_source_collections=global_source_collections,
+        config=config,
+    )
+    decisions = add_exact_one_minute_labels(decisions, one_minute, config)
+    decisions = add_overlap_metadata(decisions)
+    _guard_memory(config, "intraday exact path labeling")
+    decisions["horizon_minutes"] = config.horizon_minutes
+    decisions["decision_bar_minutes"] = config.decision_bar_minutes
+    decisions["execution_bar_minutes"] = config.execution_bar_minutes
+    decisions["decision_stride_bars"] = config.decision_stride_bars
+    decisions["target_atr_multiple"] = config.target_atr
+    decisions["stop_atr_multiple"] = config.stop_atr
+    decisions["round_trip_cost_bps"] = config.round_trip_cost_bps
+    decisions["minimum_five_minute_bars"] = config.min_five_minute_bars
+    decisions["minimum_one_minute_bars"] = config.min_one_minute_bars
+    decisions = decisions.replace([np.inf, -np.inf], np.nan)
+    audit = audit_intraday_dataset(decisions, config)
+    return (
+        decisions.sort_values(["decision_time_utc", "ticker"], kind="stable").reset_index(drop=True),
+        audit,
+    )
+
+
+def build_intraday_inference_features(
+    five_minute_decisions: pd.DataFrame,
+    one_minute_bars: pd.DataFrame,
+    benchmark_five_minute_bars: pd.DataFrame,
+    *,
+    global_events: pd.DataFrame,
+    global_source_collections: pd.DataFrame,
+    config: IntradayDatasetConfig | None = None,
+) -> tuple[pd.DataFrame, CanonicalAuditReport]:
+    """Build one audited latest completed-5m group without future path labels."""
+
+    config = config or IntradayDatasetConfig()
+    decisions, _ = _build_intraday_feature_history(
+        five_minute_decisions,
+        one_minute_bars,
+        benchmark_five_minute_bars,
+        global_events=global_events,
+        global_source_collections=global_source_collections,
+        config=config,
+    )
+    return select_and_audit_live_features(
+        decisions,
+        mode="intraday",
+        required_price_feed=config.required_price_feed,
+        required_adjustment=config.required_adjustment,
+        minimum_bar_count=config.min_five_minute_bars,
+        minimum_one_minute_bar_count=config.min_one_minute_bars,
+        minimum_cross_section=config.minimum_cross_section,
+        source_coverage_max_age_minutes=config.source_coverage_max_age_minutes,
+        required_global_sources=config.required_global_sources,
+    )
+
+
+def _build_intraday_feature_history(
+    five_minute_decisions: pd.DataFrame,
+    one_minute_bars: pd.DataFrame,
+    benchmark_five_minute_bars: pd.DataFrame,
+    *,
+    global_events: pd.DataFrame,
+    global_source_collections: pd.DataFrame,
+    config: IntradayDatasetConfig,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
     _require_columns(five_minute_decisions, DECISION_REQUIRED_COLUMNS, "canonical five-minute decisions")
     _require_columns(one_minute_bars, BAR_REQUIRED_COLUMNS, "canonical one-minute bars")
     _require_columns(
@@ -121,25 +192,9 @@ def build_intraday_dataset(
     decisions = _add_membership_features(decisions)
     decisions = _add_cross_sectional_features(decisions, config)
     _guard_memory(config, "intraday context feature construction")
-    decisions = add_exact_one_minute_labels(decisions, one_minute, config)
-    decisions = add_overlap_metadata(decisions)
-    _guard_memory(config, "intraday exact path labeling")
-    decisions["horizon_minutes"] = config.horizon_minutes
-    decisions["decision_bar_minutes"] = config.decision_bar_minutes
-    decisions["execution_bar_minutes"] = config.execution_bar_minutes
-    decisions["decision_stride_bars"] = config.decision_stride_bars
-    decisions["target_atr_multiple"] = config.target_atr
-    decisions["stop_atr_multiple"] = config.stop_atr
-    decisions["round_trip_cost_bps"] = config.round_trip_cost_bps
-    decisions["minimum_five_minute_bars"] = config.min_five_minute_bars
-    decisions["minimum_one_minute_bars"] = config.min_one_minute_bars
     decisions["intraday_feature_schema_version"] = INTRADAY_FEATURE_SCHEMA_VERSION
     decisions = decisions.replace([np.inf, -np.inf], np.nan)
-    audit = audit_intraday_dataset(decisions, config)
-    return (
-        decisions.sort_values(["decision_time_utc", "ticker"], kind="stable").reset_index(drop=True),
-        audit,
-    )
+    return decisions, one_minute
 
 
 def _guard_memory(config: IntradayDatasetConfig, stage: str) -> None:

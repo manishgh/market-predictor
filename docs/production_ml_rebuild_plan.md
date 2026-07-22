@@ -102,17 +102,22 @@ No canonical C5 model has been trained or promoted from the real production data
 
 ### C6 - Deployment, Observability, And Resource Controls
 
-Status: pending promoted C4/C5 artifacts.
+Status: implementation complete 2026-07-22; real C4/C5 model promotion remains intentionally independent.
 
-- Connect canonical feature publication to registered serving routes.
-- Add bounded workers, column projection, `float32` training matrices, fold-model release, and 4 GiB hard memory guards everywhere.
-- Add source, freshness, audit, model, latency, drift, and prediction-quality telemetry.
-- Deploy API and scheduled jobs independently on Azure Container Apps unless measured GPU inference justifies a dedicated worker.
-- Add rollback to the prior promoted manifest without mutable artifact replacement.
+- `build-swing-live-features` and `build-intraday-live-features` reuse canonical feature engineering but emit one latest, label-free, audited inference cross section.
+- `publish-live-features` accepts only the matching hash-verified canonical inference artifact and atomically records source identity, schema, feed, columns, timestamps, and hash.
+- Training uses projected inputs, `float32` matrices, sequential fold-model release, and configurable 4 GiB guards. API readiness and metrics enforce/report the same configurable process ceiling.
+- Readiness and `/v1/metrics` expose source/freshness/schema identity, model hashes, request errors/latency, drift, prediction readiness, replay outcomes, and memory.
+- Serving publication creates immutable content-addressed model-plus-feature releases; assets precede the release manifest and active pointer. Sync verifies all bytes before local activation, and rollback accepts only a complete prior release.
+- The container runs the API as non-root, has a liveness probe, and can fail-closed while hydrating the active Azure release before API import.
+
+C6 tests use synthetic promoted artifacts and an in-memory Blob protocol. A real Azure identity/network deployment rehearsal and disaster-recovery exercise remain C7 acceptance work. No canonical model is promoted merely because the deployment path exists.
+
+C6 checkpoint verification: 198 repository tests pass; Ruff and strict mypy pass on all C6 production modules; source/test compilation and credential scanning pass; the final process audit measured 0.182 GiB against the 4 GiB hard budget. The separate C7 cleanup baseline is 48 repository-wide Ruff findings and 13 strict-mypy findings in older research/source modules; these are not in the C6 production surface and are not being hidden as completed work.
 
 ### C7 - Repository Cleanup And Release Audit
 
-Status: pending C6.
+Status: pending after C6; baseline captured above.
 
 - Remove superseded builders, adapters, commands, configuration, tests, and docs.
 - Resolve repository-wide lint and type debt.

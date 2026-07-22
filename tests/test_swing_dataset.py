@@ -14,11 +14,30 @@ from market_predictor.canonical.contracts import CanonicalEvent, SourceCollectio
 from market_predictor.canonical.store import load_canonical_artifact, write_canonical_artifact
 from market_predictor.cli import app
 from market_predictor.swing.contracts import SwingDatasetConfig
-from market_predictor.swing.dataset import build_swing_dataset
+from market_predictor.swing.dataset import build_swing_dataset, build_swing_inference_features
 from market_predictor.v3.errors import DataReadinessError
 
 
 class SwingDatasetTests(unittest.TestCase):
+    def test_builds_latest_label_free_swing_inference_group(self) -> None:
+        decisions, benchmarks, events, sources = _inputs()
+        features, audit = build_swing_inference_features(
+            decisions,
+            benchmarks,
+            global_events=events,
+            global_source_collections=sources,
+            config=SwingDatasetConfig(
+                min_daily_bars=250,
+                minimum_cross_section=2,
+                required_global_sources=("alpaca",),
+            ),
+        )
+
+        self.assertTrue(audit.passed, audit.to_frame().to_dict(orient="records"))
+        self.assertEqual(len(features), 2)
+        self.assertEqual(features["decision_time_utc"].nunique(), 1)
+        self.assertFalse(any(column.startswith(("future_", "target_", "label_")) for column in features))
+
     def test_cli_publishes_hash_verified_swing_dataset(self) -> None:
         decisions, benchmarks, events, sources = _inputs()
         with TemporaryDirectory() as temp_dir:
@@ -66,6 +85,38 @@ class SwingDatasetTests(unittest.TestCase):
             self.assertTrue(manifest["production_ready"])
             self.assertEqual(len(manifest["inputs"]), 4)
 
+            live_output = root / "swing_live_features.parquet"
+            live_result = CliRunner().invoke(
+                app,
+                [
+                    "build-swing-live-features",
+                    "--decisions",
+                    str(inputs["decisions"][1]),
+                    "--benchmark-bars",
+                    str(inputs["bars"][1]),
+                    "--global-events",
+                    str(inputs["events"][1]),
+                    "--global-source-collections",
+                    str(inputs["source_collections"][1]),
+                    "--config",
+                    str(config),
+                    "--out",
+                    str(live_output),
+                ],
+            )
+            self.assertEqual(
+                live_result.exit_code,
+                0,
+                msg=f"{live_result.output}\n{live_result.exception}",
+            )
+            live_frame, live_manifest = load_canonical_artifact(
+                live_output,
+                expected_type="swing_inference_features",
+            )
+            self.assertEqual(live_frame["decision_time_utc"].nunique(), 1)
+            self.assertNotIn("future_net_return_5d", live_frame)
+            self.assertTrue(live_manifest["production_ready"])
+
     def test_builds_warm_exact_point_in_time_swing_rows(self) -> None:
         decisions, benchmarks, events, sources = _inputs()
         config = SwingDatasetConfig(
@@ -91,9 +142,7 @@ class SwingDatasetTests(unittest.TestCase):
         self.assertTrue(eligible["future_net_return_5d"].notna().all())
         self.assertTrue(eligible["future_excess_return_5d_vs_spy"].notna().all())
         self.assertTrue(eligible["future_excess_return_5d_vs_sector"].notna().all())
-        self.assertTrue(
-            set(eligible["global_source_status_alpaca"]).issubset({"observed", "observed_empty"})
-        )
+        self.assertTrue(set(eligible["global_source_status_alpaca"]).issubset({"observed", "observed_empty"}))
 
     def test_missing_sector_bar_fails_dataset_audit(self) -> None:
         decisions, benchmarks, events, sources = _inputs()
@@ -101,9 +150,7 @@ class SwingDatasetTests(unittest.TestCase):
             (benchmarks["ticker"] == "XLK") & (benchmarks["session_date_et"].notna()),
             "session_date_et",
         ].iloc[-8]
-        benchmarks = benchmarks[
-            ~((benchmarks["ticker"] == "XLK") & (benchmarks["session_date_et"] == missing_session))
-        ].copy()
+        benchmarks = benchmarks[~((benchmarks["ticker"] == "XLK") & (benchmarks["session_date_et"] == missing_session))].copy()
         config = SwingDatasetConfig(
             horizon_sessions=5,
             min_daily_bars=250,

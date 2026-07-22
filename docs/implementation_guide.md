@@ -66,13 +66,17 @@ Top-level predictions are persisted by `prediction_snapshot.py` as content-addre
 
 `POST /v1/replays/investment` is snapshot-driven and does not accept filesystem paths. This prevents an API client from selecting arbitrary local artifacts and ensures that every replay can be traced to a served prediction. Non-actionable signals return `not_entered`; `force_entry` is only a research override and cannot bypass invalid readiness or future-model checks.
 
-`feature_store.py` owns the live inference handoff. Collection and feature jobs publish rolling swing or intraday Parquet files atomically with a sidecar manifest containing generation time, source watermarks, feed tier, row/ticker counts, latest feature time, and artifact SHA-256. Production serving always reads these registered paths. Missing, modified, future-generated, stale snapshots, and snapshots containing stale feature rows fail before model scoring. This keeps external API calls and FinBERT latency outside the request path.
+`live_features.py` owns the final inference-only selection gate. The swing and intraday dataset builders share feature-history construction with training, but live commands select one latest coherent decision cross-section and remove all labels, targets, and future paths. They reject future availability, under-warm history, stale or failed source state, schema mismatch, non-SIP volume, invalid cross sections, and any label-bearing output.
 
-`prediction_service.py` owns serving routes and enforces promoted status, target/horizon compatibility, model type/schema, and artifact SHA-256 before deserialization. Swing routes accept only `canonical_swing` / `swing.model.v1`; intraday routes accept only `canonical_intraday` / `intraday.model.v1`. Old volatile and entry-path artifacts are not grandfathered. Readiness is fail-closed: `warn` and `invalid` rows retain diagnostics but cannot emit an actionable signal, decision score, model decision, or rank. `/v1/health/live` is process liveness; `/v1/health/ready` checks route artifacts and feature snapshots and returns 503 when serving is not ready.
+`feature_store.py` owns the live inference handoff. It accepts only canonical `swing_inference_features` or `intraday_inference_features` artifacts and publishes rolling Parquet files atomically with a sidecar manifest containing generation time, canonical source artifact type/hash, feature schema, source watermarks, feed tier, row/ticker/column identity, latest feature time, and artifact SHA-256. Production serving always reads these registered paths. Missing, modified, mixed-time, future-generated, stale, or label-bearing snapshots fail before model scoring. External API calls and FinBERT latency stay outside the request path.
+
+`prediction_service.py` owns serving routes and enforces promoted status, target/horizon compatibility, model type/schema, and artifact SHA-256 before deserialization. Swing routes accept only `canonical_swing` / `swing.model.v1`; intraday routes accept only `canonical_intraday` / `intraday.model.v1`. Old volatile and entry-path artifacts are not grandfathered. Readiness is fail-closed: `warn` and `invalid` rows retain diagnostics but cannot emit an actionable signal, decision score, model decision, or rank. `/v1/health/live` is process liveness; `/v1/health/ready` checks route artifacts, feature snapshots, source/schema identity, and process memory and returns 503 when serving is not ready. Training-reference drift is reported as telemetry and does not independently authorize or block a prediction.
+
+`telemetry.py` owns bounded in-process request, prediction-readiness, replay-outcome, model-hash, health, and memory metrics plus structured JSON events. `/v1/metrics` is intended for internal scraping, not public ingress. This is operational telemetry, not durable prediction-performance evidence; immutable prediction snapshots and replay outputs remain the audit source of truth.
 
 `configs/default.toml` declares production routes under `[prediction_serving.routes.<mode>."<horizon>"]`. Only promoted routes belong there. The HTTP process parses this registry at startup and fails when it is absent or malformed; candidate routes are injected only by research/test code.
 
-The previous `live-once` publisher was removed because it also scored four incompatible legacy model families and averaged their probabilities. Until the canonical point-in-time builder is connected, an audited job must explicitly call `publish-live-features`; otherwise readiness remains 503.
+The previous `live-once` publisher was removed because it also scored four incompatible legacy model families and averaged their probabilities. Scheduled jobs now call `build-swing-live-features` or `build-intraday-live-features`, then `publish-live-features`. No generic Parquet publisher or legacy scoring fallback exists; a failed build leaves the prior snapshot untouched and readiness eventually fails on freshness.
 
 `catalyst_overlay.py` is deliberately separate from estimator inference. It classifies recent evidence as confirmed, conflicting, veto, mixed, or absent. The original model probability is never modified. A separate `decision_score` adds a small confirmation bonus or conflict/veto penalty for ranking, and the API records the complete catalyst assessment so its incremental value can be ablated later.
 
@@ -120,15 +124,17 @@ The canonical intraday horizon is `60m`. Opportunity means target-before-stop; d
 
 Historical provider backfills normally know publication time but not when this system first observed the item. Such events are publication-time proxies and are research-only. They must not be relabeled as observed history. The same rule applies to SEC and Seeking Alpha current snapshots: only versioned facts with explicit availability can enter historical production features.
 
-Azure artifact publishing:
+Canonical live publication and Azure serving release:
 
 ```powershell
-market-predictor export-ohlcv-artifacts --days 730 --timeframes 1d,1h --workers 8
-market-predictor azure-upload-artifacts --root data/artifacts
-market-predictor azure-publish-models --models-dir models
+market-predictor build-swing-live-features --decisions data/canonical/decisions.parquet --benchmark-bars data/canonical/benchmark_daily_bars.parquet --global-events data/canonical/global_events.parquet --global-source-collections data/canonical/global_source_collections.parquet --config configs/swing_dataset.toml --out data/live/staging/swing_5d.parquet
+market-predictor publish-live-features --mode swing --input-path data/live/staging/swing_5d.parquet --live-dir data/live
+market-predictor azure-publish-serving-release --root .
+market-predictor azure-sync-serving-release --root .
+market-predictor azure-rollback-serving-release --release-id <64-character-release-id>
 ```
 
-`azure-publish-models` does not scan and upload arbitrary model files. It resolves the server-owned routes from TOML, accepts only promoted hash-verified artifacts under `--models-dir`, uploads each registry sidecar, and publishes `_production_routes_manifest.json` last.
+`deployment.py` publishes one content-addressed release containing every configured promoted model, model manifest, registered live feature snapshot, and feature manifest. It uploads assets first, the immutable release manifest second, and the mutable active pointer last. Sync downloads into staging, verifies every SHA-256, installs manifests last, and writes a local active-release marker only after success. Rollback can point only to an existing complete release; model or feature files are never overwritten in place in Blob Storage.
 
 ## File Responsibilities
 
@@ -145,10 +151,10 @@ Key command groups:
 - Collection: `collect`, `collect-swing`, `collect-seeking-alpha`, `alpaca-tickers`.
 - Verification: `verify-events`, `verify-swing`, `audit-swing-alignment`.
 - Sentiment: `download-model`, `score-swing-events`.
-- Feature building: canonical `build-swing-dataset` / `build-intraday-dataset`, research-only `build-swing-datasets` / `build-entry-exit-dataset`, and V3 research builders.
+- Feature building: canonical training `build-swing-dataset` / `build-intraday-dataset`, canonical inference `build-swing-live-features` / `build-intraday-live-features`, research-only builders, and V3 research builders.
 - Training/scoring: canonical swing and intraday train/promote commands, research-only entry-path commands, and V3 research evaluation.
 - Serving: `publish-live-features` and `serve-api`.
-- Azure: `export-ohlcv-artifacts`, `azure-upload-artifacts`, `azure-publish-models`.
+- Azure: `export-ohlcv-artifacts`, `azure-upload-artifacts`, `azure-publish-serving-release`, `azure-sync-serving-release`, and `azure-rollback-serving-release`.
 
 Canonical orchestration is registered by `src/market_predictor/commands/canonical_data.py`. `src/market_predictor/canonical/contracts.py` owns immutable schemas; `normalize.py` converts provider timestamps and provenance; `joins.py` performs strict as-of event, source, membership, and fundamental joins; `audits.py` implements fail-closed readiness; and `store.py` publishes hash-verified artifacts with manifests written last.
 
@@ -180,7 +186,7 @@ Loads non-secret TOML behavior from `configs/default.toml`.
 
 `configs/default.toml`
 
-Owns universe lists, sector groups, benchmark mapping, source behavior, Seeking Alpha endpoint templates, Reddit subreddit settings, and performance knobs.
+Owns universe lists, sector groups, benchmark mapping, source behavior, Seeking Alpha endpoint templates, Reddit subreddit settings, and performance knobs. Environment settings also define the API memory budget/headroom and optional Azure release sync at container startup.
 
 Why split config this way: secrets stay in `.env`; business/runtime behavior stays in TOML.
 
@@ -278,7 +284,11 @@ Tracks monthly RapidAPI usage locally so Seeking Alpha calls can be throttled be
 
 `src/market_predictor/azure_store.py`
 
-Uploads and downloads project artifacts to Azure Blob Storage. It supports either a connection string or managed identity/default credentials through Azure Identity.
+Uploads and downloads project artifacts and release bytes to Azure Blob Storage. It supports either a connection string or managed identity/default credentials through Azure Identity.
+
+`src/market_predictor/deployment.py`
+
+Builds, validates, publishes, hydrates, and rolls back immutable model-plus-feature serving releases. The active pointer is the only mutable Blob object in this protocol.
 
 ## Data Directories
 
@@ -307,7 +317,7 @@ Every scoreable Joblib artifact has a `model_registry_manifest.v1` sidecar. Cand
 
 ## Live Pipeline State
 
-Automatic live feature construction and retraining are deliberately disabled while the canonical point-in-time data component is being rebuilt. This is fail-closed: the API can be live but not ready, and no stale research dataset is substituted. Scheduling is reintroduced only after the canonical builder, independent shadow evaluation, promotion, and rollback path are connected.
+Canonical label-free live feature construction, atomic publication, immutable release activation, startup hydration, and rollback are implemented. Azure schedules remain deployment configuration rather than application-owned timers. Retraining is deliberately separate and is never triggered by prediction traffic. If no real canonical model has passed promotion, release publication fails and the API remains not ready; candidate or legacy artifacts are not substituted.
 
 ## Azure Deployment
 
@@ -315,9 +325,12 @@ Use Azure Blob Storage for project artifacts and Azure Container Apps Jobs for s
 
 Files:
 
-- `Dockerfile`: container image for the Python CLI.
+- `Dockerfile`: non-root API image with 4 GiB defaults and a liveness probe.
 - `.dockerignore`: keeps local data, models, secrets, and venv out of the build context.
+- `scripts/container-entrypoint.sh`: optionally syncs and verifies the active Azure release before API import, then starts the server.
 - `docs/azure_deployment_plan.md`: deployment recommendation, schedule, and operational rules.
+
+Set `SYNC_AZURE_RELEASE_ON_STARTUP=true` only on the production API revision with Blob read permission. Keep `/v1/metrics` internal, configure external readiness against `/v1/health/ready`, and enforce a 4 GiB Container Apps memory limit in addition to the application guard.
 
 ## Why the Stages Are Separate
 

@@ -7,6 +7,7 @@ import pandas as pd
 
 from market_predictor.canonical.audits import CanonicalAuditReport
 from market_predictor.canonical.joins import join_source_collection_status
+from market_predictor.live_features import select_and_audit_live_features
 from market_predictor.swing.audits import audit_swing_dataset
 from market_predictor.swing.contracts import (
     CATALYST_FEATURES,
@@ -69,6 +70,56 @@ def build_swing_dataset(
     """Build post-close swing features and next-open labels from canonical inputs."""
 
     config = config or SwingDatasetConfig()
+    data, benchmark_features = _build_swing_feature_history(
+        decisions,
+        benchmark_bars,
+        global_events=global_events,
+        global_source_collections=global_source_collections,
+        config=config,
+    )
+    data = _add_exact_labels(data, benchmark_features, config)
+    audit = audit_swing_dataset(data, config)
+    return data.sort_values(["decision_time_utc", "ticker"], kind="stable").reset_index(drop=True), audit
+
+
+def build_swing_inference_features(
+    decisions: pd.DataFrame,
+    benchmark_bars: pd.DataFrame,
+    *,
+    global_events: pd.DataFrame,
+    global_source_collections: pd.DataFrame,
+    config: SwingDatasetConfig | None = None,
+) -> tuple[pd.DataFrame, CanonicalAuditReport]:
+    """Build one audited latest post-close feature group without future labels."""
+
+    config = config or SwingDatasetConfig()
+    data, _ = _build_swing_feature_history(
+        decisions,
+        benchmark_bars,
+        global_events=global_events,
+        global_source_collections=global_source_collections,
+        config=config,
+    )
+    return select_and_audit_live_features(
+        data,
+        mode="swing",
+        required_price_feed=config.required_price_feed,
+        required_adjustment=config.required_adjustment,
+        minimum_bar_count=config.min_daily_bars,
+        minimum_cross_section=config.minimum_cross_section,
+        source_coverage_max_age_minutes=config.source_coverage_max_age_minutes,
+        required_global_sources=config.required_global_sources,
+    )
+
+
+def _build_swing_feature_history(
+    decisions: pd.DataFrame,
+    benchmark_bars: pd.DataFrame,
+    *,
+    global_events: pd.DataFrame,
+    global_source_collections: pd.DataFrame,
+    config: SwingDatasetConfig,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
     _require_columns(decisions, DECISION_REQUIRED_COLUMNS, "canonical decisions")
     _require_columns(benchmark_bars, BENCHMARK_REQUIRED_COLUMNS, "canonical benchmark bars")
     data = _prepare_daily_rows(decisions, name="canonical decisions")
@@ -89,14 +140,12 @@ def build_swing_dataset(
     data = _add_canonical_optional_features(data)
     data = _add_membership_features(data)
     data = _add_cross_sectional_features(data, config)
-    data = _add_exact_labels(data, benchmark_features, config)
     data["horizon_sessions"] = config.horizon_sessions
     data["round_trip_cost_bps"] = config.round_trip_cost_bps
     data["minimum_daily_bars"] = config.min_daily_bars
     data["swing_feature_schema_version"] = SWING_FEATURE_SCHEMA_VERSION
     data = data.replace([np.inf, -np.inf], np.nan)
-    audit = audit_swing_dataset(data, config)
-    return data.sort_values(["decision_time_utc", "ticker"], kind="stable").reset_index(drop=True), audit
+    return data, benchmark_features
 
 
 def _prepare_daily_rows(frame: pd.DataFrame, *, name: str) -> pd.DataFrame:
@@ -199,23 +248,13 @@ def _join_benchmark_features(
         (config.growth_benchmark.upper(), "qqq"),
     ):
         part = benchmarks.loc[benchmarks["ticker"].eq(ticker), selected].copy()
-        renamed = {
-            column: f"{prefix}_{column}"
-            for column in selected
-            if column not in {"ticker", "session_date_et"}
-        }
+        renamed = {column: f"{prefix}_{column}" for column in selected if column not in {"ticker", "session_date_et"}}
         part = part.rename(columns=renamed).drop(columns="ticker")
         part = part.rename(columns={f"{prefix}_available_at_utc": f"{prefix}_available_at_utc"})
         output = output.merge(part, on="session_date_et", how="left", validate="many_to_one")
 
     sector = benchmarks.loc[:, selected].rename(columns={"ticker": "primary_benchmark"})
-    sector = sector.rename(
-        columns={
-            column: f"sector_{column}"
-            for column in selected
-            if column not in {"ticker", "session_date_et"}
-        }
-    )
+    sector = sector.rename(columns={column: f"sector_{column}" for column in selected if column not in {"ticker", "session_date_et"}})
     output["primary_benchmark"] = output["primary_benchmark"].astype(str).str.upper().str.strip()
     output = output.merge(
         sector,
@@ -303,11 +342,7 @@ def _add_global_source_status(
     unique = decisions[["decision_time_utc"]].drop_duplicates().sort_values("decision_time_utc").copy()
     unique["ticker"] = "MARKET"
     joined = join_source_collection_status(unique, collections, source_families=required_sources)
-    rename = {
-        column: f"global_{column}"
-        for column in joined.columns
-        if column.startswith("source_")
-    }
+    rename = {column: f"global_{column}" for column in joined.columns if column.startswith("source_")}
     joined = joined.rename(columns=rename).drop(columns="ticker")
     output = decisions.merge(joined, on="decision_time_utc", how="left", validate="many_to_one")
     availability_columns = [f"global_source_status_available_at_utc_{source.strip().lower()}" for source in required_sources]
@@ -449,12 +484,8 @@ def _add_exact_labels(
     ]
     data.loc[invalid_label, label_columns] = np.nan
     data.loc[invalid_label, swing_target_column(horizon)] = pd.NA
-    data["target_excess_rank"] = data.groupby("decision_group_id")[
-        swing_excess_column(horizon, "spy")
-    ].rank(method="average", pct=True)
-    data["label_eligible"] = data["feature_eligible"] & data["label_path_exact"] & data[
-        swing_target_column(horizon)
-    ].notna()
+    data["target_excess_rank"] = data.groupby("decision_group_id")[swing_excess_column(horizon, "spy")].rank(method="average", pct=True)
+    data["label_eligible"] = data["feature_eligible"] & data["label_path_exact"] & data[swing_target_column(horizon)].notna()
     return data.drop(columns="_session_ordinal")
 
 

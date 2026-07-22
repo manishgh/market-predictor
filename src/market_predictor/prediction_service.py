@@ -14,6 +14,7 @@ from market_predictor.catalyst_overlay import (
     assess_catalyst_overlay,
     overlay_decision_score,
 )
+from market_predictor.drift import audit_feature_drift
 from market_predictor.feature_store import LiveFeatureStore
 from market_predictor.intraday.contracts import (
     INTRADAY_MODEL_SCHEMA_VERSION,
@@ -41,6 +42,7 @@ from market_predictor.readiness import (
     assess_intraday_readiness,
 )
 from market_predictor.registry import MODEL_STATUS_PROMOTED, verify_model_artifact
+from market_predictor.resources import memory_audit
 from market_predictor.swing.contracts import SWING_MODEL_SCHEMA_VERSION, SWING_MODEL_TYPE
 from market_predictor.swing.model import score_swing_frame
 
@@ -88,6 +90,33 @@ def serving_routes_from_config(config: Mapping[str, Any]) -> dict[str, dict[str,
     return routes
 
 
+def verify_serving_model_artifact(
+    model_path: Path,
+    *,
+    resolved_horizon: str,
+    expected_model_type: str,
+    expected_schema_version: str,
+) -> dict[str, Any]:
+    """Verify registry integrity and the route-specific production model contract."""
+
+    manifest = verify_model_artifact(
+        model_path,
+        allowed_statuses={MODEL_STATUS_PROMOTED},
+    )
+    if manifest.get("model_type") != expected_model_type:
+        raise ValueError(f"model type {manifest.get('model_type', 'unknown')} is incompatible with {expected_model_type} serving")
+    if manifest.get("schema_version") != expected_schema_version:
+        raise ValueError(
+            f"model schema {manifest.get('schema_version', 'unknown')} is incompatible with {expected_schema_version} serving"
+        )
+    target_horizon = _target_horizon(_optional_str(manifest.get("target_col")))
+    if target_horizon != resolved_horizon:
+        raise ValueError(
+            f"requested model horizon {resolved_horizon} is incompatible with model target horizon {target_horizon or 'unknown'}"
+        )
+    return manifest
+
+
 class PredictionService:
     """Production serving boundary for promoted market prediction models."""
 
@@ -100,6 +129,8 @@ class PredictionService:
         persist_snapshots: bool = True,
         routes: Mapping[str, Mapping[str, ServingRoute]],
         data_source: PredictionDataSource = "live",
+        memory_budget_gib: float = 4.0,
+        memory_headroom_gib: float = 0.25,
     ) -> None:
         self.root = Path(root)
         self.snapshot_store = snapshot_store or PredictionSnapshotStore(self.root / "data/predictions/snapshots")
@@ -109,6 +140,10 @@ class PredictionService:
             raise ValueError("at least one prediction serving route is required")
         self.routes = {mode: dict(mode_routes) for mode, mode_routes in routes.items()}
         self.data_source = data_source
+        if memory_budget_gib <= 0 or not 0 < memory_headroom_gib < memory_budget_gib:
+            raise ValueError("runtime memory budget and headroom are invalid")
+        self.memory_budget_gib = memory_budget_gib
+        self.memory_headroom_gib = memory_headroom_gib
 
     def predict(self, request: PredictionRequest) -> PredictionResponse:
         if request.mode == "swing":
@@ -219,23 +254,33 @@ class PredictionService:
 
         checked_at = as_of or datetime.now(UTC)
         components: dict[str, dict[str, object]] = {}
+        model_manifests: dict[tuple[str, str], dict[str, Any]] = {}
         ready = True
         for mode, mode_routes in self.routes.items():
             for horizon, route in mode_routes.items():
                 name = f"model:{mode}:{horizon}"
                 try:
-                    info = self._model_info(
-                        self._resolve(route.model),
+                    model_path = self._resolve(route.model)
+                    expected_model_type = SWING_MODEL_TYPE if mode == "swing" else INTRADAY_MODEL_TYPE
+                    expected_schema_version = SWING_MODEL_SCHEMA_VERSION if mode == "swing" else INTRADAY_MODEL_SCHEMA_VERSION
+                    manifest = verify_serving_model_artifact(
+                        model_path,
+                        resolved_horizon=horizon,
+                        expected_model_type=expected_model_type,
+                        expected_schema_version=expected_schema_version,
+                    )
+                    info = self._model_info_from_manifest(
+                        model_path,
+                        manifest=manifest,
                         resolved_horizon=horizon,
                         bar_timeframe=route.bar_timeframe,
-                        expected_model_type=(SWING_MODEL_TYPE if mode == "swing" else INTRADAY_MODEL_TYPE),
-                        expected_schema_version=(SWING_MODEL_SCHEMA_VERSION if mode == "swing" else INTRADAY_MODEL_SCHEMA_VERSION),
                     )
                     components[name] = {
                         "status": "ready",
                         "model_status": info.status,
                         "artifact_sha256": info.artifact_sha256,
                     }
+                    model_manifests[(mode, horizon)] = manifest
                 except Exception as exc:
                     ready = False
                     components[name] = {"status": "not_ready", "reason": str(exc)}
@@ -252,7 +297,23 @@ class PredictionService:
                         "generated_at_utc": manifest.get("generated_at_utc"),
                         "last_feature_time": manifest.get("last_feature_time"),
                         "price_feed": manifest.get("price_feed"),
+                        "source_artifact_sha256": manifest.get("source_artifact_sha256"),
+                        "feature_schema_version": manifest.get("feature_schema_version"),
                     }
+                    feature_frame = self.live_feature_store.load(mode, as_of=checked_at)  # type: ignore[arg-type]
+                    for horizon in mode_routes:
+                        model_manifest = model_manifests.get((mode, horizon), {})
+                        metrics = model_manifest.get("metrics")
+                        reference = (
+                            metrics.get("feature_reference_profile")
+                            if isinstance(metrics, dict)
+                            else None
+                        )
+                        drift = audit_feature_drift(
+                            feature_frame,
+                            reference if isinstance(reference, dict) else None,
+                        )
+                        components[f"drift:{mode}:{horizon}"] = drift
                 else:
                     missing = []
                     for route in mode_routes.values():
@@ -268,6 +329,19 @@ class PredictionService:
             except Exception as exc:
                 ready = False
                 components[name] = {"status": "not_ready", "reason": str(exc)}
+
+        process_memory = memory_audit(
+            hard_budget_gib=self.memory_budget_gib,
+            headroom_gib=self.memory_headroom_gib,
+        ).to_record()
+        current_memory = process_memory.get("current_working_set_gib")
+        threshold = float(process_memory["safety_threshold_gib"] or 0.0)
+        memory_ready = current_memory is None or float(current_memory) <= threshold
+        components["process_memory"] = {
+            "status": "ready" if memory_ready else "not_ready",
+            **process_memory,
+        }
+        ready &= memory_ready
 
         return {
             "status": "ready" if ready else "not_ready",
@@ -608,23 +682,29 @@ class PredictionService:
         expected_model_type: str,
         expected_schema_version: str,
     ) -> ModelInfo:
-        manifest = verify_model_artifact(
+        manifest = verify_serving_model_artifact(
             model_path,
-            allowed_statuses={MODEL_STATUS_PROMOTED},
+            resolved_horizon=resolved_horizon,
+            expected_model_type=expected_model_type,
+            expected_schema_version=expected_schema_version,
         )
+        return self._model_info_from_manifest(
+            model_path,
+            manifest=manifest,
+            resolved_horizon=resolved_horizon,
+            bar_timeframe=bar_timeframe,
+        )
+
+    def _model_info_from_manifest(
+        self,
+        model_path: Path,
+        *,
+        manifest: Mapping[str, Any],
+        resolved_horizon: str,
+        bar_timeframe: str,
+    ) -> ModelInfo:
         status = str(manifest.get("status", "unknown"))
-        if manifest.get("model_type") != expected_model_type:
-            raise ValueError(f"model type {manifest.get('model_type', 'unknown')} is incompatible with {expected_model_type} serving")
-        if manifest.get("schema_version") != expected_schema_version:
-            raise ValueError(
-                f"model schema {manifest.get('schema_version', 'unknown')} is incompatible with {expected_schema_version} serving"
-            )
         target = _optional_str(manifest.get("target_col"))
-        target_horizon = _target_horizon(target)
-        if target_horizon != resolved_horizon:
-            raise ValueError(
-                f"requested model horizon {resolved_horizon} is incompatible with model target horizon {target_horizon or 'unknown'}"
-            )
         dataset_value = manifest.get("dataset")
         dataset = dataset_value if isinstance(dataset_value, dict) else {}
         return ModelInfo(

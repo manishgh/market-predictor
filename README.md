@@ -13,7 +13,7 @@ This is research and prediction tooling, not investment advice and not an automa
 
 The repository produces prediction intelligence: probabilities, catalyst summaries, feature/audit context, and watchlist rankings. It does not own broker execution, portfolio state, final sizing, stops, exits, or order lifecycle. Those responsibilities belong in a trading/runtime system such as `trading_flow`.
 
-## Current Model State (2026-07-21)
+## Current Model State (2026-07-22)
 
 Model lifecycle state comes from each artifact's `.manifest.json`; unregistered or hash-mismatched artifacts cannot be scored.
 
@@ -34,6 +34,7 @@ Production API implications:
 - The configured swing route is deliberately not ready until a real canonical candidate passes every C4 promotion gate; there is no legacy fallback.
 - Unified mode may return explicit swing and intraday errors until each requested view has its own promoted canonical artifact.
 - Candidate scoring is available only through research commands or an explicitly constructed test service, never through the HTTP request contract.
+- C6 serving infrastructure is complete: canonical label-free inference builds, atomic live snapshots, immutable Azure releases, rollback, startup sync, drift/resource telemetry, and the non-root API image are implemented. This does not change the model state above; no real canonical model has passed promotion.
 
 The next valid intraday promotion attempt requires a new predeclared development hypothesis that first passes both economic scopes, followed by matured shadow data after 2026-07-08 and all current promotion audits. See [Intraday model promotion](docs/intraday_model_promotion.md).
 
@@ -189,10 +190,10 @@ Upload project artifacts to Azure Blob Storage after Azure env vars are configur
 
 ```powershell
 market-predictor azure-upload-artifacts --root data/artifacts
-market-predictor azure-publish-models --models-dir models
+market-predictor azure-publish-serving-release --root .
 ```
 
-Model publication reads the server-owned prediction routes, verifies that every referenced artifact is promoted and hash-matches its registry manifest, and uploads the artifact plus sidecar under a mode/horizon path. The deployment manifest is uploaded last; unregistered, candidate, deprecated, or out-of-root artifacts are never published by this command.
+Serving-release publication reads the server-owned prediction routes and registered live snapshots. It verifies promoted model status, artifact and manifest hashes, live feature freshness, canonical source identity, feature schema, and SIP provenance. Assets are uploaded beneath a content-addressed release id, the immutable release manifest is written after all assets, and the mutable active pointer is moved last. Unregistered, candidate, deprecated, stale, or out-of-root artifacts cannot be activated.
 
 For implementation details and file responsibilities, read:
 
@@ -298,17 +299,27 @@ The production service reads only the server-registered snapshots at `data/live/
 
 Production model routes are declared under `[prediction_serving.routes]` in `configs/default.toml`. A route is added only after promotion; changing the model, universe, or timeframe is an operator configuration change followed by readiness verification, not a client request option.
 
-`/v1/health/live` reports process liveness. `/v1/health/ready` validates every registered model manifest/status/hash and each live feature snapshot; it returns HTTP 503 whenever any serving component is unavailable or stale.
+`/v1/health/live` reports process liveness. `/v1/health/ready` validates every registered model manifest/status/hash, each live feature snapshot, source/schema provenance, drift telemetry, and the process memory guard; it returns HTTP 503 whenever a required serving component is unavailable, stale, or over the memory safety threshold. Drift is reported but does not independently block readiness. `/v1/metrics` exposes bounded in-process request latency/error counters, prediction readiness counts, replay outcomes, model hashes, the latest health result, and process memory; expose it only on internal ingress.
 
-Publish an audited feature table from the appropriate completed pipeline with:
+Build a label-free canonical inference artifact, then publish it atomically to the registered live path:
 
 ```powershell
+market-predictor build-intraday-live-features `
+  --decisions data/canonical/intraday_decisions_5m.parquet `
+  --one-minute-bars data/canonical/intraday_bars_1m.parquet `
+  --benchmark-bars data/canonical/intraday_benchmarks_5m.parquet `
+  --global-events data/canonical/global_events.parquet `
+  --global-source-collections data/canonical/global_source_collections.parquet `
+  --config configs/intraday_dataset.toml `
+  --out data/live/staging/intraday_60m.parquet
+
 market-predictor publish-live-features `
   --mode intraday `
-  --input-path data/features/intraday_latest_enriched.parquet `
-  --live-dir data/live `
-  --price-feed sip
+  --input-path data/live/staging/intraday_60m.parquet `
+  --live-dir data/live
 ```
+
+`publish-live-features` accepts only the matching `swing_inference_features` or `intraday_inference_features` canonical artifact. Arbitrary Parquet, label-bearing training rows, caller-supplied feed overrides, mixed decision timestamps, stale rows, and future feature availability are rejected.
 
 Catalyst evidence is returned separately from model probabilities. Swing exposes its unmodified probability. Canonical intraday exposes independent `opportunity_probability` and `downside_probability`; its `decision_score` applies a transparent ranking adjustment to their risk-adjusted combination. The `catalyst` object reports confirmation, conflict, veto, mixed, or absent evidence using relevance, sentiment, recency, source diversity, generic-headline rate, and material-event taxonomy. Catalyst can confirm or veto a decision, but it does not modify either intraday estimator probability.
 
@@ -392,7 +403,7 @@ Hourly reaction features require Alpaca bars. If hourly bars are unavailable, th
 
 The former four-model watchlist average, heuristic watch/behavior commands, event/daily baseline trainers, `live-once`, `live-run`, and accuracy-only `live-train-event` path were removed. They mixed incompatible horizons, accepted unregistered artifacts, and could republish research features as live data. The API is the only operational prediction surface; research scorers require a registered, hash-matching candidate or promoted model.
 
-The canonical point-in-time data boundary, C4 swing pipeline, and C5 intraday pipeline are implemented. Automatic live publication and deployment wiring are C6 work. `/v1/health/ready` remains HTTP 503 while a promoted canonical model or audited live snapshot is absent.
+The canonical point-in-time data boundary, C4 swing pipeline, C5 intraday pipeline, and C6 serving/deployment infrastructure are implemented. Scheduling remains an external Azure Container Apps responsibility. `/v1/health/ready` remains HTTP 503 while a promoted canonical model or audited live snapshot is absent.
 
 ## Canonical Point-In-Time Data
 
@@ -450,7 +461,7 @@ The removed `build-volatile-dataset`, `train-volatile-model`, and `score-volatil
 
 ## Canonical Intraday Model Pipeline
 
-The production intraday path consumes hash-verified canonical 5-minute decisions, 1-minute stock/benchmark bars, 5-minute benchmark bars, and global context. Dataset construction and training fail before the configured 4 GiB process limit; input windows must be sized accordingly until C6 adds bounded multi-artifact orchestration.
+The production intraday path consumes hash-verified canonical 5-minute decisions, 1-minute stock/benchmark bars, 5-minute benchmark bars, and global context. Dataset construction and training use column projection, `float32` matrices, sequential fold-model release, and fail before the configured 4 GiB process limit.
 
 ```powershell
 market-predictor build-intraday-dataset `
@@ -583,9 +594,20 @@ Build context files:
 ```text
 Dockerfile
 .dockerignore
+scripts/container-entrypoint.sh
 ```
 
-The deployment rationale and job schedule are in `docs/azure_deployment_plan.md`.
+The image runs the API as UID/GID 10001, exposes port 8000, and probes `/v1/health/live`. Set `SYNC_AZURE_RELEASE_ON_STARTUP=true` in the production API revision so the entrypoint downloads and hash-verifies the active immutable release before importing the API. A failed sync stops startup; it never falls back to stale local artifacts. Configure the Container Apps revision with a 4 GiB memory limit in addition to the in-process guard.
+
+Publish, hydrate, or roll back a complete serving release with:
+
+```powershell
+market-predictor azure-publish-serving-release --root .
+market-predictor azure-sync-serving-release --root .
+market-predictor azure-rollback-serving-release --release-id <64-character-release-id>
+```
+
+The deployment rationale, identity/secret requirements, release ordering, and job schedule are in `docs/azure_deployment_plan.md`.
 
 ## Reddit Signals
 

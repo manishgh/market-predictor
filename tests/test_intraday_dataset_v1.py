@@ -17,10 +17,29 @@ from market_predictor.intraday.contracts import (
     downside_target_column,
     opportunity_target_column,
 )
-from market_predictor.intraday.dataset import build_intraday_dataset
+from market_predictor.intraday.dataset import (
+    build_intraday_dataset,
+    build_intraday_inference_features,
+)
 
 
 class IntradayDatasetV1Tests(unittest.TestCase):
+    def test_builds_latest_label_free_intraday_inference_group(self) -> None:
+        decisions, one_minute, benchmarks, events, collections = _inputs()
+        features, audit = build_intraday_inference_features(
+            decisions,
+            one_minute,
+            benchmarks,
+            global_events=events,
+            global_source_collections=collections,
+            config=_config(),
+        )
+
+        self.assertTrue(audit.passed, audit.to_frame().to_dict(orient="records"))
+        self.assertEqual(len(features), 2)
+        self.assertEqual(features["decision_time_utc"].nunique(), 1)
+        self.assertFalse(any(column.startswith(("target_", "path_", "label_", "future_")) for column in features))
+
     def test_cli_publishes_hash_verified_intraday_dataset(self) -> None:
         decisions, one_minute, benchmarks, events, collections = _inputs()
         with TemporaryDirectory() as temp_dir:
@@ -85,6 +104,40 @@ class IntradayDatasetV1Tests(unittest.TestCase):
             self.assertGreater(int(frame["label_eligible"].sum()), 0)
             self.assertTrue(manifest["production_ready"])
             self.assertEqual(len(manifest["inputs"]), 5)
+
+            live_output = root / "intraday_live_features.parquet"
+            live_result = CliRunner().invoke(
+                app,
+                [
+                    "build-intraday-live-features",
+                    "--decisions",
+                    str(inputs["decisions"][1]),
+                    "--one-minute-bars",
+                    str(inputs["one_minute"][1]),
+                    "--benchmark-bars",
+                    str(inputs["benchmarks"][1]),
+                    "--global-events",
+                    str(inputs["events"][1]),
+                    "--global-source-collections",
+                    str(inputs["collections"][1]),
+                    "--config",
+                    str(config_path),
+                    "--out",
+                    str(live_output),
+                ],
+            )
+            self.assertEqual(
+                live_result.exit_code,
+                0,
+                msg=f"{live_result.output}\n{live_result.exception}",
+            )
+            live_frame, live_manifest = load_canonical_artifact(
+                live_output,
+                expected_type="intraday_inference_features",
+            )
+            self.assertEqual(live_frame["decision_time_utc"].nunique(), 1)
+            self.assertNotIn("path_outcome", live_frame)
+            self.assertTrue(live_manifest["production_ready"])
 
     def test_builds_exact_completed_bar_features_and_one_minute_labels(self) -> None:
         decisions, one_minute, benchmarks, events, collections = _inputs()

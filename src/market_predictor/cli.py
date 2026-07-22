@@ -7,6 +7,7 @@ from collections.abc import Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import UTC, date, datetime, time, timedelta
 from pathlib import Path
+from typing import cast
 from urllib.parse import urlsplit, urlunsplit
 from uuid import uuid4
 
@@ -17,6 +18,7 @@ from rich.console import Console
 
 from market_predictor.azure_store import AzureBlobStore
 from market_predictor.canonical.contracts import SourceCollection
+from market_predictor.canonical.store import load_canonical_artifact
 from market_predictor.commands.canonical_data import register_canonical_data_commands
 from market_predictor.commands.intraday_model import register_intraday_model_commands
 from market_predictor.commands.ranking import register_ranking_commands
@@ -29,6 +31,13 @@ from market_predictor.commands.v3_models import register_v3_model_commands
 from market_predictor.commands.v3_readiness import register_v3_readiness_commands
 from market_predictor.config import Settings, get_settings
 from market_predictor.data_quality import sanitize_events_frame
+from market_predictor.deployment import (
+    DEFAULT_ACTIVE_POINTER,
+    DEFAULT_RELEASE_PREFIX,
+    publish_serving_release,
+    rollback_serving_release,
+    sync_active_serving_release,
+)
 from market_predictor.entry_exit import (
     ENTRY_EXIT_SCHEMA_VERSION,
     EntryExitLabelConfig,
@@ -51,6 +60,7 @@ from market_predictor.global_context import score_flashpoints
 from market_predictor.intraday_confirmation import build_intraday_decision_report
 from market_predictor.intraday_enrichment import build_enriched_intraday_dataset
 from market_predictor.intraday_universe import build_intraday_candidate_universe
+from market_predictor.live_features import LIVE_ARTIFACT_TYPES, LIVE_SCHEMA_VERSIONS, LiveMode
 from market_predictor.model import DEFAULT_FEATURES
 from market_predictor.prediction_service import serving_routes_from_config
 from market_predictor.price import fetch_daily_prices, fetch_intraday_prices
@@ -62,10 +72,7 @@ from market_predictor.promotion_audit import (
     read_audit_record,
 )
 from market_predictor.registry import (
-    MODEL_STATUS_PROMOTED,
-    manifest_path_for,
     promote_model_manifest,
-    verify_model_artifact,
 )
 from market_predictor.schemas import NewsEvent
 from market_predictor.sources import AlpacaSource, FinvizSource, GdeltSource, RedditSource, SeekingAlphaRapidApiSource
@@ -104,17 +111,29 @@ def serve_api(
 @app.command("publish-live-features")
 def publish_live_features(
     mode: str = typer.Option(..., help="Feature mode: swing or intraday."),
-    input_path: Path = typer.Option(..., help="Curated rolling feature parquet to publish."),
+    input_path: Path = typer.Option(..., help="Canonical inference feature artifact to publish."),
     live_dir: Path = typer.Option(Path("data/live"), help="Managed live feature root."),
-    price_feed: str = typer.Option("sip", help="Explicit feed tier recorded in the manifest."),
 ) -> None:
     """Atomically publish an integrity-checked feature snapshot for API serving."""
     normalized_mode = mode.strip().lower()
     if normalized_mode not in {"swing", "intraday"}:
         raise typer.BadParameter("mode must be swing or intraday")
-    if not input_path.exists() or input_path.suffix.lower() != ".parquet":
-        raise typer.BadParameter("input_path must be an existing parquet file")
-    frame = pd.read_parquet(input_path)
+    live_mode = cast(LiveMode, normalized_mode)
+    expected_type = LIVE_ARTIFACT_TYPES[live_mode]
+    frame, canonical_manifest = load_canonical_artifact(
+        input_path,
+        expected_type=expected_type,
+        allow_research=False,
+    )
+    schema_column = "swing_feature_schema_version" if normalized_mode == "swing" else "intraday_feature_schema_version"
+    schemas = set(frame[schema_column].astype(str).unique()) if schema_column in frame else set()
+    expected_schema = LIVE_SCHEMA_VERSIONS[live_mode]
+    if schemas != {expected_schema}:
+        raise typer.BadParameter(f"canonical {normalized_mode} features do not match schema {expected_schema}")
+    feeds = set(frame["price_feed"].astype(str).str.lower().str.strip().unique())
+    if len(feeds) != 1:
+        raise typer.BadParameter("canonical inference features must contain exactly one price feed")
+    price_feed = next(iter(feeds))
     store = LiveFeatureStore(
         Path("."),
         LiveFeatureStoreConfig(
@@ -123,10 +142,16 @@ def publish_live_features(
         ),
     )
     manifest = store.publish(
-        normalized_mode,  # type: ignore[arg-type]
+        live_mode,
         frame,
         price_feed=price_feed,
-        source_watermarks={"published_from": str(input_path)},
+        feature_schema_version=expected_schema,
+        source_artifact_sha256=str(canonical_manifest["artifact_sha256"]),
+        source_artifact_type=expected_type,
+        source_watermarks={
+            "published_from": str(input_path),
+            "canonical_created_at_utc": str(canonical_manifest.get("created_at_utc", "")),
+        },
     )
     console.print(manifest)
 
@@ -493,11 +518,7 @@ def _count_nonzero_feature_days(
     column: str,
     bucket: str | None = None,
 ) -> int:
-    dates = set(
-        events["date"]
-        if bucket is None
-        else events.loc[events["event_time_bucket"] == bucket, "date"]
-    )
+    dates = set(events["date"] if bucket is None else events.loc[events["event_time_bucket"] == bucket, "date"])
     if column not in daily_features.columns or not dates:
         return 0
     matching_dates = daily_features.index.intersection(dates)
@@ -882,9 +903,7 @@ def collect_swing(
                 console.print(f"{symbol}: wrote {record['events']} events to {record['path']}")
     pd.DataFrame(summary).to_csv(out_dir / "_collection_summary.csv", index=False)
     collection_frames = [
-        pd.read_parquet(Path(str(record["source_collections_path"])))
-        for record in summary
-        if record.get("source_collections_path")
+        pd.read_parquet(Path(str(record["source_collections_path"]))) for record in summary if record.get("source_collections_path")
     ]
     if collection_frames:
         pd.concat(collection_frames, ignore_index=True).to_parquet(out_dir / "_source_collections.parquet", index=False)
@@ -1090,9 +1109,7 @@ def audit_swing_alignment(
             latest_feature_date = max(dataset_dates)
             events["has_feature_row"] = events["date"].isin(dataset_dates)
             events["pending_after_latest_feature_date"] = events["date"] > latest_feature_date
-            events["missing_historical_feature_row"] = (~events["has_feature_row"]) & (
-                ~events["pending_after_latest_feature_date"]
-            )
+            events["missing_historical_feature_row"] = (~events["has_feature_row"]) & (~events["pending_after_latest_feature_date"])
             source_counts = events["source"].map(source_family_for_source).value_counts().to_dict()
             grouped_events = events.groupby("date").size().rename("event_count_raw")
             grouped_dataset = dataset.copy()
@@ -1119,9 +1136,7 @@ def audit_swing_alignment(
                     "pre_market_event_dates": int(event_dates.get("pre_market", 0)),
                     "intraday_event_dates": int(event_dates.get("intraday", 0)),
                     "after_hours_event_dates": int(event_dates.get("after_hours", 0)),
-                    "premarket_gap_matched_days": _count_nonzero_feature_days(
-                        events, grouped_dataset, "premarket_gap_mean", "pre_market"
-                    ),
+                    "premarket_gap_matched_days": _count_nonzero_feature_days(events, grouped_dataset, "premarket_gap_mean", "pre_market"),
                     "intraday_2h_reaction_matched_days": _count_nonzero_feature_days(
                         events, grouped_dataset, "intraday_reaction_2h_mean", "intraday"
                     ),
@@ -1335,64 +1350,57 @@ def azure_upload_artifacts(
     console.print(pd.DataFrame(uploaded).tail(20) if uploaded else "No files uploaded.")
 
 
-@app.command("azure-publish-models")
-def azure_publish_models(
-    models_dir: Path = typer.Option(Path("models"), help="Allowed root for configured production model artifacts."),
-    blob_prefix: str = typer.Option("models/active", help="Blob prefix for active models."),
+@app.command("azure-publish-serving-release")
+def azure_publish_serving_release(
+    root: Path = typer.Option(Path("."), help="Deployment root containing configured models and live features."),
+    release_prefix: str = typer.Option(DEFAULT_RELEASE_PREFIX, help="Immutable release prefix under AZURE_BLOB_PREFIX."),
+    active_pointer: str = typer.Option(DEFAULT_ACTIVE_POINTER, help="Mutable active-release pointer blob."),
 ) -> None:
-    """Publish only configured, promoted, integrity-checked production models."""
+    """Publish one immutable, complete model-plus-feature serving release."""
+
     settings = get_settings()
-    routes = serving_routes_from_config(settings.app_config)
-    allowed_root = models_dir.resolve()
-    manifest_rows: list[dict[str, object]] = []
-    uploads: list[tuple[Path, str]] = []
-    for mode, mode_routes in sorted(routes.items()):
-        for horizon, route in sorted(mode_routes.items()):
-            model_path = route.model.resolve()
-            if not model_path.is_relative_to(allowed_root):
-                raise typer.BadParameter(f"Configured model is outside allowed root {allowed_root}: {model_path}")
-            registry_manifest = verify_model_artifact(
-                model_path,
-                allowed_statuses={MODEL_STATUS_PROMOTED},
-            )
-            registry_path = manifest_path_for(model_path)
-            route_prefix = f"{blob_prefix.strip('/')}/{mode}/{horizon}"
-            model_blob = f"{route_prefix}/{model_path.name}"
-            registry_blob = f"{route_prefix}/{registry_path.name}"
-            uploads.extend(((model_path, model_blob), (registry_path, registry_blob)))
-            manifest_rows.append(
-                {
-                    "mode": mode,
-                    "horizon": horizon,
-                    "model_blob": model_blob,
-                    "registry_manifest_blob": registry_blob,
-                    "artifact_sha256": registry_manifest["artifact_sha256"],
-                    "target_col": registry_manifest["target_col"],
-                    "schema_version": registry_manifest["schema_version"],
-                }
-            )
-    if not manifest_rows:
-        raise typer.BadParameter("No configured production model routes were found")
-    manifest_path = models_dir / "_production_routes_manifest.json"
-    _write_artifact_manifest(
-        manifest_path,
-        {
-            "schema": "production_model_routes.v1",
-            "generated_at_utc": datetime.now(UTC).isoformat(),
-            "routes": manifest_rows,
-        },
+    resolved_root = root.resolve()
+    pointer = publish_serving_release(
+        AzureBlobStore(settings),
+        root=resolved_root,
+        routes=serving_routes_from_config(settings.app_config),
+        live_feature_store=LiveFeatureStore(resolved_root),
+        release_prefix=release_prefix,
+        active_pointer_blob=active_pointer,
     )
-    store = AzureBlobStore(settings)
-    for local_path, blob_path in uploads:
-        store.upload_file(local_path, blob_path)
-    deployment_manifest_blob = f"{blob_prefix.strip('/')}/_production_routes_manifest.json"
-    store.upload_file(manifest_path, deployment_manifest_blob)
-    console.print(
-        {
-            "uploaded_models": len(manifest_rows),
-            "manifest": f"{settings.azure_prefix}/{deployment_manifest_blob}",
-        }
+    console.print(pointer)
+
+
+@app.command("azure-rollback-serving-release")
+def azure_rollback_serving_release(
+    release_id: str = typer.Option(..., help="Previously published 64-character serving release id."),
+    release_prefix: str = typer.Option(DEFAULT_RELEASE_PREFIX, help="Immutable release prefix under AZURE_BLOB_PREFIX."),
+    active_pointer: str = typer.Option(DEFAULT_ACTIVE_POINTER, help="Mutable active-release pointer blob."),
+) -> None:
+    """Atomically move the active pointer to a verified earlier release."""
+
+    pointer = rollback_serving_release(
+        AzureBlobStore(get_settings()),
+        release_id=release_id,
+        release_prefix=release_prefix,
+        active_pointer_blob=active_pointer,
     )
+    console.print(pointer)
+
+
+@app.command("azure-sync-serving-release")
+def azure_sync_serving_release(
+    root: Path = typer.Option(Path("."), help="Local deployment root to hydrate before API startup."),
+    active_pointer: str = typer.Option(DEFAULT_ACTIVE_POINTER, help="Active-release pointer blob."),
+) -> None:
+    """Hydrate and integrity-check the active Azure release into the local root."""
+
+    pointer = sync_active_serving_release(
+        AzureBlobStore(get_settings()),
+        root=root,
+        active_pointer_blob=active_pointer,
+    )
+    console.print(pointer)
 
 
 @app.command("audit-promotion-readiness")
@@ -1933,12 +1941,8 @@ def collect_seeking_alpha_universe(
                 snapshot_rows.append(snapshot)
                 row["snapshot_fields"] = len(snapshot)
                 row["snapshot_path"] = str(snapshot_path)
-                row["snapshot_errors"] = " | ".join(
-                    f"{key}={value}" for key, value in snapshot.items() if str(key).endswith("_error")
-                )
-                row["snapshot_skips"] = " | ".join(
-                    f"{key}={value}" for key, value in snapshot.items() if str(key).endswith("_skipped")
-                )
+                row["snapshot_errors"] = " | ".join(f"{key}={value}" for key, value in snapshot.items() if str(key).endswith("_error"))
+                row["snapshot_skips"] = " | ".join(f"{key}={value}" for key, value in snapshot.items() if str(key).endswith("_skipped"))
         except Exception as exc:
             row["status"] = "failed"
             row["error"] = str(exc)

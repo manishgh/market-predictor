@@ -47,6 +47,17 @@ class ArchitectureBoundaryTests(unittest.TestCase):
                 "promote-intraday-model",
             }.issubset(command_names)
         )
+        self.assertTrue(
+            {
+                "build-swing-live-features",
+                "build-intraday-live-features",
+                "publish-live-features",
+                "azure-publish-serving-release",
+                "azure-rollback-serving-release",
+                "azure-sync-serving-release",
+            }.issubset(command_names)
+        )
+        self.assertNotIn("azure-publish-models", command_names)
         self.assertIn("rank-sector-themes", command_names)
 
         prediction_service = (package_root / "prediction_service.py").read_text(encoding="utf-8")
@@ -61,6 +72,17 @@ class ArchitectureBoundaryTests(unittest.TestCase):
                 any(token in path for token in forbidden_tokens),
                 f"Market Predictor route crosses the architecture boundary: {path}",
             )
+
+    def test_container_runs_non_root_api_with_liveness_probe(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        dockerfile = (root / "Dockerfile").read_text(encoding="utf-8")
+        entrypoint = (root / "scripts" / "container-entrypoint.sh").read_text(encoding="utf-8")
+
+        self.assertIn("USER 10001:10001", dockerfile)
+        self.assertIn("/v1/health/live", dockerfile)
+        self.assertIn('CMD ["sh", "scripts/container-entrypoint.sh"]', dockerfile)
+        self.assertIn("azure-sync-serving-release --root /app", entrypoint)
+        self.assertIn("exec market-predictor serve-api", entrypoint)
 
 
 if __name__ == "__main__":

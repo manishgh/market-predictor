@@ -374,7 +374,7 @@ The repo currently contains several useful families. Their intended roles should
 | Finviz-only expansion models | Research models trained on candidate expansion set | Candidate/research only |
 | Older clean/sector/swing models | Earlier iterations | Deprecated unless explicitly revalidated |
 
-### Current Deployment State (2026-07-21)
+### Current Deployment State (2026-07-22)
 
 The manifest, not the filename, is authoritative.
 
@@ -389,6 +389,7 @@ The manifest, not the filename, is authoritative.
 | Intraday opening V2 logistic baseline | `candidate` | ROC AUC 0.5641; lift 1.1836 | Promotion rejected. |
 | Intraday opening V2 net-positive direction model | `candidate` | ROC AUC 0.4890; lift 0.9162 | Promotion rejected. |
 | Intraday V4-H1 exact 120-minute R1 | `candidate` | NDCG@10 0.4868/0.5131; top-10 excess -0.0802%/-0.0629% | Promotion rejected; shadow not opened. |
+| C6 serving infrastructure | implemented, no active real release | Canonical inference artifacts, atomic snapshots, immutable releases, startup sync, rollback, telemetry, and container contracts are tested | Operationally blocked until a real C4 or C5 model passes promotion; no candidate fallback. |
 The V2 structural dataset itself is valid for continued research: 47,614 rows, 196 eligible tickers, 122 sessions, exact 09:30-11:25 ET bar timestamps, no duplicate ticker/timestamp keys, and no cooldown gaps below 13 bars. Catalyst context covered 21.44% of rows; market context covered 87.28%. Reddit coverage was zero in this historical V2 table, so Reddit cannot be claimed as a trained intraday signal yet.
 
 Selected-trade economics are the decisive V2 failure: 558 capped OOS trades produced -0.184% average net realized return, 35.13% win rate, 0.7076 profit factor, 30.28% maximum drawdown, and 64.44% negative periods. All three market regimes were represented, so the rejection is not caused by missing regime coverage.
@@ -404,6 +405,8 @@ Serving rules:
 - Readiness checks both snapshot generation time and the latest feature timestamp; republishing stale rows does not make them fresh.
 - Catalyst/news remains an intraday confirmation and ranking overlay until a predeclared ablation on fresh data proves incremental model value.
 - A new intraday hypothesis must first pass both development economics scopes; only then may matured observations after 2026-07-08 be used as an untouched shadow interval.
+- A live snapshot must originate from the canonical label-free inference builder for its mode; arbitrary Parquet and training labels are not accepted.
+- An Azure serving release is one immutable content-addressed unit containing every configured promoted model and registered feature snapshot. The active pointer moves only after all assets and the release manifest exist.
 
 The data, target, ranking, validation, cleanup, and Git checkpoint sequence for the next model generation is defined in [ML Model V3 Improvement Plan](ml_model_v3_plan.md).
 
@@ -473,7 +476,23 @@ Implemented audit surfaces:
 - `promote-intraday-model` verifies every evidence hash and promotes both estimators atomically only when all frozen gates pass.
 - The older `audit-promotion-readiness` / `promote-model` path remains research-only and cannot promote a canonical C4 or C5 artifact.
 
-## 12. Prediction Workflow
+## 12. Production Serving And Releases
+
+The request path performs no provider calls, FinBERT inference, feature building, training, promotion, or alert delivery. Scheduled collection and canonical feature jobs prepare immutable source artifacts. A mode-specific inference builder then selects one latest coherent decision cross section, removes targets/labels/future paths, and fails on future availability, stale source state, insufficient warm-up, unknown or partial feed, schema mismatch, and invalid cross-section coverage.
+
+`publish-live-features` atomically installs the validated inference artifact and manifest at the registered swing or intraday path. The manifest binds the live snapshot to its canonical source hash/type, feature schema, SIP feed, exact columns, one decision timestamp, freshness, and artifact hash. The API validates this identity again before scoring.
+
+Azure publication resolves server-owned routes and creates a content-addressed release containing every promoted model plus registry manifest and every registered live feature snapshot plus manifest. The ordering is assets, immutable release manifest, then mutable active pointer. API startup sync downloads to staging, verifies every hash, installs manifests last, and records the active release only after success. Rollback moves the pointer to a complete prior release; no release asset is modified in place.
+
+Operational surfaces are:
+
+- `/v1/health/live`: process liveness only.
+- `/v1/health/ready`: promoted model/hash, feature freshness/source/schema, and memory readiness; returns HTTP 503 on required-component failure.
+- `/v1/metrics`: internal bounded counters for latency/errors, prediction readiness, replay outcomes, model hashes, last health, drift, and memory.
+
+Training-reference drift is telemetry, not a promotion bypass or automatic trading veto. Durable prediction-quality evidence comes from immutable prediction snapshots and later replay outcomes. Azure deployment uses separate API and scheduled-job identities; the API receives read-only Blob access, while publication/rollback jobs receive write access.
+
+## 13. Prediction Workflow
 
 Recommended flow:
 
@@ -481,14 +500,14 @@ Recommended flow:
 2. Collect recent catalysts and required market context.
 3. Sanitize and deduplicate events.
 4. Verify event relevance and timestamp quality.
-5. Build feature rows.
-6. Run data-readiness gates.
-7. Score promoted models.
-8. Combine daily, event, and heuristic outputs into a prediction package.
-9. Write readable report, raw report, field dictionary, and audit ID.
-10. Let `trading_flow` consume the prediction package for trade decisions.
+5. Build the mode-specific canonical, label-free latest feature cross section.
+6. Run data-readiness gates and atomically publish the registered live snapshot.
+7. Score exactly one promoted model per requested view.
+8. Apply catalyst evidence only as the documented confirmation/ranking overlay; preserve original model probabilities.
+9. Persist an immutable prediction snapshot and expose model/source/readiness identities in the response.
+10. Evaluate matured outcomes through investment replay; let `trading_flow` independently decide whether and how to trade.
 
-## 13. Parameter Summary
+## 14. Parameter Summary
 
 | Parameter | Value / Cadence | Notes |
 | --- | --- | --- |

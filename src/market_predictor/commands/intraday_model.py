@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pandas as pd
 import typer
 from rich.console import Console
 
@@ -16,7 +17,10 @@ from market_predictor.intraday.contracts import (
     IntradayPromotionConfig,
     IntradayTrainingConfig,
 )
-from market_predictor.intraday.dataset import build_intraday_dataset
+from market_predictor.intraday.dataset import (
+    build_intraday_dataset,
+    build_intraday_inference_features,
+)
 from market_predictor.intraday.model import train_intraday_model
 from market_predictor.intraday.promotion import (
     load_intraday_training_evidence,
@@ -43,30 +47,13 @@ def register_intraday_model_commands(app: typer.Typer, console: Console) -> None
     ) -> None:
         """Build audited 5m decisions with exact subsequent 1m path labels."""
 
-        decision_frame, _ = load_canonical_artifact(
+        decision_frame, one_minute_frame, benchmark_frame, global_event_frame, global_collection_frame = _load_intraday_build_inputs(
             decisions,
-            expected_type="decisions",
-            allow_research=not production,
-        )
-        one_minute_frame, _ = load_canonical_artifact(
             one_minute_bars,
-            expected_type="bars",
-            allow_research=not production,
-        )
-        benchmark_frame, _ = load_canonical_artifact(
             benchmark_bars,
-            expected_type="bars",
-            allow_research=not production,
-        )
-        global_event_frame, _ = load_canonical_artifact(
             global_events,
-            expected_type="events",
-            allow_research=not production,
-        )
-        global_collection_frame, _ = load_canonical_artifact(
             global_source_collections,
-            expected_type="source_collections",
-            allow_research=not production,
+            production=production,
         )
         config = load_typed_config(config_path, IntradayDatasetConfig)
         dataset, audit = build_intraday_dataset(
@@ -100,6 +87,64 @@ def register_intraday_model_commands(app: typer.Typer, console: Console) -> None
                 "rows": len(dataset),
                 "eligible_rows": int(dataset["label_eligible"].fillna(False).sum()),
                 "catalyst_eligible_rows": int(dataset["catalyst_eligible"].fillna(False).sum()),
+                "out": str(out),
+                "sha256": manifest["artifact_sha256"],
+            }
+        )
+
+    @app.command("build-intraday-live-features")
+    def build_intraday_live_features_command(
+        decisions: Path = typer.Option(..., help="Hash-verified canonical 5m decision artifact."),
+        one_minute_bars: Path = typer.Option(..., help="Hash-verified canonical 1m stock and benchmark bars."),
+        benchmark_bars: Path = typer.Option(..., help="Hash-verified canonical 5m SPY, QQQ, and sector bars."),
+        global_events: Path = typer.Option(..., help="Hash-verified canonical MARKET event artifact."),
+        global_source_collections: Path = typer.Option(
+            ...,
+            help="Hash-verified source collection states for ticker MARKET.",
+        ),
+        out: Path = typer.Option(..., help="Immutable latest intraday inference feature artifact."),
+        config_path: Path | None = typer.Option(None, "--config", help="Intraday dataset JSON or TOML config."),
+    ) -> None:
+        """Build a label-free, audited latest intraday inference snapshot."""
+
+        decision_frame, one_minute_frame, benchmark_frame, global_event_frame, global_collection_frame = _load_intraday_build_inputs(
+            decisions,
+            one_minute_bars,
+            benchmark_bars,
+            global_events,
+            global_source_collections,
+            production=True,
+        )
+        features, audit = build_intraday_inference_features(
+            decision_frame,
+            one_minute_frame,
+            benchmark_frame,
+            global_events=global_event_frame,
+            global_source_collections=global_collection_frame,
+            config=load_typed_config(config_path, IntradayDatasetConfig),
+        )
+        inputs = {
+            str(path): file_sha256(path)
+            for path in (
+                decisions,
+                one_minute_bars,
+                benchmark_bars,
+                global_events,
+                global_source_collections,
+            )
+        }
+        manifest = write_canonical_artifact(
+            features,
+            out,
+            artifact_type="intraday_inference_features",
+            audit=audit,
+            inputs=inputs,
+            production_ready=True,
+        )
+        console.print(
+            {
+                "rows": len(features),
+                "decision_time_utc": str(features["decision_time_utc"].iloc[0]),
                 "out": str(out),
                 "sha256": manifest["artifact_sha256"],
             }
@@ -163,3 +208,46 @@ def register_intraday_model_commands(app: typer.Typer, console: Console) -> None
         console.print(result)
         if not bool(result["passed"]):
             raise typer.Exit(code=2)
+
+
+def _load_intraday_build_inputs(
+    decisions: Path,
+    one_minute_bars: Path,
+    benchmark_bars: Path,
+    global_events: Path,
+    global_source_collections: Path,
+    *,
+    production: bool,
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    decision_frame, _ = load_canonical_artifact(
+        decisions,
+        expected_type="decisions",
+        allow_research=not production,
+    )
+    one_minute_frame, _ = load_canonical_artifact(
+        one_minute_bars,
+        expected_type="bars",
+        allow_research=not production,
+    )
+    benchmark_frame, _ = load_canonical_artifact(
+        benchmark_bars,
+        expected_type="bars",
+        allow_research=not production,
+    )
+    global_event_frame, _ = load_canonical_artifact(
+        global_events,
+        expected_type="events",
+        allow_research=not production,
+    )
+    global_collection_frame, _ = load_canonical_artifact(
+        global_source_collections,
+        expected_type="source_collections",
+        allow_research=not production,
+    )
+    return (
+        decision_frame,
+        one_minute_frame,
+        benchmark_frame,
+        global_event_frame,
+        global_collection_frame,
+    )
