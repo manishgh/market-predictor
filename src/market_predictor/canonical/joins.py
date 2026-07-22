@@ -173,7 +173,9 @@ def aggregate_event_features(
         raise DataReadinessError("events contain invalid feature availability timestamps")
     clean = clean.sort_values(["ticker", "feature_available_at_utc"]).drop_duplicates("event_id", keep="first")
     clean["sentiment_numeric"] = pd.to_numeric(clean.get("sentiment_numeric"), errors="coerce")
-    clean["relevance"] = pd.to_numeric(clean.get("relevance"), errors="coerce").fillna(1.0).clip(lower=0)
+    # Unknown relevance stays NaN (never coerced to fully-relevant); it is excluded
+    # from relevance-weighted features and counted against quality downstream.
+    clean["relevance"] = pd.to_numeric(clean.get("relevance"), errors="coerce").clip(lower=0)
     source_families = sorted(clean["source_family"].astype(str).str.lower().unique())
     parts: list[pd.DataFrame] = []
     for ticker, decision_part in output.groupby("ticker", sort=False):
@@ -307,12 +309,25 @@ def _aggregate_ticker_events(
     sentiment = events["sentiment_numeric"].fillna(0.0).to_numpy(dtype=float)
     sentiment_present = events["sentiment_numeric"].notna().to_numpy(dtype=float)
     relevance = events["relevance"].to_numpy(dtype=float)
+    # Three relevance states: validated (finite value), and unknown (NaN). Unknown
+    # events contribute zero relevance weight (excluded from sentiment / relevance
+    # mean) and count as not-high-quality in the low-relevance fraction.
+    relevance_known = np.isfinite(relevance)
+    relevance_weight = np.where(relevance_known, relevance, 0.0)
+    low_or_unknown = np.where(relevance_known, (relevance < 0.5).astype(float), 1.0)
+    unknown_relevance = (~relevance_known).astype(float)
     for name, window in windows.items():
         start = np.searchsorted(event_ns, decision_ns - int(window.value), side="left")
         count = end - start
         output[f"event_count_{name}"] = count
-        weighted = _window_sum(sentiment * relevance, start, end)
-        weight = _window_sum(relevance * sentiment_present, start, end)
+        output[f"unknown_relevance_event_fraction_{name}"] = np.divide(
+            _window_sum(unknown_relevance, start, end),
+            count,
+            out=np.zeros(len(output)),
+            where=count > 0,
+        )
+        weighted = _window_sum(sentiment * relevance_weight, start, end)
+        weight = _window_sum(relevance_weight * sentiment_present, start, end)
         output[f"sentiment_mean_{name}"] = np.divide(weighted, weight, out=np.zeros(len(output)), where=weight > 0)
         output[f"sentiment_coverage_{name}"] = np.divide(
             _window_sum(sentiment_present, start, end),
@@ -321,13 +336,13 @@ def _aggregate_ticker_events(
             where=count > 0,
         )
         output[f"event_relevance_mean_{name}"] = np.divide(
-            _window_sum(relevance, start, end),
+            _window_sum(relevance_weight, start, end),
             count,
             out=np.zeros(len(output)),
             where=count > 0,
         )
         output[f"low_relevance_event_fraction_{name}"] = np.divide(
-            _window_sum((relevance < 0.5).astype(float), start, end),
+            _window_sum(low_or_unknown, start, end),
             count,
             out=np.zeros(len(output)),
             where=count > 0,

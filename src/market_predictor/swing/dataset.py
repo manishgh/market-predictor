@@ -301,7 +301,8 @@ def _add_global_event_features(decisions: pd.DataFrame, events: pd.DataFrame) ->
     sentiment = pd.to_numeric(event_frame["sentiment_numeric"], errors="coerce")
     sentiment_values = sentiment.fillna(0.0).to_numpy(dtype=float)
     sentiment_present = sentiment.notna().to_numpy(dtype=float)
-    relevance = pd.to_numeric(event_frame["relevance"], errors="coerce").fillna(1.0).clip(lower=0).to_numpy(dtype=float)
+    # Unknown relevance carries zero weight in global sentiment (excluded, not fully relevant).
+    relevance = pd.to_numeric(event_frame["relevance"], errors="coerce").fillna(0.0).clip(lower=0).to_numpy(dtype=float)
     unique = output[["decision_time_utc"]].drop_duplicates().sort_values("decision_time_utc").copy()
     decision_times = pd.DatetimeIndex(unique["decision_time_utc"]).as_unit("ns").asi8
     end = np.searchsorted(event_times, decision_times, side="right")

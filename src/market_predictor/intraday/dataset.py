@@ -540,7 +540,8 @@ def _add_global_event_features(decisions: pd.DataFrame, events: pd.DataFrame) ->
     )
     sentiment = pd.to_numeric(event_frame.get("sentiment_numeric"), errors="coerce").fillna(0.0).to_numpy(float)
     sentiment_present = pd.to_numeric(event_frame.get("sentiment_numeric"), errors="coerce").notna().to_numpy(float)
-    relevance = pd.to_numeric(event_frame.get("relevance"), errors="coerce").fillna(1.0).clip(lower=0).to_numpy(float)
+    # Unknown relevance carries zero weight in global sentiment (excluded, not fully relevant).
+    relevance = pd.to_numeric(event_frame.get("relevance"), errors="coerce").fillna(0.0).clip(lower=0).to_numpy(float)
     end = np.searchsorted(event_ns, decision_ns, side="right")
     for name, window in GLOBAL_EVENT_WINDOWS.items():
         start = np.searchsorted(event_ns, decision_ns - int(window.value), side="left")
