@@ -170,23 +170,27 @@ def promote_swing_model(
 
     alignment = _required_first_row(alignment_audit, "alignment", failures)
     if alignment is not None:
-        alignment_columns = (
+        columns = (
             "alignment_error_total",
+            "future_feature_rows",
+            "label_path_mismatches",
+            "benchmark_path_mismatches",
             "events_without_feature_row",
             "missing_historical_feature_rows",
             "dates_with_news_count_mismatch",
-            "future_feature_rows",
-            "label_path_mismatches",
         )
-        alignment_total = 0.0
-        for column in alignment_columns:
+        total = 0.0
+        for column in columns:
             value = _finite_number(alignment.get(column))
             if value is None or value < 0:
                 failures.append(f"alignment.{column} is missing or invalid")
-            else:
-                alignment_total += value
-        if alignment_total > config.max_alignment_errors:
-            failures.append(f"alignment errors {alignment_total} > {config.max_alignment_errors}")
+            elif column != "alignment_error_total":
+                total += value
+        declared_total = _finite_number(alignment.get("alignment_error_total"))
+        if declared_total is not None and not np.isclose(declared_total, total):
+            failures.append("alignment_error_total does not equal component failures")
+        if total > config.max_alignment_errors:
+            failures.append(f"alignment errors {total} > {config.max_alignment_errors}")
 
     requested_at = datetime.now(UTC).isoformat()
     effective_report_path = report_path or model_path.with_suffix(model_path.suffix + ".promotion.json")

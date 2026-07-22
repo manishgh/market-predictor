@@ -305,18 +305,7 @@ def train_swing_model(
         policy=DEFAULT_EXECUTION_POLICY,
     )
     catalyst = catalyst_audit(combined_regime_evidence)
-    alignment = pd.DataFrame(
-        [
-            {
-                "alignment_error_total": 0,
-                "events_without_feature_row": 0,
-                "missing_historical_feature_rows": 0,
-                "dates_with_news_count_mismatch": 0,
-                "future_feature_rows": 0,
-                "label_path_mismatches": 0,
-            }
-        ]
-    )
+    alignment = _alignment_audit(dataset)
     for evidence in (oof, holdout_evidence, profitability, regime, catalyst, alignment):
         evidence["model_run_id"] = model_run_id
     representation = holdout_plan.representation_audit.copy()
@@ -459,6 +448,48 @@ def train_swing_model(
         alignment_audit=alignment,
         fold_audit=fold_audit,
         manifest=manifest,
+    )
+
+
+def _alignment_audit(dataset: pd.DataFrame) -> pd.DataFrame:
+    """Real feature/label alignment evidence (no fabricated zeros).
+
+    Feature-row-level checks: features that postdate their decision (leakage),
+    eligible rows whose expected label path is not exact, and exact-label rows
+    missing a benchmark excess return. Event-to-feature reconciliation counts
+    (events_without_feature_row / missing_historical_feature_rows /
+    dates_with_news_count_mismatch) are populated by the R3 reconciliation
+    artifact; they remain zero here until that artifact is bound in.
+    """
+
+    decision = pd.to_datetime(dataset["decision_time_utc"], utc=True, errors="coerce")
+    feature = pd.to_datetime(dataset["feature_available_at_utc"], utc=True, errors="coerce")
+    label_expected = dataset["label_window_expected"].fillna(False).astype(bool)
+    label_exact = dataset["label_path_exact"].fillna(False).astype(bool)
+    feature_eligible = dataset["feature_eligible"].fillna(False).astype(bool)
+    benchmark_columns = [
+        column
+        for column in dataset
+        if column.startswith("future_excess_return_") and column.endswith(("_vs_spy", "_vs_qqq", "_vs_sector"))
+    ]
+    benchmark_missing = (
+        dataset[benchmark_columns].isna().any(axis=1) if benchmark_columns else pd.Series(False, index=dataset.index)
+    )
+    future = int((feature > decision).fillna(True).sum())
+    path_mismatch = int((feature_eligible & label_expected & ~label_exact).sum())
+    benchmark_mismatch = int((feature_eligible & label_exact & benchmark_missing).sum())
+    return pd.DataFrame(
+        [
+            {
+                "alignment_error_total": future + path_mismatch + benchmark_mismatch,
+                "future_feature_rows": future,
+                "label_path_mismatches": path_mismatch,
+                "benchmark_path_mismatches": benchmark_mismatch,
+                "events_without_feature_row": 0,
+                "missing_historical_feature_rows": 0,
+                "dates_with_news_count_mismatch": 0,
+            }
+        ]
     )
 
 
