@@ -23,6 +23,7 @@ from market_predictor.canonical.contracts import (
     CanonicalUniverseMembership,
     SourceCollection,
 )
+from market_predictor.canonical.cutoffs import SWING_NIGHTLY_CUTOFF
 from market_predictor.canonical.joins import (
     aggregate_event_features,
     decisions_from_completed_bars,
@@ -205,6 +206,117 @@ class CanonicalNormalizationTests(unittest.TestCase):
 
 
 class CanonicalJoinAndAuditTests(unittest.TestCase):
+    def test_swing_cutoff_is_after_normal_and_early_close(self) -> None:
+        cases = (
+            ("2026-07-21T04:00:00Z", "2026-07-21T20:15:00Z", "2026-07-21T22:00:00Z"),
+            ("2025-11-28T05:00:00Z", "2025-11-28T18:15:00Z", "2025-11-28T23:00:00Z"),
+        )
+        for session_timestamp, expected_bar_available, expected_cutoff in cases:
+            with self.subTest(session_timestamp=session_timestamp):
+                bars = canonicalize_bars(self._daily_bar(session_timestamp))
+                decisions = decisions_from_completed_bars(bars, mode="swing-nightly")
+                self.assertEqual(decisions.loc[0, "bar_available_at_utc"], pd.Timestamp(expected_bar_available))
+                self.assertEqual(decisions.loc[0, "feature_available_at_utc"], pd.Timestamp(expected_bar_available))
+                self.assertEqual(decisions.loc[0, "decision_time_utc"], pd.Timestamp(expected_cutoff))
+                self.assertEqual(
+                    decisions.loc[0, "prediction_cutoff_policy_id"],
+                    SWING_NIGHTLY_CUTOFF.policy_id,
+                )
+
+    def test_swing_cutoff_tracks_new_york_dst_not_fixed_utc(self) -> None:
+        before_dst = decisions_from_completed_bars(
+            canonicalize_bars(self._daily_bar("2026-03-06T05:00:00Z")),
+            mode="swing-nightly",
+        )
+        after_dst = decisions_from_completed_bars(
+            canonicalize_bars(self._daily_bar("2026-03-09T04:00:00Z")),
+            mode="swing-nightly",
+        )
+        self.assertEqual(before_dst.loc[0, "decision_time_utc"], pd.Timestamp("2026-03-06T23:00:00Z"))
+        self.assertEqual(after_dst.loc[0, "decision_time_utc"], pd.Timestamp("2026-03-09T22:00:00Z"))
+
+    def test_swing_joins_include_after_close_evidence_only_through_cutoff(self) -> None:
+        decisions = decisions_from_completed_bars(
+            canonicalize_bars(self._daily_bar("2026-07-21T04:00:00Z")),
+            mode="swing-nightly",
+        )
+        included = self._canonical_event(
+            published="2026-07-21T20:30:00Z",
+            first_seen="2026-07-21T21:15:00Z",
+            scored="2026-07-21T21:16:00Z",
+        )
+        excluded = self._canonical_event(
+            published="2026-07-21T21:45:00Z",
+            first_seen="2026-07-21T22:01:00Z",
+            scored="2026-07-21T22:02:00Z",
+        )
+        excluded["event_id"] = "c" * 64
+        event_join = aggregate_event_features(decisions, pd.concat([included, excluded], ignore_index=True))
+        self.assertEqual(event_join.loc[0, "event_count_2h"], 1)
+        self.assertEqual(
+            event_join.loc[0, "latest_event_feature_available_at_utc"],
+            pd.Timestamp("2026-07-21T21:16:00Z"),
+        )
+
+        collections = pd.DataFrame(
+            [
+                SourceCollection(
+                    collection_id="alpaca-before-cutoff",
+                    ticker="MSFT",
+                    source_family="alpaca",
+                    requested_start_utc=datetime(2026, 7, 21, 20, 0, tzinfo=UTC),
+                    requested_end_utc=datetime(2026, 7, 21, 21, 20, tzinfo=UTC),
+                    started_at_utc=datetime(2026, 7, 21, 21, 20, tzinfo=UTC),
+                    completed_at_utc=datetime(2026, 7, 21, 21, 30, tzinfo=UTC),
+                    status="observed",
+                    row_count=1,
+                ).model_dump(),
+                SourceCollection(
+                    collection_id="alpaca-after-cutoff",
+                    ticker="MSFT",
+                    source_family="alpaca",
+                    requested_start_utc=datetime(2026, 7, 21, 21, 20, tzinfo=UTC),
+                    requested_end_utc=datetime(2026, 7, 21, 21, 59, tzinfo=UTC),
+                    started_at_utc=datetime(2026, 7, 21, 21, 59, tzinfo=UTC),
+                    completed_at_utc=datetime(2026, 7, 21, 22, 1, tzinfo=UTC),
+                    status="observed_empty",
+                    row_count=0,
+                ).model_dump(),
+            ]
+        )
+        source_join = join_source_collection_status(decisions, collections, source_families=["alpaca"])
+        self.assertEqual(source_join.loc[0, "source_status_alpaca"], "observed")
+        self.assertEqual(
+            source_join.loc[0, "source_status_available_at_utc_alpaca"],
+            pd.Timestamp("2026-07-21T21:30:00Z"),
+        )
+
+        facts = pd.DataFrame(
+            {
+                "fact_id": ["before-cutoff-fact", "after-cutoff-fact"],
+                "ticker": ["MSFT", "MSFT"],
+                "metric": ["revenue", "revenue"],
+                "value": [100.0, 999.0],
+                "available_at_utc": [
+                    pd.Timestamp("2026-07-21T21:31:00Z"),
+                    pd.Timestamp("2026-07-21T22:01:00Z"),
+                ],
+                "availability_policy": ["observed", "observed"],
+            }
+        )
+        fact_join = join_fundamentals_asof(decisions, facts, metrics=["revenue"])
+        self.assertEqual(fact_join.loc[0, "fundamental_revenue"], 100.0)
+        self.assertEqual(
+            fact_join.loc[0, "fundamental_available_at_utc_revenue"],
+            pd.Timestamp("2026-07-21T21:31:00Z"),
+        )
+
+    def test_swing_cutoff_rejects_daily_bar_not_available_by_cutoff(self) -> None:
+        bars = canonicalize_bars(self._daily_bar("2026-07-21T04:00:00Z"))
+        bars.loc[0, "available_at_utc"] = pd.Timestamp("2026-07-21T22:01:00Z")
+        with self.assertRaisesRegex(DataReadinessError, "available after frozen swing cutoff"):
+            decisions_from_completed_bars(bars, mode="swing-nightly")
+
     def test_empty_production_artifacts_fail_readiness(self) -> None:
         empty_bars = pd.DataFrame(columns=CanonicalBar.model_fields)
         bar_checks = audit_canonical_bars(empty_bars)
@@ -235,14 +347,10 @@ class CanonicalJoinAndAuditTests(unittest.TestCase):
         joined = aggregate_event_features(decisions, event)
         self.assertEqual(joined["event_count_2h"].tolist(), [0, 1])
         self.assertEqual(joined["sentiment_mean_2h"].tolist(), [0.0, 0.8])
-        self.assertTrue(
-            joined.loc[1, "latest_event_feature_available_at_utc"] <= joined.loc[1, "decision_time_utc"]
-        )
+        self.assertTrue(joined.loc[1, "latest_event_feature_available_at_utc"] <= joined.loc[1, "decision_time_utc"])
 
     def test_proxy_events_fail_production_join_and_audit(self) -> None:
-        decisions = pd.DataFrame(
-            {"ticker": ["MSFT"], "decision_time_utc": [pd.Timestamp("2026-07-21T10:10:00Z")]}
-        )
+        decisions = pd.DataFrame({"ticker": ["MSFT"], "decision_time_utc": [pd.Timestamp("2026-07-21T10:10:00Z")]})
         event = self._canonical_event(
             published="2026-07-21T09:00:00Z",
             first_seen="2026-07-21T12:00:00Z",
@@ -326,9 +434,7 @@ class CanonicalJoinAndAuditTests(unittest.TestCase):
         )
         joined = join_fundamentals_asof(decisions, facts, metrics=["revenue"])
         self.assertEqual(joined["fundamental_revenue"].tolist(), [100.0, 120.0])
-        self.assertTrue(
-            (joined["fundamental_available_at_utc_revenue"] <= joined["decision_time_utc"]).all()
-        )
+        self.assertTrue((joined["fundamental_available_at_utc_revenue"] <= joined["decision_time_utc"]).all())
 
     def test_membership_join_rejects_hindsight_before_snapshot_was_known(self) -> None:
         membership = CanonicalUniverseMembership(
@@ -411,7 +517,7 @@ class CanonicalJoinAndAuditTests(unittest.TestCase):
         )
         bars = canonicalize_bars(raw)
         self.assertEqual(next(check for check in audit_canonical_bars(bars) if check.name == "bar_price_feed").status, "fail")
-        decisions = decisions_from_completed_bars(bars)
+        decisions = decisions_from_completed_bars(bars, mode="intraday-bar-availability")
         decisions["event_available_at_utc"] = decisions["decision_time_utc"] + pd.Timedelta(seconds=1)
         availability = audit_decision_availability(
             decisions,
@@ -447,6 +553,23 @@ class CanonicalJoinAndAuditTests(unittest.TestCase):
             changed.to_parquet(path, index=False)
             with self.assertRaises(DataReadinessError):
                 load_canonical_artifact(path, expected_type="bars")
+
+    @staticmethod
+    def _daily_bar(session_timestamp: str) -> pd.DataFrame:
+        return pd.DataFrame(
+            {
+                "symbol": ["MSFT"],
+                "timeframe": ["1d"],
+                "timestamp": [pd.Timestamp(session_timestamp)],
+                "open": [100.0],
+                "high": [101.0],
+                "low": [99.0],
+                "close": [100.5],
+                "volume": [1_000],
+                "price_feed": ["sip"],
+                "ingested_at_utc": [pd.Timestamp(session_timestamp) + pd.Timedelta(days=1)],
+            }
+        )
 
     @staticmethod
     def _canonical_event(

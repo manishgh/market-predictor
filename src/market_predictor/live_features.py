@@ -6,6 +6,7 @@ from typing import Literal
 import pandas as pd
 
 from market_predictor.canonical.audits import CanonicalAuditCheck, CanonicalAuditReport
+from market_predictor.canonical.cutoffs import SWING_NIGHTLY_CUTOFF
 from market_predictor.intraday.contracts import (
     CATALYST_AUDIT_FEATURES,
     INTRADAY_FEATURE_SCHEMA_VERSION,
@@ -91,7 +92,13 @@ def select_and_audit_live_features(
             }
         )
     else:
-        required.add("session_date_et")
+        required.update(
+            {
+                "session_date_et",
+                "bar_available_at_utc",
+                "prediction_cutoff_policy_id",
+            }
+        )
     missing = sorted(required.difference(frame.columns))
     if missing:
         report = CanonicalAuditReport(
@@ -108,26 +115,28 @@ def select_and_audit_live_features(
 
     data = frame.copy()
     data["ticker"] = data["ticker"].astype(str).str.upper().str.strip()
-    decision = _utc(data["decision_time_utc"])
+    cutoff = _utc(data["decision_time_utc"])
     feature = _utc(data["feature_available_at_utc"])
-    latest_decision = decision.max()
-    latest = decision.eq(latest_decision) & data["feature_eligible"].fillna(False).astype(bool)
+    latest_decision = cutoff.max()
+    latest = cutoff.eq(latest_decision) & data["feature_eligible"].fillna(False).astype(bool)
     selected = data.loc[latest].copy()
-    selected_decision = decision.loc[selected.index]
+    selected_cutoff = cutoff.loc[selected.index]
     selected_feature = feature.loc[selected.index]
 
     forbidden = forbidden_live_columns(data.columns)
-    future_features = int((selected_feature > selected_decision).fillna(True).sum())
+    future_features = int((selected_feature > selected_cutoff).fillna(True).sum())
     availability_columns = [
-        column for column in selected.columns if column.endswith("available_at_utc") and not column.startswith("label_")
+        column
+        for column in selected.columns
+        if (column.endswith("available_at_utc") or "_available_at_utc_" in column) and not column.startswith("label_")
     ]
     for column in availability_columns:
         available = _utc(selected[column], allow_null=True)
-        future_features += int((available.notna() & available.gt(selected_decision)).sum())
+        future_features += int((available.notna() & available.gt(selected_cutoff)).sum())
 
     source_failures = _source_failures(
         selected,
-        selected_decision,
+        selected_cutoff,
         source_coverage_max_age_minutes=source_coverage_max_age_minutes,
         required_global_sources=required_global_sources,
     )
@@ -148,7 +157,15 @@ def select_and_audit_live_features(
     )
     catalyst_failures = int((~selected["catalyst_eligible"].fillna(False).astype(bool)).sum()) if mode == "intraday" else 0
     schema_failures = int(selected[schema_column].astype(str).ne(LIVE_SCHEMA_VERSIONS[mode]).sum())
-    timestamp_failures = int(selected_decision.isna().sum() + selected_feature.isna().sum())
+    timestamp_failures = int(selected_cutoff.isna().sum() + selected_feature.isna().sum())
+    cutoff_contract_failures = 0
+    if mode == "swing":
+        bar_available = _utc(selected["bar_available_at_utc"])
+        cutoff_contract_failures = int(
+            bar_available.isna().sum()
+            + bar_available.gt(selected_cutoff).sum()
+            + selected["prediction_cutoff_policy_id"].astype(str).ne(SWING_NIGHTLY_CUTOFF.policy_id).sum()
+        )
     checks = (
         _check(f"{mode}_live_schema", 0, len(selected), "frozen live feature columns are present"),
         _check(f"{mode}_live_rows", int(selected.empty), len(selected), "latest eligible decision group is not empty"),
@@ -160,7 +177,13 @@ def select_and_audit_live_features(
             "all rows belong to one latest decision group",
         ),
         _check(f"{mode}_live_timestamps", timestamp_failures, len(selected), "timestamps are valid UTC"),
-        _check(f"{mode}_live_no_future_features", future_features, len(selected), "all inputs were available by decision time"),
+        _check(
+            f"{mode}_live_cutoff_contract",
+            cutoff_contract_failures,
+            len(selected),
+            "bar availability is separate and the frozen swing cutoff policy is preserved",
+        ),
+        _check(f"{mode}_live_no_future_features", future_features, len(selected), "all inputs were available by prediction cutoff"),
         _check(f"{mode}_live_no_labels", len(forbidden), len(data.columns), "live input contains no targets or future paths"),
         _check(f"{mode}_live_sources", source_failures, len(selected), "source coverage is observed and fresh"),
         _check(f"{mode}_live_feed", feed_failures, len(selected), "volume features use the required full feed"),
@@ -189,11 +212,7 @@ def live_feature_columns(mode: LiveMode) -> tuple[str, ...]:
 
 
 def forbidden_live_columns(columns: Iterable[str]) -> list[str]:
-    return sorted(
-        column
-        for column in columns
-        if column in _FORBIDDEN_COLUMNS or column.startswith(_FORBIDDEN_PREFIXES)
-    )
+    return sorted(column for column in columns if column in _FORBIDDEN_COLUMNS or column.startswith(_FORBIDDEN_PREFIXES))
 
 
 def _source_failures(
@@ -249,7 +268,14 @@ def _one_source_failures(
     status = frame[status_column].astype(str).str.lower().str.strip()
     available = _utc(frame[available_column], allow_null=True)
     coverage = _utc(frame[coverage_column], allow_null=True)
-    stale = available.isna() | coverage.isna() | coverage.gt(available) | coverage.gt(decision) | decision.sub(coverage).gt(max_age)
+    stale = (
+        available.isna()
+        | coverage.isna()
+        | available.gt(decision)
+        | coverage.gt(available)
+        | coverage.gt(decision)
+        | decision.sub(coverage).gt(max_age)
+    )
     return int((~status.isin({"observed", "observed_empty"}) | stale).sum())
 
 

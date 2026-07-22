@@ -7,8 +7,10 @@ from pathlib import Path
 
 import pandas as pd
 
+from market_predictor.canonical.cutoffs import SWING_NIGHTLY_CUTOFF
 from market_predictor.feature_store import LiveFeatureStore, LiveFeatureStoreConfig
-from market_predictor.live_features import live_feature_columns
+from market_predictor.live_features import live_feature_columns, select_and_audit_live_features
+from market_predictor.swing.contracts import SWING_FEATURE_SCHEMA_VERSION
 
 
 class LiveFeatureStoreTests(unittest.TestCase):
@@ -71,6 +73,94 @@ class LiveFeatureStoreTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "labels or future paths"):
                 _publish(store, _frame().assign(target_net_positive_5d=1), generated)
 
+    def test_live_audit_uses_frozen_cutoff_for_features_and_source_freshness(self) -> None:
+        frame = _frame()
+        cutoff = pd.Timestamp("2026-07-10T22:00:00Z")
+        frame["decision_time_utc"] = cutoff
+        frame["feature_available_at_utc"] = pd.Timestamp("2026-07-10T21:31:00Z")
+        frame["bar_available_at_utc"] = pd.Timestamp("2026-07-10T20:15:00Z")
+        frame["prediction_cutoff_policy_id"] = SWING_NIGHTLY_CUTOFF.policy_id
+        frame["decision_group_id"] = cutoff.isoformat()
+        frame["session_date_et"] = pd.Timestamp("2026-07-10").date()
+        frame["feature_eligible"] = True
+        frame["cross_section_eligible"] = True
+        frame["daily_bar_count"] = 250
+        frame["adjustment"] = "all"
+        frame["swing_feature_schema_version"] = SWING_FEATURE_SCHEMA_VERSION
+        frame["source_status_alpaca"] = "observed"
+        frame["source_status_available_at_utc_alpaca"] = pd.Timestamp("2026-07-10T21:31:00Z")
+        frame["source_coverage_end_utc_alpaca"] = pd.Timestamp("2026-07-10T21:30:00Z")
+
+        selected, audit = select_and_audit_live_features(
+            frame,
+            mode="swing",
+            required_price_feed="sip",
+            required_adjustment="all",
+            minimum_bar_count=250,
+            minimum_cross_section=2,
+            source_coverage_max_age_minutes=45,
+            required_global_sources=(),
+        )
+        self.assertEqual(len(selected), 2)
+        self.assertTrue(audit.passed, msg=audit.to_frame().to_string(index=False))
+
+        after_cutoff = frame.copy()
+        after_cutoff["source_status_available_at_utc_alpaca"] = cutoff + pd.Timedelta(minutes=1)
+        _, rejected = select_and_audit_live_features(
+            after_cutoff,
+            mode="swing",
+            required_price_feed="sip",
+            required_adjustment="all",
+            minimum_bar_count=250,
+            minimum_cross_section=2,
+            source_coverage_max_age_minutes=45,
+            required_global_sources=(),
+        )
+        checks = {check.name: check for check in rejected.checks}
+        self.assertEqual(checks["swing_live_no_future_features"].status, "fail")
+        self.assertEqual(checks["swing_live_sources"].status, "fail")
+
+        wrong_policy = frame.copy()
+        wrong_policy["prediction_cutoff_policy_id"] = "unreviewed-policy"
+        _, rejected_policy = select_and_audit_live_features(
+            wrong_policy,
+            mode="swing",
+            required_price_feed="sip",
+            required_adjustment="all",
+            minimum_bar_count=250,
+            minimum_cross_section=2,
+            source_coverage_max_age_minutes=45,
+            required_global_sources=(),
+        )
+        policy_check = next(check for check in rejected_policy.checks if check.name == "swing_live_cutoff_contract")
+        self.assertEqual(policy_check.status, "fail")
+
+    def test_live_swing_audit_rejects_missing_cutoff_identity(self) -> None:
+        frame = _frame()
+        frame["session_date_et"] = pd.Timestamp("2026-07-10").date()
+        frame["feature_eligible"] = True
+        frame["cross_section_eligible"] = True
+        frame["daily_bar_count"] = 250
+        frame["adjustment"] = "all"
+        frame["swing_feature_schema_version"] = SWING_FEATURE_SCHEMA_VERSION
+
+        selected, audit = select_and_audit_live_features(
+            frame,
+            mode="swing",
+            required_price_feed="sip",
+            required_adjustment="all",
+            minimum_bar_count=250,
+            minimum_cross_section=2,
+            source_coverage_max_age_minutes=45,
+            required_global_sources=(),
+        )
+
+        self.assertTrue(selected.empty)
+        schema_check = next(check for check in audit.checks if check.name == "swing_live_schema")
+        self.assertEqual(schema_check.status, "fail")
+        self.assertIn("bar_available_at_utc", schema_check.detail)
+        self.assertIn("prediction_cutoff_policy_id", schema_check.detail)
+
 
 def _frame() -> pd.DataFrame:
     frame = pd.DataFrame(
@@ -93,11 +183,7 @@ def _frame() -> pd.DataFrame:
             "volume": [1_000_000, 1_100_000],
         }
     )
-    missing = {
-        column: pd.Series(0.0, index=frame.index)
-        for column in live_feature_columns("swing")
-        if column not in frame
-    }
+    missing = {column: pd.Series(0.0, index=frame.index) for column in live_feature_columns("swing") if column not in frame}
     return pd.concat([frame, pd.DataFrame(missing)], axis=1)
 
 

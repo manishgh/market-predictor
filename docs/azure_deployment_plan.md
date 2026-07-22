@@ -72,20 +72,17 @@ Each serving release contains configured promoted model artifacts/manifests and 
 
 ## Job Schedule
 
-Use UTC in Azure schedules.
+Swing scoring uses the immutable cutoff policy `xnys_1800_america_new_york_v1`: `18:00 America/New_York` on each valid XNYS session. The application resolves that local cutoff through the exchange calendar, so it is `22:00 UTC` during US daylight time and `23:00 UTC` during US standard time. Daily bar availability remains a separate timestamp and is normally earlier than the prediction cutoff.
 
-Berlin midnight is not always the same UTC time because of daylight saving time. Prefer one of these:
-
-- Run at `22:30 UTC` during Central European Summer Time.
-- Run at `23:30 UTC` during Central European Time.
-- Or intentionally run after US market data has settled, for example `02:00 UTC`.
+Drive the jobs from a timezone-aware scheduler configured for `America/New_York`, or from a calendar dispatcher that resolves this policy before invoking a manual Container Apps Job. Do not encode one fixed UTC hour as the swing decision time. A UTC-only scheduler must maintain both seasonal trigger times and use an idempotent XNYS-session gate so only the trigger matching `18:00 America/New_York` can publish.
 
 Recommended daily sequence:
 
 ```text
-02:00 UTC  source-isolated collection
-02:30 UTC  canonical feature build + validation + publication
-03:00 UTC  immutable serving-release publication, when all routes are promotable
+17:45 America/New_York  source-isolated collection, completing before cutoff
+18:00 America/New_York  immutable swing prediction cutoff
+18:05 America/New_York  canonical feature build + validation + publication
+after validation          immutable serving-release publication, when all routes are promotable
 weekly/on demand  candidate training and shadow evaluation
 ```
 
@@ -123,6 +120,20 @@ market-predictor publish-live-features `
   --input-path data/live/staging/swing_5d.parquet `
   --live-dir data/live
 ```
+
+The canonical swing decision artifact consumed above must first be built with the frozen cutoff mode:
+
+```powershell
+market-predictor build-canonical-decisions `
+  --bars data/canonical/bars.parquet `
+  --events data/canonical/events.parquet `
+  --source-collections data/canonical/source_collections.parquet `
+  --memberships data/canonical/memberships.parquet `
+  --decision-mode swing-nightly `
+  --out data/canonical/decisions.parquet
+```
+
+`swing-nightly` is not a configurable UTC instant. It resolves the frozen New York policy for every historical session. `intraday-bar-availability` is the explicit production intraday mode; `research-bar-availability` requires `--research` and must not produce production-ready swing artifacts.
 
 Intraday uses the equivalent `build-intraday-live-features` command with canonical one-minute stock/benchmark bars and five-minute benchmark bars. Both builders write label-free canonical artifacts. `publish-live-features` derives feed and schema from the verified artifact; operators cannot override them.
 

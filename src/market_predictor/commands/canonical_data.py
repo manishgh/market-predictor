@@ -19,6 +19,7 @@ from market_predictor.canonical.audits import (
 )
 from market_predictor.canonical.contracts import AvailabilityPolicy
 from market_predictor.canonical.joins import (
+    DecisionMode,
     aggregate_event_features,
     decisions_from_completed_bars,
     join_fundamentals_asof,
@@ -116,9 +117,7 @@ def register_canonical_data_commands(app: typer.Typer, console: Any) -> None:
         """Validate source attempt states and publish an immutable collection artifact."""
 
         collections = _read_frame(input_path)
-        audit = CanonicalAuditReport(
-            checks=audit_source_collections(collections, require_success=production)
-        )
+        audit = CanonicalAuditReport(checks=audit_source_collections(collections, require_success=production))
         manifest = write_canonical_artifact(
             collections,
             out,
@@ -169,9 +168,7 @@ def register_canonical_data_commands(app: typer.Typer, console: Any) -> None:
             inputs={str(path): file_sha256(path) for path in paths},
             production_ready=production,
         )
-        console.print(
-            {"files": len(paths), "rows": len(events), "out": str(out), "sha256": manifest["artifact_sha256"]}
-        )
+        console.print({"files": len(paths), "rows": len(events), "out": str(out), "sha256": manifest["artifact_sha256"]})
 
     @app.command("canonicalize-fundamentals")
     def canonicalize_fundamentals_command(
@@ -214,9 +211,7 @@ def register_canonical_data_commands(app: typer.Typer, console: Any) -> None:
             source=source,
             availability_policy=policy,
         )
-        audit = CanonicalAuditReport(
-            checks=audit_universe_memberships(memberships, require_observed=production)
-        )
+        audit = CanonicalAuditReport(checks=audit_universe_memberships(memberships, require_observed=production))
         manifest = write_canonical_artifact(
             memberships,
             out,
@@ -245,6 +240,10 @@ def register_canonical_data_commands(app: typer.Typer, console: Any) -> None:
             min=0,
             help="Maximum gap from a source request coverage end to a decision.",
         ),
+        decision_mode: str = typer.Option(
+            ...,
+            help="Explicit decision clock: swing-nightly, intraday-bar-availability, or research-bar-availability.",
+        ),
         production: bool = typer.Option(True, "--production/--research"),
     ) -> None:
         """Build a fail-closed point-in-time decision table from canonical inputs."""
@@ -262,11 +261,13 @@ def register_canonical_data_commands(app: typer.Typer, console: Any) -> None:
             allow_research=not production,
         )
         sources = _csv(required_sources)
-        decisions = decisions_from_completed_bars(bar_frame)
+        parsed_decision_mode = _decision_mode(decision_mode, production=production)
+        decisions = decisions_from_completed_bars(bar_frame, mode=parsed_decision_mode)
         decisions = join_universe_membership(decisions, membership_frame)
         decisions = aggregate_event_features(decisions, event_frame, require_observed=production)
         decisions = join_source_collection_status(decisions, collection_frame, source_families=sources)
         feature_timestamps = [
+            "bar_available_at_utc",
             "feature_available_at_utc",
             "membership_available_at_utc",
             "latest_event_feature_available_at_utc",
@@ -374,3 +375,13 @@ def _optional_availability_policy(value: str | None) -> AvailabilityPolicy | Non
     if normalized not in {"observed", "provider_publication_proxy"}:
         raise typer.BadParameter("availability policy must be observed or provider_publication_proxy")
     return cast(AvailabilityPolicy, normalized)
+
+
+def _decision_mode(value: str, *, production: bool) -> DecisionMode:
+    normalized = value.strip().lower()
+    allowed = {"swing-nightly", "intraday-bar-availability", "research-bar-availability"}
+    if normalized not in allowed:
+        raise typer.BadParameter(f"decision mode must be one of: {', '.join(sorted(allowed))}")
+    if production and normalized == "research-bar-availability":
+        raise typer.BadParameter("research-bar-availability requires --research")
+    return cast(DecisionMode, normalized)

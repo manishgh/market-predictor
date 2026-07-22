@@ -31,8 +31,8 @@ class CanonicalCliTests(unittest.TestCase):
             pd.DataFrame(
                 {
                     "symbol": ["MSFT"],
-                    "timestamp": [pd.Timestamp("2026-07-21T13:30:00Z")],
-                    "ingested_at_utc": [pd.Timestamp("2026-07-21T13:36:00Z")],
+                    "timestamp": [pd.Timestamp("2026-07-21T04:00:00Z")],
+                    "ingested_at_utc": [pd.Timestamp("2026-07-21T20:16:00Z")],
                     "open": [100.0],
                     "high": [101.0],
                     "low": [99.0],
@@ -43,9 +43,9 @@ class CanonicalCliTests(unittest.TestCase):
             pd.DataFrame(
                 {
                     "ticker": ["MSFT"],
-                    "timestamp": [pd.Timestamp("2026-07-21T13:30:00Z")],
-                    "ingested_at_utc": [pd.Timestamp("2026-07-21T13:31:00Z")],
-                    "sentiment_scored_at_utc": [pd.Timestamp("2026-07-21T13:31:10Z")],
+                    "timestamp": [pd.Timestamp("2026-07-21T20:30:00Z")],
+                    "ingested_at_utc": [pd.Timestamp("2026-07-21T21:30:00Z")],
+                    "sentiment_scored_at_utc": [pd.Timestamp("2026-07-21T21:31:00Z")],
                     "source": ["alpaca:benzinga"],
                     "title": ["Microsoft announces an update"],
                     "url": ["https://example.test/msft"],
@@ -60,9 +60,9 @@ class CanonicalCliTests(unittest.TestCase):
                 ticker="MSFT",
                 source_family="alpaca",
                 requested_start_utc=datetime(2026, 7, 20, tzinfo=UTC),
-                requested_end_utc=datetime(2026, 7, 21, 13, 30, tzinfo=UTC),
-                started_at_utc=datetime(2026, 7, 21, 13, 30, tzinfo=UTC),
-                completed_at_utc=datetime(2026, 7, 21, 13, 31, tzinfo=UTC),
+                requested_end_utc=datetime(2026, 7, 21, 21, 30, tzinfo=UTC),
+                started_at_utc=datetime(2026, 7, 21, 21, 30, tzinfo=UTC),
+                completed_at_utc=datetime(2026, 7, 21, 21, 31, tzinfo=UTC),
                 status="observed",
                 row_count=1,
             )
@@ -90,7 +90,7 @@ class CanonicalCliTests(unittest.TestCase):
                     "--out",
                     str(bars),
                     "--timeframe",
-                    "5m",
+                    "1d",
                     "--price-feed",
                     "sip",
                 ],
@@ -121,6 +121,8 @@ class CanonicalCliTests(unittest.TestCase):
                     str(memberships),
                     "--required-sources",
                     "alpaca",
+                    "--decision-mode",
+                    "swing-nightly",
                     "--out",
                     str(decisions),
                 ],
@@ -134,10 +136,25 @@ class CanonicalCliTests(unittest.TestCase):
             self.assertEqual(decision_frame.loc[0, "event_count_2h"], 1)
             self.assertEqual(decision_frame.loc[0, "source_status_alpaca"], "observed")
             self.assertEqual(decision_frame.loc[0, "primary_benchmark"], "XLK")
+            self.assertEqual(
+                decision_frame.loc[0, "bar_available_at_utc"],
+                pd.Timestamp("2026-07-21T20:15:00Z"),
+            )
+            self.assertEqual(decision_frame.loc[0, "decision_time_utc"], pd.Timestamp("2026-07-21T22:00:00Z"))
+            self.assertEqual(
+                decision_frame.loc[0, "prediction_cutoff_policy_id"],
+                "xnys_1800_america_new_york_v1",
+            )
             self.assertLessEqual(
                 decision_frame.loc[0, "latest_event_feature_available_at_utc"],
                 decision_frame.loc[0, "decision_time_utc"],
             )
+
+    def test_production_decision_command_requires_explicit_mode(self) -> None:
+        result = CliRunner().invoke(app, ["build-canonical-decisions", "--help"])
+        self.assertEqual(result.exit_code, 0, msg=result.output)
+        self.assertIn("--decision-mode", result.output)
+        self.assertIn("required", result.output.lower())
 
 
 if __name__ == "__main__":

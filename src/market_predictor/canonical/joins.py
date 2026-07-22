@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
+from typing import Literal
 
 import numpy as np
 import pandas as pd
 
 from market_predictor.canonical.contracts import CANONICAL_SCHEMA_VERSION
+from market_predictor.canonical.cutoffs import SWING_NIGHTLY_CUTOFF, swing_prediction_cutoffs
 from market_predictor.v3.errors import DataReadinessError, SchemaMismatchError
 
 DEFAULT_EVENT_WINDOWS: Mapping[str, pd.Timedelta] = {
@@ -22,10 +24,13 @@ MEMBERSHIP_VALUE_COLUMNS = (
     "universe_snapshot_id",
     "source",
 )
+DecisionMode = Literal["swing-nightly", "intraday-bar-availability", "research-bar-availability"]
+INTRADAY_BAR_AVAILABILITY_POLICY_ID = "intraday_bar_available_at_v1"
+RESEARCH_BAR_AVAILABILITY_POLICY_ID = "research_bar_available_at_v1"
 
 
-def decisions_from_completed_bars(bars: pd.DataFrame) -> pd.DataFrame:
-    """Create decision identities at bar availability, never at the provider's left edge."""
+def decisions_from_completed_bars(bars: pd.DataFrame, *, mode: DecisionMode) -> pd.DataFrame:
+    """Create explicit decision identities without conflating bar and prediction availability."""
 
     required = {
         "ticker",
@@ -40,12 +45,32 @@ def decisions_from_completed_bars(bars: pd.DataFrame) -> pd.DataFrame:
     if missing:
         raise SchemaMismatchError(f"canonical bars missing decision columns: {', '.join(missing)}")
     output = bars.copy()
-    output["decision_time_utc"] = _utc_series(output["available_at_utc"])
-    output["feature_available_at_utc"] = output["decision_time_utc"]
-    if bool(output["decision_time_utc"].isna().any()):
+    output["bar_available_at_utc"] = _utc_series(output["available_at_utc"])
+    if bool(output["bar_available_at_utc"].isna().any()):
         raise DataReadinessError("canonical bars contain invalid availability timestamps")
+    timeframes = output["timeframe"].astype(str).str.lower().str.strip()
+    output["session_date_et"] = _utc_series(output["bar_start_utc"]).dt.tz_convert("America/New_York").dt.date
+    if mode == "swing-nightly":
+        invalid_timeframes = sorted(timeframes[timeframes.ne("1d")].unique())
+        if invalid_timeframes:
+            raise DataReadinessError(f"swing-nightly decisions require only 1d bars; received timeframes={invalid_timeframes}")
+        output["decision_time_utc"] = swing_prediction_cutoffs(output["session_date_et"])
+        output["prediction_cutoff_policy_id"] = SWING_NIGHTLY_CUTOFF.policy_id
+        after_cutoff = output["bar_available_at_utc"].gt(output["decision_time_utc"])
+        if bool(after_cutoff.any()):
+            raise DataReadinessError(f"daily bars available after frozen swing cutoff: rows={int(after_cutoff.sum())}")
+    elif mode == "intraday-bar-availability":
+        if bool(timeframes.eq("1d").any()):
+            raise DataReadinessError("intraday-bar-availability decisions reject daily bars")
+        output["decision_time_utc"] = output["bar_available_at_utc"]
+        output["prediction_cutoff_policy_id"] = INTRADAY_BAR_AVAILABILITY_POLICY_ID
+    elif mode == "research-bar-availability":
+        output["decision_time_utc"] = output["bar_available_at_utc"]
+        output["prediction_cutoff_policy_id"] = RESEARCH_BAR_AVAILABILITY_POLICY_ID
+    else:
+        raise ValueError(f"unsupported decision mode: {mode}")
+    output["feature_available_at_utc"] = output["bar_available_at_utc"]
     output["decision_group_id"] = output["decision_time_utc"].map(lambda value: value.isoformat())
-    output["session_date_et"] = output["bar_start_utc"].dt.tz_convert("America/New_York").dt.date
     output["canonical_schema_version"] = CANONICAL_SCHEMA_VERSION
     return output.sort_values(["decision_time_utc", "ticker"]).reset_index(drop=True)
 
@@ -64,9 +89,7 @@ def join_universe_membership(decisions: pd.DataFrame, memberships: pd.DataFrame)
     missing_decisions = sorted(decision_required.difference(decisions.columns))
     missing_memberships = sorted(membership_required.difference(memberships.columns))
     if missing_decisions or missing_memberships:
-        raise SchemaMismatchError(
-            f"membership join missing decisions={missing_decisions}, memberships={missing_memberships}"
-        )
+        raise SchemaMismatchError(f"membership join missing decisions={missing_decisions}, memberships={missing_memberships}")
     output = decisions.copy()
     output["ticker"] = output["ticker"].astype(str).str.upper().str.strip()
     output["decision_time_utc"] = _utc_series(output["decision_time_utc"])
@@ -95,9 +118,7 @@ def join_universe_membership(decisions: pd.DataFrame, memberships: pd.DataFrame)
             continue
         decision_times = output.loc[decision_indices, "decision_time_utc"]
         for membership in membership_part.to_dict(orient="records"):
-            eligible = decision_times.ge(membership["effective_from_utc"]) & decision_times.ge(
-                membership["available_at_utc"]
-            )
+            eligible = decision_times.ge(membership["effective_from_utc"]) & decision_times.ge(membership["available_at_utc"])
             if pd.notna(membership["effective_to_utc"]):
                 eligible &= decision_times.lt(membership["effective_to_utc"])
             selected = decision_indices[eligible.to_numpy()]
@@ -113,9 +134,7 @@ def join_universe_membership(decisions: pd.DataFrame, memberships: pd.DataFrame)
     uncovered = int(matches.eq(0).sum())
     ambiguous = int(matches.gt(1).sum())
     if uncovered or ambiguous:
-        raise DataReadinessError(
-            f"point-in-time universe membership failed: uncovered={uncovered}, ambiguous={ambiguous}"
-        )
+        raise DataReadinessError(f"point-in-time universe membership failed: uncovered={uncovered}, ambiguous={ambiguous}")
     return output.sort_values(["decision_time_utc", "ticker"]).reset_index(drop=True)
 
 
