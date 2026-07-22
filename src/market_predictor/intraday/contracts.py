@@ -235,6 +235,8 @@ class IntradayPromotionConfig(FrozenConfig):
     min_opportunity_holdout_roc_auc: float = Field(default=0.54, ge=0.5, le=1)
     min_opportunity_top_decile_lift: float = Field(default=1.10, ge=1)
     min_opportunity_holdout_lift: float = Field(default=1.03, ge=1)
+    min_opportunity_group_lift_at_k: float = Field(default=1.05, ge=0)
+    min_opportunity_holdout_group_lift_at_k: float = Field(default=1.02, ge=0)
     min_downside_roc_auc: float = Field(default=0.55, ge=0.5, le=1)
     min_downside_holdout_roc_auc: float = Field(default=0.52, ge=0.5, le=1)
     max_opportunity_brier: float = Field(default=0.25, ge=0, le=1)
@@ -242,6 +244,16 @@ class IntradayPromotionConfig(FrozenConfig):
     max_calibration_error: float = Field(default=0.10, ge=0, le=1)
     min_validated_rows: int = Field(default=20_000, ge=100)
     min_tickers: int = Field(default=200, ge=2)
+    min_decision_groups: int = Field(default=250, ge=1)
+    min_independent_sessions: int = Field(default=60, ge=1)
+    min_validation_folds: int = Field(default=4, ge=1)
+    min_effective_sample_size: float = Field(default=200.0, ge=0)
+    min_stress_avg_trade_return: float = 0.0
+    min_stress_avg_excess_return_vs_spy: float = 0.0
+    min_worst_regime_avg_excess_return_vs_spy: float = -0.01
+    max_worst_regime_drawdown: float = Field(default=0.30, gt=0, le=1)
+    max_worst_regime_calibration_error: float = Field(default=0.15, ge=0, le=1)
+    min_capacity_avg_net_return: float = -0.02
     min_selected_trades: int = Field(default=200, ge=1)
     min_avg_trade_return: float = 0.0
     min_avg_excess_return_vs_spy: float = 0.0

@@ -16,6 +16,13 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 
 from market_predictor.drift import build_feature_reference_profile
+from market_predictor.execution_policy import (
+    DEFAULT_EXECUTION_POLICY,
+    STRESS_ECONOMIC_FIELDS,
+    capacity_curve,
+    execution_policy_identity,
+    merge_stress_summary,
+)
 from market_predictor.intraday.contracts import (
     INTRADAY_FEATURE_SCHEMA_VERSION,
     INTRADAY_MODEL_FEATURES,
@@ -31,9 +38,18 @@ from market_predictor.intraday.evaluation import (
     catalyst_audit,
     classification_metrics,
     conservative_economics,
+    effective_sample_size,
     phase_economics,
     prediction_evidence,
     regime_audit,
+)
+from market_predictor.prediction_policy import (
+    INTRADAY_SELECTION_TIE_BREAKERS,
+    group_ranking_metrics,
+    intraday_decision_scores,
+    intraday_selection_eligible,
+    prediction_policy_identity,
+    select_top_k_per_group,
 )
 from market_predictor.registry import (
     MODEL_STATUS_CANDIDATE,
@@ -281,38 +297,93 @@ def train_intraday_model(
         holdout_evidence[downside_target],
         holdout_evidence["intraday_downside_probability"],
     )
+    opportunity_group_metrics = group_ranking_metrics(
+        oof,
+        target_column=opportunity_target,
+        score=intraday_decision_scores(
+            oof,
+            opportunity_column="intraday_opportunity_probability",
+            downside_column="intraday_downside_probability",
+        ),
+        group_column="decision_group_id",
+        k=config.top_k,
+        eligible=intraday_selection_eligible(
+            oof,
+            downside_column="intraday_downside_probability",
+            downside_ceiling=config.max_downside_probability,
+        ),
+    )
+    opportunity_holdout_group_metrics = group_ranking_metrics(
+        holdout_evidence,
+        target_column=opportunity_target,
+        score=intraday_decision_scores(
+            holdout_evidence,
+            opportunity_column="intraday_opportunity_probability",
+            downside_column="intraday_downside_probability",
+        ),
+        group_column="decision_group_id",
+        k=config.top_k,
+        eligible=intraday_selection_eligible(
+            holdout_evidence,
+            downside_column="intraday_downside_probability",
+            downside_ceiling=config.max_downside_probability,
+        ),
+    )
+    def _intraday_phase(frame: pd.DataFrame, scope: str, cost_stress: float = 1.0) -> pd.DataFrame:
+        return phase_economics(
+            frame,
+            horizon_minutes=horizon,
+            decision_interval_minutes=decision_interval,
+            top_k=config.top_k,
+            downside_ceiling=config.max_downside_probability,
+            max_trades_per_session=config.max_trades_per_session,
+            scope=scope,
+            cost_stress=cost_stress,
+        )
+
+    stress_multiplier = max(DEFAULT_EXECUTION_POLICY.stress_multipliers)
     economics = pd.concat(
+        [_intraday_phase(oof, "walk_forward"), _intraday_phase(holdout_evidence, "ticker_holdout")],
+        ignore_index=True,
+    )
+    stress_economics = pd.concat(
         [
-            phase_economics(
-                oof,
-                horizon_minutes=horizon,
-                decision_interval_minutes=decision_interval,
-                top_k=config.top_k,
-                downside_ceiling=config.max_downside_probability,
-                max_trades_per_session=config.max_trades_per_session,
-                scope="walk_forward",
-            ),
-            phase_economics(
-                holdout_evidence,
-                horizon_minutes=horizon,
-                decision_interval_minutes=decision_interval,
-                top_k=config.top_k,
-                downside_ceiling=config.max_downside_probability,
-                max_trades_per_session=config.max_trades_per_session,
-                scope="ticker_holdout",
-            ),
+            _intraday_phase(oof, "walk_forward", stress_multiplier),
+            _intraday_phase(holdout_evidence, "ticker_holdout", stress_multiplier),
         ],
         ignore_index=True,
     )
-    profitability = pd.concat([conservative_economics(economics), economics], ignore_index=True)
+    conservative = merge_stress_summary(
+        conservative_economics(economics),
+        conservative_economics(stress_economics),
+        multiplier=stress_multiplier,
+        fields=STRESS_ECONOMIC_FIELDS,
+    )
+    profitability = pd.concat([conservative, economics], ignore_index=True)
     combined_evidence = pd.concat([oof, holdout_evidence], ignore_index=True)
-    regime = regime_audit(combined_evidence)
+    regime = regime_audit(
+        combined_evidence,
+        horizon_minutes=horizon,
+        decision_interval_minutes=decision_interval,
+        top_k=config.top_k,
+        downside_ceiling=config.max_downside_probability,
+        max_trades_per_session=config.max_trades_per_session,
+        target_column=opportunity_target,
+        policy=DEFAULT_EXECUTION_POLICY,
+    )
     catalyst = catalyst_audit(combined_evidence)
     alignment = _alignment_audit(dataset)
     for evidence in (oof, holdout_evidence, profitability, regime, catalyst, alignment):
         evidence["model_run_id"] = model_run_id
     representation = holdout_plan.representation_audit.copy()
-    fold_audit = pd.concat([pd.DataFrame(fold_records), representation], ignore_index=True, sort=False)
+    fold_frame = pd.DataFrame(fold_records)
+    folds_causally_ordered = bool(
+        len(fold_records) > 0
+        and pd.to_datetime(fold_frame["max_train_label_available_at_utc"], utc=True)
+        .lt(pd.to_datetime(fold_frame["min_test_decision_time_utc"], utc=True))
+        .all()
+    )
+    fold_audit = pd.concat([fold_frame, representation], ignore_index=True, sort=False)
     fold_audit["model_run_id"] = model_run_id
 
     final_models: dict[str, ProbabilityEstimator] = {}
@@ -351,7 +422,37 @@ def train_intraday_model(
     finally:
         temporary.unlink(missing_ok=True)
 
+    capacity = capacity_curve(
+        select_top_k_per_group(
+            oof,
+            score=intraday_decision_scores(
+                oof,
+                opportunity_column="intraday_opportunity_probability",
+                downside_column="intraday_downside_probability",
+            ),
+            group_column="decision_group_id",
+            top_k=config.top_k,
+            tie_breakers=INTRADAY_SELECTION_TIE_BREAKERS,
+            eligible=intraday_selection_eligible(
+                oof,
+                downside_column="intraday_downside_probability",
+                downside_ceiling=config.max_downside_probability,
+            ),
+        ),
+        gross_return_column=f"path_realized_return_gross_{horizon}m",
+        dollar_volume_column="entry_dollar_volume",
+        price_column="entry_price",
+        atr_pct_column="entry_atr_pct",
+        capital_weight=1.0 / config.top_k,
+        policy=DEFAULT_EXECUTION_POLICY,
+    )
     robust = profitability.iloc[0].to_dict()
+    capacity_min_avg_net_return = float(pd.to_numeric(capacity["avg_net_return"], errors="coerce").min())
+    if not np.isfinite(capacity_min_avg_net_return):
+        # No point-in-time liquidity evidence in this dataset: fall back to the
+        # marginal (base-size) economics so the gate reflects real capacity only
+        # when dollar-volume evidence is present.
+        capacity_min_avg_net_return = float(robust.get("avg_trade_return", float("nan")))
     metrics: dict[str, Any] = {
         "schema_version": INTRADAY_MODEL_SCHEMA_VERSION,
         "model_type": INTRADAY_MODEL_TYPE,
@@ -364,8 +465,18 @@ def train_intraday_model(
         "validation_split": INTRADAY_VALIDATION_SPLIT,
         "validated_rows": len(oof),
         "ticker_holdout_rows": len(holdout_evidence),
+        "decision_groups": int(oof["decision_group_id"].nunique()),
+        "independent_sessions": int(oof["session_date_et"].nunique()),
+        "validation_folds": config.n_splits,
+        "capacity_min_avg_net_return": capacity_min_avg_net_return,
+        "effective_sample_size": effective_sample_size(oof["overlap_weight"]),
+        "holdout_effective_sample_size": effective_sample_size(holdout_evidence["overlap_weight"]),
         "calibration_method": "isotonic_prior_outer_folds",
         "calibration_seed_folds_excluded": calibration_seed_folds_excluded,
+        "feature_set_sha256": feature_set_sha256,
+        "folds_causally_ordered": folds_causally_ordered,
+        **prediction_policy_identity(),
+        **execution_policy_identity(),
         "holdout_assignment_cutoff_utc": holdout_plan.assignment_cutoff_utc,
         "holdout_ticker_summary_sha256": holdout_plan.ticker_summary_sha256,
         "holdout_required_strata": int(
@@ -381,10 +492,15 @@ def train_intraday_model(
         "features": len(features),
         "opportunity_roc_auc": opportunity_metrics["roc_auc"],
         "opportunity_top_decile_lift": opportunity_metrics["top_decile_lift"],
+        "opportunity_group_lift_at_k": opportunity_group_metrics["group_lift_at_k"],
+        "opportunity_group_precision_at_k": opportunity_group_metrics["group_precision_at_k"],
+        "opportunity_group_ndcg_at_k": opportunity_group_metrics["group_ndcg_at_k"],
+        "selection_k": opportunity_group_metrics["k"],
         "opportunity_brier_score": opportunity_metrics["brier_score"],
         "opportunity_calibration_error": opportunity_metrics["expected_calibration_error"],
         "opportunity_holdout_roc_auc": opportunity_holdout_metrics["roc_auc"],
         "opportunity_holdout_top_decile_lift": opportunity_holdout_metrics["top_decile_lift"],
+        "opportunity_holdout_group_lift_at_k": opportunity_holdout_group_metrics["group_lift_at_k"],
         "opportunity_holdout_brier_score": opportunity_holdout_metrics["brier_score"],
         "opportunity_holdout_calibration_error": opportunity_holdout_metrics["expected_calibration_error"],
         "downside_roc_auc": downside_metrics["roc_auc"],

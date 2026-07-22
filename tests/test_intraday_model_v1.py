@@ -129,6 +129,18 @@ class IntradayModelV1Tests(unittest.TestCase):
                     min_tickers=6,
                     min_selected_trades=1,
                     min_catalyst_coverage_rate=0.10,
+                    min_opportunity_group_lift_at_k=0.0,
+                    min_opportunity_holdout_group_lift_at_k=0.0,
+                    min_decision_groups=1,
+                    min_independent_sessions=1,
+                    min_validation_folds=1,
+                    min_effective_sample_size=0.0,
+                    min_stress_avg_trade_return=-1.0,
+                    min_stress_avg_excess_return_vs_spy=-1.0,
+                    min_worst_regime_avg_excess_return_vs_spy=-1.0,
+                    max_worst_regime_drawdown=1.0,
+                    max_worst_regime_calibration_error=1.0,
+                    min_capacity_avg_net_return=-1.0,
                 ),
             )
 

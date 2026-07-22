@@ -3,6 +3,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
+from market_predictor.execution_policy import executable_fill_prices
 from market_predictor.intraday.contracts import (
     IntradayDatasetConfig,
     downside_target_column,
@@ -57,33 +58,52 @@ def add_exact_one_minute_labels(
 
 
 def add_overlap_metadata(frame: pd.DataFrame) -> pd.DataFrame:
+    """Attach concurrency, average uniqueness, and independent-event identity.
+
+    ``overlap_weight`` is the exact average uniqueness of a label: the mean of
+    ``1 / concurrency`` over each one-minute bar the label spans, where
+    ``concurrency`` is the number of same-ticker/session labels active at that
+    bar (half-open ``[entry, label_window_end)`` intervals). This replaces the
+    prior single-reciprocal ``1 / concurrent_count`` proxy so a staggered
+    horizon is weighted by how uniquely it observes each bar. ``concurrent_label_count``
+    is the peak concurrency over the span; ``independent_event_id`` numbers a
+    greedy non-overlapping subset for strictly non-overlapping evaluation.
+    """
+
     data = frame.copy()
     data["concurrent_label_count"] = 0
     data["overlap_weight"] = 0.0
     data["independent_event_id"] = pd.Series(pd.NA, index=data.index, dtype="string")
+    bar_ns = 60 * 1_000_000_000  # one-minute execution bar
     for (ticker, session), indices in data.groupby(["ticker", "session_date_et"], sort=False).groups.items():
         part = data.loc[indices]
-        valid = part["label_path_exact"].fillna(False).astype(bool)
-        part = part[valid].sort_values("entry_time_utc", kind="stable")
+        part = part[part["label_path_exact"].fillna(False).astype(bool)].sort_values("entry_time_utc", kind="stable")
         if part.empty:
             continue
-        starts = pd.DatetimeIndex(part["entry_time_utc"]).as_unit("ns").asi8
-        ends = pd.DatetimeIndex(part["label_window_end_utc"]).as_unit("ns").asi8
-        overlap = np.searchsorted(starts, ends, side="right") - np.searchsorted(
-            ends,
-            starts,
-            side="left",
-        )
-        data.loc[part.index, "concurrent_label_count"] = overlap
-        data.loc[part.index, "overlap_weight"] = 1.0 / np.maximum(overlap, 1)
-        next_available = np.iinfo(np.int64).min
+        start_bar = pd.DatetimeIndex(part["entry_time_utc"]).as_unit("ns").asi8 // bar_ns
+        end_bar = pd.DatetimeIndex(part["label_window_end_utc"]).as_unit("ns").asi8 // bar_ns
+        origin = int(start_bar.min())
+        starts = (start_bar - origin).astype(int)
+        ends = np.maximum((end_bar - origin).astype(int), starts + 1)
+        concurrency = np.zeros(int(ends.max()), dtype=int)
+        for start, end in zip(starts, ends, strict=True):
+            concurrency[start:end] += 1
+        counts = np.empty(len(part), dtype=int)
+        weights = np.empty(len(part), dtype=float)
+        event_ids: list[object] = [pd.NA] * len(part)
+        last_end = np.iinfo(np.int64).min
         number = 0
-        for row_index, start, end in zip(part.index, starts, ends, strict=True):
-            if start < next_available:
-                continue
-            number += 1
-            data.loc[row_index, "independent_event_id"] = f"{ticker}:{session}:{number}"
-            next_available = end
+        for position, (start, end) in enumerate(zip(starts, ends, strict=True)):
+            active = concurrency[start:end]
+            counts[position] = int(active.max())
+            weights[position] = float(np.mean(1.0 / active))
+            if start >= last_end:
+                number += 1
+                event_ids[position] = f"{ticker}:{session}:{number}"
+                last_end = end
+        data.loc[part.index, "concurrent_label_count"] = counts
+        data.loc[part.index, "overlap_weight"] = weights
+        data.loc[part.index, "independent_event_id"] = pd.array(event_ids, dtype="string")
     return data
 
 
@@ -135,13 +155,25 @@ def _label_ticker(
     stop_first = (first_stop <= first_target) & (first_stop < missing)
     timeout = ~(target_first | stop_first)
     outcome_offset = np.minimum(np.minimum(first_target, first_stop), horizon - 1)
-    realized = closes[:, -1].copy()
-    realized[target_first] = target_price[target_first]
-    realized[stop_first] = stop_price[stop_first]
+    outcome_labels = np.full(len(positions), "timeout", dtype=object)
+    outcome_labels[target_first] = "target_first"
+    outcome_labels[stop_first] = "stop_first"
+    opens = bars["open"].to_numpy(float)[path_indices]
+    trigger_open = opens[np.arange(len(positions)), outcome_offset]
+    realized = executable_fill_prices(
+        outcome=outcome_labels,
+        target_price=target_price,
+        stop_price=stop_price,
+        trigger_open=trigger_open,
+        final_price=closes[:, -1],
+    )
     active = offsets[None, :] <= outcome_offset[:, None]
     mfe_high = np.where(active, highs, -np.inf).max(axis=1)
     mae_low = np.where(active, lows, np.inf).min(axis=1)
     exit_indices = entry_indices + outcome_offset
+    entry_volume = bars["volume"].to_numpy(float)[entry_indices]
+    entry_dollar_volume = open_price * entry_volume
+    entry_atr_pct = np.divide(atr, open_price, out=np.full_like(atr, np.nan), where=open_price > 0)
     gross = realized / open_price - 1.0
     net = gross - config.round_trip_cost_bps / 10_000.0
     valid_price = np.isfinite(open_price) & (open_price > 0) & np.isfinite(atr) & (atr > 0)
@@ -159,11 +191,10 @@ def _label_ticker(
     data.loc[positions, "exit_time_utc"] = bars["bar_end_utc"].to_numpy()[exit_indices[select]]
     data.loc[positions, "label_available_at_utc"] = bars["available_at_utc"].to_numpy()[exit_indices[select]]
     data.loc[positions, "label_window_end_utc"] = bars["bar_end_utc"].to_numpy()[entry_indices[select] + horizon - 1]
-    outcomes = np.full(len(select), "timeout", dtype=object)
-    outcomes[target_first] = "target_first"
-    outcomes[stop_first] = "stop_first"
-    data.loc[positions, "path_outcome"] = outcomes[select]
+    data.loc[positions, "path_outcome"] = outcome_labels[select]
     data.loc[positions, "path_outcome_bar"] = outcome_offset[select] + 1
+    data.loc[positions, "entry_dollar_volume"] = entry_dollar_volume[select]
+    data.loc[positions, "entry_atr_pct"] = entry_atr_pct[select]
     data.loc[positions, opportunity_target_column(config.horizon_minutes)] = target_first[select].astype(int)
     data.loc[positions, downside_target_column(config.horizon_minutes)] = stop_first[select].astype(int)
     data.loc[positions, f"path_timeout_{config.horizon_minutes}m"] = timeout[select].astype(int)
@@ -186,6 +217,8 @@ def _initialize_label_columns(data: pd.DataFrame, config: IntradayDatasetConfig)
         data[column] = pd.Series(pd.NaT, index=data.index, dtype="datetime64[ns, UTC]")
     for column in (
         "entry_price",
+        "entry_dollar_volume",
+        "entry_atr_pct",
         "target_price",
         "stop_price",
         "entry_target_pct",

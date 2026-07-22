@@ -43,6 +43,21 @@ from market_predictor.prediction_contracts import (
     SwingPrediction,
     UnifiedTickerPrediction,
 )
+from market_predictor.prediction_policy import (
+    INTRADAY_AVOID_DOWNSIDE,
+    INTRADAY_DOWNSIDE_VETO,
+    INTRADAY_ENTRY,
+    INTRADAY_ENTRY_MAX_DOWNSIDE,
+    INTRADAY_LOW,
+    INTRADAY_WATCH,
+    INTRADAY_WATCH_MAX_DOWNSIDE,
+    SWING_LOW,
+    SWING_STRONG,
+    SWING_WATCH,
+    intraday_action,
+    intraday_decision_score,
+    swing_action,
+)
 from market_predictor.prediction_snapshot import PredictionSnapshotStore
 from market_predictor.readiness import (
     INVALID,
@@ -58,16 +73,18 @@ from market_predictor.swing.model import score_swing_frame
 
 DEFAULT_MODE_HORIZONS = {"swing": "5d", "intraday": "60m"}
 SERVING_POLICY_ID = "market_predictor.serving_policy.r1_a.v1"
-_SWING_STRONG = 0.65
-_SWING_WATCH = 0.55
-_SWING_LOW = 0.40
-_INTRADAY_DOWNSIDE_VETO = 0.55
-_INTRADAY_ENTRY = 0.70
-_INTRADAY_ENTRY_MAX_DOWNSIDE = 0.35
-_INTRADAY_WATCH = 0.55
-_INTRADAY_WATCH_MAX_DOWNSIDE = 0.45
-_INTRADAY_LOW = 0.40
-_INTRADAY_AVOID_DOWNSIDE = 0.50
+# Serving thresholds are sourced from the canonical prediction policy so the
+# served signal semantics and the promotion-evaluated policy share one definition.
+_SWING_STRONG = SWING_STRONG
+_SWING_WATCH = SWING_WATCH
+_SWING_LOW = SWING_LOW
+_INTRADAY_DOWNSIDE_VETO = INTRADAY_DOWNSIDE_VETO
+_INTRADAY_ENTRY = INTRADAY_ENTRY
+_INTRADAY_ENTRY_MAX_DOWNSIDE = INTRADAY_ENTRY_MAX_DOWNSIDE
+_INTRADAY_WATCH = INTRADAY_WATCH
+_INTRADAY_WATCH_MAX_DOWNSIDE = INTRADAY_WATCH_MAX_DOWNSIDE
+_INTRADAY_LOW = INTRADAY_LOW
+_INTRADAY_AVOID_DOWNSIDE = INTRADAY_AVOID_DOWNSIDE
 _SERVING_POLICY = {
     "actionable_readiness": "valid",
     "intraday_rank": "opportunity_probability * (1 - downside_probability)",
@@ -1133,35 +1150,17 @@ def _final_signal(swing: SwingPrediction | None, intraday: IntradayPrediction | 
 
 
 def _swing_signal(probability: Any) -> str:
-    value = _float_or_none(probability)
-    if value is None:
-        return "not_scored"
-    if value >= _SWING_STRONG:
-        return "strong_bullish_watch"
-    if value >= _SWING_WATCH:
-        return "bullish_watch"
-    if value <= _SWING_LOW:
-        return "low_probability"
-    return "neutral"
+    return swing_action(_float_or_none(probability))
 
 
 def _intraday_signal(
     opportunity_probability: Any,
     downside_probability: Any,
 ) -> str:
-    opportunity = _float_or_none(opportunity_probability)
-    downside = _float_or_none(downside_probability)
-    if opportunity is None or downside is None:
-        return "not_scored"
-    if downside >= _INTRADAY_DOWNSIDE_VETO:
-        return "avoid_entry_downside_risk"
-    if opportunity >= _INTRADAY_ENTRY and downside <= _INTRADAY_ENTRY_MAX_DOWNSIDE:
-        return "entry_candidate"
-    if opportunity >= _INTRADAY_WATCH and downside <= _INTRADAY_WATCH_MAX_DOWNSIDE:
-        return "watch_for_confirmation"
-    if opportunity <= _INTRADAY_LOW or downside > _INTRADAY_AVOID_DOWNSIDE:
-        return "avoid_entry"
-    return "neutral"
+    return intraday_action(
+        _float_or_none(opportunity_probability),
+        _float_or_none(downside_probability),
+    )
 
 
 def _risk_adjusted_intraday_score(
@@ -1169,11 +1168,10 @@ def _risk_adjusted_intraday_score(
     opportunity_column: str,
     downside_column: str,
 ) -> float:
-    opportunity = _float_or_none(row.get(opportunity_column))
-    downside = _float_or_none(row.get(downside_column))
-    if opportunity is None or downside is None:
-        return float("-inf")
-    return opportunity * (1.0 - downside)
+    return intraday_decision_score(
+        _float_or_none(row.get(opportunity_column)),
+        _float_or_none(row.get(downside_column)),
+    )
 
 
 def _suppress_swing_prediction(row: SwingPrediction, reason: str) -> SwingPrediction:

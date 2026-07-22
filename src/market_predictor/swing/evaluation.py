@@ -10,6 +10,18 @@ from sklearn.metrics import (
     roc_auc_score,
 )
 
+from market_predictor.execution_policy import (
+    ExecutionCostPolicy,
+    execution_cost_fraction,
+    flat_stress_surcharge,
+)
+from market_predictor.prediction_policy import (
+    SWING_SELECTION_TIE_BREAKERS,
+    expected_calibration_error,
+    finite_or_none,
+    select_top_k_per_group,
+    swing_decision_scores,
+)
 from market_predictor.swing.contracts import (
     swing_excess_column,
     swing_net_return_column,
@@ -38,6 +50,9 @@ def prediction_evidence(
         "low_relevance_event_fraction_3d",
         swing_target_column(horizon),
         swing_net_return_column(horizon),
+        f"future_gross_return_{horizon}d",
+        "close",
+        "atr_pct_14",
         swing_excess_column(horizon, "spy"),
         swing_excess_column(horizon, "qqq"),
         swing_excess_column(horizon, "sector"),
@@ -85,8 +100,11 @@ def phase_economics(
     horizon: int,
     top_k: int,
     scope: str,
+    policy: ExecutionCostPolicy | None = None,
+    cost_stress: float = 1.0,
 ) -> pd.DataFrame:
     return_column = swing_net_return_column(horizon)
+    gross_column = f"future_gross_return_{horizon}d"
     excess_columns = {
         benchmark: swing_excess_column(horizon, benchmark)
         for benchmark in ("spy", "qqq", "sector")
@@ -96,26 +114,33 @@ def phase_economics(
     for phase in range(horizon):
         selected_sessions = set(sessions[phase::horizon])
         phase_rows = predictions[pd.to_datetime(predictions["session_date_et"]).dt.date.isin(selected_sessions)]
-        selected = (
-            phase_rows.sort_values(
-                ["decision_group_id", "swing_probability", "ticker"],
-                ascending=[True, False, True],
-                kind="stable",
-            )
-            .groupby("decision_group_id", sort=False)
-            .head(top_k)
+        selected = select_top_k_per_group(
+            phase_rows,
+            score=swing_decision_scores(phase_rows, probability_column="swing_probability"),
+            group_column="decision_group_id",
+            top_k=top_k,
+            tie_breakers=SWING_SELECTION_TIE_BREAKERS,
         )
-        returns = pd.to_numeric(selected[return_column], errors="coerce").dropna()
+        cost = execution_cost_fraction(
+            selected,
+            price_column="close",
+            atr_pct_column="atr_pct_14",
+            policy=policy,
+            stress=cost_stress,
+        )
+        if cost is not None and gross_column in selected.columns:
+            base_return = pd.to_numeric(selected[gross_column], errors="coerce")
+            cost_series = cost
+        else:
+            base_return = pd.to_numeric(selected[return_column], errors="coerce")
+            cost_series = pd.Series(flat_stress_surcharge(cost_stress, policy), index=selected.index)
+        selected = selected.assign(_net=base_return - cost_series)
+        returns = selected["_net"].dropna()
         excess = {
-            benchmark: pd.to_numeric(selected[column], errors="coerce").dropna()
+            benchmark: (pd.to_numeric(selected[column], errors="coerce") - cost_series).dropna()
             for benchmark, column in excess_columns.items()
         }
-        period = (
-            selected.assign(_return=pd.to_numeric(selected[return_column], errors="coerce"))
-            .groupby("session_date_et")["_return"]
-            .mean()
-            .dropna()
-        )
+        period = selected.groupby("session_date_et")["_net"].mean().dropna()
         records.append(_economic_record(returns, excess, period, scope=scope, phase=phase))
     return pd.DataFrame(records)
 
@@ -152,24 +177,68 @@ def conservative_economics(economics: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame([record])
 
 
-def regime_audit(predictions: pd.DataFrame) -> pd.DataFrame:
-    counts = predictions["market_regime"].fillna("unknown").astype(str).value_counts()
+def regime_audit(
+    predictions: pd.DataFrame,
+    *,
+    horizon: int,
+    top_k: int,
+    target_column: str,
+    min_regime_sessions: int = 5,
+    min_regime_trades: int = 20,
+    policy: ExecutionCostPolicy | None = None,
+) -> pd.DataFrame:
+    """Per-regime selected-policy economics, calibration, and evidence status.
+
+    Beyond representation (regimes present, dominant share), each frozen regime
+    reports the conservative selected-policy return, benchmark excess, drawdown,
+    calibration error, and independent sessions. A regime with too few sessions
+    or selected trades is ``insufficient_evidence`` and can never be counted as
+    passing; a populated regime that loses is visible to the worst-regime gate.
+    """
+
+    labelled = predictions.assign(_regime=predictions["market_regime"].fillna("unknown").astype(str))
+    counts = labelled["_regime"].value_counts()
     total = int(counts.sum())
-    summary = {
+    summary: dict[str, object] = {
         "scope": "summary",
         "regimes_present": int(counts.size),
         "max_single_regime_share": float(counts.max() / total) if total else 1.0,
         "rows": total,
+        "evidence_status": "summary",
+        "selected_trades": float("nan"),
+        "sessions": float("nan"),
+        "avg_trade_return": float("nan"),
+        "avg_excess_return_vs_spy": float("nan"),
+        "max_drawdown": float("nan"),
+        "calibration_error": float("nan"),
     }
-    details = [
-        {
-            "scope": f"regime:{regime}",
-            "regimes_present": int(counts.size),
-            "max_single_regime_share": float(count / total) if total else 1.0,
-            "rows": int(count),
-        }
-        for regime, count in counts.items()
-    ]
+    details: list[dict[str, object]] = []
+    for regime, subset in labelled.groupby("_regime", sort=False):
+        record = conservative_economics(
+            phase_economics(subset, horizon=horizon, top_k=top_k, scope=f"regime:{regime}", policy=policy)
+        ).iloc[0]
+        sessions = int(finite_or_none(record.get("periods")) or 0)
+        trades = int(finite_or_none(record.get("selected_trades")) or 0)
+        status = "sufficient" if sessions >= min_regime_sessions and trades >= min_regime_trades else "insufficient_evidence"
+        details.append(
+            {
+                "scope": f"regime:{regime}",
+                "regimes_present": int(counts.size),
+                "max_single_regime_share": float(counts.get(regime, 0) / total) if total else 1.0,
+                "rows": int(counts.get(regime, 0)),
+                "evidence_status": status,
+                "selected_trades": trades,
+                "sessions": sessions,
+                "avg_trade_return": finite_or_none(record.get("avg_trade_return")),
+                "avg_excess_return_vs_spy": finite_or_none(record.get("avg_excess_return_vs_spy")),
+                "max_drawdown": finite_or_none(record.get("max_drawdown")),
+                "calibration_error": (
+                    expected_calibration_error(subset[target_column], subset["swing_probability"])
+                    if len(subset)
+                    else float("nan")
+                ),
+            }
+        )
     return pd.DataFrame([summary, *details])
 
 

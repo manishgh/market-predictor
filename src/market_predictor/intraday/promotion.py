@@ -10,12 +10,14 @@ from typing import TYPE_CHECKING, Any, cast
 import numpy as np
 import pandas as pd
 
+from market_predictor.execution_policy import EXECUTION_POLICY_SHA256
 from market_predictor.intraday.contracts import (
     INTRADAY_MODEL_SCHEMA_VERSION,
     INTRADAY_MODEL_TYPE,
     INTRADAY_VALIDATION_SPLIT,
     IntradayPromotionConfig,
 )
+from market_predictor.prediction_policy import PREDICTION_POLICY_SHA256
 from market_predictor.registry import (
     MODEL_STATUS_CANDIDATE,
     MODEL_STATUS_PROMOTED,
@@ -58,6 +60,7 @@ def promote_intraday_model(
     validation_split = str(metrics.get("validation_split") or manifest.get("validation_split") or "")
     if validation_split != INTRADAY_VALIDATION_SPLIT:
         failures.append(f"validation_split must be {INTRADAY_VALIDATION_SPLIT}")
+    failures.extend(_causal_identity_failures(metrics))
     model_run_id = str(metrics.get("model_run_id") or "")
     manifest_run_id = str(cast(dict[str, Any], manifest.get("extra") or {}).get("model_run_id") or "")
     if not model_run_id or model_run_id != manifest_run_id:
@@ -88,6 +91,14 @@ def promote_intraday_model(
                     config.min_opportunity_holdout_lift,
                     "min",
                 ),
+                "opportunity_group_lift_at_k": (
+                    config.min_opportunity_group_lift_at_k,
+                    "min",
+                ),
+                "opportunity_holdout_group_lift_at_k": (
+                    config.min_opportunity_holdout_group_lift_at_k,
+                    "min",
+                ),
                 "downside_roc_auc": (config.min_downside_roc_auc, "min"),
                 "downside_holdout_roc_auc": (config.min_downside_holdout_roc_auc, "min"),
                 "opportunity_brier_score": (config.max_opportunity_brier, "max"),
@@ -106,9 +117,15 @@ def promote_intraday_model(
                 ),
                 "validated_rows": (float(config.min_validated_rows), "min"),
                 "tickers": (float(config.min_tickers), "min"),
+                "decision_groups": (float(config.min_decision_groups), "min"),
+                "independent_sessions": (float(config.min_independent_sessions), "min"),
+                "validation_folds": (float(config.min_validation_folds), "min"),
+                "effective_sample_size": (config.min_effective_sample_size, "min"),
+                "capacity_min_avg_net_return": (config.min_capacity_avg_net_return, "min"),
             },
         )
     )
+    failures.extend(_worst_regime_failures(evidence.regime_audit, config))
     memory = metrics.get("memory")
     peak_memory = _finite_number(memory.get("peak_working_set_gib")) if isinstance(memory, dict) else None
     if peak_memory is None or peak_memory > config.max_peak_working_set_gib:
@@ -135,6 +152,8 @@ def promote_intraday_model(
                     "return_drawdown_ratio": (config.min_return_drawdown_ratio, "min"),
                     "negative_session_rate": (config.max_negative_session_rate, "max"),
                     "average_turnover": (config.max_average_turnover, "max"),
+                    "stress_avg_trade_return": (config.min_stress_avg_trade_return, "min"),
+                    "stress_avg_excess_return_vs_spy": (config.min_stress_avg_excess_return_vs_spy, "min"),
                 },
                 prefix="profitability",
             )
@@ -390,6 +409,55 @@ def _required_first_row(
             failures.append(f"{name} audit is empty")
         return None
     return audit.iloc[0]
+
+
+def _causal_identity_failures(metrics: dict[str, Any]) -> list[str]:
+    """Reject promotion when causal evidence identities are missing.
+
+    Cutoff, split, feature-schema, calibration, and fold-ordering identities from
+    the causal validation build must be present, and the recorded prediction and
+    execution policy hashes must match the code that would serve the model.
+    """
+
+    failures: list[str] = []
+    for field in (
+        "validation_split",
+        "holdout_assignment_cutoff_utc",
+        "holdout_ticker_summary_sha256",
+        "feature_set_sha256",
+        "calibration_method",
+    ):
+        value = metrics.get(field)
+        if value is None or str(value).strip() == "":
+            failures.append(f"metrics.{field} causal identity is missing")
+    if metrics.get("calibration_seed_folds_excluded") is None:
+        failures.append("metrics.calibration_seed_folds_excluded is missing")
+    if not _strict_bool(metrics.get("folds_causally_ordered")):
+        failures.append("metrics.folds_causally_ordered is not proven")
+    if str(metrics.get("prediction_policy_sha256") or "") != PREDICTION_POLICY_SHA256:
+        failures.append("metrics.prediction_policy_sha256 does not match the serving policy")
+    if str(metrics.get("execution_policy_sha256") or "") != EXECUTION_POLICY_SHA256:
+        failures.append("metrics.execution_policy_sha256 does not match the execution policy")
+    return failures
+
+
+def _worst_regime_failures(regime_audit: pd.DataFrame, config: IntradayPromotionConfig) -> list[str]:
+    if "evidence_status" not in regime_audit.columns:
+        return ["regime audit is missing per-regime evidence status"]
+    failures: list[str] = []
+    sufficient = regime_audit[regime_audit["evidence_status"].astype(str) == "sufficient"]
+    for _, detail in sufficient.iterrows():
+        scope = str(detail.get("scope"))
+        excess = _finite_number(detail.get("avg_excess_return_vs_spy"))
+        if excess is None or excess < config.min_worst_regime_avg_excess_return_vs_spy:
+            failures.append(f"{scope} avg_excess_return_vs_spy {excess} < {config.min_worst_regime_avg_excess_return_vs_spy}")
+        drawdown = _finite_number(detail.get("max_drawdown"))
+        if drawdown is not None and drawdown > config.max_worst_regime_drawdown:
+            failures.append(f"{scope} max_drawdown {drawdown} > {config.max_worst_regime_drawdown}")
+        calibration = _finite_number(detail.get("calibration_error"))
+        if calibration is not None and calibration > config.max_worst_regime_calibration_error:
+            failures.append(f"{scope} calibration_error {calibration} > {config.max_worst_regime_calibration_error}")
+    return failures
 
 
 def _finite_number(value: object) -> float | None:

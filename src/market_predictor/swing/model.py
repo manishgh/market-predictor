@@ -16,6 +16,18 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 
 from market_predictor.drift import build_feature_reference_profile
+from market_predictor.execution_policy import (
+    DEFAULT_EXECUTION_POLICY,
+    STRESS_ECONOMIC_FIELDS,
+    execution_policy_identity,
+    merge_stress_summary,
+)
+from market_predictor.prediction_policy import (
+    calibration_summary,
+    group_ranking_metrics,
+    prediction_policy_identity,
+    swing_decision_scores,
+)
 from market_predictor.registry import (
     MODEL_STATUS_CANDIDATE,
     MODEL_STATUS_PROMOTED,
@@ -240,21 +252,59 @@ def train_swing_model(
         holdout_evidence[target],
         holdout_evidence["swing_probability"],
     )
+    oof_group_metrics = group_ranking_metrics(
+        oof,
+        target_column=target,
+        score=swing_decision_scores(oof, probability_column="swing_probability"),
+        group_column="decision_group_id",
+        k=config.top_k,
+    )
+    holdout_group_metrics = group_ranking_metrics(
+        holdout_evidence,
+        target_column=target,
+        score=swing_decision_scores(holdout_evidence, probability_column="swing_probability"),
+        group_column="decision_group_id",
+        k=config.top_k,
+    )
+    oof_calibration = calibration_summary(oof[target], oof["swing_probability"])
+    holdout_calibration = calibration_summary(holdout_evidence[target], holdout_evidence["swing_probability"])
+    stress_multiplier = max(DEFAULT_EXECUTION_POLICY.stress_multipliers)
     economics = pd.concat(
         [
             phase_economics(oof, horizon=horizon, top_k=config.top_k, scope="walk_forward"),
+            phase_economics(holdout_evidence, horizon=horizon, top_k=config.top_k, scope="ticker_holdout"),
+        ],
+        ignore_index=True,
+    )
+    stress_economics = pd.concat(
+        [
+            phase_economics(oof, horizon=horizon, top_k=config.top_k, scope="walk_forward", cost_stress=stress_multiplier),
             phase_economics(
                 holdout_evidence,
                 horizon=horizon,
                 top_k=config.top_k,
                 scope="ticker_holdout",
+                cost_stress=stress_multiplier,
             ),
         ],
         ignore_index=True,
     )
-    profitability = pd.concat([conservative_economics(economics), economics], ignore_index=True)
-    regime = regime_audit(pd.concat([oof, holdout_evidence], ignore_index=True))
-    catalyst = catalyst_audit(pd.concat([oof, holdout_evidence], ignore_index=True))
+    conservative = merge_stress_summary(
+        conservative_economics(economics),
+        conservative_economics(stress_economics),
+        multiplier=stress_multiplier,
+        fields=STRESS_ECONOMIC_FIELDS,
+    )
+    profitability = pd.concat([conservative, economics], ignore_index=True)
+    combined_regime_evidence = pd.concat([oof, holdout_evidence], ignore_index=True)
+    regime = regime_audit(
+        combined_regime_evidence,
+        horizon=horizon,
+        top_k=config.top_k,
+        target_column=target,
+        policy=DEFAULT_EXECUTION_POLICY,
+    )
+    catalyst = catalyst_audit(combined_regime_evidence)
     alignment = pd.DataFrame(
         [
             {
@@ -270,7 +320,14 @@ def train_swing_model(
     for evidence in (oof, holdout_evidence, profitability, regime, catalyst, alignment):
         evidence["model_run_id"] = model_run_id
     representation = holdout_plan.representation_audit.copy()
-    fold_audit = pd.concat([pd.DataFrame(fold_records), representation], ignore_index=True, sort=False)
+    fold_frame = pd.DataFrame(fold_records)
+    folds_causally_ordered = bool(
+        len(fold_records) > 0
+        and pd.to_datetime(fold_frame["max_train_label_available_at_utc"], utc=True)
+        .lt(pd.to_datetime(fold_frame["min_test_decision_time_utc"], utc=True))
+        .all()
+    )
+    fold_audit = pd.concat([fold_frame, representation], ignore_index=True, sort=False)
     fold_audit["model_run_id"] = model_run_id
 
     final_estimator = _estimator(config)
@@ -316,19 +373,36 @@ def train_swing_model(
         "tickers": ticker_count,
         "features": len(features),
         "validated_rows": len(oof),
+        "decision_groups": int(oof["decision_group_id"].nunique()),
+        "independent_sessions": int(oof["session_date_et"].nunique()),
+        "validation_folds": config.n_splits,
         "roc_auc": oof_metrics["roc_auc"],
         "top_decile_lift": oof_metrics["top_decile_lift"],
+        "group_lift_at_k": oof_group_metrics["group_lift_at_k"],
+        "group_precision_at_k": oof_group_metrics["group_precision_at_k"],
+        "group_ndcg_at_k": oof_group_metrics["group_ndcg_at_k"],
+        "selection_k": oof_group_metrics["k"],
         "brier_score": oof_metrics["brier_score"],
         "log_loss": oof_metrics["log_loss"],
+        "expected_calibration_error": oof_calibration["expected_calibration_error"],
+        "calibration_bias": oof_calibration["calibration_bias"],
+        "calibration_slope": oof_calibration["calibration_slope"],
+        "calibration_intercept": oof_calibration["calibration_intercept"],
         "precision": oof_metrics["precision"],
         "recall": oof_metrics["recall"],
         "f1": oof_metrics["f1"],
         "ticker_holdout_rows": len(holdout_evidence),
         "ticker_holdout_roc_auc": holdout_metrics["roc_auc"],
         "ticker_holdout_top_decile_lift": holdout_metrics["top_decile_lift"],
+        "ticker_holdout_group_lift_at_k": holdout_group_metrics["group_lift_at_k"],
         "ticker_holdout_brier_score": holdout_metrics["brier_score"],
+        "ticker_holdout_calibration_error": holdout_calibration["expected_calibration_error"],
         "calibration_method": "isotonic_prior_outer_folds",
         "calibration_seed_folds_excluded": calibration_seed_folds_excluded,
+        "feature_set_sha256": feature_set_sha256,
+        "folds_causally_ordered": folds_causally_ordered,
+        **prediction_policy_identity(),
+        **execution_policy_identity(),
         "holdout_assignment_cutoff_utc": holdout_plan.assignment_cutoff_utc,
         "holdout_ticker_summary_sha256": holdout_plan.ticker_summary_sha256,
         "holdout_required_strata": int(
