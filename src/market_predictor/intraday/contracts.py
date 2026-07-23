@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import json
 from typing import Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -188,6 +190,22 @@ class IntradayDatasetConfig(FrozenConfig):
     max_build_memory_gb: float = Field(default=4.0, ge=1.0, le=64)
     memory_guard_headroom_gb: float = Field(default=0.25, ge=0.1, le=2.0)
     schema_version: str = INTRADAY_FEATURE_SCHEMA_VERSION
+
+    def label_config_sha256(self) -> str:
+        """Content hash of the fields that define intraday label/cost semantics."""
+
+        payload = {
+            "policy": "intraday_label.v1",
+            "horizon_minutes": self.horizon_minutes,
+            "decision_bar_minutes": self.decision_bar_minutes,
+            "execution_bar_minutes": self.execution_bar_minutes,
+            "decision_stride_bars": self.decision_stride_bars,
+            "target_atr": self.target_atr,
+            "stop_atr": self.stop_atr,
+            "round_trip_cost_bps": self.round_trip_cost_bps,
+            "ambiguous_barrier_policy": self.ambiguous_barrier_policy,
+        }
+        return hashlib.sha256(json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
 
     @model_validator(mode="after")
     def validate_dataset(self) -> Self:

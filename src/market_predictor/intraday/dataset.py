@@ -7,6 +7,7 @@ import pandas as pd
 
 from market_predictor.canonical.audits import CanonicalAuditReport
 from market_predictor.canonical.joins import join_source_collection_status
+from market_predictor.execution_policy import EXECUTION_POLICY_SHA256
 from market_predictor.intraday.audits import audit_intraday_dataset
 from market_predictor.intraday.contracts import (
     CATALYST_AUDIT_FEATURES,
@@ -92,6 +93,8 @@ def build_intraday_dataset(
     decisions["round_trip_cost_bps"] = config.round_trip_cost_bps
     decisions["minimum_five_minute_bars"] = config.min_five_minute_bars
     decisions["minimum_one_minute_bars"] = config.min_one_minute_bars
+    decisions["dataset_label_config_sha256"] = config.label_config_sha256()
+    decisions["execution_policy_sha256"] = EXECUTION_POLICY_SHA256
     decisions = decisions.replace([np.inf, -np.inf], np.nan)
     audit = audit_intraday_dataset(decisions, config)
     return (

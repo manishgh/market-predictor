@@ -391,6 +391,7 @@ def train_swing_model(
         "calibration_seed_folds_excluded": calibration_seed_folds_excluded,
         "feature_set_sha256": feature_set_sha256,
         "reconciliation_sha256": stamped_hash(dataset, "reconciliation_sha256"),
+        "dataset_label_config_sha256": stamped_hash(dataset, "dataset_label_config_sha256"),
         "folds_causally_ordered": folds_causally_ordered,
         **prediction_policy_identity(),
         **execution_policy_identity(),
@@ -545,6 +546,7 @@ def _training_rows(dataset: pd.DataFrame) -> tuple[pd.DataFrame, int, str]:
         "label_eligible",
         "horizon_sessions",
         "swing_feature_schema_version",
+        "dataset_label_config_sha256",
         "market_regime",
     }
     missing = sorted(required.difference(dataset.columns))
@@ -552,6 +554,9 @@ def _training_rows(dataset: pd.DataFrame) -> tuple[pd.DataFrame, int, str]:
         raise SchemaMismatchError(f"swing dataset missing training columns: {', '.join(missing)}")
     if bool(dataset["swing_feature_schema_version"].astype(str).ne(SWING_FEATURE_SCHEMA_VERSION).any()):
         raise SchemaMismatchError("swing dataset feature schema mismatch")
+    label_configs = dataset["dataset_label_config_sha256"].astype(str).unique()
+    if len(label_configs) != 1 or not str(label_configs[0]).strip():
+        raise SchemaMismatchError("swing dataset must contain exactly one label config")
     horizons = pd.to_numeric(dataset["horizon_sessions"], errors="coerce").dropna().astype(int).unique()
     if len(horizons) != 1:
         raise SchemaMismatchError("swing dataset must contain exactly one horizon")

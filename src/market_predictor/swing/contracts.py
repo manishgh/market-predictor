@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import json
 from typing import Self
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -165,6 +167,16 @@ class SwingDatasetConfig(FrozenConfig):
     source_coverage_max_age_minutes: int = Field(default=60, ge=0, le=1_440)
     minimum_cross_section: int = Field(default=20, ge=2)
     schema_version: str = SWING_FEATURE_SCHEMA_VERSION
+
+    def label_config_sha256(self) -> str:
+        """Content hash of the fields that define swing label/cost semantics."""
+
+        payload = {
+            "policy": "swing_label.v1",
+            "horizon_sessions": self.horizon_sessions,
+            "round_trip_cost_bps": self.round_trip_cost_bps,
+        }
+        return hashlib.sha256(json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
 
 
 class SwingTrainingConfig(FrozenConfig):
