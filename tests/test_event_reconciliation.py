@@ -64,5 +64,20 @@ class EventReconciliationTest(unittest.TestCase):
         self.assertEqual(reconciliation_sha256(self._artifact()), reconciliation_sha256(self._artifact()))
 
 
+class ReconciliationAuditCheckTest(unittest.TestCase):
+    def test_check_passes_when_every_event_is_explained(self) -> None:
+        from market_predictor.canonical.audits import event_reconciliation_checks
+
+        checks = event_reconciliation_checks({"total_events": 5, "unexplained_events": 0, "matched": 5})
+        self.assertEqual(checks[0].name, "event_reconciliation")
+        self.assertEqual(checks[0].status, "pass")
+
+    def test_check_fails_on_any_unexplained_event(self) -> None:
+        from market_predictor.canonical.audits import event_reconciliation_checks
+
+        checks = event_reconciliation_checks({"total_events": 5, "unexplained_events": 1})
+        self.assertEqual(checks[0].status, "fail")
+
+
 if __name__ == "__main__":
     unittest.main()

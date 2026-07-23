@@ -16,6 +16,7 @@ from market_predictor.canonical.audits import (
     audit_fundamental_facts,
     audit_source_collections,
     audit_universe_memberships,
+    event_reconciliation_checks,
 )
 from market_predictor.canonical.contracts import AvailabilityPolicy
 from market_predictor.canonical.joins import (
@@ -30,6 +31,11 @@ from market_predictor.canonical.normalize import (
     canonicalize_bars,
     canonicalize_events,
     canonicalize_universe_memberships,
+)
+from market_predictor.canonical.reconciliation import (
+    reconcile_events,
+    reconciliation_sha256,
+    reconciliation_summary,
 )
 from market_predictor.canonical.store import file_sha256, load_canonical_artifact, write_canonical_artifact
 
@@ -265,6 +271,8 @@ def register_canonical_data_commands(app: typer.Typer, console: Any) -> None:
         decisions = decisions_from_completed_bars(bar_frame, mode=parsed_decision_mode)
         decisions = join_universe_membership(decisions, membership_frame)
         decisions = aggregate_event_features(decisions, event_frame, require_observed=production)
+        reconciliation = reconcile_events(decisions, event_frame)
+        reconciliation_stats = reconciliation_summary(reconciliation)
         decisions = join_source_collection_status(decisions, collection_frame, source_families=sources)
         feature_timestamps = [
             "bar_available_at_utc",
@@ -287,12 +295,14 @@ def register_canonical_data_commands(app: typer.Typer, console: Any) -> None:
                 decisions=decisions,
                 require_observed=production,
             ),
+            *event_reconciliation_checks(reconciliation_stats),
         ]
         inputs = {
             str(bars): file_sha256(bars),
             str(events): file_sha256(events),
             str(source_collections): file_sha256(source_collections),
             str(memberships): file_sha256(memberships),
+            "reconciliation_sha256": reconciliation_sha256(reconciliation),
         }
         metrics = _csv(fundamental_metrics)
         if fundamentals is not None:

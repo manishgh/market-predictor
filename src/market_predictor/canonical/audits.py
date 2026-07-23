@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from typing import Literal
 
 import pandas as pd
@@ -126,6 +126,27 @@ def audit_canonical_events(
         _check("event_observed_history", proxy_failures, len(data), "production requires observed first-seen history"),
         _check("event_identity", identity_failures + duplicates, len(data), "event identity is populated and unique"),
         _check("event_schema_version", schema_failures, len(data), "schema version matches"),
+    )
+
+
+def event_reconciliation_checks(summary: Mapping[str, int]) -> tuple[CanonicalAuditCheck, ...]:
+    """Build the event-to-feature reconciliation audit check.
+
+    The mandatory invariant is that no accepted event is left unexplained; the
+    per-status counts (matched / duplicate / wrong_ticker / unavailable_future /
+    unknown_relevance / irrelevant / outside_window) are recorded in the detail.
+    """
+
+    total = int(summary.get("total_events", 0))
+    unexplained = int(summary.get("unexplained_events", 0))
+    detail = ", ".join(f"{key}={summary[key]}" for key in sorted(summary))
+    return (
+        _check(
+            "event_reconciliation",
+            unexplained,
+            total,
+            f"every accepted event resolves to exactly one status ({detail})",
+        ),
     )
 
 
