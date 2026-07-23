@@ -45,6 +45,9 @@ DECISION_REQUIRED_COLUMNS = {
     "market_cap_bucket",
     "liquidity_bucket",
     "membership_available_at_utc",
+    "membership_effective_from_utc",
+    "membership_effective_to_utc",
+    "universe_snapshot_id",
 }
 BENCHMARK_REQUIRED_COLUMNS = {
     "ticker",

@@ -304,6 +304,8 @@ def _daily_rows(
     frame["liquidity_bucket"] = "high"
     frame["universe_snapshot_id"] = "snapshot-1"
     frame["membership_available_at_utc"] = pd.Timestamp("2025-01-01T00:00:00Z")
+    frame["membership_effective_from_utc"] = pd.Timestamp("2024-01-01T00:00:00Z")
+    frame["membership_effective_to_utc"] = pd.NaT
     frame["event_count_3d"] = 0
     frame["sentiment_mean_3d"] = 0.0
     frame["latest_event_feature_available_at_utc"] = pd.NaT

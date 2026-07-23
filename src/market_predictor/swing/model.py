@@ -392,6 +392,8 @@ def train_swing_model(
         "feature_set_sha256": feature_set_sha256,
         "reconciliation_sha256": stamped_hash(dataset, "reconciliation_sha256"),
         "dataset_label_config_sha256": stamped_hash(dataset, "dataset_label_config_sha256"),
+        "universe_identity_sha256": identity_set_sha256(data["universe_snapshot_id"].astype(str).unique()),
+        "universe_snapshots": int(data["universe_snapshot_id"].nunique()),
         "folds_causally_ordered": folds_causally_ordered,
         **prediction_policy_identity(),
         **execution_policy_identity(),
@@ -547,6 +549,7 @@ def _training_rows(dataset: pd.DataFrame) -> tuple[pd.DataFrame, int, str]:
         "horizon_sessions",
         "swing_feature_schema_version",
         "dataset_label_config_sha256",
+        "universe_snapshot_id",
         "market_regime",
     }
     missing = sorted(required.difference(dataset.columns))
@@ -566,6 +569,9 @@ def _training_rows(dataset: pd.DataFrame) -> tuple[pd.DataFrame, int, str]:
         raise SchemaMismatchError(f"swing dataset missing target {target}")
     data = dataset[dataset["label_eligible"].fillna(False).astype(bool)].copy()
     data = data.dropna(subset=[target]).sort_values(["session_date_et", "ticker"]).reset_index(drop=True)
+    universe = data["universe_snapshot_id"].astype(str).str.strip()
+    if bool(data["universe_snapshot_id"].isna().any()) or bool(universe.eq("").any()):
+        raise DataReadinessError("swing training rows are missing point-in-time universe identity")
     decision = pd.to_datetime(data["decision_time_utc"], utc=True, errors="coerce")
     feature = pd.to_datetime(data["feature_available_at_utc"], utc=True, errors="coerce")
     label = pd.to_datetime(data["label_available_at_utc"], utc=True, errors="coerce")

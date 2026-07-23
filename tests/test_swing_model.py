@@ -299,6 +299,7 @@ def _training_dataset() -> pd.DataFrame:
                     "market_cap_bucket": "large" if ticker_index < 6 else "mid",
                     "liquidity_bucket": "high" if ticker_index % 3 else "medium",
                     "primary_benchmark": "XLK" if ticker_index % 2 == 0 else "XLV",
+                    "universe_snapshot_id": "snapshot-1",
                     "event_count_3d": max(0.0, feature_map["event_count_3d"]),
                     "event_relevance_mean_3d": 0.8,
                     "low_relevance_event_fraction_3d": 0.05,
