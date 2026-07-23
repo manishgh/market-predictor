@@ -189,8 +189,12 @@ class SeekingAlphaRapidApiSource:
             cached = self._read_cached_access_token()
             if cached:
                 return cached
+        # Reserve one quota slot atomically before the request so concurrent
+        # collectors cannot both consume the last remaining call.
         if self.settings.seeking_alpha_fail_when_monthly_limit_reached:
-            self.quota.assert_available()
+            self.quota.reserve()
+        else:
+            self.quota.record_call()
         payload, headers = self.client.post_json_with_headers(
             f"{self.base_url}{self.settings.seeking_alpha_access_token_endpoint}",
             payload={
@@ -199,7 +203,7 @@ class SeekingAlphaRapidApiSource:
             },
             headers={**self.headers, "Content-Type": "application/json"},
         )
-        self.quota.record_call(headers)
+        self.quota.record_headers(headers)
         token = self._extract_access_token(payload)
         self._write_cached_access_token(token, payload)
         return token

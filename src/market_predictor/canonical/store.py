@@ -11,6 +11,7 @@ import pandas as pd
 
 from market_predictor.canonical.audits import CanonicalAuditReport
 from market_predictor.canonical.contracts import CANONICAL_SCHEMA_VERSION
+from market_predictor.locking import file_lock
 from market_predictor.v3.errors import DataReadinessError
 
 CANONICAL_MANIFEST_SCHEMA = "market_data.artifact_manifest.v1"
@@ -29,17 +30,16 @@ def write_canonical_artifact(
     inputs: Mapping[str, str] | None = None,
     production_ready: bool = True,
 ) -> dict[str, object]:
-    """Atomically publish a canonical table and write its integrity manifest last."""
+    """Atomically publish a canonical table and its integrity manifest.
+
+    Concurrent publishers to the same path are serialized with a file lock, both
+    files are staged before either is published, and the manifest (the reader's
+    integrity gate) is renamed last so it never references a stale table.
+    """
 
     if not audit.passed:
         audit.raise_for_failure()
     path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_name(f".{path.name}.{uuid.uuid4().hex}.tmp")
-    try:
-        frame.to_parquet(temporary, index=False)
-        temporary.replace(path)
-    finally:
-        temporary.unlink(missing_ok=True)
     availability_column = next(
         (
             column
@@ -53,29 +53,34 @@ def write_canonical_artifact(
         if availability_column is not None
         else pd.Series(dtype="datetime64[ns, UTC]")
     )
-    manifest: dict[str, object] = {
-        "schema": CANONICAL_MANIFEST_SCHEMA,
-        "canonical_schema_version": CANONICAL_SCHEMA_VERSION,
-        "artifact_type": artifact_type.strip().lower(),
-        "artifact_path": str(path),
-        "artifact_sha256": file_sha256(path),
-        "created_at_utc": datetime.now(UTC).isoformat(),
-        "rows": len(frame),
-        "columns": list(frame.columns),
-        "first_available_at_utc": _iso(availability.min()) if not availability.empty else None,
-        "last_available_at_utc": _iso(availability.max()) if not availability.empty else None,
-        "inputs": dict(inputs or {}),
-        "audit": [check.model_dump() for check in audit.checks],
-        "production_ready": production_ready,
-    }
     manifest_path = manifest_path_for(path)
-    manifest_temporary = manifest_path.with_name(f".{manifest_path.name}.{uuid.uuid4().hex}.tmp")
-    try:
-        manifest_temporary.write_text(json.dumps(manifest, indent=2, sort_keys=True), encoding="utf-8")
-        manifest_temporary.replace(manifest_path)
-    finally:
-        manifest_temporary.unlink(missing_ok=True)
-    return manifest
+    with file_lock(path):
+        data_temporary = path.with_name(f".{path.name}.{uuid.uuid4().hex}.tmp")
+        manifest_temporary = manifest_path.with_name(f".{manifest_path.name}.{uuid.uuid4().hex}.tmp")
+        try:
+            frame.to_parquet(data_temporary, index=False)
+            manifest: dict[str, object] = {
+                "schema": CANONICAL_MANIFEST_SCHEMA,
+                "canonical_schema_version": CANONICAL_SCHEMA_VERSION,
+                "artifact_type": artifact_type.strip().lower(),
+                "artifact_path": str(path),
+                "artifact_sha256": file_sha256(data_temporary),
+                "created_at_utc": datetime.now(UTC).isoformat(),
+                "rows": len(frame),
+                "columns": list(frame.columns),
+                "first_available_at_utc": _iso(availability.min()) if not availability.empty else None,
+                "last_available_at_utc": _iso(availability.max()) if not availability.empty else None,
+                "inputs": dict(inputs or {}),
+                "audit": [check.model_dump() for check in audit.checks],
+                "production_ready": production_ready,
+            }
+            manifest_temporary.write_text(json.dumps(manifest, indent=2, sort_keys=True), encoding="utf-8")
+            data_temporary.replace(path)
+            manifest_temporary.replace(manifest_path)
+            return manifest
+        finally:
+            data_temporary.unlink(missing_ok=True)
+            manifest_temporary.unlink(missing_ok=True)
 
 
 def load_canonical_artifact(
