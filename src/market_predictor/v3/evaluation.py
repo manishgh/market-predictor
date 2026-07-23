@@ -404,6 +404,18 @@ def _session_block_interval(
     return {"point": point, "low": float(low), "high": float(high), "iterations": float(iterations), "seed": float(seed)}
 
 
+def session_block_interval(
+    frame: pd.DataFrame,
+    *,
+    metric: Any,
+    iterations: int,
+    seed: int,
+) -> dict[str, float]:
+    """Public, deterministic session-block bootstrap used by promotion evidence."""
+
+    return _session_block_interval(frame, metric=metric, iterations=iterations, seed=seed)
+
+
 def _profit_factor(returns: pd.Series) -> float | None:
     gains = float(returns[returns > 0].sum())
     losses = abs(float(returns[returns < 0].sum()))
