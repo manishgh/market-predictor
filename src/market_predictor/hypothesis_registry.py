@@ -13,6 +13,7 @@ from market_predictor.locking import file_lock
 from market_predictor.v3.errors import DataReadinessError
 
 HYPOTHESIS_SCHEMA = "market_predictor.promotion_hypothesis.v1"
+TEST_CLOCK_ENV = "MARKET_PREDICTOR_ALLOW_TEST_CLOCK"
 _SAFE_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{2,127}$")
 
 
@@ -25,6 +26,7 @@ def declare_hypothesis(
     baseline_id: str,
     baseline_artifact_sha256: str,
     prediction_policy_sha256: str,
+    execution_policy_sha256: str,
     objective: str,
     declared_at: datetime | None = None,
 ) -> dict[str, Any]:
@@ -37,6 +39,9 @@ def declare_hypothesis(
         raise ValueError("model_type and objective are required")
     _require_sha256(baseline_artifact_sha256, "baseline_artifact_sha256")
     _require_sha256(prediction_policy_sha256, "prediction_policy_sha256")
+    _require_sha256(execution_policy_sha256, "execution_policy_sha256")
+    if declared_at is not None and os.environ.get(TEST_CLOCK_ENV) != "1":
+        raise DataReadinessError("caller-supplied hypothesis timestamps are test-only")
     timestamp = _utc(declared_at or datetime.now(UTC))
     content: dict[str, Any] = {
         "schema": HYPOTHESIS_SCHEMA,
@@ -46,6 +51,7 @@ def declare_hypothesis(
         "baseline_id": baseline_id,
         "baseline_artifact_sha256": baseline_artifact_sha256,
         "prediction_policy_sha256": prediction_policy_sha256,
+        "execution_policy_sha256": execution_policy_sha256,
         "objective": objective.strip(),
         "declared_at_utc": timestamp.isoformat(),
     }

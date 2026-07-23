@@ -105,6 +105,7 @@ def verify_model_artifact(
     model_path: Path,
     *,
     allowed_statuses: set[str] | None = None,
+    attestation_trust_store_path: Path | None = None,
 ) -> dict[str, Any]:
     """Verify immutable candidate identity and derive promoted status from attestation."""
 
@@ -129,7 +130,10 @@ def verify_model_artifact(
     effective_status = MODEL_STATUS_CANDIDATE
     result = dict(manifest)
     if attestation_path.exists():
-        attestation = verify_promotion_attestation(model_path)
+        attestation = verify_promotion_attestation(
+            model_path,
+            trust_store_path=attestation_trust_store_path,
+        )
         effective_status = MODEL_STATUS_PROMOTED
         result["promotion_attestation"] = {
             "path": str(attestation_path),

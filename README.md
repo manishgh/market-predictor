@@ -13,9 +13,9 @@ This is research and prediction tooling, not investment advice and not an automa
 
 The repository produces prediction intelligence: probabilities, catalyst summaries, feature/audit context, and watchlist rankings. It does not own broker execution, portfolio state, final sizing, stops, exits, or order lifecycle. Those responsibilities belong in a trading/runtime system such as `trading_flow`.
 
-## Current Model State (2026-07-22)
+## Current Model State (2026-07-23)
 
-Model lifecycle state comes from each artifact's `.manifest.json`; unregistered or hash-mismatched artifacts cannot be scored.
+Candidate identity comes from an immutable `.manifest.json`. Effective promoted state exists only when a content-addressed promotion attestation verifies the candidate, evidence manifest, causal identity chain, predeclared baseline/hypothesis, untouched-shadow confidence interval, gate configuration, and build/approver identities. Unregistered, unattested, or hash-mismatched artifacts cannot be served.
 
 | Serving view | Artifact / family | State | Current evidence |
 | --- | --- | --- | --- |
@@ -34,8 +34,9 @@ Production API implications:
 - The configured swing route is deliberately not ready until a real canonical candidate passes every C4 promotion gate; there is no legacy fallback.
 - Unified mode may return explicit swing and intraday errors until each requested view has its own promoted canonical artifact.
 - Candidate scoring is available only through research commands or an explicitly constructed test service, never through the HTTP request contract.
-- C6 serving infrastructure is complete: canonical label-free inference builds, atomic live snapshots, immutable Azure releases, rollback, startup sync, drift/resource telemetry, and the non-root API image are implemented. This does not change the model state above; no real canonical model has passed promotion.
-- The C7 repository cleanup checkpoint is complete: repository-wide Ruff and strict mypy pass, and the full 199-test suite is green. Real Azure deployment and disaster-recovery rehearsal remain required before a production release tag.
+- R4 promotion and local release infrastructure is complete: immutable candidate manifests and attestations, predeclared hypotheses, one-use shadow evidence, paired session-block confidence gates, versioned local releases, atomic activation, and verified rollback are implemented. This does not change the model state above; no real canonical model has passed promotion.
+- Azure publication, synchronization, rollback, and disaster-recovery rehearsal are `environment_pending` and are not evidence for R4 completion.
+- Repository-wide Ruff and strict mypy pass, and the full 263-test suite is green at the R4 local-release checkpoint.
 
 The next valid intraday promotion attempt requires a new predeclared development hypothesis that first passes both economic scopes, followed by matured shadow data after 2026-07-08 and all current promotion audits. See [Intraday model promotion](docs/intraday_model_promotion.md).
 
@@ -453,10 +454,18 @@ market-predictor train-swing-model `
 market-predictor promote-swing-model `
   --model models/swing/candidates/swing_5d.joblib `
   --evidence-dir data/reports/swing_5d_candidate `
+  --hypothesis-registry data/governance `
+  --hypothesis-id swing-5d-h001 `
+  --shadow-bundle data/governance/shadow/<shadow-fingerprint>.json `
+  --build-identity ci:<build-id> `
+  --approver-identity reviewer:<identity> `
+  --signing-private-key <secure-ed25519-private-key.pem> `
+  --attestation-trust-store configs/attestation_trust_store.json `
+  --signer-id promotion-ci-prod `
   --config configs/swing_promotion.toml
 ```
 
-`build-swing-dataset` uses a post-close decision, next-session-open entry, and fifth-session-close exit. It writes exact entry/exit/label timestamps, costs, stock and benchmark returns, MFE/MAE, and eligibility evidence. `train-swing-model` publishes a candidate plus a hash inventory for every promotion file. `promote-swing-model` verifies that inventory and the candidate hash before applying frozen gates. Editing a metrics or audit file invalidates the bundle.
+`build-swing-dataset` uses a post-close decision, next-session-open entry, and fifth-session-close exit. It writes exact entry/exit/label timestamps, costs, stock and benchmark returns, MFE/MAE, and eligibility evidence. `train-swing-model` publishes an immutable candidate plus a hash inventory for every promotion file. `promote-swing-model` verifies that inventory, applies frozen development gates, consumes one predeclared untouched-shadow bundle, requires a positive paired session-block confidence lower bound, and writes an immutable attestation. Editing a model, manifest, metric, audit, shadow bundle, or attestation invalidates authorization.
 
 The removed `build-volatile-dataset`, `train-volatile-model`, and `score-volatile-latest` commands are not compatibility aliases. Old volatile artifacts cannot be loaded by the production swing API.
 
@@ -483,12 +492,43 @@ market-predictor train-intraday-model `
 market-predictor promote-intraday-model `
   --model models/intraday/candidates/intraday_60m.joblib `
   --evidence-dir data/reports/intraday_60m_candidate `
+  --hypothesis-registry data/governance `
+  --hypothesis-id intraday-60m-h001 `
+  --shadow-bundle data/governance/shadow/<shadow-fingerprint>.json `
+  --build-identity ci:<build-id> `
+  --approver-identity reviewer:<identity> `
+  --signing-private-key <secure-ed25519-private-key.pem> `
+  --attestation-trust-store configs/attestation_trust_store.json `
+  --signer-id promotion-ci-prod `
   --config configs/intraday_promotion.toml
 ```
 
 Each decision is made only after a completed 5-minute bar. Entry is the first subsequent 1-minute open. The default 60-minute path uses exact consecutive 1-minute bars, a 1 ATR target, a 0.75 ATR stop, and stop-first resolution when both barriers occur in one bar. SPY, QQQ, and sector returns use the same actual entry/exit interval. Missing ticker or benchmark bars invalidate the row; they are never shifted or filled.
 
 The candidate contains two estimators and is promoted atomically: opportunity estimates target-before-stop, while downside estimates stop-before-target. Catalyst/news features are audited and returned as a confirmation/ranking overlay, but are deliberately excluded from both estimators until fresh ablation evidence proves incremental value. No real C5 candidate has been promoted, so no canonical intraday route belongs in `configs/default.toml` yet.
+
+## Trusted Local Releases
+
+Only an attested model can enter the local release repository. Publication copies the model, immutable candidate manifest, promotion attestation, evidence manifest, and every evidence file into a versioned content-addressed directory. Every hash and the attestation are reverified before one locked active pointer is replaced.
+
+```powershell
+market-predictor publish-local-release `
+  --model models/swing/candidates/swing_5d.joblib `
+  --evidence-manifest data/reports/swing_5d_candidate/evidence.manifest.json `
+  --release-root data/local_release_repository `
+  --attestation-trust-store configs/attestation_trust_store.json
+
+market-predictor show-active-local-release `
+  --release-root data/local_release_repository `
+  --attestation-trust-store configs/attestation_trust_store.json
+
+market-predictor rollback-local-release `
+  --release-id <64-character-release-id> `
+  --release-root data/local_release_repository `
+  --attestation-trust-store configs/attestation_trust_store.json
+```
+
+A partial, mutated, candidate-only, unsigned, untrusted, or unattested release cannot become active. The public trust store is server-owned and should be mounted read-only; the signing private key belongs only to the promotion workload and must not be stored in this repository. Set `MARKET_PREDICTOR_ATTESTATION_TRUST_STORE` for serving-time verification. The local pointer is the current R4 activation authority. Azure activation remains `environment_pending`.
 
 ## Entry / Exit Path Models
 

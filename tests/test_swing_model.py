@@ -28,7 +28,7 @@ from market_predictor.swing.promotion import (
     write_swing_training_evidence,
 )
 from market_predictor.v3.errors import DataReadinessError, SchemaMismatchError
-from tests.r4_fixtures import trust_context_for_candidate
+from tests.r4_fixtures import test_signing_material, trust_context_for_candidate
 
 
 class SwingModelTests(unittest.TestCase):
@@ -71,6 +71,7 @@ class SwingModelTests(unittest.TestCase):
             profitability = pd.read_csv(profitability_path)
             profitability.loc[0, "return_drawdown_ratio"] = 1.0
             profitability.to_csv(profitability_path, index=False)
+            signing_key, trust_store, signer_id = test_signing_material()
             promoted = runner.invoke(
                 app,
                 [
@@ -86,13 +87,17 @@ class SwingModelTests(unittest.TestCase):
                     "--hypothesis-id",
                     "swing-cli-test",
                     "--shadow-bundle",
-                    str(root / "missing-shadow.json"),
-                    "--shadow-ledger",
-                    str(root / "shadow-ledger.jsonl"),
+                    str(root / "trust" / "shadow" / "missing-shadow.json"),
                     "--build-identity",
                     "ci:test",
                     "--approver-identity",
                     "reviewer:test",
+                    "--signing-private-key",
+                    str(signing_key),
+                    "--attestation-trust-store",
+                    str(trust_store),
+                    "--signer-id",
+                    signer_id,
                 ],
             )
             self.assertNotEqual(promoted.exit_code, 0)

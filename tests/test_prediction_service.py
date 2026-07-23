@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import tempfile
 import unittest
 from datetime import UTC, date, datetime, timedelta
@@ -424,6 +425,35 @@ class PredictionServiceTests(unittest.TestCase):
 
             with self.assertRaises(PredictionReadinessError):
                 _service(root, swing=(dataset, model)).predict_swing(PredictionRequest(tickers=["MSFT"], mode="swing"))
+
+    def test_tampered_promotion_attestation_fails_as_not_ready(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            dataset = root / "features.parquet"
+            model = root / "swing.joblib"
+            features = ["return_1d", "volume_z20"]
+            _swing_frame(["MSFT"], features, rows=260).to_parquet(
+                dataset,
+                index=False,
+            )
+            _write_model(
+                model,
+                features,
+                target_col="target_net_positive_5d",
+                status="promoted",
+                probability=0.73,
+            )
+            attestation = model.with_suffix(
+                model.suffix + ".promotion.attestation.json"
+            )
+            payload = json.loads(attestation.read_text(encoding="utf-8"))
+            payload["build_identity"] = "tampered"
+            attestation.write_text(json.dumps(payload), encoding="utf-8")
+
+            with self.assertRaises(PredictionReadinessError):
+                _service(root, swing=(dataset, model)).predict_swing(
+                    PredictionRequest(tickers=["MSFT"], mode="swing")
+                )
 
     def test_warning_readiness_is_never_returned_as_actionable(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

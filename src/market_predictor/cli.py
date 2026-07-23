@@ -22,6 +22,7 @@ from market_predictor.canonical.store import load_canonical_artifact
 from market_predictor.commands.canonical_data import register_canonical_data_commands
 from market_predictor.commands.intraday_model import register_intraday_model_commands
 from market_predictor.commands.ranking import register_ranking_commands
+from market_predictor.commands.release import register_release_commands
 from market_predictor.commands.swing_model import register_swing_model_commands
 from market_predictor.commands.v3_data import register_v3_data_commands
 from market_predictor.commands.v3_evaluation import register_v3_evaluation_commands
@@ -80,6 +81,7 @@ console = Console()
 DEFAULT_MARKET_CONTEXT_PATH = Path("data/external/market_context/market_context_events_scored.parquet")
 register_ranking_commands(app, console)
 register_canonical_data_commands(app, console)
+register_release_commands(app, console)
 register_swing_model_commands(app, console)
 register_intraday_model_commands(app, console)
 register_v3_data_commands(app, console)

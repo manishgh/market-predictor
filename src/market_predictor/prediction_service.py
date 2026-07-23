@@ -70,6 +70,7 @@ from market_predictor.registry import MODEL_STATUS_PROMOTED, file_sha256, verify
 from market_predictor.resources import memory_audit
 from market_predictor.swing.contracts import SWING_MODEL_SCHEMA_VERSION, SWING_MODEL_TYPE
 from market_predictor.swing.model import score_swing_frame
+from market_predictor.v3.errors import DataReadinessError
 
 DEFAULT_MODE_HORIZONS = {"swing": "5d", "intraday": "60m"}
 SERVING_POLICY_ID = "market_predictor.serving_policy.r1_a.v1"
@@ -275,7 +276,14 @@ class PredictionService:
             )
         except PredictionServiceError:
             raise
-        except (FileNotFoundError, KeyError, OSError, TypeError, ValueError) as exc:
+        except (
+            DataReadinessError,
+            FileNotFoundError,
+            KeyError,
+            OSError,
+            TypeError,
+            ValueError,
+        ) as exc:
             raise PredictionReadinessError from exc
 
     def predict_intraday(self, request: PredictionRequest) -> PredictionResponse:
@@ -305,7 +313,14 @@ class PredictionService:
             )
         except PredictionServiceError:
             raise
-        except (FileNotFoundError, KeyError, OSError, TypeError, ValueError) as exc:
+        except (
+            DataReadinessError,
+            FileNotFoundError,
+            KeyError,
+            OSError,
+            TypeError,
+            ValueError,
+        ) as exc:
             raise PredictionReadinessError from exc
 
     def predict_unified(self, request: PredictionRequest) -> PredictionResponse:

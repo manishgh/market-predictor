@@ -5,6 +5,7 @@ description = "Ticker-level market prediction pipeline using news, filings, sent
 requires-python = ">=3.11"
 dependencies = [
     "beautifulsoup4>=4.12.3",
+    "cryptography>=43.0.0",
     "joblib>=1.4.2",
     "numpy>=1.26.4",
     "pandas>=2.2.2",

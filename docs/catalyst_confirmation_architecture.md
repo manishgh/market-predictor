@@ -374,9 +374,9 @@ The repo currently contains several useful families. Their intended roles should
 | Finviz-only expansion models | Research models trained on candidate expansion set | Candidate/research only |
 | Older clean/sector/swing models | Earlier iterations | Deprecated unless explicitly revalidated |
 
-### Current Deployment State (2026-07-22)
+### Current Deployment State (2026-07-23)
 
-The manifest, not the filename, is authoritative.
+The immutable candidate manifest and promotion attestation, not the filename or a mutable status field, are authoritative.
 
 | Route / artifact | Manifest state | Validation summary | Operational decision |
 | --- | --- | --- | --- |
@@ -389,7 +389,8 @@ The manifest, not the filename, is authoritative.
 | Intraday opening V2 logistic baseline | `candidate` | ROC AUC 0.5641; lift 1.1836 | Promotion rejected. |
 | Intraday opening V2 net-positive direction model | `candidate` | ROC AUC 0.4890; lift 0.9162 | Promotion rejected. |
 | Intraday V4-H1 exact 120-minute R1 | `candidate` | NDCG@10 0.4868/0.5131; top-10 excess -0.0802%/-0.0629% | Promotion rejected; shadow not opened. |
-| C6 serving infrastructure | implemented, no active real release | Canonical inference artifacts, atomic snapshots, immutable releases, startup sync, rollback, telemetry, and container contracts are tested | Operationally blocked until a real C4 or C5 model passes promotion; no candidate fallback. |
+| R4 promotion and local release | implemented, no active real release | Candidate isolation, trusted Ed25519 attestation, predeclared hypotheses, one-use canonical shadow ledger, paired confidence gates, versioned local releases, atomic activation, and verified rollback are tested | Operationally blocked until a real C4 or C5 model passes every development and untouched-shadow gate; no candidate fallback. |
+| Azure release transport | `environment_pending` | Existing transport code is not R4 evidence and has not completed a real integration/rollback/DR rehearsal | Excluded from activation authority until infrastructure integration is verified. |
 The V2 structural dataset itself is valid for continued research: 47,614 rows, 196 eligible tickers, 122 sessions, exact 09:30-11:25 ET bar timestamps, no duplicate ticker/timestamp keys, and no cooldown gaps below 13 bars. Catalyst context covered 21.44% of rows; market context covered 87.28%. Reddit coverage was zero in this historical V2 table, so Reddit cannot be claimed as a trained intraday signal yet.
 
 Selected-trade economics are the decisive V2 failure: 558 capped OOS trades produced -0.184% average net realized return, 35.13% win rate, 0.7076 profit factor, 30.28% maximum drawdown, and 64.44% negative periods. All three market regimes were represented, so the rejection is not caused by missing regime coverage.
@@ -398,7 +399,7 @@ Serving rules:
 
 - Each prediction view is produced by exactly one registered model artifact. Probabilities from different targets or horizons are never averaged.
 - Model routes, feature sources, universes, and promotion policy are server-owned; they are not API request fields.
-- Every serving route requires a promoted manifest and a matching model artifact SHA-256 before deserialization.
+- Every serving route requires an immutable candidate manifest, a valid Ed25519 promotion attestation from the server-owned trust store, and matching model/evidence identity before deserialization.
 - No route may silently substitute a candidate model.
 - Unified responses may be partial and must include explicit per-view errors.
 - A view with `warn` or `invalid` readiness is diagnostic only and emits `not_ready`, never an actionable signal.
@@ -406,7 +407,8 @@ Serving rules:
 - Catalyst/news remains an intraday confirmation and ranking overlay until a predeclared ablation on fresh data proves incremental model value.
 - A new intraday hypothesis must first pass both development economics scopes; only then may matured observations after 2026-07-08 be used as an untouched shadow interval.
 - A live snapshot must originate from the canonical label-free inference builder for its mode; arbitrary Parquet and training labels are not accepted.
-- An Azure serving release is one immutable content-addressed unit containing every configured promoted model and registered feature snapshot. The active pointer moves only after all assets and the release manifest exist.
+- The R4 local release is one immutable content-addressed unit containing the model, candidate manifest, promotion attestation, evidence manifest, and all evidence files. One locked local pointer moves only after every asset and the attestation verify.
+- Azure publication and rollback remain `environment_pending`; they are not current activation evidence.
 
 The data, target, ranking, validation, cleanup, and Git checkpoint sequence for the next model generation is defined in [ML Model V3 Improvement Plan](ml_model_v3_plan.md).
 
@@ -474,7 +476,7 @@ Implemented audit surfaces:
 - `build-intraday-dataset` publishes completed 5-minute decisions with exact subsequent 1-minute paths only after timing, dual warm-up, benchmark, SIP, adjustment, source-freshness, cross-section, and memory checks pass.
 - `train-intraday-model` writes separate opportunity/downside validation, unseen-ticker, economics, regime, catalyst, alignment, fold, memory, and provenance evidence in one hash-bound candidate bundle.
 - `promote-intraday-model` verifies every evidence hash and promotes both estimators atomically only when all frozen gates pass.
-- The older `audit-promotion-readiness` / `promote-model` path remains research-only and cannot promote a canonical C4 or C5 artifact.
+- The generic `promote-model` path has been removed. Only the canonical swing and intraday promotion commands can produce an attestation.
 
 ## 12. Production Serving And Releases
 
@@ -482,7 +484,9 @@ The request path performs no provider calls, FinBERT inference, feature building
 
 `publish-live-features` atomically installs the validated inference artifact and manifest at the registered swing or intraday path. The manifest binds the live snapshot to its canonical source hash/type, feature schema, SIP feed, exact columns, one decision timestamp, freshness, and artifact hash. The API validates this identity again before scoring.
 
-Azure publication resolves server-owned routes and creates a content-addressed release containing every promoted model plus registry manifest and every registered live feature snapshot plus manifest. The ordering is assets, immutable release manifest, then mutable active pointer. API startup sync downloads to staging, verifies every hash, installs manifests last, and records the active release only after success. Rollback moves the pointer to a complete prior release; no release asset is modified in place.
+Local publication creates a content-addressed release containing the attested model, immutable candidate manifest, signed promotion attestation, evidence manifest, and all evidence files. It copies into staging, verifies every hash, signature, issuer, and identity, atomically renames the complete release directory, and only then swaps one hash-protected active pointer under an OS-released file lock. Rollback is restricted to the immediately previous release and re-verifies it first. Partial, mutated, unsigned, or untrusted releases never become active.
+
+Azure publication, startup hydration, rollback, and disaster-recovery rehearsal are `environment_pending` and excluded from the R4 acceptance evidence.
 
 Operational surfaces are:
 
@@ -490,7 +494,9 @@ Operational surfaces are:
 - `/v1/health/ready`: promoted model/hash, feature freshness/source/schema, and memory readiness; returns HTTP 503 on required-component failure.
 - `/v1/metrics`: internal bounded counters for latency/errors, prediction readiness, replay outcomes, model hashes, last health, drift, and memory.
 
-Training-reference drift is telemetry, not a promotion bypass or automatic trading veto. Durable prediction-quality evidence comes from immutable prediction snapshots and later replay outcomes. Azure deployment uses separate API and scheduled-job identities; the API receives read-only Blob access, while publication/rollback jobs receive write access.
+Training-reference drift is telemetry, not a promotion bypass or automatic trading veto. Durable prediction-quality evidence comes from immutable prediction snapshots and later replay outcomes. External deployment identities and Blob permissions remain `environment_pending` until Azure integration is resumed.
+
+The R4 shadow bundle binds exact paired session records to candidate, baseline, prediction-policy, and execution-policy identities and recomputes its confidence interval during verification. R5 must replace test/ad hoc outcome preparation with the durable deterministic outcome-maturation repository before any live serving claim; this remains `environment_pending`, not simulated evidence.
 
 ## 13. Prediction Workflow
 

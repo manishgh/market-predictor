@@ -4,19 +4,20 @@ import hashlib
 import json
 import math
 import os
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Any, Literal, cast
 from uuid import uuid4
 
 import pandas as pd
 
+from market_predictor.hypothesis_registry import TEST_CLOCK_ENV
 from market_predictor.locking import file_lock
 from market_predictor.v3.errors import DataReadinessError
 from market_predictor.v3.evaluation import session_block_interval
 
 SHADOW_BUNDLE_SCHEMA = "market_predictor.shadow_evidence.v1"
-SHADOW_LEDGER_ENTRY_SCHEMA = "market_predictor.shadow_ledger_entry.v1"
+SHADOW_LEDGER_ENTRY_SCHEMA = "market_predictor.shadow_ledger_entry.v2"
 ShadowResult = Literal["passed", "failed"]
 
 
@@ -43,9 +44,13 @@ def write_shadow_bundle(
     baseline_id = str(hypothesis.get("baseline_id") or "")
     hypothesis_sha = str(hypothesis.get("record_sha256") or "")
     prediction_policy_sha = str(hypothesis.get("prediction_policy_sha256") or "")
+    execution_policy_sha = str(hypothesis.get("execution_policy_sha256") or "")
+    baseline_artifact_sha = str(hypothesis.get("baseline_artifact_sha256") or "")
     for value, name in (
         (hypothesis_sha, "hypothesis record_sha256"),
         (prediction_policy_sha, "hypothesis prediction_policy_sha256"),
+        (execution_policy_sha, "hypothesis execution_policy_sha256"),
+        (baseline_artifact_sha, "hypothesis baseline_artifact_sha256"),
     ):
         _require_sha256(value, name)
     evidence = sessions.loc[:, sorted(required)].copy()
@@ -77,18 +82,40 @@ def write_shadow_bundle(
         }
         for row in evidence.itertuples(index=False)
     ]
+    if generated_at is not None and os.environ.get(TEST_CLOCK_ENV) != "1":
+        raise DataReadinessError("caller-supplied shadow timestamps are test-only")
     created = _utc(generated_at or datetime.now(UTC))
     declared_at = _parse_utc(str(hypothesis.get("declared_at_utc") or ""), "hypothesis declared_at_utc")
     if created <= declared_at:
         raise DataReadinessError("shadow evidence must be generated after hypothesis declaration")
+    first_session = cast(date, evidence.iloc[0]["session_date_et"])
+    last_session = cast(date, evidence.iloc[-1]["session_date_et"])
+    if first_session <= declared_at.date():
+        raise DataReadinessError("every shadow session must follow hypothesis declaration")
+    if created.date() < last_session:
+        raise DataReadinessError("shadow evidence cannot be generated before its last session")
+    if created > datetime.now(UTC) + timedelta(minutes=5):
+        raise DataReadinessError("shadow evidence generation time cannot be in the future")
+    source_evidence_sha256 = _json_sha256(
+        {
+            "session_returns": records,
+            "candidate_artifact_sha256": candidate_artifact_sha256,
+            "baseline_artifact_sha256": baseline_artifact_sha,
+            "prediction_policy_sha256": prediction_policy_sha,
+            "execution_policy_sha256": execution_policy_sha,
+        }
+    )
     content: dict[str, Any] = {
         "schema": SHADOW_BUNDLE_SCHEMA,
         "hypothesis_id": hypothesis_id,
         "hypothesis_family": family,
         "hypothesis_record_sha256": hypothesis_sha,
         "baseline_id": baseline_id,
+        "baseline_artifact_sha256": baseline_artifact_sha,
         "candidate_artifact_sha256": candidate_artifact_sha256,
         "prediction_policy_sha256": prediction_policy_sha,
+        "execution_policy_sha256": execution_policy_sha,
+        "source_evidence_sha256": source_evidence_sha256,
         "generated_at_utc": created.isoformat(),
         "first_session_date_et": records[0]["session_date_et"],
         "last_session_date_et": records[-1]["session_date_et"],
@@ -121,6 +148,7 @@ def load_shadow_bundle(path: Path) -> dict[str, Any]:
     fingerprint = str(payload.pop("shadow_fingerprint", ""))
     if payload.get("schema") != SHADOW_BUNDLE_SCHEMA or _json_sha256(payload) != fingerprint:
         raise DataReadinessError("shadow evidence bundle integrity check failed")
+    _verify_shadow_statistics(payload)
     return {**payload, "shadow_fingerprint": fingerprint}
 
 
@@ -143,6 +171,74 @@ def shadow_gate_failures(
     return failures
 
 
+def _verify_shadow_statistics(payload: dict[str, Any]) -> None:
+    records = payload.get("session_returns")
+    bootstrap = payload.get("bootstrap")
+    declared = payload.get("paired_improvement_interval")
+    if (
+        not isinstance(records, list)
+        or not records
+        or not isinstance(bootstrap, dict)
+        or not isinstance(declared, dict)
+    ):
+        raise DataReadinessError("shadow evidence statistics are incomplete")
+    expected_source_sha = _json_sha256(
+        {
+            "session_returns": records,
+            "candidate_artifact_sha256": payload.get("candidate_artifact_sha256"),
+            "baseline_artifact_sha256": payload.get("baseline_artifact_sha256"),
+            "prediction_policy_sha256": payload.get("prediction_policy_sha256"),
+            "execution_policy_sha256": payload.get("execution_policy_sha256"),
+        }
+    )
+    if payload.get("source_evidence_sha256") != expected_source_sha:
+        raise DataReadinessError("shadow source evidence identity is invalid")
+    frame = pd.DataFrame(records)
+    required = {
+        "session_date_et",
+        "candidate_benchmark_excess_return",
+        "baseline_benchmark_excess_return",
+    }
+    if required.difference(frame.columns):
+        raise DataReadinessError("shadow evidence session records are incomplete")
+    frame["paired_improvement"] = (
+        pd.to_numeric(
+            frame["candidate_benchmark_excess_return"],
+            errors="coerce",
+        )
+        - pd.to_numeric(
+            frame["baseline_benchmark_excess_return"],
+            errors="coerce",
+        )
+    )
+    iterations = _int_value(bootstrap.get("iterations"))
+    seed = _int_value(bootstrap.get("seed"))
+    if iterations is None or iterations < 100 or seed is None:
+        raise DataReadinessError("shadow evidence bootstrap configuration is invalid")
+    recomputed = session_block_interval(
+        frame,
+        metric=lambda data: float(
+            pd.to_numeric(data["paired_improvement"]).mean()
+        ),
+        iterations=iterations,
+        seed=seed,
+    )
+    if set(declared) != set(recomputed):
+        raise DataReadinessError("shadow evidence interval fields are invalid")
+    for key, expected in recomputed.items():
+        actual = declared.get(key)
+        if isinstance(expected, (int, float)):
+            if _float_value(actual) is None or not math.isclose(
+                float(cast(Any, actual)),
+                float(expected),
+                rel_tol=0.0,
+                abs_tol=1e-15,
+            ):
+                raise DataReadinessError("shadow evidence confidence interval was not reproduced")
+        elif actual != expected:
+            raise DataReadinessError("shadow evidence confidence interval was not reproduced")
+
+
 def consume_shadow_fingerprint(
     ledger_path: Path,
     *,
@@ -150,6 +246,7 @@ def consume_shadow_fingerprint(
     hypothesis: dict[str, Any],
     result: ShadowResult,
     attestation_id: str | None,
+    transaction_id: str,
     consumed_at: datetime | None = None,
 ) -> dict[str, Any]:
     """Append one hash-chained decision; fingerprints are never reusable."""
@@ -162,11 +259,26 @@ def consume_shadow_fingerprint(
     if bundle.get("hypothesis_id") != hypothesis_id or bundle.get("hypothesis_family") != family:
         raise DataReadinessError("shadow evidence does not match the predeclared hypothesis")
     _require_sha256(fingerprint, "shadow_fingerprint")
+    _require_sha256(transaction_id, "transaction_id")
     if attestation_id is not None:
         _require_sha256(attestation_id, "attestation_id")
     with file_lock(ledger_path):
         entries = load_shadow_ledger(ledger_path)
-        if any(entry.get("shadow_fingerprint") == fingerprint for entry in entries):
+        existing = next(
+            (
+                entry
+                for entry in entries
+                if entry.get("shadow_fingerprint") == fingerprint
+            ),
+            None,
+        )
+        if existing is not None:
+            if (
+                existing.get("transaction_id") == transaction_id
+                and existing.get("result") == result
+                and existing.get("attestation_id") == attestation_id
+            ):
+                return existing
             raise DataReadinessError("shadow fingerprint has already been consumed")
         if any(entry.get("hypothesis_family") == family and entry.get("result") == "failed" for entry in entries):
             raise DataReadinessError("hypothesis family was retired by failed shadow evidence")
@@ -180,6 +292,7 @@ def consume_shadow_fingerprint(
             "hypothesis_family": family,
             "result": result,
             "attestation_id": attestation_id,
+            "transaction_id": transaction_id,
             "consumed_at_utc": _utc(consumed_at or datetime.now(UTC)).isoformat(),
         }
         entry = {**content, "entry_sha256": _json_sha256(content)}
