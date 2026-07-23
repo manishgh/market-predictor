@@ -38,6 +38,29 @@ class SwingAlignmentAuditTest(unittest.TestCase):
             + int(audit["benchmark_path_mismatches"]),
         )
 
+    def test_alignment_audit_surfaces_stamped_reconciliation_counts(self) -> None:
+        base = pd.Timestamp("2026-01-05 21:00", tz="UTC")
+        frame = pd.DataFrame(
+            {
+                "decision_time_utc": [base, base],
+                "feature_available_at_utc": [base, base],
+                "feature_eligible": [True, True],
+                "label_window_expected": [True, True],
+                "label_path_exact": [True, True],
+                "future_excess_return_5d_vs_spy": [0.01, 0.02],
+                "future_excess_return_5d_vs_qqq": [0.01, 0.02],
+                "future_excess_return_5d_vs_sector": [0.01, 0.02],
+                # Reconciliation-derived counts stamped by the canonical build.
+                "reconciliation_events_without_feature_row": [3, 3],
+                "reconciliation_dates_with_news_count_mismatch": [2, 2],
+            }
+        )
+        audit = _alignment_audit(frame).iloc[0]
+        self.assertEqual(int(audit["events_without_feature_row"]), 3)
+        self.assertEqual(int(audit["dates_with_news_count_mismatch"]), 2)
+        # No feature-level errors, so the total is the two reconciliation counts.
+        self.assertEqual(int(audit["alignment_error_total"]), 5)
+
     def test_clean_frame_has_no_alignment_errors(self) -> None:
         base = pd.Timestamp("2026-01-05 21:00", tz="UTC")
         frame = pd.DataFrame(

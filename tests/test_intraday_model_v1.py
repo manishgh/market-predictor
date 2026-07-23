@@ -299,6 +299,7 @@ def _training_dataset() -> pd.DataFrame:
                     "concurrent_label_count": 1,
                     "independent_event_id": f"{ticker}:{session.date()}:{group_index}",
                     "intraday_feature_schema_version": INTRADAY_FEATURE_SCHEMA_VERSION,
+                    "reconciliation_sha256": "a" * 64,
                     "market_regime": ["risk_on", "risk_off", "neutral"][session_index % 3],
                     "sector": "Technology",
                     "market_cap_bucket": "large" if ticker_index < 5 else "mid",

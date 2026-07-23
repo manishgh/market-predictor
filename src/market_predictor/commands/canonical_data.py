@@ -273,6 +273,12 @@ def register_canonical_data_commands(app: typer.Typer, console: Any) -> None:
         decisions = aggregate_event_features(decisions, event_frame, require_observed=production)
         reconciliation = reconcile_events(decisions, event_frame)
         reconciliation_stats = reconciliation_summary(reconciliation)
+        reconciliation_hash = reconciliation_sha256(reconciliation)
+        # Stamp the reconciliation identity and derived alignment counts so they ride
+        # the canonical decisions into the model datasets and promotion evidence.
+        decisions["reconciliation_sha256"] = reconciliation_hash
+        decisions["reconciliation_events_without_feature_row"] = int(reconciliation_stats.get("wrong_ticker", 0))
+        decisions["reconciliation_dates_with_news_count_mismatch"] = int(reconciliation_stats.get("duplicate", 0))
         decisions = join_source_collection_status(decisions, collection_frame, source_families=sources)
         feature_timestamps = [
             "bar_available_at_utc",
@@ -302,7 +308,7 @@ def register_canonical_data_commands(app: typer.Typer, console: Any) -> None:
             str(events): file_sha256(events),
             str(source_collections): file_sha256(source_collections),
             str(memberships): file_sha256(memberships),
-            "reconciliation_sha256": reconciliation_sha256(reconciliation),
+            "reconciliation_sha256": reconciliation_hash,
         }
         metrics = _csv(fundamental_metrics)
         if fundamentals is not None:

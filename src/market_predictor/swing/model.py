@@ -15,6 +15,7 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 
+from market_predictor.canonical.reconciliation import stamped_hash, stamped_scalar
 from market_predictor.drift import build_feature_reference_profile
 from market_predictor.execution_policy import (
     DEFAULT_EXECUTION_POLICY,
@@ -389,6 +390,7 @@ def train_swing_model(
         "calibration_method": "isotonic_prior_outer_folds",
         "calibration_seed_folds_excluded": calibration_seed_folds_excluded,
         "feature_set_sha256": feature_set_sha256,
+        "reconciliation_sha256": stamped_hash(dataset, "reconciliation_sha256"),
         "folds_causally_ordered": folds_causally_ordered,
         **prediction_policy_identity(),
         **execution_policy_identity(),
@@ -478,16 +480,20 @@ def _alignment_audit(dataset: pd.DataFrame) -> pd.DataFrame:
     future = int((feature > decision).fillna(True).sum())
     path_mismatch = int((feature_eligible & label_expected & ~label_exact).sum())
     benchmark_mismatch = int((feature_eligible & label_exact & benchmark_missing).sum())
+    events_without_feature_row = stamped_scalar(dataset, "reconciliation_events_without_feature_row")
+    dates_with_news_count_mismatch = stamped_scalar(dataset, "reconciliation_dates_with_news_count_mismatch")
     return pd.DataFrame(
         [
             {
-                "alignment_error_total": future + path_mismatch + benchmark_mismatch,
+                "alignment_error_total": (
+                    future + path_mismatch + benchmark_mismatch + events_without_feature_row + dates_with_news_count_mismatch
+                ),
                 "future_feature_rows": future,
                 "label_path_mismatches": path_mismatch,
                 "benchmark_path_mismatches": benchmark_mismatch,
-                "events_without_feature_row": 0,
+                "events_without_feature_row": events_without_feature_row,
                 "missing_historical_feature_rows": 0,
-                "dates_with_news_count_mismatch": 0,
+                "dates_with_news_count_mismatch": dates_with_news_count_mismatch,
             }
         ]
     )

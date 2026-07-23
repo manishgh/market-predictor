@@ -292,6 +292,7 @@ def _training_dataset() -> pd.DataFrame:
                     "label_path_exact": True,
                     "horizon_sessions": 5,
                     "swing_feature_schema_version": SWING_FEATURE_SCHEMA_VERSION,
+                    "reconciliation_sha256": "a" * 64,
                     "market_regime": regime,
                     "sector": "Technology" if ticker_index % 2 == 0 else "Healthcare",
                     "market_cap_bucket": "large" if ticker_index < 6 else "mid",

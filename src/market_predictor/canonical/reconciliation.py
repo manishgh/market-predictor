@@ -128,6 +128,23 @@ def reconciliation_summary(artifact: pd.DataFrame) -> dict[str, int]:
     return summary
 
 
+def stamped_scalar(frame: pd.DataFrame, column: str, *, default: int = 0) -> int:
+    """Read a per-dataset integer stamped as a constant column (or the default)."""
+
+    if column in frame.columns and len(frame):
+        return int(pd.to_numeric(frame[column], errors="coerce").fillna(default).iloc[0])
+    return default
+
+
+def stamped_hash(frame: pd.DataFrame, column: str) -> str:
+    """Read a per-dataset hash stamped as a constant column (or empty string)."""
+
+    if column in frame.columns and len(frame):
+        value = str(frame[column].iloc[0])
+        return value if value and value.lower() != "nan" else ""
+    return ""
+
+
 def reconciliation_sha256(artifact: pd.DataFrame) -> str:
     payload = (
         artifact.loc[:, ["event_id", "status"]]

@@ -236,6 +236,19 @@ class PromotionGateTest(unittest.TestCase):
                 any("synthetic_bear" in failure and "avg_excess_return_vs_spy" in failure for failure in report["failures"])
             )
 
+    def test_missing_reconciliation_hash_fails_promotion(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            model_path, result, evidence = self._train(temp_dir)
+            metrics = dict(result.metrics)
+            metrics["reconciliation_sha256"] = ""
+            report = promote_swing_model(
+                model_path=model_path,
+                evidence=replace(evidence, metrics=metrics),
+                config=self._config(),
+            )
+            self.assertFalse(report["passed"])
+            self.assertTrue(any("reconciliation_sha256" in failure for failure in report["failures"]))
+
     def test_too_few_sessions_fails_even_with_many_rows(self) -> None:
         with TemporaryDirectory() as temp_dir:
             model_path, result, evidence = self._train(temp_dir)
