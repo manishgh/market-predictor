@@ -69,10 +69,6 @@ from market_predictor.promotion_audit import (
     build_catalyst_news_audit,
     build_market_regime_audit,
     build_walk_forward_profitability_audit,
-    read_audit_record,
-)
-from market_predictor.registry import (
-    promote_model_manifest,
 )
 from market_predictor.schemas import NewsEvent
 from market_predictor.sources import AlpacaSource, FinvizSource, GdeltSource, RedditSource, SeekingAlphaRapidApiSource
@@ -1462,94 +1458,6 @@ def audit_promotion_readiness(
     console.print(summary.iloc[0].to_dict())
     console.print(regime.iloc[0].to_dict())
     console.print(catalyst.iloc[0].to_dict())
-
-
-@app.command("promote-model")
-def promote_model_command(
-    model: Path = typer.Option(..., help="Model artifact to promote."),
-    metrics: Path = typer.Option(..., help="Metrics CSV produced by the model training command."),
-    alignment_audit: Path | None = typer.Option(
-        None,
-        help="Alignment audit CSV from audit-swing-alignment. Required by default.",
-    ),
-    profitability_audit: Path | None = typer.Option(None, help="Profitability audit CSV from audit-promotion-readiness."),
-    regime_audit: Path | None = typer.Option(None, help="Market-regime audit CSV from audit-promotion-readiness."),
-    catalyst_audit: Path | None = typer.Option(None, help="Catalyst/news audit CSV from audit-promotion-readiness."),
-    report_out: Path | None = typer.Option(
-        None,
-        help="Promotion/rejection JSON report. Defaults beside the model manifest.",
-    ),
-    min_roc_auc: float = typer.Option(0.65, help="Minimum out-of-sample ROC AUC."),
-    min_top_decile_lift: float = typer.Option(2.0, help="Minimum top-decile lift."),
-    min_validated_rows: int = typer.Option(20_000, help="Minimum out-of-sample validated rows."),
-    min_tickers: int = typer.Option(200, help="Minimum distinct tickers in the training set."),
-    max_alignment_errors: int = typer.Option(0, help="Maximum allowed alignment audit errors/mismatches."),
-    require_alignment_audit: bool = typer.Option(True, help="Reject if alignment audit is not supplied."),
-    min_selected_trades: int = typer.Option(100, help="Minimum selected OOS trades in profitability audit."),
-    min_avg_trade_return: float = typer.Option(0.0, help="Minimum average return of selected OOS trades."),
-    min_profit_factor: float = typer.Option(1.05, help="Minimum selected-trade profit factor."),
-    max_strategy_drawdown: float = typer.Option(0.25, help="Maximum selected-trade cumulative drawdown."),
-    min_return_drawdown_ratio: float = typer.Option(0.5, help="Minimum selected-trade cumulative return to drawdown ratio."),
-    max_negative_period_rate: float = typer.Option(0.55, help="Maximum share of selected periods with negative average return."),
-    require_profitability_audit: bool = typer.Option(True, help="Reject if profitability audit is not supplied."),
-    min_regime_count: int = typer.Option(3, help="Minimum number of market regimes represented."),
-    max_single_regime_share: float = typer.Option(0.85, help="Maximum training rows allowed in one market regime."),
-    require_regime_audit: bool = typer.Option(True, help="Reject if regime audit is not supplied."),
-    max_low_relevance_event_rate: float = typer.Option(0.25, help="Maximum low-relevance event rate in catalyst audit."),
-    require_catalyst_audit: bool = typer.Option(True, help="Reject if catalyst/news audit is not supplied."),
-) -> None:
-    """Promote a candidate model only after production audit gates pass."""
-    if not model.exists():
-        raise typer.BadParameter(f"Missing model artifact: {model}")
-    if not metrics.exists():
-        raise typer.BadParameter(f"Missing metrics CSV: {metrics}")
-    metric_frame = pd.read_csv(metrics)
-    if metric_frame.empty:
-        raise typer.BadParameter(f"Metrics CSV has no rows: {metrics}")
-    metric_record = metric_frame.iloc[0].to_dict()
-    audit_frame = None
-    if alignment_audit is not None:
-        if not alignment_audit.exists():
-            raise typer.BadParameter(f"Missing alignment audit CSV: {alignment_audit}")
-        audit_frame = pd.read_csv(alignment_audit)
-    profitability_frame = read_audit_record(profitability_audit)
-    regime_frame = read_audit_record(regime_audit)
-    catalyst_frame = read_audit_record(catalyst_audit)
-    if report_out is None:
-        report_out = model.with_suffix(model.suffix + ".promotion_report.json")
-    result = promote_model_manifest(
-        model_path=model,
-        metrics=metric_record,
-        alignment_audit=audit_frame,
-        profitability_audit=profitability_frame,
-        regime_audit=regime_frame,
-        catalyst_audit=catalyst_frame,
-        min_roc_auc=min_roc_auc,
-        min_top_decile_lift=min_top_decile_lift,
-        min_validated_rows=min_validated_rows,
-        min_tickers=min_tickers,
-        max_alignment_errors=max_alignment_errors,
-        require_alignment_audit=require_alignment_audit,
-        min_selected_trades=min_selected_trades,
-        min_avg_trade_return=min_avg_trade_return,
-        min_profit_factor=min_profit_factor,
-        max_strategy_drawdown=max_strategy_drawdown,
-        min_return_drawdown_ratio=min_return_drawdown_ratio,
-        max_negative_period_rate=max_negative_period_rate,
-        require_profitability_audit=require_profitability_audit,
-        min_regime_count=min_regime_count,
-        max_single_regime_share=max_single_regime_share,
-        require_regime_audit=require_regime_audit,
-        max_low_relevance_event_rate=max_low_relevance_event_rate,
-        require_catalyst_audit=require_catalyst_audit,
-        report_path=report_out,
-    )
-    if not result["passed"]:
-        console.print("[red]Model promotion rejected[/red]")
-        console.print(result)
-        raise typer.Exit(code=1)
-    console.print("[green]Model promoted[/green]")
-    console.print(result)
 
 
 @app.command("score-flashpoints")

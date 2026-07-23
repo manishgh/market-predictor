@@ -16,6 +16,7 @@ from market_predictor.swing.contracts import (
     SWING_MODEL_SCHEMA_VERSION,
     SWING_MODEL_TYPE,
 )
+from tests.r4_fixtures import authorize_candidate_for_test, synthetic_identity_metrics
 
 
 class GlobalContextTests(unittest.TestCase):
@@ -83,6 +84,10 @@ class GlobalContextTests(unittest.TestCase):
                     {"ticker": "DAL", "date": "2026-07-01", "feature": 0.2, "target": 0},
                 ]
             )
+            metrics = {
+                **synthetic_identity_metrics(model_type=SWING_MODEL_TYPE, model_run_id="global-context-test"),
+                "roc_auc": 0.7,
+            }
             write_model_manifest(
                 model_path=model_path,
                 model_type=SWING_MODEL_TYPE,
@@ -90,10 +95,11 @@ class GlobalContextTests(unittest.TestCase):
                 target_col="target_net_positive_5d",
                 features=["feature"],
                 training_data=training.assign(target_net_positive_5d=training["target"]),
-                metrics={"roc_auc": 0.7},
+                metrics=metrics,
                 validation_split="session_purged_walk_forward_and_ticker_holdout",
-                status="promoted",
+                extra={"model_run_id": "global-context-test"},
             )
+            authorize_candidate_for_test(model_path, metrics)
             dataset = pd.DataFrame(
                 [
                     {

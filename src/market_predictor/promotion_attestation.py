@@ -55,7 +55,7 @@ def build_promotion_attestation(
 
     manifest_path = candidate_manifest_path_for(model_path)
     manifest = _load_json_object(manifest_path, "candidate manifest")
-    if manifest.get("schema") != "model_registry_manifest.v1" or manifest.get("status") != "candidate":
+    if manifest.get("schema") != "model_registry_manifest.v2" or manifest.get("status") != "candidate":
         raise DataReadinessError("promotion attestation requires an immutable candidate manifest")
     if not model_path.is_file():
         raise DataReadinessError(f"candidate model artifact is missing: {model_path}")

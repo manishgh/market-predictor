@@ -34,6 +34,7 @@ from market_predictor.swing.contracts import (
     SWING_MODEL_SCHEMA_VERSION,
     SWING_MODEL_TYPE,
 )
+from tests.r4_fixtures import authorize_candidate_for_test, synthetic_identity_metrics
 
 
 class FixedProbabilityModel:
@@ -559,6 +560,14 @@ def _write_model(
     joblib.dump(payload, path)
     training = _swing_frame(["MSFT", "AAPL"], features, rows=300)
     training["target"] = [idx % 2 for idx in range(len(training))]
+    model_run_id = f"prediction-service-{path.stem}"
+    metrics = {
+        **synthetic_identity_metrics(model_type=model_type, model_run_id=model_run_id),
+        "roc_auc": 0.7,
+        "top_decile_lift": 2.1,
+        "validated_rows": 250,
+        "tickers": 2,
+    }
     write_model_manifest(
         model_path=path,
         model_type=model_type,
@@ -566,17 +575,16 @@ def _write_model(
         target_col=target_col,
         features=features,
         training_data=training.assign(**{target_col: training["target"]}),
-        metrics={
-            "roc_auc": 0.7,
-            "top_decile_lift": 2.1,
-            "validated_rows": 250,
-            "tickers": 2,
-        },
+        metrics=metrics,
         validation_split=(
             "session_purged_walk_forward_and_ticker_holdout" if is_swing else "session_purged_walk_forward_and_ticker_holdout"
         ),
-        status=status,
+        extra={"model_run_id": model_run_id},
     )
+    if status == "promoted":
+        authorize_candidate_for_test(path, metrics)
+    elif status != "candidate":
+        raise ValueError(f"unsupported test model status: {status}")
 
 
 def _publish_live_swing(

@@ -12,6 +12,7 @@ from market_predictor.canonical.store import (
     write_canonical_artifact,
 )
 from market_predictor.commands.configuration import load_typed_config
+from market_predictor.promotion_workflow import PromotionTrustContext
 from market_predictor.registry import manifest_path_for
 from market_predictor.swing.contracts import (
     SwingDatasetConfig,
@@ -166,6 +167,17 @@ def register_swing_model_commands(app: typer.Typer, console: Console) -> None:
     def promote_swing_model_command(
         model: Path = typer.Option(..., help="Candidate canonical swing model."),
         evidence_dir: Path = typer.Option(..., help="Evidence directory produced by training."),
+        hypothesis_registry: Path = typer.Option(..., help="Root containing immutable hypothesis declarations."),
+        hypothesis_id: str = typer.Option(..., help="Predeclared hypothesis identifier."),
+        shadow_bundle: Path = typer.Option(..., help="Immutable untouched-shadow evidence bundle."),
+        shadow_ledger: Path = typer.Option(..., help="Append-only one-use shadow ledger."),
+        build_identity: str = typer.Option(..., help="CI/build workload identity recorded in the attestation."),
+        approver_identity: str = typer.Option(..., help="Reviewer identity recorded in the attestation."),
+        minimum_shadow_sessions: int = typer.Option(60, min=2, help="Minimum independent shadow sessions."),
+        minimum_paired_improvement_ci_low: float = typer.Option(
+            0.0,
+            help="Paired benchmark-excess improvement CI lower bound must be strictly above this value.",
+        ),
         config_path: Path | None = typer.Option(None, "--config", help="Promotion gate JSON or TOML config."),
         report_out: Path | None = typer.Option(None, help="Optional promotion report path."),
     ) -> None:
@@ -176,6 +188,16 @@ def register_swing_model_commands(app: typer.Typer, console: Console) -> None:
             model_path=model,
             evidence=evidence,
             config=load_typed_config(config_path, SwingPromotionConfig),
+            trust_context=PromotionTrustContext(
+                hypothesis_registry_root=hypothesis_registry,
+                hypothesis_id=hypothesis_id,
+                shadow_bundle_path=shadow_bundle,
+                shadow_ledger_path=shadow_ledger,
+                build_identity=build_identity,
+                approver_identity=approver_identity,
+                minimum_shadow_sessions=minimum_shadow_sessions,
+                minimum_paired_improvement_ci_low=minimum_paired_improvement_ci_low,
+            ),
             report_path=report_out,
         )
         console.print(result)

@@ -542,7 +542,6 @@ def train_intraday_model(
         training_data=data,
         metrics=metrics,
         validation_split=INTRADAY_VALIDATION_SPLIT,
-        status=MODEL_STATUS_CANDIDATE,
         extra={
             "model_run_id": model_run_id,
             "dataset_sha256": dataset_sha256,

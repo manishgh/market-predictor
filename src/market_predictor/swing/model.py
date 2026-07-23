@@ -428,7 +428,6 @@ def train_swing_model(
         training_data=data,
         metrics=metrics,
         validation_split=SWING_VALIDATION_SPLIT,
-        status=MODEL_STATUS_CANDIDATE,
         extra={
             "dataset_sha256": dataset_sha256,
             "feature_schema_version": SWING_FEATURE_SCHEMA_VERSION,

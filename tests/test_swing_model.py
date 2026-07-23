@@ -13,7 +13,7 @@ from typer.testing import CliRunner
 from market_predictor.canonical.audits import CanonicalAuditCheck, CanonicalAuditReport
 from market_predictor.canonical.store import write_canonical_artifact
 from market_predictor.cli import app
-from market_predictor.registry import load_model_manifest
+from market_predictor.registry import load_model_manifest, verify_model_artifact
 from market_predictor.swing.contracts import (
     SWING_FEATURE_SCHEMA_VERSION,
     SWING_FEATURES,
@@ -25,10 +25,10 @@ from market_predictor.swing.model import score_swing_frame, train_swing_model
 from market_predictor.swing.promotion import (
     load_swing_training_evidence,
     promote_swing_model,
-    promotion_evidence_from_result,
     write_swing_training_evidence,
 )
 from market_predictor.v3.errors import DataReadinessError, SchemaMismatchError
+from tests.r4_fixtures import trust_context_for_candidate
 
 
 class SwingModelTests(unittest.TestCase):
@@ -81,6 +81,18 @@ class SwingModelTests(unittest.TestCase):
                     str(evidence_dir),
                     "--config",
                     str(promotion_config),
+                    "--hypothesis-registry",
+                    str(root / "trust"),
+                    "--hypothesis-id",
+                    "swing-cli-test",
+                    "--shadow-bundle",
+                    str(root / "missing-shadow.json"),
+                    "--shadow-ledger",
+                    str(root / "shadow-ledger.jsonl"),
+                    "--build-identity",
+                    "ci:test",
+                    "--approver-identity",
+                    "reviewer:test",
                 ],
             )
             self.assertNotEqual(promoted.exit_code, 0)
@@ -154,14 +166,15 @@ class SwingModelTests(unittest.TestCase):
             required = representation["required"].fillna(False).astype(bool)
             self.assertTrue(representation.loc[required, "represented"].astype(bool).all())
             self.assertEqual(result.profitability_audit.iloc[0]["phase"], "conservative")
-            paths = write_swing_training_evidence(result, Path(temp_dir) / "evidence")
+            evidence_dir = Path(temp_dir) / "evidence"
+            paths = write_swing_training_evidence(result, evidence_dir)
             self.assertTrue(all(path.exists() for path in paths.values()))
             with self.assertRaises(FileExistsError):
                 write_swing_training_evidence(result, Path(temp_dir) / "evidence")
 
             mismatched_alignment = result.alignment_audit.copy()
             mismatched_alignment["model_run_id"] = "different-run"
-            evidence = promotion_evidence_from_result(result)
+            evidence = load_swing_training_evidence(evidence_dir, model_path)
             rejected = promote_swing_model(
                 model_path=model_path,
                 evidence=replace(evidence, alignment_audit=mismatched_alignment),
@@ -171,15 +184,21 @@ class SwingModelTests(unittest.TestCase):
             self.assertTrue(any("model_run_id" in failure for failure in rejected["failures"]))
             self.assertEqual(load_model_manifest(model_path)["status"], "candidate")
 
-            promotable_profitability = result.profitability_audit.copy()
-            promotable_profitability.loc[0, "return_drawdown_ratio"] = 1.0
+            trust_context = trust_context_for_candidate(
+                Path(temp_dir) / "trust",
+                model_path=model_path,
+                metrics=result.metrics,
+                model_type=SWING_MODEL_TYPE,
+            )
             promoted = promote_swing_model(
                 model_path=model_path,
-                evidence=replace(evidence, profitability_audit=promotable_profitability),
+                evidence=evidence,
                 config=_permissive_promotion_config(),
+                trust_context=trust_context,
             )
             self.assertTrue(promoted["passed"], promoted["failures"])
-            self.assertEqual(load_model_manifest(model_path)["status"], "promoted")
+            self.assertEqual(load_model_manifest(model_path)["status"], "candidate")
+            self.assertEqual(verify_model_artifact(model_path, allowed_statuses={"promoted"})["status"], "promoted")
 
             latest = dataset.sort_values("decision_time_utc").groupby("ticker", as_index=False).tail(1)
             scored = score_swing_frame(latest, model_path, require_promoted=True)
@@ -277,7 +296,7 @@ def _training_dataset() -> pd.DataFrame:
             feature_map = dict(zip(SWING_FEATURES, feature_values, strict=True))
             signal = 0.9 * feature_map["return_20d"] + 0.6 * feature_map["volume_z20"] + rng.normal(0, 0.8)
             target = int(signal > 0)
-            net_return = (0.012 if target else -0.010) + float(rng.normal(0, 0.004))
+            net_return = (0.012 if target else -0.002) + float(rng.normal(0, 0.001))
             rows.append(
                 {
                     "ticker": ticker,

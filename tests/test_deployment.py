@@ -27,6 +27,7 @@ from market_predictor.swing.contracts import (
     SWING_MODEL_TYPE,
 )
 from market_predictor.v3.errors import DataReadinessError
+from tests.r4_fixtures import authorize_candidate_for_test, synthetic_identity_metrics
 
 
 class InMemoryBlobStore:
@@ -101,7 +102,8 @@ class ServingDeploymentTests(unittest.TestCase):
             first_release = str(first["release_id"])
             first_model_hash = file_sha256(model)
 
-            _write_promoted_model(source, marker="second")
+            second_model = _write_promoted_model(source, marker="second")
+            routes = {"swing": {"5d": ServingRoute(model=second_model.relative_to(source), bar_timeframe="1Day")}}
             second = publish_serving_release(
                 store,
                 root=source,
@@ -122,8 +124,8 @@ class ServingDeploymentTests(unittest.TestCase):
 
             synced = sync_active_serving_release(store, root=target)
             self.assertEqual(synced["release_id"], first_release)
-            self.assertEqual(file_sha256(target / "models/swing.joblib"), first_model_hash)
-            self.assertTrue((target / "models/swing.joblib.manifest.json").exists())
+            self.assertEqual(file_sha256(target / "models/swing-first.joblib"), first_model_hash)
+            self.assertTrue((target / "models/swing-first.joblib.manifest.json").exists())
             self.assertTrue((target / "data/live/features/swing.parquet").exists())
             self.assertTrue((target / "data/live/.active_release.json").exists())
 
@@ -228,7 +230,7 @@ class ServingDeploymentTests(unittest.TestCase):
 
 
 def _write_promoted_model(root: Path, *, marker: str) -> Path:
-    model = root / "models/swing.joblib"
+    model = root / f"models/swing-{marker}.joblib"
     model.parent.mkdir(parents=True, exist_ok=True)
     joblib.dump({"marker": marker}, model)
     training = pd.DataFrame(
@@ -239,6 +241,11 @@ def _write_promoted_model(root: Path, *, marker: str) -> Path:
             "target_net_positive_5d": [1, 0, 1, 0],
         }
     )
+    model_run_id = f"deployment-{marker}"
+    metrics = {
+        **synthetic_identity_metrics(model_type=SWING_MODEL_TYPE, model_run_id=model_run_id),
+        "roc_auc": 0.7,
+    }
     write_model_manifest(
         model_path=model,
         model_type=SWING_MODEL_TYPE,
@@ -246,10 +253,11 @@ def _write_promoted_model(root: Path, *, marker: str) -> Path:
         target_col="target_net_positive_5d",
         features=["return_1d"],
         training_data=training,
-        metrics={"roc_auc": 0.7},
+        metrics=metrics,
         validation_split="session_purged_walk_forward_and_ticker_holdout",
-        status="promoted",
+        extra={"model_run_id": model_run_id},
     )
+    authorize_candidate_for_test(model, metrics)
     return model
 
 

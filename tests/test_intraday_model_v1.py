@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import tempfile
 import unittest
+from dataclasses import replace
 from pathlib import Path
 
 import numpy as np
@@ -10,6 +11,7 @@ import pandas as pd
 from market_predictor.intraday.contracts import (
     INTRADAY_FEATURE_SCHEMA_VERSION,
     INTRADAY_MODEL_FEATURES,
+    INTRADAY_MODEL_TYPE,
     IntradayPromotionConfig,
     IntradayTrainingConfig,
     downside_target_column,
@@ -26,6 +28,7 @@ from market_predictor.intraday.promotion import (
 )
 from market_predictor.registry import verify_model_artifact
 from market_predictor.v3.errors import DataReadinessError
+from tests.r4_fixtures import trust_context_for_candidate
 
 
 class IntradayModelV1Tests(unittest.TestCase):
@@ -120,10 +123,38 @@ class IntradayModelV1Tests(unittest.TestCase):
                 load_intraday_training_evidence(evidence_dir, model_path)
             paths["profitability"].write_bytes(original_profitability)
             loaded = load_intraday_training_evidence(evidence_dir, model_path)
+            substituted_profitability = loaded.profitability_audit.copy()
+            substituted_profitability.loc[0, "avg_trade_return"] = 1.0
+            rejected = promote_intraday_model(
+                model_path=model_path,
+                evidence=replace(
+                    loaded,
+                    profitability_audit=substituted_profitability,
+                ),
+                config=IntradayPromotionConfig(
+                    min_validated_rows=100,
+                    min_tickers=6,
+                    min_selected_trades=1,
+                    min_catalyst_coverage_rate=0.10,
+                ),
+            )
+            self.assertFalse(rejected["passed"])
+            self.assertTrue(
+                any(
+                    "differs from its persisted bundle" in failure
+                    for failure in rejected["failures"]
+                )
+            )
 
             report = promote_intraday_model(
                 model_path=model_path,
                 evidence=loaded,
+                trust_context=trust_context_for_candidate(
+                    root / "trust",
+                    model_path=model_path,
+                    metrics=result.metrics,
+                    model_type=INTRADAY_MODEL_TYPE,
+                ),
                 config=IntradayPromotionConfig(
                     min_validated_rows=100,
                     min_tickers=6,

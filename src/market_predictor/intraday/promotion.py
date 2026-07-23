@@ -18,6 +18,11 @@ from market_predictor.intraday.contracts import (
     IntradayPromotionConfig,
 )
 from market_predictor.prediction_policy import PREDICTION_POLICY_SHA256
+from market_predictor.promotion_workflow import (
+    PromotionTrustContext,
+    TrustedPromotionOutcome,
+    evaluate_shadow_and_attest,
+)
 from market_predictor.registry import (
     MODEL_STATUS_CANDIDATE,
     MODEL_STATUS_PROMOTED,
@@ -40,6 +45,7 @@ class IntradayPromotionEvidence:
     alignment_audit: pd.DataFrame
     provenance: str
     evidence_manifest: dict[str, Any] | None = None
+    evidence_manifest_path: Path | None = None
 
 
 def promote_intraday_model(
@@ -47,12 +53,15 @@ def promote_intraday_model(
     model_path: Path,
     evidence: IntradayPromotionEvidence,
     config: IntradayPromotionConfig | None = None,
+    trust_context: PromotionTrustContext | None = None,
     report_path: Path | None = None,
 ) -> dict[str, Any]:
     config = config or IntradayPromotionConfig()
     metrics = evidence.metrics
+    evidence_manifest_path = evidence.evidence_manifest_path
     manifest = verify_model_artifact(model_path, allowed_statuses={MODEL_STATUS_CANDIDATE})
     failures: list[str] = []
+    failures.extend(_persisted_evidence_binding_failures(evidence, model_path))
     if manifest.get("model_type") != INTRADAY_MODEL_TYPE:
         failures.append(f"model_type must be {INTRADAY_MODEL_TYPE}")
     if manifest.get("schema_version") != INTRADAY_MODEL_SCHEMA_VERSION:
@@ -73,6 +82,12 @@ def promote_intraday_model(
     }
     for name, audit in audits.items():
         failures.extend(_audit_provenance_failures(name, audit, model_run_id))
+    if (
+        evidence.provenance != "hash_verified_evidence_bundle"
+        or evidence.evidence_manifest is None
+        or evidence_manifest_path is None
+    ):
+        failures.append("promotion requires a hash-verified persisted training evidence bundle")
 
     failures.extend(
         _metric_gate_failures(
@@ -215,6 +230,31 @@ def promote_intraday_model(
         if total > config.max_alignment_errors:
             failures.append(f"alignment errors {total} > {config.max_alignment_errors}")
 
+    trust_outcome: TrustedPromotionOutcome | None = None
+    if not failures:
+        if trust_context is None:
+            failures.append("promotion trust context is required")
+        elif evidence_manifest_path is None:
+            failures.append("promotion evidence manifest path is required")
+        else:
+            gate_config = {
+                **config.model_dump(),
+                "minimum_shadow_sessions": trust_context.minimum_shadow_sessions,
+                "minimum_paired_improvement_ci_low": trust_context.minimum_paired_improvement_ci_low,
+            }
+            try:
+                trust_outcome = evaluate_shadow_and_attest(
+                    model_path=model_path,
+                    evidence_manifest_path=evidence_manifest_path,
+                    metrics=metrics,
+                    gate_config=gate_config,
+                    context=trust_context,
+                )
+            except DataReadinessError as exc:
+                failures.append(str(exc))
+            else:
+                failures.extend(trust_outcome.failures)
+
     requested_at = datetime.now(UTC).isoformat()
     effective_report_path = report_path or model_path.with_suffix(model_path.suffix + ".promotion.json")
     report: dict[str, Any] = {
@@ -229,26 +269,18 @@ def promote_intraday_model(
         "failures": failures,
         "thresholds": config.model_dump(),
         "metrics": metrics,
+        "shadow": trust_outcome.shadow_evidence if trust_outcome is not None else None,
+        "shadow_ledger_entry": trust_outcome.ledger_entry if trust_outcome is not None else None,
     }
     if failures:
         _write_json_atomic(effective_report_path, report)
         return report
 
-    promoted_at = datetime.now(UTC).isoformat()
-    history = list(manifest.get("promotion_history") or [])
-    history.append(
-        {
-            "status": MODEL_STATUS_PROMOTED,
-            "model_run_id": model_run_id,
-            "promoted_at_utc": promoted_at,
-            "thresholds": config.model_dump(),
-        }
-    )
-    manifest["status"] = MODEL_STATUS_PROMOTED
-    manifest["promoted_at_utc"] = promoted_at
-    manifest["promotion_history"] = history
-    _write_json_atomic(manifest_path_for(model_path), manifest)
+    if trust_outcome is None or trust_outcome.attestation is None or trust_outcome.attestation_path is None:
+        raise DataReadinessError("promotion passed without producing an immutable attestation")
     report["new_status"] = MODEL_STATUS_PROMOTED
+    report["attestation_id"] = trust_outcome.attestation["attestation_id"]
+    report["attestation_path"] = str(trust_outcome.attestation_path)
     _write_json_atomic(effective_report_path, report)
     return report
 
@@ -302,6 +334,7 @@ def promotion_evidence_from_result(result: IntradayTrainingResult) -> IntradayPr
         catalyst_audit=result.catalyst_audit,
         alignment_audit=result.alignment_audit,
         provenance="in_memory_training_result",
+        evidence_manifest_path=None,
     )
 
 
@@ -356,7 +389,35 @@ def load_intraday_training_evidence(
         alignment_audit=pd.read_csv(verified["alignment"]),
         provenance="hash_verified_evidence_bundle",
         evidence_manifest=manifest,
+        evidence_manifest_path=evidence_manifest_path,
     )
+
+
+def _persisted_evidence_binding_failures(
+    evidence: IntradayPromotionEvidence,
+    model_path: Path,
+) -> list[str]:
+    if evidence.evidence_manifest_path is None:
+        return []
+    persisted = load_intraday_training_evidence(
+        evidence.evidence_manifest_path.parent,
+        model_path,
+    )
+    if evidence.evidence_manifest != persisted.evidence_manifest:
+        return ["supplied intraday evidence manifest differs from its persisted bundle"]
+    if evidence.metrics != persisted.metrics:
+        return ["supplied intraday metrics differ from their persisted bundle"]
+    frames = (
+        ("profitability", evidence.profitability_audit, persisted.profitability_audit),
+        ("regime", evidence.regime_audit, persisted.regime_audit),
+        ("catalyst", evidence.catalyst_audit, persisted.catalyst_audit),
+        ("alignment", evidence.alignment_audit, persisted.alignment_audit),
+    )
+    return [
+        f"supplied intraday {name} evidence differs from its persisted bundle"
+        for name, supplied, canonical in frames
+        if not supplied.equals(canonical)
+    ]
 
 
 def _audit_provenance_failures(name: str, audit: pd.DataFrame, model_run_id: str) -> list[str]:
