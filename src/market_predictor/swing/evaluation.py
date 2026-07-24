@@ -21,7 +21,13 @@ from market_predictor.prediction_policy import (
     finite_or_none,
     select_swing_candidates,
 )
+from market_predictor.regime_evidence import (
+    REGIME_BOOTSTRAP_ITERATIONS,
+    REGIME_BOOTSTRAP_SEED,
+    session_block_mean_interval,
+)
 from market_predictor.swing.contracts import (
+    SWING_REQUIRED_MARKET_REGIMES,
     swing_excess_column,
     swing_net_return_column,
     swing_target_column,
@@ -153,7 +159,16 @@ def phase_economics(
             }
         returns = selected["_net"].dropna()
         period = selected.groupby("session_date_et")["_net"].mean().dropna()
-        records.append(_economic_record(returns, excess, period, scope=scope, phase=phase))
+        records.append(
+            _economic_record(
+                returns,
+                excess,
+                period,
+                session_ids=selected["session_date_et"],
+                scope=scope,
+                phase=phase,
+            )
+        )
     return pd.DataFrame(records)
 
 
@@ -176,6 +191,15 @@ def conservative_economics(economics: pd.DataFrame) -> pd.DataFrame:
         "avg_excess_return_vs_sector": float(
             pd.to_numeric(economics["avg_excess_return_vs_sector"], errors="coerce").min()
         ),
+        "avg_trade_return_ci_low": float(
+            pd.to_numeric(economics["avg_trade_return_ci_low"], errors="coerce").min()
+        ),
+        "avg_excess_return_vs_spy_ci_low": float(
+            pd.to_numeric(
+                economics["avg_excess_return_vs_spy_ci_low"],
+                errors="coerce",
+            ).min()
+        ),
         "win_rate": float(pd.to_numeric(economics["win_rate"], errors="coerce").min()),
         "profit_factor": float(pd.to_numeric(economics["profit_factor"], errors="coerce").min()),
         "cumulative_return": float(pd.to_numeric(economics["cumulative_return"], errors="coerce").min()),
@@ -197,6 +221,7 @@ def regime_audit(
     target_column: str,
     min_regime_sessions: int = 5,
     min_regime_trades: int = 20,
+    required_regimes: tuple[str, ...] = SWING_REQUIRED_MARKET_REGIMES,
     policy: ExecutionCostPolicy | None = None,
 ) -> pd.DataFrame:
     """Per-regime selected-policy economics, calibration, and evidence status.
@@ -217,15 +242,46 @@ def regime_audit(
         "max_single_regime_share": float(counts.max() / total) if total else 1.0,
         "rows": total,
         "evidence_status": "summary",
+        "required_regime": False,
+        "minimum_sessions": min_regime_sessions,
+        "minimum_trades": min_regime_trades,
         "selected_trades": float("nan"),
         "sessions": float("nan"),
         "avg_trade_return": float("nan"),
         "avg_excess_return_vs_spy": float("nan"),
+        "avg_trade_return_ci_low": float("nan"),
+        "avg_excess_return_vs_spy_ci_low": float("nan"),
         "max_drawdown": float("nan"),
         "calibration_error": float("nan"),
     }
     details: list[dict[str, object]] = []
-    for regime, subset in labelled.groupby("_regime", sort=False):
+    observed_regimes = list(labelled["_regime"].drop_duplicates())
+    audit_regimes = [*required_regimes, *(regime for regime in observed_regimes if regime not in required_regimes)]
+    for regime in audit_regimes:
+        subset = labelled[labelled["_regime"].eq(regime)]
+        required = regime in required_regimes
+        if subset.empty:
+            details.append(
+                {
+                    "scope": f"regime:{regime}",
+                    "regimes_present": int(counts.size),
+                    "max_single_regime_share": 0.0,
+                    "rows": 0,
+                    "evidence_status": "missing_required" if required else "insufficient_evidence",
+                    "required_regime": required,
+                    "minimum_sessions": min_regime_sessions,
+                    "minimum_trades": min_regime_trades,
+                    "selected_trades": 0,
+                    "sessions": 0,
+                    "avg_trade_return": None,
+                    "avg_excess_return_vs_spy": None,
+                    "avg_trade_return_ci_low": None,
+                    "avg_excess_return_vs_spy_ci_low": None,
+                    "max_drawdown": None,
+                    "calibration_error": None,
+                }
+            )
+            continue
         record = conservative_economics(
             phase_economics(subset, horizon=horizon, top_k=top_k, scope=f"regime:{regime}", policy=policy)
         ).iloc[0]
@@ -239,10 +295,19 @@ def regime_audit(
                 "max_single_regime_share": float(counts.get(regime, 0) / total) if total else 1.0,
                 "rows": int(counts.get(regime, 0)),
                 "evidence_status": status,
+                "required_regime": required,
+                "minimum_sessions": min_regime_sessions,
+                "minimum_trades": min_regime_trades,
                 "selected_trades": trades,
                 "sessions": sessions,
                 "avg_trade_return": finite_or_none(record.get("avg_trade_return")),
                 "avg_excess_return_vs_spy": finite_or_none(record.get("avg_excess_return_vs_spy")),
+                "avg_trade_return_ci_low": finite_or_none(
+                    record.get("avg_trade_return_ci_low")
+                ),
+                "avg_excess_return_vs_spy_ci_low": finite_or_none(
+                    record.get("avg_excess_return_vs_spy_ci_low")
+                ),
                 "max_drawdown": finite_or_none(record.get("max_drawdown")),
                 "calibration_error": (
                     expected_calibration_error(subset[target_column], subset["swing_probability"])
@@ -282,6 +347,7 @@ def _economic_record(
     excess: dict[str, pd.Series],
     period_returns: pd.Series,
     *,
+    session_ids: pd.Series,
     scope: str,
     phase: int | str,
 ) -> dict[str, object]:
@@ -291,11 +357,25 @@ def _economic_record(
     cumulative = float(equity.iloc[-1] - 1.0) if not equity.empty else float("nan")
     drawdown = float((equity / equity.cummax() - 1.0).min()) if not equity.empty else float("nan")
     drawdown_abs = abs(drawdown) if np.isfinite(drawdown) else float("nan")
+    return_interval = session_block_mean_interval(
+        session_ids.reindex(returns.index),
+        returns,
+    )
+    spy_excess = excess["spy"]
+    spy_interval = session_block_mean_interval(
+        session_ids.reindex(spy_excess.index),
+        spy_excess,
+    )
     return {
         "scope": scope,
         "phase": phase,
         "selected_trades": int(len(returns)),
         "avg_trade_return": float(returns.mean()) if not returns.empty else float("nan"),
+        "avg_trade_return_ci_low": return_interval["low"],
+        "avg_excess_return_vs_spy_ci_low": spy_interval["low"],
+        "confidence_method": "session_block_bootstrap_95pct",
+        "confidence_iterations": REGIME_BOOTSTRAP_ITERATIONS,
+        "confidence_seed": REGIME_BOOTSTRAP_SEED,
         **{
             f"avg_excess_return_vs_{benchmark}": (
                 float(values.mean()) if not values.empty else float("nan")

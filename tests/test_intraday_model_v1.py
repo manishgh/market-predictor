@@ -239,9 +239,24 @@ class IntradayModelV1Tests(unittest.TestCase):
                     min_stress_avg_trade_return=-1.0,
                     min_stress_avg_excess_return_vs_spy=-1.0,
                     min_worst_regime_avg_excess_return_vs_spy=-1.0,
+                    min_worst_regime_avg_trade_return_ci_low=-1.0,
+                    min_worst_regime_avg_excess_return_vs_spy_ci_low=-1.0,
+                    min_required_regime_sessions=2,
+                    min_required_regime_trades=1,
                     max_worst_regime_drawdown=1.0,
                     max_worst_regime_calibration_error=1.0,
                     min_capacity_avg_net_return=-1.0,
+                    min_avg_trade_return=-1.0,
+                    min_avg_excess_return_vs_spy=-1.0,
+                    min_avg_excess_return_vs_qqq=-1.0,
+                    min_avg_excess_return_vs_sector=-1.0,
+                    min_profit_factor=0.0,
+                    max_drawdown=1.0,
+                    min_return_drawdown_ratio=0.0,
+                    max_negative_session_rate=1.0,
+                    max_average_turnover=2.0,
+                    min_regimes=1,
+                    max_single_regime_share=1.0,
                 ),
             )
 
@@ -350,6 +365,8 @@ def _training_config() -> IntradayTrainingConfig:
         ticker_holdout_fraction=0.2,
         top_k=3,
         max_trades_per_session=6,
+        min_regime_sessions=2,
+        min_regime_trades=1,
         max_iter=150,
     )
 
@@ -362,7 +379,7 @@ def _training_dataset() -> pd.DataFrame:
         sort_keys=True,
         separators=(",", ":"),
     )
-    sessions = pd.bdate_range("2025-01-02", periods=30)
+    sessions = pd.bdate_range("2025-01-02", periods=60)
     tickers = [f"T{index:02d}" for index in range(10)]
     rows: list[dict[str, object]] = []
     horizon = 60
@@ -409,7 +426,12 @@ def _training_dataset() -> pd.DataFrame:
                     "reconciliation_sha256": "a" * 64,
                     "dataset_label_config_sha256": label_config.label_config_sha256(),
                     "dataset_label_policy_json": label_policy_json,
-                    "market_regime": ["risk_on", "risk_off", "neutral"][session_index % 3],
+                    "market_regime": [
+                        "risk_on",
+                        "risk_off",
+                        "neutral",
+                        "high_volatility",
+                    ][session_index % 4],
                     "sector": "Technology",
                     "market_cap_bucket": "large" if ticker_index < 5 else "mid",
                     "liquidity_bucket": "high" if ticker_index % 2 else "medium",

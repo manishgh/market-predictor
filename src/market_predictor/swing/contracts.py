@@ -10,6 +10,7 @@ SWING_FEATURE_SCHEMA_VERSION = "swing.features.v1"
 SWING_MODEL_SCHEMA_VERSION = "swing.model.v1"
 SWING_MODEL_TYPE = "canonical_swing"
 SWING_VALIDATION_SPLIT = "session_purged_walk_forward_and_ticker_holdout"
+SWING_REQUIRED_MARKET_REGIMES = ("risk_on", "neutral", "risk_off")
 
 SECTOR_BENCHMARKS = (
     "XLB",
@@ -199,6 +200,8 @@ class SwingTrainingConfig(FrozenConfig):
     min_feature_non_null_rate: float = Field(default=0.05, ge=0, le=1)
     ticker_holdout_fraction: float = Field(default=0.2, gt=0, lt=1)
     top_k: int = Field(default=10, ge=1, le=100)
+    min_regime_sessions: int = Field(default=5, ge=2)
+    min_regime_trades: int = Field(default=20, ge=1)
     max_iter: int = Field(default=250, ge=25, le=2_000)
     learning_rate: float = Field(default=0.04, gt=0, le=1)
     l2_regularization: float = Field(default=1.0, ge=0)
@@ -233,6 +236,10 @@ class SwingPromotionConfig(FrozenConfig):
     min_stress_avg_trade_return: float = 0.0
     min_stress_avg_excess_return_vs_spy: float = 0.0
     min_worst_regime_avg_excess_return_vs_spy: float = -0.01
+    min_worst_regime_avg_trade_return_ci_low: float = 0.0
+    min_worst_regime_avg_excess_return_vs_spy_ci_low: float = 0.0
+    min_required_regime_sessions: int = Field(default=5, ge=2)
+    min_required_regime_trades: int = Field(default=20, ge=1)
     max_worst_regime_drawdown: float = Field(default=0.35, gt=0, le=1)
     max_worst_regime_calibration_error: float = Field(default=0.15, ge=0, le=1)
     min_selected_trades: int = Field(default=100, ge=1)

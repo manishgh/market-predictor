@@ -17,6 +17,7 @@ from market_predictor.promotion_workflow import (
     TrustedPromotionOutcome,
     evaluate_shadow_and_attest,
 )
+from market_predictor.regime_evidence import regime_promotion_failures
 from market_predictor.registry import (
     MODEL_STATUS_CANDIDATE,
     MODEL_STATUS_PROMOTED,
@@ -27,6 +28,7 @@ from market_predictor.registry import (
 from market_predictor.swing.contracts import (
     SWING_MODEL_SCHEMA_VERSION,
     SWING_MODEL_TYPE,
+    SWING_REQUIRED_MARKET_REGIMES,
     SWING_VALIDATION_SPLIT,
     SwingPromotionConfig,
 )
@@ -502,22 +504,23 @@ def _causal_identity_failures(metrics: dict[str, Any]) -> list[str]:
 
 
 def _worst_regime_failures(regime_audit: pd.DataFrame, config: SwingPromotionConfig) -> list[str]:
-    if "evidence_status" not in regime_audit.columns:
-        return ["regime audit is missing per-regime evidence status"]
-    failures: list[str] = []
-    sufficient = regime_audit[regime_audit["evidence_status"].astype(str) == "sufficient"]
-    for _, detail in sufficient.iterrows():
-        scope = str(detail.get("scope"))
-        excess = _finite_number(detail.get("avg_excess_return_vs_spy"))
-        if excess is None or excess < config.min_worst_regime_avg_excess_return_vs_spy:
-            failures.append(f"{scope} avg_excess_return_vs_spy {excess} < {config.min_worst_regime_avg_excess_return_vs_spy}")
-        drawdown = _finite_number(detail.get("max_drawdown"))
-        if drawdown is not None and drawdown > config.max_worst_regime_drawdown:
-            failures.append(f"{scope} max_drawdown {drawdown} > {config.max_worst_regime_drawdown}")
-        calibration = _finite_number(detail.get("calibration_error"))
-        if calibration is not None and calibration > config.max_worst_regime_calibration_error:
-            failures.append(f"{scope} calibration_error {calibration} > {config.max_worst_regime_calibration_error}")
-    return failures
+    return regime_promotion_failures(
+        regime_audit,
+        required_regimes=SWING_REQUIRED_MARKET_REGIMES,
+        min_required_sessions=config.min_required_regime_sessions,
+        min_required_trades=config.min_required_regime_trades,
+        min_avg_excess_return_vs_spy=(
+            config.min_worst_regime_avg_excess_return_vs_spy
+        ),
+        min_avg_trade_return_ci_low=(
+            config.min_worst_regime_avg_trade_return_ci_low
+        ),
+        min_avg_excess_return_vs_spy_ci_low=(
+            config.min_worst_regime_avg_excess_return_vs_spy_ci_low
+        ),
+        max_drawdown=config.max_worst_regime_drawdown,
+        max_calibration_error=config.max_worst_regime_calibration_error,
+    )
 
 
 def _finite_number(value: object) -> float | None:

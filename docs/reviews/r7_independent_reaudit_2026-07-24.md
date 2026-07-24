@@ -64,9 +64,14 @@ swing/intraday identities and a configured-versus-scored promotion regression pa
 Intraday evidence now reports summed label uniqueness and independently non-overlapping
 event count, uses their minimum as effective evidence, gates development and ticker
 holdout scopes, and retains independent sessions as a separate gate. Uniformly reducing
-all uniqueness weights now reduces effective evidence. Required-regime confidence bounds,
-full-cross-section seen/unseen attribution, and in-selection capacity/no-fill behavior
-remain open.
+all uniqueness weights now reduces effective evidence. Swing requires risk-on, neutral,
+and risk-off evidence; intraday additionally requires high-volatility evidence. Every
+required regime is emitted even when absent, with explicit session/trade thresholds.
+Deterministic session-block bootstrap lower bounds are computed inside each
+non-overlapping phase, conservatively combined across phases, and promotion rejects
+missing/thin required regimes or populated regimes whose return or SPY-excess lower bound
+misses its configured threshold. Full-cross-section seen/unseen attribution and
+in-selection capacity/no-fill behavior remain open.
 
 ### R7.3 - Event-To-Feature Reconciliation
 
@@ -137,7 +142,7 @@ approved; they are not simulated as passing evidence.
 
 ## Current Verified Evidence
 
-- 318 repository tests pass locally.
+- 320 repository tests pass locally.
 - The focused R7 trust/race/rollback/memory/idempotency suite passes 37 tests.
 - Repository-wide Ruff, strict mypy on Windows and Linux targets, and compile checks pass.
 - Dependency locks regenerate deterministically and the production dependency audit reports

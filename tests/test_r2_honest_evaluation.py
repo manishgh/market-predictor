@@ -371,8 +371,11 @@ class SparseRegimeTest(unittest.TestCase):
         )
         dense = audit[audit["scope"] == "regime:dense"].iloc[0]
         sparse = audit[audit["scope"] == "regime:sparse"].iloc[0]
+        missing_required = audit[audit["scope"] == "regime:risk_off"].iloc[0]
         self.assertEqual(dense["evidence_status"], "sufficient")
         self.assertEqual(sparse["evidence_status"], "insufficient_evidence")
+        self.assertEqual(missing_required["evidence_status"], "missing_required")
+        self.assertTrue(bool(missing_required["required_regime"]))
 
 
 class PromotionGateTest(unittest.TestCase):
@@ -444,6 +447,56 @@ class PromotionGateTest(unittest.TestCase):
             self.assertFalse(report["passed"])
             self.assertTrue(
                 any("synthetic_bear" in failure and "avg_excess_return_vs_spy" in failure for failure in report["failures"])
+            )
+
+    def test_positive_regime_point_with_negative_confidence_bound_fails(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            model_path, result, evidence = self._train(temp_dir)
+            regime = result.regime_audit.copy()
+            risk_on = regime["scope"].eq("regime:risk_on")
+            regime.loc[risk_on, "avg_trade_return"] = 0.05
+            regime.loc[risk_on, "avg_excess_return_vs_spy"] = 0.04
+            regime.loc[risk_on, "avg_trade_return_ci_low"] = -0.01
+            regime.loc[risk_on, "avg_excess_return_vs_spy_ci_low"] = -0.02
+            report = promote_swing_model(
+                model_path=model_path,
+                evidence=replace(evidence, regime_audit=regime),
+                config=self._config(
+                    min_worst_regime_avg_trade_return_ci_low=0.0,
+                    min_worst_regime_avg_excess_return_vs_spy_ci_low=0.0,
+                ),
+            )
+            self.assertFalse(report["passed"])
+            self.assertTrue(
+                any(
+                    "regime:risk_on avg_trade_return_ci_low" in failure
+                    for failure in report["failures"]
+                )
+            )
+            self.assertTrue(
+                any(
+                    "regime:risk_on avg_excess_return_vs_spy_ci_low" in failure
+                    for failure in report["failures"]
+                )
+            )
+
+    def test_missing_required_regime_fails_promotion(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            model_path, result, evidence = self._train(temp_dir)
+            regime = result.regime_audit[
+                ~result.regime_audit["scope"].eq("regime:risk_off")
+            ].copy()
+            report = promote_swing_model(
+                model_path=model_path,
+                evidence=replace(evidence, regime_audit=regime),
+                config=self._config(),
+            )
+            self.assertFalse(report["passed"])
+            self.assertTrue(
+                any(
+                    "regime:risk_off required regime evidence is missing" in failure
+                    for failure in report["failures"]
+                )
             )
 
     def test_missing_reconciliation_hash_fails_promotion(self) -> None:

@@ -378,6 +378,8 @@ def train_intraday_model(
         downside_ceiling=config.max_downside_probability,
         max_trades_per_session=config.max_trades_per_session,
         target_column=opportunity_target,
+        min_regime_sessions=config.min_regime_sessions,
+        min_regime_trades=config.min_regime_trades,
         policy=DEFAULT_EXECUTION_POLICY,
     )
     catalyst = catalyst_audit(combined_evidence)

@@ -307,6 +307,8 @@ def train_swing_model(
         horizon=horizon,
         top_k=config.top_k,
         target_column=target,
+        min_regime_sessions=config.min_regime_sessions,
+        min_regime_trades=config.min_regime_trades,
         policy=DEFAULT_EXECUTION_POLICY,
     )
     catalyst = catalyst_audit(combined_regime_evidence)
