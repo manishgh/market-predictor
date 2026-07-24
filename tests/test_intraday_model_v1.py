@@ -111,6 +111,19 @@ class IntradayModelV1Tests(unittest.TestCase):
             result.metrics["configured_validation_folds"],
             result.metrics["validation_folds"] + excluded_folds,
         )
+        expected_uniqueness = float(result.oof_predictions["overlap_weight"].sum())
+        expected_events = int(
+            result.oof_predictions["independent_event_id"].dropna().nunique()
+        )
+        self.assertAlmostEqual(
+            result.metrics["summed_label_uniqueness"],
+            expected_uniqueness,
+        )
+        self.assertEqual(result.metrics["independent_event_count"], expected_events)
+        self.assertAlmostEqual(
+            result.metrics["effective_sample_size"],
+            min(expected_uniqueness, float(expected_events)),
+        )
         self.assertEqual(
             set(validation_folds["feature_set_sha256"]),
             {result.manifest["dataset"]["feature_schema_hash"]},
@@ -152,6 +165,34 @@ class IntradayModelV1Tests(unittest.TestCase):
                 load_intraday_training_evidence(evidence_dir, model_path)
             paths["profitability"].write_bytes(original_profitability)
             loaded = load_intraday_training_evidence(evidence_dir, model_path)
+            low_overlap_metrics = dict(loaded.metrics)
+            low_overlap_metrics["validated_rows"] = 1_000_000
+            low_overlap_metrics["effective_sample_size"] = 1.0
+            low_overlap_metrics["holdout_effective_sample_size"] = 1.0
+            low_overlap = promote_intraday_model(
+                model_path=model_path,
+                evidence=replace(loaded, metrics=low_overlap_metrics),
+                config=IntradayPromotionConfig(
+                    min_validated_rows=100,
+                    min_tickers=6,
+                    min_selected_trades=1,
+                    min_catalyst_coverage_rate=0.10,
+                    min_effective_sample_size=2.0,
+                ),
+            )
+            self.assertFalse(low_overlap["passed"])
+            self.assertTrue(
+                any(
+                    "effective_sample_size" in failure
+                    for failure in low_overlap["failures"]
+                )
+            )
+            self.assertTrue(
+                any(
+                    "holdout_effective_sample_size" in failure
+                    for failure in low_overlap["failures"]
+                )
+            )
             substituted_profitability = loaded.profitability_audit.copy()
             substituted_profitability.loc[0, "avg_trade_return"] = 1.0
             rejected = promote_intraday_model(

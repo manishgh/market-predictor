@@ -136,6 +136,10 @@ def promote_intraday_model(
                 "independent_sessions": (float(config.min_independent_sessions), "min"),
                 "validation_folds": (float(config.min_validation_folds), "min"),
                 "effective_sample_size": (config.min_effective_sample_size, "min"),
+                "holdout_effective_sample_size": (
+                    config.min_effective_sample_size,
+                    "min",
+                ),
                 "capacity_min_avg_net_return": (config.min_capacity_avg_net_return, "min"),
             },
         )

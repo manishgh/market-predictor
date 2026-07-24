@@ -19,6 +19,9 @@ from market_predictor.execution_policy import (
     executable_fill_prices,
 )
 from market_predictor.intraday.evaluation import (
+    overlap_evidence_summary,
+)
+from market_predictor.intraday.evaluation import (
     phase_economics as intraday_phase_economics,
 )
 from market_predictor.intraday.labels import add_overlap_metadata
@@ -206,6 +209,21 @@ class AverageUniquenessTest(unittest.TestCase):
         self.assertEqual(list(out["concurrent_label_count"]), [2, 2, 1])
         # Greedy non-overlapping independent events: A and C.
         self.assertEqual(int(out["independent_event_id"].notna().sum()), 2)
+
+    def test_effective_evidence_decreases_with_uniformly_lower_uniqueness(self) -> None:
+        event_ids = pd.Series(["event-1", "event-2", "event-3", "event-4"])
+        unique = overlap_evidence_summary(pd.Series([1.0] * 4), event_ids)
+        overlapping = overlap_evidence_summary(pd.Series([0.25] * 4), event_ids)
+        event_bounded = overlap_evidence_summary(
+            pd.Series([1.0] * 4),
+            pd.Series(["event-1", pd.NA, "event-2", pd.NA], dtype="string"),
+        )
+
+        self.assertEqual(unique["effective_sample_size"], 4.0)
+        self.assertEqual(overlapping["summed_label_uniqueness"], 1.0)
+        self.assertEqual(overlapping["effective_sample_size"], 1.0)
+        self.assertEqual(event_bounded["independent_event_count"], 2)
+        self.assertEqual(event_bounded["effective_sample_size"], 2.0)
 
 
 class GapThroughFillTest(unittest.TestCase):

@@ -39,7 +39,7 @@ from market_predictor.intraday.evaluation import (
     catalyst_audit,
     classification_metrics,
     conservative_economics,
-    effective_sample_size,
+    overlap_evidence_summary,
     phase_economics,
     prediction_evidence,
     regime_audit,
@@ -465,6 +465,14 @@ def train_intraday_model(
         policy=DEFAULT_EXECUTION_POLICY,
     )
     robust = profitability.iloc[0].to_dict()
+    overlap_evidence = overlap_evidence_summary(
+        oof["overlap_weight"],
+        oof["independent_event_id"],
+    )
+    holdout_overlap_evidence = overlap_evidence_summary(
+        holdout_evidence["overlap_weight"],
+        holdout_evidence["independent_event_id"],
+    )
     capacity_min_avg_net_return = float(pd.to_numeric(capacity["avg_net_return"], errors="coerce").min())
     if not np.isfinite(capacity_min_avg_net_return):
         # No point-in-time liquidity evidence in this dataset: fall back to the
@@ -489,8 +497,16 @@ def train_intraday_model(
         "configured_validation_folds": config.n_splits,
         "scored_validation_fold_ids": scored_validation_fold_ids,
         "capacity_min_avg_net_return": capacity_min_avg_net_return,
-        "effective_sample_size": effective_sample_size(oof["overlap_weight"]),
-        "holdout_effective_sample_size": effective_sample_size(holdout_evidence["overlap_weight"]),
+        **overlap_evidence,
+        "holdout_summed_label_uniqueness": holdout_overlap_evidence[
+            "summed_label_uniqueness"
+        ],
+        "holdout_independent_event_count": holdout_overlap_evidence[
+            "independent_event_count"
+        ],
+        "holdout_effective_sample_size": holdout_overlap_evidence[
+            "effective_sample_size"
+        ],
         "calibration_method": "isotonic_prior_outer_folds",
         "calibration_seed_folds_excluded": calibration_seed_folds_excluded,
         "feature_set_sha256": feature_set_sha256,

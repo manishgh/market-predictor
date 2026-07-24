@@ -61,8 +61,12 @@ diagnostic evidence, and records the exact scored IDs. Benchmark excess is now c
 as gross return minus exactly one execution cost minus the matched raw benchmark return;
 the frozen-label fallback subtracts only the incremental stress surcharge. Hand-calculated
 swing/intraday identities and a configured-versus-scored promotion regression pass.
-Overlap-aware evidence, required-regime confidence bounds, full-cross-section
-seen/unseen attribution, and in-selection capacity/no-fill behavior remain open.
+Intraday evidence now reports summed label uniqueness and independently non-overlapping
+event count, uses their minimum as effective evidence, gates development and ticker
+holdout scopes, and retains independent sessions as a separate gate. Uniformly reducing
+all uniqueness weights now reduces effective evidence. Required-regime confidence bounds,
+full-cross-section seen/unseen attribution, and in-selection capacity/no-fill behavior
+remain open.
 
 ### R7.3 - Event-To-Feature Reconciliation
 
@@ -133,7 +137,7 @@ approved; they are not simulated as passing evidence.
 
 ## Current Verified Evidence
 
-- 317 repository tests pass locally.
+- 318 repository tests pass locally.
 - The focused R7 trust/race/rollback/memory/idempotency suite passes 37 tests.
 - Repository-wide Ruff, strict mypy on Windows and Linux targets, and compile checks pass.
 - Dependency locks regenerate deterministically and the production dependency audit reports

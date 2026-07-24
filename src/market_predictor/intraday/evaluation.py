@@ -114,22 +114,32 @@ def classification_metrics(target: pd.Series, probability: pd.Series) -> dict[st
     }
 
 
-def effective_sample_size(weights: pd.Series) -> float:
-    """Kish effective sample size from label uniqueness weights.
+def overlap_evidence_summary(
+    weights: pd.Series,
+    independent_event_ids: pd.Series,
+) -> dict[str, float | int]:
+    """Summarize overlapping-label evidence conservatively.
 
-    ``(sum w)^2 / sum w^2``. Equals the row count when every label is fully
-    unique and shrinks as overlapping labels share information. Evaluation never
-    filters or reweights economics by these training weights; this is a reported
-    sufficiency statistic only.
+    Summed average uniqueness measures label-equivalent information. The
+    independent-event count is the greedy non-overlapping subset emitted by
+    label construction. Effective evidence is bounded by both; independent
+    sessions are reported and gated separately by the trainer.
     """
 
-    values = pd.to_numeric(weights, errors="coerce").dropna()
-    positive = values[values > 0]
-    if positive.empty:
-        return 0.0
-    total = float(positive.sum())
-    total_squared = float((positive**2).sum())
-    return (total * total) / total_squared if total_squared > 0 else 0.0
+    if len(weights) != len(independent_event_ids):
+        raise ValueError("overlap weights and independent event IDs must align")
+    values = pd.to_numeric(weights, errors="coerce")
+    if bool((values.isna() | values.le(0) | values.gt(1)).any()):
+        raise ValueError("overlap weights must be finite and in the interval (0, 1]")
+    event_ids = independent_event_ids.astype("string")
+    populated = event_ids[event_ids.notna() & event_ids.str.strip().ne("")]
+    summed_uniqueness = float(values.sum())
+    independent_events = int(populated.nunique())
+    return {
+        "summed_label_uniqueness": summed_uniqueness,
+        "independent_event_count": independent_events,
+        "effective_sample_size": min(summed_uniqueness, float(independent_events)),
+    }
 
 
 def phase_economics(
