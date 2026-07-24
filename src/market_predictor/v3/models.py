@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import ctypes
-import gc
 import hashlib
 import importlib
 import importlib.metadata
@@ -22,6 +20,7 @@ from sklearn.metrics import average_precision_score, ndcg_score, roc_auc_score
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 
+from market_predictor.process_memory import process_memory_snapshot, release_process_memory
 from market_predictor.registry import feature_schema_hash, manifest_path_for, write_model_manifest
 from market_predictor.v3.errors import DataReadinessError
 from market_predictor.v3.features import V3_FEATURE_SCHEMA_VERSION, core_feature_columns
@@ -770,66 +769,16 @@ def _assert_memory_budget(
 
 
 def _current_process_rss_bytes() -> int | None:
-    snapshot = _process_memory_snapshot()
+    snapshot = process_memory_snapshot()
     return snapshot[0] if snapshot is not None else None
 
 
-def _process_memory_snapshot() -> tuple[int, int] | None:
-    if os.name == "nt":
-        class ProcessMemoryCounters(ctypes.Structure):
-            _fields_ = [
-                ("cb", ctypes.c_ulong),
-                ("PageFaultCount", ctypes.c_ulong),
-                ("PeakWorkingSetSize", ctypes.c_size_t),
-                ("WorkingSetSize", ctypes.c_size_t),
-                ("QuotaPeakPagedPoolUsage", ctypes.c_size_t),
-                ("QuotaPagedPoolUsage", ctypes.c_size_t),
-                ("QuotaPeakNonPagedPoolUsage", ctypes.c_size_t),
-                ("QuotaNonPagedPoolUsage", ctypes.c_size_t),
-                ("PagefileUsage", ctypes.c_size_t),
-                ("PeakPagefileUsage", ctypes.c_size_t),
-            ]
-
-        counters = ProcessMemoryCounters()
-        counters.cb = ctypes.sizeof(counters)
-        get_current_process = ctypes.windll.kernel32.GetCurrentProcess
-        get_current_process.restype = ctypes.c_void_p
-        get_process_memory_info = ctypes.windll.psapi.GetProcessMemoryInfo
-        get_process_memory_info.argtypes = [
-            ctypes.c_void_p,
-            ctypes.POINTER(ProcessMemoryCounters),
-            ctypes.c_ulong,
-        ]
-        get_process_memory_info.restype = ctypes.c_int
-        if get_process_memory_info(get_current_process(), ctypes.byref(counters), counters.cb):
-            return int(counters.WorkingSetSize), int(counters.PeakWorkingSetSize)
-        return None
-    statm = Path("/proc/self/statm")
-    if statm.exists():
-        resident_pages = int(statm.read_text(encoding="ascii").split()[1])
-        sysconf = os.__dict__.get("sysconf")
-        if not callable(sysconf):
-            return None
-        page_size = int(sysconf("SC_PAGE_SIZE"))
-        rss = resident_pages * page_size
-        return rss, rss
-    return None
-
-
 def _release_training_memory() -> None:
-    gc.collect()
-    if os.name != "nt":
-        return
-    get_current_process = ctypes.windll.kernel32.GetCurrentProcess
-    get_current_process.restype = ctypes.c_void_p
-    empty_working_set = ctypes.windll.psapi.EmptyWorkingSet
-    empty_working_set.argtypes = [ctypes.c_void_p]
-    empty_working_set.restype = ctypes.c_int
-    empty_working_set(get_current_process())
+    release_process_memory()
 
 
 def _memory_audit(config: V3TrainingConfig) -> dict[str, float | None]:
-    snapshot = _process_memory_snapshot()
+    snapshot = process_memory_snapshot()
     return {
         "hard_budget_gib": config.max_training_memory_gb,
         "safety_threshold_gib": config.max_training_memory_gb - config.memory_guard_headroom_gb,

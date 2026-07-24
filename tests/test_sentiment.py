@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import unittest
+from unittest.mock import patch
 
 import pandas as pd
 
 from market_predictor.features import add_finbert_with_scorer
-from market_predictor.sentiment import build_sentiment_inputs
+from market_predictor.sentiment import _load_optional_dependency, build_sentiment_inputs
 
 
 class _FakeScorer:
@@ -68,6 +69,15 @@ class SentimentInputTests(unittest.TestCase):
         self.assertEqual(scorer.texts[0], "Raises guidance. Revenue beats estimates")
         self.assertEqual(scored["text"].tolist(), self.events["text"].tolist())
         self.assertTrue(scored["sentiment_numeric"].eq(0.9).all())
+
+    def test_missing_optional_dependency_has_actionable_error(self) -> None:
+        missing = ModuleNotFoundError("No module named 'torch'", name="torch")
+
+        with (
+            patch("market_predictor.sentiment.importlib.import_module", side_effect=missing),
+            self.assertRaisesRegex(RuntimeError, "install the market-predictor 'training' dependency group"),
+        ):
+            _load_optional_dependency("torch", extra="training")
 
 
 if __name__ == "__main__":

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from typing import Any, cast
+import importlib
+from types import ModuleType
+from typing import Any
 
 import pandas as pd
 
@@ -39,8 +41,8 @@ class FinbertScorer:
         torch_num_threads: int = 0,
         max_length: int = 512,
     ) -> None:
-        import torch
-        from transformers import AutoModelForSequenceClassification, AutoTokenizer, pipeline
+        torch = _load_optional_dependency("torch", extra="training")
+        transformers = _load_optional_dependency("transformers", extra="training")
 
         self.model_name = model_name
         self.max_length = max(1, int(max_length))
@@ -48,17 +50,20 @@ class FinbertScorer:
             torch.set_num_threads(torch_num_threads)
         device = 0 if torch.cuda.is_available() else -1
         try:
-            tokenizer = AutoTokenizer.from_pretrained(model_name, local_files_only=True)
-            model = AutoModelForSequenceClassification.from_pretrained(model_name, local_files_only=True)
+            tokenizer = transformers.AutoTokenizer.from_pretrained(model_name, local_files_only=True)
+            model = transformers.AutoModelForSequenceClassification.from_pretrained(
+                model_name,
+                local_files_only=True,
+            )
         except OSError as exc:
             raise RuntimeError(
                 f"FinBERT model {model_name!r} is not available in the local cache; "
                 "run `market-predictor download-model` before offline inference."
             ) from exc
-        self.classifier: Any = pipeline(
+        self.classifier: Any = transformers.pipeline(
             "text-classification",
             model=model,
-            tokenizer=cast(Any, tokenizer),
+            tokenizer=tokenizer,
             device=device,
             truncation=True,
             max_length=self.max_length,
@@ -89,7 +94,18 @@ class FinbertScorer:
 
 
 def download_model(model_name: str) -> None:
-    from transformers import AutoModelForSequenceClassification, AutoTokenizer
+    transformers = _load_optional_dependency("transformers", extra="training")
+    transformers.AutoTokenizer.from_pretrained(model_name)
+    transformers.AutoModelForSequenceClassification.from_pretrained(model_name)
 
-    AutoTokenizer.from_pretrained(model_name)
-    AutoModelForSequenceClassification.from_pretrained(model_name)
+
+def _load_optional_dependency(module_name: str, *, extra: str) -> ModuleType:
+    try:
+        return importlib.import_module(module_name)
+    except ModuleNotFoundError as exc:
+        if exc.name != module_name:
+            raise
+        raise RuntimeError(
+            f"Optional dependency {module_name!r} is required; "
+            f"install the market-predictor {extra!r} dependency group."
+        ) from exc

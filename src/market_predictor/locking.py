@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import importlib
 import os
 import time
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
+from typing import Any
 
 
 class LockTimeout(RuntimeError):
@@ -43,26 +45,19 @@ def file_lock(target: Path, *, timeout: float = 30.0, poll_seconds: float = 0.05
 
 def _try_lock(descriptor: int) -> None:
     if os.name == "nt":
-        import msvcrt
-
+        msvcrt: Any = importlib.import_module("msvcrt")
         os.lseek(descriptor, 0, os.SEEK_SET)
         msvcrt.locking(descriptor, msvcrt.LK_NBLCK, 1)
         return
-    import fcntl
-
-    fcntl.flock(  # type: ignore[attr-defined]
-        descriptor,
-        fcntl.LOCK_EX | fcntl.LOCK_NB,  # type: ignore[attr-defined]
-    )
+    fcntl: Any = importlib.import_module("fcntl")
+    fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
 
 
 def _unlock(descriptor: int) -> None:
     if os.name == "nt":
-        import msvcrt
-
+        msvcrt: Any = importlib.import_module("msvcrt")
         os.lseek(descriptor, 0, os.SEEK_SET)
         msvcrt.locking(descriptor, msvcrt.LK_UNLCK, 1)
         return
-    import fcntl
-
-    fcntl.flock(descriptor, fcntl.LOCK_UN)  # type: ignore[attr-defined]
+    fcntl: Any = importlib.import_module("fcntl")
+    fcntl.flock(descriptor, fcntl.LOCK_UN)
