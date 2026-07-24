@@ -1,5 +1,9 @@
 # Market Prediction Intelligence Architecture
 
+Implementation and review of this architecture are governed by
+[`AGENTS.md`](../AGENTS.md). Its convergence rules, evidence requirements, ML
+invariants, and checkpoint definition of done are normative.
+
 This document defines the operational design for `market-predictor` as a prediction intelligence system.
 
 The system produces swing, daily momentum, and intraday setup predictions from catalysts, news, filings, sentiment, market context, and price behavior. It does not own final trade execution, portfolio state, order routing, position sizing, stops, or exits.

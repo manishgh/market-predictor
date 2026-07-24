@@ -1,5 +1,8 @@
 # Market Predictor
 
+All contributors and coding agents must follow the mandatory convergence and ML
+engineering rules in [AGENTS.md](AGENTS.md) before changing this repository.
+
 Python prediction-intelligence project for ticker-level swing, daily momentum, and intraday setup scoring using:
 
 - Alpaca premium news, ticker universe, and market bars as the primary live source.

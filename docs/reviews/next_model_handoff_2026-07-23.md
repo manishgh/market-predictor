@@ -1,5 +1,9 @@
 # Market Predictor Remediation Handoff - R1-R6 Implemented, R7 Next
 
+Mandatory first step for every continuation: read
+[`AGENTS.md`](../../AGENTS.md). Do not reopen a completed checkpoint without new
+reproducible evidence that meets its reopening rule.
+
 Date: 2026-07-24
 Repository: `C:\project\market-predictor`
 Remote: `https://github.com/manishgh/market-predictor` (origin)
