@@ -70,8 +70,11 @@ required regime is emitted even when absent, with explicit session/trade thresho
 Deterministic session-block bootstrap lower bounds are computed inside each
 non-overlapping phase, conservatively combined across phases, and promotion rejects
 missing/thin required regimes or populated regimes whose return or SPY-excess lower bound
-misses its configured threshold. Full-cross-section seen/unseen attribution and
-in-selection capacity/no-fill behavior remain open.
+misses its configured threshold. Each scored fold now combines seen and held-out tickers
+into one full decision cross-section before economic top-k selection. Classification
+diagnostics remain separated, while profitability records the full portfolio and
+post-selection seen/unseen attribution whose trade counts must reconcile exactly.
+In-selection capacity/no-fill behavior remains open.
 
 ### R7.3 - Event-To-Feature Reconciliation
 
@@ -142,7 +145,7 @@ approved; they are not simulated as passing evidence.
 
 ## Current Verified Evidence
 
-- 320 repository tests pass locally.
+- 321 repository tests pass locally.
 - The focused R7 trust/race/rollback/memory/idempotency suite passes 37 tests.
 - Repository-wide Ruff, strict mypy on Windows and Linux targets, and compile checks pass.
 - Dependency locks regenerate deterministically and the production dependency audit reports

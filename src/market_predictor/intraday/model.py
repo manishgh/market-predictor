@@ -279,6 +279,12 @@ def train_intraday_model(
         raise DataReadinessError("no calibrated outer folds remain after the calibration seed")
     oof = pd.concat(walk_forward_parts, ignore_index=True)
     holdout_evidence = pd.concat(holdout_parts, ignore_index=True)
+    oof["ticker_cohort"] = "seen"
+    holdout_evidence["ticker_cohort"] = "unseen"
+    full_cross_section_evidence = pd.concat(
+        [oof, holdout_evidence],
+        ignore_index=True,
+    )
     if len(oof) < max(100, config.min_train_rows // 4):
         raise DataReadinessError("insufficient calibrated purged intraday predictions")
     calibrators = {
@@ -338,7 +344,12 @@ def train_intraday_model(
             downside_ceiling=config.max_downside_probability,
         ),
     )
-    def _intraday_phase(frame: pd.DataFrame, scope: str, cost_stress: float = 1.0) -> pd.DataFrame:
+    def _intraday_phase(
+        frame: pd.DataFrame,
+        scope: str,
+        cost_stress: float = 1.0,
+        cohort_column: str | None = None,
+    ) -> pd.DataFrame:
         return phase_economics(
             frame,
             horizon_minutes=horizon,
@@ -347,31 +358,31 @@ def train_intraday_model(
             downside_ceiling=config.max_downside_probability,
             max_trades_per_session=config.max_trades_per_session,
             scope=scope,
+            cohort_column=cohort_column,
             cost_stress=cost_stress,
         )
 
     stress_multiplier = max(DEFAULT_EXECUTION_POLICY.stress_multipliers)
-    economics = pd.concat(
-        [_intraday_phase(oof, "walk_forward"), _intraday_phase(holdout_evidence, "ticker_holdout")],
-        ignore_index=True,
+    economics = _intraday_phase(
+        full_cross_section_evidence,
+        "full_cross_section",
+        cohort_column="ticker_cohort",
     )
-    stress_economics = pd.concat(
-        [
-            _intraday_phase(oof, "walk_forward", stress_multiplier),
-            _intraday_phase(holdout_evidence, "ticker_holdout", stress_multiplier),
-        ],
-        ignore_index=True,
+    full_economics = economics[economics["scope"].eq("full_cross_section")]
+    stress_economics = _intraday_phase(
+        full_cross_section_evidence,
+        "full_cross_section",
+        stress_multiplier,
     )
     conservative = merge_stress_summary(
-        conservative_economics(economics),
+        conservative_economics(full_economics),
         conservative_economics(stress_economics),
         multiplier=stress_multiplier,
         fields=STRESS_ECONOMIC_FIELDS,
     )
     profitability = pd.concat([conservative, economics], ignore_index=True)
-    combined_evidence = pd.concat([oof, holdout_evidence], ignore_index=True)
     regime = regime_audit(
-        combined_evidence,
+        full_cross_section_evidence,
         horizon_minutes=horizon,
         decision_interval_minutes=decision_interval,
         top_k=config.top_k,
@@ -382,7 +393,7 @@ def train_intraday_model(
         min_regime_trades=config.min_regime_trades,
         policy=DEFAULT_EXECUTION_POLICY,
     )
-    catalyst = catalyst_audit(combined_evidence)
+    catalyst = catalyst_audit(full_cross_section_evidence)
     alignment = _alignment_audit(dataset)
     for evidence in (oof, holdout_evidence, profitability, regime, catalyst, alignment):
         evidence["model_run_id"] = model_run_id
@@ -493,6 +504,31 @@ def train_intraday_model(
         "validation_split": INTRADAY_VALIDATION_SPLIT,
         "validated_rows": len(oof),
         "ticker_holdout_rows": len(holdout_evidence),
+        "full_cross_section_rows": len(full_cross_section_evidence),
+        "full_cross_section_selected_trades": int(
+            pd.to_numeric(
+                full_economics["selected_trades"],
+                errors="coerce",
+            ).sum()
+        ),
+        "selected_seen_trades": int(
+            pd.to_numeric(
+                economics.loc[
+                    economics["scope"].eq("full_cross_section:seen"),
+                    "selected_trades",
+                ],
+                errors="coerce",
+            ).sum()
+        ),
+        "selected_unseen_trades": int(
+            pd.to_numeric(
+                economics.loc[
+                    economics["scope"].eq("full_cross_section:unseen"),
+                    "selected_trades",
+                ],
+                errors="coerce",
+            ).sum()
+        ),
         "decision_groups": int(oof["decision_group_id"].nunique()),
         "independent_sessions": int(oof["session_date_et"].nunique()),
         "validation_folds": len(scored_validation_fold_ids),

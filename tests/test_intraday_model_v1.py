@@ -129,6 +129,41 @@ class IntradayModelV1Tests(unittest.TestCase):
             {result.manifest["dataset"]["feature_schema_hash"]},
         )
         self.assertEqual(result.catalyst_audit.iloc[0]["included_in_estimators"], False)
+        self.assertEqual(set(result.oof_predictions["ticker_cohort"]), {"seen"})
+        self.assertEqual(
+            set(result.ticker_holdout_predictions["ticker_cohort"]),
+            {"unseen"},
+        )
+        phase_economics = result.profitability_audit[
+            result.profitability_audit["phase"].ne("conservative")
+        ]
+        full_selected = int(
+            phase_economics.loc[
+                phase_economics["scope"].eq("full_cross_section"),
+                "selected_trades",
+            ].sum()
+        )
+        attributed_selected = int(
+            phase_economics.loc[
+                phase_economics["scope"].isin(
+                    {
+                        "full_cross_section:seen",
+                        "full_cross_section:unseen",
+                    }
+                ),
+                "selected_trades",
+            ].sum()
+        )
+        self.assertEqual(full_selected, attributed_selected)
+        self.assertEqual(
+            result.metrics["full_cross_section_selected_trades"],
+            full_selected,
+        )
+        self.assertEqual(
+            result.metrics["selected_seen_trades"]
+            + result.metrics["selected_unseen_trades"],
+            full_selected,
+        )
         self.assertLess(float(result.metrics["memory"]["peak_working_set_gib"]), 4.0)
 
     def test_rejects_future_feature_timestamp(self) -> None:

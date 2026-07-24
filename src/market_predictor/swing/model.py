@@ -244,6 +244,12 @@ def train_swing_model(
         raise DataReadinessError("no calibrated outer folds remain after the calibration seed")
     oof = pd.concat(walk_forward_parts, ignore_index=True)
     holdout_evidence = pd.concat(holdout_parts, ignore_index=True)
+    oof["ticker_cohort"] = "seen"
+    holdout_evidence["ticker_cohort"] = "unseen"
+    full_cross_section_evidence = pd.concat(
+        [oof, holdout_evidence],
+        ignore_index=True,
+    )
     if len(oof) < max(100, config.min_train_rows // 4):
         raise DataReadinessError("insufficient calibrated purged walk-forward predictions")
     calibrator = fit_final_isotonic(
@@ -274,36 +280,30 @@ def train_swing_model(
     oof_calibration = calibration_summary(oof[target], oof["swing_probability"])
     holdout_calibration = calibration_summary(holdout_evidence[target], holdout_evidence["swing_probability"])
     stress_multiplier = max(DEFAULT_EXECUTION_POLICY.stress_multipliers)
-    economics = pd.concat(
-        [
-            phase_economics(oof, horizon=horizon, top_k=config.top_k, scope="walk_forward"),
-            phase_economics(holdout_evidence, horizon=horizon, top_k=config.top_k, scope="ticker_holdout"),
-        ],
-        ignore_index=True,
+    economics = phase_economics(
+        full_cross_section_evidence,
+        horizon=horizon,
+        top_k=config.top_k,
+        scope="full_cross_section",
+        cohort_column="ticker_cohort",
     )
-    stress_economics = pd.concat(
-        [
-            phase_economics(oof, horizon=horizon, top_k=config.top_k, scope="walk_forward", cost_stress=stress_multiplier),
-            phase_economics(
-                holdout_evidence,
-                horizon=horizon,
-                top_k=config.top_k,
-                scope="ticker_holdout",
-                cost_stress=stress_multiplier,
-            ),
-        ],
-        ignore_index=True,
+    full_economics = economics[economics["scope"].eq("full_cross_section")]
+    stress_economics = phase_economics(
+        full_cross_section_evidence,
+        horizon=horizon,
+        top_k=config.top_k,
+        scope="full_cross_section",
+        cost_stress=stress_multiplier,
     )
     conservative = merge_stress_summary(
-        conservative_economics(economics),
+        conservative_economics(full_economics),
         conservative_economics(stress_economics),
         multiplier=stress_multiplier,
         fields=STRESS_ECONOMIC_FIELDS,
     )
     profitability = pd.concat([conservative, economics], ignore_index=True)
-    combined_regime_evidence = pd.concat([oof, holdout_evidence], ignore_index=True)
     regime = regime_audit(
-        combined_regime_evidence,
+        full_cross_section_evidence,
         horizon=horizon,
         top_k=config.top_k,
         target_column=target,
@@ -311,7 +311,7 @@ def train_swing_model(
         min_regime_trades=config.min_regime_trades,
         policy=DEFAULT_EXECUTION_POLICY,
     )
-    catalyst = catalyst_audit(combined_regime_evidence)
+    catalyst = catalyst_audit(full_cross_section_evidence)
     alignment = _alignment_audit(dataset)
     for evidence in (oof, holdout_evidence, profitability, regime, catalyst, alignment):
         evidence["model_run_id"] = model_run_id
@@ -399,6 +399,31 @@ def train_swing_model(
         "recall": oof_metrics["recall"],
         "f1": oof_metrics["f1"],
         "ticker_holdout_rows": len(holdout_evidence),
+        "full_cross_section_rows": len(full_cross_section_evidence),
+        "full_cross_section_selected_trades": int(
+            pd.to_numeric(
+                full_economics["selected_trades"],
+                errors="coerce",
+            ).sum()
+        ),
+        "selected_seen_trades": int(
+            pd.to_numeric(
+                economics.loc[
+                    economics["scope"].eq("full_cross_section:seen"),
+                    "selected_trades",
+                ],
+                errors="coerce",
+            ).sum()
+        ),
+        "selected_unseen_trades": int(
+            pd.to_numeric(
+                economics.loc[
+                    economics["scope"].eq("full_cross_section:unseen"),
+                    "selected_trades",
+                ],
+                errors="coerce",
+            ).sum()
+        ),
         "ticker_holdout_roc_auc": holdout_metrics["roc_auc"],
         "ticker_holdout_top_decile_lift": holdout_metrics["top_decile_lift"],
         "ticker_holdout_group_lift_at_k": holdout_group_metrics["group_lift_at_k"],

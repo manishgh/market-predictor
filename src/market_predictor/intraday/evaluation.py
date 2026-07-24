@@ -157,6 +157,7 @@ def phase_economics(
     downside_ceiling: float,
     max_trades_per_session: int,
     scope: str,
+    cohort_column: str | None = None,
     policy: ExecutionCostPolicy | None = None,
     cost_stress: float = 1.0,
 ) -> pd.DataFrame:
@@ -193,6 +194,20 @@ def phase_economics(
                 cost_stress=cost_stress,
             )
         )
+        if cohort_column is not None:
+            if cohort_column not in selected.columns:
+                raise ValueError(f"cohort column {cohort_column} is missing")
+            for cohort, cohort_rows in selected.groupby(cohort_column, sort=True):
+                records.append(
+                    _economic_record(
+                        cohort_rows,
+                        horizon_minutes=horizon_minutes,
+                        scope=f"{scope}:{cohort}",
+                        phase=phase,
+                        policy=policy,
+                        cost_stress=cost_stress,
+                    )
+                )
     return pd.DataFrame(records)
 
 
@@ -228,7 +243,9 @@ def conservative_economics(economics: pd.DataFrame) -> pd.DataFrame:
                 "profit_factor": float(pd.to_numeric(economics["profit_factor"], errors="coerce").min()),
                 "cumulative_return": float(pd.to_numeric(economics["cumulative_return"], errors="coerce").min()),
                 "max_drawdown": float(pd.to_numeric(economics["max_drawdown"], errors="coerce").max()),
-                "return_drawdown_ratio": (float(finite_ratio.min()) if finite_ratio.notna().any() else float("inf")),
+                "return_drawdown_ratio": (
+                    float(finite_ratio.min()) if finite_ratio.notna().any() else 0.0
+                ),
                 "negative_session_rate": float(pd.to_numeric(economics["negative_session_rate"], errors="coerce").max()),
                 "average_turnover": float(pd.to_numeric(economics["average_turnover"], errors="coerce").max()),
                 "sessions": int(pd.to_numeric(economics["sessions"], errors="coerce").min()),

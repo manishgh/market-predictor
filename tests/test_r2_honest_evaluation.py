@@ -341,6 +341,75 @@ class EconomicIdentityTest(unittest.TestCase):
             0.03,
         )
 
+    def test_full_cross_section_selects_before_cohort_attribution(self) -> None:
+        swing = pd.DataFrame(
+            {
+                "ticker": ["SEEN", "UNSEEN"],
+                "ticker_cohort": ["seen", "unseen"],
+                "session_date_et": ["2026-01-05", "2026-01-05"],
+                "decision_group_id": ["swing-g", "swing-g"],
+                "swing_probability": [0.90, 0.80],
+                "future_net_return_1d": [0.02, 0.03],
+                "future_excess_return_1d_vs_spy": [0.01, 0.02],
+                "future_excess_return_1d_vs_qqq": [0.01, 0.02],
+                "future_excess_return_1d_vs_sector": [0.01, 0.02],
+            }
+        )
+        intraday = pd.DataFrame(
+            {
+                "ticker": ["SEEN", "UNSEEN"],
+                "ticker_cohort": ["seen", "unseen"],
+                "session_date_et": ["2026-01-05", "2026-01-05"],
+                "decision_group_id": ["intraday-g", "intraday-g"],
+                "decision_time_utc": pd.to_datetime(
+                    ["2026-01-05T15:00:00Z", "2026-01-05T15:00:00Z"],
+                    utc=True,
+                ),
+                "intraday_opportunity_probability": [0.90, 0.80],
+                "intraday_downside_probability": [0.10, 0.10],
+                "path_realized_return_net_60m": [0.02, 0.03],
+                "path_excess_return_60m_vs_spy": [0.01, 0.02],
+                "path_excess_return_60m_vs_qqq": [0.01, 0.02],
+                "path_excess_return_60m_vs_sector": [0.01, 0.02],
+            }
+        )
+
+        swing_economics = swing_phase_economics(
+            swing,
+            horizon=1,
+            top_k=1,
+            scope="full_cross_section",
+            cohort_column="ticker_cohort",
+        )
+        intraday_economics = intraday_phase_economics(
+            intraday,
+            horizon_minutes=60,
+            decision_interval_minutes=60,
+            top_k=1,
+            downside_ceiling=0.45,
+            max_trades_per_session=1,
+            scope="full_cross_section",
+            cohort_column="ticker_cohort",
+        )
+
+        for economics in (swing_economics, intraday_economics):
+            self.assertEqual(
+                set(economics["scope"]),
+                {"full_cross_section", "full_cross_section:seen"},
+            )
+            self.assertEqual(
+                int(
+                    economics.loc[
+                        economics["scope"].eq("full_cross_section"),
+                        "selected_trades",
+                    ].sum()
+                ),
+                1,
+            )
+            self.assertFalse(
+                economics["scope"].eq("full_cross_section:unseen").any()
+            )
+
 
 class CalibrationGateTest(unittest.TestCase):
     def test_biased_probabilities_preserving_auc_fail_calibration(self) -> None:

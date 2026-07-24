@@ -123,7 +123,10 @@ the deployed full cross-section.
 Fix: reconstruct each fold's full test-time cross-section, select once, and report
 full-universe economics plus seen/unseen attribution.
 
-Status: open; R7.2.
+Status: implemented and locally verified in R7.2. Scored seen and held-out rows are
+combined by fold into the deployed full decision cross-section before top-k selection.
+Profitability reports the full portfolio plus post-selection seen/unseen attribution,
+and tests require attributed trade counts to reconcile to the full selection.
 
 ## P1 Production Findings
 

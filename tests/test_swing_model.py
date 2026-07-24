@@ -191,6 +191,41 @@ class SwingModelTests(unittest.TestCase):
             required = representation["required"].fillna(False).astype(bool)
             self.assertTrue(representation.loc[required, "represented"].astype(bool).all())
             self.assertEqual(result.profitability_audit.iloc[0]["phase"], "conservative")
+            self.assertEqual(set(result.oof_predictions["ticker_cohort"]), {"seen"})
+            self.assertEqual(
+                set(result.ticker_holdout_predictions["ticker_cohort"]),
+                {"unseen"},
+            )
+            phase_economics = result.profitability_audit[
+                result.profitability_audit["phase"].ne("conservative")
+            ]
+            full_selected = int(
+                phase_economics.loc[
+                    phase_economics["scope"].eq("full_cross_section"),
+                    "selected_trades",
+                ].sum()
+            )
+            attributed_selected = int(
+                phase_economics.loc[
+                    phase_economics["scope"].isin(
+                        {
+                            "full_cross_section:seen",
+                            "full_cross_section:unseen",
+                        }
+                    ),
+                    "selected_trades",
+                ].sum()
+            )
+            self.assertEqual(full_selected, attributed_selected)
+            self.assertEqual(
+                result.metrics["full_cross_section_selected_trades"],
+                full_selected,
+            )
+            self.assertEqual(
+                result.metrics["selected_seen_trades"]
+                + result.metrics["selected_unseen_trades"],
+                full_selected,
+            )
             evidence_dir = Path(temp_dir) / "evidence"
             paths = write_swing_training_evidence(result, evidence_dir)
             self.assertTrue(all(path.exists() for path in paths.values()))

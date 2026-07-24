@@ -105,6 +105,7 @@ def phase_economics(
     horizon: int,
     top_k: int,
     scope: str,
+    cohort_column: str | None = None,
     policy: ExecutionCostPolicy | None = None,
     cost_stress: float = 1.0,
 ) -> pd.DataFrame:
@@ -157,18 +158,24 @@ def phase_economics(
                 ).dropna()
                 for benchmark, column in excess_columns.items()
             }
-        returns = selected["_net"].dropna()
-        period = selected.groupby("session_date_et")["_net"].mean().dropna()
-        records.append(
-            _economic_record(
-                returns,
-                excess,
-                period,
-                session_ids=selected["session_date_et"],
-                scope=scope,
-                phase=phase,
-            )
+        _append_phase_record(
+            records,
+            selected,
+            excess,
+            scope=scope,
+            phase=phase,
         )
+        if cohort_column is not None:
+            if cohort_column not in selected.columns:
+                raise ValueError(f"cohort column {cohort_column} is missing")
+            for cohort, cohort_rows in selected.groupby(cohort_column, sort=True):
+                _append_phase_record(
+                    records,
+                    cohort_rows,
+                    excess,
+                    scope=f"{scope}:{cohort}",
+                    phase=phase,
+                )
     return pd.DataFrame(records)
 
 
@@ -204,7 +211,7 @@ def conservative_economics(economics: pd.DataFrame) -> pd.DataFrame:
         "profit_factor": float(pd.to_numeric(economics["profit_factor"], errors="coerce").min()),
         "cumulative_return": float(pd.to_numeric(economics["cumulative_return"], errors="coerce").min()),
         "max_drawdown": float(pd.to_numeric(economics["max_drawdown"], errors="coerce").max()),
-        "return_drawdown_ratio": float(finite_ratio.min()) if finite_ratio.notna().any() else float("inf"),
+        "return_drawdown_ratio": float(finite_ratio.min()) if finite_ratio.notna().any() else 0.0,
         "negative_period_rate": float(
             pd.to_numeric(economics["negative_period_rate"], errors="coerce").max()
         ),
@@ -392,3 +399,29 @@ def _economic_record(
         "negative_period_rate": float(period_returns.lt(0).mean()) if not period_returns.empty else float("nan"),
         "periods": int(len(period_returns)),
     }
+
+
+def _append_phase_record(
+    records: list[dict[str, object]],
+    frame: pd.DataFrame,
+    excess: dict[str, pd.Series],
+    *,
+    scope: str,
+    phase: int,
+) -> None:
+    returns = frame["_net"].dropna()
+    cohort_excess = {
+        benchmark: values.reindex(frame.index).dropna()
+        for benchmark, values in excess.items()
+    }
+    period = frame.groupby("session_date_et")["_net"].mean().dropna()
+    records.append(
+        _economic_record(
+            returns,
+            cohort_excess,
+            period,
+            session_ids=frame["session_date_et"],
+            scope=scope,
+            phase=phase,
+        )
+    )
