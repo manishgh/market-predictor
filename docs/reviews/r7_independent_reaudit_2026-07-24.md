@@ -12,9 +12,10 @@ maturation, authentication, and reproducible delivery. The repository is not yet
 for a real-model production promotion. The fresh R7 review found three promotion blockers
 and several high-impact statistical and release gaps.
 
-No gate may be weakened to make a candidate pass. Azure remains excluded until explicitly
-integrated. Missing real shadow, execution-cost, live outcome, and deployment evidence
-remains `environment_pending`.
+No gate may be weakened to make a candidate pass. Missing real shadow,
+execution-cost, and live-outcome evidence remain blockers for model promotion.
+Azure and deployment evidence are tracked separately in the deferred post-R7
+program.
 
 ## Ordered Remediation
 
@@ -145,7 +146,11 @@ the affected route.
 
 Exit gate: a response is produced from one verified bundle identity or is non-actionable.
 
-### R7.8 - Delivery And Deployment Closure
+### Deferred Post-R7 - Delivery And Deployment Closure
+
+This phase is intentionally deferred and is not part of the current R7
+completion sequence. Its requirements remain recorded for the later deployment
+program and must not be represented as completed evidence.
 
 1. Keep the container smoke test authenticated and add a ready-state authenticated
    prediction fixture.
@@ -160,7 +165,7 @@ approved; they are not simulated as passing evidence.
 
 ## Current Verified Evidence
 
-- 322 repository tests pass locally.
+- 328 repository tests pass locally at the R7.3 checkpoint.
 - The focused R7 trust/race/rollback/memory/idempotency suite passes 37 tests.
 - Repository-wide Ruff, strict mypy on Windows and Linux targets, and compile checks pass.
 - Dependency locks regenerate deterministically and the production dependency audit reports

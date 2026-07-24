@@ -167,7 +167,7 @@ and chunked bodies are fully buffered before the 64 KiB check in
 Fix: protect `/v1/*` by default with explicit probe exceptions, derive production security
 independently of DI, and enforce body limits in the ASGI receive stream and ingress.
 
-Status: open; R7.8/security.
+Status: deferred to the post-R7 delivery and deployment program.
 
 ### 11. Model replacement and feature reads do not bound peak memory safely
 
@@ -177,7 +177,8 @@ full; estimates do not use cgroup limits.
 Fix: artifact byte/row limits, predicate/projection pushdown, cgroup-aware accounting, and
 preload/functional validation before an RCU-style context swap that retains rollback.
 
-Status: open; R7.7/R7.8.
+Status: model/feature swap work remains in R7.7; deployment-scale memory evidence
+is deferred to the post-R7 delivery program.
 
 ### 12. Outcome registration is not a durable closed loop
 
@@ -233,4 +234,7 @@ Status: environment pending; no distributed/cloud claim.
 5. Complete R7.5 causally derived shadow evidence.
 6. Complete R7.6 selected-policy monitoring and durable outbox.
 7. Complete R7.7 atomic feature/model serving generations.
-8. Complete R7.8 security and deployment evidence.
+
+Security hardening, container/CI delivery closure, Azure deployment, rollback,
+and disaster-recovery evidence are retained as a separate deferred post-R7
+program.
