@@ -5,7 +5,9 @@ from pathlib import Path
 
 from market_predictor.api import create_app
 from market_predictor.api_security import ApiSecurityConfig
-from market_predictor.cli import app
+from market_predictor.cli_surface import command_names
+from market_predictor.production_cli import app as production_app
+from market_predictor.research_cli import app as research_app
 
 
 class ArchitectureBoundaryTests(unittest.TestCase):
@@ -14,9 +16,10 @@ class ArchitectureBoundaryTests(unittest.TestCase):
         self.assertFalse((package_root / "alerts.py").exists())
         self.assertFalse((package_root / "volatile.py").exists())
 
-        command_names = {command.name for command in app.registered_commands}
-        self.assertNotIn("monitor-alerts", command_names)
-        self.assertNotIn("backtest-alerts", command_names)
+        research_commands = command_names(research_app)
+        production_commands = command_names(production_app)
+        self.assertNotIn("monitor-alerts", research_commands)
+        self.assertNotIn("backtest-alerts", research_commands)
         obsolete_prediction_commands = {
             "behavior",
             "build-dataset",
@@ -39,31 +42,32 @@ class ArchitectureBoundaryTests(unittest.TestCase):
             "train-volatile-model",
             "watch",
         }
-        self.assertTrue(obsolete_prediction_commands.isdisjoint(command_names))
-        self.assertTrue({"build-swing-dataset", "train-swing-model", "promote-swing-model"}.issubset(command_names))
+        self.assertTrue(obsolete_prediction_commands.isdisjoint(research_commands))
+        self.assertTrue({"build-swing-dataset", "train-swing-model", "promote-swing-model"}.issubset(research_commands))
         self.assertTrue(
             {
                 "build-intraday-dataset",
                 "train-intraday-model",
                 "promote-intraday-model",
-            }.issubset(command_names)
+            }.issubset(research_commands)
         )
         self.assertTrue(
             {
                 "build-swing-live-features",
                 "build-intraday-live-features",
                 "publish-live-features",
-            }.issubset(command_names)
+            }.issubset(research_commands | production_commands)
         )
         self.assertTrue(
             {
                 "azure-publish-serving-release",
                 "azure-rollback-serving-release",
                 "azure-sync-serving-release",
-            }.isdisjoint(command_names)
+            }.isdisjoint(research_commands | production_commands)
         )
-        self.assertNotIn("azure-publish-models", command_names)
-        self.assertIn("rank-sector-themes", command_names)
+        self.assertNotIn("azure-publish-models", research_commands)
+        self.assertIn("rank-sector-themes", research_commands)
+        self.assertFalse((package_root / "deployment.py").exists())
 
         prediction_service = (package_root / "prediction_service.py").read_text(encoding="utf-8")
         self.assertNotIn("market_predictor.entry_exit", prediction_service)
@@ -92,7 +96,7 @@ class ArchitectureBoundaryTests(unittest.TestCase):
         self.assertIn("/v1/health/live", dockerfile)
         self.assertIn('CMD ["sh", "scripts/container-entrypoint.sh"]', dockerfile)
         self.assertNotIn("azure-sync-serving-release", entrypoint)
-        self.assertIn("exec market-predictor serve-api", entrypoint)
+        self.assertIn("exec market-predictor-prod serve-api", entrypoint)
 
 
 if __name__ == "__main__":

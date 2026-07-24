@@ -374,7 +374,7 @@ The repo currently contains several useful families. Their intended roles should
 | Finviz-only expansion models | Research models trained on candidate expansion set | Candidate/research only |
 | Older clean/sector/swing models | Earlier iterations | Deprecated unless explicitly revalidated |
 
-### Current Deployment State (2026-07-23)
+### Current Deployment State (2026-07-24)
 
 The immutable candidate manifest and promotion attestation, not the filename or a mutable status field, are authoritative.
 
@@ -394,7 +394,8 @@ The immutable candidate manifest and promotion attestation, not the filename or 
 | R5.2 deterministic outcome maturation | implemented locally | Identity-complete live snapshots produce immutable semantic intents; exact swing/intraday label policies, canonical bar evidence, pending attempts, repeated-snapshot deduplication, and offline-label parity are tested | Requires scheduled canonical bar publication and real matured outcomes before performance evidence exists. |
 | R5.3 performance drift actionability | implemented locally | Hash-validated release/view/horizon cohorts and a versioned drift policy persist release-specific state; severe, stale, warming, unavailable, tampered, and wrong-release states fail closed in serving | Real performance state remains unavailable until a promoted release produces sufficient matured outcomes. |
 | R5.4 API access boundary | implemented locally | Entra JWT validation, per-route scopes, public minimal probes, disabled-by-default replay, 64 KiB bodies, canonical ticker bounds, principal token buckets, and redacted audit identity are tested | Tenant/app registration, managed-identity role assignment, JWKS refresh, ingress restrictions, and load rehearsal remain deployment environment work. |
-| Azure release transport | `environment_pending` | Existing transport code is not R4 evidence and has not completed a real integration/rollback/DR rehearsal | Excluded from activation authority until infrastructure integration is verified. |
+| R6.1 operational command boundary | implemented locally | Production, collection, and research commands have exact golden inventories; the production import graph excludes providers, sentiment, training, promotion, Torch, Transformers, and yfinance | Dependency locks, container provenance, and expanded supply-chain CI remain the next R6 checkpoints. |
+| Azure release transport | `environment_pending` | The obsolete unverified Blob release module was removed; no external transport is treated as R4 evidence | Excluded from activation authority until infrastructure integration, rollback, and DR are implemented and verified. |
 The V2 structural dataset itself is valid for continued research: 47,614 rows, 196 eligible tickers, 122 sessions, exact 09:30-11:25 ET bar timestamps, no duplicate ticker/timestamp keys, and no cooldown gaps below 13 bars. Catalyst context covered 21.44% of rows; market context covered 87.28%. Reddit coverage was zero in this historical V2 table, so Reddit cannot be claimed as a trained intraday signal yet.
 
 Selected-trade economics are the decisive V2 failure: 558 capped OOS trades produced -0.184% average net realized return, 35.13% win rate, 0.7076 profit factor, 30.28% maximum drawdown, and 64.44% negative periods. All three market regimes were represented, so the rejection is not caused by missing regime coverage.

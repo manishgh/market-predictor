@@ -7,7 +7,6 @@ from collections.abc import Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import UTC, date, datetime, time, timedelta
 from pathlib import Path
-from typing import cast
 from urllib.parse import urlsplit, urlunsplit
 from uuid import uuid4
 
@@ -18,12 +17,9 @@ from rich.console import Console
 
 from market_predictor.azure_store import AzureBlobStore
 from market_predictor.canonical.contracts import SourceCollection
-from market_predictor.canonical.store import load_canonical_artifact
 from market_predictor.commands.canonical_data import register_canonical_data_commands
 from market_predictor.commands.intraday_model import register_intraday_model_commands
-from market_predictor.commands.outcomes import register_outcome_commands
 from market_predictor.commands.ranking import register_ranking_commands
-from market_predictor.commands.release import register_release_commands
 from market_predictor.commands.swing_model import register_swing_model_commands
 from market_predictor.commands.v3_data import register_v3_data_commands
 from market_predictor.commands.v3_evaluation import register_v3_evaluation_commands
@@ -41,7 +37,6 @@ from market_predictor.entry_exit import (
     score_entry_exit_frame,
     train_entry_exit_model,
 )
-from market_predictor.feature_store import LiveFeatureStore, LiveFeatureStoreConfig
 from market_predictor.features import (
     add_event_taxonomy,
     add_finbert,
@@ -55,7 +50,6 @@ from market_predictor.global_context import score_flashpoints
 from market_predictor.intraday_confirmation import build_intraday_decision_report
 from market_predictor.intraday_enrichment import build_enriched_intraday_dataset
 from market_predictor.intraday_universe import build_intraday_candidate_universe
-from market_predictor.live_features import LIVE_ARTIFACT_TYPES, LIVE_SCHEMA_VERSIONS, LiveMode
 from market_predictor.model import DEFAULT_FEATURES
 from market_predictor.price import fetch_daily_prices, fetch_intraday_prices
 from market_predictor.promotion_audit import (
@@ -74,80 +68,14 @@ console = Console()
 DEFAULT_MARKET_CONTEXT_PATH = Path("data/external/market_context/market_context_events_scored.parquet")
 register_ranking_commands(app, console)
 register_canonical_data_commands(app, console)
-register_release_commands(app, console)
 register_swing_model_commands(app, console)
 register_intraday_model_commands(app, console)
-register_outcome_commands(app, console)
 register_v3_data_commands(app, console)
 register_v3_feature_commands(app, console)
 register_v3_evaluation_commands(app, console)
 register_v3_label_commands(app, console)
 register_v3_model_commands(app, console)
 register_v3_readiness_commands(app, console)
-
-
-@app.command("serve-api")
-def serve_api(
-    host: str = typer.Option("127.0.0.1", help="API bind host."),
-    port: int = typer.Option(8000, help="API bind port."),
-    reload: bool = typer.Option(False, help="Enable uvicorn reload for local development."),
-) -> None:
-    """Serve the typed prediction API for swing, intraday, and unified views."""
-    try:
-        import uvicorn
-    except ImportError as exc:
-        raise typer.BadParameter("uvicorn is not installed. Run `python -m pip install -e .` first.") from exc
-    uvicorn.run(
-        "market_predictor.api:create_app",
-        host=host,
-        port=port,
-        reload=reload,
-        factory=True,
-    )
-
-
-@app.command("publish-live-features")
-def publish_live_features(
-    mode: str = typer.Option(..., help="Feature mode: swing or intraday."),
-    input_path: Path = typer.Option(..., help="Canonical inference feature artifact to publish."),
-    live_dir: Path = typer.Option(Path("data/live"), help="Managed live feature root."),
-) -> None:
-    """Atomically publish an integrity-checked feature snapshot for API serving."""
-    normalized_mode = mode.strip().lower()
-    if normalized_mode not in {"swing", "intraday"}:
-        raise typer.BadParameter("mode must be swing or intraday")
-    live_mode = cast(LiveMode, normalized_mode)
-    expected_type = LIVE_ARTIFACT_TYPES[live_mode]
-    frame, canonical_manifest = load_canonical_artifact(
-        input_path,
-        expected_type=expected_type,
-        allow_research=False,
-    )
-    schema_column = "swing_feature_schema_version" if normalized_mode == "swing" else "intraday_feature_schema_version"
-    schemas = set(frame[schema_column].astype(str).unique()) if schema_column in frame else set()
-    expected_schema = LIVE_SCHEMA_VERSIONS[live_mode]
-    if schemas != {expected_schema}:
-        raise typer.BadParameter(f"canonical {normalized_mode} features do not match schema {expected_schema}")
-    feeds = set(frame["price_feed"].astype(str).str.lower().str.strip().unique())
-    if len(feeds) != 1:
-        raise typer.BadParameter("canonical inference features must contain exactly one price feed")
-    price_feed = next(iter(feeds))
-    store = LiveFeatureStore(
-        Path("."),
-        LiveFeatureStoreConfig(
-            swing_path=live_dir / "features/swing.parquet",
-            intraday_path=live_dir / "features/intraday.parquet",
-        ),
-    )
-    manifest = store.publish(
-        live_mode,
-        frame,
-        price_feed=price_feed,
-        feature_schema_version=expected_schema,
-        source_artifact_sha256=str(canonical_manifest["artifact_sha256"]),
-        source_artifact_type=expected_type,
-    )
-    console.print(manifest)
 
 
 def _daily_training_columns(frame: pd.DataFrame, horizon_days: int) -> list[str]:

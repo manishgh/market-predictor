@@ -38,7 +38,9 @@ ranking = [
 ]
 
 [project.scripts]
-market-predictor = "market_predictor.cli:app"
+market-predictor-prod = "market_predictor.production_cli:app"
+market-predictor-collect = "market_predictor.collection_cli:app"
+market-predictor-research = "market_predictor.research_cli:app"
 
 [build-system]
 requires = ["hatchling"]

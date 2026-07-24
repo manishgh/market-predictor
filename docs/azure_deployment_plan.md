@@ -93,21 +93,21 @@ Do not publish a new serving release merely because a nightly feature job succee
 Research collection:
 
 ```powershell
-market-predictor collect-swing --days 3 --workers 8 --out-dir data/raw/nightly
-market-predictor score-swing-events --raw-dir data/raw/nightly --out-dir data/raw/nightly_scored
+market-predictor-collect collect-swing --days 3 --workers 8 --out-dir data/raw/nightly
+market-predictor-research score-swing-events --raw-dir data/raw/nightly --out-dir data/raw/nightly_scored
 ```
 
 Artifact export:
 
 ```powershell
-market-predictor export-ohlcv-artifacts --days 730 --timeframes 1d,1h --workers 8
-market-predictor azure-upload-artifacts --root data/artifacts
+market-predictor-collect export-ohlcv-artifacts --days 730 --timeframes 1d,1h --workers 8
+market-predictor-collect azure-upload-artifacts --root data/artifacts
 ```
 
 Swing feature publication after canonical source jobs finish:
 
 ```powershell
-market-predictor build-swing-live-features `
+market-predictor-research build-swing-live-features `
   --decisions data/canonical/decisions.parquet `
   --benchmark-bars data/canonical/benchmark_daily_bars.parquet `
   --global-events data/canonical/global_events.parquet `
@@ -115,7 +115,7 @@ market-predictor build-swing-live-features `
   --config configs/swing_dataset.toml `
   --out data/live/staging/swing_5d.parquet
 
-market-predictor publish-live-features `
+market-predictor-prod publish-live-features `
   --mode swing `
   --input-path data/live/staging/swing_5d.parquet `
   --live-dir data/live
@@ -124,7 +124,7 @@ market-predictor publish-live-features `
 The canonical swing decision artifact consumed above must first be built with the frozen cutoff mode:
 
 ```powershell
-market-predictor build-canonical-decisions `
+market-predictor-research build-canonical-decisions `
   --bars data/canonical/bars.parquet `
   --events data/canonical/events.parquet `
   --source-collections data/canonical/source_collections.parquet `

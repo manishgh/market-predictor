@@ -1,4 +1,4 @@
 #!/bin/sh
 set -eu
 
-exec market-predictor serve-api --host 0.0.0.0 --port 8000
+exec market-predictor-prod serve-api --host 0.0.0.0 --port 8000

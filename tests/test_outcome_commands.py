@@ -4,7 +4,7 @@ import unittest
 
 from typer.testing import CliRunner
 
-from market_predictor.cli import app
+from market_predictor.production_cli import app
 
 
 class OutcomeCommandTests(unittest.TestCase):

@@ -11,7 +11,7 @@ import joblib
 import pandas as pd
 from typer.testing import CliRunner
 
-from market_predictor.cli import app
+from market_predictor.production_cli import app
 from market_predictor.registry import write_model_manifest
 from market_predictor.release import (
     activate_local_release,

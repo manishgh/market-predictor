@@ -44,14 +44,14 @@ Setup and model download:
 
 ```powershell
 python -m pip install -e .
-market-predictor download-model
+market-predictor-collect download-model
 ```
 
 Research collection and sentiment scoring:
 
 ```powershell
-market-predictor collect-swing --tickers "LUNR,MXL,RGTI" --days 30 --out-dir data/raw/research --workers 4
-market-predictor score-swing-events --tickers "LUNR,MXL,RGTI" --raw-dir data/raw/research --out-dir data/raw/research_scored
+market-predictor-collect collect-swing --tickers "LUNR,MXL,RGTI" --days 30 --out-dir data/raw/research --workers 4
+market-predictor-research score-swing-events --tickers "LUNR,MXL,RGTI" --raw-dir data/raw/research --out-dir data/raw/research_scored
 ```
 
 Prediction API requests are point-in-time contracts. `PredictionRequest.as_of`, when present, must be timezone-aware. Canonical daily and intraday inference require `feature_available_at_utc` and filter directly on that timestamp; neither reconstructs availability from a date or bar label.
@@ -91,19 +91,19 @@ The previous `live-once` publisher was removed because it also scored four incom
 Historical event collection and sentiment build:
 
 ```powershell
-market-predictor collect-swing --days 730 --out-dir data/raw/swing --workers 8
-market-predictor verify-swing --raw-dir data/raw/swing --rewrite
-market-predictor score-swing-events --raw-dir data/raw/swing --out-dir data/raw/swing_scored
+market-predictor-collect collect-swing --days 730 --out-dir data/raw/swing --workers 8
+market-predictor-research verify-swing --raw-dir data/raw/swing --rewrite
+market-predictor-research score-swing-events --raw-dir data/raw/swing --out-dir data/raw/swing_scored
 ```
 
 Canonical data publication and decision build:
 
 ```powershell
-market-predictor canonicalize-bars --input-path data/raw/bars.parquet --out data/canonical/bars.parquet --timeframe 5m --price-feed sip
-market-predictor canonicalize-event-directory --input-dir data/raw/swing_scored --out data/canonical/events.parquet
-market-predictor canonicalize-source-collections --input-path data/raw/swing/_source_collections.parquet --out data/canonical/source_collections.parquet
-market-predictor canonicalize-memberships --input-path data/raw/universe_memberships.parquet --out data/canonical/memberships.parquet
-market-predictor build-canonical-decisions --bars data/canonical/bars.parquet --events data/canonical/events.parquet --source-collections data/canonical/source_collections.parquet --memberships data/canonical/memberships.parquet --out data/canonical/decisions.parquet
+market-predictor-research canonicalize-bars --input-path data/raw/bars.parquet --out data/canonical/bars.parquet --timeframe 5m --price-feed sip
+market-predictor-research canonicalize-event-directory --input-dir data/raw/swing_scored --out data/canonical/events.parquet
+market-predictor-research canonicalize-source-collections --input-path data/raw/swing/_source_collections.parquet --out data/canonical/source_collections.parquet
+market-predictor-research canonicalize-memberships --input-path data/raw/universe_memberships.parquet --out data/canonical/memberships.parquet
+market-predictor-research build-canonical-decisions --bars data/canonical/bars.parquet --events data/canonical/events.parquet --source-collections data/canonical/source_collections.parquet --memberships data/canonical/memberships.parquet --out data/canonical/decisions.parquet
 ```
 
 Each canonical output has a sidecar manifest containing its SHA-256, input hashes, row/column identity, availability range, audit evidence, and production-readiness state. A consumer verifies the manifest and hash before reading the table. Production decisions fail when any required source was not successfully observed through a fresh request coverage end, when membership is unknown or ambiguous, when volume is not SIP, or when a joined feature is from the future.
@@ -111,19 +111,19 @@ Each canonical output has a sidecar manifest containing its SHA-256, input hashe
 Canonical swing build, training, and promotion:
 
 ```powershell
-market-predictor build-swing-dataset --decisions data/canonical/decisions.parquet --benchmark-bars data/canonical/benchmark_daily_bars.parquet --global-events data/canonical/global_events.parquet --global-source-collections data/canonical/global_source_collections.parquet --config configs/swing_dataset.toml --out data/features/swing/swing_5d.parquet
-market-predictor train-swing-model --dataset data/features/swing/swing_5d.parquet --config configs/swing_training.toml --model-out models/swing/candidates/swing_5d.joblib --evidence-dir data/reports/swing_5d_candidate
-market-predictor promote-swing-model --model models/swing/candidates/swing_5d.joblib --evidence-dir data/reports/swing_5d_candidate --hypothesis-registry data/governance --hypothesis-id swing-5d-h001 --shadow-bundle data/governance/shadow/<shadow-fingerprint>.json --build-identity ci:<build-id> --approver-identity reviewer:<identity> --signing-private-key <secure-ed25519-private-key.pem> --attestation-trust-store configs/attestation_trust_store.json --signer-id promotion-ci-prod --config configs/swing_promotion.toml
+market-predictor-research build-swing-dataset --decisions data/canonical/decisions.parquet --benchmark-bars data/canonical/benchmark_daily_bars.parquet --global-events data/canonical/global_events.parquet --global-source-collections data/canonical/global_source_collections.parquet --config configs/swing_dataset.toml --out data/features/swing/swing_5d.parquet
+market-predictor-research train-swing-model --dataset data/features/swing/swing_5d.parquet --config configs/swing_training.toml --model-out models/swing/candidates/swing_5d.joblib --evidence-dir data/reports/swing_5d_candidate
+market-predictor-research promote-swing-model --model models/swing/candidates/swing_5d.joblib --evidence-dir data/reports/swing_5d_candidate --hypothesis-registry data/governance --hypothesis-id swing-5d-h001 --shadow-bundle data/governance/shadow/<shadow-fingerprint>.json --build-identity ci:<build-id> --approver-identity reviewer:<identity> --signing-private-key <secure-ed25519-private-key.pem> --attestation-trust-store configs/attestation_trust_store.json --signer-id promotion-ci-prod --config configs/swing_promotion.toml
 ```
 
-`src/market_predictor/swing/contracts.py` freezes feature/model schemas and typed configs. `dataset.py` owns technical, benchmark-relative, catalyst/global, membership, cross-sectional, and exact future-path construction. `audits.py` owns fail-closed eligibility. `model.py` owns purged folds, unseen-ticker holdout, calibration, memory enforcement, immutable candidate registration, and scoring. `evaluation.py` owns classification, ranking-economics, regime, and catalyst validation. `promotion.py` owns hash-bound evidence bundles and fail-closed development gates, then delegates predeclared hypothesis, untouched-shadow, one-use ledger, and attestation enforcement to `promotion_workflow.py`. `commands/swing_model.py` is the only production CLI entry point for those stages.
+`src/market_predictor/swing/contracts.py` freezes feature/model schemas and typed configs. `dataset.py` owns technical, benchmark-relative, catalyst/global, membership, cross-sectional, and exact future-path construction. `audits.py` owns fail-closed eligibility. `model.py` owns purged folds, unseen-ticker holdout, calibration, memory enforcement, immutable candidate registration, and scoring. `evaluation.py` owns classification, ranking-economics, regime, and catalyst validation. `promotion.py` owns hash-bound evidence bundles and fail-closed development gates, then delegates predeclared hypothesis, untouched-shadow, one-use ledger, and attestation enforcement to `promotion_workflow.py`. `commands/swing_model.py` is the only canonical research command entry point for those stages.
 
 Canonical intraday build, training, and promotion:
 
 ```powershell
-market-predictor build-intraday-dataset --decisions data/canonical/intraday_decisions_5m.parquet --one-minute-bars data/canonical/intraday_bars_1m.parquet --benchmark-bars data/canonical/intraday_benchmarks_5m.parquet --global-events data/canonical/global_events.parquet --global-source-collections data/canonical/global_source_collections.parquet --config configs/intraday_dataset.toml --out data/features/intraday/intraday_60m.parquet
-market-predictor train-intraday-model --dataset data/features/intraday/intraday_60m.parquet --config configs/intraday_training.toml --model-out models/intraday/candidates/intraday_60m.joblib --evidence-dir data/reports/intraday_60m_candidate
-market-predictor promote-intraday-model --model models/intraday/candidates/intraday_60m.joblib --evidence-dir data/reports/intraday_60m_candidate --hypothesis-registry data/governance --hypothesis-id intraday-60m-h001 --shadow-bundle data/governance/shadow/<shadow-fingerprint>.json --build-identity ci:<build-id> --approver-identity reviewer:<identity> --signing-private-key <secure-ed25519-private-key.pem> --attestation-trust-store configs/attestation_trust_store.json --signer-id promotion-ci-prod --config configs/intraday_promotion.toml
+market-predictor-research build-intraday-dataset --decisions data/canonical/intraday_decisions_5m.parquet --one-minute-bars data/canonical/intraday_bars_1m.parquet --benchmark-bars data/canonical/intraday_benchmarks_5m.parquet --global-events data/canonical/global_events.parquet --global-source-collections data/canonical/global_source_collections.parquet --config configs/intraday_dataset.toml --out data/features/intraday/intraday_60m.parquet
+market-predictor-research train-intraday-model --dataset data/features/intraday/intraday_60m.parquet --config configs/intraday_training.toml --model-out models/intraday/candidates/intraday_60m.joblib --evidence-dir data/reports/intraday_60m_candidate
+market-predictor-research promote-intraday-model --model models/intraday/candidates/intraday_60m.joblib --evidence-dir data/reports/intraday_60m_candidate --hypothesis-registry data/governance --hypothesis-id intraday-60m-h001 --shadow-bundle data/governance/shadow/<shadow-fingerprint>.json --build-identity ci:<build-id> --approver-identity reviewer:<identity> --signing-private-key <secure-ed25519-private-key.pem> --attestation-trust-store configs/attestation_trust_store.json --signer-id promotion-ci-prod --config configs/intraday_promotion.toml
 ```
 
 `src/market_predictor/intraday/contracts.py` freezes the 5-minute decision, 1-minute execution, feature, model, and typed configuration contracts. `dataset.py` owns completed-bar technical state, the latest fully available 1-minute confirmation state, and benchmark/global/membership/cross-sectional context. `labels.py` owns the exact decision-time 1-minute entry and consecutive target/stop path, benchmark returns over the same interval, overlap weights, and independent-event identities. `audits.py` rejects future features, under-warm rows, non-SIP/partially adjusted bars, stale source state, missing paths, and missing benchmark intervals. `model.py` trains opportunity and downside estimators atomically with session-purged walk-forward validation, deterministic unseen-ticker holdout, cross-fitted calibration, overlap weights, `float32` matrices, and a 4 GiB guard. `evaluation.py` owns classification and non-overlapping top-k economics. `promotion.py` verifies persisted candidate/evidence hashes and applies the dual-model, economics, drawdown, regime, catalyst-coverage, alignment, memory, and provenance gates before the shared hypothesis/shadow/attestation workflow can authorize the artifact. `commands/intraday_model.py` is the only canonical C5 CLI entry point.
@@ -135,10 +135,10 @@ Historical provider backfills normally know publication time but not when this s
 Trusted promotion and local release:
 
 ```powershell
-market-predictor publish-local-release --model models/swing/candidates/swing_5d.joblib --evidence-manifest data/reports/swing_5d_candidate/evidence.manifest.json --release-root data/local_release_repository --attestation-trust-store configs/attestation_trust_store.json
-market-predictor show-active-local-release --release-root data/local_release_repository --attestation-trust-store configs/attestation_trust_store.json
-market-predictor verify-local-release --release-id <64-character-release-id> --release-root data/local_release_repository --attestation-trust-store configs/attestation_trust_store.json
-market-predictor rollback-local-release --release-id <64-character-release-id> --release-root data/local_release_repository --attestation-trust-store configs/attestation_trust_store.json
+market-predictor-prod publish-local-release --model models/swing/candidates/swing_5d.joblib --evidence-manifest data/reports/swing_5d_candidate/evidence.manifest.json --release-root data/local_release_repository --attestation-trust-store configs/attestation_trust_store.json
+market-predictor-prod show-active-local-release --release-root data/local_release_repository --attestation-trust-store configs/attestation_trust_store.json
+market-predictor-prod verify-local-release --release-id <64-character-release-id> --release-root data/local_release_repository --attestation-trust-store configs/attestation_trust_store.json
+market-predictor-prod rollback-local-release --release-id <64-character-release-id> --release-root data/local_release_repository --attestation-trust-store configs/attestation_trust_store.json
 ```
 
 `registry.py` can publish only immutable candidate manifests; effective `promoted` state is derived from a strict Ed25519-signed attestation whose issuer exists in the server-owned trust store. `hypothesis_registry.py` freezes the baseline and hypothesis before shadow generation. `shadow_ledger.py` content-addresses paired session evidence, recomputes the session-block interval, derives its source identity from the exact session records and frozen candidate/baseline/policies, consumes each fingerprint once in the governance root's canonical ledger, and retires a hypothesis family after failure. `promotion_attestation.py` binds the artifact, candidate manifest, training evidence, causal identity chain, baseline, ledger receipt, gates, build, distinct approver, signer, and timestamp. `release.py` stages and verifies the complete model/attestation/evidence unit, renames it into a versioned directory, and moves one hash-protected active pointer under an OS-released file lock. Mutation, partial publication, untrusted signatures, and rollback targets are reverified before activation. The private signing key belongs only to the promotion workload; set `MARKET_PREDICTOR_ATTESTATION_TRUST_STORE` to a read-only public trust-store path for serving.
@@ -146,33 +146,45 @@ market-predictor rollback-local-release --release-id <64-character-release-id> -
 Canonical live publication and external serving release:
 
 ```powershell
-market-predictor build-swing-live-features --decisions data/canonical/decisions.parquet --benchmark-bars data/canonical/benchmark_daily_bars.parquet --global-events data/canonical/global_events.parquet --global-source-collections data/canonical/global_source_collections.parquet --config configs/swing_dataset.toml --out data/live/staging/swing_5d.parquet
-market-predictor publish-live-features --mode swing --input-path data/live/staging/swing_5d.parquet --live-dir data/live
+market-predictor-research build-swing-live-features --decisions data/canonical/decisions.parquet --benchmark-bars data/canonical/benchmark_daily_bars.parquet --global-events data/canonical/global_events.parquet --global-source-collections data/canonical/global_source_collections.parquet --config configs/swing_dataset.toml --out data/live/staging/swing_5d.parquet
+market-predictor-prod publish-live-features --mode swing --input-path data/live/staging/swing_5d.parquet --live-dir data/live
 ```
 
-`deployment.py` retains research-only external Blob transport code, but its
-publication/synchronization commands are not exposed. Azure release transport and
-disaster recovery remain `environment_pending`. The signed local repository is
-the only activation authority.
+The obsolete Azure serving-release transport was removed. Azure release
+transport and disaster recovery remain `environment_pending`; the signed local
+repository is the only activation authority. `azure_store.py` remains a
+collection-side artifact utility and is not imported by production serving.
 
 ## File Responsibilities
 
 ### CLI and Orchestration
 
-`src/market_predictor/cli.py`
+The installed commands are intentionally split:
 
-The command center. It wires sources, feature builders, model functions, file paths, and reports into Typer CLI commands.
+- `src/market_predictor/production_cli.py` exposes only serving, live-feature
+  publication, signed local-release management, and outcome/drift operations.
+- `src/market_predictor/collection_cli.py` exposes provider collection, source
+  quota/token utilities, model download, and artifact upload/export.
+- `src/market_predictor/research_cli.py` exposes canonicalization, feature
+  engineering, model training, evaluation, and promotion.
+- `src/market_predictor/cli.py` is the internal research/collection command
+  registry used to construct the two non-production surfaces. It is not an
+  installed executable and is never imported by production.
 
-Why it exists: keep operational workflows scriptable and restartable. Most commands isolate per-ticker failures and write intermediate files so a later stage can continue even if an earlier source partly failed.
+Why the split exists: the serving process has a small auditable import graph and
+cannot accidentally initialize provider clients, FinBERT, Torch, Transformers,
+XGBoost, or research promotion modules. Collection remains restartable and
+source-isolated; research retains all reproducible data/model workflows.
 
-Key command groups:
+Command ownership:
 
 - Collection: `collect`, `collect-swing`, `collect-seeking-alpha`, `alpaca-tickers`.
 - Verification: `verify-events`, `verify-swing`, `audit-swing-alignment`.
 - Sentiment: `download-model`, `score-swing-events`.
 - Feature building: canonical training `build-swing-dataset` / `build-intraday-dataset`, canonical inference `build-swing-live-features` / `build-intraday-live-features`, research-only builders, and V3 research builders.
 - Training/scoring: canonical swing and intraday train/promote commands, research-only entry-path commands, and V3 research evaluation.
-- Serving: `publish-live-features` and `serve-api`.
+- Production: `serve-api`, `publish-live-features`, signed local-release
+  commands, and deterministic outcome/drift commands.
 - Azure data utilities: `export-ohlcv-artifacts` and `azure-upload-artifacts`.
 
 Canonical orchestration is registered by `src/market_predictor/commands/canonical_data.py`. `src/market_predictor/canonical/contracts.py` owns immutable schemas; `normalize.py` converts provider timestamps and provenance; `joins.py` performs strict as-of event, source, membership, and fundamental joins; `audits.py` implements fail-closed readiness; and `store.py` publishes hash-verified artifacts with manifests written last.
@@ -305,10 +317,6 @@ Tracks monthly RapidAPI usage locally so Seeking Alpha calls can be throttled be
 
 Uploads and downloads project artifacts and release bytes to Azure Blob Storage. It supports either a connection string or managed identity/default credentials through Azure Identity.
 
-`src/market_predictor/deployment.py`
-
-Builds, validates, publishes, hydrates, and rolls back immutable model-plus-feature serving releases. The active pointer is the only mutable Blob object in this protocol.
-
 ## Data Directories
 
 Recommended local layout:
@@ -389,18 +397,18 @@ Keeping them separate gives:
 Check source/API issues:
 
 ```powershell
-market-predictor seeking-alpha-limits
-market-predictor collect LUNR --days 3 --out data/raw/debug_lunr.parquet
+market-predictor-collect seeking-alpha-limits
+market-predictor-collect collect LUNR --days 3 --out data/raw/debug_lunr.parquet
 ```
 
 Check event quality:
 
 ```powershell
-market-predictor verify-events data/raw/debug_lunr.parquet --rewrite
+market-predictor-research verify-events data/raw/debug_lunr.parquet --rewrite
 ```
 
 Check Azure storage configuration:
 
 ```powershell
-market-predictor azure-upload-artifacts --root data/artifacts
+market-predictor-collect azure-upload-artifacts --root data/artifacts
 ```

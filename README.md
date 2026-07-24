@@ -99,19 +99,27 @@ Minimum runtime:
 - RapidAPI key if Seeking Alpha feeds should be collected.
 - SEC needs no key, but `SEC_USER_AGENT` should contain real contact information.
 
-Verify the CLI:
+Verify each operational surface:
 
 ```powershell
-market-predictor --help
+market-predictor-prod --help
+market-predictor-collect --help
+market-predictor-research --help
 ```
+
+`market-predictor-prod` is the only runtime surface installed in the serving
+container. It exposes API serving, validated live-feature publication, signed
+local-release activation, and deterministic outcome/drift operations. Provider
+collection and model development are isolated behind the other two executables
+so importing production commands does not load provider, NLP, or training code.
 
 V3 development workflow after the raw data audit passes:
 
 ```powershell
-market-predictor build-v3-features --bars data/curated/v3_bars.parquet --benchmarks data/curated/v3_benchmarks.parquet --source-availability data/curated/v3_source_availability.parquet --out data/features/v3_features_latest.parquet
-market-predictor build-v3-labels --bars data/features/v3_features_latest.parquet --benchmarks data/curated/v3_benchmarks.parquet --out data/features/v3_training_latest.parquet
-market-predictor train-v3-models --dataset data/features/v3_training_latest.parquet --output-dir models/v3/candidates
-market-predictor audit-v3-ranking --predictions data/reports/v3_oof_predictions_latest.parquet --opportunity-family R1 --downside-family D1
+market-predictor-research build-v3-features --bars data/curated/v3_bars.parquet --benchmarks data/curated/v3_benchmarks.parquet --source-availability data/curated/v3_source_availability.parquet --out data/features/v3_features_latest.parquet
+market-predictor-research build-v3-labels --bars data/features/v3_features_latest.parquet --benchmarks data/curated/v3_benchmarks.parquet --out data/features/v3_training_latest.parquet
+market-predictor-research train-v3-models --dataset data/features/v3_training_latest.parquet --output-dir models/v3/candidates
+market-predictor-research audit-v3-ranking --predictions data/reports/v3_oof_predictions_latest.parquet --opportunity-family R1 --downside-family D1
 ```
 
 The label builder drops any decision whose maximum configured path is not contiguous at the declared bar interval. The training command refuses shadow rows, non-SIP volume provenance, future feature availability, cross-session labels, malformed ranking groups, and stale feature schemas. It writes per-family candidate manifests, walk-forward OOF predictions, deterministic ticker-holdout evidence, and a fold feature-coverage audit. One family failure is reported without discarding successful families; the command exits nonzero if any requested family failed.
@@ -121,8 +129,8 @@ The label builder drops any decision whose maximum configured path is not contig
 Before C8, run the fail-closed development gate:
 
 ```powershell
-market-predictor build-v3-sp500-point-in-time-universe --current-snapshot data/universe/sp500_current_20260708.csv --start-date 2024-07-09 --cutoff-date 2026-07-08 --out data/universe/sp500_point_in_time_20240709_20260708.parquet --raw-dir data/raw/index_membership/spglobal_20240709_20260708 --audit-out data/reports/sp500_point_in_time_20240709_20260708_audit.json
-market-predictor audit-v3-development-readiness --bars data/artifacts/ohlcv/v3_sp500_current_730d_20260708/5m --universe data/universe/sp500_point_in_time_20240709_20260708.parquet --benchmark-dir data/artifacts/ohlcv/v3_development_benchmarks_730d_20260708/5m --out data/reports/v3_development_readiness_pit_20260711.json
+market-predictor-research build-v3-sp500-point-in-time-universe --current-snapshot data/universe/sp500_current_20260708.csv --start-date 2024-07-09 --cutoff-date 2026-07-08 --out data/universe/sp500_point_in_time_20240709_20260708.parquet --raw-dir data/raw/index_membership/spglobal_20240709_20260708 --audit-out data/reports/sp500_point_in_time_20240709_20260708_audit.json
+market-predictor-research audit-v3-development-readiness --bars data/artifacts/ohlcv/v3_sp500_current_730d_20260708/5m --universe data/universe/sp500_point_in_time_20240709_20260708.parquet --benchmark-dir data/artifacts/ohlcv/v3_development_benchmarks_730d_20260708/5m --out data/reports/v3_development_readiness_pit_20260711.json
 ```
 
 The universe builder hashes official S&P Global add/drop announcements, joins Alpaca name-change events, and reverses those events from the frozen constituent anchor. As of 2026-07-11, the local development audit passes with 546 point-in-time symbols, 501 sessions, SIP provenance, non-overlapping membership windows, bars for every historical member, and all 13 market/sector benchmarks. This establishes data readiness only; no V3 candidate is selected or promoted by this audit.
@@ -130,8 +138,8 @@ The universe builder hashes official S&P Global add/drop announcements, joins Al
 Build the monthly development rows through the hash-verified, XNYS-calendar-aware path, then train only from that registered directory:
 
 ```powershell
-market-predictor build-v3-development-dataset --bars-dir data/artifacts/ohlcv/v3_sp500_current_730d_20260708/5m --benchmark-dir data/artifacts/ohlcv/v3_development_benchmarks_730d_20260708/5m --memberships data/universe/sp500_point_in_time_20240709_20260708.parquet --technical-dir data/work/v3_c8_technical_20260711 --out-dir data/features/v3_c8_development_20260711_v9 --decision-start-date 2024-08-09 --minimum-cross-section 300 --decision-stride-bars 12 --reuse-technical
-market-predictor train-v3-models --dataset data/features/v3_c8_development_20260711_v9 --families R1 --max-training-memory-gb 4
+market-predictor-research build-v3-development-dataset --bars-dir data/artifacts/ohlcv/v3_sp500_current_730d_20260708/5m --benchmark-dir data/artifacts/ohlcv/v3_development_benchmarks_730d_20260708/5m --memberships data/universe/sp500_point_in_time_20240709_20260708.parquet --technical-dir data/work/v3_c8_technical_20260711 --out-dir data/features/v3_c8_development_20260711_v9 --decision-start-date 2024-08-09 --minimum-cross-section 300 --decision-stride-bars 12 --reuse-technical
+market-predictor-research train-v3-models --dataset data/features/v3_c8_development_20260711_v9 --families R1 --max-training-memory-gb 4
 ```
 
 The loader rejects missing, modified, or unregistered monthly shards and carries the dataset fingerprint into training evidence. It projects only required training/audit columns; the trainer compacts features to `float32`, releases fold models, and enforces a configurable process-memory guard. The completed C8 dataset has 1,063,587 rows across 24 months. B0, B1, B2, R1, D1, and the external O1 catalyst overlay were evaluated and rejected; R2 could not be evaluated because the frozen rows contain no microstructure observations. See the [B0](docs/model_cards/v3_c8_b0_20260711.md), [B1](docs/model_cards/v3_c8_b1_20260711.md), [B2](docs/model_cards/v3_c8_b2_20260711.md), [R1](docs/model_cards/v3_c8_r1_20260720.md), [D1](docs/model_cards/v3_c8_d1_20260711.md), and [O1](docs/model_cards/v3_c8_o1_20260721.md) model cards.
@@ -141,8 +149,8 @@ V4-H1 was built with `--horizons 6,12,24 --primary-horizon-bars 24 --decision-st
 O1 remains outside the estimator. Historical catalyst scoring is resumable and provenance-bound:
 
 ```powershell
-market-predictor score-swing-events --tickers $tickers --raw-dir data/raw/sp500_6m_20260708 --out-dir data/raw/sp500_6m_20260708_scored --text-mode title_summary --max-length 128 --batch-size 64
-market-predictor audit-v3-o1-overlay --predictions data/reports/v3_c8_r1_oof_20260720.parquet --event-dir data/raw/sp500_6m_20260708_scored --coverage-start 2026-01-09T00:00:00Z --coverage-end 2026-07-08T23:59:59Z --availability-policy provider_publication_backfill
+market-predictor-research score-swing-events --tickers $tickers --raw-dir data/raw/sp500_6m_20260708 --out-dir data/raw/sp500_6m_20260708_scored --text-mode title_summary --max-length 128 --batch-size 64
+market-predictor-research audit-v3-o1-overlay --predictions data/reports/v3_c8_r1_oof_20260720.parquet --event-dir data/raw/sp500_6m_20260708_scored --coverage-start 2026-01-09T00:00:00Z --coverage-end 2026-07-08T23:59:59Z --availability-policy provider_publication_backfill
 ```
 
 Publication-time backfill is always research-only. A global-context file is accepted only when its first and last available events cover the declared interval within the configured boundary tolerance.
@@ -166,32 +174,32 @@ Use Azure Blob Storage or another artifact store for durable datasets, reports, 
 Download FinBERT once:
 
 ```powershell
-market-predictor download-model
+market-predictor-collect download-model
 ```
 
 Collect and sentiment-score a small research universe:
 
 ```powershell
-market-predictor collect-swing --tickers "LUNR,MXL,RGTI" --days 30 --out-dir data/raw/research --workers 4
-market-predictor score-swing-events --tickers "LUNR,MXL,RGTI" --raw-dir data/raw/research --out-dir data/raw/research_scored
+market-predictor-collect collect-swing --tickers "LUNR,MXL,RGTI" --days 30 --out-dir data/raw/research --workers 4
+market-predictor-research score-swing-events --tickers "LUNR,MXL,RGTI" --raw-dir data/raw/research --out-dir data/raw/research_scored
 ```
 
 Start the prediction API:
 
 ```powershell
-market-predictor serve-api --host 127.0.0.1 --port 8000
+market-predictor-prod serve-api --host 127.0.0.1 --port 8000
 ```
 
 Export project-owned OHLCV artifacts for Azure upload:
 
 ```powershell
-market-predictor export-ohlcv-artifacts --tickers "LUNR,MXL,RGTI" --days 730 --timeframes 1d,1h
+market-predictor-collect export-ohlcv-artifacts --tickers "LUNR,MXL,RGTI" --days 730 --timeframes 1d,1h
 ```
 
 Upload project artifacts to Azure Blob Storage after Azure env vars are configured:
 
 ```powershell
-market-predictor azure-upload-artifacts --root data/artifacts
+market-predictor-collect azure-upload-artifacts --root data/artifacts
 ```
 
 Azure serving publication, hydration, rollback, and disaster-recovery rehearsal are
@@ -242,8 +250,8 @@ Seeking Alpha RapidAPI:
 - If RapidAPI changes parameter names, update the template values in config instead of changing Python code.
 - Your current basic plan screenshot shows 200 requests/month, 1000 requests/hour, and 10240 MB/month bandwidth.
 - The project caches Seeking Alpha analysis and ratings for 24 hours by default and tracks local monthly usage in `data/usage/rapidapi_usage.json`.
-- Check local usage and the last RapidAPI limit headers with `market-predictor seeking-alpha-limits`.
-- If an endpoint requires a Seeking Alpha account token, cache it with `market-predictor seeking-alpha-token`. The token is stored locally and never printed.
+- Check local usage and the last RapidAPI limit headers with `market-predictor-collect seeking-alpha-limits`.
+- If an endpoint requires a Seeking Alpha account token, cache it with `market-predictor-collect seeking-alpha-token`. The token is stored locally and never printed.
 
 SEC:
 
@@ -253,7 +261,7 @@ SEC:
 ## Download FinBERT
 
 ```powershell
-market-predictor download-model
+market-predictor-collect download-model
 ```
 
 The default model is `ProsusAI/finbert`. Override with `FINBERT_MODEL`.
@@ -261,9 +269,9 @@ The default model is `ProsusAI/finbert`. Override with `FINBERT_MODEL`.
 ## Collect Data
 
 ```powershell
-market-predictor alpaca-tickers --out data/universe/alpaca_tickers.csv
-market-predictor collect AAPL --days 90 --out data/raw/aapl_events.parquet
-market-predictor collect-seeking-alpha AAPL --out data/external/seeking_alpha_quant.csv
+market-predictor-collect alpaca-tickers --out data/universe/alpaca_tickers.csv
+market-predictor-collect collect AAPL --days 90 --out data/raw/aapl_events.parquet
+market-predictor-collect collect-seeking-alpha AAPL --out data/external/seeking_alpha_quant.csv
 ```
 
 Data collection is separate from training and serving. Use the volatile-mover or V3 workflows below for model research; use the prediction API only after an audited live feature snapshot has been published.
@@ -321,7 +329,7 @@ still required before deployment.
 Build a label-free canonical inference artifact, then publish it atomically to the registered live path:
 
 ```powershell
-market-predictor build-intraday-live-features `
+market-predictor-research build-intraday-live-features `
   --decisions data/canonical/intraday_decisions_5m.parquet `
   --one-minute-bars data/canonical/intraday_bars_1m.parquet `
   --benchmark-bars data/canonical/intraday_benchmarks_5m.parquet `
@@ -330,7 +338,7 @@ market-predictor build-intraday-live-features `
   --config configs/intraday_dataset.toml `
   --out data/live/staging/intraday_60m.parquet
 
-market-predictor publish-live-features `
+market-predictor-prod publish-live-features `
   --mode intraday `
   --input-path data/live/staging/intraday_60m.parquet `
   --live-dir data/live
@@ -345,16 +353,16 @@ Every prediction served through the top-level API is written as an immutable, co
 Live model validation is separate from investment replay. Identity-complete live snapshots are converted into immutable maturation intents, then matured only from a hash-verified canonical bar artifact using the exact label policy frozen into the model release:
 
 ```powershell
-market-predictor register-outcome-intents `
+market-predictor-prod register-outcome-intents `
   --snapshot-id <64-character-snapshot-id>
 
-market-predictor mature-outcomes `
+market-predictor-prod mature-outcomes `
   --bars data/canonical/exact_outcome_bars.parquet
 
-market-predictor build-outcome-performance-report `
+market-predictor-prod build-outcome-performance-report `
   --minimum-samples 30
 
-market-predictor publish-drift-assessment `
+market-predictor-prod publish-drift-assessment `
   --mode swing `
   --horizon 5d `
   --model-release-id <64-character-release-id> `
@@ -395,16 +403,16 @@ It also includes a broader high-beta US-listed and liquid ADR/ETF universe in `c
 Bulk workflow:
 
 ```powershell
-market-predictor swing-universe --out data/universe/swing_candidates.csv
-market-predictor collect-swing --days 180 --out-dir data/raw/swing
-market-predictor score-swing-events --raw-dir data/raw/swing --out-dir data/raw/swing_scored
-market-predictor build-swing-datasets --horizon-days 1 --raw-dir data/raw/swing --out-dir data/features/swing
+market-predictor-collect swing-universe --out data/universe/swing_candidates.csv
+market-predictor-collect collect-swing --days 180 --out-dir data/raw/swing
+market-predictor-research score-swing-events --raw-dir data/raw/swing --out-dir data/raw/swing_scored
+market-predictor-research build-swing-datasets --horizon-days 1 --raw-dir data/raw/swing --out-dir data/features/swing
 ```
 
 Use a custom list:
 
 ```powershell
-market-predictor collect-swing --tickers "POET,MXL,RDW,LASE,RGTI,MRVL,IONQ,QBTS" --days 180
+market-predictor-collect collect-swing --tickers "POET,MXL,RDW,LASE,RGTI,MRVL,IONQ,QBTS" --days 180
 ```
 
 Stage separation:
@@ -424,9 +432,9 @@ finbert_batch_size = 32
 Override workers per command:
 
 ```powershell
-market-predictor collect-swing --days 180 --workers 8
-market-predictor score-swing-events --batch-size 64
-market-predictor build-swing-datasets --horizon-days 1 --workers 8
+market-predictor-collect collect-swing --days 180 --workers 8
+market-predictor-research score-swing-events --batch-size 64
+market-predictor-research build-swing-datasets --horizon-days 1 --workers 8
 ```
 
 The engine separates event timing buckets:
@@ -448,11 +456,11 @@ The canonical point-in-time data boundary, C4 swing pipeline, C5 intraday pipeli
 Production model inputs are immutable, hash-verified Parquet artifacts. The normal path is:
 
 ```powershell
-market-predictor canonicalize-bars --input-path data/raw/bars.parquet --out data/canonical/bars.parquet --timeframe 5m --price-feed sip
-market-predictor canonicalize-event-directory --input-dir data/raw/swing_scored --out data/canonical/events.parquet
-market-predictor canonicalize-source-collections --input-path data/raw/swing/_source_collections.parquet --out data/canonical/source_collections.parquet
-market-predictor canonicalize-memberships --input-path data/raw/universe_memberships.parquet --out data/canonical/memberships.parquet
-market-predictor build-canonical-decisions --bars data/canonical/bars.parquet --events data/canonical/events.parquet --source-collections data/canonical/source_collections.parquet --memberships data/canonical/memberships.parquet --out data/canonical/decisions.parquet
+market-predictor-research canonicalize-bars --input-path data/raw/bars.parquet --out data/canonical/bars.parquet --timeframe 5m --price-feed sip
+market-predictor-research canonicalize-event-directory --input-dir data/raw/swing_scored --out data/canonical/events.parquet
+market-predictor-research canonicalize-source-collections --input-path data/raw/swing/_source_collections.parquet --out data/canonical/source_collections.parquet
+market-predictor-research canonicalize-memberships --input-path data/raw/universe_memberships.parquet --out data/canonical/memberships.parquet
+market-predictor-research build-canonical-decisions --bars data/canonical/bars.parquet --events data/canonical/events.parquet --source-collections data/canonical/source_collections.parquet --memberships data/canonical/memberships.parquet --out data/canonical/decisions.parquet
 ```
 
 Canonical guarantees:
@@ -473,7 +481,7 @@ Market Predictor has no runtime alert commands or alert persistence. Alert evalu
 The production swing path consumes only hash-verified canonical artifacts. SPY, QQQ, and every sector ETF used by a membership row must be present in `benchmark_bars`.
 
 ```powershell
-market-predictor build-swing-dataset `
+market-predictor-research build-swing-dataset `
   --decisions data/canonical/decisions.parquet `
   --benchmark-bars data/canonical/benchmark_daily_bars.parquet `
   --global-events data/canonical/global_events.parquet `
@@ -481,13 +489,13 @@ market-predictor build-swing-dataset `
   --config configs/swing_dataset.toml `
   --out data/features/swing/swing_5d.parquet
 
-market-predictor train-swing-model `
+market-predictor-research train-swing-model `
   --dataset data/features/swing/swing_5d.parquet `
   --config configs/swing_training.toml `
   --model-out models/swing/candidates/swing_5d.joblib `
   --evidence-dir data/reports/swing_5d_candidate
 
-market-predictor promote-swing-model `
+market-predictor-research promote-swing-model `
   --model models/swing/candidates/swing_5d.joblib `
   --evidence-dir data/reports/swing_5d_candidate `
   --hypothesis-registry data/governance `
@@ -510,7 +518,7 @@ The removed `build-volatile-dataset`, `train-volatile-model`, and `score-volatil
 The production intraday path consumes hash-verified canonical 5-minute decisions, 1-minute stock/benchmark bars, 5-minute benchmark bars, and global context. Dataset construction and training use column projection, `float32` matrices, sequential fold-model release, and fail before the configured 4 GiB process limit.
 
 ```powershell
-market-predictor build-intraday-dataset `
+market-predictor-research build-intraday-dataset `
   --decisions data/canonical/intraday_decisions_5m.parquet `
   --one-minute-bars data/canonical/intraday_bars_1m.parquet `
   --benchmark-bars data/canonical/intraday_benchmarks_5m.parquet `
@@ -519,13 +527,13 @@ market-predictor build-intraday-dataset `
   --config configs/intraday_dataset.toml `
   --out data/features/intraday/intraday_60m.parquet
 
-market-predictor train-intraday-model `
+market-predictor-research train-intraday-model `
   --dataset data/features/intraday/intraday_60m.parquet `
   --config configs/intraday_training.toml `
   --model-out models/intraday/candidates/intraday_60m.joblib `
   --evidence-dir data/reports/intraday_60m_candidate
 
-market-predictor promote-intraday-model `
+market-predictor-research promote-intraday-model `
   --model models/intraday/candidates/intraday_60m.joblib `
   --evidence-dir data/reports/intraday_60m_candidate `
   --hypothesis-registry data/governance `
@@ -548,17 +556,17 @@ The candidate contains two estimators and is promoted atomically: opportunity es
 Only an attested model can enter the local release repository. Publication copies the model, immutable candidate manifest, promotion attestation, evidence manifest, and every evidence file into a versioned content-addressed directory. Every hash and the attestation are reverified before one locked active pointer is replaced.
 
 ```powershell
-market-predictor publish-local-release `
+market-predictor-prod publish-local-release `
   --model models/swing/candidates/swing_5d.joblib `
   --evidence-manifest data/reports/swing_5d_candidate/evidence.manifest.json `
   --release-root data/local_release_repository `
   --attestation-trust-store configs/attestation_trust_store.json
 
-market-predictor show-active-local-release `
+market-predictor-prod show-active-local-release `
   --release-root data/local_release_repository `
   --attestation-trust-store configs/attestation_trust_store.json
 
-market-predictor rollback-local-release `
+market-predictor-prod rollback-local-release `
   --release-id <64-character-release-id> `
   --release-root data/local_release_repository `
   --attestation-trust-store configs/attestation_trust_store.json
@@ -573,7 +581,7 @@ Direction models answer whether a stock is likely to move. Entry/exit path model
 Build swing entry/exit labels from daily feature rows:
 
 ```powershell
-market-predictor build-entry-exit-dataset `
+market-predictor-research build-entry-exit-dataset `
   --input data/features/volatile_mover_daily_20260704.parquet `
   --horizon-bars 5 `
   --take-profit-atr 1.5 `
@@ -586,12 +594,12 @@ market-predictor build-entry-exit-dataset `
 Train separate entry and exit-risk models:
 
 ```powershell
-market-predictor train-entry-exit-model `
+market-predictor-research train-entry-exit-model `
   --dataset data/features/entry_exit_swing_5b_20260704.parquet `
   --target-col target_entry_success_5b `
   --model-out models/entry_exit_swing_entry_success_5b_20260704_candidate.joblib
 
-market-predictor train-entry-exit-model `
+market-predictor-research train-entry-exit-model `
   --dataset data/features/entry_exit_swing_5b_20260704.parquet `
   --target-col target_exit_risk_5b `
   --model-out models/entry_exit_swing_exit_risk_5b_20260704_candidate.joblib
@@ -600,7 +608,7 @@ market-predictor train-entry-exit-model `
 Score the latest row per ticker:
 
 ```powershell
-market-predictor score-entry-exit-latest `
+market-predictor-research score-entry-exit-latest `
   --dataset data/features/entry_exit_swing_5b_20260704.parquet `
   --model models/entry_exit_swing_entry_success_5b_20260704_candidate.joblib `
   --out data/reports/entry_exit_swing_entry_latest_20260704.csv
@@ -611,7 +619,7 @@ The same commands work for intraday datasets when the input rows are hourly or 5
 Opening-session V2 example for a 60-minute horizon on 5-minute bars:
 
 ```powershell
-market-predictor build-entry-exit-dataset `
+market-predictor-research build-entry-exit-dataset `
   --input data/features/intraday_full_5m.parquet `
   --context data/features/intraday_point_in_time_context.parquet `
   --horizon-bars 12 `
@@ -629,7 +637,7 @@ market-predictor build-entry-exit-dataset `
 Controlled estimator comparisons use the same purged walk-forward folds:
 
 ```powershell
-market-predictor train-entry-exit-model `
+market-predictor-research train-entry-exit-model `
   --dataset data/features/entry_exit_intraday_opening_v2.parquet `
   --target-col target_entry_success_12b `
   --feature-set technical `
@@ -642,7 +650,7 @@ Supported estimators are `hist_gradient_boosting`, `extra_trees`, and `logistic`
 Before promotion, build production-readiness audits from the feature table and out-of-sample predictions:
 
 ```powershell
-market-predictor audit-promotion-readiness `
+market-predictor-research audit-promotion-readiness `
   --dataset data/features/entry_exit_swing_5b_20260704.parquet `
   --predictions data/reports/entry_exit_swing_entry_success_5b_oos_predictions_20260704.csv `
   --out-prefix data/reports/entry_exit_swing_entry_success_5b_promotion_20260704
@@ -707,7 +715,7 @@ The legacy daily-model quant compatibility columns are:
 timestamp,ticker,quant_rating,valuation,growth,profitability,momentum,eps_revision,eps_actual,eps_estimate
 ```
 
-The RapidAPI adapter writes this CSV through `market-predictor collect-seeking-alpha`.
+The RapidAPI adapter writes this CSV through `market-predictor-collect collect-seeking-alpha`.
 
 ## Useful Official Docs
 
