@@ -10,7 +10,7 @@ import typer
 from market_predictor.canonical.store import load_canonical_artifact
 from market_predictor.commands.configuration import load_typed_config
 from market_predictor.drift_policy import (
-    DriftPolicyV1,
+    DriftPolicyV2,
     DriftStateStore,
     evaluate_drift,
 )
@@ -103,6 +103,11 @@ def register_outcome_commands(app: typer.Typer, console: Any) -> None:
             min=1,
             help="Minimum matured outcomes required for sufficient evidence.",
         ),
+        lookback_days: int = typer.Option(
+            60,
+            min=1,
+            help="Rolling decision window in calendar days.",
+        ),
         generated_at: datetime | None = typer.Option(
             None,
             help="Timezone-aware report timestamp; defaults to current UTC.",
@@ -117,6 +122,7 @@ def register_outcome_commands(app: typer.Typer, console: Any) -> None:
             OutcomeRepository(outcome_dir),
             generated_at=timestamp,
             minimum_samples=minimum_samples,
+            lookback_days=lookback_days,
         )
         persisted = write_performance_report(report_out, report)
         source_ids = persisted.get("source_outcome_ids")
@@ -142,6 +148,22 @@ def register_outcome_commands(app: typer.Typer, console: Any) -> None:
         model_release_id: str = typer.Option(
             ...,
             help="Active model release SHA-256 identity.",
+        ),
+        model_artifact_sha256: str = typer.Option(
+            ...,
+            help="Active model artifact SHA-256 identity.",
+        ),
+        prediction_policy_sha256: str = typer.Option(
+            ...,
+            help="Active prediction-policy SHA-256 identity.",
+        ),
+        label_policy_sha256: str = typer.Option(
+            ...,
+            help="Active label-policy SHA-256 identity.",
+        ),
+        execution_policy_sha256: str = typer.Option(
+            ...,
+            help="Active execution-policy SHA-256 identity.",
         ),
         feature_drift_report: Path = typer.Option(
             ...,
@@ -171,11 +193,15 @@ def register_outcome_commands(app: typer.Typer, console: Any) -> None:
             raise typer.BadParameter("evaluated-at must be timezone-aware")
         feature_drift = _load_json_object(feature_drift_report)
         report = load_performance_report(performance_report)
-        policy = load_typed_config(policy_config, DriftPolicyV1)
+        policy = load_typed_config(policy_config, DriftPolicyV2)
         assessment = evaluate_drift(
             mode=mode.strip().lower(),
             horizon=horizon.strip().lower(),
             model_release_id=model_release_id.strip().lower(),
+            model_artifact_sha256=model_artifact_sha256.strip().lower(),
+            prediction_policy_sha256=prediction_policy_sha256.strip().lower(),
+            label_policy_sha256=label_policy_sha256.strip().lower(),
+            execution_policy_sha256=execution_policy_sha256.strip().lower(),
             feature_drift=feature_drift,
             performance_report=report,
             policy=policy,

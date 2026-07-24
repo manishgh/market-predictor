@@ -13,9 +13,9 @@ import numpy as np
 import pandas as pd
 
 from market_predictor.drift_policy import (
-    DriftPolicyV1,
+    DriftAssessmentV2,
+    DriftPolicyV2,
     DriftStateStore,
-    evaluate_drift,
 )
 from market_predictor.feature_store import LiveFeatureStore
 from market_predictor.intraday.contracts import (
@@ -44,7 +44,7 @@ from market_predictor.prediction_service import (
     ServingRoute,
     serving_routes_from_config,
 )
-from market_predictor.registry import write_model_manifest
+from market_predictor.registry import load_model_manifest, write_model_manifest
 from market_predictor.serving_context import (
     ActiveModelContext,
     ActiveReleaseRoute,
@@ -844,7 +844,15 @@ class PredictionServiceTests(unittest.TestCase):
             )
             store = DriftStateStore(root / "drift")
             now = datetime.now(UTC)
-            store.publish(_drift_assessment("swing", "5d", "severe", now))
+            store.publish(
+                _drift_assessment(
+                    "swing",
+                    "5d",
+                    "severe",
+                    now,
+                    model,
+                )
+            )
             service = _service(
                 root,
                 swing=(dataset, model),
@@ -898,8 +906,24 @@ class PredictionServiceTests(unittest.TestCase):
             )
             store = DriftStateStore(root / "drift")
             now = datetime.now(UTC)
-            store.publish(_drift_assessment("swing", "5d", "severe", now))
-            store.publish(_drift_assessment("intraday", "60m", "stable", now))
+            store.publish(
+                _drift_assessment(
+                    "swing",
+                    "5d",
+                    "severe",
+                    now,
+                    swing_model,
+                )
+            )
+            store.publish(
+                _drift_assessment(
+                    "intraday",
+                    "60m",
+                    "stable",
+                    now,
+                    intraday_model,
+                )
+            )
             service = _service(
                 root,
                 swing=(swing_dataset, swing_model),
@@ -1052,50 +1076,50 @@ def _drift_assessment(
     horizon: str,
     state: str,
     evaluated_at: datetime,
-):
-    severe = state == "severe"
-    identity = {
-        "contract_version": "market_predictor.performance_cohorts.v1",
-        "generated_at_utc": evaluated_at.isoformat().replace("+00:00", "Z"),
-        "minimum_samples": 10,
-        "source_outcome_ids": ["c" * 64],
-        "rows": [
-            {
-                "model_release_id": "e" * 64,
-                "view": mode,
-                "horizon": horizon,
-                "cohort_type": "all",
-                "cohort_value": "all",
-                "samples": 50,
-                "evidence_status": "sufficient",
-                "mean_probability": 0.60,
-                "observed_rate": 0.55,
-                "brier_score": 0.40 if severe else 0.20,
-                "calibration_error": 0.05,
-                "average_net_return": 0.01,
-                "average_excess_return_vs_spy": 0.01,
-                "win_rate": 0.55,
-                "max_drawdown": 0.05,
-                "first_exit_time_utc": evaluated_at.isoformat().replace(
-                    "+00:00",
-                    "Z",
-                ),
-                "last_exit_time_utc": evaluated_at.isoformat().replace(
-                    "+00:00",
-                    "Z",
-                ),
-            }
-        ],
+    model_path: Path,
+) -> DriftAssessmentV2:
+    manifest = load_model_manifest(model_path)
+    metrics = manifest["metrics"]
+    if not isinstance(metrics, dict):
+        raise AssertionError("test model metrics are unavailable")
+    content = {
+        "contract_version": "market_predictor.drift_assessment.v2",
+        "mode": mode,
+        "horizon": horizon,
+        "model_release_id": "e" * 64,
+        "model_artifact_sha256": manifest["artifact_sha256"],
+        "prediction_policy_sha256": metrics["prediction_policy_sha256"],
+        "label_policy_sha256": metrics["dataset_label_config_sha256"],
+        "execution_policy_sha256": metrics["execution_policy_sha256"],
+        "policy_sha256": DriftPolicyV2().sha256(),
+        "performance_report_id": "1" * 64,
+        "performance_cohort_id": "2" * 64,
+        "feature_artifact_set_sha256": "3" * 64,
+        "evaluated_at_utc": evaluated_at.isoformat().replace("+00:00", "Z"),
+        "state": state,
+        "actionability": (
+            "actionable" if state in {"stable", "warning"} else "not_ready"
+        ),
+        "reasons": (
+            ("selected_policy_performance_severe",)
+            if state == "severe"
+            else ()
+        ),
+        "feature_drift_status": "stable",
+        "total_predictions": 50,
+        "selected_predictions": 10,
+        "matured_samples": 10,
+        "independent_decision_groups": 10,
+        "last_matured_outcome_utc": evaluated_at.isoformat().replace(
+            "+00:00",
+            "Z",
+        ),
     }
-    report = {**identity, "report_id": content_sha256(identity)}
-    return evaluate_drift(
-        mode=mode,
-        horizon=horizon,
-        model_release_id="e" * 64,
-        feature_drift={"status": "stable"},
-        performance_report=report,
-        policy=DriftPolicyV1(minimum_matured_samples=10),
-        evaluated_at=evaluated_at,
+    return DriftAssessmentV2.model_validate(
+        {
+            **content,
+            "assessment_id": content_sha256(content),
+        }
     )
 
 

@@ -135,6 +135,12 @@ cannot be attested.
 Exit gate: degrading only selected rows, downside calibration, or recent outcomes suppresses
 the affected route.
 
+Status: implemented and locally verified. The rolling report keeps the complete
+canonical intent population for selection-rate measurement, evaluates calibration and
+economics only on selected/actionable/matured rows, retains pending selections, and
+binds exact release/model/prediction/label/execution/feature/source identities. Real
+live matured evidence remains `environment_pending`.
+
 ### R7.7 - Atomic Serving Bundle
 
 1. Publish model, calibration, policy, feature schema, and compatible feature-release

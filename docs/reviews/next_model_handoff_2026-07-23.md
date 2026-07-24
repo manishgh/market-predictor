@@ -302,6 +302,16 @@ candidate integration test):
   one-use ledger transaction and signed attestation without exposing token material.
   Verification on 2026-07-24: **343 tests passed**, repository-wide Ruff clean, and
   strict mypy clean for all changed R7.5b source/script modules.
+- **R7.6 completed locally:** selected-policy performance now uses a bounded rolling
+  decision window. All canonical intents form the selection-rate population, while
+  calibration and economics require selected, actionable, matured rows. Pending
+  selections, opportunity and intraday-downside calibration, score/rank distributions,
+  economics, drawdown, and last-outcome freshness are reported under exact
+  release/model/prediction/label/execution/feature/source identities. Missing, stale,
+  insufficient, severe, tampered, or mismatched assessments suppress actionable
+  serving. Verification on 2026-07-24: **347 tests passed**, repository-wide Ruff
+  clean, and strict mypy clean across **135 source/script files**. Real live evidence
+  remains `environment_pending`.
 
 ## Do NOT claim complete without real external evidence (`environment_pending`)
 
@@ -318,9 +328,9 @@ Mark these `environment_pending`, never simulate them into a pass.
 ```powershell
 Set-Location C:\project\market-predictor
 git checkout r3-lineage
-git status --short                # expect empty
-.\.venv\Scripts\python.exe -m unittest discover -s tests   # expect 343 OK
-# Start R7.6 live selected-policy monitoring. R7.8 remains deferred.
+git status --short                # expect empty after the R7.6 checkpoint
+.\.venv\Scripts\python.exe -m unittest discover -s tests
+# Start R7.7 atomic serving bundle. R7.8 remains deferred.
 ```
 
 Persistent notes for this effort also live in the assistant memory file

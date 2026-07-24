@@ -123,7 +123,11 @@ and intraday downside probability, then aggregate lifetime overall cohorts.
 Fix: monitor rolling selected-policy cohorts, opportunity/downside calibration, rank and
 selection-rate drift, economics, drawdown, and outcome freshness.
 
-Status: policy identity added in R7.1; monitoring remains open in R7.6.
+Status: remediated locally in R7.6. Reports use a bounded rolling decision window,
+retain every canonical intent in the selection-rate population, restrict calibration
+and economics to selected/actionable/matured rows, keep pending selections explicit,
+and bind exact release/model/prediction/label/execution/feature/source identities.
+Real live matured evidence remains `environment_pending`.
 
 ### 7. Unseen-ticker economics are not reconstructed over the full universe
 
@@ -238,7 +242,8 @@ Status: environment pending; no distributed/cloud claim.
 4. R7.4 source-path label reproduction completed locally; rebuild real
    candidates through the new reconciliation path.
 5. Complete R7.5 causally derived shadow evidence.
-6. Complete R7.6 selected-policy monitoring and durable outbox.
+6. R7.6 selected-policy monitoring is complete locally; durable snapshot-to-intent
+   outbox work remains open as finding 12.
 7. Complete R7.7 atomic feature/model serving generations.
 
 Security hardening, container/CI delivery closure, Azure deployment, rollback,

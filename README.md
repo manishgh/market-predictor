@@ -39,11 +39,15 @@ Production API implications:
 - Candidate scoring is available only through research commands or an explicitly constructed test service, never through the HTTP request contract.
 - R4 promotion and local release infrastructure is complete: immutable candidate manifests and attestations, predeclared hypotheses, one-use shadow evidence, paired session-block confidence gates, versioned local releases, atomic activation, and verified rollback are implemented. This does not change the model state above; no real canonical model has passed promotion.
 - Azure publication, synchronization, rollback, and disaster-recovery rehearsal are `environment_pending` and are not evidence for R4 completion.
-- R7.3 exact catalyst lineage is implemented. Canonical builds persist immutable
-  event-to-decision/window assignments, reproduce every material event aggregate
-  from those assignments, and bind both hashes into training and promotion.
-- Repository-wide Ruff and strict mypy pass, and the full 328-test suite is green
-  at the R7.3 checkpoint.
+- R7.3 exact catalyst lineage, R7.4 source-path label reproduction, R7.5 causal
+  shadow evidence, and R7.6 selected-policy monitoring are implemented locally.
+  R7.6 evaluates a bounded rolling decision window, keeps pending selections
+  explicit, and binds every cohort to the exact model, feature, prediction,
+  label, execution, intent, and outcome identities.
+- Real selected-policy monitoring evidence remains `environment_pending` until a
+  promoted release has accumulated sufficient live matured outcomes.
+- At the R7.6 checkpoint, all 347 repository tests pass, repository-wide Ruff is
+  clean, and strict mypy passes across 135 source/script files.
 
 The next valid intraday promotion attempt requires a new predeclared development hypothesis that first passes both economic scopes, followed by matured shadow data after 2026-07-08 and all current promotion audits. See [Intraday model promotion](docs/intraday_model_promotion.md).
 
@@ -379,16 +383,21 @@ market-predictor-prod mature-outcomes `
   --bars data/canonical/exact_outcome_bars.parquet
 
 market-predictor-prod build-outcome-performance-report `
-  --minimum-samples 30
+  --minimum-samples 30 `
+  --lookback-days 60
 
 market-predictor-prod publish-drift-assessment `
   --mode swing `
   --horizon 5d `
   --model-release-id <64-character-release-id> `
+  --model-artifact-sha256 <64-character-model-artifact-hash> `
+  --prediction-policy-sha256 <64-character-prediction-policy-hash> `
+  --label-policy-sha256 <64-character-label-policy-hash> `
+  --execution-policy-sha256 <64-character-execution-policy-hash> `
   --feature-drift-report data/monitoring/feature-drift/swing-5d.json
 ```
 
-The outcome repository deduplicates repeated snapshots by semantic prediction identity and persists intents, attempts, exact bar evidence, and matured outcomes independently. Each maturation intent binds its view's complete prediction-policy payload and hash plus rank, eligibility, and selected state; only a ready row selected by that exact policy is actionable. Swing and intraday may carry distinct policy hashes, while unified responses bind the ordered per-view map into one serving-bundle hash. Performance reports are content-addressed and report calibration, net and SPY-relative return, win rate, and drawdown by release, view, horizon, regime, sector, market-cap, liquidity, and calibration bin. `configs/drift_policy.toml` is the versioned actionability policy. Missing, stale, warming, severe, tampered, or release-mismatched drift state prevents actionable serving; warning state remains actionable and visible in readiness.
+The outcome repository deduplicates repeated snapshots by semantic prediction identity and persists intents, attempts, exact bar evidence, and matured outcomes independently. Each maturation intent binds its view's complete prediction-policy payload and hash plus rank, eligibility, and selected state; only a ready row selected by that exact policy is actionable. Swing and intraday may carry distinct policy hashes, while unified responses bind the ordered per-view map into one serving-bundle hash. Performance reports are content-addressed rolling selected-policy reports. All canonical intents form the selection-rate denominator, while calibration and economics use only selected, actionable, matured outcomes. Reports keep pending selections explicit and include score/rank distributions, selection rate, opportunity calibration, separate intraday downside calibration, net and SPY-relative return, win rate, drawdown, and last-matured freshness by release, view, horizon, regime, sector, market-cap, liquidity, and calibration bin. `configs/drift_policy.toml` is the versioned actionability policy. Missing, stale, warming, insufficient, severe, tampered, or identity-mismatched drift state prevents actionable serving; warning state remains actionable and visible in readiness.
 
 Replay an investment from a stored prediction:
 

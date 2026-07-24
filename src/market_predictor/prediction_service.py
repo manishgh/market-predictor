@@ -17,7 +17,7 @@ from market_predictor.catalyst_overlay import (
     CatalystAssessment,
     assess_catalyst_overlay,
 )
-from market_predictor.drift_policy import DriftAssessmentV1, DriftStateStore
+from market_predictor.drift_policy import DriftAssessmentV2, DriftStateStore
 from market_predictor.feature_store import LiveFeatureStore
 from market_predictor.intraday.model import score_intraday_payload
 from market_predictor.prediction_contracts import (
@@ -256,17 +256,17 @@ class PredictionService:
         try:
             route, resolved_horizon = self._serving_route("swing", request)
             context = self.model_context_cache.get("swing", resolved_horizon, route)
-            self._require_actionable_drift(
-                mode="swing",
-                horizon=resolved_horizon,
-                release_id=context.release_id,
-            )
             model = self._model_info_from_context(
                 context,
                 bar_timeframe=route.bar_timeframe,
             )
             prediction_policy = _prediction_policy_for_model(model)
             source = self._load_feature_source("swing", route, request)
+            self._require_actionable_drift(
+                mode="swing",
+                horizon=resolved_horizon,
+                model=model,
+            )
             frame = self._feature_frame(
                 source.frame,
                 request=request,
@@ -312,17 +312,17 @@ class PredictionService:
         try:
             route, resolved_horizon = self._serving_route("intraday", request)
             context = self.model_context_cache.get("intraday", resolved_horizon, route)
-            self._require_actionable_drift(
-                mode="intraday",
-                horizon=resolved_horizon,
-                release_id=context.release_id,
-            )
             model = self._model_info_from_context(
                 context,
                 bar_timeframe=route.bar_timeframe,
             )
             prediction_policy = _prediction_policy_for_model(model)
             source = self._load_feature_source("intraday", route, request)
+            self._require_actionable_drift(
+                mode="intraday",
+                horizon=resolved_horizon,
+                model=model,
+            )
             frame = self._feature_frame(
                 source.frame,
                 request=request,
@@ -491,7 +491,7 @@ class PredictionService:
                     assessment = self._load_drift_assessment(
                         mode=mode,
                         horizon=horizon,
-                        release_id=context.release_id,
+                        model=info,
                         checked_at=checked_at,
                     )
                     components[drift_name] = {
@@ -575,15 +575,15 @@ class PredictionService:
         *,
         mode: str,
         horizon: str,
-        release_id: str,
-    ) -> DriftAssessmentV1 | None:
+        model: ModelInfo,
+    ) -> DriftAssessmentV2 | None:
         if not self.enforce_drift:
             return None
         try:
             assessment = self._load_drift_assessment(
                 mode=mode,
                 horizon=horizon,
-                release_id=release_id,
+                model=model,
                 checked_at=datetime.now(UTC),
             )
         except (DataReadinessError, PredictionConflictError, ValueError) as exc:
@@ -597,12 +597,24 @@ class PredictionService:
         *,
         mode: str,
         horizon: str,
-        release_id: str,
+        model: ModelInfo,
         checked_at: datetime,
-    ) -> DriftAssessmentV1:
+    ) -> DriftAssessmentV2:
         if not self.enforce_drift:
             raise DataReadinessError("drift enforcement is disabled")
-        assessment = self.drift_state_store.load(mode, horizon, release_id)
+        route_identity = _model_drift_identity(model)
+        assessment = self.drift_state_store.load(
+            mode,
+            horizon,
+            route_identity["model_release_id"],
+        )
+        if any(
+            getattr(assessment, field) != value
+            for field, value in route_identity.items()
+        ):
+            raise DataReadinessError(
+                "route drift assessment model or policy identity mismatch"
+            )
         evaluated_at = assessment.evaluated_at_utc.astimezone(UTC)
         if checked_at.astimezone(UTC) - evaluated_at > self.maximum_drift_assessment_age:
             raise DataReadinessError("route drift assessment is stale")
@@ -1661,6 +1673,24 @@ def _strict_utc_series(values: pd.Series) -> pd.Series:
 def _is_sha256(value: Any) -> bool:
     text = str(value or "").lower()
     return len(text) == 64 and all(character in "0123456789abcdef" for character in text)
+
+
+def _model_drift_identity(model: ModelInfo) -> dict[str, str]:
+    values = {
+        "model_release_id": model.release_id,
+        "model_artifact_sha256": model.artifact_sha256,
+        "prediction_policy_sha256": model.prediction_policy_sha256,
+        "label_policy_sha256": model.label_policy_sha256,
+        "execution_policy_sha256": model.execution_policy_sha256,
+    }
+    if any(not _is_sha256(value) for value in values.values()):
+        raise DataReadinessError(
+            "active model identity is incomplete for drift enforcement"
+        )
+    return {
+        field: str(value)
+        for field, value in values.items()
+    }
 
 
 def _drivers(row: pd.Series, columns: list[str]) -> dict[str, float | int | str | None]:
