@@ -32,13 +32,6 @@ from market_predictor.commands.v3_models import register_v3_model_commands
 from market_predictor.commands.v3_readiness import register_v3_readiness_commands
 from market_predictor.config import Settings, get_settings
 from market_predictor.data_quality import sanitize_events_frame
-from market_predictor.deployment import (
-    DEFAULT_ACTIVE_POINTER,
-    DEFAULT_RELEASE_PREFIX,
-    publish_serving_release,
-    rollback_serving_release,
-    sync_active_serving_release,
-)
 from market_predictor.entry_exit import (
     ENTRY_EXIT_SCHEMA_VERSION,
     EntryExitLabelConfig,
@@ -63,7 +56,6 @@ from market_predictor.intraday_enrichment import build_enriched_intraday_dataset
 from market_predictor.intraday_universe import build_intraday_candidate_universe
 from market_predictor.live_features import LIVE_ARTIFACT_TYPES, LIVE_SCHEMA_VERSIONS, LiveMode
 from market_predictor.model import DEFAULT_FEATURES
-from market_predictor.prediction_service import serving_routes_from_config
 from market_predictor.price import fetch_daily_prices, fetch_intraday_prices
 from market_predictor.promotion_audit import (
     ProfitabilityAuditConfig,
@@ -1342,59 +1334,6 @@ def azure_upload_artifacts(
     uploaded = store.upload_tree(root, blob_prefix=prefix, patterns=pattern_values)
     console.print(f"Uploaded {len(uploaded)} files to container {settings.azure_storage_container}/{settings.azure_prefix}/{prefix}")
     console.print(pd.DataFrame(uploaded).tail(20) if uploaded else "No files uploaded.")
-
-
-@app.command("azure-publish-serving-release")
-def azure_publish_serving_release(
-    root: Path = typer.Option(Path("."), help="Deployment root containing configured models and live features."),
-    release_prefix: str = typer.Option(DEFAULT_RELEASE_PREFIX, help="Immutable release prefix under AZURE_BLOB_PREFIX."),
-    active_pointer: str = typer.Option(DEFAULT_ACTIVE_POINTER, help="Mutable active-release pointer blob."),
-) -> None:
-    """Publish one immutable, complete model-plus-feature serving release."""
-
-    settings = get_settings()
-    resolved_root = root.resolve()
-    pointer = publish_serving_release(
-        AzureBlobStore(settings),
-        root=resolved_root,
-        routes=serving_routes_from_config(settings.app_config),
-        live_feature_store=LiveFeatureStore(resolved_root),
-        release_prefix=release_prefix,
-        active_pointer_blob=active_pointer,
-    )
-    console.print(pointer)
-
-
-@app.command("azure-rollback-serving-release")
-def azure_rollback_serving_release(
-    release_id: str = typer.Option(..., help="Previously published 64-character serving release id."),
-    release_prefix: str = typer.Option(DEFAULT_RELEASE_PREFIX, help="Immutable release prefix under AZURE_BLOB_PREFIX."),
-    active_pointer: str = typer.Option(DEFAULT_ACTIVE_POINTER, help="Mutable active-release pointer blob."),
-) -> None:
-    """Atomically move the active pointer to a verified earlier release."""
-
-    pointer = rollback_serving_release(
-        AzureBlobStore(get_settings()),
-        release_id=release_id,
-        release_prefix=release_prefix,
-        active_pointer_blob=active_pointer,
-    )
-    console.print(pointer)
-
-
-@app.command("azure-sync-serving-release")
-def azure_sync_serving_release(
-    root: Path = typer.Option(Path("."), help="Local deployment root to hydrate before API startup."),
-    active_pointer: str = typer.Option(DEFAULT_ACTIVE_POINTER, help="Active-release pointer blob."),
-) -> None:
-    """Hydrate and integrity-check the active Azure release into the local root."""
-
-    pointer = sync_active_serving_release(
-        AzureBlobStore(get_settings()),
-        root=root,
-        active_pointer_blob=active_pointer,
-    )
-    console.print(pointer)
 
 
 @app.command("audit-promotion-readiness")

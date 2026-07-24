@@ -140,7 +140,7 @@ Intraday uses the equivalent `build-intraday-live-features` command with canonic
 Publish one complete serving release:
 
 ```powershell
-market-predictor azure-publish-serving-release --root .
+Azure model-serving release publication is currently `environment_pending`.
 ```
 
 This command uploads all assets first, writes the immutable release manifest second, and moves the active pointer last. It accepts only promoted, integrity-checked models referenced by server-owned routes and fresh registered live snapshots with canonical source identity.
@@ -148,15 +148,16 @@ This command uploads all assets first, writes the immutable release manifest sec
 Hydrate an API revision manually or at startup:
 
 ```powershell
-market-predictor azure-sync-serving-release --root .
+No Azure model-release synchronization command is exposed in the production CLI.
 ```
 
-The container entrypoint runs this before API import when `SYNC_AZURE_RELEASE_ON_STARTUP=true`. Downloads go to staging, every SHA-256 is verified, local manifests are installed after their artifacts, and the active-release marker is written last. Any failure stops startup rather than serving a partial release.
+The container no longer performs Azure model hydration at startup. Serving starts
+only from signed local active-release repositories mounted into the runtime.
 
 Rollback by moving the pointer to a complete prior release:
 
 ```powershell
-market-predictor azure-rollback-serving-release --release-id <64-character-release-id>
+Rollback currently uses the verified local release repository only.
 ```
 
 Restart the API revision after rollback, or run sync in each instance. Rollback never mutates artifacts inside either release.
@@ -168,7 +169,7 @@ The removed `live-once`, `live-run`, and `live-train-event` commands must not be
 Deploy the API and scheduled jobs independently. The API revision should use:
 
 - target port `8000`
-- `SYNC_AZURE_RELEASE_ON_STARTUP=true`
+- Azure model-release hydration: `environment_pending`
 - `AZURE_STORAGE_ACCOUNT_URL` plus a managed identity with Blob Data Reader permission
 - `AZURE_STORAGE_CONTAINER` and `AZURE_BLOB_PREFIX`
 - 4 GiB memory limit, `RUNTIME_MEMORY_BUDGET_GIB=4.0`, and `RUNTIME_MEMORY_HEADROOM_GIB=0.25`

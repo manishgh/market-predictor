@@ -187,6 +187,17 @@ def load_active_local_release(
     return {"pointer": pointer, "release": release}
 
 
+def load_active_local_pointer(root: Path) -> dict[str, Any]:
+    """Load and verify only the atomic active pointer.
+
+    Serving uses this inexpensive identity check between full release
+    verifications. A changed pointer always triggers complete release and
+    attestation verification before a new model is deserialized.
+    """
+
+    return _load_active_pointer(root.resolve() / ACTIVE_POINTER_NAME)
+
+
 def _source_inventory(
     model_path: Path,
     evidence_manifest_path: Path,

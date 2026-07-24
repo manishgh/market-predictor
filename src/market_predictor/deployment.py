@@ -5,6 +5,7 @@ import json
 import os
 import tempfile
 from collections.abc import Mapping
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path, PurePosixPath
 from typing import Protocol, TypedDict, cast
@@ -13,8 +14,8 @@ from market_predictor.canonical.store import file_sha256
 from market_predictor.feature_store import LiveFeatureStore
 from market_predictor.intraday.contracts import INTRADAY_MODEL_SCHEMA_VERSION, INTRADAY_MODEL_TYPE
 from market_predictor.live_features import LiveMode
-from market_predictor.prediction_service import ServingRoute, verify_serving_model_artifact
 from market_predictor.registry import manifest_path_for
+from market_predictor.serving_context import verify_serving_model_artifact
 from market_predictor.swing.contracts import SWING_MODEL_SCHEMA_VERSION, SWING_MODEL_TYPE
 from market_predictor.v3.errors import DataReadinessError
 
@@ -22,6 +23,12 @@ SERVING_RELEASE_SCHEMA = "market_predictor.serving_release.v1"
 ACTIVE_RELEASE_SCHEMA = "market_predictor.active_serving_release.v1"
 DEFAULT_RELEASE_PREFIX = "serving/releases"
 DEFAULT_ACTIVE_POINTER = "serving/_active_release.json"
+
+
+@dataclass(frozen=True)
+class DeploymentRoute:
+    model: Path
+    bar_timeframe: str = "unknown"
 
 
 class ReleaseAsset(TypedDict):
@@ -76,7 +83,7 @@ def publish_serving_release(
     store: DeploymentBlobStore,
     *,
     root: Path,
-    routes: Mapping[str, Mapping[str, ServingRoute]],
+    routes: Mapping[str, Mapping[str, DeploymentRoute]],
     live_feature_store: LiveFeatureStore,
     release_prefix: str = DEFAULT_RELEASE_PREFIX,
     active_pointer_blob: str = DEFAULT_ACTIVE_POINTER,

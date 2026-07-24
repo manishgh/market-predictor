@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import json
 import tempfile
+import threading
 import unittest
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
@@ -18,9 +20,11 @@ from market_predictor.intraday.contracts import (
 )
 from market_predictor.live_features import live_feature_columns
 from market_predictor.prediction_contracts import (
+    PredictionCapacityError,
     PredictionDataSource,
     PredictionReadinessError,
     PredictionRequest,
+    PredictionValidationError,
 )
 from market_predictor.prediction_service import (
     SERVING_POLICY_ID,
@@ -30,6 +34,11 @@ from market_predictor.prediction_service import (
     serving_routes_from_config,
 )
 from market_predictor.registry import write_model_manifest
+from market_predictor.serving_context import (
+    ActiveModelContext,
+    ActiveReleaseRoute,
+    verify_serving_model_artifact,
+)
 from market_predictor.swing.contracts import (
     SWING_FEATURE_SCHEMA_VERSION,
     SWING_MODEL_SCHEMA_VERSION,
@@ -51,15 +60,94 @@ class FixedProbabilityModel:
         )
 
 
+class StaticModelContextProvider:
+    """Test-only provider; production always resolves an active release pointer."""
+
+    def __init__(self, root: Path) -> None:
+        self.root = root
+        self.contexts: dict[tuple[str, str, Path], ActiveModelContext] = {}
+        self.load_count = 0
+
+    def get(
+        self,
+        mode: str,
+        horizon: str,
+        route: ActiveReleaseRoute,
+    ) -> ActiveModelContext:
+        model_path = route.repository if route.repository.is_absolute() else self.root / route.repository
+        key = (mode, horizon, model_path)
+        cached = self.contexts.get(key)
+        if cached is not None:
+            return cached
+        expected_type = SWING_MODEL_TYPE if mode == "swing" else INTRADAY_MODEL_TYPE
+        expected_schema = SWING_MODEL_SCHEMA_VERSION if mode == "swing" else INTRADAY_MODEL_SCHEMA_VERSION
+        manifest = verify_serving_model_artifact(
+            model_path,
+            resolved_horizon=horizon,
+            expected_model_type=expected_type,
+            expected_schema_version=expected_schema,
+        )
+        payload = joblib.load(model_path)
+        self.load_count += 1
+        context = ActiveModelContext(
+            mode=mode,
+            horizon=horizon,
+            release_id="e" * 64,
+            pointer_sha256="d" * 64,
+            model_path=model_path,
+            manifest=manifest,
+            payload=payload,
+        )
+        self.contexts[key] = context
+        return context
+
+    def snapshot(self) -> dict[str, object]:
+        return {"loaded_contexts": len(self.contexts), "contexts": []}
+
+    def cached(self, mode: str, horizon: str) -> ActiveModelContext | None:
+        for (cached_mode, cached_horizon, _), context in self.contexts.items():
+            if cached_mode == mode and cached_horizon == horizon:
+                return context
+        return None
+
+    def is_current(
+        self,
+        mode: str,
+        horizon: str,
+        route: ActiveReleaseRoute,
+    ) -> bool:
+        del route
+        return self.cached(mode, horizon) is not None
+
+
+class BlockingModelContextProvider(StaticModelContextProvider):
+    def __init__(self, root: Path) -> None:
+        super().__init__(root)
+        self.entered = threading.Event()
+        self.release = threading.Event()
+
+    def get(
+        self,
+        mode: str,
+        horizon: str,
+        route: ActiveReleaseRoute,
+    ) -> ActiveModelContext:
+        self.entered.set()
+        if not self.release.wait(timeout=5):
+            raise TimeoutError("test did not release blocked model context")
+        return super().get(mode, horizon, route)
+
+
 class PredictionServiceTests(unittest.TestCase):
     def test_serving_routes_are_loaded_from_server_configuration(self) -> None:
         routes = serving_routes_from_config(
             {
                 "prediction_serving": {
+                    "attestation_trust_store": "configs/trust.json",
                     "routes": {
                         "swing": {
                             "5d": {
-                                "model": "models/swing.joblib",
+                                "release_repository": "data/releases/swing_5d",
                                 "bar_timeframe": "1Day",
                             }
                         }
@@ -68,7 +156,10 @@ class PredictionServiceTests(unittest.TestCase):
             }
         )
 
-        self.assertEqual(routes["swing"]["5d"].model, Path("models/swing.joblib"))
+        self.assertEqual(
+            routes["swing"]["5d"].repository,
+            Path("data/releases/swing_5d"),
+        )
 
     def test_swing_prediction_uses_promoted_model_and_returns_contract(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -97,6 +188,62 @@ class PredictionServiceTests(unittest.TestCase):
             self.assertEqual(response.evidence.serving_policy_id, SERVING_POLICY_ID)
             self.assertEqual(response.evidence.serving_policy_sha256, SERVING_POLICY_SHA256)
             self.assertEqual(response.evidence.identity_status, "research_only")
+
+    def test_prediction_rejects_oversized_ticker_batch_before_scoring(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            dataset = root / "features.parquet"
+            model = root / "swing.joblib"
+            features = ["return_1d", "volume_z20"]
+            _swing_frame(["MSFT"], features, rows=260).to_parquet(dataset, index=False)
+            _write_model(
+                model,
+                features,
+                target_col="target_net_positive_5d",
+                status="promoted",
+                probability=0.73,
+            )
+            service = _service(
+                root,
+                swing=(dataset, model),
+                max_tickers_per_request=1,
+            )
+
+            with self.assertRaises(PredictionValidationError):
+                service.predict(
+                    PredictionRequest(tickers=["MSFT", "AAPL"], mode="swing")
+                )
+
+    def test_concurrent_request_is_rejected_instead_of_queued(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            dataset = root / "features.parquet"
+            model = root / "swing.joblib"
+            features = ["return_1d", "volume_z20"]
+            _swing_frame(["MSFT"], features, rows=260).to_parquet(dataset, index=False)
+            _write_model(
+                model,
+                features,
+                target_col="target_net_positive_5d",
+                status="promoted",
+                probability=0.73,
+            )
+            provider = BlockingModelContextProvider(root)
+            service = _service(
+                root,
+                swing=(dataset, model),
+                model_context_cache=provider,
+                max_concurrent_inference=1,
+            )
+            request = PredictionRequest(tickers=["MSFT"], mode="swing")
+
+            with ThreadPoolExecutor(max_workers=1) as executor:
+                first = executor.submit(service.predict, request)
+                self.assertTrue(provider.entered.wait(timeout=2))
+                with self.assertRaises(PredictionCapacityError):
+                    service.predict(request)
+                provider.release.set()
+                self.assertEqual(first.result(timeout=5).mode, "swing")
 
     def test_swing_prediction_rejects_candidate_model_by_default(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -504,6 +651,7 @@ class PredictionServiceTests(unittest.TestCase):
                 data_source="live",
                 live_feature_store=store,
             )
+            service.preload()
 
             result = service.health(as_of=generated)
 
@@ -519,13 +667,17 @@ def _service(
     intraday: tuple[Path | None, Path] | None = None,
     data_source: PredictionDataSource = "curated",
     live_feature_store: LiveFeatureStore | None = None,
+    model_context_cache: StaticModelContextProvider | None = None,
+    max_concurrent_inference: int = 1,
+    max_tickers_per_request: int = 100,
 ) -> PredictionService:
     routes: dict[str, dict[str, ServingRoute]] = {}
     if swing is not None:
         dataset, model = swing
         routes["swing"] = {
             swing_horizon: ServingRoute(
-                model=model,
+                repository=model,
+                attestation_trust_store=Path("unused-test-trust.json"),
                 curated_dataset=dataset,
                 bar_timeframe="1Day",
             )
@@ -534,7 +686,8 @@ def _service(
         dataset, model = intraday
         routes["intraday"] = {
             "60m": ServingRoute(
-                model=model,
+                repository=model,
+                attestation_trust_store=Path("unused-test-trust.json"),
                 curated_dataset=dataset,
                 bar_timeframe="5Min",
             )
@@ -544,6 +697,9 @@ def _service(
         routes=routes,
         data_source=data_source,
         live_feature_store=live_feature_store,
+        model_context_cache=model_context_cache or StaticModelContextProvider(root),
+        max_concurrent_inference=max_concurrent_inference,
+        max_tickers_per_request=max_tickers_per_request,
     )
 
 

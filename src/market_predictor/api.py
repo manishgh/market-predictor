@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import time
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
@@ -50,6 +52,10 @@ def create_app(
             routes=serving_routes_from_config(settings.app_config),
             memory_budget_gib=settings.runtime_memory_budget_gib,
             memory_headroom_gib=settings.runtime_memory_headroom_gib,
+            max_concurrent_inference=settings.runtime_max_concurrent_inference,
+            max_tickers_per_request=settings.runtime_max_tickers_per_request,
+            inference_memory_reservation_gib=settings.runtime_inference_memory_reservation_gib,
+            reject_unknown_memory=settings.runtime_reject_unknown_memory,
         )
     configured_replay_service = replay_service
     if configured_replay_service is None and isinstance(prediction_service, PredictionService):
@@ -57,10 +63,18 @@ def create_app(
             snapshot_store=prediction_service.snapshot_store,
             price_provider=AlpacaReplayPriceProvider(get_settings()),
         )
+    @asynccontextmanager
+    async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+        preload = getattr(prediction_service, "preload", None)
+        if callable(preload):
+            preload()
+        yield
+
     app = FastAPI(
         title="Market Predictor API",
         version="0.1.0",
         description="Production prediction API for swing and intraday market models.",
+        lifespan=lifespan,
     )
     if telemetry is not None:
         runtime_telemetry = telemetry

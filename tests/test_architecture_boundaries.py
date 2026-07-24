@@ -52,10 +52,14 @@ class ArchitectureBoundaryTests(unittest.TestCase):
                 "build-swing-live-features",
                 "build-intraday-live-features",
                 "publish-live-features",
+            }.issubset(command_names)
+        )
+        self.assertTrue(
+            {
                 "azure-publish-serving-release",
                 "azure-rollback-serving-release",
                 "azure-sync-serving-release",
-            }.issubset(command_names)
+            }.isdisjoint(command_names)
         )
         self.assertNotIn("azure-publish-models", command_names)
         self.assertIn("rank-sector-themes", command_names)
@@ -81,7 +85,7 @@ class ArchitectureBoundaryTests(unittest.TestCase):
         self.assertIn("USER 10001:10001", dockerfile)
         self.assertIn("/v1/health/live", dockerfile)
         self.assertIn('CMD ["sh", "scripts/container-entrypoint.sh"]', dockerfile)
-        self.assertIn("azure-sync-serving-release --root /app", entrypoint)
+        self.assertNotIn("azure-sync-serving-release", entrypoint)
         self.assertIn("exec market-predictor serve-api", entrypoint)
 
 

@@ -9,8 +9,10 @@ from market_predictor.api import create_app
 from market_predictor.prediction_contracts import (
     InvestmentReplayRequest,
     InvestmentReplayResponse,
+    PredictionCapacityError,
     PredictionConflictError,
     PredictionDependencyError,
+    PredictionMemoryPressureError,
     PredictionNotFoundError,
     PredictionReadinessError,
     PredictionRequest,
@@ -122,6 +124,8 @@ class PredictionApiTests(unittest.TestCase):
             (PredictionNotFoundError, 404, "prediction_not_found"),
             (PredictionConflictError, 409, "prediction_conflict"),
             (PredictionThrottledError, 429, "prediction_throttled"),
+            (PredictionCapacityError, 503, "inference_capacity_exhausted"),
+            (PredictionMemoryPressureError, 503, "memory_pressure"),
             (PredictionReadinessError, 503, "prediction_not_ready"),
             (PredictionDependencyError, 503, "prediction_dependency_unavailable"),
         ]

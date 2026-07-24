@@ -44,6 +44,25 @@ class Settings(BaseSettings):
     azure_blob_prefix: str = Field(default="market-predictor", alias="AZURE_BLOB_PREFIX")
     runtime_memory_budget_gib: float = Field(default=4.0, alias="RUNTIME_MEMORY_BUDGET_GIB", gt=0)
     runtime_memory_headroom_gib: float = Field(default=0.25, alias="RUNTIME_MEMORY_HEADROOM_GIB", gt=0)
+    runtime_max_concurrent_inference: int = Field(
+        default=1,
+        alias="RUNTIME_MAX_CONCURRENT_INFERENCE",
+        ge=1,
+    )
+    runtime_max_tickers_per_request: int = Field(
+        default=100,
+        alias="RUNTIME_MAX_TICKERS_PER_REQUEST",
+        ge=1,
+    )
+    runtime_inference_memory_reservation_gib: float = Field(
+        default=0.5,
+        alias="RUNTIME_INFERENCE_MEMORY_RESERVATION_GIB",
+        gt=0,
+    )
+    runtime_reject_unknown_memory: bool = Field(
+        default=False,
+        alias="RUNTIME_REJECT_UNKNOWN_MEMORY",
+    )
     data_dir: Path = Path("data")
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")

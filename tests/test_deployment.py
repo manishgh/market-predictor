@@ -13,13 +13,13 @@ import pandas as pd
 from market_predictor.canonical.store import file_sha256
 from market_predictor.deployment import (
     DEFAULT_ACTIVE_POINTER,
+    DeploymentRoute,
     publish_serving_release,
     rollback_serving_release,
     sync_active_serving_release,
 )
 from market_predictor.feature_store import LiveFeatureStore
 from market_predictor.live_features import live_feature_columns
-from market_predictor.prediction_service import ServingRoute
 from market_predictor.registry import write_model_manifest
 from market_predictor.swing.contracts import (
     SWING_FEATURE_SCHEMA_VERSION,
@@ -90,7 +90,7 @@ class ServingDeploymentTests(unittest.TestCase):
             target = Path(target_dir)
             model = _write_promoted_model(source, marker="first")
             live_store = _write_live_features(source, generated)
-            routes = {"swing": {"5d": ServingRoute(model=model.relative_to(source), bar_timeframe="1Day")}}
+            routes = {"swing": {"5d": DeploymentRoute(model=model.relative_to(source), bar_timeframe="1Day")}}
 
             first = publish_serving_release(
                 store,
@@ -103,7 +103,7 @@ class ServingDeploymentTests(unittest.TestCase):
             first_model_hash = file_sha256(model)
 
             second_model = _write_promoted_model(source, marker="second")
-            routes = {"swing": {"5d": ServingRoute(model=second_model.relative_to(source), bar_timeframe="1Day")}}
+            routes = {"swing": {"5d": DeploymentRoute(model=second_model.relative_to(source), bar_timeframe="1Day")}}
             second = publish_serving_release(
                 store,
                 root=source,
@@ -139,7 +139,7 @@ class ServingDeploymentTests(unittest.TestCase):
             pointer = publish_serving_release(
                 store,
                 root=source,
-                routes={"swing": {"5d": ServingRoute(model=model.relative_to(source))}},
+                routes={"swing": {"5d": DeploymentRoute(model=model.relative_to(source))}},
                 live_feature_store=live_store,
                 generated_at=generated,
             )
@@ -154,7 +154,7 @@ class ServingDeploymentTests(unittest.TestCase):
                 publish_serving_release(
                     store,
                     root=source,
-                    routes={"swing": {"5d": ServingRoute(model=model.relative_to(source))}},
+                    routes={"swing": {"5d": DeploymentRoute(model=model.relative_to(source))}},
                     live_feature_store=live_store,
                     generated_at=generated,
                 )
@@ -168,7 +168,7 @@ class ServingDeploymentTests(unittest.TestCase):
             source = Path(source_dir)
             model = _write_promoted_model(source, marker="first")
             live_store = _write_live_features(source, generated)
-            routes = {"swing": {"5d": ServingRoute(model=model.relative_to(source))}}
+            routes = {"swing": {"5d": DeploymentRoute(model=model.relative_to(source))}}
             first = publish_serving_release(
                 store,
                 root=source,
@@ -203,7 +203,7 @@ class ServingDeploymentTests(unittest.TestCase):
             pointer = publish_serving_release(
                 store,
                 root=source,
-                routes={"swing": {"5d": ServingRoute(model=model.relative_to(source))}},
+                routes={"swing": {"5d": DeploymentRoute(model=model.relative_to(source))}},
                 live_feature_store=live_store,
                 generated_at=generated,
             )
@@ -223,7 +223,7 @@ class ServingDeploymentTests(unittest.TestCase):
                 publish_serving_release(
                     store,
                     root=source,
-                    routes={"swing": {"1d": ServingRoute(model=model.relative_to(source))}},
+                    routes={"swing": {"1d": DeploymentRoute(model=model.relative_to(source))}},
                     live_feature_store=live_store,
                     generated_at=generated,
                 )

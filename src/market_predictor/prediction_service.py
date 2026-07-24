@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import re
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -12,18 +11,14 @@ from uuid import uuid4
 
 import pandas as pd
 
+from market_predictor.admission import InferenceAdmissionController
 from market_predictor.canonical.cutoffs import SWING_NIGHTLY_CUTOFF
 from market_predictor.catalyst_overlay import (
     CatalystAssessment,
     assess_catalyst_overlay,
 )
-from market_predictor.drift import audit_feature_drift
 from market_predictor.feature_store import LiveFeatureStore
-from market_predictor.intraday.contracts import (
-    INTRADAY_MODEL_SCHEMA_VERSION,
-    INTRADAY_MODEL_TYPE,
-)
-from market_predictor.intraday.model import score_intraday_frame
+from market_predictor.intraday.model import score_intraday_payload
 from market_predictor.prediction_contracts import (
     CatalystConfirmationInfo,
     FeatureArtifactIdentityV1,
@@ -66,10 +61,15 @@ from market_predictor.readiness import (
     assess_daily_readiness,
     assess_intraday_readiness,
 )
-from market_predictor.registry import MODEL_STATUS_PROMOTED, file_sha256, verify_model_artifact
+from market_predictor.registry import file_sha256
 from market_predictor.resources import memory_audit
-from market_predictor.swing.contracts import SWING_MODEL_SCHEMA_VERSION, SWING_MODEL_TYPE
-from market_predictor.swing.model import score_swing_frame
+from market_predictor.serving_context import (
+    ActiveModelContext,
+    ActiveModelContextCache,
+    ActiveReleaseRoute,
+    ModelContextProvider,
+)
+from market_predictor.swing.model import score_swing_payload
 from market_predictor.v3.errors import DataReadinessError
 
 DEFAULT_MODE_HORIZONS = {"swing": "5d", "intraday": "60m"}
@@ -120,13 +120,7 @@ SERVING_POLICY_SHA256 = hashlib.sha256(
 ).hexdigest()
 
 
-@dataclass(frozen=True)
-class ServingRoute:
-    """Server-owned route from a prediction horizon to registered artifacts."""
-
-    model: Path
-    curated_dataset: Path | None = None
-    bar_timeframe: str = "unknown"
+ServingRoute = ActiveReleaseRoute
 
 
 @dataclass(frozen=True)
@@ -145,6 +139,13 @@ def serving_routes_from_config(config: Mapping[str, Any]) -> dict[str, dict[str,
 
     serving = config.get("prediction_serving")
     route_config = serving.get("routes") if isinstance(serving, dict) else None
+    trust_store = (
+        str(serving.get("attestation_trust_store", "")).strip()
+        if isinstance(serving, dict)
+        else ""
+    )
+    if not trust_store:
+        raise ValueError("prediction_serving.attestation_trust_store must be configured")
     if not isinstance(route_config, dict):
         raise ValueError("prediction_serving.routes must be configured")
     routes: dict[str, dict[str, ServingRoute]] = {}
@@ -158,48 +159,37 @@ def serving_routes_from_config(config: Mapping[str, Any]) -> dict[str, dict[str,
         for horizon, raw_route in raw_mode_routes.items():
             if not isinstance(raw_route, dict):
                 raise ValueError(f"prediction serving route {mode}.{horizon} must be a table")
-            model = str(raw_route.get("model", "")).strip()
-            if not model:
-                raise ValueError(f"prediction serving route {mode}.{horizon} is missing model")
+            repository = str(raw_route.get("release_repository", "")).strip()
+            if not repository:
+                raise ValueError(
+                    f"prediction serving route {mode}.{horizon} is missing release_repository"
+                )
+            if "model" in raw_route:
+                raise ValueError(
+                    f"prediction serving route {mode}.{horizon} cannot use a direct model path"
+                )
             canonical_horizon = _canonical_horizon(str(horizon))
             if canonical_horizon in parsed:
                 raise ValueError(f"duplicate prediction serving route after horizon normalization: {mode}.{canonical_horizon}")
+            estimated_resident_gib = float(
+                raw_route.get("estimated_resident_gib", 0.5)
+            )
+            if estimated_resident_gib <= 0:
+                raise ValueError(
+                    f"prediction serving route {mode}.{horizon} has an invalid "
+                    "estimated_resident_gib"
+                )
             parsed[canonical_horizon] = ServingRoute(
-                model=Path(model),
+                repository=Path(repository),
+                attestation_trust_store=Path(trust_store),
                 bar_timeframe=str(raw_route.get("bar_timeframe", "unknown")).strip() or "unknown",
+                estimated_resident_gib=estimated_resident_gib,
             )
         if parsed:
             routes[normalized_mode] = parsed
     if not routes:
         raise ValueError("at least one production prediction serving route is required")
     return routes
-
-
-def verify_serving_model_artifact(
-    model_path: Path,
-    *,
-    resolved_horizon: str,
-    expected_model_type: str,
-    expected_schema_version: str,
-) -> dict[str, Any]:
-    """Verify registry integrity and the route-specific production model contract."""
-
-    manifest = verify_model_artifact(
-        model_path,
-        allowed_statuses={MODEL_STATUS_PROMOTED},
-    )
-    if manifest.get("model_type") != expected_model_type:
-        raise ValueError(f"model type {manifest.get('model_type', 'unknown')} is incompatible with {expected_model_type} serving")
-    if manifest.get("schema_version") != expected_schema_version:
-        raise ValueError(
-            f"model schema {manifest.get('schema_version', 'unknown')} is incompatible with {expected_schema_version} serving"
-        )
-    target_horizon = _target_horizon(_optional_str(manifest.get("target_col")))
-    if target_horizon != resolved_horizon:
-        raise ValueError(
-            f"requested model horizon {resolved_horizon} is incompatible with model target horizon {target_horizon or 'unknown'}"
-        )
-    return manifest
 
 
 class PredictionService:
@@ -216,6 +206,11 @@ class PredictionService:
         data_source: PredictionDataSource = "live",
         memory_budget_gib: float = 4.0,
         memory_headroom_gib: float = 0.25,
+        max_concurrent_inference: int = 1,
+        max_tickers_per_request: int = 100,
+        inference_memory_reservation_gib: float = 0.5,
+        reject_unknown_memory: bool = False,
+        model_context_cache: ModelContextProvider | None = None,
     ) -> None:
         self.root = Path(root)
         self.snapshot_store = snapshot_store or PredictionSnapshotStore(self.root / "data/predictions/snapshots")
@@ -229,18 +224,44 @@ class PredictionService:
             raise ValueError("runtime memory budget and headroom are invalid")
         self.memory_budget_gib = memory_budget_gib
         self.memory_headroom_gib = memory_headroom_gib
+        if max_concurrent_inference != 1 or max_tickers_per_request < 1:
+            raise ValueError(
+                "inference concurrency must be one and the ticker limit must be positive"
+            )
+        self.max_concurrent_inference = max_concurrent_inference
+        self.max_tickers_per_request = max_tickers_per_request
+        if inference_memory_reservation_gib <= 0:
+            raise ValueError("inference memory reservation must be positive")
+        self.inference_memory_reservation_gib = inference_memory_reservation_gib
+        self.admission = InferenceAdmissionController(
+            max_concurrent_requests=max_concurrent_inference,
+            memory_budget_gib=memory_budget_gib,
+            memory_headroom_gib=memory_headroom_gib,
+            reject_unknown_memory=reject_unknown_memory,
+        )
+        self.model_context_cache = model_context_cache or ActiveModelContextCache(
+            self.root,
+            memory_budget_gib=memory_budget_gib,
+            memory_headroom_gib=memory_headroom_gib,
+            max_contexts=sum(len(mode_routes) for mode_routes in self.routes.values()),
+        )
 
     def predict(self, request: PredictionRequest) -> PredictionResponse:
+        if len(request.tickers) > self.max_tickers_per_request:
+            raise PredictionValidationError
         try:
-            if request.mode == "swing":
-                response = self.predict_swing(request)
-            elif request.mode == "intraday":
-                response = self.predict_intraday(request)
-            else:
-                response = self.predict_unified(request)
-            if not self.persist_snapshots:
-                return response
-            return self.snapshot_store.record(request, response)
+            with self.admission.lease(
+                estimated_incremental_gib=self.inference_memory_reservation_gib
+            ):
+                if request.mode == "swing":
+                    response = self.predict_swing(request)
+                elif request.mode == "intraday":
+                    response = self.predict_intraday(request)
+                else:
+                    response = self.predict_unified(request)
+                if not self.persist_snapshots:
+                    return response
+                return self.snapshot_store.record(request, response)
         except PredictionServiceError:
             raise
         except OSError as exc:
@@ -248,13 +269,11 @@ class PredictionService:
 
     def predict_swing(self, request: PredictionRequest) -> PredictionResponse:
         try:
-            route, model_path, resolved_horizon = self._serving_route("swing", request)
-            model = self._model_info(
-                model_path,
-                resolved_horizon=resolved_horizon,
+            route, resolved_horizon = self._serving_route("swing", request)
+            context = self.model_context_cache.get("swing", resolved_horizon, route)
+            model = self._model_info_from_context(
+                context,
                 bar_timeframe=route.bar_timeframe,
-                expected_model_type=SWING_MODEL_TYPE,
-                expected_schema_version=SWING_MODEL_SCHEMA_VERSION,
             )
             source = self._load_feature_source("swing", route, request)
             frame = self._feature_frame(
@@ -264,7 +283,7 @@ class PredictionService:
             )
             scored = self._score_swing_frame(
                 frame=frame,
-                model_path=model_path,
+                context=context,
             )
             predictions = self._swing_predictions(scored, frame, model.status)
             return self._response(
@@ -286,15 +305,20 @@ class PredictionService:
         ) as exc:
             raise PredictionReadinessError from exc
 
+    def preload(self) -> None:
+        """Verify and deserialize every configured active route before readiness."""
+
+        for mode, mode_routes in sorted(self.routes.items()):
+            for horizon, route in sorted(mode_routes.items()):
+                self.model_context_cache.get(mode, horizon, route)
+
     def predict_intraday(self, request: PredictionRequest) -> PredictionResponse:
         try:
-            route, model_path, resolved_horizon = self._serving_route("intraday", request)
-            model = self._model_info(
-                model_path,
-                resolved_horizon=resolved_horizon,
+            route, resolved_horizon = self._serving_route("intraday", request)
+            context = self.model_context_cache.get("intraday", resolved_horizon, route)
+            model = self._model_info_from_context(
+                context,
                 bar_timeframe=route.bar_timeframe,
-                expected_model_type=INTRADAY_MODEL_TYPE,
-                expected_schema_version=INTRADAY_MODEL_SCHEMA_VERSION,
             )
             source = self._load_feature_source("intraday", route, request)
             frame = self._feature_frame(
@@ -302,7 +326,7 @@ class PredictionService:
                 request=request,
                 timeframe="intraday",
             )
-            scored = self._score_intraday_frame(frame=frame, model_path=model_path)
+            scored = self._score_intraday_frame(frame=frame, context=context)
             predictions = self._intraday_predictions(scored, frame, model.status)
             return self._response(
                 request,
@@ -394,25 +418,20 @@ class PredictionService:
 
         checked_at = as_of or datetime.now(UTC)
         components: dict[str, dict[str, object]] = {}
-        model_manifests: dict[tuple[str, str], dict[str, Any]] = {}
         ready = True
         for mode, mode_routes in self.routes.items():
             for horizon, route in mode_routes.items():
                 name = f"model:{mode}:{horizon}"
                 try:
-                    model_path = self._resolve(route.model)
-                    expected_model_type = SWING_MODEL_TYPE if mode == "swing" else INTRADAY_MODEL_TYPE
-                    expected_schema_version = SWING_MODEL_SCHEMA_VERSION if mode == "swing" else INTRADAY_MODEL_SCHEMA_VERSION
-                    manifest = verify_serving_model_artifact(
-                        model_path,
-                        resolved_horizon=horizon,
-                        expected_model_type=expected_model_type,
-                        expected_schema_version=expected_schema_version,
-                    )
-                    info = self._model_info_from_manifest(
-                        model_path,
-                        manifest=manifest,
-                        resolved_horizon=horizon,
+                    if not self.model_context_cache.is_current(mode, horizon, route):
+                        raise DataReadinessError(
+                            "active model context is missing or its pointer changed"
+                        )
+                    context = self.model_context_cache.cached(mode, horizon)
+                    if context is None:
+                        raise DataReadinessError("active model context is not preloaded")
+                    info = self._model_info_from_context(
+                        context,
                         bar_timeframe=route.bar_timeframe,
                     )
                     components[name] = {
@@ -420,7 +439,6 @@ class PredictionService:
                         "model_status": info.status,
                         "artifact_sha256": info.artifact_sha256,
                     }
-                    model_manifests[(mode, horizon)] = manifest
                 except Exception as exc:
                     ready = False
                     components[name] = {"status": "not_ready", "reason": str(exc)}
@@ -440,20 +458,6 @@ class PredictionService:
                         "source_artifact_sha256": manifest.get("source_artifact_sha256"),
                         "feature_schema_version": manifest.get("feature_schema_version"),
                     }
-                    feature_frame = self.live_feature_store.load(mode, as_of=checked_at)  # type: ignore[arg-type]
-                    for horizon in mode_routes:
-                        model_manifest = model_manifests.get((mode, horizon), {})
-                        metrics = model_manifest.get("metrics")
-                        reference = (
-                            metrics.get("feature_reference_profile")
-                            if isinstance(metrics, dict)
-                            else None
-                        )
-                        drift = audit_feature_drift(
-                            feature_frame,
-                            reference if isinstance(reference, dict) else None,
-                        )
-                        components[f"drift:{mode}:{horizon}"] = drift
                 else:
                     missing = []
                     for route in mode_routes.values():
@@ -482,6 +486,14 @@ class PredictionService:
             **process_memory,
         }
         ready &= memory_ready
+        components["model_context_cache"] = {
+            "status": "ready",
+            **self.model_context_cache.snapshot(),
+        }
+        components["inference_admission"] = {
+            "status": "ready",
+            **self.admission.snapshot().to_record(),
+        }
 
         return {
             "status": "ready" if ready else "not_ready",
@@ -494,19 +506,19 @@ class PredictionService:
         self,
         *,
         frame: pd.DataFrame,
-        model_path: Path,
+        context: ActiveModelContext,
     ) -> pd.DataFrame:
         latest = self._latest_rows(frame)
-        return score_swing_frame(latest, model_path, require_promoted=True)
+        return score_swing_payload(latest, context.payload)
 
     def _score_intraday_frame(
         self,
         *,
         frame: pd.DataFrame,
-        model_path: Path,
+        context: ActiveModelContext,
     ) -> pd.DataFrame:
         latest = self._latest_rows(frame)
-        return score_intraday_frame(latest, model_path, require_promoted=True)
+        return score_intraday_payload(latest, context.payload)
 
     def _swing_predictions(
         self,
@@ -776,7 +788,7 @@ class PredictionService:
         self,
         mode: str,
         request: PredictionRequest,
-    ) -> tuple[ServingRoute, Path, str]:
+    ) -> tuple[ServingRoute, str]:
         if mode not in DEFAULT_MODE_HORIZONS:
             raise PredictionValidationError
         routes = self.routes.get(mode, {})
@@ -784,7 +796,7 @@ class PredictionService:
         if resolved_horizon not in routes:
             raise PredictionValidationError
         route = routes[resolved_horizon]
-        return route, self._resolve(route.model), resolved_horizon
+        return route, resolved_horizon
 
     def _feature_frame(
         self,
@@ -852,26 +864,18 @@ class PredictionService:
             raise ValueError(f"no {timeframe} feature rows are available at or before {request.as_of.isoformat()}")
         return working
 
-    def _model_info(
+    def _model_info_from_context(
         self,
-        model_path: Path,
+        context: ActiveModelContext,
         *,
-        resolved_horizon: str,
         bar_timeframe: str,
-        expected_model_type: str,
-        expected_schema_version: str,
     ) -> ModelInfo:
-        manifest = verify_serving_model_artifact(
-            model_path,
-            resolved_horizon=resolved_horizon,
-            expected_model_type=expected_model_type,
-            expected_schema_version=expected_schema_version,
-        )
         return self._model_info_from_manifest(
-            model_path,
-            manifest=manifest,
-            resolved_horizon=resolved_horizon,
+            context.model_path,
+            manifest=context.manifest,
+            resolved_horizon=context.horizon,
             bar_timeframe=bar_timeframe,
+            release_id=context.release_id,
         )
 
     def _model_info_from_manifest(
@@ -881,6 +885,7 @@ class PredictionService:
         manifest: Mapping[str, Any],
         resolved_horizon: str,
         bar_timeframe: str,
+        release_id: str | None = None,
     ) -> ModelInfo:
         status = str(manifest.get("status", "unknown"))
         target = _optional_str(manifest.get("target_col"))
@@ -889,6 +894,7 @@ class PredictionService:
         return ModelInfo(
             path=str(model_path),
             status=status,
+            release_id=release_id,
             model_type=_optional_str(manifest.get("model_type")),
             schema_version=_optional_str(manifest.get("schema_version")),
             target=target,
@@ -966,7 +972,7 @@ class PredictionService:
         cutoffs: list[datetime] = []
         feature_artifacts: dict[str, FeatureArtifactIdentityV1] = {}
         source_watermarks: dict[str, dict[str, str]] = {}
-        release_ids: set[str] = set()
+        feature_release_ids: set[str] = set()
 
         for mode, frame in feature_frames.items():
             latest = self._latest_rows(frame)
@@ -1010,22 +1016,31 @@ class PredictionService:
                 gaps.append(f"{mode} source coverage watermarks are missing")
             if source.release_id is not None:
                 if _is_sha256(source.release_id):
-                    release_ids.add(source.release_id)
+                    feature_release_ids.add(source.release_id)
                 else:
                     gaps.append(f"{mode} release identity is invalid")
 
         model_hashes: dict[str, str] = {}
+        model_release_ids: dict[str, str] = {}
         for mode, model in models.items():
             if _is_sha256(model.artifact_sha256):
                 model_hashes[mode] = str(model.artifact_sha256)
             else:
                 gaps.append(f"{mode} model artifact identity is missing")
+            if _is_sha256(model.release_id):
+                model_release_ids[mode] = str(model.release_id)
+            elif self.data_source == "live":
+                gaps.append(f"{mode} model release identity is missing")
 
         if not cutoffs:
             raise PredictionReadinessError
-        if len(release_ids) > 1:
+        if len(feature_release_ids) > 1:
             gaps.append("feature sources belong to different serving releases")
-        release_id = next(iter(release_ids)) if len(release_ids) == 1 else None
+        release_id = (
+            next(iter(model_release_ids.values()))
+            if len(set(model_release_ids.values())) == 1
+            else None
+        )
         identity_status = "research_only" if self.data_source == "curated" else ("incomplete" if gaps else "complete")
         return PredictionEvidenceV1(
             request_id=request_id,
@@ -1034,6 +1049,7 @@ class PredictionService:
             row_feature_availability=rows,
             feature_artifacts=feature_artifacts,
             release_id=release_id,
+            model_release_ids=model_release_ids,
             model_artifact_sha256=model_hashes,
             source_watermarks=source_watermarks,
             resolved_horizons={
@@ -1347,19 +1363,6 @@ def _infer_intraday_bar_duration(timestamps: pd.Series, tickers: pd.Series) -> p
     if pd.isna(duration) or duration <= pd.Timedelta(0):
         raise ValueError("invalid inferred intraday bar duration")
     return duration
-
-
-def _target_horizon(target_col: str | None) -> str | None:
-    normalized = (target_col or "").strip().lower()
-    if "next_week" in normalized:
-        return "5d"
-    if "next_day" in normalized:
-        return "1d"
-    matches = re.findall(r"(?:^|_)(\d+)([dbm])(?:_|$)", normalized)
-    if not matches:
-        return None
-    amount, unit = matches[-1]
-    return f"{int(amount)}{unit}"
 
 
 def _has_any_value(row: pd.Series, columns: list[str]) -> bool:

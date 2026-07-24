@@ -286,6 +286,10 @@ smallcap_momentum = [
   "PL", "SATL", "QMCO", "IWM", "ARKK"
 ]
 
+[prediction_serving]
+attestation_trust_store = "configs/attestation_trust_store.json"
+
 [prediction_serving.routes.swing."5d"]
-model = "models/swing/promoted/swing_5d.joblib"
+release_repository = "data/releases/swing_5d"
 bar_timeframe = "1Day"
+estimated_resident_gib = 0.5

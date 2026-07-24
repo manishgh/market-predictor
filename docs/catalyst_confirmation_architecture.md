@@ -390,6 +390,7 @@ The immutable candidate manifest and promotion attestation, not the filename or 
 | Intraday opening V2 net-positive direction model | `candidate` | ROC AUC 0.4890; lift 0.9162 | Promotion rejected. |
 | Intraday V4-H1 exact 120-minute R1 | `candidate` | NDCG@10 0.4868/0.5131; top-10 excess -0.0802%/-0.0629% | Promotion rejected; shadow not opened. |
 | R4 promotion and local release | implemented, no active real release | Candidate isolation, trusted Ed25519 attestation, predeclared hypotheses, one-use canonical shadow ledger, paired confidence gates, versioned local releases, atomic activation, and verified rollback are tested | Operationally blocked until a real C4 or C5 model passes every development and untouched-shadow gate; no candidate fallback. |
+| R5.1 bounded active-release serving | implemented, real-size load evidence pending | Signed active-pointer preload, one cached context per route, non-queueing single inference lease, ticker bound, projected/current RSS checks, atomic route replacement, and model-release response identity are tested | Remains deployment-blocked until real promoted artifacts pass combined swing/intraday startup and burst/soak evidence below 4 GiB. |
 | Azure release transport | `environment_pending` | Existing transport code is not R4 evidence and has not completed a real integration/rollback/DR rehearsal | Excluded from activation authority until infrastructure integration is verified. |
 The V2 structural dataset itself is valid for continued research: 47,614 rows, 196 eligible tickers, 122 sessions, exact 09:30-11:25 ET bar timestamps, no duplicate ticker/timestamp keys, and no cooldown gaps below 13 bars. Catalyst context covered 21.44% of rows; market context covered 87.28%. Reddit coverage was zero in this historical V2 table, so Reddit cannot be claimed as a trained intraday signal yet.
 
@@ -408,6 +409,8 @@ Serving rules:
 - A new intraday hypothesis must first pass both development economics scopes; only then may matured observations after 2026-07-08 be used as an untouched shadow interval.
 - A live snapshot must originate from the canonical label-free inference builder for its mode; arbitrary Parquet and training labels are not accepted.
 - The R4 local release is one immutable content-addressed unit containing the model, candidate manifest, promotion attestation, evidence manifest, and all evidence files. One locked local pointer moves only after every asset and the attestation verify.
+- Each serving route references a local release repository, never a joblib path. API startup verifies and caches the active release once; prediction requests score the cached payload.
+- One process admits one inference request at a time with no queue. Ticker batches, incremental memory reservations, and projected/current RSS are bounded below the 4 GiB limit.
 - Azure publication and rollback remain `environment_pending`; they are not current activation evidence.
 
 The data, target, ranking, validation, cleanup, and Git checkpoint sequence for the next model generation is defined in [ML Model V3 Improvement Plan](ml_model_v3_plan.md).
@@ -485,6 +488,15 @@ The request path performs no provider calls, FinBERT inference, feature building
 `publish-live-features` atomically installs the validated inference artifact and manifest at the registered swing or intraday path. The manifest binds the live snapshot to its canonical source hash/type, feature schema, SIP feed, exact columns, one decision timestamp, freshness, and artifact hash. The API validates this identity again before scoring.
 
 Local publication creates a content-addressed release containing the attested model, immutable candidate manifest, signed promotion attestation, evidence manifest, and all evidence files. It copies into staging, verifies every hash, signature, issuer, and identity, atomically renames the complete release directory, and only then swaps one hash-protected active pointer under an OS-released file lock. Rollback is restricted to the immediately previous release and re-verifies it first. Partial, mutated, unsigned, or untrusted releases never become active.
+
+Each configured route points at one local release repository and conservative
+resident-memory estimate. FastAPI lifespan startup verifies and deserializes every
+active route exactly once. Requests use cached payloads. Pointer changes are
+serialized, the old route cache entry is released before replacement allocation,
+and current/projected RSS must remain below the configured safety threshold.
+Inference uses one process-wide non-queueing lease and a bounded ticker request.
+Readiness checks cached pointer identity and manifests without model or full-frame
+allocation.
 
 Azure publication, startup hydration, rollback, and disaster-recovery rehearsal are `environment_pending` and excluded from the R4 acceptance evidence.
 

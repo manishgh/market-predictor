@@ -49,6 +49,20 @@ class PredictionThrottledError(PredictionServiceError):
     public_message = "Prediction capacity is temporarily exhausted."
 
 
+class PredictionCapacityError(PredictionServiceError):
+    code = "inference_capacity_exhausted"
+    status_code = 503
+    retryable = True
+    public_message = "Inference capacity is temporarily exhausted."
+
+
+class PredictionMemoryPressureError(PredictionServiceError):
+    code = "memory_pressure"
+    status_code = 503
+    retryable = True
+    public_message = "Inference is temporarily unavailable due to memory pressure."
+
+
 class PredictionReadinessError(PredictionServiceError):
     code = "prediction_not_ready"
     status_code = 503
@@ -117,6 +131,7 @@ class PredictionRequest(BaseModel):
 class ModelInfo(BaseModel):
     path: str
     status: str
+    release_id: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
     model_type: str | None = None
     schema_version: str | None = None
     target: str | None = None
@@ -161,6 +176,7 @@ class PredictionEvidenceV1(BaseModel):
     row_feature_availability: list[PredictionRowEvidenceV1] = Field(default_factory=list)
     feature_artifacts: dict[str, FeatureArtifactIdentityV1] = Field(default_factory=dict)
     release_id: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+    model_release_ids: dict[str, str] = Field(default_factory=dict)
     model_artifact_sha256: dict[str, str] = Field(default_factory=dict)
     source_watermarks: dict[str, dict[str, str]] = Field(default_factory=dict)
     resolved_horizons: dict[str, str] = Field(default_factory=dict)
@@ -189,6 +205,13 @@ class PredictionEvidenceV1(BaseModel):
     def require_model_hashes(cls, value: dict[str, str]) -> dict[str, str]:
         if any(not re.fullmatch(r"[0-9a-f]{64}", digest) for digest in value.values()):
             raise ValueError("model artifact identities must be lowercase SHA-256 values")
+        return value
+
+    @field_validator("model_release_ids")
+    @classmethod
+    def require_model_release_ids(cls, value: dict[str, str]) -> dict[str, str]:
+        if any(not re.fullmatch(r"[0-9a-f]{64}", digest) for digest in value.values()):
+            raise ValueError("model release identities must be lowercase SHA-256 values")
         return value
 
 

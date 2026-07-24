@@ -512,6 +512,15 @@ def score_swing_frame(
     if manifest.get("model_type") != SWING_MODEL_TYPE or manifest.get("schema_version") != SWING_MODEL_SCHEMA_VERSION:
         raise SchemaMismatchError("model is not a canonical swing artifact")
     payload = joblib.load(model_path)
+    return score_swing_payload(frame, payload)
+
+
+def score_swing_payload(
+    frame: pd.DataFrame,
+    payload: object,
+) -> pd.DataFrame:
+    """Score with a previously verified and deserialized swing payload."""
+
     if not isinstance(payload, dict):
         raise SchemaMismatchError("canonical swing artifact payload is invalid")
     if payload.get("model_type") != SWING_MODEL_TYPE:

@@ -226,6 +226,12 @@ candidate integration test):
 
 ## R5–R7 (subsequent checkpoints)
 
+- **R5.1 completed in code:** production routes reference signed local active-release
+  repositories; FastAPI preloads one cached context per route; scoring uses cached
+  payloads; model release ids enter response evidence; one non-queueing inference
+  lease, ticker limits, memory reservations, projected RSS, and serialized route
+  replacement are tested. The obsolete Azure serving-release CLI path was removed.
+  Real-size combined-model soak/RSS evidence is still `environment_pending`.
 - **R5 Bounded Serving / Durable Outcomes / Drift:** cache one active model context (no
   per-request deserialize); admission control + RSS < 4 GiB; deterministic label-horizon
   outcome maturation separate from ad hoc replay; calibration/economic cohorts; versioned

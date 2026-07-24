@@ -587,6 +587,15 @@ def score_intraday_frame(
     if manifest.get("model_type") != INTRADAY_MODEL_TYPE or manifest.get("schema_version") != INTRADAY_MODEL_SCHEMA_VERSION:
         raise SchemaMismatchError("model is not a canonical intraday artifact")
     payload = joblib.load(model_path)
+    return score_intraday_payload(frame, payload)
+
+
+def score_intraday_payload(
+    frame: pd.DataFrame,
+    payload: object,
+) -> pd.DataFrame:
+    """Score with a previously verified and deserialized intraday payload."""
+
     if not isinstance(payload, dict) or payload.get("model_type") != INTRADAY_MODEL_TYPE:
         raise SchemaMismatchError("canonical intraday artifact payload is invalid")
     features = [str(feature) for feature in payload.get("features", [])]

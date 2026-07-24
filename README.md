@@ -192,10 +192,11 @@ Upload project artifacts to Azure Blob Storage after Azure env vars are configur
 
 ```powershell
 market-predictor azure-upload-artifacts --root data/artifacts
-market-predictor azure-publish-serving-release --root .
 ```
 
-Serving-release publication reads the server-owned prediction routes and registered live snapshots. It verifies promoted model status, artifact and manifest hashes, live feature freshness, canonical source identity, feature schema, and SIP provenance. Assets are uploaded beneath a content-addressed release id, the immutable release manifest is written after all assets, and the mutable active pointer is moved last. Unregistered, candidate, deprecated, stale, or out-of-root artifacts cannot be activated.
+Azure serving publication, hydration, rollback, and disaster-recovery rehearsal are
+`environment_pending` and are not exposed as production CLI commands. The verified
+local release repository is the current serving authority.
 
 For implementation details and file responsibilities, read:
 
@@ -297,11 +298,19 @@ Use `horizon: "auto"` for unified prediction so each server route resolves its n
 
 The unified response returns separate `swing` and `intraday` model views plus a final orchestration signal. It does not average unrelated model probabilities into one opaque number. Readiness reports daily and intraday history separately and treats unknown feed tiers as unproven; only explicit SIP/consolidated provenance satisfies the full-volume gate. A `warn` or `invalid` view is diagnostic only and returns `signal: "not_ready"` with no decision score, model decision, or rank.
 
-The production service reads only the server-registered snapshots at `data/live/features/swing.parquet` and `data/live/features/intraday.parquet`. Live snapshots require a matching sidecar manifest, SHA-256 integrity, explicit feed provenance, a fresh generation time, and a fresh latest feature timestamp. Model artifacts must also match the SHA-256 recorded in their promoted manifest before deserialization. The request schema rejects filesystem paths, data-source overrides, and promotion overrides.
+The production service reads only the server-registered snapshots at `data/live/features/swing.parquet` and `data/live/features/intraday.parquet`. Live snapshots require a matching sidecar manifest, SHA-256 integrity, explicit feed provenance, a fresh generation time, and a fresh latest feature timestamp. Models are loaded only through each route's signed local active-release pointer. Startup verifies the complete release and public-key attestation, then deserializes one cached context per route. Requests never deserialize joblib artifacts. The request schema rejects filesystem paths, data-source overrides, and promotion overrides.
 
-Production model routes are declared under `[prediction_serving.routes]` in `configs/default.toml`. A route is added only after promotion; changing the model, universe, or timeframe is an operator configuration change followed by readiness verification, not a client request option.
+Production routes are declared under `[prediction_serving.routes]` with a
+`release_repository`, `bar_timeframe`, and conservative
+`estimated_resident_gib`; `[prediction_serving]` also names the read-only public
+attestation trust store. Direct model paths are rejected.
 
-`/v1/health/live` reports process liveness. `/v1/health/ready` validates every registered model manifest/status/hash, each live feature snapshot, source/schema provenance, drift telemetry, and the process memory guard; it returns HTTP 503 whenever a required serving component is unavailable, stale, or over the memory safety threshold. Drift is reported but does not independently block readiness. `/v1/metrics` exposes bounded in-process request latency/error counters, prediction readiness counts, replay outcomes, model hashes, the latest health result, and process memory; expose it only on internal ingress.
+The API preloads active contexts during lifespan startup. Readiness does not
+deserialize models or load full feature frames. Inference has one process-wide,
+non-queueing lease, a bounded ticker batch, an incremental-memory reservation,
+and current/projected RSS guards under the 4 GiB budget. Capacity and memory
+pressure return typed retryable HTTP 503 responses. Real-size soak evidence is
+still required before deployment.
 
 Build a label-free canonical inference artifact, then publish it atomically to the registered live path:
 
@@ -638,15 +647,10 @@ Dockerfile
 scripts/container-entrypoint.sh
 ```
 
-The image runs the API as UID/GID 10001, exposes port 8000, and probes `/v1/health/live`. Set `SYNC_AZURE_RELEASE_ON_STARTUP=true` in the production API revision so the entrypoint downloads and hash-verifies the active immutable release before importing the API. A failed sync stops startup; it never falls back to stale local artifacts. Configure the Container Apps revision with a 4 GiB memory limit in addition to the in-process guard.
-
-Publish, hydrate, or roll back a complete serving release with:
-
-```powershell
-market-predictor azure-publish-serving-release --root .
-market-predictor azure-sync-serving-release --root .
-market-predictor azure-rollback-serving-release --release-id <64-character-release-id>
-```
+The image runs the API as UID/GID 10001, exposes port 8000, and probes
+`/v1/health/live`. Configure a 4 GiB container memory limit in addition to the
+in-process guard. Azure model-release synchronization is not currently an
+activation path.
 
 The deployment rationale, identity/secret requirements, release ordering, and job schedule are in `docs/azure_deployment_plan.md`.
 
