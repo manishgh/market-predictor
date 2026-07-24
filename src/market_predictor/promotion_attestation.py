@@ -114,6 +114,10 @@ def build_promotion_attestation(
     )
     if hypothesis.get("model_type") != manifest.get("model_type"):
         raise DataReadinessError("hypothesis model_type does not match the candidate")
+    if hypothesis.get("candidate_artifact_sha256") != artifact_sha:
+        raise DataReadinessError(
+            "hypothesis candidate artifact does not match the candidate"
+        )
     if hypothesis.get("prediction_policy_sha256") != identity["prediction_policy_sha256"]:
         raise DataReadinessError("hypothesis prediction policy does not match the candidate")
     shadow_fingerprint = _required_sha(shadow_bundle, "shadow_fingerprint", "shadow bundle")
@@ -132,6 +136,14 @@ def build_promotion_attestation(
     if shadow_bundle.get("execution_policy_sha256") != identity["execution_policy_sha256"]:
         raise DataReadinessError("shadow evidence execution policy does not match the candidate")
     _required_sha(shadow_bundle, "source_evidence_sha256", "shadow bundle")
+    source_rows_sha = _required_sha(
+        shadow_bundle,
+        "source_rows_sha256",
+        "shadow bundle",
+    )
+    shadow_workload = shadow_bundle.get("shadow_workload")
+    if not isinstance(shadow_workload, dict):
+        raise DataReadinessError("shadow evidence is missing its frozen workload")
     interval = shadow_bundle.get("paired_improvement_interval")
     if not isinstance(interval, dict):
         raise DataReadinessError("shadow evidence is missing its paired confidence interval")
@@ -175,6 +187,8 @@ def build_promotion_attestation(
             "generated_at_utc": shadow_generated_at.isoformat(),
             "paired_improvement_interval": interval,
             "source_evidence_sha256": shadow_bundle.get("source_evidence_sha256"),
+            "source_rows_sha256": source_rows_sha,
+            "shadow_workload_sha256": _json_sha256(shadow_workload),
         },
         "ledger_receipt": ledger_receipt,
         "gate_config_sha256": _json_sha256(gate_config),
@@ -411,6 +425,8 @@ def _validate_attestation_bindings(payload: dict[str, Any]) -> None:
             "generated_at_utc",
             "paired_improvement_interval",
             "source_evidence_sha256",
+            "source_rows_sha256",
+            "shadow_workload_sha256",
         },
         "shadow",
     )
@@ -418,6 +434,14 @@ def _validate_attestation_bindings(payload: dict[str, Any]) -> None:
     _require_sha256(
         str(shadow["source_evidence_sha256"]),
         "shadow.source_evidence_sha256",
+    )
+    _require_sha256(
+        str(shadow["source_rows_sha256"]),
+        "shadow.source_rows_sha256",
+    )
+    _require_sha256(
+        str(shadow["shadow_workload_sha256"]),
+        "shadow.shadow_workload_sha256",
     )
     sessions = shadow.get("independent_sessions")
     if not isinstance(sessions, int) or isinstance(sessions, bool) or sessions < 2:

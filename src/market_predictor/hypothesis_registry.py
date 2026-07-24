@@ -6,7 +6,7 @@ import os
 import re
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 from uuid import uuid4
 
 from market_predictor.locking import file_lock
@@ -23,10 +23,15 @@ def declare_hypothesis(
     hypothesis_id: str,
     hypothesis_family: str,
     model_type: str,
+    candidate_artifact_sha256: str,
     baseline_id: str,
     baseline_artifact_sha256: str,
     prediction_policy_sha256: str,
     execution_policy_sha256: str,
+    shadow_view: Literal["swing", "intraday"],
+    shadow_horizon: str,
+    shadow_decision_group_ids: tuple[str, ...],
+    shadow_minimum_tickers_per_group: int,
     objective: str,
     declared_at: datetime | None = None,
 ) -> dict[str, Any]:
@@ -37,9 +42,25 @@ def declare_hypothesis(
             raise ValueError(f"{name} contains unsafe characters")
     if not model_type.strip() or not objective.strip():
         raise ValueError("model_type and objective are required")
+    _require_sha256(candidate_artifact_sha256, "candidate_artifact_sha256")
     _require_sha256(baseline_artifact_sha256, "baseline_artifact_sha256")
     _require_sha256(prediction_policy_sha256, "prediction_policy_sha256")
     _require_sha256(execution_policy_sha256, "execution_policy_sha256")
+    if not re.fullmatch(r"^[1-9]\d*(?:m|d)$", shadow_horizon):
+        raise ValueError("shadow_horizon is invalid")
+    groups = tuple(group.strip() for group in shadow_decision_group_ids)
+    if (
+        len(groups) < 2
+        or any(not group or len(group) > 256 for group in groups)
+        or len(set(groups)) != len(groups)
+    ):
+        raise ValueError(
+            "shadow workload requires at least two unique decision groups"
+        )
+    if shadow_minimum_tickers_per_group < 1:
+        raise ValueError(
+            "shadow_minimum_tickers_per_group must be positive"
+        )
     if declared_at is not None and os.environ.get(TEST_CLOCK_ENV) != "1":
         raise DataReadinessError("caller-supplied hypothesis timestamps are test-only")
     timestamp = _utc(declared_at or datetime.now(UTC))
@@ -48,10 +69,17 @@ def declare_hypothesis(
         "hypothesis_id": hypothesis_id,
         "hypothesis_family": hypothesis_family,
         "model_type": model_type.strip(),
+        "candidate_artifact_sha256": candidate_artifact_sha256,
         "baseline_id": baseline_id,
         "baseline_artifact_sha256": baseline_artifact_sha256,
         "prediction_policy_sha256": prediction_policy_sha256,
         "execution_policy_sha256": execution_policy_sha256,
+        "shadow_workload": {
+            "view": shadow_view,
+            "horizon": shadow_horizon,
+            "decision_group_ids": list(groups),
+            "minimum_tickers_per_group": shadow_minimum_tickers_per_group,
+        },
         "objective": objective.strip(),
         "declared_at_utc": timestamp.isoformat(),
     }

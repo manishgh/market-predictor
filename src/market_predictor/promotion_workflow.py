@@ -7,7 +7,9 @@ from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+from market_predictor.causal_shadow import load_causal_shadow_bundle
 from market_predictor.hypothesis_registry import load_hypothesis
+from market_predictor.outcome_repository import OutcomeRepository
 from market_predictor.promotion_attestation import (
     build_promotion_attestation,
     file_sha256,
@@ -16,7 +18,6 @@ from market_predictor.promotion_attestation import (
 )
 from market_predictor.shadow_ledger import (
     consume_shadow_fingerprint,
-    load_shadow_bundle,
     shadow_gate_failures,
 )
 from market_predictor.v3.errors import DataReadinessError
@@ -27,6 +28,8 @@ class PromotionTrustContext:
     hypothesis_registry_root: Path
     hypothesis_id: str
     shadow_bundle_path: Path
+    outcome_repository_root: Path
+    baseline_artifact_path: Path
     build_identity: str
     approver_identity: str
     signing_private_key_path: Path
@@ -82,10 +85,20 @@ def evaluate_shadow_and_attest(
     """Open shadow evidence once, retire failures, and attest passing candidates."""
 
     hypothesis = load_hypothesis(context.hypothesis_registry_root, context.hypothesis_id)
-    shadow = load_shadow_bundle(context.shadow_bundle_path)
+    shadow = load_causal_shadow_bundle(
+        context.shadow_bundle_path,
+        repository=OutcomeRepository(context.outcome_repository_root),
+        hypothesis=hypothesis,
+    )
     if shadow.get("hypothesis_id") != context.hypothesis_id:
         raise DataReadinessError("shadow bundle does not belong to the requested hypothesis")
-    _validate_shadow_context(model_path, hypothesis, shadow, metrics)
+    _validate_shadow_context(
+        model_path,
+        context.baseline_artifact_path,
+        hypothesis,
+        shadow,
+        metrics,
+    )
     transaction_id = _transaction_id(
         model_path=model_path,
         hypothesis=hypothesis,
@@ -140,12 +153,25 @@ def evaluate_shadow_and_attest(
 
 def _validate_shadow_context(
     model_path: Path,
+    baseline_artifact_path: Path,
     hypothesis: dict[str, Any],
     shadow: dict[str, Any],
     metrics: dict[str, Any],
 ) -> None:
     if shadow.get("candidate_artifact_sha256") != file_sha256(model_path):
         raise DataReadinessError("shadow bundle does not belong to the candidate artifact")
+    if hypothesis.get("candidate_artifact_sha256") != file_sha256(model_path):
+        raise DataReadinessError(
+            "hypothesis does not freeze the candidate artifact"
+        )
+    if (
+        not baseline_artifact_path.is_file()
+        or file_sha256(baseline_artifact_path)
+        != hypothesis.get("baseline_artifact_sha256")
+    ):
+        raise DataReadinessError(
+            "shadow baseline artifact is not frozen by the hypothesis"
+        )
     if shadow.get("hypothesis_record_sha256") != hypothesis.get("record_sha256"):
         raise DataReadinessError("shadow bundle does not belong to the hypothesis record")
     if shadow.get("baseline_artifact_sha256") != hypothesis.get(

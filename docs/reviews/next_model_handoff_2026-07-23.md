@@ -282,7 +282,16 @@ candidate integration test):
   target/stop/timeout, and same-bar ambiguity are tested. Verification on 2026-07-24:
   **336 tests passed**, repository-wide Ruff clean, and strict mypy clean for all 15
   changed source/script modules. Existing real candidates predate these identities and
-  must be rebuilt. The next checkpoint is **R7.5 causally derived shadow evidence**.
+  must be rebuilt.
+- **R7.5a completed locally:** candidate and baseline artifact hashes and the exact
+  shadow workload are frozen in the hypothesis before observation. Production shadow
+  evidence is derived only from paired prediction-maturation intents and matured
+  outcomes. Promotion reopens the immutable outcome repository and reproduces row
+  identity, session economics, and confidence intervals before one-use ledger
+  consumption. Operator-authored aggregate returns have been removed from production
+  code. Verification on 2026-07-24: **339 tests passed**, repository-wide Ruff clean,
+  and strict mypy clean for the changed R7.5 modules. R7.5 is not complete until
+  build and approver identities are authenticated rather than caller-supplied strings.
 
 ## Do NOT claim complete without real external evidence (`environment_pending`)
 
@@ -300,8 +309,8 @@ Mark these `environment_pending`, never simulate them into a pass.
 Set-Location C:\project\market-predictor
 git checkout r3-lineage
 git status --short                # expect empty
-.\.venv\Scripts\python.exe -m unittest discover -s tests   # expect 336 OK
-# Start R7.5 causally derived shadow evidence. R7.8 remains deferred.
+.\.venv\Scripts\python.exe -m unittest discover -s tests   # expect 339 OK
+# Continue R7.5b authenticated promotion identities. R7.8 remains deferred.
 ```
 
 Persistent notes for this effort also live in the assistant memory file

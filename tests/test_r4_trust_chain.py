@@ -21,13 +21,15 @@ from market_predictor.promotion_workflow import PromotionTrustContext
 from market_predictor.registry import write_model_manifest
 from market_predictor.shadow_ledger import (
     consume_shadow_fingerprint,
-    load_shadow_bundle,
     load_shadow_ledger,
     shadow_gate_failures,
-    write_shadow_bundle,
 )
 from market_predictor.v3.errors import DataReadinessError
-from tests.r4_fixtures import test_signing_material
+from tests.r4_fixtures import (
+    load_test_shadow_bundle,
+    test_signing_material,
+    write_test_shadow_bundle,
+)
 
 
 class R4TrustChainTests(unittest.TestCase):
@@ -42,6 +44,8 @@ class R4TrustChainTests(unittest.TestCase):
                     hypothesis_registry_root=root,
                     hypothesis_id="swing-alpha-001",
                     shadow_bundle_path=shadow,
+                    outcome_repository_root=root / "outcomes",
+                    baseline_artifact_path=root / "baseline.joblib",
                     build_identity="ci:test",
                     approver_identity="reviewer:test",
                     signing_private_key_path=signing_key,
@@ -62,10 +66,18 @@ class R4TrustChainTests(unittest.TestCase):
                     hypothesis_id="swing-alpha-001",
                     hypothesis_family="swing-alpha",
                     model_type="canonical_swing",
+                    candidate_artifact_sha256="c" * 64,
                     baseline_id="technical-baseline-v1",
                     baseline_artifact_sha256="a" * 64,
                     prediction_policy_sha256="f" * 64,
                     execution_policy_sha256="8" * 64,
+                    shadow_view="swing",
+                    shadow_horizon="5d",
+                    shadow_decision_group_ids=(
+                        "2026-07-10T20:00:00+00:00",
+                        "2026-07-13T20:00:00+00:00",
+                    ),
+                    shadow_minimum_tickers_per_group=1,
                     objective="mutated after declaration",
                     declared_at=_declared_at(),
                 )
@@ -75,7 +87,7 @@ class R4TrustChainTests(unittest.TestCase):
             root = Path(tmp)
             hypothesis = _declare(root)
             bundle_path = _shadow(root, hypothesis, candidate_sha="c" * 64, improvements=[0.02, 0.01, 0.03, 0.015])
-            bundle = load_shadow_bundle(bundle_path)
+            bundle = load_test_shadow_bundle(bundle_path)
             self.assertEqual(
                 shadow_gate_failures(bundle, minimum_independent_sessions=4, minimum_paired_improvement_ci_low=0.0),
                 [],
@@ -112,7 +124,7 @@ class R4TrustChainTests(unittest.TestCase):
                 )
             self.assertEqual(len(load_shadow_ledger(ledger)), 1)
 
-            second = load_shadow_bundle(
+            second = load_test_shadow_bundle(
                 _shadow(root, hypothesis, candidate_sha="e" * 64, improvements=[-0.02, -0.01, -0.03, -0.015])
             )
             consume_shadow_fingerprint(
@@ -124,7 +136,7 @@ class R4TrustChainTests(unittest.TestCase):
                 transaction_id="1" * 64,
                 consumed_at=_declared_at() + timedelta(days=4),
             )
-            third = load_shadow_bundle(
+            third = load_test_shadow_bundle(
                 _shadow(root, hypothesis, candidate_sha="1" * 64, improvements=[0.02, 0.01, 0.03, 0.015])
             )
             with self.assertRaisesRegex(DataReadinessError, "family was retired"):
@@ -154,7 +166,7 @@ class R4TrustChainTests(unittest.TestCase):
             )
 
             with self.assertRaisesRegex(DataReadinessError, "must follow"):
-                write_shadow_bundle(
+                write_test_shadow_bundle(
                     root,
                     sessions,
                     hypothesis=hypothesis,
@@ -167,7 +179,7 @@ class R4TrustChainTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             hypothesis = _declare(root)
-            bundle = load_shadow_bundle(
+            bundle = load_test_shadow_bundle(
                 _shadow(root, hypothesis, candidate_sha="c" * 64, improvements=[0.10, -0.09, 0.10, -0.09])
             )
             interval = bundle["paired_improvement_interval"]
@@ -184,10 +196,15 @@ class R4TrustChainTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             model, metrics, evidence_manifest = _candidate(root)
-            hypothesis = _declare(root)
-            bundle = load_shadow_bundle(
+            hypothesis = _declare(
+                root,
+                candidate_sha=file_sha256(model),
+            )
+            bundle = load_test_shadow_bundle(
                 _shadow(root, hypothesis, candidate_sha=file_sha256(model), improvements=[0.02, 0.01, 0.03, 0.015])
             )
+            bundle["source_rows_sha256"] = "e" * 64
+            bundle["shadow_workload"] = hypothesis["shadow_workload"]
             ledger_entry = consume_shadow_fingerprint(
                 root / "shadow-ledger.jsonl",
                 bundle=bundle,
@@ -271,10 +288,15 @@ class R4TrustChainTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             model, metrics, evidence_manifest = _candidate(root)
-            hypothesis = _declare(root)
-            bundle = load_shadow_bundle(
+            hypothesis = _declare(
+                root,
+                candidate_sha=file_sha256(model),
+            )
+            bundle = load_test_shadow_bundle(
                 _shadow(root, hypothesis, candidate_sha=file_sha256(model), improvements=[0.02, 0.01, 0.03, 0.015])
             )
+            bundle["source_rows_sha256"] = "e" * 64
+            bundle["shadow_workload"] = hypothesis["shadow_workload"]
             ledger_entry = consume_shadow_fingerprint(
                 root / "shadow-ledger.jsonl",
                 bundle=bundle,
@@ -316,17 +338,31 @@ def _declared_at() -> datetime:
     return datetime(2026, 7, 1, 12, 0, tzinfo=UTC)
 
 
-def _declare(root: Path) -> dict[str, object]:
+def _declare(
+    root: Path,
+    *,
+    candidate_sha: str = "c" * 64,
+) -> dict[str, object]:
     test_signing_material()
     return declare_hypothesis(
         root,
         hypothesis_id="swing-alpha-001",
         hypothesis_family="swing-alpha",
         model_type="canonical_swing",
+        candidate_artifact_sha256=candidate_sha,
         baseline_id="technical-baseline-v1",
         baseline_artifact_sha256="a" * 64,
         prediction_policy_sha256="f" * 64,
         execution_policy_sha256="8" * 64,
+        shadow_view="swing",
+        shadow_horizon="5d",
+        shadow_decision_group_ids=(
+            "2026-07-10T20:00:00+00:00",
+            "2026-07-13T20:00:00+00:00",
+            "2026-07-14T20:00:00+00:00",
+            "2026-07-15T20:00:00+00:00",
+        ),
+        shadow_minimum_tickers_per_group=1,
         objective="Improve benchmark-relative top-k swing return.",
         declared_at=_declared_at(),
     )
@@ -346,7 +382,7 @@ def _shadow(
             "baseline_benchmark_excess_return": [0.0] * len(improvements),
         }
     )
-    return write_shadow_bundle(
+    return write_test_shadow_bundle(
         root,
         sessions,
         hypothesis=hypothesis,

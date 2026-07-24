@@ -517,6 +517,8 @@ market-predictor-research promote-swing-model `
   --hypothesis-registry data/governance `
   --hypothesis-id swing-5d-h001 `
   --shadow-bundle data/governance/shadow/<shadow-fingerprint>.json `
+  --outcome-repository data/outcomes `
+  --baseline-artifact models/swing/baselines/swing_5d.joblib `
   --build-identity ci:<build-id> `
   --approver-identity reviewer:<identity> `
   --signing-private-key <secure-ed25519-private-key.pem> `
@@ -525,7 +527,7 @@ market-predictor-research promote-swing-model `
   --config configs/swing_promotion.toml
 ```
 
-`build-swing-dataset` uses a post-close decision, next-session-open entry, and fifth-session-close exit. It writes exact entry/exit/label timestamps, costs, stock and benchmark returns, MFE/MAE, and eligibility evidence. Before publication, the audit independently replays every material label from the daily stock and benchmark paths and stamps content-addressed material and reconciliation hashes. Training and promotion require those hashes and zero replay errors. `train-swing-model` publishes an immutable candidate plus a hash inventory for every promotion file. `promote-swing-model` verifies that inventory, applies frozen development gates, consumes one predeclared untouched-shadow bundle, requires a positive paired session-block confidence lower bound, and writes an immutable attestation. Editing a model, manifest, metric, audit, shadow bundle, or attestation invalidates authorization.
+`build-swing-dataset` uses a post-close decision, next-session-open entry, and fifth-session-close exit. It writes exact entry/exit/label timestamps, costs, stock and benchmark returns, MFE/MAE, and eligibility evidence. Before publication, the audit independently replays every material label from the daily stock and benchmark paths and stamps content-addressed material and reconciliation hashes. Training and promotion require those hashes and zero replay errors. `train-swing-model` publishes an immutable candidate plus a hash inventory for every promotion file. `promote-swing-model` verifies that inventory, the frozen candidate and baseline artifacts, and a predeclared shadow workload. It then reopens the outcome repository, reproduces paired row-level candidate/baseline source evidence and session economics, consumes the causal bundle once, requires a positive paired session-block confidence lower bound, and writes an immutable attestation. Operator-supplied aggregate shadow returns are not accepted. Editing a model, manifest, metric, audit, source outcome, shadow bundle, ledger receipt, or attestation invalidates authorization.
 
 The removed `build-volatile-dataset`, `train-volatile-model`, and `score-volatile-latest` commands are not compatibility aliases. Old volatile artifacts cannot be loaded by the production swing API.
 
@@ -555,6 +557,8 @@ market-predictor-research promote-intraday-model `
   --hypothesis-registry data/governance `
   --hypothesis-id intraday-60m-h001 `
   --shadow-bundle data/governance/shadow/<shadow-fingerprint>.json `
+  --outcome-repository data/outcomes `
+  --baseline-artifact models/intraday/baselines/intraday_60m.joblib `
   --build-identity ci:<build-id> `
   --approver-identity reviewer:<identity> `
   --signing-private-key <secure-ed25519-private-key.pem> `

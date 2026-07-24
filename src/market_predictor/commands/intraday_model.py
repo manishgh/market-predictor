@@ -197,6 +197,14 @@ def register_intraday_model_commands(app: typer.Typer, console: Console) -> None
         hypothesis_registry: Path = typer.Option(..., help="Root containing immutable hypothesis declarations."),
         hypothesis_id: str = typer.Option(..., help="Predeclared hypothesis identifier."),
         shadow_bundle: Path = typer.Option(..., help="Immutable untouched-shadow evidence bundle."),
+        outcome_repository: Path = typer.Option(
+            ...,
+            help="Durable repository containing paired shadow intents and outcomes.",
+        ),
+        baseline_artifact: Path = typer.Option(
+            ...,
+            help="Frozen baseline model artifact declared by the hypothesis.",
+        ),
         build_identity: str = typer.Option(..., help="CI/build workload identity recorded in the attestation."),
         approver_identity: str = typer.Option(..., help="Reviewer identity recorded in the attestation."),
         signing_private_key: Path = typer.Option(
@@ -230,6 +238,8 @@ def register_intraday_model_commands(app: typer.Typer, console: Console) -> None
                 hypothesis_registry_root=hypothesis_registry,
                 hypothesis_id=hypothesis_id,
                 shadow_bundle_path=shadow_bundle,
+                outcome_repository_root=outcome_repository,
+                baseline_artifact_path=baseline_artifact,
                 build_identity=build_identity,
                 approver_identity=approver_identity,
                 signing_private_key_path=signing_private_key,
