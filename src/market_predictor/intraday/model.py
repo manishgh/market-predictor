@@ -46,13 +46,12 @@ from market_predictor.intraday.evaluation import (
 )
 from market_predictor.label_policy import stamped_label_policy
 from market_predictor.prediction_policy import (
-    INTRADAY_SELECTION_TIE_BREAKERS,
     PredictionSelectionPolicy,
     group_ranking_metrics,
     intraday_decision_scores,
     intraday_selection_eligible,
     prediction_policy_identity,
-    select_top_k_per_group,
+    select_intraday_candidates,
 )
 from market_predictor.registry import (
     MODEL_STATUS_CANDIDATE,
@@ -454,21 +453,11 @@ def train_intraday_model(
         temporary.unlink(missing_ok=True)
 
     capacity = capacity_curve(
-        select_top_k_per_group(
-            oof,
-            score=intraday_decision_scores(
-                oof,
-                opportunity_column="intraday_opportunity_probability",
-                downside_column="intraday_downside_probability",
-            ),
-            group_column="decision_group_id",
-            top_k=config.top_k,
-            tie_breakers=INTRADAY_SELECTION_TIE_BREAKERS,
-            eligible=intraday_selection_eligible(
-                oof,
-                downside_column="intraday_downside_probability",
-                downside_ceiling=config.max_downside_probability,
-            ),
+        select_intraday_candidates(
+            full_cross_section_evidence,
+            policy=prediction_policy,
+            opportunity_column="intraday_opportunity_probability",
+            downside_column="intraday_downside_probability",
         ),
         gross_return_column=f"path_realized_return_gross_{horizon}m",
         dollar_volume_column="entry_dollar_volume",
@@ -487,11 +476,12 @@ def train_intraday_model(
         holdout_evidence["independent_event_id"],
     )
     capacity_min_avg_net_return = float(pd.to_numeric(capacity["avg_net_return"], errors="coerce").min())
-    if not np.isfinite(capacity_min_avg_net_return):
-        # No point-in-time liquidity evidence in this dataset: fall back to the
-        # marginal (base-size) economics so the gate reflects real capacity only
-        # when dollar-volume evidence is present.
-        capacity_min_avg_net_return = float(robust.get("avg_trade_return", float("nan")))
+    capacity_max_no_fill_rate = float(
+        pd.to_numeric(capacity["no_fill_rate"], errors="coerce").max()
+    )
+    capacity_liquidity_evidence_complete = bool(
+        capacity["liquidity_evidence_complete"].astype(bool).all()
+    )
     metrics: dict[str, Any] = {
         "schema_version": INTRADAY_MODEL_SCHEMA_VERSION,
         "model_type": INTRADAY_MODEL_TYPE,
@@ -535,6 +525,11 @@ def train_intraday_model(
         "configured_validation_folds": config.n_splits,
         "scored_validation_fold_ids": scored_validation_fold_ids,
         "capacity_min_avg_net_return": capacity_min_avg_net_return,
+        "capacity_max_no_fill_rate": capacity_max_no_fill_rate,
+        "capacity_liquidity_evidence_complete": (
+            capacity_liquidity_evidence_complete
+        ),
+        "capacity_curve": capacity.to_dict(orient="records"),
         **overlap_evidence,
         "holdout_summed_label_uniqueness": holdout_overlap_evidence[
             "summed_label_uniqueness"

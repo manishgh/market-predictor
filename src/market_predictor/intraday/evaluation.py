@@ -70,6 +70,9 @@ def prediction_evidence(
         downside_target_column(horizon_minutes),
         net_return_column(horizon_minutes),
         f"path_realized_return_gross_{horizon_minutes}m",
+        f"path_spy_return_{horizon_minutes}m",
+        f"path_qqq_return_{horizon_minutes}m",
+        f"path_sector_return_{horizon_minutes}m",
         "entry_price",
         "entry_dollar_volume",
         "entry_atr_pct",
@@ -175,15 +178,17 @@ def phase_economics(
         intraday_downside_ceiling=downside_ceiling,
         intraday_max_trades_per_session=max_trades_per_session,
     )
+    selected_all = select_intraday_candidates(
+        predictions,
+        policy=selection_policy,
+        opportunity_column="intraday_opportunity_probability",
+        downside_column="intraday_downside_probability",
+    )
     for phase in range(phase_count):
         phase_groups = set(ordinal[ordinal.mod(phase_count).eq(phase)].index)
-        candidates = predictions[predictions["decision_group_id"].isin(phase_groups)].copy()
-        selected = select_intraday_candidates(
-            candidates,
-            policy=selection_policy,
-            opportunity_column="intraday_opportunity_probability",
-            downside_column="intraday_downside_probability",
-        )
+        selected = selected_all[
+            selected_all["decision_group_id"].isin(phase_groups)
+        ].copy()
         records.append(
             _economic_record(
                 selected,
@@ -324,20 +329,40 @@ def regime_audit(
                 }
             )
             continue
-        record = conservative_economics(
-            phase_economics(
-                subset,
-                horizon_minutes=horizon_minutes,
-                decision_interval_minutes=decision_interval_minutes,
-                top_k=top_k,
-                downside_ceiling=downside_ceiling,
-                max_trades_per_session=max_trades_per_session,
-                scope=f"regime:{regime}",
-                policy=policy,
-            )
-        ).iloc[0]
-        sessions = int(finite_or_none(record.get("sessions")) or 0)
-        trades = int(finite_or_none(record.get("selected_trades")) or 0)
+        selection_policy = PredictionSelectionPolicy(
+            intraday_top_k=top_k,
+            intraday_downside_ceiling=downside_ceiling,
+            intraday_max_trades_per_session=max_trades_per_session,
+        )
+        selected_regime = select_intraday_candidates(
+            subset,
+            policy=selection_policy,
+            opportunity_column="intraday_opportunity_probability",
+            downside_column="intraday_downside_probability",
+        )
+        regime_economics = phase_economics(
+            subset,
+            horizon_minutes=horizon_minutes,
+            decision_interval_minutes=decision_interval_minutes,
+            top_k=top_k,
+            downside_ceiling=downside_ceiling,
+            max_trades_per_session=max_trades_per_session,
+            scope=f"regime:{regime}",
+            policy=policy,
+        )
+        populated_economics = regime_economics[
+            pd.to_numeric(
+                regime_economics["selected_trades"],
+                errors="coerce",
+            ).gt(0)
+        ]
+        record = (
+            conservative_economics(populated_economics).iloc[0]
+            if not populated_economics.empty
+            else pd.Series(dtype=object)
+        )
+        sessions = int(selected_regime["session_date_et"].nunique())
+        trades = int(len(selected_regime))
         status = "sufficient" if sessions >= min_regime_sessions and trades >= min_regime_trades else "insufficient_evidence"
         details.append(
             {

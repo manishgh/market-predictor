@@ -265,16 +265,24 @@ def capacity_curve(
     dollar_volume = _series(dollar_volume_column)
     price = _series(price_column)
     atr = _series(atr_pct_column)
+    complete_liquidity = (
+        gross.notna()
+        & dollar_volume.notna()
+        & dollar_volume.gt(0)
+        & price.notna()
+        & atr.notna()
+    )
+    liquidity_evidence_complete = bool(total := len(selected)) and bool(
+        complete_liquidity.all()
+    )
     records: list[dict[str, object]] = []
-    total = int(len(selected))
     for capital in policy.capacity_capital_usd:
         notional = float(capital) * capital_weight
         participation = participation_fraction(notional, dollar_volume)
         fillable = (
             dollar_volume.ge(policy.min_fillable_dollar_volume)
             & participation.le(policy.participation_cap)
-            & gross.notna()
-            & price.notna()
+            & complete_liquidity
         )
         filled = int(fillable.sum())
         if filled == 0:
@@ -282,10 +290,12 @@ def capacity_curve(
                 {
                     "capital_usd": float(capital),
                     "capital_per_trade_usd": notional,
+                    "selected_trades": total,
                     "filled_trades": 0,
                     "no_fill_rate": 1.0 if total else float("nan"),
                     "avg_participation": float("nan"),
                     "avg_net_return": float("nan"),
+                    "liquidity_evidence_complete": liquidity_evidence_complete,
                 }
             )
             continue
@@ -300,10 +310,12 @@ def capacity_curve(
             {
                 "capital_usd": float(capital),
                 "capital_per_trade_usd": notional,
+                "selected_trades": total,
                 "filled_trades": filled,
                 "no_fill_rate": float(1.0 - filled / total) if total else float("nan"),
                 "avg_participation": float(participation[fillable].mean()),
                 "avg_net_return": float(net.mean()),
+                "liquidity_evidence_complete": liquidity_evidence_complete,
             }
         )
     return pd.DataFrame(records)

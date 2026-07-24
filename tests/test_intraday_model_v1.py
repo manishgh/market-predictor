@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import tempfile
 import unittest
+from copy import deepcopy
 from dataclasses import replace
 from pathlib import Path
 
@@ -164,6 +165,16 @@ class IntradayModelV1Tests(unittest.TestCase):
             + result.metrics["selected_unseen_trades"],
             full_selected,
         )
+        self.assertTrue(result.metrics["capacity_liquidity_evidence_complete"])
+        self.assertEqual(result.metrics["capacity_max_no_fill_rate"], 0.0)
+        self.assertEqual(len(result.metrics["capacity_curve"]), 4)
+        self.assertTrue(
+            all(
+                row["selected_trades"]
+                == result.metrics["full_cross_section_selected_trades"]
+                for row in result.metrics["capacity_curve"]
+            )
+        )
         self.assertLess(float(result.metrics["memory"]["peak_working_set_gib"]), 4.0)
 
     def test_rejects_future_feature_timestamp(self) -> None:
@@ -204,6 +215,7 @@ class IntradayModelV1Tests(unittest.TestCase):
             low_overlap_metrics["validated_rows"] = 1_000_000
             low_overlap_metrics["effective_sample_size"] = 1.0
             low_overlap_metrics["holdout_effective_sample_size"] = 1.0
+            low_overlap_metrics["capacity_liquidity_evidence_complete"] = False
             low_overlap = promote_intraday_model(
                 model_path=model_path,
                 evidence=replace(loaded, metrics=low_overlap_metrics),
@@ -226,6 +238,32 @@ class IntradayModelV1Tests(unittest.TestCase):
                 any(
                     "holdout_effective_sample_size" in failure
                     for failure in low_overlap["failures"]
+                )
+            )
+            self.assertTrue(
+                any(
+                    "capacity liquidity evidence is incomplete" in failure
+                    for failure in low_overlap["failures"]
+                )
+            )
+            mutated_capacity_metrics = deepcopy(loaded.metrics)
+            mutated_capacity_metrics["capacity_curve"][0]["selected_trades"] += 1
+            mutated_capacity = promote_intraday_model(
+                model_path=model_path,
+                evidence=replace(loaded, metrics=mutated_capacity_metrics),
+                config=IntradayPromotionConfig(
+                    min_validated_rows=100,
+                    min_tickers=6,
+                    min_selected_trades=1,
+                    min_catalyst_coverage_rate=0.10,
+                    min_effective_sample_size=0.0,
+                ),
+            )
+            self.assertFalse(mutated_capacity["passed"])
+            self.assertTrue(
+                any(
+                    "capacity curve selected counts do not match" in failure
+                    for failure in mutated_capacity["failures"]
                 )
             )
             substituted_profitability = loaded.profitability_audit.copy()
@@ -477,10 +515,17 @@ def _training_dataset() -> pd.DataFrame:
                     "low_relevance_event_fraction_2h": 0.0,
                     opportunity_target_column(horizon): opportunity,
                     downside_target_column(horizon): downside,
+                    f"path_realized_return_gross_{horizon}m": net_return + 0.0017,
                     net_return_column(horizon): net_return,
+                    f"path_spy_return_{horizon}m": 0.0002,
+                    f"path_qqq_return_{horizon}m": 0.0003,
+                    f"path_sector_return_{horizon}m": 0.0001,
                     excess_return_column(horizon, "spy"): net_return - 0.0002,
                     excess_return_column(horizon, "qqq"): net_return - 0.0003,
                     excess_return_column(horizon, "sector"): net_return - 0.0001,
+                    "entry_price": 100.0,
+                    "entry_atr_pct": 0.02,
+                    "entry_dollar_volume": 1_000_000_000.0,
                 }
                 for feature_index, feature in enumerate(INTRADAY_MODEL_FEATURES):
                     row[feature] = technical + 0.01 * feature_index + rng.normal(0, 0.03)

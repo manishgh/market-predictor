@@ -295,6 +295,7 @@ class IntradayPromotionConfig(FrozenConfig):
     max_worst_regime_drawdown: float = Field(default=0.30, gt=0, le=1)
     max_worst_regime_calibration_error: float = Field(default=0.15, ge=0, le=1)
     min_capacity_avg_net_return: float = -0.02
+    max_capacity_no_fill_rate: float = Field(default=0.75, ge=0, le=1)
     min_selected_trades: int = Field(default=200, ge=1)
     min_avg_trade_return: float = 0.0
     min_avg_excess_return_vs_spy: float = 0.0

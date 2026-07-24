@@ -56,6 +56,9 @@ def prediction_evidence(
         swing_target_column(horizon),
         swing_net_return_column(horizon),
         f"future_gross_return_{horizon}d",
+        f"future_spy_return_{horizon}d",
+        f"future_qqq_return_{horizon}d",
+        f"future_sector_return_{horizon}d",
         "close",
         "atr_pct_14",
         swing_excess_column(horizon, "spy"),
@@ -289,11 +292,31 @@ def regime_audit(
                 }
             )
             continue
-        record = conservative_economics(
-            phase_economics(subset, horizon=horizon, top_k=top_k, scope=f"regime:{regime}", policy=policy)
-        ).iloc[0]
-        sessions = int(finite_or_none(record.get("periods")) or 0)
-        trades = int(finite_or_none(record.get("selected_trades")) or 0)
+        selected_regime = select_swing_candidates(
+            subset,
+            policy=PredictionSelectionPolicy(swing_top_k=top_k),
+            probability_column="swing_probability",
+        )
+        regime_economics = phase_economics(
+            subset,
+            horizon=horizon,
+            top_k=top_k,
+            scope=f"regime:{regime}",
+            policy=policy,
+        )
+        populated_economics = regime_economics[
+            pd.to_numeric(
+                regime_economics["selected_trades"],
+                errors="coerce",
+            ).gt(0)
+        ]
+        record = (
+            conservative_economics(populated_economics).iloc[0]
+            if not populated_economics.empty
+            else pd.Series(dtype=object)
+        )
+        sessions = int(selected_regime["session_date_et"].nunique())
+        trades = int(len(selected_regime))
         status = "sufficient" if sessions >= min_regime_sessions and trades >= min_regime_trades else "insufficient_evidence"
         details.append(
             {

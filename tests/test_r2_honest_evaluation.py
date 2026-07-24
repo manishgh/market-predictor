@@ -15,6 +15,7 @@ from sklearn.metrics import roc_auc_score
 from market_predictor import prediction_service
 from market_predictor.execution_policy import (
     ExecutionCostPolicy,
+    capacity_curve,
     executable_fill_price,
     executable_fill_prices,
 )
@@ -410,6 +411,50 @@ class EconomicIdentityTest(unittest.TestCase):
                 economics["scope"].eq("full_cross_section:unseen").any()
             )
 
+    def test_capacity_distinguishes_missing_liquidity_from_no_fill(self) -> None:
+        policy = ExecutionCostPolicy(
+            capacity_capital_usd=(100_000.0,),
+            min_fillable_dollar_volume=50_000.0,
+            participation_cap=0.05,
+        )
+        missing = capacity_curve(
+            pd.DataFrame(
+                {
+                    "gross": [0.02],
+                    "dollar_volume": [np.nan],
+                    "price": [100.0],
+                    "atr_pct": [0.02],
+                }
+            ),
+            gross_return_column="gross",
+            dollar_volume_column="dollar_volume",
+            price_column="price",
+            atr_pct_column="atr_pct",
+            capital_weight=1.0,
+            policy=policy,
+        ).iloc[0]
+        illiquid = capacity_curve(
+            pd.DataFrame(
+                {
+                    "gross": [0.02],
+                    "dollar_volume": [10_000.0],
+                    "price": [100.0],
+                    "atr_pct": [0.02],
+                }
+            ),
+            gross_return_column="gross",
+            dollar_volume_column="dollar_volume",
+            price_column="price",
+            atr_pct_column="atr_pct",
+            capital_weight=1.0,
+            policy=policy,
+        ).iloc[0]
+
+        self.assertFalse(bool(missing["liquidity_evidence_complete"]))
+        self.assertEqual(float(missing["no_fill_rate"]), 1.0)
+        self.assertTrue(bool(illiquid["liquidity_evidence_complete"]))
+        self.assertEqual(float(illiquid["no_fill_rate"]), 1.0)
+
 
 class CalibrationGateTest(unittest.TestCase):
     def test_biased_probabilities_preserving_auc_fail_calibration(self) -> None:
@@ -435,7 +480,7 @@ class SparseRegimeTest(unittest.TestCase):
             horizon=5,
             top_k=3,
             target_column=_TARGET,
-            min_regime_sessions=1,
+            min_regime_sessions=2,
             min_regime_trades=1,
         )
         dense = audit[audit["scope"] == "regime:dense"].iloc[0]

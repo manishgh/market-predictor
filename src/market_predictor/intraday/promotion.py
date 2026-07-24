@@ -10,7 +10,10 @@ from typing import TYPE_CHECKING, Any, cast
 import numpy as np
 import pandas as pd
 
-from market_predictor.execution_policy import EXECUTION_POLICY_SHA256
+from market_predictor.execution_policy import (
+    DEFAULT_EXECUTION_POLICY,
+    EXECUTION_POLICY_SHA256,
+)
 from market_predictor.intraday.contracts import (
     INTRADAY_MODEL_SCHEMA_VERSION,
     INTRADAY_MODEL_TYPE,
@@ -143,9 +146,16 @@ def promote_intraday_model(
                     "min",
                 ),
                 "capacity_min_avg_net_return": (config.min_capacity_avg_net_return, "min"),
+                "capacity_max_no_fill_rate": (
+                    config.max_capacity_no_fill_rate,
+                    "max",
+                ),
             },
         )
     )
+    if not _strict_bool(metrics.get("capacity_liquidity_evidence_complete")):
+        failures.append("capacity liquidity evidence is incomplete")
+    failures.extend(_capacity_curve_failures(metrics))
     failures.extend(_worst_regime_failures(evidence.regime_audit, config))
     memory = metrics.get("memory")
     peak_memory = _finite_number(memory.get("peak_working_set_gib")) if isinstance(memory, dict) else None
@@ -439,6 +449,87 @@ def _audit_provenance_failures(name: str, audit: pd.DataFrame, model_run_id: str
 
 def _metric_gate_failures(metrics: dict[str, Any], gates: dict[str, tuple[float, str]]) -> list[str]:
     return _value_gate_failures(metrics, gates, prefix="metrics")
+
+
+def _capacity_curve_failures(metrics: dict[str, Any]) -> list[str]:
+    payload = metrics.get("capacity_curve")
+    if not isinstance(payload, list) or not payload:
+        return ["capacity curve evidence is missing"]
+    curve = pd.DataFrame(payload)
+    required = {
+        "capital_usd",
+        "selected_trades",
+        "filled_trades",
+        "no_fill_rate",
+        "avg_net_return",
+        "liquidity_evidence_complete",
+    }
+    if missing := sorted(required.difference(curve.columns)):
+        return [f"capacity curve is missing columns: {', '.join(missing)}"]
+    failures: list[str] = []
+    capitals = pd.to_numeric(curve["capital_usd"], errors="coerce").tolist()
+    expected_capitals = list(DEFAULT_EXECUTION_POLICY.capacity_capital_usd)
+    if capitals != expected_capitals:
+        failures.append("capacity curve capital levels do not match the execution policy")
+    expected_selected = _finite_number(
+        metrics.get("full_cross_section_selected_trades")
+    )
+    selected = pd.to_numeric(curve["selected_trades"], errors="coerce")
+    if (
+        expected_selected is None
+        or selected.isna().any()
+        or not selected.eq(expected_selected).all()
+    ):
+        failures.append(
+            "capacity curve selected counts do not match full-cross-section selection"
+        )
+    filled = pd.to_numeric(curve["filled_trades"], errors="coerce")
+    no_fill = pd.to_numeric(curve["no_fill_rate"], errors="coerce")
+    if (
+        filled.isna().any()
+        or no_fill.isna().any()
+        or selected.le(0).any()
+        or not np.allclose(
+            no_fill.to_numpy(dtype=float),
+            1.0 - filled.to_numpy(dtype=float) / selected.to_numpy(dtype=float),
+            rtol=0.0,
+            atol=1e-15,
+        )
+    ):
+        failures.append("capacity curve fill and no-fill counts do not reconcile")
+    if not curve["liquidity_evidence_complete"].map(_strict_bool).all():
+        failures.append("capacity curve contains incomplete liquidity evidence")
+    recomputed_min_return = _finite_number(
+        pd.to_numeric(curve["avg_net_return"], errors="coerce").min()
+    )
+    declared_min_return = _finite_number(
+        metrics.get("capacity_min_avg_net_return")
+    )
+    if (
+        recomputed_min_return is None
+        or declared_min_return is None
+        or not np.isclose(
+            recomputed_min_return,
+            declared_min_return,
+            rtol=0.0,
+            atol=1e-15,
+        )
+    ):
+        failures.append("capacity minimum net return was not reproduced")
+    recomputed_max_no_fill = _finite_number(no_fill.max())
+    declared_max_no_fill = _finite_number(metrics.get("capacity_max_no_fill_rate"))
+    if (
+        recomputed_max_no_fill is None
+        or declared_max_no_fill is None
+        or not np.isclose(
+            recomputed_max_no_fill,
+            declared_max_no_fill,
+            rtol=0.0,
+            atol=1e-15,
+        )
+    ):
+        failures.append("capacity maximum no-fill rate was not reproduced")
+    return failures
 
 
 def _row_gate_failures(
