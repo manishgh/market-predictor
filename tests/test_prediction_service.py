@@ -75,8 +75,13 @@ class FixedProbabilityModel:
 class StaticModelContextProvider:
     """Test-only provider; production always resolves an active release pointer."""
 
-    def __init__(self, root: Path) -> None:
+    def __init__(
+        self,
+        root: Path,
+        live_feature_store: LiveFeatureStore | None = None,
+    ) -> None:
         self.root = root
+        self.live_feature_store = live_feature_store
         self.contexts: dict[tuple[str, str, Path], ActiveModelContext] = {}
         self.load_count = 0
 
@@ -100,6 +105,23 @@ class StaticModelContextProvider:
             expected_schema_version=expected_schema,
         )
         payload = joblib.load(model_path)
+        feature_frame: pd.DataFrame | None = None
+        feature_manifest: dict[str, object] = {}
+        serving_bundle_id: str | None = None
+        if self.live_feature_store is not None:
+            _, manifest_path = self.live_feature_store.paths(mode)  # type: ignore[arg-type]
+            loaded = json.loads(manifest_path.read_text(encoding="utf-8"))
+            if not isinstance(loaded, dict):
+                raise ValueError("test live feature manifest is invalid")
+            feature_manifest = {str(key): value for key, value in loaded.items()}
+            generated = datetime.fromisoformat(
+                str(feature_manifest["generated_at_utc"])
+            )
+            feature_frame = self.live_feature_store.load(  # type: ignore[arg-type]
+                mode,
+                as_of=generated,
+            )
+            serving_bundle_id = "f" * 64
         self.load_count += 1
         context = ActiveModelContext(
             mode=mode,
@@ -109,6 +131,14 @@ class StaticModelContextProvider:
             model_path=model_path,
             manifest=manifest,
             payload=payload,
+            serving_bundle_id=serving_bundle_id,
+            serving_bundle_generated_at_utc=(
+                str(feature_manifest.get("generated_at_utc"))
+                if feature_manifest
+                else None
+            ),
+            feature_frame=feature_frame,
+            feature_manifest=feature_manifest,
         )
         self.contexts[key] = context
         return context
@@ -638,6 +668,17 @@ class PredictionServiceTests(unittest.TestCase):
             )
 
             self.assertEqual(response.data_source, "live")
+            self.assertEqual(
+                response.models["swing"].serving_bundle_id,
+                "f" * 64,
+            )
+            assert response.evidence is not None
+            self.assertEqual(
+                response.evidence.view_serving_bundle_ids,
+                {"swing": "f" * 64},
+            )
+            self.assertIsNotNone(response.evidence.serving_bundle_sha256)
+            self.assertEqual(response.evidence.identity_status, "complete")
             prediction = response.predictions[0].swing
             assert prediction is not None
             self.assertAlmostEqual(prediction.probability or 0.0, 0.73)
@@ -982,7 +1023,11 @@ def _service(
         routes=routes,
         data_source=data_source,
         live_feature_store=live_feature_store,
-        model_context_cache=model_context_cache or StaticModelContextProvider(root),
+        model_context_cache=model_context_cache
+        or StaticModelContextProvider(
+            root,
+            live_feature_store if data_source == "live" else None,
+        ),
         max_concurrent_inference=max_concurrent_inference,
         max_tickers_per_request=max_tickers_per_request,
         drift_state_store=drift_state_store,

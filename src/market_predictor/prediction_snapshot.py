@@ -18,7 +18,7 @@ from market_predictor.prediction_contracts import (
     PredictionValidationError,
 )
 
-SNAPSHOT_SCHEMA = "market_predictor.prediction_snapshot.v2"
+SNAPSHOT_SCHEMA = "market_predictor.prediction_snapshot.v3"
 _SNAPSHOT_ID = re.compile(r"^[0-9a-f]{64}$")
 
 

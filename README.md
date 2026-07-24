@@ -40,14 +40,15 @@ Production API implications:
 - R4 promotion and local release infrastructure is complete: immutable candidate manifests and attestations, predeclared hypotheses, one-use shadow evidence, paired session-block confidence gates, versioned local releases, atomic activation, and verified rollback are implemented. This does not change the model state above; no real canonical model has passed promotion.
 - Azure publication, synchronization, rollback, and disaster-recovery rehearsal are `environment_pending` and are not evidence for R4 completion.
 - R7.3 exact catalyst lineage, R7.4 source-path label reproduction, R7.5 causal
-  shadow evidence, and R7.6 selected-policy monitoring are implemented locally.
+  shadow evidence, R7.6 selected-policy monitoring, and R7.7 atomic serving
+  bundles are implemented locally.
   R7.6 evaluates a bounded rolling decision window, keeps pending selections
   explicit, and binds every cohort to the exact model, feature, prediction,
   label, execution, intent, and outcome identities.
 - Real selected-policy monitoring evidence remains `environment_pending` until a
   promoted release has accumulated sufficient live matured outcomes.
-- At the R7.6 checkpoint, all 347 repository tests pass, repository-wide Ruff is
-  clean, and strict mypy passes across 135 source/script files.
+- At the R7.7 checkpoint, all 357 repository tests pass, repository-wide Ruff is
+  clean, and strict mypy passes across 136 source/script files.
 
 The next valid intraday promotion attempt requires a new predeclared development hypothesis that first passes both economic scopes, followed by matured shadow data after 2026-07-08 and all current promotion audits. See [Intraday model promotion](docs/intraday_model_promotion.md).
 
@@ -335,12 +336,13 @@ Use `horizon: "auto"` for unified prediction so each server route resolves its n
 
 The unified response returns separate `swing` and `intraday` model views plus a final orchestration signal. It does not average unrelated model probabilities into one opaque number. Readiness reports daily and intraday history separately and treats unknown feed tiers as unproven; only explicit SIP/consolidated provenance satisfies the full-volume gate. A `warn` or `invalid` view is diagnostic only and returns `signal: "not_ready"` with no decision score, model decision, or rank.
 
-The production service reads only the server-registered snapshots at `data/live/features/swing.parquet` and `data/live/features/intraday.parquet`. Live snapshots require a matching sidecar manifest, SHA-256 integrity, explicit feed provenance, a fresh generation time, and a fresh latest feature timestamp. Models are loaded only through each route's signed local active-release pointer. Startup verifies the complete release and public-key attestation, then deserializes one cached context per route. Requests never deserialize joblib artifacts. The request schema rejects filesystem paths, data-source overrides, and promotion overrides.
+The production service reads only the immutable generation referenced by each route's `active_serving_bundle.json`. The mutable files under `data/live/features/` are validated staging inputs and are never request-path authority. A bundle contains an immutable feature copy and binds it to one signed model release, embedded calibration, prediction/label/execution policies, feature schema/source/columns, and complete hashes. Startup verifies the transitive bundle and public-key attestation, then loads one model-plus-feature context per route through bounded same-handle reads. Requests never deserialize joblib artifacts or reopen feature files. The request schema rejects filesystem paths, data-source overrides, and promotion overrides.
 
 Production routes are declared under `[prediction_serving.routes]` with a
 `release_repository`, `bar_timeframe`, and conservative
-`estimated_resident_gib`; `[prediction_serving]` also names the read-only public
-attestation trust store. Direct model paths are rejected.
+`estimated_resident_gib` plus hard model-byte, feature-byte, and feature-row
+limits; `[prediction_serving]` also names the read-only public attestation trust
+store. Direct model paths are rejected.
 
 The API preloads active contexts during lifespan startup. Readiness does not
 deserialize models or load full feature frames. Inference has one process-wide,
@@ -349,7 +351,9 @@ and current/projected RSS guards under the 4 GiB budget. Capacity and memory
 pressure return typed retryable HTTP 503 responses. Real-size soak evidence is
 still required before deployment.
 
-Build a label-free canonical inference artifact, then publish it atomically to the registered live path:
+Build a label-free canonical inference artifact, validate it into the live staging
+store, then publish the exact promoted model release and staged feature generation
+as one immutable serving bundle:
 
 ```powershell
 market-predictor-research build-intraday-live-features `
@@ -365,13 +369,21 @@ market-predictor-prod publish-live-features `
   --mode intraday `
   --input-path data/live/staging/intraday_60m.parquet `
   --live-dir data/live
+
+market-predictor-prod publish-serving-bundle `
+  --mode intraday `
+  --horizon 60m `
+  --model-release-id <64-character-model-release-id> `
+  --feature-snapshot data/live/features/intraday.parquet `
+  --release-root data/releases/intraday_60m `
+  --attestation-trust-store configs/attestation_trust_store.json
 ```
 
-`publish-live-features` accepts only the matching `swing_inference_features` or `intraday_inference_features` canonical artifact. Arbitrary Parquet, label-bearing training rows, caller-supplied feed overrides, mixed decision timestamps, stale rows, and future feature availability are rejected.
+`publish-live-features` accepts only the matching `swing_inference_features` or `intraday_inference_features` canonical artifact. Arbitrary Parquet, label-bearing training rows, caller-supplied feed overrides, mixed decision timestamps, stale rows, and future feature availability are rejected. This registered file is a staging input, not a serving authority. `publish-serving-bundle` copies it into a content-addressed generation and binds the exact model release, embedded calibration, prediction/label/execution policies, feature schema, canonical feature source, columns, and artifact hashes. Only `active_serving_bundle.json` is read for production activation. Partial, stale, mutated, or incompatible bundles cannot replace it.
 
 Catalyst evidence is returned separately from model probabilities. Swing exposes its unmodified probability. Canonical intraday exposes independent `opportunity_probability` and `downside_probability`; its exact decision score is `opportunity_probability * (1 - downside_probability)`. The model artifact binds the complete content-addressed selection policy: swing and intraday top-k, intraday downside ceiling, per-session cap, deterministic tie-breakers, action thresholds, and readiness requirements. Serving scores and selects against the complete published decision cross-section before returning the caller's requested tickers, so a one-ticker request cannot bypass the evaluated top-k policy. Responses distinguish `selection_eligible` from `selected_for_policy`; non-ready or non-finite rows never consume a selection slot. Catalyst reports confirmation, conflict, veto, mixed, or absent evidence, but remains an explanation and confirmation overlay and does not change estimator probabilities, decision scores, or policy selection.
 
-Every prediction served through the top-level API is written as an immutable, content-addressed JSON snapshot under `data/predictions/snapshots/`. The response returns `snapshot_id` and `snapshot_sha256`; both identify the exact request, response, model hashes, per-view prediction-policy hashes, unified serving-bundle hash, resolved horizons, feature cutoff, and generation time used for later outcome evaluation.
+Every prediction served through the top-level API is written as an immutable, content-addressed JSON snapshot under `data/predictions/snapshots/`. The response returns `snapshot_id` and `snapshot_sha256`; both identify the exact request, response, model hashes, per-view prediction-policy hashes, per-view serving-bundle ids and their ordered bundle-set hash, resolved horizons, feature cutoff, and generation time used for later outcome evaluation.
 
 Live model validation is separate from investment replay. Identity-complete live snapshots are converted into immutable maturation intents, then matured only from a hash-verified canonical bar artifact using the exact label policy frozen into the model release:
 

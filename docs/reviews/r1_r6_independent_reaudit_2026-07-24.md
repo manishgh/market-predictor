@@ -154,7 +154,11 @@ Data and manifests are replaced separately, and readers hash then reopen paths i
 Fix: immutable content-addressed generation directories plus one atomic pointer; read and
 verify one immutable generation. Add writer/reader race and crash-injection tests.
 
-Status: open; R7.7.
+Status: remediated for production serving in R7.7. The API no longer reads the mutable
+feature/manifest pair. Bundle publication copies and verifies it into one immutable,
+content-addressed route generation before replacing a single hash-protected pointer.
+Barrier-controlled pointer flips, partial publication, corruption, and rollback are
+tested.
 
 ### 9. Drift warm-up can deadlock a new release
 
@@ -186,8 +190,11 @@ full; estimates do not use cgroup limits.
 Fix: artifact byte/row limits, predicate/projection pushdown, cgroup-aware accounting, and
 preload/functional validation before an RCU-style context swap that retains rollback.
 
-Status: model/feature swap work remains in R7.7; deployment-scale memory evidence
-is deferred to the post-R7 delivery program.
+Status: remediated locally in R7.7 for serving correctness and bounded loading.
+Model/feature byte limits and feature-row limits apply before same-handle
+deserialization, the cached context owns both artifacts, and in-flight references
+retain the old generation during pointer replacement. Real combined-model startup and
+burst/soak evidence below 4 GiB remains deferred to the deployment evidence program.
 
 ### 12. Outcome registration is not a durable closed loop
 
@@ -244,7 +251,7 @@ Status: environment pending; no distributed/cloud claim.
 5. Complete R7.5 causally derived shadow evidence.
 6. R7.6 selected-policy monitoring is complete locally; durable snapshot-to-intent
    outbox work remains open as finding 12.
-7. Complete R7.7 atomic feature/model serving generations.
+7. R7.7 atomic feature/model serving generations are complete locally.
 
 Security hardening, container/CI delivery closure, Azure deployment, rollback,
 and disaster-recovery evidence are retained as a separate deferred post-R7

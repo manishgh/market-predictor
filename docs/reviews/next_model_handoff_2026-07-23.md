@@ -312,6 +312,17 @@ candidate integration test):
   serving. Verification on 2026-07-24: **347 tests passed**, repository-wide Ruff
   clean, and strict mypy clean across **135 source/script files**. Real live evidence
   remains `environment_pending`.
+- **R7.7 completed locally:** serving now activates one content-addressed route bundle
+  that binds the verified model release, embedded calibration, prediction/label/
+  execution policies, feature schema/source/columns, and an immutable feature copy.
+  Model and feature artifacts are hashed and consumed through one opened handle under
+  byte/row limits, and the cached context owns both for the full request. Partial
+  publication, mutation, policy mismatch, rollback, concurrent activation, and a
+  barrier-controlled pointer flip fail safely. Prediction evidence v3 records exact
+  per-view bundle ids and their ordered set hash. Verification on 2026-07-24:
+  **357 tests passed**, repository-wide Ruff clean, and strict mypy clean across
+  **136 source/script files**. Real combined-model startup and burst/soak evidence
+  below 4 GiB remains `environment_pending`.
 
 ## Do NOT claim complete without real external evidence (`environment_pending`)
 
@@ -328,9 +339,10 @@ Mark these `environment_pending`, never simulate them into a pass.
 ```powershell
 Set-Location C:\project\market-predictor
 git checkout r3-lineage
-git status --short                # expect empty after the R7.6 checkpoint
-.\.venv\Scripts\python.exe -m unittest discover -s tests
-# Start R7.7 atomic serving bundle. R7.8 remains deferred.
+git status --short                # expect empty after the R7.7 checkpoint
+.\.venv\Scripts\python.exe -m unittest discover -s tests   # expect 357 OK
+# R7.6 selected-policy monitoring and R7.7 atomic serving are complete locally.
+# Drift warm-up and durable snapshot-to-intent outbox findings remain separate/open.
 ```
 
 Persistent notes for this effort also live in the assistant memory file

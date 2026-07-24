@@ -152,6 +152,16 @@ live matured evidence remains `environment_pending`.
 
 Exit gate: a response is produced from one verified bundle identity or is non-actionable.
 
+Status: implemented and locally verified. Publication binds the model release,
+embedded calibration, prediction/label/execution policies, feature schema/source/
+columns, and immutable feature artifact in one content-addressed route bundle.
+Serving hashes and consumes each artifact through one opened handle, enforces byte/row
+limits and payload compatibility, and retains one model-plus-feature context through a
+request. Partial publication, mutation, policy conflict, rollback, concurrent
+activation, and a barrier-controlled pointer flip are tested. Prediction evidence v3
+records exact per-view bundle ids and their ordered set hash. Real combined-model
+startup and burst/soak evidence remains `environment_pending`.
+
 ### Deferred Post-R7 - Delivery And Deployment Closure
 
 This phase is intentionally deferred and is not part of the current R7

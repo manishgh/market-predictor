@@ -293,3 +293,6 @@ attestation_trust_store = "configs/attestation_trust_store.json"
 release_repository = "data/releases/swing_5d"
 bar_timeframe = "1Day"
 estimated_resident_gib = 0.5
+max_model_bytes = 536870912
+max_feature_bytes = 536870912
+max_feature_rows = 250000

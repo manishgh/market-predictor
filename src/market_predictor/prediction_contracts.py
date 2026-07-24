@@ -12,7 +12,7 @@ PredictionView = Literal["swing", "intraday"]
 PredictionDataSource = Literal["curated", "live"]
 
 PREDICTION_CONTRACT_VERSION = "market_predictor.prediction.v2"
-PREDICTION_EVIDENCE_CONTRACT_VERSION = "market_predictor.prediction_evidence.v2"
+PREDICTION_EVIDENCE_CONTRACT_VERSION = "market_predictor.prediction_evidence.v3"
 
 
 class PredictionServiceError(Exception):
@@ -146,6 +146,10 @@ class ModelInfo(BaseModel):
     path: str
     status: str
     release_id: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+    serving_bundle_id: str | None = Field(
+        default=None,
+        pattern=r"^[0-9a-f]{64}$",
+    )
     model_type: str | None = None
     schema_version: str | None = None
     target: str | None = None
@@ -204,11 +208,11 @@ class PredictionRowEvidenceV1(BaseModel):
         return value.astimezone(UTC)
 
 
-class PredictionEvidenceV2(BaseModel):
+class PredictionEvidenceV3(BaseModel):
     """Immutable identities and point-in-time evidence for one served response."""
 
-    contract_version: Literal["market_predictor.prediction_evidence.v2"] = (
-        "market_predictor.prediction_evidence.v2"
+    contract_version: Literal["market_predictor.prediction_evidence.v3"] = (
+        "market_predictor.prediction_evidence.v3"
     )
     request_id: str = Field(..., min_length=1, max_length=128)
     correlation_id: str = Field(..., min_length=1, max_length=128)
@@ -217,6 +221,11 @@ class PredictionEvidenceV2(BaseModel):
     feature_artifacts: dict[str, FeatureArtifactIdentityV1] = Field(default_factory=dict)
     release_id: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
     model_release_ids: dict[str, str] = Field(default_factory=dict)
+    view_serving_bundle_ids: dict[str, str] = Field(default_factory=dict)
+    serving_bundle_sha256: str | None = Field(
+        default=None,
+        pattern=r"^[0-9a-f]{64}$",
+    )
     model_artifact_sha256: dict[str, str] = Field(default_factory=dict)
     source_watermarks: dict[str, dict[str, str]] = Field(default_factory=dict)
     resolved_horizons: dict[str, str] = Field(default_factory=dict)
@@ -253,6 +262,22 @@ class PredictionEvidenceV2(BaseModel):
     def require_model_release_ids(cls, value: dict[str, str]) -> dict[str, str]:
         if any(not re.fullmatch(r"[0-9a-f]{64}", digest) for digest in value.values()):
             raise ValueError("model release identities must be lowercase SHA-256 values")
+        return value
+
+    @field_validator("view_serving_bundle_ids")
+    @classmethod
+    def require_serving_bundle_ids(
+        cls,
+        value: dict[str, str],
+    ) -> dict[str, str]:
+        if any(
+            view not in {"swing", "intraday"}
+            or not re.fullmatch(r"[0-9a-f]{64}", digest)
+            for view, digest in value.items()
+        ):
+            raise ValueError(
+                "serving bundle identities must be mode-to-SHA-256 mappings"
+            )
         return value
 
     @field_validator("view_prediction_policy_sha256")
@@ -401,7 +426,7 @@ class PredictionResponse(BaseModel):
     models: dict[str, ModelInfo] = Field(default_factory=dict)
     predictions: list[UnifiedTickerPrediction] = Field(default_factory=list)
     errors: list[str] = Field(default_factory=list)
-    evidence: PredictionEvidenceV2 | None = None
+    evidence: PredictionEvidenceV3 | None = None
     snapshot_id: str | None = None
     snapshot_sha256: str | None = None
 

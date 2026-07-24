@@ -85,6 +85,17 @@ class LiveFeatureStore:
         self._validate_manifest(manifest, mode=mode, path=path, as_of=as_of)
         return manifest
 
+    def validate_bound_manifest(
+        self,
+        mode: FeatureMode,
+        manifest: dict[str, object],
+        *,
+        as_of: datetime | None = None,
+    ) -> None:
+        """Validate freshness and schema for an already integrity-bound snapshot."""
+
+        self._validate_manifest(manifest, mode=mode, path=None, as_of=as_of)
+
     def publish(
         self,
         mode: FeatureMode,
@@ -207,7 +218,7 @@ class LiveFeatureStore:
         manifest: dict[str, object],
         *,
         mode: FeatureMode,
-        path: Path,
+        path: Path | None,
         as_of: datetime | None,
     ) -> None:
         if manifest.get("schema") != LIVE_FEATURE_SCHEMA or manifest.get("mode") != mode:
@@ -243,7 +254,9 @@ class LiveFeatureStore:
         for value in watermarks.values():
             _parse_utc(str(value))
         expected_hash = str(manifest.get("artifact_sha256", ""))
-        if not expected_hash or _file_sha256(path) != expected_hash:
+        if not _is_sha256(expected_hash):
+            raise ValueError(f"live {mode} feature manifest has an invalid artifact identity")
+        if path is not None and _file_sha256(path) != expected_hash:
             raise ValueError(f"live {mode} feature snapshot integrity check failed")
         generated_raw = manifest.get("generated_at_utc")
         if not generated_raw:

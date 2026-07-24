@@ -30,7 +30,7 @@ from market_predictor.prediction_contracts import (
     PredictionDataSource,
     PredictionDependencyError,
     PredictionDriftBlockedError,
-    PredictionEvidenceV2,
+    PredictionEvidenceV3,
     PredictionReadinessError,
     PredictionRequest,
     PredictionResponse,
@@ -105,6 +105,7 @@ class _FeatureSource:
     feature_schema_version: str | None = None
     source_watermarks: dict[str, str] | None = None
     release_id: str | None = None
+    serving_bundle_id: str | None = None
 
 
 def serving_routes_from_config(config: Mapping[str, Any]) -> dict[str, dict[str, ServingRoute]]:
@@ -152,11 +153,26 @@ def serving_routes_from_config(config: Mapping[str, Any]) -> dict[str, dict[str,
                     f"prediction serving route {mode}.{horizon} has an invalid "
                     "estimated_resident_gib"
                 )
+            max_model_bytes = int(
+                raw_route.get("max_model_bytes", 512 * 1024 * 1024)
+            )
+            max_feature_bytes = int(
+                raw_route.get("max_feature_bytes", 512 * 1024 * 1024)
+            )
+            max_feature_rows = int(raw_route.get("max_feature_rows", 250_000))
+            if min(max_model_bytes, max_feature_bytes, max_feature_rows) < 1:
+                raise ValueError(
+                    f"prediction serving route {mode}.{horizon} has invalid "
+                    "model/feature artifact limits"
+                )
             parsed[canonical_horizon] = ServingRoute(
                 repository=Path(repository),
                 attestation_trust_store=Path(trust_store),
                 bar_timeframe=str(raw_route.get("bar_timeframe", "unknown")).strip() or "unknown",
                 estimated_resident_gib=estimated_resident_gib,
+                max_model_bytes=max_model_bytes,
+                max_feature_bytes=max_feature_bytes,
+                max_feature_rows=max_feature_rows,
             )
         if parsed:
             routes[normalized_mode] = parsed
@@ -200,6 +216,19 @@ class PredictionService:
             raise ValueError("runtime memory budget and headroom are invalid")
         self.memory_budget_gib = memory_budget_gib
         self.memory_headroom_gib = memory_headroom_gib
+        maximum_artifact_bytes = int(
+            (memory_budget_gib - memory_headroom_gib) * 1024**3
+        )
+        for mode_routes in self.routes.values():
+            for route in mode_routes.values():
+                if (
+                    route.max_model_bytes + route.max_feature_bytes
+                    > maximum_artifact_bytes
+                ):
+                    raise ValueError(
+                        "combined route artifact byte limits exceed the memory "
+                        "safety threshold"
+                    )
         if max_concurrent_inference != 1 or max_tickers_per_request < 1:
             raise ValueError(
                 "inference concurrency must be one and the ticker limit must be positive"
@@ -261,7 +290,12 @@ class PredictionService:
                 bar_timeframe=route.bar_timeframe,
             )
             prediction_policy = _prediction_policy_for_model(model)
-            source = self._load_feature_source("swing", route, request)
+            source = self._load_feature_source(
+                "swing",
+                route,
+                request,
+                context=context,
+            )
             self._require_actionable_drift(
                 mode="swing",
                 horizon=resolved_horizon,
@@ -317,7 +351,12 @@ class PredictionService:
                 bar_timeframe=route.bar_timeframe,
             )
             prediction_policy = _prediction_policy_for_model(model)
-            source = self._load_feature_source("intraday", route, request)
+            source = self._load_feature_source(
+                "intraday",
+                route,
+                request,
+                context=context,
+            )
             self._require_actionable_drift(
                 mode="intraday",
                 horizon=resolved_horizon,
@@ -360,7 +399,7 @@ class PredictionService:
         swing: dict[str, SwingPrediction] = {}
         intraday: dict[str, IntradayPrediction] = {}
         resolved_horizons: dict[str, str] = {}
-        evidence_parts: list[PredictionEvidenceV2] = []
+        evidence_parts: list[PredictionEvidenceV3] = []
 
         try:
             swing_response = self.predict_swing(request.model_copy(update={"mode": "swing"}))
@@ -475,7 +514,37 @@ class PredictionService:
                         "status": "ready",
                         "model_status": info.status,
                         "artifact_sha256": info.artifact_sha256,
+                        "model_release_id": context.release_id,
+                        "serving_bundle_id": context.serving_bundle_id,
                     }
+                    if self.data_source == "live":
+                        _require_bundle_available_at(context, checked_at)
+                        feature_manifest = {
+                            str(key): value
+                            for key, value in context.feature_manifest.items()
+                        }
+                        self.live_feature_store.validate_bound_manifest(
+                            cast(Any, mode),
+                            feature_manifest,
+                            as_of=checked_at,
+                        )
+                        components[f"features:{mode}:{horizon}"] = {
+                            "status": "ready",
+                            "serving_bundle_id": context.serving_bundle_id,
+                            "generated_at_utc": feature_manifest.get(
+                                "generated_at_utc"
+                            ),
+                            "last_feature_time": feature_manifest.get(
+                                "last_feature_time"
+                            ),
+                            "price_feed": feature_manifest.get("price_feed"),
+                            "source_artifact_sha256": feature_manifest.get(
+                                "source_artifact_sha256"
+                            ),
+                            "feature_schema_version": feature_manifest.get(
+                                "feature_schema_version"
+                            ),
+                        }
                 except Exception as exc:
                     ready = False
                     components[name] = {"status": "not_ready", "reason": str(exc)}
@@ -514,30 +583,21 @@ class PredictionService:
         for mode, mode_routes in self.routes.items():
             if not mode_routes:
                 continue
+            if self.data_source == "live":
+                continue
             name = f"features:{mode}"
             try:
-                if self.data_source == "live":
-                    manifest = self.live_feature_store.validate(mode, as_of=checked_at)  # type: ignore[arg-type]
-                    components[name] = {
-                        "status": "ready",
-                        "generated_at_utc": manifest.get("generated_at_utc"),
-                        "last_feature_time": manifest.get("last_feature_time"),
-                        "price_feed": manifest.get("price_feed"),
-                        "source_artifact_sha256": manifest.get("source_artifact_sha256"),
-                        "feature_schema_version": manifest.get("feature_schema_version"),
-                    }
-                else:
-                    missing = []
-                    for route in mode_routes.values():
-                        if route.curated_dataset is None:
-                            missing.append("<not configured>")
-                            continue
-                        dataset_path = self._resolve(route.curated_dataset)
-                        if not dataset_path.exists():
-                            missing.append(str(dataset_path))
-                    if missing:
-                        raise FileNotFoundError(f"configured curated {mode} feature datasets are unavailable: {missing}")
-                    components[name] = {"status": "ready", "source": "curated"}
+                missing = []
+                for route in mode_routes.values():
+                    if route.curated_dataset is None:
+                        missing.append("<not configured>")
+                        continue
+                    dataset_path = self._resolve(route.curated_dataset)
+                    if not dataset_path.exists():
+                        missing.append(str(dataset_path))
+                if missing:
+                    raise FileNotFoundError(f"configured curated {mode} feature datasets are unavailable: {missing}")
+                components[name] = {"status": "ready", "source": "curated"}
             except Exception as exc:
                 ready = False
                 components[name] = {"status": "not_ready", "reason": str(exc)}
@@ -1064,6 +1124,7 @@ class PredictionService:
             resolved_horizon=context.horizon,
             bar_timeframe=bar_timeframe,
             release_id=context.release_id,
+            serving_bundle_id=context.serving_bundle_id,
         )
 
     def _model_info_from_manifest(
@@ -1074,6 +1135,7 @@ class PredictionService:
         resolved_horizon: str,
         bar_timeframe: str,
         release_id: str | None = None,
+        serving_bundle_id: str | None = None,
     ) -> ModelInfo:
         status = str(manifest.get("status", "unknown"))
         target = _optional_str(manifest.get("target_col"))
@@ -1087,6 +1149,7 @@ class PredictionService:
             path=str(model_path),
             status=status,
             release_id=release_id,
+            serving_bundle_id=serving_bundle_id,
             model_type=_optional_str(manifest.get("model_type")),
             schema_version=_optional_str(manifest.get("schema_version")),
             target=target,
@@ -1184,13 +1247,14 @@ class PredictionService:
         models: dict[str, ModelInfo],
         feature_sources: dict[str, _FeatureSource],
         feature_frames: dict[str, pd.DataFrame],
-    ) -> PredictionEvidenceV2:
+    ) -> PredictionEvidenceV3:
         rows: list[PredictionRowEvidenceV1] = []
         gaps: list[str] = []
         cutoffs: list[datetime] = []
         feature_artifacts: dict[str, FeatureArtifactIdentityV1] = {}
         source_watermarks: dict[str, dict[str, str]] = {}
-        feature_release_ids: set[str] = set()
+        feature_release_ids: dict[str, str] = {}
+        feature_bundle_ids: dict[str, str] = {}
 
         for mode, frame in feature_frames.items():
             latest = self._latest_rows(frame)
@@ -1274,12 +1338,18 @@ class PredictionService:
                 gaps.append(f"{mode} source coverage watermarks are missing")
             if source.release_id is not None:
                 if _is_sha256(source.release_id):
-                    feature_release_ids.add(source.release_id)
+                    feature_release_ids[mode] = source.release_id
                 else:
                     gaps.append(f"{mode} release identity is invalid")
+            if source.serving_bundle_id is not None:
+                if _is_sha256(source.serving_bundle_id):
+                    feature_bundle_ids[mode] = source.serving_bundle_id
+                else:
+                    gaps.append(f"{mode} serving bundle identity is invalid")
 
         model_hashes: dict[str, str] = {}
         model_release_ids: dict[str, str] = {}
+        model_bundle_ids: dict[str, str] = {}
         prediction_policy_hashes: dict[str, str] = {}
         for mode, model in models.items():
             if _is_sha256(model.artifact_sha256):
@@ -1290,6 +1360,10 @@ class PredictionService:
                 model_release_ids[mode] = str(model.release_id)
             elif self.data_source == "live":
                 gaps.append(f"{mode} model release identity is missing")
+            if _is_sha256(model.serving_bundle_id):
+                model_bundle_ids[mode] = str(model.serving_bundle_id)
+            elif self.data_source == "live":
+                gaps.append(f"{mode} model serving bundle identity is missing")
             if model.label_policy is None or not _is_sha256(
                 model.label_policy_sha256
             ):
@@ -1315,15 +1389,23 @@ class PredictionService:
 
         if not cutoffs:
             raise PredictionReadinessError
-        if len(feature_release_ids) > 1:
-            gaps.append("feature sources belong to different serving releases")
+        if self.data_source == "live":
+            for mode in models:
+                if feature_release_ids.get(mode) != model_release_ids.get(mode):
+                    gaps.append(
+                        f"{mode} model and feature release identities conflict"
+                    )
+                if feature_bundle_ids.get(mode) != model_bundle_ids.get(mode):
+                    gaps.append(
+                        f"{mode} model and feature serving bundle identities conflict"
+                    )
         release_id = (
             next(iter(model_release_ids.values()))
             if len(set(model_release_ids.values())) == 1
             else None
         )
         identity_status = "research_only" if self.data_source == "curated" else ("incomplete" if gaps else "complete")
-        return PredictionEvidenceV2(
+        return PredictionEvidenceV3(
             request_id=request_id,
             correlation_id=request.correlation_id or request_id,
             prediction_cutoff_utc=max(cutoffs),
@@ -1331,6 +1413,12 @@ class PredictionService:
             feature_artifacts=feature_artifacts,
             release_id=release_id,
             model_release_ids=model_release_ids,
+            view_serving_bundle_ids=model_bundle_ids,
+            serving_bundle_sha256=(
+                _serving_bundle_set_sha256(model_bundle_ids)
+                if model_bundle_ids
+                else None
+            ),
             model_artifact_sha256=model_hashes,
             source_watermarks=source_watermarks,
             resolved_horizons={
@@ -1368,6 +1456,8 @@ class PredictionService:
         mode: str,
         route: ServingRoute,
         request: PredictionRequest,
+        *,
+        context: ActiveModelContext,
     ) -> _FeatureSource:
         if self.data_source == "curated":
             if route.curated_dataset is None:
@@ -1378,7 +1468,20 @@ class PredictionService:
                 artifact_sha256=file_sha256(path),
                 source_artifact_type="curated_feature_dataset",
             )
-        manifest = self.live_feature_store.validate(mode, as_of=request.as_of)  # type: ignore[arg-type]
+        if context.feature_frame is None or context.serving_bundle_id is None:
+            raise ValueError("live serving requires an atomic model/feature bundle")
+        _require_bundle_available_at(
+            context,
+            request.as_of or datetime.now(UTC),
+        )
+        manifest = {
+            str(key): value for key, value in context.feature_manifest.items()
+        }
+        self.live_feature_store.validate_bound_manifest(
+            cast(Any, mode),
+            manifest,
+            as_of=request.as_of,
+        )
         watermarks_raw = manifest.get("source_watermarks")
         watermarks = (
             {str(key): str(value) for key, value in watermarks_raw.items()}
@@ -1386,24 +1489,15 @@ class PredictionService:
             else {}
         )
         return _FeatureSource(
-            frame=self.live_feature_store.load(mode, as_of=request.as_of),  # type: ignore[arg-type]
+            frame=context.feature_frame,
             artifact_sha256=_optional_str(manifest.get("artifact_sha256")),
             source_artifact_sha256=_optional_str(manifest.get("source_artifact_sha256")),
             source_artifact_type=_optional_str(manifest.get("source_artifact_type")),
             feature_schema_version=_optional_str(manifest.get("feature_schema_version")),
             source_watermarks=watermarks,
-            release_id=self._active_release_id(),
+            release_id=context.release_id,
+            serving_bundle_id=context.serving_bundle_id,
         )
-
-    def _active_release_id(self) -> str | None:
-        marker = self.root / "data/live/.active_release.json"
-        if not marker.exists():
-            return None
-        loaded = json.loads(marker.read_text(encoding="utf-8"))
-        release_id = loaded.get("release_id") if isinstance(loaded, dict) else None
-        if not _is_sha256(release_id):
-            raise ValueError("active release identity is invalid")
-        return str(release_id)
 
     def _resolve(self, path: Path) -> Path:
         return path if path.is_absolute() else self.root / path
@@ -1510,6 +1604,16 @@ def _serving_policy_bundle_sha256(
     ).hexdigest()
 
 
+def _serving_bundle_set_sha256(view_bundle_ids: Mapping[str, str]) -> str:
+    payload = {
+        "contract_version": "market_predictor.serving_bundle_set.v1",
+        "view_serving_bundle_ids": dict(sorted(view_bundle_ids.items())),
+    }
+    return hashlib.sha256(
+        json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+
+
 def _require_requested_tickers(
     frame: pd.DataFrame,
     requested: set[str],
@@ -1570,9 +1674,9 @@ def _combine_evidence(
     request: PredictionRequest,
     *,
     request_id: str,
-    evidence_parts: list[PredictionEvidenceV2],
+    evidence_parts: list[PredictionEvidenceV3],
     data_source: PredictionDataSource,
-) -> PredictionEvidenceV2:
+) -> PredictionEvidenceV3:
     if not evidence_parts:
         raise PredictionReadinessError
     rows = [row for evidence in evidence_parts for row in evidence.row_feature_availability]
@@ -1601,6 +1705,11 @@ def _combine_evidence(
         for evidence in evidence_parts
         for mode, release_id in evidence.model_release_ids.items()
     }
+    serving_bundle_ids = {
+        mode: bundle_id
+        for evidence in evidence_parts
+        for mode, bundle_id in evidence.view_serving_bundle_ids.items()
+    }
     gaps = [gap for evidence in evidence_parts for gap in evidence.identity_gaps]
     prediction_policy_hashes = {
         mode: digest
@@ -1608,15 +1717,20 @@ def _combine_evidence(
         for mode, digest in evidence.view_prediction_policy_sha256.items()
     }
     release_ids = {evidence.release_id for evidence in evidence_parts if evidence.release_id is not None}
-    if len(release_ids) > 1:
-        gaps.append("prediction views belong to different serving releases")
+    expected_views = {
+        mode
+        for evidence in evidence_parts
+        for mode in evidence.model_release_ids
+    }
+    if data_source == "live" and set(serving_bundle_ids) != expected_views:
+        gaps.append("prediction views do not have complete serving bundle identities")
     if data_source == "curated":
         identity_status = "research_only"
     elif gaps or any(evidence.identity_status != "complete" for evidence in evidence_parts):
         identity_status = "incomplete"
     else:
         identity_status = "complete"
-    return PredictionEvidenceV2(
+    return PredictionEvidenceV3(
         request_id=request_id,
         correlation_id=request.correlation_id or request_id,
         prediction_cutoff_utc=max(evidence.prediction_cutoff_utc for evidence in evidence_parts),
@@ -1624,6 +1738,12 @@ def _combine_evidence(
         feature_artifacts=artifacts,
         release_id=next(iter(release_ids)) if len(release_ids) == 1 else None,
         model_release_ids=model_release_ids,
+        view_serving_bundle_ids=serving_bundle_ids,
+        serving_bundle_sha256=(
+            _serving_bundle_set_sha256(serving_bundle_ids)
+            if serving_bundle_ids
+            else None
+        ),
         model_artifact_sha256=model_hashes,
         source_watermarks=watermarks,
         resolved_horizons=horizons,
@@ -1664,6 +1784,20 @@ def _aware_datetime_or_none(value: Any) -> datetime | None:
     if pd.isna(timestamp) or timestamp.tzinfo is None:
         return None
     return cast(datetime, timestamp.tz_convert("UTC").to_pydatetime())
+
+
+def _require_bundle_available_at(
+    context: ActiveModelContext,
+    as_of: datetime,
+) -> None:
+    generated = _aware_datetime_or_none(context.serving_bundle_generated_at_utc)
+    cutoff = _aware_datetime_or_none(as_of)
+    if generated is None:
+        raise ValueError("serving bundle generation timestamp is missing")
+    if cutoff is None:
+        raise ValueError("serving bundle availability cutoff is invalid")
+    if generated > cutoff + timedelta(minutes=1):
+        raise ValueError("serving bundle was generated after the requested as_of")
 
 
 def _strict_utc_series(values: pd.Series) -> pd.Series:

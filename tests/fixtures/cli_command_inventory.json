@@ -20,16 +20,21 @@
   ],
   "production": [
     "activate-local-release",
+    "activate-serving-bundle",
     "build-outcome-performance-report",
     "mature-outcomes",
     "publish-drift-assessment",
     "publish-live-features",
     "publish-local-release",
+    "publish-serving-bundle",
     "register-outcome-intents",
     "rollback-local-release",
+    "rollback-serving-bundle",
     "serve-api",
     "show-active-local-release",
-    "verify-local-release"
+    "show-active-serving-bundle",
+    "verify-local-release",
+    "verify-serving-bundle"
   ],
   "research": [
     "audit-promotion-readiness",

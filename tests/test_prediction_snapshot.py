@@ -8,7 +8,7 @@ from pathlib import Path
 
 from market_predictor.prediction_contracts import (
     PredictionConflictError,
-    PredictionEvidenceV2,
+    PredictionEvidenceV3,
     PredictionRequest,
     PredictionResponse,
 )
@@ -61,7 +61,7 @@ def _response(cutoff: datetime) -> PredictionResponse:
         request_id=request_id,
         mode="swing",
         horizon="5d",
-        evidence=PredictionEvidenceV2(
+        evidence=PredictionEvidenceV3(
             request_id=request_id,
             correlation_id="correlation-1",
             prediction_cutoff_utc=cutoff,
