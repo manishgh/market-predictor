@@ -1,16 +1,16 @@
-# Market Predictor Remediation Handoff — R2/R3 Complete, R4 Next
+# Market Predictor Remediation Handoff - R1-R4 Complete, R5 Next
 
 Date: 2026-07-23
 Repository: `C:\project\market-predictor`
 Remote: `https://github.com/manishgh/market-predictor` (origin)
 Working branch: `r3-lineage` (stacked on `r2-honest-evaluation`, both branched off `main`)
-Tip commit: `77822e9` (pushed to `origin/r3-lineage`)
+Tip commit: `01a0f36` (pushed to `origin/r3-lineage`)
 Supersedes: `docs/reviews/next_model_handoff_2026-07-22.md` (still valid for R4–R7 scope)
 
 ## Objective
 
-Continue the senior-review remediation. **R1, R2, and R3 are complete.** The next
-checkpoint is **R4 (Trustworthy Promotion and Release)**, then R5–R7. This document
+Continue the senior-review remediation. **R1 through R4 are complete.** The next
+checkpoint is **R5 (Bounded Serving / Durable Outcomes / Drift)**, then R6-R7. This document
 is self-contained: read it plus the two review reports below and you can resume
 without prior chat context.
 
@@ -22,6 +22,35 @@ Context reports (read for the "why"):
 
 The system produces prediction intelligence for swing and intraday workflows. It
 does not own alerts, orders, positions, risk, or execution; those remain TradingFlow.
+
+## R4 Completion Update
+
+R4 was implemented, independently reviewed by two read-only senior agents, hardened
+against their findings, fully verified, committed, and pushed:
+
+- `69c261a` - immutable hypothesis registry, one-use shadow ledger primitives,
+  session-block confidence interval, and promotion attestation primitives.
+- `25cd47c` - candidate-only manifests, removal of generic promotion, canonical
+  swing/intraday trust workflow, and persisted-evidence substitution rejection.
+- `01a0f36` - strict Ed25519 authorization with external trust store, canonical
+  retry-safe shadow ledger receipt, prospective shadow timing, OS-released locks,
+  content-addressed local releases, atomic activation, immediate-prior rollback,
+  path/reparse confinement, durable writes, CLI/docs, and adversarial tests.
+
+Verification at `01a0f36`:
+
+- 263 tests passed.
+- Ruff passed across `src` and `tests`.
+- strict mypy passed across 106 source files.
+- `git diff --check` passed.
+- No Python worker remained after verification; model/training guards remain below
+  the 4 GiB ceiling.
+
+R4 does **not** claim a real promoted model, real untouched-shadow edge, or Azure
+deployment. Those remain `environment_pending`. The remaining reviewed architecture
+items are intentionally R5: serving must load one cached model context from the verified
+local active pointer, and shadow/outcome inputs must come from the durable deterministic
+outcome-maturation repository rather than ad hoc preparation.
 
 ## Non-Negotiable Constraints
 
@@ -226,10 +255,11 @@ Mark these `environment_pending`, never simulate them into a pass.
 
 ```powershell
 Set-Location C:\project\market-predictor
-git checkout r3-lineage           # tip 77822e9, clean, pushed
+git checkout r3-lineage           # tip 01a0f36, clean, pushed
 git status --short                # expect empty
-.\.venv\Scripts\python.exe -m unittest discover -s tests   # expect 247 OK
-# then start R4: create promotion_attestation.py etc., commit each atomic unit, push.
+.\.venv\Scripts\python.exe -m unittest discover -s tests   # expect 263 OK
+# then start R5: active-release serving cache, durable outcome maturation, drift,
+# admission control, authentication, rate limits, and structured audit logs.
 ```
 
 Persistent notes for this effort also live in the assistant memory file
