@@ -69,7 +69,7 @@ jobs:
           pip-licenses --python .production-smoke/bin/python --format json --output-file artifacts/production-licenses.json
 
       - name: Build ephemeral signed container smoke release
-        run: python scripts/build_container_smoke_release.py --output artifacts/container-smoke
+        run: python -m scripts.build_container_smoke_release --output artifacts/container-smoke
 
       - name: Upload validation evidence
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2

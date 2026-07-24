@@ -14,7 +14,7 @@ from market_predictor.swing.contracts import (
     SWING_MODEL_SCHEMA_VERSION,
     SWING_MODEL_TYPE,
 )
-from tests.r4_fixtures import (
+from scripts.promotion_fixture import (
     authorize_candidate_for_test,
     synthetic_identity_metrics,
     test_signing_material,
