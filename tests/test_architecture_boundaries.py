@@ -93,8 +93,8 @@ class ArchitectureBoundaryTests(unittest.TestCase):
 
         self.assertEqual(
             dockerfile.splitlines()[0],
-            "FROM python:3.11.15-slim-bookworm@sha256:"
-            "b18992999dbe963a45a8a4da40ac2b1975be1a776d939d098c647482bcad5cba",
+            "FROM python:3.11.15-slim-trixie@sha256:"
+            "db3ff2e1800a8581e2c48a27c3995339d47bdf046da21c7627accd3d51053a93",
         )
         self.assertIn("requirements/production.lock", dockerfile)
         self.assertIn("--require-hashes --no-deps", dockerfile)

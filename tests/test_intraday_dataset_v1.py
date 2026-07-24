@@ -11,6 +11,7 @@ from typer.testing import CliRunner
 from market_predictor.canonical.audits import CanonicalAuditCheck, CanonicalAuditReport
 from market_predictor.canonical.store import load_canonical_artifact, write_canonical_artifact
 from market_predictor.cli import app
+from market_predictor.intraday.audits import audit_intraday_dataset
 from market_predictor.intraday.contracts import (
     INTRADAY_MODEL_FEATURES,
     IntradayDatasetConfig,
@@ -39,6 +40,88 @@ class IntradayDatasetV1Tests(unittest.TestCase):
         self.assertEqual(len(features), 2)
         self.assertEqual(features["decision_time_utc"].nunique(), 1)
         self.assertFalse(any(column.startswith(("target_", "path_", "label_", "future_")) for column in features))
+
+    def test_delays_cross_section_until_slowest_peer_is_available(self) -> None:
+        decisions, one_minute, benchmarks, events, collections = _inputs()
+        eastern_start = decisions["bar_start_utc"].dt.tz_convert(
+            "America/New_York"
+        )
+        decision_minute = eastern_start.dt.hour * 60 + eastern_start.dt.minute
+        latest_bar_end = decisions.loc[
+            decision_minute.between(10 * 60, 15 * 60 + 45),
+            "bar_end_utc",
+        ].max()
+        delayed_peer = decisions["ticker"].eq("BBB") & decisions[
+            "bar_end_utc"
+        ].eq(latest_bar_end)
+        original_fast_cutoff = decisions.loc[
+            decisions["ticker"].eq("AAA")
+            & decisions["bar_end_utc"].eq(latest_bar_end),
+            "decision_time_utc",
+        ].iloc[0]
+        delayed_cutoff = (
+            decisions.loc[delayed_peer, "decision_time_utc"].iloc[0]
+            + pd.Timedelta(minutes=2)
+        )
+        decisions.loc[delayed_peer, "available_at_utc"] = delayed_cutoff
+        decisions.loc[delayed_peer, "decision_time_utc"] = delayed_cutoff
+        decisions.loc[delayed_peer, "feature_available_at_utc"] = delayed_cutoff
+
+        features, audit = build_intraday_inference_features(
+            decisions,
+            one_minute,
+            benchmarks,
+            global_events=events,
+            global_source_collections=collections,
+            config=_config(),
+        )
+
+        self.assertTrue(audit.passed, audit.to_frame().to_dict(orient="records"))
+        self.assertTrue(features["decision_time_utc"].eq(delayed_cutoff).all())
+        self.assertTrue(
+            features["cross_section_cutoff_utc"].eq(delayed_cutoff).all()
+        )
+        self.assertFalse(
+            features["decision_time_utc"].eq(original_fast_cutoff).any()
+        )
+        self.assertEqual(
+            features.set_index("ticker").loc["AAA", "ticker_decision_time_utc"],
+            original_fast_cutoff,
+        )
+        self.assertTrue(
+            pd.to_datetime(
+                features["feature_available_at_utc"],
+                utc=True,
+            )
+            .le(delayed_cutoff)
+            .all()
+        )
+
+    def test_audit_rejects_tampered_cross_section_cutoff(self) -> None:
+        decisions, one_minute, benchmarks, events, collections = _inputs()
+        config = _config()
+        dataset, audit = build_intraday_dataset(
+            decisions,
+            one_minute,
+            benchmarks,
+            global_events=events,
+            global_source_collections=collections,
+            config=config,
+        )
+        self.assertTrue(audit.passed, audit.to_frame().to_dict(orient="records"))
+        tampered = dataset.copy()
+        tampered.loc[tampered.index[0], "cross_section_cutoff_utc"] = (
+            pd.Timestamp(tampered.loc[tampered.index[0], "cross_section_cutoff_utc"])
+            - pd.Timedelta(minutes=1)
+        )
+
+        tampered_audit = audit_intraday_dataset(tampered, config)
+
+        check = tampered_audit.to_frame().set_index("name").loc[
+            "intraday_cross_section_availability"
+        ]
+        self.assertEqual(check["status"], "fail")
+        self.assertGreater(int(check["failures"]), 0)
 
     def test_cli_publishes_hash_verified_intraday_dataset(self) -> None:
         decisions, one_minute, benchmarks, events, collections = _inputs()

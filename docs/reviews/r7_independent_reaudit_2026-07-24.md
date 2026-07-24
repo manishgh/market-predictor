@@ -124,7 +124,7 @@ approved; they are not simulated as passing evidence.
 
 ## Current Verified Evidence
 
-- 313 repository tests pass locally.
+- 315 repository tests pass locally.
 - The focused R7 trust/race/rollback/memory/idempotency suite passes 37 tests.
 - Repository-wide Ruff, strict mypy on Windows and Linux targets, and compile checks pass.
 - Dependency locks regenerate deterministically and the production dependency audit reports

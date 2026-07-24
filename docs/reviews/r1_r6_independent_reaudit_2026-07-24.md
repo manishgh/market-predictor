@@ -40,7 +40,8 @@ Required remediation:
 3. Add a staggered-availability poison test proving later peer mutations cannot alter an
    earlier row.
 
-Status: open; next implementation priority.
+Status: implemented and locally verified after the audit in `intraday.features.v2`;
+checkpoint pending.
 
 ### 2. Shadow promotion authenticates supplied returns, not their derivation
 

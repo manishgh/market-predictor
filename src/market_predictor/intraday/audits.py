@@ -22,6 +22,8 @@ def audit_intraday_dataset(
     required = {
         "ticker",
         "decision_time_utc",
+        "ticker_decision_time_utc",
+        "cross_section_cutoff_utc",
         "feature_available_at_utc",
         "one_minute_available_at_utc",
         "entry_time_utc",
@@ -29,6 +31,7 @@ def audit_intraday_dataset(
         "label_available_at_utc",
         "label_window_end_utc",
         "decision_group_id",
+        "nominal_decision_group_id",
         "session_date_et",
         "five_minute_bar_count",
         "one_minute_bar_count",
@@ -73,6 +76,8 @@ def audit_intraday_dataset(
 
     data = frame.copy()
     decision = _utc(data["decision_time_utc"])
+    ticker_decision = _utc(data["ticker_decision_time_utc"])
+    cross_section_cutoff = _utc(data["cross_section_cutoff_utc"])
     feature = _utc(data["feature_available_at_utc"])
     one_minute_available = _utc(data["one_minute_available_at_utc"], allow_null=True)
     entry = _utc(data["entry_time_utc"], allow_null=True)
@@ -86,6 +91,20 @@ def audit_intraday_dataset(
 
     timestamp_failures = int(decision.isna().sum() + feature.isna().sum())
     future_features = int((feature > decision).fillna(True).sum())
+    peer_cutoff_failures = int(
+        (
+            cross_section_cutoff.ne(decision)
+            | ticker_decision.gt(cross_section_cutoff)
+        )
+        .fillna(True)
+        .sum()
+    )
+    expected_cutoff = feature.groupby(data["nominal_decision_group_id"]).transform(
+        "max"
+    )
+    peer_cutoff_failures += int(
+        expected_cutoff.ne(cross_section_cutoff).fillna(True).sum()
+    )
     availability_columns = [
         "membership_available_at_utc",
         "one_minute_available_at_utc",
@@ -210,6 +229,12 @@ def audit_intraday_dataset(
             future_features,
             len(data),
             "all technical, benchmark, catalyst, and membership features were available",
+        ),
+        _check(
+            "intraday_cross_section_availability",
+            peer_cutoff_failures,
+            len(data),
+            "every peer row uses one cutoff at or after all contributing availability",
         ),
         _check(
             "intraday_benchmark_coverage",

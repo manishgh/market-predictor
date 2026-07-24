@@ -89,7 +89,7 @@ Status: complete on 2026-07-21 (`a844fdd`).
 
 Exit evidence:
 
-- Canonical `intraday.features.v1` and atomic `intraday.model.v1` contracts replace the old serving scorer.
+- Canonical `intraday.features.v2` and atomic `intraday.model.v1` contracts replace the old serving scorer. V2 delays each nominal 5-minute cross-section to one cutoff at or after every peer and benchmark availability timestamp.
 - Completed 5-minute decisions use the latest fully available 1-minute state and exact subsequent 1-minute entry/path labels; missing ticker or benchmark intervals fail closed.
 - Opportunity and downside estimators use session-purged walk-forward folds, deterministic unseen-ticker holdout, cross-fitted calibration, overlap weights, and non-overlapping top-k economics.
 - Catalyst/news remains outside both estimators and is measured as a confirmation/ranking overlay.

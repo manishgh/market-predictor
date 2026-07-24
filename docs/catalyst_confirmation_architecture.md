@@ -245,7 +245,7 @@ Minimum:
 - `intraday_bar_count >= configured_intraday_warmup`
 - Default recommendation: approximately 130 bars for MACD 12/26/9 stabilization.
 
-The canonical 60-minute intraday route requires at least 130 completed 5-minute bars and 130 completed 1-minute bars, point-in-time session features, exact consecutive 1-minute label paths, SIP/all-adjusted feed provenance, exact benchmark intervals, and a promoted `intraday.model.v1` manifest. If intraday features are not part of a requested model view, intraday warm-up does not block daily-only prediction.
+The canonical 60-minute intraday route requires at least 130 completed 5-minute bars and 130 completed 1-minute bars, point-in-time session features, exact consecutive 1-minute label paths, SIP/all-adjusted feed provenance, exact benchmark intervals, and a promoted `intraday.model.v1` manifest. `intraday.features.v2` uses one auditable cutoff per nominal 5-minute cross-section: every member is delayed until all peer and benchmark technical inputs are available, and 1-minute confirmation is then joined as-of that common cutoff. If intraday features are not part of a requested model view, intraday warm-up does not block daily-only prediction.
 
 ## 7. Data-Readiness Gates
 

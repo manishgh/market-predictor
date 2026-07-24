@@ -187,8 +187,9 @@ def _build_intraday_feature_history(
     decisions = _add_five_minute_features(decisions, config)
     benchmark_features = _add_five_minute_features(benchmarks, config)
     decisions = _select_decision_rows(decisions, config)
-    decisions = _join_one_minute_features(decisions, one_minute, config)
     decisions = _join_benchmark_features(decisions, benchmark_features, config)
+    decisions = _synchronize_decision_cross_sections(decisions)
+    decisions = _join_one_minute_features(decisions, one_minute, config)
     _guard_memory(config, "intraday technical feature construction")
     decisions = _add_breadth_regime_and_relative_features(decisions)
     decisions = _add_global_event_features(decisions, global_events)
@@ -346,8 +347,53 @@ def _select_decision_rows(
         config.last_decision_minute_et,
     ) & data["session_slot"].mod(config.decision_stride_bars).eq(0)
     data = data[selected].copy()
-    data["decision_group_id"] = data["bar_end_utc"].map(lambda value: value.isoformat())
+    data["nominal_decision_group_id"] = data["bar_end_utc"].map(
+        lambda value: value.isoformat()
+    )
+    data["decision_group_id"] = data["nominal_decision_group_id"]
     return data.reset_index(drop=True)
+
+
+def _synchronize_decision_cross_sections(frame: pd.DataFrame) -> pd.DataFrame:
+    """Delay every nominal 5-minute group to one fully observable cutoff."""
+
+    data = frame.copy()
+    data["ticker_decision_time_utc"] = _strict_utc(
+        data["decision_time_utc"],
+        "intraday ticker decision time",
+    )
+    technical_availability = _strict_utc(
+        data["feature_available_at_utc"],
+        "intraday technical feature availability",
+    )
+    cutoff = technical_availability.groupby(
+        data["nominal_decision_group_id"],
+        sort=False,
+    ).transform("max")
+    if bool(cutoff.isna().any()):
+        raise DataReadinessError(
+            "intraday cross-section cutoff cannot be derived"
+        )
+    cutoff_collisions = (
+        data.assign(_cross_section_cutoff=cutoff)
+        .groupby("_cross_section_cutoff", sort=False)[
+            "nominal_decision_group_id"
+        ]
+        .nunique()
+        .gt(1)
+    )
+    if bool(cutoff_collisions.any()):
+        raise DataReadinessError(
+            "multiple nominal intraday groups resolve to the same decision cutoff"
+        )
+    data["cross_section_cutoff_utc"] = cutoff
+    data["decision_time_utc"] = cutoff
+    data["decision_group_id"] = cutoff.map(lambda value: value.isoformat())
+    if bool(technical_availability.gt(cutoff).any()):
+        raise DataReadinessError(
+            "intraday peer feature availability exceeds its cross-section cutoff"
+        )
+    return data
 
 
 def _join_one_minute_features(

@@ -6,7 +6,7 @@ from typing import Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-INTRADAY_FEATURE_SCHEMA_VERSION = "intraday.features.v1"
+INTRADAY_FEATURE_SCHEMA_VERSION = "intraday.features.v2"
 INTRADAY_MODEL_SCHEMA_VERSION = "intraday.model.v1"
 INTRADAY_MODEL_TYPE = "canonical_intraday"
 INTRADAY_VALIDATION_SPLIT = "session_purged_walk_forward_and_ticker_holdout"

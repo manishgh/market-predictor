@@ -20,4 +20,4 @@ source_coverage_max_age_minutes = 60
 ambiguous_barrier_policy = "stop"
 max_build_memory_gb = 4.0
 memory_guard_headroom_gb = 0.25
-schema_version = "intraday.features.v1"
+schema_version = "intraday.features.v2"
