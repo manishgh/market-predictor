@@ -3,18 +3,17 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from typing import Literal
 
-import numpy as np
 import pandas as pd
 
 from market_predictor.canonical.contracts import CANONICAL_SCHEMA_VERSION
 from market_predictor.canonical.cutoffs import SWING_NIGHTLY_CUTOFF, swing_prediction_cutoffs
+from market_predictor.canonical.reconciliation import (
+    DEFAULT_EVENT_WINDOWS,
+    build_event_assignments,
+    reproduce_event_features,
+)
 from market_predictor.v3.errors import DataReadinessError, SchemaMismatchError
 
-DEFAULT_EVENT_WINDOWS: Mapping[str, pd.Timedelta] = {
-    "2h": pd.Timedelta(hours=2),
-    "1d": pd.Timedelta(days=1),
-    "3d": pd.Timedelta(days=3),
-}
 MEMBERSHIP_VALUE_COLUMNS = (
     "sector",
     "industry",
@@ -171,17 +170,19 @@ def aggregate_event_features(
     clean["feature_available_at_utc"] = _utc_series(clean["feature_available_at_utc"])
     if bool(clean["feature_available_at_utc"].isna().any()):
         raise DataReadinessError("events contain invalid feature availability timestamps")
-    clean = clean.sort_values(["ticker", "feature_available_at_utc"]).drop_duplicates("event_id", keep="first")
+    clean = clean.sort_values(["ticker", "feature_available_at_utc"])
     clean["sentiment_numeric"] = pd.to_numeric(clean.get("sentiment_numeric"), errors="coerce")
     # Unknown relevance stays NaN (never coerced to fully-relevant); it is excluded
     # from relevance-weighted features and counted against quality downstream.
     clean["relevance"] = pd.to_numeric(clean.get("relevance"), errors="coerce").clip(lower=0)
     source_families = sorted(clean["source_family"].astype(str).str.lower().unique())
-    parts: list[pd.DataFrame] = []
-    for ticker, decision_part in output.groupby("ticker", sort=False):
-        event_part = clean[clean["ticker"] == ticker].sort_values("feature_available_at_utc")
-        parts.append(_aggregate_ticker_events(decision_part, event_part, windows=windows, source_families=source_families))
-    return pd.concat(parts, ignore_index=True).sort_values(["decision_time_utc", "ticker"]).reset_index(drop=True)
+    assignments = build_event_assignments(output, clean, windows=windows)
+    return reproduce_event_features(
+        output,
+        assignments,
+        windows=windows,
+        source_families=source_families,
+    ).sort_values(["decision_time_utc", "ticker"]).reset_index(drop=True)
 
 
 def join_source_collection_status(
@@ -274,7 +275,7 @@ def join_fundamentals_asof(
         normalized_metric = metric.strip().lower()
         value_column = f"fundamental_{normalized_metric}"
         available_column = f"fundamental_available_at_utc_{normalized_metric}"
-        output[value_column] = np.nan
+        output[value_column] = float("nan")
         output[available_column] = pd.Series(pd.NaT, index=output.index, dtype="datetime64[ns, UTC]")
         selected = prepared[prepared["metric"] == normalized_metric]
         for ticker, indices in output.groupby("ticker", sort=False).groups.items():
@@ -293,75 +294,6 @@ def join_fundamentals_asof(
             output.loc[decision_part.index, value_column] = joined["value"].to_numpy()
             output.loc[decision_part.index, available_column] = joined["available_at_utc"].array
     return output
-
-
-def _aggregate_ticker_events(
-    decisions: pd.DataFrame,
-    events: pd.DataFrame,
-    *,
-    windows: Mapping[str, pd.Timedelta],
-    source_families: Sequence[str],
-) -> pd.DataFrame:
-    output = decisions.sort_values("decision_time_utc").copy()
-    decision_ns = pd.DatetimeIndex(output["decision_time_utc"]).as_unit("ns").asi8
-    event_ns = pd.DatetimeIndex(events["feature_available_at_utc"]).as_unit("ns").asi8 if not events.empty else np.array([], dtype=np.int64)
-    end = np.searchsorted(event_ns, decision_ns, side="right")
-    sentiment = events["sentiment_numeric"].fillna(0.0).to_numpy(dtype=float)
-    sentiment_present = events["sentiment_numeric"].notna().to_numpy(dtype=float)
-    relevance = events["relevance"].to_numpy(dtype=float)
-    # Three relevance states: validated (finite value), and unknown (NaN). Unknown
-    # events contribute zero relevance weight (excluded from sentiment / relevance
-    # mean) and count as not-high-quality in the low-relevance fraction.
-    relevance_known = np.isfinite(relevance)
-    relevance_weight = np.where(relevance_known, relevance, 0.0)
-    low_or_unknown = np.where(relevance_known, (relevance < 0.5).astype(float), 1.0)
-    unknown_relevance = (~relevance_known).astype(float)
-    for name, window in windows.items():
-        start = np.searchsorted(event_ns, decision_ns - int(window.value), side="left")
-        count = end - start
-        output[f"event_count_{name}"] = count
-        output[f"unknown_relevance_event_fraction_{name}"] = np.divide(
-            _window_sum(unknown_relevance, start, end),
-            count,
-            out=np.zeros(len(output)),
-            where=count > 0,
-        )
-        weighted = _window_sum(sentiment * relevance_weight, start, end)
-        weight = _window_sum(relevance_weight * sentiment_present, start, end)
-        output[f"sentiment_mean_{name}"] = np.divide(weighted, weight, out=np.zeros(len(output)), where=weight > 0)
-        output[f"sentiment_coverage_{name}"] = np.divide(
-            _window_sum(sentiment_present, start, end),
-            count,
-            out=np.zeros(len(output)),
-            where=count > 0,
-        )
-        output[f"event_relevance_mean_{name}"] = np.divide(
-            _window_sum(relevance_weight, start, end),
-            count,
-            out=np.zeros(len(output)),
-            where=count > 0,
-        )
-        output[f"low_relevance_event_fraction_{name}"] = np.divide(
-            _window_sum(low_or_unknown, start, end),
-            count,
-            out=np.zeros(len(output)),
-            where=count > 0,
-        )
-        for family in source_families:
-            mask = events["source_family"].astype(str).str.lower().eq(family).to_numpy(dtype=float)
-            output[f"source_count_{family}_{name}"] = _window_sum(mask, start, end)
-    latest = end - 1
-    has_latest = latest >= 0
-    values = np.full(len(output), np.datetime64("NaT"), dtype="datetime64[ns]")
-    if has_latest.any():
-        values[has_latest] = events["feature_available_at_utc"].to_numpy(dtype="datetime64[ns]")[latest[has_latest]]
-    output["latest_event_feature_available_at_utc"] = pd.to_datetime(values, utc=True)
-    return output
-
-
-def _window_sum(values: np.ndarray, start: np.ndarray, end: np.ndarray) -> np.ndarray:
-    cumulative = np.concatenate(([0.0], np.cumsum(values, dtype=float)))
-    return np.asarray(cumulative[end] - cumulative[start], dtype=float)
 
 
 def _utc_series(values: pd.Series) -> pd.Series:

@@ -378,6 +378,8 @@ def _training_dataset() -> pd.DataFrame:
                     "horizon_sessions": 5,
                     "swing_feature_schema_version": SWING_FEATURE_SCHEMA_VERSION,
                     "reconciliation_sha256": "a" * 64,
+                    "event_assignment_sha256": "b" * 64,
+                    "event_aggregate_sha256": "c" * 64,
                     "dataset_label_config_sha256": label_config.label_config_sha256(),
                     "dataset_label_policy_json": label_policy_json,
                     "market_regime": regime,

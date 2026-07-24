@@ -92,7 +92,12 @@ Fix: persist exact assignments and independently reproduce count, relevance, sen
 source diversity, and latest-availability aggregates. Poison one event and require
 promotion rejection.
 
-Status: open; R7.3.
+Status: implemented and locally verified in R7.3. The canonical build emits a
+content-addressed event-assignment artifact, independently reproduces count,
+weighted sentiment, sentiment coverage, relevance quality, source
+counts/diversity, and latest availability, and binds assignment plus aggregate
+hashes into training and promotion. Poison tests cover deletion, duplication,
+wrong ticker, wrong window, and aggregate mutation.
 
 ### 5. Fold-count evidence includes unscored seed folds
 

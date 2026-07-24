@@ -52,14 +52,16 @@ class SwingAlignmentAuditTest(unittest.TestCase):
                 "future_excess_return_5d_vs_sector": [0.01, 0.02],
                 # Reconciliation-derived counts stamped by the canonical build.
                 "reconciliation_events_without_feature_row": [3, 3],
+                "reconciliation_missing_historical_feature_rows": [4, 4],
                 "reconciliation_dates_with_news_count_mismatch": [2, 2],
             }
         )
         audit = _alignment_audit(frame).iloc[0]
         self.assertEqual(int(audit["events_without_feature_row"]), 3)
+        self.assertEqual(int(audit["missing_historical_feature_rows"]), 4)
         self.assertEqual(int(audit["dates_with_news_count_mismatch"]), 2)
-        # No feature-level errors, so the total is the two reconciliation counts.
-        self.assertEqual(int(audit["alignment_error_total"]), 5)
+        # No feature-level errors, so the total is the reconciliation evidence.
+        self.assertEqual(int(audit["alignment_error_total"]), 9)
 
     def test_clean_frame_has_no_alignment_errors(self) -> None:
         base = pd.Timestamp("2026-01-05 21:00", tz="UTC")

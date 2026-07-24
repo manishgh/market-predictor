@@ -150,6 +150,40 @@ def event_reconciliation_checks(summary: Mapping[str, int]) -> tuple[CanonicalAu
     )
 
 
+def event_assignment_checks(
+    assignment_summary: Mapping[str, int],
+    aggregate_summary: Mapping[str, int],
+) -> tuple[CanonicalAuditCheck, ...]:
+    """Fail closed on altered assignments or unreproducible feature aggregates."""
+
+    assignment_errors = int(
+        assignment_summary.get("assignment_integrity_errors", 0)
+    )
+    aggregate_errors = int(
+        aggregate_summary.get("aggregate_reconciliation_errors", 0)
+    )
+    assignment_detail = ", ".join(
+        f"{key}={assignment_summary[key]}" for key in sorted(assignment_summary)
+    )
+    aggregate_detail = ", ".join(
+        f"{key}={aggregate_summary[key]}" for key in sorted(aggregate_summary)
+    )
+    return (
+        _check(
+            "event_assignment_integrity",
+            assignment_errors,
+            int(assignment_summary.get("expected_assignment_rows", 0)),
+            f"persisted assignments equal deterministic rebuild ({assignment_detail})",
+        ),
+        _check(
+            "event_aggregate_reproduction",
+            aggregate_errors,
+            int(aggregate_summary.get("aggregate_cells_checked", 0)),
+            f"decision aggregates reproduce from assignments ({aggregate_detail})",
+        ),
+    )
+
+
 def audit_universe_memberships(
     frame: pd.DataFrame,
     *,

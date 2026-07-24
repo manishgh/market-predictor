@@ -93,6 +93,15 @@ still required before promotion.
 Exit gate: deleting or miscounting one historically eligible event causes reconciliation
 and promotion failure.
 
+Status: implemented and locally verified. Canonical builds now persist exact
+`event_assignment.v1` rows, rebuild all material event aggregates solely from
+those rows, publish the assignment artifact with an integrity manifest, and bind
+assignment/aggregate hashes into both model families and promotion
+attestations. Alignment audits consume real missing-row and mismatch counters.
+Deletion, duplication, wrong-ticker, wrong-window, and aggregate-mutation poison
+tests fail closed. Repository verification at this checkpoint: 328 unit tests,
+Ruff, strict mypy across 129 source files, and compileall all pass. R7.4 is next.
+
 ### R7.4 - Source-Path Label Reproduction
 
 1. Recompute audited swing labels, costs, benchmark returns, and availability from immutable

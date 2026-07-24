@@ -188,7 +188,22 @@ Command ownership:
   commands, and deterministic outcome/drift commands.
 - Azure data utilities: `export-ohlcv-artifacts` and `azure-upload-artifacts`.
 
-Canonical orchestration is registered by `src/market_predictor/commands/canonical_data.py`. `src/market_predictor/canonical/contracts.py` owns immutable schemas; `normalize.py` converts provider timestamps and provenance; `joins.py` performs strict as-of event, source, membership, and fundamental joins; `audits.py` implements fail-closed readiness; and `store.py` publishes hash-verified artifacts with manifests written last.
+Canonical orchestration is registered by `src/market_predictor/commands/canonical_data.py`. `src/market_predictor/canonical/contracts.py` owns immutable schemas; `normalize.py` converts provider timestamps and provenance; `joins.py` performs strict as-of source, membership, and fundamental joins; `reconciliation.py` owns exact event-to-decision/window assignment and rebuilds event aggregates from that evidence; `audits.py` implements fail-closed readiness; and `store.py` publishes hash-verified artifacts with manifests written last.
+
+`build-canonical-decisions` publishes both the canonical decision table and a
+neighboring `*.event_assignments.parquet` artifact unless
+`--event-assignments-out` is supplied. An assigned row names the event,
+decision, window, ticker, feature-availability timestamp, source family,
+sentiment, and relevance used by the feature. Non-assigned events carry one
+explicit exclusion status. The build independently recreates event count,
+weighted sentiment, sentiment coverage, relevance quality, source counts/source
+diversity, and latest event availability. Missing, extra, duplicated,
+wrong-ticker, wrong-window, or misaggregated evidence fails readiness.
+
+The decision table carries `event_assignment_sha256` and
+`event_aggregate_sha256`. Swing and intraday training copy both identities into
+candidate metrics; promotion and signed attestation reject either a missing
+identity or nonzero stamped reconciliation counters.
 
 `build-swing-datasets` remains research-only. Production swing feature engineering is `build-swing-dataset` on the canonical decision table. The production path never fetches while building features, never forward-fills current Seeking Alpha/SEC snapshots, and never accepts publication-proxy history.
 

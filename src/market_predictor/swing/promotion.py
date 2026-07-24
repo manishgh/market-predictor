@@ -469,6 +469,8 @@ def _causal_identity_failures(metrics: dict[str, Any]) -> list[str]:
         "holdout_ticker_summary_sha256",
         "feature_set_sha256",
         "reconciliation_sha256",
+        "event_assignment_sha256",
+        "event_aggregate_sha256",
         "dataset_label_config_sha256",
         "universe_identity_sha256",
         "calibration_method",

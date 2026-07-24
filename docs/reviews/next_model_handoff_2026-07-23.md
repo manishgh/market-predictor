@@ -150,14 +150,11 @@ calibration, training-only feature selection, poison tests, final fit after vali
 - **P1-1 event relevance state** (`77d9cec`): dropped `fillna(1.0)` in
   `canonical/joins.py` + both dataset global-event sites. Unknown relevance is excluded
   from sentiment/relevance-mean and counted as low-relevance.
-- **P0-3 alignment + reconciliation** (`911b6e4`, `4e133a4`, `27704ea`, `e756950`):
-  `swing/model.py::_alignment_audit` now computes real feature-level errors (was
-  hardcoded zeros); `canonical/reconciliation.py::reconcile_events` assigns every accepted
-  event exactly one status (matched/duplicate/wrong_ticker/unavailable_future/
-  unknown_relevance/irrelevant/outside_window) with zero unexplained; the canonical build
-  runs it as an audit check (fails if any unexplained) and records `reconciliation_sha256`
-  in the manifest; the counts ride into the trainers' alignment audit; promotion binds the
-  hash.
+- **P0-3 alignment + reconciliation** (`911b6e4`, `4e133a4`, `27704ea`, `e756950`;
+  superseded by R7.3): the original status-only audit has been replaced by immutable
+  event-to-decision/window assignments. Canonical builds now reproduce every material
+  aggregate from those assignments and bind separate assignment and aggregate hashes
+  through training, promotion, and attestation.
 - **P1-7 label/execution config hash** (`dea8e44`): `SwingDatasetConfig`/
   `IntradayDatasetConfig.label_config_sha256()`; datasets stamp `dataset_label_config_sha256`
   + `execution_policy_sha256`; `_training_rows` requires exactly one label config (mixed →

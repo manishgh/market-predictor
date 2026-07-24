@@ -28,6 +28,7 @@ class CanonicalCliTests(unittest.TestCase):
             sources = root / "sources.parquet"
             memberships = root / "memberships.parquet"
             decisions = root / "decisions.parquet"
+            event_assignments = root / "decisions.event_assignments.parquet"
 
             pd.DataFrame(
                 {
@@ -133,7 +134,21 @@ class CanonicalCliTests(unittest.TestCase):
                 self.assertEqual(result.exit_code, 0, msg=f"{arguments}: {result.output}\n{result.exception}")
 
             decision_frame, manifest = load_canonical_artifact(decisions, expected_type="decisions")
+            assignment_frame, assignment_manifest = load_canonical_artifact(
+                event_assignments,
+                expected_type="event_assignments",
+            )
             self.assertTrue(manifest["production_ready"])
+            self.assertTrue(assignment_manifest["production_ready"])
+            self.assertEqual(set(assignment_frame["status"]), {"assigned"})
+            self.assertEqual(
+                decision_frame.loc[0, "event_assignment_sha256"],
+                decision_frame.loc[0, "reconciliation_sha256"],
+            )
+            self.assertEqual(
+                len(str(decision_frame.loc[0, "event_aggregate_sha256"])),
+                64,
+            )
             self.assertEqual(decision_frame.loc[0, "event_count_2h"], 1)
             self.assertEqual(decision_frame.loc[0, "source_status_alpaca"], "observed")
             self.assertEqual(decision_frame.loc[0, "primary_benchmark"], "XLK")

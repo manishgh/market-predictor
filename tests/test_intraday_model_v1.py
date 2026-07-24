@@ -497,6 +497,8 @@ def _training_dataset() -> pd.DataFrame:
                     "independent_event_id": f"{ticker}:{session.date()}:{group_index}",
                     "intraday_feature_schema_version": INTRADAY_FEATURE_SCHEMA_VERSION,
                     "reconciliation_sha256": "a" * 64,
+                    "event_assignment_sha256": "b" * 64,
+                    "event_aggregate_sha256": "c" * 64,
                     "dataset_label_config_sha256": label_config.label_config_sha256(),
                     "dataset_label_policy_json": label_policy_json,
                     "market_regime": [

@@ -13,7 +13,7 @@ This is research and prediction tooling, not investment advice and not an automa
 
 The repository produces prediction intelligence: probabilities, catalyst summaries, feature/audit context, and watchlist rankings. It does not own broker execution, portfolio state, final sizing, stops, exits, or order lifecycle. Those responsibilities belong in a trading/runtime system such as `trading_flow`.
 
-## Current Model State (2026-07-23)
+## Current Model State (2026-07-24)
 
 Candidate identity comes from an immutable `.manifest.json`. Effective promoted state exists only when a content-addressed promotion attestation verifies the candidate, evidence manifest, causal identity chain, predeclared baseline/hypothesis, untouched-shadow confidence interval, gate configuration, and build/approver identities. Unregistered, unattested, or hash-mismatched artifacts cannot be served.
 
@@ -36,7 +36,11 @@ Production API implications:
 - Candidate scoring is available only through research commands or an explicitly constructed test service, never through the HTTP request contract.
 - R4 promotion and local release infrastructure is complete: immutable candidate manifests and attestations, predeclared hypotheses, one-use shadow evidence, paired session-block confidence gates, versioned local releases, atomic activation, and verified rollback are implemented. This does not change the model state above; no real canonical model has passed promotion.
 - Azure publication, synchronization, rollback, and disaster-recovery rehearsal are `environment_pending` and are not evidence for R4 completion.
-- Repository-wide Ruff and strict mypy pass, and the full 263-test suite is green at the R4 local-release checkpoint.
+- R7.3 exact catalyst lineage is implemented. Canonical builds persist immutable
+  event-to-decision/window assignments, reproduce every material event aggregate
+  from those assignments, and bind both hashes into training and promotion.
+- Repository-wide Ruff and strict mypy pass, and the full 328-test suite is green
+  at the R7.3 checkpoint.
 
 The next valid intraday promotion attempt requires a new predeclared development hypothesis that first passes both economic scopes, followed by matured shadow data after 2026-07-08 and all current promotion audits. See [Intraday model promotion](docs/intraday_model_promotion.md).
 

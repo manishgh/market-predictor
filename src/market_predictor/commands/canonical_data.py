@@ -16,12 +16,12 @@ from market_predictor.canonical.audits import (
     audit_fundamental_facts,
     audit_source_collections,
     audit_universe_memberships,
+    event_assignment_checks,
     event_reconciliation_checks,
 )
 from market_predictor.canonical.contracts import AvailabilityPolicy
 from market_predictor.canonical.joins import (
     DecisionMode,
-    aggregate_event_features,
     decisions_from_completed_bars,
     join_fundamentals_asof,
     join_source_collection_status,
@@ -33,9 +33,13 @@ from market_predictor.canonical.normalize import (
     canonicalize_universe_memberships,
 )
 from market_predictor.canonical.reconciliation import (
-    reconcile_events,
+    aggregate_reconciliation_summary,
+    assignment_integrity_summary,
+    build_event_assignments,
+    event_aggregate_sha256,
     reconciliation_sha256,
     reconciliation_summary,
+    reproduce_event_features,
 )
 from market_predictor.canonical.store import file_sha256, load_canonical_artifact, write_canonical_artifact
 
@@ -235,6 +239,10 @@ def register_canonical_data_commands(app: typer.Typer, console: Any) -> None:
         source_collections: Path = typer.Option(..., help="Source collection status CSV or parquet."),
         memberships: Path = typer.Option(..., help="Hash-verified point-in-time universe memberships."),
         out: Path = typer.Option(..., help="Canonical decision table parquet."),
+        event_assignments_out: Path | None = typer.Option(
+            None,
+            help="Event assignment parquet; defaults beside --out.",
+        ),
         fundamentals: Path | None = typer.Option(None, help="Optional canonical fundamental facts."),
         fundamental_metrics: str = typer.Option("", help="Comma-separated metrics to join as of decision time."),
         required_sources: str = typer.Option(
@@ -270,15 +278,45 @@ def register_canonical_data_commands(app: typer.Typer, console: Any) -> None:
         parsed_decision_mode = _decision_mode(decision_mode, production=production)
         decisions = decisions_from_completed_bars(bar_frame, mode=parsed_decision_mode)
         decisions = join_universe_membership(decisions, membership_frame)
-        decisions = aggregate_event_features(decisions, event_frame, require_observed=production)
-        reconciliation = reconcile_events(decisions, event_frame)
-        reconciliation_stats = reconciliation_summary(reconciliation)
-        reconciliation_hash = reconciliation_sha256(reconciliation)
-        # Stamp the reconciliation identity and derived alignment counts so they ride
-        # the canonical decisions into the model datasets and promotion evidence.
-        decisions["reconciliation_sha256"] = reconciliation_hash
-        decisions["reconciliation_events_without_feature_row"] = int(reconciliation_stats.get("wrong_ticker", 0))
-        decisions["reconciliation_dates_with_news_count_mismatch"] = int(reconciliation_stats.get("duplicate", 0))
+        if production and bool(
+            event_frame["availability_policy"].astype(str).ne("observed").any()
+        ):
+            raise typer.BadParameter(
+                "production event features reject provider publication proxy history"
+            )
+        assignments = build_event_assignments(decisions, event_frame)
+        source_families = sorted(
+            event_frame["source_family"].astype(str).str.lower().unique()
+        )
+        decisions = reproduce_event_features(
+            decisions,
+            assignments,
+            source_families=source_families,
+        )
+        reconciliation_stats = reconciliation_summary(assignments)
+        assignment_summary = assignment_integrity_summary(
+            decisions,
+            event_frame,
+            assignments,
+        )
+        aggregate_summary = aggregate_reconciliation_summary(
+            decisions,
+            assignments,
+        )
+        assignment_hash = reconciliation_sha256(assignments)
+        aggregate_hash = event_aggregate_sha256(decisions)
+        decisions["reconciliation_sha256"] = assignment_hash
+        decisions["event_assignment_sha256"] = assignment_hash
+        decisions["event_aggregate_sha256"] = aggregate_hash
+        decisions["reconciliation_events_without_feature_row"] = int(
+            assignment_summary["assignment_integrity_errors"]
+        )
+        decisions["reconciliation_missing_historical_feature_rows"] = int(
+            aggregate_summary["missing_aggregate_columns"]
+        )
+        decisions["reconciliation_dates_with_news_count_mismatch"] = int(
+            aggregate_summary["aggregate_value_mismatches"]
+        )
         decisions = join_source_collection_status(decisions, collection_frame, source_families=sources)
         feature_timestamps = [
             "bar_available_at_utc",
@@ -302,13 +340,15 @@ def register_canonical_data_commands(app: typer.Typer, console: Any) -> None:
                 require_observed=production,
             ),
             *event_reconciliation_checks(reconciliation_stats),
+            *event_assignment_checks(assignment_summary, aggregate_summary),
         ]
         inputs = {
             str(bars): file_sha256(bars),
             str(events): file_sha256(events),
             str(source_collections): file_sha256(source_collections),
             str(memberships): file_sha256(memberships),
-            "reconciliation_sha256": reconciliation_hash,
+            "event_assignment_sha256": assignment_hash,
+            "event_aggregate_sha256": aggregate_hash,
         }
         metrics = _csv(fundamental_metrics)
         if fundamentals is not None:
@@ -336,6 +376,31 @@ def register_canonical_data_commands(app: typer.Typer, console: Any) -> None:
                 )
             )
         audit = CanonicalAuditReport(checks=tuple(checks))
+        assignments_path = event_assignments_out or out.with_name(
+            f"{out.stem}.event_assignments.parquet"
+        )
+        assignment_audit = CanonicalAuditReport(
+            checks=(
+                *event_reconciliation_checks(reconciliation_stats),
+                *event_assignment_checks(assignment_summary, aggregate_summary),
+            )
+        )
+        assignment_manifest = write_canonical_artifact(
+            assignments,
+            assignments_path,
+            artifact_type="event_assignments",
+            audit=assignment_audit,
+            inputs={
+                str(bars): file_sha256(bars),
+                str(events): file_sha256(events),
+                str(memberships): file_sha256(memberships),
+                "event_assignment_sha256": assignment_hash,
+            },
+            production_ready=production,
+        )
+        inputs[str(assignments_path)] = str(
+            assignment_manifest["artifact_sha256"]
+        )
         manifest = write_canonical_artifact(
             decisions,
             out,
@@ -344,7 +409,15 @@ def register_canonical_data_commands(app: typer.Typer, console: Any) -> None:
             inputs=inputs,
             production_ready=production,
         )
-        console.print({"rows": len(decisions), "out": str(out), "sha256": manifest["artifact_sha256"]})
+        console.print(
+            {
+                "rows": len(decisions),
+                "out": str(out),
+                "sha256": manifest["artifact_sha256"],
+                "event_assignments": str(assignments_path),
+                "event_assignment_sha256": assignment_hash,
+            }
+        )
 
 
 def _read_frame(path: Path) -> pd.DataFrame:

@@ -433,6 +433,14 @@ def train_swing_model(
         "calibration_seed_folds_excluded": calibration_seed_folds_excluded,
         "feature_set_sha256": feature_set_sha256,
         "reconciliation_sha256": stamped_hash(dataset, "reconciliation_sha256"),
+        "event_assignment_sha256": stamped_hash(
+            dataset,
+            "event_assignment_sha256",
+        ),
+        "event_aggregate_sha256": stamped_hash(
+            dataset,
+            "event_aggregate_sha256",
+        ),
         "dataset_label_config_sha256": stamped_hash(dataset, "dataset_label_config_sha256"),
         "universe_identity_sha256": identity_set_sha256(data["universe_snapshot_id"].astype(str).unique()),
         "universe_snapshots": int(data["universe_snapshot_id"].nunique()),
@@ -527,18 +535,27 @@ def _alignment_audit(dataset: pd.DataFrame) -> pd.DataFrame:
     path_mismatch = int((feature_eligible & label_expected & ~label_exact).sum())
     benchmark_mismatch = int((feature_eligible & label_exact & benchmark_missing).sum())
     events_without_feature_row = stamped_scalar(dataset, "reconciliation_events_without_feature_row")
+    missing_historical_feature_rows = stamped_scalar(
+        dataset,
+        "reconciliation_missing_historical_feature_rows",
+    )
     dates_with_news_count_mismatch = stamped_scalar(dataset, "reconciliation_dates_with_news_count_mismatch")
     return pd.DataFrame(
         [
             {
                 "alignment_error_total": (
-                    future + path_mismatch + benchmark_mismatch + events_without_feature_row + dates_with_news_count_mismatch
+                    future
+                    + path_mismatch
+                    + benchmark_mismatch
+                    + events_without_feature_row
+                    + missing_historical_feature_rows
+                    + dates_with_news_count_mismatch
                 ),
                 "future_feature_rows": future,
                 "label_path_mismatches": path_mismatch,
                 "benchmark_path_mismatches": benchmark_mismatch,
                 "events_without_feature_row": events_without_feature_row,
-                "missing_historical_feature_rows": 0,
+                "missing_historical_feature_rows": missing_historical_feature_rows,
                 "dates_with_news_count_mismatch": dates_with_news_count_mismatch,
             }
         ]
