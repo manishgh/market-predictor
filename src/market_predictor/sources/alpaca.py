@@ -25,7 +25,7 @@ class AlpacaSource:
             raise ValueError("ALPACA_API_KEY_ID and ALPACA_API_SECRET_KEY are required.")
         return {
             "APCA-API-KEY-ID": self.settings.alpaca_api_key_id or "",
-            "APCA-API-SECRET-KEY": self.settings.alpaca_api_secret_key or "",
+            "APCA-API-SECRET-KEY": self.settings.alpaca_api_secret_value or "",
         }
 
     @property

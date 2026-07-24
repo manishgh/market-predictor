@@ -143,7 +143,8 @@ Publish one complete serving release:
 Azure model-serving release publication is currently `environment_pending`.
 ```
 
-This command uploads all assets first, writes the immutable release manifest second, and moves the active pointer last. It accepts only promoted, integrity-checked models referenced by server-owned routes and fresh registered live snapshots with canonical source identity.
+No Azure release writer exists in the current code. The verified local release
+repository remains the only activation authority.
 
 Hydrate an API revision manually or at startup:
 
@@ -160,7 +161,8 @@ Rollback by moving the pointer to a complete prior release:
 Rollback currently uses the verified local release repository only.
 ```
 
-Restart the API revision after rollback, or run sync in each instance. Rollback never mutates artifacts inside either release.
+Restart the API revision after local rollback. Rollback never mutates artifacts
+inside either release.
 
 The removed `live-once`, `live-run`, and `live-train-event` commands must not be recreated as deployment wrappers. They blended incompatible models and promoted on insufficient gates. The production readiness endpoint returns 503 for missing/stale features, missing promoted models, hash failures, or process memory above the configured safety threshold.
 
@@ -170,14 +172,17 @@ Deploy the API and scheduled jobs independently. The API revision should use:
 
 - target port `8000`
 - Azure model-release hydration: `environment_pending`
-- `AZURE_STORAGE_ACCOUNT_URL` plus a managed identity with Blob Data Reader permission
-- `AZURE_STORAGE_CONTAINER` and `AZURE_BLOB_PREFIX`
+- a read-only mounted signed local release repository and public attestation trust store
 - 4 GiB memory limit, `RUNTIME_MEMORY_BUDGET_GIB=4.0`, and `RUNTIME_MEMORY_HEADROOM_GIB=0.25`
 - liveness probe `/v1/health/live`
 - readiness probe `/v1/health/ready`
 - internal-only scrape access to `/v1/metrics`
+- read-only root filesystem, all Linux capabilities dropped, no privilege escalation,
+  and writable ephemeral mounts only for `/app/data` and `/tmp`
 
-Use a connection string only for controlled local work. Do not grant the serving identity Blob write access; publication and rollback jobs use a separate write-capable identity.
+The serving image contains no Azure SDK and needs no Blob credential. Collection
+jobs use the separate `collection.lock`; prefer managed identity there. A connection
+string is permitted only for controlled local collection work.
 
 ## VM vs AKS Decision
 
@@ -194,6 +199,8 @@ Acceptable for experiments: one GPU VM, stopped when idle.
 ## Operational Rules
 
 - Store secrets in Azure Container Apps secrets, Azure Key Vault, or managed identity. Do not bake API keys into images.
+- Build from the digest-pinned Dockerfile and committed `production.lock`; reject
+  lock drift, secret findings, critical image vulnerabilities, or missing SBOM/license evidence.
 - Keep Alpaca, Seeking Alpha, Reddit, and SEC collectors independent so one source failure does not block other data.
 - Write manifests for every exported dataset.
 - Promote new models only after validation beats or matches the active baseline.

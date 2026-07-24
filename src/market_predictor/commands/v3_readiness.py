@@ -9,7 +9,7 @@ import typer
 from rich.console import Console
 
 from market_predictor.config import get_settings
-from market_predictor.sources import AlpacaSource
+from market_predictor.sources.alpaca import AlpacaSource
 from market_predictor.v3.readiness import DevelopmentReadinessConfig, audit_development_readiness
 from market_predictor.v3.universe import (
     build_point_in_time_sp500_universe,

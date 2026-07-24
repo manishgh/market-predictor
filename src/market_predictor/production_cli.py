@@ -15,3 +15,7 @@ console = Console()
 register_production_commands(app, console)
 register_release_commands(app, console)
 register_outcome_commands(app, console)
+
+
+if __name__ == "__main__":
+    app()

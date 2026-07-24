@@ -11,3 +11,7 @@ app = filtered_app(
     allowed_commands=RESEARCH_COMMANDS,
     help_text="Build, train, audit, and promote Market Predictor research artifacts.",
 )
+
+
+if __name__ == "__main__":
+    app()

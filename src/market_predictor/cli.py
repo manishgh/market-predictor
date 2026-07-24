@@ -59,9 +59,12 @@ from market_predictor.promotion_audit import (
     build_walk_forward_profitability_audit,
 )
 from market_predictor.schemas import NewsEvent
-from market_predictor.sources import AlpacaSource, FinvizSource, GdeltSource, RedditSource, SeekingAlphaRapidApiSource
-from market_predictor.sources.gdelt import DEFAULT_GDELT_CONTEXT_QUERIES
+from market_predictor.sources.alpaca import AlpacaSource
+from market_predictor.sources.finviz import FinvizSource
+from market_predictor.sources.gdelt import DEFAULT_GDELT_CONTEXT_QUERIES, GdeltSource
+from market_predictor.sources.reddit import RedditSource
 from market_predictor.sources.sec import SecSource
+from market_predictor.sources.seeking_alpha import SeekingAlphaRapidApiSource
 
 app = typer.Typer(help="Build and serve audited swing and intraday market predictions.")
 console = Console()
@@ -642,7 +645,6 @@ def download_finviz(
 
 @app.command("download-finviz-screeners")
 def download_finviz_screeners(
-    auth: str | None = typer.Option(None, help="Finviz Elite auth token. Defaults to FINVIZ_ELITE_AUTH."),
     base_url: str = typer.Option("https://elite.finviz.com/export", help="Finviz Elite export endpoint."),
     sectors: str | None = typer.Option(None, help="Comma-separated sector keys. Defaults to broad sector set."),
     caps: str | None = typer.Option(None, help="Comma-separated cap keys. Defaults to mega,large,mid,small,micro."),
@@ -654,11 +656,11 @@ def download_finviz_screeners(
     tickers_out: Path = typer.Option(Path("data/universe/finviz_sector_cap_tickers.txt"), help="Comma-separated ticker output."),
     symbol_column: str = typer.Option("Ticker", help="Symbol column name in Finviz exports."),
 ) -> None:
-    """Download multiple Finviz Elite screener exports across sector and cap buckets."""
+    """Download Finviz Elite screeners using FINVIZ_ELITE_AUTH from the environment."""
     settings = get_settings()
-    token = auth or settings.finviz_elite_auth
+    token = settings.finviz_elite_auth_value
     if not token:
-        raise typer.BadParameter("Provide --auth or set FINVIZ_ELITE_AUTH in .env.")
+        raise typer.BadParameter("Set FINVIZ_ELITE_AUTH in the process environment.")
     sector_keys = [key.strip() for key in (sectors.split(",") if sectors else FINVIZ_DEFAULT_SECTORS.keys())]
     cap_keys = [key.strip() for key in (caps.split(",") if caps else FINVIZ_DEFAULT_CAPS.keys())]
     selected_sectors = {key: FINVIZ_DEFAULT_SECTORS[key] for key in sector_keys if key in FINVIZ_DEFAULT_SECTORS}

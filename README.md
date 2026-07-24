@@ -78,15 +78,27 @@ Seeking Alpha premium account access:
 cd C:\project\market-predictor
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
-python -m pip install -U pip
-python -m pip install -e .
+python -m pip install --require-hashes --no-deps -r requirements/development.lock
+python -m pip install --no-build-isolation --no-deps -e .
 Copy-Item .env.example .env
 ```
 
-Install the optional grouped-ranking dependency for R1 training:
+The committed locks have distinct scopes:
+
+- `production.lock`: API serving, signed releases, outcomes, and drift only.
+- `collection.lock`: production plus Alpaca/Reddit/Finviz/Seeking Alpha/Azure
+  collection dependencies.
+- `training.lock`: production plus FinBERT and XGBoost.
+- `validation.lock`: collection, XGBoost, test/type/lint, audit, license, build,
+  and lock tooling without Torch/Transformers.
+- `development.lock`: complete research, training, and validation environment.
+
+All locks are universal for Python 3.11+ and contain artifact hashes. Maintainers
+regenerate all five with pinned uv 0.11.32:
 
 ```powershell
-python -m pip install -e ".[ranking]"
+python scripts/lock_dependencies.py
+git diff --exit-code -- requirements
 ```
 
 Fill `.env` with Alpaca keys and any optional service keys.
@@ -679,8 +691,13 @@ Build context files:
 ```text
 Dockerfile
 .dockerignore
-scripts/container-entrypoint.sh
+requirements/production.lock
 ```
+
+The production image is pinned to an immutable Python 3.11.15 Bookworm digest,
+installs only `production.lock` with hash enforcement, contains no compiler or
+packaging toolchain, runs as UID/GID 10001, and starts Uvicorn directly from the
+read-only source tree.
 
 The image runs the API as UID/GID 10001, exposes port 8000, and probes
 `/v1/health/live`. Configure a 4 GiB container memory limit in addition to the

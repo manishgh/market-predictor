@@ -30,3 +30,7 @@ app = filtered_app(
     allowed_commands=COLLECTION_COMMANDS,
     help_text="Collect and export raw Market Predictor source data.",
 )
+
+
+if __name__ == "__main__":
+    app()

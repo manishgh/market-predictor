@@ -1,15 +1,5 @@
-from market_predictor.sources.alpaca import AlpacaSource
-from market_predictor.sources.finviz import FinvizSource
-from market_predictor.sources.gdelt import GdeltSource
-from market_predictor.sources.reddit import RedditSource
-from market_predictor.sources.sec import SecSource
-from market_predictor.sources.seeking_alpha import SeekingAlphaRapidApiSource
+"""Market data source adapters.
 
-__all__ = [
-    "AlpacaSource",
-    "FinvizSource",
-    "GdeltSource",
-    "RedditSource",
-    "SecSource",
-    "SeekingAlphaRapidApiSource",
-]
+Import adapters from their owning modules. Package-level re-exports make a caller of
+one adapter import every provider dependency.
+"""

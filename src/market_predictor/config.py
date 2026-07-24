@@ -13,7 +13,10 @@ load_dotenv()
 
 class Settings(BaseSettings):
     alpaca_api_key_id: str | None = Field(default=None, alias="ALPACA_API_KEY_ID")
-    alpaca_api_secret_key: str | None = Field(default=None, alias="ALPACA_API_SECRET_KEY")
+    alpaca_api_secret_key: SecretStr | None = Field(
+        default=None,
+        alias="ALPACA_API_SECRET_KEY",
+    )
     alpaca_stock_feed: str = Field(default="sip", alias="ALPACA_STOCK_FEED")
     alpaca_trading_base_url: str = Field(default="https://api.alpaca.markets", alias="ALPACA_TRADING_BASE_URL")
     app_config_path: Path = Field(default=Path("configs/default.toml"), alias="APP_CONFIG_PATH")
@@ -22,23 +25,38 @@ class Settings(BaseSettings):
         alias="SEC_USER_AGENT",
     )
     reddit_client_id: str | None = Field(default=None, alias="REDDIT_CLIENT_ID")
-    reddit_client_secret: str | None = Field(default=None, alias="REDDIT_CLIENT_SECRET")
+    reddit_client_secret: SecretStr | None = Field(
+        default=None,
+        alias="REDDIT_CLIENT_SECRET",
+    )
     reddit_username: str | None = Field(default=None, alias="REDDIT_USERNAME")
-    reddit_password: str | None = Field(default=None, alias="REDDIT_PASSWORD")
+    reddit_password: SecretStr | None = Field(
+        default=None,
+        alias="REDDIT_PASSWORD",
+    )
     reddit_user_agent: str = Field(
         default="market-predictor/0.1 by unknown",
         alias="REDDIT_USER_AGENT",
     )
-    rapidapi_key: str | None = Field(default=None, alias="RAPIDAPI_KEY")
-    finviz_elite_auth: str | None = Field(default=None, alias="FINVIZ_ELITE_AUTH")
+    rapidapi_key: SecretStr | None = Field(default=None, alias="RAPIDAPI_KEY")
+    finviz_elite_auth: SecretStr | None = Field(
+        default=None,
+        alias="FINVIZ_ELITE_AUTH",
+    )
     seeking_alpha_account_email: str | None = Field(default=None, alias="SEEKING_ALPHA_ACCOUNT_EMAIL")
-    seeking_alpha_account_password: str | None = Field(default=None, alias="SEEKING_ALPHA_ACCOUNT_PASSWORD")
+    seeking_alpha_account_password: SecretStr | None = Field(
+        default=None,
+        alias="SEEKING_ALPHA_ACCOUNT_PASSWORD",
+    )
     seeking_alpha_access_token_cache_file: Path = Field(
         default=Path("data/cache/seeking_alpha/access_token.json"),
         alias="SEEKING_ALPHA_ACCESS_TOKEN_CACHE_FILE",
     )
     finbert_model: str = Field(default="ProsusAI/finbert", alias="FINBERT_MODEL")
-    azure_storage_connection_string: str | None = Field(default=None, alias="AZURE_STORAGE_CONNECTION_STRING")
+    azure_storage_connection_string: SecretStr | None = Field(
+        default=None,
+        alias="AZURE_STORAGE_CONNECTION_STRING",
+    )
     azure_storage_account_url: str | None = Field(default=None, alias="AZURE_STORAGE_ACCOUNT_URL")
     azure_storage_container: str = Field(default="market-data", alias="AZURE_STORAGE_CONTAINER")
     azure_blob_prefix: str = Field(default="market-predictor", alias="AZURE_BLOB_PREFIX")
@@ -110,11 +128,14 @@ class Settings(BaseSettings):
 
     @property
     def has_alpaca(self) -> bool:
-        return bool(self.alpaca_api_key_id and self.alpaca_api_secret_key)
+        return bool(self.alpaca_api_key_id and self.alpaca_api_secret_value)
 
     @property
     def has_azure_storage(self) -> bool:
-        return bool(self.azure_storage_connection_string or self.azure_storage_account_url)
+        return bool(
+            self.azure_storage_connection_string_value
+            or self.azure_storage_account_url
+        )
 
     @property
     def azure_prefix(self) -> str:
@@ -128,9 +149,9 @@ class Settings(BaseSettings):
     def has_reddit(self) -> bool:
         return bool(
             self.reddit_client_id
-            and self.reddit_client_secret
+            and self.reddit_client_secret_value
             and self.reddit_username
-            and self.reddit_password
+            and self.reddit_password_value
         )
 
     @property
@@ -181,11 +202,42 @@ class Settings(BaseSettings):
 
     @property
     def has_seeking_alpha_rapidapi(self) -> bool:
-        return bool(self.rapidapi_key and self.seeking_alpha_rapidapi_host)
+        return bool(self.rapidapi_key_value and self.seeking_alpha_rapidapi_host)
 
     @property
     def has_seeking_alpha_account_credentials(self) -> bool:
-        return bool(self.seeking_alpha_account_email and self.seeking_alpha_account_password)
+        return bool(
+            self.seeking_alpha_account_email
+            and self.seeking_alpha_account_password_value
+        )
+
+    @property
+    def alpaca_api_secret_value(self) -> str | None:
+        return _secret_value(self.alpaca_api_secret_key)
+
+    @property
+    def reddit_client_secret_value(self) -> str | None:
+        return _secret_value(self.reddit_client_secret)
+
+    @property
+    def reddit_password_value(self) -> str | None:
+        return _secret_value(self.reddit_password)
+
+    @property
+    def rapidapi_key_value(self) -> str | None:
+        return _secret_value(self.rapidapi_key)
+
+    @property
+    def finviz_elite_auth_value(self) -> str | None:
+        return _secret_value(self.finviz_elite_auth)
+
+    @property
+    def seeking_alpha_account_password_value(self) -> str | None:
+        return _secret_value(self.seeking_alpha_account_password)
+
+    @property
+    def azure_storage_connection_string_value(self) -> str | None:
+        return _secret_value(self.azure_storage_connection_string)
 
     @property
     def seeking_alpha_rapidapi_host(self) -> str:
@@ -335,3 +387,7 @@ class Settings(BaseSettings):
 @lru_cache
 def get_settings() -> Settings:
     return Settings()
+
+
+def _secret_value(value: SecretStr | None) -> str | None:
+    return value.get_secret_value() if value is not None else None

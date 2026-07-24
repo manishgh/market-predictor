@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
+import stat
+import tempfile
 from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -39,7 +42,7 @@ class SeekingAlphaRapidApiSource:
     @property
     def headers(self) -> dict[str, str]:
         return {
-            "X-RapidAPI-Key": self.settings.rapidapi_key or "",
+            "X-RapidAPI-Key": self.settings.rapidapi_key_value or "",
             "X-RapidAPI-Host": self.settings.seeking_alpha_rapidapi_host,
         }
 
@@ -199,7 +202,7 @@ class SeekingAlphaRapidApiSource:
             f"{self.base_url}{self.settings.seeking_alpha_access_token_endpoint}",
             payload={
                 "email": self.settings.seeking_alpha_account_email,
-                "password": self.settings.seeking_alpha_account_password,
+                "password": self.settings.seeking_alpha_account_password_value,
             },
             headers={**self.headers, "Content-Type": "application/json"},
         )
@@ -274,14 +277,36 @@ class SeekingAlphaRapidApiSource:
         return str(token) if token else None
 
     def _write_cached_access_token(self, token: str, raw_payload: Any) -> None:
-        self._write_cache(
-            self.settings.seeking_alpha_access_token_cache_file,
-            {
-                "access_token": token,
-                "cached_at": datetime.now(UTC).isoformat(),
-                "raw_keys": sorted(raw_payload.keys()) if isinstance(raw_payload, dict) else [],
-            },
+        path = self.settings.seeking_alpha_access_token_cache_file
+        path.parent.mkdir(parents=True, exist_ok=True)
+        payload = {
+            "access_token": token,
+            "cached_at": datetime.now(UTC).isoformat(),
+            "raw_keys": sorted(raw_payload.keys())
+            if isinstance(raw_payload, dict)
+            else [],
+        }
+        descriptor, temporary_name = tempfile.mkstemp(
+            dir=path.parent,
+            prefix=f".{path.name}.",
+            suffix=".tmp",
         )
+        temporary = Path(temporary_name)
+        try:
+            if os.name != "nt":
+                temporary.chmod(stat.S_IRUSR | stat.S_IWUSR)
+            with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+                descriptor = -1
+                json.dump(payload, handle, ensure_ascii=True)
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(temporary, path)
+            if os.name != "nt":
+                path.chmod(stat.S_IRUSR | stat.S_IWUSR)
+        finally:
+            if descriptor >= 0:
+                os.close(descriptor)
+            temporary.unlink(missing_ok=True)
 
     @classmethod
     def _extract_access_token(cls, payload: Any) -> str:

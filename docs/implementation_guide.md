@@ -43,7 +43,8 @@ historical events and bars
 Setup and model download:
 
 ```powershell
-python -m pip install -e .
+python -m pip install --require-hashes --no-deps -r requirements/development.lock
+python -m pip install --no-build-isolation --no-deps -e .
 market-predictor-collect download-model
 ```
 
@@ -352,9 +353,12 @@ Use Azure Blob Storage for project artifacts and Azure Container Apps Jobs for s
 
 Files:
 
-- `Dockerfile`: non-root API image with 4 GiB defaults and a liveness probe.
+- `Dockerfile`: digest-pinned, non-root, read-only-compatible API image with 4
+  GiB defaults, hash-only production dependencies, and a liveness probe.
 - `.dockerignore`: keeps local data, models, secrets, and venv out of the build context.
-- `scripts/container-entrypoint.sh`: optionally syncs and verifies the active Azure release before API import, then starts the server.
+- `requirements/*.lock`: universal hash locks for production, collection,
+  training, validation, and full development.
+- `scripts/lock_dependencies.py`: pinned cross-platform lock regeneration.
 - `docs/azure_deployment_plan.md`: deployment recommendation, schedule, and operational rules.
 
 Azure model-release hydration is `environment_pending`; the current container

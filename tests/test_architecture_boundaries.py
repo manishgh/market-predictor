@@ -90,13 +90,28 @@ class ArchitectureBoundaryTests(unittest.TestCase):
     def test_container_runs_non_root_api_with_liveness_probe(self) -> None:
         root = Path(__file__).resolve().parents[1]
         dockerfile = (root / "Dockerfile").read_text(encoding="utf-8")
-        entrypoint = (root / "scripts" / "container-entrypoint.sh").read_text(encoding="utf-8")
 
+        self.assertEqual(
+            dockerfile.splitlines()[0],
+            "FROM python:3.11.15-slim-bookworm@sha256:"
+            "b18992999dbe963a45a8a4da40ac2b1975be1a776d939d098c647482bcad5cba",
+        )
+        self.assertIn("requirements/production.lock", dockerfile)
+        self.assertIn("--require-hashes --no-deps", dockerfile)
+        self.assertNotIn("pip install --upgrade", dockerfile)
+        self.assertNotIn("build-essential", dockerfile)
+        self.assertNotIn("pip install .", dockerfile)
         self.assertIn("USER 10001:10001", dockerfile)
+        self.assertIn("RUNTIME_MEMORY_BUDGET_GIB=4.0", dockerfile)
         self.assertIn("/v1/health/live", dockerfile)
-        self.assertIn('CMD ["sh", "scripts/container-entrypoint.sh"]', dockerfile)
-        self.assertNotIn("azure-sync-serving-release", entrypoint)
-        self.assertIn("exec market-predictor-prod serve-api", entrypoint)
+        self.assertIn(
+            'CMD ["python", "-m", "uvicorn", '
+            '"market_predictor.api:create_app", "--factory"',
+            dockerfile,
+        )
+        self.assertFalse(
+            (root / "scripts" / "container-entrypoint.sh").exists()
+        )
 
 
 if __name__ == "__main__":

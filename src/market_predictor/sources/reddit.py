@@ -31,11 +31,14 @@ class RedditSource:
             )
         response = requests.post(
             self.token_url,
-            auth=(self.settings.reddit_client_id or "", self.settings.reddit_client_secret or ""),
+            auth=(
+                self.settings.reddit_client_id or "",
+                self.settings.reddit_client_secret_value or "",
+            ),
             data={
                 "grant_type": "password",
                 "username": self.settings.reddit_username,
-                "password": self.settings.reddit_password,
+                "password": self.settings.reddit_password_value,
             },
             headers={"User-Agent": self.settings.reddit_user_agent},
             timeout=30,

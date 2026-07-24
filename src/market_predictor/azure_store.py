@@ -13,8 +13,11 @@ class AzureBlobStore:
             raise ValueError("Azure storage is not configured. Set AZURE_STORAGE_CONNECTION_STRING or AZURE_STORAGE_ACCOUNT_URL.")
         from azure.storage.blob import BlobServiceClient
 
-        if settings.azure_storage_connection_string:
-            self.service = BlobServiceClient.from_connection_string(settings.azure_storage_connection_string)
+        connection_string = settings.azure_storage_connection_string_value
+        if connection_string:
+            self.service = BlobServiceClient.from_connection_string(
+                connection_string
+            )
         else:
             account_url = settings.azure_storage_account_url
             if not account_url:

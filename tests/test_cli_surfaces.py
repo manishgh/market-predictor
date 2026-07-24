@@ -34,6 +34,7 @@ class CliSurfaceTests(unittest.TestCase):
     def test_production_entrypoint_does_not_import_research_or_collection_graph(self) -> None:
         script = (
             "import json,sys; import market_predictor.production_cli; "
+            "import market_predictor.api; "
             "print(json.dumps(sorted(sys.modules)))"
         )
         completed = subprocess.run(
@@ -48,11 +49,15 @@ class CliSurfaceTests(unittest.TestCase):
             "market_predictor.collection_cli",
             "market_predictor.research_cli",
             "market_predictor.sentiment",
-            "market_predictor.sources",
+            "market_predictor.sources.finviz",
+            "market_predictor.sources.seeking_alpha",
             "market_predictor.swing.promotion",
             "market_predictor.intraday.promotion",
+            "azure",
+            "bs4",
             "torch",
             "transformers",
+            "xgboost",
             "yfinance",
         }
         self.assertTrue(
