@@ -6,6 +6,8 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 import pandas as pd
+from click import Context, Option
+from typer.main import get_command
 from typer.testing import CliRunner
 
 from market_predictor.canonical.contracts import CanonicalUniverseMembership, SourceCollection
@@ -151,10 +153,19 @@ class CanonicalCliTests(unittest.TestCase):
             )
 
     def test_production_decision_command_requires_explicit_mode(self) -> None:
-        result = CliRunner().invoke(app, ["build-canonical-decisions", "--help"])
-        self.assertEqual(result.exit_code, 0, msg=result.output)
-        self.assertIn("--decision-mode", result.output)
-        self.assertIn("required", result.output.lower())
+        root = get_command(app)
+        command = root.get_command(Context(root), "build-canonical-decisions")
+        self.assertIsNotNone(command)
+        option = next(
+            (
+                parameter
+                for parameter in command.params
+                if isinstance(parameter, Option) and "--decision-mode" in parameter.opts
+            ),
+            None,
+        )
+        self.assertIsNotNone(option)
+        self.assertTrue(option.required)
 
 
 if __name__ == "__main__":
