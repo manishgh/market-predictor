@@ -156,7 +156,7 @@ class IntradayDatasetV1Tests(unittest.TestCase):
         eligible = dataset[dataset["label_eligible"]]
         self.assertFalse(eligible.empty)
         self.assertTrue((eligible["feature_available_at_utc"] <= eligible["decision_time_utc"]).all())
-        self.assertTrue((eligible["entry_time_utc"] >= eligible["decision_time_utc"]).all())
+        self.assertTrue((eligible["entry_time_utc"] == eligible["decision_time_utc"]).all())
         outcomes = (
             eligible[opportunity_target_column(config.horizon_minutes)]
             + eligible[downside_target_column(config.horizon_minutes)]
@@ -184,6 +184,36 @@ class IntradayDatasetV1Tests(unittest.TestCase):
         checks = audit.to_frame().set_index("name")
         self.assertEqual(checks.loc["intraday_exact_label_path", "status"], "fail")
         self.assertGreater(int(checks.loc["intraday_exact_label_path", "failures"]), 0)
+
+    def test_missing_exact_entry_bar_does_not_shift_entry_forward(self) -> None:
+        decisions, one_minute, benchmarks, events, collections = _inputs()
+        missing_start = pd.Timestamp(
+            "2025-01-08 14:00",
+            tz="America/New_York",
+        ).tz_convert("UTC")
+        one_minute = one_minute[
+            ~(
+                one_minute["ticker"].eq("AAA")
+                & one_minute["bar_start_utc"].eq(missing_start)
+            )
+        ].copy()
+
+        dataset, _ = build_intraday_dataset(
+            decisions,
+            one_minute,
+            benchmarks,
+            global_events=events,
+            global_source_collections=collections,
+            config=_config(),
+        )
+
+        decision = dataset[
+            dataset["ticker"].eq("AAA")
+            & pd.to_datetime(dataset["decision_time_utc"], utc=True).eq(missing_start)
+        ]
+        self.assertEqual(len(decision), 1)
+        self.assertFalse(bool(decision.iloc[0]["label_path_exact"]))
+        self.assertTrue(pd.isna(decision.iloc[0]["entry_time_utc"]))
 
     def test_missing_exact_benchmark_execution_bar_fails_audit(self) -> None:
         decisions, one_minute, benchmarks, events, collections = _inputs()

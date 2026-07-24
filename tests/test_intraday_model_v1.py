@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import tempfile
 import unittest
 from dataclasses import replace
@@ -12,6 +13,7 @@ from market_predictor.intraday.contracts import (
     INTRADAY_FEATURE_SCHEMA_VERSION,
     INTRADAY_MODEL_FEATURES,
     INTRADAY_MODEL_TYPE,
+    IntradayDatasetConfig,
     IntradayPromotionConfig,
     IntradayTrainingConfig,
     downside_target_column,
@@ -286,6 +288,12 @@ def _training_config() -> IntradayTrainingConfig:
 
 def _training_dataset() -> pd.DataFrame:
     rng = np.random.default_rng(42)
+    label_config = IntradayDatasetConfig()
+    label_policy_json = json.dumps(
+        label_config.label_policy(),
+        sort_keys=True,
+        separators=(",", ":"),
+    )
     sessions = pd.bdate_range("2025-01-02", periods=30)
     tickers = [f"T{index:02d}" for index in range(10)]
     rows: list[dict[str, object]] = []
@@ -331,7 +339,8 @@ def _training_dataset() -> pd.DataFrame:
                     "independent_event_id": f"{ticker}:{session.date()}:{group_index}",
                     "intraday_feature_schema_version": INTRADAY_FEATURE_SCHEMA_VERSION,
                     "reconciliation_sha256": "a" * 64,
-                    "dataset_label_config_sha256": "b" * 64,
+                    "dataset_label_config_sha256": label_config.label_config_sha256(),
+                    "dataset_label_policy_json": label_policy_json,
                     "market_regime": ["risk_on", "risk_off", "neutral"][session_index % 3],
                     "sector": "Technology",
                     "market_cap_bucket": "large" if ticker_index < 5 else "mid",

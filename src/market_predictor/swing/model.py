@@ -23,6 +23,7 @@ from market_predictor.execution_policy import (
     execution_policy_identity,
     merge_stress_summary,
 )
+from market_predictor.label_policy import stamped_label_policy
 from market_predictor.prediction_policy import (
     calibration_summary,
     group_ranking_metrics,
@@ -104,6 +105,7 @@ def train_swing_model(
         raise FileExistsError(f"swing model artifact already exists: {model_out}")
     model_run_id = f"swing-{uuid.uuid4().hex}"
     data, horizon, target = _training_rows(dataset)
+    label_policy = stamped_label_policy(dataset)
     if len(data) < config.min_train_rows:
         raise DataReadinessError(f"swing training needs at least {config.min_train_rows} eligible rows")
     ticker_count = int(data["ticker"].nunique())
@@ -440,6 +442,7 @@ def train_swing_model(
             "calibration_method": "isotonic_prior_outer_folds",
             "feature_set_sha256": feature_set_sha256,
             "training_config": config.model_dump(),
+            "label_policy": label_policy,
         },
     )
     return SwingTrainingResult(

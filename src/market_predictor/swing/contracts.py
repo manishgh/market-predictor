@@ -168,14 +168,24 @@ class SwingDatasetConfig(FrozenConfig):
     minimum_cross_section: int = Field(default=20, ge=2)
     schema_version: str = SWING_FEATURE_SCHEMA_VERSION
 
-    def label_config_sha256(self) -> str:
-        """Content hash of the fields that define swing label/cost semantics."""
+    def label_policy(self) -> dict[str, object]:
+        """Complete reproducible swing outcome semantics."""
 
-        payload = {
-            "policy": "swing_label.v1",
+        return {
+            "policy": "swing_label.v2",
             "horizon_sessions": self.horizon_sessions,
             "round_trip_cost_bps": self.round_trip_cost_bps,
+            "entry_rule": "next_exact_exchange_session_open",
+            "exit_rule": "decision_plus_horizon_session_close",
+            "path_rule": "all_exchange_sessions_required",
+            "broad_benchmark": self.broad_benchmark.upper(),
+            "growth_benchmark": self.growth_benchmark.upper(),
         }
+
+    def label_config_sha256(self) -> str:
+        """Content hash of the complete swing label/cost semantics."""
+
+        payload = self.label_policy()
         return hashlib.sha256(json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
 
 

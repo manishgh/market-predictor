@@ -44,6 +44,7 @@ from market_predictor.intraday.evaluation import (
     prediction_evidence,
     regime_audit,
 )
+from market_predictor.label_policy import stamped_label_policy
 from market_predictor.prediction_policy import (
     INTRADAY_SELECTION_TIE_BREAKERS,
     group_ranking_metrics,
@@ -110,6 +111,7 @@ def train_intraday_model(
         raise FileExistsError(f"intraday model artifact already exists: {model_out}")
     model_run_id = f"intraday-{uuid.uuid4().hex}"
     data, horizon, decision_interval, opportunity_target, downside_target = _training_rows(dataset)
+    label_policy = stamped_label_policy(dataset)
     if len(data) < config.min_train_rows:
         raise DataReadinessError(f"intraday training needs at least {config.min_train_rows} eligible rows")
     ticker_count = int(data["ticker"].nunique())
@@ -554,6 +556,7 @@ def train_intraday_model(
             "feature_set_sha256": feature_set_sha256,
             "catalyst_policy": "external_confirmation_overlay",
             "memory": metrics["memory"],
+            "label_policy": label_policy,
         },
     )
     return IntradayTrainingResult(

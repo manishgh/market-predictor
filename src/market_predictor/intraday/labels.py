@@ -122,15 +122,23 @@ def _label_ticker(
     decisions_ns = pd.DatetimeIndex(data["decision_time_utc"]).as_unit("ns").asi8
     entry_index = np.searchsorted(starts, decisions_ns, side="left")
     in_bounds = entry_index + horizon <= len(bars)
+    exact_entry = np.zeros(len(data), dtype=bool)
+    bounded_entry = entry_index < len(bars)
+    exact_entry[bounded_entry] = starts[entry_index[bounded_entry]] == decisions_ns[bounded_entry]
     expected = data["session_minute_et"].le(16 * 60 - config.horizon_minutes)
     data["label_window_expected"] = expected.to_numpy(bool)
-    candidate_positions = np.flatnonzero(in_bounds & expected.to_numpy(bool))
+    candidate_positions = np.flatnonzero(
+        in_bounds & exact_entry & expected.to_numpy(bool)
+    )
     if len(candidate_positions) == 0:
         return data
     offsets = np.arange(horizon, dtype=np.int64)
     path_indices = entry_index[candidate_positions, None] + offsets[None, :]
     path_starts = starts[path_indices]
-    expected_starts = starts[entry_index[candidate_positions], None] + offsets[None, :] * 60_000_000_000
+    expected_starts = (
+        decisions_ns[candidate_positions, None]
+        + offsets[None, :] * 60_000_000_000
+    )
     path_sessions = bars["session_date_et"].to_numpy(object)[path_indices]
     decision_sessions = data["session_date_et"].to_numpy(object)[candidate_positions, None]
     exact = (path_starts == expected_starts).all(axis=1) & (path_sessions == decision_sessions).all(axis=1)

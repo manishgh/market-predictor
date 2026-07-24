@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from collections.abc import Sequence
 
 import numpy as np
@@ -94,6 +95,11 @@ def build_intraday_dataset(
     decisions["minimum_five_minute_bars"] = config.min_five_minute_bars
     decisions["minimum_one_minute_bars"] = config.min_one_minute_bars
     decisions["dataset_label_config_sha256"] = config.label_config_sha256()
+    decisions["dataset_label_policy_json"] = json.dumps(
+        config.label_policy(),
+        sort_keys=True,
+        separators=(",", ":"),
+    )
     decisions["execution_policy_sha256"] = EXECUTION_POLICY_SHA256
     decisions = decisions.replace([np.inf, -np.inf], np.nan)
     audit = audit_intraday_dataset(decisions, config)

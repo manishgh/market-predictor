@@ -232,12 +232,23 @@ candidate integration test):
   lease, ticker limits, memory reservations, projected RSS, and serialized route
   replacement are tested. The obsolete Azure serving-release CLI path was removed.
   Real-size combined-model soak/RSS evidence is still `environment_pending`.
+- **R5.2 completed in code:** full hash-bound swing/intraday label policies are persisted
+  with model manifests; identity-complete live snapshots create immutable semantic
+  maturation intents; exact canonical bars produce deterministic attempts, evidence,
+  and outcomes; repeated snapshots are deduplicated; online/offline label parity is
+  tested.
+- **R5.3 completed in code:** canonical outcomes produce hash-validated calibration and
+  economics cohorts by release/view/horizon and operational slices. A versioned drift
+  policy persists release-specific actionability. Missing, stale, warming, severe,
+  tampered, or wrong-release state fails closed in direct and unified serving.
 - **R5 Bounded Serving / Durable Outcomes / Drift:** cache one active model context (no
   per-request deserialize); admission control + RSS < 4 GiB; deterministic label-horizon
   outcome maturation separate from ad hoc replay; calibration/economic cohorts; versioned
   drift policies that make severe drift non-actionable; auth/scopes/rate-limits/structured
   logs. **Azure Blob persistence EXCLUDED** — use the durable local repository + bounded
   cache; mark Blob as `environment_pending`.
+  R5.1-R5.3 are implemented locally. Authentication, scopes, body/rate limits,
+  structured audit logs, and real-size combined-model soak evidence remain.
 - **R6 Repository / Delivery Hardening:** remove legacy promotion + obsolete runtime
   paths; split production/collection/research CLI surfaces; hash-lock dependencies with
   runtime/training/research extras; pin container base by digest; SBOM + vuln/license

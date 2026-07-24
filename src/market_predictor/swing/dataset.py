@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from collections.abc import Sequence
 
 import numpy as np
@@ -151,6 +152,11 @@ def _build_swing_feature_history(
     data["minimum_daily_bars"] = config.min_daily_bars
     data["swing_feature_schema_version"] = SWING_FEATURE_SCHEMA_VERSION
     data["dataset_label_config_sha256"] = config.label_config_sha256()
+    data["dataset_label_policy_json"] = json.dumps(
+        config.label_policy(),
+        sort_keys=True,
+        separators=(",", ":"),
+    )
     data["execution_policy_sha256"] = EXECUTION_POLICY_SHA256
     data = data.replace([np.inf, -np.inf], np.nan)
     return data, benchmark_features

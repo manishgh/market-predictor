@@ -12,16 +12,24 @@ import joblib
 import numpy as np
 import pandas as pd
 
+from market_predictor.drift_policy import (
+    DriftPolicyV1,
+    DriftStateStore,
+    evaluate_drift,
+)
 from market_predictor.feature_store import LiveFeatureStore
 from market_predictor.intraday.contracts import (
     INTRADAY_FEATURE_SCHEMA_VERSION,
     INTRADAY_MODEL_SCHEMA_VERSION,
     INTRADAY_MODEL_TYPE,
+    IntradayDatasetConfig,
 )
 from market_predictor.live_features import live_feature_columns
+from market_predictor.outcome_contracts import content_sha256
 from market_predictor.prediction_contracts import (
     PredictionCapacityError,
     PredictionDataSource,
+    PredictionDriftBlockedError,
     PredictionReadinessError,
     PredictionRequest,
     PredictionValidationError,
@@ -43,6 +51,7 @@ from market_predictor.swing.contracts import (
     SWING_FEATURE_SCHEMA_VERSION,
     SWING_MODEL_SCHEMA_VERSION,
     SWING_MODEL_TYPE,
+    SwingDatasetConfig,
 )
 from tests.r4_fixtures import authorize_candidate_for_test, synthetic_identity_metrics
 
@@ -257,7 +266,9 @@ class PredictionServiceTests(unittest.TestCase):
             with self.assertRaises(PredictionReadinessError):
                 _service(root, swing=(dataset, model)).predict_swing(PredictionRequest(tickers=["MSFT"], mode="swing"))
 
-    def test_unified_response_keeps_swing_when_intraday_model_is_not_promoted(self) -> None:
+    def test_unified_response_is_not_actionable_when_intraday_model_is_not_promoted(
+        self,
+    ) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             swing_dataset = root / "swing_features.parquet"
@@ -287,7 +298,9 @@ class PredictionServiceTests(unittest.TestCase):
             row = response.predictions[0]
             self.assertIsNotNone(row.swing)
             self.assertIsNone(row.intraday)
-            self.assertEqual(row.final_signal, "high_conviction_watch")
+            self.assertEqual(row.final_signal, "not_ready")
+            self.assertEqual(row.readiness_status, "invalid")
+            self.assertIn("missing intraday prediction", row.errors)
 
     def test_daily_as_of_does_not_use_close_before_market_close(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -658,6 +671,95 @@ class PredictionServiceTests(unittest.TestCase):
             self.assertEqual(result["status"], "ready")
             self.assertEqual(result["data_source"], "live")
 
+    def test_direct_prediction_requires_actionable_release_drift_state(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            dataset = root / "features.parquet"
+            model = root / "swing.joblib"
+            features = ["return_1d", "volume_z20"]
+            _swing_frame(["MSFT"], features, rows=260).to_parquet(dataset, index=False)
+            _write_model(
+                model,
+                features,
+                target_col="target_net_positive_5d",
+                status="promoted",
+                probability=0.73,
+            )
+            store = DriftStateStore(root / "drift")
+            now = datetime.now(UTC)
+            store.publish(_drift_assessment("swing", "5d", "severe", now))
+            service = _service(
+                root,
+                swing=(dataset, model),
+                drift_state_store=store,
+                enforce_drift=True,
+            )
+
+            with self.assertRaises(PredictionDriftBlockedError):
+                service.predict_swing(
+                    PredictionRequest(tickers=["MSFT"], mode="swing")
+                )
+
+            service.preload()
+            health = service.health(as_of=now)
+            self.assertEqual(health["status"], "not_ready")
+            self.assertEqual(
+                health["components"]["drift:swing:5d"]["state"],
+                "severe",
+            )
+
+    def test_unified_prediction_fails_closed_when_one_view_is_drift_blocked(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            swing_dataset = root / "swing.parquet"
+            intraday_dataset = root / "intraday.parquet"
+            swing_model = root / "swing.joblib"
+            intraday_model = root / "intraday.joblib"
+            swing_features = ["return_1d", "volume_z20"]
+            intraday_features = ["return_1d", "volume_z20"]
+            _swing_frame(["MSFT"], swing_features, rows=260).to_parquet(
+                swing_dataset,
+                index=False,
+            )
+            _intraday_frame("MSFT", rows=150).to_parquet(
+                intraday_dataset,
+                index=False,
+            )
+            _write_model(
+                swing_model,
+                swing_features,
+                target_col="target_net_positive_5d",
+                status="promoted",
+                probability=0.73,
+            )
+            _write_model(
+                intraday_model,
+                intraday_features,
+                target_col="target_before_stop_60m",
+                status="promoted",
+                probability=0.71,
+            )
+            store = DriftStateStore(root / "drift")
+            now = datetime.now(UTC)
+            store.publish(_drift_assessment("swing", "5d", "severe", now))
+            store.publish(_drift_assessment("intraday", "60m", "stable", now))
+            service = _service(
+                root,
+                swing=(swing_dataset, swing_model),
+                intraday=(intraday_dataset, intraday_model),
+                drift_state_store=store,
+                enforce_drift=True,
+            )
+
+            response = service.predict_unified(
+                PredictionRequest(tickers=["MSFT"], mode="unified")
+            )
+
+            self.assertTrue(response.errors)
+            self.assertEqual(response.predictions[0].final_signal, "not_ready")
+            self.assertEqual(response.predictions[0].readiness_status, "invalid")
+            self.assertIn("missing swing prediction", response.predictions[0].errors)
+
 
 def _service(
     root: Path,
@@ -670,6 +772,8 @@ def _service(
     model_context_cache: StaticModelContextProvider | None = None,
     max_concurrent_inference: int = 1,
     max_tickers_per_request: int = 100,
+    drift_state_store: DriftStateStore | None = None,
+    enforce_drift: bool = False,
 ) -> PredictionService:
     routes: dict[str, dict[str, ServingRoute]] = {}
     if swing is not None:
@@ -700,6 +804,8 @@ def _service(
         model_context_cache=model_context_cache or StaticModelContextProvider(root),
         max_concurrent_inference=max_concurrent_inference,
         max_tickers_per_request=max_tickers_per_request,
+        drift_state_store=drift_state_store,
+        enforce_drift=enforce_drift,
     )
 
 
@@ -747,8 +853,10 @@ def _write_model(
     training = _swing_frame(["MSFT", "AAPL"], features, rows=300)
     training["target"] = [idx % 2 for idx in range(len(training))]
     model_run_id = f"prediction-service-{path.stem}"
+    label_config = SwingDatasetConfig() if is_swing else IntradayDatasetConfig()
     metrics = {
         **synthetic_identity_metrics(model_type=model_type, model_run_id=model_run_id),
+        "dataset_label_config_sha256": label_config.label_config_sha256(),
         "roc_auc": 0.7,
         "top_decile_lift": 2.1,
         "validated_rows": 250,
@@ -765,12 +873,67 @@ def _write_model(
         validation_split=(
             "session_purged_walk_forward_and_ticker_holdout" if is_swing else "session_purged_walk_forward_and_ticker_holdout"
         ),
-        extra={"model_run_id": model_run_id},
+        extra={
+            "model_run_id": model_run_id,
+            "label_policy": label_config.label_policy(),
+        },
     )
     if status == "promoted":
         authorize_candidate_for_test(path, metrics)
     elif status != "candidate":
         raise ValueError(f"unsupported test model status: {status}")
+
+
+def _drift_assessment(
+    mode: str,
+    horizon: str,
+    state: str,
+    evaluated_at: datetime,
+):
+    severe = state == "severe"
+    identity = {
+        "contract_version": "market_predictor.performance_cohorts.v1",
+        "generated_at_utc": evaluated_at.isoformat().replace("+00:00", "Z"),
+        "minimum_samples": 10,
+        "source_outcome_ids": ["c" * 64],
+        "rows": [
+            {
+                "model_release_id": "e" * 64,
+                "view": mode,
+                "horizon": horizon,
+                "cohort_type": "all",
+                "cohort_value": "all",
+                "samples": 50,
+                "evidence_status": "sufficient",
+                "mean_probability": 0.60,
+                "observed_rate": 0.55,
+                "brier_score": 0.40 if severe else 0.20,
+                "calibration_error": 0.05,
+                "average_net_return": 0.01,
+                "average_excess_return_vs_spy": 0.01,
+                "win_rate": 0.55,
+                "max_drawdown": 0.05,
+                "first_exit_time_utc": evaluated_at.isoformat().replace(
+                    "+00:00",
+                    "Z",
+                ),
+                "last_exit_time_utc": evaluated_at.isoformat().replace(
+                    "+00:00",
+                    "Z",
+                ),
+            }
+        ],
+    }
+    report = {**identity, "report_id": content_sha256(identity)}
+    return evaluate_drift(
+        mode=mode,
+        horizon=horizon,
+        model_release_id="e" * 64,
+        feature_drift={"status": "stable"},
+        performance_report=report,
+        policy=DriftPolicyV1(minimum_matured_samples=10),
+        evaluated_at=evaluated_at,
+    )
 
 
 def _publish_live_swing(
@@ -819,8 +982,10 @@ def _swing_frame(tickers: list[str], features: list[str], *, rows: int) -> pd.Da
             feature_available = decision_time - pd.Timedelta(minutes=10)
             record = {
                 "ticker": ticker,
+                "canonical_security_id": f"security:{ticker}",
                 "date": session_date,
                 "session_date_et": session_date,
+                "decision_group_id": decision_time.isoformat(),
                 "decision_time_utc": decision_time,
                 "feature_available_at_utc": feature_available,
                 "bar_available_at_utc": bar_available,
@@ -830,6 +995,11 @@ def _swing_frame(tickers: list[str], features: list[str], *, rows: int) -> pd.Da
                 "daily_bar_count": idx + 1,
                 "close": 100.0 + idx,
                 "price_feed": "sip",
+                "primary_benchmark": "XLK",
+                "market_regime": "risk_on",
+                "sector": "Technology",
+                "market_cap_bucket": "large",
+                "liquidity_bucket": "high",
                 "return_1d": 0.01,
                 "volume_z20": 1.5,
                 "news_count": 2,
@@ -854,7 +1024,10 @@ def _intraday_frame(ticker: str, *, rows: int) -> pd.DataFrame:
     return pd.DataFrame(
         {
             "ticker": ticker,
+            "canonical_security_id": f"security:{ticker}",
             "date": timestamps.tz_convert(None),
+            "session_date_et": timestamps.tz_convert("America/New_York").date,
+            "decision_group_id": (timestamps + pd.Timedelta(minutes=5)).astype(str),
             "bar_start_utc": timestamps,
             "feature_available_at_utc": timestamps + pd.Timedelta(minutes=5),
             "decision_time_utc": timestamps + pd.Timedelta(minutes=5),
@@ -866,6 +1039,12 @@ def _intraday_frame(ticker: str, *, rows: int) -> pd.DataFrame:
             "close": 100.5,
             "volume": 100_000.0,
             "price_feed": "sip",
+            "primary_benchmark": "XLK",
+            "market_regime": "risk_on",
+            "sector": "Technology",
+            "market_cap_bucket": "large",
+            "liquidity_bucket": "high",
+            "atr_14_price_5m": 1.25,
             "return_1d": 0.01,
             "volume_z20": 1.5,
             "qqq_return_1bar_5m": 0.001,

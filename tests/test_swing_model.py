@@ -18,6 +18,7 @@ from market_predictor.swing.contracts import (
     SWING_FEATURE_SCHEMA_VERSION,
     SWING_FEATURES,
     SWING_MODEL_TYPE,
+    SwingDatasetConfig,
     SwingPromotionConfig,
     SwingTrainingConfig,
 )
@@ -289,6 +290,12 @@ class SwingModelTests(unittest.TestCase):
 
 def _training_dataset() -> pd.DataFrame:
     rng = np.random.default_rng(42)
+    label_config = SwingDatasetConfig()
+    label_policy_json = json.dumps(
+        label_config.label_policy(),
+        sort_keys=True,
+        separators=(",", ":"),
+    )
     sessions = pd.bdate_range("2024-01-02", periods=180)
     tickers = [f"T{index:02d}" for index in range(12)]
     rows: list[dict[str, object]] = []
@@ -317,7 +324,8 @@ def _training_dataset() -> pd.DataFrame:
                     "horizon_sessions": 5,
                     "swing_feature_schema_version": SWING_FEATURE_SCHEMA_VERSION,
                     "reconciliation_sha256": "a" * 64,
-                    "dataset_label_config_sha256": "b" * 64,
+                    "dataset_label_config_sha256": label_config.label_config_sha256(),
+                    "dataset_label_policy_json": label_policy_json,
                     "market_regime": regime,
                     "sector": "Technology" if ticker_index % 2 == 0 else "Healthcare",
                     "market_cap_bucket": "large" if ticker_index < 6 else "mid",

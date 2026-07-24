@@ -191,11 +191,11 @@ class IntradayDatasetConfig(FrozenConfig):
     memory_guard_headroom_gb: float = Field(default=0.25, ge=0.1, le=2.0)
     schema_version: str = INTRADAY_FEATURE_SCHEMA_VERSION
 
-    def label_config_sha256(self) -> str:
-        """Content hash of the fields that define intraday label/cost semantics."""
+    def label_policy(self) -> dict[str, object]:
+        """Complete reproducible intraday path and cost semantics."""
 
-        payload = {
-            "policy": "intraday_label.v1",
+        return {
+            "policy": "intraday_label.v2",
             "horizon_minutes": self.horizon_minutes,
             "decision_bar_minutes": self.decision_bar_minutes,
             "execution_bar_minutes": self.execution_bar_minutes,
@@ -204,7 +204,18 @@ class IntradayDatasetConfig(FrozenConfig):
             "stop_atr": self.stop_atr,
             "round_trip_cost_bps": self.round_trip_cost_bps,
             "ambiguous_barrier_policy": self.ambiguous_barrier_policy,
+            "entry_rule": "exact_bar_start_at_decision_time",
+            "stop_fill_rule": "worse_of_stop_or_trigger_open",
+            "target_fill_rule": "target_price",
+            "timeout_fill_rule": "final_horizon_bar_close",
+            "broad_benchmark": self.broad_benchmark.upper(),
+            "growth_benchmark": self.growth_benchmark.upper(),
         }
+
+    def label_config_sha256(self) -> str:
+        """Content hash of the complete intraday label/cost semantics."""
+
+        payload = self.label_policy()
         return hashlib.sha256(json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
 
     @model_validator(mode="after")

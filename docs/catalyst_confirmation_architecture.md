@@ -391,6 +391,8 @@ The immutable candidate manifest and promotion attestation, not the filename or 
 | Intraday V4-H1 exact 120-minute R1 | `candidate` | NDCG@10 0.4868/0.5131; top-10 excess -0.0802%/-0.0629% | Promotion rejected; shadow not opened. |
 | R4 promotion and local release | implemented, no active real release | Candidate isolation, trusted Ed25519 attestation, predeclared hypotheses, one-use canonical shadow ledger, paired confidence gates, versioned local releases, atomic activation, and verified rollback are tested | Operationally blocked until a real C4 or C5 model passes every development and untouched-shadow gate; no candidate fallback. |
 | R5.1 bounded active-release serving | implemented, real-size load evidence pending | Signed active-pointer preload, one cached context per route, non-queueing single inference lease, ticker bound, projected/current RSS checks, atomic route replacement, and model-release response identity are tested | Remains deployment-blocked until real promoted artifacts pass combined swing/intraday startup and burst/soak evidence below 4 GiB. |
+| R5.2 deterministic outcome maturation | implemented locally | Identity-complete live snapshots produce immutable semantic intents; exact swing/intraday label policies, canonical bar evidence, pending attempts, repeated-snapshot deduplication, and offline-label parity are tested | Requires scheduled canonical bar publication and real matured outcomes before performance evidence exists. |
+| R5.3 performance drift actionability | implemented locally | Hash-validated release/view/horizon cohorts and a versioned drift policy persist release-specific state; severe, stale, warming, unavailable, tampered, and wrong-release states fail closed in serving | Real performance state remains unavailable until a promoted release produces sufficient matured outcomes; R5 API access controls remain incomplete. |
 | Azure release transport | `environment_pending` | Existing transport code is not R4 evidence and has not completed a real integration/rollback/DR rehearsal | Excluded from activation authority until infrastructure integration is verified. |
 The V2 structural dataset itself is valid for continued research: 47,614 rows, 196 eligible tickers, 122 sessions, exact 09:30-11:25 ET bar timestamps, no duplicate ticker/timestamp keys, and no cooldown gaps below 13 bars. Catalyst context covered 21.44% of rows; market context covered 87.28%. Reddit coverage was zero in this historical V2 table, so Reddit cannot be claimed as a trained intraday signal yet.
 
@@ -476,7 +478,7 @@ Implemented audit surfaces:
 - `build-swing-dataset` publishes a hash-verified feature/label artifact only after timing, warm-up, benchmark, SIP, adjustment, source-freshness, cross-section, and exact-path checks pass.
 - `train-swing-model` writes purged predictions, unseen-ticker predictions, folds, profitability, regime, catalyst, alignment, metrics, and an evidence hash manifest tied to the candidate.
 - `promote-swing-model` verifies the candidate and every evidence hash, then leaves any failing artifact in candidate state with a rejection report.
-- `build-intraday-dataset` publishes completed 5-minute decisions with exact subsequent 1-minute paths only after timing, dual warm-up, benchmark, SIP, adjustment, source-freshness, cross-section, and memory checks pass.
+- `build-intraday-dataset` publishes completed 5-minute decisions with an exact decision-time 1-minute entry and consecutive path only after timing, dual warm-up, benchmark, SIP, adjustment, source-freshness, cross-section, and memory checks pass.
 - `train-intraday-model` writes separate opportunity/downside validation, unseen-ticker, economics, regime, catalyst, alignment, fold, memory, and provenance evidence in one hash-bound candidate bundle.
 - `promote-intraday-model` verifies every evidence hash and promotes both estimators atomically only when all frozen gates pass.
 - The generic `promote-model` path has been removed. Only the canonical swing and intraday promotion commands can produce an attestation.
@@ -503,12 +505,12 @@ Azure publication, startup hydration, rollback, and disaster-recovery rehearsal 
 Operational surfaces are:
 
 - `/v1/health/live`: process liveness only.
-- `/v1/health/ready`: promoted model/hash, feature freshness/source/schema, and memory readiness; returns HTTP 503 on required-component failure.
+- `/v1/health/ready`: promoted model/hash, feature freshness/source/schema, release-specific drift actionability, and memory readiness; returns HTTP 503 on required-component failure.
 - `/v1/metrics`: internal bounded counters for latency/errors, prediction readiness, replay outcomes, model hashes, last health, drift, and memory.
 
-Training-reference drift is telemetry, not a promotion bypass or automatic trading veto. Durable prediction-quality evidence comes from immutable prediction snapshots and later replay outcomes. External deployment identities and Blob permissions remain `environment_pending` until Azure integration is resumed.
+Feature drift and matured performance are evaluated by a versioned actionability policy; they never bypass promotion. Warning remains actionable, while missing, stale, warming, severe, tampered, or release-mismatched state suppresses the affected route. Durable prediction-quality evidence comes from immutable prediction snapshots, semantic maturation intents, exact canonical outcomes, and content-addressed cohort reports. External deployment identities and Blob permissions remain `environment_pending` until Azure integration is resumed.
 
-The R4 shadow bundle binds exact paired session records to candidate, baseline, prediction-policy, and execution-policy identities and recomputes its confidence interval during verification. R5 must replace test/ad hoc outcome preparation with the durable deterministic outcome-maturation repository before any live serving claim; this remains `environment_pending`, not simulated evidence.
+The R4 shadow bundle binds exact paired session records to candidate, baseline, prediction-policy, and execution-policy identities and recomputes its confidence interval during verification. R5.2 replaces ad hoc outcome preparation with the durable deterministic outcome-maturation repository. This code path is verified locally, but real matured evidence remains unavailable until a promoted release is served prospectively.
 
 ## 13. Prediction Workflow
 

@@ -336,6 +336,27 @@ Catalyst evidence is returned separately from model probabilities. Swing exposes
 
 Every prediction served through the top-level API is written as an immutable, content-addressed JSON snapshot under `data/predictions/snapshots/`. The response returns `snapshot_id` and `snapshot_sha256`; both identify the exact request, response, model hashes, resolved horizons, feature cutoff, and generation time used for later outcome evaluation.
 
+Live model validation is separate from investment replay. Identity-complete live snapshots are converted into immutable maturation intents, then matured only from a hash-verified canonical bar artifact using the exact label policy frozen into the model release:
+
+```powershell
+market-predictor register-outcome-intents `
+  --snapshot-id <64-character-snapshot-id>
+
+market-predictor mature-outcomes `
+  --bars data/canonical/exact_outcome_bars.parquet
+
+market-predictor build-outcome-performance-report `
+  --minimum-samples 30
+
+market-predictor publish-drift-assessment `
+  --mode swing `
+  --horizon 5d `
+  --model-release-id <64-character-release-id> `
+  --feature-drift-report data/monitoring/feature-drift/swing-5d.json
+```
+
+The outcome repository deduplicates repeated snapshots by semantic prediction identity and persists intents, attempts, exact bar evidence, and matured outcomes independently. Performance reports are content-addressed and report calibration, net and SPY-relative return, win rate, and drawdown by release, view, horizon, regime, sector, market-cap, liquidity, and calibration bin. `configs/drift_policy.toml` is the versioned actionability policy. Missing, stale, warming, severe, tampered, or release-mismatched drift state prevents actionable serving; warning state remains actionable and visible in readiness.
+
 Replay an investment from a stored prediction:
 
 ```json
@@ -512,7 +533,7 @@ market-predictor promote-intraday-model `
   --config configs/intraday_promotion.toml
 ```
 
-Each decision is made only after a completed 5-minute bar. Entry is the first subsequent 1-minute open. The default 60-minute path uses exact consecutive 1-minute bars, a 1 ATR target, a 0.75 ATR stop, and stop-first resolution when both barriers occur in one bar. SPY, QQQ, and sector returns use the same actual entry/exit interval. Missing ticker or benchmark bars invalidate the row; they are never shifted or filled.
+Each decision is made only after a completed 5-minute bar. Entry is the open of the exact 1-minute bar that starts at the decision timestamp. The default 60-minute path uses exact consecutive 1-minute bars, a 1 ATR target, a 0.75 ATR stop, and stop-first resolution when both barriers occur in one bar. SPY, QQQ, and sector returns use the same actual entry/exit interval. A missing entry, path, or benchmark bar invalidates the row; labels are never shifted or filled.
 
 The candidate contains two estimators and is promoted atomically: opportunity estimates target-before-stop, while downside estimates stop-before-target. Catalyst/news features are audited and returned as a confirmation/ranking overlay, but are deliberately excluded from both estimators until fresh ablation evidence proves incremental value. No real C5 candidate has been promoted, so no canonical intraday route belongs in `configs/default.toml` yet.
 

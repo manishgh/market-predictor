@@ -70,6 +70,13 @@ class PredictionReadinessError(PredictionServiceError):
     public_message = "Prediction inputs or models are not ready."
 
 
+class PredictionDriftBlockedError(PredictionServiceError):
+    code = "prediction_drift_blocked"
+    status_code = 503
+    retryable = True
+    public_message = "Prediction is unavailable because model monitoring is not actionable."
+
+
 class PredictionDependencyError(PredictionServiceError):
     code = "prediction_dependency_unavailable"
     status_code = 503
@@ -142,6 +149,15 @@ class ModelInfo(BaseModel):
     created_at_utc: str | None = None
     training_data_start: str | None = None
     training_data_end: str | None = None
+    label_policy_sha256: str | None = Field(
+        default=None,
+        pattern=r"^[0-9a-f]{64}$",
+    )
+    label_policy: dict[str, object] | None = None
+    execution_policy_sha256: str | None = Field(
+        default=None,
+        pattern=r"^[0-9a-f]{64}$",
+    )
 
 
 class FeatureArtifactIdentityV1(BaseModel):
@@ -157,6 +173,16 @@ class PredictionRowEvidenceV1(BaseModel):
     view: PredictionView
     decision_time_utc: datetime
     feature_available_at_utc: datetime
+    canonical_security_id: str | None = None
+    decision_group_id: str | None = None
+    session_date_et: str | None = None
+    primary_benchmark: str | None = None
+    market_regime: str | None = None
+    sector: str | None = None
+    market_cap_bucket: str | None = None
+    liquidity_bucket: str | None = None
+    price_feed: str | None = None
+    decision_atr: float | None = None
 
     @field_validator("decision_time_utc", "feature_available_at_utc")
     @classmethod

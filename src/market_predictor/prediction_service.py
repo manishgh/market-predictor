@@ -4,7 +4,7 @@ import hashlib
 import json
 from collections.abc import Mapping
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, cast
 from uuid import uuid4
@@ -17,6 +17,7 @@ from market_predictor.catalyst_overlay import (
     CatalystAssessment,
     assess_catalyst_overlay,
 )
+from market_predictor.drift_policy import DriftAssessmentV1, DriftStateStore
 from market_predictor.feature_store import LiveFeatureStore
 from market_predictor.intraday.model import score_intraday_payload
 from market_predictor.prediction_contracts import (
@@ -25,8 +26,10 @@ from market_predictor.prediction_contracts import (
     GlobalContextInfo,
     IntradayPrediction,
     ModelInfo,
+    PredictionConflictError,
     PredictionDataSource,
     PredictionDependencyError,
+    PredictionDriftBlockedError,
     PredictionEvidenceV1,
     PredictionReadinessError,
     PredictionRequest,
@@ -211,6 +214,9 @@ class PredictionService:
         inference_memory_reservation_gib: float = 0.5,
         reject_unknown_memory: bool = False,
         model_context_cache: ModelContextProvider | None = None,
+        drift_state_store: DriftStateStore | None = None,
+        enforce_drift: bool = True,
+        maximum_drift_assessment_age_minutes: int = 1_440,
     ) -> None:
         self.root = Path(root)
         self.snapshot_store = snapshot_store or PredictionSnapshotStore(self.root / "data/predictions/snapshots")
@@ -245,6 +251,15 @@ class PredictionService:
             memory_headroom_gib=memory_headroom_gib,
             max_contexts=sum(len(mode_routes) for mode_routes in self.routes.values()),
         )
+        if maximum_drift_assessment_age_minutes < 1:
+            raise ValueError("maximum drift assessment age must be positive")
+        self.drift_state_store = drift_state_store or DriftStateStore(
+            self.root / "data/monitoring/drift"
+        )
+        self.enforce_drift = enforce_drift
+        self.maximum_drift_assessment_age = timedelta(
+            minutes=maximum_drift_assessment_age_minutes
+        )
 
     def predict(self, request: PredictionRequest) -> PredictionResponse:
         if len(request.tickers) > self.max_tickers_per_request:
@@ -271,6 +286,11 @@ class PredictionService:
         try:
             route, resolved_horizon = self._serving_route("swing", request)
             context = self.model_context_cache.get("swing", resolved_horizon, route)
+            self._require_actionable_drift(
+                mode="swing",
+                horizon=resolved_horizon,
+                release_id=context.release_id,
+            )
             model = self._model_info_from_context(
                 context,
                 bar_timeframe=route.bar_timeframe,
@@ -316,6 +336,11 @@ class PredictionService:
         try:
             route, resolved_horizon = self._serving_route("intraday", request)
             context = self.model_context_cache.get("intraday", resolved_horizon, route)
+            self._require_actionable_drift(
+                mode="intraday",
+                horizon=resolved_horizon,
+                release_id=context.release_id,
+            )
             model = self._model_info_from_context(
                 context,
                 bar_timeframe=route.bar_timeframe,
@@ -394,8 +419,16 @@ class PredictionService:
                     ticker=ticker,
                     swing=swing_row,
                     intraday=intraday_row,
-                    final_signal=_final_signal(swing_row, intraday_row),
-                    readiness_status=_combined_readiness(swing_row, intraday_row),
+                    final_signal=(
+                        "not_ready"
+                        if row_errors
+                        else _final_signal(swing_row, intraday_row)
+                    ),
+                    readiness_status=(
+                        INVALID
+                        if row_errors
+                        else _combined_readiness(swing_row, intraday_row)
+                    ),
                     errors=row_errors,
                 )
             )
@@ -442,6 +475,37 @@ class PredictionService:
                 except Exception as exc:
                     ready = False
                     components[name] = {"status": "not_ready", "reason": str(exc)}
+                    continue
+                drift_name = f"drift:{mode}:{horizon}"
+                if not self.enforce_drift:
+                    components[drift_name] = {
+                        "status": "disabled",
+                        "reason": "drift enforcement is disabled",
+                    }
+                    continue
+                try:
+                    assessment = self._load_drift_assessment(
+                        mode=mode,
+                        horizon=horizon,
+                        release_id=context.release_id,
+                        checked_at=checked_at,
+                    )
+                    components[drift_name] = {
+                        "status": (
+                            "ready"
+                            if assessment.actionability == "actionable"
+                            else "not_ready"
+                        ),
+                        **assessment.model_dump(mode="json"),
+                    }
+                    if assessment.actionability != "actionable":
+                        ready = False
+                except Exception as exc:
+                    ready = False
+                    components[drift_name] = {
+                        "status": "not_ready",
+                        "reason": str(exc),
+                    }
 
         for mode, mode_routes in self.routes.items():
             if not mode_routes:
@@ -501,6 +565,46 @@ class PredictionService:
             "data_source": self.data_source,
             "components": components,
         }
+
+    def _require_actionable_drift(
+        self,
+        *,
+        mode: str,
+        horizon: str,
+        release_id: str,
+    ) -> DriftAssessmentV1 | None:
+        if not self.enforce_drift:
+            return None
+        try:
+            assessment = self._load_drift_assessment(
+                mode=mode,
+                horizon=horizon,
+                release_id=release_id,
+                checked_at=datetime.now(UTC),
+            )
+        except (DataReadinessError, PredictionConflictError, ValueError) as exc:
+            raise PredictionDriftBlockedError from exc
+        if assessment.actionability != "actionable":
+            raise PredictionDriftBlockedError
+        return assessment
+
+    def _load_drift_assessment(
+        self,
+        *,
+        mode: str,
+        horizon: str,
+        release_id: str,
+        checked_at: datetime,
+    ) -> DriftAssessmentV1:
+        if not self.enforce_drift:
+            raise DataReadinessError("drift enforcement is disabled")
+        assessment = self.drift_state_store.load(mode, horizon, release_id)
+        evaluated_at = assessment.evaluated_at_utc.astimezone(UTC)
+        if checked_at.astimezone(UTC) - evaluated_at > self.maximum_drift_assessment_age:
+            raise DataReadinessError("route drift assessment is stale")
+        if evaluated_at > checked_at.astimezone(UTC) + timedelta(minutes=5):
+            raise DataReadinessError("route drift assessment is from the future")
+        return assessment
 
     def _score_swing_frame(
         self,
@@ -891,6 +995,8 @@ class PredictionService:
         target = _optional_str(manifest.get("target_col"))
         dataset_value = manifest.get("dataset")
         dataset = dataset_value if isinstance(dataset_value, dict) else {}
+        extra_value = manifest.get("extra")
+        extra = extra_value if isinstance(extra_value, dict) else {}
         return ModelInfo(
             path=str(model_path),
             status=status,
@@ -905,6 +1011,27 @@ class PredictionService:
             created_at_utc=_optional_str(manifest.get("created_at_utc")),
             training_data_start=_optional_str(dataset.get("first_date")),
             training_data_end=_optional_str(dataset.get("last_date")),
+            label_policy_sha256=_optional_str(
+                manifest.get("dataset_label_config_sha256")
+                or (
+                    manifest.get("metrics", {}).get("dataset_label_config_sha256")
+                    if isinstance(manifest.get("metrics"), dict)
+                    else None
+                )
+            ),
+            label_policy=(
+                dict(extra["label_policy"])
+                if isinstance(extra.get("label_policy"), dict)
+                else None
+            ),
+            execution_policy_sha256=_optional_str(
+                manifest.get("execution_policy_sha256")
+                or (
+                    manifest.get("metrics", {}).get("execution_policy_sha256")
+                    if isinstance(manifest.get("metrics"), dict)
+                    else None
+                )
+            ),
         )
 
     def _response(
@@ -994,8 +1121,48 @@ class PredictionService:
                         view=mode,
                         decision_time_utc=decision,
                         feature_available_at_utc=availability,
+                        canonical_security_id=_optional_str(
+                            row.get("canonical_security_id", row.get("canonical_id"))
+                        ),
+                        decision_group_id=_optional_str(row.get("decision_group_id")),
+                        session_date_et=_optional_str(row.get("session_date_et")),
+                        primary_benchmark=_optional_str(row.get("primary_benchmark")),
+                        market_regime=_optional_str(row.get("market_regime")),
+                        sector=_optional_str(row.get("sector")),
+                        market_cap_bucket=_optional_str(row.get("market_cap_bucket")),
+                        liquidity_bucket=_optional_str(row.get("liquidity_bucket")),
+                        price_feed=_optional_str(row.get("price_feed")),
+                        decision_atr=_float_or_none(row.get("atr_14_price_5m")),
                     )
                 )
+                if self.data_source == "live":
+                    required_row_identity = {
+                        "canonical_security_id": row.get(
+                            "canonical_security_id",
+                            row.get("canonical_id"),
+                        ),
+                        "decision_group_id": row.get("decision_group_id"),
+                        "primary_benchmark": row.get("primary_benchmark"),
+                        "market_regime": row.get("market_regime"),
+                        "sector": row.get("sector"),
+                        "market_cap_bucket": row.get("market_cap_bucket"),
+                        "liquidity_bucket": row.get("liquidity_bucket"),
+                        "price_feed": row.get("price_feed"),
+                    }
+                    missing_row_identity = sorted(
+                        name
+                        for name, value in required_row_identity.items()
+                        if _optional_str(value) is None
+                    )
+                    if mode == "intraday" and _float_or_none(
+                        row.get("atr_14_price_5m")
+                    ) is None:
+                        missing_row_identity.append("decision_atr")
+                    if missing_row_identity:
+                        gaps.append(
+                            f"{mode} maturation row identity is missing: "
+                            f"{', '.join(missing_row_identity)}"
+                        )
                 cutoffs.append(decision)
 
             source = feature_sources[mode]
@@ -1031,6 +1198,12 @@ class PredictionService:
                 model_release_ids[mode] = str(model.release_id)
             elif self.data_source == "live":
                 gaps.append(f"{mode} model release identity is missing")
+            if model.label_policy is None or not _is_sha256(
+                model.label_policy_sha256
+            ):
+                gaps.append(f"{mode} model label policy identity is missing")
+            if not _is_sha256(model.execution_policy_sha256):
+                gaps.append(f"{mode} execution policy identity is missing")
 
         if not cutoffs:
             raise PredictionReadinessError
@@ -1272,6 +1445,11 @@ def _combine_evidence(
         for evidence in evidence_parts
         for mode, horizon in evidence.resolved_horizons.items()
     }
+    model_release_ids = {
+        mode: release_id
+        for evidence in evidence_parts
+        for mode, release_id in evidence.model_release_ids.items()
+    }
     gaps = [gap for evidence in evidence_parts for gap in evidence.identity_gaps]
     policy_hashes = {evidence.serving_policy_sha256 for evidence in evidence_parts}
     if policy_hashes != {SERVING_POLICY_SHA256}:
@@ -1292,6 +1470,7 @@ def _combine_evidence(
         row_feature_availability=rows,
         feature_artifacts=artifacts,
         release_id=next(iter(release_ids)) if len(release_ids) == 1 else None,
+        model_release_ids=model_release_ids,
         model_artifact_sha256=model_hashes,
         source_watermarks=watermarks,
         resolved_horizons=horizons,

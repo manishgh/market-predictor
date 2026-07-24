@@ -1,0 +1,10 @@
+contract_version = "market_predictor.drift_policy.v1"
+minimum_matured_samples = 30
+maximum_report_age_minutes = 1440
+warning_brier_score = 0.25
+severe_brier_score = 0.35
+warning_min_excess_return = -0.001
+severe_min_excess_return = -0.005
+warning_max_drawdown = 0.15
+severe_max_drawdown = 0.25
+feature_drift_required = true
