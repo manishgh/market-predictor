@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -38,30 +39,34 @@ class ActiveModelContextCacheTests(unittest.TestCase):
             repository = root / "repository"
             _, trust_store, _ = test_signing_material()
             model, evidence = _promoted_swing_model(root / "source", "first")
-            published = publish_local_release(
-                repository,
-                model_path=model,
-                evidence_manifest_path=evidence,
-                attestation_trust_store_path=trust_store,
-            )
-            cache = ActiveModelContextCache(
-                root,
-                memory_budget_gib=4.0,
-                memory_headroom_gib=0.25,
-                max_contexts=1,
-            )
-            route = ActiveReleaseRoute(
-                repository=repository,
-                attestation_trust_store=trust_store,
-                bar_timeframe="1Day",
-            )
+            with patch.dict(
+                os.environ,
+                {"MARKET_PREDICTOR_ATTESTATION_TRUST_STORE": ""},
+            ):
+                published = publish_local_release(
+                    repository,
+                    model_path=model,
+                    evidence_manifest_path=evidence,
+                    attestation_trust_store_path=trust_store,
+                )
+                cache = ActiveModelContextCache(
+                    root,
+                    memory_budget_gib=4.0,
+                    memory_headroom_gib=0.25,
+                    max_contexts=1,
+                )
+                route = ActiveReleaseRoute(
+                    repository=repository,
+                    attestation_trust_store=trust_store,
+                    bar_timeframe="1Day",
+                )
 
-            with patch(
-                "market_predictor.serving_context.joblib.load",
-                wraps=joblib.load,
-            ) as load:
-                first = cache.get("swing", "5d", route)
-                second = cache.get("swing", "5d", route)
+                with patch(
+                    "market_predictor.serving_context.joblib.load",
+                    wraps=joblib.load,
+                ) as load:
+                    first = cache.get("swing", "5d", route)
+                    second = cache.get("swing", "5d", route)
 
             self.assertIs(first, second)
             self.assertEqual(load.call_count, 1)

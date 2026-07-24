@@ -210,6 +210,7 @@ def _source_inventory(
         candidate = verify_model_artifact(
             model_path,
             allowed_statuses={MODEL_STATUS_PROMOTED},
+            attestation_trust_store_path=attestation_trust_store_path,
         )
         attestation = verify_promotion_attestation(
             model_path,
@@ -422,6 +423,7 @@ def _verify_release_directory(
         candidate = verify_model_artifact(
             model_path,
             allowed_statuses={MODEL_STATUS_PROMOTED},
+            attestation_trust_store_path=attestation_trust_store_path,
         )
         attestation = verify_promotion_attestation(
             model_path,

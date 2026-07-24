@@ -132,6 +132,9 @@ class ActiveModelContextCache:
                     horizon=horizon,
                     expected_model_type=expected_type,
                     expected_schema_version=expected_schema,
+                    attestation_trust_store_path=self._resolve(
+                        route.attestation_trust_store
+                    ),
                 )
                 if cached is None and len(self._contexts) >= self._max_contexts:
                     raise DataReadinessError("active model context cache is full")
@@ -225,12 +228,14 @@ def verify_serving_model_artifact(
     resolved_horizon: str,
     expected_model_type: str,
     expected_schema_version: str,
+    attestation_trust_store_path: Path | None = None,
 ) -> dict[str, Any]:
     """Verify registry integrity and the route-specific production contract."""
 
     manifest = verify_model_artifact(
         model_path,
         allowed_statuses={MODEL_STATUS_PROMOTED},
+        attestation_trust_store_path=attestation_trust_store_path,
     )
     if manifest.get("model_type") != expected_model_type:
         raise ValueError(
@@ -292,12 +297,14 @@ def _verify_manifest_contract(
     horizon: str,
     expected_model_type: str,
     expected_schema_version: str,
+    attestation_trust_store_path: Path | None = None,
 ) -> dict[str, Any]:
     manifest = verify_serving_model_artifact(
         model_path,
         resolved_horizon=horizon,
         expected_model_type=expected_model_type,
         expected_schema_version=expected_schema_version,
+        attestation_trust_store_path=attestation_trust_store_path,
     )
     if manifest.get("status") != MODEL_STATUS_PROMOTED:
         raise DataReadinessError("active release model is not promoted")
