@@ -128,7 +128,8 @@ jobs:
             --volume "${PWD}/artifacts/container-smoke:/smoke:ro" \
             --env APP_CONFIG_PATH=/smoke/app_config.toml \
             --env API_ENVIRONMENT=development \
-            --env API_AUTH_MODE=disabled \
+            --env API_AUTH_MODE=development \
+            --env API_DEVELOPMENT_BEARER_TOKEN="${GITHUB_SHA}${GITHUB_SHA}" \
             --env API_REPLAY_ENABLED=false \
             "market-predictor:${GITHUB_SHA}"
 
