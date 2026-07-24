@@ -16,7 +16,7 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 from market_predictor.execution_policy import EXECUTION_POLICY_SHA256
 from market_predictor.hypothesis_registry import declare_hypothesis
-from market_predictor.prediction_policy import PREDICTION_POLICY_SHA256
+from market_predictor.prediction_policy import prediction_policy_identity
 from market_predictor.promotion_attestation import (
     ATTESTATION_TRUST_STORE_ENV,
     ATTESTATION_TRUST_STORE_SCHEMA,
@@ -47,9 +47,9 @@ def synthetic_identity_metrics(
         "dataset_label_config_sha256": "4" * 64,
         "calibration_method": "isotonic_prior_fold_only",
         "folds_causally_ordered": True,
-        "prediction_policy_sha256": PREDICTION_POLICY_SHA256,
         "execution_policy_sha256": EXECUTION_POLICY_SHA256,
         "dataset_sha256": "9" * 64,
+        **prediction_policy_identity(),
     }
     if model_type == "canonical_swing":
         metrics["universe_identity_sha256"] = "5" * 64

@@ -13,6 +13,7 @@ from typer.testing import CliRunner
 from market_predictor.canonical.audits import CanonicalAuditCheck, CanonicalAuditReport
 from market_predictor.canonical.store import write_canonical_artifact
 from market_predictor.cli import app
+from market_predictor.prediction_policy import parse_prediction_policy
 from market_predictor.registry import load_model_manifest, verify_model_artifact
 from market_predictor.swing.contracts import (
     SWING_FEATURE_SCHEMA_VERSION,
@@ -133,6 +134,11 @@ class SwingModelTests(unittest.TestCase):
             self.assertGreater(result.metrics["validated_rows"], 100)
             self.assertGreater(result.metrics["ticker_holdout_rows"], 100)
             self.assertIn("feature_reference_profile", result.metrics)
+            bound_policy = parse_prediction_policy(
+                result.metrics["prediction_policy"],
+                expected_sha256=result.metrics["prediction_policy_sha256"],
+            )
+            self.assertEqual(bound_policy.swing_top_k, config.top_k)
             self.assertTrue(result.oof_predictions["swing_probability"].between(0, 1).all())
             self.assertTrue(result.ticker_holdout_predictions["swing_probability"].between(0, 1).all())
             for evidence in (result.oof_predictions, result.ticker_holdout_predictions):

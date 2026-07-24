@@ -28,6 +28,7 @@ from market_predictor.intraday.promotion import (
     promotion_evidence_from_result,
     write_intraday_training_evidence,
 )
+from market_predictor.prediction_policy import parse_prediction_policy
 from market_predictor.registry import verify_model_artifact
 from market_predictor.v3.errors import DataReadinessError
 from tests.r4_fixtures import trust_context_for_candidate
@@ -52,6 +53,19 @@ class IntradayModelV1Tests(unittest.TestCase):
         self.assertEqual(manifest["model_type"], "canonical_intraday")
         self.assertEqual(result.metrics["validation_split"], "session_purged_walk_forward_and_ticker_holdout")
         self.assertIn("feature_reference_profile", result.metrics)
+        bound_policy = parse_prediction_policy(
+            result.metrics["prediction_policy"],
+            expected_sha256=result.metrics["prediction_policy_sha256"],
+        )
+        self.assertEqual(bound_policy.intraday_top_k, config.top_k)
+        self.assertEqual(
+            bound_policy.intraday_downside_ceiling,
+            config.max_downside_probability,
+        )
+        self.assertEqual(
+            bound_policy.intraday_max_trades_per_session,
+            config.max_trades_per_session,
+        )
         self.assertFalse(result.oof_predictions.empty)
         self.assertFalse(result.ticker_holdout_predictions.empty)
         self.assertIn("intraday_opportunity_probability", scored.columns)

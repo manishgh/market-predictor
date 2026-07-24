@@ -34,9 +34,12 @@ from market_predictor.prediction_contracts import (
     PredictionRequest,
     PredictionValidationError,
 )
+from market_predictor.prediction_policy import (
+    PredictionSelectionPolicy,
+    prediction_policy_identity,
+)
 from market_predictor.prediction_service import (
     SERVING_POLICY_ID,
-    SERVING_POLICY_SHA256,
     PredictionService,
     ServingRoute,
     serving_routes_from_config,
@@ -190,12 +193,21 @@ class PredictionServiceTests(unittest.TestCase):
             self.assertAlmostEqual(prediction.probability or 0.0, 0.73)
             self.assertEqual(prediction.signal, "strong_bullish_watch")
             self.assertAlmostEqual(prediction.decision_score or 0.0, 0.73)
+            self.assertTrue(prediction.selection_eligible)
+            self.assertTrue(prediction.selected_for_policy)
             self.assertEqual(prediction.readiness.status, "valid")
             self.assertEqual(response.horizon, "5d")
             self.assertIsNotNone(response.evidence)
             assert response.evidence is not None
             self.assertEqual(response.evidence.serving_policy_id, SERVING_POLICY_ID)
-            self.assertEqual(response.evidence.serving_policy_sha256, SERVING_POLICY_SHA256)
+            self.assertEqual(
+                response.evidence.view_prediction_policy_sha256,
+                {
+                    "swing": response.models[
+                        "swing"
+                    ].prediction_policy_sha256
+                },
+            )
             self.assertEqual(response.evidence.identity_status, "research_only")
 
     def test_prediction_rejects_oversized_ticker_batch_before_scoring(self) -> None:
@@ -222,6 +234,91 @@ class PredictionServiceTests(unittest.TestCase):
                 service.predict(
                     PredictionRequest(tickers=["MSFT", "AAPL"], mode="swing")
                 )
+
+    def test_non_valid_readiness_row_does_not_consume_swing_selection_quota(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            dataset = root / "features.parquet"
+            model = root / "swing.joblib"
+            features = ["return_1d", "volume_z20"]
+            valid_tickers = [f"B{index}" for index in range(10)]
+            frame = _swing_frame(["AAA", *valid_tickers], features, rows=260)
+            latest_aaa = frame.index[frame["ticker"].eq("AAA")][-1]
+            frame.loc[latest_aaa, "daily_bar_count"] = 249
+            frame.to_parquet(dataset, index=False)
+            _write_model(
+                model,
+                features,
+                target_col="target_net_positive_5d",
+                status="promoted",
+                probability=0.73,
+            )
+
+            response = _service(root, swing=(dataset, model)).predict_swing(
+                PredictionRequest(
+                    tickers=["AAA", *valid_tickers],
+                    mode="swing",
+                )
+            )
+            predictions = {
+                row.ticker: row.swing for row in response.predictions
+            }
+
+            assert predictions["AAA"] is not None
+            self.assertFalse(predictions["AAA"].selected_for_policy)
+            self.assertEqual(predictions["AAA"].readiness.status, "warn")
+            self.assertTrue(
+                all(
+                    predictions[ticker] is not None
+                    and predictions[ticker].selected_for_policy
+                    for ticker in valid_tickers
+                )
+            )
+
+    def test_selection_uses_complete_feature_cross_section_not_request_subset(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            dataset = root / "features.parquet"
+            model = root / "swing.joblib"
+            features = ["return_1d", "volume_z20"]
+            universe = [
+                "AAA",
+                "AAB",
+                "AAC",
+                "AAD",
+                "AAE",
+                "AAF",
+                "AAG",
+                "AAH",
+                "AAI",
+                "AAJ",
+                "AAK",
+            ]
+            _swing_frame(universe, features, rows=260).to_parquet(
+                dataset,
+                index=False,
+            )
+            _write_model(
+                model,
+                features,
+                target_col="target_net_positive_5d",
+                status="promoted",
+                probability=0.73,
+            )
+
+            response = _service(root, swing=(dataset, model)).predict_swing(
+                PredictionRequest(tickers=["AAK"], mode="swing")
+            )
+
+            prediction = response.predictions[0].swing
+            assert prediction is not None
+            self.assertEqual(prediction.rank, 11)
+            self.assertTrue(prediction.selection_eligible)
+            self.assertFalse(prediction.selected_for_policy)
 
     def test_concurrent_request_is_rejected_instead_of_queued(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -301,6 +398,64 @@ class PredictionServiceTests(unittest.TestCase):
             self.assertEqual(row.final_signal, "not_ready")
             self.assertEqual(row.readiness_status, "invalid")
             self.assertIn("missing intraday prediction", row.errors)
+
+    def test_unified_response_binds_distinct_view_prediction_policies(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            swing_dataset = root / "swing_features.parquet"
+            intraday_dataset = root / "intraday_features.parquet"
+            swing_model = root / "swing.joblib"
+            intraday_model = root / "intraday.joblib"
+            features = ["return_1d", "volume_z20"]
+            _swing_frame(["MSFT"], features, rows=260).to_parquet(
+                swing_dataset,
+                index=False,
+            )
+            _intraday_frame("MSFT", rows=150).to_parquet(
+                intraday_dataset,
+                index=False,
+            )
+            swing_policy = PredictionSelectionPolicy(swing_top_k=9)
+            intraday_policy = PredictionSelectionPolicy(intraday_top_k=8)
+            _write_model(
+                swing_model,
+                features,
+                target_col="target_net_positive_5d",
+                status="promoted",
+                probability=0.70,
+                prediction_policy=swing_policy,
+            )
+            _write_model(
+                intraday_model,
+                features,
+                target_col="target_before_stop_60m",
+                status="promoted",
+                probability=0.80,
+                prediction_policy=intraday_policy,
+            )
+
+            response = _service(
+                root,
+                swing=(swing_dataset, swing_model),
+                intraday=(intraday_dataset, intraday_model),
+            ).predict_unified(
+                PredictionRequest(tickers=["MSFT"], mode="unified")
+            )
+
+            assert response.evidence is not None
+            self.assertEqual(
+                response.evidence.view_prediction_policy_sha256,
+                {
+                    "swing": swing_policy.sha256(),
+                    "intraday": intraday_policy.sha256(),
+                },
+            )
+            self.assertEqual(response.evidence.identity_status, "research_only")
+            self.assertNotEqual(
+                response.evidence.serving_policy_sha256,
+                swing_policy.sha256(),
+            )
+            self.assertEqual(response.predictions[0].readiness_status, "valid")
 
     def test_daily_as_of_does_not_use_close_before_market_close(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -455,6 +610,8 @@ class PredictionServiceTests(unittest.TestCase):
             self.assertAlmostEqual(prediction.decision_score or 0.0, 0.72 * (1.0 - 0.20))
             self.assertEqual(prediction.catalyst.status, "confirmed")
             self.assertEqual(prediction.signal, "entry_candidate")
+            self.assertTrue(prediction.selection_eligible)
+            self.assertTrue(prediction.selected_for_policy)
 
     def test_live_data_source_uses_registered_feature_store(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -816,13 +973,17 @@ def _write_model(
     target_col: str,
     status: str,
     probability: float,
+    prediction_policy: PredictionSelectionPolicy | None = None,
 ) -> None:
+    prediction_policy = prediction_policy or PredictionSelectionPolicy()
     is_swing = target_col.startswith("target_net_positive_")
     model_type = SWING_MODEL_TYPE if is_swing else INTRADAY_MODEL_TYPE
     schema_version = SWING_MODEL_SCHEMA_VERSION if is_swing else INTRADAY_MODEL_SCHEMA_VERSION
     payload: dict[str, object] = {
         "features": features,
         "model_type": model_type,
+        "prediction_policy": prediction_policy.specification(),
+        "prediction_policy_sha256": prediction_policy.sha256(),
     }
     if is_swing:
         payload.update(
@@ -856,6 +1017,7 @@ def _write_model(
     label_config = SwingDatasetConfig() if is_swing else IntradayDatasetConfig()
     metrics = {
         **synthetic_identity_metrics(model_type=model_type, model_run_id=model_run_id),
+        **prediction_policy_identity(prediction_policy),
         "dataset_label_config_sha256": label_config.label_config_sha256(),
         "roc_auc": 0.7,
         "top_decile_lift": 2.1,
@@ -876,6 +1038,7 @@ def _write_model(
         extra={
             "model_run_id": model_run_id,
             "label_policy": label_config.label_policy(),
+            "prediction_policy": prediction_policy.specification(),
         },
     )
     if status == "promoted":

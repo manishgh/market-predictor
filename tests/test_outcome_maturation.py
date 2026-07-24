@@ -12,14 +12,17 @@ from market_predictor.intraday.contracts import IntradayDatasetConfig
 from market_predictor.intraday.labels import add_exact_one_minute_labels
 from market_predictor.outcome_contracts import (
     MaturedOutcomeV1,
-    PredictionMaturationIntentV1,
+    PredictionMaturationIntentV2,
     maturation_key_sha256,
     semantic_prediction_sha256,
 )
 from market_predictor.outcome_maturation import mature_prediction
 from market_predictor.outcome_repository import OutcomeRepository
 from market_predictor.outcome_worker import mature_pending_intents
-from market_predictor.prediction_policy import PREDICTION_POLICY_SHA256
+from market_predictor.prediction_policy import (
+    DEFAULT_PREDICTION_POLICY,
+    PREDICTION_POLICY_SHA256,
+)
 from market_predictor.swing.contracts import SwingDatasetConfig
 from market_predictor.swing.dataset import _add_exact_labels
 from tests.test_outcome_repository import _intent as swing_intent
@@ -190,11 +193,11 @@ class OutcomeMaturationTests(unittest.TestCase):
             self.assertFalse(repository.has_outcome(duplicate.maturation_key))
 
 
-def _intraday_intent() -> PredictionMaturationIntentV1:
+def _intraday_intent() -> PredictionMaturationIntentV2:
     config = IntradayDatasetConfig(horizon_minutes=5)
     decision = datetime(2026, 7, 24, 14, 0, tzinfo=UTC)
     base: dict[str, object] = {
-        "contract_version": "market_predictor.maturation_intent.v1",
+        "contract_version": "market_predictor.maturation_intent.v2",
         "ticker": "MSFT",
         "canonical_security_id": "security:MSFT",
         "view": "intraday",
@@ -205,9 +208,10 @@ def _intraday_intent() -> PredictionMaturationIntentV1:
         "model_release_id": "a" * 64,
         "model_artifact_sha256": "b" * 64,
         "feature_artifact_sha256": "c" * 64,
-        "serving_policy_sha256": PREDICTION_POLICY_SHA256,
+        "prediction_policy_sha256": PREDICTION_POLICY_SHA256,
         "label_policy_sha256": config.label_config_sha256(),
         "execution_policy_sha256": EXECUTION_POLICY_SHA256,
+        "prediction_policy": DEFAULT_PREDICTION_POLICY.specification(),
         "label_policy": config.label_policy(),
         "primary_benchmark": "XLK",
         "market_regime": "risk_on",
@@ -219,13 +223,16 @@ def _intraday_intent() -> PredictionMaturationIntentV1:
         "downside_probability": 0.2,
         "calibration_bin": 7,
         "signal": "entry_candidate",
+        "rank": 1,
+        "selection_eligible": True,
+        "selected_for_policy": True,
         "actionable": True,
         "catalyst_status": "confirmed",
         "decision_atr": 1.0,
     }
     semantic = semantic_prediction_sha256(base)
     snapshot_id = "1" * 64
-    return PredictionMaturationIntentV1.model_validate(
+    return PredictionMaturationIntentV2.model_validate(
         {
             **base,
             "snapshot_id": snapshot_id,

@@ -10,7 +10,7 @@ from market_predictor.execution_policy import executable_fill_prices
 from market_predictor.outcome_contracts import (
     MaturationAttemptV1,
     MaturedOutcomeV1,
-    PredictionMaturationIntentV1,
+    PredictionMaturationIntentV2,
     content_sha256,
 )
 from market_predictor.v3.errors import DataReadinessError
@@ -32,7 +32,7 @@ _BAR_COLUMNS = {
 
 
 def mature_prediction(
-    intent: PredictionMaturationIntentV1,
+    intent: PredictionMaturationIntentV2,
     bars: pd.DataFrame,
     *,
     observed_as_of: datetime,
@@ -51,7 +51,7 @@ def mature_prediction(
 
 
 def maturation_attempt(
-    intent: PredictionMaturationIntentV1,
+    intent: PredictionMaturationIntentV2,
     *,
     observed_as_of: datetime,
     status: str,
@@ -76,7 +76,7 @@ def maturation_attempt(
 
 
 def _mature_swing(
-    intent: PredictionMaturationIntentV1,
+    intent: PredictionMaturationIntentV2,
     bars: pd.DataFrame,
     observed: datetime,
 ) -> tuple[MaturationResult, list[dict[str, object]]]:
@@ -169,7 +169,7 @@ def _mature_swing(
 
 
 def _mature_intraday(
-    intent: PredictionMaturationIntentV1,
+    intent: PredictionMaturationIntentV2,
     bars: pd.DataFrame,
     observed: datetime,
 ) -> tuple[MaturationResult, list[dict[str, object]]]:
@@ -298,7 +298,7 @@ def _mature_intraday(
 
 
 def _outcome(
-    intent: PredictionMaturationIntentV1,
+    intent: PredictionMaturationIntentV2,
     *,
     entry_time: datetime,
     exit_time: datetime,
@@ -352,7 +352,7 @@ def _outcome(
 
 
 def _pending(
-    intent: PredictionMaturationIntentV1,
+    intent: PredictionMaturationIntentV2,
     observed: datetime,
     *,
     reasons: tuple[str, ...],

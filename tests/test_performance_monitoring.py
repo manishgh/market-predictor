@@ -7,7 +7,7 @@ from pathlib import Path
 
 from market_predictor.outcome_contracts import (
     MaturedOutcomeV1,
-    PredictionMaturationIntentV1,
+    PredictionMaturationIntentV2,
     content_sha256,
     maturation_key_sha256,
     semantic_prediction_sha256,
@@ -180,7 +180,7 @@ def _intent_variant(
     *,
     probability: float,
     decision_time: datetime | None = None,
-) -> PredictionMaturationIntentV1:
+) -> PredictionMaturationIntentV2:
     base = _intent().model_dump(
         mode="python",
         exclude={"maturation_key", "semantic_prediction_id", "snapshot_id"},
@@ -199,7 +199,7 @@ def _intent_variant(
     )
     semantic_id = semantic_prediction_sha256(base)
     snapshot_id = snapshot_character * 64
-    return PredictionMaturationIntentV1.model_validate(
+    return PredictionMaturationIntentV2.model_validate(
         {
             **base,
             "semantic_prediction_id": semantic_id,
@@ -211,7 +211,7 @@ def _intent_variant(
 
 def _record(
     repository: OutcomeRepository,
-    intent: PredictionMaturationIntentV1,
+    intent: PredictionMaturationIntentV2,
     *,
     target: int,
     net_return: float,

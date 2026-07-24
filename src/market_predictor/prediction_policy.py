@@ -20,12 +20,14 @@ from __future__ import annotations
 import hashlib
 import json
 import math
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
+from typing import Any, Literal
 
 import numpy as np
 import pandas as pd
+from pydantic import BaseModel, ConfigDict, Field
 
-PREDICTION_POLICY_ID = "market_predictor.prediction_policy.v1"
+PREDICTION_POLICY_ID = "market_predictor.prediction_policy.v2"
 
 # --- Swing action thresholds (probability of the model's positive target) ---
 SWING_STRONG = 0.65
@@ -144,6 +146,67 @@ def select_top_k_per_group(
     ordered = working.sort_values(sort_columns, ascending=ascending, kind="stable")
     selected = ordered.groupby(group_column, sort=False).head(top_k)
     return selected.rename(columns={_SCORE_WORK_COLUMN: DECISION_SCORE_COLUMN})
+
+
+def select_swing_candidates(
+    frame: pd.DataFrame,
+    *,
+    policy: PredictionSelectionPolicy,
+    probability_column: str,
+    group_column: str = "decision_group_id",
+) -> pd.DataFrame:
+    """Apply the bound swing policy used by evaluation and serving."""
+
+    score = swing_decision_scores(frame, probability_column=probability_column)
+    return select_top_k_per_group(
+        frame,
+        score=score,
+        group_column=group_column,
+        top_k=policy.swing_top_k,
+        tie_breakers=SWING_SELECTION_TIE_BREAKERS,
+        eligible=pd.Series(np.isfinite(score), index=frame.index),
+    )
+
+
+def select_intraday_candidates(
+    frame: pd.DataFrame,
+    *,
+    policy: PredictionSelectionPolicy,
+    opportunity_column: str,
+    downside_column: str,
+    group_column: str = "decision_group_id",
+    session_column: str = "session_date_et",
+    decision_time_column: str = "decision_time_utc",
+) -> pd.DataFrame:
+    """Apply eligibility, per-group top-k, and the bound per-session cap."""
+
+    score = intraday_decision_scores(
+        frame,
+        opportunity_column=opportunity_column,
+        downside_column=downside_column,
+    )
+    eligible = intraday_selection_eligible(
+        frame,
+        downside_column=downside_column,
+        downside_ceiling=policy.intraday_downside_ceiling,
+    ) & pd.Series(np.isfinite(score), index=frame.index)
+    selected = select_top_k_per_group(
+        frame,
+        score=score,
+        group_column=group_column,
+        top_k=policy.intraday_top_k,
+        tie_breakers=INTRADAY_SELECTION_TIE_BREAKERS,
+        eligible=eligible,
+    )
+    return (
+        selected.sort_values(
+            [session_column, decision_time_column, DECISION_SCORE_COLUMN],
+            ascending=[True, True, False],
+            kind="stable",
+        )
+        .groupby(session_column, sort=False)
+        .head(policy.intraday_max_trades_per_session)
+    )
 
 
 # --------------------------------------------------------------------------- #
@@ -381,46 +444,131 @@ INTRADAY_SELECTION_TIE_BREAKERS: tuple[tuple[str, bool], ...] = (
     ("ticker", True),
 )
 
-_POLICY_SPEC = {
-    "policy_id": PREDICTION_POLICY_ID,
-    "unscorable_score": "negative_infinity",
-    "swing": {
-        "decision_score": "model_probability",
-        "selection": "top_k_per_decision_group_by_decision_score",
-        "tie_breakers": ["decision_score:desc", "ticker:asc"],
-        "action_thresholds": {
-            "strong_at_or_above": SWING_STRONG,
-            "watch_at_or_above": SWING_WATCH,
-            "low_at_or_below": SWING_LOW,
-        },
-    },
-    "intraday": {
-        "decision_score": "opportunity_probability*(1-downside_probability)",
-        "selection": "top_k_per_decision_group_by_decision_score_among_eligible",
-        "eligibility": "downside_probability<=selection_downside_ceiling",
-        "selection_downside_ceiling": INTRADAY_SELECTION_DOWNSIDE_CEILING,
-        "tie_breakers": ["decision_score:desc", "downside_probability:asc", "ticker:asc"],
-        "action_thresholds": {
-            "avoid_downside_at_or_above": INTRADAY_DOWNSIDE_VETO,
-            "entry_opportunity_at_or_above": INTRADAY_ENTRY,
-            "entry_max_downside": INTRADAY_ENTRY_MAX_DOWNSIDE,
-            "watch_opportunity_at_or_above": INTRADAY_WATCH,
-            "watch_max_downside": INTRADAY_WATCH_MAX_DOWNSIDE,
-            "avoid_opportunity_at_or_below": INTRADAY_LOW,
-            "avoid_downside_above": INTRADAY_AVOID_DOWNSIDE,
-        },
-    },
-}
 
-PREDICTION_POLICY_SHA256 = hashlib.sha256(
-    json.dumps(_POLICY_SPEC, sort_keys=True, separators=(",", ":")).encode("utf-8")
-).hexdigest()
+def _policy_sha256(payload: Mapping[str, object]) -> str:
+    return hashlib.sha256(
+        json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
 
 
-def prediction_policy_identity() -> dict[str, str]:
-    """Identity block recorded in promotion evidence and prediction snapshots."""
+class PredictionSelectionPolicy(BaseModel):
+    """Material ranking and selection parameters bound to model evidence."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    contract_version: Literal["market_predictor.prediction_policy.v2"] = (
+        "market_predictor.prediction_policy.v2"
+    )
+    swing_top_k: int = Field(default=10, ge=1, le=100)
+    intraday_top_k: int = Field(default=10, ge=1, le=100)
+    intraday_downside_ceiling: float = Field(
+        default=INTRADAY_SELECTION_DOWNSIDE_CEILING,
+        ge=0,
+        le=1,
+    )
+    intraday_max_trades_per_session: int = Field(default=10, ge=1, le=100)
+
+    def specification(self) -> dict[str, object]:
+        return {
+            "contract_version": self.contract_version,
+            "policy_id": PREDICTION_POLICY_ID,
+            "actionable_readiness": "valid",
+            "unscorable_score": "negative_infinity",
+            "swing": {
+                "decision_score": "model_probability",
+                "selection": "top_k_per_decision_group_by_decision_score",
+                "eligibility": "readiness=valid_and_model_probability_is_finite",
+                "top_k": self.swing_top_k,
+                "tie_breakers": ["decision_score:desc", "ticker:asc"],
+                "action_thresholds": {
+                    "strong_at_or_above": SWING_STRONG,
+                    "watch_at_or_above": SWING_WATCH,
+                    "low_at_or_below": SWING_LOW,
+                },
+            },
+            "intraday": {
+                "decision_score": "opportunity_probability*(1-downside_probability)",
+                "selection": "top_k_per_decision_group_by_decision_score_among_eligible",
+                "eligibility": (
+                    "readiness=valid_and_probabilities_are_finite_and_"
+                    "downside_probability<=selection_downside_ceiling"
+                ),
+                "top_k": self.intraday_top_k,
+                "selection_downside_ceiling": self.intraday_downside_ceiling,
+                "max_trades_per_session": self.intraday_max_trades_per_session,
+                "tie_breakers": [
+                    "decision_score:desc",
+                    "downside_probability:asc",
+                    "ticker:asc",
+                ],
+                "action_thresholds": {
+                    "avoid_downside_at_or_above": INTRADAY_DOWNSIDE_VETO,
+                    "entry_opportunity_at_or_above": INTRADAY_ENTRY,
+                    "entry_max_downside": INTRADAY_ENTRY_MAX_DOWNSIDE,
+                    "watch_opportunity_at_or_above": INTRADAY_WATCH,
+                    "watch_max_downside": INTRADAY_WATCH_MAX_DOWNSIDE,
+                    "avoid_opportunity_at_or_below": INTRADAY_LOW,
+                    "avoid_downside_above": INTRADAY_AVOID_DOWNSIDE,
+                },
+            },
+            "unified": {
+                "high_conviction_swing_at_or_above": SWING_STRONG,
+                "watch_swing_at_or_above": SWING_WATCH,
+                "intraday_support_opportunity_at_or_above": INTRADAY_WATCH,
+                "intraday_support_max_downside": INTRADAY_WATCH_MAX_DOWNSIDE,
+                "intraday_only_at_or_above": SWING_STRONG,
+                "intraday_only_max_downside": SWING_LOW,
+                "swing_wait_intraday_below": 0.50,
+            },
+            "catalyst_role": "explanation_only",
+        }
+
+    def sha256(self) -> str:
+        return _policy_sha256(self.specification())
+
+
+DEFAULT_PREDICTION_POLICY = PredictionSelectionPolicy()
+PREDICTION_POLICY_SHA256 = DEFAULT_PREDICTION_POLICY.sha256()
+
+
+def prediction_policy_identity(
+    policy: PredictionSelectionPolicy = DEFAULT_PREDICTION_POLICY,
+) -> dict[str, object]:
+    """Complete policy identity recorded in models, evidence, and releases."""
 
     return {
         "prediction_policy_id": PREDICTION_POLICY_ID,
-        "prediction_policy_sha256": PREDICTION_POLICY_SHA256,
+        "prediction_policy_sha256": policy.sha256(),
+        "prediction_policy": policy.specification(),
     }
+
+
+def parse_prediction_policy(
+    payload: Mapping[str, Any],
+    *,
+    expected_sha256: str | None = None,
+) -> PredictionSelectionPolicy:
+    """Validate a complete stored specification and its optional bound hash."""
+
+    swing = payload.get("swing")
+    intraday = payload.get("intraday")
+    if not isinstance(swing, Mapping) or not isinstance(intraday, Mapping):
+        raise ValueError("prediction policy is missing swing or intraday semantics")
+    policy = PredictionSelectionPolicy.model_validate(
+        {
+            "contract_version": payload.get("contract_version"),
+            "swing_top_k": swing.get("top_k"),
+            "intraday_top_k": intraday.get("top_k"),
+            "intraday_downside_ceiling": intraday.get(
+                "selection_downside_ceiling"
+            ),
+            "intraday_max_trades_per_session": intraday.get(
+                "max_trades_per_session"
+            ),
+        }
+    )
+    if dict(payload) != policy.specification():
+        raise ValueError("prediction policy semantics do not match the supported contract")
+    if expected_sha256 is not None and policy.sha256() != expected_sha256:
+        raise ValueError("prediction policy payload does not match its bound hash")
+    return policy

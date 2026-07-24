@@ -5,14 +5,14 @@ from datetime import UTC, datetime
 from typing import ClassVar, Literal
 from uuid import uuid4
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 PredictionMode = Literal["swing", "intraday", "unified"]
 PredictionView = Literal["swing", "intraday"]
 PredictionDataSource = Literal["curated", "live"]
 
-PREDICTION_CONTRACT_VERSION = "market_predictor.prediction.v1"
-PREDICTION_EVIDENCE_CONTRACT_VERSION = "market_predictor.prediction_evidence.v1"
+PREDICTION_CONTRACT_VERSION = "market_predictor.prediction.v2"
+PREDICTION_EVIDENCE_CONTRACT_VERSION = "market_predictor.prediction_evidence.v2"
 
 
 class PredictionServiceError(Exception):
@@ -165,6 +165,11 @@ class ModelInfo(BaseModel):
         default=None,
         pattern=r"^[0-9a-f]{64}$",
     )
+    prediction_policy_sha256: str | None = Field(
+        default=None,
+        pattern=r"^[0-9a-f]{64}$",
+    )
+    prediction_policy: dict[str, object] | None = None
 
 
 class FeatureArtifactIdentityV1(BaseModel):
@@ -199,10 +204,12 @@ class PredictionRowEvidenceV1(BaseModel):
         return value.astimezone(UTC)
 
 
-class PredictionEvidenceV1(BaseModel):
+class PredictionEvidenceV2(BaseModel):
     """Immutable identities and point-in-time evidence for one served response."""
 
-    contract_version: Literal["market_predictor.prediction_evidence.v1"] = "market_predictor.prediction_evidence.v1"
+    contract_version: Literal["market_predictor.prediction_evidence.v2"] = (
+        "market_predictor.prediction_evidence.v2"
+    )
     request_id: str = Field(..., min_length=1, max_length=128)
     correlation_id: str = Field(..., min_length=1, max_length=128)
     prediction_cutoff_utc: datetime
@@ -214,6 +221,7 @@ class PredictionEvidenceV1(BaseModel):
     source_watermarks: dict[str, dict[str, str]] = Field(default_factory=dict)
     resolved_horizons: dict[str, str] = Field(default_factory=dict)
     view_prediction_cutoffs_utc: dict[str, datetime] = Field(default_factory=dict)
+    view_prediction_policy_sha256: dict[str, str] = Field(default_factory=dict)
     serving_policy_id: str
     serving_policy_sha256: str = Field(..., pattern=r"^[0-9a-f]{64}$")
     identity_status: Literal["complete", "incomplete", "research_only"]
@@ -245,6 +253,22 @@ class PredictionEvidenceV1(BaseModel):
     def require_model_release_ids(cls, value: dict[str, str]) -> dict[str, str]:
         if any(not re.fullmatch(r"[0-9a-f]{64}", digest) for digest in value.values()):
             raise ValueError("model release identities must be lowercase SHA-256 values")
+        return value
+
+    @field_validator("view_prediction_policy_sha256")
+    @classmethod
+    def require_prediction_policy_hashes(
+        cls,
+        value: dict[str, str],
+    ) -> dict[str, str]:
+        if any(
+            view not in {"swing", "intraday"}
+            or not re.fullmatch(r"[0-9a-f]{64}", digest)
+            for view, digest in value.items()
+        ):
+            raise ValueError(
+                "view prediction policy identities must be mode-to-SHA-256 mappings"
+            )
         return value
 
 
@@ -302,6 +326,8 @@ class SwingPrediction(BaseModel):
     model_prediction: int | None = None
     signal: str
     rank: int | None = None
+    selection_eligible: bool = False
+    selected_for_policy: bool = False
     close: float | None = None
     return_1d: float | None = None
     volume_z20: float | None = None
@@ -314,6 +340,14 @@ class SwingPrediction(BaseModel):
     readiness: ReadinessInfo
     drivers: dict[str, float | int | str | None] = Field(default_factory=dict)
 
+    @model_validator(mode="after")
+    def validate_selection(self) -> SwingPrediction:
+        if self.selected_for_policy and (
+            not self.selection_eligible or self.readiness.status != "valid"
+        ):
+            raise ValueError("selected swing prediction must be eligible and ready")
+        return self
+
 
 class IntradayPrediction(BaseModel):
     ticker: str
@@ -325,6 +359,8 @@ class IntradayPrediction(BaseModel):
     downside_prediction: int | None = None
     signal: str
     rank: int | None = None
+    selection_eligible: bool = False
+    selected_for_policy: bool = False
     close: float | None = None
     return_15m: float | None = None
     relative_volume: float | None = None
@@ -335,6 +371,14 @@ class IntradayPrediction(BaseModel):
     catalyst: CatalystConfirmationInfo = Field(default_factory=CatalystConfirmationInfo)
     readiness: ReadinessInfo
     drivers: dict[str, float | int | str | None] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def validate_selection(self) -> IntradayPrediction:
+        if self.selected_for_policy and (
+            not self.selection_eligible or self.readiness.status != "valid"
+        ):
+            raise ValueError("selected intraday prediction must be eligible and ready")
+        return self
 
 
 class UnifiedTickerPrediction(BaseModel):
@@ -347,7 +391,7 @@ class UnifiedTickerPrediction(BaseModel):
 
 
 class PredictionResponse(BaseModel):
-    contract_version: Literal["market_predictor.prediction.v1"] = "market_predictor.prediction.v1"
+    contract_version: Literal["market_predictor.prediction.v2"] = "market_predictor.prediction.v2"
     request_id: str = Field(default_factory=lambda: str(uuid4()))
     generated_at_utc: datetime = Field(default_factory=lambda: datetime.now(UTC))
     mode: PredictionMode
@@ -357,7 +401,7 @@ class PredictionResponse(BaseModel):
     models: dict[str, ModelInfo] = Field(default_factory=dict)
     predictions: list[UnifiedTickerPrediction] = Field(default_factory=list)
     errors: list[str] = Field(default_factory=list)
-    evidence: PredictionEvidenceV1 | None = None
+    evidence: PredictionEvidenceV2 | None = None
     snapshot_id: str | None = None
     snapshot_sha256: str | None = None
 

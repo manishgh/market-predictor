@@ -25,13 +25,10 @@ from market_predictor.intraday.contracts import (
     opportunity_target_column,
 )
 from market_predictor.prediction_policy import (
-    DECISION_SCORE_COLUMN,
-    INTRADAY_SELECTION_TIE_BREAKERS,
+    PredictionSelectionPolicy,
     expected_calibration_error,
     finite_or_none,
-    intraday_decision_scores,
-    intraday_selection_eligible,
-    select_top_k_per_group,
+    select_intraday_candidates,
 )
 
 
@@ -156,33 +153,19 @@ def phase_economics(
     groups["group_ordinal"] = groups.groupby("session_date_et", sort=False).cumcount()
     ordinal = groups.set_index("decision_group_id")["group_ordinal"]
     records: list[dict[str, object]] = []
+    selection_policy = PredictionSelectionPolicy(
+        intraday_top_k=top_k,
+        intraday_downside_ceiling=downside_ceiling,
+        intraday_max_trades_per_session=max_trades_per_session,
+    )
     for phase in range(phase_count):
         phase_groups = set(ordinal[ordinal.mod(phase_count).eq(phase)].index)
         candidates = predictions[predictions["decision_group_id"].isin(phase_groups)].copy()
-        selected = select_top_k_per_group(
+        selected = select_intraday_candidates(
             candidates,
-            score=intraday_decision_scores(
-                candidates,
-                opportunity_column="intraday_opportunity_probability",
-                downside_column="intraday_downside_probability",
-            ),
-            group_column="decision_group_id",
-            top_k=top_k,
-            tie_breakers=INTRADAY_SELECTION_TIE_BREAKERS,
-            eligible=intraday_selection_eligible(
-                candidates,
-                downside_column="intraday_downside_probability",
-                downside_ceiling=downside_ceiling,
-            ),
-        )
-        selected = (
-            selected.sort_values(
-                ["session_date_et", "decision_time_utc", DECISION_SCORE_COLUMN],
-                ascending=[True, True, False],
-                kind="stable",
-            )
-            .groupby("session_date_et", sort=False)
-            .head(max_trades_per_session)
+            policy=selection_policy,
+            opportunity_column="intraday_opportunity_probability",
+            downside_column="intraday_downside_probability",
         )
         records.append(
             _economic_record(

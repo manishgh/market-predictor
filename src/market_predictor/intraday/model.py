@@ -47,6 +47,7 @@ from market_predictor.intraday.evaluation import (
 from market_predictor.label_policy import stamped_label_policy
 from market_predictor.prediction_policy import (
     INTRADAY_SELECTION_TIE_BREAKERS,
+    PredictionSelectionPolicy,
     group_ranking_metrics,
     intraday_decision_scores,
     intraday_selection_eligible,
@@ -107,6 +108,11 @@ def train_intraday_model(
     overwrite: bool = False,
 ) -> IntradayTrainingResult:
     config = config or IntradayTrainingConfig()
+    prediction_policy = PredictionSelectionPolicy(
+        intraday_top_k=config.top_k,
+        intraday_downside_ceiling=config.max_downside_probability,
+        intraday_max_trades_per_session=config.max_trades_per_session,
+    )
     if not overwrite and (model_out.exists() or manifest_path_for(model_out).exists()):
         raise FileExistsError(f"intraday model artifact already exists: {model_out}")
     model_run_id = f"intraday-{uuid.uuid4().hex}"
@@ -414,6 +420,8 @@ def train_intraday_model(
         "family": config.family,
         "model_run_id": model_run_id,
         "calibration_method": "isotonic_prior_outer_folds",
+        "prediction_policy": prediction_policy.specification(),
+        "prediction_policy_sha256": prediction_policy.sha256(),
         "decision_semantics": "completed_5m_decision_next_available_1m_open_entry",
         "catalyst_policy": "external_confirmation_overlay",
         "trained_at_utc": datetime.now(UTC).isoformat(),
@@ -480,7 +488,7 @@ def train_intraday_model(
         "reconciliation_sha256": stamped_hash(dataset, "reconciliation_sha256"),
         "dataset_label_config_sha256": stamped_hash(dataset, "dataset_label_config_sha256"),
         "folds_causally_ordered": folds_causally_ordered,
-        **prediction_policy_identity(),
+        **prediction_policy_identity(prediction_policy),
         **execution_policy_identity(),
         "holdout_assignment_cutoff_utc": holdout_plan.assignment_cutoff_utc,
         "holdout_ticker_summary_sha256": holdout_plan.ticker_summary_sha256,
@@ -501,6 +509,8 @@ def train_intraday_model(
         "opportunity_group_precision_at_k": opportunity_group_metrics["group_precision_at_k"],
         "opportunity_group_ndcg_at_k": opportunity_group_metrics["group_ndcg_at_k"],
         "selection_k": opportunity_group_metrics["k"],
+        "selection_downside_ceiling": config.max_downside_probability,
+        "max_trades_per_session": config.max_trades_per_session,
         "opportunity_brier_score": opportunity_metrics["brier_score"],
         "opportunity_calibration_error": opportunity_metrics["expected_calibration_error"],
         "opportunity_holdout_roc_auc": opportunity_holdout_metrics["roc_auc"],
@@ -557,6 +567,7 @@ def train_intraday_model(
             "catalyst_policy": "external_confirmation_overlay",
             "memory": metrics["memory"],
             "label_policy": label_policy,
+            "prediction_policy": prediction_policy.specification(),
         },
     )
     return IntradayTrainingResult(

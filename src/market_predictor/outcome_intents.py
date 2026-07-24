@@ -4,7 +4,7 @@ from datetime import date
 from zoneinfo import ZoneInfo
 
 from market_predictor.outcome_contracts import (
-    PredictionMaturationIntentV1,
+    PredictionMaturationIntentV2,
     maturation_key_sha256,
     semantic_prediction_sha256,
 )
@@ -25,7 +25,7 @@ def register_snapshot_intents(
     snapshot_store: PredictionSnapshotStore,
     outcome_repository: OutcomeRepository,
     snapshot_id: str,
-) -> list[PredictionMaturationIntentV1]:
+) -> list[PredictionMaturationIntentV2]:
     _, response, _ = snapshot_store.load(snapshot_id)
     intents = maturation_intents_from_response(response, snapshot_id=snapshot_id)
     return [outcome_repository.record_intent(intent) for intent in intents]
@@ -35,13 +35,13 @@ def maturation_intents_from_response(
     response: PredictionResponse,
     *,
     snapshot_id: str,
-) -> list[PredictionMaturationIntentV1]:
+) -> list[PredictionMaturationIntentV2]:
     evidence = response.evidence
     if evidence is None:
         raise DataReadinessError("prediction snapshot has no point-in-time evidence")
     if evidence.identity_status != "complete":
         raise DataReadinessError("only identity-complete live predictions can mature")
-    intents: list[PredictionMaturationIntentV1] = []
+    intents: list[PredictionMaturationIntentV2] = []
     for prediction in response.predictions:
         if prediction.swing is not None:
             intents.append(
@@ -75,7 +75,7 @@ def _intent(
     ticker: str,
     view: str,
     prediction: SwingPrediction | IntradayPrediction,
-) -> PredictionMaturationIntentV1:
+) -> PredictionMaturationIntentV2:
     evidence = response.evidence
     assert evidence is not None
     model = response.models.get(view)
@@ -96,9 +96,16 @@ def _intent(
         "model_artifact_sha256": model.artifact_sha256,
         "label_policy_sha256": model.label_policy_sha256,
         "execution_policy_sha256": model.execution_policy_sha256,
+        "prediction_policy_sha256": model.prediction_policy_sha256,
     }
     missing = sorted(name for name, value in required_strings.items() if not value)
-    if missing or model.label_policy is None:
+    if (
+        missing
+        or model.label_policy is None
+        or model.prediction_policy is None
+        or model.prediction_policy_sha256
+        != evidence.view_prediction_policy_sha256.get(view)
+    ):
         raise DataReadinessError(
             f"{view} maturation identity is incomplete: {', '.join(missing)}"
         )
@@ -112,7 +119,7 @@ def _intent(
         else row.decision_time_utc.astimezone(_EASTERN).date()
     )
     base: dict[str, object] = {
-        "contract_version": "market_predictor.maturation_intent.v1",
+        "contract_version": "market_predictor.maturation_intent.v2",
         "ticker": ticker,
         "canonical_security_id": str(row.canonical_security_id),
         "view": view,
@@ -123,9 +130,10 @@ def _intent(
         "model_release_id": str(model.release_id),
         "model_artifact_sha256": str(model.artifact_sha256),
         "feature_artifact_sha256": feature.artifact_sha256,
-        "serving_policy_sha256": evidence.serving_policy_sha256,
+        "prediction_policy_sha256": str(model.prediction_policy_sha256),
         "label_policy_sha256": str(model.label_policy_sha256),
         "execution_policy_sha256": str(model.execution_policy_sha256),
+        "prediction_policy": model.prediction_policy,
         "label_policy": model.label_policy,
         "primary_benchmark": str(row.primary_benchmark),
         "market_regime": str(row.market_regime),
@@ -137,13 +145,17 @@ def _intent(
         "downside_probability": downside,
         "calibration_bin": min(int(probability * 10), 9),
         "signal": prediction.signal,
+        "rank": prediction.rank,
+        "selection_eligible": prediction.selection_eligible,
+        "selected_for_policy": prediction.selected_for_policy,
         "actionable": prediction.readiness.status == "valid"
+        and prediction.selected_for_policy
         and prediction.signal != "not_ready",
         "catalyst_status": prediction.catalyst.status,
         "decision_atr": row.decision_atr,
     }
     semantic_id = semantic_prediction_sha256(base)
-    return PredictionMaturationIntentV1.model_validate(
+    return PredictionMaturationIntentV2.model_validate(
         {
             **base,
             "snapshot_id": snapshot_id,

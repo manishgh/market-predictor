@@ -11,7 +11,7 @@ import numpy as np
 import pandas as pd
 
 from market_predictor.execution_policy import EXECUTION_POLICY_SHA256
-from market_predictor.prediction_policy import PREDICTION_POLICY_SHA256
+from market_predictor.prediction_policy import parse_prediction_policy
 from market_predictor.promotion_workflow import (
     PromotionTrustContext,
     TrustedPromotionOutcome,
@@ -478,8 +478,24 @@ def _causal_identity_failures(metrics: dict[str, Any]) -> list[str]:
         failures.append("metrics.calibration_seed_folds_excluded is missing")
     if not _strict_bool(metrics.get("folds_causally_ordered")):
         failures.append("metrics.folds_causally_ordered is not proven")
-    if str(metrics.get("prediction_policy_sha256") or "") != PREDICTION_POLICY_SHA256:
-        failures.append("metrics.prediction_policy_sha256 does not match the serving policy")
+    policy_payload = metrics.get("prediction_policy")
+    if not isinstance(policy_payload, dict):
+        failures.append("metrics.prediction_policy is missing")
+    else:
+        try:
+            policy = parse_prediction_policy(
+                policy_payload,
+                expected_sha256=str(metrics.get("prediction_policy_sha256") or ""),
+            )
+        except (TypeError, ValueError) as exc:
+            failures.append(f"metrics prediction policy identity is invalid: {exc}")
+        else:
+            if _finite_number(metrics.get("selection_k")) != float(
+                policy.swing_top_k
+            ):
+                failures.append(
+                    "metrics.selection_k does not match the bound swing policy"
+                )
     if str(metrics.get("execution_policy_sha256") or "") != EXECUTION_POLICY_SHA256:
         failures.append("metrics.execution_policy_sha256 does not match the execution policy")
     return failures

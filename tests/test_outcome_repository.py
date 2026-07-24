@@ -10,13 +10,16 @@ from market_predictor.execution_policy import EXECUTION_POLICY_SHA256
 from market_predictor.outcome_contracts import (
     MaturationAttemptV1,
     MaturedOutcomeV1,
-    PredictionMaturationIntentV1,
+    PredictionMaturationIntentV2,
     content_sha256,
     maturation_key_sha256,
     semantic_prediction_sha256,
 )
 from market_predictor.outcome_repository import OutcomeRepository
-from market_predictor.prediction_policy import PREDICTION_POLICY_SHA256
+from market_predictor.prediction_policy import (
+    DEFAULT_PREDICTION_POLICY,
+    PREDICTION_POLICY_SHA256,
+)
 from market_predictor.swing.contracts import SwingDatasetConfig
 
 
@@ -79,11 +82,11 @@ class OutcomeRepositoryTests(unittest.TestCase):
             )
 
 
-def _intent(snapshot_id: str = "1" * 64) -> PredictionMaturationIntentV1:
+def _intent(snapshot_id: str = "1" * 64) -> PredictionMaturationIntentV2:
     config = SwingDatasetConfig()
     decision = datetime(2026, 7, 24, 22, 0, tzinfo=UTC)
     base: dict[str, object] = {
-        "contract_version": "market_predictor.maturation_intent.v1",
+        "contract_version": "market_predictor.maturation_intent.v2",
         "ticker": "MSFT",
         "canonical_security_id": "security:MSFT",
         "view": "swing",
@@ -94,9 +97,10 @@ def _intent(snapshot_id: str = "1" * 64) -> PredictionMaturationIntentV1:
         "model_release_id": "a" * 64,
         "model_artifact_sha256": "b" * 64,
         "feature_artifact_sha256": "c" * 64,
-        "serving_policy_sha256": PREDICTION_POLICY_SHA256,
+        "prediction_policy_sha256": PREDICTION_POLICY_SHA256,
         "label_policy_sha256": config.label_config_sha256(),
         "execution_policy_sha256": EXECUTION_POLICY_SHA256,
+        "prediction_policy": DEFAULT_PREDICTION_POLICY.specification(),
         "label_policy": config.label_policy(),
         "primary_benchmark": "XLK",
         "market_regime": "risk_on",
@@ -108,12 +112,15 @@ def _intent(snapshot_id: str = "1" * 64) -> PredictionMaturationIntentV1:
         "downside_probability": None,
         "calibration_bin": 7,
         "signal": "strong_bullish_watch",
+        "rank": 1,
+        "selection_eligible": True,
+        "selected_for_policy": True,
         "actionable": True,
         "catalyst_status": "confirmed",
         "decision_atr": None,
     }
     semantic = semantic_prediction_sha256(base)
-    return PredictionMaturationIntentV1.model_validate(
+    return PredictionMaturationIntentV2.model_validate(
         {
             **base,
             "snapshot_id": snapshot_id,
@@ -123,7 +130,7 @@ def _intent(snapshot_id: str = "1" * 64) -> PredictionMaturationIntentV1:
     )
 
 
-def _attempt(intent: PredictionMaturationIntentV1) -> MaturationAttemptV1:
+def _attempt(intent: PredictionMaturationIntentV2) -> MaturationAttemptV1:
     base = {
         "contract_version": "market_predictor.maturation_attempt.v1",
         "maturation_key": intent.maturation_key,
@@ -139,7 +146,7 @@ def _attempt(intent: PredictionMaturationIntentV1) -> MaturationAttemptV1:
 
 
 def _outcome(
-    intent: PredictionMaturationIntentV1,
+    intent: PredictionMaturationIntentV2,
     evidence: list[dict[str, object]],
 ) -> MaturedOutcomeV1:
     entry = datetime(2026, 7, 27, 13, 30, tzinfo=UTC)

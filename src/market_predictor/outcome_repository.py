@@ -12,7 +12,7 @@ from market_predictor.locking import file_lock
 from market_predictor.outcome_contracts import (
     MaturationAttemptV1,
     MaturedOutcomeV1,
-    PredictionMaturationIntentV1,
+    PredictionMaturationIntentV2,
     content_sha256,
 )
 from market_predictor.prediction_contracts import PredictionConflictError
@@ -28,8 +28,8 @@ class OutcomeRepository:
 
     def record_intent(
         self,
-        intent: PredictionMaturationIntentV1,
-    ) -> PredictionMaturationIntentV1:
+        intent: PredictionMaturationIntentV2,
+    ) -> PredictionMaturationIntentV2:
         path = self._key_path("intents", intent.maturation_key)
         self._write_idempotent(path, intent)
         semantic_path = self._key_path(
@@ -95,10 +95,10 @@ class OutcomeRepository:
             )
         return outcome
 
-    def load_intent(self, maturation_key: str) -> PredictionMaturationIntentV1:
+    def load_intent(self, maturation_key: str) -> PredictionMaturationIntentV2:
         return self._load_model(
             self._key_path("intents", maturation_key),
-            PredictionMaturationIntentV1,
+            PredictionMaturationIntentV2,
         )
 
     def load_outcome(self, maturation_key: str) -> MaturedOutcomeV1:
@@ -115,12 +115,12 @@ class OutcomeRepository:
         value = str(loaded.get("canonical_maturation_key") or "")
         return value or None
 
-    def intents(self) -> list[PredictionMaturationIntentV1]:
+    def intents(self) -> list[PredictionMaturationIntentV2]:
         root = self.root / "intents"
         if not root.exists():
             return []
         return [
-            PredictionMaturationIntentV1.model_validate(_load_object(path))
+            PredictionMaturationIntentV2.model_validate(_load_object(path))
             for path in sorted(root.glob("*/*.json"))
         ]
 

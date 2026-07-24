@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import unittest
+from copy import deepcopy
 from dataclasses import replace
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -16,10 +17,14 @@ from market_predictor.execution_policy import executable_fill_price, executable_
 from market_predictor.intraday.labels import add_overlap_metadata
 from market_predictor.prediction_policy import (
     INTRADAY_SELECTION_TIE_BREAKERS,
+    PredictionSelectionPolicy,
     calibration_summary,
     intraday_action,
     intraday_decision_score,
     intraday_decision_scores,
+    parse_prediction_policy,
+    select_intraday_candidates,
+    select_swing_candidates,
     select_top_k_per_group,
     swing_action,
     swing_decision_score,
@@ -70,6 +75,97 @@ class ServingPolicyIdentityTest(unittest.TestCase):
         )
         # A=0.54, B=0.45, C=0.64 -> C wins even though B has the highest opportunity.
         self.assertEqual(list(selected["ticker"]), ["C"])
+
+    def test_every_material_selection_parameter_changes_policy_identity(self) -> None:
+        baseline = PredictionSelectionPolicy()
+        variants = (
+            PredictionSelectionPolicy(swing_top_k=9),
+            PredictionSelectionPolicy(intraday_top_k=9),
+            PredictionSelectionPolicy(intraday_downside_ceiling=0.40),
+            PredictionSelectionPolicy(intraday_max_trades_per_session=9),
+        )
+
+        for variant in variants:
+            self.assertNotEqual(variant.sha256(), baseline.sha256())
+
+        mutated = baseline.specification()
+        mutated["intraday"]["top_k"] = 9
+        with self.assertRaisesRegex(ValueError, "bound hash"):
+            parse_prediction_policy(mutated, expected_sha256=baseline.sha256())
+
+    def test_intraday_serving_selection_uses_bound_eligibility_top_k_and_session_cap(
+        self,
+    ) -> None:
+        frame = pd.DataFrame(
+            {
+                "decision_group_id": ["g1", "g1", "g2", "g2"],
+                "session_date_et": ["2026-01-05"] * 4,
+                "decision_time_utc": pd.to_datetime(
+                    [
+                        "2026-01-05T15:00:00Z",
+                        "2026-01-05T15:00:00Z",
+                        "2026-01-05T16:00:00Z",
+                        "2026-01-05T16:00:00Z",
+                    ],
+                    utc=True,
+                ),
+                "ticker": ["A", "B", "C", "D"],
+                "intraday_opportunity_probability": [0.80, 0.95, 0.90, 0.70],
+                "intraday_downside_probability": [0.20, 0.60, 0.10, 0.10],
+            }
+        )
+        policy = PredictionSelectionPolicy(
+            intraday_top_k=1,
+            intraday_downside_ceiling=0.45,
+            intraday_max_trades_per_session=1,
+        )
+
+        selected = select_intraday_candidates(
+            frame,
+            policy=policy,
+            opportunity_column="intraday_opportunity_probability",
+            downside_column="intraday_downside_probability",
+        )
+
+        self.assertEqual(selected["ticker"].tolist(), ["A"])
+
+    def test_unscorable_rows_never_enter_selected_set(self) -> None:
+        swing = pd.DataFrame(
+            {
+                "decision_group_id": ["g", "g"],
+                "ticker": ["A", "B"],
+                "swing_probability": [np.nan, 0.70],
+            }
+        )
+        intraday = pd.DataFrame(
+            {
+                "decision_group_id": ["g", "g"],
+                "session_date_et": ["2026-01-05", "2026-01-05"],
+                "decision_time_utc": pd.to_datetime(
+                    ["2026-01-05T15:00:00Z", "2026-01-05T15:00:00Z"],
+                    utc=True,
+                ),
+                "ticker": ["A", "B"],
+                "intraday_opportunity_probability": [np.nan, 0.75],
+                "intraday_downside_probability": [0.10, 0.20],
+            }
+        )
+        policy = PredictionSelectionPolicy()
+
+        selected_swing = select_swing_candidates(
+            swing,
+            policy=policy,
+            probability_column="swing_probability",
+        )
+        selected_intraday = select_intraday_candidates(
+            intraday,
+            policy=policy,
+            opportunity_column="intraday_opportunity_probability",
+            downside_column="intraday_downside_probability",
+        )
+
+        self.assertEqual(selected_swing["ticker"].tolist(), ["B"])
+        self.assertEqual(selected_intraday["ticker"].tolist(), ["B"])
 
 
 class AverageUniquenessTest(unittest.TestCase):
@@ -248,6 +344,23 @@ class PromotionGateTest(unittest.TestCase):
             )
             self.assertFalse(report["passed"])
             self.assertTrue(any("reconciliation_sha256" in failure for failure in report["failures"]))
+
+    def test_mutated_prediction_policy_payload_fails_promotion(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            model_path, result, evidence = self._train(temp_dir)
+            metrics = deepcopy(result.metrics)
+            metrics["prediction_policy"]["swing"]["top_k"] = 1
+
+            report = promote_swing_model(
+                model_path=model_path,
+                evidence=replace(evidence, metrics=metrics),
+                config=self._config(),
+            )
+
+            self.assertFalse(report["passed"])
+            self.assertTrue(
+                any("prediction policy identity is invalid" in failure for failure in report["failures"])
+            )
 
     def test_too_few_sessions_fails_even_with_many_rows(self) -> None:
         with TemporaryDirectory() as temp_dir:

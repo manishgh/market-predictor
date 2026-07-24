@@ -25,6 +25,7 @@ from market_predictor.execution_policy import (
 )
 from market_predictor.label_policy import stamped_label_policy
 from market_predictor.prediction_policy import (
+    PredictionSelectionPolicy,
     calibration_summary,
     group_ranking_metrics,
     prediction_policy_identity,
@@ -101,6 +102,7 @@ def train_swing_model(
     overwrite: bool = False,
 ) -> SwingTrainingResult:
     config = config or SwingTrainingConfig()
+    prediction_policy = PredictionSelectionPolicy(swing_top_k=config.top_k)
     if not overwrite and (model_out.exists() or manifest_path_for(model_out).exists()):
         raise FileExistsError(f"swing model artifact already exists: {model_out}")
     model_run_id = f"swing-{uuid.uuid4().hex}"
@@ -342,6 +344,8 @@ def train_swing_model(
         "family": config.family,
         "model_run_id": model_run_id,
         "calibration_method": "isotonic_prior_outer_folds",
+        "prediction_policy": prediction_policy.specification(),
+        "prediction_policy_sha256": prediction_policy.sha256(),
         "decision_semantics": "post_close_decision_next_session_open_entry",
         "trained_at_utc": datetime.now(UTC).isoformat(),
     }
@@ -397,7 +401,7 @@ def train_swing_model(
         "universe_identity_sha256": identity_set_sha256(data["universe_snapshot_id"].astype(str).unique()),
         "universe_snapshots": int(data["universe_snapshot_id"].nunique()),
         "folds_causally_ordered": folds_causally_ordered,
-        **prediction_policy_identity(),
+        **prediction_policy_identity(prediction_policy),
         **execution_policy_identity(),
         "holdout_assignment_cutoff_utc": holdout_plan.assignment_cutoff_utc,
         "holdout_ticker_summary_sha256": holdout_plan.ticker_summary_sha256,
@@ -443,6 +447,7 @@ def train_swing_model(
             "feature_set_sha256": feature_set_sha256,
             "training_config": config.model_dump(),
             "label_policy": label_policy,
+            "prediction_policy": prediction_policy.specification(),
         },
     )
     return SwingTrainingResult(

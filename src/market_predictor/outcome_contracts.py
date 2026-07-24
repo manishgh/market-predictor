@@ -9,6 +9,7 @@ from typing import Literal, Self
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from market_predictor.label_policy import policy_sha256
+from market_predictor.prediction_policy import parse_prediction_policy
 
 SHA256_PATTERN = r"^[0-9a-f]{64}$"
 
@@ -17,9 +18,9 @@ class FrozenContract(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True, allow_inf_nan=False)
 
 
-class PredictionMaturationIntentV1(FrozenContract):
-    contract_version: Literal["market_predictor.maturation_intent.v1"] = (
-        "market_predictor.maturation_intent.v1"
+class PredictionMaturationIntentV2(FrozenContract):
+    contract_version: Literal["market_predictor.maturation_intent.v2"] = (
+        "market_predictor.maturation_intent.v2"
     )
     maturation_key: str = Field(pattern=SHA256_PATTERN)
     semantic_prediction_id: str = Field(pattern=SHA256_PATTERN)
@@ -34,9 +35,10 @@ class PredictionMaturationIntentV1(FrozenContract):
     model_release_id: str = Field(pattern=SHA256_PATTERN)
     model_artifact_sha256: str = Field(pattern=SHA256_PATTERN)
     feature_artifact_sha256: str = Field(pattern=SHA256_PATTERN)
-    serving_policy_sha256: str = Field(pattern=SHA256_PATTERN)
+    prediction_policy_sha256: str = Field(pattern=SHA256_PATTERN)
     label_policy_sha256: str = Field(pattern=SHA256_PATTERN)
     execution_policy_sha256: str = Field(pattern=SHA256_PATTERN)
+    prediction_policy: dict[str, object]
     label_policy: dict[str, object]
     primary_benchmark: str = Field(min_length=1, max_length=16)
     market_regime: str = Field(min_length=1, max_length=64)
@@ -48,6 +50,9 @@ class PredictionMaturationIntentV1(FrozenContract):
     downside_probability: float | None = Field(default=None, ge=0.0, le=1.0)
     calibration_bin: int = Field(ge=0, le=9)
     signal: str = Field(min_length=1, max_length=128)
+    rank: int | None = Field(default=None, ge=1)
+    selection_eligible: bool
+    selected_for_policy: bool
     actionable: bool
     catalyst_status: str = Field(min_length=1, max_length=32)
     decision_atr: float | None = Field(default=None, gt=0)
@@ -66,8 +71,18 @@ class PredictionMaturationIntentV1(FrozenContract):
 
     @model_validator(mode="after")
     def validate_identity(self) -> Self:
+        parse_prediction_policy(
+            self.prediction_policy,
+            expected_sha256=self.prediction_policy_sha256,
+        )
         if policy_sha256(self.label_policy) != self.label_policy_sha256:
             raise ValueError("label policy hash does not match its payload")
+        if self.selected_for_policy and not self.selection_eligible:
+            raise ValueError("selected maturation intent must be eligible")
+        if self.actionable != (
+            self.selected_for_policy and self.signal != "not_ready"
+        ):
+            raise ValueError("maturation actionability does not match selection")
         semantic = semantic_prediction_sha256(self.model_dump(exclude={"maturation_key"}))
         if semantic != self.semantic_prediction_id:
             raise ValueError("semantic prediction identity is invalid")

@@ -17,7 +17,7 @@ from market_predictor.intraday.contracts import (
     INTRADAY_VALIDATION_SPLIT,
     IntradayPromotionConfig,
 )
-from market_predictor.prediction_policy import PREDICTION_POLICY_SHA256
+from market_predictor.prediction_policy import parse_prediction_policy
 from market_predictor.promotion_workflow import (
     PromotionTrustContext,
     TrustedPromotionOutcome,
@@ -497,8 +497,30 @@ def _causal_identity_failures(metrics: dict[str, Any]) -> list[str]:
         failures.append("metrics.calibration_seed_folds_excluded is missing")
     if not _strict_bool(metrics.get("folds_causally_ordered")):
         failures.append("metrics.folds_causally_ordered is not proven")
-    if str(metrics.get("prediction_policy_sha256") or "") != PREDICTION_POLICY_SHA256:
-        failures.append("metrics.prediction_policy_sha256 does not match the serving policy")
+    policy_payload = metrics.get("prediction_policy")
+    if not isinstance(policy_payload, dict):
+        failures.append("metrics.prediction_policy is missing")
+    else:
+        try:
+            policy = parse_prediction_policy(
+                policy_payload,
+                expected_sha256=str(metrics.get("prediction_policy_sha256") or ""),
+            )
+        except (TypeError, ValueError) as exc:
+            failures.append(f"metrics prediction policy identity is invalid: {exc}")
+        else:
+            expected_values = {
+                "selection_k": float(policy.intraday_top_k),
+                "selection_downside_ceiling": policy.intraday_downside_ceiling,
+                "max_trades_per_session": float(
+                    policy.intraday_max_trades_per_session
+                ),
+            }
+            for field, expected in expected_values.items():
+                if _finite_number(metrics.get(field)) != expected:
+                    failures.append(
+                        f"metrics.{field} does not match the bound intraday policy"
+                    )
     if str(metrics.get("execution_policy_sha256") or "") != EXECUTION_POLICY_SHA256:
         failures.append("metrics.execution_policy_sha256 does not match the execution policy")
     return failures

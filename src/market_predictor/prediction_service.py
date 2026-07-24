@@ -30,7 +30,7 @@ from market_predictor.prediction_contracts import (
     PredictionDataSource,
     PredictionDependencyError,
     PredictionDriftBlockedError,
-    PredictionEvidenceV1,
+    PredictionEvidenceV2,
     PredictionReadinessError,
     PredictionRequest,
     PredictionResponse,
@@ -52,8 +52,12 @@ from market_predictor.prediction_policy import (
     SWING_LOW,
     SWING_STRONG,
     SWING_WATCH,
+    PredictionSelectionPolicy,
     intraday_action,
     intraday_decision_score,
+    parse_prediction_policy,
+    select_intraday_candidates,
+    select_swing_candidates,
     swing_action,
 )
 from market_predictor.prediction_snapshot import PredictionSnapshotStore
@@ -76,7 +80,7 @@ from market_predictor.swing.model import score_swing_payload
 from market_predictor.v3.errors import DataReadinessError
 
 DEFAULT_MODE_HORIZONS = {"swing": "5d", "intraday": "60m"}
-SERVING_POLICY_ID = "market_predictor.serving_policy.r1_a.v1"
+SERVING_POLICY_ID = "market_predictor.serving_policy_bundle.v2"
 # Serving thresholds are sourced from the canonical prediction policy so the
 # served signal semantics and the promotion-evaluated policy share one definition.
 _SWING_STRONG = SWING_STRONG
@@ -89,40 +93,6 @@ _INTRADAY_WATCH = INTRADAY_WATCH
 _INTRADAY_WATCH_MAX_DOWNSIDE = INTRADAY_WATCH_MAX_DOWNSIDE
 _INTRADAY_LOW = INTRADAY_LOW
 _INTRADAY_AVOID_DOWNSIDE = INTRADAY_AVOID_DOWNSIDE
-_SERVING_POLICY = {
-    "actionable_readiness": "valid",
-    "intraday_rank": "opportunity_probability * (1 - downside_probability)",
-    "intraday_signal": {
-        "avoid_downside_at_or_above": _INTRADAY_DOWNSIDE_VETO,
-        "entry_opportunity_at_or_above": _INTRADAY_ENTRY,
-        "entry_max_downside": _INTRADAY_ENTRY_MAX_DOWNSIDE,
-        "watch_opportunity_at_or_above": _INTRADAY_WATCH,
-        "watch_max_downside": _INTRADAY_WATCH_MAX_DOWNSIDE,
-        "avoid_opportunity_at_or_below": _INTRADAY_LOW,
-        "avoid_downside_above": _INTRADAY_AVOID_DOWNSIDE,
-    },
-    "swing_rank": "model_probability",
-    "swing_signal": {
-        "strong_at_or_above": _SWING_STRONG,
-        "watch_at_or_above": _SWING_WATCH,
-        "low_at_or_below": _SWING_LOW,
-    },
-    "unified_signal": {
-        "high_conviction_swing_at_or_above": _SWING_STRONG,
-        "watch_swing_at_or_above": _SWING_WATCH,
-        "intraday_support_opportunity_at_or_above": _INTRADAY_WATCH,
-        "intraday_support_max_downside": _INTRADAY_WATCH_MAX_DOWNSIDE,
-        "intraday_only_at_or_above": _SWING_STRONG,
-        "intraday_only_max_downside": _SWING_LOW,
-        "swing_wait_intraday_below": 0.50,
-    },
-    "catalyst_role": "explanation_only",
-}
-SERVING_POLICY_SHA256 = hashlib.sha256(
-    json.dumps(_SERVING_POLICY, sort_keys=True, separators=(",", ":")).encode("utf-8")
-).hexdigest()
-
-
 ServingRoute = ActiveReleaseRoute
 
 
@@ -295,6 +265,7 @@ class PredictionService:
                 context,
                 bar_timeframe=route.bar_timeframe,
             )
+            prediction_policy = _prediction_policy_for_model(model)
             source = self._load_feature_source("swing", route, request)
             frame = self._feature_frame(
                 source.frame,
@@ -305,7 +276,12 @@ class PredictionService:
                 frame=frame,
                 context=context,
             )
-            predictions = self._swing_predictions(scored, frame, model.status)
+            predictions = self._swing_predictions(
+                scored,
+                frame,
+                model.status,
+                prediction_policy,
+            )
             return self._response(
                 request,
                 models={"swing": model},
@@ -345,6 +321,7 @@ class PredictionService:
                 context,
                 bar_timeframe=route.bar_timeframe,
             )
+            prediction_policy = _prediction_policy_for_model(model)
             source = self._load_feature_source("intraday", route, request)
             frame = self._feature_frame(
                 source.frame,
@@ -352,7 +329,12 @@ class PredictionService:
                 timeframe="intraday",
             )
             scored = self._score_intraday_frame(frame=frame, context=context)
-            predictions = self._intraday_predictions(scored, frame, model.status)
+            predictions = self._intraday_predictions(
+                scored,
+                frame,
+                model.status,
+                prediction_policy,
+            )
             return self._response(
                 request,
                 models={"intraday": model},
@@ -378,7 +360,7 @@ class PredictionService:
         swing: dict[str, SwingPrediction] = {}
         intraday: dict[str, IntradayPrediction] = {}
         resolved_horizons: dict[str, str] = {}
-        evidence_parts: list[PredictionEvidenceV1] = []
+        evidence_parts: list[PredictionEvidenceV2] = []
 
         try:
             swing_response = self.predict_swing(request.model_copy(update={"mode": "swing"}))
@@ -434,6 +416,28 @@ class PredictionService:
             )
         request_id = str(uuid4())
         evidence = _combine_evidence(request, request_id=request_id, evidence_parts=evidence_parts, data_source=self.data_source)
+        if self.data_source == "live" and evidence.identity_status != "complete":
+            reason = "unified prediction identity is incomplete"
+            rows = [
+                row.model_copy(
+                    update={
+                        "swing": (
+                            _suppress_swing_prediction(row.swing, reason)
+                            if row.swing is not None
+                            else None
+                        ),
+                        "intraday": (
+                            _suppress_intraday_prediction(row.intraday, reason)
+                            if row.intraday is not None
+                            else None
+                        ),
+                        "final_signal": "not_ready",
+                        "readiness_status": INVALID,
+                        "errors": list(dict.fromkeys([*row.errors, reason])),
+                    }
+                )
+                for row in rows
+            ]
         return PredictionResponse(
             request_id=request_id,
             mode="unified",
@@ -629,6 +633,7 @@ class PredictionService:
         scored: pd.DataFrame,
         source_frame: pd.DataFrame,
         model_status: str,
+        prediction_policy: PredictionSelectionPolicy,
     ) -> list[SwingPrediction]:
         rows = scored.copy()
         rows["_catalyst_assessment"] = rows.apply(
@@ -650,20 +655,44 @@ class PredictionService:
                 .groupby("ticker")["_trading_date"]
                 .nunique()
             )
-        predictions: list[SwingPrediction] = []
-        ready_rank = 0
-        for _, row in rows.iterrows():
+        readiness_by_index: dict[int, ReadinessInfo] = {}
+        for row_index, row in rows.iterrows():
             ticker = str(row["ticker"]).upper()
-            catalyst = row["_catalyst_assessment"]
             audited_count = _int_or_none(row.get("daily_bar_count"))
             research_fallback = self.data_source == "curated" and audited_count is None
-            daily_bar_count = int(daily_counts.get(ticker, 0)) if research_fallback else audited_count
-            readiness = self._daily_readiness(
+            daily_bar_count = (
+                int(daily_counts.get(ticker, 0))
+                if research_fallback
+                else audited_count
+            )
+            readiness_by_index[int(row_index)] = self._daily_readiness(
                 row,
                 daily_bar_count,
                 model_status,
-                missing_audited_count=audited_count is None and self.data_source == "live",
+                missing_audited_count=(
+                    audited_count is None and self.data_source == "live"
+                ),
             )
+        ready_rows = rows.loc[
+            [
+                index
+                for index, readiness in readiness_by_index.items()
+                if readiness.status == VALID
+            ]
+        ]
+        selected_indexes = set(
+            select_swing_candidates(
+                ready_rows,
+                policy=prediction_policy,
+                probability_column="swing_model_probability",
+            ).index
+        )
+        predictions: list[SwingPrediction] = []
+        ready_rank = 0
+        for row_index, row in rows.iterrows():
+            ticker = str(row["ticker"]).upper()
+            catalyst = row["_catalyst_assessment"]
+            readiness = readiness_by_index[int(row_index)]
             is_ready = readiness.status == VALID
             if is_ready:
                 ready_rank += 1
@@ -676,6 +705,13 @@ class PredictionService:
                     model_prediction=(_int_or_none(row.get("swing_model_prediction")) if is_ready else None),
                     signal=(_swing_signal(row.get("swing_model_probability")) if is_ready else "not_ready"),
                     rank=ready_rank if is_ready else None,
+                    selection_eligible=(
+                        is_ready
+                        and _float_or_none(row.get("_decision_score")) is not None
+                    ),
+                    selected_for_policy=(
+                        is_ready and row_index in selected_indexes
+                    ),
                     close=_float_or_none(row.get("close")),
                     return_1d=_float_or_none(row.get("return_1d")),
                     volume_z20=_float_or_none(row.get("volume_z20")),
@@ -712,6 +748,7 @@ class PredictionService:
         scored: pd.DataFrame,
         source_frame: pd.DataFrame,
         model_status: str,
+        prediction_policy: PredictionSelectionPolicy,
     ) -> list[IntradayPrediction]:
         opportunity_col = "intraday_opportunity_probability"
         downside_col = "intraday_downside_probability"
@@ -731,17 +768,40 @@ class PredictionService:
         )
         rows = rows.sort_values("_decision_score", ascending=False).reset_index(drop=True)
         intraday_counts = source_frame.assign(ticker=source_frame["ticker"].astype(str).str.upper()).groupby("ticker").size()
-        predictions: list[IntradayPrediction] = []
-        ready_rank = 0
-        for _, row in rows.iterrows():
+        readiness_by_index: dict[int, ReadinessInfo] = {}
+        for row_index, row in rows.iterrows():
             ticker = str(row["ticker"]).upper()
-            catalyst = row["_catalyst_assessment"]
             warm_count = _int_or_none(row.get("five_minute_bar_count"))
-            readiness = self._intraday_readiness(
+            readiness_by_index[int(row_index)] = self._intraday_readiness(
                 row,
-                warm_count if warm_count is not None else intraday_counts.get(ticker, 0),
+                (
+                    warm_count
+                    if warm_count is not None
+                    else int(intraday_counts.get(ticker, 0))
+                ),
                 model_status,
             )
+        ready_rows = rows.loc[
+            [
+                index
+                for index, readiness in readiness_by_index.items()
+                if readiness.status == VALID
+            ]
+        ]
+        selected_indexes = set(
+            select_intraday_candidates(
+                ready_rows,
+                policy=prediction_policy,
+                opportunity_column=opportunity_col,
+                downside_column=downside_col,
+            ).index
+        )
+        predictions: list[IntradayPrediction] = []
+        ready_rank = 0
+        for row_index, row in rows.iterrows():
+            ticker = str(row["ticker"]).upper()
+            catalyst = row["_catalyst_assessment"]
+            readiness = readiness_by_index[int(row_index)]
             is_ready = readiness.status == VALID
             if is_ready:
                 ready_rank += 1
@@ -763,6 +823,17 @@ class PredictionService:
                         else "not_ready"
                     ),
                     rank=ready_rank if is_ready else None,
+                    selection_eligible=(
+                        is_ready
+                        and (
+                            _float_or_none(row.get(downside_col)) is not None
+                            and float(row[downside_col])
+                            <= prediction_policy.intraday_downside_ceiling
+                        )
+                    ),
+                    selected_for_policy=(
+                        is_ready and row_index in selected_indexes
+                    ),
                     close=_float_or_none(row.get("close")),
                     return_15m=_float_or_none(row.get("return_3bar_5m")),
                     relative_volume=_float_or_none(row.get("relative_volume_same_slot_20d_5m")),
@@ -921,9 +992,8 @@ class PredictionService:
             else:
                 raise ValueError("feature dataset has no canonical decision date")
         working["ticker"] = working["ticker"].astype(str).str.upper().str.strip()
-        working = working[working["ticker"].isin(symbols)].copy()
         if working.empty:
-            raise ValueError(f"no {timeframe} feature rows found for requested tickers")
+            raise ValueError(f"{timeframe} feature dataset is empty")
         if "feature_available_at_utc" in working.columns:
             availability = pd.to_datetime(working["feature_available_at_utc"], errors="coerce", utc=True)
         elif timeframe == "daily":
@@ -954,6 +1024,7 @@ class PredictionService:
             ):
                 raise ValueError("live swing cutoff policy identity is invalid")
         if request.as_of is None:
+            _require_requested_tickers(working, symbols, timeframe=timeframe)
             return working
 
         cutoff = pd.Timestamp(request.as_of).tz_convert("UTC")
@@ -966,6 +1037,7 @@ class PredictionService:
         working = working[eligible].copy()
         if working.empty:
             raise ValueError(f"no {timeframe} feature rows are available at or before {request.as_of.isoformat()}")
+        _require_requested_tickers(working, symbols, timeframe=timeframe)
         return working
 
     def _model_info_from_context(
@@ -997,6 +1069,8 @@ class PredictionService:
         dataset = dataset_value if isinstance(dataset_value, dict) else {}
         extra_value = manifest.get("extra")
         extra = extra_value if isinstance(extra_value, dict) else {}
+        metrics_value = manifest.get("metrics")
+        metrics = metrics_value if isinstance(metrics_value, dict) else {}
         return ModelInfo(
             path=str(model_path),
             status=status,
@@ -1013,11 +1087,7 @@ class PredictionService:
             training_data_end=_optional_str(dataset.get("last_date")),
             label_policy_sha256=_optional_str(
                 manifest.get("dataset_label_config_sha256")
-                or (
-                    manifest.get("metrics", {}).get("dataset_label_config_sha256")
-                    if isinstance(manifest.get("metrics"), dict)
-                    else None
-                )
+                or metrics.get("dataset_label_config_sha256")
             ),
             label_policy=(
                 dict(extra["label_policy"])
@@ -1026,9 +1096,18 @@ class PredictionService:
             ),
             execution_policy_sha256=_optional_str(
                 manifest.get("execution_policy_sha256")
-                or (
-                    manifest.get("metrics", {}).get("execution_policy_sha256")
-                    if isinstance(manifest.get("metrics"), dict)
+                or metrics.get("execution_policy_sha256")
+            ),
+            prediction_policy_sha256=_optional_str(
+                manifest.get("prediction_policy_sha256")
+                or metrics.get("prediction_policy_sha256")
+            ),
+            prediction_policy=(
+                dict(extra["prediction_policy"])
+                if isinstance(extra.get("prediction_policy"), dict)
+                else (
+                    dict(metrics["prediction_policy"])
+                    if isinstance(metrics.get("prediction_policy"), dict)
                     else None
                 )
             ),
@@ -1093,7 +1172,7 @@ class PredictionService:
         models: dict[str, ModelInfo],
         feature_sources: dict[str, _FeatureSource],
         feature_frames: dict[str, pd.DataFrame],
-    ) -> PredictionEvidenceV1:
+    ) -> PredictionEvidenceV2:
         rows: list[PredictionRowEvidenceV1] = []
         gaps: list[str] = []
         cutoffs: list[datetime] = []
@@ -1189,6 +1268,7 @@ class PredictionService:
 
         model_hashes: dict[str, str] = {}
         model_release_ids: dict[str, str] = {}
+        prediction_policy_hashes: dict[str, str] = {}
         for mode, model in models.items():
             if _is_sha256(model.artifact_sha256):
                 model_hashes[mode] = str(model.artifact_sha256)
@@ -1204,6 +1284,22 @@ class PredictionService:
                 gaps.append(f"{mode} model label policy identity is missing")
             if not _is_sha256(model.execution_policy_sha256):
                 gaps.append(f"{mode} execution policy identity is missing")
+            if model.prediction_policy is None or not _is_sha256(
+                model.prediction_policy_sha256
+            ):
+                gaps.append(f"{mode} prediction policy identity is missing")
+            else:
+                try:
+                    parse_prediction_policy(
+                        model.prediction_policy,
+                        expected_sha256=model.prediction_policy_sha256,
+                    )
+                except (TypeError, ValueError):
+                    gaps.append(f"{mode} prediction policy identity is invalid")
+                else:
+                    prediction_policy_hashes[mode] = str(
+                        model.prediction_policy_sha256
+                    )
 
         if not cutoffs:
             raise PredictionReadinessError
@@ -1215,7 +1311,7 @@ class PredictionService:
             else None
         )
         identity_status = "research_only" if self.data_source == "curated" else ("incomplete" if gaps else "complete")
-        return PredictionEvidenceV1(
+        return PredictionEvidenceV2(
             request_id=request_id,
             correlation_id=request.correlation_id or request_id,
             prediction_cutoff_utc=max(cutoffs),
@@ -1237,8 +1333,11 @@ class PredictionService:
                 for mode in feature_frames
                 if any(row.view == mode for row in rows)
             },
+            view_prediction_policy_sha256=prediction_policy_hashes,
             serving_policy_id=SERVING_POLICY_ID,
-            serving_policy_sha256=SERVING_POLICY_SHA256,
+            serving_policy_sha256=_serving_policy_bundle_sha256(
+                prediction_policy_hashes
+            ),
             identity_status=identity_status,
             identity_gaps=sorted(set(gaps)),
         )
@@ -1378,6 +1477,42 @@ def _risk_adjusted_intraday_score(
     )
 
 
+def _prediction_policy_for_model(model: ModelInfo) -> PredictionSelectionPolicy:
+    if model.prediction_policy is None or model.prediction_policy_sha256 is None:
+        raise ValueError("model prediction policy identity is missing")
+    return parse_prediction_policy(
+        model.prediction_policy,
+        expected_sha256=model.prediction_policy_sha256,
+    )
+
+
+def _serving_policy_bundle_sha256(
+    view_policy_hashes: Mapping[str, str],
+) -> str:
+    payload = {
+        "contract_version": SERVING_POLICY_ID,
+        "view_prediction_policy_sha256": dict(sorted(view_policy_hashes.items())),
+    }
+    return hashlib.sha256(
+        json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+
+
+def _require_requested_tickers(
+    frame: pd.DataFrame,
+    requested: set[str],
+    *,
+    timeframe: str,
+) -> None:
+    available = set(frame["ticker"].astype(str))
+    missing = sorted(requested.difference(available))
+    if missing:
+        raise ValueError(
+            f"no {timeframe} feature rows found for requested tickers: "
+            f"{', '.join(missing)}"
+        )
+
+
 def _suppress_swing_prediction(row: SwingPrediction, reason: str) -> SwingPrediction:
     readiness = row.readiness.model_copy(
         update={
@@ -1391,6 +1526,8 @@ def _suppress_swing_prediction(row: SwingPrediction, reason: str) -> SwingPredic
             "model_prediction": None,
             "signal": "not_ready",
             "rank": None,
+            "selection_eligible": False,
+            "selected_for_policy": False,
             "readiness": readiness,
         }
     )
@@ -1410,6 +1547,8 @@ def _suppress_intraday_prediction(row: IntradayPrediction, reason: str) -> Intra
             "downside_prediction": None,
             "signal": "not_ready",
             "rank": None,
+            "selection_eligible": False,
+            "selected_for_policy": False,
             "readiness": readiness,
         }
     )
@@ -1419,9 +1558,9 @@ def _combine_evidence(
     request: PredictionRequest,
     *,
     request_id: str,
-    evidence_parts: list[PredictionEvidenceV1],
+    evidence_parts: list[PredictionEvidenceV2],
     data_source: PredictionDataSource,
-) -> PredictionEvidenceV1:
+) -> PredictionEvidenceV2:
     if not evidence_parts:
         raise PredictionReadinessError
     rows = [row for evidence in evidence_parts for row in evidence.row_feature_availability]
@@ -1451,9 +1590,11 @@ def _combine_evidence(
         for mode, release_id in evidence.model_release_ids.items()
     }
     gaps = [gap for evidence in evidence_parts for gap in evidence.identity_gaps]
-    policy_hashes = {evidence.serving_policy_sha256 for evidence in evidence_parts}
-    if policy_hashes != {SERVING_POLICY_SHA256}:
-        gaps.append("serving policy identities do not match")
+    prediction_policy_hashes = {
+        mode: digest
+        for evidence in evidence_parts
+        for mode, digest in evidence.view_prediction_policy_sha256.items()
+    }
     release_ids = {evidence.release_id for evidence in evidence_parts if evidence.release_id is not None}
     if len(release_ids) > 1:
         gaps.append("prediction views belong to different serving releases")
@@ -1463,7 +1604,7 @@ def _combine_evidence(
         identity_status = "incomplete"
     else:
         identity_status = "complete"
-    return PredictionEvidenceV1(
+    return PredictionEvidenceV2(
         request_id=request_id,
         correlation_id=request.correlation_id or request_id,
         prediction_cutoff_utc=max(evidence.prediction_cutoff_utc for evidence in evidence_parts),
@@ -1479,8 +1620,11 @@ def _combine_evidence(
             for evidence in evidence_parts
             for mode, cutoff in evidence.view_prediction_cutoffs_utc.items()
         },
+        view_prediction_policy_sha256=prediction_policy_hashes,
         serving_policy_id=SERVING_POLICY_ID,
-        serving_policy_sha256=SERVING_POLICY_SHA256,
+        serving_policy_sha256=_serving_policy_bundle_sha256(
+            prediction_policy_hashes
+        ),
         identity_status=identity_status,
         identity_gaps=sorted(set(gaps)),
     )

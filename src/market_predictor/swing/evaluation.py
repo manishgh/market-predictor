@@ -16,11 +16,10 @@ from market_predictor.execution_policy import (
     flat_stress_surcharge,
 )
 from market_predictor.prediction_policy import (
-    SWING_SELECTION_TIE_BREAKERS,
+    PredictionSelectionPolicy,
     expected_calibration_error,
     finite_or_none,
-    select_top_k_per_group,
-    swing_decision_scores,
+    select_swing_candidates,
 )
 from market_predictor.swing.contracts import (
     swing_excess_column,
@@ -111,15 +110,14 @@ def phase_economics(
     }
     sessions = sorted(pd.to_datetime(predictions["session_date_et"]).dt.date.unique())
     records: list[dict[str, object]] = []
+    selection_policy = PredictionSelectionPolicy(swing_top_k=top_k)
     for phase in range(horizon):
         selected_sessions = set(sessions[phase::horizon])
         phase_rows = predictions[pd.to_datetime(predictions["session_date_et"]).dt.date.isin(selected_sessions)]
-        selected = select_top_k_per_group(
+        selected = select_swing_candidates(
             phase_rows,
-            score=swing_decision_scores(phase_rows, probability_column="swing_probability"),
-            group_column="decision_group_id",
-            top_k=top_k,
-            tie_breakers=SWING_SELECTION_TIE_BREAKERS,
+            policy=selection_policy,
+            probability_column="swing_probability",
         )
         cost = execution_cost_fraction(
             selected,
