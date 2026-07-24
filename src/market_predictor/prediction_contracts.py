@@ -104,7 +104,7 @@ class PredictionRequest(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    tickers: list[str] = Field(..., min_length=1)
+    tickers: list[str] = Field(..., min_length=1, max_length=100)
     mode: PredictionMode = "unified"
     horizon: str = "auto"
     as_of: datetime | None = None
@@ -117,6 +117,13 @@ class PredictionRequest(BaseModel):
         unique = list(dict.fromkeys(normalized))
         if not unique:
             raise ValueError("at least one ticker is required")
+        invalid = [
+            ticker
+            for ticker in unique
+            if re.fullmatch(r"[A-Z][A-Z0-9.-]{0,14}", ticker) is None
+        ]
+        if invalid:
+            raise ValueError("tickers must use canonical US symbol syntax")
         return unique
 
     @field_validator("horizon")

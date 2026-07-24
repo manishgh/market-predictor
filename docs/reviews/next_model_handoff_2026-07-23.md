@@ -1,16 +1,16 @@
-# Market Predictor Remediation Handoff - R1-R4 Complete, R5 Next
+# Market Predictor Remediation Handoff - R1-R5 Complete, R6 Next
 
-Date: 2026-07-23
+Date: 2026-07-24
 Repository: `C:\project\market-predictor`
 Remote: `https://github.com/manishgh/market-predictor` (origin)
 Working branch: `r3-lineage` (stacked on `r2-honest-evaluation`, both branched off `main`)
-Tip commit: `01a0f36` (pushed to `origin/r3-lineage`)
+Tip before R5.4: `188d03d` (pushed to `origin/r3-lineage`); the current branch tip is authoritative.
 Supersedes: `docs/reviews/next_model_handoff_2026-07-22.md` (still valid for R4–R7 scope)
 
 ## Objective
 
-Continue the senior-review remediation. **R1 through R4 are complete.** The next
-checkpoint is **R5 (Bounded Serving / Durable Outcomes / Drift)**, then R6-R7. This document
+Continue the senior-review remediation. **R1 through R5 are complete in code.** The next
+checkpoint is **R6 (Repository / Delivery Hardening)**, then R7. This document
 is self-contained: read it plus the two review reports below and you can resume
 without prior chat context.
 
@@ -241,14 +241,19 @@ candidate integration test):
   economics cohorts by release/view/horizon and operational slices. A versioned drift
   policy persists release-specific actionability. Missing, stale, warming, severe,
   tampered, or wrong-release state fails closed in direct and unified serving.
+- **R5.4 completed in code:** production startup requires Entra JWT configuration;
+  signature/issuer/audience/time claims and `scp`/`roles` are validated. Prediction,
+  detailed operations, metrics, and replay have separate scopes; replay defaults off;
+  body/ticker/rate state is bounded; structured audit events omit credentials.
 - **R5 Bounded Serving / Durable Outcomes / Drift:** cache one active model context (no
   per-request deserialize); admission control + RSS < 4 GiB; deterministic label-horizon
   outcome maturation separate from ad hoc replay; calibration/economic cohorts; versioned
   drift policies that make severe drift non-actionable; auth/scopes/rate-limits/structured
   logs. **Azure Blob persistence EXCLUDED** — use the durable local repository + bounded
   cache; mark Blob as `environment_pending`.
-  R5.1-R5.3 are implemented locally. Authentication, scopes, body/rate limits,
-  structured audit logs, and real-size combined-model soak evidence remain.
+  R5.1-R5.4 are implemented locally. Tenant/app registration, role assignment, JWKS
+  refresh, private ingress, and real-size combined-model soak evidence remain deployment
+  environment work.
 - **R6 Repository / Delivery Hardening:** remove legacy promotion + obsolete runtime
   paths; split production/collection/research CLI surfaces; hash-lock dependencies with
   runtime/training/research extras; pin container base by digest; SBOM + vuln/license

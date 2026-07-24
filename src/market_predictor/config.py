@@ -3,7 +3,7 @@ from pathlib import Path
 from typing import Any
 
 from dotenv import load_dotenv
-from pydantic import Field
+from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from market_predictor.app_config import config_get, load_app_config
@@ -63,6 +63,47 @@ class Settings(BaseSettings):
         default=False,
         alias="RUNTIME_REJECT_UNKNOWN_MEMORY",
     )
+    api_environment: str = Field(default="production", alias="API_ENVIRONMENT")
+    api_auth_mode: str = Field(default="entra", alias="API_AUTH_MODE")
+    api_jwt_issuer: str | None = Field(default=None, alias="API_JWT_ISSUER")
+    api_jwt_audience: str | None = Field(default=None, alias="API_JWT_AUDIENCE")
+    api_jwks_path: Path | None = Field(default=None, alias="API_JWKS_PATH")
+    api_development_bearer_token: SecretStr | None = Field(
+        default=None,
+        alias="API_DEVELOPMENT_BEARER_TOKEN",
+    )
+    api_maximum_body_bytes: int = Field(
+        default=65_536,
+        alias="API_MAXIMUM_BODY_BYTES",
+        ge=1_024,
+        le=1_048_576,
+    )
+    api_maximum_rate_limit_principals: int = Field(
+        default=10_000,
+        alias="API_MAXIMUM_RATE_LIMIT_PRINCIPALS",
+        ge=1,
+    )
+    api_prediction_requests_per_minute: int = Field(
+        default=60,
+        alias="API_PREDICTION_REQUESTS_PER_MINUTE",
+        ge=1,
+    )
+    api_operations_requests_per_minute: int = Field(
+        default=30,
+        alias="API_OPERATIONS_REQUESTS_PER_MINUTE",
+        ge=1,
+    )
+    api_metrics_requests_per_minute: int = Field(
+        default=30,
+        alias="API_METRICS_REQUESTS_PER_MINUTE",
+        ge=1,
+    )
+    api_replay_requests_per_minute: int = Field(
+        default=5,
+        alias="API_REPLAY_REQUESTS_PER_MINUTE",
+        ge=1,
+    )
+    api_replay_enabled: bool = Field(default=False, alias="API_REPLAY_ENABLED")
     data_dir: Path = Path("data")
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")

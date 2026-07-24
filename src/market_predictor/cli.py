@@ -97,7 +97,13 @@ def serve_api(
         import uvicorn
     except ImportError as exc:
         raise typer.BadParameter("uvicorn is not installed. Run `python -m pip install -e .` first.") from exc
-    uvicorn.run("market_predictor.api:app", host=host, port=port, reload=reload)
+    uvicorn.run(
+        "market_predictor.api:create_app",
+        host=host,
+        port=port,
+        reload=reload,
+        factory=True,
+    )
 
 
 @app.command("publish-live-features")

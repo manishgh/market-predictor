@@ -4,6 +4,7 @@ import json
 import logging
 import threading
 from collections import defaultdict
+from collections.abc import Mapping
 from datetime import UTC, datetime
 from typing import Any
 
@@ -33,7 +34,17 @@ class RuntimeTelemetry:
         self._last_health: dict[str, object] | None = None
         self._last_models: dict[str, str | None] = {}
 
-    def record_request(self, *, method: str, path: str, status_code: int, elapsed_ms: float) -> None:
+    def record_request(
+        self,
+        *,
+        method: str,
+        path: str,
+        status_code: int,
+        elapsed_ms: float,
+        principal_id: str | None = None,
+        correlation_id: str | None = None,
+        required_scope: str | None = None,
+    ) -> None:
         key = f"{method.upper()} {path}"
         with self._lock:
             record = self._requests[key]
@@ -41,9 +52,24 @@ class RuntimeTelemetry:
             record["errors"] = int(record["errors"]) + int(status_code >= 400)
             record["latency_ms_sum"] = float(record["latency_ms_sum"]) + elapsed_ms
             record["latency_ms_max"] = max(float(record["latency_ms_max"]), elapsed_ms)
-        self.emit("http_request", route=key, status_code=status_code, elapsed_ms=round(elapsed_ms, 3))
+        self.emit(
+            "http_request",
+            route=key,
+            status_code=status_code,
+            elapsed_ms=round(elapsed_ms, 3),
+            principal_id=principal_id,
+            correlation_id=correlation_id,
+            required_scope=required_scope,
+        )
 
-    def record_prediction(self, response: PredictionResponse) -> None:
+    def record_prediction(
+        self,
+        response: PredictionResponse,
+        *,
+        principal_id: str | None = None,
+        correlation_id: str | None = None,
+        admission: Mapping[str, object] | None = None,
+    ) -> None:
         counts = {"valid": 0, "warn": 0, "invalid": 0}
         for row in response.predictions:
             counts[row.readiness_status] += 1
@@ -65,6 +91,14 @@ class RuntimeTelemetry:
             readiness=counts,
             model_hashes=self._last_models,
             error_count=len(response.errors),
+            principal_id=principal_id,
+            correlation_id=correlation_id,
+            model_release_ids=(
+                response.evidence.model_release_ids
+                if response.evidence is not None
+                else {}
+            ),
+            admission=dict(admission) if admission is not None else None,
         )
 
     def record_replay(self, response: InvestmentReplayResponse) -> None:

@@ -4,9 +4,17 @@ import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal, cast
 from uuid import uuid4
 
+from market_predictor.api_security import (
+    API_SCOPES,
+    ApiAuthenticator,
+    ApiPrincipal,
+    ApiSecurityConfig,
+    ApiSecurityError,
+    PrincipalRateLimiter,
+)
 from market_predictor.config import get_settings
 from market_predictor.investment_replay import AlpacaReplayPriceProvider, InvestmentReplayService
 from market_predictor.prediction_contracts import (
@@ -40,6 +48,11 @@ def create_app(
     service: PredictionService | None = None,
     replay_service: InvestmentReplayService | None = None,
     telemetry: RuntimeTelemetry | None = None,
+    *,
+    security_config: ApiSecurityConfig | None = None,
+    rate_limiter: PrincipalRateLimiter | None = None,
+    maximum_body_bytes: int | None = None,
+    replay_enabled: bool | None = None,
 ) -> FastAPI:
     if FastAPI is None:
         raise RuntimeError("FastAPI is not installed. Install the api extras/dependencies before serving.")
@@ -57,12 +70,35 @@ def create_app(
             inference_memory_reservation_gib=settings.runtime_inference_memory_reservation_gib,
             reject_unknown_memory=settings.runtime_reject_unknown_memory,
         )
+    configured_security = security_config
+    if configured_security is None:
+        configured_security = (
+            _security_config_from_settings(settings)
+            if settings is not None
+            else ApiSecurityConfig(mode="disabled")
+        )
+    authenticator = ApiAuthenticator(configured_security)
+    body_limit = maximum_body_bytes or (
+        settings.api_maximum_body_bytes if settings is not None else 65_536
+    )
+    if body_limit < 1_024:
+        raise ValueError("API body limit must be at least 1024 bytes")
+    limiter = rate_limiter or _rate_limiter_from_settings(settings)
     configured_replay_service = replay_service
     if configured_replay_service is None and isinstance(prediction_service, PredictionService):
         configured_replay_service = InvestmentReplayService(
             snapshot_store=prediction_service.snapshot_store,
             price_provider=AlpacaReplayPriceProvider(get_settings()),
         )
+    allow_replay = (
+        replay_enabled
+        if replay_enabled is not None
+        else (
+            settings.api_replay_enabled
+            if settings is not None
+            else configured_replay_service is not None
+        )
+    )
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         preload = getattr(prediction_service, "preload", None)
@@ -75,6 +111,9 @@ def create_app(
         version="0.1.0",
         description="Production prediction API for swing and intraday market models.",
         lifespan=lifespan,
+        docs_url=None if configured_security.mode == "entra" else "/docs",
+        redoc_url=None,
+        openapi_url=None if configured_security.mode == "entra" else "/openapi.json",
     )
     if telemetry is not None:
         runtime_telemetry = telemetry
@@ -87,15 +126,77 @@ def create_app(
         runtime_telemetry = RuntimeTelemetry()
 
     @app.middleware("http")
-    async def observe_request(request: Any, call_next: Any) -> Any:
+    async def enforce_boundary_and_observe(request: Any, call_next: Any) -> Any:
         started = time.perf_counter()
         status_code = 500
-        request.state.correlation_id = _request_correlation_id(request.headers.get("x-correlation-id"))
+        correlation_id = _request_correlation_id(
+            request.headers.get("x-correlation-id")
+        )
+        request.state.correlation_id = correlation_id
+        principal: ApiPrincipal | None = None
+        required_scope = _required_scope(str(request.method), str(request.url.path))
         try:
+            if str(request.method).upper() in {"POST", "PUT", "PATCH"}:
+                content_length = request.headers.get("content-length")
+                if content_length is not None:
+                    try:
+                        declared_length = int(content_length)
+                    except ValueError:
+                        status_code = 400
+                        return _boundary_error(
+                            status_code=400,
+                            code="invalid_content_length",
+                            message="The request content length is invalid.",
+                            correlation_id=correlation_id,
+                        )
+                    if declared_length < 0 or declared_length > body_limit:
+                        status_code = 413
+                        return _boundary_error(
+                            status_code=413,
+                            code="request_body_too_large",
+                            message="The request body exceeds the configured limit.",
+                            correlation_id=correlation_id,
+                        )
+                body = await request.body()
+                if len(body) > body_limit:
+                    status_code = 413
+                    return _boundary_error(
+                        status_code=413,
+                        code="request_body_too_large",
+                        message="The request body exceeds the configured limit.",
+                        correlation_id=correlation_id,
+                    )
+            if (
+                str(request.url.path) == "/v1/replays/investment"
+                and not allow_replay
+            ):
+                status_code = 404
+                return _boundary_error(
+                    status_code=404,
+                    code="resource_not_found",
+                    message="The requested resource was not found.",
+                    correlation_id=correlation_id,
+                )
+            if required_scope is not None:
+                principal = authenticator.authenticate(
+                    request.headers.get("authorization"),
+                    required_scope=required_scope,
+                )
+                limiter.acquire(principal.principal_id, required_scope)
+                request.state.api_principal = principal
             response = await call_next(request)
             status_code = int(response.status_code)
-            response.headers["x-correlation-id"] = request.state.correlation_id
+            response.headers["x-correlation-id"] = correlation_id
             return response
+        except ApiSecurityError as exc:
+            status_code = exc.status_code
+            return _boundary_error(
+                status_code=exc.status_code,
+                code=exc.code,
+                message=exc.message,
+                correlation_id=correlation_id,
+                retry_after_seconds=exc.retry_after_seconds,
+            )
         finally:
             route = request.scope.get("route")
             route_path = getattr(route, "path", "__unmatched__")
@@ -104,6 +205,9 @@ def create_app(
                 path=str(route_path),
                 status_code=status_code,
                 elapsed_ms=(time.perf_counter() - started) * 1_000.0,
+                principal_id=principal.principal_id if principal is not None else None,
+                correlation_id=correlation_id,
+                required_scope=required_scope,
             )
 
     @app.exception_handler(PredictionServiceError)
@@ -152,6 +256,24 @@ def create_app(
         )
         status_code = 200 if result.get("status") == "ready" else 503
         runtime_telemetry.record_health(result)
+        return JSONResponse(
+            status_code=status_code,
+            content={
+                "status": result.get("status", "not_ready"),
+                "checked_at_utc": result.get("checked_at_utc"),
+            },
+        )
+
+    @app.get("/v1/operations/health")
+    def operational_health() -> JSONResponse:
+        health_check = getattr(prediction_service, "health", None)
+        result = (
+            health_check()
+            if callable(health_check)
+            else {"status": "not_ready", "reason": "prediction readiness is not configured"}
+        )
+        status_code = 200 if result.get("status") == "ready" else 503
+        runtime_telemetry.record_health(result)
         return JSONResponse(status_code=status_code, content=result)
 
     @app.get("/v1/metrics")
@@ -164,6 +286,7 @@ def create_app(
             prediction_service,
             _with_request_context(request, http_request, mode="swing"),
             runtime_telemetry,
+            http_request,
         )
 
     @app.post("/v1/predictions/intraday", response_model=PredictionResponse)
@@ -172,6 +295,7 @@ def create_app(
             prediction_service,
             _with_request_context(request, http_request, mode="intraday"),
             runtime_telemetry,
+            http_request,
         )
 
     @app.post("/v1/predictions/unified", response_model=PredictionResponse)
@@ -180,6 +304,7 @@ def create_app(
             prediction_service,
             _with_request_context(request, http_request, mode="unified"),
             runtime_telemetry,
+            http_request,
         )
 
     @app.post("/v1/replays/investment", response_model=InvestmentReplayResponse)
@@ -195,9 +320,21 @@ def _run_prediction(
     service: PredictionService,
     request: PredictionRequest,
     telemetry: RuntimeTelemetry,
+    http_request: Request,
 ) -> PredictionResponse:
     response = service.predict(request)
-    telemetry.record_prediction(response)
+    principal = _request_principal(http_request)
+    admission = (
+        service.admission.snapshot().to_record()
+        if isinstance(service, PredictionService)
+        else None
+    )
+    telemetry.record_prediction(
+        response,
+        principal_id=principal.principal_id if principal is not None else None,
+        correlation_id=_state_correlation_id(http_request),
+        admission=admission,
+    )
     return response
 
 
@@ -243,6 +380,7 @@ def _error_response(
     message: str,
     correlation_id: str,
     retryable: bool,
+    headers: dict[str, str] | None = None,
 ) -> JSONResponse:
     envelope = PredictionApiErrorEnvelope(
         error=PredictionApiError(
@@ -255,8 +393,89 @@ def _error_response(
     return JSONResponse(
         status_code=status_code,
         content=envelope.model_dump(mode="json"),
-        headers={"x-correlation-id": correlation_id},
+        headers={"x-correlation-id": correlation_id, **(headers or {})},
     )
 
 
-app = create_app() if FastAPI is not None else None
+def _boundary_error(
+    *,
+    status_code: int,
+    code: str,
+    message: str,
+    correlation_id: str,
+    retry_after_seconds: int | None = None,
+) -> JSONResponse:
+    headers: dict[str, str] = {}
+    if status_code == 401:
+        headers["www-authenticate"] = "Bearer"
+    if retry_after_seconds is not None:
+        headers["retry-after"] = str(retry_after_seconds)
+    return _error_response(
+        status_code=status_code,
+        code=code,
+        message=message,
+        correlation_id=correlation_id,
+        retryable=status_code in {429, 503},
+        headers=headers,
+    )
+
+
+def _required_scope(method: str, path: str) -> str | None:
+    return {
+        ("POST", "/v1/predictions/swing"): "predictions.read",
+        ("POST", "/v1/predictions/intraday"): "predictions.read",
+        ("POST", "/v1/predictions/unified"): "predictions.read",
+        ("GET", "/v1/operations/health"): "operations.read",
+        ("GET", "/v1/metrics"): "metrics.read",
+        ("POST", "/v1/replays/investment"): "replay.execute",
+    }.get((method.upper(), path))
+
+
+def _request_principal(request: Request) -> ApiPrincipal | None:
+    principal = getattr(request.state, "api_principal", None)
+    return principal if isinstance(principal, ApiPrincipal) else None
+
+
+def _security_config_from_settings(settings: Any) -> ApiSecurityConfig:
+    environment = str(settings.api_environment).strip().lower()
+    mode = str(settings.api_auth_mode).strip().lower()
+    if environment not in {"development", "production"}:
+        raise RuntimeError("API_ENVIRONMENT must be development or production")
+    if environment == "production" and mode != "entra":
+        raise RuntimeError("production API requires Entra authentication")
+    if environment == "development" and mode not in {"development", "entra"}:
+        raise RuntimeError("development API auth mode must be development or entra")
+    return ApiSecurityConfig(
+        mode=cast(Literal["development", "entra"], mode),
+        issuer=settings.api_jwt_issuer,
+        audience=settings.api_jwt_audience,
+        jwks_path=settings.api_jwks_path,
+        development_token=settings.api_development_bearer_token,
+    )
+
+
+def _rate_limiter_from_settings(settings: Any | None) -> PrincipalRateLimiter:
+    rates = {
+        "predictions.read": (
+            settings.api_prediction_requests_per_minute if settings is not None else 60
+        ),
+        "operations.read": (
+            settings.api_operations_requests_per_minute if settings is not None else 30
+        ),
+        "metrics.read": (
+            settings.api_metrics_requests_per_minute if settings is not None else 30
+        ),
+        "replay.execute": (
+            settings.api_replay_requests_per_minute if settings is not None else 5
+        ),
+    }
+    if set(rates) != API_SCOPES:
+        raise RuntimeError("API rate-limit scope configuration is incomplete")
+    return PrincipalRateLimiter(
+        requests_per_minute=rates,
+        maximum_principals=(
+            settings.api_maximum_rate_limit_principals
+            if settings is not None
+            else 10_000
+        ),
+    )

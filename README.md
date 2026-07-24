@@ -276,10 +276,16 @@ Endpoints:
 
 - `GET /v1/health/live`
 - `GET /v1/health/ready`
+- `GET /v1/operations/health`
+- `GET /v1/metrics`
 - `POST /v1/predictions/swing`
 - `POST /v1/predictions/intraday`
 - `POST /v1/predictions/unified`
 - `POST /v1/replays/investment`
+
+Liveness and the minimal readiness status are public for platform probes. All other endpoints require a bearer access token. Production accepts only Entra-signed RS256 access tokens whose signature, issuer, audience, expiry, and not-before claims validate against the read-only local JWKS. Authorization accepts delegated `scp` values or application `roles`: `predictions.read`, `operations.read`, `metrics.read`, and `replay.execute`. TradingFlow should use its managed identity or service principal with only `predictions.read`; grant `replay.execute` separately. Replay is disabled unless `API_REPLAY_ENABLED=true`.
+
+The API caps request bodies at 64 KiB, accepts at most 100 canonical US ticker symbols per request, applies bounded principal/token-bucket limits per scope, and returns `Retry-After` with HTTP 429. Production startup fails when Entra issuer, audience, or JWKS configuration is absent. Static bearer tokens are accepted only when both `API_ENVIRONMENT=development` and `API_AUTH_MODE=development`; OpenAPI UI is disabled in Entra mode.
 
 Example request:
 

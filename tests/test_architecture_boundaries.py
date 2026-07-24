@@ -4,6 +4,7 @@ import unittest
 from pathlib import Path
 
 from market_predictor.api import create_app
+from market_predictor.api_security import ApiSecurityConfig
 from market_predictor.cli import app
 
 
@@ -68,7 +69,12 @@ class ArchitectureBoundaryTests(unittest.TestCase):
         self.assertNotIn("market_predictor.entry_exit", prediction_service)
 
     def test_prediction_api_exposes_no_alert_or_execution_routes(self) -> None:
-        route_paths = {route.path.lower() for route in create_app().routes}
+        route_paths = {
+            route.path.lower()
+            for route in create_app(
+                security_config=ApiSecurityConfig(mode="disabled")
+            ).routes
+        }
         forbidden_tokens = ("alert", "notification", "order", "broker", "position")
 
         for path in route_paths:
