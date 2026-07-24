@@ -3,10 +3,23 @@ from __future__ import annotations
 import pandas as pd
 
 from market_predictor.canonical.audits import CanonicalAuditCheck, CanonicalAuditReport
+from market_predictor.label_reconciliation import (
+    LABEL_IDENTITY_COLUMNS,
+    replay_mismatch_count,
+    stamped_material_hash_is_valid,
+    swing_label_material_columns,
+)
 from market_predictor.swing.contracts import SWING_FEATURES, SwingDatasetConfig, swing_target_column
+from market_predictor.swing.labels import add_exact_swing_labels
 
 
-def audit_swing_dataset(frame: pd.DataFrame, config: SwingDatasetConfig) -> CanonicalAuditReport:
+def audit_swing_dataset(
+    frame: pd.DataFrame,
+    config: SwingDatasetConfig,
+    *,
+    source_frame: pd.DataFrame | None = None,
+    benchmark_bars: pd.DataFrame | None = None,
+) -> CanonicalAuditReport:
     horizon = config.horizon_sessions
     required = {
         "ticker",
@@ -32,6 +45,9 @@ def audit_swing_dataset(frame: pd.DataFrame, config: SwingDatasetConfig) -> Cano
         "qqq_available_at_utc",
         "sector_available_at_utc",
         "swing_feature_schema_version",
+        "label_material_sha256",
+        "label_source_reconciliation_sha256",
+        "label_source_reconciliation_errors",
         swing_target_column(horizon),
         f"future_net_return_{horizon}d",
         f"future_excess_return_{horizon}d_vs_spy",
@@ -41,9 +57,7 @@ def audit_swing_dataset(frame: pd.DataFrame, config: SwingDatasetConfig) -> Cano
     }
     missing = sorted(required.difference(frame.columns))
     if missing:
-        return CanonicalAuditReport(
-            checks=(_check("swing_schema", 1, len(frame), f"missing columns: {', '.join(missing)}"),)
-        )
+        return CanonicalAuditReport(checks=(_check("swing_schema", 1, len(frame), f"missing columns: {', '.join(missing)}"),))
 
     data = frame.copy()
     decision = _utc(data["decision_time_utc"])
@@ -80,7 +94,10 @@ def audit_swing_dataset(frame: pd.DataFrame, config: SwingDatasetConfig) -> Cano
         data.loc[
             warm_candidate,
             ["spy_available_at_utc", "qqq_available_at_utc", "sector_available_at_utc"],
-        ].isna().any(axis=1).sum()
+        ]
+        .isna()
+        .any(axis=1)
+        .sum()
     )
     source_failures = 0
     max_source_age = pd.Timedelta(minutes=config.source_coverage_max_age_minutes)
@@ -110,51 +127,62 @@ def audit_swing_dataset(frame: pd.DataFrame, config: SwingDatasetConfig) -> Cano
         status_column = f"global_source_status_{normalized}"
         available_column = f"global_source_status_available_at_utc_{normalized}"
         coverage_column = f"global_source_coverage_end_utc_{normalized}"
-        if (
-            status_column not in data.columns
-            or available_column not in data.columns
-            or coverage_column not in data.columns
-        ):
+        if status_column not in data.columns or available_column not in data.columns or coverage_column not in data.columns:
             global_source_failures += max(1, int(feature_eligible.sum()))
             continue
         statuses = data.loc[feature_eligible, status_column].astype(str).str.lower().str.strip()
         available = _utc(data.loc[feature_eligible, available_column], allow_null=True)
         coverage = _utc(data.loc[feature_eligible, coverage_column], allow_null=True)
         source_decision = decision.loc[feature_eligible]
-        stale = (
-            coverage.isna()
-            | coverage.gt(available)
-            | coverage.gt(source_decision)
-            | source_decision.sub(coverage).gt(max_source_age)
-        )
-        global_source_failures += int(
-            (~statuses.isin({"observed", "observed_empty"}) | available.isna() | stale).sum()
-        )
+        stale = coverage.isna() | coverage.gt(available) | coverage.gt(source_decision) | source_decision.sub(coverage).gt(max_source_age)
+        global_source_failures += int((~statuses.isin({"observed", "observed_empty"}) | available.isna() | stale).sum())
 
     feed_failures = int(data.loc[feature_eligible, "price_feed"].astype(str).str.lower().ne(config.required_price_feed).sum())
-    adjustment_failures = int(
-        data.loc[feature_eligible, "adjustment"].astype(str).str.lower().ne(config.required_adjustment).sum()
-    )
+    adjustment_failures = int(data.loc[feature_eligible, "adjustment"].astype(str).str.lower().ne(config.required_adjustment).sum())
     identity_failures = int(data.duplicated(["ticker", "decision_time_utc"]).sum())
     warm_rows = int(feature_eligible.sum())
     cross_section_failures = int((feature_eligible & ~data["cross_section_eligible"].fillna(False).astype(bool)).sum())
     internal_path_failures = int((feature_eligible & label_expected & ~label_exact).sum())
     label_order = label_eligible & (
-        entry.isna()
-        | exit_time.isna()
-        | label_available.isna()
-        | entry.le(decision)
-        | exit_time.le(entry)
-        | label_available.lt(exit_time)
+        entry.isna() | exit_time.isna() | label_available.isna() | entry.le(decision) | exit_time.le(entry) | label_available.lt(exit_time)
     )
     label_order_failures = int(label_order.sum())
     target = pd.to_numeric(data[swing_target_column(horizon)], errors="coerce")
     label_value_failures = int((label_eligible & (target.isna() | ~target.isin({0, 1}))).sum())
     schema_failures = int(data["swing_feature_schema_version"].astype(str).ne(config.schema_version).sum())
+    material_columns = swing_label_material_columns(horizon)
+    lineage_failures = int(
+        not stamped_material_hash_is_valid(
+            data,
+            identity_columns=LABEL_IDENTITY_COLUMNS,
+            material_columns=material_columns,
+        )
+    )
+    stamped_errors = pd.to_numeric(
+        data["label_source_reconciliation_errors"],
+        errors="coerce",
+    )
+    lineage_failures += int(
+        stamped_errors.isna().any() or stamped_errors.nunique(dropna=False) != 1 or stamped_errors.fillna(1).iloc[0] != 0
+    )
+    reconciliation_hashes = data["label_source_reconciliation_sha256"].fillna("").astype(str).unique()
+    lineage_failures += int(len(reconciliation_hashes) != 1 or len(reconciliation_hashes[0]) != 64)
+    if (source_frame is None) != (benchmark_bars is None):
+        lineage_failures += 1
+    elif source_frame is not None and benchmark_bars is not None:
+        reproduced = add_exact_swing_labels(
+            source_frame,
+            benchmark_bars,
+            config,
+        )
+        lineage_failures += replay_mismatch_count(
+            data,
+            reproduced,
+            identity_columns=LABEL_IDENTITY_COLUMNS,
+            material_columns=material_columns,
+        )
     leakage_named_features = [
-        feature
-        for feature in SWING_FEATURES
-        if feature.startswith(("future_", "target_", "entry_", "exit_", "label_"))
+        feature for feature in SWING_FEATURES if feature.startswith(("future_", "target_", "entry_", "exit_", "label_"))
     ]
 
     checks = (
@@ -188,6 +216,12 @@ def audit_swing_dataset(frame: pd.DataFrame, config: SwingDatasetConfig) -> Cano
         _check("swing_exact_label_path", internal_path_failures, int(label_expected.sum()), "future sessions are consecutive"),
         _check("swing_label_order", label_order_failures, int(label_eligible.sum()), "entry and exit follow decision"),
         _check("swing_label_values", label_value_failures, int(label_eligible.sum()), "eligible targets are binary"),
+        _check(
+            "swing_label_source_reconciliation",
+            lineage_failures,
+            len(data),
+            "material labels reproduce from immutable daily stock and benchmark paths",
+        ),
         _check("swing_feature_names", len(leakage_named_features), len(SWING_FEATURES), "feature names exclude labels"),
         _check("swing_schema_version", schema_failures, len(data), "swing schema version matches"),
     )
@@ -195,11 +229,7 @@ def audit_swing_dataset(frame: pd.DataFrame, config: SwingDatasetConfig) -> Cano
 
 
 def audit_feature_availability_columns(frame: pd.DataFrame) -> list[str]:
-    return [
-        column
-        for column in frame.columns
-        if column.endswith("available_at_utc") and column not in {"label_available_at_utc"}
-    ]
+    return [column for column in frame.columns if column.endswith("available_at_utc") and column not in {"label_available_at_utc"}]
 
 
 def _utc(values: pd.Series, *, allow_null: bool = False) -> pd.Series:

@@ -87,11 +87,7 @@ def promote_intraday_model(
     }
     for name, audit in audits.items():
         failures.extend(_audit_provenance_failures(name, audit, model_run_id))
-    if (
-        evidence.provenance != "hash_verified_evidence_bundle"
-        or evidence.evidence_manifest is None
-        or evidence_manifest_path is None
-    ):
+    if evidence.provenance != "hash_verified_evidence_bundle" or evidence.evidence_manifest is None or evidence_manifest_path is None:
         failures.append("promotion requires a hash-verified persisted training evidence bundle")
 
     failures.extend(
@@ -232,6 +228,7 @@ def promote_intraday_model(
             "events_without_feature_row",
             "missing_historical_feature_rows",
             "dates_with_news_count_mismatch",
+            "label_source_reconciliation_errors",
         )
         total = 0.0
         for column in columns:
@@ -471,18 +468,10 @@ def _capacity_curve_failures(metrics: dict[str, Any]) -> list[str]:
     expected_capitals = list(DEFAULT_EXECUTION_POLICY.capacity_capital_usd)
     if capitals != expected_capitals:
         failures.append("capacity curve capital levels do not match the execution policy")
-    expected_selected = _finite_number(
-        metrics.get("full_cross_section_selected_trades")
-    )
+    expected_selected = _finite_number(metrics.get("full_cross_section_selected_trades"))
     selected = pd.to_numeric(curve["selected_trades"], errors="coerce")
-    if (
-        expected_selected is None
-        or selected.isna().any()
-        or not selected.eq(expected_selected).all()
-    ):
-        failures.append(
-            "capacity curve selected counts do not match full-cross-section selection"
-        )
+    if expected_selected is None or selected.isna().any() or not selected.eq(expected_selected).all():
+        failures.append("capacity curve selected counts do not match full-cross-section selection")
     filled = pd.to_numeric(curve["filled_trades"], errors="coerce")
     no_fill = pd.to_numeric(curve["no_fill_rate"], errors="coerce")
     if (
@@ -499,12 +488,8 @@ def _capacity_curve_failures(metrics: dict[str, Any]) -> list[str]:
         failures.append("capacity curve fill and no-fill counts do not reconcile")
     if not curve["liquidity_evidence_complete"].map(_strict_bool).all():
         failures.append("capacity curve contains incomplete liquidity evidence")
-    recomputed_min_return = _finite_number(
-        pd.to_numeric(curve["avg_net_return"], errors="coerce").min()
-    )
-    declared_min_return = _finite_number(
-        metrics.get("capacity_min_avg_net_return")
-    )
+    recomputed_min_return = _finite_number(pd.to_numeric(curve["avg_net_return"], errors="coerce").min())
+    declared_min_return = _finite_number(metrics.get("capacity_min_avg_net_return"))
     if (
         recomputed_min_return is None
         or declared_min_return is None
@@ -586,6 +571,8 @@ def _causal_identity_failures(metrics: dict[str, Any]) -> list[str]:
         "reconciliation_sha256",
         "event_assignment_sha256",
         "event_aggregate_sha256",
+        "label_material_sha256",
+        "label_source_reconciliation_sha256",
         "dataset_label_config_sha256",
         "calibration_method",
     ):
@@ -611,15 +598,11 @@ def _causal_identity_failures(metrics: dict[str, Any]) -> list[str]:
             expected_values = {
                 "selection_k": float(policy.intraday_top_k),
                 "selection_downside_ceiling": policy.intraday_downside_ceiling,
-                "max_trades_per_session": float(
-                    policy.intraday_max_trades_per_session
-                ),
+                "max_trades_per_session": float(policy.intraday_max_trades_per_session),
             }
             for field, expected in expected_values.items():
                 if _finite_number(metrics.get(field)) != expected:
-                    failures.append(
-                        f"metrics.{field} does not match the bound intraday policy"
-                    )
+                    failures.append(f"metrics.{field} does not match the bound intraday policy")
     if str(metrics.get("execution_policy_sha256") or "") != EXECUTION_POLICY_SHA256:
         failures.append("metrics.execution_policy_sha256 does not match the execution policy")
     return failures
@@ -631,15 +614,9 @@ def _worst_regime_failures(regime_audit: pd.DataFrame, config: IntradayPromotion
         required_regimes=INTRADAY_REQUIRED_MARKET_REGIMES,
         min_required_sessions=config.min_required_regime_sessions,
         min_required_trades=config.min_required_regime_trades,
-        min_avg_excess_return_vs_spy=(
-            config.min_worst_regime_avg_excess_return_vs_spy
-        ),
-        min_avg_trade_return_ci_low=(
-            config.min_worst_regime_avg_trade_return_ci_low
-        ),
-        min_avg_excess_return_vs_spy_ci_low=(
-            config.min_worst_regime_avg_excess_return_vs_spy_ci_low
-        ),
+        min_avg_excess_return_vs_spy=(config.min_worst_regime_avg_excess_return_vs_spy),
+        min_avg_trade_return_ci_low=(config.min_worst_regime_avg_trade_return_ci_low),
+        min_avg_excess_return_vs_spy_ci_low=(config.min_worst_regime_avg_excess_return_vs_spy_ci_low),
         max_drawdown=config.max_worst_regime_drawdown,
         max_calibration_error=config.max_worst_regime_calibration_error,
     )

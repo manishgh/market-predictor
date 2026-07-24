@@ -12,11 +12,21 @@ from market_predictor.intraday.contracts import (
     net_return_column,
     opportunity_target_column,
 )
+from market_predictor.intraday.labels import add_exact_one_minute_labels
+from market_predictor.label_reconciliation import (
+    LABEL_IDENTITY_COLUMNS,
+    intraday_label_material_columns,
+    replay_mismatch_count,
+    stamped_material_hash_is_valid,
+)
 
 
 def audit_intraday_dataset(
     frame: pd.DataFrame,
     config: IntradayDatasetConfig,
+    *,
+    source_frame: pd.DataFrame | None = None,
+    one_minute_bars: pd.DataFrame | None = None,
 ) -> CanonicalAuditReport:
     horizon = config.horizon_minutes
     required = {
@@ -52,6 +62,9 @@ def audit_intraday_dataset(
         "qqq_available_at_utc",
         "sector_available_at_utc",
         "intraday_feature_schema_version",
+        "label_material_sha256",
+        "label_source_reconciliation_sha256",
+        "label_source_reconciliation_errors",
         opportunity_target_column(horizon),
         downside_target_column(horizon),
         f"path_timeout_{horizon}m",
@@ -91,20 +104,9 @@ def audit_intraday_dataset(
 
     timestamp_failures = int(decision.isna().sum() + feature.isna().sum())
     future_features = int((feature > decision).fillna(True).sum())
-    peer_cutoff_failures = int(
-        (
-            cross_section_cutoff.ne(decision)
-            | ticker_decision.gt(cross_section_cutoff)
-        )
-        .fillna(True)
-        .sum()
-    )
-    expected_cutoff = feature.groupby(data["nominal_decision_group_id"]).transform(
-        "max"
-    )
-    peer_cutoff_failures += int(
-        expected_cutoff.ne(cross_section_cutoff).fillna(True).sum()
-    )
+    peer_cutoff_failures = int((cross_section_cutoff.ne(decision) | ticker_decision.gt(cross_section_cutoff)).fillna(True).sum())
+    expected_cutoff = feature.groupby(data["nominal_decision_group_id"]).transform("max")
+    peer_cutoff_failures += int(expected_cutoff.ne(cross_section_cutoff).fillna(True).sum())
     availability_columns = [
         "membership_available_at_utc",
         "one_minute_available_at_utc",
@@ -208,6 +210,37 @@ def audit_intraday_dataset(
     )
     catalyst_future = int((data["catalyst_eligible"].fillna(False).astype(bool) & one_minute_available.gt(decision)).sum())
     schema_failures = int(data["intraday_feature_schema_version"].astype(str).ne(config.schema_version).sum())
+    material_columns = intraday_label_material_columns(horizon)
+    lineage_failures = int(
+        not stamped_material_hash_is_valid(
+            data,
+            identity_columns=LABEL_IDENTITY_COLUMNS,
+            material_columns=material_columns,
+        )
+    )
+    stamped_errors = pd.to_numeric(
+        data["label_source_reconciliation_errors"],
+        errors="coerce",
+    )
+    lineage_failures += int(
+        stamped_errors.isna().any() or stamped_errors.nunique(dropna=False) != 1 or stamped_errors.fillna(1).iloc[0] != 0
+    )
+    reconciliation_hashes = data["label_source_reconciliation_sha256"].fillna("").astype(str).unique()
+    lineage_failures += int(len(reconciliation_hashes) != 1 or len(reconciliation_hashes[0]) != 64)
+    if (source_frame is None) != (one_minute_bars is None):
+        lineage_failures += 1
+    elif source_frame is not None and one_minute_bars is not None:
+        reproduced = add_exact_one_minute_labels(
+            source_frame,
+            one_minute_bars,
+            config,
+        )
+        lineage_failures += replay_mismatch_count(
+            data,
+            reproduced,
+            identity_columns=LABEL_IDENTITY_COLUMNS,
+            material_columns=material_columns,
+        )
     leakage_named_features = [
         feature for feature in INTRADAY_MODEL_FEATURES if feature.startswith(("target_", "path_", "entry_", "exit_", "label_", "future_"))
     ]
@@ -290,6 +323,12 @@ def audit_intraday_dataset(
             benchmark_label_failures,
             int(benchmark_label_scope.sum()),
             "SPY, QQQ, and sector returns use the exact trade interval",
+        ),
+        _check(
+            "intraday_label_source_reconciliation",
+            lineage_failures,
+            len(data),
+            "material labels reproduce from immutable one-minute stock and benchmark paths",
         ),
         _check(
             "intraday_overlap_metadata",

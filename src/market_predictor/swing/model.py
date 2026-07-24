@@ -112,9 +112,7 @@ def train_swing_model(
         raise DataReadinessError(f"swing training needs at least {config.min_train_rows} eligible rows")
     ticker_count = int(data["ticker"].nunique())
     if ticker_count < config.min_training_tickers:
-        raise DataReadinessError(
-            f"swing training needs at least {config.min_training_tickers} tickers; found {ticker_count}"
-        )
+        raise DataReadinessError(f"swing training needs at least {config.min_training_tickers} tickers; found {ticker_count}")
     splitter = V3PurgedWalkForwardSplit(
         n_splits=config.n_splits,
         embargo_sessions=horizon,
@@ -169,9 +167,7 @@ def train_swing_model(
         train = development.iloc[train_indices]
         validation = development.iloc[fold.test_indices].reset_index(drop=True)
         test_sessions = set(pd.to_datetime(validation["session_date_et"]).dt.date)
-        ticker_validation = holdout[
-            pd.to_datetime(holdout["session_date_et"]).dt.date.isin(test_sessions)
-        ].reset_index(drop=True)
+        ticker_validation = holdout[pd.to_datetime(holdout["session_date_et"]).dt.date.isin(test_sessions)].reset_index(drop=True)
         if ticker_validation.empty:
             raise DataReadinessError(f"fold {fold.fold} has no held-out ticker test rows")
         _require_binary_target(train[target], f"fold {fold.fold} training")
@@ -441,6 +437,14 @@ def train_swing_model(
             dataset,
             "event_aggregate_sha256",
         ),
+        "label_material_sha256": stamped_hash(
+            dataset,
+            "label_material_sha256",
+        ),
+        "label_source_reconciliation_sha256": stamped_hash(
+            dataset,
+            "label_source_reconciliation_sha256",
+        ),
         "dataset_label_config_sha256": stamped_hash(dataset, "dataset_label_config_sha256"),
         "universe_identity_sha256": identity_set_sha256(data["universe_snapshot_id"].astype(str).unique()),
         "universe_snapshots": int(data["universe_snapshot_id"].nunique()),
@@ -449,13 +453,10 @@ def train_swing_model(
         **execution_policy_identity(),
         "holdout_assignment_cutoff_utc": holdout_plan.assignment_cutoff_utc,
         "holdout_ticker_summary_sha256": holdout_plan.ticker_summary_sha256,
-        "holdout_required_strata": int(
-            holdout_plan.representation_audit["required"].astype(bool).sum()
-        ),
+        "holdout_required_strata": int(holdout_plan.representation_audit["required"].astype(bool).sum()),
         "holdout_unrepresented_required_strata": int(
             (
-                holdout_plan.representation_audit["required"].astype(bool)
-                & ~holdout_plan.representation_audit["represented"].astype(bool)
+                holdout_plan.representation_audit["required"].astype(bool) & ~holdout_plan.representation_audit["represented"].astype(bool)
             ).sum()
         ),
         "robust_avg_trade_return": robust["avg_trade_return"],
@@ -524,13 +525,9 @@ def _alignment_audit(dataset: pd.DataFrame) -> pd.DataFrame:
     label_exact = dataset["label_path_exact"].fillna(False).astype(bool)
     feature_eligible = dataset["feature_eligible"].fillna(False).astype(bool)
     benchmark_columns = [
-        column
-        for column in dataset
-        if column.startswith("future_excess_return_") and column.endswith(("_vs_spy", "_vs_qqq", "_vs_sector"))
+        column for column in dataset if column.startswith("future_excess_return_") and column.endswith(("_vs_spy", "_vs_qqq", "_vs_sector"))
     ]
-    benchmark_missing = (
-        dataset[benchmark_columns].isna().any(axis=1) if benchmark_columns else pd.Series(False, index=dataset.index)
-    )
+    benchmark_missing = dataset[benchmark_columns].isna().any(axis=1) if benchmark_columns else pd.Series(False, index=dataset.index)
     future = int((feature > decision).fillna(True).sum())
     path_mismatch = int((feature_eligible & label_expected & ~label_exact).sum())
     benchmark_mismatch = int((feature_eligible & label_exact & benchmark_missing).sum())
@@ -540,6 +537,11 @@ def _alignment_audit(dataset: pd.DataFrame) -> pd.DataFrame:
         "reconciliation_missing_historical_feature_rows",
     )
     dates_with_news_count_mismatch = stamped_scalar(dataset, "reconciliation_dates_with_news_count_mismatch")
+    label_source_reconciliation_errors = stamped_scalar(
+        dataset,
+        "label_source_reconciliation_errors",
+        default=1,
+    )
     return pd.DataFrame(
         [
             {
@@ -550,6 +552,7 @@ def _alignment_audit(dataset: pd.DataFrame) -> pd.DataFrame:
                     + events_without_feature_row
                     + missing_historical_feature_rows
                     + dates_with_news_count_mismatch
+                    + label_source_reconciliation_errors
                 ),
                 "future_feature_rows": future,
                 "label_path_mismatches": path_mismatch,
@@ -557,6 +560,7 @@ def _alignment_audit(dataset: pd.DataFrame) -> pd.DataFrame:
                 "events_without_feature_row": events_without_feature_row,
                 "missing_historical_feature_rows": missing_historical_feature_rows,
                 "dates_with_news_count_mismatch": dates_with_news_count_mismatch,
+                "label_source_reconciliation_errors": (label_source_reconciliation_errors),
             }
         ]
     )
@@ -618,6 +622,9 @@ def _training_rows(dataset: pd.DataFrame) -> tuple[pd.DataFrame, int, str]:
         "horizon_sessions",
         "swing_feature_schema_version",
         "dataset_label_config_sha256",
+        "label_material_sha256",
+        "label_source_reconciliation_sha256",
+        "label_source_reconciliation_errors",
         "universe_snapshot_id",
         "market_regime",
     }
@@ -629,6 +636,23 @@ def _training_rows(dataset: pd.DataFrame) -> tuple[pd.DataFrame, int, str]:
     label_configs = dataset["dataset_label_config_sha256"].astype(str).unique()
     if len(label_configs) != 1 or not str(label_configs[0]).strip():
         raise SchemaMismatchError("swing dataset must contain exactly one label config")
+    for column in (
+        "label_material_sha256",
+        "label_source_reconciliation_sha256",
+    ):
+        values = dataset[column].fillna("").astype(str).unique()
+        if len(values) != 1 or len(values[0]) != 64:
+            raise DataReadinessError(f"swing dataset has invalid {column} identity")
+    label_reconciliation_errors = pd.to_numeric(
+        dataset["label_source_reconciliation_errors"],
+        errors="coerce",
+    )
+    if (
+        label_reconciliation_errors.isna().any()
+        or label_reconciliation_errors.nunique(dropna=False) != 1
+        or int(label_reconciliation_errors.iloc[0]) != 0
+    ):
+        raise DataReadinessError("swing dataset label source reconciliation did not pass")
     horizons = pd.to_numeric(dataset["horizon_sessions"], errors="coerce").dropna().astype(int).unique()
     if len(horizons) != 1:
         raise SchemaMismatchError("swing dataset must contain exactly one horizon")
@@ -659,10 +683,7 @@ def _select_features(
     for feature in SWING_FEATURES:
         if feature not in training_data.columns:
             continue
-        if (
-            pd.to_numeric(training_data[feature], errors="coerce").notna().mean()
-            < config.min_feature_non_null_rate
-        ):
+        if pd.to_numeric(training_data[feature], errors="coerce").notna().mean() < config.min_feature_non_null_rate:
             continue
         selected.append(feature)
     return selected
@@ -750,9 +771,7 @@ def _fold_evidence_record(
         **fold.audit_record(),
         "record_type": "validation_fold",
         "validation_scope": scope,
-        "validation_status": (
-            "included" if calibration_fit is not None else "calibration_seed_excluded"
-        ),
+        "validation_status": ("included" if calibration_fit is not None else "calibration_seed_excluded"),
         "train_rows": len(train),
         "test_rows": len(test),
         "max_train_label_available_at_utc": max_train_label.isoformat(),
@@ -765,9 +784,7 @@ def _fold_evidence_record(
         "test_row_identity_sha256": identity_set_sha256(test["validation_row_identity"]),
         "feature_set_sha256": feature_set_sha256,
         "calibration_method": calibration_fit.method if calibration_fit else "seed_only_not_scored",
-        "calibration_train_cutoff_utc": (
-            calibration_fit.train_cutoff_utc.isoformat() if calibration_fit else ""
-        ),
+        "calibration_train_cutoff_utc": (calibration_fit.train_cutoff_utc.isoformat() if calibration_fit else ""),
         "calibration_training_rows": calibration_fit.training_rows if calibration_fit else 0,
     }
 

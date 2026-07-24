@@ -205,6 +205,17 @@ The decision table carries `event_assignment_sha256` and
 candidate metrics; promotion and signed attestation reject either a missing
 identity or nonzero stamped reconciliation counters.
 
+`src/market_predictor/label_paths.py` is the shared pure evaluator for swing
+open-to-close paths and intraday target/stop/timeout paths. Offline dataset
+labeling and live outcome maturation both call it, including executable
+gap-through fills, stop-first same-bar ambiguity, frozen round-trip cost, and
+MFE/MAE. `label_reconciliation.py` content-addresses material label rows in
+bounded chunks. Each canonical swing or intraday dataset audit independently
+rebuilds labels from the original stock and benchmark bars before publication.
+Training requires one valid `label_material_sha256`, one
+`label_source_reconciliation_sha256`, and zero reconciliation errors; promotion
+and signed attestation bind both hashes.
+
 `build-swing-datasets` remains research-only. Production swing feature engineering is `build-swing-dataset` on the canonical decision table. The production path never fetches while building features, never forward-fills current Seeking Alpha/SEC snapshots, and never accepts publication-proxy history.
 
 V3 orchestration is registered through focused modules under `src/market_predictor/commands/`: `v3_data.py`, `v3_features.py`, `v3_labels.py`, `v3_models.py`, and `v3_evaluation.py`. The corresponding implementation under `src/market_predictor/v3/` owns strict contracts, immutable development/shadow partitioning, exact labels, batch/live feature parity, session-purged validation, deterministic ticker holdout, B0/B1/B2/R1/D1 candidate training, disjoint calibration, and session-blocked ranking economics. Label schema `ml_v3.labels.v2` requires the maximum configured path to be contiguous at `bar_minutes`; decisions spanning a missing ticker candle are dropped rather than interpolated or shifted. These candidates and audit calibrators are research artifacts and are not connected to the promoted serving registry until later promotion checkpoints pass.

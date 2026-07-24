@@ -46,6 +46,8 @@ def synthetic_identity_metrics(
         "reconciliation_sha256": "3" * 64,
         "event_assignment_sha256": "a" * 64,
         "event_aggregate_sha256": "b" * 64,
+        "label_material_sha256": "c" * 64,
+        "label_source_reconciliation_sha256": "d" * 64,
         "dataset_label_config_sha256": "4" * 64,
         "calibration_method": "isotonic_prior_fold_only",
         "folds_causally_ordered": True,
@@ -133,9 +135,7 @@ def authorize_candidate_for_test(model_path: Path, metrics: dict[str, Any]) -> P
         json.dumps(
             {
                 "schema": (
-                    "intraday_training_evidence.v1"
-                    if manifest["model_type"] == "canonical_intraday"
-                    else "swing_training_evidence.v1"
+                    "intraday_training_evidence.v1" if manifest["model_type"] == "canonical_intraday" else "swing_training_evidence.v1"
                 ),
                 "model_run_id": metrics["model_run_id"],
                 "model_artifact_sha256": manifest["artifact_sha256"],

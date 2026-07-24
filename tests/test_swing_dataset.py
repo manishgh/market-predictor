@@ -15,6 +15,7 @@ from market_predictor.canonical.contracts import CanonicalEvent, SourceCollectio
 from market_predictor.canonical.cutoffs import SWING_NIGHTLY_CUTOFF, swing_prediction_cutoffs
 from market_predictor.canonical.store import load_canonical_artifact, write_canonical_artifact
 from market_predictor.cli import app
+from market_predictor.swing.audits import audit_swing_dataset
 from market_predictor.swing.contracts import SwingDatasetConfig
 from market_predictor.swing.dataset import build_swing_dataset, build_swing_inference_features
 from market_predictor.v3.errors import DataReadinessError
@@ -145,6 +146,50 @@ class SwingDatasetTests(unittest.TestCase):
         self.assertTrue(eligible["future_excess_return_5d_vs_spy"].notna().all())
         self.assertTrue(eligible["future_excess_return_5d_vs_sector"].notna().all())
         self.assertTrue(set(eligible["global_source_status_alpaca"]).issubset({"observed", "observed_empty"}))
+
+    def test_source_replay_rejects_stock_and_benchmark_mutations(self) -> None:
+        decisions, benchmarks, events, sources = _inputs()
+        config = SwingDatasetConfig(
+            horizon_sessions=5,
+            min_daily_bars=250,
+            minimum_cross_section=2,
+            required_global_sources=("alpaca",),
+        )
+        dataset, audit = build_swing_dataset(
+            decisions,
+            benchmarks,
+            global_events=events,
+            global_source_collections=sources,
+            config=config,
+        )
+        self.assertTrue(audit.passed, audit.to_frame().to_dict(orient="records"))
+        row = dataset.loc[dataset["label_eligible"]].iloc[0]
+
+        stock_source = dataset.copy()
+        stock_exit = stock_source["ticker"].eq(row["ticker"]) & stock_source["session_date_et"].eq(row["exit_session_date_et"])
+        stock_source.loc[stock_exit, "close"] *= 1.05
+        stock_audit = audit_swing_dataset(
+            dataset,
+            config,
+            source_frame=stock_source,
+            benchmark_bars=benchmarks,
+        )
+        stock_check = stock_audit.to_frame().set_index("name").loc["swing_label_source_reconciliation"]
+        self.assertEqual(stock_check["status"], "fail")
+        self.assertGreater(int(stock_check["failures"]), 0)
+
+        benchmark_source = benchmarks.copy()
+        benchmark_entry = benchmark_source["ticker"].eq("SPY") & benchmark_source["session_date_et"].eq(row["entry_session_date_et"])
+        benchmark_source.loc[benchmark_entry, "open"] *= 1.05
+        benchmark_audit = audit_swing_dataset(
+            dataset,
+            config,
+            source_frame=dataset,
+            benchmark_bars=benchmark_source,
+        )
+        benchmark_check = benchmark_audit.to_frame().set_index("name").loc["swing_label_source_reconciliation"]
+        self.assertEqual(benchmark_check["status"], "fail")
+        self.assertGreater(int(benchmark_check["failures"]), 0)
 
     def test_missing_sector_bar_fails_dataset_audit(self) -> None:
         decisions, benchmarks, events, sources = _inputs()

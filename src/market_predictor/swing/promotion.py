@@ -89,11 +89,7 @@ def promote_swing_model(
     }
     for name, audit in audits.items():
         failures.extend(_audit_provenance_failures(name, audit, model_run_id))
-    if (
-        evidence.provenance != "hash_verified_evidence_bundle"
-        or evidence.evidence_manifest is None
-        or evidence_manifest_path is None
-    ):
+    if evidence.provenance != "hash_verified_evidence_bundle" or evidence.evidence_manifest is None or evidence_manifest_path is None:
         failures.append("promotion requires a hash-verified persisted training evidence bundle")
 
     failures.extend(
@@ -125,10 +121,7 @@ def promote_swing_model(
     memory = metrics.get("memory")
     peak_memory = _finite_number(memory.get("peak_working_set_gib")) if isinstance(memory, dict) else None
     if peak_memory is None or peak_memory > config.max_peak_working_set_gib:
-        failures.append(
-            f"peak_working_set_gib {peak_memory} exceeds or does not prove <= "
-            f"{config.max_peak_working_set_gib}"
-        )
+        failures.append(f"peak_working_set_gib {peak_memory} exceeds or does not prove <= {config.max_peak_working_set_gib}")
 
     conservative = _required_first_row(profitability_audit, "profitability", failures)
     if conservative is not None:
@@ -195,6 +188,7 @@ def promote_swing_model(
             "events_without_feature_row",
             "missing_historical_feature_rows",
             "dates_with_news_count_mismatch",
+            "label_source_reconciliation_errors",
         )
         total = 0.0
         for column in columns:
@@ -471,6 +465,8 @@ def _causal_identity_failures(metrics: dict[str, Any]) -> list[str]:
         "reconciliation_sha256",
         "event_assignment_sha256",
         "event_aggregate_sha256",
+        "label_material_sha256",
+        "label_source_reconciliation_sha256",
         "dataset_label_config_sha256",
         "universe_identity_sha256",
         "calibration_method",
@@ -494,12 +490,8 @@ def _causal_identity_failures(metrics: dict[str, Any]) -> list[str]:
         except (TypeError, ValueError) as exc:
             failures.append(f"metrics prediction policy identity is invalid: {exc}")
         else:
-            if _finite_number(metrics.get("selection_k")) != float(
-                policy.swing_top_k
-            ):
-                failures.append(
-                    "metrics.selection_k does not match the bound swing policy"
-                )
+            if _finite_number(metrics.get("selection_k")) != float(policy.swing_top_k):
+                failures.append("metrics.selection_k does not match the bound swing policy")
     if str(metrics.get("execution_policy_sha256") or "") != EXECUTION_POLICY_SHA256:
         failures.append("metrics.execution_policy_sha256 does not match the execution policy")
     return failures
@@ -511,15 +503,9 @@ def _worst_regime_failures(regime_audit: pd.DataFrame, config: SwingPromotionCon
         required_regimes=SWING_REQUIRED_MARKET_REGIMES,
         min_required_sessions=config.min_required_regime_sessions,
         min_required_trades=config.min_required_regime_trades,
-        min_avg_excess_return_vs_spy=(
-            config.min_worst_regime_avg_excess_return_vs_spy
-        ),
-        min_avg_trade_return_ci_low=(
-            config.min_worst_regime_avg_trade_return_ci_low
-        ),
-        min_avg_excess_return_vs_spy_ci_low=(
-            config.min_worst_regime_avg_excess_return_vs_spy_ci_low
-        ),
+        min_avg_excess_return_vs_spy=(config.min_worst_regime_avg_excess_return_vs_spy),
+        min_avg_trade_return_ci_low=(config.min_worst_regime_avg_trade_return_ci_low),
+        min_avg_excess_return_vs_spy_ci_low=(config.min_worst_regime_avg_excess_return_vs_spy_ci_low),
         max_drawdown=config.max_worst_regime_drawdown,
         max_calibration_error=config.max_worst_regime_calibration_error,
     )

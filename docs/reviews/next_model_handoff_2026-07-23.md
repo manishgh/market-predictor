@@ -174,7 +174,9 @@ calibration, training-only feature selection, poison tests, final fit after vali
 Model `metrics` and the canonical manifests now carry a complete, content-addressed
 chain that R4's attestation must bind:
 `validation_split`, `holdout_assignment_cutoff_utc`, `holdout_ticker_summary_sha256`,
-`feature_set_sha256`, `reconciliation_sha256`, `dataset_label_config_sha256`,
+`feature_set_sha256`, `reconciliation_sha256`, `event_assignment_sha256`,
+`event_aggregate_sha256`, `label_material_sha256`,
+`label_source_reconciliation_sha256`, `dataset_label_config_sha256`,
 `universe_identity_sha256`, `calibration_method`, `folds_causally_ordered`,
 `prediction_policy_sha256`, `execution_policy_sha256`, `dataset_sha256`. Promotion
 already rejects when any are missing (`swing/promotion.py::_causal_identity_failures`,
@@ -272,6 +274,15 @@ candidate integration test):
 - **R7 Final Verification and Evidence Status:** full battery + focused mutation /
   concurrency / memory / release-race / rollback / shadow-ledger / reproducibility tests;
   fresh independent re-audit.
+- **R7.4 completed locally:** one shared pure evaluator now owns offline and matured
+  swing/intraday path semantics. Dataset publication independently replays material
+  labels from canonical stock and benchmark bars, stamps bounded-memory material and
+  reconciliation hashes, and binds them through training, promotion, and signed
+  attestation. Stock/benchmark candle mutations, missing execution bars, cost drift,
+  target/stop/timeout, and same-bar ambiguity are tested. Verification on 2026-07-24:
+  **336 tests passed**, repository-wide Ruff clean, and strict mypy clean for all 15
+  changed source/script modules. Existing real candidates predate these identities and
+  must be rebuilt. The next checkpoint is **R7.5 causally derived shadow evidence**.
 
 ## Do NOT claim complete without real external evidence (`environment_pending`)
 
@@ -289,8 +300,8 @@ Mark these `environment_pending`, never simulate them into a pass.
 Set-Location C:\project\market-predictor
 git checkout r3-lineage
 git status --short                # expect empty
-.\.venv\Scripts\python.exe -m unittest discover -s tests   # expect 305 OK
-# Confirm the R6 Linux CI evidence, then start the R7 independent re-audit.
+.\.venv\Scripts\python.exe -m unittest discover -s tests   # expect 336 OK
+# Start R7.5 causally derived shadow evidence. R7.8 remains deferred.
 ```
 
 Persistent notes for this effort also live in the assistant memory file

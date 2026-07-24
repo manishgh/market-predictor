@@ -24,6 +24,7 @@ class SwingAlignmentAuditTest(unittest.TestCase):
                 "future_excess_return_5d_vs_spy": [0.01, 0.01, 0.01],
                 "future_excess_return_5d_vs_qqq": [0.01, 0.01, 0.01],
                 "future_excess_return_5d_vs_sector": [0.01, 0.01, None],
+                "label_source_reconciliation_errors": [0, 0, 0],
             }
         )
         audit = _alignment_audit(frame).iloc[0]
@@ -35,7 +36,8 @@ class SwingAlignmentAuditTest(unittest.TestCase):
             int(audit["alignment_error_total"]),
             int(audit["future_feature_rows"])
             + int(audit["label_path_mismatches"])
-            + int(audit["benchmark_path_mismatches"]),
+            + int(audit["benchmark_path_mismatches"])
+            + int(audit["label_source_reconciliation_errors"]),
         )
 
     def test_alignment_audit_surfaces_stamped_reconciliation_counts(self) -> None:
@@ -54,6 +56,7 @@ class SwingAlignmentAuditTest(unittest.TestCase):
                 "reconciliation_events_without_feature_row": [3, 3],
                 "reconciliation_missing_historical_feature_rows": [4, 4],
                 "reconciliation_dates_with_news_count_mismatch": [2, 2],
+                "label_source_reconciliation_errors": [0, 0],
             }
         )
         audit = _alignment_audit(frame).iloc[0]
@@ -75,6 +78,7 @@ class SwingAlignmentAuditTest(unittest.TestCase):
                 "future_excess_return_5d_vs_spy": [0.01, 0.02],
                 "future_excess_return_5d_vs_qqq": [0.01, 0.02],
                 "future_excess_return_5d_vs_sector": [0.01, 0.02],
+                "label_source_reconciliation_errors": [0, 0],
             }
         )
         audit = _alignment_audit(frame).iloc[0]

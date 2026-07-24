@@ -177,9 +177,7 @@ def train_intraday_model(
         train = development.iloc[train_indices]
         validation = development.iloc[fold.test_indices].reset_index(drop=True)
         test_sessions = set(pd.to_datetime(validation["session_date_et"]).dt.date)
-        ticker_validation = holdout[
-            pd.to_datetime(holdout["session_date_et"]).dt.date.isin(test_sessions)
-        ].reset_index(drop=True)
+        ticker_validation = holdout[pd.to_datetime(holdout["session_date_et"]).dt.date.isin(test_sessions)].reset_index(drop=True)
         if ticker_validation.empty:
             raise DataReadinessError(f"fold {fold.fold} has no held-out ticker test rows")
 
@@ -343,6 +341,7 @@ def train_intraday_model(
             downside_ceiling=config.max_downside_probability,
         ),
     )
+
     def _intraday_phase(
         frame: pd.DataFrame,
         scope: str,
@@ -476,12 +475,8 @@ def train_intraday_model(
         holdout_evidence["independent_event_id"],
     )
     capacity_min_avg_net_return = float(pd.to_numeric(capacity["avg_net_return"], errors="coerce").min())
-    capacity_max_no_fill_rate = float(
-        pd.to_numeric(capacity["no_fill_rate"], errors="coerce").max()
-    )
-    capacity_liquidity_evidence_complete = bool(
-        capacity["liquidity_evidence_complete"].astype(bool).all()
-    )
+    capacity_max_no_fill_rate = float(pd.to_numeric(capacity["no_fill_rate"], errors="coerce").max())
+    capacity_liquidity_evidence_complete = bool(capacity["liquidity_evidence_complete"].astype(bool).all())
     metrics: dict[str, Any] = {
         "schema_version": INTRADAY_MODEL_SCHEMA_VERSION,
         "model_type": INTRADAY_MODEL_TYPE,
@@ -526,20 +521,12 @@ def train_intraday_model(
         "scored_validation_fold_ids": scored_validation_fold_ids,
         "capacity_min_avg_net_return": capacity_min_avg_net_return,
         "capacity_max_no_fill_rate": capacity_max_no_fill_rate,
-        "capacity_liquidity_evidence_complete": (
-            capacity_liquidity_evidence_complete
-        ),
+        "capacity_liquidity_evidence_complete": (capacity_liquidity_evidence_complete),
         "capacity_curve": capacity.to_dict(orient="records"),
         **overlap_evidence,
-        "holdout_summed_label_uniqueness": holdout_overlap_evidence[
-            "summed_label_uniqueness"
-        ],
-        "holdout_independent_event_count": holdout_overlap_evidence[
-            "independent_event_count"
-        ],
-        "holdout_effective_sample_size": holdout_overlap_evidence[
-            "effective_sample_size"
-        ],
+        "holdout_summed_label_uniqueness": holdout_overlap_evidence["summed_label_uniqueness"],
+        "holdout_independent_event_count": holdout_overlap_evidence["independent_event_count"],
+        "holdout_effective_sample_size": holdout_overlap_evidence["effective_sample_size"],
         "calibration_method": "isotonic_prior_outer_folds",
         "calibration_seed_folds_excluded": calibration_seed_folds_excluded,
         "feature_set_sha256": feature_set_sha256,
@@ -552,19 +539,24 @@ def train_intraday_model(
             dataset,
             "event_aggregate_sha256",
         ),
+        "label_material_sha256": stamped_hash(
+            dataset,
+            "label_material_sha256",
+        ),
+        "label_source_reconciliation_sha256": stamped_hash(
+            dataset,
+            "label_source_reconciliation_sha256",
+        ),
         "dataset_label_config_sha256": stamped_hash(dataset, "dataset_label_config_sha256"),
         "folds_causally_ordered": folds_causally_ordered,
         **prediction_policy_identity(prediction_policy),
         **execution_policy_identity(),
         "holdout_assignment_cutoff_utc": holdout_plan.assignment_cutoff_utc,
         "holdout_ticker_summary_sha256": holdout_plan.ticker_summary_sha256,
-        "holdout_required_strata": int(
-            holdout_plan.representation_audit["required"].astype(bool).sum()
-        ),
+        "holdout_required_strata": int(holdout_plan.representation_audit["required"].astype(bool).sum()),
         "holdout_unrepresented_required_strata": int(
             (
-                holdout_plan.representation_audit["required"].astype(bool)
-                & ~holdout_plan.representation_audit["represented"].astype(bool)
+                holdout_plan.representation_audit["required"].astype(bool) & ~holdout_plan.representation_audit["represented"].astype(bool)
             ).sum()
         ),
         "tickers": ticker_count,
@@ -733,6 +725,9 @@ def _training_rows(
         "overlap_weight",
         "intraday_feature_schema_version",
         "dataset_label_config_sha256",
+        "label_material_sha256",
+        "label_source_reconciliation_sha256",
+        "label_source_reconciliation_errors",
         "market_regime",
     }
     missing = sorted(required.difference(dataset.columns))
@@ -743,6 +738,23 @@ def _training_rows(
     label_configs = dataset["dataset_label_config_sha256"].astype(str).unique()
     if len(label_configs) != 1 or not str(label_configs[0]).strip():
         raise SchemaMismatchError("intraday dataset must contain exactly one label config")
+    for column in (
+        "label_material_sha256",
+        "label_source_reconciliation_sha256",
+    ):
+        values = dataset[column].fillna("").astype(str).unique()
+        if len(values) != 1 or len(values[0]) != 64:
+            raise DataReadinessError(f"intraday dataset has invalid {column} identity")
+    label_reconciliation_errors = pd.to_numeric(
+        dataset["label_source_reconciliation_errors"],
+        errors="coerce",
+    )
+    if (
+        label_reconciliation_errors.isna().any()
+        or label_reconciliation_errors.nunique(dropna=False) != 1
+        or int(label_reconciliation_errors.iloc[0]) != 0
+    ):
+        raise DataReadinessError("intraday dataset label source reconciliation did not pass")
     horizons = pd.to_numeric(dataset["horizon_minutes"], errors="coerce").dropna().astype(int).unique()
     intervals = (
         (pd.to_numeric(dataset["decision_bar_minutes"], errors="coerce") * pd.to_numeric(dataset["decision_stride_bars"], errors="coerce"))
@@ -905,9 +917,7 @@ def _fold_evidence_record(
         **fold.audit_record(),
         "record_type": "validation_fold",
         "validation_scope": scope,
-        "validation_status": (
-            "included" if calibration_fits else "calibration_seed_excluded"
-        ),
+        "validation_status": ("included" if calibration_fits else "calibration_seed_excluded"),
         "train_rows": len(train),
         "test_rows": len(test),
         "max_train_label_available_at_utc": max_train_label.isoformat(),
@@ -919,9 +929,7 @@ def _fold_evidence_record(
         "train_row_identity_sha256": identity_set_sha256(train["validation_row_identity"]),
         "test_row_identity_sha256": identity_set_sha256(test["validation_row_identity"]),
         "feature_set_sha256": feature_set_sha256,
-        "calibration_method": (
-            "isotonic_prior_outer_folds" if calibration_fits else "seed_only_not_scored"
-        ),
+        "calibration_method": ("isotonic_prior_outer_folds" if calibration_fits else "seed_only_not_scored"),
         "calibration_train_cutoff_utc": max(cutoffs).isoformat() if cutoffs else "",
         "calibration_training_rows": training_rows,
     }
@@ -946,6 +954,11 @@ def _alignment_audit(data: pd.DataFrame) -> pd.DataFrame:
         "reconciliation_missing_historical_feature_rows",
     )
     dates_with_news_count_mismatch = stamped_scalar(data, "reconciliation_dates_with_news_count_mismatch")
+    label_source_reconciliation_errors = stamped_scalar(
+        data,
+        "label_source_reconciliation_errors",
+        default=1,
+    )
     return pd.DataFrame(
         [
             {
@@ -956,6 +969,7 @@ def _alignment_audit(data: pd.DataFrame) -> pd.DataFrame:
                     + events_without_feature_row
                     + missing_historical_feature_rows
                     + dates_with_news_count_mismatch
+                    + label_source_reconciliation_errors
                 ),
                 "future_feature_rows": future,
                 "label_path_mismatches": path_mismatch,
@@ -963,6 +977,7 @@ def _alignment_audit(data: pd.DataFrame) -> pd.DataFrame:
                 "events_without_feature_row": events_without_feature_row,
                 "missing_historical_feature_rows": missing_historical_feature_rows,
                 "dates_with_news_count_mismatch": dates_with_news_count_mismatch,
+                "label_source_reconciliation_errors": (label_source_reconciliation_errors),
             }
         ]
     )

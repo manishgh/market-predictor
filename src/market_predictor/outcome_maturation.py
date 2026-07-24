@@ -6,7 +6,10 @@ from typing import TypeAlias, cast
 import numpy as np
 import pandas as pd
 
-from market_predictor.execution_policy import executable_fill_prices
+from market_predictor.label_paths import (
+    evaluate_intraday_barrier_paths,
+    evaluate_swing_paths,
+)
 from market_predictor.outcome_contracts import (
     MaturationAttemptV1,
     MaturedOutcomeV1,
@@ -70,9 +73,7 @@ def maturation_attempt(
         "reasons": reasons,
         "missing_intervals": missing_intervals,
     }
-    return MaturationAttemptV1.model_validate(
-        {**base, "attempt_id": content_sha256(base)}
-    )
+    return MaturationAttemptV1.model_validate({**base, "attempt_id": content_sha256(base)})
 
 
 def _mature_swing(
@@ -85,12 +86,7 @@ def _mature_swing(
     horizon = _policy_int(policy, "horizon_sessions")
     spy_ticker = str(policy["broad_benchmark"]).upper()
     qqq_ticker = str(policy["growth_benchmark"]).upper()
-    sessions = (
-        bars.loc[bars["ticker"].eq(spy_ticker), "session_date_et"]
-        .drop_duplicates()
-        .sort_values()
-        .tolist()
-    )
+    sessions = bars.loc[bars["ticker"].eq(spy_ticker), "session_date_et"].drop_duplicates().sort_values().tolist()
     if intent.decision_session_et not in sessions:
         return _pending(
             intent,
@@ -134,16 +130,20 @@ def _mature_swing(
     entry_price = float(stock_path.iloc[0]["open"])
     exit_price = float(stock_path.iloc[-1]["close"])
     _require_positive_prices(entry_price, exit_price)
-    gross = exit_price / entry_price - 1.0
-    net = gross - _policy_float(policy, "round_trip_cost_bps") / 10_000.0
+    evaluated = evaluate_swing_paths(
+        entry_price=np.asarray([entry_price]),
+        exit_price=np.asarray([exit_price]),
+        path_high=stock_path["high"].to_numpy(float)[None, :],
+        path_low=stock_path["low"].to_numpy(float)[None, :],
+        round_trip_cost_bps=_policy_float(policy, "round_trip_cost_bps"),
+    )
+    gross = float(evaluated.gross_return[0])
+    net = float(evaluated.net_return[0])
     spy_return = _pair_return(benchmark_pairs[spy_ticker])
     qqq_return = _pair_return(benchmark_pairs[qqq_ticker])
     sector_return = _pair_return(benchmark_pairs[intent.primary_benchmark])
     evidence_frames = [stock_path]
-    evidence_frames.extend(
-        pd.DataFrame([entry, exit_row])
-        for entry, exit_row in benchmark_pairs.values()
-    )
+    evidence_frames.extend(pd.DataFrame([entry, exit_row]) for entry, exit_row in benchmark_pairs.values())
     evidence_rows = _evidence_rows(evidence_frames)
     label_available = _max_available(evidence_frames)
     outcome = _outcome(
@@ -155,8 +155,8 @@ def _mature_swing(
         exit_price=exit_price,
         gross_return=gross,
         net_return=net,
-        mfe=float(stock_path["high"].max()) / entry_price - 1.0,
-        mae=float(stock_path["low"].min()) / entry_price - 1.0,
+        mfe=float(evaluated.mfe[0]),
+        mae=float(evaluated.mae[0]),
         path_outcome="positive" if net > 0 else "negative",
         opportunity_target=int(net > 0),
         downside_target=None,
@@ -180,10 +180,7 @@ def _mature_intraday(
     horizon_minutes = _policy_int(policy, "horizon_minutes")
     execution_minutes = _policy_int(policy, "execution_bar_minutes")
     horizon_bars = horizon_minutes // execution_minutes
-    expected_starts = [
-        intent.decision_time_utc + timedelta(minutes=execution_minutes * offset)
-        for offset in range(horizon_bars)
-    ]
+    expected_starts = [intent.decision_time_utc + timedelta(minutes=execution_minutes * offset) for offset in range(horizon_bars)]
     stock_path, missing = _intraday_path(
         bars,
         ticker=intent.ticker,
@@ -191,11 +188,7 @@ def _mature_intraday(
         session=intent.decision_session_et,
     )
     if missing:
-        reason = (
-            "horizon_not_complete"
-            if expected_starts[-1] >= observed
-            else "required_bar_path_incomplete"
-        )
+        reason = "horizon_not_complete" if expected_starts[-1] >= observed else "required_bar_path_incomplete"
         return _pending(
             intent,
             observed,
@@ -204,44 +197,24 @@ def _mature_intraday(
         ), []
 
     entry_price = float(stock_path.iloc[0]["open"])
-    target_price = entry_price + _policy_float(policy, "target_atr") * intent.decision_atr
-    stop_price = entry_price - _policy_float(policy, "stop_atr") * intent.decision_atr
-    _require_positive_prices(entry_price, stop_price, target_price)
-    highs = stock_path["high"].to_numpy(float)
-    lows = stock_path["low"].to_numpy(float)
-    target_hits = np.flatnonzero(highs >= target_price)
-    stop_hits = np.flatnonzero(lows <= stop_price)
-    missing_index = horizon_bars + 1
-    first_target = int(target_hits[0]) if len(target_hits) else missing_index
-    first_stop = int(stop_hits[0]) if len(stop_hits) else missing_index
-    if first_target < first_stop:
-        path_outcome = "target_first"
-        outcome_index = first_target
-        opportunity_target = 1
-        downside_target = 0
-    elif first_stop <= first_target and first_stop < missing_index:
-        path_outcome = "stop_first"
-        outcome_index = first_stop
-        opportunity_target = 0
-        downside_target = 1
-    else:
-        path_outcome = "timeout"
-        outcome_index = horizon_bars - 1
-        opportunity_target = 0
-        downside_target = 0
-    active_path = stock_path.iloc[: outcome_index + 1]
-    outcome_row = stock_path.iloc[outcome_index]
-    realized = float(
-        executable_fill_prices(
-            outcome=np.asarray([path_outcome], dtype=object),
-            target_price=np.asarray([target_price]),
-            stop_price=np.asarray([stop_price]),
-            trigger_open=np.asarray([float(outcome_row["open"])]),
-            final_price=np.asarray([float(stock_path.iloc[-1]["close"])]),
-        )[0]
+    evaluated = evaluate_intraday_barrier_paths(
+        path_open=stock_path["open"].to_numpy(float)[None, :],
+        path_high=stock_path["high"].to_numpy(float)[None, :],
+        path_low=stock_path["low"].to_numpy(float)[None, :],
+        path_close=stock_path["close"].to_numpy(float)[None, :],
+        entry_atr=np.asarray([intent.decision_atr]),
+        target_atr=_policy_float(policy, "target_atr"),
+        stop_atr=_policy_float(policy, "stop_atr"),
+        round_trip_cost_bps=_policy_float(policy, "round_trip_cost_bps"),
     )
-    gross = realized / entry_price - 1.0
-    net = gross - _policy_float(policy, "round_trip_cost_bps") / 10_000.0
+    path_outcome = str(evaluated.outcome[0])
+    outcome_index = int(evaluated.outcome_offset[0])
+    opportunity_target = int(evaluated.target_first[0])
+    downside_target = int(evaluated.stop_first[0])
+    active_path = stock_path.iloc[: outcome_index + 1]
+    realized = float(evaluated.realized_price[0])
+    gross = float(evaluated.gross_return[0])
+    net = float(evaluated.net_return[0])
     entry_start = expected_starts[0]
     exit_start = expected_starts[outcome_index]
     benchmark_tickers = (
@@ -269,10 +242,7 @@ def _mature_intraday(
         ), []
     spy_ticker, qqq_ticker, sector_ticker = benchmark_tickers
     evidence_frames = [active_path]
-    evidence_frames.extend(
-        pd.DataFrame([entry, exit_row])
-        for entry, exit_row in benchmark_pairs.values()
-    )
+    evidence_frames.extend(pd.DataFrame([entry, exit_row]) for entry, exit_row in benchmark_pairs.values())
     evidence_rows = _evidence_rows(evidence_frames)
     label_available = _max_available(evidence_frames)
     outcome = _outcome(
@@ -284,8 +254,8 @@ def _mature_intraday(
         exit_price=realized,
         gross_return=gross,
         net_return=net,
-        mfe=float(active_path["high"].max()) / entry_price - 1.0,
-        mae=float(active_path["low"].min()) / entry_price - 1.0,
+        mfe=float(evaluated.mfe[0]),
+        mae=float(evaluated.mae[0]),
         path_outcome=path_outcome,
         opportunity_target=opportunity_target,
         downside_target=downside_target,
@@ -346,9 +316,7 @@ def _outcome(
         "excess_return_vs_sector": net_return - sector_return,
         "evidence_sha256": content_sha256(evidence_rows),
     }
-    return MaturedOutcomeV1.model_validate(
-        {**base, "outcome_id": content_sha256(base)}
-    )
+    return MaturedOutcomeV1.model_validate({**base, "outcome_id": content_sha256(base)})
 
 
 def _pending(
@@ -376,12 +344,8 @@ def _prepare_bars(
 ) -> pd.DataFrame:
     missing = sorted(_BAR_COLUMNS.difference(bars.columns))
     if missing:
-        raise DataReadinessError(
-            f"maturation bars are missing columns: {', '.join(missing)}"
-        )
-    if len(source_artifact_sha256) != 64 or any(
-        character not in "0123456789abcdef" for character in source_artifact_sha256
-    ):
+        raise DataReadinessError(f"maturation bars are missing columns: {', '.join(missing)}")
+    if len(source_artifact_sha256) != 64 or any(character not in "0123456789abcdef" for character in source_artifact_sha256):
         raise DataReadinessError("maturation source artifact identity is invalid")
     data = bars.copy()
     data["ticker"] = data["ticker"].astype(str).str.upper().str.strip()
@@ -390,9 +354,7 @@ def _prepare_bars(
     if data[["bar_start_utc", "bar_end_utc", "available_at_utc"]].isna().any().any():
         raise DataReadinessError("maturation bars contain invalid timestamps")
     if "session_date_et" not in data:
-        data["session_date_et"] = (
-            data["bar_start_utc"].dt.tz_convert("America/New_York").dt.date
-        )
+        data["session_date_et"] = data["bar_start_utc"].dt.tz_convert("America/New_York").dt.date
     else:
         data["session_date_et"] = pd.to_datetime(
             data["session_date_et"],
@@ -406,9 +368,7 @@ def _prepare_bars(
         raise DataReadinessError("maturation bars contain invalid OHLCV")
     if bool(data["available_at_utc"].lt(data["bar_end_utc"]).any()):
         raise DataReadinessError("maturation bar availability precedes bar completion")
-    if bool(
-        data["price_feed"].astype(str).str.upper().ne(required_price_feed.upper()).any()
-    ):
+    if bool(data["price_feed"].astype(str).str.upper().ne(required_price_feed.upper()).any()):
         raise DataReadinessError("maturation bars use an unexpected price feed")
     if bool(data["adjustment"].astype(str).str.lower().ne("all").any()):
         raise DataReadinessError("maturation bars are not fully adjusted")
@@ -427,11 +387,7 @@ def _daily_path(
 ) -> tuple[pd.DataFrame, list[str]]:
     ticker_rows = bars[bars["ticker"].eq(ticker)]
     counts = ticker_rows.groupby("session_date_et").size()
-    missing = [
-        f"{ticker}:{session}"
-        for session in sessions
-        if int(counts.get(session, 0)) != 1
-    ]
+    missing = [f"{ticker}:{session}" for session in sessions if int(counts.get(session, 0)) != 1]
     if missing:
         return pd.DataFrame(), missing
     rows = ticker_rows.set_index("session_date_et")
@@ -447,11 +403,7 @@ def _intraday_path(
     session: object,
 ) -> tuple[pd.DataFrame, list[str]]:
     ticker_rows = bars[bars["ticker"].eq(ticker)].set_index("bar_start_utc")
-    missing = [
-        f"{ticker}:{start.isoformat()}"
-        for start in expected_starts
-        if pd.Timestamp(start) not in ticker_rows.index
-    ]
+    missing = [f"{ticker}:{start.isoformat()}" for start in expected_starts if pd.Timestamp(start) not in ticker_rows.index]
     if missing:
         return pd.DataFrame(), missing
     selected = ticker_rows.loc[pd.DatetimeIndex(expected_starts)].copy()
@@ -486,10 +438,7 @@ def _one_intraday_row(
     ticker: str,
     start: datetime,
 ) -> pd.Series | None:
-    rows = bars[
-        bars["ticker"].eq(ticker)
-        & bars["bar_start_utc"].eq(pd.Timestamp(start))
-    ]
+    rows = bars[bars["ticker"].eq(ticker) & bars["bar_start_utc"].eq(pd.Timestamp(start))]
     return rows.iloc[0] if len(rows) == 1 else None
 
 
@@ -504,9 +453,7 @@ def _pair_return(pair: tuple[pd.Series, pd.Series]) -> float:
 def _evidence_rows(
     frames: list[pd.DataFrame],
 ) -> list[dict[str, object]]:
-    combined = pd.concat(frames, ignore_index=True).drop_duplicates(
-        ["ticker", "bar_start_utc"]
-    )
+    combined = pd.concat(frames, ignore_index=True).drop_duplicates(["ticker", "bar_start_utc"])
     combined = combined.sort_values(["ticker", "bar_start_utc"], kind="stable")
     columns = [
         "ticker",
@@ -526,23 +473,13 @@ def _evidence_rows(
     records: list[dict[str, object]] = []
     for record in combined[columns].to_dict(orient="records"):
         records.append(
-            {
-                key: (
-                    value.isoformat()
-                    if isinstance(value, (datetime, date, pd.Timestamp))
-                    else value
-                )
-                for key, value in record.items()
-            }
+            {key: (value.isoformat() if isinstance(value, (datetime, date, pd.Timestamp)) else value) for key, value in record.items()}
         )
     return records
 
 
 def _max_available(frames: list[pd.DataFrame]) -> datetime:
-    value = max(
-        _timestamp(frame["available_at_utc"].max())
-        for frame in frames
-    )
+    value = max(_timestamp(frame["available_at_utc"].max()) for frame in frames)
     return value
 
 
@@ -552,9 +489,7 @@ def _require_policy(
     expected: object,
 ) -> None:
     if policy.get(field) != expected:
-        raise DataReadinessError(
-            f"unsupported maturation label policy: {policy.get(field)!r}"
-        )
+        raise DataReadinessError(f"unsupported maturation label policy: {policy.get(field)!r}")
 
 
 def _policy_int(policy: dict[str, object], field: str) -> int:

@@ -369,6 +369,8 @@ def _candidate(root: Path) -> tuple[Path, dict[str, object], Path]:
         "reconciliation_sha256": "3" * 64,
         "event_assignment_sha256": "a" * 64,
         "event_aggregate_sha256": "b" * 64,
+        "label_material_sha256": "c" * 64,
+        "label_source_reconciliation_sha256": "d" * 64,
         "dataset_label_config_sha256": "4" * 64,
         "universe_identity_sha256": "5" * 64,
         "calibration_method": "isotonic_prior_fold_only",

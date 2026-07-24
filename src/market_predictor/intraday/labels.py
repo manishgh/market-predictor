@@ -3,7 +3,6 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-from market_predictor.execution_policy import executable_fill_prices
 from market_predictor.intraday.contracts import (
     IntradayDatasetConfig,
     downside_target_column,
@@ -11,6 +10,7 @@ from market_predictor.intraday.contracts import (
     net_return_column,
     opportunity_target_column,
 )
+from market_predictor.label_paths import evaluate_intraday_barrier_paths
 
 
 def add_exact_one_minute_labels(
@@ -127,18 +127,13 @@ def _label_ticker(
     exact_entry[bounded_entry] = starts[entry_index[bounded_entry]] == decisions_ns[bounded_entry]
     expected = data["session_minute_et"].le(16 * 60 - config.horizon_minutes)
     data["label_window_expected"] = expected.to_numpy(bool)
-    candidate_positions = np.flatnonzero(
-        in_bounds & exact_entry & expected.to_numpy(bool)
-    )
+    candidate_positions = np.flatnonzero(in_bounds & exact_entry & expected.to_numpy(bool))
     if len(candidate_positions) == 0:
         return data
     offsets = np.arange(horizon, dtype=np.int64)
     path_indices = entry_index[candidate_positions, None] + offsets[None, :]
     path_starts = starts[path_indices]
-    expected_starts = (
-        decisions_ns[candidate_positions, None]
-        + offsets[None, :] * 60_000_000_000
-    )
+    expected_starts = decisions_ns[candidate_positions, None] + offsets[None, :] * 60_000_000_000
     path_sessions = bars["session_date_et"].to_numpy(object)[path_indices]
     decision_sessions = data["session_date_et"].to_numpy(object)[candidate_positions, None]
     exact = (path_starts == expected_starts).all(axis=1) & (path_sessions == decision_sessions).all(axis=1)
@@ -149,67 +144,58 @@ def _label_ticker(
     entry_indices = entry_index[positions]
     open_price = bars["open"].to_numpy(float)[entry_indices]
     atr = pd.to_numeric(data["atr_14_price_5m"], errors="coerce").to_numpy(float)[positions]
-    target_price = open_price + config.target_atr * atr
-    stop_price = open_price - config.stop_atr * atr
-    highs = bars["high"].to_numpy(float)[path_indices]
-    lows = bars["low"].to_numpy(float)[path_indices]
-    closes = bars["close"].to_numpy(float)[path_indices]
-    hit_target = highs >= target_price[:, None]
-    hit_stop = lows <= stop_price[:, None]
-    missing = horizon + 1
-    first_target = np.where(hit_target.any(axis=1), hit_target.argmax(axis=1), missing)
-    first_stop = np.where(hit_stop.any(axis=1), hit_stop.argmax(axis=1), missing)
-    target_first = first_target < first_stop
-    stop_first = (first_stop <= first_target) & (first_stop < missing)
-    timeout = ~(target_first | stop_first)
-    outcome_offset = np.minimum(np.minimum(first_target, first_stop), horizon - 1)
-    outcome_labels = np.full(len(positions), "timeout", dtype=object)
-    outcome_labels[target_first] = "target_first"
-    outcome_labels[stop_first] = "stop_first"
-    opens = bars["open"].to_numpy(float)[path_indices]
-    trigger_open = opens[np.arange(len(positions)), outcome_offset]
-    realized = executable_fill_prices(
-        outcome=outcome_labels,
-        target_price=target_price,
-        stop_price=stop_price,
-        trigger_open=trigger_open,
-        final_price=closes[:, -1],
-    )
-    active = offsets[None, :] <= outcome_offset[:, None]
-    mfe_high = np.where(active, highs, -np.inf).max(axis=1)
-    mae_low = np.where(active, lows, np.inf).min(axis=1)
-    exit_indices = entry_indices + outcome_offset
-    entry_volume = bars["volume"].to_numpy(float)[entry_indices]
-    entry_dollar_volume = open_price * entry_volume
-    entry_atr_pct = np.divide(atr, open_price, out=np.full_like(atr, np.nan), where=open_price > 0)
-    gross = realized / open_price - 1.0
-    net = gross - config.round_trip_cost_bps / 10_000.0
     valid_price = np.isfinite(open_price) & (open_price > 0) & np.isfinite(atr) & (atr > 0)
     positions = positions[valid_price]
     if len(positions) == 0:
         return data
-    select = valid_price
+    path_indices = path_indices[valid_price]
+    entry_indices = entry_indices[valid_price]
+    open_price = open_price[valid_price]
+    atr = atr[valid_price]
+    opens = bars["open"].to_numpy(float)[path_indices]
+    highs = bars["high"].to_numpy(float)[path_indices]
+    lows = bars["low"].to_numpy(float)[path_indices]
+    closes = bars["close"].to_numpy(float)[path_indices]
+    evaluated = evaluate_intraday_barrier_paths(
+        path_open=opens,
+        path_high=highs,
+        path_low=lows,
+        path_close=closes,
+        entry_atr=atr,
+        target_atr=config.target_atr,
+        stop_atr=config.stop_atr,
+        round_trip_cost_bps=config.round_trip_cost_bps,
+    )
+    exit_indices = entry_indices + evaluated.outcome_offset
+    entry_volume = bars["volume"].to_numpy(float)[entry_indices]
+    entry_dollar_volume = open_price * entry_volume
+    entry_atr_pct = np.divide(
+        atr,
+        open_price,
+        out=np.full_like(atr, np.nan),
+        where=open_price > 0,
+    )
     data.loc[positions, "label_path_exact"] = True
-    data.loc[positions, "entry_time_utc"] = bars["bar_start_utc"].to_numpy()[entry_indices[select]]
-    data.loc[positions, "entry_price"] = open_price[select]
-    data.loc[positions, "target_price"] = target_price[select]
-    data.loc[positions, "stop_price"] = stop_price[select]
-    data.loc[positions, "entry_target_pct"] = target_price[select] / open_price[select] - 1.0
-    data.loc[positions, "entry_stop_pct"] = open_price[select] / stop_price[select] - 1.0
-    data.loc[positions, "exit_time_utc"] = bars["bar_end_utc"].to_numpy()[exit_indices[select]]
-    data.loc[positions, "label_available_at_utc"] = bars["available_at_utc"].to_numpy()[exit_indices[select]]
-    data.loc[positions, "label_window_end_utc"] = bars["bar_end_utc"].to_numpy()[entry_indices[select] + horizon - 1]
-    data.loc[positions, "path_outcome"] = outcome_labels[select]
-    data.loc[positions, "path_outcome_bar"] = outcome_offset[select] + 1
-    data.loc[positions, "entry_dollar_volume"] = entry_dollar_volume[select]
-    data.loc[positions, "entry_atr_pct"] = entry_atr_pct[select]
-    data.loc[positions, opportunity_target_column(config.horizon_minutes)] = target_first[select].astype(int)
-    data.loc[positions, downside_target_column(config.horizon_minutes)] = stop_first[select].astype(int)
-    data.loc[positions, f"path_timeout_{config.horizon_minutes}m"] = timeout[select].astype(int)
-    data.loc[positions, f"path_realized_return_gross_{config.horizon_minutes}m"] = gross[select]
-    data.loc[positions, net_return_column(config.horizon_minutes)] = net[select]
-    data.loc[positions, f"path_mfe_{config.horizon_minutes}m"] = mfe_high[select] / open_price[select] - 1.0
-    data.loc[positions, f"path_mae_{config.horizon_minutes}m"] = mae_low[select] / open_price[select] - 1.0
+    data.loc[positions, "entry_time_utc"] = bars["bar_start_utc"].to_numpy()[entry_indices]
+    data.loc[positions, "entry_price"] = open_price
+    data.loc[positions, "target_price"] = evaluated.target_price
+    data.loc[positions, "stop_price"] = evaluated.stop_price
+    data.loc[positions, "entry_target_pct"] = evaluated.target_price / open_price - 1.0
+    data.loc[positions, "entry_stop_pct"] = open_price / evaluated.stop_price - 1.0
+    data.loc[positions, "exit_time_utc"] = bars["bar_end_utc"].to_numpy()[exit_indices]
+    data.loc[positions, "label_available_at_utc"] = bars["available_at_utc"].to_numpy()[exit_indices]
+    data.loc[positions, "label_window_end_utc"] = bars["bar_end_utc"].to_numpy()[entry_indices + horizon - 1]
+    data.loc[positions, "path_outcome"] = evaluated.outcome
+    data.loc[positions, "path_outcome_bar"] = evaluated.outcome_offset + 1
+    data.loc[positions, "entry_dollar_volume"] = entry_dollar_volume
+    data.loc[positions, "entry_atr_pct"] = entry_atr_pct
+    data.loc[positions, opportunity_target_column(config.horizon_minutes)] = evaluated.target_first.astype(int)
+    data.loc[positions, downside_target_column(config.horizon_minutes)] = evaluated.stop_first.astype(int)
+    data.loc[positions, f"path_timeout_{config.horizon_minutes}m"] = evaluated.timeout.astype(int)
+    data.loc[positions, f"path_realized_return_gross_{config.horizon_minutes}m"] = evaluated.gross_return
+    data.loc[positions, net_return_column(config.horizon_minutes)] = evaluated.net_return
+    data.loc[positions, f"path_mfe_{config.horizon_minutes}m"] = evaluated.mfe
+    data.loc[positions, f"path_mae_{config.horizon_minutes}m"] = evaluated.mae
     return data
 
 

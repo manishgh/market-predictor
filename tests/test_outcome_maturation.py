@@ -24,7 +24,7 @@ from market_predictor.prediction_policy import (
     PREDICTION_POLICY_SHA256,
 )
 from market_predictor.swing.contracts import SwingDatasetConfig
-from market_predictor.swing.dataset import _add_exact_labels
+from market_predictor.swing.labels import add_exact_swing_labels
 from tests.test_outcome_repository import _intent as swing_intent
 
 
@@ -79,12 +79,7 @@ class OutcomeMaturationTests(unittest.TestCase):
     def test_intraday_missing_entry_bar_never_shifts_forward(self) -> None:
         intent = _intraday_intent()
         bars = _intraday_bars(ambiguous=False)
-        bars = bars[
-            ~(
-                bars["ticker"].eq("MSFT")
-                & bars["bar_start_utc"].eq(pd.Timestamp(intent.decision_time_utc))
-            )
-        ].copy()
+        bars = bars[~(bars["ticker"].eq("MSFT") & bars["bar_start_utc"].eq(pd.Timestamp(intent.decision_time_utc)))].copy()
 
         result, evidence = mature_prediction(
             intent,
@@ -95,9 +90,7 @@ class OutcomeMaturationTests(unittest.TestCase):
 
         self.assertEqual(result.status, "pending")
         self.assertIn("required_bar_path_incomplete", result.reasons)
-        self.assertTrue(
-            any(intent.decision_time_utc.isoformat() in item for item in result.missing_intervals)
-        )
+        self.assertTrue(any(intent.decision_time_utc.isoformat() in item for item in result.missing_intervals))
         self.assertEqual(evidence, [])
 
     def test_intraday_maturation_matches_offline_label_builder(self) -> None:
@@ -147,7 +140,7 @@ class OutcomeMaturationTests(unittest.TestCase):
         stock["primary_benchmark"] = "XLK"
         stock["decision_group_id"] = stock["session_date_et"].astype(str)
         benchmarks = bars[bars["ticker"].isin({"SPY", "QQQ", "XLK"})].copy()
-        offline = _add_exact_labels(
+        offline = add_exact_swing_labels(
             stock,
             benchmarks,
             SwingDatasetConfig(),

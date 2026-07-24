@@ -17,6 +17,11 @@ from market_predictor.intraday.contracts import (
     IntradayDatasetConfig,
 )
 from market_predictor.intraday.labels import add_exact_one_minute_labels, add_overlap_metadata
+from market_predictor.label_reconciliation import (
+    LABEL_IDENTITY_COLUMNS,
+    intraday_label_material_columns,
+    stamp_label_reconciliation,
+)
 from market_predictor.live_features import select_and_audit_live_features
 from market_predictor.resources import assert_memory_budget
 from market_predictor.v3.errors import DataReadinessError, SchemaMismatchError
@@ -82,8 +87,15 @@ def build_intraday_dataset(
         global_source_collections=global_source_collections,
         config=config,
     )
+    label_source = decisions.copy()
     decisions = add_exact_one_minute_labels(decisions, one_minute, config)
     decisions = add_overlap_metadata(decisions)
+    decisions = stamp_label_reconciliation(
+        decisions,
+        identity_columns=LABEL_IDENTITY_COLUMNS,
+        material_columns=intraday_label_material_columns(config.horizon_minutes),
+        label_policy_sha256=config.label_config_sha256(),
+    )
     _guard_memory(config, "intraday exact path labeling")
     decisions["horizon_minutes"] = config.horizon_minutes
     decisions["decision_bar_minutes"] = config.decision_bar_minutes
@@ -102,7 +114,12 @@ def build_intraday_dataset(
     )
     decisions["execution_policy_sha256"] = EXECUTION_POLICY_SHA256
     decisions = decisions.replace([np.inf, -np.inf], np.nan)
-    audit = audit_intraday_dataset(decisions, config)
+    audit = audit_intraday_dataset(
+        decisions,
+        config,
+        source_frame=label_source,
+        one_minute_bars=one_minute,
+    )
     return (
         decisions.sort_values(["decision_time_utc", "ticker"], kind="stable").reset_index(drop=True),
         audit,
@@ -347,9 +364,7 @@ def _select_decision_rows(
         config.last_decision_minute_et,
     ) & data["session_slot"].mod(config.decision_stride_bars).eq(0)
     data = data[selected].copy()
-    data["nominal_decision_group_id"] = data["bar_end_utc"].map(
-        lambda value: value.isoformat()
-    )
+    data["nominal_decision_group_id"] = data["bar_end_utc"].map(lambda value: value.isoformat())
     data["decision_group_id"] = data["nominal_decision_group_id"]
     return data.reset_index(drop=True)
 
@@ -371,28 +386,17 @@ def _synchronize_decision_cross_sections(frame: pd.DataFrame) -> pd.DataFrame:
         sort=False,
     ).transform("max")
     if bool(cutoff.isna().any()):
-        raise DataReadinessError(
-            "intraday cross-section cutoff cannot be derived"
-        )
+        raise DataReadinessError("intraday cross-section cutoff cannot be derived")
     cutoff_collisions = (
-        data.assign(_cross_section_cutoff=cutoff)
-        .groupby("_cross_section_cutoff", sort=False)[
-            "nominal_decision_group_id"
-        ]
-        .nunique()
-        .gt(1)
+        data.assign(_cross_section_cutoff=cutoff).groupby("_cross_section_cutoff", sort=False)["nominal_decision_group_id"].nunique().gt(1)
     )
     if bool(cutoff_collisions.any()):
-        raise DataReadinessError(
-            "multiple nominal intraday groups resolve to the same decision cutoff"
-        )
+        raise DataReadinessError("multiple nominal intraday groups resolve to the same decision cutoff")
     data["cross_section_cutoff_utc"] = cutoff
     data["decision_time_utc"] = cutoff
     data["decision_group_id"] = cutoff.map(lambda value: value.isoformat())
     if bool(technical_availability.gt(cutoff).any()):
-        raise DataReadinessError(
-            "intraday peer feature availability exceeds its cross-section cutoff"
-        )
+        raise DataReadinessError("intraday peer feature availability exceeds its cross-section cutoff")
     return data
 
 

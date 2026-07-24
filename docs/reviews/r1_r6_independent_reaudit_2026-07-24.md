@@ -230,7 +230,8 @@ Status: environment pending; no distributed/cloud claim.
 1. Fix intraday cross-sectional peer availability and add the poison audit.
 2. Complete R7.2 statistical/economic corrections.
 3. Complete R7.3 exact event reconciliation.
-4. Complete R7.4 source-path label reproduction.
+4. R7.4 source-path label reproduction completed locally; rebuild real
+   candidates through the new reconciliation path.
 5. Complete R7.5 causally derived shadow evidence.
 6. Complete R7.6 selected-policy monitoring and durable outbox.
 7. Complete R7.7 atomic feature/model serving generations.

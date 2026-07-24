@@ -32,6 +32,8 @@ COMMON_IDENTITY_FIELDS = (
     "reconciliation_sha256",
     "event_assignment_sha256",
     "event_aggregate_sha256",
+    "label_material_sha256",
+    "label_source_reconciliation_sha256",
     "dataset_label_config_sha256",
     "calibration_method",
     "folds_causally_ordered",
@@ -45,6 +47,8 @@ SHA_IDENTITY_FIELDS = {
     "reconciliation_sha256",
     "event_assignment_sha256",
     "event_aggregate_sha256",
+    "label_material_sha256",
+    "label_source_reconciliation_sha256",
     "dataset_label_config_sha256",
     "universe_identity_sha256",
     "prediction_policy_sha256",
@@ -142,9 +146,7 @@ def build_promotion_attestation(
         hypothesis_family=hypothesis_family,
     )
     timestamp = _utc(promoted_at or datetime.now(UTC))
-    shadow_generated_at = _utc(
-        datetime.fromisoformat(str(shadow_bundle.get("generated_at_utc") or ""))
-    )
+    shadow_generated_at = _utc(datetime.fromisoformat(str(shadow_bundle.get("generated_at_utc") or "")))
     if timestamp < shadow_generated_at:
         raise DataReadinessError("promotion cannot predate shadow evidence generation")
     content: dict[str, Any] = {
@@ -333,10 +335,7 @@ def _verify_attestation_content(
     unsigned.pop("signature")
     payload = dict(unsigned)
     attestation_id = str(payload.pop("attestation_id", ""))
-    if (
-        payload.get("schema") != PROMOTION_ATTESTATION_SCHEMA
-        or _json_sha256(payload) != attestation_id
-    ):
+    if payload.get("schema") != PROMOTION_ATTESTATION_SCHEMA or _json_sha256(payload) != attestation_id:
         raise DataReadinessError("promotion attestation content hash is invalid")
     _require_sha256(attestation_id, "attestation_id")
     _validate_attestation_bindings(payload)
@@ -357,10 +356,7 @@ def _validate_attestation_bindings(payload: dict[str, Any]) -> None:
     )
     _require_sha256(str(candidate["artifact_sha256"]), "candidate.artifact_sha256")
     _require_sha256(str(candidate["manifest_sha256"]), "candidate.manifest_sha256")
-    if not all(
-        str(candidate.get(field) or "").strip()
-        for field in ("model_run_id", "model_type", "model_schema_version")
-    ):
+    if not all(str(candidate.get(field) or "").strip() for field in ("model_run_id", "model_type", "model_schema_version")):
         raise DataReadinessError("promotion attestation candidate identity is incomplete")
     _require_sha256(
         str(payload.get("evidence_manifest_sha256") or ""),
@@ -429,9 +425,7 @@ def _validate_attestation_bindings(payload: dict[str, Any]) -> None:
     interval = shadow.get("paired_improvement_interval")
     if not isinstance(interval, dict) or not {"point", "low", "high"}.issubset(interval):
         raise DataReadinessError("promotion attestation shadow interval is invalid")
-    shadow_generated_at = _utc(
-        datetime.fromisoformat(str(shadow.get("generated_at_utc") or ""))
-    )
+    shadow_generated_at = _utc(datetime.fromisoformat(str(shadow.get("generated_at_utc") or "")))
     _validated_ledger_receipt(
         _exact_object(
             payload.get("ledger_receipt"),
@@ -458,9 +452,7 @@ def _validate_attestation_bindings(payload: dict[str, Any]) -> None:
     approver_identity = str(payload.get("approver_identity") or "").strip()
     if not build_identity or not approver_identity or build_identity == approver_identity:
         raise DataReadinessError("promotion attestation separation of duties is invalid")
-    promoted_at = _utc(
-        datetime.fromisoformat(str(payload.get("promoted_at_utc") or ""))
-    )
+    promoted_at = _utc(datetime.fromisoformat(str(payload.get("promoted_at_utc") or "")))
     if promoted_at < shadow_generated_at:
         raise DataReadinessError("promotion attestation predates shadow evidence")
 
@@ -500,10 +492,7 @@ def _verify_signature(
         raise DataReadinessError("promotion attestation signature algorithm is unsupported")
     signer_id = str(signature.get("signer_id") or "")
     trust_store = _load_json_object(trust_store_path, "attestation trust store")
-    if (
-        set(trust_store) != {"schema", "issuers"}
-        or trust_store.get("schema") != ATTESTATION_TRUST_STORE_SCHEMA
-    ):
+    if set(trust_store) != {"schema", "issuers"} or trust_store.get("schema") != ATTESTATION_TRUST_STORE_SCHEMA:
         raise DataReadinessError("attestation trust store schema is invalid")
     issuers = trust_store.get("issuers")
     issuer = issuers.get(signer_id) if isinstance(issuers, dict) else None
@@ -515,9 +504,7 @@ def _verify_signature(
     if issuer.get("algorithm") != SIGNATURE_ALGORITHM:
         raise DataReadinessError("trusted attestation signer algorithm is invalid")
     try:
-        public_key = Ed25519PublicKey.from_public_bytes(
-            b64decode(str(issuer["public_key_base64"]), validate=True)
-        )
+        public_key = Ed25519PublicKey.from_public_bytes(b64decode(str(issuer["public_key_base64"]), validate=True))
         signature_bytes = b64decode(
             str(signature.get("signature_base64") or ""),
             validate=True,
@@ -567,15 +554,9 @@ def _exact_object(
 
 
 def _resolve_trust_store_path(path: Path | None) -> Path:
-    selected = path or (
-        Path(os.environ[ATTESTATION_TRUST_STORE_ENV])
-        if os.environ.get(ATTESTATION_TRUST_STORE_ENV)
-        else None
-    )
+    selected = path or (Path(os.environ[ATTESTATION_TRUST_STORE_ENV]) if os.environ.get(ATTESTATION_TRUST_STORE_ENV) else None)
     if selected is None:
-        raise DataReadinessError(
-            f"attestation trust store is required via {ATTESTATION_TRUST_STORE_ENV}"
-        )
+        raise DataReadinessError(f"attestation trust store is required via {ATTESTATION_TRUST_STORE_ENV}")
     return selected.resolve()
 
 

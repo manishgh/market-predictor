@@ -43,26 +43,18 @@ class IntradayDatasetV1Tests(unittest.TestCase):
 
     def test_delays_cross_section_until_slowest_peer_is_available(self) -> None:
         decisions, one_minute, benchmarks, events, collections = _inputs()
-        eastern_start = decisions["bar_start_utc"].dt.tz_convert(
-            "America/New_York"
-        )
+        eastern_start = decisions["bar_start_utc"].dt.tz_convert("America/New_York")
         decision_minute = eastern_start.dt.hour * 60 + eastern_start.dt.minute
         latest_bar_end = decisions.loc[
             decision_minute.between(10 * 60, 15 * 60 + 45),
             "bar_end_utc",
         ].max()
-        delayed_peer = decisions["ticker"].eq("BBB") & decisions[
-            "bar_end_utc"
-        ].eq(latest_bar_end)
+        delayed_peer = decisions["ticker"].eq("BBB") & decisions["bar_end_utc"].eq(latest_bar_end)
         original_fast_cutoff = decisions.loc[
-            decisions["ticker"].eq("AAA")
-            & decisions["bar_end_utc"].eq(latest_bar_end),
+            decisions["ticker"].eq("AAA") & decisions["bar_end_utc"].eq(latest_bar_end),
             "decision_time_utc",
         ].iloc[0]
-        delayed_cutoff = (
-            decisions.loc[delayed_peer, "decision_time_utc"].iloc[0]
-            + pd.Timedelta(minutes=2)
-        )
+        delayed_cutoff = decisions.loc[delayed_peer, "decision_time_utc"].iloc[0] + pd.Timedelta(minutes=2)
         decisions.loc[delayed_peer, "available_at_utc"] = delayed_cutoff
         decisions.loc[delayed_peer, "decision_time_utc"] = delayed_cutoff
         decisions.loc[delayed_peer, "feature_available_at_utc"] = delayed_cutoff
@@ -78,12 +70,8 @@ class IntradayDatasetV1Tests(unittest.TestCase):
 
         self.assertTrue(audit.passed, audit.to_frame().to_dict(orient="records"))
         self.assertTrue(features["decision_time_utc"].eq(delayed_cutoff).all())
-        self.assertTrue(
-            features["cross_section_cutoff_utc"].eq(delayed_cutoff).all()
-        )
-        self.assertFalse(
-            features["decision_time_utc"].eq(original_fast_cutoff).any()
-        )
+        self.assertTrue(features["cross_section_cutoff_utc"].eq(delayed_cutoff).all())
+        self.assertFalse(features["decision_time_utc"].eq(original_fast_cutoff).any())
         self.assertEqual(
             features.set_index("ticker").loc["AAA", "ticker_decision_time_utc"],
             original_fast_cutoff,
@@ -110,18 +98,89 @@ class IntradayDatasetV1Tests(unittest.TestCase):
         )
         self.assertTrue(audit.passed, audit.to_frame().to_dict(orient="records"))
         tampered = dataset.copy()
-        tampered.loc[tampered.index[0], "cross_section_cutoff_utc"] = (
-            pd.Timestamp(tampered.loc[tampered.index[0], "cross_section_cutoff_utc"])
-            - pd.Timedelta(minutes=1)
-        )
+        tampered.loc[tampered.index[0], "cross_section_cutoff_utc"] = pd.Timestamp(
+            tampered.loc[tampered.index[0], "cross_section_cutoff_utc"]
+        ) - pd.Timedelta(minutes=1)
 
         tampered_audit = audit_intraday_dataset(tampered, config)
 
-        check = tampered_audit.to_frame().set_index("name").loc[
-            "intraday_cross_section_availability"
-        ]
+        check = tampered_audit.to_frame().set_index("name").loc["intraday_cross_section_availability"]
         self.assertEqual(check["status"], "fail")
         self.assertGreater(int(check["failures"]), 0)
+
+    def test_source_replay_rejects_path_benchmark_and_gap_mutations(self) -> None:
+        decisions, one_minute, benchmarks, events, collections = _inputs()
+        config = _config()
+        dataset, audit = build_intraday_dataset(
+            decisions,
+            one_minute,
+            benchmarks,
+            global_events=events,
+            global_source_collections=collections,
+            config=config,
+        )
+        self.assertTrue(audit.passed, audit.to_frame().to_dict(orient="records"))
+        row = dataset.loc[dataset["label_eligible"]].iloc[0]
+        replay_bars = one_minute.copy()
+        replay_bars["session_date_et"] = (
+            replay_bars["bar_start_utc"]
+            .dt.tz_convert("America/New_York")
+            .dt.date
+        )
+
+        stock_bars = replay_bars.copy()
+        stock_entry = stock_bars["ticker"].eq(row["ticker"]) & stock_bars["bar_start_utc"].eq(row["entry_time_utc"])
+        stock_bars.loc[stock_entry, "high"] = float(row["target_price"]) * 1.01
+        stock_bars.loc[stock_entry, "low"] = float(row["stop_price"]) * 0.99
+        stock_audit = audit_intraday_dataset(
+            dataset,
+            config,
+            source_frame=dataset,
+            one_minute_bars=stock_bars,
+        )
+        stock_check = stock_audit.to_frame().set_index("name").loc["intraday_label_source_reconciliation"]
+        self.assertEqual(stock_check["status"], "fail")
+        self.assertGreater(int(stock_check["failures"]), 0)
+
+        benchmark_bars = replay_bars.copy()
+        exit_start = pd.Timestamp(row["exit_time_utc"]) - pd.Timedelta(minutes=1)
+        benchmark_exit = benchmark_bars["ticker"].eq("SPY") & benchmark_bars["bar_start_utc"].eq(exit_start)
+        benchmark_bars.loc[benchmark_exit, "close"] *= 1.05
+        benchmark_audit = audit_intraday_dataset(
+            dataset,
+            config,
+            source_frame=dataset,
+            one_minute_bars=benchmark_bars,
+        )
+        benchmark_check = benchmark_audit.to_frame().set_index("name").loc["intraday_label_source_reconciliation"]
+        self.assertEqual(benchmark_check["status"], "fail")
+        self.assertGreater(int(benchmark_check["failures"]), 0)
+
+        gap_bars = replay_bars.loc[~stock_entry].copy()
+        gap_audit = audit_intraday_dataset(
+            dataset,
+            config,
+            source_frame=dataset,
+            one_minute_bars=gap_bars,
+        )
+        gap_check = gap_audit.to_frame().set_index("name").loc["intraday_label_source_reconciliation"]
+        self.assertEqual(gap_check["status"], "fail")
+        self.assertGreater(int(gap_check["failures"]), 0)
+
+        cost_config = config.model_copy(
+            update={
+                "round_trip_cost_bps": config.round_trip_cost_bps + 10.0,
+            }
+        )
+        cost_audit = audit_intraday_dataset(
+            dataset,
+            cost_config,
+            source_frame=dataset,
+            one_minute_bars=replay_bars,
+        )
+        cost_check = cost_audit.to_frame().set_index("name").loc["intraday_label_source_reconciliation"]
+        self.assertEqual(cost_check["status"], "fail")
+        self.assertGreater(int(cost_check["failures"]), 0)
 
     def test_cli_publishes_hash_verified_intraday_dataset(self) -> None:
         decisions, one_minute, benchmarks, events, collections = _inputs()
@@ -274,12 +333,7 @@ class IntradayDatasetV1Tests(unittest.TestCase):
             "2025-01-08 14:00",
             tz="America/New_York",
         ).tz_convert("UTC")
-        one_minute = one_minute[
-            ~(
-                one_minute["ticker"].eq("AAA")
-                & one_minute["bar_start_utc"].eq(missing_start)
-            )
-        ].copy()
+        one_minute = one_minute[~(one_minute["ticker"].eq("AAA") & one_minute["bar_start_utc"].eq(missing_start))].copy()
 
         dataset, _ = build_intraday_dataset(
             decisions,
@@ -290,10 +344,7 @@ class IntradayDatasetV1Tests(unittest.TestCase):
             config=_config(),
         )
 
-        decision = dataset[
-            dataset["ticker"].eq("AAA")
-            & pd.to_datetime(dataset["decision_time_utc"], utc=True).eq(missing_start)
-        ]
+        decision = dataset[dataset["ticker"].eq("AAA") & pd.to_datetime(dataset["decision_time_utc"], utc=True).eq(missing_start)]
         self.assertEqual(len(decision), 1)
         self.assertFalse(bool(decision.iloc[0]["label_path_exact"]))
         self.assertTrue(pd.isna(decision.iloc[0]["entry_time_utc"]))
