@@ -6,6 +6,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 import pandas as pd
+from click.utils import strip_ansi
 from typer.testing import CliRunner
 
 from market_predictor.canonical.contracts import CanonicalUniverseMembership, SourceCollection
@@ -158,8 +159,9 @@ class CanonicalCliTests(unittest.TestCase):
             terminal_width=240,
         )
         self.assertEqual(result.exit_code, 0, msg=result.output)
-        self.assertIn("--decision-mode", result.output)
-        self.assertIn("required", result.output.lower())
+        output = strip_ansi(result.output)
+        self.assertIn("--decision-mode", output)
+        self.assertIn("required", output.lower())
 
 
 if __name__ == "__main__":

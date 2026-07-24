@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import unittest
 
+from click.utils import strip_ansi
 from typer.testing import CliRunner
 
 from market_predictor.production_cli import app
@@ -24,9 +25,9 @@ class OutcomeCommandTests(unittest.TestCase):
         )
 
         self.assertEqual(report_help.exit_code, 0, report_help.output)
-        self.assertIn("--minimum-samples", report_help.output)
+        self.assertIn("--minimum-samples", strip_ansi(report_help.output))
         self.assertEqual(drift_help.exit_code, 0, drift_help.output)
-        self.assertIn("--model-release-id", drift_help.output)
+        self.assertIn("--model-release-id", strip_ansi(drift_help.output))
 
 
 if __name__ == "__main__":
