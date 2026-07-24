@@ -10,9 +10,12 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+import jwt
 import pandas as pd
 from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+from pydantic import SecretStr
 
 from market_predictor.causal_shadow import write_causal_shadow_bundle
 from market_predictor.execution_policy import EXECUTION_POLICY_SHA256
@@ -35,6 +38,15 @@ from market_predictor.promotion_attestation import (
     ATTESTATION_TRUST_STORE_SCHEMA,
     SIGNATURE_ALGORITHM,
     file_sha256,
+)
+from market_predictor.promotion_identity import (
+    APPROVER_ROLE,
+    BUILD_ROLE,
+    DEFAULT_APPROVER_TOKEN_ENV,
+    DEFAULT_BUILD_TOKEN_ENV,
+    PromotionIdentityAuthenticator,
+    PromotionIdentityConfig,
+    PromotionTokens,
 )
 from market_predictor.promotion_workflow import (
     PromotionTrustContext,
@@ -145,14 +157,15 @@ def trust_context_for_candidate(
         bootstrap_iterations=200,
         bootstrap_seed=17,
     )
+    identity_config, identity_tokens = test_promotion_identity_material()
     return PromotionTrustContext(
         hypothesis_registry_root=root,
         hypothesis_id=hypothesis_id,
         shadow_bundle_path=bundle,
         outcome_repository_root=outcome_repository.root,
         baseline_artifact_path=baseline_artifact,
-        build_identity="ci:test-build",
-        approver_identity="reviewer:test",
+        identity_config=identity_config,
+        identity_tokens=identity_tokens,
         signing_private_key_path=signing_key,
         attestation_trust_store_path=trust_store,
         signer_id=signer_id,
@@ -411,3 +424,131 @@ def test_signing_material() -> tuple[Path, Path, str]:
     os.environ[ATTESTATION_TRUST_STORE_ENV] = str(trust_store_path)
     os.environ["MARKET_PREDICTOR_ALLOW_TEST_CLOCK"] = "1"
     return key_path, trust_store_path, signer_id
+
+
+def test_promotion_identity_material() -> tuple[
+    PromotionIdentityConfig,
+    PromotionTokens,
+]:
+    root = Path(tempfile.gettempdir()) / (
+        f"market-predictor-promotion-identity-{os.getpid()}"
+    )
+    root.mkdir(parents=True, exist_ok=True)
+    key_path = root / "test-rsa-private.pem"
+    jwks_path = root / "test-jwks.json"
+    issuer = "https://issuer.market-predictor.test"
+    audience = "market-predictor-promotion"
+    if not key_path.exists():
+        private_key = rsa.generate_private_key(
+            public_exponent=65_537,
+            key_size=2_048,
+        )
+        key_path.write_bytes(
+            private_key.private_bytes(
+                encoding=serialization.Encoding.PEM,
+                format=serialization.PrivateFormat.PKCS8,
+                encryption_algorithm=serialization.NoEncryption(),
+            )
+        )
+        numbers = private_key.public_key().public_numbers()
+        jwks_path.write_text(
+            json.dumps(
+                {
+                    "keys": [
+                        {
+                            "kty": "RSA",
+                            "kid": "promotion-test-key",
+                            "use": "sig",
+                            "alg": "RS256",
+                            "n": _base64url_uint(numbers.n),
+                            "e": _base64url_uint(numbers.e),
+                        }
+                    ]
+                },
+                sort_keys=True,
+            ),
+            encoding="utf-8",
+        )
+    loaded = serialization.load_pem_private_key(
+        key_path.read_bytes(),
+        password=None,
+    )
+    if not isinstance(loaded, rsa.RSAPrivateKey):
+        raise AssertionError("test promotion identity key is not RSA")
+    now = datetime.now(UTC)
+    build_token = _promotion_token(
+        loaded,
+        issuer=issuer,
+        audience=audience,
+        principal="test-build-principal",
+        role=BUILD_ROLE,
+        token_id=f"build-{os.getpid()}",
+        now=now,
+    )
+    approver_token = _promotion_token(
+        loaded,
+        issuer=issuer,
+        audience=audience,
+        principal="test-approver-principal",
+        role=APPROVER_ROLE,
+        token_id=f"approver-{os.getpid()}",
+        now=now,
+    )
+    os.environ[DEFAULT_BUILD_TOKEN_ENV] = build_token
+    os.environ[DEFAULT_APPROVER_TOKEN_ENV] = approver_token
+    return (
+        PromotionIdentityConfig(
+            issuer=issuer,
+            audience=audience,
+            jwks_path=jwks_path,
+        ),
+        PromotionTokens(
+            build=SecretStr(build_token),
+            approver=SecretStr(approver_token),
+        ),
+    )
+
+
+def test_authenticated_promotion_principals() -> tuple[
+    dict[str, Any],
+    dict[str, Any],
+]:
+    config, tokens = test_promotion_identity_material()
+    return PromotionIdentityAuthenticator(config).authenticate_pair(tokens)
+
+
+def _promotion_token(
+    private_key: rsa.RSAPrivateKey,
+    *,
+    issuer: str,
+    audience: str,
+    principal: str,
+    role: str,
+    token_id: str,
+    now: datetime,
+) -> str:
+    return jwt.encode(
+        {
+            "iss": issuer,
+            "aud": audience,
+            "sub": principal,
+            "oid": principal,
+            "tid": "test-tenant",
+            "azp": "promotion-test-client",
+            "roles": [role],
+            "jti": token_id,
+            "iat": int(now.timestamp()) - 1,
+            "exp": int((now + timedelta(minutes=10)).timestamp()),
+        },
+        private_key,
+        algorithm="RS256",
+        headers={"kid": "promotion-test-key"},
+    )
+
+
+def _base64url_uint(value: int) -> str:
+    raw = value.to_bytes((value.bit_length() + 7) // 8, "big")
+    return b64encode(raw).rstrip(b"=").replace(b"+", b"-").replace(
+        b"/",
+        b"_",
+    ).decode("ascii")

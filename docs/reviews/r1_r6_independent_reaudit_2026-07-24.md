@@ -62,11 +62,12 @@ Required remediation:
 4. Bind workload/approver OIDC identities, baseline artifact, gate config, source rows,
    and ledger inclusion proof into the attestation.
 
-Status: partially remediated in R7.5a. Candidate/baseline artifacts and exact decision
+Status: remediated locally in R7.5. Candidate/baseline artifacts and exact decision
 groups are frozen before observation; paired source rows and session returns are derived
 from the outcome repository and independently reproduced at promotion. Operator-authored
-aggregate returns are no longer accepted. Authenticated build/approver identity remains
-open for R7.5b.
+aggregate returns are no longer accepted. Build and approver identities require separate
+RS256 OIDC tokens, roles, principals, issuer/audience validation, and a deployment-owned
+JWKS; stable token/claims evidence is bound into the ledger transaction and attestation.
 
 ## P1 ML Findings
 

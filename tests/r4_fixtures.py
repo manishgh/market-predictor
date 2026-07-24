@@ -15,6 +15,12 @@ from scripts.promotion_fixture import (
     synthetic_identity_metrics as synthetic_identity_metrics,
 )
 from scripts.promotion_fixture import (
+    test_authenticated_promotion_principals as test_authenticated_promotion_principals,
+)
+from scripts.promotion_fixture import (
+    test_promotion_identity_material as test_promotion_identity_material,
+)
+from scripts.promotion_fixture import (
     test_signing_material as test_signing_material,
 )
 from scripts.promotion_fixture import (

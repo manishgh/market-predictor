@@ -290,8 +290,14 @@ candidate integration test):
   identity, session economics, and confidence intervals before one-use ledger
   consumption. Operator-authored aggregate returns have been removed from production
   code. Verification on 2026-07-24: **339 tests passed**, repository-wide Ruff clean,
-  and strict mypy clean for the changed R7.5 modules. R7.5 is not complete until
-  build and approver identities are authenticated rather than caller-supplied strings.
+  and strict mypy clean for the changed R7.5 modules.
+- **R7.5b completed locally:** promotion now verifies separate short-lived RS256 OIDC
+  tokens for `promotion.build` and `promotion.approve` against an exact issuer,
+  audience, and deployment-owned JWKS. The principals must differ. Tokens are read
+  from environment variables only; stable token/claims evidence is bound into the
+  one-use ledger transaction and signed attestation without exposing token material.
+  Verification on 2026-07-24: **343 tests passed**, repository-wide Ruff clean, and
+  strict mypy clean for all changed R7.5b source/script modules.
 
 ## Do NOT claim complete without real external evidence (`environment_pending`)
 
@@ -309,8 +315,8 @@ Mark these `environment_pending`, never simulate them into a pass.
 Set-Location C:\project\market-predictor
 git checkout r3-lineage
 git status --short                # expect empty
-.\.venv\Scripts\python.exe -m unittest discover -s tests   # expect 339 OK
-# Continue R7.5b authenticated promotion identities. R7.8 remains deferred.
+.\.venv\Scripts\python.exe -m unittest discover -s tests   # expect 343 OK
+# Start R7.6 live selected-policy monitoring. R7.8 remains deferred.
 ```
 
 Persistent notes for this effort also live in the assistant memory file

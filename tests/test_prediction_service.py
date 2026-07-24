@@ -764,7 +764,7 @@ class PredictionServiceTests(unittest.TestCase):
                 model.suffix + ".promotion.attestation.json"
             )
             payload = json.loads(attestation.read_text(encoding="utf-8"))
-            payload["build_identity"] = "tampered"
+            payload["build_principal"]["principal_id"] = "tampered"
             attestation.write_text(json.dumps(payload), encoding="utf-8")
 
             with self.assertRaises(PredictionReadinessError):

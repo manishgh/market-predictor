@@ -18,9 +18,14 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import (
 )
 
 from market_predictor.locking import file_lock
+from market_predictor.promotion_identity import (
+    APPROVER_ROLE,
+    BUILD_ROLE,
+    validate_promotion_principal,
+)
 from market_predictor.v3.errors import DataReadinessError
 
-PROMOTION_ATTESTATION_SCHEMA = "market_predictor.promotion_attestation.v1"
+PROMOTION_ATTESTATION_SCHEMA = "market_predictor.promotion_attestation.v2"
 ATTESTATION_TRUST_STORE_SCHEMA = "market_predictor.attestation_trust_store.v1"
 ATTESTATION_TRUST_STORE_ENV = "MARKET_PREDICTOR_ATTESTATION_TRUST_STORE"
 SIGNATURE_ALGORITHM = "ed25519"
@@ -66,8 +71,8 @@ def build_promotion_attestation(
     shadow_bundle: dict[str, Any],
     ledger_entry: dict[str, Any],
     gate_config: dict[str, Any],
-    build_identity: str,
-    approver_identity: str,
+    build_principal: dict[str, Any],
+    approver_principal: dict[str, Any],
     signing_private_key_path: Path,
     signer_id: str,
     promoted_at: datetime | None = None,
@@ -147,9 +152,17 @@ def build_promotion_attestation(
     interval = shadow_bundle.get("paired_improvement_interval")
     if not isinstance(interval, dict):
         raise DataReadinessError("shadow evidence is missing its paired confidence interval")
-    if not build_identity.strip() or not approver_identity.strip() or not signer_id.strip():
-        raise ValueError("build_identity and approver_identity are required")
-    if build_identity.strip() == approver_identity.strip():
+    build = validate_promotion_principal(
+        build_principal,
+        expected_role=BUILD_ROLE,
+    )
+    approver = validate_promotion_principal(
+        approver_principal,
+        expected_role=APPROVER_ROLE,
+    )
+    if not signer_id.strip():
+        raise ValueError("signer_id is required")
+    if build["principal_id"] == approver["principal_id"]:
         raise DataReadinessError("promotion build and approver identities must be distinct")
     ledger_receipt = _validated_ledger_receipt(
         ledger_entry,
@@ -158,6 +171,8 @@ def build_promotion_attestation(
         hypothesis_family=hypothesis_family,
     )
     timestamp = _utc(promoted_at or datetime.now(UTC))
+    _validate_principal_promotion_time(build, promoted_at=timestamp)
+    _validate_principal_promotion_time(approver, promoted_at=timestamp)
     shadow_generated_at = _utc(datetime.fromisoformat(str(shadow_bundle.get("generated_at_utc") or "")))
     if timestamp < shadow_generated_at:
         raise DataReadinessError("promotion cannot predate shadow evidence generation")
@@ -192,8 +207,8 @@ def build_promotion_attestation(
         },
         "ledger_receipt": ledger_receipt,
         "gate_config_sha256": _json_sha256(gate_config),
-        "build_identity": build_identity.strip(),
-        "approver_identity": approver_identity.strip(),
+        "build_principal": build,
+        "approver_principal": approver,
         "promoted_at_utc": timestamp.isoformat(),
     }
     unsigned = {**content, "attestation_id": _json_sha256(content)}
@@ -330,8 +345,8 @@ def _verify_attestation_content(
         "shadow",
         "ledger_receipt",
         "gate_config_sha256",
-        "build_identity",
-        "approver_identity",
+        "build_principal",
+        "approver_principal",
         "promoted_at_utc",
         "attestation_id",
         "signature",
@@ -472,13 +487,49 @@ def _validate_attestation_bindings(payload: dict[str, Any]) -> None:
         hypothesis_id=str(hypothesis["hypothesis_id"]),
         hypothesis_family=str(hypothesis["hypothesis_family"]),
     )
-    build_identity = str(payload.get("build_identity") or "").strip()
-    approver_identity = str(payload.get("approver_identity") or "").strip()
-    if not build_identity or not approver_identity or build_identity == approver_identity:
+    build_principal = validate_promotion_principal(
+        payload.get("build_principal"),
+        expected_role=BUILD_ROLE,
+    )
+    approver_principal = validate_promotion_principal(
+        payload.get("approver_principal"),
+        expected_role=APPROVER_ROLE,
+    )
+    if build_principal["principal_id"] == approver_principal["principal_id"]:
         raise DataReadinessError("promotion attestation separation of duties is invalid")
     promoted_at = _utc(datetime.fromisoformat(str(payload.get("promoted_at_utc") or "")))
+    _validate_principal_promotion_time(
+        build_principal,
+        promoted_at=promoted_at,
+    )
+    _validate_principal_promotion_time(
+        approver_principal,
+        promoted_at=promoted_at,
+    )
     if promoted_at < shadow_generated_at:
         raise DataReadinessError("promotion attestation predates shadow evidence")
+
+
+def _validate_principal_promotion_time(
+    principal: dict[str, Any],
+    *,
+    promoted_at: datetime,
+) -> None:
+    authenticated_at = _utc(
+        datetime.fromisoformat(str(principal["authenticated_at_utc"]))
+    )
+    expires_at = _utc(
+        datetime.fromisoformat(str(principal["expires_at_utc"]))
+    )
+    elapsed_seconds = (promoted_at - authenticated_at).total_seconds()
+    if (
+        elapsed_seconds < 0
+        or elapsed_seconds > 300
+        or promoted_at >= expires_at
+    ):
+        raise DataReadinessError(
+            "promotion identity was not authenticated for this promotion"
+        )
 
 
 def _sign_attestation(

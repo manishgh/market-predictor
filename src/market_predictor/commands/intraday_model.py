@@ -27,6 +27,12 @@ from market_predictor.intraday.promotion import (
     promote_intraday_model,
     write_intraday_training_evidence,
 )
+from market_predictor.promotion_identity import (
+    DEFAULT_APPROVER_TOKEN_ENV,
+    DEFAULT_BUILD_TOKEN_ENV,
+    PromotionIdentityConfig,
+    promotion_tokens_from_environment,
+)
 from market_predictor.promotion_workflow import PromotionTrustContext
 from market_predictor.registry import manifest_path_for
 
@@ -205,8 +211,26 @@ def register_intraday_model_commands(app: typer.Typer, console: Console) -> None
             ...,
             help="Frozen baseline model artifact declared by the hypothesis.",
         ),
-        build_identity: str = typer.Option(..., help="CI/build workload identity recorded in the attestation."),
-        approver_identity: str = typer.Option(..., help="Reviewer identity recorded in the attestation."),
+        identity_issuer: str = typer.Option(
+            ...,
+            help="OIDC issuer trusted for promotion identities.",
+        ),
+        identity_audience: str = typer.Option(
+            ...,
+            help="OIDC audience required for promotion identities.",
+        ),
+        identity_jwks: Path = typer.Option(
+            ...,
+            help="Deployment-owned JWKS file for promotion identity verification.",
+        ),
+        build_token_env: str = typer.Option(
+            DEFAULT_BUILD_TOKEN_ENV,
+            help="Environment variable containing the promotion.build OIDC token.",
+        ),
+        approver_token_env: str = typer.Option(
+            DEFAULT_APPROVER_TOKEN_ENV,
+            help="Environment variable containing the promotion.approve OIDC token.",
+        ),
         signing_private_key: Path = typer.Option(
             ...,
             help="Ed25519 private key controlled by the promotion workload.",
@@ -240,8 +264,15 @@ def register_intraday_model_commands(app: typer.Typer, console: Console) -> None
                 shadow_bundle_path=shadow_bundle,
                 outcome_repository_root=outcome_repository,
                 baseline_artifact_path=baseline_artifact,
-                build_identity=build_identity,
-                approver_identity=approver_identity,
+                identity_config=PromotionIdentityConfig(
+                    issuer=identity_issuer,
+                    audience=identity_audience,
+                    jwks_path=identity_jwks,
+                ),
+                identity_tokens=promotion_tokens_from_environment(
+                    build_token_env=build_token_env,
+                    approver_token_env=approver_token_env,
+                ),
                 signing_private_key_path=signing_private_key,
                 attestation_trust_store_path=attestation_trust_store,
                 signer_id=signer_id,

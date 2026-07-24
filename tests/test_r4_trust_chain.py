@@ -27,6 +27,8 @@ from market_predictor.shadow_ledger import (
 from market_predictor.v3.errors import DataReadinessError
 from tests.r4_fixtures import (
     load_test_shadow_bundle,
+    test_authenticated_promotion_principals,
+    test_promotion_identity_material,
     test_signing_material,
     write_test_shadow_bundle,
 )
@@ -38,6 +40,9 @@ class R4TrustChainTests(unittest.TestCase):
             root = Path(tmp)
             shadow = root / "outside" / f"{'a' * 64}.json"
             signing_key, trust_store, signer_id = test_signing_material()
+            identity_config, identity_tokens = (
+                test_promotion_identity_material()
+            )
 
             with self.assertRaisesRegex(ValueError, "inside the hypothesis registry"):
                 PromotionTrustContext(
@@ -46,8 +51,8 @@ class R4TrustChainTests(unittest.TestCase):
                     shadow_bundle_path=shadow,
                     outcome_repository_root=root / "outcomes",
                     baseline_artifact_path=root / "baseline.joblib",
-                    build_identity="ci:test",
-                    approver_identity="reviewer:test",
+                    identity_config=identity_config,
+                    identity_tokens=identity_tokens,
                     signing_private_key_path=signing_key,
                     attestation_trust_store_path=trust_store,
                     signer_id=signer_id,
@@ -214,6 +219,9 @@ class R4TrustChainTests(unittest.TestCase):
                 transaction_id="6" * 64,
             )
             signing_key, trust_store, signer_id = test_signing_material()
+            build_principal, approver_principal = (
+                test_authenticated_promotion_principals()
+            )
             attestation = build_promotion_attestation(
                 model_path=model,
                 evidence_manifest_path=evidence_manifest,
@@ -222,11 +230,11 @@ class R4TrustChainTests(unittest.TestCase):
                 shadow_bundle=bundle,
                 ledger_entry=ledger_entry,
                 gate_config={"minimum_shadow_sessions": 4, "minimum_ci_low": 0.0},
-                build_identity="ci:test-build",
-                approver_identity="reviewer:test",
+                build_principal=build_principal,
+                approver_principal=approver_principal,
                 signing_private_key_path=signing_key,
                 signer_id=signer_id,
-                promoted_at=_declared_at() + timedelta(days=22),
+                promoted_at=datetime.now(UTC),
             )
             write_promotion_attestation(
                 model,
@@ -306,6 +314,9 @@ class R4TrustChainTests(unittest.TestCase):
                 transaction_id="7" * 64,
             )
             signing_key, trust_store, signer_id = test_signing_material()
+            build_principal, approver_principal = (
+                test_authenticated_promotion_principals()
+            )
             attestation = build_promotion_attestation(
                 model_path=model,
                 evidence_manifest_path=evidence_manifest,
@@ -314,11 +325,11 @@ class R4TrustChainTests(unittest.TestCase):
                 shadow_bundle=bundle,
                 ledger_entry=ledger_entry,
                 gate_config={"minimum_shadow_sessions": 4, "minimum_ci_low": 0.0},
-                build_identity="ci:test-build",
-                approver_identity="reviewer:test",
+                build_principal=build_principal,
+                approver_principal=approver_principal,
                 signing_private_key_path=signing_key,
                 signer_id=signer_id,
-                promoted_at=_declared_at() + timedelta(days=22),
+                promoted_at=datetime.now(UTC),
             )
             write_promotion_attestation(
                 model,

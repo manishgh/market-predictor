@@ -30,7 +30,11 @@ from market_predictor.swing.promotion import (
     write_swing_training_evidence,
 )
 from market_predictor.v3.errors import DataReadinessError, SchemaMismatchError
-from tests.r4_fixtures import test_signing_material, trust_context_for_candidate
+from tests.r4_fixtures import (
+    test_promotion_identity_material,
+    test_signing_material,
+    trust_context_for_candidate,
+)
 
 
 class SwingModelTests(unittest.TestCase):
@@ -74,6 +78,7 @@ class SwingModelTests(unittest.TestCase):
             profitability.loc[0, "return_drawdown_ratio"] = 1.0
             profitability.to_csv(profitability_path, index=False)
             signing_key, trust_store, signer_id = test_signing_material()
+            identity_config, _ = test_promotion_identity_material()
             promoted = runner.invoke(
                 app,
                 [
@@ -94,10 +99,12 @@ class SwingModelTests(unittest.TestCase):
                     str(root / "trust" / "outcomes"),
                     "--baseline-artifact",
                     str(root / "trust" / "baseline.joblib"),
-                    "--build-identity",
-                    "ci:test",
-                    "--approver-identity",
-                    "reviewer:test",
+                    "--identity-issuer",
+                    identity_config.issuer,
+                    "--identity-audience",
+                    identity_config.audience,
+                    "--identity-jwks",
+                    str(identity_config.jwks_path),
                     "--signing-private-key",
                     str(signing_key),
                     "--attestation-trust-store",

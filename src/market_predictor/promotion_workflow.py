@@ -16,6 +16,11 @@ from market_predictor.promotion_attestation import (
     promotion_attestation_path_for,
     write_promotion_attestation,
 )
+from market_predictor.promotion_identity import (
+    PromotionIdentityAuthenticator,
+    PromotionIdentityConfig,
+    PromotionTokens,
+)
 from market_predictor.shadow_ledger import (
     consume_shadow_fingerprint,
     shadow_gate_failures,
@@ -30,8 +35,8 @@ class PromotionTrustContext:
     shadow_bundle_path: Path
     outcome_repository_root: Path
     baseline_artifact_path: Path
-    build_identity: str
-    approver_identity: str
+    identity_config: PromotionIdentityConfig
+    identity_tokens: PromotionTokens
     signing_private_key_path: Path
     attestation_trust_store_path: Path
     signer_id: str
@@ -45,16 +50,12 @@ class PromotionTrustContext:
             value.strip()
             for value in (
                 self.hypothesis_id,
-                self.build_identity,
-                self.approver_identity,
                 self.signer_id,
             )
         ):
             raise ValueError(
-                "hypothesis_id, build_identity, approver_identity, and signer_id are required"
+                "hypothesis_id and signer_id are required"
             )
-        if self.build_identity.strip() == self.approver_identity.strip():
-            raise ValueError("build and approver identities must be distinct")
         registry_root = self.hypothesis_registry_root.resolve()
         shadow_root = registry_root / "shadow"
         if not self.shadow_bundle_path.resolve().is_relative_to(shadow_root):
@@ -99,11 +100,18 @@ def evaluate_shadow_and_attest(
         shadow,
         metrics,
     )
+    build_principal, approver_principal = (
+        PromotionIdentityAuthenticator(
+            context.identity_config
+        ).authenticate_pair(context.identity_tokens)
+    )
     transaction_id = _transaction_id(
         model_path=model_path,
         hypothesis=hypothesis,
         shadow=shadow,
         gate_config=gate_config,
+        build_principal=build_principal,
+        approver_principal=approver_principal,
     )
     failures = shadow_gate_failures(
         shadow,
@@ -136,8 +144,8 @@ def evaluate_shadow_and_attest(
         shadow_bundle=shadow,
         ledger_entry=ledger_entry,
         gate_config=gate_config,
-        build_identity=context.build_identity,
-        approver_identity=context.approver_identity,
+        build_principal=build_principal,
+        approver_principal=approver_principal,
         signing_private_key_path=context.signing_private_key_path,
         signer_id=context.signer_id,
     )
@@ -213,12 +221,18 @@ def _transaction_id(
     hypothesis: dict[str, Any],
     shadow: dict[str, Any],
     gate_config: dict[str, Any],
+    build_principal: dict[str, Any],
+    approver_principal: dict[str, Any],
 ) -> str:
     payload = {
         "candidate_artifact_sha256": file_sha256(model_path),
         "hypothesis_record_sha256": hypothesis.get("record_sha256"),
         "shadow_fingerprint": shadow.get("shadow_fingerprint"),
         "gate_config": gate_config,
+        "build_principal": _stable_principal_identity(build_principal),
+        "approver_principal": _stable_principal_identity(
+            approver_principal
+        ),
     }
     encoded = json.dumps(
         payload,
@@ -227,3 +241,13 @@ def _transaction_id(
         default=str,
     ).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
+
+
+def _stable_principal_identity(
+    principal: dict[str, Any],
+) -> dict[str, Any]:
+    return {
+        key: value
+        for key, value in principal.items()
+        if key != "authenticated_at_utc"
+    }

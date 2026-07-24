@@ -15,7 +15,7 @@ The repository produces prediction intelligence: probabilities, catalyst summari
 
 ## Current Model State (2026-07-24)
 
-Candidate identity comes from an immutable `.manifest.json`. Effective promoted state exists only when a content-addressed promotion attestation verifies the candidate, evidence manifest, causal identity chain, predeclared baseline/hypothesis, untouched-shadow confidence interval, gate configuration, and build/approver identities. Unregistered, unattested, or hash-mismatched artifacts cannot be served.
+Candidate identity comes from an immutable `.manifest.json`. Effective promoted state exists only when a content-addressed promotion attestation verifies the candidate, evidence manifest, causal identity chain, predeclared baseline/hypothesis, untouched-shadow confidence interval, gate configuration, and distinct OIDC-authenticated build/approver principals. Unregistered, unattested, unauthenticated, or hash-mismatched artifacts cannot be served.
 
 | Serving view | Artifact / family | State | Current evidence |
 | --- | --- | --- | --- |
@@ -519,15 +519,18 @@ market-predictor-research promote-swing-model `
   --shadow-bundle data/governance/shadow/<shadow-fingerprint>.json `
   --outcome-repository data/outcomes `
   --baseline-artifact models/swing/baselines/swing_5d.joblib `
-  --build-identity ci:<build-id> `
-  --approver-identity reviewer:<identity> `
+  --identity-issuer https://login.microsoftonline.com/<tenant>/v2.0 `
+  --identity-audience market-predictor-promotion `
+  --identity-jwks C:\run\secrets\promotion-jwks.json `
   --signing-private-key <secure-ed25519-private-key.pem> `
   --attestation-trust-store configs/attestation_trust_store.json `
   --signer-id promotion-ci-prod `
   --config configs/swing_promotion.toml
 ```
 
-`build-swing-dataset` uses a post-close decision, next-session-open entry, and fifth-session-close exit. It writes exact entry/exit/label timestamps, costs, stock and benchmark returns, MFE/MAE, and eligibility evidence. Before publication, the audit independently replays every material label from the daily stock and benchmark paths and stamps content-addressed material and reconciliation hashes. Training and promotion require those hashes and zero replay errors. `train-swing-model` publishes an immutable candidate plus a hash inventory for every promotion file. `promote-swing-model` verifies that inventory, the frozen candidate and baseline artifacts, and a predeclared shadow workload. It then reopens the outcome repository, reproduces paired row-level candidate/baseline source evidence and session economics, consumes the causal bundle once, requires a positive paired session-block confidence lower bound, and writes an immutable attestation. Operator-supplied aggregate shadow returns are not accepted. Editing a model, manifest, metric, audit, source outcome, shadow bundle, ledger receipt, or attestation invalidates authorization.
+Set `MARKET_PREDICTOR_PROMOTION_BUILD_TOKEN` and `MARKET_PREDICTOR_PROMOTION_APPROVER_TOKEN` in the promotion process environment. Tokens are never accepted as command arguments. They must be RS256 JWTs issued for the configured audience with `promotion.build` and `promotion.approve` roles respectively, and they must resolve to distinct principals.
+
+`build-swing-dataset` uses a post-close decision, next-session-open entry, and fifth-session-close exit. It writes exact entry/exit/label timestamps, costs, stock and benchmark returns, MFE/MAE, and eligibility evidence. Before publication, the audit independently replays every material label from the daily stock and benchmark paths and stamps content-addressed material and reconciliation hashes. Training and promotion require those hashes and zero replay errors. `train-swing-model` publishes an immutable candidate plus a hash inventory for every promotion file. `promote-swing-model` verifies that inventory, the frozen candidate and baseline artifacts, a predeclared shadow workload, and distinct OIDC-authenticated build/approver principals. It then reopens the outcome repository, reproduces paired row-level candidate/baseline source evidence and session economics, consumes the causal bundle once, requires a positive paired session-block confidence lower bound, and writes an immutable attestation. Operator-supplied aggregate shadow returns and identity strings are not accepted. Editing a model, manifest, metric, audit, source outcome, shadow bundle, ledger receipt, identity evidence, or attestation invalidates authorization.
 
 The removed `build-volatile-dataset`, `train-volatile-model`, and `score-volatile-latest` commands are not compatibility aliases. Old volatile artifacts cannot be loaded by the production swing API.
 
@@ -559,8 +562,9 @@ market-predictor-research promote-intraday-model `
   --shadow-bundle data/governance/shadow/<shadow-fingerprint>.json `
   --outcome-repository data/outcomes `
   --baseline-artifact models/intraday/baselines/intraday_60m.joblib `
-  --build-identity ci:<build-id> `
-  --approver-identity reviewer:<identity> `
+  --identity-issuer https://login.microsoftonline.com/<tenant>/v2.0 `
+  --identity-audience market-predictor-promotion `
+  --identity-jwks C:\run\secrets\promotion-jwks.json `
   --signing-private-key <secure-ed25519-private-key.pem> `
   --attestation-trust-store configs/attestation_trust_store.json `
   --signer-id promotion-ci-prod `

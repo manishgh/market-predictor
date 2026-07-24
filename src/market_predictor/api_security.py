@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import hmac
-import json
 import re
 import threading
 import time
@@ -10,8 +9,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
 
-import jwt
 from pydantic import BaseModel, ConfigDict, Field, SecretStr, model_validator
+
+from market_predictor.jwt_verification import (
+    JwtVerificationError,
+    LocalJwksVerifier,
+)
 
 API_SCOPES = frozenset(
     {
@@ -86,9 +89,22 @@ class ApiSecurityError(Exception):
 class ApiAuthenticator:
     def __init__(self, config: ApiSecurityConfig) -> None:
         self.config = config
-        self._jwks_lock = threading.Lock()
-        self._jwks_mtime_ns: int | None = None
-        self._keys: dict[str, Any] = {}
+        self._entra_verifier = (
+            LocalJwksVerifier(
+                issuer=config.issuer,
+                audience=config.audience,
+                jwks_path=config.jwks_path,
+                clock_skew_seconds=config.clock_skew_seconds,
+                maximum_token_bytes=config.maximum_token_bytes,
+            )
+            if (
+                config.mode == "entra"
+                and config.issuer is not None
+                and config.audience is not None
+                and config.jwks_path is not None
+            )
+            else None
+        )
 
     @classmethod
     def disabled_for_tests(cls) -> ApiAuthenticator:
@@ -138,24 +154,14 @@ class ApiAuthenticator:
         )
 
     def _entra_principal(self, token: str) -> ApiPrincipal:
+        verifier = self._entra_verifier
+        if verifier is None:
+            raise _authentication_error()
         try:
-            header = jwt.get_unverified_header(token)
-            if header.get("alg") != "RS256":
-                raise _authentication_error()
-            kid = str(header.get("kid") or "")
-            key = self._signing_key(kid)
-            claims = jwt.decode(
+            claims, _, _ = verifier.verify(
                 token,
-                key=key,
-                algorithms=["RS256"],
-                audience=self.config.audience,
-                issuer=self.config.issuer,
-                leeway=self.config.clock_skew_seconds,
-                options={"require": ["exp", "iat", "iss", "aud"]},
             )
-        except ApiSecurityError:
-            raise
-        except jwt.PyJWTError as exc:
+        except JwtVerificationError as exc:
             raise _authentication_error() from exc
         tenant_id = _bounded_claim(claims.get("tid"), "tenant")
         object_id = _bounded_claim(claims.get("oid"), "object")
@@ -176,26 +182,6 @@ class ApiAuthenticator:
             scopes=scopes,
             authentication_method="entra_jwt",
         )
-
-    def _signing_key(self, kid: str) -> Any:
-        if not kid or len(kid) > 256:
-            raise _authentication_error()
-        path = self.config.jwks_path
-        if path is None:
-            raise _authentication_error()
-        try:
-            mtime_ns = path.stat().st_mtime_ns
-        except OSError as exc:
-            raise _authentication_error() from exc
-        with self._jwks_lock:
-            if self._jwks_mtime_ns != mtime_ns:
-                self._keys = _load_jwks(path)
-                self._jwks_mtime_ns = mtime_ns
-            key = self._keys.get(kid)
-        if key is None:
-            raise _authentication_error()
-        return key
-
 
 @dataclass(slots=True)
 class _Bucket:
@@ -291,28 +277,6 @@ def _bounded_claim(value: object, name: str) -> str | None:
             message=f"The access token {name} identity is invalid.",
         )
     return value
-
-
-def _load_jwks(path: Path) -> dict[str, Any]:
-    try:
-        loaded = json.loads(path.read_text(encoding="utf-8"))
-        keys = loaded.get("keys") if isinstance(loaded, dict) else None
-        if not isinstance(keys, list):
-            raise ValueError("JWKS keys are missing")
-        parsed: dict[str, Any] = {}
-        for raw in keys:
-            if not isinstance(raw, dict):
-                continue
-            kid = str(raw.get("kid") or "")
-            if not kid or kid in parsed:
-                raise ValueError("JWKS key identity is invalid")
-            pyjwk = jwt.PyJWK.from_dict(raw, algorithm="RS256")
-            parsed[kid] = pyjwk.key
-        if not parsed:
-            raise ValueError("JWKS contains no usable signing keys")
-        return parsed
-    except (OSError, ValueError, jwt.PyJWTError) as exc:
-        raise _authentication_error() from exc
 
 
 def _authentication_error() -> ApiSecurityError:
