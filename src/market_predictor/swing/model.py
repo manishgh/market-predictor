@@ -315,6 +315,13 @@ def train_swing_model(
         evidence["model_run_id"] = model_run_id
     representation = holdout_plan.representation_audit.copy()
     fold_frame = pd.DataFrame(fold_records)
+    scored_validation_fold_ids = sorted(
+        int(fold)
+        for fold in fold_frame.loc[
+            fold_frame["validation_status"].eq("included"),
+            "fold",
+        ].unique()
+    )
     folds_causally_ordered = bool(
         len(fold_records) > 0
         and pd.to_datetime(fold_frame["max_train_label_available_at_utc"], utc=True)
@@ -371,7 +378,9 @@ def train_swing_model(
         "validated_rows": len(oof),
         "decision_groups": int(oof["decision_group_id"].nunique()),
         "independent_sessions": int(oof["session_date_et"].nunique()),
-        "validation_folds": config.n_splits,
+        "validation_folds": len(scored_validation_fold_ids),
+        "configured_validation_folds": config.n_splits,
+        "scored_validation_fold_ids": scored_validation_fold_ids,
         "roc_auc": oof_metrics["roc_auc"],
         "top_decile_lift": oof_metrics["top_decile_lift"],
         "group_lift_at_k": oof_group_metrics["group_lift_at_k"],

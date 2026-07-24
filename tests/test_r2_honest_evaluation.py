@@ -13,7 +13,14 @@ import pandas as pd
 from sklearn.metrics import roc_auc_score
 
 from market_predictor import prediction_service
-from market_predictor.execution_policy import executable_fill_price, executable_fill_prices
+from market_predictor.execution_policy import (
+    ExecutionCostPolicy,
+    executable_fill_price,
+    executable_fill_prices,
+)
+from market_predictor.intraday.evaluation import (
+    phase_economics as intraday_phase_economics,
+)
 from market_predictor.intraday.labels import add_overlap_metadata
 from market_predictor.prediction_policy import (
     INTRADAY_SELECTION_TIE_BREAKERS,
@@ -30,7 +37,12 @@ from market_predictor.prediction_policy import (
     swing_decision_score,
 )
 from market_predictor.swing.contracts import SwingPromotionConfig, SwingTrainingConfig, swing_target_column
-from market_predictor.swing.evaluation import regime_audit as swing_regime_audit
+from market_predictor.swing.evaluation import (
+    phase_economics as swing_phase_economics,
+)
+from market_predictor.swing.evaluation import (
+    regime_audit as swing_regime_audit,
+)
 from market_predictor.swing.model import train_swing_model
 from market_predictor.swing.promotion import promote_swing_model, promotion_evidence_from_result
 from tests.test_swing_model import _permissive_promotion_config, _training_dataset
@@ -228,6 +240,90 @@ class GapThroughFillTest(unittest.TestCase):
         np.testing.assert_allclose(fills, [90.0, 110.0, 103.0])
 
 
+class EconomicIdentityTest(unittest.TestCase):
+    def test_benchmark_excess_subtracts_exactly_one_execution_cost(self) -> None:
+        policy = ExecutionCostPolicy(
+            commission_bps=100.0,
+            base_half_spread_bps=0.0,
+            low_price_half_spread_coef_bps=0.0,
+            slippage_fraction_of_atr=0.0,
+            impact_bps_at_participation_cap=0.0,
+        )
+        swing = pd.DataFrame(
+            {
+                "ticker": ["AAA"],
+                "session_date_et": ["2026-01-05"],
+                "decision_group_id": ["swing-g"],
+                "swing_probability": [0.8],
+                "future_gross_return_1d": [0.05],
+                "future_net_return_1d": [0.04],
+                "future_spy_return_1d": [0.01],
+                "future_qqq_return_1d": [0.01],
+                "future_sector_return_1d": [0.01],
+                "future_excess_return_1d_vs_spy": [0.03],
+                "future_excess_return_1d_vs_qqq": [0.03],
+                "future_excess_return_1d_vs_sector": [0.03],
+                "close": [100.0],
+                "atr_pct_14": [0.02],
+            }
+        )
+        intraday = pd.DataFrame(
+            {
+                "ticker": ["AAA"],
+                "session_date_et": ["2026-01-05"],
+                "decision_group_id": ["intraday-g"],
+                "decision_time_utc": pd.to_datetime(
+                    ["2026-01-05T15:00:00Z"],
+                    utc=True,
+                ),
+                "intraday_opportunity_probability": [0.8],
+                "intraday_downside_probability": [0.2],
+                "path_realized_return_gross_60m": [0.05],
+                "path_realized_return_net_60m": [0.04],
+                "path_spy_return_60m": [0.01],
+                "path_qqq_return_60m": [0.01],
+                "path_sector_return_60m": [0.01],
+                "path_excess_return_60m_vs_spy": [0.03],
+                "path_excess_return_60m_vs_qqq": [0.03],
+                "path_excess_return_60m_vs_sector": [0.03],
+                "entry_price": [100.0],
+                "entry_atr_pct": [0.02],
+            }
+        )
+
+        swing_record = swing_phase_economics(
+            swing,
+            horizon=1,
+            top_k=1,
+            scope="test",
+            policy=policy,
+        ).iloc[0]
+        intraday_record = intraday_phase_economics(
+            intraday,
+            horizon_minutes=60,
+            decision_interval_minutes=60,
+            top_k=1,
+            downside_ceiling=0.45,
+            max_trades_per_session=1,
+            scope="test",
+            policy=policy,
+        ).iloc[0]
+
+        self.assertAlmostEqual(float(swing_record["avg_trade_return"]), 0.04)
+        self.assertAlmostEqual(
+            float(swing_record["avg_excess_return_vs_spy"]),
+            0.03,
+        )
+        self.assertAlmostEqual(
+            float(intraday_record["avg_trade_return"]),
+            0.04,
+        )
+        self.assertAlmostEqual(
+            float(intraday_record["avg_excess_return_vs_spy"]),
+            0.03,
+        )
+
+
 class CalibrationGateTest(unittest.TestCase):
     def test_biased_probabilities_preserving_auc_fail_calibration(self) -> None:
         rng = np.random.default_rng(0)
@@ -376,6 +472,20 @@ class PromotionGateTest(unittest.TestCase):
             self.assertFalse(report["passed"])
             self.assertTrue(any("independent_sessions" in failure for failure in report["failures"]))
 
+    def test_configured_folds_cannot_replace_scored_folds(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            model_path, result, evidence = self._train(temp_dir)
+            metrics = dict(result.metrics)
+            metrics["validation_folds"] = 0
+            metrics["configured_validation_folds"] = 100
+            report = promote_swing_model(
+                model_path=model_path,
+                evidence=replace(evidence, metrics=metrics),
+                config=self._config(min_validation_folds=1),
+            )
+            self.assertFalse(report["passed"])
+            self.assertTrue(any("validation_folds" in failure for failure in report["failures"]))
+
 
 def _regime_frame() -> pd.DataFrame:
     records: list[dict[str, object]] = []
@@ -395,6 +505,9 @@ def _regime_frame() -> pd.DataFrame:
                         _TARGET: index % 2,
                         "future_net_return_5d": 0.010,
                         "future_gross_return_5d": 0.012,
+                        "future_spy_return_5d": 0.004,
+                        "future_qqq_return_5d": 0.005,
+                        "future_sector_return_5d": 0.006,
                         "future_excess_return_5d_vs_spy": 0.005,
                         "future_excess_return_5d_vs_qqq": 0.004,
                         "future_excess_return_5d_vs_sector": 0.003,

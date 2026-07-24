@@ -97,7 +97,20 @@ class IntradayModelV1Tests(unittest.TestCase):
             validation_folds["validation_status"].eq("calibration_seed_excluded"),
             "fold",
         ].nunique()
+        scored_fold_ids = sorted(
+            int(fold)
+            for fold in validation_folds.loc[
+                validation_folds["validation_status"].eq("included"),
+                "fold",
+            ].unique()
+        )
         self.assertEqual(result.metrics["calibration_seed_folds_excluded"], excluded_folds)
+        self.assertEqual(result.metrics["validation_folds"], len(scored_fold_ids))
+        self.assertEqual(result.metrics["scored_validation_fold_ids"], scored_fold_ids)
+        self.assertEqual(
+            result.metrics["configured_validation_folds"],
+            result.metrics["validation_folds"] + excluded_folds,
+        )
         self.assertEqual(
             set(validation_folds["feature_set_sha256"]),
             {result.manifest["dataset"]["feature_schema_hash"]},

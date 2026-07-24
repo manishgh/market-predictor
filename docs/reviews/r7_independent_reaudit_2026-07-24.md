@@ -55,6 +55,15 @@ are included.
 Exit gate: focused skipped-fold, overlap, sparse-regime, losing-regime, cost identity, and
 capacity tests pass.
 
+Status: in progress. The first checkpoint now gates `validation_folds` on the distinct
+fold IDs whose audit status is `included`, retains the configured split count only as
+diagnostic evidence, and records the exact scored IDs. Benchmark excess is now computed
+as gross return minus exactly one execution cost minus the matched raw benchmark return;
+the frozen-label fallback subtracts only the incremental stress surcharge. Hand-calculated
+swing/intraday identities and a configured-versus-scored promotion regression pass.
+Overlap-aware evidence, required-regime confidence bounds, full-cross-section
+seen/unseen attribution, and in-selection capacity/no-fill behavior remain open.
+
 ### R7.3 - Event-To-Feature Reconciliation
 
 1. Persist exact event-to-decision/window assignments.
@@ -124,13 +133,16 @@ approved; they are not simulated as passing evidence.
 
 ## Current Verified Evidence
 
-- 315 repository tests pass locally.
+- 317 repository tests pass locally.
 - The focused R7 trust/race/rollback/memory/idempotency suite passes 37 tests.
 - Repository-wide Ruff, strict mypy on Windows and Linux targets, and compile checks pass.
 - Dependency locks regenerate deterministically and the production dependency audit reports
   no known vulnerabilities.
 - Git history secret scanning passes.
-- Linux container/Trivy evidence is accepted only when the current branch CI completes.
+- CI run `30087411847` passes secret scanning, repository validation, container build,
+  startup, liveness, fail-closed readiness, and memory checks. The production-container
+  job remains failed at the strict critical-vulnerability Trivy gate; no scanner gate was
+  weakened. Linux container evidence is not accepted until that gate passes.
 
 ## Environment-Pending Evidence
 

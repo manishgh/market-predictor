@@ -41,7 +41,7 @@ Required remediation:
    earlier row.
 
 Status: implemented and locally verified after the audit in `intraday.features.v2`;
-checkpoint pending.
+checkpoint `9f28da1`.
 
 ### 2. Shadow promotion authenticates supplied returns, not their derivation
 
@@ -77,7 +77,10 @@ again in `src/market_predictor/swing/evaluation.py:124` and
 Fix: compute `gross return - one execution cost - matched benchmark return` directly and
 cover zero, flat, dynamic, and stressed costs with hand-calculated tests.
 
-Status: open; R7.2.
+Status: implemented and locally verified in the first R7.2 checkpoint. Swing and
+intraday evaluation now derive benchmark excess from gross return, one execution cost,
+and the raw matched benchmark path. The frozen-label fallback subtracts only the
+incremental stress surcharge. Hand-calculated identity tests cover both timeframes.
 
 ### 4. Event reconciliation does not reproduce event aggregates
 
@@ -98,7 +101,9 @@ Calibration seed folds are excluded from scoring, but metrics report configured
 
 Fix: persist and gate actual included fold IDs with per-fold rows, sessions, and economics.
 
-Status: open; R7.2.
+Status: implemented and locally verified in the first R7.2 checkpoint. Promotion now
+consumes the distinct included/scored fold count; configured splits are retained under a
+separate diagnostic field and cannot satisfy the gate.
 
 ### 6. Live drift is population/lifetime rather than selected/rolling
 

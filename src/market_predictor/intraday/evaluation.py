@@ -330,18 +330,40 @@ def _economic_record(
     if cost is not None and gross_column in selected.columns:
         base_return = pd.to_numeric(selected[gross_column], errors="coerce")
         cost_series = cost
+        net = base_return - cost_series
+        excess = {
+            benchmark: (
+                net
+                - pd.to_numeric(
+                    selected[
+                        f"path_{benchmark}_return_{horizon_minutes}m"
+                    ],
+                    errors="coerce",
+                )
+            ).dropna()
+            for benchmark in ("spy", "qqq", "sector")
+        }
     else:
         base_return = pd.to_numeric(selected.get(net_return_column(horizon_minutes)), errors="coerce")
         cost_series = pd.Series(flat_stress_surcharge(cost_stress, policy), index=selected.index)
-    net = base_return - cost_series
+        net = base_return - cost_series
+        excess = {
+            benchmark: (
+                pd.to_numeric(
+                    selected.get(
+                        excess_return_column(
+                            horizon_minutes,
+                            benchmark,
+                        )
+                    ),
+                    errors="coerce",
+                )
+                - cost_series
+            ).dropna()
+            for benchmark in ("spy", "qqq", "sector")
+        }
     work = selected.assign(_net=net)
     returns = work["_net"].dropna()
-    excess = {
-        benchmark: (
-            pd.to_numeric(selected.get(excess_return_column(horizon_minutes, benchmark)), errors="coerce") - cost_series
-        ).dropna()
-        for benchmark in ("spy", "qqq", "sector")
-    }
     group_returns = (
         work.groupby(["session_date_et", "decision_group_id"], sort=False)["_net"].mean().dropna()
     )

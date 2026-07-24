@@ -386,6 +386,13 @@ def train_intraday_model(
         evidence["model_run_id"] = model_run_id
     representation = holdout_plan.representation_audit.copy()
     fold_frame = pd.DataFrame(fold_records)
+    scored_validation_fold_ids = sorted(
+        int(fold)
+        for fold in fold_frame.loc[
+            fold_frame["validation_status"].eq("included"),
+            "fold",
+        ].unique()
+    )
     folds_causally_ordered = bool(
         len(fold_records) > 0
         and pd.to_datetime(fold_frame["max_train_label_available_at_utc"], utc=True)
@@ -478,7 +485,9 @@ def train_intraday_model(
         "ticker_holdout_rows": len(holdout_evidence),
         "decision_groups": int(oof["decision_group_id"].nunique()),
         "independent_sessions": int(oof["session_date_et"].nunique()),
-        "validation_folds": config.n_splits,
+        "validation_folds": len(scored_validation_fold_ids),
+        "configured_validation_folds": config.n_splits,
+        "scored_validation_fold_ids": scored_validation_fold_ids,
         "capacity_min_avg_net_return": capacity_min_avg_net_return,
         "effective_sample_size": effective_sample_size(oof["overlap_weight"]),
         "holdout_effective_sample_size": effective_sample_size(holdout_evidence["overlap_weight"]),

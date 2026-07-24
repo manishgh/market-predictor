@@ -129,15 +129,29 @@ def phase_economics(
         if cost is not None and gross_column in selected.columns:
             base_return = pd.to_numeric(selected[gross_column], errors="coerce")
             cost_series = cost
+            selected = selected.assign(_net=base_return - cost_series)
+            excess = {
+                benchmark: (
+                    selected["_net"]
+                    - pd.to_numeric(
+                        selected[f"future_{benchmark}_return_{horizon}d"],
+                        errors="coerce",
+                    )
+                ).dropna()
+                for benchmark in excess_columns
+            }
         else:
             base_return = pd.to_numeric(selected[return_column], errors="coerce")
             cost_series = pd.Series(flat_stress_surcharge(cost_stress, policy), index=selected.index)
-        selected = selected.assign(_net=base_return - cost_series)
+            selected = selected.assign(_net=base_return - cost_series)
+            excess = {
+                benchmark: (
+                    pd.to_numeric(selected[column], errors="coerce")
+                    - cost_series
+                ).dropna()
+                for benchmark, column in excess_columns.items()
+            }
         returns = selected["_net"].dropna()
-        excess = {
-            benchmark: (pd.to_numeric(selected[column], errors="coerce") - cost_series).dropna()
-            for benchmark, column in excess_columns.items()
-        }
         period = selected.groupby("session_date_et")["_net"].mean().dropna()
         records.append(_economic_record(returns, excess, period, scope=scope, phase=phase))
     return pd.DataFrame(records)
