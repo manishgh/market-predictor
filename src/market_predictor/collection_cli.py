@@ -13,6 +13,7 @@ COLLECTION_COMMANDS = frozenset(
         "collect-seeking-alpha",
         "collect-seeking-alpha-universe",
         "collect-swing",
+        "collect-swing-daily-history",
         "download-finviz",
         "download-finviz-screeners",
         "download-model",

@@ -20,6 +20,7 @@ from market_predictor.canonical.contracts import SourceCollection
 from market_predictor.commands.canonical_data import register_canonical_data_commands
 from market_predictor.commands.intraday_model import register_intraday_model_commands
 from market_predictor.commands.ranking import register_ranking_commands
+from market_predictor.commands.swing_collection import register_swing_collection_commands
 from market_predictor.commands.swing_model import register_swing_model_commands
 from market_predictor.commands.swing_research import register_swing_research_commands
 from market_predictor.commands.v3_data import register_v3_data_commands
@@ -73,6 +74,7 @@ DEFAULT_MARKET_CONTEXT_PATH = Path("data/external/market_context/market_context_
 register_ranking_commands(app, console)
 register_canonical_data_commands(app, console)
 register_swing_model_commands(app, console)
+register_swing_collection_commands(app, console)
 register_swing_research_commands(app, console)
 register_intraday_model_commands(app, console)
 register_v3_data_commands(app, console)

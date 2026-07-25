@@ -168,7 +168,10 @@ def canonicalize_bars(
         raise DataReadinessError("bar input contains invalid or timezone-naive timestamps")
 
     if normalized_timeframe == "1d":
-        bar_start, bar_end = _daily_market_intervals(input_timestamp)
+        bar_start, bar_end = _daily_market_intervals(
+            input_timestamp,
+            dates_are_sessions=timestamp_column == "date",
+        )
         delay = daily_finalization_delay
     else:
         bar_start = input_timestamp
@@ -371,8 +374,12 @@ def _timeframe_series(data: pd.DataFrame, supplied: str | None) -> pd.Series:
         raise DataReadinessError(str(exc)) from exc
 
 
-def _daily_market_intervals(timestamp: pd.Series) -> tuple[pd.Series, pd.Series]:
-    eastern_dates = timestamp.dt.tz_convert("America/New_York").dt.date
+def _daily_market_intervals(
+    timestamp: pd.Series,
+    *,
+    dates_are_sessions: bool = False,
+) -> tuple[pd.Series, pd.Series]:
+    eastern_dates = timestamp.dt.date if dates_are_sessions else timestamp.dt.tz_convert("America/New_York").dt.date
     calendar = xcals.get_calendar("XNYS")
     schedule = calendar.schedule.loc[str(min(eastern_dates)) : str(max(eastern_dates))]  # type: ignore[misc]
     intervals = {

@@ -247,6 +247,25 @@ V3 orchestration is registered through focused modules under `src/market_predict
 
 `v3_readiness.py` scans large Parquet datasets in batches before C8. It rejects inadequate symbol/session coverage, post-cutoff rows, undeclared or non-SIP volume, current-only universe files, missing sector ETFs, and benchmark coverage gaps. `export-ohlcv-artifacts --end-date YYYY-MM-DD` creates reproducible frozen-cutoff exports and persists `price_feed` in every row and manifest.
 
+For new swing research, use `collect-swing-daily-history`, not the legacy
+`export-ohlcv-artifacts` path. `swing/market_history.py` reads the hash-frozen
+point-in-time membership artifact, adds SPY/QQQ/sector benchmarks, fetches one
+logical symbol per isolated Alpaca request, canonicalizes daily exchange
+sessions, audits SIP/OHLCV/timestamp integrity, and publishes one atomic
+Parquet/manifest pair per symbol. `_request.json` freezes the symbol set,
+membership hash, dates, feed, adjustment, and timeframe. `_status.json` records
+resumable progress; `_source_collections.parquet` distinguishes observed,
+observed-empty, and failed requests; `_manifest.json` makes a completed run
+immutable.
+
+The point-in-time universe builder expands official composite ticker rows,
+forward-fills only table-local effective dates, rejects ambiguous legacy
+company/ticker bindings, bounds symbol changes between release publication and
+effective date, and assigns interval-level security identities. Corporate
+lineage must be complete before feature windows are grouped: neither bars nor
+returns may cross a security-identity boundary even when the ticker text is
+unchanged.
+
 `v3/catalysts.py` owns the O1 point-in-time overlay and paired ablation. It filters decisions to an explicit source interval, joins only events available by each decision timestamp, validates ticker-file and sentiment coverage, detects future matches, and compares R1/O1 on identical groups with a session-blocked paired bootstrap. Provider publication-time backfill is marked research-only. Optional global context must cover both declared interval boundaries or readiness fails.
 
 `score-swing-events` keeps raw provider text unchanged and writes sentiment to a separate per-ticker directory. For catalyst research, `--text-mode title_summary --max-length 128` bounds inference to the immutable headline and provider summary. Every output row carries the FinBERT model, input mode, and token limit; an existing file is resumed only when all provenance fields match. Model inference loads the previously downloaded local cache and does not make hidden network requests.

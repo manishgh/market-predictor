@@ -16,7 +16,7 @@ This is research and prediction tooling, not investment advice and not an automa
 
 The repository produces prediction intelligence: probabilities, catalyst summaries, feature/audit context, and watchlist rankings. It does not own broker execution, portfolio state, final sizing, stops, exits, or order lifecycle. Those responsibilities belong in a trading/runtime system such as `trading_flow`.
 
-## Current Model State (2026-07-24)
+## Current Model State (2026-07-25)
 
 Candidate identity comes from an immutable `.manifest.json`. Effective promoted state exists only when a content-addressed promotion attestation verifies the candidate, evidence manifest, causal identity chain, predeclared baseline/hypothesis, untouched-shadow confidence interval, gate configuration, and distinct OIDC-authenticated build/approver principals. Unregistered, unattested, unauthenticated, or hash-mismatched artifacts cannot be served.
 
@@ -54,6 +54,41 @@ file. Peak process working set was 0.57 GiB.
   --out data\reports\swing_research_inventory_largecap_20260725_v2.csv `
   --summary-out data\reports\swing_research_inventory_largecap_20260725_v2.json `
   --config configs\swing_research_inventory.toml
+```
+
+### Swing S1 market history
+
+S1a reconstructs a seven-year point-in-time S&P 500 universe from a frozen
+current snapshot, official S&P change releases, and Alpaca corporate actions.
+Membership intervals carry `security_id`; ticker reuse such as the two distinct
+`IR` companies and simultaneous issuer share classes are kept separate.
+Publication-to-effective ticker resolution is bounded by the official release
+date so an old ticker alias cannot rewrite a later reused symbol.
+
+`collect-swing-daily-history` is the canonical raw daily collector. It calls
+Alpaca directly without a Yahoo fallback, requires SIP/all-adjusted provenance,
+uses at most four per-symbol workers, writes hash-verified canonical bar
+artifacts plus a source-collection ledger, resumes only matching requests, and
+finalizes output immutably. Successful empty responses remain explicit
+`observed_empty` coverage gaps.
+
+The frozen 2019-07-09 through 2026-07-08 v2 run contains 664 observed symbols,
+1,082,705 daily rows, and full 1,759-session history for SPY, QQQ, and all 11
+sector ETFs. Alpaca returned no RHT history. Peak working set was 0.24 GiB.
+Point-in-time membership/session coverage is 99.60%; 32 intervals have at least
+one missing member bar. Model training remains blocked while large corporate
+lineage gaps such as `PARA -> PSKY`, `LB -> BBWI`, `ARNC -> HWM`,
+`MYL -> VTRS`, `DISCA -> WBD`, and `SYMC -> NLOK` are repaired and audited.
+At this checkpoint, all 379 repository tests pass, repository-wide Ruff is
+clean, strict mypy passes across 140 files, and all 664 artifact hashes replay.
+
+```powershell
+.\.venv\Scripts\python.exe -m market_predictor.collection_cli collect-swing-daily-history `
+  --memberships data\universe\sp500_point_in_time_20190709_20260708.parquet `
+  --start-date 2019-07-09 `
+  --end-date 2026-07-08 `
+  --out-dir data\raw\swing_daily_sip_sp500_pit_20190709_20260708_v2 `
+  --workers 4
 ```
 
 Production API implications:

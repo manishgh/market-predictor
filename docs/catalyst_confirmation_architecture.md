@@ -510,6 +510,31 @@ point-in-time membership input. Five tickers failed alignment and BRK-B lacked a
 matching daily feature artifact. Every ticker therefore failed the frozen seven-year
 technical and three-year catalyst research thresholds.
 
+S1 daily market history uses a point-in-time S&P membership artifact with an
+interval-level `security_id`. CIK alone is not a security identifier because
+issuers can have multiple simultaneous share classes; ticker alone is not an
+identifier because symbols can be renamed or reused. Corporate-action CUSIP
+lineage separates reused symbols and joins true rename continuity. Official
+composite constituent rows such as `UA/UAA` expand to individual tradable
+securities, while temporary when-issued instruments do not become long-lived
+membership identities.
+
+`collect-swing-daily-history` owns the S1 raw market-data boundary. It requires
+Alpaca SIP and all-adjusted bars, canonical exchange-session intervals,
+availability timestamps, per-symbol source status, content hashes, a matching
+membership hash, bounded concurrency, and a 4 GiB memory audit. It supports
+resume before finalization but rejects changes to the frozen request and rejects
+all writes after `_manifest.json` exists. `observed_empty` is terminal source
+evidence and is never replaced with partial-feed data.
+
+The 2026-07-25 v2 run produced 1,082,705 rows for 664 observed symbols with full
+SPY/QQQ/sector-ETF coverage and a 0.24 GiB peak working set. Membership/session
+coverage is 99.60%. This is source evidence, not training approval: 32 intervals
+still have missing member bars, dominated by unresolved corporate
+provider-symbol lineage. Canonical panel v2 and model training remain blocked
+until those transitions are repaired or an explicit exclusion policy passes
+coverage and selection-bias audits.
+
 ## 12. Production Serving And Releases
 
 The request path performs no provider calls, FinBERT inference, feature building, training, promotion, or alert delivery. Scheduled collection and canonical feature jobs prepare immutable source artifacts. A mode-specific inference builder then selects one latest coherent decision cross section, removes targets/labels/future paths, and fails on future availability, stale source state, insufficient warm-up, unknown or partial feed, schema mismatch, and invalid cross-section coverage.

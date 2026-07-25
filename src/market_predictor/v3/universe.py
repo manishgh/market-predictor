@@ -5,7 +5,7 @@ import json
 import re
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -38,6 +38,10 @@ SECTOR_BENCHMARKS = {
 _PUBLISHED_DATE = re.compile(r"/(20\d{2}-\d{2}-\d{2})-")
 _CHANGE_TITLE = re.compile(r"\b(?:set|sets)\s+to\s+join\s+S&P\s+500\b", re.IGNORECASE)
 _TABLE_COLUMNS = ("Effective Date", "Index Name", "Action", "Company Name", "Ticker", "GICS Sector")
+_LEGACY_TABLE_TITLE = re.compile(r"^S&P\s+500\s+INDEX\s*[-–—]\s*(.+)$", re.IGNORECASE)
+_LEGACY_ACTIONS = {"ADDED": "addition", "DELETED": "deletion"}
+_ANY_LEGACY_TABLE_TITLE = re.compile(r"^S&P\s+.+?\s+INDEX\s*[-\u2013\u2014]", re.IGNORECASE)
+_EXCHANGE_TICKER = r"\((?:NYSE|NASD|NASDAQ|NYSE\s+American|OTC(?:QX|QB)?)\s*:\s*([A-Z0-9.-]+)\)"
 
 
 @dataclass(frozen=True)
@@ -78,6 +82,7 @@ class SymbolChange:
     new_ticker: str
     source_id: str
     source_url: str
+    security_id: str
 
     def to_record(self) -> dict[str, str]:
         return {
@@ -86,6 +91,7 @@ class SymbolChange:
             "new_ticker": self.new_ticker,
             "source_id": self.source_id,
             "source_url": self.source_url,
+            "security_id": self.security_id,
         }
 
 
@@ -96,6 +102,10 @@ def symbol_changes_from_alpaca(frame: pd.DataFrame) -> list[SymbolChange]:
         raise DataReadinessError(f"Alpaca name-change data is missing columns: {missing}")
     changes: list[SymbolChange] = []
     for record in frame.to_dict(orient="records"):
+        old_ticker = normalized_ticker(str(record["old_symbol"]))
+        new_ticker = normalized_ticker(str(record["new_symbol"]))
+        if _is_temporary_security_symbol(old_ticker) or _is_temporary_security_symbol(new_ticker):
+            continue
         effective_date = pd.Timestamp(record["process_date"]).date()
         effective_at = datetime.combine(
             effective_date,
@@ -103,16 +113,28 @@ def symbol_changes_from_alpaca(frame: pd.DataFrame) -> list[SymbolChange]:
             tzinfo=ZoneInfo("America/New_York"),
         ).astimezone(UTC)
         source_id = str(record["id"])
+        old_cusip = str(record.get("old_cusip") or "").strip().upper()
+        new_cusip = str(record.get("new_cusip") or "").strip().upper()
+        security_id = (
+            f"cusip:{old_cusip}"
+            if old_cusip and old_cusip == new_cusip
+            else f"alpaca-name-change:{source_id}"
+        )
         changes.append(
             SymbolChange(
                 effective_at_utc=effective_at,
-                old_ticker=normalized_ticker(str(record["old_symbol"])),
-                new_ticker=normalized_ticker(str(record["new_symbol"])),
+                old_ticker=old_ticker,
+                new_ticker=new_ticker,
                 source_id=source_id,
                 source_url=f"https://data.alpaca.markets/v1/corporate-actions?ids={source_id}",
+                security_id=security_id,
             )
         )
     return sorted(changes, key=lambda item: (item.effective_at_utc, item.old_ticker, item.new_ticker))
+
+
+def _is_temporary_security_symbol(ticker: str) -> bool:
+    return ticker.endswith((".WI", ".PR", ".WS"))
 
 
 def discover_sp500_change_announcements(
@@ -156,6 +178,7 @@ def parse_sp500_changes(html: str, *, source_url: str, published_date: date) -> 
     digest = hashlib.sha256(html.encode("utf-8")).hexdigest()
     soup = BeautifulSoup(html, "html.parser")
     changes: list[IndexChange] = []
+    deferred_rows = 0
     for table in soup.find_all("table"):
         rows = [[cell.get_text(" ", strip=True) for cell in row.find_all(["th", "td"])] for row in table.find_all("tr")]
         if not rows:
@@ -164,32 +187,169 @@ def parse_sp500_changes(html: str, *, source_url: str, published_date: date) -> 
         if not set(_TABLE_COLUMNS).issubset(header):
             continue
         positions = {name: header.index(name) for name in _TABLE_COLUMNS}
+        last_effective_text: str | None = None
         for row in rows[1:]:
             if len(row) < len(header):
                 continue
+            row_effective_text = row[positions["Effective Date"]].strip()
+            if row_effective_text:
+                last_effective_text = row_effective_text
             index_name = row[positions["Index Name"]].replace("®", "").strip()
             action = row[positions["Action"]].strip().lower()
             if index_name != "S&P 500" or action not in {"addition", "deletion"}:
                 continue
-            effective_date = pd.Timestamp(row[positions["Effective Date"]]).date()
+            if last_effective_text is None:
+                raise DataReadinessError(f"S&P 500 row has no effective date context in {source_url}: {row}")
+            effective_text = last_effective_text
+            if effective_text.upper() == "TBA":
+                deferred_rows += 1
+                continue
+            effective_date = pd.Timestamp(effective_text).date()
             effective_at = datetime.combine(effective_date, datetime.min.time(), tzinfo=ZoneInfo("America/New_York")).astimezone(UTC)
-            changes.append(
-                IndexChange(
-                    effective_at_utc=effective_at,
-                    action=action,
-                    ticker=normalized_ticker(row[positions["Ticker"]]),
-                    company=row[positions["Company Name"]].strip(),
-                    sector=row[positions["GICS Sector"]].strip(),
-                    source_url=source_url,
-                    source_published_date=published_date,
-                    source_sha256=digest,
+            for ticker in _index_tickers(row[positions["Ticker"]]):
+                changes.append(
+                    IndexChange(
+                        effective_at_utc=effective_at,
+                        action=action,
+                        ticker=ticker,
+                        company=row[positions["Company Name"]].strip(),
+                        sector=row[positions["GICS Sector"]].strip(),
+                        source_url=source_url,
+                        source_published_date=published_date,
+                        source_sha256=digest,
+                    )
                 )
+    if not changes:
+        changes.extend(
+            _parse_legacy_sp500_tables(
+                soup,
+                source_url=source_url,
+                published_date=published_date,
+                source_sha256=digest,
             )
+        )
     unique = {(item.effective_at_utc, item.action, item.ticker): item for item in changes}
     parsed = sorted(unique.values(), key=lambda item: (item.effective_at_utc, item.action, item.ticker))
+    if not parsed and deferred_rows:
+        return []
     if not parsed:
         raise DataReadinessError(f"Official announcement contains no structured S&P 500 change rows: {source_url}")
     return parsed
+
+
+def _index_tickers(raw: str) -> tuple[str, ...]:
+    values = tuple(normalized_ticker(value) for value in raw.split("/") if value.strip())
+    if not values:
+        raise DataReadinessError(f"S&P 500 change row contains no ticker: {raw!r}")
+    return values
+
+
+def _parse_legacy_sp500_tables(
+    soup: BeautifulSoup,
+    *,
+    source_url: str,
+    published_date: date,
+    source_sha256: str,
+) -> list[IndexChange]:
+    body = soup.select_one(".wd_news_body") or soup
+    body_text = body.get_text(" ", strip=True)
+    parsed: list[IndexChange] = []
+    for table in body.find_all("table"):
+        rows = [[cell.get_text(" ", strip=True) for cell in row.find_all(["th", "td"])] for row in table.find_all("tr")]
+        if len(rows) < 3:
+            continue
+        effective_date: date | None = None
+        company_position: int | None = None
+        sector_position: int | None = None
+        current_action: str | None = None
+        for row in rows:
+            if not row or not any(value.strip() for value in row):
+                continue
+            first_cell = row[0].strip()
+            title_match = _LEGACY_TABLE_TITLE.match(first_cell)
+            if title_match is not None:
+                effective_text = title_match.group(1).strip()
+                effective_date = None
+                company_position = None
+                sector_position = None
+                current_action = None
+                if effective_text.upper() == "TBA":
+                    continue
+                try:
+                    effective_date = pd.Timestamp(effective_text).date()
+                except (TypeError, ValueError) as exc:
+                    raise DataReadinessError(
+                        f"Legacy S&P 500 announcement has an invalid effective date {effective_text!r}: {source_url}"
+                    ) from exc
+                continue
+            if _ANY_LEGACY_TABLE_TITLE.match(first_cell):
+                effective_date = None
+                company_position = None
+                sector_position = None
+                current_action = None
+                continue
+            if effective_date is None:
+                continue
+            normalized_row = [value.strip().upper() for value in row]
+            if "COMPANY" in normalized_row and "GICS ECONOMIC SECTOR" in normalized_row:
+                company_position = _legacy_column_position(normalized_row, "COMPANY")
+                sector_position = _legacy_column_position(normalized_row, "GICS ECONOMIC SECTOR")
+                continue
+            if company_position is None or sector_position is None:
+                continue
+            explicit_action = _LEGACY_ACTIONS.get(first_cell.upper())
+            if explicit_action is not None:
+                current_action = explicit_action
+            if current_action is None:
+                continue
+            if company_position >= len(row) or sector_position >= len(row):
+                raise DataReadinessError(f"Legacy S&P 500 row is incomplete in {source_url}: {row}")
+            company = row[company_position].strip()
+            sector = row[sector_position].strip()
+            if not company:
+                continue
+            ticker = _legacy_company_ticker(body_text, company, source_url=source_url)
+            effective_at = datetime.combine(
+                effective_date,
+                datetime.min.time(),
+                tzinfo=ZoneInfo("America/New_York"),
+            ).astimezone(UTC)
+            parsed.append(
+                IndexChange(
+                    effective_at_utc=effective_at,
+                    action=current_action,
+                    ticker=normalized_ticker(ticker),
+                    company=company,
+                    sector=sector,
+                    source_url=source_url,
+                    source_published_date=published_date,
+                    source_sha256=source_sha256,
+                )
+            )
+    return parsed
+
+
+def _legacy_column_position(header: list[str], name: str) -> int:
+    if name not in header:
+        raise DataReadinessError(f"Legacy S&P 500 table is missing {name!r}")
+    return header.index(name)
+
+
+def _legacy_company_ticker(body_text: str, company: str, *, source_url: str) -> str:
+    company_tokens = re.findall(r"[A-Z0-9]+", company, flags=re.IGNORECASE)
+    if not company_tokens:
+        raise DataReadinessError(f"Legacy S&P 500 company name is empty in {source_url}")
+    flexible_company = r"[\W_]*".join(re.escape(token) for token in company_tokens)
+    legal_descriptor = r"(?:\s+(?:Holding|Holdings|Group|Global|Worldwide|Technologies|Systems))?"
+    corporate_suffix = r"(?:\s*,?\s*(?:Inc(?:orporated)?|Corp(?:oration)?|Co(?:mpany)?|Ltd|PLC|LLC)\.?)*"
+    pattern = re.compile(
+        rf"\b{flexible_company}\b{legal_descriptor}{corporate_suffix}\s*[.,]?\s*{_EXCHANGE_TICKER}",
+        re.IGNORECASE,
+    )
+    tickers = {match.group(1).upper() for match in pattern.finditer(body_text)}
+    if len(tickers) != 1:
+        raise DataReadinessError(f"Could not bind legacy S&P 500 company {company!r} to a ticker in {source_url}")
+    return tickers.pop()
 
 
 def collect_sp500_changes(
@@ -235,6 +395,30 @@ def collect_sp500_changes(
     return sorted(deduplicated.values(), key=lambda item: (item.effective_at_utc, item.action, item.ticker)), manifest
 
 
+def _ticker_at(
+    ticker: str,
+    published_date: date,
+    effective_at: datetime,
+    aliases: list[SymbolChange],
+) -> str:
+    current = ticker
+    aliases_by_time: dict[datetime, list[SymbolChange]] = {}
+    for alias in aliases:
+        alias_date = alias.effective_at_utc.astimezone(ZoneInfo("America/New_York")).date()
+        if published_date < alias_date and alias.effective_at_utc <= effective_at:
+            aliases_by_time.setdefault(alias.effective_at_utc, []).append(alias)
+    for alias_time in sorted(aliases_by_time):
+        matches = [alias for alias in aliases_by_time[alias_time] if alias.old_ticker == current]
+        if len(matches) > 1:
+            destinations = sorted({alias.new_ticker for alias in matches})
+            raise DataReadinessError(
+                f"Ticker {current} has ambiguous destinations at {alias_time.isoformat()}: {destinations}"
+            )
+        if matches:
+            current = matches[0].new_ticker
+    return current
+
+
 def build_point_in_time_sp500_universe(
     *,
     current_snapshot: pd.DataFrame,
@@ -254,6 +438,18 @@ def build_point_in_time_sp500_universe(
         for item in changes
         if start_date <= item.effective_at_utc.astimezone(ZoneInfo("America/New_York")).date() <= cutoff_date
     ]
+    resolved_changes = [
+        replace(
+            item,
+            ticker=_ticker_at(
+                item.ticker,
+                item.source_published_date,
+                item.effective_at_utc,
+                aliases,
+            ),
+        )
+        for item in relevant
+    ]
     identity_payload = {
         "start_date": start_date.isoformat(),
         "cutoff_date": cutoff_date.isoformat(),
@@ -272,7 +468,7 @@ def build_point_in_time_sp500_universe(
     contradictions: list[str] = []
     applied_aliases: list[SymbolChange] = []
     grouped: dict[datetime, list[IndexChange]] = {}
-    for change in relevant:
+    for change in resolved_changes:
         grouped.setdefault(change.effective_at_utc, []).append(change)
     aliases_by_time: dict[datetime, list[SymbolChange]] = {}
     for alias in aliases:
@@ -350,6 +546,12 @@ def build_point_in_time_sp500_universe(
     if contradictions:
         raise DataReadinessError("Point-in-time S&P reconstruction contradictions: " + " | ".join(contradictions[:20]))
     universe = pd.DataFrame(intervals).sort_values(["effective_from_utc", "ticker"], kind="stable").reset_index(drop=True)
+    universe, security_audit = _attach_security_identities(
+        universe,
+        current=current,
+        aliases=aliases,
+        cutoff_date=cutoff_date,
+    )
     audit = {
         "schema": "ml_v3.sp500_point_in_time_universe.v1",
         "generated_at_utc": datetime.now(UTC).isoformat(),
@@ -364,6 +566,16 @@ def build_point_in_time_sp500_universe(
         "change_events": len(relevant),
         "symbol_change_events": len(applied_aliases),
         "symbol_changes": [item.to_record() for item in applied_aliases],
+        "resolved_announcement_tickers": [
+            {
+                "effective_at_utc": original.effective_at_utc.isoformat(),
+                "source_ticker": original.ticker,
+                "effective_ticker": resolved.ticker,
+            }
+            for original, resolved in zip(relevant, resolved_changes, strict=True)
+            if original.ticker != resolved.ticker
+        ],
+        "security_identity": security_audit,
         "source_urls": sorted({item.source_url for item in relevant}),
         "contradictions": contradictions,
     }
@@ -433,10 +645,151 @@ def _metadata_by_ticker(
             item["company"] = change.company
         if not item.get("sector") or item["sector"] == "Unknown":
             item["sector"] = change.sector
-    for alias in reversed(symbol_changes):
-        if alias.new_ticker in metadata and alias.old_ticker not in metadata:
-            metadata[alias.old_ticker] = dict(metadata[alias.new_ticker])
+    for _ in range(len(symbol_changes) + 1):
+        propagated = False
+        for alias in symbol_changes:
+            if alias.new_ticker in metadata and alias.old_ticker not in metadata:
+                metadata[alias.old_ticker] = dict(metadata[alias.new_ticker])
+                propagated = True
+            elif alias.old_ticker in metadata and alias.new_ticker not in metadata:
+                metadata[alias.new_ticker] = dict(metadata[alias.old_ticker])
+                propagated = True
+        if not propagated:
+            break
     return metadata
+
+
+def _attach_security_identities(
+    universe: pd.DataFrame,
+    *,
+    current: pd.DataFrame,
+    aliases: list[SymbolChange],
+    cutoff_date: date,
+) -> tuple[pd.DataFrame, dict[str, Any]]:
+    output = universe.copy()
+    identities = [
+        _security_identity_for_interval(
+            ticker=str(record["ticker"]),
+            company=str(record["company"]),
+            effective_from=pd.Timestamp(record["effective_from_utc"]),
+            effective_to=pd.Timestamp(record["effective_to_utc"]) if not pd.isna(record["effective_to_utc"]) else None,
+            current=current,
+            aliases=aliases,
+        )
+        for record in output.to_dict(orient="records")
+    ]
+    output.insert(1, "security_id", identities)
+
+    active_at_cutoff = datetime.combine(
+        cutoff_date,
+        datetime.min.time(),
+        tzinfo=ZoneInfo("America/New_York"),
+    ).astimezone(UTC)
+    active = output[
+        output["effective_from_utc"].le(active_at_cutoff)
+        & (output["effective_to_utc"].isna() | output["effective_to_utc"].gt(active_at_cutoff))
+    ]
+    if bool(active["ticker"].duplicated().any()):
+        duplicates = sorted(active.loc[active["ticker"].duplicated(keep=False), "ticker"].unique())
+        raise DataReadinessError(f"Current membership has duplicate ticker identities: {duplicates[:20]}")
+
+    current_columns = {column.lower().strip(): column for column in current.columns}
+    metadata_columns = {
+        "company": current_columns.get("company"),
+        "sector": current_columns.get("sector"),
+        "industry": current_columns.get("industry"),
+    }
+    current_metadata_by_identity: dict[str, dict[str, str]] = {}
+    for record in active.to_dict(orient="records"):
+        ticker = str(record["ticker"])
+        if ticker not in current.index:
+            continue
+        source = current.loc[ticker]
+        current_metadata_by_identity[str(record["security_id"])] = {
+            target: str(source[column]).strip()
+            for target, column in metadata_columns.items()
+            if column is not None and not pd.isna(source[column]) and str(source[column]).strip()
+        }
+    for security_id, values in current_metadata_by_identity.items():
+        mask = output["security_id"].eq(security_id)
+        for column, value in values.items():
+            output.loc[mask, column] = value
+
+    _validate_security_identity_intervals(output)
+    reused = (
+        output.groupby("ticker", sort=True)["security_id"]
+        .nunique()
+        .loc[lambda values: values.gt(1)]
+        .index.astype(str)
+        .tolist()
+    )
+    return output, {
+        "security_identities": int(output["security_id"].nunique()),
+        "reused_tickers": reused,
+        "current_metadata_identities": len(current_metadata_by_identity),
+    }
+
+
+def _security_identity_for_interval(
+    *,
+    ticker: str,
+    company: str,
+    effective_from: pd.Timestamp,
+    effective_to: pd.Timestamp | None,
+    current: pd.DataFrame,
+    aliases: list[SymbolChange],
+) -> str:
+    old_matches = [
+        alias
+        for alias in aliases
+        if alias.old_ticker == ticker
+        and effective_to is not None
+        and alias.effective_at_utc == effective_to.to_pydatetime()
+    ]
+    if old_matches:
+        security_ids = {alias.security_id for alias in old_matches}
+        if len(security_ids) != 1:
+            effective_to_text = effective_to.isoformat() if effective_to is not None else "unknown"
+            raise DataReadinessError(f"Ticker {ticker} has ambiguous security identities at {effective_to_text}")
+        return security_ids.pop()
+
+    new_matches = [
+        alias
+        for alias in aliases
+        if alias.new_ticker == ticker and alias.effective_at_utc <= effective_from.to_pydatetime()
+    ]
+    if new_matches:
+        latest = max(alias.effective_at_utc for alias in new_matches)
+        security_ids = {alias.security_id for alias in new_matches if alias.effective_at_utc == latest}
+        if len(security_ids) != 1:
+            raise DataReadinessError(f"Ticker {ticker} has ambiguous security identities at {latest.isoformat()}")
+        return security_ids.pop()
+
+    if effective_to is None and ticker in current.index:
+        current_columns = {column.lower().strip(): column for column in current.columns}
+        cik_column = current_columns.get("cik")
+        if cik_column is not None:
+            cik = str(current.loc[ticker, cik_column]).strip().removesuffix(".0")
+            if cik and cik.lower() != "nan":
+                return f"cik:{cik.zfill(10)}:ticker:{ticker}"
+
+    identity_payload = f"{ticker}|{company.strip().lower()}|{effective_from.isoformat()}"
+    return f"sp500-historical:{hashlib.sha256(identity_payload.encode('utf-8')).hexdigest()[:24]}"
+
+
+def _validate_security_identity_intervals(universe: pd.DataFrame) -> None:
+    for security_id, group in universe.sort_values(["security_id", "effective_from_utc"]).groupby(
+        "security_id",
+        sort=False,
+    ):
+        previous_end: pd.Timestamp | None = None
+        previous_is_open = False
+        for record in group.itertuples(index=False):
+            start = pd.Timestamp(record.effective_from_utc)
+            if previous_is_open or (previous_end is not None and start < previous_end):
+                raise DataReadinessError(f"Security identity {security_id} has overlapping membership intervals")
+            previous_is_open = pd.isna(record.effective_to_utc)
+            previous_end = None if previous_is_open else pd.Timestamp(record.effective_to_utc)
 
 
 def _membership_record(

@@ -380,6 +380,23 @@ research-only.
 
 Exit: immutable dataset with passing alignment, coverage, memory, and replay audits.
 
+Status on 2026-07-25: S1a market foundation complete; joined panel remains blocked.
+
+- Official point-in-time membership: 654 intervals, 652 tickers, 626 security
+  identities, 504 constituents before the 2022 Under Armour dual-class removal
+  and 503 afterward.
+- Frozen Alpaca SIP window: 2019-07-09 through 2026-07-08.
+- Observed bar artifacts: 664 of 665 requested stock/benchmark symbols.
+- Rows: 1,082,705.
+- Benchmarks: SPY, QQQ, and all 11 sector ETFs each have all 1,759 sessions.
+- Explicit source gap: RHT returned `observed_empty`.
+- Membership/session coverage: 882,018 of 885,538 expected rows, or 99.60%.
+- Memory: 0.24 GiB peak working set under the 4 GiB hard budget.
+- Remaining blocker: 32 membership intervals have at least one missing bar.
+  The dominant gaps are provider-symbol lineage across mergers, spinoffs,
+  renames, and temporary when-issued tickers. No training dataset may be built
+  until this lineage is repaired and re-audited.
+
 ### S2: reproducible baselines
 
 - Run E0 and E1.
