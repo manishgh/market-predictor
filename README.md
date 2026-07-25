@@ -16,6 +16,10 @@ This is research and prediction tooling, not investment advice and not an automa
 
 The repository produces prediction intelligence: probabilities, catalyst summaries, feature/audit context, and watchlist rankings. It does not own broker execution, portfolio state, final sizing, stops, exits, or order lifecycle. Those responsibilities belong in a trading/runtime system such as `trading_flow`.
 
+The current data-reuse, five-year expansion, and memory-bounded training sequence
+is defined in the
+[five-year swing and intraday execution plan](docs/five_year_swing_intraday_execution_plan_2026-07-25.md).
+
 ## Current Model State (2026-07-25)
 
 Candidate identity comes from an immutable `.manifest.json`. Effective promoted state exists only when a content-addressed promotion attestation verifies the candidate, evidence manifest, causal identity chain, predeclared baseline/hypothesis, untouched-shadow confidence interval, gate configuration, and distinct OIDC-authenticated build/approver principals. Unregistered, unattested, unauthenticated, or hash-mismatched artifacts cannot be served.
