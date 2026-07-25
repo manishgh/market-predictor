@@ -157,7 +157,22 @@ def audit_swing_dataset(
     identity_failures = int(data.duplicated(["security_id", "decision_time_utc"]).sum())
     warm_rows = int(feature_eligible.sum())
     cross_section_failures = int((feature_eligible & ~data["cross_section_eligible"].fillna(False).astype(bool)).sum())
-    internal_path_failures = int((feature_eligible & label_expected & ~label_exact).sum())
+    label_candidates = feature_eligible & label_expected
+    missing_expected_paths = int((label_candidates & ~label_exact).sum())
+    candidate_count = int(label_candidates.sum())
+    exact_label_coverage = (
+        float((label_candidates & label_exact).sum() / candidate_count)
+        if candidate_count
+        else 0.0
+    )
+    allowed_missing_paths = int(
+        candidate_count * (1.0 - config.min_exact_label_coverage)
+    )
+    coverage_failures = max(
+        0,
+        missing_expected_paths - allowed_missing_paths,
+    )
+    internal_path_failures = int((label_eligible & ~label_exact).sum())
     label_order = label_eligible & (
         entry.isna() | exit_time.isna() | label_available.isna() | entry.le(decision) | exit_time.le(entry) | label_available.lt(exit_time)
     )
@@ -236,7 +251,22 @@ def audit_swing_dataset(
             warm_rows,
             f"eligible groups contain at least {config.minimum_cross_section} symbols",
         ),
-        _check("swing_exact_label_path", internal_path_failures, int(label_expected.sum()), "future sessions are consecutive"),
+        _check(
+            "swing_exact_label_path",
+            internal_path_failures,
+            int(label_eligible.sum()),
+            "every training-eligible row has an exact consecutive future path",
+        ),
+        _check(
+            "swing_exact_label_coverage",
+            coverage_failures,
+            candidate_count,
+            (
+                f"exact path coverage {exact_label_coverage:.6f}; "
+                f"minimum {config.min_exact_label_coverage:.6f}; "
+                f"missing {missing_expected_paths}"
+            ),
+        ),
         _check("swing_label_order", label_order_failures, int(label_eligible.sum()), "entry and exit follow decision"),
         _check("swing_label_values", label_value_failures, int(label_eligible.sum()), "eligible targets are binary"),
         _check(

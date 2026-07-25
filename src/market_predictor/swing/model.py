@@ -537,7 +537,11 @@ def _alignment_audit(dataset: pd.DataFrame) -> pd.DataFrame:
     ]
     benchmark_missing = dataset[benchmark_columns].isna().any(axis=1) if benchmark_columns else pd.Series(False, index=dataset.index)
     future = int((feature > decision).fillna(True).sum())
-    path_mismatch = int((feature_eligible & label_expected & ~label_exact).sum())
+    label_eligible = dataset["label_eligible"].fillna(False).astype(bool)
+    path_mismatch = int((label_eligible & ~label_exact).sum())
+    excluded_missing_paths = int(
+        (feature_eligible & label_expected & ~label_exact).sum()
+    )
     benchmark_mismatch = int((feature_eligible & label_exact & benchmark_missing).sum())
     events_without_feature_row = stamped_scalar(dataset, "reconciliation_events_without_feature_row")
     missing_historical_feature_rows = stamped_scalar(
@@ -564,6 +568,7 @@ def _alignment_audit(dataset: pd.DataFrame) -> pd.DataFrame:
                 ),
                 "future_feature_rows": future,
                 "label_path_mismatches": path_mismatch,
+                "excluded_missing_label_paths": excluded_missing_paths,
                 "benchmark_path_mismatches": benchmark_mismatch,
                 "events_without_feature_row": events_without_feature_row,
                 "missing_historical_feature_rows": missing_historical_feature_rows,
@@ -705,6 +710,54 @@ def _training_rows(
         raise DataReadinessError("swing training rows contain future or invalid timestamps")
     _require_binary_target(data[target], "swing training")
     return data, horizon, target
+
+
+def swing_training_input_columns(
+    available_columns: tuple[str, ...],
+    config: SwingTrainingConfig,
+) -> tuple[str, ...]:
+    """Project only columns used by canonical training and its audits."""
+
+    required = {
+        "ticker",
+        "session_date_et",
+        "decision_group_id",
+        "decision_time_utc",
+        "feature_available_at_utc",
+        "label_available_at_utc",
+        "label_eligible",
+        "feature_eligible",
+        "label_window_expected",
+        "label_path_exact",
+        "horizon_sessions",
+        "swing_feature_schema_version",
+        "feature_profile",
+        "dataset_label_config_sha256",
+        "dataset_label_policy_json",
+        "label_material_sha256",
+        "label_source_reconciliation_sha256",
+        "label_source_reconciliation_errors",
+        "universe_snapshot_id",
+        "market_regime",
+        "sector",
+        "primary_benchmark",
+        "close",
+        "atr_pct_14",
+        "reconciliation_sha256",
+        "event_assignment_sha256",
+        "event_aggregate_sha256",
+        "reconciliation_events_without_feature_row",
+        "reconciliation_missing_historical_feature_rows",
+        "reconciliation_dates_with_news_count_mismatch",
+        *swing_features_for_profile(config.feature_profile),
+    }
+    selected = [
+        column
+        for column in available_columns
+        if column in required
+        or column.startswith(("future_", "target_net_positive_"))
+    ]
+    return tuple(selected)
 
 
 def _select_features(

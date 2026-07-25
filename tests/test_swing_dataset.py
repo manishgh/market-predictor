@@ -26,11 +26,94 @@ from market_predictor.swing.dataset import (
     build_swing_dataset,
     build_swing_inference_features,
 )
-from market_predictor.swing.labels import add_exact_swing_labels
+from market_predictor.swing.labels import (
+    _benchmark_label_return,
+    add_exact_swing_labels,
+)
 from market_predictor.v3.errors import DataReadinessError
 
 
 class SwingDatasetTests(unittest.TestCase):
+    def test_label_window_stops_at_exclusive_membership_end(self) -> None:
+        sessions = pd.date_range("2026-07-06", periods=4, tz="UTC")
+        decisions = _daily_rows("EXIT", sessions, 0.0)
+        decisions["membership_effective_to_utc"] = pd.Timestamp(
+            "2026-07-08T04:00:00Z"
+        )
+        decisions = _add_technical_features(
+            decisions,
+            identity_column="security_id",
+        )
+        decisions["feature_eligible"] = True
+        benchmarks = pd.concat(
+            [
+                _daily_rows(ticker, sessions, offset, decision=False)
+                for ticker, offset in (
+                    ("SPY", 0.0),
+                    ("QQQ", 2.0),
+                    ("XLK", 4.0),
+                )
+            ],
+            ignore_index=True,
+        )
+
+        labeled = add_exact_swing_labels(
+            decisions,
+            benchmarks,
+            SwingDatasetConfig(horizon_sessions=1),
+        )
+
+        before_exit = labeled.loc[
+            labeled["session_date_et"].eq(sessions[1].date())
+        ].iloc[0]
+        self.assertFalse(before_exit["label_window_expected"])
+        self.assertFalse(before_exit["label_eligible"])
+
+    def test_benchmark_label_return_vectorizes_exact_paths_and_missing_rows(
+        self,
+    ) -> None:
+        lookup = pd.DataFrame(
+            {
+                "ticker": ["SPY", "SPY", "QQQ", "QQQ"],
+                "session_date_et": [
+                    datetime(2026, 7, 1).date(),
+                    datetime(2026, 7, 2).date(),
+                    datetime(2026, 7, 1).date(),
+                    datetime(2026, 7, 2).date(),
+                ],
+                "open": [100.0, 101.0, 200.0, 202.0],
+                "close": [101.0, 110.0, 201.0, 220.0],
+            }
+        ).set_index(["ticker", "session_date_et"])
+        decisions = pd.DataFrame(
+            {
+                "entry_session_date_et": [
+                    datetime(2026, 7, 1).date(),
+                    datetime(2026, 7, 1).date(),
+                    datetime(2026, 6, 30).date(),
+                ],
+                "exit_session_date_et": [
+                    datetime(2026, 7, 2).date(),
+                    datetime(2026, 7, 2).date(),
+                    datetime(2026, 7, 2).date(),
+                ],
+            }
+        )
+
+        returns = _benchmark_label_return(
+            decisions,
+            lookup,
+            pd.Series(["SPY", "QQQ", "SPY"]),
+        )
+
+        np.testing.assert_allclose(
+            returns.iloc[:2],
+            np.array([0.10, 0.10]),
+            rtol=0,
+            atol=1e-12,
+        )
+        self.assertTrue(pd.isna(returns.iloc[2]))
+
     def test_builds_technical_market_without_event_inputs(self) -> None:
         decisions, benchmarks, _, _ = _inputs()
         decisions["feature_profile"] = "technical_market"

@@ -26,7 +26,11 @@ from market_predictor.swing.contracts import (
     SwingPromotionConfig,
     SwingTrainingConfig,
 )
-from market_predictor.swing.model import score_swing_frame, train_swing_model
+from market_predictor.swing.model import (
+    score_swing_frame,
+    swing_training_input_columns,
+    train_swing_model,
+)
 from market_predictor.swing.promotion import (
     load_swing_training_evidence,
     promote_swing_model,
@@ -41,6 +45,37 @@ from tests.r4_fixtures import (
 
 
 class SwingModelTests(unittest.TestCase):
+    def test_training_projection_keeps_evidence_and_drops_raw_bar_columns(
+        self,
+    ) -> None:
+        dataset = _training_dataset()
+        available = tuple(
+            [
+                *dataset.columns,
+                "open",
+                "high",
+                "low",
+                "volume",
+                "unused_raw_text",
+            ]
+        )
+
+        selected = set(
+            swing_training_input_columns(
+                available,
+                SwingTrainingConfig(),
+            )
+        )
+
+        self.assertTrue(set(SWING_FEATURES).issubset(selected))
+        self.assertIn("future_net_return_5d", selected)
+        self.assertIn("label_material_sha256", selected)
+        self.assertTrue(
+            {"open", "high", "low", "volume", "unused_raw_text"}.isdisjoint(
+                selected
+            )
+        )
+
     def test_technical_profile_excludes_catalyst_and_rejects_profile_mismatch(
         self,
     ) -> None:

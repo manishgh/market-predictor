@@ -9,4 +9,7 @@ growth_benchmark = "QQQ"
 required_global_sources = ["alpaca", "gdelt"]
 source_coverage_max_age_minutes = 60
 minimum_cross_section = 20
+min_exact_label_coverage = 0.995
+max_build_memory_gb = 4.0
+memory_guard_headroom_gb = 0.75
 schema_version = "swing.features.v1"

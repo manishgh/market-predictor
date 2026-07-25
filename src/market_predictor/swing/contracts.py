@@ -191,6 +191,9 @@ class SwingDatasetConfig(FrozenConfig):
     required_global_sources: tuple[str, ...] = ("alpaca", "gdelt")
     source_coverage_max_age_minutes: int = Field(default=60, ge=0, le=1_440)
     minimum_cross_section: int = Field(default=20, ge=2)
+    min_exact_label_coverage: float = Field(default=0.995, ge=0.95, le=1.0)
+    max_build_memory_gb: float = Field(default=4.0, ge=1.0, le=4.0)
+    memory_guard_headroom_gb: float = Field(default=0.75, ge=0.5, le=2.0)
     schema_version: str = SWING_FEATURE_SCHEMA_VERSION
 
     @model_validator(mode="after")
@@ -201,6 +204,8 @@ class SwingDatasetConfig(FrozenConfig):
             and self.decision_start_date > self.decision_end_date
         ):
             raise ValueError("decision_start_date must not follow decision_end_date")
+        if self.memory_guard_headroom_gb >= self.max_build_memory_gb:
+            raise ValueError("memory guard headroom must be below the hard budget")
         if self.feature_profile == "technical_market" and self.required_global_sources:
             raise ValueError(
                 "technical_market requires required_global_sources=[]; "

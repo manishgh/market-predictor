@@ -631,15 +631,17 @@ promoted. Build it from the existing seven-year SIP bars:
 ```powershell
 market-predictor-research build-canonical-decisions `
   --bars data/artifacts/swing_market_panel_inputs_20190709_20260708_v1/stock_bars.parquet `
-  --memberships data/artifacts/swing_market_panel_inputs_20190709_20260708_v1/memberships.parquet `
+  --memberships data/canonical/swing_memberships_20190709_20260708_v1.parquet `
   --feature-profile technical_market `
   --decision-mode swing-nightly `
+  --research `
   --out data/canonical/swing_technical_decisions_20190709_20260708_v1.parquet
 
 market-predictor-research build-swing-dataset `
   --decisions data/canonical/swing_technical_decisions_20190709_20260708_v1.parquet `
   --benchmark-bars data/artifacts/swing_market_panel_inputs_20190709_20260708_v1/benchmark_bars.parquet `
   --config configs/swing_technical_dataset.toml `
+  --research `
   --out data/features/swing/swing_technical_5d_20210709_20260708_v1.parquet
 ```
 

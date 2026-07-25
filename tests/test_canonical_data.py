@@ -552,6 +552,23 @@ class CanonicalJoinAndAuditTests(unittest.TestCase):
             loaded, loaded_manifest = load_canonical_artifact(path, expected_type="bars")
             pd.testing.assert_frame_equal(loaded, bars)
             self.assertEqual(loaded_manifest["artifact_sha256"], manifest["artifact_sha256"])
+            projected, projected_manifest = load_canonical_artifact(
+                path,
+                expected_type="bars",
+                columns=["ticker", "close"],
+            )
+            self.assertEqual(list(projected.columns), ["ticker", "close"])
+            self.assertEqual(len(projected), len(bars))
+            self.assertEqual(
+                projected_manifest["artifact_sha256"],
+                manifest["artifact_sha256"],
+            )
+            with self.assertRaises(DataReadinessError):
+                load_canonical_artifact(
+                    path,
+                    expected_type="bars",
+                    columns=["ticker", "not_a_column"],
+                )
             changed = bars.copy()
             changed.loc[0, "close"] = 100.75
             changed.to_parquet(path, index=False)

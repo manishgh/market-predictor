@@ -3,7 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import uuid
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -88,6 +88,7 @@ def load_canonical_artifact(
     *,
     expected_type: str | None = None,
     allow_research: bool = False,
+    columns: Sequence[str] | None = None,
 ) -> tuple[pd.DataFrame, dict[str, object]]:
     manifest_path = manifest_path_for(path)
     if not path.exists() or not manifest_path.exists():
@@ -107,12 +108,52 @@ def load_canonical_artifact(
     expected_hash = str(manifest.get("artifact_sha256", ""))
     if not expected_hash or file_sha256(path) != expected_hash:
         raise DataReadinessError(f"canonical artifact integrity check failed: {path}")
-    frame = pd.read_parquet(path)
+    manifest_columns = list(manifest.get("columns", []))
+    projected_columns = list(columns) if columns is not None else manifest_columns
+    if len(projected_columns) != len(set(projected_columns)):
+        raise DataReadinessError(
+            f"canonical projected columns contain duplicates: {path}"
+        )
+    missing_projection = sorted(
+        set(projected_columns).difference(manifest_columns)
+    )
+    if missing_projection:
+        raise DataReadinessError(
+            "canonical projected columns are absent from the manifest: "
+            f"{missing_projection[:10]}"
+        )
+    frame = pd.read_parquet(path, columns=projected_columns)
     if len(frame) != int(manifest.get("rows", -1)):
         raise DataReadinessError(f"canonical artifact row count does not match manifest: {path}")
-    if list(frame.columns) != list(manifest.get("columns", [])):
+    if list(frame.columns) != projected_columns:
         raise DataReadinessError(f"canonical artifact columns do not match manifest: {path}")
     return frame, manifest
+
+
+def canonical_artifact_columns(path: Path) -> tuple[str, ...]:
+    """Read the declared column order for planning a verified projected load."""
+
+    manifest_path = manifest_path_for(path)
+    if not manifest_path.exists():
+        raise FileNotFoundError(
+            f"canonical artifact manifest is missing: {manifest_path}"
+        )
+    loaded = json.loads(manifest_path.read_text(encoding="utf-8"))
+    if not isinstance(loaded, dict) or loaded.get("schema") != CANONICAL_MANIFEST_SCHEMA:
+        raise DataReadinessError(
+            f"unsupported canonical manifest schema: {manifest_path}"
+        )
+    columns = loaded.get("columns")
+    if (
+        not isinstance(columns, list)
+        or not columns
+        or any(not isinstance(column, str) or not column for column in columns)
+        or len(columns) != len(set(columns))
+    ):
+        raise DataReadinessError(
+            f"canonical manifest has invalid columns: {manifest_path}"
+        )
+    return tuple(columns)
 
 
 def file_sha256(path: Path) -> str:

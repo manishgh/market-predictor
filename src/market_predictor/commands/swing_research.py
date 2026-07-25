@@ -89,7 +89,7 @@ def register_swing_research_commands(app: typer.Typer, console: Console) -> None
             membership_manifest = write_canonical_artifact(
                 canonical_memberships,
                 memberships_out,
-                artifact_type="universe_memberships",
+                artifact_type="memberships",
                 audit=CanonicalAuditReport(
                     checks=audit_universe_memberships(
                         canonical_memberships,

@@ -15,6 +15,7 @@ from market_predictor.label_reconciliation import (
     swing_label_material_columns,
 )
 from market_predictor.live_features import select_and_audit_live_features
+from market_predictor.resources import assert_memory_budget, memory_audit
 from market_predictor.swing.audits import audit_swing_dataset
 from market_predictor.swing.contracts import (
     CATALYST_FEATURES,
@@ -47,8 +48,6 @@ DECISION_REQUIRED_COLUMNS = {
     "price_feed",
     "adjustment",
     "primary_benchmark",
-    "market_cap_bucket",
-    "liquidity_bucket",
     "membership_available_at_utc",
     "membership_effective_from_utc",
     "membership_effective_to_utc",
@@ -89,8 +88,34 @@ def build_swing_dataset(
         global_source_collections=global_source_collections,
         config=config,
     )
-    label_source = data.copy()
-    data = add_exact_swing_labels(data, benchmark_features, config)
+    _assert_build_memory(config, "swing feature history")
+    label_source = data.loc[
+        :,
+        [
+            "ticker",
+            "security_id",
+            "session_date_et",
+            "decision_group_id",
+            "decision_time_utc",
+            "bar_start_utc",
+            "bar_end_utc",
+            "available_at_utc",
+            "open",
+            "high",
+            "low",
+            "close",
+            "primary_benchmark",
+            "feature_eligible",
+            "membership_effective_to_utc",
+        ],
+    ].copy()
+    data = add_exact_swing_labels(
+        data,
+        benchmark_features,
+        config,
+        inplace=True,
+    )
+    _assert_build_memory(config, "swing exact labels")
     data = stamp_label_reconciliation(
         data,
         identity_columns=LABEL_IDENTITY_COLUMNS,
@@ -103,6 +128,12 @@ def build_swing_dataset(
         source_frame=label_source,
         benchmark_bars=benchmark_features,
     )
+    memory = memory_audit(
+        hard_budget_gib=config.max_build_memory_gb,
+        headroom_gib=config.memory_guard_headroom_gb,
+    )
+    data["dataset_build_peak_working_set_gib"] = memory.peak_working_set_gib
+    data["dataset_build_safety_threshold_gib"] = memory.safety_threshold_gib
     return data.sort_values(["decision_time_utc", "ticker"], kind="stable").reset_index(drop=True), audit
 
 
@@ -146,6 +177,12 @@ def _build_swing_feature_history(
     config: SwingDatasetConfig,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     _require_columns(decisions, DECISION_REQUIRED_COLUMNS, "canonical decisions")
+    if config.feature_profile == "catalyst_full":
+        _require_columns(
+            decisions,
+            {"market_cap_bucket", "liquidity_bucket"},
+            "catalyst_full canonical decisions",
+        )
     _require_columns(benchmark_bars, BENCHMARK_REQUIRED_COLUMNS, "canonical benchmark bars")
     data = _prepare_daily_rows(decisions, name="canonical decisions")
     benchmarks = _prepare_daily_rows(benchmark_bars, name="canonical benchmark bars")
@@ -163,9 +200,12 @@ def _build_swing_feature_history(
         )
 
     data = _add_technical_features(data, identity_column="security_id")
+    _assert_build_memory(config, "swing stock technical features")
     benchmark_features = _add_technical_features(benchmarks, identity_column="ticker")
+    _assert_build_memory(config, "swing benchmark technical features")
     data = _join_benchmark_features(data, benchmark_features, config)
     data = _add_relative_and_regime_features(data)
+    _assert_build_memory(config, "swing benchmark and regime joins")
     if config.feature_profile == "catalyst_full":
         if global_events is None or global_source_collections is None:
             raise DataReadinessError(
@@ -182,8 +222,10 @@ def _build_swing_feature_history(
         raise DataReadinessError(
             "technical_market rejects global event and source-collection inputs"
         )
-    data = _add_membership_features(data)
+    if config.feature_profile == "catalyst_full":
+        data = _add_membership_features(data)
     data = _add_cross_sectional_features(data, config)
+    _assert_build_memory(config, "swing cross-sectional features")
     if config.decision_start_date is not None:
         data = data[
             data["session_date_et"].ge(config.decision_start_date)
@@ -222,6 +264,14 @@ def _build_swing_feature_history(
     return data, benchmark_features
 
 
+def _assert_build_memory(config: SwingDatasetConfig, stage: str) -> None:
+    assert_memory_budget(
+        hard_budget_gib=config.max_build_memory_gb,
+        headroom_gib=config.memory_guard_headroom_gb,
+        stage=stage,
+    )
+
+
 def _prepare_daily_rows(frame: pd.DataFrame, *, name: str) -> pd.DataFrame:
     data = frame.copy()
     data["ticker"] = data["ticker"].astype(str).str.upper().str.strip()
@@ -252,50 +302,110 @@ def _add_technical_features(
 ) -> pd.DataFrame:
     if identity_column not in frame.columns:
         raise SchemaMismatchError(f"technical feature input is missing identity column: {identity_column}")
-    parts = [_technical_ticker(part) for _, part in frame.groupby(identity_column, sort=False)]
-    return pd.concat(parts, ignore_index=True) if parts else frame.copy()
-
-
-def _technical_ticker(frame: pd.DataFrame) -> pd.DataFrame:
-    data = frame.sort_values("session_date_et", kind="stable").copy()
+    data = frame
+    data.sort_values(
+        [identity_column, "session_date_et"],
+        kind="stable",
+        inplace=True,
+    )
+    data.reset_index(drop=True, inplace=True)
+    identity = data[identity_column]
     close = data["close"].astype(float)
     high = data["high"].astype(float)
     low = data["low"].astype(float)
     open_price = data["open"].astype(float)
     volume = data["volume"].astype(float)
-    prior_close = close.shift(1)
-    data["daily_bar_count"] = np.arange(1, len(data) + 1, dtype=np.int32)
+    close_groups = close.groupby(identity, sort=False)
+    volume_groups = volume.groupby(identity, sort=False)
+    prior_close = close_groups.shift(1)
+    data["daily_bar_count"] = (
+        data.groupby(identity_column, sort=False).cumcount() + 1
+    ).astype("int32")
     for window in (1, 5, 10, 20, 60):
-        data[f"return_{window}d"] = close.pct_change(window, fill_method=None)
-    daily_return = close.pct_change(fill_method=None)
+        data[f"return_{window}d"] = close_groups.pct_change(
+            window,
+            fill_method=None,
+        )
+    daily_return = close_groups.pct_change(fill_method=None)
     for window in (10, 20, 60):
-        data[f"realized_vol_{window}d"] = daily_return.rolling(window, min_periods=window).std()
-    true_range = pd.concat(
-        [high - low, (high - prior_close).abs(), (low - prior_close).abs()],
-        axis=1,
-    ).max(axis=1)
-    data["atr_pct_14"] = true_range.rolling(14, min_periods=14).mean() / close
-    data["rsi_14"] = _rsi(close, 14)
-    ema_12 = close.ewm(span=12, adjust=False, min_periods=12).mean()
-    ema_26 = close.ewm(span=26, adjust=False, min_periods=26).mean()
+        data[f"realized_vol_{window}d"] = daily_return.groupby(
+            identity,
+            sort=False,
+        ).transform(
+            lambda values, period=window: values.rolling(
+                period,
+                min_periods=period,
+            ).std()
+        )
+    true_range = pd.Series(
+        np.fmax.reduce(
+            (
+                (high - low).to_numpy(dtype=float),
+                (high - prior_close).abs().to_numpy(dtype=float),
+                (low - prior_close).abs().to_numpy(dtype=float),
+            )
+        ),
+        index=data.index,
+    )
+    data["atr_pct_14"] = true_range.groupby(identity, sort=False).transform(
+        lambda values: values.rolling(14, min_periods=14).mean()
+    ) / close
+    data["rsi_14"] = close_groups.transform(lambda values: _rsi(values, 14))
+    ema_12 = close_groups.transform(
+        lambda values: values.ewm(
+            span=12,
+            adjust=False,
+            min_periods=12,
+        ).mean()
+    )
+    ema_26 = close_groups.transform(
+        lambda values: values.ewm(
+            span=26,
+            adjust=False,
+            min_periods=26,
+        ).mean()
+    )
     macd = ema_12 - ema_26
-    macd_signal = macd.ewm(span=9, adjust=False, min_periods=9).mean()
+    macd_signal = macd.groupby(identity, sort=False).transform(
+        lambda values: values.ewm(
+            span=9,
+            adjust=False,
+            min_periods=9,
+        ).mean()
+    )
     data["macd_signal_diff_pct"] = (macd - macd_signal) / close
     for window in (10, 20, 50):
-        ema = close.ewm(span=window, adjust=False, min_periods=window).mean()
+        ema = close_groups.transform(
+            lambda values, period=window: values.ewm(
+                span=period,
+                adjust=False,
+                min_periods=period,
+            ).mean()
+        )
         data[f"dist_ema_{window}"] = close / ema - 1.0
     for window in (20, 50, 200):
-        sma = close.rolling(window, min_periods=window).mean()
+        sma = close_groups.transform(
+            lambda values, period=window: values.rolling(
+                period,
+                min_periods=period,
+            ).mean()
+        )
         data[f"dist_sma_{window}"] = close / sma - 1.0
         if window == 200:
-            data["sma_200_slope_20d"] = sma / sma.shift(20) - 1.0
+            data["sma_200_slope_20d"] = (
+                sma / sma.groupby(identity, sort=False).shift(20) - 1.0
+            )
     data["gap_return"] = open_price / prior_close - 1.0
     data["intraday_return"] = close / open_price - 1.0
     data["range_pct"] = (high - low) / prior_close
     spread = (high - low).replace(0, np.nan)
     data["close_location"] = (close - low) / spread
-    volume_mean = volume.rolling(20, min_periods=20).mean()
-    volume_std = volume.rolling(20, min_periods=20).std().replace(0, np.nan)
+    volume_mean = volume_groups.transform(
+        lambda values: values.rolling(20, min_periods=20).mean()
+    )
+    volume_std = volume_groups.transform(
+        lambda values: values.rolling(20, min_periods=20).std()
+    ).replace(0, np.nan)
     data["volume_z20"] = (volume - volume_mean) / volume_std
     data["volume_ratio_20"] = volume / volume_mean
     data["dollar_volume_log"] = np.log1p(close * volume)

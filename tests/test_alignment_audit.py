@@ -10,7 +10,7 @@ from market_predictor.swing.model import _alignment_audit
 
 
 class SwingAlignmentAuditTest(unittest.TestCase):
-    def test_alignment_audit_detects_leakage_and_path_mismatch(self) -> None:
+    def test_alignment_audit_detects_leakage_and_reports_excluded_path(self) -> None:
         base = pd.Timestamp("2026-01-05 21:00", tz="UTC")
         frame = pd.DataFrame(
             {
@@ -21,6 +21,7 @@ class SwingAlignmentAuditTest(unittest.TestCase):
                 "label_window_expected": [True, True, True],
                 # row 2's expected label path is not exact -> path mismatch.
                 "label_path_exact": [True, True, False],
+                "label_eligible": [True, True, False],
                 "future_excess_return_5d_vs_spy": [0.01, 0.01, 0.01],
                 "future_excess_return_5d_vs_qqq": [0.01, 0.01, 0.01],
                 "future_excess_return_5d_vs_sector": [0.01, 0.01, None],
@@ -29,7 +30,8 @@ class SwingAlignmentAuditTest(unittest.TestCase):
         )
         audit = _alignment_audit(frame).iloc[0]
         self.assertEqual(int(audit["future_feature_rows"]), 1)
-        self.assertEqual(int(audit["label_path_mismatches"]), 1)
+        self.assertEqual(int(audit["label_path_mismatches"]), 0)
+        self.assertEqual(int(audit["excluded_missing_label_paths"]), 1)
         # row 2 has a missing benchmark but is not exact, so it is not a benchmark mismatch.
         self.assertEqual(int(audit["benchmark_path_mismatches"]), 0)
         self.assertEqual(
@@ -49,6 +51,7 @@ class SwingAlignmentAuditTest(unittest.TestCase):
                 "feature_eligible": [True, True],
                 "label_window_expected": [True, True],
                 "label_path_exact": [True, True],
+                "label_eligible": [True, True],
                 "future_excess_return_5d_vs_spy": [0.01, 0.02],
                 "future_excess_return_5d_vs_qqq": [0.01, 0.02],
                 "future_excess_return_5d_vs_sector": [0.01, 0.02],
@@ -75,6 +78,7 @@ class SwingAlignmentAuditTest(unittest.TestCase):
                 "feature_eligible": [True, True],
                 "label_window_expected": [True, True],
                 "label_path_exact": [True, True],
+                "label_eligible": [True, True],
                 "future_excess_return_5d_vs_spy": [0.01, 0.02],
                 "future_excess_return_5d_vs_qqq": [0.01, 0.02],
                 "future_excess_return_5d_vs_sector": [0.01, 0.02],

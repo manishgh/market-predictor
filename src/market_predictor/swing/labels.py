@@ -17,14 +17,24 @@ def add_exact_swing_labels(
     frame: pd.DataFrame,
     benchmarks: pd.DataFrame,
     config: SwingDatasetConfig,
+    *,
+    inplace: bool = False,
 ) -> pd.DataFrame:
     if "security_id" not in frame.columns:
         raise DataReadinessError("swing labels require security_id")
     horizon = config.horizon_sessions
-    data = frame.sort_values(
-        ["security_id", "session_date_et"],
-        kind="stable",
-    ).copy()
+    if inplace:
+        frame.sort_values(
+            ["security_id", "session_date_et"],
+            kind="stable",
+            inplace=True,
+        )
+        data = frame
+    else:
+        data = frame.sort_values(
+            ["security_id", "session_date_et"],
+            kind="stable",
+        ).copy()
     spy = benchmarks[benchmarks["ticker"].eq(config.broad_benchmark.upper())].sort_values("session_date_et")
     if spy.empty:
         raise DataReadinessError(f"benchmark bars do not contain {config.broad_benchmark}")
@@ -46,7 +56,36 @@ def add_exact_swing_labels(
     expected_exit = data["_session_ordinal"] + horizon
     actual_entry = data["entry_session_date_et"].map(session_ordinal)
     actual_exit = data["exit_session_date_et"].map(session_ordinal)
-    data["label_window_expected"] = expected_exit.lt(len(ordered_sessions))
+    market_window_expected = expected_exit.lt(len(ordered_sessions))
+    membership_window_expected = pd.Series(True, index=data.index)
+    if "membership_effective_to_utc" in data.columns:
+        membership_end = pd.to_datetime(
+            data["membership_effective_to_utc"],
+            utc=True,
+            errors="coerce",
+        )
+        membership_end_date = membership_end.dt.tz_convert(
+            "America/New_York"
+        ).dt.date
+        expected_exit_date = expected_exit.map(
+            lambda ordinal: (
+                ordered_sessions[int(ordinal)]
+                if pd.notna(ordinal)
+                and int(ordinal) >= 0
+                and int(ordinal) < len(ordered_sessions)
+                else pd.NaT
+            )
+        )
+        membership_window_expected = (
+            membership_end_date.isna()
+            | (
+                pd.Series(expected_exit_date, index=data.index)
+                < membership_end_date
+            )
+        )
+    data["label_window_expected"] = (
+        market_window_expected & membership_window_expected
+    )
     data["label_path_exact"] = actual_entry.eq(expected_entry) & actual_exit.eq(expected_exit)
 
     future_highs = pd.concat(
@@ -113,7 +152,12 @@ def add_exact_swing_labels(
     data.loc[invalid_label, label_columns] = np.nan
     data.loc[invalid_label, swing_target_column(horizon)] = pd.NA
     data["target_excess_rank"] = data.groupby("decision_group_id")[swing_excess_column(horizon, "spy")].rank(method="average", pct=True)
-    data["label_eligible"] = data["feature_eligible"] & data["label_path_exact"] & data[swing_target_column(horizon)].notna()
+    data["label_eligible"] = (
+        data["feature_eligible"]
+        & data["label_window_expected"]
+        & data["label_path_exact"]
+        & data[swing_target_column(horizon)].notna()
+    )
     return data.drop(columns="_session_ordinal")
 
 
@@ -122,21 +166,28 @@ def _benchmark_label_return(
     lookup: pd.DataFrame,
     benchmark_tickers: pd.Series,
 ) -> pd.Series:
-    values = np.full(len(decisions), np.nan, dtype=float)
-    for position, (ticker, entry_date, exit_date) in enumerate(
-        zip(
-            benchmark_tickers.astype(str).str.upper(),
-            decisions["entry_session_date_et"],
-            decisions["exit_session_date_et"],
-            strict=True,
-        )
-    ):
-        if pd.isna(entry_date) or pd.isna(exit_date):
-            continue
-        try:
-            entry_open = float(lookup.loc[(ticker, entry_date), "open"])
-            exit_close = float(lookup.loc[(ticker, exit_date), "close"])
-        except (KeyError, TypeError, ValueError):
-            continue
-        values[position] = exit_close / entry_open - 1.0
+    tickers = benchmark_tickers.astype(str).str.upper()
+    entry_index = pd.MultiIndex.from_arrays(
+        [tickers, decisions["entry_session_date_et"]],
+        names=lookup.index.names,
+    )
+    exit_index = pd.MultiIndex.from_arrays(
+        [tickers, decisions["exit_session_date_et"]],
+        names=lookup.index.names,
+    )
+    entry_open = pd.to_numeric(
+        lookup["open"].reindex(entry_index),
+        errors="coerce",
+    ).to_numpy(dtype=float)
+    exit_close = pd.to_numeric(
+        lookup["close"].reindex(exit_index),
+        errors="coerce",
+    ).to_numpy(dtype=float)
+    values = np.divide(
+        exit_close,
+        entry_open,
+        out=np.full(len(decisions), np.nan, dtype=float),
+        where=np.isfinite(entry_open) & np.isfinite(exit_close) & (entry_open != 0),
+    )
+    values -= 1.0
     return pd.Series(values, index=decisions.index, dtype="float64")

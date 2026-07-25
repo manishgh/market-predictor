@@ -7,6 +7,7 @@ import typer
 from rich.console import Console
 
 from market_predictor.canonical.store import (
+    canonical_artifact_columns,
     file_sha256,
     load_canonical_artifact,
     write_canonical_artifact,
@@ -21,13 +22,21 @@ from market_predictor.promotion_identity import (
 )
 from market_predictor.promotion_workflow import PromotionTrustContext
 from market_predictor.registry import manifest_path_for
+from market_predictor.resources import memory_audit
 from market_predictor.swing.contracts import (
     SwingDatasetConfig,
     SwingPromotionConfig,
     SwingTrainingConfig,
 )
-from market_predictor.swing.dataset import build_swing_dataset, build_swing_inference_features
-from market_predictor.swing.model import train_swing_model
+from market_predictor.swing.dataset import (
+    DECISION_REQUIRED_COLUMNS,
+    build_swing_dataset,
+    build_swing_inference_features,
+)
+from market_predictor.swing.model import (
+    swing_training_input_columns,
+    train_swing_model,
+)
 from market_predictor.swing.promotion import (
     load_swing_training_evidence,
     promote_swing_model,
@@ -71,6 +80,12 @@ def register_swing_model_commands(app: typer.Typer, console: Console) -> None:
             global_source_collections=global_collection_frame,
             config=config,
         )
+        if not audit.passed:
+            console.print(
+                {
+                    "audit": audit.to_frame().to_dict(orient="records"),
+                }
+            )
         input_paths = [
             path
             for path in (
@@ -97,6 +112,10 @@ def register_swing_model_commands(app: typer.Typer, console: Console) -> None:
                 "eligible_rows": int(dataset["label_eligible"].fillna(False).sum()),
                 "out": str(out),
                 "sha256": manifest["artifact_sha256"],
+                "memory": memory_audit(
+                    hard_budget_gib=config.max_build_memory_gb,
+                    headroom_gib=config.memory_guard_headroom_gb,
+                ).to_record(),
             }
         )
 
@@ -179,12 +198,16 @@ def register_swing_model_commands(app: typer.Typer, console: Console) -> None:
             raise typer.BadParameter(f"model output already exists: {model_out}")
         if not overwrite and evidence_dir.exists() and any(evidence_dir.iterdir()):
             raise typer.BadParameter(f"evidence directory is not empty: {evidence_dir}")
+        config = load_typed_config(config_path, SwingTrainingConfig)
         frame, manifest = load_canonical_artifact(
             dataset,
             expected_type="swing_dataset",
             allow_research=not production,
+            columns=swing_training_input_columns(
+                canonical_artifact_columns(dataset),
+                config,
+            ),
         )
-        config = load_typed_config(config_path, SwingTrainingConfig)
         result = train_swing_model(
             frame,
             model_out=model_out,
@@ -312,6 +335,11 @@ def _load_swing_build_inputs(
         decisions,
         expected_type="decisions",
         allow_research=not production,
+        columns=(
+            sorted(DECISION_REQUIRED_COLUMNS | {"sector"})
+            if feature_profile == "technical_market"
+            else None
+        ),
     )
     benchmark_frame, _ = load_canonical_artifact(
         benchmark_bars,
