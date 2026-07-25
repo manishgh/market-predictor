@@ -3,18 +3,71 @@ from __future__ import annotations
 import unittest
 from dataclasses import replace
 from datetime import date, datetime
+from pathlib import Path
 
 import pandas as pd
 
 from market_predictor.v3.errors import DataReadinessError
 from market_predictor.v3.universe import (
     build_point_in_time_sp500_universe,
+    load_reviewed_security_transitions,
+    merge_security_transition_evidence,
     parse_sp500_changes,
-    symbol_changes_from_alpaca,
+    symbol_changes_from_transitions,
 )
 
 
 class V3PointInTimeUniverseTests(unittest.TestCase):
+    def test_reviewed_transition_ledger_overrides_unapproved_provider_merger(self) -> None:
+        reviewed = load_reviewed_security_transitions(Path("configs/sp500_security_transition_review.csv"))
+        provider = pd.DataFrame(
+            {
+                "id": ["provider-para", "provider-cbs-wrong-date", "provider-unreviewed"],
+                "effective_date": ["2025-08-07", "2020-02-13", "2025-01-02"],
+                "old_symbol": ["PARA", "CBS", "AAA"],
+                "new_symbol": ["PSKY", "VIAC", "BBB"],
+                "transition_type": ["stock_merger", "name_change", "stock_merger"],
+                "identity_continuity": [False, True, False],
+                "membership_continuity": [False, True, False],
+            }
+        )
+
+        merged = merge_security_transition_evidence(provider, reviewed)
+        changes = symbol_changes_from_transitions(merged)
+
+        pairs = {(change.old_ticker, change.new_ticker) for change in changes}
+        self.assertIn(("PARA", "PSKY"), pairs)
+        self.assertNotIn(("AAA", "BBB"), pairs)
+        para = next(change for change in changes if change.old_ticker == "PARA")
+        self.assertEqual(para.source_url.split("/")[2], "www.sec.gov")
+        self.assertEqual(para.old_security_id, "cik:0000813828")
+        self.assertEqual(para.new_security_id, "cik:0002041610")
+        cbs = [change for change in changes if change.old_ticker == "CBS"]
+        self.assertEqual(len(cbs), 1)
+        self.assertEqual(cbs[0].effective_at_utc.date(), date(2019, 12, 5))
+
+    def test_transition_overlay_does_not_stringify_missing_security_ids_as_nan(self) -> None:
+        reviewed = load_reviewed_security_transitions(Path("configs/sp500_security_transition_review.csv"))
+        provider = pd.DataFrame(
+            {
+                "id": ["provider-rename"],
+                "effective_date": ["2024-01-02"],
+                "old_symbol": ["OLD"],
+                "new_symbol": ["NEW"],
+                "old_cusip": ["111111111"],
+                "new_cusip": ["111111111"],
+                "transition_type": ["name_change"],
+                "identity_continuity": [True],
+                "membership_continuity": [True],
+            }
+        )
+
+        changes = symbol_changes_from_transitions(merge_security_transition_evidence(provider, reviewed))
+        rename = next(change for change in changes if change.old_ticker == "OLD")
+
+        self.assertEqual(rename.old_security_id, "cusip:111111111")
+        self.assertEqual(rename.new_security_id, "cusip:111111111")
+
     def test_parses_only_sp500_rows_from_official_table(self) -> None:
         changes = parse_sp500_changes(
             _announcement_html(),
@@ -237,7 +290,7 @@ class V3PointInTimeUniverseTests(unittest.TestCase):
             published_date=date(2026, 1, 1),
         )
         changes = [item for item in changes if item.action == "addition"]
-        aliases = symbol_changes_from_alpaca(
+        aliases = symbol_changes_from_transitions(
             pd.DataFrame(
                 {
                     "id": ["change-1"],
@@ -261,20 +314,57 @@ class V3PointInTimeUniverseTests(unittest.TestCase):
         self.assertEqual(pd.Timestamp(old["effective_to_utc"]), pd.Timestamp(new["effective_from_utc"]))
 
     def test_temporary_when_issued_symbols_are_not_membership_aliases(self) -> None:
-        aliases = symbol_changes_from_alpaca(
+        aliases = symbol_changes_from_transitions(
             pd.DataFrame(
                 {
-                    "id": ["temporary"],
-                    "process_date": ["2020-04-01"],
-                    "old_symbol": ["HWM.WI"],
-                    "new_symbol": ["HWM"],
-                    "old_cusip": ["443201108"],
-                    "new_cusip": ["443201108"],
+                    "id": ["temporary-dotted", "temporary-v-suffix"],
+                    "process_date": ["2020-04-01", "2020-11-17"],
+                    "old_symbol": ["HWM.WI", "VTRSV"],
+                    "new_symbol": ["HWM", "VTRS"],
+                    "old_cusip": ["443201108", "92556V106"],
+                    "new_cusip": ["443201108", "92556V106"],
                 }
             )
         )
 
         self.assertEqual(aliases, [])
+
+    def test_merger_carries_membership_but_resets_security_identity(self) -> None:
+        transitions = symbol_changes_from_transitions(
+            pd.DataFrame(
+                {
+                    "id": ["para-to-psky"],
+                    "process_date": ["2025-08-07"],
+                    "effective_date": ["2025-08-07"],
+                    "old_symbol": ["PARA"],
+                    "new_symbol": ["PSKY"],
+                    "old_cusip": ["92556H206"],
+                    "new_cusip": ["69932A204"],
+                    "transition_type": ["stock_merger"],
+                    "identity_continuity": [False],
+                    "membership_continuity": [True],
+                }
+            )
+        )
+        current = pd.DataFrame(
+            {
+                "ticker": ["PSKY"],
+                "company": ["Paramount Skydance"],
+                "sector": ["Communication Services"],
+            }
+        )
+
+        universe, _ = build_point_in_time_sp500_universe(
+            current_snapshot=current,
+            changes=[],
+            symbol_changes=transitions,
+            start_date=date(2025, 1, 1),
+            cutoff_date=date(2026, 1, 1),
+            anchor_source="anchor.csv",
+        )
+
+        self.assertEqual(set(universe["ticker"]), {"PARA", "PSKY"})
+        self.assertEqual(universe["security_id"].nunique(), 2)
 
     def test_announcement_ticker_resolves_through_prior_parallel_symbol_changes(self) -> None:
         html = _announcement_html().replace("January 5, 2026", "March 3, 2020").replace("NEW", "GDI")
@@ -287,7 +377,7 @@ class V3PointInTimeUniverseTests(unittest.TestCase):
             )
             if item.action == "addition"
         ]
-        aliases = symbol_changes_from_alpaca(
+        aliases = symbol_changes_from_transitions(
             pd.DataFrame(
                 {
                     "id": ["gdi-to-ir", "ir-to-tt"],
@@ -339,7 +429,7 @@ class V3PointInTimeUniverseTests(unittest.TestCase):
             effective_at_utc=datetime.fromisoformat("2020-02-05T05:00:00+00:00"),
         )
         addition = next(item for item in changes if item.action == "addition")
-        aliases = symbol_changes_from_alpaca(
+        aliases = symbol_changes_from_transitions(
             pd.DataFrame(
                 {
                     "id": ["old-to-new"],
@@ -373,7 +463,7 @@ class V3PointInTimeUniverseTests(unittest.TestCase):
             )
             if item.action == "deletion"
         ]
-        aliases = symbol_changes_from_alpaca(
+        aliases = symbol_changes_from_transitions(
             pd.DataFrame(
                 {
                     "id": ["old-ctra-to-amr", "cog-to-new-ctra"],

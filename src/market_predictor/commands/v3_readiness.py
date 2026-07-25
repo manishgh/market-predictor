@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 from datetime import date
 from pathlib import Path
@@ -14,7 +15,9 @@ from market_predictor.v3.readiness import DevelopmentReadinessConfig, audit_deve
 from market_predictor.v3.universe import (
     build_point_in_time_sp500_universe,
     collect_sp500_changes,
-    symbol_changes_from_alpaca,
+    load_reviewed_security_transitions,
+    merge_security_transition_evidence,
+    symbol_changes_from_transitions,
 )
 
 
@@ -26,6 +29,10 @@ def register_v3_readiness_commands(app: typer.Typer, console: Console) -> None:
         cutoff_date: str = typer.Option(..., help="Frozen final membership date (YYYY-MM-DD)."),
         out: Path = typer.Option(Path("data/universe/sp500_point_in_time.parquet"), help="Output membership parquet."),
         raw_dir: Path = typer.Option(Path("data/raw/index_membership/spglobal"), help="Official announcement evidence directory."),
+        transition_review: Path = typer.Option(
+            Path("configs/sp500_security_transition_review.csv"),
+            help="Reviewed primary-source evidence for membership-carrying symbol transitions.",
+        ),
         audit_out: Path = typer.Option(
             Path("data/reports/sp500_point_in_time_universe_audit.json"),
             help="Universe reconstruction audit JSON.",
@@ -39,10 +46,12 @@ def register_v3_readiness_commands(app: typer.Typer, console: Console) -> None:
         except ValueError as exc:
             raise typer.BadParameter("start-date and cutoff-date must use YYYY-MM-DD") from exc
         current = pd.read_parquet(current_snapshot) if current_snapshot.suffix.lower() == ".parquet" else pd.read_csv(current_snapshot)
-        name_changes = AlpacaSource(get_settings()).fetch_name_changes(start, cutoff)
-        name_changes_path = raw_dir / "alpaca_name_changes.parquet"
-        name_changes_path.parent.mkdir(parents=True, exist_ok=True)
-        name_changes.to_parquet(name_changes_path, index=False)
+        security_transitions = AlpacaSource(get_settings()).fetch_security_transitions(start, cutoff)
+        transitions_path = raw_dir / "alpaca_security_transitions.parquet"
+        transitions_path.parent.mkdir(parents=True, exist_ok=True)
+        security_transitions.to_parquet(transitions_path, index=False)
+        reviewed_transitions = load_reviewed_security_transitions(transition_review)
+        merged_transitions = merge_security_transition_evidence(security_transitions, reviewed_transitions)
         changes, source_manifest = collect_sp500_changes(
             start_date=start,
             end_date=cutoff,
@@ -52,12 +61,21 @@ def register_v3_readiness_commands(app: typer.Typer, console: Console) -> None:
         universe, audit = build_point_in_time_sp500_universe(
             current_snapshot=current,
             changes=changes,
-            symbol_changes=symbol_changes_from_alpaca(name_changes),
+            symbol_changes=symbol_changes_from_transitions(merged_transitions),
             start_date=start,
             cutoff_date=cutoff,
             anchor_source=str(current_snapshot),
         )
         audit["source_manifest"] = source_manifest
+        audit["security_transition_evidence"] = {
+            "provider_candidate_count": len(security_transitions),
+            "provider_path": str(transitions_path),
+            "provider_sha256": hashlib.sha256(transitions_path.read_bytes()).hexdigest(),
+            "reviewed_count": len(reviewed_transitions),
+            "reviewed_path": str(transition_review),
+            "reviewed_sha256": hashlib.sha256(transition_review.read_bytes()).hexdigest(),
+            "approved_transition_count": len(symbol_changes_from_transitions(merged_transitions)),
+        }
         out.parent.mkdir(parents=True, exist_ok=True)
         universe.to_parquet(out, index=False)
         audit_out.parent.mkdir(parents=True, exist_ok=True)

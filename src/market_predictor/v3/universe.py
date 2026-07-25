@@ -82,59 +82,201 @@ class SymbolChange:
     new_ticker: str
     source_id: str
     source_url: str
-    security_id: str
+    transition_type: str
+    identity_continuity: bool
+    old_security_id: str
+    new_security_id: str
 
-    def to_record(self) -> dict[str, str]:
+    def to_record(self) -> dict[str, object]:
         return {
             "effective_at_utc": self.effective_at_utc.isoformat(),
             "old_ticker": self.old_ticker,
             "new_ticker": self.new_ticker,
             "source_id": self.source_id,
             "source_url": self.source_url,
-            "security_id": self.security_id,
+            "transition_type": self.transition_type,
+            "identity_continuity": self.identity_continuity,
+            "old_security_id": self.old_security_id,
+            "new_security_id": self.new_security_id,
         }
 
 
-def symbol_changes_from_alpaca(frame: pd.DataFrame) -> list[SymbolChange]:
-    required = {"id", "process_date", "old_symbol", "new_symbol"}
+_REVIEWED_TRANSITION_COLUMNS = {
+    "id",
+    "effective_date",
+    "old_symbol",
+    "new_symbol",
+    "transition_type",
+    "identity_continuity",
+    "membership_continuity",
+    "old_security_id",
+    "new_security_id",
+    "source_url",
+    "evidence_summary",
+    "reviewed_by",
+    "reviewed_at_utc",
+}
+
+
+def load_reviewed_security_transitions(path: Path) -> pd.DataFrame:
+    """Load human-reviewed transition evidence that may carry index membership."""
+
+    frame = pd.read_csv(path, dtype=str, keep_default_na=False)
+    missing = sorted(_REVIEWED_TRANSITION_COLUMNS.difference(frame.columns))
+    if missing:
+        raise DataReadinessError(f"Reviewed security-transition ledger is missing columns: {missing}")
+    if frame.empty:
+        raise DataReadinessError("Reviewed security-transition ledger must not be empty")
+    frame = frame.copy()
+    for column in ("id", "old_symbol", "new_symbol", "transition_type", "source_url", "evidence_summary", "reviewed_by"):
+        if frame[column].astype(str).str.strip().eq("").any():
+            raise DataReadinessError(f"Reviewed security-transition ledger has blank {column} values")
+    for column in ("identity_continuity", "membership_continuity"):
+        frame[column] = frame[column].map(lambda value, field=column: _transition_boolean(value, field=field))
+    parsed_dates = pd.to_datetime(frame["effective_date"], errors="coerce")
+    if parsed_dates.isna().any():
+        raise DataReadinessError("Reviewed security-transition ledger has invalid effective_date values")
+    frame["effective_date"] = parsed_dates.dt.date.astype(str)
+    reviewed_at = pd.to_datetime(frame["reviewed_at_utc"], utc=True, errors="coerce")
+    if reviewed_at.isna().any():
+        raise DataReadinessError("Reviewed security-transition ledger has invalid reviewed_at_utc values")
+    if not frame["source_url"].str.startswith("https://").all():
+        raise DataReadinessError("Reviewed security-transition source_url values must use HTTPS")
+    duplicate_keys = frame.duplicated(["effective_date", "old_symbol", "new_symbol"], keep=False)
+    if duplicate_keys.any():
+        raise DataReadinessError("Reviewed security-transition ledger has duplicate effective-date symbol pairs")
+    return frame.reset_index(drop=True)
+
+
+def merge_security_transition_evidence(provider: pd.DataFrame, reviewed: pd.DataFrame) -> pd.DataFrame:
+    """Overlay reviewed decisions on provider candidates without approving provider mergers."""
+
+    provider_frame = provider.copy()
+    reviewed_frame = reviewed.copy()
+    for frame, label in ((provider_frame, "provider"), (reviewed_frame, "reviewed")):
+        required = {"id", "effective_date", "old_symbol", "new_symbol", "transition_type"}
+        missing = sorted(required.difference(frame.columns))
+        if missing:
+            raise DataReadinessError(f"{label.capitalize()} security-transition data is missing columns: {missing}")
+        frame["effective_date"] = pd.to_datetime(frame["effective_date"], errors="coerce").dt.date.astype(str)
+        if frame["effective_date"].eq("NaT").any():
+            raise DataReadinessError(f"{label.capitalize()} security-transition data has invalid effective dates")
+        frame["old_symbol"] = frame["old_symbol"].astype(str).map(normalized_ticker)
+        frame["new_symbol"] = frame["new_symbol"].astype(str).map(normalized_ticker)
+    review_pairs = set(reviewed_frame[["old_symbol", "new_symbol"]].itertuples(index=False, name=None))
+    provider_pairs = provider_frame[["old_symbol", "new_symbol"]].apply(tuple, axis=1)
+    provider_frame = provider_frame.loc[~provider_pairs.isin(review_pairs)].copy()
+    combined = pd.concat([provider_frame, reviewed_frame], ignore_index=True, sort=False)
+    return combined.sort_values(
+        ["effective_date", "old_symbol", "new_symbol", "transition_type", "id"],
+        kind="stable",
+    ).reset_index(drop=True)
+
+
+def symbol_changes_from_transitions(frame: pd.DataFrame) -> list[SymbolChange]:
+    required = {"id", "old_symbol", "new_symbol"}
     missing = sorted(required.difference(frame.columns))
     if missing:
-        raise DataReadinessError(f"Alpaca name-change data is missing columns: {missing}")
+        raise DataReadinessError(f"Security-transition data is missing columns: {missing}")
     changes: list[SymbolChange] = []
+    transition_types = (
+        frame["transition_type"].fillna("name_change").astype(str)
+        if "transition_type" in frame.columns
+        else pd.Series("name_change", index=frame.index)
+    )
+    membership_flags = (
+        frame["membership_continuity"].fillna(False).astype(bool)
+        if "membership_continuity" in frame.columns
+        else transition_types.eq("name_change")
+    )
+    predecessor_targets = set(
+        frame.loc[transition_types.ne("name_change") & membership_flags, "new_symbol"].dropna().astype(str).map(normalized_ticker)
+    )
     for record in frame.to_dict(orient="records"):
         old_ticker = normalized_ticker(str(record["old_symbol"]))
         new_ticker = normalized_ticker(str(record["new_symbol"]))
-        if _is_temporary_security_symbol(old_ticker) or _is_temporary_security_symbol(new_ticker):
+        transition_type = str(record.get("transition_type") or "name_change").strip().lower()
+        raw_membership_continuity = record.get("membership_continuity")
+        membership_continuity = _transition_boolean(
+            raw_membership_continuity,
+            field="membership_continuity",
+            default=transition_type == "name_change",
+        )
+        if not membership_continuity:
             continue
-        effective_date = pd.Timestamp(record["process_date"]).date()
+        if transition_type == "name_change" and _is_temporary_security_symbol(old_ticker) and old_ticker not in predecessor_targets:
+            continue
+        effective_value = record.get("effective_date") or record.get("process_date")
+        if effective_value is None or pd.isna(effective_value):
+            raise DataReadinessError(f"Alpaca transition {record['id']} has no effective date")
+        effective_date = pd.Timestamp(effective_value).date()
         effective_at = datetime.combine(
             effective_date,
             datetime.min.time(),
             tzinfo=ZoneInfo("America/New_York"),
         ).astimezone(UTC)
         source_id = str(record["id"])
-        old_cusip = str(record.get("old_cusip") or "").strip().upper()
-        new_cusip = str(record.get("new_cusip") or "").strip().upper()
-        security_id = (
-            f"cusip:{old_cusip}"
-            if old_cusip and old_cusip == new_cusip
-            else f"alpaca-name-change:{source_id}"
+        old_cusip = _optional_transition_text(record.get("old_cusip")).upper()
+        new_cusip = _optional_transition_text(record.get("new_cusip")).upper()
+        raw_continuity = record.get("identity_continuity")
+        identity_continuity = _transition_boolean(
+            raw_continuity,
+            field="identity_continuity",
+            default=transition_type == "name_change" and (not old_cusip or old_cusip == new_cusip),
         )
+        explicit_old_security_id = _optional_transition_text(record.get("old_security_id"))
+        explicit_new_security_id = _optional_transition_text(record.get("new_security_id"))
+        if identity_continuity:
+            if explicit_old_security_id and explicit_new_security_id and explicit_old_security_id != explicit_new_security_id:
+                raise DataReadinessError(f"Identity-continuous transition {source_id} has different security IDs")
+            shared_identity = (
+                explicit_old_security_id or explicit_new_security_id or (f"cusip:{old_cusip}" if old_cusip else f"transition:{source_id}")
+            )
+            old_security_id = shared_identity
+            new_security_id = shared_identity
+        else:
+            old_security_id = explicit_old_security_id or (f"cusip:{old_cusip}" if old_cusip else f"transition:{source_id}:old")
+            new_security_id = explicit_new_security_id or (f"cusip:{new_cusip}" if new_cusip else f"transition:{source_id}:new")
+        source_url = _optional_transition_text(record.get("source_url"))
+        if not source_url:
+            source_url = f"https://data.alpaca.markets/v1/corporate-actions?ids={source_id}"
         changes.append(
             SymbolChange(
                 effective_at_utc=effective_at,
                 old_ticker=old_ticker,
                 new_ticker=new_ticker,
                 source_id=source_id,
-                source_url=f"https://data.alpaca.markets/v1/corporate-actions?ids={source_id}",
-                security_id=security_id,
+                source_url=source_url,
+                transition_type=transition_type,
+                identity_continuity=identity_continuity,
+                old_security_id=old_security_id,
+                new_security_id=new_security_id,
             )
         )
     return sorted(changes, key=lambda item: (item.effective_at_utc, item.old_ticker, item.new_ticker))
 
 
+def _transition_boolean(value: object, *, field: str, default: bool | None = None) -> bool:
+    if value is None or (not isinstance(value, (list, tuple, dict)) and pd.isna(value)):
+        if default is None:
+            raise DataReadinessError(f"Security-transition {field} must be true or false")
+        return default
+    normalized = str(value).strip().lower()
+    if normalized in {"true", "1"}:
+        return True
+    if normalized in {"false", "0"}:
+        return False
+    raise DataReadinessError(f"Security-transition {field} must be true or false, got {value!r}")
+
+
+def _optional_transition_text(value: object) -> str:
+    if value is None or (not isinstance(value, (list, tuple, dict)) and pd.isna(value)):
+        return ""
+    return str(value).strip()
+
+
 def _is_temporary_security_symbol(ticker: str) -> bool:
-    return ticker.endswith((".WI", ".PR", ".WS"))
+    return ticker.endswith((".WI", ".PR", ".WS", "V"))
 
 
 def discover_sp500_change_announcements(
@@ -405,15 +547,13 @@ def _ticker_at(
     aliases_by_time: dict[datetime, list[SymbolChange]] = {}
     for alias in aliases:
         alias_date = alias.effective_at_utc.astimezone(ZoneInfo("America/New_York")).date()
-        if published_date < alias_date and alias.effective_at_utc <= effective_at:
+        if alias.identity_continuity and published_date < alias_date and alias.effective_at_utc <= effective_at:
             aliases_by_time.setdefault(alias.effective_at_utc, []).append(alias)
     for alias_time in sorted(aliases_by_time):
         matches = [alias for alias in aliases_by_time[alias_time] if alias.old_ticker == current]
         if len(matches) > 1:
             destinations = sorted({alias.new_ticker for alias in matches})
-            raise DataReadinessError(
-                f"Ticker {current} has ambiguous destinations at {alias_time.isoformat()}: {destinations}"
-            )
+            raise DataReadinessError(f"Ticker {current} has ambiguous destinations at {alias_time.isoformat()}: {destinations}")
         if matches:
             current = matches[0].new_ticker
     return current
@@ -434,9 +574,7 @@ def build_point_in_time_sp500_universe(
     current = _normalize_current_snapshot(current_snapshot)
     aliases = symbol_changes or []
     relevant = [
-        item
-        for item in changes
-        if start_date <= item.effective_at_utc.astimezone(ZoneInfo("America/New_York")).date() <= cutoff_date
+        item for item in changes if start_date <= item.effective_at_utc.astimezone(ZoneInfo("America/New_York")).date() <= cutoff_date
     ]
     resolved_changes = [
         replace(
@@ -507,9 +645,9 @@ def build_point_in_time_sp500_universe(
             if alias.old_ticker == alias.new_ticker or not states.get(alias.new_ticker, False):
                 continue
             if states.get(alias.old_ticker, False):
-                contradictions.append(
-                    f"{alias.old_ticker}->{alias.new_ticker} at {effective_at.isoformat()} has both tickers active"
-                )
+                if not alias.identity_continuity:
+                    continue
+                contradictions.append(f"{alias.old_ticker}->{alias.new_ticker} at {effective_at.isoformat()} has both tickers active")
                 continue
             applied_aliases.append(alias)
             new_sources = interval_sources.setdefault(alias.new_ticker, {anchor_source})
@@ -649,13 +787,40 @@ def _metadata_by_ticker(
         propagated = False
         for alias in symbol_changes:
             if alias.new_ticker in metadata and alias.old_ticker not in metadata:
-                metadata[alias.old_ticker] = dict(metadata[alias.new_ticker])
+                source = metadata[alias.new_ticker]
+                metadata[alias.old_ticker] = (
+                    dict(source)
+                    if alias.identity_continuity
+                    else {
+                        "company": alias.old_ticker,
+                        "sector": source["sector"],
+                        "industry": source["industry"],
+                    }
+                )
                 propagated = True
             elif alias.old_ticker in metadata and alias.new_ticker not in metadata:
-                metadata[alias.new_ticker] = dict(metadata[alias.old_ticker])
+                source = metadata[alias.old_ticker]
+                metadata[alias.new_ticker] = (
+                    dict(source)
+                    if alias.identity_continuity
+                    else {
+                        "company": alias.new_ticker,
+                        "sector": source["sector"],
+                        "industry": source["industry"],
+                    }
+                )
                 propagated = True
         if not propagated:
             break
+    for alias in symbol_changes:
+        metadata.setdefault(
+            alias.old_ticker,
+            {"company": alias.old_ticker, "sector": "Unknown", "industry": "Unknown"},
+        )
+        metadata.setdefault(
+            alias.new_ticker,
+            {"company": alias.new_ticker, "sector": "Unknown", "industry": "Unknown"},
+        )
     return metadata
 
 
@@ -716,13 +881,7 @@ def _attach_security_identities(
             output.loc[mask, column] = value
 
     _validate_security_identity_intervals(output)
-    reused = (
-        output.groupby("ticker", sort=True)["security_id"]
-        .nunique()
-        .loc[lambda values: values.gt(1)]
-        .index.astype(str)
-        .tolist()
-    )
+    reused = output.groupby("ticker", sort=True)["security_id"].nunique().loc[lambda values: values.gt(1)].index.astype(str).tolist()
     return output, {
         "security_identities": int(output["security_id"].nunique()),
         "reused_tickers": reused,
@@ -742,25 +901,19 @@ def _security_identity_for_interval(
     old_matches = [
         alias
         for alias in aliases
-        if alias.old_ticker == ticker
-        and effective_to is not None
-        and alias.effective_at_utc == effective_to.to_pydatetime()
+        if alias.old_ticker == ticker and effective_to is not None and alias.effective_at_utc == effective_to.to_pydatetime()
     ]
     if old_matches:
-        security_ids = {alias.security_id for alias in old_matches}
+        security_ids = {alias.old_security_id for alias in old_matches}
         if len(security_ids) != 1:
             effective_to_text = effective_to.isoformat() if effective_to is not None else "unknown"
             raise DataReadinessError(f"Ticker {ticker} has ambiguous security identities at {effective_to_text}")
         return security_ids.pop()
 
-    new_matches = [
-        alias
-        for alias in aliases
-        if alias.new_ticker == ticker and alias.effective_at_utc <= effective_from.to_pydatetime()
-    ]
+    new_matches = [alias for alias in aliases if alias.new_ticker == ticker and alias.effective_at_utc <= effective_from.to_pydatetime()]
     if new_matches:
         latest = max(alias.effective_at_utc for alias in new_matches)
-        security_ids = {alias.security_id for alias in new_matches if alias.effective_at_utc == latest}
+        security_ids = {alias.new_security_id for alias in new_matches if alias.effective_at_utc == latest}
         if len(security_ids) != 1:
             raise DataReadinessError(f"Ticker {ticker} has ambiguous security identities at {latest.isoformat()}")
         return security_ids.pop()

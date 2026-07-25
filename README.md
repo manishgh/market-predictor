@@ -58,8 +58,10 @@ file. Peak process working set was 0.57 GiB.
 
 ### Swing S1 market history
 
-S1a reconstructs a seven-year point-in-time S&P 500 universe from a frozen
-current snapshot, official S&P change releases, and Alpaca corporate actions.
+S1 reconstructs a seven-year point-in-time S&P 500 universe from a frozen
+current snapshot, official S&P change releases, Alpaca corporate-action
+candidates, and the primary-source review ledger in
+`configs/sp500_security_transition_review.csv`.
 Membership intervals carry `security_id`; ticker reuse such as the two distinct
 `IR` companies and simultaneous issuer share classes are kept separate.
 Publication-to-effective ticker resolution is bounded by the official release
@@ -70,25 +72,35 @@ Alpaca directly without a Yahoo fallback, requires SIP/all-adjusted provenance,
 uses at most four per-symbol workers, writes hash-verified canonical bar
 artifacts plus a source-collection ledger, resumes only matching requests, and
 finalizes output immutably. Successful empty responses remain explicit
-`observed_empty` coverage gaps.
+`observed_empty` coverage gaps. `audit-swing-daily-history` replays every
+artifact hash and classifies each missing member session without interpolation.
 
-The frozen 2019-07-09 through 2026-07-08 v2 run contains 664 observed symbols,
-1,082,705 daily rows, and full 1,759-session history for SPY, QQQ, and all 11
-sector ETFs. Alpaca returned no RHT history. Peak working set was 0.24 GiB.
-Point-in-time membership/session coverage is 99.60%; 32 intervals have at least
-one missing member bar. Model training remains blocked while large corporate
-lineage gaps such as `PARA -> PSKY`, `LB -> BBWI`, `ARNC -> HWM`,
-`MYL -> VTRS`, `DISCA -> WBD`, and `SYMC -> NLOK` are repaired and audited.
-At this checkpoint, all 379 repository tests pass, repository-wide Ruff is
-clean, strict mypy passes across 140 files, and all 664 artifact hashes replay.
+The frozen 2019-07-09 through 2026-07-08 v3 run contains 670 observed symbols,
+1,088,146 daily rows, and full 1,759-session history for SPY, QQQ, and all 11
+sector ETFs. The reviewed lineage repairs `SYMC -> NLOK -> GEN`,
+`CBS -> VIAC -> PARA -> PSKY`, `ARNC -> HWM`, `MYL -> VTRS`, `LB -> BBWI`,
+and `DISCA -> WBD`. Coverage is 885,371 of 885,538 expected point-in-time
+member sessions, or 99.9811%. All 24 partial gaps are terminal non-trading
+sessions around acquisitions or delistings. Historical `RHT` is
+`observed_empty`; historical SunTrust `STI` is explicitly excluded because the
+provider now resolves that ticker to a different security. There are zero
+interior or initial gaps, zero blocking intervals, and peak audit memory is
+0.258 GiB. The market-history gate passes; joined event/fundamental panel work
+and model training remain separate later S1/S2 gates.
 
 ```powershell
 .\.venv\Scripts\python.exe -m market_predictor.collection_cli collect-swing-daily-history `
-  --memberships data\universe\sp500_point_in_time_20190709_20260708.parquet `
+  --memberships data\universe\sp500_point_in_time_20190709_20260708_v3.parquet `
   --start-date 2019-07-09 `
   --end-date 2026-07-08 `
-  --out-dir data\raw\swing_daily_sip_sp500_pit_20190709_20260708_v2 `
+  --out-dir data\raw\swing_daily_sip_sp500_pit_20190709_20260708_v3 `
   --workers 4
+
+.\.venv\Scripts\python.exe -m market_predictor.research_cli audit-swing-daily-history `
+  --memberships data\universe\sp500_point_in_time_20190709_20260708_v3.parquet `
+  --collection-dir data\raw\swing_daily_sip_sp500_pit_20190709_20260708_v3 `
+  --out data\reports\swing_daily_history_coverage_20190709_20260708_v3.csv `
+  --summary-out data\reports\swing_daily_history_coverage_20190709_20260708_v3.json
 ```
 
 Production API implications:

@@ -527,13 +527,16 @@ resume before finalization but rejects changes to the frozen request and rejects
 all writes after `_manifest.json` exists. `observed_empty` is terminal source
 evidence and is never replaced with partial-feed data.
 
-The 2026-07-25 v2 run produced 1,082,705 rows for 664 observed symbols with full
-SPY/QQQ/sector-ETF coverage and a 0.24 GiB peak working set. Membership/session
-coverage is 99.60%. This is source evidence, not training approval: 32 intervals
-still have missing member bars, dominated by unresolved corporate
-provider-symbol lineage. Canonical panel v2 and model training remain blocked
-until those transitions are repaired or an explicit exclusion policy passes
-coverage and selection-bias audits.
+The 2026-07-25 v3 run produced 1,088,146 rows for 670 observed symbols with full
+SPY/QQQ/sector-ETF coverage and a 0.258 GiB peak audit working set. Reviewed SEC
+evidence repairs the material rename, merger, and spinoff chains while preserving
+identity resets. Hash-replayed membership/session coverage is 99.9811%:
+885,371 of 885,538 expected rows. The remaining 167 sessions are 24 terminal
+non-trading gaps plus explicit whole-interval exclusions for RHT
+(`observed_empty`) and historical SunTrust STI (provider ticker reuse). There
+are no initial or interior gaps and the market-history gate passes. Canonical
+panel and model training still require event, fundamental, availability, and
+exact-label audits.
 
 ## 12. Production Serving And Releases
 

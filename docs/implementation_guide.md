@@ -202,8 +202,10 @@ source-isolated; research retains all reproducible data/model workflows.
 
 Command ownership:
 
-- Collection: `collect`, `collect-swing`, `collect-seeking-alpha`, `alpaca-tickers`.
-- Verification: `verify-events`, `verify-swing`, `audit-swing-alignment`.
+- Collection: `collect`, `collect-swing`, `collect-swing-daily-history`,
+  `collect-seeking-alpha`, `alpaca-tickers`.
+- Verification: `verify-events`, `verify-swing`, `audit-swing-alignment`,
+  `audit-swing-daily-history`.
 - Sentiment: `download-model`, `score-swing-events`.
 - Feature building: canonical training `build-swing-dataset` / `build-intraday-dataset`, canonical inference `build-swing-live-features` / `build-intraday-live-features`, research-only builders, and V3 research builders.
 - Training/scoring: canonical swing and intraday train/promote commands, research-only entry-path commands, and V3 research evaluation.
@@ -258,13 +260,26 @@ resumable progress; `_source_collections.parquet` distinguishes observed,
 observed-empty, and failed requests; `_manifest.json` makes a completed run
 immutable.
 
+`swing/market_history_audit.py` reopens every canonical symbol artifact, verifies
+its hash against the final collection manifest, verifies the membership and
+source-collection identities, and uses SPY SIP dates as the observed session
+calendar. It classifies gaps as complete, terminal non-trading,
+observed-empty, ticker reuse, initial, interior, or no-overlap. Terminal gaps
+remain explicit and usable sessions are retained; whole-interval source/ticker
+reuse gaps are excluded; initial, interior, no-overlap, or benchmark gaps block
+panel construction. It never fills or shifts a missing bar.
+
 The point-in-time universe builder expands official composite ticker rows,
 forward-fills only table-local effective dates, rejects ambiguous legacy
 company/ticker bindings, bounds symbol changes between release publication and
-effective date, and assigns interval-level security identities. Corporate
-lineage must be complete before feature windows are grouped: neither bars nor
-returns may cross a security-identity boundary even when the ticker text is
-unchanged.
+effective date, and assigns interval-level security identities. Alpaca
+corporate actions are candidates. Same-security name changes may apply
+automatically; merger membership continuity requires an explicit row in
+`configs/sp500_security_transition_review.csv` backed by a primary-source URL.
+Reviewed rows override conflicting provider dates for the same old/new symbol
+pair. Corporate lineage must be complete before feature windows are grouped:
+neither bars nor returns may cross a security-identity boundary even when the
+ticker text is unchanged.
 
 `v3/catalysts.py` owns the O1 point-in-time overlay and paired ablation. It filters decisions to an explicit source interval, joins only events available by each decision timestamp, validates ticker-file and sentiment coverage, detects future matches, and compares R1/O1 on identical groups with a session-blocked paired bootstrap. Provider publication-time backfill is marked research-only. Optional global context must cover both declared interval boundaries or readiness fails.
 

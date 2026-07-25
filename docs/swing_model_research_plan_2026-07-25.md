@@ -380,22 +380,30 @@ research-only.
 
 Exit: immutable dataset with passing alignment, coverage, memory, and replay audits.
 
-Status on 2026-07-25: S1a market foundation complete; joined panel remains blocked.
+Status on 2026-07-25: S1 market-history gate complete; joined panel remains pending.
 
-- Official point-in-time membership: 654 intervals, 652 tickers, 626 security
+- Official point-in-time membership: 659 intervals, 658 tickers, 631 security
   identities, 504 constituents before the 2022 Under Armour dual-class removal
   and 503 afterward.
+- Membership-carrying corporate transitions are approved in a checked-in
+  primary-source ledger. Provider mergers remain non-membership candidates
+  unless a reviewed row explicitly overrides them.
 - Frozen Alpaca SIP window: 2019-07-09 through 2026-07-08.
-- Observed bar artifacts: 664 of 665 requested stock/benchmark symbols.
-- Rows: 1,082,705.
+- Observed bar artifacts: 670 of 671 requested stock/benchmark symbols.
+- Rows: 1,088,146.
 - Benchmarks: SPY, QQQ, and all 11 sector ETFs each have all 1,759 sessions.
 - Explicit source gap: RHT returned `observed_empty`.
-- Membership/session coverage: 882,018 of 885,538 expected rows, or 99.60%.
-- Memory: 0.24 GiB peak working set under the 4 GiB hard budget.
-- Remaining blocker: 32 membership intervals have at least one missing bar.
-  The dominant gaps are provider-symbol lineage across mergers, spinoffs,
-  renames, and temporary when-issued tickers. No training dataset may be built
-  until this lineage is repaired and re-audited.
+- Membership/session coverage: 885,371 of 885,538 expected rows, or 99.9811%.
+- Gap classification: 633 complete intervals, 24 terminal non-trading gaps,
+  one `observed_empty` interval, one ticker-reuse exclusion, and zero initial or
+  interior gaps.
+- Explicit exclusions: historical RHT (four expected sessions and no provider
+  history) and historical SunTrust STI (107 expected sessions; Alpaca now maps
+  STI to a different security).
+- Memory: 0.258 GiB peak working set under the 4 GiB hard budget.
+- Outcome: the hash-replayed market-history gate passes with zero blocking
+  intervals. Event, fundamental, availability, and exact-label joins remain
+  required before the immutable S1 panel can pass.
 
 ### S2: reproducible baselines
 

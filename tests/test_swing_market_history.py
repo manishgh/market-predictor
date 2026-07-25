@@ -10,10 +10,47 @@ import pandas as pd
 
 from market_predictor.canonical.store import load_canonical_artifact
 from market_predictor.swing.market_history import collect_swing_daily_history
+from market_predictor.swing.market_history_audit import audit_swing_daily_history
 from market_predictor.v3.errors import DataReadinessError
 
 
 class SwingMarketHistoryTests(unittest.TestCase):
+    def test_coverage_audit_allows_terminal_nontrading_but_blocks_interior_gaps(self) -> None:
+        cases = (
+            ([date(2026, 7, 6), date(2026, 7, 7)], "terminal_nontrading_gap", True),
+            ([date(2026, 7, 6), date(2026, 7, 8)], "interior_gap", False),
+        )
+        for observed_dates, expected_gap, expected_ready in cases:
+            with self.subTest(expected_gap=expected_gap), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                memberships = _write_memberships(root / "memberships.parquet")
+                history = root / "history"
+
+                collect_swing_daily_history(
+                    memberships_path=memberships,
+                    start_date=date(2026, 7, 6),
+                    end_date=date(2026, 7, 8),
+                    out_dir=history,
+                    fetcher=lambda symbol, start, end, observed=tuple(observed_dates): (
+                        _bars_for_dates([date(2026, 7, 6), date(2026, 7, 7), date(2026, 7, 8)])
+                        if symbol == "SPY"
+                        else _bars_for_dates(list(observed))
+                    ),
+                    price_feed="sip",
+                    workers=2,
+                    benchmarks=("SPY",),
+                )
+
+                report, summary = audit_swing_daily_history(
+                    memberships_path=memberships,
+                    collection_dir=history,
+                    benchmarks=("SPY",),
+                )
+
+                self.assertEqual(report.iloc[0]["gap_class"], expected_gap)
+                self.assertEqual(summary["training_ready"], expected_ready)
+                self.assertEqual(summary["missing_member_sessions"], 1)
+
     def test_failure_is_isolated_and_resume_retries_only_missing_symbol(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -137,14 +174,19 @@ def _write_memberships(path: Path) -> Path:
 
 
 def _bars() -> pd.DataFrame:
+    return _bars_for_dates([date(2026, 7, 1), date(2026, 7, 2)])
+
+
+def _bars_for_dates(dates: list[date]) -> pd.DataFrame:
+    count = len(dates)
     return pd.DataFrame(
         {
-            "date": [date(2026, 7, 1), date(2026, 7, 2)],
-            "open": [100.0, 101.0],
-            "high": [102.0, 103.0],
-            "low": [99.0, 100.0],
-            "close": [101.0, 102.0],
-            "volume": [1_000_000, 1_100_000],
+            "date": dates,
+            "open": [100.0 + value for value in range(count)],
+            "high": [102.0 + value for value in range(count)],
+            "low": [99.0 + value for value in range(count)],
+            "close": [101.0 + value for value in range(count)],
+            "volume": [1_000_000 + value * 100_000 for value in range(count)],
         }
     )
 

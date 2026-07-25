@@ -83,10 +83,11 @@ class AlpacaSource:
             assets = assets[assets["tradable"] == True]  # noqa: E712
         return assets.sort_values("symbol").reset_index(drop=True)
 
-    def fetch_name_changes(self, start: date, end: date) -> pd.DataFrame:
-        """Fetch point-in-time US symbol changes used to preserve security continuity."""
+    def fetch_security_transitions(self, start: date, end: date) -> pd.DataFrame:
+        """Fetch symbol transitions that can carry index membership across a corporate event."""
+
         params: dict[str, Any] = {
-            "types": "name_change",
+            "types": "name_change,cash_merger,stock_merger,stock_and_cash_merger,reorganization",
             "region": "us",
             "start": start.isoformat(),
             "end": end.isoformat(),
@@ -96,17 +97,66 @@ class AlpacaSource:
         rows: list[dict[str, Any]] = []
         while True:
             payload = self.client.get_json(self.corporate_actions_url, params=params, headers=self.headers)
-            rows.extend(payload.get("corporate_actions", {}).get("name_changes", []))
+            actions = payload.get("corporate_actions", {})
+            for item in actions.get("name_changes", []):
+                rows.append(
+                    {
+                        "id": item.get("id"),
+                        "process_date": item.get("process_date"),
+                        "effective_date": item.get("process_date"),
+                        "old_symbol": item.get("old_symbol"),
+                        "new_symbol": item.get("new_symbol"),
+                        "old_cusip": item.get("old_cusip"),
+                        "new_cusip": item.get("new_cusip"),
+                        "transition_type": "name_change",
+                        "identity_continuity": item.get("old_cusip") == item.get("new_cusip"),
+                        "membership_continuity": True,
+                    }
+                )
+            for family in ("cash_mergers", "stock_mergers", "stock_and_cash_mergers", "reorganizations"):
+                for item in actions.get(family, []):
+                    if not item.get("acquiree_symbol") or not item.get("acquirer_symbol"):
+                        continue
+                    rows.append(
+                        {
+                            "id": item.get("id"),
+                            "process_date": item.get("process_date"),
+                            "effective_date": item.get("effective_date") or item.get("process_date"),
+                            "old_symbol": item.get("acquiree_symbol"),
+                            "new_symbol": item.get("acquirer_symbol"),
+                            "old_cusip": item.get("acquiree_cusip"),
+                            "new_cusip": item.get("acquirer_cusip"),
+                            "transition_type": family.removesuffix("s"),
+                            "identity_continuity": False,
+                            "membership_continuity": False,
+                        }
+                    )
             token = payload.get("next_page_token")
             if not token:
                 break
             params["page_token"] = token
-        columns = ["id", "process_date", "old_symbol", "new_symbol", "old_cusip", "new_cusip"]
+        columns = [
+            "id",
+            "process_date",
+            "effective_date",
+            "old_symbol",
+            "new_symbol",
+            "old_cusip",
+            "new_cusip",
+            "transition_type",
+            "identity_continuity",
+            "membership_continuity",
+        ]
         if not rows:
             return pd.DataFrame(columns=columns)
         frame = pd.DataFrame(rows)
-        keep = [column for column in columns if column in frame.columns]
-        return frame[keep].sort_values(["process_date", "old_symbol"], kind="stable").reset_index(drop=True)
+        frame = frame.dropna(subset=["id", "effective_date", "old_symbol", "new_symbol"])
+        frame = frame.sort_values(
+            ["effective_date", "old_symbol", "new_symbol", "transition_type", "id"],
+            kind="stable",
+        )
+        frame = frame.drop_duplicates(["effective_date", "old_symbol", "new_symbol"], keep="first")
+        return frame.loc[:, columns].reset_index(drop=True)
 
     def fetch_news(
         self,
@@ -164,9 +214,7 @@ class AlpacaSource:
         rows = self._fetch_bar_rows(ticker, params)
         if not rows:
             return pd.DataFrame(columns=["date", "open", "high", "low", "close", "volume"])
-        frame = pd.DataFrame(rows).rename(
-            columns={"t": "timestamp", "o": "open", "h": "high", "l": "low", "c": "close", "v": "volume"}
-        )
+        frame = pd.DataFrame(rows).rename(columns={"t": "timestamp", "o": "open", "h": "high", "l": "low", "c": "close", "v": "volume"})
         frame["date"] = pd.to_datetime(frame["timestamp"], utc=True).dt.date
         return frame[["date", "open", "high", "low", "close", "volume"]].sort_values("date")
 
@@ -194,9 +242,7 @@ class AlpacaSource:
         rows = self._fetch_bar_rows(ticker, params)
         if not rows:
             return pd.DataFrame(columns=["timestamp", "date", "open", "high", "low", "close", "volume"])
-        frame = pd.DataFrame(rows).rename(
-            columns={"t": "timestamp", "o": "open", "h": "high", "l": "low", "c": "close", "v": "volume"}
-        )
+        frame = pd.DataFrame(rows).rename(columns={"t": "timestamp", "o": "open", "h": "high", "l": "low", "c": "close", "v": "volume"})
         frame["timestamp"] = pd.to_datetime(frame["timestamp"], utc=True)
         frame["date"] = frame["timestamp"].dt.date
         return frame[["timestamp", "date", "open", "high", "low", "close", "volume"]].sort_values("timestamp")
