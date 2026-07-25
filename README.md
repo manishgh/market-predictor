@@ -85,8 +85,22 @@ sessions around acquisitions or delistings. Historical `RHT` is
 `observed_empty`; historical SunTrust `STI` is explicitly excluded because the
 provider now resolves that ticker to a different security. There are zero
 interior or initial gaps, zero blocking intervals, and peak audit memory is
-0.258 GiB. The market-history gate passes; joined event/fundamental panel work
-and model training remain separate later S1/S2 gates.
+0.258 GiB.
+
+`build-swing-market-panel-inputs` replays the membership, collection, source
+ledger, coverage-report, and per-symbol artifact hashes before constructing
+training inputs. It filters stock bars strictly to approved `[effective_from,
+effective_to)` membership windows, preserves terminal gaps without filling,
+keeps the 13 benchmarks separate, and carries mandatory `security_id` through
+canonical membership and decision joins. The v1 assembly contains 885,371
+point-in-time stock rows across 656 tickers, 22,867 benchmark rows, and 657
+approved membership intervals across 628 security identities. It has zero
+duplicate ticker/session rows, retains the two audited exclusions, and peaked
+at 0.881 GiB. Stock and benchmark bars are production-quality SIP artifacts.
+Historical membership availability is a `provider_publication_proxy`, so the
+membership artifact and resulting bundle remain research-only. Event,
+fundamental, exact-label, and source-availability joins are separate remaining
+S1 gates; no model is promoted by this step.
 
 ```powershell
 .\.venv\Scripts\python.exe -m market_predictor.collection_cli collect-swing-daily-history `
@@ -101,6 +115,16 @@ and model training remain separate later S1/S2 gates.
   --collection-dir data\raw\swing_daily_sip_sp500_pit_20190709_20260708_v3 `
   --out data\reports\swing_daily_history_coverage_20190709_20260708_v3.csv `
   --summary-out data\reports\swing_daily_history_coverage_20190709_20260708_v3.json
+
+.\.venv\Scripts\python.exe -m market_predictor.research_cli build-swing-market-panel-inputs `
+  --memberships data\universe\sp500_point_in_time_20190709_20260708_v3.parquet `
+  --collection-dir data\raw\swing_daily_sip_sp500_pit_20190709_20260708_v3 `
+  --coverage-report data\reports\swing_daily_history_coverage_20190709_20260708_v3.csv `
+  --coverage-summary data\reports\swing_daily_history_coverage_20190709_20260708_v3.json `
+  --stock-bars-out data\artifacts\swing_market_panel_inputs_20190709_20260708_v1\stock_bars.parquet `
+  --benchmark-bars-out data\artifacts\swing_market_panel_inputs_20190709_20260708_v1\benchmark_bars.parquet `
+  --memberships-out data\artifacts\swing_market_panel_inputs_20190709_20260708_v1\memberships.parquet `
+  --audit-out data\reports\swing_market_panel_inputs_20190709_20260708_v1_audit.json
 ```
 
 Production API implications:

@@ -17,11 +17,50 @@ from market_predictor.canonical.store import load_canonical_artifact, write_cano
 from market_predictor.cli import app
 from market_predictor.swing.audits import audit_swing_dataset
 from market_predictor.swing.contracts import SwingDatasetConfig
-from market_predictor.swing.dataset import build_swing_dataset, build_swing_inference_features
+from market_predictor.swing.dataset import (
+    _add_technical_features,
+    build_swing_dataset,
+    build_swing_inference_features,
+)
+from market_predictor.swing.labels import add_exact_swing_labels
 from market_predictor.v3.errors import DataReadinessError
 
 
 class SwingDatasetTests(unittest.TestCase):
+    def test_reused_ticker_does_not_cross_security_feature_or_label_boundary(self) -> None:
+        sessions = pd.date_range("2026-07-06", periods=4, tz="UTC")
+        old_security = _daily_rows("REUSE", sessions[:2], 0.0)
+        new_security = _daily_rows("REUSE", sessions[2:], 10.0)
+        old_security["security_id"] = "security:old"
+        new_security["security_id"] = "security:new"
+        decisions = _add_technical_features(
+            pd.concat([old_security, new_security], ignore_index=True),
+            identity_column="security_id",
+        )
+        decisions["feature_eligible"] = True
+        benchmarks = pd.concat(
+            [
+                _daily_rows(ticker, sessions, offset, decision=False)
+                for ticker, offset in (("SPY", 0.0), ("QQQ", 2.0), ("XLK", 4.0))
+            ],
+            ignore_index=True,
+        )
+
+        labeled = add_exact_swing_labels(
+            decisions,
+            benchmarks,
+            SwingDatasetConfig(horizon_sessions=1),
+        )
+
+        counts = labeled.groupby("security_id")["daily_bar_count"].apply(list).to_dict()
+        self.assertEqual(counts, {"security:new": [1, 2], "security:old": [1, 2]})
+        old_last = labeled.loc[
+            labeled["security_id"].eq("security:old")
+            & labeled["session_date_et"].eq(sessions[1].date())
+        ].iloc[0]
+        self.assertFalse(old_last["label_path_exact"])
+        self.assertTrue(pd.isna(old_last["entry_time_utc"]))
+
     def test_builds_latest_label_free_swing_inference_group(self) -> None:
         decisions, benchmarks, events, sources = _inputs()
         features, audit = build_swing_inference_features(
@@ -343,6 +382,7 @@ def _daily_rows(
     frame["prediction_cutoff_policy_id"] = SWING_NIGHTLY_CUTOFF.policy_id
     frame["decision_group_id"] = cutoffs.astype(str)
     frame["primary_benchmark"] = "XLK"
+    frame["security_id"] = f"test:{ticker.lower()}"
     frame["sector"] = "Technology"
     frame["industry"] = "Software"
     frame["market_cap_bucket"] = "large"

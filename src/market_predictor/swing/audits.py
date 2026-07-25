@@ -23,6 +23,7 @@ def audit_swing_dataset(
     horizon = config.horizon_sessions
     required = {
         "ticker",
+        "security_id",
         "decision_time_utc",
         "feature_available_at_utc",
         "entry_time_utc",
@@ -139,7 +140,7 @@ def audit_swing_dataset(
 
     feed_failures = int(data.loc[feature_eligible, "price_feed"].astype(str).str.lower().ne(config.required_price_feed).sum())
     adjustment_failures = int(data.loc[feature_eligible, "adjustment"].astype(str).str.lower().ne(config.required_adjustment).sum())
-    identity_failures = int(data.duplicated(["ticker", "decision_time_utc"]).sum())
+    identity_failures = int(data.duplicated(["security_id", "decision_time_utc"]).sum())
     warm_rows = int(feature_eligible.sum())
     cross_section_failures = int((feature_eligible & ~data["cross_section_eligible"].fillna(False).astype(bool)).sum())
     internal_path_failures = int((feature_eligible & label_expected & ~label_exact).sum())
@@ -188,7 +189,7 @@ def audit_swing_dataset(
     checks = (
         _check("swing_schema", 0, len(data), "frozen swing feature and label columns are present"),
         _check("swing_rows", int(data.empty), len(data), "swing dataset is not empty"),
-        _check("swing_identity", identity_failures, len(data), "ticker/decision identity is unique"),
+        _check("swing_identity", identity_failures, len(data), "security/decision identity is unique"),
         _check("swing_timestamps", timestamp_failures, len(data), "decision and feature timestamps are valid UTC"),
         _check("swing_no_future_features", future_features, len(data), "all features were available by decision time"),
         _check(

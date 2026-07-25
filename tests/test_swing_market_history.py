@@ -8,13 +8,70 @@ from pathlib import Path
 
 import pandas as pd
 
-from market_predictor.canonical.store import load_canonical_artifact
+from market_predictor.canonical.store import file_sha256, load_canonical_artifact
 from market_predictor.swing.market_history import collect_swing_daily_history
 from market_predictor.swing.market_history_audit import audit_swing_daily_history
+from market_predictor.swing.panel_inputs import build_swing_market_panel_inputs
 from market_predictor.v3.errors import DataReadinessError
 
 
 class SwingMarketHistoryTests(unittest.TestCase):
+    def test_builds_hash_bound_point_in_time_market_panel_inputs(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            memberships = _write_memberships(root / "memberships.parquet")
+            history = root / "history"
+            collect_swing_daily_history(
+                memberships_path=memberships,
+                start_date=date(2026, 7, 1),
+                end_date=date(2026, 7, 2),
+                out_dir=history,
+                fetcher=lambda symbol, start, end: _bars(),
+                price_feed="sip",
+                workers=2,
+                benchmarks=("SPY",),
+            )
+            report_path, summary_path = _write_coverage_evidence(
+                root=root,
+                memberships=memberships,
+                history=history,
+            )
+
+            stock_bars, benchmark_bars, canonical_memberships, audit = (
+                build_swing_market_panel_inputs(
+                    memberships_path=memberships,
+                    collection_dir=history,
+                    coverage_report_path=report_path,
+                    coverage_summary_path=summary_path,
+                    benchmarks=("SPY",),
+                )
+            )
+
+            self.assertEqual(len(stock_bars), 2)
+            self.assertEqual(set(stock_bars["ticker"]), {"AAA"})
+            self.assertEqual(len(benchmark_bars), 2)
+            self.assertEqual(set(benchmark_bars["ticker"]), {"SPY"})
+            self.assertEqual(canonical_memberships.loc[0, "security_id"], "test:aaa")
+            self.assertEqual(
+                canonical_memberships.loc[0, "availability_policy"],
+                "provider_publication_proxy",
+            )
+            self.assertTrue(audit["training_ready"])
+            self.assertFalse(audit["production_ready"]["memberships"])
+
+            report_path.write_text(
+                report_path.read_text(encoding="utf-8") + "\n",
+                encoding="utf-8",
+            )
+            with self.assertRaises(DataReadinessError):
+                build_swing_market_panel_inputs(
+                    memberships_path=memberships,
+                    collection_dir=history,
+                    coverage_report_path=report_path,
+                    coverage_summary_path=summary_path,
+                    benchmarks=("SPY",),
+                )
+
     def test_coverage_audit_allows_terminal_nontrading_but_blocks_interior_gaps(self) -> None:
         cases = (
             ([date(2026, 7, 6), date(2026, 7, 7)], "terminal_nontrading_gap", True),
@@ -165,12 +222,44 @@ def _write_memberships(path: Path) -> Path:
         {
             "ticker": ["AAA"],
             "security_id": ["test:aaa"],
+            "company": ["AAA Test Company"],
             "effective_from_utc": [pd.Timestamp("2026-01-01", tz="UTC")],
             "effective_to_utc": [pd.NaT],
+            "sector": ["Technology"],
+            "industry": ["Software"],
+            "market_cap_bucket": ["large_cap_sp500"],
+            "liquidity_bucket": ["sp500_constituent"],
             "primary_benchmark": ["SPY"],
+            "universe_snapshot_id": ["test-snapshot-1"],
         }
     ).to_parquet(path, index=False)
     return path
+
+
+def _write_coverage_evidence(
+    *,
+    root: Path,
+    memberships: Path,
+    history: Path,
+) -> tuple[Path, Path]:
+    report, summary = audit_swing_daily_history(
+        memberships_path=memberships,
+        collection_dir=history,
+        benchmarks=("SPY",),
+    )
+    report_path = root / "coverage.csv"
+    summary_path = root / "coverage.json"
+    report.to_csv(report_path, index=False)
+    summary["report"] = {
+        "path": str(report_path.resolve()),
+        "rows": len(report),
+        "sha256": file_sha256(report_path),
+    }
+    summary_path.write_text(
+        json.dumps(summary, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    return report_path, summary_path
 
 
 def _bars() -> pd.DataFrame:

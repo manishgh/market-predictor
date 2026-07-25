@@ -535,8 +535,19 @@ identity resets. Hash-replayed membership/session coverage is 99.9811%:
 non-trading gaps plus explicit whole-interval exclusions for RHT
 (`observed_empty`) and historical SunTrust STI (provider ticker reuse). There
 are no initial or interior gaps and the market-history gate passes. Canonical
-panel and model training still require event, fundamental, availability, and
-exact-label audits.
+market-panel inputs are assembled only after replaying the membership,
+collection, source-ledger, coverage-report, and per-symbol hashes.
+`swing/panel_inputs.py` filters stock bars to approved membership intervals,
+keeps benchmark bars separate, preserves missing sessions without imputation,
+and carries mandatory `security_id` through canonical membership and decision
+joins. Swing technical windows and future label paths group by that security
+identity, so ticker reuse cannot bridge indicator or outcome state. The v1
+result has 885,371 stock rows, 22,867 benchmark rows, 657
+membership intervals, 628 security identities, no duplicate ticker/session
+rows, and a 0.881 GiB peak working set. Historical membership availability is
+a publication proxy, so this input bundle is research-only. Model training
+still requires event, fundamental, observed-availability, and exact-label
+audits.
 
 ## 12. Production Serving And Releases
 

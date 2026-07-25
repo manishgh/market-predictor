@@ -269,6 +269,33 @@ remain explicit and usable sessions are retained; whole-interval source/ticker
 reuse gaps are excluded; initial, interior, no-overlap, or benchmark gaps block
 panel construction. It never fills or shifts a missing bar.
 
+`swing/panel_inputs.py` owns the next immutable boundary. It refuses a coverage
+summary that is not training-ready, replays the membership, final collection,
+source ledger, coverage report, and every per-symbol artifact hash, and rejects
+any blocking interval. It removes only intervals explicitly classified
+`exclude_interval`, filters each stock bar to `[effective_from, effective_to)`,
+keeps SPY/QQQ/sector ETF bars separate, and does not fill, interpolate, or shift
+sessions. Canonical memberships require `security_id`; `canonical/joins.py`
+therefore carries that identity into every decision row. Swing technical
+windows and exact future labels group by `security_id`, never ticker alone. The
+command publishes
+hash-manifested stock bars, benchmark bars, and research memberships, then
+writes the bundle audit last. Historical membership availability uses
+`provider_publication_proxy`, making the membership and bundle research-only
+until observed availability evidence exists.
+
+```powershell
+market-predictor-research build-swing-market-panel-inputs `
+  --memberships data/universe/sp500_point_in_time_20190709_20260708_v3.parquet `
+  --collection-dir data/raw/swing_daily_sip_sp500_pit_20190709_20260708_v3 `
+  --coverage-report data/reports/swing_daily_history_coverage_20190709_20260708_v3.csv `
+  --coverage-summary data/reports/swing_daily_history_coverage_20190709_20260708_v3.json `
+  --stock-bars-out data/artifacts/swing_market_panel_inputs_20190709_20260708_v1/stock_bars.parquet `
+  --benchmark-bars-out data/artifacts/swing_market_panel_inputs_20190709_20260708_v1/benchmark_bars.parquet `
+  --memberships-out data/artifacts/swing_market_panel_inputs_20190709_20260708_v1/memberships.parquet `
+  --audit-out data/reports/swing_market_panel_inputs_20190709_20260708_v1_audit.json
+```
+
 The point-in-time universe builder expands official composite ticker rows,
 forward-fills only table-local effective dates, rejects ambiguous legacy
 company/ticker bindings, bounds symbol changes between release publication and

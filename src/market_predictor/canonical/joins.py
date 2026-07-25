@@ -15,6 +15,7 @@ from market_predictor.canonical.reconciliation import (
 from market_predictor.v3.errors import DataReadinessError, SchemaMismatchError
 
 MEMBERSHIP_VALUE_COLUMNS = (
+    "security_id",
     "sector",
     "industry",
     "market_cap_bucket",

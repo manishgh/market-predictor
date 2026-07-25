@@ -90,6 +90,7 @@ def canonicalize_universe_memberships(
 
     required = {
         "ticker",
+        "security_id",
         "effective_from_utc",
         "effective_to_utc",
         "available_at_utc",

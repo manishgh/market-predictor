@@ -380,7 +380,9 @@ research-only.
 
 Exit: immutable dataset with passing alignment, coverage, memory, and replay audits.
 
-Status on 2026-07-25: S1 market-history gate complete; joined panel remains pending.
+Status on 2026-07-25: S1 market history and technical market-panel input gates
+complete; catalyst, fundamental, exact-label, and availability joins remain
+pending.
 
 - Official point-in-time membership: 659 intervals, 658 tickers, 631 security
   identities, 504 constituents before the 2022 Under Armour dual-class removal
@@ -402,8 +404,20 @@ Status on 2026-07-25: S1 market-history gate complete; joined panel remains pend
   STI to a different security).
 - Memory: 0.258 GiB peak working set under the 4 GiB hard budget.
 - Outcome: the hash-replayed market-history gate passes with zero blocking
-  intervals. Event, fundamental, availability, and exact-label joins remain
-  required before the immutable S1 panel can pass.
+  intervals.
+- Canonical market-panel input assembly: 885,371 PIT stock rows across 656
+  tickers, 22,867 benchmark rows, 657 approved membership intervals, and 628
+  security identities.
+- Panel integrity: zero duplicate ticker/session rows; stock bars are restricted
+  to approved membership windows; gaps are not filled or shifted; all source and
+  audit hashes are replayed before publication.
+- Panel assembly memory: 0.881 GiB peak working set.
+- Research boundary: stock and benchmark bars are production-quality SIP/all
+  adjusted artifacts, but historical membership availability is a
+  `provider_publication_proxy`. The membership artifact and bundle are
+  research-only and cannot support promotion.
+- Remaining exit work: event, fundamental, observed-availability, exact-label,
+  and source-path replay joins must pass before the immutable S1 panel exits.
 
 ### S2: reproducible baselines
 
@@ -457,7 +471,9 @@ Exit: a signed, atomic, promotion-authorized serving bundle, or a documented rej
 
 ## 11. Highest-value next action
 
-S0 is complete. Start S1 with the evidence gaps above, not a new model download.
+S0 and the S1 technical market-input gate are complete. Continue S1 with the
+event, fundamental, availability, and exact-label evidence gaps above, not a
+new model download.
 
 The first deliverable should answer:
 
@@ -468,7 +484,10 @@ The first deliverable should answer:
 - What spread/capacity evidence is available?
 - How many independent five-session test periods and market regimes can be evaluated?
 
-After S0, build the longer canonical panel and run logistic, gradient-boosted classification, gradient-boosted regression, and direct ranking on identical folds. This is the shortest path to learning whether the project has a real swing-prediction edge.
+After the remaining S1 joins pass, run logistic, gradient-boosted
+classification, gradient-boosted regression, and direct ranking on identical
+folds. This is the shortest path to learning whether the project has a real
+swing-prediction edge.
 
 ## 12. Research basis
 

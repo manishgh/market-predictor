@@ -28,6 +28,7 @@ from market_predictor.v3.errors import DataReadinessError, SchemaMismatchError
 
 DECISION_REQUIRED_COLUMNS = {
     "ticker",
+    "security_id",
     "timeframe",
     "bar_start_utc",
     "bar_end_utc",
@@ -153,8 +154,8 @@ def _build_swing_feature_history(
     if bool(benchmarks.duplicated(["ticker", "session_date_et"]).any()):
         raise DataReadinessError("benchmark bars contain duplicate ticker/session rows")
 
-    data = _add_technical_features(data)
-    benchmark_features = _add_technical_features(benchmarks)
+    data = _add_technical_features(data, identity_column="security_id")
+    benchmark_features = _add_technical_features(benchmarks, identity_column="ticker")
     data = _join_benchmark_features(data, benchmark_features, config)
     data = _add_relative_and_regime_features(data)
     data = _add_global_event_features(data, global_events)
@@ -200,8 +201,14 @@ def _prepare_daily_rows(frame: pd.DataFrame, *, name: str) -> pd.DataFrame:
     return data.sort_values(["ticker", "session_date_et"], kind="stable").reset_index(drop=True)
 
 
-def _add_technical_features(frame: pd.DataFrame) -> pd.DataFrame:
-    parts = [_technical_ticker(part) for _, part in frame.groupby("ticker", sort=False)]
+def _add_technical_features(
+    frame: pd.DataFrame,
+    *,
+    identity_column: str,
+) -> pd.DataFrame:
+    if identity_column not in frame.columns:
+        raise SchemaMismatchError(f"technical feature input is missing identity column: {identity_column}")
+    parts = [_technical_ticker(part) for _, part in frame.groupby(identity_column, sort=False)]
     return pd.concat(parts, ignore_index=True) if parts else frame.copy()
 
 

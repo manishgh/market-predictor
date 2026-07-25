@@ -71,6 +71,7 @@ class CanonicalCliTests(unittest.TestCase):
             pd.DataFrame([collection.model_dump()]).to_parquet(raw_sources, index=False)
             membership = CanonicalUniverseMembership(
                 ticker="MSFT",
+                security_id="MSFT",
                 effective_from_utc=datetime(2026, 1, 1, tzinfo=UTC),
                 available_at_utc=datetime(2026, 1, 1, tzinfo=UTC),
                 sector="Technology",

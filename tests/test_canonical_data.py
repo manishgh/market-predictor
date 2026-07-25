@@ -101,6 +101,7 @@ class CanonicalContractTests(unittest.TestCase):
         raw = pd.DataFrame(
             {
                 "ticker": ["MSFT"],
+                "security_id": ["MSFT"],
                 "effective_from_utc": [pd.Timestamp("2026-01-01T00:00:00Z")],
                 "effective_to_utc": [pd.NaT],
                 "sector": ["Technology"],
@@ -439,6 +440,7 @@ class CanonicalJoinAndAuditTests(unittest.TestCase):
     def test_membership_join_rejects_hindsight_before_snapshot_was_known(self) -> None:
         membership = CanonicalUniverseMembership(
             ticker="MSFT",
+            security_id="MSFT",
             effective_from_utc=datetime(2026, 1, 1, tzinfo=UTC),
             available_at_utc=datetime(2026, 7, 1, tzinfo=UTC),
             sector="Technology",
@@ -465,12 +467,14 @@ class CanonicalJoinAndAuditTests(unittest.TestCase):
 
         decisions["decision_time_utc"] = pd.Timestamp("2026-07-02T14:00:00Z")
         joined = join_universe_membership(decisions, memberships)
+        self.assertEqual(joined.loc[0, "security_id"], "MSFT")
         self.assertEqual(joined.loc[0, "primary_benchmark"], "XLK")
         self.assertLessEqual(joined.loc[0, "membership_available_at_utc"], joined.loc[0, "decision_time_utc"])
 
     def test_membership_audit_rejects_overlapping_windows(self) -> None:
         base = {
             "ticker": "MSFT",
+            "security_id": "MSFT",
             "available_at_utc": datetime(2026, 1, 1, tzinfo=UTC),
             "sector": "Technology",
             "industry": "Software",

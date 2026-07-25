@@ -18,9 +18,11 @@ def add_exact_swing_labels(
     benchmarks: pd.DataFrame,
     config: SwingDatasetConfig,
 ) -> pd.DataFrame:
+    if "security_id" not in frame.columns:
+        raise DataReadinessError("swing labels require security_id")
     horizon = config.horizon_sessions
     data = frame.sort_values(
-        ["ticker", "session_date_et"],
+        ["security_id", "session_date_et"],
         kind="stable",
     ).copy()
     spy = benchmarks[benchmarks["ticker"].eq(config.broad_benchmark.upper())].sort_values("session_date_et")
@@ -32,7 +34,7 @@ def add_exact_swing_labels(
     if bool(data["_session_ordinal"].isna().any()):
         raise DataReadinessError("equity decisions contain sessions absent from SPY")
 
-    grouped = data.groupby("ticker", sort=False)
+    grouped = data.groupby("security_id", sort=False)
     data["entry_time_utc"] = grouped["bar_start_utc"].shift(-1)
     data["exit_time_utc"] = grouped["bar_end_utc"].shift(-horizon)
     data["label_available_at_utc"] = grouped["available_at_utc"].shift(-horizon)

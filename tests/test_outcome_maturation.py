@@ -136,6 +136,7 @@ class OutcomeMaturationTests(unittest.TestCase):
         intent = swing_intent()
         bars = _swing_bars()
         stock = bars[bars["ticker"].eq("MSFT")].copy()
+        stock["security_id"] = "test:msft"
         stock["feature_eligible"] = True
         stock["primary_benchmark"] = "XLK"
         stock["decision_group_id"] = stock["session_date_et"].astype(str)

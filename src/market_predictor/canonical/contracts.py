@@ -176,6 +176,7 @@ class CanonicalFundamentalFact(CanonicalContract):
 
 class CanonicalUniverseMembership(CanonicalContract):
     ticker: str
+    security_id: str = Field(min_length=1)
     effective_from_utc: datetime
     effective_to_utc: datetime | None = None
     available_at_utc: datetime
@@ -200,6 +201,7 @@ class CanonicalUniverseMembership(CanonicalContract):
         return None if value is None else _utc(value)
 
     @field_validator(
+        "security_id",
         "sector",
         "industry",
         "market_cap_bucket",
