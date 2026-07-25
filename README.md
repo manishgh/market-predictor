@@ -31,6 +31,31 @@ Candidate identity comes from an immutable `.manifest.json`. Effective promoted 
 | Intraday V3 O1 | 2026-07-21 fixed ticker-catalyst overlay on R1 | Research ablation; rejected | Walk-forward top-10 excess return improves from -0.0574% to -0.0487%, but ticker holdout worsens from -0.0642% to -0.0669%; both paired confidence intervals include zero. |
 | Intraday V4-H1 120m | 2026-07-21 exact-path B0/R1 experiment | Research candidates; rejected | R1 top-10 cost-adjusted excess return is -0.0802%/-0.0629% walk-forward/holdout. The longer horizon does not cover costs. |
 
+### Swing research inventory
+
+`audit-swing-research-inventory` is the S0 gate for new swing-model research. It reads
+one ticker at a time, enforces the 4 GiB process budget, and writes a ticker-level CSV
+plus a hash-bound JSON summary. Technical readiness, catalyst research readiness, and
+catalyst promotion evidence are separate states: publication-time backfills may support
+controlled research, but they never satisfy prospective first-observed or
+source-collection evidence.
+
+The 2026-07-25 audit of the existing large-cap corpus found 318 tickers, 224,681
+sanitized events, 787 median daily bars, and 23.81 median news months. All 318 rows are
+ineligible for the new research threshold. The corpus has no historical first-observed
+evidence, source-collection ledger, SIP provenance, or point-in-time membership input.
+Five tickers have news/candle alignment failures and BRK-B has no matching daily feature
+file. Peak process working set was 0.57 GiB.
+
+```powershell
+.\.venv\Scripts\python.exe -m market_predictor.research_cli audit-swing-research-inventory `
+  --raw-event-dir data\raw\largecap_50b_2y_20260630_curated `
+  --feature-dir data\features\largecap_50b_2y_news_volume_20260630 `
+  --out data\reports\swing_research_inventory_largecap_20260725_v2.csv `
+  --summary-out data\reports\swing_research_inventory_largecap_20260725_v2.json `
+  --config configs\swing_research_inventory.toml
+```
+
 Production API implications:
 
 - Production routes are server-owned and always require a promoted, hash-verified artifact.

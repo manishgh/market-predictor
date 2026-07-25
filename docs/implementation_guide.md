@@ -121,6 +121,24 @@ market-predictor-research train-swing-model --dataset data/features/swing/swing_
 market-predictor-research promote-swing-model --model models/swing/candidates/swing_5d.joblib --evidence-dir data/reports/swing_5d_candidate --hypothesis-registry data/governance --hypothesis-id swing-5d-h001 --shadow-bundle data/governance/shadow/<shadow-fingerprint>.json --outcome-repository data/outcomes --baseline-artifact models/swing/baselines/swing_5d.joblib --identity-issuer https://login.microsoftonline.com/<tenant>/v2.0 --identity-audience market-predictor-promotion --identity-jwks C:\run\secrets\promotion-jwks.json --signing-private-key <secure-ed25519-private-key.pem> --attestation-trust-store configs/attestation_trust_store.json --signer-id promotion-ci-prod --config configs/swing_promotion.toml
 ```
 
+Before building a new swing research panel, audit the legacy/raw corpus independently:
+
+```powershell
+.\.venv\Scripts\python.exe -m market_predictor.research_cli audit-swing-research-inventory `
+  --raw-event-dir data\raw\largecap_50b_2y_20260630_curated `
+  --feature-dir data\features\largecap_50b_2y_news_volume_20260630 `
+  --out data\reports\swing_research_inventory_largecap_20260725_v2.csv `
+  --summary-out data\reports\swing_research_inventory_largecap_20260725_v2.json `
+  --config configs\swing_research_inventory.toml
+```
+
+The inventory reads and releases one ticker at a time. It hashes the input-directory
+file inventories and output CSV, rejects output overwrite, records memory evidence, and
+reports technical, catalyst-research, and catalyst-promotion eligibility separately.
+Missing SIP provenance, point-in-time membership, first-observed timestamps, or
+source-collection evidence is reported as missing evidence; it is never inferred from a
+directory name.
+
 `src/market_predictor/swing/contracts.py` freezes feature/model schemas and typed configs. `dataset.py` owns technical, benchmark-relative, catalyst/global, membership, cross-sectional, and exact future-path construction. `audits.py` owns fail-closed eligibility. `model.py` owns purged folds, unseen-ticker holdout, calibration, memory enforcement, immutable candidate registration, and scoring. `evaluation.py` owns classification, ranking-economics, regime, and catalyst validation. `promotion.py` owns hash-bound evidence bundles and fail-closed development gates, then delegates predeclared hypothesis, untouched-shadow, one-use ledger, and attestation enforcement to `promotion_workflow.py`. `commands/swing_model.py` is the only canonical research command entry point for those stages.
 
 Canonical intraday build, training, and promotion:

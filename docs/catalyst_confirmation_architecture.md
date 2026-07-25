@@ -490,6 +490,10 @@ Initial known audit shape:
 
 Implemented audit surfaces:
 
+- `audit-swing-research-inventory` produces a sequential, bounded-memory ticker
+  inventory with content identities for its event and feature directories. It separates
+  technical eligibility, catalyst research eligibility, and catalyst promotion evidence
+  so a publication-time backfill cannot be mistaken for prospectively observed news.
 - `audit-swing-alignment` verifies historical event-to-candle mapping and news-count consistency.
 - `build-swing-dataset` publishes a hash-verified feature/label artifact only after timing, warm-up, benchmark, SIP, adjustment, source-freshness, cross-section, and exact-path checks pass.
 - `train-swing-model` writes purged predictions, unseen-ticker predictions, folds, profitability, regime, catalyst, alignment, metrics, and an evidence hash manifest tied to the candidate.
@@ -498,6 +502,13 @@ Implemented audit surfaces:
 - `train-intraday-model` writes separate opportunity/downside validation, unseen-ticker, economics, regime, catalyst, alignment, fold, memory, and provenance evidence in one hash-bound candidate bundle.
 - `promote-intraday-model` verifies every evidence hash and promotes both estimators atomically only when all frozen gates pass.
 - The generic `promote-model` path has been removed. Only the canonical swing and intraday promotion commands can produce an attestation.
+
+The 2026-07-25 S0 large-cap inventory is not training approval. Across 318 tickers it
+found 224,681 sanitized events, 787 median daily bars, 23.81 median news months, zero
+first-observed coverage, unknown feed provenance, no source-collection ledger, and no
+point-in-time membership input. Five tickers failed alignment and BRK-B lacked a
+matching daily feature artifact. Every ticker therefore failed the frozen seven-year
+technical and three-year catalyst research thresholds.
 
 ## 12. Production Serving And Releases
 

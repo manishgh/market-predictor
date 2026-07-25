@@ -39,6 +39,7 @@
   "research": [
     "audit-promotion-readiness",
     "audit-swing-alignment",
+    "audit-swing-research-inventory",
     "audit-v3-data",
     "audit-v3-development-readiness",
     "audit-v3-failure-attribution",
