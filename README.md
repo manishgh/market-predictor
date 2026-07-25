@@ -671,7 +671,19 @@ market-predictor-collect collect-alpaca-news-history `
   --out-dir data/raw/alpaca_news_20210709_20260708_v1 `
   --workers 2 `
   --chunk-days 92
+
+market-predictor-research audit-alpaca-news-history `
+  --collection-dir data/raw/alpaca_news_20210709_20260708_v1 `
+  --out data/reports/alpaca_news_20210709_20260708_v1_audit.csv `
+  --summary-out data/reports/alpaca_news_20210709_20260708_v1_audit.json
 ```
+
+The completed archive contains 564,986 events across 612 effective tickers and
+592 financial security identities. The streaming replay verified all 12,663
+raw pages and every event artifact with zero duplicate event IDs at 0.320 GiB
+peak RSS. Alpaca has a confirmed recent class-share news blind spot for `BF-B`
+and `BRK-B`; catalyst training excludes those identities instead of treating
+missing history as zero events, leaving 590 catalyst-eligible identities.
 
 ```powershell
 market-predictor-research build-swing-dataset `

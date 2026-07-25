@@ -19,6 +19,7 @@ from market_predictor.canonical.store import (
 )
 from market_predictor.sources.alpaca import AlpacaNewsPage
 from market_predictor.swing.news_history import collect_alpaca_news_history
+from market_predictor.swing.news_history_audit import audit_alpaca_news_history
 from market_predictor.v3.errors import DataReadinessError
 
 
@@ -134,6 +135,16 @@ class SwingNewsHistoryTests(unittest.TestCase):
             self.assertEqual(int(ledger.loc[0, "provider_rows"]), 3)
             self.assertEqual(int(ledger.loc[0, "symbol_mismatch_rows"]), 1)
             self.assertEqual(int(ledger.loc[0, "duplicate_rows"]), 1)
+            audit_report, audit_summary = audit_alpaca_news_history(out_dir)
+            self.assertTrue(audit_summary["passed"])
+            self.assertEqual(audit_summary["event_rows"], 1)
+            self.assertEqual(audit_summary["page_count"], 2)
+            self.assertEqual(
+                audit_summary["coverage_blindspot_security_ids"],
+                [],
+            )
+            self.assertEqual(audit_report.loc[0, "audit_errors"], "")
+            self.assertTrue(audit_report.loc[0, "catalyst_source_complete"])
 
             with self.assertRaisesRegex(DataReadinessError, "immutable"):
                 collect_alpaca_news_history(

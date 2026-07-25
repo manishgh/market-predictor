@@ -101,11 +101,13 @@ No swing price download is required.
 
 ## Phase C: Five-Year Historical News
 
-Implementation status on 2026-07-25: the immutable collector and event-identity
-contract are complete and verified. The actual five-year collection has not
-been finalized yet. Local event files cover at most about two years, omit 146
-PIT tickers, have no source manifests or stable stock identity, and lack
-historical first-observed evidence.
+Implementation status on 2026-07-26: collection and the independent streaming
+audit are complete. The archive contains 564,986 events, 12,663 raw pages,
+2,619 terminal chunks, 612 effective tickers, and 592 financial security
+identities. Raw-page hashes/token chains, event artifacts, request identity,
+publication windows, and 564,986 globally unique event IDs replayed with zero
+errors. Audit peak RSS was 0.320 GiB. Historical availability remains a
+publication-time proxy, so every downstream catalyst artifact is research-only.
 
 Collection rules:
 
@@ -121,6 +123,12 @@ Collection rules:
 - Publish hash-bound per-security chunks, raw pages, a source-attempt ledger,
   status evidence, and the final manifest last.
 - Collect raw events first; run FinBERT separately and sequentially.
+
+Completed-collection exception: Alpaca returned no 2024-2026 news for `BF-B`
+and `BRK-B` under dot, dash, class-A, and class-B provider forms. Treat both
+financial security identities as catalyst-source coverage blind spots. Keep
+them in technical research, but exclude their rows from catalyst training;
+never encode the missing provider history as zero news.
 
 Seeking Alpha, SEC, Reddit, and global events remain separate source families.
 The 10,000-call Seeking Alpha allowance is reserved for current enrichment and

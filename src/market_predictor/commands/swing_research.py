@@ -25,10 +25,73 @@ from market_predictor.swing.inventory import (
     build_swing_research_inventory,
 )
 from market_predictor.swing.market_history_audit import audit_swing_daily_history
+from market_predictor.swing.news_history_audit import audit_alpaca_news_history
 from market_predictor.swing.panel_inputs import build_swing_market_panel_inputs
 
 
 def register_swing_research_commands(app: typer.Typer, console: Console) -> None:
+    @app.command("audit-alpaca-news-history")
+    @serialized_heavy_job("audit-alpaca-news-history")
+    def audit_alpaca_news_history_command(
+        collection_dir: Path = typer.Option(
+            ...,
+            help="Completed immutable Alpaca news-history collection.",
+        ),
+        out: Path = typer.Option(
+            ...,
+            help="New chunk-level audit CSV.",
+        ),
+        summary_out: Path = typer.Option(
+            ...,
+            help="New aggregate audit JSON.",
+        ),
+    ) -> None:
+        """Replay raw-page, event, identity, and manifest integrity sequentially."""
+
+        if out.exists() or summary_out.exists():
+            raise typer.BadParameter(
+                "Alpaca news audit outputs must not already exist"
+            )
+        report, summary = audit_alpaca_news_history(collection_dir)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        summary_out.parent.mkdir(parents=True, exist_ok=True)
+        csv_temporary = out.with_name(f".{out.name}.{uuid4().hex}.tmp")
+        summary_temporary = summary_out.with_name(
+            f".{summary_out.name}.{uuid4().hex}.tmp"
+        )
+        try:
+            report.to_csv(csv_temporary, index=False)
+            summary["report"] = {
+                "path": str(out.resolve()),
+                "rows": len(report),
+                "sha256": file_sha256(csv_temporary),
+            }
+            summary_temporary.write_text(
+                json.dumps(summary, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+            os.replace(csv_temporary, out)
+            os.replace(summary_temporary, summary_out)
+        except Exception:
+            csv_temporary.unlink(missing_ok=True)
+            summary_temporary.unlink(missing_ok=True)
+            raise
+        console.print(
+            {
+                "passed": summary["passed"],
+                "chunks": summary["requested_chunks"],
+                "event_rows": summary["event_rows"],
+                "pages": summary["page_count"],
+                "peak_working_set_gib": summary["memory"][
+                    "peak_working_set_gib"
+                ],
+                "out": str(out),
+                "summary_out": str(summary_out),
+            }
+        )
+        if not summary["passed"]:
+            raise typer.Exit(code=2)
+
     @app.command("build-swing-market-panel-inputs")
     @serialized_heavy_job("build-swing-market-panel-inputs")
     def build_swing_market_panel_inputs_command(

@@ -277,6 +277,11 @@ deduplicated deterministically, and canonical events are keyed by financial
 `security_id` so ticker reuse cannot cross-contaminate model rows. Historical
 availability is always `provider_publication_proxy`; these artifacts are never
 production-ready or a substitute for live first-seen evidence.
+`swing/news_history_audit.py` then replays the frozen request, source ledger,
+every archived page and token transition, every canonical event artifact,
+cross-chunk event-ID uniqueness, stock identity, and half-open publication
+window sequentially. It also emits explicit catalyst-training exclusions for
+long provider coverage gaps; missing source history is never imputed as zero.
 
 `swing/market_history_audit.py` reopens every canonical symbol artifact, verifies
 its hash against the final collection manifest, verifies the membership and

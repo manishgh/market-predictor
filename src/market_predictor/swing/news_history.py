@@ -318,9 +318,21 @@ def collect_alpaca_news_history(
         work_units,
         observed=observed,
     )
+    all_chunks_terminal = (
+        not failures and len(observed) + len(empty) == len(work_units)
+    )
     ledger_path = out_dir / "_source_collections.parquet"
     ledger_audit = CanonicalAuditReport(
-        checks=audit_source_collections(ledger, require_success=False)
+        checks=audit_source_collections(
+            ledger,
+            required_tickers=(
+                (unit.ticker for unit in work_units)
+                if all_chunks_terminal
+                else ()
+            ),
+            required_sources=("alpaca",) if all_chunks_terminal else (),
+            require_success=False,
+        )
     )
     ledger_manifest = write_canonical_artifact(
         ledger,

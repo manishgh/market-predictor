@@ -39,6 +39,7 @@
     "verify-serving-bundle"
   ],
   "research": [
+    "audit-alpaca-news-history",
     "audit-promotion-readiness",
     "audit-swing-alignment",
     "audit-swing-daily-history",
