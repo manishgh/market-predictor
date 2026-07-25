@@ -114,6 +114,13 @@ class SwingModelTests(unittest.TestCase):
             result.metrics["feature_profile"],
             "technical_market",
         )
+        self.assertEqual(
+            result.catalyst_audit.iloc[0]["evidence_status"],
+            "not_applicable",
+        )
+        self.assertTrue(
+            pd.isna(result.catalyst_audit.iloc[0]["catalyst_row_rate"])
+        )
         with self.assertRaises(SchemaMismatchError):
             train_swing_model(
                 dataset,

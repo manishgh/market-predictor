@@ -392,7 +392,7 @@ The immutable candidate manifest and promotion attestation, not the filename or 
 
 | Route / artifact | Manifest state | Validation summary | Operational decision |
 | --- | --- | --- | --- |
-| Swing 5D, `canonical_swing` / `swing.model.v1` | no promoted artifact | C4 code and frozen gates are verified; real-data metrics do not yet exist | Route remains not-ready until a hash-bound candidate passes every C4 gate. |
+| Swing 5D, `canonical_swing` / `swing.model.v1` | five-year technical baselines rejected; no promoted artifact | 607,909 eligible rows across 581 training tickers; logistic/HGB AUC 0.4962/0.5000; both lose after costs and versus SPY | Route remains not-ready. The next candidate must bind causal catalyst evidence and pass every C4 gate. |
 | Pre-C4 volatile swing artifacts | historical manifests only | Earlier reported classification metrics are not comparable to the new target and gates | Production API rejects their type/schema; no grandfathering. |
 | Intraday 60m, `canonical_intraday` / `intraday.model.v1` | no promoted artifact | C5 code and frozen dual-model/economic gates are verified; real-data metrics do not yet exist | No route is registered until one atomic candidate passes every C5 gate. |
 | Intraday 12-bar API default, 2026-07-09 technical ablation | `candidate` | ROC AUC 0.6014; top-decile lift 1.4719 | Research only; fails current 0.65 AUC and 2.0 lift gates. |

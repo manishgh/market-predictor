@@ -26,7 +26,7 @@ Candidate identity comes from an immutable `.manifest.json`. Effective promoted 
 
 | Serving view | Artifact / family | State | Current evidence |
 | --- | --- | --- | --- |
-| Swing 5D | Canonical `swing.model.v1` | Implementation complete; no promoted artifact | Point-in-time dataset, exact five-session labels, purged walk-forward, unseen-ticker holdout, calibration, economics, drawdown, catalyst, alignment, provenance, and 4 GiB gates are implemented. Real-data training and promotion have not passed yet. |
+| Swing 5D | Canonical `swing.model.v1` | Five-year technical baselines completed and rejected; no promoted artifact | The 2021-07-09 through 2026-07-08 dataset has 607,909 eligible rows and 581 training tickers. Logistic/HGB walk-forward AUC is 0.4962/0.5000 and conservative return is -0.2343%/-0.0303%; neither has predictive or economic edge. Catalyst-full training remains blocked on causal five-year news evidence. |
 | Legacy swing 1D/5D volatile models | Pre-C4 artifacts | Deprecated and not serveable | Their feature/target schemas do not satisfy the canonical C4 contract, regardless of an older manifest status. |
 | Intraday 60m | Canonical `intraday.model.v1` | Implementation complete; no promoted artifact | Completed 5-minute decisions, exact next-available 1-minute entry/path labels, separate opportunity/downside estimators, purged walk-forward, unseen-ticker holdout, calibration, economics, drawdown, catalyst-overlay, alignment, provenance, and 4 GiB gates are implemented. Real-data training and promotion have not passed yet. |
 | Legacy intraday 12 bars | 2026-07-09 technical ablation | Candidate; not serveable | ROC AUC 0.6014 and lift 1.4719. It predates the canonical C5 contract and fails its historical gates. |
@@ -649,6 +649,11 @@ Memory-heavy commands share one non-queueing workspace lease under
 `MARKET_PREDICTOR_RUNTIME_DIR` (default `data/runtime`). A competing heavy
 command exits with code 75 before loading data. Application guards stop at
 3.25 GiB RSS under the 4 GiB process/container budget.
+
+The completed baselines are documented in the
+[logistic model card](docs/model_cards/swing_technical_5d_logistic_20260725.md)
+and [HGB model card](docs/model_cards/swing_technical_5d_hgb_20260725.md).
+Both are immutable comparison candidates and are rejected for use.
 
 ```powershell
 market-predictor-research build-swing-dataset `

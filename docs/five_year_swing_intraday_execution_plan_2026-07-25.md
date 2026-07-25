@@ -78,6 +78,14 @@ but cannot produce a current candidate result.
 
 ## Phase B: Five-Year Swing Baselines
 
+Status on 2026-07-25: the technical dataset and both E0 baselines completed.
+The dataset contains 630,978 rows, 607,909 exact-path eligible rows, 581
+training tickers, and 99.9941% exact outcome-path coverage. Peak dataset-build
+RSS was 3.115 GiB. Logistic and histogram-gradient walk-forward AUC were 0.4962
+and 0.5000 respectively, with negative conservative return and SPY excess.
+Both are rejected. Bars alone did not establish edge; proceed to causal
+catalyst evidence without promoting either baseline.
+
 1. Slice the existing canonical PIT daily panel to the frozen five-year window.
 2. Build research decisions and exact five-session next-open labels using
    `security_id`, SPY, QQQ, and sector ETF paths.

@@ -349,7 +349,29 @@ def regime_audit(
     return pd.DataFrame([summary, *details])
 
 
-def catalyst_audit(predictions: pd.DataFrame) -> pd.DataFrame:
+def catalyst_audit(
+    predictions: pd.DataFrame,
+    *,
+    applicable: bool = True,
+) -> pd.DataFrame:
+    required = {
+        "event_count_3d",
+        "low_relevance_event_fraction_3d",
+    }
+    if not applicable or not required.issubset(predictions.columns):
+        return pd.DataFrame(
+            [
+                {
+                    "has_catalyst_features": False,
+                    "evidence_status": "not_applicable",
+                    "rows": len(predictions),
+                    "rows_with_catalyst": 0,
+                    "catalyst_row_rate": np.nan,
+                    "low_relevance_event_rate": np.nan,
+                    "alignment_error_total": 0,
+                }
+            ]
+        )
     event_count = pd.to_numeric(predictions.get("event_count_3d"), errors="coerce").fillna(0.0)
     low_fraction = pd.to_numeric(
         predictions.get("low_relevance_event_fraction_3d"),
@@ -360,6 +382,7 @@ def catalyst_audit(predictions: pd.DataFrame) -> pd.DataFrame:
         [
             {
                 "has_catalyst_features": "event_count_3d" in predictions.columns,
+                "evidence_status": "observed",
                 "rows": len(predictions),
                 "rows_with_catalyst": int(event_count.gt(0).sum()),
                 "catalyst_row_rate": float(event_count.gt(0).mean()) if len(predictions) else 0.0,

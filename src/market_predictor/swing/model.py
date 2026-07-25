@@ -312,7 +312,10 @@ def train_swing_model(
         min_regime_trades=config.min_regime_trades,
         policy=DEFAULT_EXECUTION_POLICY,
     )
-    catalyst = catalyst_audit(full_cross_section_evidence)
+    catalyst = catalyst_audit(
+        full_cross_section_evidence,
+        applicable=config.feature_profile == "catalyst_full",
+    )
     alignment = _alignment_audit(dataset)
     for evidence in (oof, holdout_evidence, profitability, regime, catalyst, alignment):
         evidence["model_run_id"] = model_run_id
