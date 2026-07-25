@@ -695,6 +695,12 @@ Each decision is made only after a completed 5-minute bar. Entry is the open of 
 
 The candidate contains two estimators and is promoted atomically: opportunity estimates target-before-stop, while downside estimates stop-before-target. Catalyst/news features are audited and returned as a confirmation/ranking overlay, but are deliberately excluded from both estimators until fresh ablation evidence proves incremental value. No real C5 candidate has been promoted, so no canonical intraday route belongs in `configs/default.toml` yet.
 
+Current Finviz screener fields are ranking overlays only. A current candidate
+score, same-session change/dollar volume, or theme classification is never an
+estimator feature and cannot be joined by ticker across historical training
+rows. Historical training uses only point-in-time market and catalyst evidence;
+Finviz current snapshots narrow and rank the live inference workload.
+
 ## Trusted Local Releases
 
 Only an attested model can enter the local release repository. Publication copies the model, immutable candidate manifest, promotion attestation, evidence manifest, and every evidence file into a versioned content-addressed directory. Every hash and the attestation are reverified before one locked active pointer is replaced.

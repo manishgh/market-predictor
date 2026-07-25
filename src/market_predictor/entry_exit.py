@@ -18,7 +18,10 @@ from sklearn.preprocessing import StandardScaler
 
 from market_predictor.features import add_price_features
 from market_predictor.intraday_catalysts import INTRADAY_CATALYST_FEATURES
-from market_predictor.intraday_enrichment import add_intraday_technical_features
+from market_predictor.intraday_enrichment import (
+    CURRENT_CANDIDATE_OVERLAY_COLUMNS,
+    add_intraday_technical_features,
+)
 from market_predictor.market_regime import MARKET_REGIME_FEATURES, add_market_regime_labels
 from market_predictor.model import DEFAULT_FEATURES, DateGroupedPurgedWalkForwardSplit
 from market_predictor.registry import verify_model_artifact, write_model_manifest
@@ -70,15 +73,6 @@ ENTRY_EXIT_EXTRA_FEATURES = [
     "close_gt_ema20",
     "macd_improving",
     "setup_candidate_score",
-    "intraday_candidate_score",
-    "finviz_abs_change_pct",
-    "finviz_dollar_volume_m",
-    "theme_semis_ai_hardware",
-    "theme_software_ai_data",
-    "theme_biotech_healthcare",
-    "theme_space_aerospace_mobility",
-    "theme_crypto_fintech_high_beta",
-    "theme_consumer_high_beta",
     "qqq_return_1bar",
     "qqq_return_3bar",
     "qqq_return_6bar",
@@ -473,6 +467,8 @@ def score_entry_exit_frame(dataset: pd.DataFrame, model_path: Path) -> pd.DataFr
 
 
 def _feature_allowed_for_set(feature: str, feature_set: str) -> bool:
+    if feature in CURRENT_CANDIDATE_OVERLAY_COLUMNS:
+        return False
     is_catalyst = _is_catalyst_feature(feature)
     if feature_set == "all":
         return True

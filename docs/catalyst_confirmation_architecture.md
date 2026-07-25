@@ -424,6 +424,9 @@ Serving rules:
 - Readiness checks both snapshot generation time and the latest feature timestamp; republishing stale rows does not make them fresh.
 - The complete model-bound prediction policy controls finite-score eligibility, deterministic top-k selection, intraday downside ceiling, and per-session cap. Serving applies it to the complete published decision cross-section before filtering the response to requested tickers. A selected row must be eligible and have `valid` readiness.
 - Catalyst/news remains a confirmation and explanation overlay. It does not modify estimator probabilities, decision scores, or selected membership unless a future predeclared ablation and a new policy version prove incremental value.
+- Finviz Elite current-candidate score, current change/dollar volume, and theme
+  fields are workload-ranking overlays only. They are prohibited estimator
+  features and cannot be joined by ticker across historical training rows.
 - A new intraday hypothesis must first pass both development economics scopes; only then may matured observations after 2026-07-08 be used as an untouched shadow interval.
 - A live snapshot must originate from the canonical label-free inference builder for its mode; arbitrary Parquet and training labels are not accepted.
 - The R4 local release is one immutable content-addressed unit containing the model, candidate manifest, promotion attestation, evidence manifest, and all evidence files. One locked local pointer moves only after every asset and the attestation verify.

@@ -153,6 +153,12 @@ market-predictor-research promote-intraday-model --model models/intraday/candida
 
 The canonical intraday horizon is `60m`. Opportunity means target-before-stop; downside means stop-before-target. Catalyst/news is an external confirmation and ranking overlay and is not included in either estimator feature list. No real canonical intraday artifact is promoted yet.
 
+Finviz current-candidate metadata remains outside the estimator contract.
+`CURRENT_CANDIDATE_OVERLAY_COLUMNS` identifies current score, change, dollar
+volume, and theme fields; `entry_exit.py` rejects them for every feature set.
+They may rank the current inference workload but cannot become historical
+features through a ticker-only join.
+
 Historical provider backfills normally know publication time but not when this system first observed the item. Such events are publication-time proxies and are research-only. They must not be relabeled as observed history. The same rule applies to SEC and Seeking Alpha current snapshots: only versioned facts with explicit availability can enter historical production features.
 
 Trusted promotion and local release:

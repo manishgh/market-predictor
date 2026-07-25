@@ -8,6 +8,18 @@ import pandas as pd
 from market_predictor.intraday_catalysts import INTRADAY_CATALYST_FEATURES, add_intraday_catalyst_features
 from market_predictor.market_regime import MARKET_REGIME_FEATURES, add_market_regime_labels
 
+CURRENT_CANDIDATE_OVERLAY_COLUMNS = (
+    "intraday_candidate_score",
+    "finviz_abs_change_pct",
+    "finviz_dollar_volume_m",
+    "theme_semis_ai_hardware",
+    "theme_software_ai_data",
+    "theme_biotech_healthcare",
+    "theme_space_aerospace_mobility",
+    "theme_crypto_fintech_high_beta",
+    "theme_consumer_high_beta",
+)
+
 INTRADAY_ENRICHED_FEATURES = [
     "session_minutes_from_open",
     "session_progress",
@@ -39,15 +51,6 @@ INTRADAY_ENRICHED_FEATURES = [
     "close_gt_ema20",
     "macd_improving",
     "setup_candidate_score",
-    "intraday_candidate_score",
-    "finviz_abs_change_pct",
-    "finviz_dollar_volume_m",
-    "theme_semis_ai_hardware",
-    "theme_software_ai_data",
-    "theme_biotech_healthcare",
-    "theme_space_aerospace_mobility",
-    "theme_crypto_fintech_high_beta",
-    "theme_consumer_high_beta",
     "qqq_return_1bar",
     "qqq_return_3bar",
     "qqq_return_6bar",

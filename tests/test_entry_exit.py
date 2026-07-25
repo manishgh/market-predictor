@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 import pandas as pd
 
 from market_predictor.entry_exit import (
+    ENTRY_EXIT_FEATURES,
     EntryExitLabelConfig,
     _drop_features_without_fold_training_coverage,
     _feature_allowed_for_set,
@@ -230,6 +231,22 @@ class EntryExitDatasetTests(unittest.TestCase):
         self.assertFalse(_feature_allowed_for_set("return_1d", "catalyst"))
         self.assertTrue(_feature_allowed_for_set("return_1d", "technical"))
         self.assertFalse(_feature_allowed_for_set("market_context_news_count_1d", "technical"))
+
+    def test_current_finviz_candidate_fields_are_never_estimator_features(self) -> None:
+        current_only = {
+            "intraday_candidate_score",
+            "finviz_abs_change_pct",
+            "finviz_dollar_volume_m",
+            "theme_semis_ai_hardware",
+            "theme_software_ai_data",
+            "theme_biotech_healthcare",
+            "theme_space_aerospace_mobility",
+            "theme_crypto_fintech_high_beta",
+            "theme_consumer_high_beta",
+        }
+        self.assertTrue(current_only.isdisjoint(ENTRY_EXIT_FEATURES))
+        for feature in current_only:
+            self.assertFalse(_feature_allowed_for_set(feature, "all"))
 
     def test_sparse_features_are_removed_when_missing_in_training_fold(self) -> None:
         frame = pd.DataFrame(
