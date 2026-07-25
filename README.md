@@ -26,7 +26,7 @@ Candidate identity comes from an immutable `.manifest.json`. Effective promoted 
 
 | Serving view | Artifact / family | State | Current evidence |
 | --- | --- | --- | --- |
-| Swing 5D | Canonical `swing.model.v1` | Five-year technical baselines completed and rejected; no promoted artifact | The 2021-07-09 through 2026-07-08 dataset has 607,909 eligible rows and 581 training tickers. Logistic/HGB walk-forward AUC is 0.4962/0.5000 and conservative return is -0.2343%/-0.0303%; neither has predictive or economic edge. Catalyst-full training remains blocked on causal five-year news evidence. |
+| Swing 5D | Canonical `swing.model.v1` | Five-year technical baselines completed and rejected; no promoted artifact | The 2021-07-09 through 2026-07-08 dataset has 607,909 eligible rows and 581 training tickers. Logistic/HGB walk-forward AUC is 0.4962/0.5000 and conservative return is -0.2343%/-0.0303%; neither has predictive or economic edge. The five-year Alpaca archive is audited; catalyst-full training remains blocked until sentiment artifacts are completed, audited, and joined causally. |
 | Legacy swing 1D/5D volatile models | Pre-C4 artifacts | Deprecated and not serveable | Their feature/target schemas do not satisfy the canonical C4 contract, regardless of an older manifest status. |
 | Intraday 60m | Canonical `intraday.model.v1` | Implementation complete; no promoted artifact | Completed 5-minute decisions, exact next-available 1-minute entry/path labels, separate opportunity/downside estimators, purged walk-forward, unseen-ticker holdout, calibration, economics, drawdown, catalyst-overlay, alignment, provenance, and 4 GiB gates are implemented. Real-data training and promotion have not passed yet. |
 | Legacy intraday 12 bars | 2026-07-09 technical ablation | Candidate; not serveable | ROC AUC 0.6014 and lift 1.4719. It predates the canonical C5 contract and fails its historical gates. |
@@ -676,6 +676,17 @@ market-predictor-research audit-alpaca-news-history `
   --collection-dir data/raw/alpaca_news_20210709_20260708_v1 `
   --out data/reports/alpaca_news_20210709_20260708_v1_audit.csv `
   --summary-out data/reports/alpaca_news_20210709_20260708_v1_audit.json
+
+market-predictor-research score-alpaca-news-history `
+  --collection-dir data/raw/alpaca_news_20210709_20260708_v1 `
+  --collection-audit data/reports/alpaca_news_20210709_20260708_v1_audit.json `
+  --universe data/universe/sp500_point_in_time_20190709_20260708_v3.parquet `
+  --out-dir data/features/swing/alpaca_finbert_20210709_20260708_v1 `
+  --text-mode title_summary `
+  --max-length 128 `
+  --batch-size 32 `
+  --torch-threads 4 `
+  --fixed-latency-minutes 5
 ```
 
 The completed archive contains 564,986 events across 612 effective tickers and
@@ -684,6 +695,13 @@ raw pages and every event artifact with zero duplicate event IDs at 0.320 GiB
 peak RSS. Alpaca has a confirmed recent class-share news blind spot for `BF-B`
 and `BRK-B`; catalyst training excludes those identities instead of treating
 missing history as zero events, leaving 590 catalyst-eligible identities.
+The sentiment command reads one audited chunk at a time, uses one local
+FinBERT process, and resumes only artifacts whose request and source hashes
+still match. It records actual inference time separately from the hypothetical
+publication-plus-latency research timestamp; neither field converts the
+historical archive into production-observed evidence. Provider tagging is not
+treated as proof of full relevance: deterministic issuer, ticker, industry,
+materiality, and generic-roundup evidence is retained for later ablation.
 
 ```powershell
 market-predictor-research build-swing-dataset `

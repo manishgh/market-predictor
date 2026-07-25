@@ -102,7 +102,9 @@ No swing price download is required.
 ## Phase C: Five-Year Historical News
 
 Implementation status on 2026-07-26: collection and the independent streaming
-audit are complete. The archive contains 564,986 events, 12,663 raw pages,
+audit are complete. The partitioned sentiment/relevance scorer and its
+resumable lineage contract are implemented and verified; the full CPU
+inference run is not yet complete. The archive contains 564,986 events, 12,663 raw pages,
 2,619 terminal chunks, 612 effective tickers, and 592 financial security
 identities. Raw-page hashes/token chains, event artifacts, request identity,
 publication windows, and 564,986 globally unique event IDs replayed with zero
@@ -123,6 +125,13 @@ Collection rules:
 - Publish hash-bound per-security chunks, raw pages, a source-attempt ledger,
   status evidence, and the final manifest last.
 - Collect raw events first; run FinBERT separately and sequentially.
+- Score one canonical event chunk at a time. Bind each output to the collection
+  request, audit, source artifact, point-in-time universe, model revision, text
+  mode, token limit, and relevance policy.
+- Keep actual inference time distinct from the hypothetical
+  publication-plus-fixed-latency feature time used for controlled historical
+  research. Both remain research-only.
+- Resume only hash-matching completed chunks; never rescore or overwrite them.
 
 Completed-collection exception: Alpaca returned no 2024-2026 news for `BF-B`
 and `BRK-B` under dot, dash, class-A, and class-B provider forms. Treat both

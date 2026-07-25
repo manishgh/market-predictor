@@ -19,7 +19,9 @@ from market_predictor.canonical.store import (
     write_canonical_artifact,
 )
 from market_predictor.commands.configuration import load_typed_config
+from market_predictor.config import get_settings
 from market_predictor.heavy_jobs import serialized_heavy_job
+from market_predictor.sentiment import FinbertScorer
 from market_predictor.swing.inventory import (
     SwingResearchInventoryConfig,
     build_swing_research_inventory,
@@ -27,9 +29,96 @@ from market_predictor.swing.inventory import (
 from market_predictor.swing.market_history_audit import audit_swing_daily_history
 from market_predictor.swing.news_history_audit import audit_alpaca_news_history
 from market_predictor.swing.panel_inputs import build_swing_market_panel_inputs
+from market_predictor.swing.sentiment_history import score_alpaca_news_history
 
 
 def register_swing_research_commands(app: typer.Typer, console: Console) -> None:
+    @app.command("score-alpaca-news-history")
+    @serialized_heavy_job("score-alpaca-news-history")
+    def score_alpaca_news_history_command(
+        collection_dir: Path = typer.Option(
+            ...,
+            help="Completed audited Alpaca news collection.",
+        ),
+        collection_audit: Path = typer.Option(
+            ...,
+            help="Passed Alpaca news audit summary JSON.",
+        ),
+        universe: Path = typer.Option(
+            ...,
+            help="Point-in-time universe with company/sector/industry metadata.",
+        ),
+        out_dir: Path = typer.Option(
+            ...,
+            help="Resumable research-only sentiment artifact directory.",
+        ),
+        text_mode: str = typer.Option(
+            "title_summary",
+            help="FinBERT input mode.",
+        ),
+        max_length: int = typer.Option(128, min=1, max=512),
+        batch_size: int = typer.Option(32, min=1, max=256),
+        torch_threads: int = typer.Option(4, min=1, max=32),
+        fixed_latency_minutes: int = typer.Option(5, min=0, max=60),
+    ) -> None:
+        """Score audited historical events sequentially with explicit proxy timing."""
+
+        settings = get_settings()
+        scorer = FinbertScorer(
+            settings.finbert_model,
+            torch_num_threads=torch_threads,
+            max_length=max_length,
+        )
+
+        def report_progress(payload: dict[str, object]) -> None:
+            index_value = payload.get("index")
+            total_value = payload.get("total")
+            if not isinstance(index_value, int) or not isinstance(
+                total_value,
+                int,
+            ):
+                raise TypeError("sentiment progress requires integer counters")
+            index = index_value
+            total = total_value
+            if (
+                index == 1
+                or index == total
+                or index % 25 == 0
+                or payload["status"] == "failed"
+            ):
+                console.print(payload)
+
+        result = score_alpaca_news_history(
+            collection_dir=collection_dir,
+            collection_audit_path=collection_audit,
+            universe_path=universe,
+            out_dir=out_dir,
+            scorer=scorer,
+            model_name=settings.finbert_model,
+            model_revision=scorer.model_revision,
+            execution_device=scorer.device,
+            text_mode=text_mode,
+            max_length=max_length,
+            batch_size=batch_size,
+            fixed_latency_minutes=fixed_latency_minutes,
+            progress=report_progress,
+        )
+        console.print(
+            {
+                "status": result["status"],
+                "requested_chunks": result["requested_chunks"],
+                "observed_chunks": result["observed_chunks"],
+                "failed_chunks": result["failed_chunks"],
+                "excluded_security_ids": result["excluded_security_ids"],
+                "total_rows": result["total_rows"],
+                "peak_working_set_gib": result["memory"][
+                    "peak_working_set_gib"
+                ],
+            }
+        )
+        if result["status"] != "complete":
+            raise typer.Exit(code=2)
+
     @app.command("audit-alpaca-news-history")
     @serialized_heavy_job("audit-alpaca-news-history")
     def audit_alpaca_news_history_command(

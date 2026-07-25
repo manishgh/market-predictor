@@ -76,6 +76,7 @@
     "promote-intraday-model",
     "promote-swing-model",
     "rank-sector-themes",
+    "score-alpaca-news-history",
     "score-entry-exit-latest",
     "score-flashpoints",
     "score-swing-events",

@@ -283,6 +283,21 @@ cross-chunk event-ID uniqueness, stock identity, and half-open publication
 window sequentially. It also emits explicit catalyst-training exclusions for
 long provider coverage gaps; missing source history is never imputed as zero.
 
+`swing/event_relevance.py` applies a versioned deterministic research policy to
+provider-tagged events. Direct ticker/company evidence, issuer industry themes,
+material terms, and generic-roundup penalties remain separate from FinBERT
+sentiment. Single-letter tickers require explicit market/ticker notation so
+ordinary words do not become false issuer matches.
+
+`swing/sentiment_history.py` consumes only a completed collection and passed
+streaming audit. It excludes audited provider blind spots, reads one event
+chunk at a time, scores immutable title-plus-summary inputs with one local
+FinBERT instance, and publishes separate research-only sentiment artifacts.
+The request binds collection, audit, source, universe, model revision, input,
+latency, and relevance identities. Completed chunks resume only after canonical
+hash validation. Actual inference time is stored separately from the simulated
+publication-plus-fixed-latency research availability time.
+
 `swing/market_history_audit.py` reopens every canonical symbol artifact, verifies
 its hash against the final collection manifest, verifies the membership and
 source-collection identities, and uses SPY SIP dates as the observed session
@@ -333,7 +348,13 @@ ticker text is unchanged.
 
 `v3/catalysts.py` owns the O1 point-in-time overlay and paired ablation. It filters decisions to an explicit source interval, joins only events available by each decision timestamp, validates ticker-file and sentiment coverage, detects future matches, and compares R1/O1 on identical groups with a session-blocked paired bootstrap. Provider publication-time backfill is marked research-only. Optional global context must cover both declared interval boundaries or readiness fails.
 
-`score-swing-events` keeps raw provider text unchanged and writes sentiment to a separate per-ticker directory. For catalyst research, `--text-mode title_summary --max-length 128` bounds inference to the immutable headline and provider summary. Every output row carries the FinBERT model, input mode, and token limit; an existing file is resumed only when all provenance fields match. Model inference loads the previously downloaded local cache and does not make hidden network requests.
+`score-alpaca-news-history` is the canonical five-year archive scorer. It keeps
+raw provider text unchanged and writes sentiment to separate per-chunk
+artifacts. `--text-mode title_summary --max-length 128` bounds inference to the
+immutable headline and provider summary. Every output row carries the FinBERT
+model/revision, input hash, mode, token limit, relevance policy, and research
+availability policy. Model inference loads the previously downloaded local
+cache and does not make hidden network requests.
 
 `audit-v3-failure-attribution` is a development-only diagnostic for a rejected ranker. It loads only registered, hash-verified monthly shards; validates exact OOF-to-label identities; rejects shadow timestamps; and writes fixed top-k horizon, score-decile, and stratum evidence. Its session bootstrap is vectorized over session sums/counts, preserving block-resampling semantics without repeated DataFrame concatenation. The report is explicitly non-promotional and cannot justify filters on the inspected strata.
 

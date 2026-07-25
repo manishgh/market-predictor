@@ -60,6 +60,10 @@ class FinbertScorer:
                 f"FinBERT model {model_name!r} is not available in the local cache; "
                 "run `market-predictor download-model` before offline inference."
             ) from exc
+        self.model_revision = str(
+            getattr(model.config, "_commit_hash", "") or "unversioned-local-cache"
+        )
+        self.device = "cuda:0" if device == 0 else "cpu"
         self.classifier: Any = transformers.pipeline(
             "text-classification",
             model=model,
