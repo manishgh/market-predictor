@@ -59,6 +59,7 @@ CANONICAL_BAR_COLUMNS = (
 CANONICAL_EVENT_COLUMNS = (
     "event_id",
     "ticker",
+    "security_id",
     "source_family",
     "source",
     "published_at_utc",
@@ -242,6 +243,11 @@ def canonicalize_events(
     clean, _ = sanitize_events_frame(frame)
     if clean.empty:
         return pd.DataFrame(columns=CANONICAL_EVENT_COLUMNS)
+    if "security_id" not in clean.columns:
+        raise SchemaMismatchError("events require a point-in-time security_id")
+    security_ids = clean["security_id"].fillna("").astype(str).str.strip()
+    if bool(security_ids.eq("").any()):
+        raise DataReadinessError("events contain empty point-in-time security_id values")
 
     raw_records = clean["raw"].map(_raw_record)
     raw_created = pd.Series([record.get("created_at") for record in raw_records], index=clean.index)
@@ -271,7 +277,12 @@ def canonicalize_events(
     else:
         available = content_time
 
-    sentiment = pd.to_numeric(clean.get("sentiment_numeric"), errors="coerce")
+    sentiment_input = (
+        clean["sentiment_numeric"]
+        if "sentiment_numeric" in clean.columns
+        else pd.Series(float("nan"), index=clean.index, dtype=float)
+    )
+    sentiment = pd.to_numeric(sentiment_input, errors="coerce")
     has_sentiment = sentiment.notna()
     score_source: pd.Series | object | None = None
     if "sentiment_scored_at_utc" in clean.columns:
@@ -292,6 +303,7 @@ def canonicalize_events(
     event_ids = [
         _event_id(
             ticker=str(row.ticker),
+            security_id=str(row.security_id),
             source=str(row.source),
             published=pd.Timestamp(row.published),
             title=str(row.title),
@@ -302,6 +314,7 @@ def canonicalize_events(
             pd.DataFrame(
                 {
                     "ticker": clean["ticker"],
+                    "security_id": security_ids,
                     "source": source,
                     "published": published,
                     "title": clean["title"],
@@ -316,6 +329,7 @@ def canonicalize_events(
         {
             "event_id": event_ids,
             "ticker": clean["ticker"].map(normalized_ticker),
+            "security_id": security_ids,
             "source_family": source.map(source_family_for_source),
             "source": source,
             "published_at_utc": published,
@@ -329,7 +343,12 @@ def canonicalize_events(
             "summary": clean["summary"].fillna("").astype(str),
             "text": clean["text"].fillna("").astype(str),
             "sentiment_numeric": sentiment.clip(-1, 1),
-            "relevance": pd.to_numeric(clean.get("relevance"), errors="coerce"),
+            "relevance": pd.to_numeric(
+                clean["relevance"]
+                if "relevance" in clean.columns
+                else pd.Series(float("nan"), index=clean.index, dtype=float),
+                errors="coerce",
+            ),
             "availability_policy": availability_policy,
             "raw_sha256": raw_sha,
             "schema_version": CANONICAL_SCHEMA_VERSION,
@@ -496,6 +515,7 @@ def _provider_event_id(record: dict[str, Any]) -> str:
 def _event_id(
     *,
     ticker: str,
+    security_id: str,
     source: str,
     published: pd.Timestamp,
     title: str,
@@ -503,5 +523,12 @@ def _event_id(
     provider_id: str,
 ) -> str:
     identity = provider_id or "|".join((published.isoformat(), title.strip(), url.strip()))
-    payload = "|".join((ticker.strip().upper(), source.strip().lower(), identity))
+    payload = "|".join(
+        (
+            security_id.strip(),
+            ticker.strip().upper(),
+            source.strip().lower(),
+            identity,
+        )
+    )
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()

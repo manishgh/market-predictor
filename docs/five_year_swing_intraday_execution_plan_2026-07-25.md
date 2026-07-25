@@ -101,20 +101,25 @@ No swing price download is required.
 
 ## Phase C: Five-Year Historical News
 
-A new immutable Alpaca collector is required because local event files cover at
-most about two years, omit 146 PIT tickers, have no source manifests or
-`security_id`, and lack historical first-observed evidence.
+Implementation status on 2026-07-25: the immutable collector and event-identity
+contract are complete and verified. The actual five-year collection has not
+been finalized yet. Local event files cover at most about two years, omit 146
+PIT tickers, have no source manifests or stable stock identity, and lack
+historical first-observed evidence.
 
 Collection rules:
 
-- One ticker/source attempt is isolated and resumable.
+- Each point-in-time security/date chunk is isolated and resumable by page.
 - Freeze 2021-07-09 through 2026-07-08.
 - Preserve provider `created_at` as publication and `updated_at` separately.
 - Record collection/ingestion time honestly.
 - Historical backfill uses `provider_publication_proxy` and is research-only.
-- Map each event to the effective `security_id`; reject ticker-reuse ambiguity.
-- Deduplicate by provider ID and content identity.
-- Publish per-ticker artifacts plus a source-attempt ledger and final manifest.
+- Map each event to the effective financial `security_id`; reject ticker-reuse
+  ambiguity and provider rows not tagged to the requested symbol.
+- Deduplicate revisions by security and provider ID, with content identity as
+  fallback.
+- Publish hash-bound per-security chunks, raw pages, a source-attempt ledger,
+  status evidence, and the final manifest last.
 - Collect raw events first; run FinBERT separately and sequentially.
 
 Seeking Alpha, SEC, Reddit, and global events remain separate source families.

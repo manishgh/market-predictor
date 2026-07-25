@@ -436,6 +436,7 @@ def _inputs() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     event = CanonicalEvent(
         event_id="a" * 64,
         ticker="MARKET",
+        security_id="market:global",
         source_family="alpaca",
         source="alpaca:benzinga",
         published_at_utc=published,

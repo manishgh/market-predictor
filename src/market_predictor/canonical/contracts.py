@@ -79,6 +79,7 @@ class CanonicalBar(CanonicalContract):
 class CanonicalEvent(CanonicalContract):
     event_id: str = Field(min_length=16)
     ticker: str
+    security_id: str = Field(min_length=1)
     source_family: str = Field(min_length=1)
     source: str = Field(min_length=1)
     published_at_utc: datetime
@@ -118,6 +119,11 @@ class CanonicalEvent(CanonicalContract):
     @classmethod
     def normalize_source(cls, value: str) -> str:
         return value.strip().lower()
+
+    @field_validator("security_id")
+    @classmethod
+    def normalize_security_id(cls, value: str) -> str:
+        return value.strip()
 
     @model_validator(mode="after")
     def validate_availability(self) -> Self:

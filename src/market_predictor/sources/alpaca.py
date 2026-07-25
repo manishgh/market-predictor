@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from typing import Any
 
@@ -8,6 +9,13 @@ import pandas as pd
 from market_predictor.config import Settings
 from market_predictor.schemas import NewsEvent
 from market_predictor.sources.http import HttpClient
+
+
+@dataclass(frozen=True, slots=True)
+class AlpacaNewsPage:
+    request_page_token: str | None
+    next_page_token: str | None
+    news: tuple[dict[str, Any], ...]
 
 
 class AlpacaSource:
@@ -168,20 +176,23 @@ class AlpacaSource:
         limit: int = 50,
     ) -> list[NewsEvent]:
         end = end or datetime.now(UTC)
-        params: dict[str, Any] = {
-            "symbols": ticker.upper(),
-            "start": start.isoformat(),
-            "end": end.isoformat(),
-            "sort": "asc",
-            "limit": min(limit, 50),
-            "include_content": str(include_content).lower(),
-        }
-
         events: list[NewsEvent] = []
+        token: str | None = None
+        seen_tokens: set[str] = set()
         while True:
-            payload = self.client.get_json(self.news_url, params=params, headers=self.headers)
-            for item in payload.get("news", []):
-                timestamp = pd.to_datetime(item.get("updated_at") or item.get("created_at"), utc=True)
+            page = self.fetch_news_page(
+                ticker,
+                start,
+                end,
+                page_token=token,
+                include_content=include_content,
+                limit=limit,
+            )
+            for item in page.news:
+                timestamp = pd.to_datetime(
+                    item.get("created_at") or item.get("updated_at"),
+                    utc=True,
+                )
                 events.append(
                     NewsEvent(
                         ticker=ticker.upper(),
@@ -194,11 +205,63 @@ class AlpacaSource:
                         raw=item,
                     )
                 )
-            token = payload.get("next_page_token")
+            token = page.next_page_token
             if not token:
                 break
-            params["page_token"] = token
+            if token in seen_tokens:
+                raise RuntimeError("Alpaca news pagination repeated a page token")
+            seen_tokens.add(token)
         return events
+
+    def fetch_news_page(
+        self,
+        ticker: str,
+        start: datetime,
+        end: datetime,
+        *,
+        page_token: str | None = None,
+        include_content: bool = True,
+        limit: int = 50,
+    ) -> AlpacaNewsPage:
+        if start.tzinfo is None or end.tzinfo is None:
+            raise ValueError("Alpaca news bounds must be timezone-aware")
+        if start >= end:
+            raise ValueError("Alpaca news start must precede end")
+        if limit < 1 or limit > 50:
+            raise ValueError("Alpaca news page limit must be between 1 and 50")
+        params: dict[str, Any] = {
+            "symbols": ticker.upper(),
+            "start": start.isoformat(),
+            "end": end.isoformat(),
+            "sort": "asc",
+            "limit": limit,
+            "include_content": str(include_content).lower(),
+        }
+        if page_token:
+            params["page_token"] = page_token
+        payload = self.client.get_json(
+            self.news_url,
+            params=params,
+            headers=self.headers,
+        )
+        if not isinstance(payload, dict):
+            raise RuntimeError("Alpaca news response must be an object")
+        raw_news = payload.get("news", [])
+        if not isinstance(raw_news, list) or any(
+            not isinstance(item, dict) for item in raw_news
+        ):
+            raise RuntimeError("Alpaca news response has invalid news rows")
+        next_token_value = payload.get("next_page_token")
+        next_token = (
+            str(next_token_value).strip()
+            if next_token_value is not None and str(next_token_value).strip()
+            else None
+        )
+        return AlpacaNewsPage(
+            request_page_token=page_token,
+            next_page_token=next_token,
+            news=tuple({str(key): value for key, value in item.items()} for item in raw_news),
+        )
 
     def fetch_daily_bars(self, ticker: str, start: datetime, end: datetime | None = None) -> pd.DataFrame:
         end = end or datetime.now(UTC)

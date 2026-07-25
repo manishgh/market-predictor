@@ -147,9 +147,10 @@ def aggregate_event_features(
 ) -> pd.DataFrame:
     """Join event counts and sentiment using feature availability, not publication time."""
 
-    decision_required = {"ticker", "decision_time_utc"}
+    decision_required = {"ticker", "security_id", "decision_time_utc"}
     event_required = {
         "ticker",
+        "security_id",
         "source_family",
         "feature_available_at_utc",
         "availability_policy",
@@ -163,11 +164,13 @@ def aggregate_event_features(
         raise DataReadinessError("production event features reject provider publication proxy history")
     output = decisions.copy()
     output["ticker"] = output["ticker"].astype(str).str.upper().str.strip()
+    output["security_id"] = output["security_id"].astype(str).str.strip()
     output["decision_time_utc"] = _utc_series(output["decision_time_utc"])
     if bool(output["decision_time_utc"].isna().any()):
         raise DataReadinessError("decision rows contain invalid or timezone-naive timestamps")
     clean = events.copy()
     clean["ticker"] = clean["ticker"].astype(str).str.upper().str.strip()
+    clean["security_id"] = clean["security_id"].astype(str).str.strip()
     clean["feature_available_at_utc"] = _utc_series(clean["feature_available_at_utc"])
     if bool(clean["feature_available_at_utc"].isna().any()):
         raise DataReadinessError("events contain invalid feature availability timestamps")

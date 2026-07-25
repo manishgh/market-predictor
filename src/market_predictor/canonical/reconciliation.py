@@ -22,11 +22,11 @@ DEFAULT_EVENT_WINDOWS: Mapping[str, pd.Timedelta] = {
     "1d": pd.Timedelta(days=1),
     "3d": pd.Timedelta(days=3),
 }
-ASSIGNMENT_SCHEMA_VERSION = "event_assignment.v1"
+ASSIGNMENT_SCHEMA_VERSION = "event_assignment.v2"
 ASSIGNMENT_STATUSES: tuple[str, ...] = (
     "assigned",
     "duplicate_event_id",
-    "ticker_not_in_decisions",
+    "security_not_in_decisions",
     "invalid_availability",
     "no_future_decision",
     "outside_all_windows",
@@ -35,6 +35,7 @@ ASSIGNMENT_COLUMNS: tuple[str, ...] = (
     "assignment_id",
     "event_id",
     "ticker",
+    "security_id",
     "source_family",
     "feature_available_at_utc",
     "decision_id",
@@ -56,15 +57,28 @@ def build_event_assignments(
 ) -> pd.DataFrame:
     """Build immutable assignment evidence for all input event rows."""
 
-    _require_columns(decisions, {"ticker", "decision_time_utc"}, "decisions")
+    _require_columns(
+        decisions,
+        {"ticker", "security_id", "decision_time_utc"},
+        "decisions",
+    )
     _require_columns(
         events,
-        {"event_id", "ticker", "source_family", "feature_available_at_utc"},
+        {
+            "event_id",
+            "ticker",
+            "security_id",
+            "source_family",
+            "feature_available_at_utc",
+        },
         "events",
     )
     prepared_decisions = _prepare_decisions(decisions)
     prepared_events = events.copy()
     prepared_events["ticker"] = _ticker(prepared_events["ticker"])
+    prepared_events["security_id"] = (
+        prepared_events["security_id"].fillna("").astype(str).str.strip()
+    )
     prepared_events["source_family"] = (
         prepared_events["source_family"].fillna("").astype(str).str.lower().str.strip()
     )
@@ -82,7 +96,7 @@ def build_event_assignments(
         errors="coerce",
     )
 
-    decision_tickers = set(prepared_decisions["ticker"])
+    decision_security_ids = set(prepared_decisions["security_id"])
     records: list[dict[str, Any]] = []
     seen: set[str] = set()
     ordered_windows = tuple(
@@ -94,33 +108,33 @@ def build_event_assignments(
     max_window = max(window for _, window in ordered_windows)
     for event in prepared_events.to_dict(orient="records"):
         event_id = str(event["event_id"])
-        ticker = str(event["ticker"])
+        security_id = str(event["security_id"])
         if event_id in seen:
             records.append(_exclusion_record(event, "duplicate_event_id"))
             continue
         seen.add(event_id)
-        if ticker not in decision_tickers:
-            records.append(_exclusion_record(event, "ticker_not_in_decisions"))
+        if security_id not in decision_security_ids:
+            records.append(_exclusion_record(event, "security_not_in_decisions"))
             continue
         available = event["feature_available_at_utc"]
         if pd.isna(available):
             records.append(_exclusion_record(event, "invalid_availability"))
             continue
-        ticker_decisions = prepared_decisions.loc[
-            prepared_decisions["ticker"].eq(ticker)
+        security_decisions = prepared_decisions.loc[
+            prepared_decisions["security_id"].eq(security_id)
             & prepared_decisions["decision_time_utc"].ge(available)
         ]
-        if ticker_decisions.empty:
+        if security_decisions.empty:
             records.append(_exclusion_record(event, "no_future_decision"))
             continue
-        ticker_decisions = ticker_decisions.loc[
-            ticker_decisions["decision_time_utc"].le(available + max_window)
+        security_decisions = security_decisions.loc[
+            security_decisions["decision_time_utc"].le(available + max_window)
         ]
-        if ticker_decisions.empty:
+        if security_decisions.empty:
             records.append(_exclusion_record(event, "outside_all_windows"))
             continue
         assigned = False
-        for decision in ticker_decisions.to_dict(orient="records"):
+        for decision in security_decisions.to_dict(orient="records"):
             age = decision["decision_time_utc"] - available
             for window_name, window in ordered_windows:
                 if age <= window:
@@ -448,6 +462,9 @@ def event_aggregate_sha256(
 def _prepare_decisions(decisions: pd.DataFrame) -> pd.DataFrame:
     output = decisions.copy()
     output["ticker"] = _ticker(output["ticker"])
+    output["security_id"] = output["security_id"].fillna("").astype(str).str.strip()
+    if bool(output["security_id"].eq("").any()):
+        raise DataReadinessError("decision rows contain empty security_id values")
     output["decision_time_utc"] = pd.to_datetime(
         output["decision_time_utc"],
         utc=True,
@@ -470,6 +487,7 @@ def _prepare_decisions(decisions: pd.DataFrame) -> pd.DataFrame:
 
 def _decision_id(row: pd.Series) -> str:
     fields = (
+        str(row["security_id"]).strip(),
         str(row["ticker"]).strip().upper(),
         pd.Timestamp(row["decision_time_utc"]).isoformat(),
         str(row.get("prediction_cutoff_policy_id", "")),
@@ -499,6 +517,7 @@ def _assignment_record(
         "assignment_id": assignment_id,
         "event_id": str(event["event_id"]),
         "ticker": str(event["ticker"]),
+        "security_id": str(event["security_id"]),
         "source_family": str(event["source_family"]),
         "feature_available_at_utc": event["feature_available_at_utc"],
         "decision_id": str(decision["decision_id"]),
@@ -523,6 +542,7 @@ def _exclusion_record(
         "assignment_id": assignment_id,
         "event_id": str(event["event_id"]),
         "ticker": str(event["ticker"]),
+        "security_id": str(event["security_id"]),
         "source_family": str(event["source_family"]),
         "feature_available_at_utc": event["feature_available_at_utc"],
         "decision_id": "",

@@ -209,7 +209,7 @@ source-isolated; research retains all reproducible data/model workflows.
 Command ownership:
 
 - Collection: `collect`, `collect-swing`, `collect-swing-daily-history`,
-  `collect-seeking-alpha`, `alpaca-tickers`.
+  `collect-alpaca-news-history`, `collect-seeking-alpha`, `alpaca-tickers`.
 - Verification: `verify-events`, `verify-swing`, `audit-swing-alignment`,
   `audit-swing-daily-history`.
 - Sentiment: `download-model`, `score-swing-events`.
@@ -224,7 +224,8 @@ Canonical orchestration is registered by `src/market_predictor/commands/canonica
 `build-canonical-decisions` publishes both the canonical decision table and a
 neighboring `*.event_assignments.parquet` artifact unless
 `--event-assignments-out` is supplied. An assigned row names the event,
-decision, window, ticker, feature-availability timestamp, source family,
+decision, window, ticker, stable financial security identity,
+feature-availability timestamp, source family,
 sentiment, and relevance used by the feature. Non-assigned events carry one
 explicit exclusion status. The build independently recreates event count,
 weighted sentiment, sentiment coverage, relevance quality, source counts/source
@@ -265,6 +266,17 @@ membership hash, dates, feed, adjustment, and timeframe. `_status.json` records
 resumable progress; `_source_collections.parquet` distinguishes observed,
 observed-empty, and failed requests; `_manifest.json` makes a completed run
 immutable.
+
+`swing/news_history.py` owns historical Alpaca/Benzinga research collection.
+It intersects the frozen request window with point-in-time membership
+intervals, converts canonical tickers to Alpaca symbols, archives every page
+atomically, validates the pagination token chain, and resumes only unfinished
+chunks. Provider creation and update timestamps remain separate. Articles not
+explicitly tagged to the requested symbol are excluded, revisions are
+deduplicated deterministically, and canonical events are keyed by financial
+`security_id` so ticker reuse cannot cross-contaminate model rows. Historical
+availability is always `provider_publication_proxy`; these artifacts are never
+production-ready or a substitute for live first-seen evidence.
 
 `swing/market_history_audit.py` reopens every canonical symbol artifact, verifies
 its hash against the final collection manifest, verifies the membership and

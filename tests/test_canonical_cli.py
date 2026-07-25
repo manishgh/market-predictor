@@ -45,6 +45,7 @@ class CanonicalCliTests(unittest.TestCase):
             pd.DataFrame(
                 {
                     "ticker": ["MSFT"],
+                    "security_id": ["MSFT"],
                     "timestamp": [pd.Timestamp("2026-07-21T20:30:00Z")],
                     "ingested_at_utc": [pd.Timestamp("2026-07-21T21:30:00Z")],
                     "sentiment_scored_at_utc": [pd.Timestamp("2026-07-21T21:31:00Z")],

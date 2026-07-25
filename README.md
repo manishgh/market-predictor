@@ -655,6 +655,24 @@ The completed baselines are documented in the
 and [HGB model card](docs/model_cards/swing_technical_5d_hgb_20260725.md).
 Both are immutable comparison candidates and are rejected for use.
 
+The five-year catalyst path starts with an isolated Alpaca/Benzinga backfill.
+This command archives and hashes each provider page, resumes from the last
+verified page, binds every article to the effective financial `security_id`,
+and rejects articles whose provider symbol list does not contain the requested
+ticker. It publishes unscored `provider_publication_proxy` events as
+research-only artifacts. Sentiment inference and training are separate
+sequential heavy jobs.
+
+```powershell
+market-predictor-collect collect-alpaca-news-history `
+  --memberships data/canonical/swing_memberships_20190709_20260708_v1.parquet `
+  --start-date 2021-07-09 `
+  --end-date 2026-07-08 `
+  --out-dir data/raw/alpaca_news_20210709_20260708_v1 `
+  --workers 2 `
+  --chunk-days 92
+```
+
 ```powershell
 market-predictor-research build-swing-dataset `
   --decisions data/canonical/decisions.parquet `

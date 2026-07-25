@@ -68,6 +68,7 @@ class CanonicalContractTests(unittest.TestCase):
             CanonicalEvent(
                 event_id="a" * 64,
                 ticker="MSFT",
+                security_id="security:msft",
                 source_family="alpaca",
                 source="alpaca:benzinga",
                 published_at_utc=published,
@@ -161,6 +162,7 @@ class CanonicalNormalizationTests(unittest.TestCase):
         events = pd.DataFrame(
             {
                 "ticker": ["MSFT"],
+                "security_id": ["security:msft"],
                 "timestamp": [pd.Timestamp("2026-07-21T12:05:00Z")],
                 "source": ["alpaca:benzinga"],
                 "title": ["Microsoft announces an update"],
@@ -192,6 +194,7 @@ class CanonicalNormalizationTests(unittest.TestCase):
         events = pd.DataFrame(
             {
                 "ticker": ["MSFT"],
+                "security_id": ["security:msft"],
                 "timestamp": [pd.Timestamp("2026-07-21T12:00:00Z")],
                 "source": ["finviz"],
                 "title": ["Microsoft headline"],
@@ -241,6 +244,7 @@ class CanonicalJoinAndAuditTests(unittest.TestCase):
             canonicalize_bars(self._daily_bar("2026-07-21T04:00:00Z")),
             mode="swing-nightly",
         )
+        decisions["security_id"] = "security:msft"
         included = self._canonical_event(
             published="2026-07-21T20:30:00Z",
             first_seen="2026-07-21T21:15:00Z",
@@ -334,6 +338,7 @@ class CanonicalJoinAndAuditTests(unittest.TestCase):
         decisions = pd.DataFrame(
             {
                 "ticker": ["MSFT", "MSFT"],
+                "security_id": ["security:msft", "security:msft"],
                 "decision_time_utc": [
                     pd.Timestamp("2026-07-21T10:05:00Z"),
                     pd.Timestamp("2026-07-21T10:10:00Z"),
@@ -351,7 +356,13 @@ class CanonicalJoinAndAuditTests(unittest.TestCase):
         self.assertTrue(joined.loc[1, "latest_event_feature_available_at_utc"] <= joined.loc[1, "decision_time_utc"])
 
     def test_proxy_events_fail_production_join_and_audit(self) -> None:
-        decisions = pd.DataFrame({"ticker": ["MSFT"], "decision_time_utc": [pd.Timestamp("2026-07-21T10:10:00Z")]})
+        decisions = pd.DataFrame(
+            {
+                "ticker": ["MSFT"],
+                "security_id": ["security:msft"],
+                "decision_time_utc": [pd.Timestamp("2026-07-21T10:10:00Z")],
+            }
+        )
         event = self._canonical_event(
             published="2026-07-21T09:00:00Z",
             first_seen="2026-07-21T12:00:00Z",
@@ -606,6 +617,7 @@ class CanonicalJoinAndAuditTests(unittest.TestCase):
             {
                 "event_id": ["a" * 64],
                 "ticker": ["MSFT"],
+                "security_id": ["security:msft"],
                 "source_family": ["alpaca"],
                 "source": ["alpaca:benzinga"],
                 "published_at_utc": [pd.Timestamp(published)],

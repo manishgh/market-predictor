@@ -28,6 +28,7 @@ class EventReconciliationTest(unittest.TestCase):
         self.decisions = pd.DataFrame(
             {
                 "ticker": ["AAA"],
+                "security_id": ["security:aaa"],
                 "decision_time_utc": [self.decision],
                 "prediction_cutoff_policy_id": ["test-cutoff-v1"],
                 "timeframe": ["1d"],
@@ -38,6 +39,13 @@ class EventReconciliationTest(unittest.TestCase):
         self.events = pd.DataFrame(
             {
                 "ticker": ["AAA", "AAA", "ZZZ", "AAA", "AAA"],
+                "security_id": [
+                    "security:aaa",
+                    "security:aaa",
+                    "security:zzz",
+                    "security:aaa",
+                    "security:aaa",
+                ],
                 "source_family": ["alpaca", "alpaca", "reddit", "sec", "finviz"],
                 "event_id": ["m1", "m1", "w1", "f1", "o1"],
                 "feature_available_at_utc": [
@@ -69,7 +77,7 @@ class EventReconciliationTest(unittest.TestCase):
         artifact = self._artifact()
         statuses = artifact.groupby("event_id")["status"].apply(set).to_dict()
         self.assertEqual(statuses["m1"], {"assigned", "duplicate_event_id"})
-        self.assertEqual(statuses["w1"], {"ticker_not_in_decisions"})
+        self.assertEqual(statuses["w1"], {"security_not_in_decisions"})
         self.assertEqual(statuses["f1"], {"no_future_decision"})
         self.assertEqual(statuses["o1"], {"outside_all_windows"})
         summary = reconciliation_summary(artifact)

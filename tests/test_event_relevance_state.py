@@ -13,10 +13,17 @@ from market_predictor.canonical.joins import aggregate_event_features
 class UnknownRelevanceTest(unittest.TestCase):
     def test_unknown_relevance_is_excluded_and_counted_low(self) -> None:
         decision_time = pd.Timestamp("2026-01-05 20:00", tz="UTC")
-        decisions = pd.DataFrame({"ticker": ["AAA"], "decision_time_utc": [decision_time]})
+        decisions = pd.DataFrame(
+            {
+                "ticker": ["AAA"],
+                "security_id": ["security:aaa"],
+                "decision_time_utc": [decision_time],
+            }
+        )
         events = pd.DataFrame(
             {
                 "ticker": ["AAA", "AAA"],
+                "security_id": ["security:aaa", "security:aaa"],
                 "source_family": ["alpaca", "reddit"],
                 "feature_available_at_utc": [
                     decision_time - pd.Timedelta(hours=1),

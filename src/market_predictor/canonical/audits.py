@@ -116,7 +116,9 @@ def audit_canonical_events(
     ordering_failures = int(ordering.fillna(True).sum())
     proxy_failures = int((~observed).sum()) if require_observed else 0
     duplicates = int(data["event_id"].astype(str).duplicated().sum())
-    identity = data[["event_id", "ticker", "source_family"]].fillna("").astype(str)
+    identity = data[
+        ["event_id", "ticker", "security_id", "source_family"]
+    ].fillna("").astype(str)
     identity_failures = int(identity.apply(lambda column: column.str.strip().eq("")).any(axis=1).sum())
     schema_failures = int(data["schema_version"].astype(str).ne(CANONICAL_SCHEMA_VERSION).sum())
     return (
@@ -282,7 +284,9 @@ def audit_source_collections(
         return (_fail("source_collection_schema", len(frame), f"missing columns: {', '.join(missing)}"),)
     invalid = 0
     records: list[SourceCollection] = []
-    for row in frame.to_dict(orient="records"):
+    for row in frame.loc[:, list(SourceCollection.model_fields)].to_dict(
+        orient="records"
+    ):
         try:
             records.append(SourceCollection.model_validate(row))
         except ValueError:

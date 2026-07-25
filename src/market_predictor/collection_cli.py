@@ -8,6 +8,7 @@ COLLECTION_COMMANDS = frozenset(
         "alpaca-tickers",
         "azure-upload-artifacts",
         "collect",
+        "collect-alpaca-news-history",
         "collect-gdelt-context",
         "collect-market-context",
         "collect-seeking-alpha",

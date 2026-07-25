@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import unittest
-from datetime import date
+from datetime import UTC, date, datetime
 from unittest.mock import Mock
 
 from market_predictor.config import Settings
@@ -9,6 +9,70 @@ from market_predictor.sources.alpaca import AlpacaSource
 
 
 class AlpacaSourceTests(unittest.TestCase):
+    def test_news_pages_preserve_provider_timestamps_and_page_tokens(self) -> None:
+        source = AlpacaSource(
+            Settings(ALPACA_API_KEY_ID="key", ALPACA_API_SECRET_KEY="secret")
+        )
+        client = Mock()
+        client.get_json.side_effect = [
+            {
+                "news": [
+                    {
+                        "id": 1,
+                        "created_at": "2026-07-01T12:00:00Z",
+                        "updated_at": "2026-07-01T12:05:00Z",
+                        "headline": "First",
+                        "source": "benzinga",
+                    }
+                ],
+                "next_page_token": "page-2",
+            },
+            {
+                "news": [
+                    {
+                        "id": 2,
+                        "created_at": "2026-07-01T13:00:00Z",
+                        "updated_at": "2026-07-01T13:02:00Z",
+                        "headline": "Second",
+                        "source": "benzinga",
+                    }
+                ],
+                "next_page_token": None,
+            },
+        ]
+        source.client = client
+
+        events = source.fetch_news(
+            "MSFT",
+            datetime(2026, 7, 1, tzinfo=UTC),
+            datetime(2026, 7, 2, tzinfo=UTC),
+        )
+
+        self.assertEqual([event.title for event in events], ["First", "Second"])
+        self.assertEqual(events[0].timestamp, datetime(2026, 7, 1, 12, tzinfo=UTC))
+        self.assertEqual(
+            client.get_json.call_args_list[1].kwargs["params"]["page_token"],
+            "page-2",
+        )
+
+    def test_news_pagination_rejects_repeated_token(self) -> None:
+        source = AlpacaSource(
+            Settings(ALPACA_API_KEY_ID="key", ALPACA_API_SECRET_KEY="secret")
+        )
+        client = Mock()
+        client.get_json.return_value = {
+            "news": [],
+            "next_page_token": "same-token",
+        }
+        source.client = client
+
+        with self.assertRaisesRegex(RuntimeError, "repeated"):
+            source.fetch_news(
+                "MSFT",
+                datetime(2026, 7, 1, tzinfo=UTC),
+                datetime(2026, 7, 2, tzinfo=UTC),
+            )
+
     def test_security_transitions_normalize_renames_and_deduplicate_mergers(self) -> None:
         source = AlpacaSource(Settings(ALPACA_API_KEY_ID="key", ALPACA_API_SECRET_KEY="secret"))
         client = Mock()
