@@ -24,7 +24,7 @@ def audit_swing_daily_history(
     collection_dir: Path,
     benchmarks: tuple[str, ...] = DEFAULT_BENCHMARKS,
     memory_budget_gib: float = 4.0,
-    memory_headroom_gib: float = 0.25,
+    memory_headroom_gib: float = 0.75,
 ) -> tuple[pd.DataFrame, dict[str, Any]]:
     manifest_path = collection_dir / "_manifest.json"
     request_path = collection_dir / "_request.json"

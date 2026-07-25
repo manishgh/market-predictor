@@ -167,6 +167,50 @@ class CanonicalCliTests(unittest.TestCase):
                 decision_frame.loc[0, "decision_time_utc"],
             )
 
+            technical_decisions = root / "technical_decisions.parquet"
+            technical_result = runner.invoke(
+                app,
+                [
+                    "build-canonical-decisions",
+                    "--bars",
+                    str(bars),
+                    "--memberships",
+                    str(memberships),
+                    "--feature-profile",
+                    "technical_market",
+                    "--decision-mode",
+                    "swing-nightly",
+                    "--out",
+                    str(technical_decisions),
+                ],
+            )
+            self.assertEqual(
+                technical_result.exit_code,
+                0,
+                msg=f"{technical_result.output}\n{technical_result.exception}",
+            )
+            technical_frame, technical_manifest = load_canonical_artifact(
+                technical_decisions,
+                expected_type="decisions",
+            )
+            self.assertTrue(technical_manifest["production_ready"])
+            self.assertEqual(
+                set(technical_frame["feature_profile"]),
+                {"technical_market"},
+            )
+            self.assertNotIn("event_assignment_sha256", technical_frame)
+            self.assertFalse(
+                any(
+                    column.startswith("source_status_")
+                    for column in technical_frame.columns
+                )
+            )
+            self.assertFalse(
+                technical_decisions.with_name(
+                    "technical_decisions.event_assignments.parquet"
+                ).exists()
+            )
+
     def test_production_decision_command_requires_explicit_mode(self) -> None:
         result = CliRunner().invoke(
             app,

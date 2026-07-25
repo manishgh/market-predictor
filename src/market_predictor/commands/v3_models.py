@@ -8,6 +8,7 @@ import pandas as pd
 import typer
 from rich.console import Console
 
+from market_predictor.heavy_jobs import serialized_heavy_job
 from market_predictor.v3.development import load_verified_development_dataset
 from market_predictor.v3.errors import DataReadinessError
 from market_predictor.v3.models import (
@@ -21,6 +22,7 @@ from market_predictor.v3.models import (
 
 def register_v3_model_commands(app: typer.Typer, console: Console) -> None:
     @app.command("train-v3-models")
+    @serialized_heavy_job("train-v3-models")
     def train_models(
         dataset: Path = typer.Option(..., help="Development-only V3 feature and label parquet."),
         output_dir: Path = typer.Option(Path("models/v3/candidates"), help="Candidate model artifact directory."),

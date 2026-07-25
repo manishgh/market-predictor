@@ -53,6 +53,7 @@ DECISION_REQUIRED_COLUMNS = {
     "membership_effective_from_utc",
     "membership_effective_to_utc",
     "universe_snapshot_id",
+    "feature_profile",
 }
 BENCHMARK_REQUIRED_COLUMNS = {
     "ticker",
@@ -74,8 +75,8 @@ def build_swing_dataset(
     decisions: pd.DataFrame,
     benchmark_bars: pd.DataFrame,
     *,
-    global_events: pd.DataFrame,
-    global_source_collections: pd.DataFrame,
+    global_events: pd.DataFrame | None = None,
+    global_source_collections: pd.DataFrame | None = None,
     config: SwingDatasetConfig | None = None,
 ) -> tuple[pd.DataFrame, CanonicalAuditReport]:
     """Build post-close swing features and next-open labels from canonical inputs."""
@@ -109,8 +110,8 @@ def build_swing_inference_features(
     decisions: pd.DataFrame,
     benchmark_bars: pd.DataFrame,
     *,
-    global_events: pd.DataFrame,
-    global_source_collections: pd.DataFrame,
+    global_events: pd.DataFrame | None = None,
+    global_source_collections: pd.DataFrame | None = None,
     config: SwingDatasetConfig | None = None,
 ) -> tuple[pd.DataFrame, CanonicalAuditReport]:
     """Build one audited latest post-close feature group without future labels."""
@@ -132,6 +133,7 @@ def build_swing_inference_features(
         minimum_cross_section=config.minimum_cross_section,
         source_coverage_max_age_minutes=config.source_coverage_max_age_minutes,
         required_global_sources=config.required_global_sources,
+        feature_profile=config.feature_profile,
     )
 
 
@@ -139,8 +141,8 @@ def _build_swing_feature_history(
     decisions: pd.DataFrame,
     benchmark_bars: pd.DataFrame,
     *,
-    global_events: pd.DataFrame,
-    global_source_collections: pd.DataFrame,
+    global_events: pd.DataFrame | None,
+    global_source_collections: pd.DataFrame | None,
     config: SwingDatasetConfig,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     _require_columns(decisions, DECISION_REQUIRED_COLUMNS, "canonical decisions")
@@ -153,16 +155,58 @@ def _build_swing_feature_history(
         raise DataReadinessError("canonical decisions contain duplicate ticker/session rows")
     if bool(benchmarks.duplicated(["ticker", "session_date_et"]).any()):
         raise DataReadinessError("benchmark bars contain duplicate ticker/session rows")
+    decision_profiles = set(data["feature_profile"].astype(str).str.lower().str.strip())
+    if decision_profiles != {config.feature_profile}:
+        raise DataReadinessError(
+            "decision and swing dataset feature profiles do not match: "
+            f"{sorted(decision_profiles)} != {config.feature_profile}"
+        )
 
     data = _add_technical_features(data, identity_column="security_id")
     benchmark_features = _add_technical_features(benchmarks, identity_column="ticker")
     data = _join_benchmark_features(data, benchmark_features, config)
     data = _add_relative_and_regime_features(data)
-    data = _add_global_event_features(data, global_events)
-    data = _add_global_source_status(data, global_source_collections, config.required_global_sources)
-    data = _add_canonical_optional_features(data)
+    if config.feature_profile == "catalyst_full":
+        if global_events is None or global_source_collections is None:
+            raise DataReadinessError(
+                "catalyst_full requires global events and source collections"
+            )
+        data = _add_global_event_features(data, global_events)
+        data = _add_global_source_status(
+            data,
+            global_source_collections,
+            config.required_global_sources,
+        )
+        data = _add_canonical_optional_features(data)
+    elif global_events is not None or global_source_collections is not None:
+        raise DataReadinessError(
+            "technical_market rejects global event and source-collection inputs"
+        )
     data = _add_membership_features(data)
     data = _add_cross_sectional_features(data, config)
+    if config.decision_start_date is not None:
+        data = data[
+            data["session_date_et"].ge(config.decision_start_date)
+        ].copy()
+    if config.decision_end_date is not None:
+        data = data[
+            data["session_date_et"].le(config.decision_end_date)
+        ].copy()
+    if data.empty:
+        raise DataReadinessError(
+            "swing decision window contains no rows after feature warm-up"
+        )
+    data["feature_profile"] = config.feature_profile
+    data["decision_start_date"] = (
+        config.decision_start_date.isoformat()
+        if config.decision_start_date is not None
+        else ""
+    )
+    data["decision_end_date"] = (
+        config.decision_end_date.isoformat()
+        if config.decision_end_date is not None
+        else ""
+    )
     data["horizon_sessions"] = config.horizon_sessions
     data["round_trip_cost_bps"] = config.round_trip_cost_bps
     data["minimum_daily_bars"] = config.min_daily_bars
@@ -432,22 +476,24 @@ def _add_cross_sectional_features(frame: pd.DataFrame, config: SwingDatasetConfi
         "rel_return_20d_vs_spy": "xs_rank_rel_return_20d_vs_spy",
         "rel_return_20d_vs_sector": "xs_rank_rel_return_20d_vs_sector",
     }
-    grouped = data.groupby("decision_group_id", sort=False)
-    for source, target in rank_inputs.items():
-        data[target] = grouped[source].rank(method="average", pct=True)
     core_ready = data[["dist_sma_200", "sma_200_slope_20d", "return_60d", "spy_dist_sma_200"]].notna().all(axis=1)
     benchmark_ready = data[["spy_available_at_utc", "qqq_available_at_utc", "sector_available_at_utc"]].notna().all(axis=1)
-    data["feature_eligible"] = (
+    provisional = (
         data["daily_bar_count"].ge(config.min_daily_bars)
         & core_ready
         & benchmark_ready
         & data["price_feed"].astype(str).str.lower().eq(config.required_price_feed)
         & data["adjustment"].astype(str).str.lower().eq(config.required_adjustment)
     )
-    eligible_count = data["feature_eligible"].groupby(data["decision_group_id"]).transform("sum")
+    eligible_count = provisional.groupby(data["decision_group_id"]).transform("sum")
     data["cross_section_size"] = eligible_count.astype("int32")
     data["cross_section_eligible"] = eligible_count.ge(config.minimum_cross_section)
-    data["feature_eligible"] &= data["cross_section_eligible"]
+    data["feature_eligible"] = provisional & data["cross_section_eligible"]
+    grouped = data.loc[data["feature_eligible"]].groupby("decision_group_id", sort=False)
+    for source, target in rank_inputs.items():
+        data[target] = np.nan
+        ranked = grouped[source].rank(method="average", pct=True)
+        data.loc[ranked.index, target] = ranked
     return data
 
 

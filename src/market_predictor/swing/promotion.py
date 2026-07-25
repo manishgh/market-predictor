@@ -91,6 +91,11 @@ def promote_swing_model(
         failures.extend(_audit_provenance_failures(name, audit, model_run_id))
     if evidence.provenance != "hash_verified_evidence_bundle" or evidence.evidence_manifest is None or evidence_manifest_path is None:
         failures.append("promotion requires a hash-verified persisted training evidence bundle")
+    if str(metrics.get("feature_profile", "")).strip().lower() != "catalyst_full":
+        failures.append(
+            "only catalyst_full swing candidates are promotion-eligible; "
+            "technical_market is a baseline-only feature profile"
+        )
 
     failures.extend(
         _metric_gate_failures(

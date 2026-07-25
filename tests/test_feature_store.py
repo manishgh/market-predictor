@@ -201,6 +201,7 @@ def _frame() -> pd.DataFrame:
             "bar_available_at_utc": [pd.Timestamp("2026-07-10T20:15:00Z")] * 2,
             "prediction_cutoff_policy_id": [SWING_NIGHTLY_CUTOFF.policy_id] * 2,
             "daily_bar_count": [250, 250],
+            "feature_profile": ["catalyst_full", "catalyst_full"],
             "source_coverage_end_utc_alpaca": [pd.Timestamp("2026-07-10T21:30:00Z")] * 2,
             "price_feed": ["sip", "sip"],
             "open": [100.0, 101.0],

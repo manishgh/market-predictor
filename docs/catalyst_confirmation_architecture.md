@@ -229,6 +229,14 @@ Reason:
 
 The production C4 swing contract is `swing.features.v1` -> `swing.model.v1`.
 
+Swing feature profiles are explicit and hash-bound. `technical_market` contains
+only stock technical, benchmark-relative, regime, and eligible-cohort
+cross-sectional features. It consumes no news/source artifacts, never converts
+missing catalysts to zero, excludes membership proxy buckets from the
+estimator, and is baseline-only. `catalyst_full` is the only promotion-eligible
+profile and retains the complete event, source-coverage, alignment, and
+catalyst gates.
+
 - Decision: after the completed daily bar and all required feature/source timestamps.
 - Entry reference: next exchange session open.
 - Primary horizon: fifth exchange session close.

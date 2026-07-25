@@ -42,6 +42,7 @@ from market_predictor.canonical.reconciliation import (
     reproduce_event_features,
 )
 from market_predictor.canonical.store import file_sha256, load_canonical_artifact, write_canonical_artifact
+from market_predictor.heavy_jobs import serialized_heavy_job
 
 
 def register_canonical_data_commands(app: typer.Typer, console: Any) -> None:
@@ -233,15 +234,19 @@ def register_canonical_data_commands(app: typer.Typer, console: Any) -> None:
         console.print({"rows": len(memberships), "out": str(out), "sha256": manifest["artifact_sha256"]})
 
     @app.command("build-canonical-decisions")
+    @serialized_heavy_job("build-canonical-decisions")
     def build_canonical_decisions_command(
         bars: Path = typer.Option(..., help="Hash-verified canonical bars."),
-        events: Path = typer.Option(..., help="Hash-verified canonical events."),
-        source_collections: Path = typer.Option(..., help="Source collection status CSV or parquet."),
         memberships: Path = typer.Option(..., help="Hash-verified point-in-time universe memberships."),
         out: Path = typer.Option(..., help="Canonical decision table parquet."),
+        events: Path | None = typer.Option(None, help="Hash-verified canonical events; catalyst_full only."),
+        source_collections: Path | None = typer.Option(
+            None,
+            help="Hash-verified source collection status; catalyst_full only.",
+        ),
         event_assignments_out: Path | None = typer.Option(
             None,
-            help="Event assignment parquet; defaults beside --out.",
+            help="Event assignment parquet; catalyst_full only and defaults beside --out.",
         ),
         fundamentals: Path | None = typer.Option(None, help="Optional canonical fundamental facts."),
         fundamental_metrics: str = typer.Option("", help="Comma-separated metrics to join as of decision time."),
@@ -254,6 +259,10 @@ def register_canonical_data_commands(app: typer.Typer, console: Any) -> None:
             min=0,
             help="Maximum gap from a source request coverage end to a decision.",
         ),
+        feature_profile: str = typer.Option(
+            "catalyst_full",
+            help="Decision feature profile: catalyst_full or technical_market.",
+        ),
         decision_mode: str = typer.Option(
             ...,
             help="Explicit decision clock: swing-nightly, intraday-bar-availability, or research-bar-availability.",
@@ -263,21 +272,83 @@ def register_canonical_data_commands(app: typer.Typer, console: Any) -> None:
         """Build a fail-closed point-in-time decision table from canonical inputs."""
 
         bar_frame, _ = load_canonical_artifact(bars, expected_type="bars", allow_research=not production)
-        event_frame, _ = load_canonical_artifact(events, expected_type="events", allow_research=not production)
-        collection_frame, _ = load_canonical_artifact(
-            source_collections,
-            expected_type="source_collections",
-            allow_research=not production,
-        )
         membership_frame, _ = load_canonical_artifact(
             memberships,
             expected_type="memberships",
             allow_research=not production,
         )
-        sources = _csv(required_sources)
+        normalized_profile = feature_profile.strip().lower()
+        if normalized_profile not in {"catalyst_full", "technical_market"}:
+            raise typer.BadParameter(
+                "feature-profile must be catalyst_full or technical_market"
+            )
         parsed_decision_mode = _decision_mode(decision_mode, production=production)
         decisions = decisions_from_completed_bars(bar_frame, mode=parsed_decision_mode)
         decisions = join_universe_membership(decisions, membership_frame)
+        decisions["feature_profile"] = normalized_profile
+
+        if normalized_profile == "technical_market":
+            if events is not None or source_collections is not None or event_assignments_out is not None:
+                raise typer.BadParameter(
+                    "technical_market rejects event and source-collection inputs"
+                )
+            if fundamentals is not None or _csv(fundamental_metrics):
+                raise typer.BadParameter(
+                    "technical_market rejects fundamental inputs"
+                )
+            checks = [
+                *audit_canonical_bars(bar_frame, require_sip=production),
+                *audit_universe_memberships(
+                    membership_frame,
+                    decisions=decisions,
+                    require_observed=production,
+                ),
+                *audit_decision_availability(
+                    decisions,
+                    feature_timestamp_columns=[
+                        "bar_available_at_utc",
+                        "feature_available_at_utc",
+                        "membership_available_at_utc",
+                    ],
+                ),
+            ]
+            manifest = write_canonical_artifact(
+                decisions,
+                out,
+                artifact_type="decisions",
+                audit=CanonicalAuditReport(checks=tuple(checks)),
+                inputs={
+                    str(bars): file_sha256(bars),
+                    str(memberships): file_sha256(memberships),
+                    "feature_profile": normalized_profile,
+                },
+                production_ready=production,
+            )
+            console.print(
+                {
+                    "rows": len(decisions),
+                    "out": str(out),
+                    "sha256": manifest["artifact_sha256"],
+                    "feature_profile": normalized_profile,
+                }
+            )
+            return
+
+        if events is None or source_collections is None:
+            raise typer.BadParameter(
+                "catalyst_full requires --events and --source-collections"
+            )
+        event_frame, _ = load_canonical_artifact(
+            events,
+            expected_type="events",
+            allow_research=not production,
+        )
+        collection_frame, _ = load_canonical_artifact(
+            source_collections,
+            expected_type="source_collections",
+            allow_research=not production,
+        )
+        sources = _csv(required_sources)
         if production and bool(
             event_frame["availability_policy"].astype(str).ne("observed").any()
         ):

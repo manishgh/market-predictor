@@ -12,6 +12,7 @@ from market_predictor.canonical.store import (
     write_canonical_artifact,
 )
 from market_predictor.commands.configuration import load_typed_config
+from market_predictor.heavy_jobs import serialized_heavy_job
 from market_predictor.intraday.contracts import (
     IntradayDatasetConfig,
     IntradayPromotionConfig,
@@ -39,6 +40,7 @@ from market_predictor.registry import manifest_path_for
 
 def register_intraday_model_commands(app: typer.Typer, console: Console) -> None:
     @app.command("build-intraday-dataset")
+    @serialized_heavy_job("build-intraday-dataset")
     def build_intraday_dataset_command(
         decisions: Path = typer.Option(..., help="Hash-verified canonical 5m decision artifact."),
         one_minute_bars: Path = typer.Option(..., help="Hash-verified canonical 1m stock and benchmark bars."),
@@ -100,6 +102,7 @@ def register_intraday_model_commands(app: typer.Typer, console: Console) -> None
         )
 
     @app.command("build-intraday-live-features")
+    @serialized_heavy_job("build-intraday-live-features")
     def build_intraday_live_features_command(
         decisions: Path = typer.Option(..., help="Hash-verified canonical 5m decision artifact."),
         one_minute_bars: Path = typer.Option(..., help="Hash-verified canonical 1m stock and benchmark bars."),
@@ -158,6 +161,7 @@ def register_intraday_model_commands(app: typer.Typer, console: Console) -> None
         )
 
     @app.command("train-intraday-model")
+    @serialized_heavy_job("train-intraday-model")
     def train_intraday_model_command(
         dataset: Path = typer.Option(..., help="Hash-verified canonical intraday dataset."),
         model_out: Path = typer.Option(..., help="New atomic dual-model candidate artifact."),

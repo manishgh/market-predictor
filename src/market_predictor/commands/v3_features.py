@@ -6,11 +6,13 @@ import pandas as pd
 import typer
 from rich.console import Console
 
+from market_predictor.heavy_jobs import serialized_heavy_job
 from market_predictor.v3.features import build_v3_features, core_feature_columns
 
 
 def register_v3_feature_commands(app: typer.Typer, console: Console) -> None:
     @app.command("build-v3-features")
+    @serialized_heavy_job("build-v3-features")
     def build_features(
         bars: Path = typer.Option(..., help="Audited ticker OHLCV CSV or parquet."),
         benchmarks: Path = typer.Option(..., help="Exact-timestamp QQQ, SPY, and sector ETF bars."),

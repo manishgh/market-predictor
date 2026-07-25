@@ -19,6 +19,7 @@ from market_predictor.canonical.store import (
     write_canonical_artifact,
 )
 from market_predictor.commands.configuration import load_typed_config
+from market_predictor.heavy_jobs import serialized_heavy_job
 from market_predictor.swing.inventory import (
     SwingResearchInventoryConfig,
     build_swing_research_inventory,
@@ -29,6 +30,7 @@ from market_predictor.swing.panel_inputs import build_swing_market_panel_inputs
 
 def register_swing_research_commands(app: typer.Typer, console: Console) -> None:
     @app.command("build-swing-market-panel-inputs")
+    @serialized_heavy_job("build-swing-market-panel-inputs")
     def build_swing_market_panel_inputs_command(
         memberships: Path = typer.Option(..., help="Frozen point-in-time membership parquet."),
         collection_dir: Path = typer.Option(..., help="Finalized immutable SIP daily-history collection."),

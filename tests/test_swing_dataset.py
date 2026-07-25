@@ -16,7 +16,11 @@ from market_predictor.canonical.cutoffs import SWING_NIGHTLY_CUTOFF, swing_predi
 from market_predictor.canonical.store import load_canonical_artifact, write_canonical_artifact
 from market_predictor.cli import app
 from market_predictor.swing.audits import audit_swing_dataset
-from market_predictor.swing.contracts import SwingDatasetConfig
+from market_predictor.swing.contracts import (
+    CATALYST_FEATURES,
+    FUNDAMENTAL_FEATURES,
+    SwingDatasetConfig,
+)
 from market_predictor.swing.dataset import (
     _add_technical_features,
     build_swing_dataset,
@@ -27,6 +31,46 @@ from market_predictor.v3.errors import DataReadinessError
 
 
 class SwingDatasetTests(unittest.TestCase):
+    def test_builds_technical_market_without_event_inputs(self) -> None:
+        decisions, benchmarks, _, _ = _inputs()
+        decisions["feature_profile"] = "technical_market"
+        event_or_source_columns = [
+            column
+            for column in decisions.columns
+            if column in {*CATALYST_FEATURES, *FUNDAMENTAL_FEATURES}
+            or column.startswith(
+                (
+                    "source_",
+                    "latest_event_",
+                    "event_",
+                    "reconciliation_",
+                )
+            )
+        ]
+        decisions = decisions.drop(columns=event_or_source_columns)
+        config = SwingDatasetConfig(
+            feature_profile="technical_market",
+            min_daily_bars=250,
+            minimum_cross_section=2,
+            required_global_sources=(),
+        )
+
+        dataset, audit = build_swing_dataset(
+            decisions,
+            benchmarks,
+            config=config,
+        )
+
+        self.assertTrue(audit.passed, audit.to_frame().to_dict(orient="records"))
+        self.assertEqual(set(dataset["feature_profile"]), {"technical_market"})
+        self.assertTrue(set(CATALYST_FEATURES).isdisjoint(dataset.columns))
+        self.assertTrue(
+            all(
+                not column.startswith(("source_status_", "global_source_"))
+                for column in dataset.columns
+            )
+        )
+
     def test_reused_ticker_does_not_cross_security_feature_or_label_boundary(self) -> None:
         sessions = pd.date_range("2026-07-06", periods=4, tz="UTC")
         old_security = _daily_rows("REUSE", sessions[:2], 0.0)
@@ -125,7 +169,10 @@ class SwingDatasetTests(unittest.TestCase):
             frame, manifest = load_canonical_artifact(output, expected_type="swing_dataset")
             self.assertGreater(int(frame["label_eligible"].sum()), 0)
             self.assertTrue(manifest["production_ready"])
-            self.assertEqual(len(manifest["inputs"]), 4)
+            self.assertEqual(
+                manifest["inputs"]["feature_profile"],
+                "catalyst_full",
+            )
 
             live_output = root / "swing_live_features.parquet"
             live_result = CliRunner().invoke(
@@ -388,6 +435,7 @@ def _daily_rows(
     frame["market_cap_bucket"] = "large"
     frame["liquidity_bucket"] = "high"
     frame["universe_snapshot_id"] = "snapshot-1"
+    frame["feature_profile"] = "catalyst_full"
     frame["membership_available_at_utc"] = pd.Timestamp("2025-01-01T00:00:00Z")
     frame["membership_effective_from_utc"] = pd.Timestamp("2024-01-01T00:00:00Z")
     frame["membership_effective_to_utc"] = pd.NaT

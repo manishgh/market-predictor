@@ -620,6 +620,34 @@ Market Predictor has no runtime alert commands or alert persistence. Alert evalu
 
 The production swing path consumes only hash-verified canonical artifacts. SPY, QQQ, and every sector ETF used by a membership row must be present in `benchmark_bars`.
 
+The five-year technical baseline is an explicit `technical_market` profile. It
+uses stock technicals, SPY/QQQ/sector-relative features, and ranks calculated
+only inside the eligible point-in-time cohort. It does not read event artifacts,
+does not create event/source placeholders, and excludes membership cap/liquidity
+buckets from the estimator because those buckets do not yet have complete
+historical availability evidence. This profile is baseline-only and cannot be
+promoted. Build it from the existing seven-year SIP bars:
+
+```powershell
+market-predictor-research build-canonical-decisions `
+  --bars data/artifacts/swing_market_panel_inputs_20190709_20260708_v1/stock_bars.parquet `
+  --memberships data/artifacts/swing_market_panel_inputs_20190709_20260708_v1/memberships.parquet `
+  --feature-profile technical_market `
+  --decision-mode swing-nightly `
+  --out data/canonical/swing_technical_decisions_20190709_20260708_v1.parquet
+
+market-predictor-research build-swing-dataset `
+  --decisions data/canonical/swing_technical_decisions_20190709_20260708_v1.parquet `
+  --benchmark-bars data/artifacts/swing_market_panel_inputs_20190709_20260708_v1/benchmark_bars.parquet `
+  --config configs/swing_technical_dataset.toml `
+  --out data/features/swing/swing_technical_5d_20210709_20260708_v1.parquet
+```
+
+Memory-heavy commands share one non-queueing workspace lease under
+`MARKET_PREDICTOR_RUNTIME_DIR` (default `data/runtime`). A competing heavy
+command exits with code 75 before loading data. Application guards stop at
+3.25 GiB RSS under the 4 GiB process/container budget.
+
 ```powershell
 market-predictor-research build-swing-dataset `
   --decisions data/canonical/decisions.parquet `

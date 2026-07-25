@@ -6,11 +6,13 @@ import pandas as pd
 import typer
 from rich.console import Console
 
+from market_predictor.heavy_jobs import serialized_heavy_job
 from market_predictor.v3.labels import V3LabelConfig, build_v3_labels
 
 
 def register_v3_label_commands(app: typer.Typer, console: Console) -> None:
     @app.command("build-v3-labels")
+    @serialized_heavy_job("build-v3-labels")
     def build_labels(
         bars: Path = typer.Option(..., help="Audited ticker decision bars in CSV or parquet."),
         benchmarks: Path = typer.Option(..., help="Audited QQQ and sector ETF bars in CSV or parquet."),

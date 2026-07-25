@@ -42,11 +42,11 @@ from market_predictor.registry import (
 from market_predictor.resources import assert_memory_budget, memory_audit, release_process_memory
 from market_predictor.swing.contracts import (
     SWING_FEATURE_SCHEMA_VERSION,
-    SWING_FEATURES,
     SWING_MODEL_SCHEMA_VERSION,
     SWING_MODEL_TYPE,
     SWING_VALIDATION_SPLIT,
     SwingTrainingConfig,
+    swing_features_for_profile,
     swing_target_column,
 )
 from market_predictor.swing.evaluation import (
@@ -106,7 +106,7 @@ def train_swing_model(
     if not overwrite and (model_out.exists() or manifest_path_for(model_out).exists()):
         raise FileExistsError(f"swing model artifact already exists: {model_out}")
     model_run_id = f"swing-{uuid.uuid4().hex}"
-    data, horizon, target = _training_rows(dataset)
+    data, horizon, target = _training_rows(dataset, config)
     label_policy = stamped_label_policy(dataset)
     if len(data) < config.min_train_rows:
         raise DataReadinessError(f"swing training needs at least {config.min_train_rows} eligible rows")
@@ -141,7 +141,12 @@ def train_swing_model(
         candidate_indices=folds[0].train_indices,
         test_indices=folds[0].test_indices,
     )
-    features = _select_features(development.iloc[first_train_indices], config)
+    feature_universe = swing_features_for_profile(config.feature_profile)
+    features = _select_features(
+        development.iloc[first_train_indices],
+        config,
+        feature_universe=feature_universe,
+    )
     if len(features) < config.min_features:
         raise DataReadinessError(f"only {len(features)} swing features pass fold coverage; need {config.min_features}")
     assert_memory_budget(
@@ -346,6 +351,7 @@ def train_swing_model(
         "model_type": SWING_MODEL_TYPE,
         "model_schema_version": SWING_MODEL_SCHEMA_VERSION,
         "feature_schema_version": SWING_FEATURE_SCHEMA_VERSION,
+        "feature_profile": config.feature_profile,
         "family": config.family,
         "model_run_id": model_run_id,
         "calibration_method": "isotonic_prior_outer_folds",
@@ -366,6 +372,7 @@ def train_swing_model(
         "schema_version": SWING_MODEL_SCHEMA_VERSION,
         "model_type": SWING_MODEL_TYPE,
         "family": config.family,
+        "feature_profile": config.feature_profile,
         "model_run_id": model_run_id,
         "target_col": target,
         "horizon_sessions": horizon,
@@ -482,6 +489,7 @@ def train_swing_model(
         extra={
             "dataset_sha256": dataset_sha256,
             "feature_schema_version": SWING_FEATURE_SCHEMA_VERSION,
+            "feature_profile": config.feature_profile,
             "horizon_sessions": horizon,
             "family": config.family,
             "model_run_id": model_run_id,
@@ -588,8 +596,20 @@ def score_swing_payload(
 
     if not isinstance(payload, dict):
         raise SchemaMismatchError("canonical swing artifact payload is invalid")
-    if payload.get("model_type") != SWING_MODEL_TYPE:
+    if (
+        payload.get("model_type") != SWING_MODEL_TYPE
+        or payload.get("model_schema_version") != SWING_MODEL_SCHEMA_VERSION
+        or payload.get("feature_schema_version") != SWING_FEATURE_SCHEMA_VERSION
+    ):
         raise SchemaMismatchError("canonical swing payload model type mismatch")
+    payload_profile = str(payload.get("feature_profile", "")).strip().lower()
+    if payload_profile not in {"technical_market", "catalyst_full"}:
+        raise SchemaMismatchError("canonical swing payload feature profile is invalid")
+    if "feature_profile" not in frame.columns:
+        raise SchemaMismatchError("swing scoring rows are missing feature_profile")
+    frame_profiles = set(frame["feature_profile"].astype(str).str.lower().str.strip())
+    if frame_profiles != {payload_profile}:
+        raise SchemaMismatchError("swing scoring feature profile mismatch")
     features = [str(feature) for feature in payload.get("features", [])]
     missing = sorted(set(features).difference(frame.columns))
     if missing:
@@ -610,7 +630,10 @@ def score_swing_payload(
     return output
 
 
-def _training_rows(dataset: pd.DataFrame) -> tuple[pd.DataFrame, int, str]:
+def _training_rows(
+    dataset: pd.DataFrame,
+    config: SwingTrainingConfig,
+) -> tuple[pd.DataFrame, int, str]:
     required = {
         "ticker",
         "session_date_et",
@@ -621,6 +644,7 @@ def _training_rows(dataset: pd.DataFrame) -> tuple[pd.DataFrame, int, str]:
         "label_eligible",
         "horizon_sessions",
         "swing_feature_schema_version",
+        "feature_profile",
         "dataset_label_config_sha256",
         "label_material_sha256",
         "label_source_reconciliation_sha256",
@@ -633,6 +657,14 @@ def _training_rows(dataset: pd.DataFrame) -> tuple[pd.DataFrame, int, str]:
         raise SchemaMismatchError(f"swing dataset missing training columns: {', '.join(missing)}")
     if bool(dataset["swing_feature_schema_version"].astype(str).ne(SWING_FEATURE_SCHEMA_VERSION).any()):
         raise SchemaMismatchError("swing dataset feature schema mismatch")
+    profiles = set(
+        dataset["feature_profile"].astype(str).str.lower().str.strip()
+    )
+    if profiles != {config.feature_profile}:
+        raise SchemaMismatchError(
+            "swing dataset and training feature profiles do not match: "
+            f"{sorted(profiles)} != {config.feature_profile}"
+        )
     label_configs = dataset["dataset_label_config_sha256"].astype(str).unique()
     if len(label_configs) != 1 or not str(label_configs[0]).strip():
         raise SchemaMismatchError("swing dataset must contain exactly one label config")
@@ -678,9 +710,11 @@ def _training_rows(dataset: pd.DataFrame) -> tuple[pd.DataFrame, int, str]:
 def _select_features(
     training_data: pd.DataFrame,
     config: SwingTrainingConfig,
+    *,
+    feature_universe: tuple[str, ...],
 ) -> list[str]:
     selected: list[str] = []
-    for feature in SWING_FEATURES:
+    for feature in feature_universe:
         if feature not in training_data.columns:
             continue
         if pd.to_numeric(training_data[feature], errors="coerce").notna().mean() < config.min_feature_non_null_rate:

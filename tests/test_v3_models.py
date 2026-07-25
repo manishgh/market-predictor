@@ -54,9 +54,9 @@ class V3ModelTests(unittest.TestCase):
         self.assertFalse(bool(sparse["eligible"]))
 
     def test_memory_budget_reserves_headroom_below_hard_limit(self) -> None:
-        config = V3TrainingConfig(max_training_memory_gb=4.0, memory_guard_headroom_gb=0.25)
+        config = V3TrainingConfig(max_training_memory_gb=4.0, memory_guard_headroom_gb=0.75)
         self.assertEqual(config.max_training_memory_gb, 4.0)
-        self.assertEqual(config.memory_guard_headroom_gb, 0.25)
+        self.assertEqual(config.memory_guard_headroom_gb, 0.75)
         with self.assertRaisesRegex(ValueError, "headroom"):
             V3TrainingConfig(max_training_memory_gb=1.0, memory_guard_headroom_gb=1.0)
         rss = _current_process_rss_bytes()

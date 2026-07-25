@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import hashlib
 import json
-from typing import Self
+from datetime import date
+from typing import Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -11,6 +12,7 @@ SWING_MODEL_SCHEMA_VERSION = "swing.model.v1"
 SWING_MODEL_TYPE = "canonical_swing"
 SWING_VALIDATION_SPLIT = "session_purged_walk_forward_and_ticker_holdout"
 SWING_REQUIRED_MARKET_REGIMES = ("risk_on", "neutral", "risk_off")
+SwingFeatureProfile = Literal["technical_market", "catalyst_full"]
 
 SECTOR_BENCHMARKS = (
     "XLB",
@@ -151,12 +153,34 @@ SWING_FEATURES = tuple(
     )
 )
 
+TECHNICAL_MARKET_FEATURES = tuple(
+    dict.fromkeys(
+        (
+            *TECHNICAL_FEATURES,
+            *BENCHMARK_FEATURES,
+            *CROSS_SECTIONAL_FEATURES,
+        )
+    )
+)
+
+SWING_FEATURE_PROFILES: dict[SwingFeatureProfile, tuple[str, ...]] = {
+    "technical_market": TECHNICAL_MARKET_FEATURES,
+    "catalyst_full": SWING_FEATURES,
+}
+
+
+def swing_features_for_profile(profile: SwingFeatureProfile) -> tuple[str, ...]:
+    return SWING_FEATURE_PROFILES[profile]
+
 
 class FrozenConfig(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
 
 class SwingDatasetConfig(FrozenConfig):
+    feature_profile: SwingFeatureProfile = "catalyst_full"
+    decision_start_date: date | None = None
+    decision_end_date: date | None = None
     horizon_sessions: int = Field(default=5, ge=1, le=20)
     round_trip_cost_bps: float = Field(default=10.0, ge=0, le=500)
     min_daily_bars: int = Field(default=250, ge=220, le=1_000)
@@ -168,6 +192,23 @@ class SwingDatasetConfig(FrozenConfig):
     source_coverage_max_age_minutes: int = Field(default=60, ge=0, le=1_440)
     minimum_cross_section: int = Field(default=20, ge=2)
     schema_version: str = SWING_FEATURE_SCHEMA_VERSION
+
+    @model_validator(mode="after")
+    def validate_profile(self) -> Self:
+        if (
+            self.decision_start_date is not None
+            and self.decision_end_date is not None
+            and self.decision_start_date > self.decision_end_date
+        ):
+            raise ValueError("decision_start_date must not follow decision_end_date")
+        if self.feature_profile == "technical_market" and self.required_global_sources:
+            raise ValueError(
+                "technical_market requires required_global_sources=[]; "
+                "news coverage is not part of this baseline"
+            )
+        if self.feature_profile == "catalyst_full" and not self.required_global_sources:
+            raise ValueError("catalyst_full requires at least one global source")
+        return self
 
     def label_policy(self) -> dict[str, object]:
         """Complete reproducible swing outcome semantics."""
@@ -191,6 +232,7 @@ class SwingDatasetConfig(FrozenConfig):
 
 
 class SwingTrainingConfig(FrozenConfig):
+    feature_profile: SwingFeatureProfile = "catalyst_full"
     family: str = "hist_gradient_boosting"
     n_splits: int = Field(default=4, ge=2, le=8)
     min_train_sessions: int = Field(default=120, ge=20)
@@ -206,8 +248,8 @@ class SwingTrainingConfig(FrozenConfig):
     learning_rate: float = Field(default=0.04, gt=0, le=1)
     l2_regularization: float = Field(default=1.0, ge=0)
     random_seed: int = 42
-    max_training_memory_gb: float = Field(default=4.0, ge=1.0, le=64)
-    memory_guard_headroom_gb: float = Field(default=0.25, ge=0.1, le=2.0)
+    max_training_memory_gb: float = Field(default=4.0, ge=1.0, le=4.0)
+    memory_guard_headroom_gb: float = Field(default=0.75, ge=0.5, le=2.0)
     schema_version: str = SWING_MODEL_SCHEMA_VERSION
 
     @model_validator(mode="after")

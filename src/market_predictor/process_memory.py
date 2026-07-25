@@ -41,7 +41,8 @@ def process_memory_snapshot() -> tuple[int, int] | None:
     if os.name == "nt":
         return _windows_memory_snapshot()
     statm = Path("/proc/self/statm")
-    if not statm.exists():
+    status = Path("/proc/self/status")
+    if not statm.exists() or not status.exists():
         return None
     parts = statm.read_text(encoding="ascii").split()
     if len(parts) < 2:
@@ -50,7 +51,19 @@ def process_memory_snapshot() -> tuple[int, int] | None:
     if not callable(sysconf):
         return None
     rss = int(parts[1]) * int(sysconf("SC_PAGE_SIZE"))
-    return rss, rss
+    peak = _linux_peak_rss(status)
+    return rss, peak if peak is not None else rss
+
+
+def _linux_peak_rss(status: Path) -> int | None:
+    for line in status.read_text(encoding="ascii").splitlines():
+        if not line.startswith("VmHWM:"):
+            continue
+        fields = line.split()
+        if len(fields) < 2:
+            return None
+        return int(fields[1]) * 1024
+    return None
 
 
 def _windows_memory_snapshot() -> tuple[int, int] | None:

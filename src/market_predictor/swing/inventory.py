@@ -33,8 +33,8 @@ class SwingResearchInventoryConfig(BaseModel):
     require_point_in_time_membership: bool = True
     require_source_collection_evidence: bool = True
     max_alignment_errors: int = Field(default=0, ge=0)
-    max_memory_gib: float = Field(default=4.0, ge=1.0, le=64)
-    memory_headroom_gib: float = Field(default=0.25, ge=0.1, le=2.0)
+    max_memory_gib: float = Field(default=4.0, ge=1.0, le=4.0)
+    memory_headroom_gib: float = Field(default=0.75, ge=0.5, le=2.0)
 
     @model_validator(mode="after")
     def validate_inventory(self) -> SwingResearchInventoryConfig:

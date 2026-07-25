@@ -15,7 +15,8 @@ from market_predictor.intraday.contracts import (
 from market_predictor.swing.contracts import (
     CATALYST_FEATURES,
     SWING_FEATURE_SCHEMA_VERSION,
-    SWING_FEATURES,
+    SwingFeatureProfile,
+    swing_features_for_profile,
 )
 
 LiveMode = Literal["swing", "intraday"]
@@ -59,11 +60,23 @@ def select_and_audit_live_features(
     minimum_cross_section: int,
     source_coverage_max_age_minutes: int,
     required_global_sources: Sequence[str],
+    feature_profile: SwingFeatureProfile | None = None,
 ) -> tuple[pd.DataFrame, CanonicalAuditReport]:
     """Select one complete latest decision group and audit it for live scoring."""
 
-    model_features = SWING_FEATURES if mode == "swing" else INTRADAY_MODEL_FEATURES
-    catalyst_features = CATALYST_FEATURES if mode == "swing" else CATALYST_AUDIT_FEATURES
+    swing_profile = feature_profile or "catalyst_full"
+    model_features = (
+        swing_features_for_profile(swing_profile)
+        if mode == "swing"
+        else INTRADAY_MODEL_FEATURES
+    )
+    catalyst_features = (
+        CATALYST_FEATURES
+        if mode == "swing" and swing_profile == "catalyst_full"
+        else CATALYST_AUDIT_FEATURES
+        if mode == "intraday"
+        else ()
+    )
     schema_column = "swing_feature_schema_version" if mode == "swing" else "intraday_feature_schema_version"
     bar_count_column = "daily_bar_count" if mode == "swing" else "five_minute_bar_count"
     required = {
@@ -97,6 +110,7 @@ def select_and_audit_live_features(
                 "session_date_et",
                 "bar_available_at_utc",
                 "prediction_cutoff_policy_id",
+                "feature_profile",
             }
         )
     missing = sorted(required.difference(frame.columns))
@@ -139,6 +153,7 @@ def select_and_audit_live_features(
         selected_cutoff,
         source_coverage_max_age_minutes=source_coverage_max_age_minutes,
         required_global_sources=required_global_sources,
+        require_ticker_sources=mode == "intraday" or swing_profile == "catalyst_full",
     )
     identity_failures = int(selected.duplicated(["ticker", "decision_time_utc"]).sum())
     decision_group_failures = max(0, selected["decision_group_id"].nunique() - 1)
@@ -157,6 +172,18 @@ def select_and_audit_live_features(
     )
     catalyst_failures = int((~selected["catalyst_eligible"].fillna(False).astype(bool)).sum()) if mode == "intraday" else 0
     schema_failures = int(selected[schema_column].astype(str).ne(LIVE_SCHEMA_VERSIONS[mode]).sum())
+    profile_failures = (
+        int(
+            selected["feature_profile"]
+            .astype(str)
+            .str.lower()
+            .str.strip()
+            .ne(swing_profile)
+            .sum()
+        )
+        if mode == "swing"
+        else 0
+    )
     timestamp_failures = int(selected_cutoff.isna().sum() + selected_feature.isna().sum())
     cutoff_contract_failures = 0
     if mode == "swing":
@@ -168,6 +195,12 @@ def select_and_audit_live_features(
         )
     checks = (
         _check(f"{mode}_live_schema", 0, len(selected), "frozen live feature columns are present"),
+        _check(
+            f"{mode}_live_feature_profile",
+            profile_failures,
+            len(selected),
+            "live rows match the configured feature profile",
+        ),
         _check(f"{mode}_live_rows", int(selected.empty), len(selected), "latest eligible decision group is not empty"),
         _check(f"{mode}_live_identity", identity_failures, len(selected), "ticker/decision identity is unique"),
         _check(
@@ -205,9 +238,24 @@ def select_and_audit_live_features(
     return selected.sort_values("ticker", kind="stable").reset_index(drop=True), CanonicalAuditReport(checks=checks)
 
 
-def live_feature_columns(mode: LiveMode) -> tuple[str, ...]:
-    model_features = SWING_FEATURES if mode == "swing" else INTRADAY_MODEL_FEATURES
-    catalyst_features = CATALYST_FEATURES if mode == "swing" else CATALYST_AUDIT_FEATURES
+def live_feature_columns(
+    mode: LiveMode,
+    *,
+    feature_profile: SwingFeatureProfile | None = None,
+) -> tuple[str, ...]:
+    swing_profile = feature_profile or "catalyst_full"
+    model_features = (
+        swing_features_for_profile(swing_profile)
+        if mode == "swing"
+        else INTRADAY_MODEL_FEATURES
+    )
+    catalyst_features = (
+        CATALYST_FEATURES
+        if mode == "swing" and swing_profile == "catalyst_full"
+        else CATALYST_AUDIT_FEATURES
+        if mode == "intraday"
+        else ()
+    )
     return tuple(dict.fromkeys((*model_features, *catalyst_features)))
 
 
@@ -221,6 +269,7 @@ def _source_failures(
     *,
     source_coverage_max_age_minutes: int,
     required_global_sources: Sequence[str],
+    require_ticker_sources: bool = True,
 ) -> int:
     failures = 0
     max_age = pd.Timedelta(minutes=source_coverage_max_age_minutes)
@@ -229,9 +278,9 @@ def _source_failures(
         for column in frame.columns
         if column.startswith("source_status_") and not column.startswith("source_status_available_at_utc_")
     ]
-    if not ticker_statuses:
+    if require_ticker_sources and not ticker_statuses:
         failures += max(1, len(frame))
-    for status_column in ticker_statuses:
+    for status_column in ticker_statuses if require_ticker_sources else ():
         source = status_column.removeprefix("source_status_")
         failures += _one_source_failures(
             frame,

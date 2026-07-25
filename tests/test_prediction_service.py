@@ -1061,7 +1061,9 @@ def _write_model(
                 "target_col": target_col,
                 "calibrator": None,
                 "horizon_sessions": 5,
+                "model_schema_version": SWING_MODEL_SCHEMA_VERSION,
                 "feature_schema_version": SWING_FEATURE_SCHEMA_VERSION,
+                "feature_profile": "catalyst_full",
             }
         )
     else:
@@ -1224,6 +1226,7 @@ def _swing_frame(tickers: list[str], features: list[str], *, rows: int) -> pd.Da
                 "prediction_cutoff_policy_id": "xnys_1800_america_new_york_v1",
                 "source_coverage_end_utc_alpaca": decision_time - pd.Timedelta(minutes=15),
                 "swing_feature_schema_version": SWING_FEATURE_SCHEMA_VERSION,
+                "feature_profile": "catalyst_full",
                 "daily_bar_count": idx + 1,
                 "close": 100.0 + idx,
                 "price_feed": "sip",

@@ -9,7 +9,11 @@ from market_predictor.label_reconciliation import (
     stamped_material_hash_is_valid,
     swing_label_material_columns,
 )
-from market_predictor.swing.contracts import SWING_FEATURES, SwingDatasetConfig, swing_target_column
+from market_predictor.swing.contracts import (
+    SwingDatasetConfig,
+    swing_features_for_profile,
+    swing_target_column,
+)
 from market_predictor.swing.labels import add_exact_swing_labels
 
 
@@ -21,6 +25,7 @@ def audit_swing_dataset(
     benchmark_bars: pd.DataFrame | None = None,
 ) -> CanonicalAuditReport:
     horizon = config.horizon_sessions
+    profile_features = swing_features_for_profile(config.feature_profile)
     required = {
         "ticker",
         "security_id",
@@ -46,6 +51,7 @@ def audit_swing_dataset(
         "qqq_available_at_utc",
         "sector_available_at_utc",
         "swing_feature_schema_version",
+        "feature_profile",
         "label_material_sha256",
         "label_source_reconciliation_sha256",
         "label_source_reconciliation_errors",
@@ -54,7 +60,7 @@ def audit_swing_dataset(
         f"future_excess_return_{horizon}d_vs_spy",
         f"future_excess_return_{horizon}d_vs_qqq",
         f"future_excess_return_{horizon}d_vs_sector",
-        *SWING_FEATURES,
+        *profile_features,
     }
     missing = sorted(required.difference(frame.columns))
     if missing:
@@ -71,6 +77,14 @@ def audit_swing_dataset(
     label_expected = data["label_window_expected"].fillna(False).astype(bool)
     label_exact = data["label_path_exact"].fillna(False).astype(bool)
     label_eligible = data["label_eligible"].fillna(False).astype(bool)
+    profile_failures = int(
+        data["feature_profile"]
+        .astype(str)
+        .str.lower()
+        .str.strip()
+        .ne(config.feature_profile)
+        .sum()
+    )
 
     timestamp_failures = int(decision.isna().sum() + feature_available.isna().sum())
     future_features = int((feature_available > decision).fillna(True).sum())
@@ -183,11 +197,19 @@ def audit_swing_dataset(
             material_columns=material_columns,
         )
     leakage_named_features = [
-        feature for feature in SWING_FEATURES if feature.startswith(("future_", "target_", "entry_", "exit_", "label_"))
+        feature
+        for feature in profile_features
+        if feature.startswith(("future_", "target_", "entry_", "exit_", "label_"))
     ]
 
     checks = (
         _check("swing_schema", 0, len(data), "frozen swing feature and label columns are present"),
+        _check(
+            "swing_feature_profile",
+            profile_failures,
+            len(data),
+            "dataset rows match the configured feature profile",
+        ),
         _check("swing_rows", int(data.empty), len(data), "swing dataset is not empty"),
         _check("swing_identity", identity_failures, len(data), "security/decision identity is unique"),
         _check("swing_timestamps", timestamp_failures, len(data), "decision and feature timestamps are valid UTC"),
@@ -223,7 +245,12 @@ def audit_swing_dataset(
             len(data),
             "material labels reproduce from immutable daily stock and benchmark paths",
         ),
-        _check("swing_feature_names", len(leakage_named_features), len(SWING_FEATURES), "feature names exclude labels"),
+        _check(
+            "swing_feature_names",
+            len(leakage_named_features),
+            len(profile_features),
+            "feature names exclude labels",
+        ),
         _check("swing_schema_version", schema_failures, len(data), "swing schema version matches"),
     )
     return CanonicalAuditReport(checks=checks)

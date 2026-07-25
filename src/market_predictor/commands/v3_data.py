@@ -8,6 +8,7 @@ import typer
 from rich.console import Console
 
 from market_predictor.commands.v3_labels import parse_horizons
+from market_predictor.heavy_jobs import serialized_heavy_job
 from market_predictor.v3.audits import build_data_audit
 from market_predictor.v3.development import DevelopmentDatasetConfig, build_monthly_development_dataset
 from market_predictor.v3.partitions import partition_development_shadow, write_shadow_partition
@@ -15,6 +16,7 @@ from market_predictor.v3.partitions import partition_development_shadow, write_s
 
 def register_v3_data_commands(app: typer.Typer, console: Console) -> None:
     @app.command("build-v3-development-dataset")
+    @serialized_heavy_job("build-v3-development-dataset")
     def build_v3_development_dataset(
         bars_dir: Path = typer.Option(..., help="Directory of audited per-symbol 5-minute parquets."),
         benchmark_dir: Path = typer.Option(..., help="Directory of exact-timestamp market and sector ETF parquets."),

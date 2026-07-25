@@ -1,5 +1,5 @@
-feature_profile = "catalyst_full"
-family = "hist_gradient_boosting"
+feature_profile = "technical_market"
+family = "logistic"
 n_splits = 4
 min_train_sessions = 120
 min_train_rows = 5000

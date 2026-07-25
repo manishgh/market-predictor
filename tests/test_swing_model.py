@@ -16,9 +16,12 @@ from market_predictor.cli import app
 from market_predictor.prediction_policy import parse_prediction_policy
 from market_predictor.registry import load_model_manifest, verify_model_artifact
 from market_predictor.swing.contracts import (
+    CATALYST_FEATURES,
+    FUNDAMENTAL_FEATURES,
     SWING_FEATURE_SCHEMA_VERSION,
     SWING_FEATURES,
     SWING_MODEL_TYPE,
+    TECHNICAL_MARKET_FEATURES,
     SwingDatasetConfig,
     SwingPromotionConfig,
     SwingTrainingConfig,
@@ -38,6 +41,54 @@ from tests.r4_fixtures import (
 
 
 class SwingModelTests(unittest.TestCase):
+    def test_technical_profile_excludes_catalyst_and_rejects_profile_mismatch(
+        self,
+    ) -> None:
+        dataset = _training_dataset()
+        dataset["feature_profile"] = "technical_market"
+        poison_columns = [
+            column
+            for column in (*CATALYST_FEATURES, *FUNDAMENTAL_FEATURES)
+            if column in dataset.columns
+        ]
+        dataset.loc[:, poison_columns] = 999_999.0
+        config = SwingTrainingConfig(
+            feature_profile="technical_market",
+            family="logistic",
+            n_splits=3,
+            min_train_sessions=30,
+            min_train_rows=100,
+            min_training_tickers=6,
+            min_features=25,
+            ticker_holdout_fraction=0.2,
+            top_k=3,
+            max_iter=100,
+        )
+        with TemporaryDirectory() as temp_dir:
+            result = train_swing_model(
+                dataset,
+                model_out=Path(temp_dir) / "technical.joblib",
+                dataset_sha256="f" * 64,
+                config=config,
+            )
+        selected = set(result.metrics["feature_reference_profile"])
+        self.assertTrue(selected.issubset(TECHNICAL_MARKET_FEATURES))
+        self.assertTrue(selected.isdisjoint(CATALYST_FEATURES))
+        self.assertTrue(selected.isdisjoint(FUNDAMENTAL_FEATURES))
+        self.assertEqual(
+            result.metrics["feature_profile"],
+            "technical_market",
+        )
+        with self.assertRaises(SchemaMismatchError):
+            train_swing_model(
+                dataset,
+                model_out=Path("not-created.joblib"),
+                dataset_sha256="f" * 64,
+                config=config.model_copy(
+                    update={"feature_profile": "catalyst_full"}
+                ),
+            )
+
     def test_cli_trains_and_rejects_tampered_evidence(self) -> None:
         dataset = _training_dataset()
         with TemporaryDirectory() as temp_dir:
@@ -388,6 +439,7 @@ def _training_dataset() -> pd.DataFrame:
                     "label_path_exact": True,
                     "horizon_sessions": 5,
                     "swing_feature_schema_version": SWING_FEATURE_SCHEMA_VERSION,
+                    "feature_profile": "catalyst_full",
                     "reconciliation_sha256": "a" * 64,
                     "event_assignment_sha256": "b" * 64,
                     "event_aggregate_sha256": "c" * 64,

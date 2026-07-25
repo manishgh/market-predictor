@@ -69,7 +69,7 @@ def collect_swing_daily_history(
     workers: int = 4,
     benchmarks: tuple[str, ...] = DEFAULT_BENCHMARKS,
     memory_budget_gib: float = 4.0,
-    memory_headroom_gib: float = 0.5,
+    memory_headroom_gib: float = 0.75,
 ) -> DailyHistoryCollectionResult:
     if start_date > end_date:
         raise ValueError("start_date must not be after end_date")

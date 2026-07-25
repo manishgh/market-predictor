@@ -12,6 +12,7 @@ from market_predictor.canonical.store import (
     write_canonical_artifact,
 )
 from market_predictor.commands.configuration import load_typed_config
+from market_predictor.heavy_jobs import serialized_heavy_job
 from market_predictor.promotion_identity import (
     DEFAULT_APPROVER_TOKEN_ENV,
     DEFAULT_BUILD_TOKEN_ENV,
@@ -36,13 +37,17 @@ from market_predictor.swing.promotion import (
 
 def register_swing_model_commands(app: typer.Typer, console: Console) -> None:
     @app.command("build-swing-dataset")
+    @serialized_heavy_job("build-swing-dataset")
     def build_swing_dataset_command(
         decisions: Path = typer.Option(..., help="Hash-verified canonical decision artifact."),
         benchmark_bars: Path = typer.Option(..., help="Hash-verified SPY, QQQ, and sector daily bars."),
-        global_events: Path = typer.Option(..., help="Hash-verified canonical MARKET event artifact."),
-        global_source_collections: Path = typer.Option(
-            ...,
-            help="Hash-verified source collection states for ticker MARKET.",
+        global_events: Path | None = typer.Option(
+            None,
+            help="Hash-verified MARKET events; catalyst_full only.",
+        ),
+        global_source_collections: Path | None = typer.Option(
+            None,
+            help="Hash-verified MARKET source states; catalyst_full only.",
         ),
         out: Path = typer.Option(..., help="Immutable canonical swing dataset parquet."),
         config_path: Path | None = typer.Option(None, "--config", help="Swing dataset JSON or TOML config."),
@@ -50,14 +55,15 @@ def register_swing_model_commands(app: typer.Typer, console: Console) -> None:
     ) -> None:
         """Build an audited point-in-time daily swing feature and label artifact."""
 
+        config = load_typed_config(config_path, SwingDatasetConfig)
         decision_frame, benchmark_frame, global_event_frame, global_collection_frame = _load_swing_build_inputs(
             decisions,
             benchmark_bars,
             global_events,
             global_source_collections,
+            feature_profile=config.feature_profile,
             production=production,
         )
-        config = load_typed_config(config_path, SwingDatasetConfig)
         dataset, audit = build_swing_dataset(
             decision_frame,
             benchmark_frame,
@@ -65,7 +71,18 @@ def register_swing_model_commands(app: typer.Typer, console: Console) -> None:
             global_source_collections=global_collection_frame,
             config=config,
         )
-        inputs = {str(path): file_sha256(path) for path in (decisions, benchmark_bars, global_events, global_source_collections)}
+        input_paths = [
+            path
+            for path in (
+                decisions,
+                benchmark_bars,
+                global_events,
+                global_source_collections,
+            )
+            if path is not None
+        ]
+        inputs = {str(path): file_sha256(path) for path in input_paths}
+        inputs["feature_profile"] = config.feature_profile
         manifest = write_canonical_artifact(
             dataset,
             out,
@@ -84,24 +101,30 @@ def register_swing_model_commands(app: typer.Typer, console: Console) -> None:
         )
 
     @app.command("build-swing-live-features")
+    @serialized_heavy_job("build-swing-live-features")
     def build_swing_live_features_command(
         decisions: Path = typer.Option(..., help="Hash-verified canonical decision artifact."),
         benchmark_bars: Path = typer.Option(..., help="Hash-verified SPY, QQQ, and sector daily bars."),
-        global_events: Path = typer.Option(..., help="Hash-verified canonical MARKET event artifact."),
-        global_source_collections: Path = typer.Option(
-            ...,
-            help="Hash-verified source collection states for ticker MARKET.",
+        global_events: Path | None = typer.Option(
+            None,
+            help="Hash-verified MARKET events; catalyst_full only.",
+        ),
+        global_source_collections: Path | None = typer.Option(
+            None,
+            help="Hash-verified MARKET source states; catalyst_full only.",
         ),
         out: Path = typer.Option(..., help="Immutable latest swing inference feature artifact."),
         config_path: Path | None = typer.Option(None, "--config", help="Swing dataset JSON or TOML config."),
     ) -> None:
         """Build a label-free, audited latest swing inference snapshot."""
 
+        config = load_typed_config(config_path, SwingDatasetConfig)
         decision_frame, benchmark_frame, global_event_frame, global_collection_frame = _load_swing_build_inputs(
             decisions,
             benchmark_bars,
             global_events,
             global_source_collections,
+            feature_profile=config.feature_profile,
             production=True,
         )
         features, audit = build_swing_inference_features(
@@ -109,9 +132,20 @@ def register_swing_model_commands(app: typer.Typer, console: Console) -> None:
             benchmark_frame,
             global_events=global_event_frame,
             global_source_collections=global_collection_frame,
-            config=load_typed_config(config_path, SwingDatasetConfig),
+            config=config,
         )
-        inputs = {str(path): file_sha256(path) for path in (decisions, benchmark_bars, global_events, global_source_collections)}
+        input_paths = [
+            path
+            for path in (
+                decisions,
+                benchmark_bars,
+                global_events,
+                global_source_collections,
+            )
+            if path is not None
+        ]
+        inputs = {str(path): file_sha256(path) for path in input_paths}
+        inputs["feature_profile"] = config.feature_profile
         manifest = write_canonical_artifact(
             features,
             out,
@@ -130,6 +164,7 @@ def register_swing_model_commands(app: typer.Typer, console: Console) -> None:
         )
 
     @app.command("train-swing-model")
+    @serialized_heavy_job("train-swing-model")
     def train_swing_model_command(
         dataset: Path = typer.Option(..., help="Hash-verified canonical swing dataset."),
         model_out: Path = typer.Option(..., help="New candidate model artifact path."),
@@ -262,11 +297,17 @@ def register_swing_model_commands(app: typer.Typer, console: Console) -> None:
 def _load_swing_build_inputs(
     decisions: Path,
     benchmark_bars: Path,
-    global_events: Path,
-    global_source_collections: Path,
+    global_events: Path | None,
+    global_source_collections: Path | None,
     *,
+    feature_profile: str,
     production: bool,
-) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+) -> tuple[
+    pd.DataFrame,
+    pd.DataFrame,
+    pd.DataFrame | None,
+    pd.DataFrame | None,
+]:
     decision_frame, _ = load_canonical_artifact(
         decisions,
         expected_type="decisions",
@@ -277,6 +318,16 @@ def _load_swing_build_inputs(
         expected_type="bars",
         allow_research=not production,
     )
+    if feature_profile == "technical_market":
+        if global_events is not None or global_source_collections is not None:
+            raise typer.BadParameter(
+                "technical_market rejects global event and source-collection inputs"
+            )
+        return decision_frame, benchmark_frame, None, None
+    if global_events is None or global_source_collections is None:
+        raise typer.BadParameter(
+            "catalyst_full requires --global-events and --global-source-collections"
+        )
     global_event_frame, _ = load_canonical_artifact(
         global_events,
         expected_type="events",

@@ -73,8 +73,9 @@ class GlobalContextTests(unittest.TestCase):
                     "features": ["feature"],
                     "target_col": "target_net_positive_5d",
                     "model_type": SWING_MODEL_TYPE,
-                    "schema_version": SWING_MODEL_SCHEMA_VERSION,
+                    "model_schema_version": SWING_MODEL_SCHEMA_VERSION,
                     "feature_schema_version": SWING_FEATURE_SCHEMA_VERSION,
+                    "feature_profile": "catalyst_full",
                 },
                 model_path,
             )
@@ -109,6 +110,7 @@ class GlobalContextTests(unittest.TestCase):
                         "volume_z20": 1.0,
                         "event_count_3d": 2,
                         "swing_feature_schema_version": SWING_FEATURE_SCHEMA_VERSION,
+                        "feature_profile": "catalyst_full",
                     },
                     {
                         "ticker": "DAL",
@@ -117,6 +119,7 @@ class GlobalContextTests(unittest.TestCase):
                         "volume_z20": 1.0,
                         "event_count_3d": 2,
                         "swing_feature_schema_version": SWING_FEATURE_SCHEMA_VERSION,
+                        "feature_profile": "catalyst_full",
                     },
                 ]
             )

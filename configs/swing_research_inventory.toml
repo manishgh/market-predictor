@@ -8,4 +8,4 @@ require_point_in_time_membership = true
 require_source_collection_evidence = true
 max_alignment_errors = 0
 max_memory_gib = 4.0
-memory_headroom_gib = 0.25
+memory_headroom_gib = 0.75

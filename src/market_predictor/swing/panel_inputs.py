@@ -32,7 +32,7 @@ def build_swing_market_panel_inputs(
     coverage_summary_path: Path,
     benchmarks: tuple[str, ...] = DEFAULT_BENCHMARKS,
     memory_budget_gib: float = 4.0,
-    memory_headroom_gib: float = 0.5,
+    memory_headroom_gib: float = 0.75,
 ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, dict[str, Any]]:
     """Build hash-bound PIT stock, benchmark, and membership inputs without filling gaps."""
 

@@ -191,6 +191,9 @@ infrastructure, must remain `environment_pending`. Never simulate them into a pa
   `float32` matrices where appropriate, and sequential model release.
 - Do not leave Python workers or test servers running after verification.
 - Do not run multiple heavy test/training processes concurrently.
+- Every heavy CLI build or training entry point must acquire the shared
+  non-queueing workspace lease before loading inputs. Do not bypass the lease
+  from scripts, tests, notebooks, or deployment wrappers.
 
 ## 6. Change Workflow
 

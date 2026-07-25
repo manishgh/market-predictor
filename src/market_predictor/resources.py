@@ -37,7 +37,9 @@ def assert_memory_budget(
         raise ValueError("memory budget and headroom are invalid")
     snapshot = process_memory_snapshot()
     if snapshot is None:
-        return
+        raise DataReadinessError(
+            f"memory guard stopped {stage}: process memory accounting is unavailable"
+        )
     threshold = int((hard_budget_gib - headroom_gib) * 1024**3)
     if snapshot[0] > threshold:
         raise DataReadinessError(
