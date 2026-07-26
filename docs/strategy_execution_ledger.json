@@ -564,32 +564,57 @@
     {
       "blocker": null,
       "checkpoint_id": "KS2",
-      "closure": null,
+      "closure": {
+        "closed_at_utc": "2026-07-26T22:07:13Z",
+        "commit_sha": "0abe64fc0be167893a3fbc498bf7fd893b60807a",
+        "remote_ref": "origin/r3-lineage",
+        "summary": "Published six frozen, strategy-specific swing label artifacts with causal setup eligibility, exact stock and benchmark intervals, evidenced execution costs, independent replay audits, and fail-closed catalyst readiness."
+      },
       "contracts": [
         "strategy setup eligibility",
         "exact path outcome evaluator",
         "strategy label policy",
         "configs/swing_strategy_labels.toml"
       ],
-      "evidence": [],
+      "evidence": [
+        {
+          "description": "Hash-bound five-year replay of six independently audited strategy-label artifacts with exact execution and benchmark intervals.",
+          "evidence_id": "KS2-E1",
+          "path": "docs/evidence/ks2_strategy_label_replay_20260726.json",
+          "sha256": "13ae320e04da624cb731636dd8d30f056f907917650609dd7c94dddeaac90620"
+        },
+        {
+          "description": "Strategy-label poison tests, independent systems and ML reviews, and repository-wide unit, lint, strict-type, and compile verification.",
+          "evidence_id": "KS2-E2",
+          "path": "docs/evidence/ks2_verification_20260726.json",
+          "sha256": "8df5387c145c3d4141e22816af3c75ef5ff3c058a767902f312b7bbac579c7b4"
+        }
+      ],
       "exit_gates": [
         {
           "description": "Continuation, reversal, breakout, and residual strategies have distinct causal label policies.",
-          "evidence_ids": [],
+          "evidence_ids": [
+            "KS2-E1"
+          ],
           "gate_id": "KS2-G1",
-          "status": "pending"
+          "status": "passed"
         },
         {
           "description": "Every label replays from immutable bars and the bound execution policy.",
-          "evidence_ids": [],
+          "evidence_ids": [
+            "KS2-E1"
+          ],
           "gate_id": "KS2-G2",
-          "status": "pending"
+          "status": "passed"
         },
         {
           "description": "Future setup selection and generic-label reuse fail poison tests.",
-          "evidence_ids": [],
+          "evidence_ids": [
+            "KS2-E1",
+            "KS2-E2"
+          ],
           "gate_id": "KS2-G3",
-          "status": "pending"
+          "status": "passed"
         }
       ],
       "in_scope": [
@@ -605,21 +630,25 @@
       ],
       "problem_statement": "Prevent one generic direction label from standing in for multiple market behaviors.",
       "sequence": 2,
-      "status": "in_progress",
+      "status": "completed",
       "title": "Build strategy-specific label primitives",
       "verification": [
         {
-          "command": null,
+          "command": ".\\.venv\\Scripts\\python.exe -m market_predictor.research_cli build-swing-strategy-labels --decisions data\\canonical\\swing_technical_decisions_20190709_20260708_v1.parquet --benchmark-bars data\\artifacts\\swing_market_panel_inputs_20190709_20260708_v1\\benchmark_bars.parquet --config configs\\swing_technical_dataset.toml --strategy-policy configs\\swing_strategy_labels.toml --research --out-dir data\\features\\swing\\strategy_labels_20210709_20260708_v4",
           "description": "Replay strategy labels and exact stock, SPY, QQQ, and sector intervals.",
-          "evidence_ids": [],
-          "status": "pending",
+          "evidence_ids": [
+            "KS2-E1"
+          ],
+          "status": "passed",
           "verification_id": "KS2-V1"
         },
         {
-          "command": null,
+          "command": ".\\.venv\\Scripts\\python.exe -m unittest discover -s tests -p \"test_*.py\"",
           "description": "Run look-ahead, missing-path, ambiguous-fill, and cost-once poison tests.",
-          "evidence_ids": [],
-          "status": "pending",
+          "evidence_ids": [
+            "KS2-E2"
+          ],
+          "status": "passed",
           "verification_id": "KS2-V2"
         }
       ]

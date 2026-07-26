@@ -1,0 +1,57 @@
+{
+  "checkpoint_id": "KS2",
+  "implementation_commit": "0abe64fc0be167893a3fbc498bf7fd893b60807a",
+  "independent_reviews": [
+    {
+      "result": "passed",
+      "scope": "systems, provenance, resume, memory, and artifact-integrity review"
+    },
+    {
+      "result": "passed",
+      "scope": "ML causality, target semantics, benchmark alignment, and execution-economics review"
+    }
+  ],
+  "poison_tests": [
+    "future feature availability and generic label-bearing setup inputs fail closed",
+    "future-bar mutation cannot change decision-time setup selection",
+    "missing exact stock paths abstain and replay-tampered outputs fail audit",
+    "missing dynamic ATR cost evidence abstains",
+    "net return charges the bound round-trip execution cost exactly once",
+    "date-chunked and complete technical-indicator replays are exactly equivalent",
+    "orphan data without a manifest is rebuilt and orphan manifests fail closed",
+    "completed bundles reject child hash, row, request, lineage, or audit mismatch",
+    "breakout gap-through and same-bar target/stop paths use executable stop-first outcomes",
+    "catalyst-dependent setups require reconstructed point-in-time source completeness"
+  ],
+  "schema": "market_predictor.ks2_verification_evidence.v1",
+  "verification": [
+    {
+      "command": ".\\.venv\\Scripts\\python.exe -m unittest discover -s tests -p \"test_*.py\"",
+      "result": "passed",
+      "tests": 472
+    },
+    {
+      "command": ".\\.venv\\Scripts\\ruff.exe check src tests",
+      "result": "passed"
+    },
+    {
+      "command": ".\\.venv\\Scripts\\mypy.exe --strict src\\market_predictor",
+      "result": "passed",
+      "source_files": 151
+    },
+    {
+      "command": ".\\.venv\\Scripts\\python.exe -m compileall -q src tests",
+      "result": "passed"
+    },
+    {
+      "command": ".\\.venv\\Scripts\\python.exe -m unittest tests.test_swing_strategy_labels tests.test_strategy_governance tests.test_strategy_research_contracts",
+      "result": "passed",
+      "tests": 26
+    },
+    {
+      "command": "git diff --check && credential-pattern diff scan",
+      "result": "passed"
+    }
+  ],
+  "warning": "The full suite emits one existing upstream Starlette/httpx deprecation warning; it does not affect test results."
+}

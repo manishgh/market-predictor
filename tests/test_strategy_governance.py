@@ -31,7 +31,7 @@ class StrategyGovernanceTests(unittest.TestCase):
         self.assertTrue(report["valid"])
         self.assertEqual(report["checkpoint_count"], 10)
         self.assertEqual(report["catalog_count"], 25)
-        self.assertEqual(report["next_checkpoint"], "KS2")
+        self.assertEqual(report["next_checkpoint"], "KS3")
 
     def test_garch_family_is_explicit_and_owned_by_ks6(self) -> None:
         ledger = StrategyExecutionLedger.model_validate_json(
@@ -134,6 +134,8 @@ class StrategyGovernanceTests(unittest.TestCase):
             "ks0_verification_20260726.json",
             "ks1_catalyst_lineage_replay_20260726.json",
             "ks1_verification_20260726.json",
+            "ks2_strategy_label_replay_20260726.json",
+            "ks2_verification_20260726.json",
         ):
             source = REPOSITORY_ROOT / "docs" / "evidence" / name
             (evidence / name).write_bytes(source.read_bytes())

@@ -1,0 +1,128 @@
+{
+  "acceptance": {
+    "artifact_isolation": "Each strategy is published as an independently hashed, resumable artifact and the bundle completes only after all child manifests, hashes, row counts, request lineage, and audits reconcile.",
+    "catalyst_readiness": "Catalyst Drift and Short-Term Reversal correctly abstain in the technical-only replay because ticker catalyst coverage is unavailable; missing history is never interpreted as zero events.",
+    "execution_economics": "Labels use exact executable stock paths, matching SPY, QQQ, and sector intervals, dynamic evidenced costs, and stop-first same-bar ambiguity handling.",
+    "label_separation": "Continuation, reversal, breakout, and residual strategies use frozen, distinct setup, horizon, target, and outcome contracts.",
+    "memory_gate": "Peak working set is a hard completion gate below the configured 3.25 GiB safety threshold."
+  },
+  "artifacts": {
+    "benchmark_bars": {
+      "path": "data/artifacts/swing_market_panel_inputs_20190709_20260708_v1/benchmark_bars.parquet",
+      "sha256": "09310f91c6bd46590c641287e3eca18f108e2dfca287ea99e0d71bc82b11f808"
+    },
+    "benchmark_bars_manifest": {
+      "path": "data/artifacts/swing_market_panel_inputs_20190709_20260708_v1/benchmark_bars.parquet.manifest.json",
+      "sha256": "794c8b3b392aa82044df9ded35673057cd41afa7a5e26d79963eefca51c6bd32"
+    },
+    "bundle_manifest": {
+      "path": "data/features/swing/strategy_labels_20210709_20260708_v4/_manifest.json",
+      "sha256": "505b5b7c63021a80fc847f21c65c057d1efd69253491c561a8797c9363ddd38e"
+    },
+    "bundle_request": {
+      "path": "data/features/swing/strategy_labels_20210709_20260708_v4/_request.json",
+      "sha256": "f97ce4fc86ed6695450f7e1854779bc7c07905140c84c9f491b5fb9f081a9854"
+    },
+    "decisions": {
+      "path": "data/canonical/swing_technical_decisions_20190709_20260708_v1.parquet",
+      "sha256": "8b14bdec2c2ae4f46fbff058b4a1cdeb2d7700eb42d02f1bb2a0eca344bd3533"
+    },
+    "decisions_manifest": {
+      "path": "data/canonical/swing_technical_decisions_20190709_20260708_v1.parquet.manifest.json",
+      "sha256": "0d144e0bf90f0f5fe4e8e3355d1e90a142198836d39e282afd54ccdba5d0fdd7"
+    },
+    "policy": {
+      "path": "configs/swing_strategy_labels.toml",
+      "sha256": "fd65bf5c43c24ba9eaf9bf0663102ee07115cf9dcc1b417650caab4eab234611"
+    }
+  },
+  "audits": [
+    "strategy_label_schema",
+    "strategy_setup_causality",
+    "strategy_abstention_reasons",
+    "strategy_cost_once",
+    "strategy_target_contract",
+    "strategy_catalyst_coverage",
+    "strategy_breakout_execution",
+    "strategy_label_replay"
+  ],
+  "checkpoint_id": "KS2",
+  "implementation_commit": "0abe64fc0be167893a3fbc498bf7fd893b60807a",
+  "lineage": {
+    "dataset_config_sha256": "c7e9db4dabed964a6e3c2fa44cfae361763a68f74ec52a409b4d55c9953e156b",
+    "execution_policy_sha256": "2249656b0c0943003864850de6b2254e0fa091e45106ac3dd7ae23eddc425e2d",
+    "request_sha256": "661b6ac9fd32b714739ed3baac982f02ac55d5e1961d23779d40105d3ddfc9c4",
+    "strategy_label_evaluator_sha256": "c05417efc714ecf117decc3f2b97b9927753f394140ac11f0317f91499da627c",
+    "strategy_label_policy_sha256": "a844898a826a5e99acf05ad5822fe6793d27e6acd588659d4660a9ebc9b20464"
+  },
+  "production_ready": false,
+  "result": {
+    "failed_strategies": 0,
+    "label_eligible_rows": 410936,
+    "observed_strategies": 6,
+    "peak_working_set_gib": 3.128681182861328,
+    "requested_strategies": 6,
+    "rows": 3785868,
+    "safety_threshold_gib": 3.25,
+    "setup_eligible_rows": 413187,
+    "skipped_strategies": 0,
+    "status": "complete",
+    "strategies": [
+      {
+        "artifact_sha256": "834262cc055991fdfebff31d4a526f20cfaa2069e8dd5385de4e3fb58f2a9efc",
+        "label_eligible_rows": 113884,
+        "rows": 630978,
+        "setup_eligible_rows": 114468,
+        "strategy_id": "SWING.CROSS_SECTIONAL_MOMENTUM.5D.V1",
+        "strategy_label_material_sha256": "b64693f50c4c61a3a26273b79bf56c076d0f233ba9c57a6f6ddcc76f6dd5a8dd",
+        "strategy_label_policy_sha256": "1e8980b6290b04f3f9fb2905a770e799f107aae9b3b29135d526912f1f0d430e"
+      },
+      {
+        "artifact_sha256": "1a97cb123e695963d5814eb5072ccf1cf5e4744dd083ef1cc5dfc35fdace79f4",
+        "label_eligible_rows": 189082,
+        "rows": 630978,
+        "setup_eligible_rows": 190147,
+        "strategy_id": "SWING.TIME_SERIES_MOMENTUM.5D.V1",
+        "strategy_label_material_sha256": "da23597ffbf0a5a72eb65c105d80013d187fda4b274a298f4ebba17945af76a0",
+        "strategy_label_policy_sha256": "75abf72d06205de52321f9189ec713a59afdd6b41342fb1846f26162e8d63cc8"
+      },
+      {
+        "artifact_sha256": "564a564c9708484c956a34f27e8260d9dd82f17786806fc32a6f0d7b9e11e165",
+        "label_eligible_rows": 0,
+        "rows": 630978,
+        "setup_eligible_rows": 0,
+        "strategy_id": "SWING.CATALYST_DRIFT.5D.V1",
+        "strategy_label_material_sha256": "38575fbfe700a4e9e39dfebbec0c11c776fe42d7ca84d2e3ff49b5053745ca0f",
+        "strategy_label_policy_sha256": "9642a3ae1bf61792736fc0ae3e0324d5d5c720008aae957604cceac542e45657"
+      },
+      {
+        "artifact_sha256": "47744a5732b5c8432c5b118369790e38177964829c319218f8123fed64b28218",
+        "label_eligible_rows": 0,
+        "rows": 630978,
+        "setup_eligible_rows": 0,
+        "strategy_id": "SWING.SHORT_TERM_REVERSAL.3D.V1",
+        "strategy_label_material_sha256": "05dc869ef5c713f9ee6f8dad3fab52d3d9bfa3a9eb68dbcef0adae916f4aabdc",
+        "strategy_label_policy_sha256": "20f65c2a51a800f6f6cf59b0fdf47827acabb5c1a477c9a388ddd85529984c97"
+      },
+      {
+        "artifact_sha256": "99c36c7f9d5cc967dea7bbb3aacfd937709c5cdd2938e3be571be5193894a2fd",
+        "label_eligible_rows": 4133,
+        "rows": 630978,
+        "setup_eligible_rows": 4143,
+        "strategy_id": "SWING.BREAKOUT_EXPANSION.5D.V1",
+        "strategy_label_material_sha256": "f197da07162cad83035810819e25eb80450e7cfc272edec3940654c204a56459",
+        "strategy_label_policy_sha256": "104019686671237b5085eabde81d19b9044a987c074362fad4630a4bc0091c3f"
+      },
+      {
+        "artifact_sha256": "96b6518e8cb6e61001f7e3e126f43519d21d7b045ea9b8e5ea40822bc276fdfb",
+        "label_eligible_rows": 103837,
+        "rows": 630978,
+        "setup_eligible_rows": 104429,
+        "strategy_id": "SWING.SECTOR_RESIDUAL_MOMENTUM.5D.V1",
+        "strategy_label_material_sha256": "e3360f408b67beac6bd46ce734308ffbcad278468f6c9704ddb3774e36817fb5",
+        "strategy_label_policy_sha256": "d8c4cfe9242af66dd733b1790733ed697080ecc81bc9be43d57f1d0242145f69"
+      }
+    ]
+  },
+  "schema": "market_predictor.ks2_strategy_label_replay_evidence.v1"
+}
