@@ -1,0 +1,37 @@
+schema_version = "market_predictor.catalyst_lineage.v1"
+production_ready = false
+availability_policy = "provider_publication_proxy_plus_fixed_inference_latency"
+training_eligible_channels = ["direct_issuer"]
+research_only_channels = ["business_exposure", "sector_context"]
+missing_sentiment_policy = "exclude_and_fail_reconciliation"
+blind_window_policy = "exclude_never_impute_zero"
+unrelated_event_policy = "exclude_without_relation"
+historical_business_evidence_policy = "exclude_proxy_channels_until_point_in_time_evidence"
+maximum_process_memory_gib = 4.0
+memory_guard_headroom_gib = 0.75
+
+[assignment_windows]
+"2h" = "2h"
+"1d" = "1D"
+"3d" = "3D"
+
+[feature_profiles.catalyst_only]
+features = [
+  "event_count_{window}",
+  "sentiment_mean_{window}",
+  "sentiment_coverage_{window}",
+  "event_relevance_mean_{window}",
+  "low_relevance_event_fraction_{window}",
+  "source_family_count_{window}",
+]
+
+[feature_profiles.technical_plus_catalyst]
+base_profile = "technical_market"
+features = [
+  "event_count_{window}",
+  "sentiment_mean_{window}",
+  "sentiment_coverage_{window}",
+  "event_relevance_mean_{window}",
+  "low_relevance_event_fraction_{window}",
+  "source_family_count_{window}",
+]

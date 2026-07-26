@@ -96,7 +96,26 @@ def build_event_assignments(
         errors="coerce",
     )
 
-    decision_security_ids = set(prepared_decisions["security_id"])
+    ordered_decisions = prepared_decisions.sort_values(
+        ["security_id", "decision_time_utc", "decision_id"],
+        kind="stable",
+    ).reset_index(drop=True)
+    decision_times_ns = (
+        pd.DatetimeIndex(ordered_decisions["decision_time_utc"])
+        .as_unit("ns")
+        .asi8
+    )
+    decision_ranges: dict[str, tuple[int, int]] = {}
+    for security_id, indices in ordered_decisions.groupby(
+        "security_id",
+        sort=False,
+    ).indices.items():
+        positions = np.asarray(indices, dtype=np.int64)
+        decision_ranges[str(security_id)] = (
+            int(positions[0]),
+            int(positions[-1]) + 1,
+        )
+    decision_security_ids = set(decision_ranges)
     records: list[dict[str, Any]] = []
     seen: set[str] = set()
     ordered_windows = tuple(
@@ -120,19 +139,32 @@ def build_event_assignments(
         if pd.isna(available):
             records.append(_exclusion_record(event, "invalid_availability"))
             continue
-        security_decisions = prepared_decisions.loc[
-            prepared_decisions["security_id"].eq(security_id)
-            & prepared_decisions["decision_time_utc"].ge(available)
-        ]
-        if security_decisions.empty:
+        range_start, range_end = decision_ranges[security_id]
+        security_times = decision_times_ns[range_start:range_end]
+        available_ns = pd.Timestamp(available).value
+        first_future_offset = int(
+            np.searchsorted(
+                security_times,
+                available_ns,
+                side="left",
+            )
+        )
+        if first_future_offset >= len(security_times):
             records.append(_exclusion_record(event, "no_future_decision"))
             continue
-        security_decisions = security_decisions.loc[
-            security_decisions["decision_time_utc"].le(available + max_window)
-        ]
-        if security_decisions.empty:
+        last_window_offset = int(
+            np.searchsorted(
+                security_times,
+                pd.Timestamp(available + max_window).value,
+                side="right",
+            )
+        )
+        if last_window_offset <= first_future_offset:
             records.append(_exclusion_record(event, "outside_all_windows"))
             continue
+        security_decisions = ordered_decisions.iloc[
+            range_start + first_future_offset : range_start + last_window_offset
+        ]
         assigned = False
         for decision in security_decisions.to_dict(orient="records"):
             age = decision["decision_time_utc"] - available

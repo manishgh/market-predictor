@@ -84,6 +84,68 @@ class EventReconciliationTest(unittest.TestCase):
         self.assertEqual(summary["unexplained_events"], 0)
         self.assertEqual(summary["duplicate_event_id"], 1)
 
+    def test_time_index_assignment_handles_unsorted_multi_security_decisions(self) -> None:
+        decisions = pd.DataFrame(
+            {
+                "ticker": ["BBB", "AAA", "AAA", "BBB"],
+                "security_id": [
+                    "security:bbb",
+                    "security:aaa",
+                    "security:aaa",
+                    "security:bbb",
+                ],
+                "decision_time_utc": [
+                    self.decision + pd.Timedelta(days=1),
+                    self.decision,
+                    self.decision + pd.Timedelta(days=1),
+                    self.decision,
+                ],
+                "prediction_cutoff_policy_id": ["test-cutoff-v1"] * 4,
+                "timeframe": ["1d"] * 4,
+                "bar_start_utc": [
+                    self.decision + pd.Timedelta(days=1),
+                    self.decision,
+                    self.decision + pd.Timedelta(days=1),
+                    self.decision,
+                ],
+            }
+        )
+        events = pd.DataFrame(
+            {
+                "ticker": ["AAA", "BBB"],
+                "security_id": ["security:aaa", "security:bbb"],
+                "source_family": ["alpaca", "alpaca"],
+                "event_id": ["aaa-event", "bbb-event"],
+                "feature_available_at_utc": [
+                    self.decision - pd.Timedelta(hours=1),
+                    self.decision + pd.Timedelta(hours=1),
+                ],
+                "sentiment_numeric": [0.5, -0.5],
+                "relevance": [1.0, 1.0],
+            }
+        )
+
+        assigned = build_event_assignments(decisions, events)
+
+        aaa = assigned.loc[
+            assigned["event_id"].eq("aaa-event")
+            & assigned["status"].eq("assigned")
+        ]
+        bbb = assigned.loc[
+            assigned["event_id"].eq("bbb-event")
+            & assigned["status"].eq("assigned")
+        ]
+        self.assertEqual(aaa["decision_id"].nunique(), 2)
+        self.assertEqual(bbb["decision_id"].nunique(), 1)
+        self.assertTrue(
+            (
+                pd.to_datetime(assigned["feature_available_at_utc"], utc=True)
+                <= pd.to_datetime(assigned["decision_time_utc"], utc=True)
+            )
+            .fillna(True)
+            .all()
+        )
+
     def test_aggregates_reproduce_from_assignment_rows(self) -> None:
         assignments = self._artifact()
         decisions = reproduce_event_features(self.decisions, assignments)

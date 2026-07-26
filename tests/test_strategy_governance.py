@@ -31,7 +31,7 @@ class StrategyGovernanceTests(unittest.TestCase):
         self.assertTrue(report["valid"])
         self.assertEqual(report["checkpoint_count"], 10)
         self.assertEqual(report["catalog_count"], 25)
-        self.assertEqual(report["next_checkpoint"], "KS0")
+        self.assertEqual(report["next_checkpoint"], "KS1")
 
     def test_garch_family_is_explicit_and_owned_by_ks6(self) -> None:
         ledger = StrategyExecutionLedger.model_validate_json(
@@ -46,13 +46,16 @@ class StrategyGovernanceTests(unittest.TestCase):
 
     def test_completed_checkpoint_cannot_omit_evidence(self) -> None:
         payload = json.loads(LEDGER_PATH.read_text(encoding="utf-8"))
-        payload["checkpoints"][0]["status"] = "completed"
-        payload["checkpoints"][0]["closure"] = {
-            "closed_at_utc": "2026-07-26T12:00:00Z",
-            "commit_sha": "a" * 40,
-            "remote_ref": "origin/test",
-            "summary": "Invalid closure without evidence.",
-        }
+        checkpoint = next(
+            item
+            for item in payload["checkpoints"]
+            if item["checkpoint_id"] == "KS0"
+        )
+        checkpoint["evidence"] = []
+        for gate in checkpoint["exit_gates"]:
+            gate["evidence_ids"] = []
+        for verification in checkpoint["verification"]:
+            verification["evidence_ids"] = []
 
         with self.assertRaisesRegex(
             ValidationError,
@@ -116,7 +119,9 @@ class StrategyGovernanceTests(unittest.TestCase):
     @staticmethod
     def _copy_governance_files(root: Path) -> None:
         docs = root / "docs"
+        evidence = docs / "evidence"
         docs.mkdir(parents=True)
+        evidence.mkdir()
         for name in (
             "strategy_execution_ledger.json",
             "known_strategy_expansion_sequence_2026-07-26.md",
@@ -124,6 +129,12 @@ class StrategyGovernanceTests(unittest.TestCase):
         ):
             source = REPOSITORY_ROOT / "docs" / name
             (docs / name).write_bytes(source.read_bytes())
+        for name in (
+            "ks0_strategy_research_contracts.json",
+            "ks0_verification_20260726.json",
+        ):
+            source = REPOSITORY_ROOT / "docs" / "evidence" / name
+            (evidence / name).write_bytes(source.read_bytes())
 
 
 if __name__ == "__main__":

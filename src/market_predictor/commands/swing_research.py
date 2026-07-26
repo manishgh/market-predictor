@@ -22,6 +22,7 @@ from market_predictor.commands.configuration import load_typed_config
 from market_predictor.config import get_settings
 from market_predictor.heavy_jobs import serialized_heavy_job
 from market_predictor.sentiment import FinbertScorer
+from market_predictor.swing.catalyst_lineage import build_catalyst_lineage
 from market_predictor.swing.event_attribution_history import (
     attribute_alpaca_news_history,
 )
@@ -95,6 +96,83 @@ def register_swing_research_commands(app: typer.Typer, console: Console) -> None
                 "failed_chunks": result["failed_chunks"],
                 "relation_rows": result["relation_rows"],
                 "channel_counts": result["channel_counts"],
+            }
+        )
+        if result["status"] != "complete":
+            raise typer.Exit(code=2)
+
+    @app.command("build-catalyst-lineage")
+    @serialized_heavy_job("build-catalyst-lineage")
+    def build_catalyst_lineage_command(
+        collection_dir: Path = typer.Option(
+            ...,
+            help="Completed immutable Alpaca news collection.",
+        ),
+        collection_audit: Path = typer.Option(
+            ...,
+            help="Passed Alpaca news collection audit JSON.",
+        ),
+        attribution_dir: Path = typer.Option(
+            ...,
+            help="Completed event-attribution replay directory.",
+        ),
+        sentiment_dir: Path = typer.Option(
+            ...,
+            help="Completed FinBERT replay directory.",
+        ),
+        decisions: Path = typer.Option(
+            ...,
+            help="Hash-verified canonical decision artifact.",
+        ),
+        policy: Path = typer.Option(
+            Path("configs/catalyst_lineage.toml"),
+            help="Frozen catalyst-lineage policy.",
+        ),
+        out_dir: Path = typer.Option(
+            ...,
+            help="Resumable catalyst-lineage artifact directory.",
+        ),
+    ) -> None:
+        """Join catalyst evidence and replay exact decision assignments."""
+
+        def report_progress(payload: dict[str, object]) -> None:
+            index = payload.get("index")
+            total = payload.get("total")
+            if not isinstance(index, int) or not isinstance(total, int):
+                raise TypeError("catalyst lineage progress requires integer counters")
+            if (
+                index == 1
+                or index == total
+                or index % 25 == 0
+                or payload.get("status") == "failed"
+            ):
+                console.print(payload)
+
+        result = build_catalyst_lineage(
+            collection_dir=collection_dir,
+            collection_audit_path=collection_audit,
+            attribution_dir=attribution_dir,
+            sentiment_dir=sentiment_dir,
+            decisions_path=decisions,
+            policy_path=policy,
+            out_dir=out_dir,
+            progress=report_progress,
+        )
+        memory = result["memory"]
+        if not isinstance(memory, dict):
+            raise TypeError("catalyst lineage memory evidence is malformed")
+        console.print(
+            {
+                "status": result["status"],
+                "requested_chunks": result["requested_chunks"],
+                "observed_chunks": result["observed_chunks"],
+                "skipped_chunks": result["skipped_chunks"],
+                "failed_chunks": result["failed_chunks"],
+                "relation_rows": result["relation_rows"],
+                "training_eligible_rows": result["training_eligible_rows"],
+                "assignment_rows": result["assignment_rows"],
+                "lineage_sha256": result["lineage_sha256"],
+                "peak_working_set_gib": memory["peak_working_set_gib"],
             }
         )
         if result["status"] != "complete":

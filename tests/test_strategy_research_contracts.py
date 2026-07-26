@@ -155,9 +155,11 @@ class _repository_copy:
         root = Path(self._temporary.name)
         docs = root / "docs"
         configs = root / "configs"
+        evidence = docs / "evidence"
         model_cards = docs / "model_cards"
         docs.mkdir()
         configs.mkdir()
+        evidence.mkdir()
         model_cards.mkdir()
 
         for name in (
@@ -168,6 +170,14 @@ class _repository_copy:
             "reference_model_inventory.json",
         ):
             shutil.copy2(REPOSITORY_ROOT / "docs" / name, docs / name)
+        for name in (
+            "ks0_strategy_research_contracts.json",
+            "ks0_verification_20260726.json",
+        ):
+            shutil.copy2(
+                REPOSITORY_ROOT / "docs" / "evidence" / name,
+                evidence / name,
+            )
         for name in (
             "swing_technical_5d_logistic_20260725.md",
             "swing_technical_5d_hgb_20260725.md",
@@ -180,6 +190,7 @@ class _repository_copy:
             )
         for name in (
             "strategy_research_governance.toml",
+            "catalyst_lineage.toml",
             "swing_dataset.toml",
             "swing_training.toml",
             "swing_promotion.toml",

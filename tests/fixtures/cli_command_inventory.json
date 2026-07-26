@@ -52,6 +52,7 @@
     "audit-v3-o1-overlay",
     "audit-v3-ranking",
     "build-canonical-decisions",
+    "build-catalyst-lineage",
     "build-entry-exit-dataset",
     "build-intraday-dataset",
     "build-intraday-decision-report",
