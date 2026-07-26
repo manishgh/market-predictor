@@ -103,8 +103,9 @@ No swing price download is required.
 
 Implementation status on 2026-07-26: collection and the independent streaming
 audit are complete. The partitioned sentiment/relevance scorer and its
-resumable lineage contract are implemented and verified; the full CPU
-inference run is not yet complete. The archive contains 564,986 events, 12,663 raw pages,
+resumable lineage contract are implemented and verified. The full CPU inference
+run completed across 2,608 observed chunks and produced 564,916 scored rows with
+a 1.149 GiB peak working set. The archive contains 564,986 events, 12,663 raw pages,
 2,619 terminal chunks, 612 effective tickers, and 592 financial security
 identities. Raw-page hashes/token chains, event artifacts, request identity,
 publication windows, and 564,986 globally unique event IDs replayed with zero

@@ -83,6 +83,12 @@ The phased contract, failure policy, alert migration, backtest handoff, and live
 
 The removed predictor alert rules and TradingFlow parity decisions are recorded in [Legacy Alert Rule Parity](legacy_alert_rule_parity.md).
 
+The canonical names, hypotheses, implementation order, and independent promotion
+gates for known swing and intraday strategies are defined in
+[Known Strategy Expansion Sequence](known_strategy_expansion_sequence_2026-07-26.md).
+Estimator families and volatility models are components of those strategies,
+not strategy names.
+
 ## 3. Prediction Output Contract
 
 Every prediction output should include enough metadata to audit the score later.
