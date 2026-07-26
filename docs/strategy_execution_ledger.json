@@ -1,0 +1,1007 @@
+{
+  "catalog": [
+    {
+      "blocker": null,
+      "checkpoint_id": "KS3",
+      "display_name": "Cross-Sectional Momentum / Relative Strength",
+      "evidence_paths": [
+        "docs/catalyst_confirmation_architecture.md"
+      ],
+      "item_id": "SWING.CROSS_SECTIONAL_MOMENTUM.5D.V1",
+      "kind": "strategy",
+      "mode": "swing",
+      "required_evidence": [
+        "same-session universe rank",
+        "cost-adjusted SPY and sector-relative economics",
+        "temporal and unseen-ticker validation"
+      ],
+      "state": "reference_rejected"
+    },
+    {
+      "blocker": null,
+      "checkpoint_id": "KS3",
+      "display_name": "Time-Series Momentum / Trend Following",
+      "evidence_paths": [],
+      "item_id": "SWING.TIME_SERIES_MOMENTUM.5D.V1",
+      "kind": "strategy",
+      "mode": "swing",
+      "required_evidence": [
+        "causal trend setup eligibility",
+        "continuation path labels",
+        "cost-adjusted benchmark-relative validation"
+      ],
+      "state": "planned"
+    },
+    {
+      "blocker": null,
+      "checkpoint_id": "KS3",
+      "display_name": "Catalyst Drift",
+      "evidence_paths": [],
+      "item_id": "SWING.CATALYST_DRIFT.5D.V1",
+      "kind": "strategy",
+      "mode": "swing",
+      "required_evidence": [
+        "point-in-time direct, business, and sector catalyst relation",
+        "publication-to-decision alignment",
+        "technical-only, catalyst-only, and combined ablation"
+      ],
+      "state": "planned"
+    },
+    {
+      "blocker": "Point-in-time earnings surprise, guidance, and calendar evidence is incomplete.",
+      "checkpoint_id": "KS3",
+      "display_name": "Post-Earnings-Announcement Drift (PEAD)",
+      "evidence_paths": [],
+      "item_id": "SWING.POST_EARNINGS_DRIFT.5D.V1",
+      "kind": "strategy",
+      "mode": "swing",
+      "required_evidence": [
+        "point-in-time earnings surprise",
+        "guidance and announcement timing",
+        "post-announcement drift economics"
+      ],
+      "state": "data_blocked"
+    },
+    {
+      "blocker": null,
+      "checkpoint_id": "KS3",
+      "display_name": "Short-Term Reversal / Overreaction",
+      "evidence_paths": [],
+      "item_id": "SWING.SHORT_TERM_REVERSAL.3D.V1",
+      "kind": "strategy",
+      "mode": "swing",
+      "required_evidence": [
+        "liquidity-adjusted overreaction eligibility",
+        "reversal-specific path labels",
+        "peer and catalyst support ablation"
+      ],
+      "state": "planned"
+    },
+    {
+      "blocker": null,
+      "checkpoint_id": "KS3",
+      "display_name": "Breakout / Volatility Expansion",
+      "evidence_paths": [],
+      "item_id": "SWING.BREAKOUT_EXPANSION.5D.V1",
+      "kind": "strategy",
+      "mode": "swing",
+      "required_evidence": [
+        "compression and breakout eligibility",
+        "price and consolidated-volume confirmation",
+        "continuation and failed-breakout paths"
+      ],
+      "state": "planned"
+    },
+    {
+      "blocker": null,
+      "checkpoint_id": "KS3",
+      "display_name": "Sector-Neutral Residual Momentum",
+      "evidence_paths": [],
+      "item_id": "SWING.SECTOR_RESIDUAL_MOMENTUM.5D.V1",
+      "kind": "strategy",
+      "mode": "swing",
+      "required_evidence": [
+        "point-in-time sector identity",
+        "market and sector residual objective",
+        "identical-interval sector-relative economics"
+      ],
+      "state": "planned"
+    },
+    {
+      "blocker": "Point-in-time peer membership and stable spread evidence are not available.",
+      "checkpoint_id": "KS8",
+      "display_name": "Pairs Trading / Statistical Arbitrage",
+      "evidence_paths": [],
+      "item_id": "SWING.PAIRS_REVERSION.5D.V1",
+      "kind": "strategy",
+      "mode": "swing",
+      "required_evidence": [
+        "point-in-time peer map",
+        "stable spread and break tests",
+        "pair-level cost and capacity simulation"
+      ],
+      "state": "deferred"
+    },
+    {
+      "blocker": null,
+      "checkpoint_id": "KS4",
+      "display_name": "Opening Range Breakout (ORB)",
+      "evidence_paths": [],
+      "item_id": "INTRADAY.OPENING_RANGE_BREAKOUT.60M.V1",
+      "kind": "strategy",
+      "mode": "intraday",
+      "required_evidence": [
+        "causal opening-range setup",
+        "exact one-minute target, stop, and timeout paths",
+        "opening-session validation"
+      ],
+      "state": "planned"
+    },
+    {
+      "blocker": null,
+      "checkpoint_id": "KS4",
+      "display_name": "Gap-and-Go / Gap Continuation",
+      "evidence_paths": [],
+      "item_id": "INTRADAY.GAP_CONTINUATION.60M.V1",
+      "kind": "strategy",
+      "mode": "intraday",
+      "required_evidence": [
+        "overnight gap and catalyst eligibility",
+        "premarket and opening-volume context",
+        "exact continuation path economics"
+      ],
+      "state": "planned"
+    },
+    {
+      "blocker": null,
+      "checkpoint_id": "KS4",
+      "display_name": "Gap Fade",
+      "evidence_paths": [],
+      "item_id": "INTRADAY.GAP_FADE.60M.V1",
+      "kind": "strategy",
+      "mode": "intraday",
+      "required_evidence": [
+        "unsupported or exhausted gap eligibility",
+        "continuation-versus-fade separation",
+        "exact fade path economics"
+      ],
+      "state": "planned"
+    },
+    {
+      "blocker": null,
+      "checkpoint_id": "KS4",
+      "display_name": "VWAP Reclaim / Continuation",
+      "evidence_paths": [],
+      "item_id": "INTRADAY.VWAP_CONTINUATION.60M.V1",
+      "kind": "strategy",
+      "mode": "intraday",
+      "required_evidence": [
+        "causal VWAP reclaim or hold",
+        "volume and relative-strength confirmation",
+        "session-stratified exact path economics"
+      ],
+      "state": "planned"
+    },
+    {
+      "blocker": null,
+      "checkpoint_id": "KS4",
+      "display_name": "VWAP Mean Reversion",
+      "evidence_paths": [],
+      "item_id": "INTRADAY.VWAP_REVERSION.30M.V1",
+      "kind": "strategy",
+      "mode": "intraday",
+      "required_evidence": [
+        "liquidity-adjusted VWAP extension",
+        "absence of continuation confirmation",
+        "exact reversion path economics"
+      ],
+      "state": "planned"
+    },
+    {
+      "blocker": null,
+      "checkpoint_id": "KS4",
+      "display_name": "Intraday Momentum",
+      "evidence_paths": [],
+      "item_id": "INTRADAY.MOMENTUM_CONTINUATION.60M.V1",
+      "kind": "strategy",
+      "mode": "intraday",
+      "required_evidence": [
+        "same-cutoff price and volume leadership",
+        "session-specific continuation labels",
+        "cost-adjusted temporal and ticker-holdout validation"
+      ],
+      "state": "planned"
+    },
+    {
+      "blocker": null,
+      "checkpoint_id": "KS4",
+      "display_name": "Short-Horizon Reversal",
+      "evidence_paths": [],
+      "item_id": "INTRADAY.SHORT_HORIZON_REVERSAL.30M.V1",
+      "kind": "strategy",
+      "mode": "intraday",
+      "required_evidence": [
+        "liquidity-adjusted shock eligibility",
+        "spread and time-of-day controls",
+        "exact reversal path economics"
+      ],
+      "state": "planned"
+    },
+    {
+      "blocker": "Historical quotes, depth, cancellations, and execution simulation are absent.",
+      "checkpoint_id": "KS8",
+      "display_name": "Order-Flow Imbalance (OFI)",
+      "evidence_paths": [],
+      "item_id": "INTRADAY.ORDER_FLOW_IMBALANCE.15M.V1",
+      "kind": "strategy",
+      "mode": "intraday",
+      "required_evidence": [
+        "historical quote and trade events",
+        "depth and cancellation state",
+        "latency-aware execution simulation"
+      ],
+      "state": "deferred"
+    },
+    {
+      "blocker": null,
+      "checkpoint_id": "KS6",
+      "display_name": "Realized Volatility / ATR Baseline",
+      "evidence_paths": [],
+      "item_id": "RISK.REALIZED_VOLATILITY.60M.V1",
+      "kind": "risk",
+      "mode": "intraday",
+      "required_evidence": [
+        "causal volatility baseline",
+        "out-of-sample forecast loss",
+        "risk and abstention ablation"
+      ],
+      "state": "planned"
+    },
+    {
+      "blocker": null,
+      "checkpoint_id": "KS6",
+      "display_name": "GARCH(1,1) Intraday Volatility",
+      "evidence_paths": [],
+      "item_id": "RISK.GARCH.60M.V1",
+      "kind": "risk",
+      "mode": "intraday",
+      "required_evidence": [
+        "time-of-day deseasonalized returns",
+        "QLIKE improvement over realized volatility and ATR",
+        "economic drawdown or abstention improvement"
+      ],
+      "state": "planned"
+    },
+    {
+      "blocker": null,
+      "checkpoint_id": "KS6",
+      "display_name": "Exponential GARCH Intraday Volatility",
+      "evidence_paths": [],
+      "item_id": "RISK.EGARCH.60M.V1",
+      "kind": "risk",
+      "mode": "intraday",
+      "required_evidence": [
+        "out-of-sample asymmetric shock evidence",
+        "QLIKE improvement over GARCH(1,1)",
+        "economic risk-selection ablation"
+      ],
+      "state": "planned"
+    },
+    {
+      "blocker": null,
+      "checkpoint_id": "KS6",
+      "display_name": "Daily GARCH Swing Volatility",
+      "evidence_paths": [],
+      "item_id": "RISK.GARCH.5D.V1",
+      "kind": "risk",
+      "mode": "swing",
+      "required_evidence": [
+        "daily return variance forecast",
+        "QLIKE improvement over realized volatility and ATR",
+        "swing risk and abstention ablation"
+      ],
+      "state": "planned"
+    },
+    {
+      "blocker": null,
+      "checkpoint_id": "KS6",
+      "display_name": "HAR-RV Intraday Volatility",
+      "evidence_paths": [],
+      "item_id": "RISK.HAR_RV.60M.V1",
+      "kind": "risk",
+      "mode": "intraday",
+      "required_evidence": [
+        "multi-scale realized-volatility inputs",
+        "out-of-sample forecast calibration",
+        "comparison with ATR and GARCH"
+      ],
+      "state": "planned"
+    },
+    {
+      "blocker": null,
+      "checkpoint_id": "KS5",
+      "display_name": "Quantile Return Model",
+      "evidence_paths": [],
+      "item_id": "META.QUANTILE_RETURN.V1",
+      "kind": "meta",
+      "mode": "shared",
+      "required_evidence": [
+        "downside, median, and upside quantile calibration",
+        "regime and liquidity stratification",
+        "selection or abstention improvement"
+      ],
+      "state": "planned"
+    },
+    {
+      "blocker": null,
+      "checkpoint_id": "KS5",
+      "display_name": "Competing-Risk Path Model",
+      "evidence_paths": [],
+      "item_id": "META.COMPETING_RISKS.V1",
+      "kind": "meta",
+      "mode": "shared",
+      "required_evidence": [
+        "target, stop, and timeout event definitions",
+        "event probability and timing calibration",
+        "path-selection improvement"
+      ],
+      "state": "planned"
+    },
+    {
+      "blocker": null,
+      "checkpoint_id": "KS7",
+      "display_name": "Meta-Labelling",
+      "evidence_paths": [],
+      "item_id": "META.META_LABEL.V1",
+      "kind": "meta",
+      "mode": "shared",
+      "required_evidence": [
+        "deterministic primary setup",
+        "causal accept-or-reject label",
+        "incremental economic improvement"
+      ],
+      "state": "planned"
+    },
+    {
+      "blocker": null,
+      "checkpoint_id": "KS7",
+      "display_name": "Regime-Switching / Mixture of Experts",
+      "evidence_paths": [],
+      "item_id": "META.REGIME_MIXTURE.V1",
+      "kind": "meta",
+      "mode": "shared",
+      "required_evidence": [
+        "causal regime state",
+        "independently passed specialists",
+        "temporal and ticker-holdout routing improvement"
+      ],
+      "state": "planned"
+    }
+  ],
+  "checkpoints": [
+    {
+      "blocker": null,
+      "checkpoint_id": "KS0",
+      "closure": null,
+      "contracts": [
+        "strategy and component ID schema",
+        "hypothesis registry",
+        "shared fold, cost, capacity, and retirement policy"
+      ],
+      "evidence": [],
+      "exit_gates": [
+        {
+          "description": "Every strategy and component has one immutable ID, display name, owner checkpoint, and bounded hypothesis.",
+          "evidence_ids": [],
+          "gate_id": "KS0-G1",
+          "status": "pending"
+        },
+        {
+          "description": "Shared folds, costs, capacity assumptions, experiment budget, and retirement rules are frozen.",
+          "evidence_ids": [],
+          "gate_id": "KS0-G2",
+          "status": "pending"
+        },
+        {
+          "description": "Existing generic models are identified as reference evidence and cannot be served as named strategies.",
+          "evidence_ids": [],
+          "gate_id": "KS0-G3",
+          "status": "pending"
+        }
+      ],
+      "in_scope": [
+        "catalog contracts",
+        "hypothesis budgets",
+        "shared validation assumptions",
+        "retirement rules"
+      ],
+      "out_of_scope": [
+        "feature construction",
+        "model training",
+        "promotion"
+      ],
+      "problem_statement": "Freeze what will be tested before strategy-specific implementation begins.",
+      "sequence": 0,
+      "status": "pending",
+      "title": "Freeze catalog and hypothesis budget",
+      "verification": [
+        {
+          "command": null,
+          "description": "Validate the strategy catalog, hypothesis registry, and shared research policy.",
+          "evidence_ids": [],
+          "status": "pending",
+          "verification_id": "KS0-V1"
+        },
+        {
+          "command": null,
+          "description": "Run focused poison tests and the complete repository verification battery.",
+          "evidence_ids": [],
+          "status": "pending",
+          "verification_id": "KS0-V2"
+        }
+      ]
+    },
+    {
+      "blocker": null,
+      "checkpoint_id": "KS1",
+      "closure": null,
+      "contracts": [
+        "event attribution policy",
+        "event availability and candle assignment",
+        "catalyst feature inventory"
+      ],
+      "evidence": [],
+      "exit_gates": [
+        {
+          "description": "Five-year direct, business, and sector event relations replay with exact identity and timing.",
+          "evidence_ids": [],
+          "gate_id": "KS1-G1",
+          "status": "pending"
+        },
+        {
+          "description": "FinBERT outputs join causally with explicit missingness and blind-window exclusions.",
+          "evidence_ids": [],
+          "gate_id": "KS1-G2",
+          "status": "pending"
+        },
+        {
+          "description": "Unrelated, duplicate, post-cutoff, or backdated events fail reconciliation.",
+          "evidence_ids": [],
+          "gate_id": "KS1-G3",
+          "status": "pending"
+        }
+      ],
+      "in_scope": [
+        "historical catalyst relation replay",
+        "sentiment join",
+        "news-to-candle alignment",
+        "source coverage"
+      ],
+      "out_of_scope": [
+        "strategy model training",
+        "live provider calls",
+        "promotion"
+      ],
+      "problem_statement": "Produce causal, ticker-relevant catalyst rows suitable for strategy research.",
+      "sequence": 1,
+      "status": "pending",
+      "title": "Complete catalyst lineage",
+      "verification": [
+        {
+          "command": null,
+          "description": "Replay relation, sentiment, event, and decision hashes from canonical inputs.",
+          "evidence_ids": [],
+          "status": "pending",
+          "verification_id": "KS1-V1"
+        },
+        {
+          "command": null,
+          "description": "Run timing, relevance, duplication, ticker-reuse, and missingness poison tests.",
+          "evidence_ids": [],
+          "status": "pending",
+          "verification_id": "KS1-V2"
+        }
+      ]
+    },
+    {
+      "blocker": null,
+      "checkpoint_id": "KS2",
+      "closure": null,
+      "contracts": [
+        "strategy setup eligibility",
+        "exact path outcome evaluator",
+        "strategy label policy"
+      ],
+      "evidence": [],
+      "exit_gates": [
+        {
+          "description": "Continuation, reversal, breakout, and residual strategies have distinct causal label policies.",
+          "evidence_ids": [],
+          "gate_id": "KS2-G1",
+          "status": "pending"
+        },
+        {
+          "description": "Every label replays from immutable bars and the bound execution policy.",
+          "evidence_ids": [],
+          "gate_id": "KS2-G2",
+          "status": "pending"
+        },
+        {
+          "description": "Future setup selection and generic-label reuse fail poison tests.",
+          "evidence_ids": [],
+          "gate_id": "KS2-G3",
+          "status": "pending"
+        }
+      ],
+      "in_scope": [
+        "setup eligibility",
+        "strategy label primitives",
+        "decision groups",
+        "abstention reasons"
+      ],
+      "out_of_scope": [
+        "estimator selection",
+        "shadow evaluation",
+        "serving"
+      ],
+      "problem_statement": "Prevent one generic direction label from standing in for multiple market behaviors.",
+      "sequence": 2,
+      "status": "pending",
+      "title": "Build strategy-specific label primitives",
+      "verification": [
+        {
+          "command": null,
+          "description": "Replay strategy labels and exact stock, SPY, QQQ, and sector intervals.",
+          "evidence_ids": [],
+          "status": "pending",
+          "verification_id": "KS2-V1"
+        },
+        {
+          "command": null,
+          "description": "Run look-ahead, missing-path, ambiguous-fill, and cost-once poison tests.",
+          "evidence_ids": [],
+          "status": "pending",
+          "verification_id": "KS2-V2"
+        }
+      ]
+    },
+    {
+      "blocker": null,
+      "checkpoint_id": "KS3",
+      "closure": null,
+      "contracts": [
+        "swing strategy datasets",
+        "swing specialist candidates",
+        "swing economic audit"
+      ],
+      "evidence": [],
+      "exit_gates": [
+        {
+          "description": "Every swing strategy is evaluated independently on frozen temporal and ticker-holdout scopes.",
+          "evidence_ids": [],
+          "gate_id": "KS3-G1",
+          "status": "pending"
+        },
+        {
+          "description": "Deterministic, logistic, HGB, and eligible ranker comparisons use identical rows and policies.",
+          "evidence_ids": [],
+          "gate_id": "KS3-G2",
+          "status": "pending"
+        },
+        {
+          "description": "Accepted and rejected outcomes retain cost, benchmark, drawdown, capacity, and ablation evidence.",
+          "evidence_ids": [],
+          "gate_id": "KS3-G3",
+          "status": "pending"
+        }
+      ],
+      "in_scope": [
+        "named swing specialists",
+        "frozen estimator comparisons",
+        "walk-forward and ticker holdout",
+        "economic rejection"
+      ],
+      "out_of_scope": [
+        "intraday specialists",
+        "strategy ensembles",
+        "prospective promotion"
+      ],
+      "problem_statement": "Determine which explicitly named swing behaviors have repeatable cost-adjusted edge.",
+      "sequence": 3,
+      "status": "pending",
+      "title": "Train swing specialists",
+      "verification": [
+        {
+          "command": null,
+          "description": "Reproduce every swing candidate and audit from immutable manifests.",
+          "evidence_ids": [],
+          "status": "pending",
+          "verification_id": "KS3-V1"
+        },
+        {
+          "command": null,
+          "description": "Run feature, strategy, cost, adverse-fill, liquidity, and regime ablations.",
+          "evidence_ids": [],
+          "status": "pending",
+          "verification_id": "KS3-V2"
+        }
+      ]
+    },
+    {
+      "blocker": null,
+      "checkpoint_id": "KS4",
+      "closure": null,
+      "contracts": [
+        "intraday setup datasets",
+        "intraday specialist candidates",
+        "exact one-minute path audit"
+      ],
+      "evidence": [],
+      "exit_gates": [
+        {
+          "description": "Each intraday specialist evaluates only its causal setup and session segment.",
+          "evidence_ids": [],
+          "gate_id": "KS4-G1",
+          "status": "pending"
+        },
+        {
+          "description": "Entry, target, stop, timeout, spread, cost, and benchmark paths replay exactly.",
+          "evidence_ids": [],
+          "gate_id": "KS4-G2",
+          "status": "pending"
+        },
+        {
+          "description": "Catalyst remains an overlay unless preregistered causal ablation passes both validation scopes.",
+          "evidence_ids": [],
+          "gate_id": "KS4-G3",
+          "status": "pending"
+        }
+      ],
+      "in_scope": [
+        "ORB",
+        "gap continuation and fade",
+        "VWAP continuation and reversion",
+        "intraday momentum and reversal"
+      ],
+      "out_of_scope": [
+        "order-flow imbalance without quotes",
+        "cross-session label substitution",
+        "production alerts"
+      ],
+      "problem_statement": "Isolate intraday setups whose exact executable paths survive realistic costs.",
+      "sequence": 4,
+      "status": "pending",
+      "title": "Train intraday specialists",
+      "verification": [
+        {
+          "command": null,
+          "description": "Reproduce every selected intraday path from canonical one-minute bars.",
+          "evidence_ids": [],
+          "status": "pending",
+          "verification_id": "KS4-V1"
+        },
+        {
+          "command": null,
+          "description": "Run session, liquidity, catalyst-overlay, cost, and adverse-fill ablations.",
+          "evidence_ids": [],
+          "status": "pending",
+          "verification_id": "KS4-V2"
+        }
+      ]
+    },
+    {
+      "blocker": null,
+      "checkpoint_id": "KS5",
+      "closure": null,
+      "contracts": [
+        "return quantile forecast",
+        "MFE and MAE forecast",
+        "competing-risk path forecast"
+      ],
+      "evidence": [],
+      "exit_gates": [
+        {
+          "description": "Return quantiles and target, stop, and timeout probabilities calibrate out of sample.",
+          "evidence_ids": [],
+          "gate_id": "KS5-G1",
+          "status": "pending"
+        },
+        {
+          "description": "Distributional outputs improve selection or abstention beyond binary probability.",
+          "evidence_ids": [],
+          "gate_id": "KS5-G2",
+          "status": "pending"
+        }
+      ],
+      "in_scope": [
+        "expected return",
+        "return quantiles",
+        "MFE and MAE",
+        "time to resolution"
+      ],
+      "out_of_scope": [
+        "portfolio sizing",
+        "order placement",
+        "uncalibrated presentation ranges"
+      ],
+      "problem_statement": "Represent return and path uncertainty rather than emitting one binary probability.",
+      "sequence": 5,
+      "status": "pending",
+      "title": "Build distributional and path models",
+      "verification": [
+        {
+          "command": null,
+          "description": "Audit quantile coverage and event-probability calibration by regime and liquidity.",
+          "evidence_ids": [],
+          "status": "pending",
+          "verification_id": "KS5-V1"
+        },
+        {
+          "command": null,
+          "description": "Ablate distributional outputs against the binary specialist baseline.",
+          "evidence_ids": [],
+          "status": "pending",
+          "verification_id": "KS5-V2"
+        }
+      ]
+    },
+    {
+      "blocker": null,
+      "checkpoint_id": "KS6",
+      "closure": null,
+      "contracts": [
+        "volatility feature policy",
+        "conditional variance forecast",
+        "risk-sidecar API output"
+      ],
+      "evidence": [],
+      "exit_gates": [
+        {
+          "description": "HAR-RV, GARCH(1,1), and EGARCH are compared sequentially with realized volatility and ATR.",
+          "evidence_ids": [],
+          "gate_id": "KS6-G1",
+          "status": "pending"
+        },
+        {
+          "description": "Adopted sidecars improve QLIKE, calibration, and downstream risk or drawdown ablation out of sample.",
+          "evidence_ids": [],
+          "gate_id": "KS6-G2",
+          "status": "pending"
+        },
+        {
+          "description": "Intraday fitting removes time-of-day seasonality, separates overnight gaps, and stays below 4 GiB.",
+          "evidence_ids": [],
+          "gate_id": "KS6-G3",
+          "status": "pending"
+        },
+        {
+          "description": "No volatility sidecar is treated as independent directional authority.",
+          "evidence_ids": [],
+          "gate_id": "KS6-G4",
+          "status": "pending"
+        }
+      ],
+      "in_scope": [
+        "realized volatility and ATR",
+        "HAR-RV",
+        "GARCH(1,1)",
+        "EGARCH when asymmetry is supported",
+        "30-minute, 60-minute, 1-day, and 5-day risk horizons"
+      ],
+      "out_of_scope": [
+        "directional signals from variance alone",
+        "hand-written GARCH optimizer",
+        "position sizing"
+      ],
+      "problem_statement": "Forecast conditional risk and expected range without confusing volatility with direction.",
+      "sequence": 6,
+      "status": "pending",
+      "title": "Evaluate GARCH and volatility sidecars",
+      "verification": [
+        {
+          "command": null,
+          "description": "Compare realized volatility, ATR, HAR-RV, GARCH, and EGARCH on frozen out-of-sample folds.",
+          "evidence_ids": [],
+          "status": "pending",
+          "verification_id": "KS6-V1"
+        },
+        {
+          "command": null,
+          "description": "Audit QLIKE, calibration, economic selection, drawdown, convergence, and memory.",
+          "evidence_ids": [],
+          "status": "pending",
+          "verification_id": "KS6-V2"
+        }
+      ]
+    },
+    {
+      "blocker": null,
+      "checkpoint_id": "KS7",
+      "closure": null,
+      "contracts": [
+        "causal market regime",
+        "meta-label acceptance",
+        "specialist routing"
+      ],
+      "evidence": [],
+      "exit_gates": [
+        {
+          "description": "Regime state uses only decision-time evidence and cannot be defined from future returns.",
+          "evidence_ids": [],
+          "gate_id": "KS7-G1",
+          "status": "pending"
+        },
+        {
+          "description": "Meta-labelling and routing improve both temporal and unseen-ticker economics.",
+          "evidence_ids": [],
+          "gate_id": "KS7-G2",
+          "status": "pending"
+        },
+        {
+          "description": "Only independently passed specialists may enter a routing comparison.",
+          "evidence_ids": [],
+          "gate_id": "KS7-G3",
+          "status": "pending"
+        }
+      ],
+      "in_scope": [
+        "causal regime state",
+        "setup accept-or-reject meta-label",
+        "mixture-of-experts comparison"
+      ],
+      "out_of_scope": [
+        "ensembles that hide failed strategies",
+        "future-defined regimes",
+        "probability averaging"
+      ],
+      "problem_statement": "Route validated specialists without using an ensemble to conceal weak base strategies.",
+      "sequence": 7,
+      "status": "pending",
+      "title": "Build regime routing and meta-labelling",
+      "verification": [
+        {
+          "command": null,
+          "description": "Run regime-causality poison tests and specialist-eligibility checks.",
+          "evidence_ids": [],
+          "status": "pending",
+          "verification_id": "KS7-V1"
+        },
+        {
+          "command": null,
+          "description": "Compare routed and unrouted policies on frozen temporal and ticker-holdout scopes.",
+          "evidence_ids": [],
+          "status": "pending",
+          "verification_id": "KS7-V2"
+        }
+      ]
+    },
+    {
+      "blocker": null,
+      "checkpoint_id": "KS8",
+      "closure": null,
+      "contracts": [
+        "data-dependent strategy admission",
+        "peer evidence",
+        "quote and depth evidence"
+      ],
+      "evidence": [],
+      "exit_gates": [
+        {
+          "description": "Pairs trading starts only after point-in-time peer and stable-spread evidence exists.",
+          "evidence_ids": [],
+          "gate_id": "KS8-G1",
+          "status": "pending"
+        },
+        {
+          "description": "Order-flow imbalance starts only after historical quote, depth, cancellation, and execution evidence exists.",
+          "evidence_ids": [],
+          "gate_id": "KS8-G2",
+          "status": "pending"
+        },
+        {
+          "description": "Sequence models start only after a positive tabular baseline and adequate effective sample size.",
+          "evidence_ids": [],
+          "gate_id": "KS8-G3",
+          "status": "pending"
+        }
+      ],
+      "in_scope": [
+        "admission criteria for pairs, OFI, and sequence models"
+      ],
+      "out_of_scope": [
+        "fabricated peer history",
+        "OFI from bar data",
+        "deep models without a passed baseline"
+      ],
+      "problem_statement": "Prevent data-intensive strategies from starting before their required evidence exists.",
+      "sequence": 8,
+      "status": "pending",
+      "title": "Admit data-dependent strategies",
+      "verification": [
+        {
+          "command": null,
+          "description": "Audit source availability and point-in-time suitability before opening a hypothesis.",
+          "evidence_ids": [],
+          "status": "pending",
+          "verification_id": "KS8-V1"
+        }
+      ]
+    },
+    {
+      "blocker": null,
+      "checkpoint_id": "KS9",
+      "closure": null,
+      "contracts": [
+        "strategy-aware model registry",
+        "atomic serving bundle",
+        "TradingFlow prediction contract"
+      ],
+      "evidence": [],
+      "exit_gates": [
+        {
+          "description": "The API returns independent coherent strategy assessments from signed promoted releases.",
+          "evidence_ids": [],
+          "gate_id": "KS9-G1",
+          "status": "pending"
+        },
+        {
+          "description": "TradingFlow owns alerts, orders, sizing, and execution; Market Predictor owns prediction evidence.",
+          "evidence_ids": [],
+          "gate_id": "KS9-G2",
+          "status": "pending"
+        },
+        {
+          "description": "No rejected candidate, fallback, probability averaging, or predictor-owned action is available.",
+          "evidence_ids": [],
+          "gate_id": "KS9-G3",
+          "status": "pending"
+        },
+        {
+          "description": "Selected-strategy predictions mature into exact monitoring outcomes.",
+          "evidence_ids": [],
+          "gate_id": "KS9-G4",
+          "status": "pending"
+        }
+      ],
+      "in_scope": [
+        "strategy-aware serving",
+        "promotion identity",
+        "prediction outcome monitoring",
+        "TradingFlow integration"
+      ],
+      "out_of_scope": [
+        "alerts",
+        "orders",
+        "positions",
+        "portfolio sizing"
+      ],
+      "problem_statement": "Serve only coherent promoted strategy evidence through the established system boundary.",
+      "sequence": 9,
+      "status": "pending",
+      "title": "Integrate promotion, API, and TradingFlow",
+      "verification": [
+        {
+          "command": null,
+          "description": "Verify model registry, attestation, atomic bundle, rollback, and response identities.",
+          "evidence_ids": [],
+          "status": "pending",
+          "verification_id": "KS9-V1"
+        },
+        {
+          "command": null,
+          "description": "Run contract tests proving Market Predictor cannot emit alerts or orders.",
+          "evidence_ids": [],
+          "status": "pending",
+          "verification_id": "KS9-V2"
+        }
+      ]
+    }
+  ],
+  "plan": {
+    "commit_sha": "fef72120d5c30839b79fb614acfe4c51fac66218",
+    "path": "docs/known_strategy_expansion_sequence_2026-07-26.md",
+    "remote_ref": "origin/r3-lineage",
+    "sha256": "8d434e4beb94edf30247650f144149cfc1cf33be31f7bf0d783233abd5b3bdc5"
+  },
+  "schema_version": "market_predictor.strategy_execution_ledger.v1"
+}

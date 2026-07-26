@@ -167,6 +167,8 @@ The corrected V4-H1 fingerprint contains 505,049 physical rows and 495,513 rank-
 - [Intraday model promotion](docs/intraday_model_promotion.md)
 - [ML model V3 improvement plan](docs/ml_model_v3_plan.md)
 - [Known strategy expansion sequence](docs/known_strategy_expansion_sequence_2026-07-26.md)
+- [Strategy execution traceability](docs/strategy_execution_traceability.md)
+- [Machine-readable strategy execution ledger](docs/strategy_execution_ledger.json)
 - [TradingFlow integration plan](docs/trading_flow_integration_plan.md)
 - [Legacy alert rule parity](docs/legacy_alert_rule_parity.md)
 - [Disk and dead-code cleanup audit](docs/reviews/disk_and_dead_code_cleanup_2026-07-26.md)

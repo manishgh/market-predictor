@@ -87,6 +87,7 @@
     "train-intraday-model",
     "train-swing-model",
     "train-v3-models",
+    "validate-strategy-execution-ledger",
     "verify-events",
     "verify-swing"
   ]

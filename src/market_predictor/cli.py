@@ -20,6 +20,9 @@ from market_predictor.canonical.contracts import SourceCollection
 from market_predictor.commands.canonical_data import register_canonical_data_commands
 from market_predictor.commands.intraday_model import register_intraday_model_commands
 from market_predictor.commands.ranking import register_ranking_commands
+from market_predictor.commands.strategy_governance import (
+    register_strategy_governance_commands,
+)
 from market_predictor.commands.swing_collection import register_swing_collection_commands
 from market_predictor.commands.swing_model import register_swing_model_commands
 from market_predictor.commands.swing_research import register_swing_research_commands
@@ -72,6 +75,7 @@ app = typer.Typer(help="Build and serve audited swing and intraday market predic
 console = Console()
 DEFAULT_MARKET_CONTEXT_PATH = Path("data/external/market_context/market_context_events_scored.parquet")
 register_ranking_commands(app, console)
+register_strategy_governance_commands(app, console)
 register_canonical_data_commands(app, console)
 register_swing_model_commands(app, console)
 register_swing_collection_commands(app, console)

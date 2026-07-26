@@ -55,6 +55,26 @@ market-predictor-collect collect-swing --tickers "LUNR,MXL,RGTI" --days 30 --out
 market-predictor-research score-swing-events --tickers "LUNR,MXL,RGTI" --raw-dir data/raw/research --out-dir data/raw/research_scored
 ```
 
+Strategy implementation is controlled by
+`docs/strategy_execution_ledger.json`. It binds the named-strategy design to an
+exact plan hash and pushed commit, inventories every strategy and component, and
+prevents a `KS0`-`KS9` checkpoint from closing without passed gates, verification
+commands, hash-verified evidence, and a pushed closure commit. Validate it before
+and after every strategy checkpoint:
+
+```powershell
+market-predictor-research validate-strategy-execution-ledger `
+  --ledger docs/strategy_execution_ledger.json `
+  --repository-root .
+```
+
+`strategy_governance.py` owns the strict contracts and repository/Git
+reconciliation. `commands/strategy_governance.py` exposes validation only on the
+research CLI. The production serving import graph does not load this command.
+Current status belongs only in the JSON ledger; the human workflow and evidence
+mapping are documented in
+`docs/strategy_execution_traceability.md`.
+
 Prediction API requests are point-in-time contracts. `PredictionRequest.as_of`, when present, must be timezone-aware. Canonical daily and intraday inference require `feature_available_at_utc` and filter directly on that timestamp; neither reconstructs availability from a date or bar label.
 
 `api_security.py` owns authentication and principal-scoped token buckets. Production startup permits only Entra mode and requires a local read-only JWKS, exact issuer, and exact audience. RS256 signature, `exp`, `iat`, optional `nbf`, issuer, and audience are validated before `scp` or `roles` authorization. The stable audit principal is tenant plus object id when available; the calling application id is retained separately. Static bearer auth is development-only. Liveness and minimal readiness are public; detailed operations, metrics, prediction, and replay routes require `operations.read`, `metrics.read`, `predictions.read`, and `replay.execute` respectively. Replay is disabled by default.

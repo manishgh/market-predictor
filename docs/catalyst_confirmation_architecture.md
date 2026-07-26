@@ -89,6 +89,11 @@ gates for known swing and intraday strategies are defined in
 Estimator families and volatility models are components of those strategies,
 not strategy names.
 
+Execution status and closure evidence are authoritative only in
+[Strategy Execution Ledger](strategy_execution_ledger.json). Its validation and
+traceability workflow are defined in
+[Strategy Execution Traceability](strategy_execution_traceability.md).
+
 ## 3. Prediction Output Contract
 
 Every prediction output should include enough metadata to audit the score later.
