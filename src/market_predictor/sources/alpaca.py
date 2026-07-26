@@ -281,9 +281,6 @@ class AlpacaSource:
         frame["date"] = pd.to_datetime(frame["timestamp"], utc=True).dt.date
         return frame[["date", "open", "high", "low", "close", "volume"]].sort_values("date")
 
-    def fetch_hourly_bars(self, ticker: str, start: datetime, end: datetime | None = None) -> pd.DataFrame:
-        return self.fetch_intraday_bars(ticker, start, end, timeframe="1Hour")
-
     def fetch_intraday_bars(
         self,
         ticker: str,

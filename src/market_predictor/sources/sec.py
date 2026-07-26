@@ -1,8 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Any
 from zoneinfo import ZoneInfo
 
 import pandas as pd
@@ -12,19 +10,8 @@ from market_predictor.schemas import NewsEvent
 from market_predictor.sources.http import HttpClient
 
 
-@dataclass(frozen=True)
-class SecFactSnapshot:
-    ticker: str
-    cik: str
-    eps_diluted_recent: float | None
-    eps_basic_recent: float | None
-    revenue_recent: float | None
-    net_income_recent: float | None
-
-
 class SecSource:
     ticker_map_url = "https://www.sec.gov/files/company_tickers.json"
-    companyfacts_url = "https://data.sec.gov/api/xbrl/companyfacts/CIK{cik}.json"
     submissions_url = "https://data.sec.gov/submissions/CIK{cik}.json"
 
     def __init__(self, settings: Settings) -> None:
@@ -37,19 +24,6 @@ class SecSource:
             if item.get("ticker", "").upper() == ticker_upper:
                 return str(item["cik_str"]).zfill(10)
         raise ValueError(f"CIK not found for ticker {ticker_upper}")
-
-    def latest_company_facts(self, ticker: str) -> SecFactSnapshot:
-        cik = self.cik_for_ticker(ticker)
-        payload = self.client.get_json(self.companyfacts_url.format(cik=cik))
-        facts = payload.get("facts", {}).get("us-gaap", {})
-        return SecFactSnapshot(
-            ticker=ticker.upper(),
-            cik=cik,
-            eps_diluted_recent=self._latest_numeric(facts, "EarningsPerShareDiluted", "USD/shares"),
-            eps_basic_recent=self._latest_numeric(facts, "EarningsPerShareBasic", "USD/shares"),
-            revenue_recent=self._latest_numeric(facts, "Revenues", "USD"),
-            net_income_recent=self._latest_numeric(facts, "NetIncomeLoss", "USD"),
-        )
 
     def fetch_filings(
         self,
@@ -124,19 +98,6 @@ class SecSource:
                 )
             )
         return events
-
-    @staticmethod
-    def _latest_numeric(facts: dict[str, Any], tag: str, unit: str) -> float | None:
-        entries = facts.get(tag, {}).get("units", {}).get(unit, [])
-        if not entries:
-            return None
-        frame = pd.DataFrame(entries)
-        if "filed" not in frame or "val" not in frame:
-            return None
-        frame = frame.dropna(subset=["filed", "val"]).sort_values("filed")
-        if frame.empty:
-            return None
-        return float(frame.iloc[-1]["val"])
 
     @staticmethod
     def _acceptance_time_utc(value: object) -> pd.Timestamp:

@@ -438,15 +438,11 @@ The expanded RapidAPI snapshot collection is intentionally stored as external da
 
 `src/market_predictor/sources/sec.py`
 
-Fetches SEC company facts and filings with no API key. Used for fundamentals and filing events.
+Fetches SEC filing events with no API key and preserves acceptance-time alignment.
 
 `src/market_predictor/sources/http.py`
 
 Small HTTP helper with retry/backoff behavior.
-
-`src/market_predictor/sources/seeking_alpha_mcp.py`
-
-MCP discovery helper for RapidAPI Seeking Alpha metadata when an MCP server is available. Runtime collection still uses direct REST calls.
 
 ### Price and Feature Engineering
 

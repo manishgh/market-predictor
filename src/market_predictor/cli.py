@@ -359,18 +359,6 @@ def collect_events_for_ticker(
     return frame, pd.DataFrame(collections), errors
 
 
-def collect_events_frame(
-    ticker: str,
-    days: int,
-    *,
-    end: datetime | None = None,
-    no_reddit: bool = False,
-    score: bool = True,
-) -> pd.DataFrame:
-    frame, _, _ = collect_events_for_ticker(ticker, days, end=end, no_reddit=no_reddit, score=score)
-    return frame
-
-
 def _normalize_ohlcv(ticker: str, frame: pd.DataFrame, timeframe: str, *, price_feed: str) -> pd.DataFrame:
     normalized = frame.copy()
     if timeframe == "1d":

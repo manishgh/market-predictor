@@ -286,10 +286,6 @@ def audit_swing_dataset(
     return CanonicalAuditReport(checks=checks)
 
 
-def audit_feature_availability_columns(frame: pd.DataFrame) -> list[str]:
-    return [column for column in frame.columns if column.endswith("available_at_utc") and column not in {"label_available_at_utc"}]
-
-
 def _utc(values: pd.Series, *, allow_null: bool = False) -> pd.Series:
     def parse(value: object) -> pd.Timestamp:
         if allow_null and (value is None or pd.isna(value)):

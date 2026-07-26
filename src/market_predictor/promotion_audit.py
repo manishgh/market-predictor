@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -231,16 +230,6 @@ def _audit_join_columns(
         ]
     )
     return [column for column in dict.fromkeys(columns) if column in data.columns]
-
-
-def read_audit_record(path: Path | None) -> pd.DataFrame | None:
-    if path is None:
-        return None
-    suffix = path.suffix.lower()
-    if suffix == ".json":
-        payload = pd.read_json(path)
-        return payload if isinstance(payload, pd.DataFrame) else pd.DataFrame([payload])
-    return pd.read_csv(path)
 
 
 def _profit_summary(

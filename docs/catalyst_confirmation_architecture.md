@@ -174,7 +174,7 @@ Primary sources:
 
 - Alpaca premium news and market bars
 - Seeking Alpha via RapidAPI for SA news, analysis, ratings/quant-like snapshots, earnings, and symbol data
-- SEC EDGAR filings and company facts
+- SEC EDGAR filing events
 - Reddit API for community attention and chatter where credentials are configured
 - Finviz Elite for candidate discovery and screening
 

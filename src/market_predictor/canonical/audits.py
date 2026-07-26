@@ -393,44 +393,6 @@ def audit_decision_source_coverage(
     )
 
 
-def build_canonical_audit(
-    *,
-    bars: pd.DataFrame | None = None,
-    events: pd.DataFrame | None = None,
-    source_collections: pd.DataFrame | None = None,
-    fundamentals: pd.DataFrame | None = None,
-    memberships: pd.DataFrame | None = None,
-    decisions: pd.DataFrame | None = None,
-    decision_feature_timestamps: Iterable[str] = (),
-    required_decision_sources: Iterable[str] = (),
-    require_sip: bool = True,
-    require_observed_events: bool = True,
-) -> CanonicalAuditReport:
-    checks: list[CanonicalAuditCheck] = []
-    checks.extend(audit_canonical_bars(bars, require_sip=require_sip) if bars is not None else (_not_run("bars"),))
-    checks.extend(
-        audit_canonical_events(events, require_observed=require_observed_events) if events is not None else (_not_run("events"),)
-    )
-    checks.extend(audit_source_collections(source_collections) if source_collections is not None else (_not_run("sources"),))
-    checks.extend(audit_fundamental_facts(fundamentals) if fundamentals is not None else (_not_run("fundamentals"),))
-    checks.extend(
-        audit_universe_memberships(memberships, decisions=decisions)
-        if memberships is not None
-        else (_not_run("memberships"),)
-    )
-    checks.extend(
-        audit_decision_availability(decisions, feature_timestamp_columns=decision_feature_timestamps)
-        if decisions is not None
-        else (_not_run("decisions"),)
-    )
-    checks.extend(
-        audit_decision_source_coverage(decisions, required_sources=required_decision_sources)
-        if decisions is not None
-        else (_not_run("decision_sources"),)
-    )
-    return CanonicalAuditReport(checks=tuple(checks))
-
-
 def _utc_series(values: pd.Series, *, allow_null: bool = False) -> pd.Series:
     def parse(value: object) -> pd.Timestamp:
         if allow_null and (value is None or pd.isna(value)):
@@ -458,7 +420,3 @@ def _check(name: str, failures: int, rows: int, detail: str) -> CanonicalAuditCh
 
 def _fail(name: str, rows: int, detail: str) -> CanonicalAuditCheck:
     return CanonicalAuditCheck(name=name, status="fail", failures=1, rows_checked=int(rows), detail=detail)
-
-
-def _not_run(name: str) -> CanonicalAuditCheck:
-    return CanonicalAuditCheck(name=name, status="not_run", failures=0, rows_checked=0, detail="input not supplied")

@@ -11,10 +11,6 @@ PredictionMode = Literal["swing", "intraday", "unified"]
 PredictionView = Literal["swing", "intraday"]
 PredictionDataSource = Literal["curated", "live"]
 
-PREDICTION_CONTRACT_VERSION = "market_predictor.prediction.v2"
-PREDICTION_EVIDENCE_CONTRACT_VERSION = "market_predictor.prediction_evidence.v3"
-
-
 class PredictionServiceError(Exception):
     """Base class for stable, non-leaking service failures."""
 

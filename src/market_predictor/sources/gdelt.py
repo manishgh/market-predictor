@@ -40,24 +40,6 @@ class GdeltSource:
         self.request_pause_seconds = request_pause_seconds
         self.request_retries = request_retries
 
-    def fetch_context_events(
-        self,
-        start: datetime,
-        *,
-        end: datetime | None = None,
-        queries: tuple[str, ...] = DEFAULT_GDELT_CONTEXT_QUERIES,
-        max_records_per_query: int = 75,
-    ) -> list[NewsEvent]:
-        events, errors = self.fetch_context_events_with_errors(
-            start,
-            end=end,
-            queries=queries,
-            max_records_per_query=max_records_per_query,
-        )
-        if errors and not events:
-            raise RuntimeError(" | ".join(errors))
-        return events
-
     def fetch_context_events_with_errors(
         self,
         start: datetime,

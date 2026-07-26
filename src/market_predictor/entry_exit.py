@@ -884,12 +884,3 @@ def _top_decile_lift(y_true: pd.Series, probability: pd.Series) -> dict[str, flo
     top_rate = float(top["target"].mean()) if not top.empty else float("nan")
     lift = top_rate / base_rate if base_rate else float("nan")
     return {"top_decile_positive_rate": top_rate, "base_positive_rate": base_rate, "top_decile_lift": float(lift)}
-
-
-def _num(value: object) -> float:
-    try:
-        if value is None or pd.isna(value):
-            return float("nan")
-        return float(str(value))
-    except (TypeError, ValueError):
-        return float("nan")

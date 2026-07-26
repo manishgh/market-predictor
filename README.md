@@ -8,7 +8,7 @@ Python prediction-intelligence project for ticker-level swing, daily momentum, a
 - Alpaca premium news, ticker universe, and market bars as the primary live source.
 - Reddit API crawling as the required attention/community signal.
 - Seeking Alpha via RapidAPI for SA news/analysis, earnings, and quant/rating snapshots.
-- SEC company facts for keyless EPS/fundamental snapshots.
+- SEC EDGAR filing events with acceptance-time alignment.
 - Market-wide context from SPY/QQQ/sector ETF/news proxy events so global news can affect predictions even when it is not ticker-specific.
 - FinBERT sentiment features plus price movement labels for next-day and swing-horizon prediction targets.
 
@@ -168,6 +168,7 @@ The corrected V4-H1 fingerprint contains 505,049 physical rows and 495,513 rank-
 - [ML model V3 improvement plan](docs/ml_model_v3_plan.md)
 - [TradingFlow integration plan](docs/trading_flow_integration_plan.md)
 - [Legacy alert rule parity](docs/legacy_alert_rule_parity.md)
+- [Disk and dead-code cleanup audit](docs/reviews/disk_and_dead_code_cleanup_2026-07-26.md)
 
 ## Source Strategy
 
@@ -176,7 +177,7 @@ Primary:
 - **Alpaca premium**: active/tradable ticker universe, latest news, and historical bars. Use this for reliable, timestamped market data and recent ticker news.
 - **Reddit API**: subreddit search and ticker mentions. Use this for retail attention, sentiment, score, comments, and upvote-ratio signals.
 - **Seeking Alpha via RapidAPI**: SA-owned news/analysis, earnings, and quant/rating snapshots. This is the only quant/rating API path.
-- **SEC EDGAR APIs**: keyless company facts, filings, and EPS/fundamental history.
+- **SEC EDGAR APIs**: keyless filing events with acceptance-time alignment.
 
 Seeking Alpha premium account access:
 
@@ -335,7 +336,6 @@ For implementation details and file responsibilities, read:
 ```text
 docs/implementation_guide.md
 docs/azure_deployment_plan.md
-docs/rapidapi_mcp.md
 ```
 
 ## Access Required
@@ -365,8 +365,6 @@ Seeking Alpha RapidAPI:
 - Subscribe to the Seeking Alpha API on RapidAPI basic tier.
 - Required field in `.env`: `RAPIDAPI_KEY`.
 - Optional account-token fields in `.env`: `SEEKING_ALPHA_ACCOUNT_EMAIL`, `SEEKING_ALPHA_ACCOUNT_PASSWORD`.
-- Optional MCP setup template: `mcp/rapidapi-seeking-alpha.mcp.json.example`.
-- MCP notes: `docs/rapidapi_mcp.md`.
 - Defaults assume host `seeking-alpha.p.rapidapi.com`.
 - Event feeds and snapshot feeds are configurable in `configs/default.toml`.
 - Default event feeds include ticker news, press releases, SA analysis, and broad market/context feeds.

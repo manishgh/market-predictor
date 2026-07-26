@@ -5,8 +5,8 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from market_predictor.intraday_catalysts import INTRADAY_CATALYST_FEATURES, add_intraday_catalyst_features
-from market_predictor.market_regime import MARKET_REGIME_FEATURES, add_market_regime_labels
+from market_predictor.intraday_catalysts import add_intraday_catalyst_features
+from market_predictor.market_regime import add_market_regime_labels
 
 CURRENT_CANDIDATE_OVERLAY_COLUMNS = (
     "intraday_candidate_score",
@@ -19,59 +19,6 @@ CURRENT_CANDIDATE_OVERLAY_COLUMNS = (
     "theme_crypto_fintech_high_beta",
     "theme_consumer_high_beta",
 )
-
-INTRADAY_ENRICHED_FEATURES = [
-    "session_minutes_from_open",
-    "session_progress",
-    "is_opening_30m",
-    "is_midday",
-    "is_power_hour",
-    "session_minute_sin",
-    "session_minute_cos",
-    "session_vwap",
-    "dist_session_vwap",
-    "session_vwap_slope_3bar",
-    "session_vwap_slope_6bar",
-    "opening_range_high",
-    "opening_range_low",
-    "opening_range_width_pct",
-    "dist_opening_range_high",
-    "dist_opening_range_low",
-    "above_opening_range",
-    "below_opening_range",
-    "return_1bar",
-    "return_3bar",
-    "return_6bar",
-    "return_12bar",
-    "return_acceleration_3v6",
-    "volume_burst_20bar",
-    "relative_volume_same_minute_20d",
-    "ema10_gt_ema20",
-    "ema20_gt_ema50",
-    "close_gt_ema20",
-    "macd_improving",
-    "setup_candidate_score",
-    "qqq_return_1bar",
-    "qqq_return_3bar",
-    "qqq_return_6bar",
-    "spy_return_1bar",
-    "spy_return_3bar",
-    "spy_return_6bar",
-    "rel_return_1bar_vs_qqq",
-    "rel_return_3bar_vs_qqq",
-    "rel_return_6bar_vs_qqq",
-    "rel_return_1bar_vs_spy",
-    "rel_return_3bar_vs_spy",
-    "rel_return_6bar_vs_spy",
-    "one_minute_dist_vwap",
-    "one_minute_return_5m",
-    "one_minute_return_15m",
-    "one_minute_return_30m",
-    "one_minute_volume_burst_15m",
-    *MARKET_REGIME_FEATURES,
-    *INTRADAY_CATALYST_FEATURES,
-]
-
 
 def build_enriched_intraday_dataset(
     frame: pd.DataFrame,

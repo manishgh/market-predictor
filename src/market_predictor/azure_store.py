@@ -46,45 +46,6 @@ class AzureBlobStore:
             blob.upload_blob(handle, overwrite=overwrite, metadata={"sha256": _file_sha256(local_path)})
         return blob_name
 
-    def upload_bytes(
-        self,
-        data: bytes,
-        blob_relative: str | Path,
-        *,
-        overwrite: bool = True,
-    ) -> str:
-        blob_name = self.blob_name(blob_relative)
-        self.container.get_blob_client(blob_name).upload_blob(
-            data,
-            overwrite=overwrite,
-            metadata={"sha256": hashlib.sha256(data).hexdigest()},
-        )
-        return blob_name
-
-    def download_bytes(self, blob_relative: str | Path) -> bytes:
-        blob = self.container.get_blob_client(self.blob_name(blob_relative))
-        return bytes(blob.download_blob().readall())
-
-    def blob_exists(self, blob_relative: str | Path) -> bool:
-        return bool(self.container.get_blob_client(self.blob_name(blob_relative)).exists())
-
-    def blob_sha256(self, blob_relative: str | Path) -> str | None:
-        properties = self.container.get_blob_client(self.blob_name(blob_relative)).get_blob_properties()
-        metadata = getattr(properties, "metadata", None)
-        if not isinstance(metadata, dict):
-            return None
-        value = metadata.get("sha256")
-        return str(value) if value else None
-
-    def download_file(self, blob_relative: str | Path, local_path: Path, *, overwrite: bool = True) -> Path:
-        if local_path.exists() and not overwrite:
-            return local_path
-        local_path.parent.mkdir(parents=True, exist_ok=True)
-        blob = self.container.get_blob_client(self.blob_name(blob_relative))
-        data = blob.download_blob().readall()
-        local_path.write_bytes(data)
-        return local_path
-
     def upload_tree(
         self,
         root: Path,
