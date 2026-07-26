@@ -283,11 +283,41 @@ cross-chunk event-ID uniqueness, stock identity, and half-open publication
 window sequentially. It also emits explicit catalyst-training exclusions for
 long provider coverage gaps; missing source history is never imputed as zero.
 
-`swing/event_relevance.py` applies a versioned deterministic research policy to
-provider-tagged events. Direct ticker/company evidence, issuer industry themes,
-material terms, and generic-roundup penalties remain separate from FinBERT
-sentiment. Single-letter tickers require explicit market/ticker notation so
-ordinary words do not become false issuer matches.
+`swing/event_relevance.py` is retained only for the v1 research sentiment
+artifact. Its numeric FinBERT output remains reusable by `event_id`, but its
+retrospectively applied relevance value is not accepted as model-attribution
+evidence.
+
+`security_labels.py` loads the closed, versioned business-tag taxonomy. Runtime
+industry fallback IDs are prohibited. Point-in-time membership industry can
+produce one context-only primary tag; current profile text can add an offering,
+driver, or end-market tag only through an exact phrase and an explicit
+membership-compatibility rule. `swing/security_label_artifact.py` reconciles
+the frozen training population, publishes assignments plus explicit
+insufficient-evidence coverage, caps active tags at three, and delays current
+profile availability until the profile artifact has been published.
+Profile-derived assignments expire after the policy validity interval; the
+membership context assignment resumes until a newer immutable profile
+collection is supplied.
+The coverage artifact also carries every security's point-in-time ticker,
+company, effective interval, and availability timestamp. Direct issuer
+identity therefore does not depend on having a thematic assignment.
+
+`swing/event_attribution.py` produces separate direct-issuer,
+business-exposure, and sector-context relations. Direct issuer attribution
+requires an explicit ticker or full normalized company identity. Source-tagged
+generic offering text remains business exposure, and source-tagged industry or
+end-market text remains context. Short and frozen ambiguous tickers require
+cashtag, parenthetical, exchange, or `ticker:` notation. Event and label
+effective/availability timestamps are enforced as half-open point-in-time
+joins.
+
+`swing/event_attribution_history.py` is the bounded operational replay. It
+requires a completed news collection and passed collection audit, loads the
+business-label artifact once, processes one canonical event chunk at a time,
+and publishes immutable relation chunks plus a final hash-bound inventory.
+Resume accepts only matching collection, label, all-security identity,
+source-event, and attribution-policy hashes.
 
 `swing/sentiment_history.py` consumes only a completed collection and passed
 streaming audit. It excludes audited provider blind spots, reads one event

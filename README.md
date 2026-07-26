@@ -687,6 +687,23 @@ market-predictor-research score-alpaca-news-history `
   --batch-size 32 `
   --torch-threads 4 `
   --fixed-latency-minutes 5
+
+market-predictor-research build-security-business-labels `
+  --memberships data/canonical/swing_memberships_20190709_20260708_v1.parquet `
+  --universe data/universe/sp500_point_in_time_20190709_20260708_v3.parquet `
+  --profiles data/external/seeking_alpha_profiles_sp500_20260726_v2/profiles.parquet `
+  --training-dataset data/features/swing/swing_technical_5d_20210709_20260708_v1.parquet `
+  --policy configs/security_business_labels.toml `
+  --assignments-out data/canonical/security_business_labels_sp500_20210709_20260708_v1.parquet `
+  --coverage-out data/reports/security_business_label_coverage_sp500_20210709_20260708_v1.parquet `
+  --summary-out data/reports/security_business_label_summary_sp500_20210709_20260708_v1.json
+
+market-predictor-research attribute-alpaca-news-history `
+  --collection-dir data/raw/alpaca_news_20210709_20260708_v1 `
+  --collection-audit data/reports/alpaca_news_20210709_20260708_v1_audit.json `
+  --business-labels data/canonical/security_business_labels_sp500_20210709_20260708_v1.parquet `
+  --security-identities data/reports/security_business_label_coverage_sp500_20210709_20260708_v1.parquet `
+  --out-dir data/features/swing/alpaca_event_relations_20210709_20260708_v1
 ```
 
 The completed archive contains 564,986 events across 612 effective tickers and
@@ -702,6 +719,44 @@ publication-plus-latency research timestamp; neither field converts the
 historical archive into production-observed evidence. Provider tagging is not
 treated as proof of full relevance: deterministic issuer, ticker, industry,
 materiality, and generic-roundup evidence is retained for later ablation.
+
+Business tags are security metadata, not future-return outcome labels. The
+closed taxonomy assigns at most three active tags per `security_id`; it never
+infers tags from ticker or company-name strings. Every industry observed in the
+frozen point-in-time universe is explicitly registered in configuration, so an
+unrecognized provider industry fails to `insufficient_evidence` instead of
+creating a new runtime label. Profile phrases can add an offering or driver
+only when that label is explicitly compatible with the point-in-time primary
+industry. End-market matches remain context.
+
+The current audit reconciles 607,909 eligible rows, 563 securities, and 581
+ticker histories. Historical point-in-time industry evidence assigns
+context-only tags to 480 securities; 83 have explicit insufficient evidence.
+The coverage artifact remains the point-in-time identity registry for all 563
+securities, so full company-name issuer matching still works when no thematic
+tag is assigned.
+Of 475 training securities with a current Seeking Alpha profile, 59 have a
+controlled prospective tag and 37 have at least one exposure-enabled tag.
+Current profiles become available no earlier than the completed profile
+artifact, expire after the configured 90-day validity window, and are never
+backdated into the five-year training window. The membership context tag
+resumes after profile expiry until a new immutable profile artifact is built.
+Historical
+exposure attribution remains blocked until point-in-time SEC Item 1, segment,
+or equivalent business evidence exists.
+
+`swing/event_attribution.py` keeps `direct_issuer`,
+`business_exposure`, and `sector_context` separate. Direct issuer requires an
+explicit ticker form or full normalized company name; a provider symbol tag
+plus generic business text is not enough. Ambiguous symbols such as `IT`, `ON`,
+`APP`, `ALL`, `FOR`, `NOW`, and `ARE` require explicit notation such as
+`$APP`, `(APP)`, or `NASDAQ:APP`. The retrospective relevance column in the
+five-year sentiment v1 artifacts is not valid model-attribution evidence.
+Numeric FinBERT sentiment can be reused by `event_id`, but model joins must use
+the separate point-in-time event-security relation artifact.
+`attribute-alpaca-news-history` publishes that artifact one verified source
+chunk at a time, resumes only hash-matching chunks, and records channel counts
+without loading the full news archive into memory.
 
 ```powershell
 market-predictor-research build-swing-dataset `

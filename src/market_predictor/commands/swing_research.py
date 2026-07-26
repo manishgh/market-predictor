@@ -22,6 +22,9 @@ from market_predictor.commands.configuration import load_typed_config
 from market_predictor.config import get_settings
 from market_predictor.heavy_jobs import serialized_heavy_job
 from market_predictor.sentiment import FinbertScorer
+from market_predictor.swing.event_attribution_history import (
+    attribute_alpaca_news_history,
+)
 from market_predictor.swing.inventory import (
     SwingResearchInventoryConfig,
     build_swing_research_inventory,
@@ -29,10 +32,219 @@ from market_predictor.swing.inventory import (
 from market_predictor.swing.market_history_audit import audit_swing_daily_history
 from market_predictor.swing.news_history_audit import audit_alpaca_news_history
 from market_predictor.swing.panel_inputs import build_swing_market_panel_inputs
+from market_predictor.swing.security_label_artifact import (
+    build_security_label_artifact,
+)
 from market_predictor.swing.sentiment_history import score_alpaca_news_history
 
 
 def register_swing_research_commands(app: typer.Typer, console: Console) -> None:
+    @app.command("attribute-alpaca-news-history")
+    @serialized_heavy_job("attribute-alpaca-news-history")
+    def attribute_alpaca_news_history_command(
+        collection_dir: Path = typer.Option(
+            ...,
+            help="Completed immutable Alpaca news collection.",
+        ),
+        collection_audit: Path = typer.Option(
+            ...,
+            help="Passed collection audit summary JSON.",
+        ),
+        business_labels: Path = typer.Option(
+            ...,
+            help="Canonical point-in-time business-tag assignments.",
+        ),
+        security_identities: Path = typer.Option(
+            ...,
+            help="Canonical identity/coverage artifact for all securities.",
+        ),
+        out_dir: Path = typer.Option(
+            ...,
+            help="Resumable event-security relation directory.",
+        ),
+    ) -> None:
+        """Attribute news through direct, exposure, and context channels."""
+
+        def report_progress(payload: dict[str, object]) -> None:
+            index = payload.get("index")
+            total = payload.get("total")
+            if not isinstance(index, int) or not isinstance(total, int):
+                raise TypeError("attribution progress requires integer counters")
+            if (
+                index == 1
+                or index == total
+                or index % 25 == 0
+                or payload.get("status") == "failed"
+            ):
+                console.print(payload)
+
+        result = attribute_alpaca_news_history(
+            collection_dir=collection_dir,
+            collection_audit_path=collection_audit,
+            business_labels_path=business_labels,
+            security_identities_path=security_identities,
+            out_dir=out_dir,
+            progress=report_progress,
+        )
+        console.print(
+            {
+                "status": result["status"],
+                "requested_chunks": result["requested_chunks"],
+                "observed_chunks": result["observed_chunks"],
+                "skipped_chunks": result["skipped_chunks"],
+                "failed_chunks": result["failed_chunks"],
+                "relation_rows": result["relation_rows"],
+                "channel_counts": result["channel_counts"],
+            }
+        )
+        if result["status"] != "complete":
+            raise typer.Exit(code=2)
+
+    @app.command("build-security-business-labels")
+    def build_security_business_labels_command(
+        memberships: Path = typer.Option(
+            ...,
+            help="Canonical point-in-time membership artifact.",
+        ),
+        universe: Path = typer.Option(
+            ...,
+            help="Point-in-time universe with company identities.",
+        ),
+        profiles: Path = typer.Option(
+            ...,
+            help="Canonical current-profile evidence artifact.",
+        ),
+        training_dataset: Path = typer.Option(
+            ...,
+            help="Frozen swing dataset defining label-eligible securities.",
+        ),
+        policy: Path = typer.Option(
+            Path("configs/security_business_labels.toml"),
+            help="Closed business-tag taxonomy and exact evidence rules.",
+        ),
+        assignments_out: Path = typer.Option(
+            ...,
+            help="New canonical point-in-time business-tag assignments.",
+        ),
+        coverage_out: Path = typer.Option(
+            ...,
+            help="New explicit training-security coverage artifact.",
+        ),
+        summary_out: Path = typer.Option(
+            ...,
+            help="New lineage-bound assignment summary JSON.",
+        ),
+    ) -> None:
+        """Build auditable business tags without historical profile leakage."""
+
+        outputs = (assignments_out, coverage_out)
+        occupied = [
+            path
+            for path in outputs
+            if path.exists() or manifest_path_for(path).exists()
+        ]
+        if occupied:
+            raise typer.BadParameter(
+                f"security-label output already exists: {occupied[0]}"
+            )
+        if summary_out.exists():
+            raise typer.BadParameter(
+                f"security-label summary already exists: {summary_out}"
+            )
+        artifact = build_security_label_artifact(
+            memberships_path=memberships,
+            universe_path=universe,
+            profiles_path=profiles,
+            training_dataset_path=training_dataset,
+            policy_path=policy,
+        )
+        created: list[Path] = []
+        try:
+            assignment_manifest = write_canonical_artifact(
+                artifact.assignments,
+                assignments_out,
+                artifact_type="security_business_labels",
+                audit=artifact.audit,
+                inputs=artifact.inputs,
+                production_ready=False,
+            )
+            created.extend(
+                (
+                    assignments_out,
+                    manifest_path_for(assignments_out),
+                )
+            )
+            coverage_manifest = write_canonical_artifact(
+                artifact.coverage,
+                coverage_out,
+                artifact_type="security_business_label_coverage",
+                audit=artifact.audit,
+                inputs={
+                    **artifact.inputs,
+                    "assignments_sha256": str(
+                        assignment_manifest["artifact_sha256"]
+                    ),
+                },
+                production_ready=False,
+            )
+            created.extend(
+                (
+                    coverage_out,
+                    manifest_path_for(coverage_out),
+                )
+            )
+            summary = {
+                **artifact.summary,
+                "outputs": {
+                    "assignments": _manifest_identity(
+                        assignments_out,
+                        assignment_manifest,
+                    ),
+                    "coverage": _manifest_identity(
+                        coverage_out,
+                        coverage_manifest,
+                    ),
+                },
+            }
+            summary_out.parent.mkdir(parents=True, exist_ok=True)
+            temporary = summary_out.with_name(
+                f".{summary_out.name}.{uuid4().hex}.tmp"
+            )
+            temporary.write_text(
+                json.dumps(summary, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+            os.replace(temporary, summary_out)
+        except Exception:
+            for path in reversed(created):
+                path.unlink(missing_ok=True)
+            raise
+        console.print(
+            {
+                "training_security_ids": artifact.summary[
+                    "training_security_ids"
+                ],
+                "training_ticker_histories": artifact.summary[
+                    "training_ticker_histories"
+                ],
+                "historical_assigned_security_ids": artifact.summary[
+                    "historical_assigned_security_ids"
+                ],
+                "historical_insufficient_security_ids": artifact.summary[
+                    "historical_insufficient_security_ids"
+                ],
+                "current_profile_assigned_security_ids": artifact.summary[
+                    "current_profile_assigned_security_ids"
+                ],
+                "historical_exposure_training_ready": artifact.summary[
+                    "historical_exposure_training_ready"
+                ],
+                "assignments_out": str(assignments_out),
+                "coverage_out": str(coverage_out),
+                "summary_out": str(summary_out),
+            }
+        )
+
     @app.command("score-alpaca-news-history")
     @serialized_heavy_job("score-alpaca-news-history")
     def score_alpaca_news_history_command(

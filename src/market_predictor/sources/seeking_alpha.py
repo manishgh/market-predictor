@@ -6,7 +6,7 @@ import os
 import re
 import stat
 import tempfile
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, cast
@@ -181,6 +181,35 @@ class SeekingAlphaRapidApiSource:
                 template_values.setdefault("ticker_id", ticker_id)
                 snapshot.setdefault("seeking_alpha_ticker_id", ticker_id)
         return snapshot
+
+    def fetch_profile_payload(
+        self,
+        symbols: Sequence[str],
+        *,
+        cache_hours: int = 168,
+    ) -> Any:
+        """Fetch current company profiles in one quota-tracked batch."""
+
+        normalized = sorted(
+            {
+                str(symbol).strip().lower()
+                for symbol in symbols
+                if str(symbol).strip()
+            }
+        )
+        if not normalized:
+            raise ValueError("profile batch requires at least one symbol")
+        if len(normalized) > 4:
+            raise ValueError(
+                "Seeking Alpha profile endpoint silently truncates above "
+                "4 symbols"
+            )
+        return self._get_json_cached(
+            "/symbols/get-profile",
+            {"symbols": ",".join(normalized)},
+            cache_group="snapshot_profile_batch",
+            cache_hours=cache_hours,
+        )
 
     def get_account_access_token(self, *, force_refresh: bool = False) -> str:
         if not self.settings.has_seeking_alpha_account_credentials:

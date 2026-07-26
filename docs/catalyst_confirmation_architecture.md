@@ -456,6 +456,29 @@ O1 keeps catalyst evidence outside the estimator and applies one fixed ranking a
 
 Historical sentiment inference uses locally cached FinBERT weights and immutable headline plus provider-summary inputs. Scored files carry model, input-mode, and token-limit provenance, and resume only when that tuple matches. Publication-time backfill remains research-only. Optional global context must cover both declared interval boundaries; a stale archive fails readiness instead of becoming zero-valued context.
 
+Security business tags are a separate metadata contract from future-return
+labels. A security has zero to three active tags with source hash, effective
+interval, availability timestamp, taxonomy hash, and assignment hash.
+Point-in-time membership industry is context-only. Current company profiles are
+prospective only and may establish exposure only when an exact phrase is
+compatible with the primary membership label. Unknown industries and
+unsupported profile roles remain `insufficient_evidence`.
+
+News attribution has three non-interchangeable channels:
+
+| Channel | Minimum evidence | Model use |
+| --- | --- | --- |
+| `direct_issuer` | Provider security tag plus explicit ticker notation or full normalized company identity | Issuer catalyst candidate |
+| `business_exposure` | Active exposure-enabled offering/driver term | Exposure feature or confirmation candidate |
+| `sector_context` | Active context-only industry/end-market term | Sector/global context only |
+
+The five-year v1 sentiment relevance value used current metadata
+retrospectively and is deprecated for model attribution. Sentiment probabilities
+may be joined by immutable `event_id`; accepted catalyst rows must instead use
+the point-in-time relation contract. Historical exposure training stays closed
+until SEC Item 1, segment, or equivalent business evidence is collected with
+valid availability and effective intervals.
+
 The development-only R1 failure-attribution audit projects all available 30/60/120-minute and close outcomes from the verified C8 shards, preserves fixed top-10 groups, and reports score deciles plus month/fold/time/regime/sector/liquidity/volatility strata. It never reads shadow data and cannot promote a model. C8 shows near-zero rank correlation, no stable positive filter across both scopes, and an edge that improves with horizon but remains below costs.
 
 V4-H1 changed the primary horizon and decision stride to 120 minutes. Its initial audit found that 2.32% of rank-eligible rows counted 24 observed bars across ticker-level candle gaps. The production label contract now rejects such rows and records `ml_v3.labels.v2`; it never fills or re-times bars. The corrected dataset has fingerprint `c2906f10b543327cc265798ecd81e019c5365dc9ede3e432b33ba881970cc612`, 505,049 rows, exact 120-minute exits, and 24 hash-verified shards.

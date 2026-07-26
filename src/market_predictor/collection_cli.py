@@ -12,6 +12,7 @@ COLLECTION_COMMANDS = frozenset(
         "collect-gdelt-context",
         "collect-market-context",
         "collect-seeking-alpha",
+        "collect-seeking-alpha-profiles",
         "collect-seeking-alpha-universe",
         "collect-swing",
         "collect-swing-daily-history",

@@ -1,0 +1,422 @@
+schema_version = "security.business_labels.v1"
+assignment_policy_version = "security.business_label_assignment.v1"
+max_leaf_labels = 3
+profile_validity_days = 90
+allowed_membership_availability_policies = [
+  "observed_first_seen",
+  "provider_publication_proxy",
+]
+
+# All matching is equality after lowercase alphanumeric normalization. These
+# phrases are controlled evidence terms, not fuzzy search keywords.
+
+[industry_labels]
+"Advertising" = "offering.industry.advertising"
+"Agricultural Products & Services" = "offering.industry.agricultural_products_services"
+"Air Freight & Logistics" = "offering.industry.air_freight_logistics"
+"Apparel Retail" = "offering.industry.apparel_retail"
+"Apparel, Accessories & Luxury Goods" = "offering.industry.apparel_accessories_luxury_goods"
+"Asset Management & Custody Banks" = "offering.industry.asset_management_custody_banks"
+"Automotive Parts & Equipment" = "offering.industry.automotive_parts_equipment"
+"Automotive Retail" = "offering.industry.automotive_retail"
+"Brewers" = "offering.industry.brewers"
+"Broadcasting" = "offering.industry.broadcasting"
+"Broadline Retail" = "offering.industry.broadline_retail"
+"Building Products" = "offering.industry.building_products"
+"Cable & Satellite" = "offering.industry.cable_satellite"
+"Cargo Ground Transportation" = "offering.industry.cargo_ground_transportation"
+"Casinos & Gaming" = "offering.industry.casinos_gaming"
+"Commodity Chemicals" = "offering.industry.commodity_chemicals"
+"Computer & Electronics Retail" = "offering.industry.computer_electronics_retail"
+"Construction & Engineering" = "offering.industry.construction_engineering"
+"Construction Materials" = "offering.industry.construction_materials"
+"Consumer Electronics" = "offering.industry.consumer_electronics"
+"Consumer Finance" = "offering.industry.consumer_finance"
+"Copper" = "offering.industry.copper"
+"Data Processing & Outsourced Services" = "offering.industry.data_processing_outsourced_services"
+"Distillers & Vintners" = "offering.industry.distillers_vintners"
+"Distributors" = "offering.industry.distributors"
+"Diversified Support Services" = "offering.industry.diversified_support_services"
+"Electrical Components & Equipment" = "offering.industry.electrical_components_equipment"
+"Electronic Components" = "offering.industry.electronic_components"
+"Electronic Equipment & Instruments" = "offering.industry.electronic_equipment_instruments"
+"Electronic Manufacturing Services" = "offering.industry.electronic_manufacturing_services"
+"Environmental & Facilities Services" = "offering.industry.environmental_facilities_services"
+"Fertilizers & Agricultural Chemicals" = "offering.industry.fertilizers_agricultural_chemicals"
+"Financial Exchanges & Data" = "offering.industry.financial_exchanges_data"
+"Food Distributors" = "offering.industry.food_distributors"
+"Food Retail" = "offering.industry.food_retail"
+"Footwear" = "offering.industry.footwear"
+"Gas Utilities" = "offering.industry.gas_utilities"
+"Gold" = "offering.industry.gold"
+"Health Care Distributors" = "offering.industry.health_care_distributors"
+"Health Care Facilities" = "offering.industry.health_care_facilities"
+"Health Care REITs" = "offering.industry.health_care_reits"
+"Health Care Services" = "offering.industry.health_care_services"
+"Health Care Technology" = "offering.industry.health_care_technology"
+"Heavy Electrical Equipment" = "offering.industry.heavy_electrical_equipment"
+"Home Improvement Retail" = "offering.industry.home_improvement_retail"
+"Homebuilding" = "offering.industry.homebuilding"
+"Homefurnishing Retail" = "offering.industry.homefurnishing_retail"
+"Hotel & Resort REITs" = "offering.industry.hotel_resort_reits"
+"Hotels, Resorts & Cruise Lines" = "offering.industry.hotels_resorts_cruise_lines"
+"Household Products" = "offering.industry.household_products"
+"Human Resource & Employment Services" = "offering.industry.human_resource_employment_services"
+"IT Consulting & Other Services" = "offering.industry.it_consulting_other_services"
+"Independent Power Producers & Energy Traders" = "offering.industry.independent_power_producers_energy_traders"
+"Industrial Conglomerates" = "offering.industry.industrial_conglomerates"
+"Industrial Gases" = "offering.industry.industrial_gases"
+"Industrial REITs" = "offering.industry.industrial_reits"
+"Insurance Brokers" = "offering.industry.insurance_brokers"
+"Integrated Telecommunication Services" = "offering.industry.integrated_telecommunication_services"
+"Interactive Home Entertainment" = "offering.industry.interactive_home_entertainment"
+"Interactive Media & Services" = "offering.industry.interactive_media_services"
+"Leisure Products" = "offering.industry.leisure_products"
+"Life & Health Insurance" = "offering.industry.life_health_insurance"
+"Life Sciences Tools & Services" = "offering.industry.life_sciences_tools_services"
+"Metal, Glass & Plastic Containers" = "offering.industry.metal_glass_plastic_containers"
+"Movies & Entertainment" = "offering.industry.movies_entertainment"
+"Multi-Family Residential REITs" = "offering.industry.multi_family_residential_reits"
+"Multi-Sector Holdings" = "offering.industry.multi_sector_holdings"
+"Multi-Utilities" = "offering.industry.multi_utilities"
+"Multi-line Insurance" = "offering.industry.multi_line_insurance"
+"Office REITs" = "offering.industry.office_reits"
+"Oil & Gas Exploration & Production" = "offering.industry.oil_gas_exploration_production"
+"Oil & Gas Refining & Marketing" = "offering.industry.oil_gas_refining_marketing"
+"Oil & Gas Storage & Transportation" = "offering.industry.oil_gas_storage_transportation"
+"Other Specialized REITs" = "offering.industry.other_specialized_reits"
+"Other Specialty Retail" = "offering.industry.other_specialty_retail"
+"Paper & Plastic Packaging Products & Materials" = "offering.industry.paper_plastic_packaging_products_materials"
+"Passenger Airlines" = "offering.industry.passenger_airlines"
+"Passenger Ground Transportation" = "offering.industry.passenger_ground_transportation"
+"Personal Care Products" = "offering.industry.personal_care_products"
+"Property & Casualty Insurance" = "offering.industry.property_casualty_insurance"
+"Publishing" = "offering.industry.publishing"
+"Rail Transportation" = "offering.industry.rail_transportation"
+"Real Estate Services" = "offering.industry.real_estate_services"
+"Reinsurance" = "offering.industry.reinsurance"
+"Research & Consulting Services" = "offering.industry.research_consulting_services"
+"Restaurants" = "offering.industry.restaurants"
+"Retail REITs" = "offering.industry.retail_reits"
+"Self-Storage REITs" = "offering.industry.self_storage_reits"
+"Single-Family Residential REITs" = "offering.industry.single_family_residential_reits"
+"Soft Drinks & Non-alcoholic Beverages" = "offering.industry.soft_drinks_non_alcoholic_beverages"
+"Specialized Consumer Services" = "offering.industry.specialized_consumer_services"
+"Specialty Chemicals" = "offering.industry.specialty_chemicals"
+"Steel" = "offering.industry.steel"
+"Technology Distributors" = "offering.industry.technology_distributors"
+"Timber REITs" = "offering.industry.timber_reits"
+"Tobacco" = "offering.industry.tobacco"
+"Trading Companies & Distributors" = "offering.industry.trading_companies_distributors"
+"Water Utilities" = "offering.industry.water_utilities"
+"Wireless Telecommunication Services" = "offering.industry.wireless_telecommunication_services"
+
+[[labels]]
+id = "offering.hardware.storage"
+dimension = "offering"
+compatible_membership_label_ids = ["offering.hardware.storage"]
+membership_sector_exact = []
+membership_industry_exact = ["Technology Hardware, Storage & Peripherals"]
+profile_phrase_exact = [
+  "hard disk drive",
+  "hard disk drives",
+  "data storage devices",
+  "hdd storage",
+  "storage hardware",
+  "storage infrastructure",
+]
+
+[[labels]]
+id = "offering.semiconductor.general"
+dimension = "offering"
+compatible_membership_label_ids = ["offering.semiconductor.general"]
+membership_sector_exact = []
+membership_industry_exact = ["Semiconductors"]
+profile_phrase_exact = ["semiconductors", "semiconductor memory"]
+
+[[labels]]
+id = "offering.semiconductor.memory"
+dimension = "offering"
+compatible_membership_label_ids = [
+  "offering.semiconductor.general",
+  "offering.semiconductor.memory",
+]
+membership_sector_exact = []
+membership_industry_exact = []
+profile_phrase_exact = [
+  "memory products",
+  "dynamic random access memory",
+  "dram and nand memory",
+  "high bandwidth memory",
+  "memory chips",
+  "memory semiconductors",
+  "nand flash",
+]
+
+[[labels]]
+id = "offering.semiconductor.equipment"
+dimension = "offering"
+compatible_membership_label_ids = ["offering.semiconductor.equipment"]
+membership_sector_exact = []
+membership_industry_exact = ["Semiconductor Materials & Equipment"]
+profile_phrase_exact = ["semiconductor equipment", "wafer fabrication equipment"]
+
+[[labels]]
+id = "offering.software.enterprise"
+dimension = "offering"
+compatible_membership_label_ids = ["offering.software.enterprise"]
+membership_sector_exact = []
+membership_industry_exact = ["Application Software", "Systems Software"]
+profile_phrase_exact = ["enterprise software", "systems software"]
+
+[[labels]]
+id = "offering.infrastructure.cloud"
+dimension = "offering"
+compatible_membership_label_ids = [
+  "offering.infrastructure.cloud",
+]
+membership_sector_exact = []
+membership_industry_exact = ["Internet Services & Infrastructure"]
+profile_phrase_exact = ["cloud infrastructure", "public cloud"]
+
+[[labels]]
+id = "offering.healthcare.biopharma"
+dimension = "offering"
+compatible_membership_label_ids = ["offering.healthcare.biopharma"]
+membership_sector_exact = []
+membership_industry_exact = ["Biotechnology", "Pharmaceuticals"]
+profile_phrase_exact = ["biopharmaceuticals", "drug development"]
+
+[[labels]]
+id = "offering.healthcare.medical_devices"
+dimension = "offering"
+compatible_membership_label_ids = ["offering.healthcare.medical_devices"]
+membership_sector_exact = []
+membership_industry_exact = ["Health Care Equipment", "Health Care Supplies"]
+profile_phrase_exact = ["medical devices", "medical supplies"]
+
+[[labels]]
+id = "offering.healthcare.managed_care"
+dimension = "offering"
+compatible_membership_label_ids = ["offering.healthcare.managed_care"]
+membership_sector_exact = []
+membership_industry_exact = ["Managed Health Care"]
+profile_phrase_exact = ["managed health care", "health insurance"]
+
+[[labels]]
+id = "offering.finance.diversified_banking"
+dimension = "offering"
+compatible_membership_label_ids = ["offering.finance.diversified_banking"]
+membership_sector_exact = []
+membership_industry_exact = ["Diversified Banks", "Regional Banks"]
+profile_phrase_exact = ["commercial banking", "diversified banking"]
+
+[[labels]]
+id = "offering.finance.capital_markets"
+dimension = "offering"
+compatible_membership_label_ids = [
+  "offering.finance.capital_markets",
+]
+membership_sector_exact = []
+membership_industry_exact = ["Investment Banking & Brokerage"]
+profile_phrase_exact = ["capital markets", "investment banking"]
+
+[[labels]]
+id = "offering.finance.payments"
+dimension = "offering"
+compatible_membership_label_ids = ["offering.finance.payments"]
+membership_sector_exact = []
+membership_industry_exact = ["Transaction & Payment Processing Services"]
+profile_phrase_exact = ["payment processing", "payments network"]
+
+[[labels]]
+id = "offering.energy.integrated_oil_gas"
+dimension = "offering"
+compatible_membership_label_ids = ["offering.energy.integrated_oil_gas"]
+membership_sector_exact = []
+membership_industry_exact = ["Integrated Oil & Gas"]
+profile_phrase_exact = ["integrated oil and gas"]
+
+[[labels]]
+id = "offering.energy.oilfield_services"
+dimension = "offering"
+compatible_membership_label_ids = ["offering.energy.oilfield_services"]
+membership_sector_exact = []
+membership_industry_exact = ["Oil & Gas Equipment & Services"]
+profile_phrase_exact = ["oilfield equipment", "oilfield services"]
+
+[[labels]]
+id = "offering.aerospace_defense"
+dimension = "offering"
+compatible_membership_label_ids = ["offering.aerospace_defense"]
+membership_sector_exact = []
+membership_industry_exact = ["Aerospace & Defense"]
+profile_phrase_exact = ["aerospace and defense", "defense aerospace"]
+
+[[labels]]
+id = "offering.retail.mass_market"
+dimension = "offering"
+compatible_membership_label_ids = ["offering.retail.mass_market"]
+membership_sector_exact = []
+membership_industry_exact = ["Consumer Staples Merchandise Retail"]
+profile_phrase_exact = ["mass market retail", "merchandise retail"]
+
+[[labels]]
+id = "offering.utility.electric"
+dimension = "offering"
+compatible_membership_label_ids = ["offering.utility.electric"]
+membership_sector_exact = []
+membership_industry_exact = ["Electric Utilities"]
+profile_phrase_exact = ["electric utility", "regulated electric utility"]
+
+[[labels]]
+id = "offering.automotive.manufacturer"
+dimension = "offering"
+compatible_membership_label_ids = ["offering.automotive.manufacturer"]
+membership_sector_exact = []
+membership_industry_exact = ["Automobile Manufacturers"]
+profile_phrase_exact = ["automobile manufacturing", "vehicle manufacturing"]
+
+[[labels]]
+id = "offering.industrial.machinery"
+dimension = "offering"
+compatible_membership_label_ids = ["offering.industrial.machinery"]
+membership_sector_exact = []
+membership_industry_exact = [
+  "Agricultural & Farm Machinery",
+  "Construction Machinery & Heavy Transportation Equipment",
+  "Industrial Machinery & Supplies & Components",
+]
+profile_phrase_exact = ["industrial machinery", "construction machinery"]
+
+[[labels]]
+id = "offering.real_estate.data_center"
+dimension = "offering"
+compatible_membership_label_ids = ["offering.real_estate.data_center"]
+membership_sector_exact = []
+membership_industry_exact = ["Data Center REITs"]
+profile_phrase_exact = ["data center real estate", "data center reit"]
+
+[[labels]]
+id = "offering.telecom.infrastructure"
+dimension = "offering"
+compatible_membership_label_ids = ["offering.telecom.infrastructure"]
+membership_sector_exact = []
+membership_industry_exact = ["Communications Equipment", "Telecom Tower REITs"]
+profile_phrase_exact = ["communications infrastructure", "telecom towers"]
+
+[[labels]]
+id = "offering.consumer.packaged_food"
+dimension = "offering"
+compatible_membership_label_ids = ["offering.consumer.packaged_food"]
+membership_sector_exact = []
+membership_industry_exact = ["Packaged Foods & Meats"]
+profile_phrase_exact = ["packaged food", "packaged foods"]
+
+[[labels]]
+id = "end_market.data_center"
+dimension = "end_market"
+membership_sector_exact = []
+membership_industry_exact = ["Data Center REITs"]
+profile_phrase_exact = ["data center", "hyperscale data center"]
+
+[[labels]]
+id = "end_market.enterprise_it"
+dimension = "end_market"
+membership_sector_exact = []
+membership_industry_exact = []
+profile_phrase_exact = ["enterprise information technology", "enterprise it"]
+
+[[labels]]
+id = "end_market.consumer"
+dimension = "end_market"
+membership_sector_exact = []
+membership_industry_exact = []
+profile_phrase_exact = ["consumer end market"]
+
+[[labels]]
+id = "end_market.government"
+dimension = "end_market"
+membership_sector_exact = []
+membership_industry_exact = []
+profile_phrase_exact = ["government customer", "government end market"]
+
+[[labels]]
+id = "end_market.healthcare"
+dimension = "end_market"
+membership_sector_exact = []
+membership_industry_exact = []
+profile_phrase_exact = ["healthcare end market"]
+
+[[labels]]
+id = "driver.storage_demand"
+dimension = "driver"
+compatible_membership_label_ids = ["offering.hardware.storage"]
+membership_sector_exact = []
+membership_industry_exact = []
+profile_phrase_exact = ["enterprise storage demand", "storage demand"]
+
+[[labels]]
+id = "driver.memory_pricing"
+dimension = "driver"
+compatible_membership_label_ids = [
+  "offering.semiconductor.general",
+  "offering.semiconductor.memory",
+]
+membership_sector_exact = []
+membership_industry_exact = []
+profile_phrase_exact = ["dram pricing", "memory pricing", "nand pricing"]
+
+[[labels]]
+id = "driver.ai_infrastructure_capex"
+dimension = "driver"
+compatible_membership_label_ids = [
+  "offering.hardware.storage",
+  "offering.infrastructure.cloud",
+  "offering.real_estate.data_center",
+  "offering.semiconductor.equipment",
+  "offering.semiconductor.general",
+  "offering.semiconductor.memory",
+  "offering.telecom.infrastructure",
+]
+membership_sector_exact = []
+membership_industry_exact = []
+profile_phrase_exact = ["ai infrastructure capital expenditure", "ai infrastructure capex"]
+
+[[labels]]
+id = "driver.clinical_regulatory"
+dimension = "driver"
+compatible_membership_label_ids = ["offering.healthcare.biopharma"]
+membership_sector_exact = []
+membership_industry_exact = []
+profile_phrase_exact = ["clinical and regulatory milestones", "clinical regulatory"]
+
+[[labels]]
+id = "driver.interest_credit_cycle"
+dimension = "driver"
+compatible_membership_label_ids = [
+  "offering.finance.capital_markets",
+  "offering.finance.diversified_banking",
+]
+membership_sector_exact = []
+membership_industry_exact = []
+profile_phrase_exact = ["credit cycle", "interest and credit cycle"]
+
+[[labels]]
+id = "driver.energy_commodity_prices"
+dimension = "driver"
+compatible_membership_label_ids = [
+  "offering.energy.integrated_oil_gas",
+  "offering.energy.oilfield_services",
+]
+membership_sector_exact = []
+membership_industry_exact = []
+profile_phrase_exact = ["crude oil and natural gas prices", "energy commodity prices"]
+
+[[labels]]
+id = "driver.government_contracts"
+dimension = "driver"
+compatible_membership_label_ids = ["offering.aerospace_defense"]
+membership_sector_exact = []
+membership_industry_exact = []
+profile_phrase_exact = ["government contract awards", "government contracts"]
