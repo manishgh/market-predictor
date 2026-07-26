@@ -382,31 +382,55 @@
     {
       "blocker": null,
       "checkpoint_id": "KS0",
-      "closure": null,
+      "closure": {
+        "closed_at_utc": "2026-07-26T17:25:56Z",
+        "commit_sha": "2c70f0066b5f05cb471eaddc066a4a2faee3c435",
+        "remote_ref": "origin/r3-lineage",
+        "summary": "Frozen 25 bounded H1 research hypotheses, shared validation/cost/capacity contracts, experiment and retirement policy, and five explicitly non-serving reference models."
+      },
       "contracts": [
         "strategy and component ID schema",
         "hypothesis registry",
         "shared fold, cost, capacity, and retirement policy"
       ],
-      "evidence": [],
+      "evidence": [
+        {
+          "description": "Deterministic validation report for hypothesis coverage, policy/config hashes, shared assumptions, execution policy, and reference-model exclusion.",
+          "evidence_id": "KS0-E1",
+          "path": "docs/evidence/ks0_strategy_research_contracts.json",
+          "sha256": "09fbb2a56097c2b0b197f03a73844378ae3880d241b09d9b72154e80cbc0d712"
+        },
+        {
+          "description": "Focused and repository-wide lint, type, unit, documentation, secret, process, and memory verification record.",
+          "evidence_id": "KS0-E2",
+          "path": "docs/evidence/ks0_verification_20260726.json",
+          "sha256": "d5d0a1992842da23f5c5bedeb3642ef0ed135fe6eb24c729e8f6175adf2bfafd"
+        }
+      ],
       "exit_gates": [
         {
           "description": "Every strategy and component has one immutable ID, display name, owner checkpoint, and bounded hypothesis.",
-          "evidence_ids": [],
+          "evidence_ids": [
+            "KS0-E1"
+          ],
           "gate_id": "KS0-G1",
-          "status": "pending"
+          "status": "passed"
         },
         {
           "description": "Shared folds, costs, capacity assumptions, experiment budget, and retirement rules are frozen.",
-          "evidence_ids": [],
+          "evidence_ids": [
+            "KS0-E1"
+          ],
           "gate_id": "KS0-G2",
-          "status": "pending"
+          "status": "passed"
         },
         {
           "description": "Existing generic models are identified as reference evidence and cannot be served as named strategies.",
-          "evidence_ids": [],
+          "evidence_ids": [
+            "KS0-E1"
+          ],
           "gate_id": "KS0-G3",
-          "status": "pending"
+          "status": "passed"
         }
       ],
       "in_scope": [
@@ -422,21 +446,25 @@
       ],
       "problem_statement": "Freeze what will be tested before strategy-specific implementation begins.",
       "sequence": 0,
-      "status": "in_progress",
+      "status": "completed",
       "title": "Freeze catalog and hypothesis budget",
       "verification": [
         {
-          "command": null,
+          "command": ".\\.venv\\Scripts\\python.exe -m market_predictor.research_cli validate-strategy-research-contracts --ledger docs\\strategy_execution_ledger.json --hypotheses docs\\strategy_hypothesis_registry.json --policy configs\\strategy_research_governance.toml --reference-models docs\\reference_model_inventory.json --repository-root .",
           "description": "Validate the strategy catalog, hypothesis registry, and shared research policy.",
-          "evidence_ids": [],
-          "status": "pending",
+          "evidence_ids": [
+            "KS0-E1"
+          ],
+          "status": "passed",
           "verification_id": "KS0-V1"
         },
         {
-          "command": null,
+          "command": ".\\.venv\\Scripts\\python.exe -m unittest discover -s tests -p \"test_*.py\"",
           "description": "Run focused poison tests and the complete repository verification battery.",
-          "evidence_ids": [],
-          "status": "pending",
+          "evidence_ids": [
+            "KS0-E2"
+          ],
+          "status": "passed",
           "verification_id": "KS0-V2"
         }
       ]
