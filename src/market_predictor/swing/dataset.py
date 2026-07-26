@@ -137,6 +137,26 @@ def build_swing_dataset(
     return data.sort_values(["decision_time_utc", "ticker"], kind="stable").reset_index(drop=True), audit
 
 
+def build_swing_feature_history(
+    decisions: pd.DataFrame,
+    benchmark_bars: pd.DataFrame,
+    *,
+    global_events: pd.DataFrame | None = None,
+    global_source_collections: pd.DataFrame | None = None,
+    config: SwingDatasetConfig | None = None,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Build causal swing feature history without any future label columns."""
+
+    effective = config or SwingDatasetConfig()
+    return _build_swing_feature_history(
+        decisions,
+        benchmark_bars,
+        global_events=global_events,
+        global_source_collections=global_source_collections,
+        config=effective,
+    )
+
+
 def build_swing_inference_features(
     decisions: pd.DataFrame,
     benchmark_bars: pd.DataFrame,
@@ -217,7 +237,13 @@ def _build_swing_feature_history(
             global_source_collections,
             config.required_global_sources,
         )
-        data = _add_canonical_optional_features(data)
+        data = _add_canonical_optional_features(
+            data,
+            required_ticker_sources=config.required_ticker_sources,
+            source_coverage_max_age_minutes=(
+                config.source_coverage_max_age_minutes
+            ),
+        )
     elif global_events is not None or global_source_collections is not None:
         raise DataReadinessError(
             "technical_market rejects global event and source-collection inputs"
@@ -309,6 +335,74 @@ def _add_technical_features(
         inplace=True,
     )
     data.reset_index(drop=True, inplace=True)
+    identity_values = data[identity_column].to_numpy()
+    boundaries = np.flatnonzero(identity_values[1:] != identity_values[:-1]) + 1
+    starts = np.concatenate(([0], boundaries))
+    ends = np.concatenate((boundaries, [len(data)]))
+    if len(starts) <= 48:
+        return _add_complete_identity_technical_features(
+            data,
+            identity_column=identity_column,
+        )
+
+    source_columns = [
+        identity_column,
+        "session_date_et",
+        "open",
+        "high",
+        "low",
+        "close",
+        "volume",
+    ]
+    derived_arrays: dict[str, np.ndarray] = {}
+    derived_columns: tuple[str, ...] | None = None
+    for group_start in range(0, len(starts), 48):
+        group_end = min(group_start + 48, len(starts))
+        row_start = int(starts[group_start])
+        row_end = int(ends[group_end - 1])
+        part = _add_complete_identity_technical_features(
+            data.iloc[row_start:row_end][source_columns].copy(),
+            identity_column=identity_column,
+        )
+        observed_columns = tuple(
+            column
+            for column in part.columns
+            if column not in source_columns
+        )
+        if derived_columns is None:
+            derived_columns = observed_columns
+            for column in derived_columns:
+                if pd.api.types.is_integer_dtype(part[column]):
+                    derived_arrays[column] = np.zeros(
+                        len(data),
+                        dtype=part[column].dtype,
+                    )
+                else:
+                    derived_arrays[column] = np.full(
+                        len(data),
+                        np.nan,
+                        dtype=float,
+                    )
+        elif observed_columns != derived_columns:
+            raise AssertionError(
+                "technical feature batches produced different schemas"
+            )
+        for column in observed_columns:
+            derived_arrays[column][row_start:row_end] = part[
+                column
+            ].to_numpy()
+    for column, values in derived_arrays.items():
+        data[column] = values
+    return data
+
+
+def _add_complete_identity_technical_features(
+    data: pd.DataFrame,
+    *,
+    identity_column: str,
+) -> pd.DataFrame:
+    """Calculate indicators when every identity has its full history."""
+
     identity = data[identity_column]
     close = data["close"].astype(float)
     high = data["high"].astype(float)
@@ -545,7 +639,12 @@ def _add_global_source_status(
     return output
 
 
-def _add_canonical_optional_features(frame: pd.DataFrame) -> pd.DataFrame:
+def _add_canonical_optional_features(
+    frame: pd.DataFrame,
+    *,
+    required_ticker_sources: Sequence[str],
+    source_coverage_max_age_minutes: int,
+) -> pd.DataFrame:
     data = frame.copy()
     for feature in CATALYST_FEATURES:
         if feature not in data.columns:
@@ -560,6 +659,58 @@ def _add_canonical_optional_features(frame: pd.DataFrame) -> pd.DataFrame:
     for feature in FUNDAMENTAL_FEATURES:
         if feature not in data.columns:
             data[feature] = 0.0 if feature.endswith("_present") else np.nan
+    sources = tuple(
+        dict.fromkeys(
+            source.strip().lower()
+            for source in required_ticker_sources
+            if source.strip()
+        )
+    )
+    complete = pd.Series(bool(sources), index=data.index)
+    decision = pd.to_datetime(
+        data["decision_time_utc"],
+        utc=True,
+        errors="coerce",
+    )
+    maximum_age = pd.Timedelta(
+        minutes=source_coverage_max_age_minutes
+    )
+    for source in sources:
+        column = f"source_status_{source}"
+        available_column = f"source_status_available_at_utc_{source}"
+        coverage_column = f"source_coverage_end_utc_{source}"
+        if (
+            column not in data
+            or
+            available_column not in data
+            or coverage_column not in data
+        ):
+            complete[:] = False
+            continue
+        available = pd.to_datetime(
+            data[available_column],
+            utc=True,
+            errors="coerce",
+        )
+        coverage = pd.to_datetime(
+            data[coverage_column],
+            utc=True,
+            errors="coerce",
+        )
+        complete &= (
+            data[column]
+            .astype("string")
+            .str.lower()
+            .isin({"observed", "observed_empty"})
+            & available.notna()
+            & coverage.notna()
+            & decision.notna()
+            & available.le(decision)
+            & coverage.le(available)
+            & coverage.le(decision)
+            & decision.sub(coverage).le(maximum_age)
+        )
+    data["catalyst_source_complete"] = complete
     return data
 
 

@@ -188,6 +188,7 @@ class SwingDatasetConfig(FrozenConfig):
     required_adjustment: str = "all"
     broad_benchmark: str = "SPY"
     growth_benchmark: str = "QQQ"
+    required_ticker_sources: tuple[str, ...] = ("alpaca",)
     required_global_sources: tuple[str, ...] = ("alpaca", "gdelt")
     source_coverage_max_age_minutes: int = Field(default=60, ge=0, le=1_440)
     minimum_cross_section: int = Field(default=20, ge=2)
@@ -206,13 +207,21 @@ class SwingDatasetConfig(FrozenConfig):
             raise ValueError("decision_start_date must not follow decision_end_date")
         if self.memory_guard_headroom_gb >= self.max_build_memory_gb:
             raise ValueError("memory guard headroom must be below the hard budget")
-        if self.feature_profile == "technical_market" and self.required_global_sources:
+        if self.feature_profile == "technical_market" and (
+            self.required_ticker_sources or self.required_global_sources
+        ):
             raise ValueError(
-                "technical_market requires required_global_sources=[]; "
+                "technical_market requires required_ticker_sources=[] and "
+                "required_global_sources=[]; "
                 "news coverage is not part of this baseline"
             )
-        if self.feature_profile == "catalyst_full" and not self.required_global_sources:
-            raise ValueError("catalyst_full requires at least one global source")
+        if self.feature_profile == "catalyst_full" and (
+            not self.required_ticker_sources
+            or not self.required_global_sources
+        ):
+            raise ValueError(
+                "catalyst_full requires at least one ticker and global source"
+            )
         return self
 
     def label_policy(self) -> dict[str, object]:

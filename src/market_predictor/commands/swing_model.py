@@ -12,6 +12,9 @@ from market_predictor.canonical.store import (
     load_canonical_artifact,
     write_canonical_artifact,
 )
+from market_predictor.canonical.store import (
+    manifest_path_for as canonical_manifest_path_for,
+)
 from market_predictor.commands.configuration import load_typed_config
 from market_predictor.heavy_jobs import serialized_heavy_job
 from market_predictor.promotion_identity import (
@@ -31,6 +34,7 @@ from market_predictor.swing.contracts import (
 from market_predictor.swing.dataset import (
     DECISION_REQUIRED_COLUMNS,
     build_swing_dataset,
+    build_swing_feature_history,
     build_swing_inference_features,
 )
 from market_predictor.swing.model import (
@@ -41,6 +45,11 @@ from market_predictor.swing.promotion import (
     load_swing_training_evidence,
     promote_swing_model,
     write_swing_training_evidence,
+)
+from market_predictor.swing.strategy_labels import (
+    build_swing_strategy_label_bundle,
+    load_swing_strategy_label_policy,
+    prune_swing_strategy_label_inputs,
 )
 
 
@@ -118,6 +127,98 @@ def register_swing_model_commands(app: typer.Typer, console: Console) -> None:
                 ).to_record(),
             }
         )
+
+    @app.command("build-swing-strategy-labels")
+    @serialized_heavy_job("build-swing-strategy-labels")
+    def build_swing_strategy_labels_command(
+        decisions: Path = typer.Option(
+            ...,
+            help="Hash-verified canonical decision artifact.",
+        ),
+        benchmark_bars: Path = typer.Option(
+            ...,
+            help="Hash-verified SPY, QQQ, and sector daily bars.",
+        ),
+        global_events: Path | None = typer.Option(
+            None,
+            help="Hash-verified MARKET events; catalyst_full only.",
+        ),
+        global_source_collections: Path | None = typer.Option(
+            None,
+            help="Hash-verified MARKET source states; catalyst_full only.",
+        ),
+        out_dir: Path = typer.Option(
+            ...,
+            help="Resumable directory of immutable per-strategy artifacts.",
+        ),
+        config_path: Path | None = typer.Option(
+            None,
+            "--config",
+            help="Swing dataset JSON or TOML config.",
+        ),
+        strategy_policy: Path = typer.Option(
+            Path("configs/swing_strategy_labels.toml"),
+            help="Frozen KS2 strategy-label policy.",
+        ),
+        production: bool = typer.Option(
+            False,
+            "--production/--research",
+        ),
+    ) -> None:
+        """Build and replay distinct causal labels for each swing strategy."""
+
+        config = load_typed_config(config_path, SwingDatasetConfig)
+        policy = load_swing_strategy_label_policy(strategy_policy)
+        (
+            decision_frame,
+            benchmark_frame,
+            global_event_frame,
+            global_collection_frame,
+        ) = _load_swing_build_inputs(
+            decisions,
+            benchmark_bars,
+            global_events,
+            global_source_collections,
+            feature_profile=config.feature_profile,
+            production=production,
+        )
+        features, prepared_benchmarks = build_swing_feature_history(
+            decision_frame,
+            benchmark_frame,
+            global_events=global_event_frame,
+            global_source_collections=global_collection_frame,
+            config=config,
+        )
+        prune_swing_strategy_label_inputs(features, policy)
+        input_paths = [
+            path
+            for path in (
+                decisions,
+                benchmark_bars,
+                global_events,
+                global_source_collections,
+            )
+            if path is not None
+        ]
+        inputs = {str(path): file_sha256(path) for path in input_paths}
+        for path in input_paths:
+            manifest_path = canonical_manifest_path_for(path)
+            inputs[str(manifest_path)] = file_sha256(manifest_path)
+        inputs[str(strategy_policy)] = file_sha256(strategy_policy)
+        inputs["strategy_label_policy_sha256"] = policy.sha256()
+        result = build_swing_strategy_label_bundle(
+            features,
+            prepared_benchmarks,
+            dataset_config=config,
+            policy=policy,
+            out_dir=out_dir,
+            input_hashes=inputs,
+            production_ready=production,
+            progress=console.print,
+        )
+        console.print(result)
+        if result["status"] != "complete":
+            raise typer.Exit(code=2)
 
     @app.command("build-swing-live-features")
     @serialized_heavy_job("build-swing-live-features")

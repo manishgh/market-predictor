@@ -65,6 +65,7 @@
     "build-swing-datasets",
     "build-swing-live-features",
     "build-swing-market-panel-inputs",
+    "build-swing-strategy-labels",
     "build-v3-development-dataset",
     "build-v3-features",
     "build-v3-labels",

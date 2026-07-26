@@ -24,6 +24,7 @@ from market_predictor.swing.contracts import (
 from market_predictor.swing.dataset import (
     _add_technical_features,
     build_swing_dataset,
+    build_swing_feature_history,
     build_swing_inference_features,
 )
 from market_predictor.swing.labels import (
@@ -34,6 +35,47 @@ from market_predictor.v3.errors import DataReadinessError
 
 
 class SwingDatasetTests(unittest.TestCase):
+    def test_batched_technical_features_match_identity_complete_replay(
+        self,
+    ) -> None:
+        sessions = pd.bdate_range("2025-01-02", periods=80, tz="UTC")
+        parts: list[pd.DataFrame] = []
+        for index in range(49):
+            part = _daily_rows(
+                f"T{index:02d}",
+                sessions,
+                float(index),
+                decision=False,
+            )
+            part["security_id"] = f"test:t{index:02d}"
+            parts.append(part)
+        source = pd.concat(parts, ignore_index=True)
+        expected = pd.concat(
+            [
+                _add_technical_features(
+                    part.copy(),
+                    identity_column="security_id",
+                )
+                for _, part in source.groupby("security_id", sort=True)
+            ],
+            ignore_index=True,
+        )
+        observed = _add_technical_features(
+            source.copy(),
+            identity_column="security_id",
+        )
+        derived = [
+            column
+            for column in observed.columns
+            if column not in source.columns
+        ]
+
+        pd.testing.assert_frame_equal(
+            observed[derived],
+            expected[derived],
+            check_exact=True,
+        )
+
     def test_label_window_stops_at_exclusive_membership_end(self) -> None:
         sessions = pd.date_range("2026-07-06", periods=4, tz="UTC")
         decisions = _daily_rows("EXIT", sessions, 0.0)
@@ -135,6 +177,7 @@ class SwingDatasetTests(unittest.TestCase):
             feature_profile="technical_market",
             min_daily_bars=250,
             minimum_cross_section=2,
+            required_ticker_sources=(),
             required_global_sources=(),
         )
 
@@ -152,6 +195,54 @@ class SwingDatasetTests(unittest.TestCase):
                 not column.startswith(("source_status_", "global_source_"))
                 for column in dataset.columns
             )
+        )
+
+    def test_catalyst_completeness_is_recomputed_from_source_coverage(
+        self,
+    ) -> None:
+        decisions, benchmarks, events, sources = _inputs()
+        decisions["catalyst_source_complete"] = True
+        decisions = decisions.drop(
+            columns="source_coverage_end_utc_alpaca"
+        )
+        config = SwingDatasetConfig(
+            min_daily_bars=250,
+            minimum_cross_section=2,
+            required_global_sources=("alpaca",),
+        )
+
+        features, _ = build_swing_feature_history(
+            decisions,
+            benchmarks,
+            global_events=events,
+            global_source_collections=sources,
+            config=config,
+        )
+
+        self.assertFalse(features["catalyst_source_complete"].any())
+
+        renamed, benchmarks, events, sources = _inputs()
+        renamed["catalyst_source_complete"] = True
+        renamed = renamed.rename(
+            columns={
+                "source_status_alpaca": "source_status_unregistered",
+                "source_status_available_at_utc_alpaca": (
+                    "source_status_available_at_utc_unregistered"
+                ),
+                "source_coverage_end_utc_alpaca": (
+                    "source_coverage_end_utc_unregistered"
+                ),
+            }
+        )
+        renamed_features, _ = build_swing_feature_history(
+            renamed,
+            benchmarks,
+            global_events=events,
+            global_source_collections=sources,
+            config=config,
+        )
+        self.assertFalse(
+            renamed_features["catalyst_source_complete"].any()
         )
 
     def test_reused_ticker_does_not_cross_security_feature_or_label_boundary(self) -> None:

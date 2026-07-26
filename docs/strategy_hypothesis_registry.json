@@ -253,7 +253,7 @@
   ],
   "research_policy": {
     "path": "configs/strategy_research_governance.toml",
-    "sha256": "4af52fc52cb6be67a16e67a0c0a9d774fde00da01af6967c1f3cc56d711c3632"
+    "sha256": "ebefdb6b4f90c23ce1d34b06c54c3f1f6f3fbe94e8688637444ebfebfeb8b087"
   },
   "schema_version": "market_predictor.strategy_hypothesis_registry.v1"
 }

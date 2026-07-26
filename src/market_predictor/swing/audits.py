@@ -116,15 +116,22 @@ def audit_swing_dataset(
     )
     source_failures = 0
     max_source_age = pd.Timedelta(minutes=config.source_coverage_max_age_minutes)
-    status_columns = [column for column in data if column.startswith("source_status_") and not column.startswith("source_status_available")]
-    for column in status_columns:
-        source = column.removeprefix("source_status_")
-        statuses = data.loc[feature_eligible, column].astype(str).str.lower().str.strip()
-        coverage_column = f"source_coverage_end_utc_{source}"
-        available_column = f"source_status_available_at_utc_{source}"
-        if coverage_column not in data.columns or available_column not in data.columns:
+    for source in config.required_ticker_sources:
+        normalized_source = source.strip().lower()
+        column = f"source_status_{normalized_source}"
+        coverage_column = f"source_coverage_end_utc_{normalized_source}"
+        available_column = f"source_status_available_at_utc_{normalized_source}"
+        if (
+            column not in data.columns
+            or coverage_column not in data.columns
+            or available_column not in data.columns
+        ):
             source_failures += max(1, int(feature_eligible.sum()))
             continue
+        statuses = data.loc[
+            feature_eligible,
+            column,
+        ].astype(str).str.lower().str.strip()
         coverage = _utc(data.loc[feature_eligible, coverage_column], allow_null=True)
         available = _utc(data.loc[feature_eligible, available_column], allow_null=True)
         source_decision = decision.loc[feature_eligible]

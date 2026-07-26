@@ -34,7 +34,7 @@ minimum_intraday_embargo_sessions = 1
 
 [contract_bindings.swing_dataset]
 path = "configs/swing_dataset.toml"
-sha256 = "aa8a1d87ef6f3ecf49788ca0b163d1f46d2ed668b7b8fa5f2ccb998600eb4dc7"
+sha256 = "647dfc34345d89885e6ae2b0a73661038dd2de2e06abf92332c82ac2abd3af36"
 
 [contract_bindings.swing_training]
 path = "configs/swing_training.toml"

@@ -568,7 +568,8 @@
       "contracts": [
         "strategy setup eligibility",
         "exact path outcome evaluator",
-        "strategy label policy"
+        "strategy label policy",
+        "configs/swing_strategy_labels.toml"
       ],
       "evidence": [],
       "exit_gates": [
@@ -604,7 +605,7 @@
       ],
       "problem_statement": "Prevent one generic direction label from standing in for multiple market behaviors.",
       "sequence": 2,
-      "status": "pending",
+      "status": "in_progress",
       "title": "Build strategy-specific label primitives",
       "verification": [
         {

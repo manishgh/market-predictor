@@ -646,12 +646,27 @@ market-predictor-research build-swing-dataset `
   --config configs/swing_technical_dataset.toml `
   --research `
   --out data/features/swing/swing_technical_5d_20210709_20260708_v1.parquet
+
+market-predictor-research build-swing-strategy-labels `
+  --decisions data/canonical/swing_technical_decisions_20190709_20260708_v1.parquet `
+  --benchmark-bars data/artifacts/swing_market_panel_inputs_20190709_20260708_v1/benchmark_bars.parquet `
+  --config configs/swing_technical_dataset.toml `
+  --strategy-policy configs/swing_strategy_labels.toml `
+  --research `
+  --out-dir data/features/swing/strategy_labels_20210709_20260708_v4
 ```
 
 Memory-heavy commands share one non-queueing workspace lease under
 `MARKET_PREDICTOR_RUNTIME_DIR` (default `data/runtime`). A competing heavy
 command exits with code 75 before loading data. Application guards stop at
 3.25 GiB RSS under the 4 GiB process/container budget.
+
+The strategy-label command publishes six independently replayed, resumable
+artifacts rather than reusing the generic five-day direction target. Setup
+causality, exact stock/SPY/QQQ/sector paths, cost-once accounting, conservative
+breakout fills, and bounded abstentions are defined in the
+[swing strategy label contract](docs/swing_strategy_label_contract.md). These
+are research labels, not promoted models or evidence of predictive edge.
 
 The completed baselines are documented in the
 [logistic model card](docs/model_cards/swing_technical_5d_logistic_20260725.md)
