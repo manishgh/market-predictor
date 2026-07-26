@@ -472,32 +472,57 @@
     {
       "blocker": null,
       "checkpoint_id": "KS1",
-      "closure": null,
+      "closure": {
+        "closed_at_utc": "2026-07-26T19:16:04Z",
+        "commit_sha": "1bcd8d677c700b608c7a2f2242141e7b239e357f",
+        "remote_ref": "origin/r3-lineage",
+        "summary": "Replayed five years of hash-bound catalyst relations and FinBERT evidence into causal direct-issuer decision assignments with explicit source missingness and research-only proxy channels."
+      },
       "contracts": [
         "event attribution policy",
         "event availability and candle assignment",
         "catalyst feature inventory",
         "configs/catalyst_lineage.toml"
       ],
-      "evidence": [],
+      "evidence": [
+        {
+          "description": "Five-year source, attribution, FinBERT, coverage, feature-inventory, and decision-assignment replay evidence.",
+          "evidence_id": "KS1-E1",
+          "path": "docs/evidence/ks1_catalyst_lineage_replay_20260726.json",
+          "sha256": "a8add8240c5fd712109cced06556b0bd107286bc89329520764ebfac46545c35"
+        },
+        {
+          "description": "Catalyst lineage poison tests plus repository-wide unit, lint, and strict-type verification.",
+          "evidence_id": "KS1-E2",
+          "path": "docs/evidence/ks1_verification_20260726.json",
+          "sha256": "d638077b490eaf3442552d8003dd1419912f15f57b8d62abea4774bed2fcdc79"
+        }
+      ],
       "exit_gates": [
         {
           "description": "Five-year direct, business, and sector event relations replay with exact identity and timing.",
-          "evidence_ids": [],
+          "evidence_ids": [
+            "KS1-E1"
+          ],
           "gate_id": "KS1-G1",
-          "status": "pending"
+          "status": "passed"
         },
         {
           "description": "FinBERT outputs join causally with explicit missingness and blind-window exclusions.",
-          "evidence_ids": [],
+          "evidence_ids": [
+            "KS1-E1"
+          ],
           "gate_id": "KS1-G2",
-          "status": "pending"
+          "status": "passed"
         },
         {
           "description": "Unrelated, duplicate, post-cutoff, or backdated events fail reconciliation.",
-          "evidence_ids": [],
+          "evidence_ids": [
+            "KS1-E1",
+            "KS1-E2"
+          ],
           "gate_id": "KS1-G3",
-          "status": "pending"
+          "status": "passed"
         }
       ],
       "in_scope": [
@@ -513,21 +538,25 @@
       ],
       "problem_statement": "Produce causal, ticker-relevant catalyst rows suitable for strategy research.",
       "sequence": 1,
-      "status": "in_progress",
+      "status": "completed",
       "title": "Complete catalyst lineage",
       "verification": [
         {
-          "command": null,
+          "command": ".\\.venv\\Scripts\\python.exe -m market_predictor.research_cli build-catalyst-lineage --collection-dir data\\raw\\alpaca_news_20210709_20260708_v1 --collection-audit data\\reports\\alpaca_news_20210709_20260708_v1_audit.json --attribution-dir data\\features\\swing\\alpaca_attribution_20210709_20260708_v1 --sentiment-dir data\\features\\swing\\alpaca_finbert_20210709_20260708_v1 --decisions data\\canonical\\swing_technical_decisions_20190709_20260708_v1.parquet --policy configs\\catalyst_lineage.toml --out-dir data\\features\\swing\\alpaca_catalyst_lineage_20210709_20260708_v1",
           "description": "Replay relation, sentiment, event, and decision hashes from canonical inputs.",
-          "evidence_ids": [],
-          "status": "pending",
+          "evidence_ids": [
+            "KS1-E1"
+          ],
+          "status": "passed",
           "verification_id": "KS1-V1"
         },
         {
-          "command": null,
+          "command": ".\\.venv\\Scripts\\python.exe -m unittest discover -s tests -p \"test_*.py\"",
           "description": "Run timing, relevance, duplication, ticker-reuse, and missingness poison tests.",
-          "evidence_ids": [],
-          "status": "pending",
+          "evidence_ids": [
+            "KS1-E2"
+          ],
+          "status": "passed",
           "verification_id": "KS1-V2"
         }
       ]

@@ -1,0 +1,81 @@
+{
+  "acceptance": {
+    "blind_window_policy": "Ten BF-B/BRK-B source windows are explicitly excluded; unavailable history is never imputed as zero events.",
+    "candle_assignment": "Every eligible relation was assigned only to decisions at or after final feature availability and within the frozen 2h, 1d, and 3d windows.",
+    "feature_profiles": [
+      "catalyst_only",
+      "technical_plus_catalyst"
+    ],
+    "historical_business_evidence": "Business-exposure and sector-context channels remain research-only because point-in-time historical business evidence is not training-ready.",
+    "sentiment_join": "Every eligible source chunk has an exact event-ID FinBERT inventory; missing sentiment fails the chunk.",
+    "training_eligible_channel": "direct_issuer"
+  },
+  "artifacts": {
+    "attribution_manifest": {
+      "path": "data/features/swing/alpaca_attribution_20210709_20260708_v1/_manifest.json",
+      "sha256": "93d682bbe7f6ea32ae2b508e07ce755f414b65633da3336602b68d0895ff8734"
+    },
+    "catalyst_lineage_manifest": {
+      "lineage_sha256": "f34cdd09354a75d670e1f5b28e283deefcc5782c599b92e459c0b0162d089983",
+      "path": "data/features/swing/alpaca_catalyst_lineage_20210709_20260708_v1/_manifest.json",
+      "sha256": "edb96eec61c19e1b0ac6eb1fd893618fab9c37dbd86797ab36455434fc43ac18"
+    },
+    "collection_audit": {
+      "path": "data/reports/alpaca_news_20210709_20260708_v1_audit.json",
+      "sha256": "7057ffb9a4748bac5eaaad0b03b79fe6592b24cad1215f4d5821132cf6f06cdb"
+    },
+    "collection_manifest": {
+      "path": "data/raw/alpaca_news_20210709_20260708_v1/_manifest.json",
+      "sha256": "e55bad121076023e79b3813d5500bee12ceca2eee7c4965baca9e2de682a6c70"
+    },
+    "decision_artifact": {
+      "path": "data/canonical/swing_technical_decisions_20190709_20260708_v1.parquet",
+      "sha256": "8b14bdec2c2ae4f46fbff058b4a1cdeb2d7700eb42d02f1bb2a0eca344bd3533"
+    },
+    "feature_inventory": {
+      "path": "data/features/swing/alpaca_catalyst_lineage_20210709_20260708_v1/feature_inventory.json",
+      "sha256": "83cf63202441b89e6dfecc2d948eafaac9c6a2ff1de7f8298ae2511ed4eaef2d"
+    },
+    "policy": {
+      "path": "configs/catalyst_lineage.toml",
+      "sha256": "b9d5d25b9b5dcd453a3b014e4946d6b29a3cf85dea75333b997cf95eb51466a0"
+    },
+    "sentiment_manifest": {
+      "path": "data/features/swing/alpaca_finbert_20210709_20260708_v1/_manifest.json",
+      "sha256": "a2548a080a5be872b5f293f34ffac7665c837ed148bfd4e305374b95d7d298d8"
+    },
+    "source_coverage": {
+      "path": "data/features/swing/alpaca_catalyst_lineage_20210709_20260708_v1/source_coverage.parquet",
+      "sha256": "8ec5aae74141da5d188ebb628013b2818c709e7c1fcf89be8649f077adf6e3b8"
+    }
+  },
+  "checkpoint_id": "KS1",
+  "implementation_commit": "1bcd8d677c700b608c7a2f2242141e7b239e357f",
+  "production_ready": false,
+  "result": {
+    "assignment_rows": 1663240,
+    "assignment_status_counts": {
+      "assigned": 1661474,
+      "no_future_decision": 273,
+      "outside_all_windows": 1493
+    },
+    "channel_counts": {
+      "business_exposure": 0,
+      "direct_issuer": 489088,
+      "sector_context": 490946
+    },
+    "coverage_states": {
+      "coverage_blindspot": 10,
+      "observed_complete": 2608,
+      "observed_empty": 1
+    },
+    "failed_chunks": 0,
+    "observed_chunks": 2608,
+    "peak_working_set_gib": 0.688507080078125,
+    "related_source_events": 492478,
+    "relation_rows": 980034,
+    "source_event_rows": 564916,
+    "training_eligible_rows": 489088
+  },
+  "schema": "market_predictor.ks1_catalyst_lineage_evidence.v1"
+}

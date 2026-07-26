@@ -1,0 +1,36 @@
+{
+  "checkpoint_id": "KS1",
+  "implementation_commit": "1bcd8d677c700b608c7a2f2242141e7b239e357f",
+  "poison_tests": [
+    "unrelated source event has no catalyst row without a verified relation",
+    "missing FinBERT event fails chunk reconciliation",
+    "backdated relation or sentiment availability fails chunk reconciliation",
+    "duplicate event, relation, or assignment identity fails reconciliation",
+    "ticker reuse and ambiguous bare-ticker attribution fail precision rules",
+    "post-cutoff events cannot produce assigned decision rows",
+    "observed-empty and unavailable source windows have distinct states"
+  ],
+  "schema": "market_predictor.ks1_verification_evidence.v1",
+  "verification": [
+    {
+      "command": ".\\.venv\\Scripts\\python.exe -m unittest discover -s tests -p \"test_*.py\"",
+      "result": "passed",
+      "tests": 458
+    },
+    {
+      "command": ".\\.venv\\Scripts\\ruff.exe check src tests",
+      "result": "passed"
+    },
+    {
+      "command": ".\\.venv\\Scripts\\mypy.exe --strict src\\market_predictor",
+      "result": "passed",
+      "source_files": 150
+    },
+    {
+      "command": ".\\.venv\\Scripts\\python.exe -m unittest tests.test_swing_catalyst_lineage tests.test_swing_event_attribution tests.test_swing_event_attribution_precision tests.test_swing_event_attribution_history tests.test_event_reconciliation tests.test_cli_surfaces tests.test_strategy_research_contracts",
+      "result": "passed",
+      "tests": 44
+    }
+  ],
+  "warning": "The full suite emits one upstream Starlette/httpx deprecation warning; it does not affect test results."
+}
