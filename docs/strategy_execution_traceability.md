@@ -66,6 +66,37 @@ completed closure.
 | `KS8` | Data-dependent admission | Point-in-time peer, quote/depth, or sequence-model sample-size evidence |
 | `KS9` | Promotion/API/TradingFlow | Attestation, atomic bundle, response identity, outcome maturation, boundary tests |
 
+## KS0 Frozen Contracts
+
+KS0 uses four authoritative inputs:
+
+- `docs/strategy_hypothesis_registry.json`: exactly one bounded H1 claim for
+  every named strategy, risk model, and meta model;
+- `configs/strategy_research_governance.toml`: experiment budget, comparison
+  dimensions, validation scopes, retirement triggers, memory ceiling, and
+  hash-bound canonical configuration files;
+- `docs/reference_model_inventory.json`: generic historical models that remain
+  non-serving references and have no named-strategy identity;
+- `market_predictor.execution_policy.v1`: the existing content-addressed cost,
+  participation, stress, and capacity contract.
+
+The research hypothesis registry is upstream of the immutable promotion
+hypothesis registry. A research hypothesis defines the claim, eligible
+population, outcome, comparator, and falsification rule before development. A
+promotion hypothesis is created only after candidate and baseline artifacts
+exist and before untouched shadow evidence is observed.
+
+KS0 permits no more than 12 development experiments per strategy version, four
+estimator families, three feature profiles, two selection policies, and one
+shadow attempt. These are upper bounds, not targets. Inspecting additional
+variants after the budget is exhausted requires retirement or a new semantic
+strategy version with an independently justified hypothesis.
+
+All five generic model families recorded in the reference inventory have
+`strategy_id = null` and `serving_eligible = false`. A historical filename,
+model card, or candidate metric cannot grant strategy identity or serving
+eligibility.
+
 ## Named Strategy Coverage
 
 The ledger includes all design strategies:

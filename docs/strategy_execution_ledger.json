@@ -422,7 +422,7 @@
       ],
       "problem_statement": "Freeze what will be tested before strategy-specific implementation begins.",
       "sequence": 0,
-      "status": "pending",
+      "status": "in_progress",
       "title": "Freeze catalog and hypothesis budget",
       "verification": [
         {

@@ -1,0 +1,53 @@
+{
+  "checkpoint_id": "KS0",
+  "completed_at_utc": "2026-07-26T17:25:19Z",
+  "documentation": {
+    "changed_links_valid": true,
+    "git_diff_check_passed": true,
+    "secret_patterns_found": 0
+  },
+  "focused_verification": {
+    "command": ".\\.venv\\Scripts\\python.exe -m unittest tests.test_strategy_governance tests.test_strategy_research_contracts tests.test_cli_surfaces",
+    "passed": true,
+    "tests": 17
+  },
+  "ledger_validation": {
+    "catalog_items": 25,
+    "checkpoints": 10,
+    "command": ".\\.venv\\Scripts\\python.exe -m market_predictor.research_cli validate-strategy-execution-ledger --ledger docs\\strategy_execution_ledger.json --repository-root .",
+    "passed": true
+  },
+  "memory_and_process": {
+    "hard_process_budget_gib": 4.0,
+    "market_predictor_python_workers_after_verification": 0,
+    "note": "KS0 performs contract validation only and runs no model training. System-wide memory was 84.65% used after verification; no Market Predictor Python worker remained.",
+    "process_peak_measured": false
+  },
+  "repository_verification": {
+    "full_unit_suite": {
+      "command": ".\\.venv\\Scripts\\python.exe -m unittest discover -s tests -p \"test_*.py\"",
+      "passed": true,
+      "seconds": 131.429,
+      "tests": 454,
+      "warning": "Existing StarletteDeprecationWarning for httpx/starlette.testclient compatibility."
+    },
+    "ruff": {
+      "command": ".\\.venv\\Scripts\\ruff.exe check .",
+      "passed": true
+    },
+    "strict_mypy": {
+      "command": ".\\.venv\\Scripts\\mypy.exe --strict src",
+      "passed": true,
+      "source_files": 149
+    }
+  },
+  "research_contract_validation": {
+    "command": ".\\.venv\\Scripts\\python.exe -m market_predictor.research_cli validate-strategy-research-contracts --ledger docs\\strategy_execution_ledger.json --hypotheses docs\\strategy_hypothesis_registry.json --policy configs\\strategy_research_governance.toml --reference-models docs\\reference_model_inventory.json --repository-root .",
+    "evidence_path": "docs/evidence/ks0_strategy_research_contracts.json",
+    "hypotheses": 25,
+    "passed": true,
+    "reference_models": 5,
+    "serving_eligible_reference_models": 0
+  },
+  "schema_version": "market_predictor.checkpoint_verification.v1"
+}

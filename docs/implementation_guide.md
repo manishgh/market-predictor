@@ -75,6 +75,27 @@ Current status belongs only in the JSON ledger; the human workflow and evidence
 mapping are documented in
 `docs/strategy_execution_traceability.md`.
 
+`strategy_research_contracts.py` owns the KS0 freeze. It requires exactly one H1
+research hypothesis for every catalog item, binds the six canonical
+swing/intraday dataset, training, and promotion configurations by SHA-256, binds
+the existing content-addressed execution policy, and verifies shared folds,
+holdouts, label-cost floors, SIP/all-adjusted feeds, benchmarks, random seed,
+memory ceiling, experiment budget, retirement rules, and non-serving reference
+models. The upstream strategy hypothesis registry is distinct from
+`hypothesis_registry.py`: the former freezes a research claim before development;
+the latter binds a built candidate, baseline, policies, and untouched workload
+before prospective shadow evaluation.
+
+```powershell
+market-predictor-research validate-strategy-research-contracts `
+  --ledger docs/strategy_execution_ledger.json `
+  --hypotheses docs/strategy_hypothesis_registry.json `
+  --policy configs/strategy_research_governance.toml `
+  --reference-models docs/reference_model_inventory.json `
+  --repository-root . `
+  --report-out docs/evidence/ks0_strategy_research_contracts.json
+```
+
 Prediction API requests are point-in-time contracts. `PredictionRequest.as_of`, when present, must be timezone-aware. Canonical daily and intraday inference require `feature_available_at_utc` and filter directly on that timestamp; neither reconstructs availability from a date or bar label.
 
 `api_security.py` owns authentication and principal-scoped token buckets. Production startup permits only Entra mode and requires a local read-only JWKS, exact issuer, and exact audience. RS256 signature, `exp`, `iat`, optional `nbf`, issuer, and audience are validated before `scp` or `roles` authorization. The stable audit principal is tenant plus object id when available; the calling application id is retained separately. Static bearer auth is development-only. Liveness and minimal readiness are public; detailed operations, metrics, prediction, and replay routes require `operations.read`, `metrics.read`, `predictions.read`, and `replay.execute` respectively. Replay is disabled by default.

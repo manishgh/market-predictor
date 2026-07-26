@@ -1,0 +1,70 @@
+{
+  "models": [
+    {
+      "evidence_paths": [
+        "docs/model_cards/swing_technical_5d_logistic_20260725.md"
+      ],
+      "family": "logistic",
+      "horizon": "5d",
+      "reason": "Five-year walk-forward and unseen-ticker evidence has no predictive or cost-adjusted economic edge.",
+      "reference_id": "swing.technical.logistic.5d.20260725",
+      "serving_eligible": false,
+      "status": "reference_rejected",
+      "strategy_id": null,
+      "view": "swing"
+    },
+    {
+      "evidence_paths": [
+        "docs/model_cards/swing_technical_5d_hgb_20260725.md"
+      ],
+      "family": "hist_gradient_boosting",
+      "horizon": "5d",
+      "reason": "Five-year walk-forward and unseen-ticker evidence has no predictive or cost-adjusted economic edge.",
+      "reference_id": "swing.technical.hgb.5d.20260725",
+      "serving_eligible": false,
+      "status": "reference_rejected",
+      "strategy_id": null,
+      "view": "swing"
+    },
+    {
+      "evidence_paths": [
+        "docs/catalyst_confirmation_architecture.md"
+      ],
+      "family": "opening_v2_multifamily",
+      "horizon": "60m",
+      "reason": "The opening experiment lost after costs, failed drawdown gates, and was rejected for promotion.",
+      "reference_id": "intraday.opening_v2.multifamily.60m.20260710",
+      "serving_eligible": false,
+      "status": "reference_rejected",
+      "strategy_id": null,
+      "view": "intraday"
+    },
+    {
+      "evidence_paths": [
+        "docs/model_cards/v3_c8_r1_20260720.md"
+      ],
+      "family": "xgboost_ranker",
+      "horizon": "60m",
+      "reason": "The grouped ranker produced negative cost-adjusted excess returns in development validation.",
+      "reference_id": "intraday.v3.r1.60m.20260720",
+      "serving_eligible": false,
+      "status": "reference_rejected",
+      "strategy_id": null,
+      "view": "intraday"
+    },
+    {
+      "evidence_paths": [
+        "docs/model_cards/v4_h1_120m_20260721.md"
+      ],
+      "family": "xgboost_ranker",
+      "horizon": "120m",
+      "reason": "The longer exact-path candidate remained negative after costs in both development scopes.",
+      "reference_id": "intraday.v4_h1.r1.120m.20260721",
+      "serving_eligible": false,
+      "status": "reference_rejected",
+      "strategy_id": null,
+      "view": "intraday"
+    }
+  ],
+  "schema_version": "market_predictor.reference_model_inventory.v1"
+}

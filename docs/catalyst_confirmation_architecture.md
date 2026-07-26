@@ -94,6 +94,14 @@ Execution status and closure evidence are authoritative only in
 traceability workflow are defined in
 [Strategy Execution Traceability](strategy_execution_traceability.md).
 
+The KS0 research freeze is defined by
+[Strategy Hypothesis Registry](strategy_hypothesis_registry.json),
+`configs/strategy_research_governance.toml`, and
+[Reference Model Inventory](reference_model_inventory.json). Generic historical
+models have no named-strategy identity and are not serving eligible. The
+research hypotheses precede model development; the separate immutable promotion
+hypothesis binds a built candidate and untouched shadow workload later.
+
 ## 3. Prediction Output Contract
 
 Every prediction output should include enough metadata to audit the score later.

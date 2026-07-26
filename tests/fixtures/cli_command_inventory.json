@@ -88,6 +88,7 @@
     "train-swing-model",
     "train-v3-models",
     "validate-strategy-execution-ledger",
+    "validate-strategy-research-contracts",
     "verify-events",
     "verify-swing"
   ]

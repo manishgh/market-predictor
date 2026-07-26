@@ -1,0 +1,61 @@
+schema_version = "market_predictor.strategy_research_governance.v1"
+maximum_development_experiments_per_strategy_version = 12
+maximum_estimator_families_per_strategy_version = 4
+maximum_feature_profiles_per_strategy_version = 3
+maximum_selection_policies_per_strategy_version = 2
+maximum_shadow_attempts_per_strategy_version = 1
+required_validation_scopes = ["purged_walk_forward", "unseen_ticker_holdout"]
+allowed_estimator_families = [
+  "deterministic_baseline",
+  "logistic",
+  "hist_gradient_boosting",
+  "direct_ranker",
+]
+allowed_feature_profiles = [
+  "technical_only",
+  "catalyst_only",
+  "technical_plus_catalyst",
+]
+allowed_selection_policies = [
+  "model_score_only",
+  "catalyst_confirmation_overlay",
+]
+retirement_triggers = [
+  "development_budget_exhausted_without_gate_pass",
+  "frozen_hypothesis_fails_both_validation_scopes",
+  "required_data_contract_invalidated",
+  "shadow_attempt_consumed_without_promotion",
+  "semantic_change_requires_new_strategy_version",
+]
+minimum_label_round_trip_cost_bps = 10.0
+maximum_process_memory_gib = 4.0
+swing_purge_rule = "label_horizon_sessions"
+minimum_intraday_embargo_sessions = 1
+
+[contract_bindings.swing_dataset]
+path = "configs/swing_dataset.toml"
+sha256 = "aa8a1d87ef6f3ecf49788ca0b163d1f46d2ed668b7b8fa5f2ccb998600eb4dc7"
+
+[contract_bindings.swing_training]
+path = "configs/swing_training.toml"
+sha256 = "33c4386679d8eff929c40f47d6254f762735af32f48e628c276a4546680137b1"
+
+[contract_bindings.swing_promotion]
+path = "configs/swing_promotion.toml"
+sha256 = "3d191b01eb935c1e93c52fec91b5fc693c6b061ab728f0ada481fd4a2cefaf77"
+
+[contract_bindings.intraday_dataset]
+path = "configs/intraday_dataset.toml"
+sha256 = "9dc02ff7a745ba25ead3f62c570dbe1869e5e13de8ea7ed542ef7b1174db8d52"
+
+[contract_bindings.intraday_training]
+path = "configs/intraday_training.toml"
+sha256 = "976038236cf4bdbc1257eec6a97f10b68b30a8d92f59463ad7d61c763ddd610a"
+
+[contract_bindings.intraday_promotion]
+path = "configs/intraday_promotion.toml"
+sha256 = "a1430a4205623b6dc1b6cb267fe13efa5792e042adaf765cec42eb66ae3b3ea9"
+
+[execution_policy]
+policy_id = "market_predictor.execution_policy.v1"
+sha256 = "2249656b0c0943003864850de6b2254e0fa091e45106ac3dd7ae23eddc425e2d"

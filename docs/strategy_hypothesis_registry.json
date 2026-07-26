@@ -1,0 +1,259 @@
+{
+  "hypotheses": [
+    {
+      "claim": "Stocks ranked highest on causal medium-term relative strength outperform the same-session eligible universe over the next five sessions after costs.",
+      "comparator": "Deterministic same-session relative-strength rank under the frozen swing policy.",
+      "eligible_population": "Point-in-time swing universe rows with complete market, sector, liquidity, and five-session path evidence.",
+      "falsified_when": "Selected cost-adjusted and benchmark-relative economics fail either frozen temporal or unseen-ticker gates.",
+      "hypothesis_id": "SWING.CROSS_SECTIONAL_MOMENTUM.5D.V1.H1",
+      "item_id": "SWING.CROSS_SECTIONAL_MOMENTUM.5D.V1",
+      "primary_outcome": "Five-session net return and excess return versus SPY and sector over the identical interval.",
+      "state": "reference_rejected"
+    },
+    {
+      "claim": "Stocks in an established causal trend have positive five-session continuation after costs.",
+      "comparator": "Deterministic trend-following rule using the same setup population.",
+      "eligible_population": "Swing rows passing point-in-time trend, liquidity, warm-up, and feed-readiness gates.",
+      "falsified_when": "Continuation economics fail either frozen validation scope or do not exceed the deterministic comparator.",
+      "hypothesis_id": "SWING.TIME_SERIES_MOMENTUM.5D.V1.H1",
+      "item_id": "SWING.TIME_SERIES_MOMENTUM.5D.V1",
+      "primary_outcome": "Five-session net and benchmark-relative continuation return.",
+      "state": "planned"
+    },
+    {
+      "claim": "A new, directly or causally related catalyst with technical confirmation produces delayed positive repricing over five sessions.",
+      "comparator": "Technical-only and catalyst-only models on identical decisions.",
+      "eligible_population": "Swing rows with reconciled direct, business, or sector catalyst relation available by the decision cutoff.",
+      "falsified_when": "Technical-plus-catalyst fails to improve calibrated selection economics in temporal and unseen-ticker scopes.",
+      "hypothesis_id": "SWING.CATALYST_DRIFT.5D.V1.H1",
+      "item_id": "SWING.CATALYST_DRIFT.5D.V1",
+      "primary_outcome": "Five-session net return and SPY, QQQ, and sector excess return.",
+      "state": "planned"
+    },
+    {
+      "claim": "A positive point-in-time earnings surprise or guidance change produces delayed positive repricing over five sessions.",
+      "comparator": "Catalyst Drift excluding earnings-specific surprise features.",
+      "eligible_population": "Earnings announcements with verified surprise, guidance, publication, and decision availability evidence.",
+      "falsified_when": "PEAD selection does not improve cost-adjusted benchmark-relative economics in both validation scopes.",
+      "hypothesis_id": "SWING.POST_EARNINGS_DRIFT.5D.V1.H1",
+      "item_id": "SWING.POST_EARNINGS_DRIFT.5D.V1",
+      "primary_outcome": "Post-announcement five-session net and benchmark-relative return.",
+      "state": "data_blocked"
+    },
+    {
+      "claim": "A liquidity-adjusted three-session overreaction unsupported by catalyst and peer evidence partially reverses.",
+      "comparator": "Deterministic standardized-return reversal rule.",
+      "eligible_population": "Swing rows with an extreme stock-specific move, adequate liquidity, exact paths, and complete catalyst coverage.",
+      "falsified_when": "Reversal returns fail cost-adjusted temporal or unseen-ticker gates or are explained by continuing catalysts.",
+      "hypothesis_id": "SWING.SHORT_TERM_REVERSAL.3D.V1.H1",
+      "item_id": "SWING.SHORT_TERM_REVERSAL.3D.V1",
+      "primary_outcome": "Three-session reversal net return and sector-residual return.",
+      "state": "planned"
+    },
+    {
+      "claim": "Price compression followed by a confirmed price and consolidated-volume breakout continues over five sessions.",
+      "comparator": "Deterministic breakout rule on the identical setup population.",
+      "eligible_population": "Swing rows with causal compression, breakout, SIP volume, liquidity, and exact five-session path evidence.",
+      "falsified_when": "Continuation and failed-breakout economics do not pass both validation scopes after costs.",
+      "hypothesis_id": "SWING.BREAKOUT_EXPANSION.5D.V1.H1",
+      "item_id": "SWING.BREAKOUT_EXPANSION.5D.V1",
+      "primary_outcome": "Five-session net return, MFE, MAE, and benchmark-relative return.",
+      "state": "planned"
+    },
+    {
+      "claim": "Stock-specific strength remaining after causal market and sector removal persists for five sessions.",
+      "comparator": "Cross-Sectional Momentum without sector residualization.",
+      "eligible_population": "Swing rows with point-in-time sector identity and identical stock, market, and sector intervals.",
+      "falsified_when": "Residual momentum fails cost-adjusted temporal or unseen-ticker economics or adds no value over raw momentum.",
+      "hypothesis_id": "SWING.SECTOR_RESIDUAL_MOMENTUM.5D.V1.H1",
+      "item_id": "SWING.SECTOR_RESIDUAL_MOMENTUM.5D.V1",
+      "primary_outcome": "Five-session net sector-residual and SPY-relative return.",
+      "state": "planned"
+    },
+    {
+      "claim": "A statistically stable point-in-time peer spread converges after an abnormal divergence.",
+      "comparator": "No-trade and single-name short-term reversal comparators.",
+      "eligible_population": "Pairs with point-in-time peer membership, stable predecision spread tests, and executable two-leg cost evidence.",
+      "falsified_when": "Spread convergence fails walk-forward stability, cost, capacity, or structural-break gates.",
+      "hypothesis_id": "SWING.PAIRS_REVERSION.5D.V1.H1",
+      "item_id": "SWING.PAIRS_REVERSION.5D.V1",
+      "primary_outcome": "Five-session market-neutral pair return after two-leg costs.",
+      "state": "deferred"
+    },
+    {
+      "claim": "A causal opening-range breakout with price, relative-strength, and volume confirmation reaches its target before its stop within 60 minutes.",
+      "comparator": "Deterministic opening-range breakout rule.",
+      "eligible_population": "Opening-session rows with completed opening range, SIP volume, exact one-minute path, and spread/cost evidence.",
+      "falsified_when": "Target-before-stop probability and selected net economics fail temporal or unseen-ticker gates.",
+      "hypothesis_id": "INTRADAY.OPENING_RANGE_BREAKOUT.60M.V1.H1",
+      "item_id": "INTRADAY.OPENING_RANGE_BREAKOUT.60M.V1",
+      "primary_outcome": "Target-before-stop, stop-before-target, timeout, and 60-minute net return.",
+      "state": "planned"
+    },
+    {
+      "claim": "A catalyst-confirmed overnight gap with premarket and opening-volume support continues over the next 60 minutes.",
+      "comparator": "Deterministic gap-continuation rule without learned ranking.",
+      "eligible_population": "Opening-session gaps with complete overnight, catalyst, SIP volume, and exact one-minute path evidence.",
+      "falsified_when": "Continuation economics fail both validation scopes after spread, impact, and adverse-fill stress.",
+      "hypothesis_id": "INTRADAY.GAP_CONTINUATION.60M.V1.H1",
+      "item_id": "INTRADAY.GAP_CONTINUATION.60M.V1",
+      "primary_outcome": "60-minute target/stop/timeout outcome and net benchmark-relative return.",
+      "state": "planned"
+    },
+    {
+      "claim": "An unsupported or exhausted opening gap mean-reverts over the next 60 minutes.",
+      "comparator": "Deterministic gap-fade rule and Gap Continuation eligibility veto.",
+      "eligible_population": "Opening gaps lacking continuation confirmation with complete catalyst, liquidity, and exact path evidence.",
+      "falsified_when": "Fade economics fail both validation scopes or overlap materially with continuation eligibility.",
+      "hypothesis_id": "INTRADAY.GAP_FADE.60M.V1.H1",
+      "item_id": "INTRADAY.GAP_FADE.60M.V1",
+      "primary_outcome": "60-minute reversion path, net return, MFE, and MAE.",
+      "state": "planned"
+    },
+    {
+      "claim": "A supported VWAP reclaim or hold continues over the next 60 minutes.",
+      "comparator": "Deterministic VWAP continuation rule.",
+      "eligible_population": "Session-stratified rows with causal VWAP, relative strength, SIP volume, and exact one-minute paths.",
+      "falsified_when": "Continuation economics fail either validation scope or are confined to one session segment.",
+      "hypothesis_id": "INTRADAY.VWAP_CONTINUATION.60M.V1.H1",
+      "item_id": "INTRADAY.VWAP_CONTINUATION.60M.V1",
+      "primary_outcome": "60-minute target/stop/timeout and net benchmark-relative return.",
+      "state": "planned"
+    },
+    {
+      "claim": "An excessive liquidity-adjusted VWAP extension without continuation confirmation mean-reverts within 30 minutes.",
+      "comparator": "Deterministic VWAP-extension fade rule.",
+      "eligible_population": "Session-stratified rows with causal VWAP distance, spread/liquidity controls, and exact one-minute paths.",
+      "falsified_when": "Reversion economics fail both validation scopes or disappear after spread and adverse-fill stress.",
+      "hypothesis_id": "INTRADAY.VWAP_REVERSION.30M.V1.H1",
+      "item_id": "INTRADAY.VWAP_REVERSION.30M.V1",
+      "primary_outcome": "30-minute reversion path, net return, MFE, and MAE.",
+      "state": "planned"
+    },
+    {
+      "claim": "Same-cutoff intraday price and consolidated-volume leadership persists for 60 minutes.",
+      "comparator": "Deterministic intraday momentum rank.",
+      "eligible_population": "Session-stratified cross sections with complete SIP volume, market/sector context, and exact one-minute paths.",
+      "falsified_when": "Top-ranked net and benchmark-relative economics fail temporal or unseen-ticker gates.",
+      "hypothesis_id": "INTRADAY.MOMENTUM_CONTINUATION.60M.V1.H1",
+      "item_id": "INTRADAY.MOMENTUM_CONTINUATION.60M.V1",
+      "primary_outcome": "60-minute target/stop/timeout and selected net return.",
+      "state": "planned"
+    },
+    {
+      "claim": "A liquidity-adjusted intraday price shock unsupported by order-independent confirmation reverses within 30 minutes.",
+      "comparator": "Deterministic standardized-shock reversal rule.",
+      "eligible_population": "Session-stratified shocks with spread, liquidity, market context, and exact one-minute paths.",
+      "falsified_when": "Reversal economics fail both validation scopes after cost and adverse-fill stress.",
+      "hypothesis_id": "INTRADAY.SHORT_HORIZON_REVERSAL.30M.V1.H1",
+      "item_id": "INTRADAY.SHORT_HORIZON_REVERSAL.30M.V1",
+      "primary_outcome": "30-minute reversal net return, MFE, MAE, and downside event.",
+      "state": "planned"
+    },
+    {
+      "claim": "Causal bid/ask event imbalance predicts the next 15-minute executable price move.",
+      "comparator": "Trade-only and bar-based short-horizon momentum baselines.",
+      "eligible_population": "Rows with historical quotes, depth, cancellations, trades, latency, and execution simulation.",
+      "falsified_when": "OFI adds no out-of-sample net edge after latency, spread, impact, and queue-position stress.",
+      "hypothesis_id": "INTRADAY.ORDER_FLOW_IMBALANCE.15M.V1.H1",
+      "item_id": "INTRADAY.ORDER_FLOW_IMBALANCE.15M.V1",
+      "primary_outcome": "15-minute executable net return and adverse-selection probability.",
+      "state": "deferred"
+    },
+    {
+      "claim": "Causal realized volatility and ATR provide a calibrated 60-minute conditional-risk baseline.",
+      "comparator": "Unconditional session-segment variance.",
+      "eligible_population": "Intraday decisions with complete causal one-minute returns and time-of-day context.",
+      "falsified_when": "Forecast loss and calibration do not improve over unconditional variance.",
+      "hypothesis_id": "RISK.REALIZED_VOLATILITY.60M.V1.H1",
+      "item_id": "RISK.REALIZED_VOLATILITY.60M.V1",
+      "primary_outcome": "Next-60-minute realized variance and downstream risk-selection economics.",
+      "state": "planned"
+    },
+    {
+      "claim": "Time-of-day-adjusted GARCH(1,1) improves 60-minute conditional-variance forecasts and risk selection over realized volatility and ATR.",
+      "comparator": "RISK.REALIZED_VOLATILITY.60M.V1 and HAR-RV.",
+      "eligible_population": "Intraday histories with deseasonalized returns, separate overnight gaps, convergence, and sufficient warm-up.",
+      "falsified_when": "GARCH fails out-of-sample QLIKE/calibration improvement or adds no drawdown, stop, or abstention benefit.",
+      "hypothesis_id": "RISK.GARCH.60M.V1.H1",
+      "item_id": "RISK.GARCH.60M.V1",
+      "primary_outcome": "Next-60-minute conditional variance and downstream risk ablation.",
+      "state": "planned"
+    },
+    {
+      "claim": "Asymmetric EGARCH shock response improves 60-minute conditional-risk forecasts over symmetric GARCH(1,1).",
+      "comparator": "RISK.GARCH.60M.V1.",
+      "eligible_population": "Intraday histories where predeclared asymmetry tests pass and EGARCH converges.",
+      "falsified_when": "EGARCH fails QLIKE/calibration improvement over GARCH or adds no downstream risk benefit.",
+      "hypothesis_id": "RISK.EGARCH.60M.V1.H1",
+      "item_id": "RISK.EGARCH.60M.V1",
+      "primary_outcome": "Next-60-minute conditional variance and asymmetric downside-risk calibration.",
+      "state": "planned"
+    },
+    {
+      "claim": "Daily GARCH improves one- and five-session conditional-variance forecasts and swing risk selection over realized volatility and ATR.",
+      "comparator": "Rolling daily realized volatility and ATR.",
+      "eligible_population": "Daily histories with causal adjusted returns, sufficient warm-up, and converged GARCH fits.",
+      "falsified_when": "GARCH fails out-of-sample QLIKE/calibration improvement or adds no swing drawdown or abstention benefit.",
+      "hypothesis_id": "RISK.GARCH.5D.V1.H1",
+      "item_id": "RISK.GARCH.5D.V1",
+      "primary_outcome": "Next-one- and five-session realized variance and swing risk ablation.",
+      "state": "planned"
+    },
+    {
+      "claim": "Multi-scale HAR-RV improves 60-minute realized-volatility forecasts over single-window realized volatility and ATR.",
+      "comparator": "RISK.REALIZED_VOLATILITY.60M.V1.",
+      "eligible_population": "Intraday histories with complete causal short, medium, and long realized-volatility windows.",
+      "falsified_when": "HAR-RV fails out-of-sample QLIKE/calibration improvement or adds no risk-selection benefit.",
+      "hypothesis_id": "RISK.HAR_RV.60M.V1.H1",
+      "item_id": "RISK.HAR_RV.60M.V1",
+      "primary_outcome": "Next-60-minute realized variance and downstream risk ablation.",
+      "state": "planned"
+    },
+    {
+      "claim": "Calibrated downside, median, and upside return quantiles improve selection or abstention over binary probability alone.",
+      "comparator": "Passed binary specialist using the same rows and selection policy.",
+      "eligible_population": "Rows from independently passed swing or intraday specialists with exact return paths.",
+      "falsified_when": "Quantile coverage fails by regime/liquidity or quantiles add no cost-adjusted selection benefit.",
+      "hypothesis_id": "META.QUANTILE_RETURN.V1.H1",
+      "item_id": "META.QUANTILE_RETURN.V1",
+      "primary_outcome": "Conditional return quantiles and interval coverage.",
+      "state": "planned"
+    },
+    {
+      "claim": "Competing-risk modelling improves calibrated target, stop, timeout, and time-to-resolution estimates over independent binary models.",
+      "comparator": "Passed specialist opportunity/downside models on identical paths.",
+      "eligible_population": "Exact target, stop, timeout, and censored paths from independently passed specialists.",
+      "falsified_when": "Event/timing calibration fails or competing risks add no selection or abstention benefit.",
+      "hypothesis_id": "META.COMPETING_RISKS.V1.H1",
+      "item_id": "META.COMPETING_RISKS.V1",
+      "primary_outcome": "Target, stop, timeout probabilities and time to resolution.",
+      "state": "planned"
+    },
+    {
+      "claim": "A causal meta-label can reject weak occurrences of a deterministic primary setup and improve net economics.",
+      "comparator": "The independently passed deterministic primary setup without meta-labelling.",
+      "eligible_population": "Occurrences of one frozen primary setup with complete causal features and exact outcomes.",
+      "falsified_when": "Meta-labelling fails temporal or unseen-ticker incremental economics or increases instability.",
+      "hypothesis_id": "META.META_LABEL.V1.H1",
+      "item_id": "META.META_LABEL.V1",
+      "primary_outcome": "Incremental selected net and benchmark-relative return with drawdown.",
+      "state": "planned"
+    },
+    {
+      "claim": "A causal regime router improves outcomes by selecting among independently passed specialists.",
+      "comparator": "Each passed specialist and a fixed non-routed policy.",
+      "eligible_population": "Decision-time regime states and outputs from independently passed compatible specialists.",
+      "falsified_when": "Routing fails temporal or unseen-ticker incremental economics or depends on future-defined regimes.",
+      "hypothesis_id": "META.REGIME_MIXTURE.V1.H1",
+      "item_id": "META.REGIME_MIXTURE.V1",
+      "primary_outcome": "Incremental routed net and benchmark-relative return with calibration and drawdown.",
+      "state": "planned"
+    }
+  ],
+  "research_policy": {
+    "path": "configs/strategy_research_governance.toml",
+    "sha256": "4af52fc52cb6be67a16e67a0c0a9d774fde00da01af6967c1f3cc56d711c3632"
+  },
+  "schema_version": "market_predictor.strategy_hypothesis_registry.v1"
+}

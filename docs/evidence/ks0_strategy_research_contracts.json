@@ -1,0 +1,60 @@
+{
+  "catalog_count": 25,
+  "contract_bindings": {
+    "intraday_dataset": {
+      "path": "configs/intraday_dataset.toml",
+      "sha256": "9dc02ff7a745ba25ead3f62c570dbe1869e5e13de8ea7ed542ef7b1174db8d52"
+    },
+    "intraday_promotion": {
+      "path": "configs/intraday_promotion.toml",
+      "sha256": "a1430a4205623b6dc1b6cb267fe13efa5792e042adaf765cec42eb66ae3b3ea9"
+    },
+    "intraday_training": {
+      "path": "configs/intraday_training.toml",
+      "sha256": "976038236cf4bdbc1257eec6a97f10b68b30a8d92f59463ad7d61c763ddd610a"
+    },
+    "swing_dataset": {
+      "path": "configs/swing_dataset.toml",
+      "sha256": "aa8a1d87ef6f3ecf49788ca0b163d1f46d2ed668b7b8fa5f2ccb998600eb4dc7"
+    },
+    "swing_promotion": {
+      "path": "configs/swing_promotion.toml",
+      "sha256": "3d191b01eb935c1e93c52fec91b5fc693c6b061ab728f0ada481fd4a2cefaf77"
+    },
+    "swing_training": {
+      "path": "configs/swing_training.toml",
+      "sha256": "33c4386679d8eff929c40f47d6254f762735af32f48e628c276a4546680137b1"
+    }
+  },
+  "execution_policy_id": "market_predictor.execution_policy.v1",
+  "execution_policy_sha256": "2249656b0c0943003864850de6b2254e0fa091e45106ac3dd7ae23eddc425e2d",
+  "hypothesis_count": 25,
+  "hypothesis_registry_sha256": "f137312dc8734942ab5bf2a1d8509692dccd85cc66e8310c4a8e0fd9552c19e7",
+  "hypothesis_status": {
+    "data_blocked": 1,
+    "deferred": 2,
+    "planned": 21,
+    "reference_rejected": 1
+  },
+  "ledger_sha256": "56fa6f9cbd1ce0b3499607255e27ecd753bec72050047bb3b5f220ccdea3afdf",
+  "ledger_valid": true,
+  "maximum_development_experiments_per_strategy_version": 12,
+  "maximum_shadow_attempts_per_strategy_version": 1,
+  "reference_model_count": 5,
+  "reference_model_ids": [
+    "swing.technical.logistic.5d.20260725",
+    "swing.technical.hgb.5d.20260725",
+    "intraday.opening_v2.multifamily.60m.20260710",
+    "intraday.v3.r1.60m.20260720",
+    "intraday.v4_h1.r1.120m.20260721"
+  ],
+  "reference_model_inventory_sha256": "6a6e96ab6634e0f7f1c8aab828b8101bc37b1e0911a319248824a945bea75125",
+  "reference_models_serving_eligible": 0,
+  "research_policy_sha256": "4af52fc52cb6be67a16e67a0c0a9d774fde00da01af6967c1f3cc56d711c3632",
+  "schema_version": "market_predictor.strategy_research_governance.v1",
+  "valid": true,
+  "validation_scopes": [
+    "purged_walk_forward",
+    "unseen_ticker_holdout"
+  ]
+}
