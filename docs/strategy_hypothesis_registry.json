@@ -18,7 +18,7 @@
       "hypothesis_id": "SWING.TIME_SERIES_MOMENTUM.5D.V1.H1",
       "item_id": "SWING.TIME_SERIES_MOMENTUM.5D.V1",
       "primary_outcome": "Five-session net and benchmark-relative continuation return.",
-      "state": "planned"
+      "state": "reference_rejected"
     },
     {
       "claim": "A new, directly or causally related catalyst with technical confirmation produces delayed positive repricing over five sessions.",
@@ -28,7 +28,7 @@
       "hypothesis_id": "SWING.CATALYST_DRIFT.5D.V1.H1",
       "item_id": "SWING.CATALYST_DRIFT.5D.V1",
       "primary_outcome": "Five-session net return and SPY, QQQ, and sector excess return.",
-      "state": "planned"
+      "state": "reference_rejected"
     },
     {
       "claim": "A positive point-in-time earnings surprise or guidance change produces delayed positive repricing over five sessions.",
@@ -48,7 +48,7 @@
       "hypothesis_id": "SWING.SHORT_TERM_REVERSAL.3D.V1.H1",
       "item_id": "SWING.SHORT_TERM_REVERSAL.3D.V1",
       "primary_outcome": "Three-session reversal net return and sector-residual return.",
-      "state": "planned"
+      "state": "reference_rejected"
     },
     {
       "claim": "Price compression followed by a confirmed price and consolidated-volume breakout continues over five sessions.",
@@ -58,7 +58,7 @@
       "hypothesis_id": "SWING.BREAKOUT_EXPANSION.5D.V1.H1",
       "item_id": "SWING.BREAKOUT_EXPANSION.5D.V1",
       "primary_outcome": "Five-session net return, MFE, MAE, and benchmark-relative return.",
-      "state": "planned"
+      "state": "reference_rejected"
     },
     {
       "claim": "Stock-specific strength remaining after causal market and sector removal persists for five sessions.",
@@ -68,7 +68,7 @@
       "hypothesis_id": "SWING.SECTOR_RESIDUAL_MOMENTUM.5D.V1.H1",
       "item_id": "SWING.SECTOR_RESIDUAL_MOMENTUM.5D.V1",
       "primary_outcome": "Five-session net sector-residual and SPY-relative return.",
-      "state": "planned"
+      "state": "reference_rejected"
     },
     {
       "claim": "A statistically stable point-in-time peer spread converges after an abnormal divergence.",

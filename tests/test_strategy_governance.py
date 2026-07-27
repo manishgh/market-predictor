@@ -31,7 +31,7 @@ class StrategyGovernanceTests(unittest.TestCase):
         self.assertTrue(report["valid"])
         self.assertEqual(report["checkpoint_count"], 10)
         self.assertEqual(report["catalog_count"], 25)
-        self.assertEqual(report["next_checkpoint"], "KS3")
+        self.assertEqual(report["next_checkpoint"], "KS4")
 
     def test_garch_family_is_explicit_and_owned_by_ks6(self) -> None:
         ledger = StrategyExecutionLedger.model_validate_json(
