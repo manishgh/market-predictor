@@ -658,6 +658,8 @@
       "checkpoint_id": "KS3",
       "closure": null,
       "contracts": [
+        "docs/ks3_swing_specialist_contract.md",
+        "configs/swing_specialist_research.toml",
         "swing strategy datasets",
         "swing specialist candidates",
         "swing economic audit"
@@ -696,7 +698,7 @@
       ],
       "problem_statement": "Determine which explicitly named swing behaviors have repeatable cost-adjusted edge.",
       "sequence": 3,
-      "status": "pending",
+      "status": "in_progress",
       "title": "Train swing specialists",
       "verification": [
         {

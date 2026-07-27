@@ -1,0 +1,238 @@
+schema_version = "swing.specialist_research.v1"
+n_splits = 4
+min_train_sessions = 120
+min_train_rows = 500
+min_training_tickers = 20
+ticker_holdout_fraction = 0.20
+top_k = 10
+random_seed = 42
+logistic_max_iter = 250
+hgb_max_iter = 200
+hgb_learning_rate = 0.04
+hgb_l2_regularization = 1.0
+ranker_max_iter = 150
+ranker_learning_rate = 0.04
+ranker_max_depth = 4
+ranker_max_bin = 256
+ranker_n_jobs = 2
+minimum_feature_non_null_rate = 0.05
+minimum_selected_trades = 100
+minimum_avg_net_return = 0.0
+minimum_avg_excess_return_vs_spy = 0.0
+minimum_avg_excess_return_vs_sector = 0.0
+minimum_profit_factor = 1.05
+maximum_drawdown = 0.20
+maximum_negative_phase_rate = 0.55
+capacity_participation_rate = 0.01
+maximum_process_memory_gib = 4.0
+memory_guard_headroom_gib = 0.75
+
+[feature_profiles]
+technical_only = [
+  "return_1d",
+  "return_5d",
+  "return_10d",
+  "return_20d",
+  "return_60d",
+  "realized_vol_10d",
+  "realized_vol_20d",
+  "realized_vol_60d",
+  "atr_pct_14",
+  "rsi_14",
+  "macd_signal_diff_pct",
+  "dist_ema_10",
+  "dist_ema_20",
+  "dist_ema_50",
+  "dist_sma_20",
+  "dist_sma_50",
+  "dist_sma_200",
+  "sma_200_slope_20d",
+  "gap_return",
+  "intraday_return",
+  "range_pct",
+  "close_location",
+  "volume_z20",
+  "volume_ratio_20",
+  "dollar_volume_log",
+  "spy_return_1d",
+  "spy_return_5d",
+  "spy_return_20d",
+  "spy_realized_vol_20d",
+  "spy_dist_sma_200",
+  "qqq_return_1d",
+  "qqq_return_5d",
+  "qqq_return_20d",
+  "qqq_realized_vol_20d",
+  "qqq_dist_sma_200",
+  "sector_return_1d",
+  "sector_return_5d",
+  "sector_return_20d",
+  "sector_realized_vol_20d",
+  "sector_dist_sma_200",
+  "rel_return_1d_vs_spy",
+  "rel_return_5d_vs_spy",
+  "rel_return_20d_vs_spy",
+  "rel_return_1d_vs_sector",
+  "rel_return_5d_vs_sector",
+  "rel_return_20d_vs_sector",
+  "regime_risk_on",
+  "regime_risk_off",
+  "xs_rank_return_5d",
+  "xs_rank_return_20d",
+  "xs_rank_volume_z20",
+  "xs_rank_rel_return_20d_vs_spy",
+  "xs_rank_rel_return_20d_vs_sector",
+]
+catalyst_only = [
+  "event_count_2h",
+  "event_count_1d",
+  "event_count_3d",
+  "sentiment_mean_2h",
+  "sentiment_mean_1d",
+  "sentiment_mean_3d",
+  "sentiment_coverage_2h",
+  "sentiment_coverage_1d",
+  "sentiment_coverage_3d",
+  "event_relevance_mean_2h",
+  "event_relevance_mean_1d",
+  "event_relevance_mean_3d",
+  "low_relevance_event_fraction_2h",
+  "low_relevance_event_fraction_1d",
+  "low_relevance_event_fraction_3d",
+  "source_family_count_2h",
+  "source_family_count_1d",
+  "source_family_count_3d",
+]
+technical_plus_catalyst = [
+  "return_1d",
+  "return_5d",
+  "return_10d",
+  "return_20d",
+  "return_60d",
+  "realized_vol_10d",
+  "realized_vol_20d",
+  "realized_vol_60d",
+  "atr_pct_14",
+  "rsi_14",
+  "macd_signal_diff_pct",
+  "dist_ema_10",
+  "dist_ema_20",
+  "dist_ema_50",
+  "dist_sma_20",
+  "dist_sma_50",
+  "dist_sma_200",
+  "sma_200_slope_20d",
+  "gap_return",
+  "intraday_return",
+  "range_pct",
+  "close_location",
+  "volume_z20",
+  "volume_ratio_20",
+  "dollar_volume_log",
+  "spy_return_1d",
+  "spy_return_5d",
+  "spy_return_20d",
+  "spy_realized_vol_20d",
+  "spy_dist_sma_200",
+  "qqq_return_1d",
+  "qqq_return_5d",
+  "qqq_return_20d",
+  "qqq_realized_vol_20d",
+  "qqq_dist_sma_200",
+  "sector_return_1d",
+  "sector_return_5d",
+  "sector_return_20d",
+  "sector_realized_vol_20d",
+  "sector_dist_sma_200",
+  "rel_return_1d_vs_spy",
+  "rel_return_5d_vs_spy",
+  "rel_return_20d_vs_spy",
+  "rel_return_1d_vs_sector",
+  "rel_return_5d_vs_sector",
+  "rel_return_20d_vs_sector",
+  "regime_risk_on",
+  "regime_risk_off",
+  "xs_rank_return_5d",
+  "xs_rank_return_20d",
+  "xs_rank_volume_z20",
+  "xs_rank_rel_return_20d_vs_spy",
+  "xs_rank_rel_return_20d_vs_sector",
+  "event_count_2h",
+  "event_count_1d",
+  "event_count_3d",
+  "sentiment_mean_2h",
+  "sentiment_mean_1d",
+  "sentiment_mean_3d",
+  "sentiment_coverage_2h",
+  "sentiment_coverage_1d",
+  "sentiment_coverage_3d",
+  "event_relevance_mean_2h",
+  "event_relevance_mean_1d",
+  "event_relevance_mean_3d",
+  "low_relevance_event_fraction_2h",
+  "low_relevance_event_fraction_1d",
+  "low_relevance_event_fraction_3d",
+  "source_family_count_2h",
+  "source_family_count_1d",
+  "source_family_count_3d",
+]
+
+[strategies."SWING.CROSS_SECTIONAL_MOMENTUM.5D.V1"]
+feature_profiles = ["technical_only"]
+estimator_families = [
+  "deterministic_baseline",
+  "logistic",
+  "hist_gradient_boosting",
+  "direct_ranker",
+]
+deterministic_score = "xs_rank_rel_return_20d_vs_sector"
+
+[strategies."SWING.TIME_SERIES_MOMENTUM.5D.V1"]
+feature_profiles = ["technical_only"]
+estimator_families = [
+  "deterministic_baseline",
+  "logistic",
+  "hist_gradient_boosting",
+]
+deterministic_score = "trend_strength"
+
+[strategies."SWING.CATALYST_DRIFT.5D.V1"]
+feature_profiles = [
+  "technical_only",
+  "catalyst_only",
+  "technical_plus_catalyst",
+]
+estimator_families = [
+  "deterministic_baseline",
+  "logistic",
+  "hist_gradient_boosting",
+]
+deterministic_score = "catalyst_confirmation"
+
+[strategies."SWING.SHORT_TERM_REVERSAL.3D.V1"]
+feature_profiles = ["technical_only", "technical_plus_catalyst"]
+estimator_families = [
+  "deterministic_baseline",
+  "logistic",
+  "hist_gradient_boosting",
+]
+deterministic_score = "reversal_extremity"
+
+[strategies."SWING.BREAKOUT_EXPANSION.5D.V1"]
+feature_profiles = ["technical_only"]
+estimator_families = [
+  "deterministic_baseline",
+  "logistic",
+  "hist_gradient_boosting",
+]
+deterministic_score = "breakout_confirmation"
+
+[strategies."SWING.SECTOR_RESIDUAL_MOMENTUM.5D.V1"]
+feature_profiles = ["technical_only"]
+estimator_families = [
+  "deterministic_baseline",
+  "logistic",
+  "hist_gradient_boosting",
+  "direct_ranker",
+]
+deterministic_score = "xs_rank_rel_return_20d_vs_sector"
