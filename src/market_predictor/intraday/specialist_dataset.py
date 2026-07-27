@@ -772,6 +772,17 @@ def build_one_minute_requirements(
         )
     grid = regular_minute_grid.sort_values().unique()
     grid_ns = grid.as_unit("ns").asi8
+    availability_ns = (
+        grid_ns
+        + 60_000_000_000
+        + intraday_finalization_delay_seconds * 1_000_000_000
+    )
+    grid_sessions = grid.tz_convert("America/New_York").date
+    session_start_index: dict[object, int] = {}
+    session_end_index: dict[object, int] = {}
+    for index, session_date in enumerate(grid_sessions):
+        session_start_index.setdefault(session_date, index)
+        session_end_index[session_date] = index + 1
     rows: list[dict[str, Any]] = []
     for setup in setups.loc[:, sorted(required)].itertuples(index=False):
         decision = pd.Timestamp(setup.decision_time_utc)
@@ -794,11 +805,6 @@ def build_one_minute_requirements(
             raise DataReadinessError(
                 f"KS4 decision is not an exact regular-session minute: {decision}"
             )
-        availability_ns = (
-            grid_ns
-            + 60_000_000_000
-            + intraday_finalization_delay_seconds * 1_000_000_000
-        )
         eligible_end_index = int(
             np.searchsorted(
                 availability_ns,
@@ -821,24 +827,36 @@ def build_one_minute_requirements(
                 f"KS4 label window crosses a session boundary: {setup.setup_id}"
             )
         decision_session = decision.tz_convert("America/New_York").date()
-        grid_sessions = grid.tz_convert("America/New_York").date
-        same_session_positions = np.flatnonzero(
-            grid_sessions == decision_session
-        )
-        if len(same_session_positions) == 0:
+        current_session_start = session_start_index.get(decision_session)
+        if current_session_start is None:
             raise DataReadinessError(
                 "KS4 decision session is absent from the minute grid"
             )
         warmup_start_index = min(
             eligible_end_index - minimum_warmup_bars,
-            int(same_session_positions[0]),
+            current_session_start,
         )
-        warmup_starts = grid[warmup_start_index:eligible_end_index]
-        label_starts = grid[entry_index:end_index]
-        if len(warmup_starts) < minimum_warmup_bars:
+        planned_warmup_bars = eligible_end_index - warmup_start_index
+        if planned_warmup_bars < minimum_warmup_bars:
             raise DataReadinessError("KS4 causal warm-up grid is incomplete")
-        if len(label_starts) != horizon:
-            raise DataReadinessError("KS4 exact label grid is incomplete")
+        warmup_segments = _grid_index_segments(
+            grid,
+            grid_sessions=grid_sessions,
+            session_end_index=session_end_index,
+            start_index=warmup_start_index,
+            end_index=eligible_end_index,
+        )
+        label_segments = _grid_index_segments(
+            grid,
+            grid_sessions=grid_sessions,
+            session_end_index=session_end_index,
+            start_index=entry_index,
+            end_index=end_index,
+        )
+        if len(label_segments) != 1:
+            raise DataReadinessError(
+                f"KS4 label window is not one exact session: {setup.setup_id}"
+            )
         roles: dict[str, set[str]] = {}
         for ticker, role in (
             (str(setup.ticker), "stock"),
@@ -848,13 +866,11 @@ def build_one_minute_requirements(
         ):
             roles.setdefault(ticker.upper().strip(), set()).add(role)
         for ticker, ticker_roles in sorted(roles.items()):
-            for segment_kind, starts in (
-                ("warmup", warmup_starts),
-                ("label", label_starts),
+            for segment_kind, segments in (
+                ("warmup", warmup_segments),
+                ("label", label_segments),
             ):
-                for segment_start, segment_end, session_date in (
-                    _split_regular_minute_segments(starts)
-                ):
+                for segment_start, segment_end, session_date in segments:
                     rows.append(
                         {
                             "requirement_id": _stable_hash(
@@ -876,7 +892,7 @@ def build_one_minute_requirements(
                             "feature_available_at_utc": feature_available,
                             "horizon_minutes": horizon,
                             "minimum_warmup_bars": minimum_warmup_bars,
-                            "planned_warmup_bars": len(warmup_starts),
+                            "planned_warmup_bars": planned_warmup_bars,
                             "intraday_finalization_delay_seconds": (
                                 intraday_finalization_delay_seconds
                             ),
@@ -1623,37 +1639,33 @@ def _strategy_slug(strategy_id: str) -> str:
     return strategy_id.lower().replace(".", "_")
 
 
-def _split_regular_minute_segments(
-    starts: pd.DatetimeIndex,
+def _grid_index_segments(
+    grid: pd.DatetimeIndex,
+    *,
+    grid_sessions: np.ndarray,
+    session_end_index: Mapping[object, int],
+    start_index: int,
+    end_index: int,
 ) -> list[tuple[pd.Timestamp, pd.Timestamp, object]]:
-    if starts.empty:
+    if start_index >= end_index:
         return []
-    ordered = starts.sort_values().unique()
-    eastern_dates = ordered.tz_convert("America/New_York").date
     segments: list[tuple[pd.Timestamp, pd.Timestamp, object]] = []
-    segment_start = 0
-    for index in range(1, len(ordered)):
-        contiguous = ordered[index] - ordered[index - 1] == pd.Timedelta(
-            minutes=1
+    segment_start = start_index
+    while segment_start < end_index:
+        session_date = grid_sessions[segment_start]
+        segment_end = min(
+            int(session_end_index[session_date]),
+            end_index,
         )
-        same_session = eastern_dates[index] == eastern_dates[index - 1]
-        if contiguous and same_session:
-            continue
         segments.append(
             (
-                pd.Timestamp(ordered[segment_start]),
-                pd.Timestamp(ordered[index - 1]) + pd.Timedelta(minutes=1),
-                eastern_dates[segment_start],
+                pd.Timestamp(grid[segment_start]),
+                pd.Timestamp(grid[segment_end - 1])
+                + pd.Timedelta(minutes=1),
+                session_date,
             )
         )
-        segment_start = index
-    segments.append(
-        (
-            pd.Timestamp(ordered[segment_start]),
-            pd.Timestamp(ordered[-1]) + pd.Timedelta(minutes=1),
-            eastern_dates[segment_start],
-        )
-    )
+        segment_start = segment_end
     return segments
 
 
