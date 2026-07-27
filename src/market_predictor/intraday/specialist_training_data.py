@@ -138,6 +138,52 @@ def build_intraday_specialist_training_dataset(
                 requirements = month_requirements[
                     month_requirements["setup_id"].isin(setups["setup_id"])
                 ]
+                strategy_groups = [
+                    (str(strategy_id), strategy_setups)
+                    for strategy_id, strategy_setups in setups.groupby(
+                        "strategy_id",
+                        sort=False,
+                    )
+                ]
+                output_paths = {
+                    strategy_id: (
+                        staging
+                        / "strategies"
+                        / _strategy_slug(strategy_id)
+                        / f"{month}-part-{batch_number:03d}.parquet"
+                    )
+                    for strategy_id, _ in strategy_groups
+                }
+                if all(path.exists() for path in output_paths.values()):
+                    for strategy_id, strategy_setups in strategy_groups:
+                        output_path = output_paths[strategy_id]
+                        training = pd.read_parquet(output_path)
+                        _validate_strategy_training_shard(
+                            training,
+                            expected_setups=strategy_setups,
+                            strategy_id=strategy_id,
+                            path=output_path,
+                        )
+                        files.append(
+                            _file_record(
+                                output_path,
+                                staging,
+                                rows=len(training),
+                            )
+                        )
+                        strategy_rows[strategy_id] += len(training)
+                        strategy_eligible[strategy_id] += int(
+                            training["label_eligible"].sum()
+                        )
+                        for reason, count in training[
+                            "label_ineligible_reason"
+                        ].value_counts().items():
+                            reason_counts[str(reason)] = (
+                                reason_counts.get(str(reason), 0)
+                                + int(count)
+                            )
+                    del setups, requirements
+                    continue
                 bars = load_clock_grid_for_requirements(
                     requirements,
                     artifact_records=artifact_records,
@@ -151,21 +197,13 @@ def build_intraday_specialist_training_dataset(
                         config.minimum_one_minute_warmup_bars
                     ),
                 )
-                for strategy_id, strategy_setups in setups.groupby(
-                    "strategy_id",
-                    sort=False,
-                ):
-                    output_path = (
-                        staging
-                        / "strategies"
-                        / _strategy_slug(str(strategy_id))
-                        / f"{month}-part-{batch_number:03d}.parquet"
-                    )
+                for strategy_id, strategy_setups in strategy_groups:
+                    output_path = output_paths[strategy_id]
                     output_path.parent.mkdir(parents=True, exist_ok=True)
                     if output_path.exists():
                         training = pd.read_parquet(output_path)
                     else:
-                        strategy = config.strategies[str(strategy_id)]
+                        strategy = config.strategies[strategy_id]
                         training = build_strategy_training_rows(
                             strategy_setups,
                             bars=bars,
@@ -176,14 +214,14 @@ def build_intraday_specialist_training_dataset(
                         _validate_strategy_training_shard(
                             training,
                             expected_setups=strategy_setups,
-                            strategy_id=str(strategy_id),
+                            strategy_id=strategy_id,
                             path=output_path,
                         )
                         _atomic_parquet(training, output_path)
                     _validate_strategy_training_shard(
                         training,
                         expected_setups=strategy_setups,
-                        strategy_id=str(strategy_id),
+                        strategy_id=strategy_id,
                         path=output_path,
                     )
                     files.append(
@@ -193,8 +231,8 @@ def build_intraday_specialist_training_dataset(
                             rows=len(training),
                         )
                     )
-                    strategy_rows[str(strategy_id)] += len(training)
-                    strategy_eligible[str(strategy_id)] += int(
+                    strategy_rows[strategy_id] += len(training)
+                    strategy_eligible[strategy_id] += int(
                         training["label_eligible"].sum()
                     )
                     for reason, count in training[

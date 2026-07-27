@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import json
 from collections.abc import Sequence
+from datetime import date
+from functools import lru_cache
 
+import exchange_calendars as xcals
 import numpy as np
 import pandas as pd
 
@@ -759,12 +762,32 @@ def _grid_transition_valid(data: pd.DataFrame, *, bars_per_session: int) -> pd.S
     previous_session = data["session_date_et"].shift(1)
     previous_slot = data["session_slot"].shift(1)
     same_session = data["session_date_et"].eq(previous_session)
+    populated_sessions = data["session_date_et"].dropna()
+    if populated_sessions.empty:
+        return pd.Series(0, index=data.index, dtype="int8")
+    ordinals = _xnys_session_ordinals()
+    current_ordinal = data["session_date_et"].map(ordinals)
+    previous_ordinal = previous_session.map(ordinals)
+    consecutive_session = current_ordinal.eq(previous_ordinal + 1)
     transition = (same_session & data["session_slot"].eq(previous_slot + 1)) | (
-        ~same_session & data["session_slot"].eq(0) & previous_slot.eq(bars_per_session - 1)
+        ~same_session
+        & consecutive_session
+        & data["session_slot"].eq(0)
+        & previous_slot.eq(bars_per_session - 1)
     )
     if not transition.empty:
         transition.iloc[0] = True
     return transition.astype("int8")
+
+
+@lru_cache(maxsize=1)
+def _xnys_session_ordinals() -> dict[date, int]:
+    calendar = xcals.get_calendar("XNYS")
+    sessions = calendar.sessions
+    return {
+        timestamp.date(): ordinal
+        for ordinal, timestamp in enumerate(sessions)
+    }
 
 
 def _overnight_gap(data: pd.DataFrame) -> pd.Series:
