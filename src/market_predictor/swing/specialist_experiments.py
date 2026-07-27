@@ -50,10 +50,10 @@ from market_predictor.swing.specialist_model import (
 from market_predictor.swing.strategy_labels import STRATEGY_IDS
 from market_predictor.v3.errors import DataReadinessError
 
-SPECIALIST_EXPERIMENT_BUNDLE_SCHEMA = "swing.specialist_experiment_bundle.v3"
-SPECIALIST_STRATEGY_MANIFEST_SCHEMA = "swing.specialist_strategy.v3"
-SPECIALIST_CANDIDATE_REQUEST_SCHEMA = "swing.specialist_candidate_request.v3"
-SPECIALIST_CANDIDATE_MANIFEST_SCHEMA = "swing.specialist_candidate.v3"
+SPECIALIST_EXPERIMENT_BUNDLE_SCHEMA = "swing.specialist_experiment_bundle.v4"
+SPECIALIST_STRATEGY_MANIFEST_SCHEMA = "swing.specialist_strategy.v4"
+SPECIALIST_CANDIDATE_REQUEST_SCHEMA = "swing.specialist_candidate_request.v4"
+SPECIALIST_CANDIDATE_MANIFEST_SCHEMA = "swing.specialist_candidate.v4"
 PEAD_STRATEGY_ID = "SWING.POST_EARNINGS_DRIFT.5D.V1"
 _REQUIRED_CANDIDATE_EVIDENCE = frozenset(
     {
@@ -402,10 +402,7 @@ def _run_strategy_experiments(
         except Exception as exc:
             failures[spec.candidate_id] = f"{type(exc).__name__}: {exc}"
             _write_failure_evidence(
-                out_dir.parents[1].with_name(
-                    f"{out_dir.parents[1].name}.failures"
-                )
-                / f"{_slug(spec.candidate_id)}.failure.json",
+                _candidate_failure_path(out_dir, spec.candidate_id),
                 scope=f"{plan.strategy_id}:{spec.candidate_id}",
                 request_sha256=str(candidate_request["request_sha256"]),
                 exc=exc,
@@ -1149,6 +1146,18 @@ def _json_sha256(payload: Mapping[str, object]) -> str:
 
 def _slug(value: str) -> str:
     return value.lower().replace(".", "_").replace("-", "_")
+
+
+def _candidate_failure_path(
+    strategy_out_dir: Path,
+    candidate_id: str,
+) -> Path:
+    bundle_dir = strategy_out_dir.parents[1]
+    return (
+        bundle_dir.with_name(f"{bundle_dir.name}.failures")
+        / strategy_out_dir.name
+        / f"{_slug(candidate_id)}.failure.json"
+    )
 
 
 def _object_int(value: object) -> int:

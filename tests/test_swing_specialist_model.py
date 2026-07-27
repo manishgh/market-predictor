@@ -396,11 +396,44 @@ class SwingSpecialistModelTests(unittest.TestCase):
             "src/market_predictor/swing/specialist_model.py",
             identity["source_sha256"],
         )
+        self.assertIn(
+            "src/market_predictor/locking.py",
+            identity["source_sha256"],
+        )
+        self.assertIn(
+            "src/market_predictor/v3/schema.py",
+            identity["source_sha256"],
+        )
         self.assertIn("scikit-learn", identity["runtime_versions"])
         self.assertIn(
             "requirements/training.lock",
             identity["dependency_manifest_sha256"],
         )
+
+    def test_candidate_failures_are_namespaced_by_strategy(self) -> None:
+        with TemporaryDirectory() as directory:
+            bundle = Path(directory) / "bundle"
+            first = bundle / "strategies" / "strategy_a"
+            second = bundle / "strategies" / "strategy_b"
+
+            first_path = specialist_experiments._candidate_failure_path(
+                first,
+                "shared.candidate",
+            )
+            second_path = specialist_experiments._candidate_failure_path(
+                second,
+                "shared.candidate",
+            )
+
+            self.assertNotEqual(first_path, second_path)
+            self.assertEqual(
+                first_path.relative_to(bundle.with_name("bundle.failures")),
+                Path("strategy_a") / "shared_candidate.failure.json",
+            )
+            self.assertEqual(
+                second_path.relative_to(bundle.with_name("bundle.failures")),
+                Path("strategy_b") / "shared_candidate.failure.json",
+            )
 
     def test_authority_pointer_invalidates_prior_complete_state(self) -> None:
         with TemporaryDirectory() as directory:
