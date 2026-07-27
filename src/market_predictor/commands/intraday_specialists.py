@@ -13,12 +13,18 @@ from market_predictor.intraday.specialist_collection import (
     build_intraday_specialist_acquisition_units,
     collect_intraday_specialist_one_minute,
 )
+from market_predictor.intraday.specialist_contracts import (
+    load_intraday_specialist_research_config,
+)
 from market_predictor.intraday.specialist_coverage import (
     build_intraday_specialist_coverage_audit,
 )
 from market_predictor.intraday.specialist_dataset import (
     build_intraday_specialist_collection_plan,
     build_intraday_specialist_setup_bundle,
+)
+from market_predictor.intraday.specialist_experiments import (
+    train_intraday_specialist_experiments,
 )
 from market_predictor.intraday.specialist_training_data import (
     build_intraday_specialist_training_dataset,
@@ -238,3 +244,39 @@ def register_intraday_specialist_commands(
             f"{summary['eligible_rows']:,}/"
             f"{summary['rows']:,} executable KS4 training rows."
         )
+
+    @app.command("train-intraday-specialists")
+    @serialized_heavy_job("train-intraday-specialists")
+    def train_intraday_specialists(
+        dataset_dir: Path = typer.Option(
+            ...,
+            help="Completed immutable KS4 training dataset bundle.",
+        ),
+        out_dir: Path = typer.Option(
+            ...,
+            help="Resumable immutable KS4 experiment bundle directory.",
+        ),
+        policy: Path = typer.Option(
+            Path("configs/intraday_specialist_research.toml"),
+            help="Frozen KS4 specialist policy.",
+        ),
+        strategy_id: str | None = typer.Option(
+            None,
+            "--strategy-id",
+            help="Run one frozen strategy; omit to run all sequentially.",
+        ),
+    ) -> None:
+        """Evaluate the frozen KS4 intraday candidate matrix."""
+
+        config = load_intraday_specialist_research_config(policy)
+        result = train_intraday_specialist_experiments(
+            dataset_dir=dataset_dir,
+            out_dir=out_dir,
+            config=config,
+            policy_path=policy,
+            strategy_ids=(strategy_id,) if strategy_id is not None else None,
+            progress=console.print,
+        )
+        console.print(result)
+        if result["invocation_status"] != "complete":
+            raise typer.Exit(code=2)

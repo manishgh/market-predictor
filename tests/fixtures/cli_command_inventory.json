@@ -94,6 +94,7 @@
     "score-swing-events",
     "train-entry-exit-model",
     "train-intraday-model",
+    "train-intraday-specialists",
     "train-swing-model",
     "train-swing-specialists",
     "train-v3-models",
