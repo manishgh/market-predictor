@@ -111,6 +111,7 @@ def phase_economics(
     cohort_column: str | None = None,
     policy: ExecutionCostPolicy | None = None,
     cost_stress: float = 1.0,
+    use_stamped_net_returns: bool = False,
 ) -> pd.DataFrame:
     return_column = swing_net_return_column(horizon)
     gross_column = f"future_gross_return_{horizon}d"
@@ -129,14 +130,34 @@ def phase_economics(
             policy=selection_policy,
             probability_column="swing_probability",
         )
-        cost = execution_cost_fraction(
-            selected,
-            price_column="close",
-            atr_pct_column="atr_pct_14",
-            policy=policy,
-            stress=cost_stress,
-        )
-        if cost is not None and gross_column in selected.columns:
+        cost: pd.Series | None = None
+        if use_stamped_net_returns:
+            selected = selected.assign(
+                _net=pd.to_numeric(
+                    selected[return_column],
+                    errors="coerce",
+                )
+            )
+            excess = {
+                benchmark: pd.to_numeric(
+                    selected[column],
+                    errors="coerce",
+                ).dropna()
+                for benchmark, column in excess_columns.items()
+            }
+        else:
+            cost = execution_cost_fraction(
+                selected,
+                price_column="close",
+                atr_pct_column="atr_pct_14",
+                policy=policy,
+                stress=cost_stress,
+            )
+        if (
+            not use_stamped_net_returns
+            and cost is not None
+            and gross_column in selected.columns
+        ):
             base_return = pd.to_numeric(selected[gross_column], errors="coerce")
             cost_series = cost
             selected = selected.assign(_net=base_return - cost_series)
@@ -150,7 +171,7 @@ def phase_economics(
                 ).dropna()
                 for benchmark in excess_columns
             }
-        else:
+        elif not use_stamped_net_returns:
             base_return = pd.to_numeric(selected[return_column], errors="coerce")
             cost_series = pd.Series(flat_stress_surcharge(cost_stress, policy), index=selected.index)
             selected = selected.assign(_net=base_return - cost_series)

@@ -62,6 +62,9 @@ from market_predictor.swing.specialist_dataset import (
     load_catalyst_lineage,
     specialist_technical_columns,
 )
+from market_predictor.swing.specialist_experiments import (
+    train_swing_specialist_experiments,
+)
 from market_predictor.swing.strategy_labels import (
     build_swing_strategy_label_bundle,
     load_swing_strategy_label_policy,
@@ -383,6 +386,66 @@ def register_swing_model_commands(app: typer.Typer, console: Console) -> None:
         )
         console.print(result)
         if result["status"] != "complete":
+            raise typer.Exit(code=2)
+
+    @app.command("train-swing-specialists")
+    @serialized_heavy_job("train-swing-specialists")
+    def train_swing_specialists_command(
+        dataset_dir: Path = typer.Option(
+            ...,
+            help="Completed KS3 strategy-dataset bundle directory.",
+        ),
+        out_dir: Path = typer.Option(
+            ...,
+            help="Resumable immutable KS3 experiment bundle directory.",
+        ),
+        research_policy_path: Path = typer.Option(
+            Path("configs/swing_specialist_research.toml"),
+            "--research-policy",
+            help="Frozen KS3 specialist research policy.",
+        ),
+        strategy_id: str | None = typer.Option(
+            None,
+            "--strategy-id",
+            help="Run one frozen strategy; omit to run all sequentially.",
+        ),
+    ) -> None:
+        """Evaluate the frozen swing-specialist candidate matrix."""
+
+        research_policy = load_swing_specialist_research_config(
+            research_policy_path
+        )
+        result = train_swing_specialist_experiments(
+            dataset_dir=dataset_dir,
+            out_dir=out_dir,
+            config=research_policy,
+            policy_path=research_policy_path,
+            strategy_ids=(strategy_id,) if strategy_id is not None else None,
+            progress=console.print,
+        )
+        console.print(
+            {
+                "status": result["status"],
+                "observed_strategies": result["observed_strategies"],
+                "accepted_development_candidates": result[
+                    "accepted_development_candidates"
+                ],
+                "rejected_candidates": result["rejected_candidates"],
+                "failed_strategies": result["failed_strategies"],
+                "memory": result["memory"],
+                "out_dir": str(out_dir.resolve()),
+            }
+        )
+        failed_strategies = result["failed_strategies"]
+        selected_failed = bool(
+            strategy_id is not None
+            and isinstance(failed_strategies, dict)
+            and strategy_id in failed_strategies
+        )
+        if (
+            (strategy_id is None and result["status"] != "complete")
+            or selected_failed
+        ):
             raise typer.Exit(code=2)
 
     @app.command("build-swing-live-features")

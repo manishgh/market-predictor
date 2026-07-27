@@ -71,6 +71,21 @@ Candidate budget:
 | Breakout Expansion | 3 |
 | Sector-Residual Momentum | 4 |
 
+Deterministic comparator formulas are fixed as follows:
+
+- `xs_rank_rel_return_20d_vs_sector`: the identically named rank feature;
+- `trend_strength`: `0.35 * return_20d + 0.25 * dist_sma_50 +
+  0.25 * dist_sma_200 + 0.15 * sma_200_slope_20d`;
+- `catalyst_confirmation`: `log1p(event_count_3d) *
+  event_relevance_mean_3d * sentiment_coverage_3d +
+  sentiment_mean_3d`;
+- `reversal_extremity`: `-(return_5d / max(atr_pct_14, 1e-6)) +
+  (35 - rsi_14) / 35`;
+- `breakout_confirmation`: `log1p(volume_ratio_20) + close_location`.
+
+These formulas are comparators, not promoted rules. Their raw scores receive
+the same prior-fold-only isotonic calibration as learned candidates.
+
 For Catalyst Drift, logistic and HGB are evaluated with technical-only,
 catalyst-only, and combined features on the identical catalyst-confirmed
 population. The deterministic comparator is evaluated once. Short-Term Reversal
