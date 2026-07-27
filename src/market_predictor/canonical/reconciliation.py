@@ -47,6 +47,15 @@ ASSIGNMENT_COLUMNS: tuple[str, ...] = (
     "relevance",
     "schema_version",
 )
+ASSIGNMENT_FEATURE_COLUMNS: tuple[str, ...] = (
+    "source_family",
+    "feature_available_at_utc",
+    "decision_id",
+    "window_name",
+    "status",
+    "sentiment_numeric",
+    "relevance",
+)
 
 
 def build_event_assignments(
@@ -196,12 +205,44 @@ def reproduce_event_features(
     *,
     windows: Mapping[str, pd.Timedelta] = DEFAULT_EVENT_WINDOWS,
     source_families: list[str] | tuple[str, ...] | None = None,
+    inplace: bool = False,
 ) -> pd.DataFrame:
     """Rebuild all canonical event aggregates only from assignment evidence."""
 
-    output = _prepare_decisions(decisions)
-    _require_columns(assignments, set(ASSIGNMENT_COLUMNS), "event assignments")
-    assigned = assignments.loc[assignments["status"].astype(str).eq("assigned")].copy()
+    aggregates = aggregate_event_assignments(
+        assignments,
+        windows=windows,
+        source_families=source_families,
+    )
+    return apply_event_assignment_features(
+        decisions,
+        aggregates,
+        windows=windows,
+        source_families=source_families,
+        inplace=inplace,
+    )
+
+
+def aggregate_event_assignments(
+    assignments: pd.DataFrame,
+    *,
+    windows: Mapping[str, pd.Timedelta] = DEFAULT_EVENT_WINDOWS,
+    source_families: list[str] | tuple[str, ...] | None = None,
+) -> pd.DataFrame:
+    """Reduce assignment evidence to decision-level sufficient statistics."""
+
+    _require_columns(
+        assignments,
+        set(ASSIGNMENT_FEATURE_COLUMNS),
+        "event assignments",
+    )
+    assigned_mask = assignments["status"].astype(str).eq("assigned")
+    assignments_are_all_assigned = bool(assigned_mask.all())
+    assigned = (
+        assignments
+        if assignments_are_all_assigned
+        else assignments.loc[assigned_mask].copy()
+    )
     families = (
         sorted(
             assignments["source_family"].fillna("").astype(str).str.lower().unique()
@@ -209,23 +250,16 @@ def reproduce_event_features(
         if source_families is None
         else sorted({str(value).lower().strip() for value in source_families})
     )
-    for name in windows:
-        output[f"event_count_{name}"] = 0
-        output[f"unknown_relevance_event_fraction_{name}"] = 0.0
-        output[f"sentiment_mean_{name}"] = 0.0
-        output[f"sentiment_coverage_{name}"] = 0.0
-        output[f"event_relevance_mean_{name}"] = 0.0
-        output[f"low_relevance_event_fraction_{name}"] = 0.0
-        output[f"source_family_count_{name}"] = 0
-        for family in families:
-            output[f"source_count_{family}_{name}"] = 0.0
-    output["latest_event_feature_available_at_utc"] = pd.Series(
-        pd.NaT,
-        index=output.index,
-        dtype="datetime64[ns, UTC]",
-    )
     if assigned.empty:
-        return output
+        return pd.DataFrame(
+            columns=[
+                "decision_id",
+                *event_feature_columns(
+                    windows,
+                    source_families=families,
+                ),
+            ]
+        )
 
     assigned["sentiment_numeric"] = pd.to_numeric(
         assigned["sentiment_numeric"],
@@ -235,63 +269,251 @@ def reproduce_event_features(
         assigned["relevance"],
         errors="coerce",
     )
-    for (decision_id, window_name), part in assigned.groupby(
-        ["decision_id", "window_name"],
-        sort=False,
-    ):
-        indices = output.index[output["decision_id"].eq(str(decision_id))]
-        if len(indices) != 1 or window_name not in windows:
-            continue
-        index = indices[0]
-        count = len(part)
-        relevance = part["relevance"]
-        relevance_known = relevance.notna()
-        sentiment_present = part["sentiment_numeric"].notna()
-        weighted_rows = relevance_known & sentiment_present
-        weight = relevance.loc[weighted_rows].sum()
-        weighted_sentiment = (
-            part.loc[weighted_rows, "sentiment_numeric"]
-            * relevance.loc[weighted_rows]
-        ).sum()
-        output.at[index, f"event_count_{window_name}"] = count
-        output.at[index, f"unknown_relevance_event_fraction_{window_name}"] = (
-            float((~relevance_known).sum()) / count
+    valid_windows = set(windows)
+    invalid_windows = sorted(
+        set(assigned["window_name"].astype(str)).difference(valid_windows)
+    )
+    if invalid_windows:
+        raise DataReadinessError(
+            "event assignments contain unsupported windows: "
+            + ", ".join(invalid_windows)
         )
-        output.at[index, f"sentiment_mean_{window_name}"] = (
-            float(weighted_sentiment / weight) if weight > 0 else 0.0
+
+    temporary_columns = (
+        "_relevance_known",
+        "_sentiment_present",
+        "_sentiment_weight",
+        "_weighted_sentiment",
+        "_relevance_sum",
+        "_low_relevance",
+        "_source_family",
+    )
+    try:
+        assigned["_relevance_known"] = assigned["relevance"].notna()
+        assigned["_sentiment_present"] = assigned["sentiment_numeric"].notna()
+        weighted = (
+            assigned["_relevance_known"]
+            & assigned["_sentiment_present"]
         )
-        output.at[index, f"sentiment_coverage_{window_name}"] = (
-            float(sentiment_present.sum()) / count
+        assigned["_sentiment_weight"] = assigned["relevance"].where(
+            weighted,
+            0.0,
         )
-        output.at[index, f"event_relevance_mean_{window_name}"] = (
-            float(relevance.fillna(0.0).sum()) / count
+        assigned["_weighted_sentiment"] = (
+            assigned["sentiment_numeric"].where(weighted, 0.0)
+            * assigned["_sentiment_weight"]
         )
-        output.at[index, f"low_relevance_event_fraction_{window_name}"] = (
-            float((relevance.isna() | relevance.lt(0.5)).sum()) / count
+        assigned["_relevance_sum"] = assigned["relevance"].fillna(0.0)
+        assigned["_low_relevance"] = (
+            assigned["relevance"].isna()
+            | assigned["relevance"].lt(0.5)
         )
-        observed_families = set(
-            part["source_family"].fillna("").astype(str).str.lower()
+        assigned["_source_family"] = (
+            assigned["source_family"]
+            .fillna("")
+            .astype(str)
+            .str.lower()
+            .str.strip()
         )
-        observed_families.discard("")
-        output.at[index, f"source_family_count_{window_name}"] = len(
-            observed_families
-        )
-        for family in families:
-            output.at[index, f"source_count_{family}_{window_name}"] = float(
-                part["source_family"].astype(str).str.lower().eq(family).sum()
+        grouped = (
+            assigned.groupby(
+                ["decision_id", "window_name"],
+                sort=False,
+                observed=True,
             )
-    latest = (
-        assigned.drop_duplicates(["decision_id", "event_id"])
-        .groupby("decision_id")["feature_available_at_utc"]
-        .max()
+            .agg(
+                event_count=("decision_id", "size"),
+                unknown_relevance=(
+                    "_relevance_known",
+                    lambda values: (~values).sum(),
+                ),
+                sentiment_present=("_sentiment_present", "sum"),
+                weighted_sentiment=("_weighted_sentiment", "sum"),
+                sentiment_weight=("_sentiment_weight", "sum"),
+                relevance_sum=("_relevance_sum", "sum"),
+                low_relevance=("_low_relevance", "sum"),
+                source_family_count=(
+                    "_source_family",
+                    lambda values: values[values.ne("")].nunique(),
+                ),
+            )
+            .reset_index()
+        )
+        output = pd.DataFrame(
+            {
+                "decision_id": grouped["decision_id"]
+                .astype(str)
+                .drop_duplicates()
+                .reset_index(drop=True)
+            }
+        )
+        output_index = output["decision_id"]
+        for name in windows:
+            part = grouped.loc[
+                grouped["window_name"].astype(str).eq(name)
+            ].set_index("decision_id")
+            count = pd.to_numeric(
+                output_index.map(part["event_count"]),
+                errors="coerce",
+            ).fillna(0.0)
+            output[f"event_count_{name}"] = count.astype("int64")
+            for target, source in (
+                ("unknown_relevance_event_fraction", "unknown_relevance"),
+                ("sentiment_coverage", "sentiment_present"),
+                ("event_relevance_mean", "relevance_sum"),
+                ("low_relevance_event_fraction", "low_relevance"),
+            ):
+                numerator = pd.to_numeric(
+                    output_index.map(part[source]),
+                    errors="coerce",
+                ).fillna(0.0)
+                output[f"{target}_{name}"] = np.divide(
+                    numerator,
+                    count,
+                    out=np.zeros(len(output), dtype=float),
+                    where=count.gt(0),
+                )
+            weighted_sentiment = pd.to_numeric(
+                output_index.map(part["weighted_sentiment"]),
+                errors="coerce",
+            ).fillna(0.0)
+            sentiment_weight = pd.to_numeric(
+                output_index.map(part["sentiment_weight"]),
+                errors="coerce",
+            ).fillna(0.0)
+            output[f"sentiment_mean_{name}"] = np.divide(
+                weighted_sentiment,
+                sentiment_weight,
+                out=np.zeros(len(output), dtype=float),
+                where=sentiment_weight.gt(0),
+            )
+            output[f"source_family_count_{name}"] = (
+                pd.to_numeric(
+                    output_index.map(part["source_family_count"]),
+                    errors="coerce",
+                )
+                .fillna(0)
+                .astype("int64")
+            )
+            family_counts = (
+                assigned.loc[
+                    assigned["window_name"].astype(str).eq(name)
+                    & assigned["_source_family"].ne("")
+                ]
+                .groupby(
+                    ["decision_id", "_source_family"],
+                    sort=False,
+                    observed=True,
+                )
+                .size()
+            )
+            for family in families:
+                family_part = (
+                    family_counts.xs(
+                        family,
+                        level="_source_family",
+                        drop_level=True,
+                    )
+                    if family in family_counts.index.get_level_values(
+                        "_source_family"
+                    )
+                    else pd.Series(dtype=float)
+                )
+                output[f"source_count_{family}_{name}"] = (
+                    pd.to_numeric(
+                        output_index.map(family_part),
+                        errors="coerce",
+                    )
+                    .fillna(0.0)
+                    .astype(float)
+                )
+        latest = assigned.groupby("decision_id")[
+            "feature_available_at_utc"
+        ].max()
+        output["latest_event_feature_available_at_utc"] = output[
+            "decision_id"
+        ].map(latest)
+        output["latest_event_feature_available_at_utc"] = pd.to_datetime(
+            output["latest_event_feature_available_at_utc"],
+            utc=True,
+        )
+    finally:
+        if assignments_are_all_assigned:
+            assignments.drop(
+                columns=list(temporary_columns),
+                inplace=True,
+                errors="ignore",
+            )
+    return output
+
+
+def apply_event_assignment_features(
+    decisions: pd.DataFrame,
+    aggregates: pd.DataFrame,
+    *,
+    windows: Mapping[str, pd.Timedelta] = DEFAULT_EVENT_WINDOWS,
+    source_families: list[str] | tuple[str, ...] | None = None,
+    inplace: bool = False,
+) -> pd.DataFrame:
+    """Apply pre-aggregated assignment evidence to canonical decisions."""
+
+    output = _prepare_decisions(decisions, inplace=inplace)
+    families = (
+        sorted(
+            {
+                column.removeprefix("source_count_").rsplit("_", 1)[0]
+                for column in aggregates
+                if column.startswith("source_count_")
+                and any(column.endswith(f"_{name}") for name in windows)
+            }
+        )
+        if source_families is None
+        else sorted({str(value).lower().strip() for value in source_families})
     )
-    output["latest_event_feature_available_at_utc"] = output["decision_id"].map(
-        latest
+    feature_columns = event_feature_columns(
+        windows,
+        source_families=families,
     )
-    output["latest_event_feature_available_at_utc"] = pd.to_datetime(
-        output["latest_event_feature_available_at_utc"],
-        utc=True,
+    _require_columns(
+        aggregates,
+        {"decision_id", *feature_columns},
+        "event assignment aggregates",
     )
+    if bool(aggregates["decision_id"].astype(str).duplicated().any()):
+        raise DataReadinessError(
+            "event assignment aggregates contain duplicate decisions"
+        )
+    decision_ids = set(output["decision_id"].astype(str))
+    unknown_decisions = sorted(
+        set(aggregates["decision_id"].astype(str)).difference(decision_ids)
+    )
+    if unknown_decisions:
+        raise DataReadinessError(
+            "assigned events reference decisions outside the feature population"
+        )
+
+    indexed = aggregates.set_index("decision_id")
+    output_index = output["decision_id"].astype(str)
+    for column in feature_columns:
+        mapped = output_index.map(indexed[column])
+        if column == "latest_event_feature_available_at_utc":
+            output[column] = pd.to_datetime(
+                mapped,
+                utc=True,
+                errors="coerce",
+            )
+        elif column.startswith(("event_count_", "source_family_count_")):
+            output[column] = (
+                pd.to_numeric(mapped, errors="coerce")
+                .fillna(0)
+                .astype("int64")
+            )
+        else:
+            output[column] = (
+                pd.to_numeric(mapped, errors="coerce")
+                .fillna(0.0)
+                .astype(float)
+            )
     return output
 
 
@@ -491,22 +713,40 @@ def event_aggregate_sha256(
     ).hexdigest()
 
 
-def _prepare_decisions(decisions: pd.DataFrame) -> pd.DataFrame:
-    output = decisions.copy()
-    output["ticker"] = _ticker(output["ticker"])
-    output["security_id"] = output["security_id"].fillna("").astype(str).str.strip()
+def _prepare_decisions(
+    decisions: pd.DataFrame,
+    *,
+    inplace: bool = False,
+) -> pd.DataFrame:
+    output = decisions if inplace else decisions.copy()
+    normalized_ticker = _ticker(output["ticker"])
+    if bool(output["ticker"].astype(str).ne(normalized_ticker).any()):
+        output["ticker"] = normalized_ticker
+    normalized_security = (
+        output["security_id"].fillna("").astype(str).str.strip()
+    )
+    if bool(
+        output["security_id"]
+        .fillna("")
+        .astype(str)
+        .ne(normalized_security)
+        .any()
+    ):
+        output["security_id"] = normalized_security
     if bool(output["security_id"].eq("").any()):
         raise DataReadinessError("decision rows contain empty security_id values")
-    output["decision_time_utc"] = pd.to_datetime(
+    decision_time = pd.to_datetime(
         output["decision_time_utc"],
         utc=True,
         errors="coerce",
     )
-    if bool(output["decision_time_utc"].isna().any()):
+    if bool(decision_time.isna().any()):
         raise DataReadinessError(
             "decision rows contain invalid event-assignment timestamps"
         )
-    identities = output.apply(_decision_id, axis=1)
+    if not decision_time.equals(output["decision_time_utc"]):
+        output["decision_time_utc"] = decision_time
+    identities = _decision_identities(output)
     if "decision_id" in output and bool(
         output["decision_id"].astype(str).ne(identities).any()
     ):
@@ -517,16 +757,60 @@ def _prepare_decisions(decisions: pd.DataFrame) -> pd.DataFrame:
     return output
 
 
-def _decision_id(row: pd.Series) -> str:
-    fields = (
-        str(row["security_id"]).strip(),
-        str(row["ticker"]).strip().upper(),
-        pd.Timestamp(row["decision_time_utc"]).isoformat(),
-        str(row.get("prediction_cutoff_policy_id", "")),
-        str(row.get("timeframe", "")),
-        str(row.get("bar_start_utc", "")),
+def _decision_identities(
+    frame: pd.DataFrame,
+    *,
+    chunk_rows: int = 50_000,
+) -> pd.Series:
+    identities = np.empty(len(frame), dtype=object)
+    cutoff = (
+        frame["prediction_cutoff_policy_id"]
+        if "prediction_cutoff_policy_id" in frame
+        else pd.Series("", index=frame.index)
     )
-    return hashlib.sha256("|".join(fields).encode("utf-8")).hexdigest()
+    timeframe = (
+        frame["timeframe"]
+        if "timeframe" in frame
+        else pd.Series("", index=frame.index)
+    )
+    bar_start = (
+        frame["bar_start_utc"]
+        if "bar_start_utc" in frame
+        else pd.Series("", index=frame.index)
+    )
+    for start in range(0, len(frame), chunk_rows):
+        end = min(start + chunk_rows, len(frame))
+        identities[start:end] = [
+            hashlib.sha256(
+                "|".join(
+                    (
+                        str(security_id).strip(),
+                        str(ticker).strip().upper(),
+                        pd.Timestamp(decision).isoformat(),
+                        str(cutoff_id),
+                        str(row_timeframe),
+                        str(row_bar_start),
+                    )
+                ).encode("utf-8")
+            ).hexdigest()
+            for (
+                security_id,
+                ticker,
+                decision,
+                cutoff_id,
+                row_timeframe,
+                row_bar_start,
+            ) in zip(
+                frame["security_id"].iloc[start:end],
+                frame["ticker"].iloc[start:end],
+                frame["decision_time_utc"].iloc[start:end],
+                cutoff.iloc[start:end],
+                timeframe.iloc[start:end],
+                bar_start.iloc[start:end],
+                strict=True,
+            )
+        ]
+    return pd.Series(identities, index=frame.index, dtype="string")
 
 
 def _assignment_record(

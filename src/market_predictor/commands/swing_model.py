@@ -25,7 +25,12 @@ from market_predictor.promotion_identity import (
 )
 from market_predictor.promotion_workflow import PromotionTrustContext
 from market_predictor.registry import manifest_path_for
-from market_predictor.resources import memory_audit
+from market_predictor.resources import (
+    assert_memory_budget,
+    assert_peak_memory_budget,
+    memory_audit,
+    release_process_memory,
+)
 from market_predictor.swing.contracts import (
     SwingDatasetConfig,
     SwingPromotionConfig,
@@ -36,6 +41,7 @@ from market_predictor.swing.dataset import (
     build_swing_dataset,
     build_swing_feature_history,
     build_swing_inference_features,
+    prepare_swing_benchmark_bars,
 )
 from market_predictor.swing.model import (
     swing_training_input_columns,
@@ -45,6 +51,16 @@ from market_predictor.swing.promotion import (
     load_swing_training_evidence,
     promote_swing_model,
     write_swing_training_evidence,
+)
+from market_predictor.swing.specialist_contracts import (
+    load_swing_specialist_research_config,
+)
+from market_predictor.swing.specialist_dataset import (
+    aggregate_catalyst_lineage,
+    build_swing_specialist_dataset_bundle,
+    join_catalyst_aggregates,
+    load_catalyst_lineage,
+    specialist_technical_columns,
 )
 from market_predictor.swing.strategy_labels import (
     build_swing_strategy_label_bundle,
@@ -214,6 +230,155 @@ def register_swing_model_commands(app: typer.Typer, console: Console) -> None:
             out_dir=out_dir,
             input_hashes=inputs,
             production_ready=production,
+            progress=console.print,
+        )
+        console.print(result)
+        if result["status"] != "complete":
+            raise typer.Exit(code=2)
+
+    @app.command("build-swing-specialist-datasets")
+    @serialized_heavy_job("build-swing-specialist-datasets")
+    def build_swing_specialist_datasets_command(
+        technical_features: Path = typer.Option(
+            ...,
+            help="Hash-verified five-year technical swing feature artifact.",
+        ),
+        benchmark_bars: Path = typer.Option(
+            ...,
+            help="Hash-verified SPY, QQQ, and sector daily bars.",
+        ),
+        catalyst_lineage_dir: Path = typer.Option(
+            ...,
+            help="Completed KS1 catalyst lineage directory.",
+        ),
+        out_dir: Path = typer.Option(
+            ...,
+            help="Resumable directory of immutable strategy datasets.",
+        ),
+        dataset_config_path: Path = typer.Option(
+            Path("configs/swing_technical_dataset.toml"),
+            "--dataset-config",
+            help="Frozen technical swing dataset policy.",
+        ),
+        strategy_policy_path: Path = typer.Option(
+            Path("configs/swing_strategy_labels.toml"),
+            "--strategy-policy",
+            help="Frozen KS2 setup and exact-path policy.",
+        ),
+        research_policy_path: Path = typer.Option(
+            Path("configs/swing_specialist_research.toml"),
+            "--research-policy",
+            help="Frozen KS3 specialist research policy.",
+        ),
+    ) -> None:
+        """Join KS1 catalysts and publish KS3 strategy datasets."""
+
+        dataset_config = load_typed_config(
+            dataset_config_path,
+            SwingDatasetConfig,
+        )
+        if dataset_config.feature_profile != "technical_market":
+            raise typer.BadParameter(
+                "KS3 source features must use technical_market"
+            )
+        strategy_policy = load_swing_strategy_label_policy(
+            strategy_policy_path
+        )
+        research_policy = load_swing_specialist_research_config(
+            research_policy_path
+        )
+        lineage = load_catalyst_lineage(
+            catalyst_lineage_dir,
+            maximum_process_memory_gib=(
+                research_policy.maximum_process_memory_gib
+            ),
+            memory_guard_headroom_gib=(
+                research_policy.memory_guard_headroom_gib
+            ),
+            progress=console.print,
+        )
+        assert_peak_memory_budget(
+            hard_budget_gib=research_policy.maximum_process_memory_gib,
+            headroom_gib=research_policy.memory_guard_headroom_gib,
+            stage="KS3 catalyst lineage load",
+        )
+        aggregate_lineage = aggregate_catalyst_lineage(lineage)
+        catalyst_lineage_sha256 = lineage.lineage_sha256
+        catalyst_request_sha256 = lineage.request_sha256
+        del lineage
+        release_process_memory()
+        assert_peak_memory_budget(
+            hard_budget_gib=research_policy.maximum_process_memory_gib,
+            headroom_gib=research_policy.memory_guard_headroom_gib,
+            stage="KS3 catalyst lineage aggregation",
+        )
+        feature_frame, feature_manifest = load_canonical_artifact(
+            technical_features,
+            expected_type="swing_dataset",
+            allow_research=True,
+            columns=specialist_technical_columns(
+                technical_features,
+                research_policy,
+            ),
+        )
+        benchmark_frame, benchmark_manifest = load_canonical_artifact(
+            benchmark_bars,
+            expected_type="bars",
+            allow_research=True,
+        )
+        prepared_benchmarks = prepare_swing_benchmark_bars(
+            benchmark_frame
+        )
+        feature_frame, catalyst_audit = join_catalyst_aggregates(
+            feature_frame,
+            aggregate_lineage,
+        )
+        assert_peak_memory_budget(
+            hard_budget_gib=research_policy.maximum_process_memory_gib,
+            headroom_gib=research_policy.memory_guard_headroom_gib,
+            stage="KS3 catalyst feature join",
+        )
+        lineage_manifest = catalyst_lineage_dir / "_manifest.json"
+        coverage_path = catalyst_lineage_dir / "source_coverage.parquet"
+        input_hashes = {
+            str(technical_features): str(
+                feature_manifest["artifact_sha256"]
+            ),
+            str(canonical_manifest_path_for(technical_features)): (
+                file_sha256(
+                    canonical_manifest_path_for(technical_features)
+                )
+            ),
+            str(benchmark_bars): str(
+                benchmark_manifest["artifact_sha256"]
+            ),
+            str(canonical_manifest_path_for(benchmark_bars)): (
+                file_sha256(canonical_manifest_path_for(benchmark_bars))
+            ),
+            str(lineage_manifest): file_sha256(lineage_manifest),
+            str(coverage_path): file_sha256(coverage_path),
+            str(dataset_config_path): file_sha256(dataset_config_path),
+            str(strategy_policy_path): file_sha256(strategy_policy_path),
+            str(research_policy_path): file_sha256(research_policy_path),
+            "catalyst_lineage_sha256": catalyst_lineage_sha256,
+            "catalyst_request_sha256": catalyst_request_sha256,
+        }
+        del aggregate_lineage, benchmark_frame
+        release_process_memory()
+        assert_memory_budget(
+            hard_budget_gib=research_policy.maximum_process_memory_gib,
+            headroom_gib=research_policy.memory_guard_headroom_gib,
+            stage="KS3 pre-strategy build",
+        )
+        result = build_swing_specialist_dataset_bundle(
+            feature_frame,
+            prepared_benchmarks,
+            out_dir=out_dir,
+            dataset_config=dataset_config,
+            strategy_policy=strategy_policy,
+            research_config=research_policy,
+            catalyst_audit=catalyst_audit,
+            input_hashes=input_hashes,
             progress=console.print,
         )
         console.print(result)

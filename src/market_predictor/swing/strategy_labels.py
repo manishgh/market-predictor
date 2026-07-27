@@ -903,22 +903,13 @@ def audit_swing_strategy_labels(
     strategy_ids: Sequence[str] | None = None,
 ) -> CanonicalAuditReport:
     selected_ids = _selected_strategy_ids(policy, strategy_ids)
-    reproduced = build_swing_strategy_labels(
+    replay_errors = _bounded_strategy_replay_mismatch_count(
         frame,
         benchmark_bars,
+        labels,
         dataset_config=dataset_config,
         policy=policy,
         strategy_ids=selected_ids,
-    )
-    replay_errors = replay_mismatch_count(
-        labels,
-        reproduced,
-        identity_columns=(
-            "strategy_id",
-            "security_id",
-            "decision_time_utc",
-        ),
-        material_columns=STRATEGY_LABEL_MATERIAL_COLUMNS,
     )
     schema_errors = int(
         set(labels["strategy_id"].astype(str)) != set(selected_ids)
@@ -1067,6 +1058,89 @@ def audit_swing_strategy_labels(
         ),
     )
     return CanonicalAuditReport(checks=checks)
+
+
+def _bounded_strategy_replay_mismatch_count(
+    frame: pd.DataFrame,
+    benchmark_bars: pd.DataFrame,
+    labels: pd.DataFrame,
+    *,
+    dataset_config: SwingDatasetConfig,
+    policy: SwingStrategyLabelPolicy,
+    strategy_ids: Sequence[str],
+    chunk_sessions: int = 126,
+) -> int:
+    sessions = sorted(pd.unique(frame["session_date_et"]))
+    if len(sessions) <= chunk_sessions:
+        reproduced = build_swing_strategy_labels(
+            frame,
+            benchmark_bars,
+            dataset_config=dataset_config,
+            policy=policy,
+            strategy_ids=strategy_ids,
+        )
+        return replay_mismatch_count(
+            labels,
+            reproduced,
+            identity_columns=(
+                "strategy_id",
+                "security_id",
+                "decision_time_utc",
+            ),
+            material_columns=STRATEGY_LABEL_MATERIAL_COLUMNS,
+        )
+
+    maximum_horizon = max(
+        policy.strategies[strategy_id].horizon_sessions
+        for strategy_id in strategy_ids
+    )
+    breakout = policy.strategies["SWING.BREAKOUT_EXPANSION.5D.V1"]
+    setup_lookback = max(
+        _required_int_parameter(breakout.prior_high_sessions),
+        _required_int_parameter(breakout.compression_sessions),
+    )
+    mismatches = 0
+    for core_start in range(0, len(sessions), chunk_sessions):
+        core_end = min(core_start + chunk_sessions, len(sessions))
+        source_start = max(0, core_start - setup_lookback)
+        source_end = min(len(sessions), core_end + maximum_horizon)
+        source_sessions = set(sessions[source_start:source_end])
+        core_sessions = set(sessions[core_start:core_end])
+        source = frame.loc[
+            frame["session_date_et"].isin(source_sessions)
+        ]
+        reproduced = build_swing_strategy_labels(
+            source,
+            benchmark_bars,
+            dataset_config=dataset_config,
+            policy=policy,
+            strategy_ids=strategy_ids,
+            _chunk_sessions=None,
+        )
+        reproduced = reproduced.loc[
+            reproduced["session_date_et"].isin(core_sessions)
+        ]
+        actual = labels.loc[
+            labels["session_date_et"].isin(core_sessions)
+        ]
+        mismatches += replay_mismatch_count(
+            actual,
+            reproduced,
+            identity_columns=(
+                "strategy_id",
+                "security_id",
+                "decision_time_utc",
+            ),
+            material_columns=STRATEGY_LABEL_MATERIAL_COLUMNS,
+        )
+        del actual, reproduced, source
+        gc.collect()
+        assert_memory_budget(
+            hard_budget_gib=policy.maximum_process_memory_gib,
+            headroom_gib=policy.memory_guard_headroom_gib,
+            stage="bounded strategy label replay",
+        )
+    return mismatches
 
 
 def _audit_strategy_target_contract(

@@ -157,6 +157,31 @@ def build_swing_feature_history(
     )
 
 
+def prepare_swing_benchmark_bars(
+    benchmark_bars: pd.DataFrame,
+) -> pd.DataFrame:
+    """Normalize canonical daily benchmark bars for exact-path evaluation."""
+
+    _require_columns(
+        benchmark_bars,
+        BENCHMARK_REQUIRED_COLUMNS,
+        "canonical benchmark bars",
+    )
+    prepared = _prepare_daily_rows(
+        benchmark_bars,
+        name="canonical benchmark bars",
+    )
+    if prepared.empty:
+        raise DataReadinessError(
+            "canonical benchmark bars contain no daily rows"
+        )
+    if bool(prepared.duplicated(["ticker", "session_date_et"]).any()):
+        raise DataReadinessError(
+            "canonical benchmark bars contain duplicate ticker/session rows"
+        )
+    return prepared
+
+
 def build_swing_inference_features(
     decisions: pd.DataFrame,
     benchmark_bars: pd.DataFrame,
@@ -205,7 +230,7 @@ def _build_swing_feature_history(
         )
     _require_columns(benchmark_bars, BENCHMARK_REQUIRED_COLUMNS, "canonical benchmark bars")
     data = _prepare_daily_rows(decisions, name="canonical decisions")
-    benchmarks = _prepare_daily_rows(benchmark_bars, name="canonical benchmark bars")
+    benchmarks = prepare_swing_benchmark_bars(benchmark_bars)
     if data.empty or benchmarks.empty:
         raise DataReadinessError("swing dataset requires non-empty daily decisions and benchmark bars")
     if bool(data.duplicated(["ticker", "session_date_et"]).any()):

@@ -306,6 +306,31 @@ class SwingStrategyLabelPolicyTests(unittest.TestCase):
             check_exact=True,
         )
 
+    def test_bounded_audit_replay_matches_complete_labels(self) -> None:
+        frame, benchmarks = _fixture()
+        strategy_ids = ("SWING.CATALYST_DRIFT.5D.V1",)
+        labels = build_swing_strategy_labels(
+            frame,
+            benchmarks,
+            dataset_config=self.config,
+            policy=self.policy,
+            strategy_ids=strategy_ids,
+        )
+
+        mismatches = (
+            strategy_label_module._bounded_strategy_replay_mismatch_count(
+                frame,
+                benchmarks,
+                labels,
+                dataset_config=self.config,
+                policy=self.policy,
+                strategy_ids=strategy_ids,
+                chunk_sessions=10,
+            )
+        )
+
+        self.assertEqual(mismatches, 0)
+
     def test_same_session_barrier_collision_is_stop_first(self) -> None:
         frame, benchmarks = _fixture(collision=True)
         labels = build_swing_strategy_labels(

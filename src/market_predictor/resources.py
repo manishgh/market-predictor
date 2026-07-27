@@ -48,6 +48,27 @@ def assert_memory_budget(
         )
 
 
+def assert_peak_memory_budget(
+    *,
+    hard_budget_gib: float,
+    headroom_gib: float,
+    stage: str,
+) -> None:
+    if hard_budget_gib <= 0 or headroom_gib <= 0 or headroom_gib >= hard_budget_gib:
+        raise ValueError("memory budget and headroom are invalid")
+    snapshot = process_memory_snapshot()
+    if snapshot is None:
+        raise DataReadinessError(
+            f"peak memory guard stopped {stage}: process memory accounting is unavailable"
+        )
+    threshold = int((hard_budget_gib - headroom_gib) * 1024**3)
+    if snapshot[1] > threshold:
+        raise DataReadinessError(
+            f"peak memory guard stopped {stage}: peak RSS {_gib(snapshot[1]):.2f} GiB exceeds "
+            f"the {_gib(threshold):.2f} GiB safety threshold for the {hard_budget_gib:.2f} GiB hard budget"
+        )
+
+
 def memory_audit(*, hard_budget_gib: float, headroom_gib: float) -> MemoryAudit:
     snapshot = process_memory_snapshot()
     return MemoryAudit(

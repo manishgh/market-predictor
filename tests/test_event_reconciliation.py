@@ -12,6 +12,7 @@ from market_predictor.canonical.audits import (
     event_reconciliation_checks,
 )
 from market_predictor.canonical.reconciliation import (
+    ASSIGNMENT_FEATURE_COLUMNS,
     aggregate_reconciliation_summary,
     assignment_integrity_summary,
     build_event_assignments,
@@ -159,6 +160,41 @@ class EventReconciliationTest(unittest.TestCase):
         summary = aggregate_reconciliation_summary(decisions, assignments)
         self.assertEqual(summary["aggregate_reconciliation_errors"], 0)
         self.assertGreater(summary["aggregate_cells_checked"], 0)
+
+    def test_compact_assignment_projection_reproduces_exact_aggregates(
+        self,
+    ) -> None:
+        assignments = self._artifact()
+        complete = reproduce_event_features(self.decisions, assignments)
+        compact = reproduce_event_features(
+            self.decisions,
+            assignments.loc[:, ASSIGNMENT_FEATURE_COLUMNS],
+        )
+
+        pd.testing.assert_frame_equal(compact, complete, check_exact=True)
+
+    def test_inplace_reproduction_is_exact_and_cleans_assignment_scratch(
+        self,
+    ) -> None:
+        assignments = self._artifact()
+        assigned = assignments.loc[
+            assignments["status"].eq("assigned"),
+            ASSIGNMENT_FEATURE_COLUMNS,
+        ].copy()
+        expected = reproduce_event_features(self.decisions, assigned.copy())
+        target = self.decisions.copy()
+
+        actual = reproduce_event_features(
+            target,
+            assigned,
+            inplace=True,
+        )
+
+        self.assertIs(actual, target)
+        pd.testing.assert_frame_equal(actual, expected, check_exact=True)
+        self.assertFalse(
+            any(column.startswith("_") for column in assigned.columns)
+        )
 
     def test_hashes_are_deterministic_and_content_sensitive(self) -> None:
         assignments = self._artifact()
