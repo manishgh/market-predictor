@@ -6,7 +6,6 @@ from market_predictor.cli_surface import filtered_app
 COLLECTION_COMMANDS = frozenset(
     {
         "alpaca-tickers",
-        "audit-intraday-specialist-one-minute-coverage",
         "azure-upload-artifacts",
         "collect",
         "collect-alpaca-news-history",

@@ -1,7 +1,6 @@
 {
   "collection": [
     "alpaca-tickers",
-    "audit-intraday-specialist-one-minute-coverage",
     "azure-upload-artifacts",
     "collect",
     "collect-alpaca-news-history",
@@ -44,6 +43,7 @@
   "research": [
     "attribute-alpaca-news-history",
     "audit-alpaca-news-history",
+    "audit-intraday-specialist-one-minute-coverage",
     "audit-promotion-readiness",
     "audit-swing-alignment",
     "audit-swing-daily-history",
@@ -62,6 +62,7 @@
     "build-intraday-live-features",
     "build-intraday-specialist-acquisition-units",
     "build-intraday-specialist-setups",
+    "build-intraday-specialist-training-data",
     "build-intraday-universe",
     "build-market-context-from-proxies",
     "build-security-business-labels",

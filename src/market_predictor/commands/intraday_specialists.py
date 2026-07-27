@@ -20,6 +20,9 @@ from market_predictor.intraday.specialist_dataset import (
     build_intraday_specialist_collection_plan,
     build_intraday_specialist_setup_bundle,
 )
+from market_predictor.intraday.specialist_training_data import (
+    build_intraday_specialist_training_dataset,
+)
 from market_predictor.sources.alpaca import AlpacaSource
 
 
@@ -194,4 +197,44 @@ def register_intraday_specialist_commands(
             f"{summary['requirements']:,} requirements; "
             f"{summary['grid_complete_setups']:,}/"
             f"{summary['setups']:,} setups have a physically complete grid."
+        )
+
+    @app.command("build-intraday-specialist-training-data")
+    @serialized_heavy_job("build-intraday-specialist-training-data")
+    def build_intraday_specialist_training_data(
+        setup_dir: Path = typer.Option(
+            ...,
+            help="Completed immutable causal KS4 setup bundle.",
+        ),
+        collection_plan_dir: Path = typer.Option(
+            ...,
+            help="Completed immutable KS4 one-minute collection plan.",
+        ),
+        collection_dir: Path = typer.Option(
+            ...,
+            help="Transport-complete KS4 one-minute collection.",
+        ),
+        policy: Path = typer.Option(
+            Path("configs/intraday_specialist_research.toml"),
+            help="Frozen KS4 specialist policy.",
+        ),
+        out_dir: Path = typer.Option(
+            ...,
+            help="New immutable KS4 training dataset directory.",
+        ),
+    ) -> None:
+        """Build clock-grid features and executable one-minute labels."""
+
+        report = build_intraday_specialist_training_dataset(
+            setup_directory=setup_dir,
+            collection_plan_directory=collection_plan_dir,
+            collection_directory=collection_dir,
+            policy_path=policy,
+            output_directory=out_dir,
+        )
+        summary = report["summary"]
+        console.print(
+            "Built "
+            f"{summary['eligible_rows']:,}/"
+            f"{summary['rows']:,} executable KS4 training rows."
         )
