@@ -190,6 +190,15 @@ warm-up, entry, and label-path coverage. Missing or halted minutes are recorded,
 never imputed. Any setup lacking its exact required path is excluded with a
 machine-readable reason; aggregate-only silent removal is prohibited.
 
+Alpaca emits a minute bar only when at least one eligible trade exists. A
+physically absent bar is therefore audited as a no-eligible-trade interval, not
+automatically as transport loss. Clock-grid feature construction may carry the
+last eligible trade price forward with zero volume and an explicit synthetic
+flag, but it may not create an executable fill. Entry must use an observed bar.
+Target and stop triggers use observed bars only, and a timeout or benchmark
+fill must have observed price evidence at its required minute. Grid-completeness
+statistics are diagnostics and never determine model readiness by themselves.
+
 All heavy entry points acquire the shared workspace lease. Collection, dataset
 construction, and training run sequentially. Each process fails before the
 3.25 GiB safety threshold and never exceeds the 4 GiB hard limit. Full-grid

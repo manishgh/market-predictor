@@ -1,6 +1,7 @@
 {
   "collection": [
     "alpaca-tickers",
+    "audit-intraday-specialist-one-minute-coverage",
     "azure-upload-artifacts",
     "collect",
     "collect-alpaca-news-history",

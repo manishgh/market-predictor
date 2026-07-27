@@ -13,6 +13,9 @@ from market_predictor.intraday.specialist_collection import (
     build_intraday_specialist_acquisition_units,
     collect_intraday_specialist_one_minute,
 )
+from market_predictor.intraday.specialist_coverage import (
+    build_intraday_specialist_coverage_audit,
+)
 from market_predictor.intraday.specialist_dataset import (
     build_intraday_specialist_collection_plan,
     build_intraday_specialist_setup_bundle,
@@ -153,4 +156,42 @@ def register_intraday_specialist_commands(
             f"KS4 one-minute collection status={report['status']} "
             f"completed={report['completed_units']:,}/"
             f"{report['requested_units']:,}."
+        )
+
+    @app.command("audit-intraday-specialist-one-minute-coverage")
+    @serialized_heavy_job(
+        "audit-intraday-specialist-one-minute-coverage"
+    )
+    def audit_intraday_specialist_one_minute_coverage(
+        collection_plan_dir: Path = typer.Option(
+            ...,
+            help="Completed immutable KS4 one-minute collection plan.",
+        ),
+        collection_dir: Path = typer.Option(
+            ...,
+            help="Transport-complete KS4 one-minute collection.",
+        ),
+        policy: Path = typer.Option(
+            Path("configs/intraday_specialist_research.toml"),
+            help="Frozen KS4 specialist policy.",
+        ),
+        out_dir: Path = typer.Option(
+            ...,
+            help="New immutable KS4 coverage-audit directory.",
+        ),
+    ) -> None:
+        """Audit every planned minute without imputing missing paths."""
+
+        report = build_intraday_specialist_coverage_audit(
+            collection_plan_directory=collection_plan_dir,
+            collection_directory=collection_dir,
+            policy_path=policy,
+            output_directory=out_dir,
+        )
+        summary = report["summary"]
+        console.print(
+            "Audited "
+            f"{summary['requirements']:,} requirements; "
+            f"{summary['grid_complete_setups']:,}/"
+            f"{summary['setups']:,} setups have a physically complete grid."
         )
