@@ -1,0 +1,354 @@
+schema_version = "intraday.specialist_research.v1"
+required_decision_bundle_schema = "ml_v3.development_dataset_build.v2"
+required_price_feed = "sip"
+required_adjustment = "all"
+minimum_one_minute_warmup_bars = 130
+target_atr = 1.0
+stop_atr = 0.75
+minimum_round_trip_cost_bps = 10.0
+n_splits = 4
+embargo_sessions = 1
+min_train_sessions = 120
+min_train_rows = 1000
+min_training_tickers = 100
+ticker_holdout_fraction = 0.20
+top_k = 10
+max_trades_per_session = 10
+random_seed = 42
+logistic_max_iter = 250
+hgb_max_iter = 200
+hgb_learning_rate = 0.04
+hgb_l2_regularization = 1.0
+ranker_max_iter = 150
+ranker_learning_rate = 0.04
+ranker_max_depth = 4
+ranker_max_bin = 256
+ranker_n_jobs = 2
+minimum_feature_non_null_rate = 0.05
+minimum_selected_trades = 100
+minimum_avg_net_return = 0.0
+minimum_avg_excess_return_vs_spy = 0.0
+minimum_avg_excess_return_vs_sector = 0.0
+minimum_avg_net_return_ci_low = 0.0
+minimum_avg_excess_return_vs_spy_ci_low = 0.0
+minimum_profit_factor = 1.05
+maximum_drawdown = 0.20
+maximum_negative_session_rate = 0.55
+required_market_regimes = ["risk_on", "neutral", "risk_off"]
+minimum_regime_selected_trades = 20
+minimum_regime_avg_net_return = 0.0
+minimum_regime_avg_excess_return_vs_spy = 0.0
+catalyst_overlay_minimum_relevance = 0.60
+catalyst_overlay_maximum_low_relevance_fraction = 0.25
+catalyst_overlay_minimum_net_return_improvement = 0.0
+catalyst_overlay_minimum_spy_excess_improvement = 0.0
+catalyst_overlay_maximum_drawdown_increase = 0.0
+maximum_process_memory_gib = 4.0
+memory_guard_headroom_gib = 0.75
+
+technical_features = [
+  "return_1bar",
+  "return_3bar",
+  "return_6bar",
+  "return_12bar",
+  "volatility_6bar",
+  "volatility_12bar",
+  "ema_10_slope_3bar",
+  "ema_20_slope_3bar",
+  "macd_histogram",
+  "rsi_14",
+  "atr_pct",
+  "dist_session_vwap",
+  "session_vwap_slope_3bar",
+  "opening_range_width_pct",
+  "dist_opening_range_high",
+  "dist_opening_range_low",
+  "overnight_gap",
+  "volume_burst_20bar",
+  "relative_volume_same_minute_20d",
+  "dollar_volume",
+  "dist_recent_20bar_high_atr",
+  "dist_recent_20bar_low_atr",
+  "qqq_return_1bar",
+  "qqq_return_3bar",
+  "qqq_return_6bar",
+  "spy_return_1bar",
+  "spy_return_3bar",
+  "spy_return_6bar",
+  "sector_return_1bar",
+  "sector_return_3bar",
+  "sector_return_6bar",
+  "rel_return_1bar_vs_qqq",
+  "rel_return_1bar_vs_sector",
+  "rel_return_3bar_vs_qqq",
+  "rel_return_3bar_vs_sector",
+  "rel_return_6bar_vs_qqq",
+  "rel_return_6bar_vs_sector",
+  "eligible_breadth_positive_1bar",
+  "eligible_breadth_above_vwap",
+  "regime_risk_on",
+  "regime_risk_off",
+  "regime_high_volatility",
+  "xs_rank_return_1bar",
+  "xs_rank_return_3bar",
+  "xs_rank_return_6bar",
+  "xs_rank_relative_volume_same_minute_20d",
+  "xs_rank_dollar_volume",
+  "xs_rank_atr_pct",
+  "xs_rank_dist_session_vwap",
+  "xs_rank_dist_opening_range_high",
+  "xs_rank_rel_return_3bar_vs_qqq",
+  "xs_rank_rel_return_3bar_vs_sector",
+  "xs_rank_overnight_gap",
+  "return_3bar_atr_units",
+  "dist_session_vwap_atr_units",
+  "close_location_5m",
+  "return_1bar_1m",
+  "return_3bar_1m",
+  "return_5bar_1m",
+  "realized_vol_5bar_1m",
+  "realized_vol_20bar_1m",
+  "dist_ema_5_1m",
+  "dist_ema_20_1m",
+  "macd_signal_diff_pct_1m",
+  "rsi_14_1m",
+  "atr_pct_14_1m",
+  "dist_session_vwap_1m",
+  "volume_burst_20bar_1m",
+  "range_pct_1m",
+  "close_location_1m",
+]
+
+catalyst_overlay_features = [
+  "event_count_2h",
+  "event_count_1d",
+  "sentiment_mean_2h",
+  "sentiment_mean_1d",
+  "sentiment_coverage_2h",
+  "sentiment_coverage_1d",
+  "event_relevance_mean_2h",
+  "event_relevance_mean_1d",
+  "low_relevance_event_fraction_2h",
+  "low_relevance_event_fraction_1d",
+  "source_family_count_2h",
+  "source_family_count_1d",
+  "catalyst_source_complete_1d",
+]
+
+[strategies."INTRADAY.OPENING_RANGE_BREAKOUT.60M.V1"]
+direction = "long"
+horizon_minutes = 60
+session_segment = "late_opening"
+first_decision_minute_et = 600
+last_decision_minute_et_exclusive = 690
+minimum_setup_spacing_minutes = 60
+deterministic_score = "opening_breakout_confirmation"
+estimator_families = ["deterministic_baseline", "logistic", "hist_gradient_boosting"]
+selection_policies = ["model_score_only", "catalyst_confirmation_overlay"]
+
+[[strategies."INTRADAY.OPENING_RANGE_BREAKOUT.60M.V1".setup_rules]]
+feature = "dist_opening_range_high"
+minimum = 0.0
+maximum = 0.015
+
+[[strategies."INTRADAY.OPENING_RANGE_BREAKOUT.60M.V1".setup_rules]]
+feature = "opening_range_width_pct"
+minimum = 0.002
+maximum = 0.05
+
+[[strategies."INTRADAY.OPENING_RANGE_BREAKOUT.60M.V1".setup_rules]]
+feature = "relative_volume_same_minute_20d"
+minimum = 1.25
+
+[[strategies."INTRADAY.OPENING_RANGE_BREAKOUT.60M.V1".setup_rules]]
+feature = "close_location_5m"
+minimum = 0.60
+
+[[strategies."INTRADAY.OPENING_RANGE_BREAKOUT.60M.V1".setup_rules]]
+feature = "dist_session_vwap"
+minimum = 0.0
+
+[[strategies."INTRADAY.OPENING_RANGE_BREAKOUT.60M.V1".setup_rules]]
+feature = "rel_return_3bar_vs_qqq"
+minimum = 0.0
+
+[strategies."INTRADAY.GAP_CONTINUATION.60M.V1"]
+direction = "long"
+horizon_minutes = 60
+session_segment = "opening"
+first_decision_minute_et = 575
+last_decision_minute_et_exclusive = 660
+minimum_setup_spacing_minutes = 60
+deterministic_score = "gap_continuation_confirmation"
+estimator_families = ["deterministic_baseline", "logistic", "hist_gradient_boosting"]
+selection_policies = ["model_score_only", "catalyst_confirmation_overlay"]
+
+[[strategies."INTRADAY.GAP_CONTINUATION.60M.V1".setup_rules]]
+feature = "overnight_gap"
+minimum = 0.01
+maximum = 0.15
+
+[[strategies."INTRADAY.GAP_CONTINUATION.60M.V1".setup_rules]]
+feature = "relative_volume_same_minute_20d"
+minimum = 1.25
+
+[[strategies."INTRADAY.GAP_CONTINUATION.60M.V1".setup_rules]]
+feature = "dist_session_vwap"
+minimum = 0.0
+
+[[strategies."INTRADAY.GAP_CONTINUATION.60M.V1".setup_rules]]
+feature = "return_1bar"
+minimum = 0.0
+
+[[strategies."INTRADAY.GAP_CONTINUATION.60M.V1".setup_rules]]
+feature = "close_location_5m"
+minimum = 0.55
+
+[strategies."INTRADAY.GAP_FADE.60M.V1"]
+direction = "long"
+horizon_minutes = 60
+session_segment = "opening"
+first_decision_minute_et = 575
+last_decision_minute_et_exclusive = 660
+minimum_setup_spacing_minutes = 60
+deterministic_score = "gap_fade_confirmation"
+estimator_families = ["deterministic_baseline", "logistic", "hist_gradient_boosting"]
+selection_policies = ["model_score_only", "catalyst_confirmation_overlay"]
+
+[[strategies."INTRADAY.GAP_FADE.60M.V1".setup_rules]]
+feature = "overnight_gap"
+minimum = -0.15
+maximum = -0.01
+
+[[strategies."INTRADAY.GAP_FADE.60M.V1".setup_rules]]
+feature = "return_1bar"
+minimum = 0.0
+
+[[strategies."INTRADAY.GAP_FADE.60M.V1".setup_rules]]
+feature = "close_location_5m"
+minimum = 0.60
+
+[[strategies."INTRADAY.GAP_FADE.60M.V1".setup_rules]]
+feature = "dist_opening_range_low"
+minimum = 0.0
+
+[strategies."INTRADAY.VWAP_CONTINUATION.60M.V1"]
+direction = "long"
+horizon_minutes = 60
+session_segment = "midday"
+first_decision_minute_et = 690
+last_decision_minute_et_exclusive = 840
+minimum_setup_spacing_minutes = 60
+deterministic_score = "vwap_continuation_confirmation"
+estimator_families = ["deterministic_baseline", "logistic", "hist_gradient_boosting"]
+selection_policies = ["model_score_only", "catalyst_confirmation_overlay"]
+
+[[strategies."INTRADAY.VWAP_CONTINUATION.60M.V1".setup_rules]]
+feature = "dist_session_vwap"
+minimum = 0.0
+maximum = 0.015
+
+[[strategies."INTRADAY.VWAP_CONTINUATION.60M.V1".setup_rules]]
+feature = "session_vwap_slope_3bar"
+minimum = 0.0
+
+[[strategies."INTRADAY.VWAP_CONTINUATION.60M.V1".setup_rules]]
+feature = "return_3bar"
+minimum = 0.0
+
+[[strategies."INTRADAY.VWAP_CONTINUATION.60M.V1".setup_rules]]
+feature = "rel_return_3bar_vs_sector"
+minimum = 0.0
+
+[[strategies."INTRADAY.VWAP_CONTINUATION.60M.V1".setup_rules]]
+feature = "relative_volume_same_minute_20d"
+minimum = 1.0
+
+[strategies."INTRADAY.VWAP_REVERSION.30M.V1"]
+direction = "long"
+horizon_minutes = 30
+session_segment = "midday"
+first_decision_minute_et = 690
+last_decision_minute_et_exclusive = 870
+minimum_setup_spacing_minutes = 30
+deterministic_score = "vwap_reversion_confirmation"
+estimator_families = ["deterministic_baseline", "logistic", "hist_gradient_boosting"]
+selection_policies = ["model_score_only", "catalyst_confirmation_overlay"]
+
+[[strategies."INTRADAY.VWAP_REVERSION.30M.V1".setup_rules]]
+feature = "dist_session_vwap_atr_units"
+maximum = -0.75
+
+[[strategies."INTRADAY.VWAP_REVERSION.30M.V1".setup_rules]]
+feature = "rsi_14"
+maximum = 35.0
+
+[[strategies."INTRADAY.VWAP_REVERSION.30M.V1".setup_rules]]
+feature = "return_1bar"
+minimum = 0.0
+
+[[strategies."INTRADAY.VWAP_REVERSION.30M.V1".setup_rules]]
+feature = "close_location_5m"
+minimum = 0.55
+
+[strategies."INTRADAY.MOMENTUM_CONTINUATION.60M.V1"]
+direction = "long"
+horizon_minutes = 60
+session_segment = "late_session"
+first_decision_minute_et = 810
+last_decision_minute_et_exclusive = 900
+minimum_setup_spacing_minutes = 60
+deterministic_score = "cross_sectional_momentum"
+estimator_families = ["deterministic_baseline", "logistic", "hist_gradient_boosting", "direct_ranker"]
+selection_policies = ["model_score_only", "catalyst_confirmation_overlay"]
+
+[[strategies."INTRADAY.MOMENTUM_CONTINUATION.60M.V1".setup_rules]]
+feature = "xs_rank_return_3bar"
+minimum = 0.90
+
+[[strategies."INTRADAY.MOMENTUM_CONTINUATION.60M.V1".setup_rules]]
+feature = "xs_rank_relative_volume_same_minute_20d"
+minimum = 0.80
+
+[[strategies."INTRADAY.MOMENTUM_CONTINUATION.60M.V1".setup_rules]]
+feature = "xs_rank_dollar_volume"
+minimum = 0.50
+
+[[strategies."INTRADAY.MOMENTUM_CONTINUATION.60M.V1".setup_rules]]
+feature = "rel_return_3bar_vs_qqq"
+minimum = 0.0
+
+[[strategies."INTRADAY.MOMENTUM_CONTINUATION.60M.V1".setup_rules]]
+feature = "dist_session_vwap"
+minimum = 0.0
+
+[strategies."INTRADAY.SHORT_HORIZON_REVERSAL.30M.V1"]
+direction = "long"
+horizon_minutes = 30
+session_segment = "late_session"
+first_decision_minute_et = 780
+last_decision_minute_et_exclusive = 930
+minimum_setup_spacing_minutes = 30
+deterministic_score = "shock_reversal_confirmation"
+estimator_families = ["deterministic_baseline", "logistic", "hist_gradient_boosting"]
+selection_policies = ["model_score_only", "catalyst_confirmation_overlay"]
+
+[[strategies."INTRADAY.SHORT_HORIZON_REVERSAL.30M.V1".setup_rules]]
+feature = "return_3bar_atr_units"
+maximum = -1.25
+
+[[strategies."INTRADAY.SHORT_HORIZON_REVERSAL.30M.V1".setup_rules]]
+feature = "rsi_14"
+maximum = 30.0
+
+[[strategies."INTRADAY.SHORT_HORIZON_REVERSAL.30M.V1".setup_rules]]
+feature = "return_1bar"
+minimum = 0.0
+
+[[strategies."INTRADAY.SHORT_HORIZON_REVERSAL.30M.V1".setup_rules]]
+feature = "close_location_5m"
+minimum = 0.55
+
+[[strategies."INTRADAY.SHORT_HORIZON_REVERSAL.30M.V1".setup_rules]]
+feature = "volume_burst_20bar"
+minimum = 1.0

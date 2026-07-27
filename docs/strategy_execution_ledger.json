@@ -765,6 +765,8 @@
       "checkpoint_id": "KS4",
       "closure": null,
       "contracts": [
+        "docs/ks4_intraday_specialist_contract.md",
+        "configs/intraday_specialist_research.toml",
         "intraday setup datasets",
         "intraday specialist candidates",
         "exact one-minute path audit"
@@ -803,7 +805,7 @@
       ],
       "problem_statement": "Isolate intraday setups whose exact executable paths survive realistic costs.",
       "sequence": 4,
-      "status": "pending",
+      "status": "in_progress",
       "title": "Train intraday specialists",
       "verification": [
         {
