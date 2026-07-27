@@ -1,7 +1,10 @@
 schema_version = "intraday.specialist_research.v1"
-required_decision_bundle_schema = "ml_v3.development_dataset_build.v2"
+required_technical_manifest_schema = "ml_v3.development_dataset_build.v1"
 required_price_feed = "sip"
 required_adjustment = "all"
+intraday_finalization_delay_seconds = 30
+entry_latency_minutes = 1
+cross_section_batch_sessions = 5
 minimum_one_minute_warmup_bars = 130
 target_atr = 1.0
 stop_atr = 0.75

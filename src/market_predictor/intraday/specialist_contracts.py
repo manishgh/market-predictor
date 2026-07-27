@@ -221,9 +221,12 @@ class IntradaySpecialistStrategyConfig(FrozenModel):
 
 class IntradaySpecialistResearchConfig(FrozenModel):
     schema_version: str = INTRADAY_SPECIALIST_RESEARCH_SCHEMA
-    required_decision_bundle_schema: str
+    required_technical_manifest_schema: str
     required_price_feed: Literal["sip"] = "sip"
     required_adjustment: Literal["all"] = "all"
+    intraday_finalization_delay_seconds: Literal[30] = 30
+    entry_latency_minutes: Literal[1] = 1
+    cross_section_batch_sessions: Literal[5] = 5
     minimum_one_minute_warmup_bars: int = Field(ge=20, le=10_000)
     target_atr: float = Field(gt=0, le=10)
     stop_atr: float = Field(gt=0, le=10)
@@ -280,6 +283,13 @@ class IntradaySpecialistResearchConfig(FrozenModel):
             )
         if self.memory_guard_headroom_gib >= self.maximum_process_memory_gib:
             raise ValueError("memory guard headroom must be below the hard limit")
+        if (
+            self.intraday_finalization_delay_seconds
+            >= self.entry_latency_minutes * 60
+        ):
+            raise ValueError(
+                "entry latency must exceed the intraday finalization delay"
+            )
         if tuple(self.strategies) != INTRADAY_SPECIALIST_IDS:
             raise ValueError("KS4 strategy order and identity must match the catalog")
         if (

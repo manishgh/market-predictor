@@ -19,6 +19,9 @@ from market_predictor.azure_store import AzureBlobStore
 from market_predictor.canonical.contracts import SourceCollection
 from market_predictor.commands.canonical_data import register_canonical_data_commands
 from market_predictor.commands.intraday_model import register_intraday_model_commands
+from market_predictor.commands.intraday_specialists import (
+    register_intraday_specialist_commands,
+)
 from market_predictor.commands.ranking import register_ranking_commands
 from market_predictor.commands.strategy_governance import (
     register_strategy_governance_commands,
@@ -81,6 +84,7 @@ register_swing_model_commands(app, console)
 register_swing_collection_commands(app, console)
 register_swing_research_commands(app, console)
 register_intraday_model_commands(app, console)
+register_intraday_specialist_commands(app, console)
 register_v3_data_commands(app, console)
 register_v3_feature_commands(app, console)
 register_v3_evaluation_commands(app, console)

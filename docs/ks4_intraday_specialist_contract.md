@@ -35,9 +35,13 @@ frozen in `configs/intraday_specialist_research.toml`.
 ## Data Contract
 
 The immutable two-year S&P five-minute SIP corpus and its point-in-time
-membership are the decision-feature source. KS4 projects only predecision
-columns from the monthly V3 feature artifacts. Existing future labels and
-outcome columns are prohibited inputs and are independently poison-tested.
+membership are the decision-feature source. KS4 consumes every regular-session
+row from the retained monthly V3 technical shards, repairs the fixed six-bar
+09:30-10:00 opening range, and recomputes exact market, sector, breadth, regime,
+and cross-sectional features before applying setup rules. The old V3 monthly
+label bundle is reference-only: its rotating hourly sampling and future-label
+truncation make it ineligible as a KS4 setup population. Existing future labels
+and outcome columns are prohibited inputs and are independently poison-tested.
 
 The existing local one-minute archive is not eligible because its schema does
 not declare `price_feed`. KS4 must collect a new selective Alpaca SIP archive
@@ -57,9 +61,14 @@ session failure is isolated and cannot corrupt completed peers.
 
 ## Decision And Label Semantics
 
-- A five-minute feature is usable only after its completed bar is available.
-- Entry is the exact next tradable one-minute bar beginning at the synchronized
-  decision cutoff.
+- A five-minute feature is usable only after its completed bar plus the frozen
+  30-second provider-finalization delay.
+- The source V3 timestamp is a bar-start timestamp. KS4 corrects the signal
+  cutoff to `bar_start + 5 minutes`, sets feature availability to another
+  30 seconds later, and enters at the next whole-minute boundary. It never uses
+  the legacy V3 `decision_time_utc` as an entry timestamp.
+- Entry is the exact one-minute bar beginning one minute after the completed
+  five-minute bar boundary.
 - A 60-minute strategy requires 60 consecutive in-session one-minute bars; a
   30-minute strategy requires 30.
 - Target is `1.0 * entry ATR`; stop is `0.75 * entry ATR`.
@@ -71,6 +80,12 @@ session failure is isolated and cannot corrupt completed peers.
 - Costs are applied exactly once and never below 10 bps round trip.
 - The content-addressed execution policy supplies conservative price,
   volatility, liquidity, and stress costs.
+
+The 130-bar one-minute warm-up includes only bars whose interval and frozen
+30-second finalization delay are complete by feature availability. The
+one-minute bar immediately preceding entry is therefore excluded. Acquisition
+requirements are split into regular-session segments before merging; an API
+request may never span an overnight, premarket, or after-hours interval.
 
 Historical quote-calibrated spread/impact coefficients are unavailable. This
 does not permit a zero-cost fallback: development uses the conservative bound
@@ -131,9 +146,19 @@ bundles are immutable and content-addressed. Authority is granted only by an
 atomic pointer whose hash matches a complete manifest and exact file set.
 Rejected candidates retain evidence but no loadable model.
 
+Setup extraction and one-minute acquisition planning are separate immutable
+phases. Setup shards are published monthly before any setup is expanded into
+stock and benchmark requirements. The collection-plan bundle binds the setup
+bundle fingerprint and carries an explicit requirement-to-window bridge.
+Neither an incomplete setup directory nor an incomplete collection-plan
+directory has authority.
+
 All heavy entry points acquire the shared workspace lease. Collection, dataset
 construction, and training run sequentially. Each process fails before the
-3.25 GiB safety threshold and never exceeds the 4 GiB hard limit.
+3.25 GiB safety threshold and never exceeds the 4 GiB hard limit. Full-grid
+cross-sectional setup construction is processed in frozen five-session batches
+and setup/request artifacts are published as monthly shards, so two years of
+rows are never retained in memory together.
 
 ## Exit Gates
 
