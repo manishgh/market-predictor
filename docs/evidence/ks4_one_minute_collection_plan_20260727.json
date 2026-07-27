@@ -1,0 +1,53 @@
+{
+  "schema": "market_predictor.ks4_one_minute_plan_evidence.v1",
+  "generated_at_utc": "2026-07-27T14:25:00+00:00",
+  "implementation_commit": "0afa001",
+  "implementation_branch": "r3-lineage",
+  "collection_plan": {
+    "path": "data/features/ks4_intraday_one_minute_plan_20260727",
+    "plan_fingerprint": "285c1f58c80e3f9af3b9328035cedb497b34765b241d7bdf50a593e0af485d0f",
+    "file_count": 72,
+    "one_minute_requirements": 4647813,
+    "merged_collection_windows": 447414,
+    "requirement_window_bridge_rows": 4647813,
+    "required_tickers": 559
+  },
+  "lineage": {
+    "setup_bundle_fingerprint": "99b399364b7efc21f62c469cbf091eb99645b007c81acddbe140d3fb07d8e27b",
+    "setup_manifest_sha256": "35b736aacf134ebb2bb85bbf6f3d2654a9495b83af43562fc5b30ea8f88e9579",
+    "policy_file_sha256": "be326f27d879f45dd167e3caf71c277817e67a7ee22fefa8c650b178e9e134c7",
+    "policy_sha256": "e6b2010cfc1af188626dffa62ea5d1ceb9f1e9890c6f9e3a687dfc8b82907be7"
+  },
+  "semantics": {
+    "price_feed": "sip",
+    "adjustment": "all",
+    "timeframe": "1m",
+    "regular_session_segments_only": true,
+    "causal_finalization_delay_seconds": 30,
+    "minimum_warmup_bars": 130,
+    "explicit_requirement_window_bridge": true
+  },
+  "memory": {
+    "hard_budget_gib": 4.0,
+    "safety_threshold_gib": 3.25,
+    "current_working_set_gib": 0.7154312133789062,
+    "peak_working_set_gib": 1.026092529296875
+  },
+  "verification": {
+    "august_2024_profile": {
+      "setups": 13201,
+      "requirements": 120362,
+      "merged_windows": 13842,
+      "requirement_expansion_seconds": 2.534,
+      "deterministic_merge_seconds": 11.114
+    },
+    "full_tests": 508,
+    "full_tests_passed": true,
+    "ruff_passed": true,
+    "strict_mypy_source_files": 163,
+    "strict_mypy_passed": true,
+    "compileall_passed": true,
+    "diff_check_passed": true,
+    "known_warning": "Starlette TestClient emits the existing httpx deprecation warning."
+  }
+}
