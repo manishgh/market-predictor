@@ -3,11 +3,9 @@
 from __future__ import annotations
 
 import gc
-import importlib.metadata
 import json
 import math
 import os
-import platform
 import shutil
 from collections.abc import Callable, Mapping, Sequence
 from datetime import UTC, datetime
@@ -37,6 +35,9 @@ from market_predictor.swing.specialist_contracts import (
     SPECIALIST_MODEL_SCHEMA,
     SwingSpecialistResearchConfig,
 )
+from market_predictor.swing.specialist_identity import (
+    specialist_implementation_identity,
+)
 from market_predictor.swing.specialist_model import (
     SPECIALIST_ACCEPTED_STATUS,
     SpecialistExperimentResult,
@@ -49,11 +50,22 @@ from market_predictor.swing.specialist_model import (
 from market_predictor.swing.strategy_labels import STRATEGY_IDS
 from market_predictor.v3.errors import DataReadinessError
 
-SPECIALIST_EXPERIMENT_BUNDLE_SCHEMA = "swing.specialist_experiment_bundle.v2"
-SPECIALIST_STRATEGY_MANIFEST_SCHEMA = "swing.specialist_strategy.v2"
-SPECIALIST_CANDIDATE_REQUEST_SCHEMA = "swing.specialist_candidate_request.v2"
-SPECIALIST_CANDIDATE_MANIFEST_SCHEMA = "swing.specialist_candidate.v2"
+SPECIALIST_EXPERIMENT_BUNDLE_SCHEMA = "swing.specialist_experiment_bundle.v3"
+SPECIALIST_STRATEGY_MANIFEST_SCHEMA = "swing.specialist_strategy.v3"
+SPECIALIST_CANDIDATE_REQUEST_SCHEMA = "swing.specialist_candidate_request.v3"
+SPECIALIST_CANDIDATE_MANIFEST_SCHEMA = "swing.specialist_candidate.v3"
 PEAD_STRATEGY_ID = "SWING.POST_EARNINGS_DRIFT.5D.V1"
+_REQUIRED_CANDIDATE_EVIDENCE = frozenset(
+    {
+        "predictions",
+        "economics",
+        "regime_evidence",
+        "capacity_evidence",
+        "fold_audit",
+        "metrics",
+        "request",
+    }
+)
 
 _TRAINING_BASE_COLUMNS = {
     "strategy_id",
@@ -165,13 +177,18 @@ def train_swing_specialist_experiments(
         ),
         "specialist_research_policy_sha256": config.sha256(),
         "specialist_research_policy_file_sha256": file_sha256(policy_path),
-        "implementation": _implementation_identity(),
+        "implementation": specialist_implementation_identity(),
         "strategy_ids": list(STRATEGY_IDS),
     }
     request_sha256 = _json_sha256(request)
     request["request_sha256"] = request_sha256
     out_dir.mkdir(parents=True, exist_ok=True)
     _write_or_validate_json(out_dir / "_request.json", request)
+    _write_bundle_authority(
+        out_dir,
+        state="building",
+        request_sha256=request_sha256,
+    )
 
     selected_strategy_ids = (
         tuple(STRATEGY_IDS)
@@ -235,7 +252,8 @@ def train_swing_specialist_experiments(
         except Exception as exc:
             failures[strategy_id] = f"{type(exc).__name__}: {exc}"
             _write_failure_evidence(
-                out_dir / "strategies" / f"{_slug(strategy_id)}.failure.json",
+                out_dir.with_name(f"{out_dir.name}.failures")
+                / f"{_slug(strategy_id)}.failure.json",
                 scope=strategy_id,
                 request_sha256=request_sha256,
                 exc=exc,
@@ -290,6 +308,20 @@ def train_swing_specialist_experiments(
     )
     if result["status"] == "complete":
         _write_or_validate_json(out_dir / "_manifest.json", result)
+        _validate_complete_bundle_file_set(out_dir)
+        _write_bundle_authority(
+            out_dir,
+            state="complete",
+            request_sha256=request_sha256,
+            artifact_sha256=file_sha256(out_dir / "_manifest.json"),
+        )
+    else:
+        _write_bundle_authority(
+            out_dir,
+            state="incomplete",
+            request_sha256=request_sha256,
+            artifact_sha256=file_sha256(out_dir / "_status.json"),
+        )
     return result
 
 
@@ -370,8 +402,9 @@ def _run_strategy_experiments(
         except Exception as exc:
             failures[spec.candidate_id] = f"{type(exc).__name__}: {exc}"
             _write_failure_evidence(
-                out_dir
-                / "failures"
+                out_dir.parents[1].with_name(
+                    f"{out_dir.parents[1].name}.failures"
+                )
                 / f"{_slug(spec.candidate_id)}.failure.json",
                 scope=f"{plan.strategy_id}:{spec.candidate_id}",
                 request_sha256=str(candidate_request["request_sha256"]),
@@ -421,6 +454,7 @@ def _run_strategy_experiments(
     _atomic_json(out_dir / "_status.json", record)
     if status == "complete":
         _write_or_validate_json(out_dir / "_manifest.json", record)
+        _validate_strategy_file_set(out_dir, record)
     if failures:
         raise DataReadinessError(
             f"{plan.strategy_id} candidate matrix is incomplete"
@@ -596,6 +630,7 @@ def _load_existing_candidate(
     loaded = _load_json(manifest_path)
     if (
         loaded.get("schema") != SPECIALIST_CANDIDATE_MANIFEST_SCHEMA
+        or loaded.get("evidence_schema") != SPECIALIST_EVIDENCE_SCHEMA
         or loaded.get("request_sha256") != expected_request_sha256
         or loaded.get("status")
         not in {SPECIALIST_ACCEPTED_STATUS, "rejected"}
@@ -607,6 +642,14 @@ def _load_existing_candidate(
     if not isinstance(files, dict) or not files:
         raise DataReadinessError(
             f"existing candidate has no evidence files: {manifest_path}"
+        )
+    status = str(loaded["status"])
+    expected_evidence = set(_REQUIRED_CANDIDATE_EVIDENCE)
+    if status == SPECIALIST_ACCEPTED_STATUS:
+        expected_evidence.add("model")
+    if set(files) != expected_evidence:
+        raise DataReadinessError(
+            f"candidate evidence contract mismatch: {manifest_path}"
         )
     request_path = out_dir / "_request.json"
     request = _load_json(request_path)
@@ -725,6 +768,7 @@ def _load_existing_strategy(
         raise DataReadinessError(
             f"immutable strategy manifest mismatch: {manifest_path}"
         )
+    _validate_strategy_file_set(out_dir, expected)
     return expected
 
 
@@ -870,6 +914,83 @@ def _completed_strategy_records(
     return list(by_strategy.values())
 
 
+def _validate_complete_bundle_file_set(out_dir: Path) -> None:
+    expected_files = {
+        "_authority.json",
+        "_manifest.json",
+        "_request.json",
+        "_status.json",
+    }
+    observed_files = {
+        path.name for path in out_dir.iterdir() if path.is_file()
+    }
+    observed_dirs = {
+        path.name for path in out_dir.iterdir() if path.is_dir()
+    }
+    if observed_files != expected_files or observed_dirs != {"strategies"}:
+        raise DataReadinessError(
+            f"specialist bundle file set mismatch: {out_dir}"
+        )
+
+
+def _validate_strategy_file_set(
+    out_dir: Path,
+    record: Mapping[str, object],
+) -> None:
+    observed_files = {
+        path.name for path in out_dir.iterdir() if path.is_file()
+    }
+    observed_dirs = {
+        path.name for path in out_dir.iterdir() if path.is_dir()
+    }
+    if observed_files != {"_manifest.json", "_status.json"} or (
+        observed_dirs != {"candidates"}
+    ):
+        raise DataReadinessError(
+            f"specialist strategy file set mismatch: {out_dir}"
+        )
+    expected_candidates = {
+        _slug(str(candidate["candidate_id"]))
+        for candidate in _mapping_list(record.get("candidates", []))
+    }
+    observed_candidates = {
+        path.name
+        for path in (out_dir / "candidates").iterdir()
+        if path.is_dir()
+    }
+    candidate_files = {
+        path.name
+        for path in (out_dir / "candidates").iterdir()
+        if path.is_file()
+    }
+    if observed_candidates != expected_candidates or candidate_files:
+        raise DataReadinessError(
+            f"specialist strategy candidate set mismatch: {out_dir}"
+        )
+
+
+def _write_bundle_authority(
+    out_dir: Path,
+    *,
+    state: str,
+    request_sha256: str,
+    artifact_sha256: str | None = None,
+) -> None:
+    if state not in {"building", "incomplete", "complete"}:
+        raise ValueError(f"invalid bundle authority state: {state}")
+    payload: dict[str, object] = {
+        "schema": "swing.specialist_bundle_authority.v1",
+        "state": state,
+        "request_sha256": request_sha256,
+        "artifact": (
+            "_manifest.json" if state == "complete" else "_status.json"
+        ),
+        "artifact_sha256": artifact_sha256,
+        "updated_at_utc": datetime.now(UTC).isoformat(),
+    }
+    _atomic_json(out_dir / "_authority.json", payload)
+
+
 def _candidate_file_record(path: Path, *, root: Path) -> dict[str, object]:
     relative = path.relative_to(root).as_posix()
     record: dict[str, object] = {
@@ -884,39 +1005,6 @@ def _candidate_file_record(path: Path, *, root: Path) -> dict[str, object]:
             {"arrow_schema": str(schema)}
         )
     return record
-
-
-def _implementation_identity() -> dict[str, object]:
-    module_dir = Path(__file__).resolve().parent
-    source_paths = (
-        module_dir / "specialist_experiments.py",
-        module_dir / "specialist_model.py",
-        module_dir / "specialist_dataset.py",
-        module_dir / "specialist_contracts.py",
-        module_dir / "evaluation.py",
-    )
-    source_sha256 = {
-        path.name: file_sha256(path) for path in source_paths
-    }
-    runtime_versions = {
-        package: importlib.metadata.version(package)
-        for package in (
-            "joblib",
-            "numpy",
-            "pandas",
-            "pyarrow",
-            "scikit-learn",
-            "xgboost",
-        )
-    }
-    identity: dict[str, object] = {
-        "python_implementation": platform.python_implementation(),
-        "python_version": platform.python_version(),
-        "runtime_versions": runtime_versions,
-        "source_sha256": source_sha256,
-    }
-    identity["implementation_sha256"] = _json_sha256(identity)
-    return identity
 
 
 def _write_failure_evidence(

@@ -10,6 +10,8 @@ The frozen policy is
 [`configs/swing_specialist_research.toml`](../configs/swing_specialist_research.toml).
 The policy, source manifests, selected columns, folds, ticker holdout, candidate
 artifacts, row-level predictions, and economic audits are content-addressed.
+Requests also bind the complete executable source closure, Python and package
+versions, `pyproject.toml`, and every applicable dependency lock file.
 
 ## Immutable Inputs
 
@@ -129,6 +131,11 @@ Every candidate retains row-level temporal and unseen-ticker predictions plus:
 - feature-profile ablations;
 - explicit accepted-development, rejected, failed, or data-blocked status.
 
+Candidate resume requires the exact request, metrics, predictions, economics,
+fold, regime, and capacity evidence set. Rejected candidates must contain no
+model file. All paths are bundle-relative and every hash, byte count, Parquet
+schema, and directory file set is verified.
+
 Acceptance requires both validation scopes to pass every frozen economic gate,
 including non-negative 95% confidence lower bounds for net and SPY-relative
 returns. Risk-on, neutral, and risk-off evidence must each meet the frozen
@@ -150,3 +157,10 @@ KS3 stops or isolates the affected strategy when:
 
 One strategy failure is recorded independently and does not corrupt another
 strategy's artifacts. Heavy builds and training remain sequential.
+
+`_authority.json` is the atomic bundle trust pointer. A manifest is
+authoritative only when the pointer state is `complete`, its request identity
+matches, and its recorded manifest hash verifies. Starting any invocation moves
+the pointer out of `complete`; a failed or partial invocation cannot leave an
+older complete manifest authoritative. Failed-attempt evidence is quarantined
+outside the immutable bundle directory.

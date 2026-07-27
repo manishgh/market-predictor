@@ -13,6 +13,9 @@ from market_predictor.swing.evaluation import phase_economics
 from market_predictor.swing.specialist_contracts import (
     load_swing_specialist_research_config,
 )
+from market_predictor.swing.specialist_identity import (
+    specialist_implementation_identity,
+)
 from market_predictor.swing.specialist_model import (
     SPECIALIST_ACCEPTED_STATUS,
     build_specialist_split_plan,
@@ -363,16 +366,88 @@ class SwingSpecialistModelTests(unittest.TestCase):
                         request["request_sha256"]
                     ),
                 )
+            (out_dir / "model.joblib").unlink()
+            manifest = specialist_experiments._load_json(
+                out_dir / "_manifest.json"
+            )
+            files = manifest["files"]
+            assert isinstance(files, dict)
+            files.pop("metrics")
+            specialist_experiments._atomic_json(
+                out_dir / "_manifest.json",
+                manifest,
+            )
+            with self.assertRaisesRegex(
+                DataReadinessError,
+                "evidence contract mismatch",
+            ):
+                specialist_experiments._load_existing_candidate(
+                    out_dir,
+                    expected_request_sha256=str(
+                        request["request_sha256"]
+                    ),
+                )
 
     def test_implementation_identity_binds_sources_and_runtime(self) -> None:
-        identity = specialist_experiments._implementation_identity()
+        identity = specialist_implementation_identity()
 
         self.assertEqual(len(str(identity["implementation_sha256"])), 64)
         self.assertIn(
-            "specialist_model.py",
+            "src/market_predictor/swing/specialist_model.py",
             identity["source_sha256"],
         )
         self.assertIn("scikit-learn", identity["runtime_versions"])
+        self.assertIn(
+            "requirements/training.lock",
+            identity["dependency_manifest_sha256"],
+        )
+
+    def test_authority_pointer_invalidates_prior_complete_state(self) -> None:
+        with TemporaryDirectory() as directory:
+            out_dir = Path(directory)
+            specialist_experiments._write_bundle_authority(
+                out_dir,
+                state="complete",
+                request_sha256="a" * 64,
+                artifact_sha256="b" * 64,
+            )
+            specialist_experiments._write_bundle_authority(
+                out_dir,
+                state="incomplete",
+                request_sha256="a" * 64,
+                artifact_sha256="c" * 64,
+            )
+
+            authority = specialist_experiments._load_json(
+                out_dir / "_authority.json"
+            )
+            self.assertEqual(authority["state"], "incomplete")
+            self.assertEqual(authority["artifact"], "_status.json")
+            self.assertEqual(authority["artifact_sha256"], "c" * 64)
+
+    def test_complete_bundle_rejects_unexpected_root_file(self) -> None:
+        with TemporaryDirectory() as directory:
+            out_dir = Path(directory)
+            (out_dir / "strategies").mkdir()
+            for name in (
+                "_authority.json",
+                "_manifest.json",
+                "_request.json",
+                "_status.json",
+            ):
+                (out_dir / name).write_text("{}", encoding="utf-8")
+            specialist_experiments._validate_complete_bundle_file_set(
+                out_dir
+            )
+            (out_dir / "unexpected.bin").write_bytes(b"unexpected")
+
+            with self.assertRaisesRegex(
+                DataReadinessError,
+                "bundle file set mismatch",
+            ):
+                specialist_experiments._validate_complete_bundle_file_set(
+                    out_dir
+                )
 
 
 def _dataset() -> pd.DataFrame:

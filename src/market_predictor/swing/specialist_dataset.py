@@ -45,6 +45,9 @@ from market_predictor.swing.specialist_contracts import (
     SPECIALIST_DATASET_SCHEMA,
     SwingSpecialistResearchConfig,
 )
+from market_predictor.swing.specialist_identity import (
+    specialist_implementation_identity,
+)
 from market_predictor.swing.strategy_labels import (
     STRATEGY_IDS,
     SwingStrategyLabelPolicy,
@@ -525,7 +528,7 @@ def build_swing_specialist_dataset_bundle(
 ) -> dict[str, object]:
     request = {
         "schema": SPECIALIST_DATASET_BUNDLE_SCHEMA,
-        "implementation_sha256": file_sha256(Path(__file__).resolve()),
+        "implementation": specialist_implementation_identity(),
         "dataset_config_sha256": dataset_config.label_config_sha256(),
         "strategy_label_policy_sha256": strategy_policy.sha256(),
         "specialist_research_policy_sha256": research_config.sha256(),
@@ -535,6 +538,11 @@ def build_swing_specialist_dataset_bundle(
     request["request_sha256"] = request_sha256
     out_dir.mkdir(parents=True, exist_ok=True)
     _write_or_validate_json(out_dir / "_request.json", request)
+    _write_dataset_authority(
+        out_dir,
+        state="building",
+        request_sha256=request_sha256,
+    )
     strategy_dir = out_dir / "strategies"
     strategy_dir.mkdir(parents=True, exist_ok=True)
     records: list[dict[str, object]] = []
@@ -675,8 +683,29 @@ def build_swing_specialist_dataset_bundle(
                 raise DataReadinessError(
                     f"immutable dataset manifest mismatch: {manifest_path}"
                 )
+            _validate_dataset_bundle_files(out_dir, loaded)
+            _write_dataset_authority(
+                out_dir,
+                state="complete",
+                request_sha256=request_sha256,
+                artifact_sha256=file_sha256(manifest_path),
+            )
             return loaded
         _atomic_json(manifest_path, result)
+        _validate_dataset_bundle_files(out_dir, result)
+        _write_dataset_authority(
+            out_dir,
+            state="complete",
+            request_sha256=request_sha256,
+            artifact_sha256=file_sha256(manifest_path),
+        )
+    else:
+        _write_dataset_authority(
+            out_dir,
+            state="incomplete",
+            request_sha256=request_sha256,
+            artifact_sha256=file_sha256(out_dir / "_status.json"),
+        )
     return result
 
 
@@ -1146,6 +1175,73 @@ def _json_sha256(payload: Mapping[str, object]) -> str:
         separators=(",", ":"),
     ).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
+
+
+def _validate_dataset_bundle_files(
+    out_dir: Path,
+    manifest: Mapping[str, object],
+) -> None:
+    artifacts = manifest.get("artifacts")
+    if not isinstance(artifacts, list):
+        raise DataReadinessError("dataset bundle has no artifact records")
+    expected = {
+        "_authority.json",
+        "_manifest.json",
+        "_request.json",
+        "_status.json",
+    }
+    for raw in artifacts:
+        if not isinstance(raw, dict):
+            raise DataReadinessError("invalid dataset artifact record")
+        relative = Path(str(raw.get("path", "")))
+        if (
+            relative.is_absolute()
+            or ".." in relative.parts
+            or relative.parts[:1] != ("strategies",)
+        ):
+            raise DataReadinessError(
+                f"dataset artifact path is not bundle-relative: {relative}"
+            )
+        expected.update(
+            {
+                relative.as_posix(),
+                f"{relative.as_posix()}.lock",
+                f"{relative.as_posix()}.manifest.json",
+            }
+        )
+    observed = {
+        path.relative_to(out_dir).as_posix()
+        for path in out_dir.rglob("*")
+        if path.is_file()
+    }
+    if observed != expected:
+        raise DataReadinessError(
+            f"specialist dataset bundle file set mismatch: {out_dir}"
+        )
+
+
+def _write_dataset_authority(
+    out_dir: Path,
+    *,
+    state: str,
+    request_sha256: str,
+    artifact_sha256: str | None = None,
+) -> None:
+    if state not in {"building", "incomplete", "complete"}:
+        raise ValueError(f"invalid dataset authority state: {state}")
+    _atomic_json(
+        out_dir / "_authority.json",
+        {
+            "schema": "swing.specialist_dataset_authority.v1",
+            "state": state,
+            "request_sha256": request_sha256,
+            "artifact": (
+                "_manifest.json" if state == "complete" else "_status.json"
+            ),
+            "artifact_sha256": artifact_sha256,
+            "updated_at_utc": datetime.now(UTC).isoformat(),
+        },
+    )
 
 
 def _write_or_validate_json(

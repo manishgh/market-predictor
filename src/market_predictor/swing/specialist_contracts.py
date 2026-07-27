@@ -13,11 +13,11 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from market_predictor.swing.strategy_labels import STRATEGY_IDS
 from market_predictor.v3.errors import DataReadinessError
 
-SPECIALIST_RESEARCH_SCHEMA = "swing.specialist_research.v2"
-SPECIALIST_DATASET_SCHEMA = "swing.specialist_dataset.v2"
-SPECIALIST_DATASET_BUNDLE_SCHEMA = "swing.specialist_dataset_bundle.v2"
-SPECIALIST_MODEL_SCHEMA = "swing.specialist_model.v2"
-SPECIALIST_EVIDENCE_SCHEMA = "swing.specialist_evidence.v2"
+SPECIALIST_RESEARCH_SCHEMA = "swing.specialist_research.v3"
+SPECIALIST_DATASET_SCHEMA = "swing.specialist_dataset.v3"
+SPECIALIST_DATASET_BUNDLE_SCHEMA = "swing.specialist_dataset_bundle.v3"
+SPECIALIST_MODEL_SCHEMA = "swing.specialist_model.v3"
+SPECIALIST_EVIDENCE_SCHEMA = "swing.specialist_evidence.v3"
 
 FeatureProfile = Literal[
     "technical_only",

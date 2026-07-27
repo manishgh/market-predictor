@@ -127,6 +127,9 @@ class SwingSpecialistDatasetTests(unittest.TestCase):
             patch(
                 "market_predictor.swing.specialist_dataset.assert_peak_memory_budget"
             ),
+            patch(
+                "market_predictor.swing.specialist_dataset._validate_dataset_bundle_files"
+            ),
         ):
             result = build_swing_specialist_dataset_bundle(
                 pd.DataFrame(),

@@ -1,4 +1,4 @@
-schema_version = "swing.specialist_research.v2"
+schema_version = "swing.specialist_research.v3"
 n_splits = 4
 min_train_sessions = 120
 min_train_rows = 400
