@@ -3,18 +3,22 @@
 from __future__ import annotations
 
 import gc
+import importlib.metadata
 import json
 import math
 import os
+import platform
+import shutil
 from collections.abc import Callable, Mapping, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 from uuid import uuid4
 
 import joblib
 import numpy as np
 import pandas as pd
+import pyarrow.parquet as pq
 
 from market_predictor.canonical.store import (
     canonical_artifact_columns,
@@ -45,9 +49,11 @@ from market_predictor.swing.specialist_model import (
 from market_predictor.swing.strategy_labels import STRATEGY_IDS
 from market_predictor.v3.errors import DataReadinessError
 
-SPECIALIST_EXPERIMENT_BUNDLE_SCHEMA = "swing.specialist_experiment_bundle.v1"
-SPECIALIST_CANDIDATE_MANIFEST_SCHEMA = "swing.specialist_candidate.v1"
-PEAD_STRATEGY_ID = "SWING.POST_EARNINGS_ANNOUNCEMENT_DRIFT.5D.V1"
+SPECIALIST_EXPERIMENT_BUNDLE_SCHEMA = "swing.specialist_experiment_bundle.v2"
+SPECIALIST_STRATEGY_MANIFEST_SCHEMA = "swing.specialist_strategy.v2"
+SPECIALIST_CANDIDATE_REQUEST_SCHEMA = "swing.specialist_candidate_request.v2"
+SPECIALIST_CANDIDATE_MANIFEST_SCHEMA = "swing.specialist_candidate.v2"
+PEAD_STRATEGY_ID = "SWING.POST_EARNINGS_DRIFT.5D.V1"
 
 _TRAINING_BASE_COLUMNS = {
     "strategy_id",
@@ -153,13 +159,13 @@ def train_swing_specialist_experiments(
         )
     request = {
         "schema": SPECIALIST_EXPERIMENT_BUNDLE_SCHEMA,
-        "dataset_manifest_path": str(dataset_manifest_path.resolve()),
         "dataset_manifest_sha256": file_sha256(dataset_manifest_path),
         "dataset_request_sha256": str(
             dataset_manifest["request_sha256"]
         ),
         "specialist_research_policy_sha256": config.sha256(),
         "specialist_research_policy_file_sha256": file_sha256(policy_path),
+        "implementation": _implementation_identity(),
         "strategy_ids": list(STRATEGY_IDS),
     }
     request_sha256 = _json_sha256(request)
@@ -183,7 +189,18 @@ def train_swing_specialist_experiments(
     stop_for_memory = False
     for strategy_id in selected_strategy_ids:
         strategy_record = artifacts[strategy_id]
-        path = Path(str(strategy_record["path"]))
+        relative_path = Path(str(strategy_record["path"]))
+        if relative_path.is_absolute() or ".." in relative_path.parts:
+            raise DataReadinessError(
+                f"{strategy_id} dataset path is not bundle-relative"
+            )
+        path = (dataset_dir / relative_path).resolve()
+        try:
+            path.relative_to(dataset_dir.resolve())
+        except ValueError as exc:
+            raise DataReadinessError(
+                f"{strategy_id} dataset path escapes bundle"
+            ) from exc
         expected_sha256 = str(strategy_record["sha256"])
         dataset: pd.DataFrame | None = None
         try:
@@ -215,14 +232,14 @@ def train_swing_specialist_experiments(
                 progress=progress,
             )
             records.append(strategy_result)
-        except (
-            DataReadinessError,
-            FileNotFoundError,
-            ImportError,
-            OSError,
-            ValueError,
-        ) as exc:
+        except Exception as exc:
             failures[strategy_id] = f"{type(exc).__name__}: {exc}"
+            _write_failure_evidence(
+                out_dir / "strategies" / f"{_slug(strategy_id)}.failure.json",
+                scope=strategy_id,
+                request_sha256=request_sha256,
+                exc=exc,
+            )
             if progress is not None:
                 progress(
                     {
@@ -250,7 +267,6 @@ def train_swing_specialist_experiments(
                 records=records,
                 failures=failures,
                 config=config,
-                complete=False,
                 requested_strategies=selected_strategy_ids,
             )
         if stop_for_memory:
@@ -264,22 +280,16 @@ def train_swing_specialist_experiments(
         )
     except DataReadinessError as exc:
         failures["memory_budget"] = str(exc)
-    status = (
-        "complete"
-        if not failures and len(records) == len(STRATEGY_IDS)
-        else "incomplete"
-    )
     result = _write_experiment_status(
         out_dir,
         request_sha256=request_sha256,
         records=records,
         failures=failures,
         config=config,
-        complete=status == "complete",
         requested_strategies=selected_strategy_ids,
     )
-    if status == "complete":
-        _atomic_json(out_dir / "_manifest.json", result)
+    if result["status"] == "complete":
+        _write_or_validate_json(out_dir / "_manifest.json", result)
     return result
 
 
@@ -293,6 +303,15 @@ def _run_strategy_experiments(
     progress: Callable[[object], None] | None,
 ) -> dict[str, object]:
     out_dir.mkdir(parents=True, exist_ok=True)
+    existing_strategy = _load_existing_strategy(
+        out_dir,
+        plan=plan,
+        dataset_sha256=dataset_sha256,
+        request_sha256=request_sha256,
+        config=config,
+    )
+    if existing_strategy is not None:
+        return existing_strategy
     candidate_records: list[dict[str, object]] = []
     failures: dict[str, str] = {}
     stop_for_memory = False
@@ -348,14 +367,16 @@ def _run_strategy_experiments(
                     }
                 )
             del result
-        except (
-            DataReadinessError,
-            FileNotFoundError,
-            ImportError,
-            OSError,
-            ValueError,
-        ) as exc:
+        except Exception as exc:
             failures[spec.candidate_id] = f"{type(exc).__name__}: {exc}"
+            _write_failure_evidence(
+                out_dir
+                / "failures"
+                / f"{_slug(spec.candidate_id)}.failure.json",
+                scope=f"{plan.strategy_id}:{spec.candidate_id}",
+                request_sha256=str(candidate_request["request_sha256"]),
+                exc=exc,
+            )
             if progress is not None:
                 progress(
                     {
@@ -389,29 +410,17 @@ def _run_strategy_experiments(
         == len(specialist_experiment_specs(plan.strategy_id, config))
         else "incomplete"
     )
-    record: dict[str, object] = {
-        "strategy_id": plan.strategy_id,
-        "status": status,
-        "dataset_sha256": dataset_sha256,
-        "split_sha256": plan.split_sha256,
-        "candidate_count": len(candidate_records),
-        "accepted_development_count": sum(
-            str(candidate["status"]) == SPECIALIST_ACCEPTED_STATUS
-            for candidate in candidate_records
-        ),
-        "rejected_count": sum(
-            str(candidate["status"]) == "rejected"
-            for candidate in candidate_records
-        ),
-        "failed_candidates": failures,
-        "candidates": sorted(
-            candidate_records,
-            key=lambda candidate: str(candidate["candidate_id"]),
-        ),
-    }
+    record = _strategy_record(
+        plan=plan,
+        dataset_sha256=dataset_sha256,
+        request_sha256=request_sha256,
+        candidate_records=candidate_records,
+        failures=failures,
+        status=status,
+    )
     _atomic_json(out_dir / "_status.json", record)
     if status == "complete":
-        _atomic_json(out_dir / "_manifest.json", record)
+        _write_or_validate_json(out_dir / "_manifest.json", record)
     if failures:
         raise DataReadinessError(
             f"{plan.strategy_id} candidate matrix is incomplete"
@@ -428,7 +437,7 @@ def _candidate_request(
     config: SwingSpecialistResearchConfig,
 ) -> dict[str, object]:
     request: dict[str, object] = {
-        "schema": SPECIALIST_CANDIDATE_MANIFEST_SCHEMA,
+        "schema": SPECIALIST_CANDIDATE_REQUEST_SCHEMA,
         "strategy_id": spec.strategy_id,
         "candidate_id": spec.candidate_id,
         "estimator_family": spec.estimator_family,
@@ -453,8 +462,55 @@ def _write_candidate_evidence(
     dataset_sha256: str,
     config: SwingSpecialistResearchConfig,
 ) -> dict[str, object]:
-    out_dir.mkdir(parents=True, exist_ok=True)
-    _write_or_validate_json(out_dir / "_request.json", request)
+    if out_dir.exists():
+        raise DataReadinessError(
+            f"candidate output already exists without valid manifest: {out_dir}"
+        )
+    temporary_dir = out_dir.with_name(
+        f".{out_dir.name}.{uuid4().hex}.tmp"
+    )
+    temporary_dir.mkdir(parents=True, exist_ok=False)
+    try:
+        record = _write_candidate_evidence_directory(
+            temporary_dir,
+            result=result,
+            request=request,
+            dataset_sha256=dataset_sha256,
+            config=config,
+        )
+        os.replace(temporary_dir, out_dir)
+    finally:
+        if temporary_dir.exists():
+            shutil.rmtree(temporary_dir)
+    manifest_path = out_dir / "_manifest.json"
+    return {
+        "strategy_id": result.spec.strategy_id,
+        "candidate_id": result.spec.candidate_id,
+        "status": result.status,
+        "request_sha256": str(request["request_sha256"]),
+        "manifest_path": (
+            Path("candidates") / out_dir.name / "_manifest.json"
+        ).as_posix(),
+        "manifest_sha256": file_sha256(manifest_path),
+        "prediction_rows": len(result.predictions),
+        "rejection_reasons": list(result.rejection_reasons),
+        "peak_working_set_gib": float(
+            _object_float(
+                _mapping(record["memory"])["peak_working_set_gib"]
+            )
+        ),
+    }
+
+
+def _write_candidate_evidence_directory(
+    out_dir: Path,
+    *,
+    result: SpecialistExperimentResult,
+    request: Mapping[str, object],
+    dataset_sha256: str,
+    config: SwingSpecialistResearchConfig,
+) -> dict[str, object]:
+    _atomic_json(out_dir / "_request.json", request)
     evidence_paths = {
         "predictions": out_dir / "predictions.parquet",
         "economics": out_dir / "economics.parquet",
@@ -495,20 +551,18 @@ def _write_candidate_evidence(
             "status": result.status,
         }
         _atomic_joblib(model_path, payload)
+    elif (out_dir / "model.joblib").exists():
+        raise DataReadinessError("rejected candidate contains a model artifact")
     files = {
-        name: {
-            "path": str(path.resolve()),
-            "sha256": file_sha256(path),
-            "bytes": path.stat().st_size,
-        }
+        name: _candidate_file_record(path, root=out_dir)
         for name, path in evidence_paths.items()
     }
+    files["request"] = _candidate_file_record(
+        out_dir / "_request.json",
+        root=out_dir,
+    )
     if model_path is not None:
-        files["model"] = {
-            "path": str(model_path.resolve()),
-            "sha256": file_sha256(model_path),
-            "bytes": model_path.stat().st_size,
-        }
+        files["model"] = _candidate_file_record(model_path, root=out_dir)
     manifest: dict[str, object] = {
         "schema": SPECIALIST_CANDIDATE_MANIFEST_SCHEMA,
         "evidence_schema": SPECIALIST_EVIDENCE_SCHEMA,
@@ -525,21 +579,10 @@ def _write_candidate_evidence(
             hard_budget_gib=config.maximum_process_memory_gib,
             headroom_gib=config.memory_guard_headroom_gib,
         ).to_record(),
-        "created_at_utc": datetime.now(UTC).isoformat(),
         "production_ready": False,
     }
     _atomic_json(out_dir / "_manifest.json", manifest)
-    return {
-        "strategy_id": result.spec.strategy_id,
-        "candidate_id": result.spec.candidate_id,
-        "status": result.status,
-        "request_sha256": str(request["request_sha256"]),
-        "manifest_path": str((out_dir / "_manifest.json").resolve()),
-        "manifest_sha256": file_sha256(out_dir / "_manifest.json"),
-        "prediction_rows": len(result.predictions),
-        "rejection_reasons": list(result.rejection_reasons),
-        "resumed": False,
-    }
+    return manifest
 
 
 def _load_existing_candidate(
@@ -565,28 +608,156 @@ def _load_existing_candidate(
         raise DataReadinessError(
             f"existing candidate has no evidence files: {manifest_path}"
         )
+    request_path = out_dir / "_request.json"
+    request = _load_json(request_path)
+    if (
+        request.get("schema") != SPECIALIST_CANDIDATE_REQUEST_SCHEMA
+        or request.get("request_sha256") != expected_request_sha256
+    ):
+        raise DataReadinessError(
+            f"candidate request identity mismatch: {request_path}"
+        )
+    expected_names = {"_manifest.json"}
     for raw in files.values():
         if not isinstance(raw, dict):
             raise DataReadinessError("invalid candidate file record")
-        path = Path(str(raw.get("path", "")))
+        relative = Path(str(raw.get("path", "")))
+        if relative.is_absolute() or ".." in relative.parts:
+            raise DataReadinessError("candidate evidence path is not relative")
+        path = (out_dir / relative).resolve()
+        try:
+            path.relative_to(out_dir.resolve())
+        except ValueError as exc:
+            raise DataReadinessError(
+                f"candidate evidence escapes bundle: {relative}"
+            ) from exc
         if not path.is_file() or file_sha256(path) != str(
             raw.get("sha256", "")
         ):
             raise DataReadinessError(
                 f"candidate evidence hash mismatch: {path}"
             )
+        if int(raw.get("bytes", -1)) != path.stat().st_size:
+            raise DataReadinessError(
+                f"candidate evidence size mismatch: {path}"
+            )
+        expected_columns = raw.get("columns")
+        if expected_columns is not None:
+            schema = cast(Any, pq).read_schema(path)
+            if (
+                list(schema.names) != expected_columns
+                or raw.get("arrow_schema_sha256")
+                != _json_sha256({"arrow_schema": str(schema)})
+            ):
+                raise DataReadinessError(
+                    f"candidate evidence schema mismatch: {path}"
+                )
+        expected_names.add(relative.as_posix())
+    observed_names = {
+        path.relative_to(out_dir).as_posix()
+        for path in out_dir.rglob("*")
+        if path.is_file()
+    }
+    if observed_names != expected_names:
+        raise DataReadinessError(
+            f"candidate file set mismatch: {out_dir}"
+        )
     return {
         "strategy_id": str(loaded["strategy_id"]),
         "candidate_id": str(loaded["candidate_id"]),
         "status": str(loaded["status"]),
         "request_sha256": str(loaded["request_sha256"]),
-        "manifest_path": str(manifest_path.resolve()),
+        "manifest_path": (
+            Path("candidates") / out_dir.name / "_manifest.json"
+        ).as_posix(),
         "manifest_sha256": file_sha256(manifest_path),
         "prediction_rows": _object_int(loaded["prediction_rows"]),
         "rejection_reasons": _object_list(
             loaded.get("rejection_reasons", [])
         ),
-        "resumed": True,
+        "peak_working_set_gib": float(
+            _object_float(
+                _mapping(loaded["memory"])["peak_working_set_gib"]
+            )
+        ),
+    }
+
+
+def _load_existing_strategy(
+    out_dir: Path,
+    *,
+    plan: SpecialistSplitPlan,
+    dataset_sha256: str,
+    request_sha256: str,
+    config: SwingSpecialistResearchConfig,
+) -> dict[str, object] | None:
+    manifest_path = out_dir / "_manifest.json"
+    if not manifest_path.exists():
+        return None
+    candidate_records: list[dict[str, object]] = []
+    for spec in specialist_experiment_specs(plan.strategy_id, config):
+        request = _candidate_request(
+            spec,
+            dataset_sha256=dataset_sha256,
+            split_sha256=plan.split_sha256,
+            bundle_request_sha256=request_sha256,
+            config=config,
+        )
+        candidate = _load_existing_candidate(
+            out_dir / "candidates" / _slug(spec.candidate_id),
+            expected_request_sha256=str(request["request_sha256"]),
+        )
+        if candidate is None:
+            raise DataReadinessError(
+                f"completed strategy is missing candidate {spec.candidate_id}"
+            )
+        candidate_records.append(candidate)
+    expected = _strategy_record(
+        plan=plan,
+        dataset_sha256=dataset_sha256,
+        request_sha256=request_sha256,
+        candidate_records=candidate_records,
+        failures={},
+        status="complete",
+    )
+    loaded = _load_json(manifest_path)
+    if loaded != _json_safe(expected):
+        raise DataReadinessError(
+            f"immutable strategy manifest mismatch: {manifest_path}"
+        )
+    return expected
+
+
+def _strategy_record(
+    *,
+    plan: SpecialistSplitPlan,
+    dataset_sha256: str,
+    request_sha256: str,
+    candidate_records: Sequence[Mapping[str, object]],
+    failures: Mapping[str, str],
+    status: str,
+) -> dict[str, object]:
+    return {
+        "schema": SPECIALIST_STRATEGY_MANIFEST_SCHEMA,
+        "bundle_request_sha256": request_sha256,
+        "strategy_id": plan.strategy_id,
+        "status": status,
+        "dataset_sha256": dataset_sha256,
+        "split_sha256": plan.split_sha256,
+        "candidate_count": len(candidate_records),
+        "accepted_development_count": sum(
+            str(candidate["status"]) == SPECIALIST_ACCEPTED_STATUS
+            for candidate in candidate_records
+        ),
+        "rejected_count": sum(
+            str(candidate["status"]) == "rejected"
+            for candidate in candidate_records
+        ),
+        "failed_candidates": dict(failures),
+        "candidates": sorted(
+            [dict(candidate) for candidate in candidate_records],
+            key=lambda candidate: str(candidate["candidate_id"]),
+        ),
     }
 
 
@@ -597,27 +768,37 @@ def _write_experiment_status(
     records: Sequence[Mapping[str, object]],
     failures: Mapping[str, str],
     config: SwingSpecialistResearchConfig,
-    complete: bool,
     requested_strategies: Sequence[str],
 ) -> dict[str, object]:
+    merged_records = _completed_strategy_records(
+        out_dir,
+        request_sha256=request_sha256,
+        current=records,
+    )
+    bundle_complete = not failures and len(merged_records) == len(STRATEGY_IDS)
+    candidate_peaks = [
+        _object_float(candidate.get("peak_working_set_gib", 0.0))
+        for record in merged_records
+        for candidate in _mapping_list(record.get("candidates", []))
+    ]
     result: dict[str, object] = {
         "schema": SPECIALIST_EXPERIMENT_BUNDLE_SCHEMA,
-        "status": "complete" if complete else "incomplete",
+        "status": "complete" if bundle_complete else "incomplete",
         "request_sha256": request_sha256,
-        "requested_strategies": len(requested_strategies),
-        "requested_strategy_ids": list(requested_strategies),
-        "observed_strategies": len(records),
+        "requested_strategies": len(STRATEGY_IDS),
+        "requested_strategy_ids": list(STRATEGY_IDS),
+        "observed_strategies": len(merged_records),
         "accepted_development_candidates": sum(
             _object_int(record.get("accepted_development_count", 0))
-            for record in records
+            for record in merged_records
         ),
         "rejected_candidates": sum(
             _object_int(record.get("rejected_count", 0))
-            for record in records
+            for record in merged_records
         ),
         "failed_strategies": dict(failures),
         "strategies": sorted(
-            [dict(record) for record in records],
+            [dict(record) for record in merged_records],
             key=lambda record: str(record["strategy_id"]),
         ),
         "data_blocked_strategies": {
@@ -626,15 +807,139 @@ def _write_experiment_status(
                 "is unavailable"
             )
         },
-        "memory": memory_audit(
-            hard_budget_gib=config.maximum_process_memory_gib,
-            headroom_gib=config.memory_guard_headroom_gib,
-        ).to_record(),
-        "updated_at_utc": datetime.now(UTC).isoformat(),
+        "memory": {
+            "hard_budget_gib": config.maximum_process_memory_gib,
+            "safety_threshold_gib": (
+                config.maximum_process_memory_gib
+                - config.memory_guard_headroom_gib
+            ),
+            "peak_working_set_gib": max(candidate_peaks, default=0.0),
+        },
         "production_ready": False,
     }
-    _atomic_json(out_dir / "_status.json", result)
+    status_payload = {
+        **result,
+        "invocation_status": (
+            "complete"
+            if not failures
+            and len(records) == len(requested_strategies)
+            else "failed"
+        ),
+        "invocation_strategy_ids": list(requested_strategies),
+        "updated_at_utc": datetime.now(UTC).isoformat(),
+    }
+    _atomic_json(out_dir / "_status.json", status_payload)
     return result
+
+
+def _completed_strategy_records(
+    out_dir: Path,
+    *,
+    request_sha256: str,
+    current: Sequence[Mapping[str, object]],
+) -> list[dict[str, object]]:
+    by_strategy = {
+        str(record["strategy_id"]): dict(record) for record in current
+    }
+    strategies_dir = out_dir / "strategies"
+    if not strategies_dir.exists():
+        return list(by_strategy.values())
+    for path in strategies_dir.glob("*/_manifest.json"):
+        loaded = _load_json(path)
+        if loaded.get("schema") != SPECIALIST_STRATEGY_MANIFEST_SCHEMA:
+            raise DataReadinessError(
+                f"unexpected strategy manifest schema: {path}"
+            )
+        if loaded.get("bundle_request_sha256") != request_sha256:
+            raise DataReadinessError(
+                f"strategy manifest request mismatch: {path}"
+            )
+        strategy_id = str(loaded.get("strategy_id", ""))
+        existing = by_strategy.get(strategy_id)
+        if existing is not None and existing != loaded:
+            raise DataReadinessError(
+                f"strategy status disagrees with manifest: {path}"
+            )
+        by_strategy[strategy_id] = loaded
+    unknown = sorted(set(by_strategy).difference(STRATEGY_IDS))
+    if unknown:
+        raise DataReadinessError(
+            "unexpected completed specialist strategies: "
+            + ", ".join(unknown)
+        )
+    return list(by_strategy.values())
+
+
+def _candidate_file_record(path: Path, *, root: Path) -> dict[str, object]:
+    relative = path.relative_to(root).as_posix()
+    record: dict[str, object] = {
+        "path": relative,
+        "sha256": file_sha256(path),
+        "bytes": path.stat().st_size,
+    }
+    if path.suffix == ".parquet":
+        schema = cast(Any, pq).read_schema(path)
+        record["columns"] = list(schema.names)
+        record["arrow_schema_sha256"] = _json_sha256(
+            {"arrow_schema": str(schema)}
+        )
+    return record
+
+
+def _implementation_identity() -> dict[str, object]:
+    module_dir = Path(__file__).resolve().parent
+    source_paths = (
+        module_dir / "specialist_experiments.py",
+        module_dir / "specialist_model.py",
+        module_dir / "specialist_dataset.py",
+        module_dir / "specialist_contracts.py",
+        module_dir / "evaluation.py",
+    )
+    source_sha256 = {
+        path.name: file_sha256(path) for path in source_paths
+    }
+    runtime_versions = {
+        package: importlib.metadata.version(package)
+        for package in (
+            "joblib",
+            "numpy",
+            "pandas",
+            "pyarrow",
+            "scikit-learn",
+            "xgboost",
+        )
+    }
+    identity: dict[str, object] = {
+        "python_implementation": platform.python_implementation(),
+        "python_version": platform.python_version(),
+        "runtime_versions": runtime_versions,
+        "source_sha256": source_sha256,
+    }
+    identity["implementation_sha256"] = _json_sha256(identity)
+    return identity
+
+
+def _write_failure_evidence(
+    path: Path,
+    *,
+    scope: str,
+    request_sha256: str,
+    exc: Exception,
+) -> None:
+    try:
+        _atomic_json(
+            path,
+            {
+                "schema": "swing.specialist_failure.v2",
+                "scope": scope,
+                "request_sha256": request_sha256,
+                "exception_type": type(exc).__name__,
+                "message": str(exc),
+                "failed_at_utc": datetime.now(UTC).isoformat(),
+            },
+        )
+    except OSError:
+        return
 
 
 def _load_dataset_manifest(path: Path) -> dict[str, object]:
@@ -772,7 +1077,33 @@ def _object_int(value: object) -> int:
         ) from exc
 
 
+def _object_float(value: object) -> float:
+    if isinstance(value, bool) or not isinstance(
+        value,
+        (str, int, float, np.integer, np.floating),
+    ):
+        raise DataReadinessError("expected numeric experiment metadata")
+    try:
+        return float(value)
+    except ValueError as exc:
+        raise DataReadinessError(
+            "expected numeric experiment metadata"
+        ) from exc
+
+
 def _object_list(value: object) -> list[object]:
     if not isinstance(value, list):
         raise DataReadinessError("expected list experiment metadata")
     return value
+
+
+def _mapping(value: object) -> dict[str, object]:
+    if not isinstance(value, dict):
+        raise DataReadinessError("expected object experiment metadata")
+    return {str(key): item for key, item in value.items()}
+
+
+def _mapping_list(value: object) -> list[dict[str, object]]:
+    if not isinstance(value, list):
+        raise DataReadinessError("expected object-list experiment metadata")
+    return [_mapping(item) for item in value]

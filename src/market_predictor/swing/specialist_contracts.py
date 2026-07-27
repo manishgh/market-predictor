@@ -13,11 +13,11 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from market_predictor.swing.strategy_labels import STRATEGY_IDS
 from market_predictor.v3.errors import DataReadinessError
 
-SPECIALIST_RESEARCH_SCHEMA = "swing.specialist_research.v1"
-SPECIALIST_DATASET_SCHEMA = "swing.specialist_dataset.v1"
-SPECIALIST_DATASET_BUNDLE_SCHEMA = "swing.specialist_dataset_bundle.v1"
-SPECIALIST_MODEL_SCHEMA = "swing.specialist_model.v1"
-SPECIALIST_EVIDENCE_SCHEMA = "swing.specialist_evidence.v1"
+SPECIALIST_RESEARCH_SCHEMA = "swing.specialist_research.v2"
+SPECIALIST_DATASET_SCHEMA = "swing.specialist_dataset.v2"
+SPECIALIST_DATASET_BUNDLE_SCHEMA = "swing.specialist_dataset_bundle.v2"
+SPECIALIST_MODEL_SCHEMA = "swing.specialist_model.v2"
+SPECIALIST_EVIDENCE_SCHEMA = "swing.specialist_evidence.v2"
 
 FeatureProfile = Literal[
     "technical_only",
@@ -115,9 +115,15 @@ class SwingSpecialistResearchConfig(FrozenModel):
     minimum_avg_net_return: float
     minimum_avg_excess_return_vs_spy: float
     minimum_avg_excess_return_vs_sector: float
+    minimum_avg_net_return_ci_low: float
+    minimum_avg_excess_return_vs_spy_ci_low: float
     minimum_profit_factor: float = Field(ge=0)
     maximum_drawdown: float = Field(gt=0, le=1)
     maximum_negative_phase_rate: float = Field(ge=0, le=1)
+    required_market_regimes: tuple[str, ...]
+    minimum_regime_selected_trades: int = Field(ge=1)
+    minimum_regime_avg_net_return: float
+    minimum_regime_avg_excess_return_vs_spy: float
     capacity_participation_rate: float = Field(gt=0, le=0.05)
     maximum_process_memory_gib: float = Field(ge=1, le=4)
     memory_guard_headroom_gib: float = Field(ge=0.5, le=2)
@@ -130,6 +136,14 @@ class SwingSpecialistResearchConfig(FrozenModel):
             raise ValueError("unsupported specialist research schema")
         if self.memory_guard_headroom_gib >= self.maximum_process_memory_gib:
             raise ValueError("memory guard headroom must be below the hard budget")
+        if (
+            not self.required_market_regimes
+            or len(set(self.required_market_regimes))
+            != len(self.required_market_regimes)
+        ):
+            raise ValueError(
+                "required market regimes must be non-empty and unique"
+            )
         if set(self.feature_profiles) != set(FEATURE_PROFILES):
             raise ValueError("specialist feature-profile catalog mismatch")
         if set(self.strategies) != set(STRATEGY_IDS):

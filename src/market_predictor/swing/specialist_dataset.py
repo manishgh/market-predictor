@@ -297,6 +297,7 @@ def join_catalyst_aggregates(
     event_features["catalyst_source_complete"] = _coverage_completeness(
         event_features,
         lineage.coverage,
+        lookback=pd.Timedelta(days=3),
     )
     catalyst_columns = event_feature_columns(
         DEFAULT_EVENT_WINDOWS,
@@ -524,6 +525,7 @@ def build_swing_specialist_dataset_bundle(
 ) -> dict[str, object]:
     request = {
         "schema": SPECIALIST_DATASET_BUNDLE_SCHEMA,
+        "implementation_sha256": file_sha256(Path(__file__).resolve()),
         "dataset_config_sha256": dataset_config.label_config_sha256(),
         "strategy_label_policy_sha256": strategy_policy.sha256(),
         "specialist_research_policy_sha256": research_config.sha256(),
@@ -588,7 +590,7 @@ def build_swing_specialist_dataset_bundle(
             )
             record = {
                 **summary,
-                "path": str(target.resolve()),
+                "path": target.relative_to(out_dir).as_posix(),
                 "sha256": str(manifest["artifact_sha256"]),
                 "manifest_sha256": file_sha256(manifest_path_for(target)),
             }
@@ -650,18 +652,39 @@ def build_swing_specialist_dataset_bundle(
             hard_budget_gib=research_config.maximum_process_memory_gib,
             headroom_gib=research_config.memory_guard_headroom_gib,
         ).to_record(),
-        "completed_at_utc": datetime.now(UTC).isoformat(),
         "production_ready": False,
     }
-    _atomic_json(out_dir / "_status.json", result)
+    _atomic_json(
+        out_dir / "_status.json",
+        {
+            **result,
+            "updated_at_utc": datetime.now(UTC).isoformat(),
+        },
+    )
     if status == "complete":
-        _atomic_json(out_dir / "_manifest.json", result)
+        manifest_path = out_dir / "_manifest.json"
+        if manifest_path.exists():
+            loaded = _read_json_object(manifest_path)
+            comparable_loaded = {
+                key: value for key, value in loaded.items() if key != "memory"
+            }
+            comparable_result = {
+                key: value for key, value in result.items() if key != "memory"
+            }
+            if comparable_loaded != comparable_result:
+                raise DataReadinessError(
+                    f"immutable dataset manifest mismatch: {manifest_path}"
+                )
+            return loaded
+        _atomic_json(manifest_path, result)
     return result
 
 
 def _coverage_completeness(
     decisions: pd.DataFrame,
     coverage: pd.DataFrame,
+    *,
+    lookback: pd.Timedelta,
 ) -> pd.Series:
     required = {
         "security_id",
@@ -715,28 +738,48 @@ def _coverage_completeness(
         ].sort_values("requested_start_utc")
         if rows.empty:
             continue
-        starts = pd.DatetimeIndex(rows["requested_start_utc"]).as_unit(
+        raw_starts = pd.DatetimeIndex(
+            rows["requested_start_utc"]
+        ).as_unit("ns").asi8
+        raw_ends = pd.DatetimeIndex(rows["requested_end_utc"]).as_unit(
             "ns"
         ).asi8
-        ends = pd.DatetimeIndex(rows["requested_end_utc"]).as_unit("ns").asi8
-        if len(starts) > 1 and bool((starts[1:] < ends[:-1]).any()):
+        if len(raw_starts) > 1 and bool(
+            (raw_starts[1:] < raw_ends[:-1]).any()
+        ):
             raise DataReadinessError(
                 f"overlapping catalyst coverage intervals: {security_id}"
             )
+        eligible_rows = rows.loc[rows["_eligible"]]
+        if eligible_rows.empty:
+            continue
+        merged: list[tuple[pd.Timestamp, pd.Timestamp]] = []
+        for interval in eligible_rows.itertuples(index=False):
+            start = pd.Timestamp(interval.requested_start_utc)
+            end = pd.Timestamp(interval.requested_end_utc)
+            if not merged or start > merged[-1][1]:
+                merged.append((start, end))
+            else:
+                merged[-1] = (merged[-1][0], max(merged[-1][1], end))
+        starts = pd.DatetimeIndex([start for start, _ in merged]).as_unit(
+            "ns"
+        ).asi8
+        ends = pd.DatetimeIndex([end for _, end in merged]).as_unit("ns").asi8
         selected_positions = np.asarray(positions, dtype=np.int64)
         times = (
             pd.DatetimeIndex(decision_time.iloc[selected_positions])
             .as_unit("ns")
             .asi8
         )
-        interval_indices = np.searchsorted(starts, times, side="right") - 1
+        lookback_times = times - int(lookback.value)
+        interval_indices = (
+            np.searchsorted(starts, lookback_times, side="right") - 1
+        )
         valid = interval_indices >= 0
         bounded = np.zeros(len(times), dtype=bool)
         bounded[valid] = (
             times[valid] < ends[interval_indices[valid]]
         )
-        eligible_values = rows["_eligible"].to_numpy(dtype=bool)
-        bounded[valid] &= eligible_values[interval_indices[valid]]
         result.iloc[selected_positions] = bounded
     return result
 
@@ -988,10 +1031,9 @@ def _load_existing_dataset(
         "last_decision_time_utc": _iso(
             pd.to_datetime(frame["decision_time_utc"], utc=True).max()
         ),
-        "path": str(path.resolve()),
+        "path": path.relative_to(path.parent.parent).as_posix(),
         "sha256": str(manifest["artifact_sha256"]),
         "manifest_sha256": file_sha256(manifest_path_for(path)),
-        "resumed": True,
     }
 
 
@@ -1123,6 +1165,20 @@ def _write_or_validate_json(
             )
         return
     _atomic_json(path, payload)
+
+
+def _read_json_object(path: Path) -> dict[str, object]:
+    try:
+        loaded = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise DataReadinessError(
+            f"specialist JSON is unreadable: {path}"
+        ) from exc
+    if not isinstance(loaded, dict):
+        raise DataReadinessError(
+            f"specialist JSON must be an object: {path}"
+        )
+    return {str(key): value for key, value in loaded.items()}
 
 
 def _atomic_json(path: Path, payload: Mapping[str, object]) -> None:

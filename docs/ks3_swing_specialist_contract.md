@@ -38,11 +38,11 @@ KS1 assignments are aggregated by canonical decision identity and frozen 2-hour,
 - source-family count is the number of observed source families.
 
 Source completeness is an interval fact, not an event count. A decision is
-complete only when its security and decision timestamp fall inside an
-`observed_complete` or `observed_empty` KS1 coverage interval with known
-missingness. Blind windows remain unavailable. A complete row with zero assigned
-events is verified no-catalyst evidence; an unavailable row is not converted to
-zero.
+complete only when one contiguous `observed_complete` or `observed_empty` KS1
+coverage interval with known missingness contains the full three-day feature
+window ending at the decision timestamp. Blind or partial windows remain
+unavailable. A complete row with zero assigned events is verified no-catalyst
+evidence; an unavailable row is not converted to zero.
 
 The KS2 evaluator is replayed after this join. This activates Catalyst Drift and
 Short-Term Reversal only where their frozen setup rules pass. Exact stock,
@@ -67,7 +67,7 @@ Candidate budget:
 | Cross-Sectional Momentum | 4 |
 | Time-Series Momentum | 3 |
 | Catalyst Drift | 7 |
-| Short-Term Reversal | 5 |
+| Short-Term Reversal | 3 |
 | Breakout Expansion | 3 |
 | Sector-Residual Momentum | 4 |
 
@@ -89,8 +89,8 @@ the same prior-fold-only isotonic calibration as learned candidates.
 For Catalyst Drift, logistic and HGB are evaluated with technical-only,
 catalyst-only, and combined features on the identical catalyst-confirmed
 population. The deterministic comparator is evaluated once. Short-Term Reversal
-compares technical-only with combined features on the identical verified
-no-catalyst population.
+uses technical features only because its verified zero-event setup makes every
+catalyst aggregate constant and therefore unsuitable for a feature ablation.
 
 ## Validation
 
@@ -103,6 +103,12 @@ causally mature first training window. All candidates for that strategy use:
 - labels available strictly before each test decision;
 - the same unseen tickers and test sessions;
 - the same top-10 selection policy.
+
+The four requested folds are mandatory. A strategy is data-blocked if all four
+cannot be constructed under the frozen minimum-history and sample-size rules.
+Raw model score determines top-10 ranking; calibrated probability is retained
+for probability interpretation and calibration audits, but isotonic plateaus
+cannot decide selection.
 
 The first fold seeds causal score calibration and is not scored. Calibration for
 later folds uses only earlier-fold predictions whose labels are available before
@@ -123,7 +129,10 @@ Every candidate retains row-level temporal and unseen-ticker predictions plus:
 - feature-profile ablations;
 - explicit accepted-development, rejected, failed, or data-blocked status.
 
-Acceptance requires both validation scopes to pass every frozen economic gate.
+Acceptance requires both validation scopes to pass every frozen economic gate,
+including non-negative 95% confidence lower bounds for net and SPY-relative
+returns. Risk-on, neutral, and risk-off evidence must each meet the frozen
+minimum sample, net-return, and SPY-relative-return gates.
 Passing KS3 permits later governance work only. It does not authorize
 prospective shadow, promotion, serving, alerts, or trading.
 

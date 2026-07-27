@@ -1,7 +1,7 @@
-schema_version = "swing.specialist_research.v1"
+schema_version = "swing.specialist_research.v2"
 n_splits = 4
 min_train_sessions = 120
-min_train_rows = 500
+min_train_rows = 400
 min_training_tickers = 20
 ticker_holdout_fraction = 0.20
 top_k = 10
@@ -20,9 +20,15 @@ minimum_selected_trades = 100
 minimum_avg_net_return = 0.0
 minimum_avg_excess_return_vs_spy = 0.0
 minimum_avg_excess_return_vs_sector = 0.0
+minimum_avg_net_return_ci_low = 0.0
+minimum_avg_excess_return_vs_spy_ci_low = 0.0
 minimum_profit_factor = 1.05
 maximum_drawdown = 0.20
 maximum_negative_phase_rate = 0.55
+required_market_regimes = ["risk_on", "neutral", "risk_off"]
+minimum_regime_selected_trades = 30
+minimum_regime_avg_net_return = 0.0
+minimum_regime_avg_excess_return_vs_spy = 0.0
 capacity_participation_rate = 0.01
 maximum_process_memory_gib = 4.0
 memory_guard_headroom_gib = 0.75
@@ -210,7 +216,7 @@ estimator_families = [
 deterministic_score = "catalyst_confirmation"
 
 [strategies."SWING.SHORT_TERM_REVERSAL.3D.V1"]
-feature_profiles = ["technical_only", "technical_plus_catalyst"]
+feature_profiles = ["technical_only"]
 estimator_families = [
   "deterministic_baseline",
   "logistic",

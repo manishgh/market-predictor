@@ -423,9 +423,24 @@ def register_swing_model_commands(app: typer.Typer, console: Console) -> None:
             strategy_ids=(strategy_id,) if strategy_id is not None else None,
             progress=console.print,
         )
+        failed_strategies = result["failed_strategies"]
+        selected_failed = bool(
+            strategy_id is not None
+            and isinstance(failed_strategies, dict)
+            and strategy_id in failed_strategies
+        )
         console.print(
             {
                 "status": result["status"],
+                "invocation_status": (
+                    "complete"
+                    if not selected_failed
+                    and (
+                        strategy_id is not None
+                        or result["status"] == "complete"
+                    )
+                    else "failed"
+                ),
                 "observed_strategies": result["observed_strategies"],
                 "accepted_development_candidates": result[
                     "accepted_development_candidates"
@@ -435,12 +450,6 @@ def register_swing_model_commands(app: typer.Typer, console: Console) -> None:
                 "memory": result["memory"],
                 "out_dir": str(out_dir.resolve()),
             }
-        )
-        failed_strategies = result["failed_strategies"]
-        selected_failed = bool(
-            strategy_id is not None
-            and isinstance(failed_strategies, dict)
-            and strategy_id in failed_strategies
         )
         if (
             (strategy_id is None and result["status"] != "complete")

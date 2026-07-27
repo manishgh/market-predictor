@@ -112,6 +112,7 @@ def phase_economics(
     policy: ExecutionCostPolicy | None = None,
     cost_stress: float = 1.0,
     use_stamped_net_returns: bool = False,
+    selection_score_column: str = "swing_probability",
 ) -> pd.DataFrame:
     return_column = swing_net_return_column(horizon)
     gross_column = f"future_gross_return_{horizon}d"
@@ -128,7 +129,7 @@ def phase_economics(
         selected = select_swing_candidates(
             phase_rows,
             policy=selection_policy,
-            probability_column="swing_probability",
+            probability_column=selection_score_column,
         )
         cost: pd.Series | None = None
         if use_stamped_net_returns:

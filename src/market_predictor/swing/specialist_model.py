@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import importlib
 import math
-import uuid
 from dataclasses import dataclass
 from typing import Any, Protocol, cast
 
@@ -162,6 +161,11 @@ def build_specialist_split_plan(
         min_train_rows=config.min_train_rows,
     )
     assignment_folds = splitter.split(data)
+    if len(assignment_folds) != config.n_splits:
+        raise DataReadinessError(
+            f"{strategy_id} produced {len(assignment_folds)} of "
+            f"{config.n_splits} required assignment folds"
+        )
     assignment_indices, _, _ = causal_fold_training_indices(
         data,
         candidate_indices=assignment_folds[0].train_indices,
@@ -181,6 +185,11 @@ def build_specialist_split_plan(
         data["ticker"].isin(holdout_tickers)
     ].reset_index(drop=True)
     folds = tuple(splitter.split(development))
+    if len(folds) != config.n_splits:
+        raise DataReadinessError(
+            f"{strategy_id} produced {len(folds)} of "
+            f"{config.n_splits} required validation folds"
+        )
     first_train_indices, _, _ = causal_fold_training_indices(
         development,
         candidate_indices=folds[0].train_indices,
@@ -412,20 +421,22 @@ def evaluate_specialist_experiment(
         scope="full_cross_section",
         cohort_column="ticker_cohort",
         use_stamped_net_returns=True,
+        selection_score_column="raw_probability",
+    )
+    regime = _regime_evidence(
+        predictions,
+        horizon=plan.horizon_sessions,
+        top_k=config.top_k,
     )
     rejection_reasons = _economic_rejection_reasons(
         economics,
+        regime,
         config=config,
     )
     status = (
         SPECIALIST_ACCEPTED_STATUS
         if not rejection_reasons
         else SPECIALIST_REJECTED_STATUS
-    )
-    regime = _regime_evidence(
-        predictions,
-        horizon=plan.horizon_sessions,
-        top_k=config.top_k,
     )
     capacity = _capacity_evidence(
         predictions,
@@ -919,7 +930,7 @@ def _candidate_metrics(
         target_column="strategy_target",
         score=swing_decision_scores(
             walk_forward,
-            probability_column="swing_probability",
+            probability_column="raw_probability",
         ),
         group_column="decision_group_id",
         k=config.top_k,
@@ -929,7 +940,7 @@ def _candidate_metrics(
         target_column="strategy_target",
         score=swing_decision_scores(
             ticker_holdout,
-            probability_column="swing_probability",
+            probability_column="raw_probability",
         ),
         group_column="decision_group_id",
         k=config.top_k,
@@ -944,7 +955,8 @@ def _candidate_metrics(
     )
     return {
         "model_run_id": (
-            f"ks3-{spec.candidate_id}-{uuid.uuid4().hex}"
+            f"ks3-{spec.candidate_id}-{plan.split_sha256[:16]}-"
+            f"{feature_set_sha256[:16]}"
         ),
         "strategy_id": spec.strategy_id,
         "candidate_id": spec.candidate_id,
@@ -984,6 +996,7 @@ def _candidate_metrics(
 
 def _economic_rejection_reasons(
     economics: pd.DataFrame,
+    regime_evidence: pd.DataFrame,
     *,
     config: SwingSpecialistResearchConfig,
 ) -> tuple[str, ...]:
@@ -1021,6 +1034,18 @@ def _economic_rejection_reasons(
                 "min",
             ),
             (
+                "avg_trade_return_ci_low",
+                conservative["avg_trade_return_ci_low"],
+                config.minimum_avg_net_return_ci_low,
+                "min",
+            ),
+            (
+                "avg_excess_return_vs_spy_ci_low",
+                conservative["avg_excess_return_vs_spy_ci_low"],
+                config.minimum_avg_excess_return_vs_spy_ci_low,
+                "min",
+            ),
+            (
                 "profit_factor",
                 conservative["profit_factor"],
                 config.minimum_profit_factor,
@@ -1051,6 +1076,39 @@ def _economic_rejection_reasons(
                     f"{scope}.{name} {value} fails "
                     f"{direction} {threshold}"
                 )
+    for cohort in ("seen", "unseen"):
+        for regime in config.required_market_regimes:
+            scope = f"regime:{regime}:{cohort}"
+            rows = regime_evidence.loc[
+                regime_evidence["scope"].eq(scope)
+            ]
+            if rows.empty:
+                reasons.append(f"{scope} has no regime evidence")
+                continue
+            conservative = conservative_economics(rows).iloc[0]
+            regime_gates = (
+                (
+                    "selected_trades",
+                    conservative["selected_trades"],
+                    config.minimum_regime_selected_trades,
+                ),
+                (
+                    "avg_trade_return",
+                    conservative["avg_trade_return"],
+                    config.minimum_regime_avg_net_return,
+                ),
+                (
+                    "avg_excess_return_vs_spy",
+                    conservative["avg_excess_return_vs_spy"],
+                    config.minimum_regime_avg_excess_return_vs_spy,
+                ),
+            )
+            for name, raw_value, threshold in regime_gates:
+                value = _finite_or_infinite(raw_value)
+                if value < float(threshold):
+                    reasons.append(
+                        f"{scope}.{name} {value} fails min {threshold}"
+                    )
     return tuple(reasons)
 
 
@@ -1069,6 +1127,7 @@ def _regime_evidence(
             scope=f"regime:{regime}",
             cohort_column="ticker_cohort",
             use_stamped_net_returns=True,
+            selection_score_column="raw_probability",
         )
         evidence["market_regime"] = str(regime)
         records.append(evidence)
@@ -1088,7 +1147,7 @@ def _capacity_evidence(
     selected = select_swing_candidates(
         predictions,
         policy=PredictionSelectionPolicy(swing_top_k=top_k),
-        probability_column="swing_probability",
+        probability_column="raw_probability",
     )
     if selected.empty or "dollar_volume" not in selected:
         return pd.DataFrame(

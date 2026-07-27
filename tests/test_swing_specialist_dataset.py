@@ -159,7 +159,7 @@ class SwingSpecialistDatasetTests(unittest.TestCase):
             {
                 "security_id": ["security:aaa"],
                 "requested_start_utc": [
-                    pd.Timestamp("2025-01-01", tz="UTC")
+                    pd.Timestamp("2024-12-29", tz="UTC")
                 ],
                 "requested_end_utc": [
                     pd.Timestamp("2025-01-03", tz="UTC")
