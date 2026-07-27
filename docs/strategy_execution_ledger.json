@@ -5,7 +5,8 @@
       "checkpoint_id": "KS3",
       "display_name": "Cross-Sectional Momentum / Relative Strength",
       "evidence_paths": [
-        "docs/catalyst_confirmation_architecture.md"
+        "docs/catalyst_confirmation_architecture.md",
+        "docs/evidence/ks3_swing_specialist_replay_20260727.json"
       ],
       "item_id": "SWING.CROSS_SECTIONAL_MOMENTUM.5D.V1",
       "kind": "strategy",
@@ -21,7 +22,9 @@
       "blocker": null,
       "checkpoint_id": "KS3",
       "display_name": "Time-Series Momentum / Trend Following",
-      "evidence_paths": [],
+      "evidence_paths": [
+        "docs/evidence/ks3_swing_specialist_replay_20260727.json"
+      ],
       "item_id": "SWING.TIME_SERIES_MOMENTUM.5D.V1",
       "kind": "strategy",
       "mode": "swing",
@@ -30,13 +33,15 @@
         "continuation path labels",
         "cost-adjusted benchmark-relative validation"
       ],
-      "state": "planned"
+      "state": "reference_rejected"
     },
     {
       "blocker": null,
       "checkpoint_id": "KS3",
       "display_name": "Catalyst Drift",
-      "evidence_paths": [],
+      "evidence_paths": [
+        "docs/evidence/ks3_swing_specialist_replay_20260727.json"
+      ],
       "item_id": "SWING.CATALYST_DRIFT.5D.V1",
       "kind": "strategy",
       "mode": "swing",
@@ -45,7 +50,7 @@
         "publication-to-decision alignment",
         "technical-only, catalyst-only, and combined ablation"
       ],
-      "state": "planned"
+      "state": "reference_rejected"
     },
     {
       "blocker": "Point-in-time earnings surprise, guidance, and calendar evidence is incomplete.",
@@ -66,7 +71,9 @@
       "blocker": null,
       "checkpoint_id": "KS3",
       "display_name": "Short-Term Reversal / Overreaction",
-      "evidence_paths": [],
+      "evidence_paths": [
+        "docs/evidence/ks3_swing_specialist_replay_20260727.json"
+      ],
       "item_id": "SWING.SHORT_TERM_REVERSAL.3D.V1",
       "kind": "strategy",
       "mode": "swing",
@@ -75,13 +82,15 @@
         "reversal-specific path labels",
         "peer and catalyst support ablation"
       ],
-      "state": "planned"
+      "state": "reference_rejected"
     },
     {
       "blocker": null,
       "checkpoint_id": "KS3",
       "display_name": "Breakout / Volatility Expansion",
-      "evidence_paths": [],
+      "evidence_paths": [
+        "docs/evidence/ks3_swing_specialist_replay_20260727.json"
+      ],
       "item_id": "SWING.BREAKOUT_EXPANSION.5D.V1",
       "kind": "strategy",
       "mode": "swing",
@@ -90,13 +99,15 @@
         "price and consolidated-volume confirmation",
         "continuation and failed-breakout paths"
       ],
-      "state": "planned"
+      "state": "reference_rejected"
     },
     {
       "blocker": null,
       "checkpoint_id": "KS3",
       "display_name": "Sector-Neutral Residual Momentum",
-      "evidence_paths": [],
+      "evidence_paths": [
+        "docs/evidence/ks3_swing_specialist_replay_20260727.json"
+      ],
       "item_id": "SWING.SECTOR_RESIDUAL_MOMENTUM.5D.V1",
       "kind": "strategy",
       "mode": "swing",
@@ -105,7 +116,7 @@
         "market and sector residual objective",
         "identical-interval sector-relative economics"
       ],
-      "state": "planned"
+      "state": "reference_rejected"
     },
     {
       "blocker": "Point-in-time peer membership and stable spread evidence are not available.",
@@ -656,7 +667,12 @@
     {
       "blocker": null,
       "checkpoint_id": "KS3",
-      "closure": null,
+      "closure": {
+        "closed_at_utc": "2026-07-27T09:56:15Z",
+        "commit_sha": "a080913ce109f6e8e2107f99def2678e1ece03b7",
+        "remote_ref": "origin/r3-lineage",
+        "summary": "Built and independently audited six causal swing-specialist datasets and 24 bounded candidates across four temporal folds and seen/unseen-ticker scopes. Every candidate failed one or more economic, uncertainty, regime, drawdown, or capacity gates, so all six strategies remain reference-rejected and no model was promoted."
+      },
       "contracts": [
         "docs/ks3_swing_specialist_contract.md",
         "configs/swing_specialist_research.toml",
@@ -664,25 +680,47 @@
         "swing specialist candidates",
         "swing economic audit"
       ],
-      "evidence": [],
+      "evidence": [
+        {
+          "description": "Hash-bound five-year replay of six causal swing-specialist datasets and 24 independently rejected candidate evaluations.",
+          "evidence_id": "KS3-E1",
+          "path": "docs/evidence/ks3_swing_specialist_replay_20260727.json",
+          "sha256": "e71eec65ab6b90d847471612d434711f9d56a4252c052a7c75893e366fd654fb"
+        },
+        {
+          "description": "Specialist poison tests, independent systems and ML reviews, immutable-resume proof, and repository-wide unit, lint, strict-type, and compile verification.",
+          "evidence_id": "KS3-E2",
+          "path": "docs/evidence/ks3_verification_20260727.json",
+          "sha256": "78d3ea89fe267b94d599433da485e1c8db39e6aa30f1063febb7081d60a9695e"
+        }
+      ],
       "exit_gates": [
         {
           "description": "Every swing strategy is evaluated independently on frozen temporal and ticker-holdout scopes.",
-          "evidence_ids": [],
+          "evidence_ids": [
+            "KS3-E1",
+            "KS3-E2"
+          ],
           "gate_id": "KS3-G1",
-          "status": "pending"
+          "status": "passed"
         },
         {
           "description": "Deterministic, logistic, HGB, and eligible ranker comparisons use identical rows and policies.",
-          "evidence_ids": [],
+          "evidence_ids": [
+            "KS3-E1",
+            "KS3-E2"
+          ],
           "gate_id": "KS3-G2",
-          "status": "pending"
+          "status": "passed"
         },
         {
           "description": "Accepted and rejected outcomes retain cost, benchmark, drawdown, capacity, and ablation evidence.",
-          "evidence_ids": [],
+          "evidence_ids": [
+            "KS3-E1",
+            "KS3-E2"
+          ],
           "gate_id": "KS3-G3",
-          "status": "pending"
+          "status": "passed"
         }
       ],
       "in_scope": [
@@ -698,21 +736,26 @@
       ],
       "problem_statement": "Determine which explicitly named swing behaviors have repeatable cost-adjusted edge.",
       "sequence": 3,
-      "status": "in_progress",
+      "status": "completed",
       "title": "Train swing specialists",
       "verification": [
         {
-          "command": null,
+          "command": ".\\.venv\\Scripts\\python.exe -m market_predictor.research_cli build-swing-specialist-datasets --technical-features data\\features\\swing\\swing_technical_5d_20210709_20260708_v1.parquet --benchmark-bars data\\artifacts\\swing_market_panel_inputs_20190709_20260708_v1\\benchmark_bars.parquet --catalyst-lineage-dir data\\features\\swing\\alpaca_catalyst_lineage_20210709_20260708_v1 --out-dir data\\features\\swing\\specialist_datasets_20210709_20260708_v4 --dataset-config configs\\swing_technical_dataset.toml --strategy-policy configs\\swing_strategy_labels.toml --research-policy configs\\swing_specialist_research.toml && .\\.venv\\Scripts\\python.exe -m market_predictor.research_cli train-swing-specialists --dataset-dir data\\features\\swing\\specialist_datasets_20210709_20260708_v4 --out-dir models\\swing\\ks3_specialists_20210709_20260708_v4 --research-policy configs\\swing_specialist_research.toml",
           "description": "Reproduce every swing candidate and audit from immutable manifests.",
-          "evidence_ids": [],
-          "status": "pending",
+          "evidence_ids": [
+            "KS3-E1"
+          ],
+          "status": "passed",
           "verification_id": "KS3-V1"
         },
         {
-          "command": null,
+          "command": ".\\.venv\\Scripts\\python.exe -m unittest discover -s tests -p \"test_*.py\" && .\\.venv\\Scripts\\ruff.exe check src tests scripts && .\\.venv\\Scripts\\mypy.exe --strict src\\market_predictor && .\\.venv\\Scripts\\python.exe -m compileall -q src tests",
           "description": "Run feature, strategy, cost, adverse-fill, liquidity, and regime ablations.",
-          "evidence_ids": [],
-          "status": "pending",
+          "evidence_ids": [
+            "KS3-E1",
+            "KS3-E2"
+          ],
+          "status": "passed",
           "verification_id": "KS3-V2"
         }
       ]

@@ -1,0 +1,137 @@
+{
+  "acceptance": {
+    "artifact_authority": "Dataset and model bundles are immutable, hash-bound, exact-file-set artifacts with atomic authority pointers. A repeated training request resumed the completed model bundle without recomputation.",
+    "causal_alignment": "Every decision row uses point-in-time features, exact stock and benchmark intervals, and catalyst coverage known by decision time. Catalyst-dependent setups exclude incomplete source intervals.",
+    "economic_rejection": "Candidates must pass net-return, SPY-relative, sector-relative, confidence-bound, profit-factor, drawdown, negative-phase, regime, ticker-holdout, and capacity gates. All 24 candidates were independently rejected.",
+    "model_isolation": "Each named strategy has independent rows, folds, candidates, evidence, and rejection reasons. Rejected candidates contain no model.joblib and cannot become serving artifacts.",
+    "resource_control": "Dataset construction and specialist evaluation ran sequentially. Peak working sets remained below the configured 3.25 GiB safety threshold and 4 GiB hard limit."
+  },
+  "artifacts": {
+    "dataset_authority": {
+      "path": "data/features/swing/specialist_datasets_20210709_20260708_v4/_authority.json",
+      "sha256": "83e1c9f29a28fd641b1702db060cf085b0a64fafd25ad7186643c72930d2a5b1"
+    },
+    "dataset_manifest": {
+      "path": "data/features/swing/specialist_datasets_20210709_20260708_v4/_manifest.json",
+      "sha256": "224a71dd2f4658d5d7579f2dae9191d56fe08f758ba936850f55ee159d4fa868"
+    },
+    "dataset_request": {
+      "path": "data/features/swing/specialist_datasets_20210709_20260708_v4/_request.json",
+      "sha256": "b063c3ce9743be81fa757340a965b68392d97f6418a4f2fd72c6be3c0c7776fb"
+    },
+    "model_authority": {
+      "path": "models/swing/ks3_specialists_20210709_20260708_v4/_authority.json",
+      "sha256": "fc71782b24727b8697a4bd56277280f0e39b940435ce6c7ef986b9fbbabb3dbe"
+    },
+    "model_manifest": {
+      "path": "models/swing/ks3_specialists_20210709_20260708_v4/_manifest.json",
+      "sha256": "249bff3b45bd88601594e729ae2c56b1dceb12065c1e36458e685b54b2e3fd0b"
+    },
+    "model_request": {
+      "path": "models/swing/ks3_specialists_20210709_20260708_v4/_request.json",
+      "sha256": "3907b94527cfc5d0b3994efb24e3a997014e218ba560bae0036ca184a44694b1"
+    },
+    "research_policy": {
+      "path": "configs/swing_specialist_research.toml",
+      "sha256": "c35ed48353f22f2b8131bec43d867203ea77feb8e932b0d3abc2f1195dbc00cb"
+    },
+    "strategy_contract": {
+      "path": "docs/ks3_swing_specialist_contract.md"
+    }
+  },
+  "checkpoint_id": "KS3",
+  "implementation_commit": "a080913ce109f6e8e2107f99def2678e1ece03b7",
+  "independent_reviews": [
+    {
+      "result": "passed",
+      "scope": "ML causality, fold identity, ticker holdout, catalyst coverage, exact costs and benchmark intervals, and rejection replay"
+    },
+    {
+      "result": "passed",
+      "scope": "complete source and dependency identity, failure isolation, immutable authority, exact file sets, resume behavior, and memory reconciliation"
+    }
+  ],
+  "lineage": {
+    "dataset_schema": "swing.specialist_dataset_bundle.v4",
+    "dataset_source_rows": 630978,
+    "implementation_sha256": "97fa30180a3c1b1c2999b475894975687b8239f879daceccc04f70c78501382d",
+    "model_schema": "swing.specialist_experiment_bundle.v4",
+    "source_complete_rows": 627717,
+    "source_incomplete_rows": 3261
+  },
+  "production_ready": false,
+  "result": {
+    "accepted_development_candidates": 0,
+    "dataset_peak_working_set_gib": 2.214427947998047,
+    "failed_candidates": 0,
+    "failed_strategies": 0,
+    "label_eligible_rows": 545921,
+    "model_peak_working_set_gib": 0.8861846923828125,
+    "observed_strategies": 6,
+    "rejected_candidates": 24,
+    "safety_threshold_gib": 3.25,
+    "status": "complete",
+    "strategies": [
+      {
+        "candidate_count": 3,
+        "label_eligible_rows": 4133,
+        "positive_rows": 1216,
+        "state": "reference_rejected",
+        "strategy_id": "SWING.BREAKOUT_EXPANSION.5D.V1",
+        "tickers": 544,
+        "trading_sessions": 877
+      },
+      {
+        "candidate_count": 7,
+        "label_eligible_rows": 123274,
+        "positive_rows": 40615,
+        "state": "reference_rejected",
+        "strategy_id": "SWING.CATALYST_DRIFT.5D.V1",
+        "tickers": 578,
+        "trading_sessions": 1248
+      },
+      {
+        "candidate_count": 4,
+        "label_eligible_rows": 113884,
+        "positive_rows": 22156,
+        "state": "reference_rejected",
+        "strategy_id": "SWING.CROSS_SECTIONAL_MOMENTUM.5D.V1",
+        "tickers": 573,
+        "trading_sessions": 1249
+      },
+      {
+        "candidate_count": 4,
+        "label_eligible_rows": 103837,
+        "positive_rows": 39689,
+        "state": "reference_rejected",
+        "strategy_id": "SWING.SECTOR_RESIDUAL_MOMENTUM.5D.V1",
+        "tickers": 573,
+        "trading_sessions": 1249
+      },
+      {
+        "candidate_count": 3,
+        "label_eligible_rows": 11711,
+        "positive_rows": 3923,
+        "state": "reference_rejected",
+        "strategy_id": "SWING.SHORT_TERM_REVERSAL.3D.V1",
+        "tickers": 547,
+        "trading_sessions": 957
+      },
+      {
+        "candidate_count": 3,
+        "label_eligible_rows": 189082,
+        "positive_rows": 73162,
+        "state": "reference_rejected",
+        "strategy_id": "SWING.TIME_SERIES_MOMENTUM.5D.V1",
+        "tickers": 564,
+        "trading_sessions": 1249
+      }
+    ]
+  },
+  "schema": "market_predictor.ks3_swing_specialist_replay_evidence.v1",
+  "unavailable_strategy": {
+    "reason": "Point-in-time earnings surprise, guidance, and announcement evidence is incomplete.",
+    "state": "data_blocked",
+    "strategy_id": "SWING.POST_EARNINGS_DRIFT.5D.V1"
+  }
+}

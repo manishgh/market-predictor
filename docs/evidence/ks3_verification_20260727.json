@@ -1,0 +1,69 @@
+{
+  "checkpoint_id": "KS3",
+  "implementation_commit": "a080913ce109f6e8e2107f99def2678e1ece03b7",
+  "independent_reviews": [
+    {
+      "result": "passed",
+      "scope": "ML semantics and complete v4 rejection replay"
+    },
+    {
+      "result": "passed",
+      "scope": "systems, provenance, immutable artifact authority, failure isolation, resume, and memory"
+    }
+  ],
+  "poison_tests": [
+    "future feature, label, catalyst, calibration, and fold-training leakage fail closed",
+    "candidate ranking uses raw scores rather than calibrated-probability plateaus",
+    "catalyst-dependent rows require complete causal source coverage for the full lookback interval",
+    "cost and SPY, QQQ, and sector benchmark intervals replay exactly",
+    "all candidates use four temporal folds and both seen- and unseen-ticker scopes",
+    "rejected candidates cannot retain model.joblib",
+    "unexpected files, changed hashes, stale manifests, and stale authority pointers fail validation",
+    "candidate failure artifacts are quarantined and namespaced by strategy",
+    "implementation identity covers all source files, pyproject.toml, five lock files, Python, and runtime package versions"
+  ],
+  "schema": "market_predictor.ks3_verification_evidence.v1",
+  "verification": [
+    {
+      "command": ".\\.venv\\Scripts\\python.exe -m unittest discover -s tests -p \"test_*.py\"",
+      "result": "passed",
+      "tests": 493
+    },
+    {
+      "command": ".\\.venv\\Scripts\\python.exe -m unittest tests.test_swing_specialist_dataset tests.test_swing_specialist_model",
+      "result": "passed",
+      "tests": 17
+    },
+    {
+      "command": ".\\.venv\\Scripts\\ruff.exe check src tests scripts",
+      "result": "passed"
+    },
+    {
+      "command": ".\\.venv\\Scripts\\mypy.exe --strict src\\market_predictor",
+      "result": "passed",
+      "source_files": 156
+    },
+    {
+      "command": ".\\.venv\\Scripts\\python.exe -m compileall -q src tests",
+      "result": "passed"
+    },
+    {
+      "command": "independent ML artifact replay",
+      "details": "All 192 fold/scope records have four folds and two validation scopes; all 24 rejection decisions replay; no leakage, incomplete catalyst coverage, cost mismatch, or benchmark mismatch was found.",
+      "result": "passed"
+    },
+    {
+      "command": "independent systems artifact replay",
+      "details": "All 156 source files, pyproject.toml, and five lock files are identity-bound; six dataset artifacts, 24 candidate bundles, 230 aggregate files, authority pointers, exact file sets, failure isolation, and immutable resume passed.",
+      "result": "passed"
+    },
+    {
+      "command": "git diff --check and worktree inspection",
+      "result": "passed"
+    }
+  ],
+  "warnings": [
+    "The full suite emits existing upstream Starlette/httpx and scikit-learn parallelism warnings; neither affects test results.",
+    "A small residual raw-score tie rate remains non-blocking because every candidate is rejected and no model is promoted."
+  ]
+}
