@@ -78,6 +78,43 @@ class IntradaySpecialistDatasetTests(unittest.TestCase):
             selected.iloc[0]["source_bar_start_utc"],
             pd.Timestamp("2026-06-01T13:55:00Z"),
         )
+        self.assertEqual(int(selected.iloc[0]["decision_minute_et"]), 601)
+
+    def test_gap_fade_cannot_see_opening_range_before_1001_et(
+        self,
+    ) -> None:
+        template = _source_frame(self.config).iloc[[0]]
+        parts: list[pd.DataFrame] = []
+        for timestamp in pd.date_range(
+            "2026-06-01T13:30:00Z",
+            periods=6,
+            freq="5min",
+        ):
+            part = template.copy()
+            part["timestamp"] = timestamp
+            part["decision_time_utc"] = timestamp
+            part["feature_available_at_utc"] = timestamp
+            part["overnight_gap"] = -0.03
+            part["return_1bar"] = 0.002
+            part["close_location_5m"] = 0.9
+            parts.append(part)
+        frame = pd.concat(parts, ignore_index=True)
+
+        selected = extract_specialist_setups(
+            frame,
+            config=self.config,
+            source_dataset_fingerprint="f" * 64,
+        )["INTRADAY.GAP_FADE.60M.V1"]
+
+        self.assertEqual(len(selected), 1)
+        self.assertEqual(
+            selected.iloc[0]["source_bar_start_utc"],
+            pd.Timestamp("2026-06-01T13:55:00Z"),
+        )
+        self.assertEqual(
+            selected.iloc[0]["decision_time_utc"],
+            pd.Timestamp("2026-06-01T14:01:00Z"),
+        )
 
     def test_future_column_poison_cannot_change_setup_identity(self) -> None:
         frame = _source_frame(self.config)

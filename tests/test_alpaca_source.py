@@ -9,6 +9,73 @@ from market_predictor.sources.alpaca import AlpacaSource
 
 
 class AlpacaSourceTests(unittest.TestCase):
+    def test_multi_symbol_bar_page_preserves_tokens_and_rate_headers(
+        self,
+    ) -> None:
+        source = AlpacaSource(
+            Settings(ALPACA_API_KEY_ID="key", ALPACA_API_SECRET_KEY="secret")
+        )
+        client = Mock()
+        client.get_json_with_headers.return_value = (
+            {
+                "bars": {
+                    "AAPL": [
+                        {
+                            "t": "2026-07-01T13:30:00Z",
+                            "o": 100.0,
+                            "h": 101.0,
+                            "l": 99.0,
+                            "c": 100.5,
+                            "v": 1000,
+                        }
+                    ]
+                },
+                "next_page_token": "next",
+            },
+            {"X-RateLimit-Remaining": "199"},
+        )
+        source.client = client
+
+        page = source.fetch_bars_page(
+            ("AAPL", "MSFT"),
+            datetime(2026, 7, 1, 13, 30, tzinfo=UTC),
+            datetime(2026, 7, 1, 14, 30, tzinfo=UTC),
+            timeframe="1Min",
+            asof=date(2026, 7, 1),
+        )
+
+        self.assertEqual(page.next_page_token, "next")
+        self.assertEqual(len(page.bars["AAPL"]), 1)
+        self.assertEqual(
+            page.response_headers["X-RateLimit-Remaining"],
+            "199",
+        )
+        params = client.get_json_with_headers.call_args.kwargs["params"]
+        self.assertEqual(params["symbols"], "AAPL,MSFT")
+        self.assertEqual(params["feed"], "sip")
+        self.assertEqual(params["adjustment"], "all")
+        self.assertEqual(params["sort"], "asc")
+        self.assertEqual(params["asof"], "2026-07-01")
+
+    def test_multi_symbol_bar_page_rejects_unexpected_symbol(self) -> None:
+        source = AlpacaSource(
+            Settings(ALPACA_API_KEY_ID="key", ALPACA_API_SECRET_KEY="secret")
+        )
+        client = Mock()
+        client.get_json_with_headers.return_value = (
+            {"bars": {"TSLA": []}, "next_page_token": None},
+            {},
+        )
+        source.client = client
+
+        with self.assertRaisesRegex(RuntimeError, "unexpected"):
+            source.fetch_bars_page(
+                ("AAPL",),
+                datetime(2026, 7, 1, 13, 30, tzinfo=UTC),
+                datetime(2026, 7, 1, 14, 30, tzinfo=UTC),
+                timeframe="1Min",
+            )
+
     def test_news_pages_preserve_provider_timestamps_and_page_tokens(self) -> None:
         source = AlpacaSource(
             Settings(ALPACA_API_KEY_ID="key", ALPACA_API_SECRET_KEY="secret")

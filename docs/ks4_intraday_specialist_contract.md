@@ -67,16 +67,25 @@ session failure is isolated and cannot corrupt completed peers.
   cutoff to `bar_start + 5 minutes`, sets feature availability to another
   30 seconds later, and enters at the next whole-minute boundary. It never uses
   the legacy V3 `decision_time_utc` as an entry timestamp.
+- Strategy session limits are evaluated against the actual decision minute,
+  not the preceding five-minute signal minute.
+- The fixed 09:30-10:00 ET opening range is first usable after the 09:55
+  five-minute bar closes and finalizes. Opening-range fields are null on every
+  earlier source row; ORB and Gap Fade cannot decide before 10:01 ET.
 - Entry is the exact one-minute bar beginning one minute after the completed
-  five-minute bar boundary.
+  five-minute bar boundary and fills at that bar's open.
 - A 60-minute strategy requires 60 consecutive in-session one-minute bars; a
   30-minute strategy requires 30.
-- Target is `1.0 * entry ATR`; stop is `0.75 * entry ATR`.
+- Label barriers use `atr_14_price_5m` from the causal five-minute setup row.
+  One-minute ATR is a confirmation feature only and cannot move label
+  barriers. Target is `1.0 * entry ATR`; stop is `0.75 * entry ATR`.
 - Same-minute target/stop ambiguity is stop-first.
 - A stop gap fills at the worse of the stop or trigger-bar open.
 - A target fill receives the target price, never favorable gap improvement.
 - Timeout fills at the final horizon-bar close.
-- SPY, QQQ, and sector returns use the same entry and realized exit interval.
+- SPY, QQQ, and sector benchmark returns enter at the corresponding entry
+  minute open and exit at the close of the stock's realized exit minute. This
+  applies consistently to target, stop, and timeout outcomes.
 - Costs are applied exactly once and never below 10 bps round trip.
 - The content-addressed execution policy supplies conservative price,
   volatility, liquidity, and stress costs.
@@ -105,6 +114,13 @@ separate confirmation/ranking overlay applied only after the technical score.
 The overlay is retained only if it improves average net return and SPY excess
 in both walk-forward and unseen-ticker scopes without increasing drawdown.
 Missing catalyst coverage is missing, never neutral.
+
+The overlay is data-blocked unless its immutable event bundle binds the raw
+source artifact, security-resolution lineage, source coverage, provider event
+time, first-observed time, ingestion time, and half-open lookback endpoints.
+Historical publication time alone does not prove live availability. Events
+without causal first-observed evidence cannot participate in overlay
+evaluation.
 
 ## Candidate Budget
 
@@ -152,6 +168,27 @@ stock and benchmark requirements. The collection-plan bundle binds the setup
 bundle fingerprint and carries an explicit requirement-to-window bridge.
 Neither an incomplete setup directory nor an incomplete collection-plan
 directory has authority.
+
+Provider acquisition units consolidate every required ticker/session to that
+session's full XNYS regular interval. This is a bounded causal superset of the
+exact requirements, preserves session VWAP from the open, and excludes
+premarket, after-hours, and overnight data. Symbols sharing an exact session
+interval are batched deterministically with no more than 8,000 expected rows
+and 50 symbols per unit. Every unit binds the setup and collection-plan
+fingerprints, XNYS calendar version, provider-symbol mapping, `1Min`, SIP,
+adjustment `all`, and the session-date `asof` policy. Completed units are
+hash-verified against the exact request, symbol set, bounds, `asof`, feed,
+adjustment, timeframe, and policy before they are skipped on resume. Failed
+units alone are retried. The provider's inclusive `end` is translated from the
+internal half-open interval by subtracting one microsecond.
+
+Collection completion means every provider request reached a terminal,
+integrity-checked transport result. It never means the corpus is eligible for
+training. Every completed collection is explicitly `model_data_ready=false`
+until the requirement-to-window bridge audit proves stock, SPY, QQQ, sector,
+warm-up, entry, and label-path coverage. Missing or halted minutes are recorded,
+never imputed. Any setup lacking its exact required path is excluded with a
+machine-readable reason; aggregate-only silent removal is prohibited.
 
 All heavy entry points acquire the shared workspace lease. Collection, dataset
 construction, and training run sequentially. Each process fails before the

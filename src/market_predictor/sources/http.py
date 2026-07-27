@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import random
 import time
-from typing import Any
+from datetime import UTC, datetime
+from email.utils import parsedate_to_datetime
+from typing import Any, cast
 
 import requests
 
@@ -31,25 +34,14 @@ class HttpClient:
         retries: int = 3,
         pause: float = 1.0,
     ) -> Any:
-        last_error: Exception | None = None
-        for attempt in range(retries):
-            try:
-                response = self.session.get(
-                    url,
-                    params=params,
-                    headers=headers,
-                    timeout=self.timeout,
-                )
-                if response.status_code == 429 and attempt < retries - 1:
-                    time.sleep(pause * (attempt + 1))
-                    continue
-                response.raise_for_status()
-                return response.json()
-            except requests.RequestException as exc:
-                last_error = exc
-                if attempt < retries - 1:
-                    time.sleep(pause * (attempt + 1))
-        raise RuntimeError(_http_error_message("GET", url, last_error)) from last_error
+        payload, _ = self.get_json_with_headers(
+            url,
+            params=params,
+            headers=headers,
+            retries=retries,
+            pause=pause,
+        )
+        return payload
 
     def get_json_with_headers(
         self,
@@ -69,15 +61,35 @@ class HttpClient:
                     headers=headers,
                     timeout=self.timeout,
                 )
-                if response.status_code == 429 and attempt < retries - 1:
-                    time.sleep(pause * (attempt + 1))
+                if (
+                    _is_retriable_status(response.status_code)
+                    and attempt < retries - 1
+                ):
+                    time.sleep(
+                        _retry_delay(
+                            response,
+                            attempt=attempt,
+                            pause=pause,
+                        )
+                    )
                     continue
                 response.raise_for_status()
                 return response.json(), dict(response.headers)
             except requests.RequestException as exc:
                 last_error = exc
+                status = (
+                    exc.response.status_code
+                    if isinstance(exc, requests.HTTPError)
+                    and exc.response is not None
+                    else None
+                )
+                if status is not None and not _is_retriable_status(status):
+                    break
                 if attempt < retries - 1:
-                    time.sleep(pause * (attempt + 1))
+                    time.sleep(
+                        pause * (2**attempt)
+                        + random.uniform(0.0, pause)
+                    )
         raise RuntimeError(_http_error_message("GET", url, last_error)) from last_error
 
     def post_json_with_headers(
@@ -98,13 +110,75 @@ class HttpClient:
                     headers=headers,
                     timeout=self.timeout,
                 )
-                if response.status_code == 429 and attempt < retries - 1:
-                    time.sleep(pause * (attempt + 1))
+                if (
+                    _is_retriable_status(response.status_code)
+                    and attempt < retries - 1
+                ):
+                    time.sleep(
+                        _retry_delay(
+                            response,
+                            attempt=attempt,
+                            pause=pause,
+                        )
+                    )
                     continue
                 response.raise_for_status()
                 return response.json(), dict(response.headers)
             except requests.RequestException as exc:
                 last_error = exc
+                status = (
+                    exc.response.status_code
+                    if isinstance(exc, requests.HTTPError)
+                    and exc.response is not None
+                    else None
+                )
+                if status is not None and not _is_retriable_status(status):
+                    break
                 if attempt < retries - 1:
-                    time.sleep(pause * (attempt + 1))
+                    time.sleep(
+                        pause * (2**attempt)
+                        + random.uniform(0.0, pause)
+                    )
         raise RuntimeError(_http_error_message("POST", url, last_error)) from last_error
+
+
+def _retry_delay(
+    response: requests.Response,
+    *,
+    attempt: int,
+    pause: float,
+) -> float:
+    retry_after = response.headers.get("Retry-After", "").strip()
+    if retry_after:
+        try:
+            parsed = float(retry_after)
+            return min(max(parsed, 0.0), 120.0)
+        except ValueError:
+            try:
+                target = parsedate_to_datetime(retry_after)
+                if target.tzinfo is None:
+                    target = target.replace(tzinfo=UTC)
+                delay = (
+                    target.astimezone(UTC) - datetime.now(UTC)
+                ).total_seconds()
+                return min(max(delay, 0.0), 120.0)
+            except (TypeError, ValueError, OverflowError):
+                pass
+    reset = response.headers.get("X-RateLimit-Reset", "").strip()
+    if reset:
+        try:
+            delay = float(reset) - time.time()
+            return min(max(delay, 0.0), 120.0)
+        except ValueError:
+            pass
+    return min(
+        cast(
+            float,
+            pause * (2**attempt) + random.uniform(0.0, pause),
+        ),
+        120.0,
+    )
+
+
+def _is_retriable_status(status: int) -> bool:
+    return status in {408, 429, 500, 502, 503, 504}

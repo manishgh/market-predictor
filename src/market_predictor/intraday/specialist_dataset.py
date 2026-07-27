@@ -1218,8 +1218,11 @@ def _repair_fixed_opening_range(data: pd.DataFrame) -> pd.DataFrame:
         .transform("min")
     )
     exact = opening_count.eq(6)
-    output["opening_range_high"] = fixed_high.where(exact)
-    output["opening_range_low"] = fixed_low.where(exact)
+    # The sixth 5-minute opening bar starts at 09:55 and is only usable
+    # after its 10:00 close. Earlier rows must not see the completed range.
+    range_available = exact & minute.ge(9 * 60 + 55)
+    output["opening_range_high"] = fixed_high.where(range_available)
+    output["opening_range_low"] = fixed_low.where(range_available)
     close = pd.to_numeric(output["close"], errors="coerce")
     output["opening_range_width_pct"] = (
         output["opening_range_high"] - output["opening_range_low"]
@@ -1358,6 +1361,12 @@ def _normalize_completed_five_minute_rows(
     output["session_minute_et"] = (
         eastern.dt.hour * 60 + eastern.dt.minute
     ).astype("int16")
+    decision_eastern = output["decision_time_utc"].dt.tz_convert(
+        "America/New_York"
+    )
+    output["decision_minute_et"] = (
+        decision_eastern.dt.hour * 60 + decision_eastern.dt.minute
+    ).astype("int16")
     return output
 
 
@@ -1416,7 +1425,7 @@ def _apply_setup_rules(
     data: pd.DataFrame,
     strategy: IntradaySpecialistStrategyConfig,
 ) -> pd.DataFrame:
-    selected = data["session_minute_et"].between(
+    selected = data["decision_minute_et"].between(
         strategy.first_decision_minute_et,
         strategy.last_decision_minute_et_exclusive - 1,
     )
@@ -1626,6 +1635,7 @@ def _empty_setup_frame(projection: Sequence[str]) -> pd.DataFrame:
             "bar_end_utc",
             "signal_time_utc",
             "session_minute_et",
+            "decision_minute_et",
             "close_location_5m",
             "return_3bar_atr_units",
             "dist_session_vwap_atr_units",

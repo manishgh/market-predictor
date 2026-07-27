@@ -227,6 +227,12 @@ class IntradaySpecialistResearchConfig(FrozenModel):
     intraday_finalization_delay_seconds: Literal[30] = 30
     entry_latency_minutes: Literal[1] = 1
     cross_section_batch_sessions: Literal[5] = 5
+    alpaca_unit_max_expected_rows: int = Field(ge=1_000, le=9_500)
+    alpaca_unit_max_symbols: int = Field(ge=1, le=50)
+    alpaca_collection_workers: int = Field(ge=1, le=4)
+    alpaca_collection_retries: int = Field(ge=1, le=8)
+    alpaca_request_timeout_seconds: int = Field(ge=10, le=120)
+    alpaca_max_pages_per_unit: int = Field(ge=1, le=128)
     minimum_one_minute_warmup_bars: int = Field(ge=20, le=10_000)
     target_atr: float = Field(gt=0, le=10)
     stop_atr: float = Field(gt=0, le=10)
@@ -289,6 +295,13 @@ class IntradaySpecialistResearchConfig(FrozenModel):
         ):
             raise ValueError(
                 "entry latency must exceed the intraday finalization delay"
+            )
+        if (
+            self.alpaca_unit_max_expected_rows
+            > 10_000 - 500
+        ):
+            raise ValueError(
+                "Alpaca unit rows must retain at least 500 rows of page headroom"
             )
         if tuple(self.strategies) != INTRADAY_SPECIALIST_IDS:
             raise ValueError("KS4 strategy order and identity must match the catalog")
