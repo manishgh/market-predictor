@@ -5,7 +5,7 @@ Last updated: 2026-07-28
 Repository: `C:\project\market-predictor`
 Remote: `https://github.com/manishgh/market-predictor`
 Branch: `r3-lineage`
-Last implementation commit: `b03a7bc` (pushed to `origin/r3-lineage`)
+Last implementation commit: `4257347` (pushed to `origin/r3-lineage`)
 
 Read first:
 
@@ -99,9 +99,9 @@ Material findings:
 
 Verification:
 
-- 585 tests passed; 85 existing warnings.
+- 596 tests passed; 85 existing warnings.
 - Ruff clean.
-- Strict mypy clean across 176 source files.
+- Strict mypy clean across 179 source files.
 - Compileall and `git diff --check` clean.
 - Immutable audit replay verified every published artifact.
 
@@ -143,21 +143,21 @@ Immediate work:
 
 1. Materialize hash-bound per-symbol five-minute history joined to the PIT
    session snapshots.
-2. Reconcile each setup's computed bar-end/finalization timestamp against
-   canonical `bar_complete_at_utc`.
+2. Reconcile each setup's computed bar end against canonical `bar_end_utc`
+   and its finalization timestamp against canonical `available_at_utc`.
 3. Rebuild causal setups, then plan and collect selective one-minute paths.
 4. Rebuild causal intraday rows and rerun ER1.
 5. Proceed to ER2 only after at least 750 usable sessions and a
    `ready_for_ER2` audit.
 
-Exact next command after the collector is implemented:
+Exact next implementation target:
 
-```powershell
-.\.venv\Scripts\market-predictor-research.exe `
-  collect-edge-rebuild-intraday-history `
-  --plan-dir data\research\edge_rebuild_intraday_history_plan_er1a_20260728 `
-  --out-dir data\raw\edge_rebuild_intraday_history_er1a_20260728
-```
+Create and test `materialize-edge-rebuild-intraday-history`. It must replay
+the plan and collection authorities, stream unit shards under 4 GiB, publish
+regular-session per-symbol stock and benchmark histories, merge the verified
+July-2024-forward corpus without conflicting duplicates, preserve
+`bar_end_utc` and `available_at_utc`, and publish authority only after every
+output hash verifies. No command exists for this step yet.
 
 Do not:
 
