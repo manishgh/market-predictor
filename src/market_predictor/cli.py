@@ -18,6 +18,7 @@ from rich.console import Console
 from market_predictor.azure_store import AzureBlobStore
 from market_predictor.canonical.contracts import SourceCollection
 from market_predictor.commands.canonical_data import register_canonical_data_commands
+from market_predictor.commands.edge_rebuild import register_edge_rebuild_commands
 from market_predictor.commands.intraday_model import register_intraday_model_commands
 from market_predictor.commands.intraday_specialists import (
     register_intraday_specialist_commands,
@@ -81,6 +82,7 @@ DEFAULT_MARKET_CONTEXT_PATH = Path("data/external/market_context/market_context_
 register_ranking_commands(app, console)
 register_strategy_governance_commands(app, console)
 register_canonical_data_commands(app, console)
+register_edge_rebuild_commands(app, console)
 register_swing_model_commands(app, console)
 register_swing_collection_commands(app, console)
 register_swing_research_commands(app, console)

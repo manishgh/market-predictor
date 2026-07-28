@@ -43,6 +43,7 @@
   "research": [
     "attribute-alpaca-news-history",
     "audit-alpaca-news-history",
+    "audit-edge-rebuild-readiness",
     "audit-intraday-specialist-one-minute-coverage",
     "audit-primary-v2-failures",
     "audit-promotion-readiness",
