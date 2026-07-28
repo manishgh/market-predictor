@@ -224,9 +224,9 @@ The immutable ER1A plan is
 `data/research/edge_rebuild_intraday_history_plan_er1a_20260728`.
 
 - Plan fingerprint:
-  `4c5e0c71db9337ab00f03bea47ad52b8d6745d96ed572aad1558035043023dc5`.
+  `96688b25df7abb24d0317649bde87bf29d9497f799d968801b8f5995bb7cb285`.
 - Manifest SHA-256:
-  `5cfb87aa7316aeaa5a635e7a8c3c4a78b8b12b9c7f6c63716118847daa95c885`.
+  `899a83a33032ab5878779d9feee67adfdabcf0f69f6d5cd0cb39ee768f7b159a`.
 - 804 historical sessions from 2021-04-27 through 2024-07-08.
 - 570 active historical tickers and 404,711 point-in-time ticker-sessions.
 - 4,020 bounded, resumable Alpaca SIP/all five-minute request units.
@@ -234,8 +234,46 @@ The immutable ER1A plan is
   expected rows.
 - One-minute requests are not present in this plan. They are generated only
   after causal setup extraction.
-- Peak planning RSS was 0.658 GiB under the 4 GiB hard limit.
+- Peak planning RSS was 0.663 GiB under the 4 GiB hard limit.
 - No network request, model fitting, or model artifact was produced.
+
+The ER1A collector is resumable at unit granularity. It permits two requests in
+flight, caps each Alpaca request at the provider-enforced 50 symbols, stops
+scheduling after five unit failures, stores compressed raw provider pages and
+rate-limit headers, and publishes complete authority only after all units
+verify. An operational batch limit may pause a run without changing collection
+identity.
+
+Live transport validation on 2026-07-28 proved:
+
+- Alpaca premium SIP access is active.
+- The endpoint reports a 10,000 request/hour limit.
+- The initial 125-symbol assumption failed closed before transport expansion;
+  the invalid non-authoritative smoke output was removed and the immutable plan
+  was regenerated with the verified 50-symbol limit.
+- Five corrected units returned 16,871 canonical five-minute bars with zero
+  failures, 17-50 symbols per unit, one or two provider pages, and 0.294 GiB
+  peak RSS.
+- Sparse provider observations are retained as observed. No bar is filled or
+  synthesized.
+
+The complete transport is
+`data/raw/edge_rebuild_intraday_history_er1a_20260728`.
+
+- Collection request SHA-256:
+  `5cf109183d4128310be7ad8d9353d3d7b568b3c531ad1458f27be939cdd6c377`.
+- Collection manifest SHA-256:
+  `a037802034724bfe54ed1dba0af8320514164c5002bcb35d451061e4daefcefb`.
+- Complete authority SHA-256:
+  `a474c622c10e7dd9ea23b9ac23b5847e248f5cde9305a1ca3566e949f5c69852`.
+- 8,844/8,844 units completed with zero failures; five smoke units were
+  resumed without another network request.
+- 32,033,151 canonical SIP/all five-minute bars across 583 observed symbols.
+- Peak collection RSS was 0.293 GiB.
+- Full replay verified every registered Parquet hash and matching unit
+  sidecar. The collection remains `model_data_ready=false` until
+  materialization, setup extraction, selective one-minute labels, and ER1
+  re-audit complete.
 
 ## 7. ER2: Frozen Research Contract
 

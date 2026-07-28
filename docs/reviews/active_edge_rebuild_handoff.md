@@ -118,24 +118,36 @@ Completed ER1A work:
 - Immutable plan:
   `data/research/edge_rebuild_intraday_history_plan_er1a_20260728`.
 - Plan fingerprint:
-  `4c5e0c71db9337ab00f03bea47ad52b8d6745d96ed572aad1558035043023dc5`.
+  `96688b25df7abb24d0317649bde87bf29d9497f799d968801b8f5995bb7cb285`.
 - Manifest SHA-256:
-  `5cfb87aa7316aeaa5a635e7a8c3c4a78b8b12b9c7f6c63716118847daa95c885`.
+  `899a83a33032ab5878779d9feee67adfdabcf0f69f6d5cd0cb39ee768f7b159a`.
 - Scope: 804 sessions, 570 historical tickers, 404,711 ticker-sessions,
-  4,020 request units, and at most 32,289,798 five-minute rows.
-- Peak planning RSS: 0.658 GiB.
+  8,844 request units, and at most 32,289,798 five-minute rows.
+- Peak planning RSS: 0.663 GiB.
+- Live smoke: five corrected units, 16,871 canonical rows, zero failures,
+  0.294 GiB peak RSS, and verified Alpaca SIP entitlement.
+- Provider constraints: 50 symbols/request and 10,000 requests/hour. The
+  collector uses two workers and a five-failure scheduling circuit.
+- Complete collection:
+  `data/raw/edge_rebuild_intraday_history_er1a_20260728`.
+- Request SHA-256:
+  `5cf109183d4128310be7ad8d9353d3d7b568b3c531ad1458f27be939cdd6c377`.
+- Manifest SHA-256:
+  `a037802034724bfe54ed1dba0af8320514164c5002bcb35d451061e4daefcefb`.
+- Authority SHA-256:
+  `a474c622c10e7dd9ea23b9ac23b5847e248f5cde9305a1ca3566e949f5c69852`.
+- 8,844/8,844 units, zero failures, 32,033,151 canonical five-minute
+  rows, 583 observed symbols, and 0.293 GiB peak collection RSS.
 
 Immediate work:
 
-1. Implement and test the resumable ER1A five-minute collector against the
-   immutable unit bundle.
-2. Collect sequentially with two bounded workers and peak RSS below 4 GiB.
-3. Publish and verify per-unit raw-response lineage and canonical bar hashes.
-4. Materialize hash-bound per-symbol five-minute history joined to the PIT
+1. Materialize hash-bound per-symbol five-minute history joined to the PIT
    session snapshots.
-5. Rebuild causal setups, then plan and collect selective one-minute paths.
-6. Rebuild causal intraday rows and rerun ER1.
-7. Proceed to ER2 only after at least 750 usable sessions and a
+2. Reconcile each setup's computed bar-end/finalization timestamp against
+   canonical `bar_complete_at_utc`.
+3. Rebuild causal setups, then plan and collect selective one-minute paths.
+4. Rebuild causal intraday rows and rerun ER1.
+5. Proceed to ER2 only after at least 750 usable sessions and a
    `ready_for_ER2` audit.
 
 Exact next command after the collector is implemented:

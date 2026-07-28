@@ -33,10 +33,13 @@ class IntradayHistoryConfig(FrozenModel):
     feature_warmup_sessions: int = Field(ge=20, le=100)
     minimum_session_cross_section: int = Field(ge=300)
     maximum_expected_rows_per_unit: int = Field(ge=1_000, le=10_000)
-    maximum_symbols_per_unit: int = Field(ge=1, le=500)
+    maximum_symbols_per_unit: int = Field(ge=1, le=50)
     collection_workers: int = Field(ge=1, le=4)
     collection_retries: int = Field(ge=1, le=10)
     request_timeout_seconds: float = Field(ge=10, le=300)
+    maximum_pages_per_unit: int = Field(ge=1, le=10)
+    maximum_failures_before_stop: int = Field(ge=1, le=20)
+    intraday_finalization_delay_seconds: int = Field(ge=0, le=300)
     maximum_process_memory_gib: float = Field(ge=1, le=4)
     memory_guard_headroom_gib: float = Field(ge=0.5, le=2)
     benchmark_tickers: tuple[str, ...]
@@ -57,6 +60,14 @@ class IntradayHistoryConfig(FrozenModel):
             raise ValueError("ER1A feature discovery must use five-minute bars")
         if self.exact_path_timeframe != "1Min":
             raise ValueError("ER1A exact labels must use one-minute bars")
+        if self.maximum_pages_per_unit != 4:
+            raise ValueError("ER1A page budget must remain four")
+        if self.maximum_symbols_per_unit != 50:
+            raise ValueError("ER1A Alpaca units must remain capped at 50 symbols")
+        if self.maximum_failures_before_stop != 5:
+            raise ValueError("ER1A failure circuit must remain five")
+        if self.intraday_finalization_delay_seconds != 60:
+            raise ValueError("ER1A finalization delay must remain 60 seconds")
         if self.minimum_usable_sessions > self.target_usable_sessions:
             raise ValueError("minimum sessions cannot exceed target sessions")
         if self.memory_guard_headroom_gib >= self.maximum_process_memory_gib:
@@ -97,4 +108,3 @@ def load_intraday_history_config(path: Path) -> IntradayHistoryConfig:
         raise DataReadinessError(
             f"ER1A intraday-history policy is invalid: {path}"
         ) from exc
-

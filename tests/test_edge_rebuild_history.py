@@ -30,6 +30,8 @@ def test_intraday_history_contract_freezes_two_tier_acquisition() -> None:
     assert config.target_usable_sessions == 1_250
     assert config.minimum_usable_sessions == 750
     assert config.collection_workers == 2
+    assert config.maximum_symbols_per_unit == 50
+    assert config.maximum_failures_before_stop == 5
     assert config.maximum_process_memory_gib == 4
 
 
@@ -164,6 +166,7 @@ def test_plan_is_hash_bound_point_in_time_and_selective(
     assert set(units["adjustment"]) == {"all"}
     assert set(units["timeframe"]) == {"5Min"}
     assert int(units["maximum_expected_rows"].max()) <= 10_000
+    assert int(units["symbol_count"].max()) <= 50
     assert "OLD" not in "".join(units["canonical_symbols_json"].astype(str))
 
 
