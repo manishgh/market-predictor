@@ -1,0 +1,45 @@
+schema_version = "edge_rebuild.readiness.v1"
+required_price_feed = "sip"
+required_adjustment = "all"
+target_history_sessions = 1250
+maximum_process_memory_gib = 4.0
+memory_guard_headroom_gib = 0.75
+
+[swing]
+strategy_id = "SWING.SECTOR_RESIDUAL_MOMENTUM.10D.V1"
+proxy_strategy_id = "SWING.SECTOR_RESIDUAL_MOMENTUM.5D.V1"
+proposed_horizon_sessions = 10
+non_overlapping_phases = 10
+minimum_valid_sessions = 1000
+minimum_sessions_per_phase = 60
+minimum_daily_warmup_bars = 250
+
+[intraday]
+strategy_id = "INTRADAY.VWAP_EXHAUSTION_REVERSAL.30M.V1"
+proxy_strategy_id = "INTRADAY.VWAP_REVERSION.30M.V1"
+proposed_horizon_minutes = 30
+minimum_causal_sessions = 750
+required_purged_folds = 4
+minimum_test_sessions_per_fold = 60
+required_timeframe = "1Min"
+
+[catalyst]
+required_source_families = ["alpaca"]
+required_relation_channels = [
+  "direct_issuer",
+  "business_exposure",
+  "sector_context",
+  "global_context",
+]
+required_fields = [
+  "published_at_utc",
+  "first_observed_at_utc",
+  "relation",
+  "sentiment",
+]
+research_availability_policies = [
+  "observed",
+  "provider_publication_proxy",
+]
+promotion_availability_policies = ["observed"]
+
