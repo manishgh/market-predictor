@@ -116,8 +116,8 @@ Only one checkpoint may be `in_progress`.
 
 | Step | Status | Purpose | Exit |
 | --- | --- | --- | --- |
-| ER0 | in_progress | Establish this active plan and companion handoff | Both documents exist, repository guidance requires them, verification passes, checkpoint is pushed |
-| ER1 | pending | Audit effective independent history and causal data readiness | Hash-bound audit reports sessions, regimes, setup opportunity counts, feed/cost lineage, catalyst coverage, and exact blockers without training |
+| ER0 | completed | Establish this active plan and companion handoff | Closed by implementation commit `8c28df9`; both documents and repository guidance are pushed |
+| ER1 | in_progress | Audit effective independent history and causal data readiness | Hash-bound audit reports sessions, regimes, setup opportunity counts, feed/cost lineage, catalyst coverage, and exact blockers without training |
 | ER2 | pending | Freeze new strategy contracts and bounded experiment budget | New IDs, setup eligibility, entry/exit/labels, design window, folds, costs, features, abstention, and retirement rules are immutable and tested |
 | ER3 | pending | Build deterministic setup populations and exact labels | Each setup replays from immutable bars; gross/net/benchmark economics and sample sufficiency are published before ML |
 | ER4 | pending | Complete causal catalyst confirmation evidence | Direct/business/sector/global relations and event timing reconcile; technical-only, catalyst-only, and confirmation-overlay rows are identical and auditable |
@@ -218,3 +218,15 @@ After every ER step:
 5. Commit and push the documentation closure.
 
 The next LLM must be able to continue from those two files without reading chat history.
+
+## 11. Completed Evidence
+
+### ER0
+
+- Implementation commit: `8c28df9`
+- Remote ref: `origin/r3-lineage`
+- Deliverables: this plan, the companion handoff, mandatory repository guidance, and
+  README links.
+- Verification: 19 focused governance/dependency tests passed; repository-wide Ruff,
+  strict mypy across 172 source files, compileall, and `git diff --check` passed.
+- Next checkpoint: ER1, marked `in_progress`; implementation has not started.

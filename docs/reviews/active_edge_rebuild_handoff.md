@@ -1,11 +1,11 @@
 # Active Edge Rebuild Handoff
 
-Status: ER0 plan/governance checkpoint in progress
+Status: ER0 completed; ER1 is in progress with implementation not yet started
 Last updated: 2026-07-28
 Repository: `C:\project\market-predictor`
 Remote: `https://github.com/manishgh/market-predictor`
 Branch: `r3-lineage`
-Branch tip before ER0: `6a9eb5b`
+Last implementation commit: `8c28df9` (pushed to `origin/r3-lineage`)
 
 Read first:
 
@@ -59,7 +59,7 @@ Model card:
 
 - `docs/model_cards/primary_v2_failure_attribution_20260728.md`
 
-## Current Step: ER0
+## Completed Step: ER0
 
 In scope:
 
@@ -77,17 +77,20 @@ Out of scope:
 - changing promotion gates;
 - Azure, deployment, alerts, or TradingFlow execution.
 
-ER0 exit:
+ER0 evidence:
 
 - `docs/active_edge_rebuild_plan.md` exists and ER1 is fully specified;
 - this handoff contains actual state and exact restart instructions;
 - repository guidance requires both files;
-- documentation checks pass;
-- ER0 is committed and pushed.
+- 19 focused governance/dependency tests passed;
+- repository-wide Ruff, strict mypy across 172 source files, compileall, and
+  `git diff --check` passed;
+- implementation commit `8c28df9` is pushed.
 
-## Exact Next Step After ER0
+## Current Step: ER1
 
-Start ER1 only after the ER0 planning commit is pushed.
+ER0 is pushed and ER1 is the only `in_progress` plan step. No ER1 implementation files
+have been created or modified yet.
 
 ER1 must first implement a read-only, hash-bound effective-sample/data-readiness audit.
 It must reuse and verify existing artifacts before requesting any download. It may not
