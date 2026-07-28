@@ -260,11 +260,15 @@ def _verify_swing_sources(
             "label_eligible",
             "label_path_exact",
             "market_regime",
+            "membership_available_at_utc",
+            "membership_effective_from_utc",
+            "membership_effective_to_utc",
             "price_feed",
             "round_trip_cost_bps",
             "sector",
             "session_date_et",
             "ticker",
+            "universe_snapshot_id",
         },
     )
     proxy_frame = _read_required_columns(
@@ -274,14 +278,20 @@ def _verify_swing_sources(
             "catalyst_source_complete",
             "decision_time_utc",
             "event_count_3d",
+            "entry_time_utc",
+            "exit_time_utc",
             "latest_event_feature_available_at_utc",
             "price_feed",
             "setup_eligible",
             "strategy_decision_group_id",
             "strategy_execution_cost_fraction",
+            "strategy_excess_return_vs_sector",
+            "strategy_excess_return_vs_spy",
             "strategy_gross_return",
             "strategy_label_eligible",
             "strategy_net_return",
+            "strategy_sector_return",
+            "strategy_spy_return",
             "ticker",
         },
     )
@@ -373,6 +383,10 @@ def _verify_intraday_sources(
         "session_segment",
         "setup_id",
         "ticker",
+        "universe_snapshot_id",
+        "exit_time_utc",
+        "path_sector_return_30m",
+        "path_spy_return_30m",
     }
     proxy = _read_intraday_proxy(verified, records=records, columns=columns)
     return VerifiedIntradaySources(
@@ -606,6 +620,15 @@ def _prepare_swing_rows(
     available = pd.to_datetime(
         rows["feature_available_at_utc"], utc=True, errors="coerce"
     )
+    membership_available = pd.to_datetime(
+        rows["membership_available_at_utc"], utc=True, errors="coerce"
+    )
+    membership_from = pd.to_datetime(
+        rows["membership_effective_from_utc"], utc=True, errors="coerce"
+    )
+    membership_to = pd.to_datetime(
+        rows["membership_effective_to_utc"], utc=True, errors="coerce"
+    )
     masks = {
         "feature_ineligible": ~_bool_series(rows["feature_eligible"]),
         "cross_section_ineligible": ~_bool_series(
@@ -623,10 +646,20 @@ def _prepare_swing_rows(
         "feature_available_after_decision": (
             decision.isna() | available.isna() | available.gt(decision)
         ),
+        "membership_unavailable_at_decision": (
+            membership_available.isna()
+            | membership_available.gt(decision)
+        ),
+        "membership_interval_invalid": (
+            membership_from.isna()
+            | membership_from.gt(decision)
+            | (membership_to.notna() & membership_to.lt(decision))
+        ),
         "missing_identity": (
             rows["ticker"].isna()
             | rows["decision_group_id"].isna()
             | rows["session_date_et"].isna()
+            | rows["universe_snapshot_id"].isna()
         ),
     }
     usable = pd.Series(True, index=rows.index)
@@ -688,6 +721,7 @@ def _prepare_intraday_rows(
             rows["ticker"].isna()
             | rows["setup_id"].isna()
             | rows["session_date_et"].isna()
+            | rows["universe_snapshot_id"].isna()
         ),
         "conflicting_market_regime": risk_on & risk_off,
     }
@@ -911,6 +945,60 @@ def _cost_record(
     }
 
 
+def _swing_benchmark_status(frame: pd.DataFrame) -> str:
+    eligible = _bool_series(frame["strategy_label_eligible"])
+    return _benchmark_status(
+        frame.loc[eligible],
+        entry_column="entry_time_utc",
+        exit_column="exit_time_utc",
+        numeric_columns=(
+            "strategy_spy_return",
+            "strategy_sector_return",
+            "strategy_excess_return_vs_spy",
+            "strategy_excess_return_vs_sector",
+        ),
+    )
+
+
+def _intraday_benchmark_status(frame: pd.DataFrame) -> str:
+    eligible = _bool_series(frame["label_eligible"])
+    return _benchmark_status(
+        frame.loc[eligible],
+        entry_column="entry_time_utc",
+        exit_column="exit_time_utc",
+        numeric_columns=(
+            "path_spy_return_30m",
+            "path_sector_return_30m",
+            "path_excess_return_30m_vs_spy",
+            "path_excess_return_30m_vs_sector",
+        ),
+    )
+
+
+def _benchmark_status(
+    frame: pd.DataFrame,
+    *,
+    entry_column: str,
+    exit_column: str,
+    numeric_columns: tuple[str, ...],
+) -> str:
+    if frame.empty:
+        return "blocked:no_eligible_proxy_labels"
+    entry = pd.to_datetime(frame[entry_column], utc=True, errors="coerce")
+    exit_time = pd.to_datetime(
+        frame[exit_column], utc=True, errors="coerce"
+    )
+    if entry.isna().any() or exit_time.isna().any() or exit_time.le(entry).any():
+        return "blocked:invalid_entry_exit_interval"
+    for column in numeric_columns:
+        values = pd.to_numeric(frame[column], errors="coerce").to_numpy(
+            dtype=float
+        )
+        if not np.isfinite(values).all():
+            return f"blocked:non_finite_{column}"
+    return "verified_proxy_labels"
+
+
 def _catalyst_readiness(
     *,
     swing: VerifiedSwingSources,
@@ -1105,6 +1193,14 @@ def _source_inventory(
             "source_authority": "complete",
             "coverage_exact_rate": 1.0,
             "collection_model_data_ready": True,
+            "point_in_time_membership_status": (
+                "verified_row_intervals"
+                if swing_usable["universe_snapshot_id"].notna().all()
+                else "blocked"
+            ),
+            "benchmark_interval_status": _swing_benchmark_status(
+                swing_proxy
+            ),
         },
         {
             "strategy_id": config.intraday.strategy_id,
@@ -1153,6 +1249,14 @@ def _source_inventory(
                     intraday.coverage_manifest.get("summary")
                 ).get("model_data_ready")
             ),
+            "point_in_time_membership_status": (
+                "verified_snapshot_identity"
+                if intraday_usable["universe_snapshot_id"].notna().all()
+                else "blocked"
+            ),
+            "benchmark_interval_status": _intraday_benchmark_status(
+                intraday_rows
+            ),
         },
         {
             "strategy_id": "CATALYST.OVERLAY",
@@ -1188,6 +1292,8 @@ def _source_inventory(
                 catalyst.coverage["training_eligible"].astype(bool).mean()
             ),
             "collection_model_data_ready": False,
+            "point_in_time_membership_status": "not_applicable",
+            "benchmark_interval_status": "not_applicable",
         },
     ]
     return pd.DataFrame(records)
@@ -1257,6 +1363,29 @@ def _blockers(
             ),
             f"valid_sessions={intra['valid_sessions']}; required={config.intraday.minimum_causal_sessions}; missing_at_least={missing}",
         )
+    for _, row in source_inventory.loc[
+        source_inventory["strategy_id"].isin(
+            [config.swing.strategy_id, config.intraday.strategy_id]
+        )
+    ].iterrows():
+        if not str(row["point_in_time_membership_status"]).startswith(
+            "verified"
+        ):
+            add(
+                "point_in_time_membership_incomplete",
+                str(row["strategy_id"]),
+                True,
+                "repair causal universe membership before ER2",
+                str(row["point_in_time_membership_status"]),
+            )
+        if row["benchmark_interval_status"] != "verified_proxy_labels":
+            add(
+                "benchmark_interval_incomplete",
+                str(row["strategy_id"]),
+                True,
+                "repair exact SPY/sector interval evidence before ER2",
+                str(row["benchmark_interval_status"]),
+            )
     coverage_summary = _mapping(
         intraday.coverage_manifest.get("summary")
     )

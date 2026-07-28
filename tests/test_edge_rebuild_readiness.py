@@ -92,6 +92,7 @@ def test_intraday_entry_at_decision_open_is_causally_valid() -> None:
             "adjustment": ["all"],
             "ticker": ["TEST"],
             "setup_id": ["setup-1"],
+            "universe_snapshot_id": ["snapshot-1"],
             "label_eligible": [True],
             "label_ineligible_reason": [""],
         }
