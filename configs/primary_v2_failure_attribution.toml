@@ -28,6 +28,7 @@ row_id_column = "strategy_dataset_row_id"
 volatility_column = "atr_pct_14"
 volatility_low_upper_bound = 0.015
 volatility_medium_upper_bound = 0.030
+non_overlapping_phases = 5
 
 [intraday]
 strategy_id = "INTRADAY.VWAP_REVERSION.30M.V2"
@@ -53,3 +54,4 @@ volatility_low_upper_bound = 0.010
 volatility_medium_upper_bound = 0.025
 opening_segment_end_et = "11:00"
 midday_segment_end_et = "14:00"
+non_overlapping_phases = 1

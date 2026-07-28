@@ -50,6 +50,7 @@ class FailureAttributionStrategyConfig(FrozenModel):
     volatility_column: str
     volatility_low_upper_bound: float = Field(gt=0)
     volatility_medium_upper_bound: float = Field(gt=0)
+    non_overlapping_phases: int = Field(ge=1, le=5)
     opening_segment_end_et: str | None = None
     midday_segment_end_et: str | None = None
 
@@ -67,16 +68,27 @@ class FailureAttributionStrategyConfig(FrozenModel):
         if self.dimensions != expected_dimensions:
             raise ValueError("failure-attribution dimensions are not frozen")
         if self.strategy_id == SWING_V2_ID:
+            if self.non_overlapping_phases != 5:
+                raise ValueError(
+                    "five-session swing attribution requires five phases"
+                )
             if (
                 self.opening_segment_end_et is not None
                 or self.midday_segment_end_et is not None
             ):
                 raise ValueError("swing attribution cannot define intraday segments")
-        elif (
-            self.opening_segment_end_et != "11:00"
-            or self.midday_segment_end_et != "14:00"
-        ):
-            raise ValueError("intraday time-of-day boundaries must be 11:00 and 14:00 ET")
+        else:
+            if self.non_overlapping_phases != 1:
+                raise ValueError(
+                    "within-session intraday attribution requires one phase"
+                )
+            if (
+                self.opening_segment_end_et != "11:00"
+                or self.midday_segment_end_et != "14:00"
+            ):
+                raise ValueError(
+                    "intraday time-of-day boundaries must be 11:00 and 14:00 ET"
+                )
         return self
 
 

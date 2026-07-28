@@ -84,6 +84,7 @@ class DependencyBoundaryTests(unittest.TestCase):
                 "mypy",
                 "pip-audit",
                 "pip-licenses",
+                "pytest",
                 "ruff",
                 "uv",
             },

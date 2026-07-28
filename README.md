@@ -41,6 +41,8 @@ The V2 contract, exact timing semantics, frozen hypotheses, and acceptance gates
 are in [Primary V2 strategy research plan](docs/primary_strategy_v2_plan_2026-07-28.md).
 The completed evidence and failure interpretation are in the
 [Primary V2 model card](docs/model_cards/primary_v2_20260728.md).
+The subsequent validation-population audit is in the
+[Primary V2 failure-attribution model card](docs/model_cards/primary_v2_failure_attribution_20260728.md).
 At this checkpoint, 564 repository tests and 28 subtests pass, repository-wide
 Ruff is clean, strict mypy passes across 173 source files in the current local
 Python environment, and both complete V2 runs pass recursive artifact-authority
@@ -56,7 +58,26 @@ replay.
   --strategy-id INTRADAY.VWAP_REVERSION.30M.V2 `
   --source-dir data\features\ks4_intraday_training_causal_v3_20260727 `
   --out-dir data\research\primary_v2_intraday_authoritative_v2_20260728
+
+.\.venv\Scripts\python.exe -m market_predictor.research_cli audit-primary-v2-failures `
+  --strategy-id SWING.CROSS_SECTIONAL_MOMENTUM.5D.V2 `
+  --v2-run-dir data\research\primary_v2_swing_authoritative_v2_20260728 `
+  --source-dir data\features\swing\specialist_datasets_20210709_20260708_v4 `
+  --out-dir data\research\primary_v2_failure_attribution_swing_phase_v3_20260728
+
+.\.venv\Scripts\python.exe -m market_predictor.research_cli audit-primary-v2-failures `
+  --strategy-id INTRADAY.VWAP_REVERSION.30M.V2 `
+  --v2-run-dir data\research\primary_v2_intraday_authoritative_v2_20260728 `
+  --source-dir data\features\ks4_intraday_training_causal_v3_20260727 `
+  --out-dir data\research\primary_v2_failure_attribution_intraday_phase_v3_20260728
 ```
+
+The setup audit found no replicated viable cohort. Intraday VWAP reversion is
+negative before costs in both validation scopes. Swing momentum has positive
+average gross movement, but stamped costs consume the edge, both scopes
+underperform SPY, and all five non-overlapping phases of every predeclared
+cohort fail confidence or risk gates.
+The audit does not authorize model promotion or a narrower V3 population.
 
 ### Swing research inventory
 

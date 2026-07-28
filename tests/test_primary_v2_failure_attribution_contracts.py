@@ -20,8 +20,10 @@ def test_failure_attribution_policy_freezes_dimensions_and_scopes() -> None:
     assert config.validation_scopes == ("walk_forward", "ticker_holdout")
     assert config.swing.strategy_id == SWING_V2_ID
     assert config.swing.dimensions == SWING_DIMENSIONS
+    assert config.swing.non_overlapping_phases == 5
     assert config.intraday.strategy_id == INTRADAY_V2_ID
     assert config.intraday.dimensions == INTRADAY_DIMENSIONS
+    assert config.intraday.non_overlapping_phases == 1
 
 
 def test_failure_attribution_policy_freezes_replicated_viability_gates() -> None:
@@ -52,4 +54,13 @@ def test_failure_attribution_rejects_weakened_evidence_gate() -> None:
     raw["minimum_rows_per_scope"] = 100
 
     with pytest.raises(ValidationError):
+        FailureAttributionConfig.model_validate(raw)
+
+
+def test_failure_attribution_rejects_overlapping_swing_evaluation() -> None:
+    config = load_failure_attribution_config(POLICY)
+    raw = config.model_dump()
+    raw["swing"]["non_overlapping_phases"] = 1
+
+    with pytest.raises(ValidationError, match="requires five phases"):
         FailureAttributionConfig.model_validate(raw)

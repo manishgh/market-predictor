@@ -1,7 +1,7 @@
 # Primary V2 Failure Attribution and Setup Viability Plan
 
 Date: 2026-07-28
-Status: frozen before implementation
+Status: implemented; both authoritative audits complete
 
 ## Purpose
 
@@ -11,6 +11,13 @@ a broad predeclared setup cohort. It does not train, promote, or retain a model.
 
 The audit uses only rows that were validation observations in the authoritative
 V2 split. Training rows cannot contribute to viability evidence.
+
+Five-session swing labels overlap on adjacent decision dates. Swing evidence is
+therefore split into five fixed calendar phases and every phase is evaluated
+separately. A swing cohort must pass all five phases in both validation scopes.
+Pooling adjacent five-session labels as independent observations is prohibited.
+Intraday paths remain grouped by session because each path ends within its
+decision session.
 
 ## Authoritative Inputs
 
@@ -50,6 +57,10 @@ For each validation scope and cohort, publish:
 - average maximum favorable and adverse excursion;
 - intraday target-first, stop-first, timeout, and resolution statistics.
 
+Swing records additionally identify the non-overlapping phase. Replicated
+viability uses the worst phase for return, confidence, profit factor, and sample
+counts, and the largest phase drawdown.
+
 Gross minus net is the authoritative stamped cost. The audit fails if the
 calculated cost is negative, non-finite, inconsistent by row, or below the
 frozen 10 bps minimum on average.
@@ -57,7 +68,8 @@ frozen 10 bps minimum on average.
 ## Replicated Viability
 
 The same `(dimension, value)` must independently pass both walk-forward and
-unseen-ticker scopes. Each scope requires:
+unseen-ticker scopes. Swing requires every one of five non-overlapping phases
+inside each scope; intraday has one session-contained phase. Each phase requires:
 
 - at least 200 rows and 60 sessions;
 - positive average net return and positive lower 95% confidence bound;
@@ -77,3 +89,8 @@ artifact is hash-bound. Reusing a complete directory verifies and returns it;
 an existing directory for a different request fails closed.
 
 The process is serialized and must remain below 4 GiB resident memory.
+
+## Completed Evidence
+
+The completed interpretation and immutable artifact identities are recorded in
+`docs/model_cards/primary_v2_failure_attribution_20260728.md`.
