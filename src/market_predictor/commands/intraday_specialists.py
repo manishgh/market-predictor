@@ -278,5 +278,5 @@ def register_intraday_specialist_commands(
             progress=console.print,
         )
         console.print(result)
-        if result["invocation_status"] != "complete":
+        if result.get("status") != "complete":
             raise typer.Exit(code=2)

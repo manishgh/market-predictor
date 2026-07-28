@@ -95,10 +95,11 @@ DETERMINISTIC_SCORE_FORMULAS = {
         "+ log1p(max(volume_burst_20bar,0))"
     ),
     "downside_risk": (
-        "max(atr_pct,0) "
-        "+ max(coalesce(volatility_12bar,volatility_6bar),0) "
-        "+ max(-return_1bar,0) + max(-rel_return_3bar_vs_sector,0) "
-        "+ max(1-close_location_5m,0)"
+        "coalesce(max(atr_pct,0),1) "
+        "+ coalesce(max(coalesce(volatility_12bar,volatility_6bar),0),1) "
+        "+ coalesce(max(-return_1bar,0),1) "
+        "+ coalesce(max(-rel_return_3bar_vs_sector,0),1) "
+        "+ coalesce(max(1-close_location_5m,0),1)"
     ),
 }
 DETERMINISTIC_SCORE_FORMULA_SHA256 = hashlib.sha256(
@@ -914,18 +915,25 @@ def _deterministic_score(
             raise DataReadinessError(
                 f"deterministic score is missing {column}"
             )
-        return pd.to_numeric(data[column], errors="coerce")
+        return pd.to_numeric(data[column], errors="coerce").replace(
+            [np.inf, -np.inf],
+            np.nan,
+        )
 
     if downside:
         volatility = number("volatility_12bar")
         if bool(volatility.isna().any()):
             volatility = volatility.fillna(number("volatility_6bar"))
         score = (
-            number("atr_pct").clip(lower=0)
-            + volatility.clip(lower=0)
-            + (-number("return_1bar")).clip(lower=0)
-            + (-number("rel_return_3bar_vs_sector")).clip(lower=0)
-            + (1.0 - number("close_location_5m")).clip(lower=0)
+            number("atr_pct").clip(lower=0).fillna(1.0)
+            + volatility.clip(lower=0).fillna(1.0)
+            + (-number("return_1bar")).clip(lower=0).fillna(1.0)
+            + (-number("rel_return_3bar_vs_sector"))
+            .clip(lower=0)
+            .fillna(1.0)
+            + (1.0 - number("close_location_5m"))
+            .clip(lower=0)
+            .fillna(1.0)
         )
     elif score_name == "opening_breakout_confirmation":
         score = (

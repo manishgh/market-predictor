@@ -16,6 +16,7 @@ from market_predictor.intraday.specialist_model import (
     SPECIALIST_ACCEPTED_STATUS,
     SPECIALIST_REJECTED_STATUS,
     _clock_phase_economics,
+    _deterministic_score,
     build_specialist_split_plan,
     evaluate_specialist_experiment,
     specialist_experiment_specs,
@@ -246,6 +247,24 @@ class IntradaySpecialistModelTests(unittest.TestCase):
                 strategy_id=STRATEGY_ID,
                 config=self.config,
             )
+
+    def test_deterministic_downside_missing_inputs_are_conservative(
+        self,
+    ) -> None:
+        data = _dataset().iloc[:3].copy()
+        data.loc[data.index[0], "volatility_12bar"] = float("nan")
+        data.loc[data.index[0], "volatility_6bar"] = float("nan")
+        data.loc[data.index[1], "rel_return_3bar_vs_sector"] = float("nan")
+        data.loc[data.index[2], "close_location_5m"] = float("nan")
+
+        score = _deterministic_score(
+            data,
+            "opening_breakout_confirmation",
+            downside=True,
+        )
+
+        self.assertTrue(pd.Series(score).notna().all())
+        self.assertGreaterEqual(float(score.min()), 1.0)
 
 
 def _dataset() -> pd.DataFrame:
