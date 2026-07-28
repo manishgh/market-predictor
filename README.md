@@ -27,13 +27,36 @@ Candidate identity comes from an immutable `.manifest.json`. Effective promoted 
 | Serving view | Artifact / family | State | Current evidence |
 | --- | --- | --- | --- |
 | Swing 5D | Canonical `swing.model.v1` | Five-year technical baselines completed and rejected; no promoted artifact | The 2021-07-09 through 2026-07-08 dataset has 607,909 eligible rows and 581 training tickers. Logistic/HGB walk-forward AUC is 0.4962/0.5000 and conservative return is -0.2343%/-0.0303%; neither has predictive or economic edge. The five-year Alpaca archive is audited; catalyst-full training remains blocked until sentiment artifacts are completed, audited, and joined causally. |
+| Swing Long Cross-Sectional Momentum - Next 5 Trading Sessions - Version 2 | `SWING.CROSS_SECTIONAL_MOMENTUM.5D.V2` | Distributional replay complete and rejected; no model retained | Reuses 113,884 exact KS3 rows, 53 technical features, four purged folds, and a separate unseen-ticker cohort. Expected-return HGB has worst-phase walk-forward net/SPY-relative return of -0.1937%/-0.4691%, profit factor 0.8998, and 45.99% drawdown. Its paired V1 net-return confidence lower bound is -0.2403%. |
 | Legacy swing 1D/5D volatile models | Pre-C4 artifacts | Deprecated and not serveable | Their feature/target schemas do not satisfy the canonical C4 contract, regardless of an older manifest status. |
 | Intraday 30m/60m KS4 | Seven named causal specialists | Development replay complete; all 22 technical candidates rejected; no promoted artifact | The exact-path corpus contains 479,879 rows derived from 81,349,171 Alpaca SIP one-minute bars. All seven technical populations completed four purged temporal folds and separate unseen-ticker evaluation. Five strategy hypotheses are reference-rejected; catalyst-dependent Gap Continuation and Gap Fade remain data-blocked pending immutable first-observed event lineage. No model artifact was retained. |
+| Intraday Long VWAP Mean Reversion - Up to 30 Regular-Session Minutes - Version 2 | `INTRADAY.VWAP_REVERSION.30M.V2` | Competing-risk and quantile replay complete and rejected; no model retained | Reuses 65,344 eligible exact-path KS4 rows and 70 technical features. The multinomial baseline loses -0.0855%/-0.0860% net in walk-forward/unseen-ticker validation. HGB competing risks is worse, with 0.4036 minimum profit factor and 26.80% drawdown. The distributional safety policy correctly selects zero rows because no predicted 10th-percentile return is positive. |
 | Legacy intraday 12 bars | 2026-07-09 technical ablation | Candidate; not serveable | ROC AUC 0.6014 and lift 1.4719. It predates the canonical C5 contract and fails its historical gates. |
 | Intraday opening V2 | 2026-07-10 non-overlapping, cost-aware experiment | Candidate; promotion rejected | Best exact-path AUC 0.5806, lift 1.1764, selected net return -0.184% per trade, profit factor 0.7076, max drawdown 30.28%. |
 | Intraday V3 R1 | 2026-07-20 grouped XGBoost ranker | Candidate; promotion rejected | Walk-forward/holdout NDCG@10 0.4930/0.5123, but top-10 cost-adjusted excess return is -0.0715%/-0.0764%. |
 | Intraday V3 O1 | 2026-07-21 fixed ticker-catalyst overlay on R1 | Research ablation; rejected | Walk-forward top-10 excess return improves from -0.0574% to -0.0487%, but ticker holdout worsens from -0.0642% to -0.0669%; both paired confidence intervals include zero. |
 | Intraday V4-H1 120m | 2026-07-21 exact-path B0/R1 experiment | Research candidates; rejected | R1 top-10 cost-adjusted excess return is -0.0802%/-0.0629% walk-forward/holdout. The longer horizon does not cover costs. |
+
+The V2 contract, exact timing semantics, frozen hypotheses, and acceptance gates
+are in [Primary V2 strategy research plan](docs/primary_strategy_v2_plan_2026-07-28.md).
+The completed evidence and failure interpretation are in the
+[Primary V2 model card](docs/model_cards/primary_v2_20260728.md).
+At this checkpoint, 564 repository tests and 28 subtests pass, repository-wide
+Ruff is clean, strict mypy passes across 173 source files in the current local
+Python environment, and both complete V2 runs pass recursive artifact-authority
+replay.
+
+```powershell
+.\.venv\Scripts\python.exe -m market_predictor.research_cli train-primary-v2 `
+  --strategy-id SWING.CROSS_SECTIONAL_MOMENTUM.5D.V2 `
+  --source-dir data\features\swing\specialist_datasets_20210709_20260708_v4 `
+  --out-dir data\research\primary_v2_swing_authoritative_v2_20260728
+
+.\.venv\Scripts\python.exe -m market_predictor.research_cli train-primary-v2 `
+  --strategy-id INTRADAY.VWAP_REVERSION.30M.V2 `
+  --source-dir data\features\ks4_intraday_training_causal_v3_20260727 `
+  --out-dir data\research\primary_v2_intraday_authoritative_v2_20260728
+```
 
 ### Swing research inventory
 
@@ -167,6 +190,8 @@ The corrected V4-H1 fingerprint contains 505,049 physical rows and 495,513 rank-
 - [Intraday model promotion](docs/intraday_model_promotion.md)
 - [ML model V3 improvement plan](docs/ml_model_v3_plan.md)
 - [Known strategy expansion sequence](docs/known_strategy_expansion_sequence_2026-07-26.md)
+- [Primary V2 strategy research plan](docs/primary_strategy_v2_plan_2026-07-28.md)
+- [Primary V2 model card](docs/model_cards/primary_v2_20260728.md)
 - [Strategy execution traceability](docs/strategy_execution_traceability.md)
 - [Machine-readable strategy execution ledger](docs/strategy_execution_ledger.json)
 - [Bounded strategy hypothesis registry](docs/strategy_hypothesis_registry.json)

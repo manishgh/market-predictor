@@ -112,7 +112,19 @@ scopes:
 - calibrated event probabilities for competing-risk candidates;
 - incremental economic evidence against the exact V1 comparator.
 
+For every learned candidate, the session-paired candidate-minus-V1 bootstrap
+confidence lower bounds for both net return and SPY-relative return must be
+strictly positive in walk-forward and unseen-ticker validation. The V1
+comparator itself is reported but is not required to improve on itself.
+
 AUC, accuracy, or calibration alone cannot promote a strategy.
+
+Calibration is evaluated overall and within each required market regime when
+at least 100 rows are available. Quantile calibration error may not exceed
+0.10, corrected 10th-to-90th percentile coverage must remain between 0.65 and
+0.90, and raw quantile crossing may not exceed 25%. Intraday event models must
+have log loss at most 1.20, multiclass Brier score at most 0.70, and
+probabilities summing to one.
 
 ## Data and Leakage Gates
 
@@ -142,4 +154,3 @@ Each immutable run must publish:
 - paired V1/V2 incremental evidence;
 - final accepted/rejected authority;
 - no retained serving model when the strategy is rejected.
-

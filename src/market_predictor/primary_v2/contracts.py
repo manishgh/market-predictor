@@ -111,7 +111,6 @@ class PrimaryV2StrategyConfig(FrozenModel):
             "entry_time_utc",
             "exit_time_utc",
             "label_available_at_utc",
-            "market_regime",
             "primary_benchmark",
             self.period_column,
             self.row_id_column,
@@ -124,6 +123,7 @@ class PrimaryV2StrategyConfig(FrozenModel):
         }
         if self.competing_risk_targets is not None:
             columns.update(self.competing_risk_targets.model_dump().values())
+            columns.update({"price_feed", "adjustment"})
         return frozenset(columns)
 
 
@@ -139,6 +139,8 @@ class PrimaryV2ResearchConfig(FrozenModel):
     minimum_average_excess_return_vs_sector: float
     minimum_average_net_return_ci_low: float
     minimum_average_excess_return_vs_spy_ci_low: float
+    minimum_incremental_net_return_ci_low: float
+    minimum_incremental_spy_excess_ci_low: float
     minimum_profit_factor: float = Field(ge=1)
     maximum_drawdown: float = Field(gt=0, le=0.20)
     maximum_negative_period_rate: float = Field(ge=0, le=1)
@@ -152,6 +154,13 @@ class PrimaryV2ResearchConfig(FrozenModel):
     hgb_learning_rate: float = Field(gt=0, le=1)
     hgb_l2_regularization: float = Field(ge=0)
     quantiles: tuple[float, ...]
+    minimum_calibration_rows: int = Field(ge=100)
+    maximum_quantile_calibration_error: float = Field(gt=0, le=0.20)
+    minimum_q10_q90_interval_coverage: float = Field(ge=0.50, le=0.80)
+    maximum_q10_q90_interval_coverage: float = Field(ge=0.80, le=1)
+    maximum_raw_quantile_crossing_rate: float = Field(ge=0, le=0.25)
+    maximum_event_log_loss: float = Field(gt=0)
+    maximum_event_brier_score: float = Field(gt=0, le=1)
     strategies: dict[str, PrimaryV2StrategyConfig]
 
     @model_validator(mode="after")
@@ -162,6 +171,11 @@ class PrimaryV2ResearchConfig(FrozenModel):
             raise ValueError("primary V2 strategy catalog mismatch")
         if self.quantiles != (0.10, 0.50, 0.90):
             raise ValueError("primary V2 quantiles must be exactly 0.10, 0.50, 0.90")
+        if (
+            self.minimum_q10_q90_interval_coverage
+            >= self.maximum_q10_q90_interval_coverage
+        ):
+            raise ValueError("primary V2 interval coverage bounds are invalid")
         if len(set(self.required_market_regimes)) != len(self.required_market_regimes):
             raise ValueError("required market regimes must be unique")
         if self.memory_guard_headroom_gib >= self.maximum_process_memory_gib:
@@ -189,4 +203,3 @@ def load_primary_v2_research_config(path: Path) -> PrimaryV2ResearchConfig:
     except (OSError, tomllib.TOMLDecodeError) as exc:
         raise DataReadinessError(f"primary V2 policy is unreadable: {path}") from exc
     return PrimaryV2ResearchConfig.model_validate(raw)
-

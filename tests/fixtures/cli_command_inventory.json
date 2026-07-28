@@ -95,6 +95,7 @@
     "train-entry-exit-model",
     "train-intraday-model",
     "train-intraday-specialists",
+    "train-primary-v2",
     "train-swing-model",
     "train-swing-specialists",
     "train-v3-models",

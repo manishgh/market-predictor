@@ -34,6 +34,9 @@ def test_primary_v2_policy_freezes_candidates_costs_and_memory() -> None:
     assert config.quantiles == (0.10, 0.50, 0.90)
     assert config.maximum_process_memory_gib == 4.0
     assert config.maximum_drawdown == 0.20
+    assert config.minimum_incremental_net_return_ci_low == 0.0
+    assert config.minimum_q10_q90_interval_coverage == 0.65
+    assert config.maximum_event_brier_score == 0.70
     for strategy in config.strategies.values():
         assert strategy.minimum_round_trip_cost_bps >= 10.0
         assert len(strategy.candidate_families) * len(strategy.selection_policies) <= 12
@@ -46,6 +49,7 @@ def test_primary_v2_required_columns_include_causal_and_path_fields() -> None:
     assert {"decision_time_utc", "entry_time_utc", "exit_time_utc", "label_available_at_utc"} <= swing
     intraday = config.strategies[INTRADAY_V2_ID].required_source_columns
     assert {"target_before_stop_30m", "stop_before_target_30m", "path_timeout_30m"} <= intraday
+    assert "path_excess_return_30m_vs_spy" in intraday
 
 
 def test_primary_v2_rejects_weakened_memory_or_horizon() -> None:
