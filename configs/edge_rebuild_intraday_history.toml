@@ -1,0 +1,34 @@
+schema_version = "edge_rebuild.intraday_history.v1"
+provider = "alpaca"
+calendar = "XNYS"
+required_price_feed = "sip"
+required_adjustment = "all"
+feature_timeframe = "5Min"
+exact_path_timeframe = "1Min"
+target_usable_sessions = 1250
+minimum_usable_sessions = 750
+feature_warmup_sessions = 30
+minimum_session_cross_section = 450
+maximum_expected_rows_per_unit = 10000
+maximum_symbols_per_unit = 125
+collection_workers = 2
+collection_retries = 4
+request_timeout_seconds = 60.0
+maximum_process_memory_gib = 4.0
+memory_guard_headroom_gib = 0.75
+benchmark_tickers = [
+  "SPY",
+  "QQQ",
+  "XLB",
+  "XLC",
+  "XLE",
+  "XLF",
+  "XLI",
+  "XLK",
+  "XLP",
+  "XLRE",
+  "XLU",
+  "XLV",
+  "XLY",
+]
+

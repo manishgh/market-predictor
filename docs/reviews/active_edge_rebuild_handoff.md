@@ -5,7 +5,7 @@ Last updated: 2026-07-28
 Repository: `C:\project\market-predictor`
 Remote: `https://github.com/manishgh/market-predictor`
 Branch: `r3-lineage`
-Last implementation commit: `7b0ce6d` (pushed to `origin/r3-lineage`)
+Last implementation commit: `b03a7bc` (pushed to `origin/r3-lineage`)
 
 Read first:
 
@@ -109,29 +109,49 @@ Verification:
 
 ER1A is the only `in_progress` step. ER2 remains pending and unauthorized.
 
+Completed ER1A work:
+
+- Inventory verified the five-year PIT universe and found no reusable
+  pre-July-2024 intraday bars.
+- Full-universe discovery uses SIP/all five-minute bars. Exact one-minute paths
+  remain selective and are planned only after causal setup extraction.
+- Immutable plan:
+  `data/research/edge_rebuild_intraday_history_plan_er1a_20260728`.
+- Plan fingerprint:
+  `4c5e0c71db9337ab00f03bea47ad52b8d6745d96ed572aad1558035043023dc5`.
+- Manifest SHA-256:
+  `5cfb87aa7316aeaa5a635e7a8c3c4a78b8b12b9c7f6c63716118847daa95c885`.
+- Scope: 804 sessions, 570 historical tickers, 404,711 ticker-sessions,
+  4,020 request units, and at most 32,289,798 five-minute rows.
+- Peak planning RSS: 0.658 GiB.
+
 Immediate work:
 
-1. Inventory reusable historical point-in-time universe and intraday source
-   artifacts before any network call.
-2. Freeze resumable acquisition units for pre-2024-08-09 Alpaca SIP one-minute
-   bars with `adjustment=all`.
-3. Reject a static current ticker list; historical membership must be causal.
-4. Collect sequentially and keep peak RSS below 4 GiB.
-5. Rebuild causal intraday source rows and rerun ER1.
-6. Proceed to ER2 only after at least 750 usable sessions and a
+1. Implement and test the resumable ER1A five-minute collector against the
+   immutable unit bundle.
+2. Collect sequentially with two bounded workers and peak RSS below 4 GiB.
+3. Publish and verify per-unit raw-response lineage and canonical bar hashes.
+4. Materialize hash-bound per-symbol five-minute history joined to the PIT
+   session snapshots.
+5. Rebuild causal setups, then plan and collect selective one-minute paths.
+6. Rebuild causal intraday rows and rerun ER1.
+7. Proceed to ER2 only after at least 750 usable sessions and a
    `ready_for_ER2` audit.
 
-Exact first inventory command:
+Exact next command after the collector is implemented:
 
 ```powershell
-rg --files data\artifacts data\features data\raw |
-  rg "point.in.time|sp500|universe|intraday|development.*(_manifest|authority)"
+.\.venv\Scripts\market-predictor-research.exe `
+  collect-edge-rebuild-intraday-history `
+  --plan-dir data\research\edge_rebuild_intraday_history_plan_er1a_20260728 `
+  --out-dir data\raw\edge_rebuild_intraday_history_er1a_20260728
 ```
 
 Do not:
 
 - train any model;
 - use a current static universe for historical acquisition;
+- collect full-universe one-minute history before setup discovery;
 - impute missing one-minute trades;
 - change the 750-session, four-fold, SIP, cost, or benchmark gates;
 - begin ER2 while the ER1 audit is blocked.

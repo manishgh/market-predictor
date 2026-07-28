@@ -118,7 +118,7 @@ Only one checkpoint may be `in_progress`.
 | --- | --- | --- | --- |
 | ER0 | completed | Establish this active plan and companion handoff | Closed by implementation commit `8c28df9`; both documents and repository guidance are pushed |
 | ER1 | completed | Audit effective independent history and causal data readiness | Closed by implementation commits `5ffa3d3`, `d9d93c8`, and `7b0ce6d`; immutable audit request `f80f70ae299bd5e5a6aeae6aeaa503ef4775573696b7d88856d539dbd1355080` reports one ER2 blocker |
-| ER1A | in_progress | Complete targeted intraday history and re-audit readiness | Add at least 274 causally usable pre-2024-08-09 SIP sessions without survivor leakage; republished ER1 audit must authorize ER2 |
+| ER1A | in_progress | Complete targeted intraday history and re-audit readiness | PIT inventory and the two-tier acquisition plan are complete; collect the 5-minute discovery history, derive setups, collect selective 1-minute paths, and republish ER1 |
 | ER2 | pending | Freeze new strategy contracts and bounded experiment budget | New IDs, setup eligibility, entry/exit/labels, design window, folds, costs, features, abstention, and retirement rules are immutable and tested |
 | ER3 | pending | Build deterministic setup populations and exact labels | Each setup replays from immutable bars; gross/net/benchmark economics and sample sufficiency are published before ML |
 | ER4 | pending | Complete causal catalyst confirmation evidence | Direct/business/sector/global relations and event timing reconcile; technical-only, catalyst-only, and confirmation-overlay rows are identical and auditable |
@@ -189,23 +189,53 @@ ER1 is complete. The immutable audit is
 
 ER1A is the only active checkpoint. It does not train a model.
 
-1. Reuse a verified point-in-time universe and benchmark identity. A current
-   static ticker list is prohibited because it would introduce survivor bias.
-2. Freeze resumable Alpaca acquisition units for SIP one-minute bars with
-   `adjustment=all`, ending before the first usable decision at
-   `2024-08-09T15:36:00Z`.
-3. Acquire enough earlier sessions to produce at least 750 causally usable
+1. Reuse the verified five-year point-in-time S&P 500 universe and benchmark
+   identity. A current static ticker list is prohibited because it would
+   introduce survivor bias.
+2. Acquire full-universe Alpaca SIP five-minute bars with `adjustment=all` for
+   causal feature construction and setup discovery. Full-universe one-minute
+   collection is prohibited because it adds storage and transport cost without
+   improving the five-minute setup clock.
+3. After causal setups are extracted, acquire only their exact SIP one-minute
+   trigger, entry, benchmark, stop/target, and timeout paths. Missing provider
+   trades remain no-trade observations and may not be imputed.
+4. Acquire enough earlier sessions to produce at least 750 causally usable
    sessions; the research target remains approximately 1,250 sessions.
-4. Rebuild the causal intraday technical/setup source from the expanded history.
-   Missing provider bars remain no-trade observations and may not be imputed into
-   triggers, entries, benchmark paths, or exits.
-5. Re-run the immutable ER1 audit. ER2 may start only when the audit reports
+5. Rebuild the causal intraday technical/setup source from the expanded history.
+6. Re-run the immutable ER1 audit. ER2 may start only when the audit reports
    `ready_for_ER2`, all four fold-capacity checks pass, and no membership,
    benchmark, feed, adjustment, or availability blocker remains.
 
 The download scope must be derived from verified historical membership before
 network collection begins. Memory remains below 4 GiB and collection/training jobs
 remain sequential.
+
+### ER1A Inventory And Frozen Plan
+
+The local inventory found no reusable intraday history before July 2024. It did
+verify the research-only five-year point-in-time universe at
+`data/universe/sp500_point_in_time_20190709_20260708_v3.parquet`: 659 membership
+intervals across 658 historical tickers, official S&P change evidence, reviewed
+security transitions, and no overlapping intervals. Historical membership
+availability remains a provider-publication proxy, so this source may support
+retrospective research but not prospective promotion.
+
+The immutable ER1A plan is
+`data/research/edge_rebuild_intraday_history_plan_er1a_20260728`.
+
+- Plan fingerprint:
+  `4c5e0c71db9337ab00f03bea47ad52b8d6745d96ed572aad1558035043023dc5`.
+- Manifest SHA-256:
+  `5cfb87aa7316aeaa5a635e7a8c3c4a78b8b12b9c7f6c63716118847daa95c885`.
+- 804 historical sessions from 2021-04-27 through 2024-07-08.
+- 570 active historical tickers and 404,711 point-in-time ticker-sessions.
+- 4,020 bounded, resumable Alpaca SIP/all five-minute request units.
+- Maximum 32,289,798 five-minute rows; each request is capped at 10,000
+  expected rows.
+- One-minute requests are not present in this plan. They are generated only
+  after causal setup extraction.
+- Peak planning RSS was 0.658 GiB under the 4 GiB hard limit.
+- No network request, model fitting, or model artifact was produced.
 
 ## 7. ER2: Frozen Research Contract
 

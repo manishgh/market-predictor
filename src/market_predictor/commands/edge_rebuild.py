@@ -8,6 +8,12 @@ import typer
 from market_predictor.edge_rebuild.contracts import (
     load_edge_rebuild_readiness_config,
 )
+from market_predictor.edge_rebuild.history_contracts import (
+    load_intraday_history_config,
+)
+from market_predictor.edge_rebuild.intraday_history import (
+    build_intraday_history_plan,
+)
 from market_predictor.edge_rebuild.readiness import (
     run_edge_rebuild_readiness_audit,
 )
@@ -18,6 +24,35 @@ from market_predictor.intraday.specialist_contracts import (
 
 
 def register_edge_rebuild_commands(app: typer.Typer, console: Any) -> None:
+    @app.command("plan-edge-rebuild-intraday-history")
+    @serialized_heavy_job("plan-edge-rebuild-intraday-history")
+    def plan_edge_rebuild_intraday_history(
+        readiness_audit_dir: Path = typer.Option(...),
+        memberships: Path = typer.Option(...),
+        membership_audit: Path = typer.Option(...),
+        existing_stock_bars_dir: Path = typer.Option(...),
+        existing_benchmark_bars_dir: Path = typer.Option(...),
+        out_dir: Path = typer.Option(...),
+        policy: Path = typer.Option(
+            Path("configs/edge_rebuild_intraday_history.toml")
+        ),
+    ) -> None:
+        """Plan causal PIT five-minute history before selective minute labels."""
+
+        result = build_intraday_history_plan(
+            readiness_audit_directory=readiness_audit_dir,
+            memberships_path=memberships,
+            membership_audit_path=membership_audit,
+            existing_stock_bars_directory=existing_stock_bars_dir,
+            existing_benchmark_bars_directory=(
+                existing_benchmark_bars_dir
+            ),
+            policy_path=policy,
+            output_directory=out_dir,
+            config=load_intraday_history_config(policy),
+        )
+        console.print(result["summary"])
+
     @app.command("audit-edge-rebuild-readiness")
     @serialized_heavy_job("audit-edge-rebuild-readiness")
     def audit_edge_rebuild_readiness(
