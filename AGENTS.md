@@ -24,11 +24,13 @@ When instructions disagree, use this order:
 1. Current user instruction.
 2. This `AGENTS.md`.
 3. `docs/catalyst_confirmation_architecture.md`.
-4. The current checkpoint and exit gates in
-   `docs/reviews/next_model_handoff_2026-07-23.md`.
-5. Current code contracts and tests.
-6. Older review, planning, and handoff documents.
-7. Chat history.
+4. The single active execution plan:
+   `docs/active_edge_rebuild_plan.md`.
+5. The companion current handoff:
+   `docs/reviews/active_edge_rebuild_handoff.md`.
+6. Current code contracts and tests.
+7. Older review, planning, and handoff documents.
+8. Chat history.
 
 Never infer current state from chat alone. Inspect the branch, working tree, recent
 commits, tests, and authoritative documents first.
@@ -114,6 +116,35 @@ or mark the checkpoint blocked/environment-pending with the exact missing eviden
 External facts that cannot be proven locally, such as Azure identity, Blob permissions,
 live market behavior, real shadow performance, or container execution on unavailable
 infrastructure, must remain `environment_pending`. Never simulate them into a pass.
+
+### 3.7 Two-Document Continuity
+
+There must be exactly two current continuity documents:
+
+1. `docs/active_edge_rebuild_plan.md` is the only active execution plan. It records
+   the ordered checkpoints, frozen scope, status, exit gates, and completed evidence.
+2. `docs/reviews/active_edge_rebuild_handoff.md` is the only current continuation
+   handoff. It records the actual branch state, last completed implementation commit,
+   authoritative artifacts, blockers, exact next step, files to read, and verification
+   commands.
+
+Older dated plans and handoffs are historical evidence. Do not create another active
+plan or handoff while these files exist. Replace them only when the entire edge-rebuild
+program is closed or explicitly superseded by the user.
+
+At every checkpoint boundary:
+
+1. Read both current documents before changing code.
+2. Mark only the current plan step `in_progress`; exactly one step may be in progress.
+3. Implement and verify only that step.
+4. Commit and push the implementation checkpoint.
+5. Update the active plan with factual status, evidence, and the implementation commit.
+6. Rewrite the handoff so a new LLM can resume without chat history.
+7. Commit and push the documentation closure before starting the next step.
+
+The handoff must never claim unrun tests, unverified artifacts, model profitability, or
+external readiness. If interrupted before the implementation commit, record the dirty
+files and exact unfinished command instead of marking the step complete.
 
 ## 4. Mandatory ML And Trading Invariants
 
@@ -209,7 +240,8 @@ For every checkpoint:
 8. Check `git diff --check`, process state, and memory.
 9. Update README, architecture, implementation guide, and handoff only where behavior
    actually changed.
-10. Commit one coherent checkpoint and push it before starting the next checkpoint.
+10. Commit and push the implementation, then close the two continuity documents before
+    starting the next checkpoint.
 
 Do not mix unfinished work from different checkpoints in one commit. If the working
 tree already contains paused work, stage only the files belonging to the current

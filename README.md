@@ -3,6 +3,12 @@
 All contributors and coding agents must follow the mandatory convergence and ML
 engineering rules in [AGENTS.md](AGENTS.md) before changing this repository.
 
+The only current execution queue is the
+[Active Edge Rebuild Execution Plan](docs/active_edge_rebuild_plan.md), with exact
+continuation state in the
+[Active Edge Rebuild Handoff](docs/reviews/active_edge_rebuild_handoff.md).
+Older dated plans and handoffs are historical contracts and evidence.
+
 Python prediction-intelligence project for ticker-level swing, daily momentum, and intraday setup scoring using:
 
 - Alpaca premium news, ticker universe, and market bars as the primary live source.
@@ -43,8 +49,8 @@ The completed evidence and failure interpretation are in the
 [Primary V2 model card](docs/model_cards/primary_v2_20260728.md).
 The subsequent validation-population audit is in the
 [Primary V2 failure-attribution model card](docs/model_cards/primary_v2_failure_attribution_20260728.md).
-At this checkpoint, 564 repository tests and 28 subtests pass, repository-wide
-Ruff is clean, strict mypy passes across 173 source files in the current local
+At this checkpoint, 574 repository tests pass, repository-wide Ruff is clean,
+strict mypy passes across 172 source files in the current local
 Python environment, and both complete V2 runs pass recursive artifact-authority
 replay.
 
