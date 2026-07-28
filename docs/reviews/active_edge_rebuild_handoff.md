@@ -1,11 +1,11 @@
 # Active Edge Rebuild Handoff
 
-Status: ER0 completed; ER1 is in progress with implementation not yet started
+Status: ER1 completed; ER1A targeted intraday history completion is in progress
 Last updated: 2026-07-28
 Repository: `C:\project\market-predictor`
 Remote: `https://github.com/manishgh/market-predictor`
 Branch: `r3-lineage`
-Last implementation commit: `8c28df9` (pushed to `origin/r3-lineage`)
+Last implementation commit: `7b0ce6d` (pushed to `origin/r3-lineage`)
 
 Read first:
 
@@ -59,60 +59,82 @@ Model card:
 
 - `docs/model_cards/primary_v2_failure_attribution_20260728.md`
 
-## Completed Step: ER0
+## Completed Step: ER1
 
-In scope:
+Implementation:
 
-- establish exactly one active plan and one current handoff;
-- make both mandatory in `AGENTS.md`;
-- link the active plan from README;
-- verify documentation consistency;
-- commit and push the planning checkpoint.
+- frozen contract: `5ffa3d3`
+- audit engine and CLI: `d9d93c8`
+- final lineage, fold, membership, and benchmark evidence: `7b0ce6d`
+- command: `audit-edge-rebuild-readiness`
 
-Out of scope:
+Authoritative local evidence:
 
-- data collection;
-- feature/label implementation;
-- estimator training;
-- changing promotion gates;
-- Azure, deployment, alerts, or TradingFlow execution.
+- directory: `data/research/edge_rebuild_readiness_er1_20260728`
+- request SHA-256:
+  `f80f70ae299bd5e5a6aeae6aeaa503ef4775573696b7d88856d539dbd1355080`
+- status: `blocked_pending_targeted_acquisition`
+- peak RSS: 0.935 GiB
+- training performed: false
+- download performed: false
+- models created: zero
 
-ER0 evidence:
+Material findings:
 
-- `docs/active_edge_rebuild_plan.md` exists and ER1 is fully specified;
-- this handoff contains actual state and exact restart instructions;
-- repository guidance requires both files;
-- 19 focused governance/dependency tests passed;
-- repository-wide Ruff, strict mypy across 172 source files, compileall, and
-  `git diff --check` passed;
-- implementation commit `8c28df9` is pushed.
+- Swing: 1,254 usable sessions, 583 tickers, 610,818 usable technical
+  rows, 125 effective ten-session blocks; all ten phase-capacity checks pass.
+- Intraday: 476 usable sessions, 546 tickers, 69,301 usable proxy rows;
+  at least 274 additional usable sessions are required.
+- Four provisional chronological intraday chunks each have 119 sessions, but
+  this does not override the frozen 750-session total-history gate.
+- Both horizons verify point-in-time membership identity, SIP feed,
+  `adjustment=all`, exact stamped base costs, and exact SPY/sector proxy
+  intervals.
+- Existing one-minute coverage: 4,469,565 requirements, 88.36% exact. The
+  causal sparse-clock policy requires observed trigger/entry/benchmark/exit
+  bars and never imputes a trade.
+- Catalyst: direct issuer, sector relation, and sentiment are research-ready.
+  Business exposure, global context, intraday decision joins, and prospective
+  first-observed evidence are not ready.
 
-## Current Step: ER1
+Verification:
 
-ER0 is pushed and ER1 is the only `in_progress` plan step. No ER1 implementation files
-have been created or modified yet.
+- 585 tests passed; 85 existing warnings.
+- Ruff clean.
+- Strict mypy clean across 176 source files.
+- Compileall and `git diff --check` clean.
+- Immutable audit replay verified every published artifact.
 
-ER1 must first implement a read-only, hash-bound effective-sample/data-readiness audit.
-It must reuse and verify existing artifacts before requesting any download. It may not
-train a model.
+## Current Step: ER1A
 
-Required first ER1 investigation:
+ER1A is the only `in_progress` step. ER2 remains pending and unauthorized.
 
-1. Inventory the exact daily and one-minute source bundles already present.
-2. Report usable sessions by year and why sessions are excluded.
-3. Report independent decision groups, ticker breadth, regimes, session segments,
-   liquidity, and SIP identity.
-4. Test ten-session swing non-overlapping phase capacity.
-5. Report causal catalyst readiness separately from technical readiness.
-6. Freeze the ER1 audit schema and tests before scanning real data.
+Immediate work:
+
+1. Inventory reusable historical point-in-time universe and intraday source
+   artifacts before any network call.
+2. Freeze resumable acquisition units for pre-2024-08-09 Alpaca SIP one-minute
+   bars with `adjustment=all`.
+3. Reject a static current ticker list; historical membership must be causal.
+4. Collect sequentially and keep peak RSS below 4 GiB.
+5. Rebuild causal intraday source rows and rerun ER1.
+6. Proceed to ER2 only after at least 750 usable sessions and a
+   `ready_for_ER2` audit.
+
+Exact first inventory command:
+
+```powershell
+rg --files data\artifacts data\features data\raw |
+  rg "point.in.time|sp500|universe|intraday|development.*(_manifest|authority)"
+```
 
 Do not:
 
-- rerun V1/V2 training;
-- use rejected models as baselines for KS5;
-- tune setup thresholds from the existing validation/holdout outcomes;
-- bulk-download more data before ER1 proves the gap;
-- weaken confidence, cost, drawdown, benchmark, or memory gates.
+- train any model;
+- use a current static universe for historical acquisition;
+- impute missing one-minute trades;
+- change the 750-session, four-fold, SIP, cost, or benchmark gates;
+- begin ER2 while the ER1 audit is blocked.
 
 ## Verification Commands
 

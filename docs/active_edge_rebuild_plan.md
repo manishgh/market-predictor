@@ -117,7 +117,8 @@ Only one checkpoint may be `in_progress`.
 | Step | Status | Purpose | Exit |
 | --- | --- | --- | --- |
 | ER0 | completed | Establish this active plan and companion handoff | Closed by implementation commit `8c28df9`; both documents and repository guidance are pushed |
-| ER1 | in_progress | Audit effective independent history and causal data readiness | Hash-bound audit reports sessions, regimes, setup opportunity counts, feed/cost lineage, catalyst coverage, and exact blockers without training |
+| ER1 | completed | Audit effective independent history and causal data readiness | Closed by implementation commits `5ffa3d3`, `d9d93c8`, and `7b0ce6d`; immutable audit request `f80f70ae299bd5e5a6aeae6aeaa503ef4775573696b7d88856d539dbd1355080` reports one ER2 blocker |
+| ER1A | in_progress | Complete targeted intraday history and re-audit readiness | Add at least 274 causally usable pre-2024-08-09 SIP sessions without survivor leakage; republished ER1 audit must authorize ER2 |
 | ER2 | pending | Freeze new strategy contracts and bounded experiment budget | New IDs, setup eligibility, entry/exit/labels, design window, folds, costs, features, abstention, and retirement rules are immutable and tested |
 | ER3 | pending | Build deterministic setup populations and exact labels | Each setup replays from immutable bars; gross/net/benchmark economics and sample sufficiency are published before ML |
 | ER4 | pending | Complete causal catalyst confirmation evidence | Direct/business/sector/global relations and event timing reconcile; technical-only, catalyst-only, and confirmation-overlay rows are identical and auditable |
@@ -157,6 +158,54 @@ ER1 is the immediate next implementation checkpoint. It performs no training.
 
 Failure does not trigger immediate bulk downloading. ER1 first proves which evidence is
 actually missing and whether existing Alpaca data can be reused.
+
+### ER1 Result
+
+ER1 is complete. The immutable audit is
+`data/research/edge_rebuild_readiness_er1_20260728` with request SHA-256
+`f80f70ae299bd5e5a6aeae6aeaa503ef4775573696b7d88856d539dbd1355080`.
+
+- Swing has 1,254 causally usable SIP sessions, 583 tickers, 610,818 usable
+  technical rows, and 125 ten-session effective blocks. Every one of the ten
+  non-overlapping phase-capacity checks has at least 125 sessions and passes.
+- Intraday has 476 causally usable sessions, 546 tickers, and 69,301 usable
+  VWAP-reversion proxy rows. Each provisional four-way chronological test chunk
+  has 119 sessions, but the frozen total-history gate still fails by at least 274
+  sessions.
+- Point-in-time membership, SIP feed, `all` adjustment, exact stamped costs, and
+  matching SPY/sector proxy intervals verify for both horizons.
+- The existing one-minute coverage audit verifies 4,469,565 requirements at an
+  88.36% exact-minute rate. Sparse provider bars remain causal only under the
+  frozen no-imputation policy with observed trigger, entry, benchmark, and exit
+  bars.
+- Alpaca catalyst history has 564,916 source events and 489,088
+  training-eligible direct-issuer events. Provider publication time is usable as
+  a research proxy but is not prospective first-observed promotion evidence.
+  Business-exposure, global-context, and intraday decision joins remain ER4 work.
+- No data was downloaded, no model was fitted, and no model artifact was created.
+- Peak audit RSS was 0.935 GiB under the 4 GiB hard limit.
+
+## 6A. ER1A: Targeted Intraday History Completion
+
+ER1A is the only active checkpoint. It does not train a model.
+
+1. Reuse a verified point-in-time universe and benchmark identity. A current
+   static ticker list is prohibited because it would introduce survivor bias.
+2. Freeze resumable Alpaca acquisition units for SIP one-minute bars with
+   `adjustment=all`, ending before the first usable decision at
+   `2024-08-09T15:36:00Z`.
+3. Acquire enough earlier sessions to produce at least 750 causally usable
+   sessions; the research target remains approximately 1,250 sessions.
+4. Rebuild the causal intraday technical/setup source from the expanded history.
+   Missing provider bars remain no-trade observations and may not be imputed into
+   triggers, entries, benchmark paths, or exits.
+5. Re-run the immutable ER1 audit. ER2 may start only when the audit reports
+   `ready_for_ER2`, all four fold-capacity checks pass, and no membership,
+   benchmark, feed, adjustment, or availability blocker remains.
+
+The download scope must be derived from verified historical membership before
+network collection begins. Memory remains below 4 GiB and collection/training jobs
+remain sequential.
 
 ## 7. ER2: Frozen Research Contract
 
@@ -230,3 +279,20 @@ The next LLM must be able to continue from those two files without reading chat 
 - Verification: 19 focused governance/dependency tests passed; repository-wide Ruff,
   strict mypy across 172 source files, compileall, and `git diff --check` passed.
 - Next checkpoint: ER1, marked `in_progress`; implementation has not started.
+
+### ER1
+
+- Contract commit: `5ffa3d3`
+- Audit implementation commits: `d9d93c8`, `7b0ce6d`
+- Remote ref: `origin/r3-lineage`
+- Evidence directory:
+  `data/research/edge_rebuild_readiness_er1_20260728`
+- Request SHA-256:
+  `f80f70ae299bd5e5a6aeae6aeaa503ef4775573696b7d88856d539dbd1355080`
+- Result: `blocked_pending_targeted_acquisition`; one ER2 blocker,
+  `intraday_session_history_below_gate`.
+- Verification: 585 tests passed with 85 existing warnings; repository-wide
+  Ruff, strict mypy across 176 source files, compileall, immutable replay, and
+  `git diff --check` passed.
+- Peak RSS: 0.935 GiB.
+- Next checkpoint: ER1A, marked `in_progress`; ER2 remains pending.
