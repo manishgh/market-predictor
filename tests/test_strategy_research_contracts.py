@@ -179,6 +179,8 @@ class _repository_copy:
             "ks2_verification_20260726.json",
             "ks3_swing_specialist_replay_20260727.json",
             "ks3_verification_20260727.json",
+            "ks4_intraday_specialist_replay_20260728.json",
+            "ks4_verification_20260728.json",
         ):
             shutil.copy2(
                 REPOSITORY_ROOT / "docs" / "evidence" / name,

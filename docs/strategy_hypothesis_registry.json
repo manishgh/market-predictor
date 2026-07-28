@@ -88,7 +88,7 @@
       "hypothesis_id": "INTRADAY.OPENING_RANGE_BREAKOUT.60M.V1.H1",
       "item_id": "INTRADAY.OPENING_RANGE_BREAKOUT.60M.V1",
       "primary_outcome": "Target-before-stop, stop-before-target, timeout, and 60-minute net return.",
-      "state": "planned"
+      "state": "reference_rejected"
     },
     {
       "claim": "A catalyst-confirmed overnight gap with premarket and opening-volume support continues over the next 60 minutes.",
@@ -98,7 +98,7 @@
       "hypothesis_id": "INTRADAY.GAP_CONTINUATION.60M.V1.H1",
       "item_id": "INTRADAY.GAP_CONTINUATION.60M.V1",
       "primary_outcome": "60-minute target/stop/timeout outcome and net benchmark-relative return.",
-      "state": "planned"
+      "state": "data_blocked"
     },
     {
       "claim": "An unsupported or exhausted opening gap mean-reverts over the next 60 minutes.",
@@ -108,7 +108,7 @@
       "hypothesis_id": "INTRADAY.GAP_FADE.60M.V1.H1",
       "item_id": "INTRADAY.GAP_FADE.60M.V1",
       "primary_outcome": "60-minute reversion path, net return, MFE, and MAE.",
-      "state": "planned"
+      "state": "data_blocked"
     },
     {
       "claim": "A supported VWAP reclaim or hold continues over the next 60 minutes.",
@@ -118,7 +118,7 @@
       "hypothesis_id": "INTRADAY.VWAP_CONTINUATION.60M.V1.H1",
       "item_id": "INTRADAY.VWAP_CONTINUATION.60M.V1",
       "primary_outcome": "60-minute target/stop/timeout and net benchmark-relative return.",
-      "state": "planned"
+      "state": "reference_rejected"
     },
     {
       "claim": "An excessive liquidity-adjusted VWAP extension without continuation confirmation mean-reverts within 30 minutes.",
@@ -128,7 +128,7 @@
       "hypothesis_id": "INTRADAY.VWAP_REVERSION.30M.V1.H1",
       "item_id": "INTRADAY.VWAP_REVERSION.30M.V1",
       "primary_outcome": "30-minute reversion path, net return, MFE, and MAE.",
-      "state": "planned"
+      "state": "reference_rejected"
     },
     {
       "claim": "Same-cutoff intraday price and consolidated-volume leadership persists for 60 minutes.",
@@ -138,7 +138,7 @@
       "hypothesis_id": "INTRADAY.MOMENTUM_CONTINUATION.60M.V1.H1",
       "item_id": "INTRADAY.MOMENTUM_CONTINUATION.60M.V1",
       "primary_outcome": "60-minute target/stop/timeout and selected net return.",
-      "state": "planned"
+      "state": "reference_rejected"
     },
     {
       "claim": "A liquidity-adjusted intraday price shock unsupported by order-independent confirmation reverses within 30 minutes.",
@@ -148,7 +148,7 @@
       "hypothesis_id": "INTRADAY.SHORT_HORIZON_REVERSAL.30M.V1.H1",
       "item_id": "INTRADAY.SHORT_HORIZON_REVERSAL.30M.V1",
       "primary_outcome": "30-minute reversal net return, MFE, MAE, and downside event.",
-      "state": "planned"
+      "state": "reference_rejected"
     },
     {
       "claim": "Causal bid/ask event imbalance predicts the next 15-minute executable price move.",

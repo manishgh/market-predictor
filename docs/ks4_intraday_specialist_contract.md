@@ -1,9 +1,8 @@
 # KS4 Intraday Specialist Contract
 
-Date: 2026-07-27
+Date: 2026-07-28
 
-Status: frozen development contract; implementation and real-data replay follow
-this checkpoint.
+Status: completed development checkpoint; all candidates reference-rejected.
 
 ## Objective
 
@@ -223,3 +222,26 @@ KS4 closes only when:
 
 Passing KS4 development gates does not authorize production serving. Promotion
 still requires untouched prospective shadow outcomes and execution calibration.
+
+## Completed Replay
+
+The authoritative replay is
+`models/ks4_intraday_specialists_causal_v4_20260728`. It consumed 479,879
+training rows built from 81,349,171 Alpaca SIP one-minute bars. Of those rows,
+439,707 had exact executable stock and benchmark evidence.
+
+All seven technical populations completed. The frozen matrix evaluated 22
+candidates and accepted none. Every candidate failed one or more minimum-trade,
+cost-adjusted return, benchmark-relative return, confidence, regime, profit
+factor, or drawdown gates. Five technical strategy hypotheses are
+`reference_rejected`. Gap Continuation and Gap Fade remain `data_blocked`
+because their frozen hypotheses require causal catalyst evidence. Rejected
+candidates retain their manifests and predictions but no `model.joblib`; no
+KS4 model can be served.
+
+The catalyst overlay remains `data_blocked`. Historical event publication
+timestamps without immutable first-observed and source-coverage lineage are not
+causal evidence and were not substituted with neutral values. Replay and
+verification evidence is recorded in
+`docs/evidence/ks4_intraday_specialist_replay_20260728.json` and
+`docs/evidence/ks4_verification_20260728.json`.

@@ -20,7 +20,7 @@ The current data-reuse, five-year expansion, and memory-bounded training sequenc
 is defined in the
 [five-year swing and intraday execution plan](docs/five_year_swing_intraday_execution_plan_2026-07-25.md).
 
-## Current Model State (2026-07-25)
+## Current Model State (2026-07-28)
 
 Candidate identity comes from an immutable `.manifest.json`. Effective promoted state exists only when a content-addressed promotion attestation verifies the candidate, evidence manifest, causal identity chain, predeclared baseline/hypothesis, untouched-shadow confidence interval, gate configuration, and distinct OIDC-authenticated build/approver principals. Unregistered, unattested, unauthenticated, or hash-mismatched artifacts cannot be served.
 
@@ -28,7 +28,7 @@ Candidate identity comes from an immutable `.manifest.json`. Effective promoted 
 | --- | --- | --- | --- |
 | Swing 5D | Canonical `swing.model.v1` | Five-year technical baselines completed and rejected; no promoted artifact | The 2021-07-09 through 2026-07-08 dataset has 607,909 eligible rows and 581 training tickers. Logistic/HGB walk-forward AUC is 0.4962/0.5000 and conservative return is -0.2343%/-0.0303%; neither has predictive or economic edge. The five-year Alpaca archive is audited; catalyst-full training remains blocked until sentiment artifacts are completed, audited, and joined causally. |
 | Legacy swing 1D/5D volatile models | Pre-C4 artifacts | Deprecated and not serveable | Their feature/target schemas do not satisfy the canonical C4 contract, regardless of an older manifest status. |
-| Intraday 60m | Canonical `intraday.model.v1` | Implementation complete; no promoted artifact | Completed 5-minute decisions, exact next-available 1-minute entry/path labels, separate opportunity/downside estimators, purged walk-forward, unseen-ticker holdout, calibration, economics, drawdown, catalyst-overlay, alignment, provenance, and 4 GiB gates are implemented. Real-data training and promotion have not passed yet. |
+| Intraday 30m/60m KS4 | Seven named causal specialists | Development replay complete; all 22 technical candidates rejected; no promoted artifact | The exact-path corpus contains 479,879 rows derived from 81,349,171 Alpaca SIP one-minute bars. All seven technical populations completed four purged temporal folds and separate unseen-ticker evaluation. Five strategy hypotheses are reference-rejected; catalyst-dependent Gap Continuation and Gap Fade remain data-blocked pending immutable first-observed event lineage. No model artifact was retained. |
 | Legacy intraday 12 bars | 2026-07-09 technical ablation | Candidate; not serveable | ROC AUC 0.6014 and lift 1.4719. It predates the canonical C5 contract and fails its historical gates. |
 | Intraday opening V2 | 2026-07-10 non-overlapping, cost-aware experiment | Candidate; promotion rejected | Best exact-path AUC 0.5806, lift 1.1764, selected net return -0.184% per trade, profit factor 0.7076, max drawdown 30.28%. |
 | Intraday V3 R1 | 2026-07-20 grouped XGBoost ranker | Candidate; promotion rejected | Walk-forward/holdout NDCG@10 0.4930/0.5123, but top-10 cost-adjusted excess return is -0.0715%/-0.0764%. |

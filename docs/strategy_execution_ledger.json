@@ -137,7 +137,9 @@
       "blocker": null,
       "checkpoint_id": "KS4",
       "display_name": "Opening Range Breakout (ORB)",
-      "evidence_paths": [],
+      "evidence_paths": [
+        "docs/evidence/ks4_intraday_specialist_replay_20260728.json"
+      ],
       "item_id": "INTRADAY.OPENING_RANGE_BREAKOUT.60M.V1",
       "kind": "strategy",
       "mode": "intraday",
@@ -146,13 +148,15 @@
         "exact one-minute target, stop, and timeout paths",
         "opening-session validation"
       ],
-      "state": "planned"
+      "state": "reference_rejected"
     },
     {
-      "blocker": null,
+      "blocker": "The catalyst-dependent hypothesis cannot be evaluated without immutable first-observed event and source-coverage lineage.",
       "checkpoint_id": "KS4",
       "display_name": "Gap-and-Go / Gap Continuation",
-      "evidence_paths": [],
+      "evidence_paths": [
+        "docs/evidence/ks4_intraday_specialist_replay_20260728.json"
+      ],
       "item_id": "INTRADAY.GAP_CONTINUATION.60M.V1",
       "kind": "strategy",
       "mode": "intraday",
@@ -161,13 +165,15 @@
         "premarket and opening-volume context",
         "exact continuation path economics"
       ],
-      "state": "planned"
+      "state": "data_blocked"
     },
     {
-      "blocker": null,
+      "blocker": "The catalyst-dependent hypothesis cannot be evaluated without immutable first-observed event and source-coverage lineage.",
       "checkpoint_id": "KS4",
       "display_name": "Gap Fade",
-      "evidence_paths": [],
+      "evidence_paths": [
+        "docs/evidence/ks4_intraday_specialist_replay_20260728.json"
+      ],
       "item_id": "INTRADAY.GAP_FADE.60M.V1",
       "kind": "strategy",
       "mode": "intraday",
@@ -176,13 +182,15 @@
         "continuation-versus-fade separation",
         "exact fade path economics"
       ],
-      "state": "planned"
+      "state": "data_blocked"
     },
     {
       "blocker": null,
       "checkpoint_id": "KS4",
       "display_name": "VWAP Reclaim / Continuation",
-      "evidence_paths": [],
+      "evidence_paths": [
+        "docs/evidence/ks4_intraday_specialist_replay_20260728.json"
+      ],
       "item_id": "INTRADAY.VWAP_CONTINUATION.60M.V1",
       "kind": "strategy",
       "mode": "intraday",
@@ -191,13 +199,15 @@
         "volume and relative-strength confirmation",
         "session-stratified exact path economics"
       ],
-      "state": "planned"
+      "state": "reference_rejected"
     },
     {
       "blocker": null,
       "checkpoint_id": "KS4",
       "display_name": "VWAP Mean Reversion",
-      "evidence_paths": [],
+      "evidence_paths": [
+        "docs/evidence/ks4_intraday_specialist_replay_20260728.json"
+      ],
       "item_id": "INTRADAY.VWAP_REVERSION.30M.V1",
       "kind": "strategy",
       "mode": "intraday",
@@ -206,13 +216,15 @@
         "absence of continuation confirmation",
         "exact reversion path economics"
       ],
-      "state": "planned"
+      "state": "reference_rejected"
     },
     {
       "blocker": null,
       "checkpoint_id": "KS4",
       "display_name": "Intraday Momentum",
-      "evidence_paths": [],
+      "evidence_paths": [
+        "docs/evidence/ks4_intraday_specialist_replay_20260728.json"
+      ],
       "item_id": "INTRADAY.MOMENTUM_CONTINUATION.60M.V1",
       "kind": "strategy",
       "mode": "intraday",
@@ -221,13 +233,15 @@
         "session-specific continuation labels",
         "cost-adjusted temporal and ticker-holdout validation"
       ],
-      "state": "planned"
+      "state": "reference_rejected"
     },
     {
       "blocker": null,
       "checkpoint_id": "KS4",
       "display_name": "Short-Horizon Reversal",
-      "evidence_paths": [],
+      "evidence_paths": [
+        "docs/evidence/ks4_intraday_specialist_replay_20260728.json"
+      ],
       "item_id": "INTRADAY.SHORT_HORIZON_REVERSAL.30M.V1",
       "kind": "strategy",
       "mode": "intraday",
@@ -236,7 +250,7 @@
         "spread and time-of-day controls",
         "exact reversal path economics"
       ],
-      "state": "planned"
+      "state": "reference_rejected"
     },
     {
       "blocker": "Historical quotes, depth, cancellations, and execution simulation are absent.",
@@ -763,7 +777,12 @@
     {
       "blocker": null,
       "checkpoint_id": "KS4",
-      "closure": null,
+      "closure": {
+        "closed_at_utc": "2026-07-28T07:56:00Z",
+        "commit_sha": "986d96b361f6de131b24dea550de728231c67c90",
+        "remote_ref": "origin/r3-lineage",
+        "summary": "Built 479,879 exact-path intraday rows from 81,349,171 Alpaca SIP one-minute bars and evaluated seven isolated technical populations through 22 bounded candidates. All candidates failed one or more economic, uncertainty, regime, drawdown, or minimum-trade gates. Five strategy hypotheses are reference-rejected, the two catalyst-dependent gap hypotheses remain data-blocked, and no model artifact was retained."
+      },
       "contracts": [
         "docs/ks4_intraday_specialist_contract.md",
         "configs/intraday_specialist_research.toml",
@@ -771,25 +790,47 @@
         "intraday specialist candidates",
         "exact one-minute path audit"
       ],
-      "evidence": [],
+      "evidence": [
+        {
+          "description": "Hash-bound replay of the executable KS4 training corpus and all seven strategy bundles containing 22 independently rejected candidates.",
+          "evidence_id": "KS4-E1",
+          "path": "docs/evidence/ks4_intraday_specialist_replay_20260728.json",
+          "sha256": "3942878ad45e086af895bf3ff1c52f5c288ef3f422f53b6027ce45432b72cecc"
+        },
+        {
+          "description": "Causality, path, fold, ranking, cost, artifact, resource, unit, lint, strict-type, and compilation verification.",
+          "evidence_id": "KS4-E2",
+          "path": "docs/evidence/ks4_verification_20260728.json",
+          "sha256": "a06698fa089f582b1322c3ea37cdb2d0ddaa94559251fe5272d6633c11752124"
+        }
+      ],
       "exit_gates": [
         {
           "description": "Each intraday specialist evaluates only its causal setup and session segment.",
-          "evidence_ids": [],
+          "evidence_ids": [
+            "KS4-E1",
+            "KS4-E2"
+          ],
           "gate_id": "KS4-G1",
-          "status": "pending"
+          "status": "passed"
         },
         {
           "description": "Entry, target, stop, timeout, spread, cost, and benchmark paths replay exactly.",
-          "evidence_ids": [],
+          "evidence_ids": [
+            "KS4-E1",
+            "KS4-E2"
+          ],
           "gate_id": "KS4-G2",
-          "status": "pending"
+          "status": "passed"
         },
         {
           "description": "Catalyst remains an overlay unless preregistered causal ablation passes both validation scopes.",
-          "evidence_ids": [],
+          "evidence_ids": [
+            "KS4-E1",
+            "KS4-E2"
+          ],
           "gate_id": "KS4-G3",
-          "status": "pending"
+          "status": "passed"
         }
       ],
       "in_scope": [
@@ -805,21 +846,26 @@
       ],
       "problem_statement": "Isolate intraday setups whose exact executable paths survive realistic costs.",
       "sequence": 4,
-      "status": "in_progress",
+      "status": "completed",
       "title": "Train intraday specialists",
       "verification": [
         {
-          "command": null,
+          "command": ".\\.venv\\Scripts\\market-predictor.exe build-intraday-specialist-training-data --setup-dir data\\features\\ks4_intraday_specialist_setups_causal_v2_20260727 --collection-plan-dir data\\features\\ks4_intraday_one_minute_plan_causal_v2_20260727 --collection-dir data\\raw\\ks4_intraday_one_minute_causal_v2_20260727 --policy configs\\intraday_specialist_research.toml --out-dir data\\features\\ks4_intraday_training_causal_v3_20260727 && .\\.venv\\Scripts\\market-predictor.exe train-intraday-specialists --dataset-dir data\\features\\ks4_intraday_training_causal_v3_20260727 --policy configs\\intraday_specialist_research.toml --out-dir models\\ks4_intraday_specialists_causal_v4_20260728",
           "description": "Reproduce every selected intraday path from canonical one-minute bars.",
-          "evidence_ids": [],
-          "status": "pending",
+          "evidence_ids": [
+            "KS4-E1"
+          ],
+          "status": "passed",
           "verification_id": "KS4-V1"
         },
         {
-          "command": null,
+          "command": ".\\.venv\\Scripts\\python.exe -m unittest discover -s tests -p \"test_*.py\" && .\\.venv\\Scripts\\ruff.exe check src tests scripts && .\\.venv\\Scripts\\mypy.exe --strict src\\market_predictor && .\\.venv\\Scripts\\python.exe -m compileall -q src tests",
           "description": "Run session, liquidity, catalyst-overlay, cost, and adverse-fill ablations.",
-          "evidence_ids": [],
-          "status": "pending",
+          "evidence_ids": [
+            "KS4-E1",
+            "KS4-E2"
+          ],
+          "status": "passed",
           "verification_id": "KS4-V2"
         }
       ]

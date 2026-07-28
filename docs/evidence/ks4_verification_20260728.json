@@ -1,0 +1,68 @@
+{
+  "checkpoint_id": "KS4",
+  "generated_at_utc": "2026-07-28T07:56:00Z",
+  "implementation_commit": "986d96b361f6de131b24dea550de728231c67c90",
+  "poison_tests": [
+    "Nonconsecutive XNYS sessions cannot satisfy intraday clock-grid continuity.",
+    "Future features, labels, calibration rows, and fold-training rows fail closed.",
+    "Entry, timeout, target, stop, and benchmark fills require observed one-minute evidence.",
+    "Same-minute target and stop ambiguity resolves stop-first and adverse stop gaps fill at the worse executable price.",
+    "Costs are applied exactly once and cannot fall below 10 basis points round trip.",
+    "Raw opportunity score drives ranking; calibrated downside probability is only a veto.",
+    "Walk-forward folds are purged and embargoed; unseen-ticker validation is a separate acceptance scope.",
+    "Sparse setup decisions are assigned actual clock phases before nonoverlap is asserted.",
+    "Catalyst history without immutable first-observed lineage remains data_blocked.",
+    "Rejected candidates cannot retain model.joblib.",
+    "Dataset shards, requests, manifests, policy hashes, implementation hashes, and authority pointers fail closed on drift.",
+    "Collection, dataset construction, and training enforce the 3.25 GiB safety threshold and 4 GiB hard limit."
+  ],
+  "review_findings_closed": [
+    "Corrected daily continuity to use consecutive XNYS session ordinals rather than adjacent observed ticker dates.",
+    "Made deterministic opportunity and downside formulas explicit and content-addressed.",
+    "Made missing deterministic downside inputs contribute conservative maximum risk instead of nonfinite values.",
+    "Separated raw opportunity ranking from calibrated downside veto.",
+    "Proved actual-time nonoverlap before assigning unit overlap weights.",
+    "Kept catalyst outside the estimator and blocked overlay evaluation without causal event availability lineage.",
+    "Corrected CLI completion handling to use the authoritative bundle status."
+  ],
+  "schema": "market_predictor.ks4_verification_evidence.v1",
+  "verification": [
+    {
+      "command": ".\\.venv\\Scripts\\python.exe -m unittest discover -s tests -p \"test_*.py\"",
+      "duration_seconds": 181.51,
+      "result": "passed",
+      "tests": 544
+    },
+    {
+      "command": ".\\.venv\\Scripts\\python.exe -m unittest tests.test_intraday_grid_continuity tests.test_intraday_specialist_training_data tests.test_intraday_specialist_model tests.test_intraday_specialist_experiments",
+      "result": "passed",
+      "tests": 16
+    },
+    {
+      "command": ".\\.venv\\Scripts\\ruff.exe check src tests scripts",
+      "result": "passed"
+    },
+    {
+      "command": ".\\.venv\\Scripts\\mypy.exe --strict src\\market_predictor",
+      "result": "passed",
+      "source_files": 164
+    },
+    {
+      "command": ".\\.venv\\Scripts\\python.exe -m compileall -q src tests",
+      "result": "passed"
+    },
+    {
+      "command": "artifact replay and retained-model audit",
+      "details": "Seven strategy bundles and 22 candidate manifests completed with zero failed strategies, zero accepted candidates, and zero retained model.joblib files.",
+      "result": "passed"
+    },
+    {
+      "command": "git diff --check and worktree inspection",
+      "result": "passed"
+    }
+  ],
+  "warnings": [
+    "The full suite emits an existing upstream Starlette TestClient/httpx deprecation warning; it does not affect test results.",
+    "KS4 is a completed negative research result. It does not authorize serving, alerts, orders, or production trading."
+  ]
+}

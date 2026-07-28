@@ -1,0 +1,122 @@
+{
+  "acceptance": {
+    "artifact_authority": "The completed experiment bundle is immutable, request-bound, hash-verified, and authorized by an atomic pointer. Rejected candidates retain evidence but no loadable model.",
+    "catalyst_policy": "Catalyst data was not used as an estimator feature. The confirmation overlay remained data_blocked because immutable first-observed event lineage was unavailable.",
+    "economic_rejection": "Every technical candidate was evaluated independently against walk-forward, unseen-ticker, cost-stress, regime, confidence, drawdown, and trade-count gates. All 22 candidates were rejected.",
+    "exact_path_alignment": "Training eligibility requires observed stock entry and exit bars plus observed SPY, QQQ, and sector benchmark evidence over the identical realized exit interval. Missing executable evidence is excluded with a machine-readable reason.",
+    "resource_control": "Dataset construction and specialist evaluation ran sequentially. Peak working sets remained below the configured 3.25 GiB safety threshold and 4 GiB hard limit."
+  },
+  "artifacts": {
+    "model_authority": {
+      "path": "models/ks4_intraday_specialists_causal_v4_20260728/_authority.json",
+      "sha256": "42af733f3ddaabff680adaca85703f47b605c740326c68c3975582fbf6b95336"
+    },
+    "model_manifest": {
+      "path": "models/ks4_intraday_specialists_causal_v4_20260728/_manifest.json",
+      "sha256": "5271dc3c1c7846650feef274c3545116096e0c03004ebe31f8ac27e2c4c0fff1"
+    },
+    "model_request": {
+      "path": "models/ks4_intraday_specialists_causal_v4_20260728/_request.json",
+      "sha256": "292c3a1f07472cdffb8906f643b04b7c99836de0c46173f81c5ac7162cdccec4"
+    },
+    "research_policy": {
+      "path": "configs/intraday_specialist_research.toml",
+      "sha256": "e0793ac190367ee675f642a20cd33682e06f6c656956d8955a9a489d79d47c8e"
+    },
+    "training_manifest": {
+      "path": "data/features/ks4_intraday_training_causal_v3_20260727/_manifest.json",
+      "sha256": "77f5699d02fbac9da5c88e970f1dcc93abd5d77867eeda4ef735e05b0a8ba184"
+    }
+  },
+  "catalyst_overlay": {
+    "reason": "Causal catalyst history with immutable source, security-resolution, provider-event-time, first-observed-time, ingestion-time, and coverage lineage is unavailable.",
+    "state": "data_blocked"
+  },
+  "checkpoint_id": "KS4",
+  "generated_at_utc": "2026-07-28T07:56:00Z",
+  "implementation_commit": "986d96b361f6de131b24dea550de728231c67c90",
+  "lineage": {
+    "collection_manifest_sha256": "3da0bcd5774ac9afe4093b1d5823f75a595b544cac783346c071e2e7ffd82e38",
+    "collection_rows": 81349171,
+    "collection_source": "data/raw/ks4_intraday_one_minute_causal_v2_20260727",
+    "dataset_fingerprint": "ea5150e55c2cfb0ab808ef6a102b1b604e841be13d5534eb58ecafb3c55207f5",
+    "dataset_schema": "intraday.specialist_training_dataset.v1",
+    "experiment_request_sha256": "8cc7ac77e58d093a61b51cc4688c0de386529af53ed07107d64795e9a14592d0",
+    "experiment_schema": "intraday.specialist_experiment_bundle.v1",
+    "implementation_sha256": "85911fee447168361330523f8022908b8d8e198734ea9631030c460124d5bacb",
+    "one_minute_feed": "Alpaca SIP",
+    "one_minute_shards": 740,
+    "plan_fingerprint": "cbe1a5d711fd0dfd41e970ffe182e49005dae978627fffc4b1956839b1fc7c24",
+    "setup_fingerprint": "c0244a1f485dbadf838ffc1fd69bdfdadbca378213ed2f2b9c2665d222c050fe"
+  },
+  "production_ready": false,
+  "result": {
+    "accepted_development_candidates": 0,
+    "dataset_peak_working_set_gib": 1.5431900024414062,
+    "eligible_rows": 439707,
+    "failed_candidates": 0,
+    "failed_strategies": 0,
+    "ineligible_reason_counts": {
+      "insufficient_feature_history": 5677,
+      "missing_observed_benchmark": 331,
+      "missing_observed_entry": 33276,
+      "missing_observed_exit": 888
+    },
+    "model_artifacts_retained": 0,
+    "model_peak_working_set_gib": 1.1207809448242188,
+    "observed_strategies": 7,
+    "rejected_candidates": 22,
+    "safety_threshold_gib": 3.25,
+    "status": "complete_reference_rejected",
+    "strategies": [
+      {
+        "candidate_count": 3,
+        "eligible_rows": 22347,
+        "state": "data_blocked",
+        "strategy_id": "INTRADAY.GAP_CONTINUATION.60M.V1"
+      },
+      {
+        "candidate_count": 3,
+        "eligible_rows": 20858,
+        "state": "data_blocked",
+        "strategy_id": "INTRADAY.GAP_FADE.60M.V1"
+      },
+      {
+        "candidate_count": 4,
+        "eligible_rows": 40904,
+        "state": "reference_rejected",
+        "strategy_id": "INTRADAY.MOMENTUM_CONTINUATION.60M.V1"
+      },
+      {
+        "candidate_count": 3,
+        "eligible_rows": 60427,
+        "state": "reference_rejected",
+        "strategy_id": "INTRADAY.OPENING_RANGE_BREAKOUT.60M.V1"
+      },
+      {
+        "candidate_count": 3,
+        "eligible_rows": 6285,
+        "state": "reference_rejected",
+        "strategy_id": "INTRADAY.SHORT_HORIZON_REVERSAL.30M.V1"
+      },
+      {
+        "candidate_count": 3,
+        "eligible_rows": 223542,
+        "state": "reference_rejected",
+        "strategy_id": "INTRADAY.VWAP_CONTINUATION.60M.V1"
+      },
+      {
+        "candidate_count": 3,
+        "eligible_rows": 65344,
+        "state": "reference_rejected",
+        "strategy_id": "INTRADAY.VWAP_REVERSION.30M.V1"
+      }
+    ],
+    "strategy_states": {
+      "data_blocked": 2,
+      "reference_rejected": 5
+    },
+    "total_rows": 479879
+  },
+  "schema": "market_predictor.ks4_intraday_specialist_replay_evidence.v1"
+}
