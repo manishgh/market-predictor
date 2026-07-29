@@ -19,7 +19,7 @@ import pandas as pd
 from market_predictor.canonical.normalize import canonicalize_bars
 from market_predictor.canonical.store import file_sha256
 from market_predictor.edge_rebuild.history_contracts import (
-    IntradayHistoryConfig,
+    IntradayTransportConfig,
 )
 from market_predictor.edge_rebuild.intraday_history import (
     load_complete_intraday_history_plan,
@@ -50,7 +50,7 @@ def collect_intraday_history(
     plan_directory: Path,
     policy_path: Path,
     output_directory: Path,
-    config: IntradayHistoryConfig,
+    config: IntradayTransportConfig,
     source_factory: SourceFactory,
     maximum_units_this_run: int | None = None,
 ) -> dict[str, Any]:
@@ -58,10 +58,10 @@ def collect_intraday_history(
 
     plan = load_complete_intraday_history_plan(plan_directory)
     if plan.get("policy_sha256") != config.sha256():
-        raise DataReadinessError("ER1A plan and collection policy differ")
+        raise DataReadinessError("plan and collection policy differ")
     if (output_directory / "_authority.json").exists():
         raise DataReadinessError(
-            "completed ER1A history collection is immutable"
+            "completed history collection is immutable"
         )
     if maximum_units_this_run is not None and maximum_units_this_run < 1:
         raise ValueError("maximum_units_this_run must be positive")
@@ -79,6 +79,7 @@ def collect_intraday_history(
     plan_fingerprint = str(plan["plan_fingerprint"])
     request_payload: dict[str, Any] = {
         "schema": HISTORY_COLLECTION_SCHEMA,
+        "plan_schema": str(plan.get("schema", "")),
         "plan_path": str(plan_directory),
         "plan_fingerprint": plan_fingerprint,
         "plan_manifest_sha256": file_sha256(
@@ -246,7 +247,7 @@ def _run_bounded_collection(
     pending: list[dict[str, Any]],
     collect_row: Callable[[Mapping[str, Any]], dict[str, Any]],
     completed: dict[str, dict[str, Any]],
-    config: IntradayHistoryConfig,
+    config: IntradayTransportConfig,
 ) -> dict[str, str]:
     failures: dict[str, str] = {}
     rows = iter(pending)
@@ -356,7 +357,7 @@ def _collect_unit(
     raw_pages_directory: Path,
     plan_fingerprint: str,
     request_sha256: str,
-    config: IntradayHistoryConfig,
+    config: IntradayTransportConfig,
 ) -> dict[str, Any]:
     unit_id = str(row["unit_id"])
     started_at = datetime.now(UTC)
@@ -552,7 +553,7 @@ def _collect_unit(
 def _canonical_bars(
     rows: list[dict[str, Any]],
     *,
-    config: IntradayHistoryConfig,
+    config: IntradayTransportConfig,
     ingested_at: datetime,
 ) -> pd.DataFrame:
     if rows:
@@ -805,7 +806,7 @@ def _json_sha256(value: object) -> str:
     ).hexdigest()
 
 
-def _guard_memory(config: IntradayHistoryConfig, stage: str) -> None:
+def _guard_memory(config: IntradayTransportConfig, stage: str) -> None:
     assert_memory_budget(
         hard_budget_gib=config.maximum_process_memory_gib,
         headroom_gib=config.memory_guard_headroom_gib,

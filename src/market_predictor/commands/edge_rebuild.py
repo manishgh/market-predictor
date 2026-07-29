@@ -9,10 +9,14 @@ from market_predictor.config import get_settings
 from market_predictor.edge_rebuild.contracts import (
     load_edge_rebuild_readiness_config,
 )
+from market_predictor.edge_rebuild.extended_session_context import (
+    build_extended_session_context_plan,
+)
 from market_predictor.edge_rebuild.history_collection import (
     collect_intraday_history,
 )
 from market_predictor.edge_rebuild.history_contracts import (
+    load_extended_session_context_config,
     load_intraday_history_config,
 )
 from market_predictor.edge_rebuild.intraday_history import (
@@ -29,6 +33,31 @@ from market_predictor.sources.alpaca import AlpacaSource
 
 
 def register_edge_rebuild_commands(app: typer.Typer, console: Any) -> None:
+    @app.command("plan-edge-rebuild-extended-session-context")
+    @serialized_heavy_job("plan-edge-rebuild-extended-session-context")
+    def plan_edge_rebuild_extended_session_context(
+        intraday_plan_dir: Path = typer.Option(...),
+        intraday_collection_dir: Path = typer.Option(...),
+        memberships: Path = typer.Option(...),
+        membership_audit: Path = typer.Option(...),
+        out_dir: Path = typer.Option(...),
+        policy: Path = typer.Option(
+            Path("configs/edge_rebuild_extended_session_context.toml")
+        ),
+    ) -> None:
+        """Plan the separate ER1B pre/post-market five-minute context layer."""
+
+        result = build_extended_session_context_plan(
+            intraday_plan_directory=intraday_plan_dir,
+            intraday_collection_directory=intraday_collection_dir,
+            memberships_path=memberships,
+            membership_audit_path=membership_audit,
+            policy_path=policy,
+            output_directory=out_dir,
+            config=load_extended_session_context_config(policy),
+        )
+        console.print(result["summary"])
+
     @app.command("collect-edge-rebuild-intraday-history")
     @serialized_heavy_job("collect-edge-rebuild-intraday-history")
     def collect_edge_rebuild_intraday_history(
@@ -40,17 +69,30 @@ def register_edge_rebuild_commands(app: typer.Typer, console: Any) -> None:
             help="Optional resumable operational batch limit.",
         ),
         policy: Path = typer.Option(
-            Path("configs/edge_rebuild_intraday_history.toml")
+            Path("configs/edge_rebuild_intraday_history.toml"),
+            help=(
+                "ER1A regular-session policy, or the ER1B extended-session "
+                "context policy when collecting that plan."
+            ),
+        ),
+        extended_session_context: bool = typer.Option(
+            False,
+            help="Collect an ER1B extended-session context plan.",
         ),
     ) -> None:
-        """Collect resumable PIT SIP five-minute ER1A history."""
+        """Collect resumable PIT SIP five-minute ER1A or ER1B history."""
 
         settings = get_settings()
+        config = (
+            load_extended_session_context_config(policy)
+            if extended_session_context
+            else load_intraday_history_config(policy)
+        )
         result = collect_intraday_history(
             plan_directory=plan_dir,
             policy_path=policy,
             output_directory=out_dir,
-            config=load_intraday_history_config(policy),
+            config=config,
             source_factory=lambda: AlpacaSource(settings),
             maximum_units_this_run=max_units,
         )

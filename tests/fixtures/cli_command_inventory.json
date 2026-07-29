@@ -87,6 +87,7 @@
     "canonicalize-source-collections",
     "combine-swing-datasets",
     "partition-v3-data",
+    "plan-edge-rebuild-extended-session-context",
     "plan-edge-rebuild-intraday-history",
     "plan-intraday-specialist-one-minute",
     "promote-intraday-model",

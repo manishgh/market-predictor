@@ -201,10 +201,14 @@ def test_plan_rejects_static_membership(
 
     with pytest.raises(DataReadinessError, match="point-in-time"):
         from market_predictor.edge_rebuild.intraday_history import (
-            _verify_memberships,
+            verify_point_in_time_memberships,
         )
 
-        _verify_memberships(path, audit, minimum_cross_section=300)
+        verify_point_in_time_memberships(
+            path,
+            audit,
+            minimum_cross_section=300,
+        )
 
 
 def test_plan_detects_mutated_artifact(
