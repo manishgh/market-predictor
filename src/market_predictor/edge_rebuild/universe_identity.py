@@ -21,9 +21,11 @@ substituting an inferred rename date for evidence.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
+import exchange_calendars as xcals
 import pandas as pd
 
 from market_predictor.edge_rebuild.corpus_integrity import IntegrityThresholds
@@ -99,6 +101,11 @@ def verify_membership_identity(
         if not observed.empty
         else (None, None)
     )
+    rank = (
+        exchange_session_rank(str(covered[0]), str(covered[1]))
+        if covered[0] is not None and covered[1] is not None
+        else {}
+    )
 
     result = MembershipVerification()
     for row in memberships.itertuples():
@@ -113,12 +120,14 @@ def verify_membership_identity(
                 else str(pd.Timestamp(row.effective_to_utc).date())
             ),
         }
-        window = _interval_evidence(by_ticker.get(ticker), interval)
+        group = by_ticker.get(ticker)
+        window = _interval_evidence(group, interval)
         if window is None or len(window) < 2:
-            interval["reason"] = _unevaluated_reason(window, covered, interval)
-            result.unevaluated.append(interval)
+            bucket, reason = _classify_sparse_interval(group, window, covered, interval)
+            interval["reason"] = reason
+            (result.excluded if bucket == "excluded" else result.unevaluated).append(interval)
             continue
-        breach = _identity_breach(window, limits)
+        breach = _identity_breach(window, limits, rank)
         if breach is None:
             result.verified.append({**interval, "evidence_sessions": len(window)})
         else:
@@ -138,26 +147,41 @@ def _interval_evidence(
     return inside
 
 
-def _unevaluated_reason(
+def _classify_sparse_interval(
+    group: pd.DataFrame | None,
     window: pd.DataFrame | None,
     covered: tuple[str | None, str | None],
     interval: dict[str, Any],
-) -> str:
+) -> tuple[str, str]:
+    """Decide whether too-little evidence is unevaluable or itself a defect.
+
+    An interval the corpus never spans is unevaluable, and excluding it would
+    discard a security for a gap in our own collection window. But a symbol with
+    no bars inside its claimed interval and bars *outside* it was held by
+    someone else, which is the same reuse defect a within-interval continuity
+    check cannot see precisely because there is no series to check.
+    """
+
     start, end = covered
     if start is None:
-        return "no_bar_corpus"
+        return "unevaluated", "no_bar_corpus"
     if interval["effective_to"] is not None and interval["effective_to"] <= start:
-        return "interval_precedes_corpus"
+        return "unevaluated", "interval_precedes_corpus"
     if interval["effective_from"] >= end:
-        return "interval_follows_corpus"
-    if window is None or window.empty:
-        return "no_bars_in_covered_interval"
-    return "insufficient_evidence"
+        return "unevaluated", "interval_follows_corpus"
+    inside = 0 if window is None else len(window)
+    outside = 0 if group is None else len(group) - inside
+    if inside == 0 and outside > 0:
+        return "excluded", "symbol_reused_outside_interval"
+    if inside == 0:
+        return "excluded", "no_bar_evidence"
+    return "excluded", "insufficient_evidence"
 
 
 def _identity_breach(
     window: pd.DataFrame,
     limits: IntegrityThresholds,
+    rank: Mapping[str, int],
 ) -> dict[str, Any] | None:
     """One continuous security produces one continuous series."""
 
@@ -175,7 +199,7 @@ def _identity_breach(
             "at_session": str(window.loc[position, "session"]),
         }
     sessions = list(window["session"])
-    gap = _longest_calendar_gap(sessions)
+    gap = _longest_session_gap(sessions, rank)
     if gap > limits.maximum_interior_gap_sessions:
         return {
             "reason": "symbol_unproven_for_interval",
@@ -186,17 +210,32 @@ def _identity_breach(
     return None
 
 
-def _longest_calendar_gap(sessions: list[str]) -> int:
-    """Longest run of absent trading days, approximated from calendar dates.
+def exchange_session_rank(
+    first_session: str,
+    last_session: str,
+    *,
+    calendar_name: str = "XNYS",
+) -> dict[str, int]:
+    """Ordinal position of every exchange session in a range.
 
-    Weekends make this an approximation, so it is deliberately compared against
-    a threshold far above normal weekend and holiday spacing.
+    Gaps are counted in sessions, never calendar days. Market holidays fall on
+    weekdays, so calendar arithmetic both overstates gaps across weekends and
+    understates them across holiday weeks.
     """
 
-    if len(sessions) < 2:
+    calendar = xcals.get_calendar(calendar_name)
+    sessions = calendar.sessions_in_range(first_session, last_session)
+    return {str(pd.Timestamp(session).date()): index for index, session in enumerate(sessions)}
+
+
+def _longest_session_gap(sessions: list[str], rank: Mapping[str, int]) -> int:
+    """Longest run of absent exchange sessions between observations.
+
+    A date absent from the calendar cannot be ranked and is skipped, so a bar
+    stamped on a non-session date can never manufacture a false gap.
+    """
+
+    ranks = sorted(rank[session] for session in sessions if session in rank)
+    if len(ranks) < 2:
         return 0
-    stamps = pd.to_datetime(pd.Series(sessions))
-    deltas = stamps.diff().dt.days.dropna()
-    if deltas.empty:
-        return 0
-    return int(max(0, deltas.max() - 1))
+    return int(max(later - earlier - 1 for earlier, later in zip(ranks, ranks[1:], strict=False)))

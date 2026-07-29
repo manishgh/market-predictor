@@ -116,6 +116,45 @@ def test_interval_outside_the_bar_corpus_is_unevaluated_not_excluded() -> None:
     assert result.unevaluated[0]["reason"] == "interval_precedes_corpus"
 
 
+def test_symbol_reused_outside_its_interval_is_excluded() -> None:
+    """The SunTrust shape: no bars inside the claimed window, bars years later.
+
+    A within-interval continuity check cannot see this, because there is no
+    series to check. Without this branch the reuse hides in an unevaluable
+    bucket instead of being named.
+    """
+
+    memberships = pd.DataFrame(
+        [_membership("STI", "sp500-historical:60c6fe", "2019-07-09", "2019-12-09")]
+    )
+    evidence = _evidence(
+        [("2019-08-01", "OTHER", 10.0), ("2026-01-05", "OTHER", 11.0)]
+        + [(f"2022-05-0{day}", "STI", 40.0 + day) for day in range(2, 7)]
+    )
+
+    result = verify_membership_identity(memberships, evidence)
+
+    assert len(result.excluded) == 1
+    assert result.excluded[0]["reason"] == "symbol_reused_outside_interval"
+    assert not result.unevaluated
+
+
+def test_security_with_no_bars_anywhere_is_excluded_as_unverifiable() -> None:
+    """The Red Hat shape: acquired days into the window, no bars at all."""
+
+    memberships = pd.DataFrame(
+        [_membership("RHT", "sp500-historical:acf5a2", "2019-07-09", "2019-07-15")]
+    )
+    evidence = _evidence(
+        [("2019-07-08", "OTHER", 10.0), ("2019-08-01", "OTHER", 11.0)]
+    )
+
+    result = verify_membership_identity(memberships, evidence)
+
+    assert len(result.excluded) == 1
+    assert result.excluded[0]["reason"] == "no_bar_evidence"
+
+
 def test_missing_columns_fail_closed() -> None:
     with pytest.raises(DataReadinessError, match="membership input lacks"):
         verify_membership_identity(
