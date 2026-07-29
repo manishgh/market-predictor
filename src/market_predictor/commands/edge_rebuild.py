@@ -25,14 +25,72 @@ from market_predictor.edge_rebuild.intraday_history import (
 from market_predictor.edge_rebuild.readiness import (
     run_edge_rebuild_readiness_audit,
 )
+from market_predictor.edge_rebuild.universe_identity import (
+    publish_verified_universe,
+)
 from market_predictor.heavy_jobs import serialized_heavy_job
 from market_predictor.intraday.specialist_contracts import (
     load_intraday_specialist_research_config,
 )
 from market_predictor.sources.alpaca import AlpacaSource
+from market_predictor.v3.errors import DataReadinessError
 
 
 def register_edge_rebuild_commands(app: typer.Typer, console: Any) -> None:
+    @app.command("publish-verified-universe")
+    @serialized_heavy_job("publish-verified-universe")
+    def publish_verified_universe_command(
+        memberships: Path = typer.Option(...),
+        daily_bars_dir: Path = typer.Option(
+            ...,
+            help="Daily bar corpus supplying identity evidence.",
+        ),
+        out: Path = typer.Option(...),
+        audit_out: Path = typer.Option(...),
+    ) -> None:
+        """Publish only membership intervals whose symbol claim bar evidence supports."""
+
+        import pandas as pd
+
+        frames = []
+        for path in sorted(daily_bars_dir.rglob("*.parquet")):
+            frame = pd.read_parquet(
+                path,
+                columns=["ticker", "bar_start_utc", "close", "volume"],
+            )
+            # A zero-volume daily bar is a provider placeholder, not an observation.
+            frame = frame[frame["volume"] > 0]
+            frame["session"] = (
+                frame["bar_start_utc"]
+                .dt.tz_convert("America/New_York")
+                .dt.date.astype(str)
+            )
+            frames.append(
+                frame.rename(columns={"close": "last_close"}).assign(bars=1)[
+                    ["session", "ticker", "bars", "last_close"]
+                ]
+            )
+        if not frames:
+            raise DataReadinessError(f"no daily bars found under {daily_bars_dir}")
+        audit = publish_verified_universe(
+            memberships_path=memberships,
+            evidence=pd.concat(frames, ignore_index=True),
+            output_path=out,
+            audit_path=audit_out,
+        )
+        console.print(
+            {
+                key: audit[key]
+                for key in (
+                    "source_securities",
+                    "kept_securities",
+                    "excluded_security_share",
+                    "excluded_intervals",
+                    "unevaluated_intervals",
+                )
+            }
+        )
+
     @app.command("plan-edge-rebuild-extended-session-context")
     @serialized_heavy_job("plan-edge-rebuild-extended-session-context")
     def plan_edge_rebuild_extended_session_context(

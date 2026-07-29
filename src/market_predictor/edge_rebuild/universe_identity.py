@@ -21,13 +21,16 @@ substituting an inferred rename date for evidence.
 
 from __future__ import annotations
 
+import json
 from collections.abc import Mapping
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 import exchange_calendars as xcals
 import pandas as pd
 
+from market_predictor.canonical.store import file_sha256
 from market_predictor.edge_rebuild.corpus_integrity import IntegrityThresholds
 from market_predictor.v3.errors import DataReadinessError
 
@@ -63,6 +66,57 @@ class MembershipVerification:
             "excluded_securities": sorted(self.excluded_securities),
             "exclusions": self.excluded,
         }
+
+
+def publish_verified_universe(
+    *,
+    memberships_path: Path,
+    evidence: pd.DataFrame,
+    output_path: Path,
+    audit_path: Path,
+    thresholds: IntegrityThresholds | None = None,
+) -> dict[str, Any]:
+    """Publish a universe containing only evidence-supported membership intervals.
+
+    The source artifact is never mutated. Excluded intervals are recorded with
+    their reason so the reduction is auditable rather than silent.
+    """
+
+    if output_path.exists():
+        raise DataReadinessError(f"verified universe output must be new: {output_path}")
+    memberships = pd.read_parquet(memberships_path)
+    memberships["effective_from_utc"] = pd.to_datetime(
+        memberships["effective_from_utc"], utc=True
+    )
+    memberships["effective_to_utc"] = pd.to_datetime(
+        memberships["effective_to_utc"], utc=True, errors="coerce"
+    )
+    result = verify_membership_identity(memberships, evidence, thresholds=thresholds)
+    excluded_securities = result.excluded_securities
+    kept = memberships[~memberships["security_id"].astype(str).isin(excluded_securities)]
+    if kept.empty:
+        raise DataReadinessError("verification excluded every membership interval")
+    dropped_share = 1.0 - (kept["security_id"].nunique() / memberships["security_id"].nunique())
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    kept.to_parquet(output_path, index=False)
+    audit = {
+        "schema": MEMBERSHIP_IDENTITY_SCHEMA,
+        "generated_at_utc": pd.Timestamp.now(tz="UTC").isoformat(),
+        "source_path": str(memberships_path),
+        "source_sha256": file_sha256(memberships_path),
+        "output_path": str(output_path),
+        "output_sha256": file_sha256(output_path),
+        "source_intervals": int(len(memberships)),
+        "kept_intervals": int(len(kept)),
+        "source_securities": int(memberships["security_id"].nunique()),
+        "kept_securities": int(kept["security_id"].nunique()),
+        "excluded_security_share": round(dropped_share, 6),
+        **result.to_record(),
+    }
+    audit_path.parent.mkdir(parents=True, exist_ok=True)
+    audit_path.write_text(json.dumps(audit, indent=2, sort_keys=True), encoding="utf-8")
+    return audit
 
 
 def verify_membership_identity(
