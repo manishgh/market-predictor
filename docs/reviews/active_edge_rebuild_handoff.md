@@ -1,191 +1,177 @@
 # Active Edge Rebuild Handoff
 
-Status: ER1 completed; ER1A in progress; ER1B extended-session transport running
+Status: ER1 completed; ER1A in progress; corpus defects diagnosed, fixes not yet built
 Last updated: 2026-07-29
 Repository: `C:\project\market-predictor`
 Remote: `https://github.com/manishgh/market-predictor`
 Branch: `r3-lineage`
-Last implementation commit: `319dd3e`
+Last implementation commit: `319dd3e`; last documentation commit: `08a5208`
 
 Read first:
 
 1. `AGENTS.md`
 2. `docs/active_edge_rebuild_plan.md`
-3. `docs/model_cards/primary_v2_failure_attribution_20260728.md`
+3. This file
 
 Do not infer current state from chat history.
 
 ## Objective
 
-Rebuild setup populations with positive, reproducible economics before training
-another directional model. Resume KS5 distributional modelling only after a newly
-versioned specialist passes independently.
+Build a correct and complete dataset under a sound technical design, then train.
+The goal is predicting the market. Small per-ticker data loss is acceptable and
+must not drive the design.
 
-## Verified Current State
+## Scope Constraints Set By The User On 2026-07-29
 
-- KS0 through KS4 are completed in the strategy execution ledger.
-- KS5 is pending and blocked by the absence of a passed specialist.
-- `SWING.CROSS_SECTIONAL_MOMENTUM.5D.V2` is rejected; no model was retained.
-- `INTRADAY.VWAP_REVERSION.30M.V2` is rejected; no model was retained.
-- ER1 is complete and reports one blocker, `intraday_session_history_below_gate`.
-- ER1A regular-session transport is complete: 8,844/8,844 units,
-  32,033,151 canonical SIP/`all` five-minute bars, zero failures.
-- ER1B is a sub-step of ER1A. Its plan is frozen and its transport is running.
-- ER1A remains the only `in_progress` plan step. ER2 is pending and unauthorized.
-- No model has been trained and no model artifact exists in this program.
+These supersede the earlier five-year intraday research target.
 
-## Authoritative Evidence
+- No data earlier than 2016 is required for any horizon.
+- Intraday: three years of history, with catalysts.
+- Swing: seven to ten years from now, with catalysts.
+- Some strategies, for example mean reversion, do not require catalysts.
+- Exclude a security only when its point-in-time identity cannot be proven.
+  Never exclude for thin trading or for delisting.
 
-ER1 readiness audit:
+## Two Conflicts To Resolve Before Building
 
-- Directory: `data/research/edge_rebuild_readiness_er1_20260728`
-- Request SHA-256:
-  `f80f70ae299bd5e5a6aeae6aeaa503ef4775573696b7d88856d539dbd1355080`
-- Status: `blocked_pending_targeted_acquisition`
+1. **Swing catalyst coverage is five years, not seven to ten.**
+   `data/raw/alpaca_news_20210709_20260708_v1` starts 2021-07-09 and holds
+   564,986 rows. Swing price history starts 2019-07-09. A catalyst-bearing swing
+   dataset therefore cannot exceed five years today. Options: probe whether the
+   provider serves news before 2021-07 and collect back to 2016; or use the
+   existing two-profile split, `technical_market` over the full window as the
+   baseline and `catalyst_full` over the catalyst window as the only
+   promotion-eligible profile; or run a catalyst-free strategy such as mean
+   reversion over the full window. Decide before ER2 freezes feature profiles.
 
-ER1A frozen plan:
+   Five years is ample in rows and marginal in independent evidence. ER1
+   measured 125 effective ten-session blocks over the current seven-year swing
+   corpus; five years yields roughly 90, or about 22 per purged fold, and
+   roughly 890 usable sessions against the frozen 1,000-session swing gate. A
+   window starting 2021-07 also excludes the 2020 volatility shock entirely, so
+   the surviving regime variety is the 2022 decline and the subsequent recovery.
 
-- Directory: `data/research/edge_rebuild_intraday_history_plan_er1a_20260728`
-- Plan fingerprint:
-  `96688b25df7abb24d0317649bde87bf29d9497f799d968801b8f5995bb7cb285`
+2. **Three years of intraday sits almost exactly on the frozen 750-session floor.**
+   2023-07-29 through 2026-07-08 is approximately 738 exchange sessions. The
+   frozen gate requires at least 750 causally usable sessions and four purged
+   folds retaining at least 60 test sessions each. Either widen the window
+   slightly beyond three years or change the gate. Do not silently accept 738.
 
-ER1A complete transport:
+## What The Three-Year Intraday Window Changes
 
-- Directory: `data/raw/edge_rebuild_intraday_history_er1a_20260728`
-- Request SHA-256:
-  `5cf109183d4128310be7ad8d9353d3d7b568b3c531ad1458f27be939cdd6c377`
-- Authority SHA-256:
-  `a474c622c10e7dd9ea23b9ac23b5847e248f5cde9305a1ca3566e949f5c69852`
-- 32,033,151 rows, 583 observed symbols, 0.293 GiB peak RSS.
+Most diagnosed intraday defects fall outside it and become irrelevant:
 
-ER1B frozen plan:
+- The `FI` contamination window, 2021-04-27 to 2023-06-06, is entirely outside.
+- All three truncated sessions, 2021-10-25, 2022-01-24, and 2022-03-08, are
+  entirely outside.
+- Of the ER1A collection's 804 sessions, only roughly 236 fall inside.
+- The legacy corpus supplies the remaining approximately 501 sessions and
+  already carries 04:00-20:00 ET bars.
 
-- Directory:
-  `data/research/edge_rebuild_extended_session_context_plan_er1b_20260729`
-- Plan fingerprint:
-  `89c91d178ed1095cc33047508c270a817d716e1c594bfe0940064d2de770a250`
-- Manifest SHA-256:
-  `a2a5675bed96aa312c94da4477aab1e5e7b9570935e8f4f2acda5b47be9edea0`
-- Policy SHA-256:
-  `2fb6118c448438c5ffe59a1cb3319b39f4e80bf47bca5c77df55948e204700d6`
+Consequence for ER1B: extended-session context is needed only for the roughly
+236 in-window ER1A sessions, not 804. That is approximately 5,664 request units
+rather than 17,688. The ER1B plan and its stopped collection must be regenerated
+against the reduced window.
 
-Model card:
+## Verified Defect Inventory
 
-- `docs/model_cards/primary_v2_failure_attribution_20260728.md`
+Independently derived at per-(ticker, session) bar-count granularity. Counts
+reconcile: 404,194 observed plus 517 missing equals 404,711 planned; 32,033,151
+bars matches the collection manifest.
 
-## Completed Step: ER1B Contract And Plan
+ER1A intraday corpus:
 
-Implementation commit `319dd3e`.
+| Defect | Magnitude | Class |
+| --- | --- | --- |
+| `FI` identity contamination | 111 ticker-sessions, 8,599 bars | wrong data |
+| `FI` rename gap | 421 member ticker-sessions, zero bars | missing |
+| Truncated sessions | 2022-03-08 and 2021-10-25 median 1 bar; 2022-01-24 median 15 | missing |
+| Transport holes | 74 single-session gaps across 13 units | missing |
+| Delisting boundary | 22 ticker-sessions, zero of 22 traded | benign |
+| Thin-trading absence | 12,101 ticker-sessions below 95%, 10.7x lower volume | benign, never refill |
 
-Delivered:
+Interior gap-length distribution is `{1: 74, 421: 1}`. Exactly one price jump
+above 3x exists in 32,033,151 bars. Zero zero-volume bars. Zero frozen-price
+ticker-sessions.
 
-- `configs/edge_rebuild_extended_session_context.toml`
-- `src/market_predictor/edge_rebuild/extended_session_context.py`
-- command `plan-edge-rebuild-extended-session-context`
-- `collect-edge-rebuild-intraday-history --extended-session-context`
-- `IntradayTransportConfig` split out of `IntradayHistoryConfig` so one
-  verified collector serves both plans
-- registered plan/authority schema pairs, so a plan cannot be replayed under
-  another layer's identity
+Legacy 730-day intraday corpus: clean under every detector.
 
-Frozen scope: 804 sessions, 2021-04-27 through 2024-07-08, identical to ER1A.
-570 tickers, 404,711 point-in-time ticker-sessions. 8,844 pre-market and 8,844
-post-market units. Pre-market is 04:00 ET to the session open; post-market is
-the session close to 20:00 ET. Peak planning RSS 0.303 GiB.
+Swing daily corpus: nine ticker-reuse symbols in raw; eight are correctly
+filtered by membership interval. `FI` alone escapes into
+`swing_technical_decisions` (885,371 rows) as 111 wrong-security rows, 421
+fabricated zero-volume rows at a flat 3.15, and 272 correct rows. 421 of the 429
+zero-volume rows in that artifact are this one security.
 
-Live smoke on 2026-07-29: six units, 1,617 canonical bars, 173 observed
-symbols, zero failures, 0.345 GiB peak RSS. Every row fell in 04:00-09:25 ET
-with zero regular-session rows. `available_at_utc` minus `bar_end_utc` was
-exactly 60 seconds on every row.
+## Root Cause
 
-Verification at `319dd3e`: 601 tests passed with 85 existing warnings; Ruff,
-strict mypy across 180 source files, compileall, and `git diff --check` passed.
-The frozen ER1A `policy_sha256`
-`252886fb7b7fcfca19917a1daa8e1ea43d950e006287adca12796525c911a830` is unchanged
-and is now pinned by a regression test.
+The point-in-time universe derives historical tickers by taking the current
+ticker from `data/universe/sp500_current_20260708.csv` and back-filling it,
+breaking the back-fill only where the provider's corporate-actions feed reports
+a change. Where that feed is incomplete the back-fill silently becomes a
+hindsight assertion. This is a bad derivation, not a bad row. It passed every
+hash, authority, and non-overlap check because it is structurally valid and
+factually wrong, and it defeats both existing defences: membership-interval
+filtering applies a wrong interval faithfully, and security-identity grouping
+cannot help because the contaminated rows carry the correct `security_id`.
 
-## Running Work: ER1B Transport
+## The Four Design Fixes To Build
 
-The full ER1B collection is running and is NOT complete. Do not treat it as
-evidence until its `_authority.json` exists and replay verifies.
+Build these as fail-closed contracts with poison tests. They replace all
+per-ticker patching.
 
-- Output: `data/raw/edge_rebuild_extended_session_context_er1b_20260729`
-- 17,688 units total; the collector is resumable at unit granularity.
+1. **Point-in-time symbol derivation.** Never derive a historical ticker from a
+   current constituent list. Derive per interval from evidence and fail closed
+   where evidence is absent.
+2. **Completeness floor.** Segment-aware expected-versus-observed gate per
+   (ticker, session): strict for regular session, permissive for extended hours
+   where absence is a genuine no-trade observation.
+3. **Identity continuity assertion.** Gap-length and price-level continuity
+   checks run as a build gate, not as an ad-hoc audit.
+4. **Reject provider fabrication.** Zero-volume bars are not observations and
+   must never enter a canonical build.
 
-Resume or complete it with:
+## The Exclusion Rule
 
-```powershell
-Set-Location C:\project\market-predictor
-.\.venv\Scripts\market-predictor-collect.exe `
-  collect-edge-rebuild-intraday-history `
-  --plan-dir data\research\edge_rebuild_extended_session_context_plan_er1b_20260729 `
-  --out-dir data\raw\edge_rebuild_extended_session_context_er1b_20260729 `
-  --policy configs\edge_rebuild_extended_session_context.toml `
-  --extended-session-context
-```
+Apply universally, never per ticker:
 
-Verified units resume without another network request. A run that stops on the
-five-failure circuit or an operational batch limit is resumed by re-running the
-same command.
+> A security whose point-in-time symbol cannot be proven from evidence is
+> excluded from the universe for the affected interval, and the exclusion is
+> recorded with its reason and row count.
 
-## Exact Next Implementation Target
+Never exclude for thin trading; that filters the cross-section by liquidity.
+Never exclude for delisting; that is survivorship bias and is why `TWTR`,
+`SIVB`, `FRC`, `ATVI`, and `CERN` are deliberately retained.
 
-`materialize-edge-rebuild-intraday-history`. No command exists for this step yet.
+If the rule excludes materially more than one or two securities, stop and report
+before rebuilding anything on top of it.
 
-It must:
+## Exact Next Steps
 
-1. Replay the ER1A plan, ER1A collection, ER1B plan, and ER1B collection
-   authorities, and refuse to proceed unless all four verify.
-2. Stream unit shards under the 4 GiB budget. The regular-session shuffle is
-   8,844 session-chunk shards into per-symbol outputs; use bounded
-   month-partitioned staging, not a full in-memory concat.
-3. Publish two physically separate per-symbol stores, `regular/` and
-   `extended/`, each with stock and benchmark histories. Every row carries
-   `session_segment` and `history_era`. Assert that the regular store holds no
-   extended row, the extended store holds no regular row, and the two stores
-   share no `ticker`/`bar_start_utc` pair.
-4. Merge the verified July-2024-forward corpus without conflicting duplicates,
-   splitting it by segment rather than discarding its extended bars.
-5. Derive `bar_end_utc` and `available_at_utc` for that corpus through the
-   shared `canonicalize_bars` path under the frozen `market_interval_close`
-   policy and 60-second delay. Those columns do not exist in `ohlcv.v1`, so
-   this is derivation and must be recorded as such.
-6. Apply point-in-time membership to both eras and publish per-session
-   coverage, including the measured 271 `PARA` ticker-session gap.
-7. Publish authority only after every output hash verifies.
+1. Resolve the two conflicts above with the user.
+2. Build the four gates with poison tests.
+3. Re-run the universe build so exclusions fall out by rule; publish a corrected
+   universe artifact with provenance.
+4. Regenerate the ER1A and ER1B plans. Both fingerprints,
+   `96688b25df7abb24d0317649bde87bf29d9497f799d968801b8f5995bb7cb285` and
+   `89c91d178ed1095cc33047508c270a817d716e1c594bfe0940064d2de770a250`, are
+   invalidated by any universe change.
+5. Refill only what the reduced window needs.
+6. Materialize regular and extended layers, then ER2.
 
-Then: reconcile each setup's computed bar end against canonical `bar_end_utc`
-and its finalization timestamp against canonical `available_at_utc`; rebuild
-causal setups; plan and collect selective one-minute paths; rebuild causal
-intraday rows; and rerun ER1. Proceed to ER2 only after at least 750 usable
-sessions and a `ready_for_ER2` audit.
+## Stopped Work
 
-## Measured Facts That Constrain Materialization
+The ER1B extended-session transport was stopped deliberately at 3,712 of 17,688
+units. Its output at `data/raw/edge_rebuild_extended_session_context_er1b_20260729`
+has no `_authority.json` and is not evidence. It must be discarded rather than
+resumed, because the universe correction and the reduced window both change the
+plan fingerprint and therefore every `unit_id`. Nothing else is running. The
+worktree is clean.
 
-- The two corpora do not overlap. 804 + 501 - 30 warm-up sessions is 1,275
-  usable sessions, above the 1,250 target and the 750 gate.
-- `data/artifacts/ohlcv/v3_sp500_current_730d_20260708` already carries
-  04:00-20:00 ET bars for its 501 sessions. Extended bars are 20.8% of a
-  sampled row population. Do not re-collect them and do not discard them.
-- Over those 501 sessions, 21,809 ticker-sessions (7.97%) name a non-member
-  ticker and are filtered out; 271 ticker-sessions (0.11%, all `PARA`) are
-  members with no bars and are published as a coverage gap.
-- Pre-market density ranges from 1.2 to 31 bars per session per symbol. Never
-  share a denominator between segments.
+## Deferred, Already Recorded
 
-## Do Not
-
-- train any model;
-- use a current static universe for historical acquisition;
-- merge extended-hours bars into regular-session VWAP, EMA, ATR, or
-  relative-volume inputs;
-- collect full-universe one-minute history before setup discovery;
-- impute a missing extended-hours or one-minute bar;
-- build ER2 context features before ER2 freezes them;
-- attribute a post-close move to earnings, or add news-since-prior-close,
-  before ER4 supplies first-observed evidence;
-- change the 750-session, four-fold, SIP, cost, or benchmark gates;
-- begin ER2 while the ER1 audit is blocked.
+Section 9A of the plan queues retirement of the deprecated V1 relevance path in
+`v3/catalysts.py` for ER4, with the coefficients preserved and the deletion set
+verified self-contained.
 
 ## Verification Commands
 
@@ -205,21 +191,3 @@ The local NumPy stubs use syntax newer than the project mypy 3.11 target. The
 verified local strict command therefore uses the installed Python 3.14
 environment. Do not reinterpret that environment fact as permission to add
 Python-3.14-only source syntax.
-
-## Step Closure Template
-
-After implementing any ER step:
-
-- implementation commit and remote ref:
-- plan step completed:
-- evidence paths and SHA-256:
-- focused/full tests:
-- Ruff/mypy/compileall/diff:
-- peak memory:
-- rejected, passed, blocked, or environment-pending findings:
-- next plan step:
-- exact next command:
-- dirty files or running processes:
-
-Update this file and `docs/active_edge_rebuild_plan.md`, then commit and push the
-documentation closure before starting the next step.
