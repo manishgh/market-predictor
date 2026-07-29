@@ -30,7 +30,15 @@ from typing import Any
 import exchange_calendars as xcals
 import pandas as pd
 
-from market_predictor.canonical.store import file_sha256
+from market_predictor.canonical.audits import (
+    CanonicalAuditReport,
+    audit_universe_memberships,
+)
+from market_predictor.canonical.store import (
+    file_sha256,
+    load_canonical_artifact,
+    write_canonical_artifact,
+)
 from market_predictor.edge_rebuild.corpus_integrity import IntegrityThresholds
 from market_predictor.v3.errors import DataReadinessError
 
@@ -84,7 +92,11 @@ def publish_verified_universe(
 
     if output_path.exists():
         raise DataReadinessError(f"verified universe output must be new: {output_path}")
-    memberships = pd.read_parquet(memberships_path)
+    memberships, source_manifest = load_canonical_artifact(
+        memberships_path,
+        expected_type="memberships",
+        allow_research=True,
+    )
     memberships["effective_from_utc"] = pd.to_datetime(
         memberships["effective_from_utc"], utc=True
     )
@@ -99,12 +111,29 @@ def publish_verified_universe(
     dropped_share = 1.0 - (kept["security_id"].nunique() / memberships["security_id"].nunique())
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    kept.to_parquet(output_path, index=False)
+    # Historical membership availability is a provider-publication proxy, so the
+    # verified universe stays research-only and cannot authorize promotion.
+    write_canonical_artifact(
+        kept.reset_index(drop=True),
+        output_path,
+        artifact_type="memberships",
+        audit=CanonicalAuditReport(
+            # Historical membership availability is a provider-publication
+            # proxy, never a prospectively observed fact, so the observed gate
+            # is disabled exactly as it is on the source artifact.
+            checks=audit_universe_memberships(kept, require_observed=False)
+        ),
+        inputs={
+            "source_memberships_sha256": str(source_manifest["artifact_sha256"]),
+            "identity_rule": MEMBERSHIP_IDENTITY_SCHEMA,
+        },
+        production_ready=False,
+    )
     audit = {
         "schema": MEMBERSHIP_IDENTITY_SCHEMA,
         "generated_at_utc": pd.Timestamp.now(tz="UTC").isoformat(),
         "source_path": str(memberships_path),
-        "source_sha256": file_sha256(memberships_path),
+        "source_sha256": str(source_manifest["artifact_sha256"]),
         "output_path": str(output_path),
         "output_sha256": file_sha256(output_path),
         "source_intervals": int(len(memberships)),
