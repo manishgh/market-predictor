@@ -66,6 +66,38 @@ def session_block_mean_interval(
     }
 
 
+def net_profit_factor(returns: pd.Series) -> float:
+    """Gross gains over gross losses for a realized return series.
+
+    Returns positive infinity when there is profit and no loss, and ``nan`` when
+    there is neither, so an unevaluable population can never pass a gate.
+    """
+
+    numeric = pd.to_numeric(returns, errors="coerce").dropna()
+    gains = float(numeric[numeric.gt(0)].sum())
+    losses = abs(float(numeric[numeric.lt(0)].sum()))
+    if losses > 0:
+        return gains / losses
+    if gains > 0:
+        return float("inf")
+    return float("nan")
+
+
+def maximum_drawdown_from_returns(returns: pd.Series) -> float:
+    """Peak-to-trough drawdown of compounded period returns as a positive fraction.
+
+    ``returns`` must already be ordered and non-overlapping (one value per period).
+    An empty series returns ``nan`` rather than zero so that a population with no
+    evaluable path fails closed instead of reporting a perfect drawdown.
+    """
+
+    numeric = pd.to_numeric(returns, errors="coerce").dropna()
+    if numeric.empty:
+        return float("nan")
+    equity = (1.0 + numeric.clip(lower=-0.999999)).cumprod()
+    return float((1.0 - equity / equity.cummax()).max())
+
+
 def regime_promotion_failures(
     regime_audit: pd.DataFrame,
     *,
