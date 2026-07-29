@@ -472,6 +472,30 @@ distribution: the fifth percentile is 98.7%, the first percentile is 91.9%, and
 the five problem securities fall between 74.4% and 89.7%. Any threshold from 92%
 to 98% selects the same set, so the choice is robust rather than tuned.
 
+### Catalyst Coverage And A Non-Stationarity It Creates
+
+Swing catalyst coverage now spans the full seven-year window. The 2019-07-09 to
+2021-07-08 gap was collected against the verified universe: 4,066 requested
+chunks, 4,047 observed, 19 empty, zero failed, 149,140 rows.
+
+Observed news density differs materially between the two eras:
+
+| Era | Rows | Approximate rows per year |
+| --- | ---: | ---: |
+| 2019-07 to 2021-07 | 149,140 | 75,000 |
+| 2021-07 to 2026-07 | 564,986 | 113,000 |
+
+The earlier period carries roughly two thirds the density. This is provider
+coverage growth, not a change in how much news issuers generated, and it makes
+raw event counts non-stationary across the sample. A model given a raw
+`news_count` would learn that later dates carry more news, which is an artifact
+of collection rather than a property of the market.
+
+Every news-volume feature must therefore be normalized within its decision
+cross-section, as a cross-sectional rank or as a ratio against a trailing
+per-ticker baseline. Raw counts are prohibited as estimator features. Sentiment
+means are already relevance-weighted ratios and are unaffected.
+
 ### Corporate Actions
 
 Renames are preserved, not excluded. Twenty-five of twenty-six observed alias
