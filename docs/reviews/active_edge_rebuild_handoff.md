@@ -27,14 +27,17 @@ These supersede the earlier five-year intraday research target.
 
 - No data earlier than 2016 is required for any horizon.
 - Intraday: three years of history, with catalysts.
-- Swing: seven to ten years from now, with catalysts.
+- Swing: seven years from now, with catalysts. Decided 2026-07-29; the ten-year
+  option is dropped. Swing price history already covers 2019-07-09 through
+  2026-07-08, so no additional swing price collection is required and no
+  collection before 2019 is needed for any horizon.
 - Some strategies, for example mean reversion, do not require catalysts.
 - Exclude a security only when its point-in-time identity cannot be proven.
   Never exclude for thin trading or for delisting.
 
 ## Two Conflicts To Resolve Before Building
 
-1. **Swing catalyst coverage is five years, not seven to ten.**
+1. **Swing catalyst coverage is five years, not the decided seven.**
    `data/raw/alpaca_news_20210709_20260708_v1` starts 2021-07-09 and holds
    564,986 rows. Swing price history starts 2019-07-09. A catalyst-bearing swing
    dataset therefore cannot exceed five years today. Options: probe whether the
@@ -147,7 +150,13 @@ before rebuilding anything on top of it.
 
 ## Exact Next Steps
 
-1. Resolve the two conflicts above with the user.
+1. **First action on resume.** Probe whether the provider serves news before
+   2021-07-09, back to 2019-07. That single answer decides the swing catalyst
+   design: if yes, collect the gap and the seven-year window is fully
+   catalyst-covered; if no, fall back to the two-profile split and run
+   catalyst-free strategies over the full window. Do not build feature
+   contracts before this is answered.
+2. Resolve the remaining intraday session-floor conflict with the user.
 2. Build the four gates with poison tests.
 3. Re-run the universe build so exclusions fall out by rule; publish a corrected
    universe artifact with provenance.
