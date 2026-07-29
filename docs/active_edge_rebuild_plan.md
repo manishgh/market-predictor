@@ -121,7 +121,7 @@ Only one checkpoint may be `in_progress`.
 | ER1A | in_progress | Complete targeted intraday history and re-audit readiness | PIT inventory, the two-tier acquisition plan, and the regular-session transport are complete; complete the ER1B extended-session context layer, materialize both layers, derive setups, collect selective 1-minute paths, and republish ER1 |
 | ER2 | pending | Freeze new strategy contracts and bounded experiment budget | New IDs, setup eligibility, entry/exit/labels, design window, folds, costs, features, abstention, and retirement rules are immutable and tested |
 | ER3 | pending | Build deterministic setup populations and exact labels | Each setup replays from immutable bars; gross/net/benchmark economics and sample sufficiency are published before ML |
-| ER4 | pending | Complete causal catalyst confirmation evidence | Direct/business/sector/global relations and event timing reconcile; technical-only, catalyst-only, and confirmation-overlay rows are identical and auditable |
+| ER4 | pending | Complete causal catalyst confirmation evidence | Direct/business/sector/global relations and event timing reconcile; technical-only, catalyst-only, and confirmation-overlay rows are identical and auditable; the deprecated V1 relevance path is retired per section 9A |
 | ER5 | pending | Train bounded strategy specialists | Only ER3-admitted populations are trained; deterministic/logistic/HGB comparisons and ablations complete under frozen folds |
 | ER6 | pending | Resume KS5 and KS6 conditionally | Quantiles, competing risks, and volatility sidecars run only for an independently passed ER5 specialist and must add out-of-sample economic value |
 | ER7 | pending | Prospective shadow, promotion, API, and TradingFlow boundary | One-use untouched shadow passes; signed atomic serving bundle exposes predictions only; TradingFlow retains alerts and execution |
@@ -434,6 +434,93 @@ failed holdout for a better threshold or cohort.
   cannot authorize production actionability.
 - Market Predictor emits prediction intelligence only. It does not create alerts,
   orders, positions, or final sizing.
+
+## 9A. ER4 Scope: Retire The Deprecated V1 Relevance Path
+
+### Defect
+
+`src/market_predictor/v3/catalysts.py` manufactures an event relevance value from
+a text heuristic and then filters on it:
+
+```
+relevance = 1.0 + 0.75*title_match + 0.35*(~title_match & text_match)
+relevance -= 0.60*generic_headline
+relevance += 0.30*(source_family == "sec")
+relevance = relevance.clip(lower=0.1)
+kept if relevance >= minimum_relevance
+```
+
+`O1OverlayConfig` is a `FrozenContract` and binds `minimum_relevance` (0.1-scale
+threshold, default 1.25). It does **not** bind the five constants that produce the
+value being thresholded. Editing any of them leaves `config.sha256()` unchanged,
+so the published O1 evidence is not reproducible from its own recorded identity.
+`data/reports/v3_c8_o1_ablation_20260720.json` embeds the config but cannot embed
+what the config does not cover. This is a section 3.6 no-deferred-correctness
+defect: an identity that does not bind what it claims to bind.
+
+This is a research-only path. Production never reaches it: the canonical path is
+`canonical/joins.py:aggregate_event_features`, which consumes relevance and keeps
+unknown values as `NaN` rather than inventing them, and accepted catalyst rows use
+the point-in-time three-channel contract in `swing/event_attribution.py`.
+
+### Preserved before deletion
+
+These are the exact coefficients used to produce the rejected O1 evidence. They
+are recorded here because deleting the code otherwise makes the published result
+uninterpretable. Nothing may reuse them.
+
+| Component | Value |
+| --- | --- |
+| Base relevance | 1.0 |
+| Ticker in title | +0.75 |
+| Ticker in body only | +0.35 |
+| Generic headline | -0.60 |
+| SEC source family | +0.30 |
+| Floor | 0.1 |
+| Accept threshold | `minimum_relevance`, default 1.25 |
+| Windows | 2h and 1d |
+| Overlay weight / veto penalty | 0.15 / 0.50 |
+
+O1 result being preserved: 322,291 covered prediction rows, 503 covered tickers,
+72,818 deduplicated event rows, zero future matches. Walk-forward top-10 excess
+moved from -0.05744% to -0.04871%; ticker holdout worsened from -0.06423% to
+-0.06690%. Both paired confidence intervals include zero. O1 is rejected.
+
+### Exact deletion set
+
+Verified self-contained. `v3/catalysts.py` symbols are referenced only by the
+`audit-v3-o1-overlay` command and its test.
+
+1. Delete `src/market_predictor/v3/catalysts.py`.
+2. Delete `tests/test_v3_catalysts.py`.
+3. In `src/market_predictor/commands/v3_evaluation.py`, remove the
+   `market_predictor.v3.catalysts` import block and the `audit-v3-o1-overlay`
+   command only.
+4. Remove `audit-v3-o1-overlay` from `tests/fixtures/cli_command_inventory.json`.
+
+Retained deliberately:
+
+- `audit-v3-failure-attribution`, which depends on `v3/diagnostics.py`.
+- `audit-v3-ranking`, which depends on `v3/evaluation.py`.
+- `data/reports/v3_c8_o1_ablation_20260720.json` and
+  `data/reports/v3_c8_o1_readiness_unscored_20260720.json` as immutable
+  historical evidence.
+
+### Why deletion rather than binding the coefficients
+
+Section 1 authorizes removal: the system is not deployed and every consumer of
+this module is a rejected, closed experiment. Binding the constants into the
+contract would spend effort making a rejected experiment reproducible, and would
+change the contract hash anyway, so it would not even preserve the identity it
+set out to protect. Deletion also removes the live risk that ER4 silently reuses
+the deprecated relevance while building the causal catalyst layer, which is the
+only forward-looking harm this defect can still cause.
+
+### Separately noted, not in scope here
+
+`MATERIAL_EVENT_TYPES` is defined twice, in `v3/catalysts.py` and in
+`catalyst_overlay.py`. Deleting the former leaves one definition. Confirm during
+ER4 that the surviving definition is the intended one.
 
 ## 10. Per-Step Documentation Protocol
 
