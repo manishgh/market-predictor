@@ -435,6 +435,56 @@ failed holdout for a better threshold or cohort.
 - Market Predictor emits prediction intelligence only. It does not create alerts,
   orders, positions, or final sizing.
 
+## 8A. Frozen Universe And Eligibility Contracts
+
+Decided 2026-07-29. These replace the earlier five-year intraday research target.
+
+| | Swing | Intraday |
+| --- | --- | --- |
+| Universe | point-in-time S&P 500 membership | same, then eligibility-filtered |
+| Eligibility | index membership is the filter | price > $8, dollar ADV >= $25M, bar continuity >= 95% |
+| Approximate size | 503 per session | 554 of 570 historical securities |
+| History | seven years from 2019-07 | approximately 3.25 years from 2023-04 |
+| Catalysts | required; needs the 2019-07 to 2021-07 news gap filled | already covered |
+| Bars | daily | five-minute regular plus five-minute extended context; one-minute only for exact entry and exit paths |
+
+Every intraday filter is evaluated on a trailing window as of each decision
+date, so eligibility changes over time and never uses future information.
+
+### Why The Retail Share-Volume Standard Was Rejected
+
+The common day-trading floor of one million shares per day keeps only 386 of 570
+securities here and excludes the wrong ones. `CHTR`, `LMT`, `BLK`, `REGN`, and
+`NOC` each trade over 250 million dollars per day with 100% bar continuity and
+would be excluded solely because a high share price puts the share count under a
+million. That threshold is calibrated for a retail universe of 20 to 50 dollar
+stocks, not for the S&P 500.
+
+Dollar volume alone is also insufficient. `AZO` shows 227 million dollars of
+daily volume and prints in only 83.3% of five-minute buckets; `FICO`, `MTD`,
+`NVR`, and `BIO` behave the same way. A high-priced security can carry large
+dollar volume and low print frequency, and for a thirty-minute setup the print
+frequency determines whether the modelled exit was achievable. Bar continuity is
+the only filter that separates them.
+
+The 95% continuity threshold sits in an empty region of the observed
+distribution: the fifth percentile is 98.7%, the first percentile is 91.9%, and
+the five problem securities fall between 74.4% and 89.7%. Any threshold from 92%
+to 98% selects the same set, so the choice is robust rather than tuned.
+
+### Corporate Actions
+
+Renames are preserved, not excluded. Twenty-five of twenty-six observed alias
+chains hand off cleanly, and excluding them would remove `META`, `ELV`, `BALL`,
+`CTRA`, and `RTX` from the universe, which is survivorship bias.
+
+For genuine splits the continuing entity retains its own identity and history.
+The spun-off entity requires no special rule because a new listing cannot
+satisfy the 250-session daily warm-up requirement in its first year and is
+therefore already ineligible. The only residual artifact is the unadjusted price
+step at the spin-off date, which is handled by excluding that single session
+from label generation.
+
 ## 9A. ER4 Scope: Retire The Deprecated V1 Relevance Path
 
 ### Defect
