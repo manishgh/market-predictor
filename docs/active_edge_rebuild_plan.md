@@ -118,7 +118,7 @@ Only one checkpoint may be `in_progress`.
 | --- | --- | --- | --- |
 | ER0 | completed | Establish this active plan and companion handoff | Closed by implementation commit `8c28df9`; both documents and repository guidance are pushed |
 | ER1 | completed | Audit effective independent history and causal data readiness | Closed by implementation commits `5ffa3d3`, `d9d93c8`, and `7b0ce6d`; immutable audit request `f80f70ae299bd5e5a6aeae6aeaa503ef4775573696b7d88856d539dbd1355080` reports one ER2 blocker |
-| ER1A | in_progress | Complete targeted intraday history and re-audit readiness | PIT inventory and the two-tier acquisition plan are complete; collect the 5-minute discovery history, derive setups, collect selective 1-minute paths, and republish ER1 |
+| ER1A | in_progress | Complete targeted intraday history and re-audit readiness | PIT inventory, the two-tier acquisition plan, and the regular-session transport are complete; complete the ER1B extended-session context layer, materialize both layers, derive setups, collect selective 1-minute paths, and republish ER1 |
 | ER2 | pending | Freeze new strategy contracts and bounded experiment budget | New IDs, setup eligibility, entry/exit/labels, design window, folds, costs, features, abstention, and retirement rules are immutable and tested |
 | ER3 | pending | Build deterministic setup populations and exact labels | Each setup replays from immutable bars; gross/net/benchmark economics and sample sufficiency are published before ML |
 | ER4 | pending | Complete causal catalyst confirmation evidence | Direct/business/sector/global relations and event timing reconcile; technical-only, catalyst-only, and confirmation-overlay rows are identical and auditable |
@@ -275,6 +275,99 @@ The complete transport is
   materialization, setup extraction, selective one-minute labels, and ER1
   re-audit complete.
 
+### ER1A Merge Scope And Measured Universe Gaps
+
+The materialized corpus is the union of two sources with different schemas
+and different universe semantics. Both facts were measured before design.
+
+| | ER1A collection | Existing 730-day corpus |
+| --- | --- | --- |
+| Range | 2021-04-27 to 2024-07-08 | 2024-07-09 to 2026-07-08 |
+| Sessions | 804 | 501 |
+| Schema | `market_data.v1` | `ohlcv.v1` |
+| Availability columns | `bar_end_utc`, `available_at_utc` present | neither present |
+| Session scope | regular session only | 04:00-20:00 ET |
+| Universe | point-in-time per session | current static S&P 500 list |
+
+The ranges do not overlap. 804 + 501 - 30 warm-up sessions is 1,275 usable
+sessions, above the 1,250 research target and the 750 gate.
+
+Two consequences are frozen here:
+
+1. **Availability is derived, not preserved, for the 730-day corpus.** That
+   store has no `bar_end_utc` or `available_at_utc`. Both are derived through
+   the shared `canonicalize_bars` path under the identical frozen
+   `market_interval_close` policy and 60-second finalization delay, so one
+   definition covers both eras. Evidence documents must say derived.
+2. **Point-in-time membership is applied to both eras.** Measured over the
+   501 later sessions: 21,809 ticker-sessions (7.97%) name a ticker that was
+   not an index member on that session, and 271 ticker-sessions (0.11%, all
+   `PARA`) are members with no bars. The first is look-ahead contamination and
+   is filtered out. The second cannot be filtered away, only measured, and is
+   published as a per-session coverage gap for the ER1 re-audit to judge. No
+   new download closes it.
+
+## 6B. ER1B: Extended-Session Context Layer
+
+ER1B is a sub-step of ER1A, not a separate checkpoint; ER1A remains the only
+`in_progress` step. It does not train a model and does not build features.
+
+The ER1A corpus is regular-session only. Overnight gap, pre-market
+return/range/volume, relative pre-market volume, and post-close price
+reaction cannot be derived from it at all. ER1B acquires that evidence as a
+**separate causal layer**, joined at each regular-session decision time.
+
+Frozen rules:
+
+1. Extended bars live in their own corpus and are never merged into
+   regular-session indicator inputs. Measured pre-market density across the
+   existing corpus ranges from 1.2 bars per session per symbol (`MCO`) to 31
+   (`VZ`), so a shared VWAP, EMA, ATR, or relative-volume denominator would
+   silently reweight the cross-section by liquidity.
+2. Scope is the 804 ER1A sessions only. The 730-day corpus already carries
+   verified SIP/`all` 04:00-20:00 ET bars for its own 501 sessions, so no
+   verified row is re-fetched and the 32,033,151 regular-session bars are
+   untouched.
+3. Windows are exact exchange clock times: pre-market is 04:00 ET to the
+   session open, post-market is the session close to 20:00 ET. Two separate
+   request windows per symbol chunk mean no request can reach into the
+   regular session, so no duplicate can conflict with the frozen collection.
+4. The session set, cross-section, and chunking are inherited from the frozen
+   ER1A plan rather than re-derived. ER1B binds to that plan fingerprint and
+   to the completed ER1A transport, so the two layers cannot describe
+   different sessions or a different universe.
+5. One-minute bars remain reserved for selected executable entry and exit
+   paths. Missing provider trades stay no-trade observations.
+6. Feature construction is out of scope. The context features are ER2 freeze
+   inputs, built in ER3.
+
+### ER1B Frozen Plan
+
+The immutable ER1B plan is
+`data/research/edge_rebuild_extended_session_context_plan_er1b_20260729`.
+
+- Plan fingerprint:
+  `89c91d178ed1095cc33047508c270a817d716e1c594bfe0940064d2de770a250`.
+- Manifest SHA-256:
+  `a2a5675bed96aa312c94da4477aab1e5e7b9570935e8f4f2acda5b47be9edea0`.
+- Policy SHA-256:
+  `2fb6118c448438c5ffe59a1cb3319b39f4e80bf47bca5c77df55948e204700d6`.
+- 804 sessions from 2021-04-27 through 2024-07-08, identical to ER1A.
+- 570 historical tickers and 404,711 point-in-time ticker-sessions,
+  identical to ER1A.
+- 8,844 pre-market and 8,844 post-market units, exactly two per ER1A unit.
+- Row budget ceiling 47,421,498; the expected yield is far lower because
+  extended-hours bars are sparse and are never imputed.
+- Peak planning RSS 0.303 GiB. No network request, model fitting, or model
+  artifact was produced.
+
+Live smoke validation on 2026-07-29 collected six units: 1,617 canonical
+bars, 173 observed symbols, zero failures, 0.345 GiB peak RSS. Every row fell
+in 04:00-09:25 ET with zero regular-session rows, confirming layer isolation
+at the transport boundary; `available_at_utc` minus `bar_end_utc` was exactly
+60 seconds on every row. Only 173 of roughly 300 requested symbols returned
+any pre-market bar, which is why the no-imputation policy governs this layer.
+
 ## 7. ER2: Frozen Research Contract
 
 ER2 creates a design-only window that is disjoint from evaluation. Thresholds may be
@@ -293,6 +386,24 @@ For each strategy freeze:
 - cost/adverse-fill stress;
 - no more than six learned candidates, two feature profiles, and two selection policies;
 - one retirement rule and no shadow retry.
+
+ER2 must also freeze the extended-session context features that ER1B makes
+available, before ER3 builds any of them:
+
+- overnight gap from the prior regular-session close to the current open;
+- pre-market return, range, and volume;
+- relative pre-market volume against its own pre-market baseline, never
+  against a regular-session denominator;
+- post-close price reaction over the post-market window, named as a
+  price/volume quantity and not as an earnings reaction.
+
+Each must declare its exact decision cutoff, its abstention behavior when the
+window is empty, and a minimum observed-bar requirement, because extended
+windows are sparse and are never imputed. Attributing a post-close move to an
+earnings event, and any news-since-prior-close feature, require the
+first-observed evidence that ER1 reported as not ready; both remain ER4
+catalyst-overlay work and may not enter the estimator before a preregistered
+causal ablation.
 
 ## 8. ER3: Setup Economic Admission
 
