@@ -1,8 +1,8 @@
 # Active Edge Rebuild Handoff
 
-Status: data acquisition complete for swing; intraday complete for 298 tradable
-symbols with ~651 more in collection. ER3 setup admission is the next gate.
-Last updated: 2026-07-30
+Status: swing REJECTED at ER3 admission. Intraday universe built; five-minute
+bars for the selected sessions are collecting.
+Last updated: 2026-07-31
 Repository: `C:\project\market-predictor`
 Remote: `https://github.com/manishgh/market-predictor`
 Branch: `r3-lineage`
@@ -41,6 +41,42 @@ Artifacts:
   `data/raw/swing_daily_sip_sp500_pit_20190709_20260708_v3/bars/`
 - News: `data/raw/alpaca_news_20190709_20210708_v1` and
   `data/raw/alpaca_news_20210709_20260708_v1`
+
+## ER3 Result: Swing Is Rejected
+
+`SWING.SECTOR_RESIDUAL_MOMENTUM.10D.V1` failed admission in both scopes and is
+retired. Implementation commit `e43f6a3`; module
+`src/market_predictor/edge_rebuild/swing_setups.py`.
+
+Population: 3,449 rows, 941 decision dates, 526 securities, ten phases in both
+scopes, 0.59 GiB peak.
+
+| Measure | Whole population |
+| --- | ---: |
+| gross return per ten-day trade | +0.724% |
+| net return after 20 bps | +0.524% |
+| SPY excess | **-0.180%** |
+| sector excess | **-0.158%** |
+
+**The setup earns a real, cost-surviving edge and still loses to holding the
+benchmark** over the identical executable interval, in four of seven years. ER3
+makes benchmark-relative return primary, so that alone disqualifies it.
+Worst-phase drawdown is 57% against a 20% limit, and the unseen-ticker worst
+phase is negative before costs.
+
+By year, net and SPY excess: 2020 +1.95%/-0.58%, 2021 +0.94%/-0.14%,
+2022 -0.72%/**+0.45%**, 2023 -0.10%/-1.25%, 2024 +0.75%/-0.67%,
+2025 +0.60%/+0.06%, 2026 +1.26%/+0.94%. It beats SPY mainly when SPY is weak,
+which is the expected signature of a selective long-only rule: out of the market
+most of the time, so it lags rallies.
+
+This differs from the V2 failure. V2 had negative gross return before costs, so
+there was no edge at all. This one has an edge that is not worth the opportunity
+cost. **No feature set or estimator fixes that** — a replacement hypothesis needs
+different mechanics, for example a sector-relative or market-neutral target, or
+higher participation than 6.6 firings per security over six years.
+
+Nothing was adjusted to chase a pass.
 
 ## The Intraday Universe Gap
 
