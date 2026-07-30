@@ -42,10 +42,30 @@ def test_swing_exit_must_be_timeout_only() -> None:
 
 def test_intraday_target_must_exceed_stop() -> None:
     raw = _raw()
-    raw["intraday"]["target_atr_multiple"] = 0.5
-    raw["intraday"]["stop_atr_multiple"] = 0.75
+    raw["intraday"]["target_atr_multiple"] = 1.2
+    raw["intraday"]["stop_atr_multiple"] = 1.5
 
     with pytest.raises(ValueError, match="risks more than it seeks"):
+        StrategyContract.model_validate(raw)
+
+
+def test_stop_tighter_than_one_average_range_is_rejected() -> None:
+    """A sub-1 ATR stop is hit by ordinary noise, not by the thesis failing."""
+
+    raw = _raw()
+    raw["intraday"]["stop_atr_multiple"] = 0.75
+
+    with pytest.raises(ValueError, match="greater than or equal to 1"):
+        StrategyContract.model_validate(raw)
+
+
+def test_atr_must_be_measured_on_the_trading_timeframe() -> None:
+    """A daily ATR on a 30-minute hold puts the stop out of reach."""
+
+    raw = _raw()
+    raw["intraday"]["atr_timeframe"] = "1Day"
+
+    with pytest.raises(ValueError, match="trading timeframe"):
         StrategyContract.model_validate(raw)
 
 
