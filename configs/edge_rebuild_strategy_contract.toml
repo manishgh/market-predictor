@@ -32,8 +32,16 @@ entry_reference = "next_one_minute_open"
 exit_rule = "target_stop_timeout"
 decision_finalization_seconds = 60
 round_trip_cost_bps = 10.0
-target_atr_multiple = 1.0
-stop_atr_multiple = 0.75
+# Standard day-trade sizing is a 1.5 ATR stop with a 2.0 ATR target, a 1.33:1
+# reward-to-risk. A stop tighter than one average range is hit by ordinary noise
+# rather than by the thesis failing, which bleeds the account on randomness.
+# ATR is measured on the trading timeframe: the published multiples assume that,
+# and a daily ATR applied to a thirty-minute hold would make the stop
+# unreachable and silently turn this into a timeout-only strategy.
+target_atr_multiple = 2.0
+stop_atr_multiple = 1.5
+atr_timeframe = "5Min"
+atr_lookback_bars = 14
 minimum_warmup_bars = 130
 maximum_trades_per_session = 5
 minimum_expected_net_edge_bps = 3.0
@@ -126,9 +134,25 @@ extended_context_enabled = true
 news_count_normalization = "cross_sectional_rank"
 raw_news_counts_prohibited = true
 # Sentiment decays from an impulse rather than switching off at a window edge.
-# The half-lives are frozen here and are never tuned on validation results.
-sentiment_decay_half_life_minutes_intraday = 60.0
+# Frozen here and never tuned on validation results.
+#
+# Intraday: published work finds the news-sentiment effect is concentrated in
+# the opening minutes and retains some predictive value to roughly six hours.
+# A ninety-minute half-life leaves about 6% of the impulse at six hours, which
+# matches that shape. Because the effect is front-loaded rather than uniform,
+# decay alone is insufficient: the feature set must also carry time-since-news
+# and which session segment the decision falls in.
+sentiment_decay_half_life_minutes_intraday = 90.0
+# Swing: PROVISIONAL, and weaker evidence than every other number here. The
+# sentiment-decay literature describes an intraday effect that fades after the
+# first session, which does not support a multi-day half-life. The mechanism
+# that actually persists over a ten-session horizon is post-announcement drift,
+# which is a different effect and is not a decayed sentiment score. This value
+# exists so the feature can be built; whether decayed sentiment belongs in a
+# ten-day strategy at all is an ER4 question, and catalyst remains an overlay
+# until a preregistered ablation says otherwise.
 sentiment_decay_half_life_hours_swing = 36.0
+swing_sentiment_decay_evidence = "provisional_pending_er4_ablation"
 
 [stress]
 # Costs are widened, not the signal, to test whether the edge survives worse

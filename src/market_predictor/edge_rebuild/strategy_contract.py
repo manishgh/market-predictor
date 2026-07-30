@@ -62,7 +62,9 @@ class IntradayContract(FrozenModel):
     decision_finalization_seconds: int = Field(ge=0, le=300)
     round_trip_cost_bps: float = Field(gt=0, le=100)
     target_atr_multiple: float = Field(gt=0, le=5)
-    stop_atr_multiple: float = Field(gt=0, le=5)
+    stop_atr_multiple: float = Field(ge=1.0, le=5)
+    atr_timeframe: str
+    atr_lookback_bars: int = Field(ge=5, le=50)
     minimum_warmup_bars: int = Field(ge=130)
     maximum_trades_per_session: int = Field(ge=1, le=50)
     minimum_expected_net_edge_bps: float = Field(ge=0)
@@ -80,6 +82,10 @@ class IntradayContract(FrozenModel):
             raise ValueError(
                 "target must exceed stop, otherwise the setup risks more than it seeks"
             )
+        # A daily ATR applied to a thirty-minute hold makes the stop unreachable
+        # and silently converts this into a timeout-only strategy.
+        if self.atr_timeframe != "5Min":
+            raise ValueError("ATR must be measured on the trading timeframe")
         if tuple(self.session_segments) != ("opening", "midday", "late"):
             raise ValueError("intraday segments must remain opening, midday, and late")
         if self.opening_end_et >= self.midday_end_et:
@@ -197,6 +203,7 @@ class FeatureContract(FrozenModel):
     raw_news_counts_prohibited: bool
     sentiment_decay_half_life_minutes_intraday: float = Field(gt=0, le=1_440)
     sentiment_decay_half_life_hours_swing: float = Field(gt=0, le=336)
+    swing_sentiment_decay_evidence: str
 
     @model_validator(mode="after")
     def validate_features(self) -> Self:
