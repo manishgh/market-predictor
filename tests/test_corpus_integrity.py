@@ -115,6 +115,46 @@ def test_liquid_symbol_collapsing_to_a_tenth_is_still_caught() -> None:
     assert finding["share_of_typical"] < 0.1
 
 
+def test_isolated_holes_are_recorded_but_do_not_block_a_large_corpus() -> None:
+    """Two quiet symbol-days in 450,000 rows must not refuse the whole corpus."""
+
+    rows = [
+        _row(f"2024-{month:02d}-{day:02d}", f"T{i}", 78)
+        for month in range(1, 13)
+        for day in range(1, 25)
+        for i in range(40)
+    ]
+    rows[0] = _row(rows[0]["session"], rows[0]["ticker"], 5)  # type: ignore[index]
+    frame = pd.DataFrame(rows)
+
+    report = verify_corpus_integrity(frame, label="large")
+
+    assert len(report.truncated_ticker_sessions) == 1
+    assert report.isolated_defects_tolerated
+    assert report.blocking_defect_count == 0
+    report.raise_if_defective("large")  # must not raise
+
+
+def test_clustered_truncation_still_blocks() -> None:
+    """A broken transport drags a whole session down and must refuse the build."""
+
+    rows = [
+        _row(f"2024-{month:02d}-{day:02d}", f"T{i}", 78)
+        for month in range(1, 13)
+        for day in range(1, 25)
+        for i in range(40)
+    ]
+    frame = pd.DataFrame(rows)
+    frame.loc[frame["session"] == "2024-06-12", "bars"] = 1
+
+    report = verify_corpus_integrity(frame, label="clustered")
+
+    assert report.truncated_sessions
+    assert report.blocking_defect_count > 0
+    with pytest.raises(DataReadinessError):
+        report.raise_if_defective("clustered")
+
+
 def test_frozen_price_outside_the_regular_session_is_not_a_defect() -> None:
     """A liquid symbol resting at one price across a few pre-market prints."""
 

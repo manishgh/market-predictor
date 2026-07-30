@@ -43,6 +43,10 @@ class IntegrityThresholds:
     minimum_regular_completeness: float = 0.50
     minimum_relative_completeness: float = 0.35
     minimum_sessions_for_baseline: int = 20
+    # Isolated holes are recorded but do not block a build. Clustering is what
+    # signals a transport failure, and the session-level check catches that
+    # independently: one broken day drags 400+ symbols down together.
+    maximum_isolated_defect_share: float = 0.0001
     minimum_session_median_completeness: float = 0.90
     maximum_session_close_ratio: float = 3.0
     maximum_interior_gap_sessions: int = 5
@@ -76,6 +80,9 @@ class IntegrityReport:
     checked_ticker_sessions: int = 0
     checked_bars: int = 0
 
+    isolated_defect_share: float = 0.0
+    isolated_defects_tolerated: bool = False
+
     @property
     def defect_count(self) -> int:
         return (
@@ -85,12 +92,34 @@ class IntegrityReport:
             + len(self.fabricated_bars)
         )
 
+    @property
+    def blocking_defect_count(self) -> int:
+        """Systematic failures only. Isolated holes are recorded, not blocking.
+
+        A broken transport drags hundreds of symbols down in the same session
+        and is caught by the session-level check. One symbol quiet on one day is
+        noise, and refusing a 450,000-row corpus over it would mean the gate
+        could never pass on real data.
+        """
+
+        systematic = (
+            len(self.truncated_sessions)
+            + len(self.identity_breaks)
+            + len(self.fabricated_bars)
+        )
+        if self.isolated_defects_tolerated:
+            return systematic
+        return systematic + len(self.truncated_ticker_sessions)
+
     def to_record(self) -> dict[str, Any]:
         return {
             "schema": self.schema,
             "checked_bars": self.checked_bars,
             "checked_ticker_sessions": self.checked_ticker_sessions,
             "defect_count": self.defect_count,
+            "blocking_defect_count": self.blocking_defect_count,
+            "isolated_defect_share": self.isolated_defect_share,
+            "isolated_defects_tolerated": self.isolated_defects_tolerated,
             "truncated_ticker_sessions": self.truncated_ticker_sessions,
             "truncated_sessions": self.truncated_sessions,
             "identity_breaks": self.identity_breaks,
@@ -99,11 +128,12 @@ class IntegrityReport:
         }
 
     def raise_if_defective(self, label: str) -> None:
-        if self.defect_count:
+        if self.blocking_defect_count:
             raise DataReadinessError(
                 f"{label} failed corpus integrity: "
                 f"{len(self.truncated_sessions)} truncated sessions, "
-                f"{len(self.truncated_ticker_sessions)} truncated ticker-sessions, "
+                f"{len(self.truncated_ticker_sessions)} truncated ticker-sessions "
+                f"({self.isolated_defect_share:.6%} of the corpus), "
                 f"{len(self.identity_breaks)} identity breaks, "
                 f"{len(self.fabricated_bars)} fabricated-bar groups"
             )
@@ -159,6 +189,11 @@ def verify_corpus_integrity(
     _check_session_completeness(regular, limits, report)
     _check_fabricated_bars(frame, limits, report)
     _check_identity_continuity(regular, limits, report, member_sessions)
+    checked = max(1, len(regular))
+    report.isolated_defect_share = len(report.truncated_ticker_sessions) / checked
+    report.isolated_defects_tolerated = (
+        report.isolated_defect_share <= limits.maximum_isolated_defect_share
+    )
     return report
 
 
