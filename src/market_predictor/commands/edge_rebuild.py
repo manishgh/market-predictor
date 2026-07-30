@@ -102,6 +102,10 @@ def register_edge_rebuild_commands(app: typer.Typer, console: Any) -> None:
         policy: Path = typer.Option(
             Path("configs/edge_rebuild_extended_session_context.toml")
         ),
+        first_session: str | None = typer.Option(
+            None,
+            help="Narrow the plan to a suffix of the frozen ER1A range (YYYY-MM-DD).",
+        ),
     ) -> None:
         """Plan the separate ER1B pre/post-market five-minute context layer."""
 
@@ -113,6 +117,7 @@ def register_edge_rebuild_commands(app: typer.Typer, console: Any) -> None:
             policy_path=policy,
             output_directory=out_dir,
             config=load_extended_session_context_config(policy),
+            first_session=first_session,
         )
         console.print(result["summary"])
 

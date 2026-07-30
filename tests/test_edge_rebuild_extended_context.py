@@ -116,6 +116,55 @@ def test_context_plan_covers_both_segments_without_regular_session_rows(
     )
 
 
+def test_window_narrows_to_a_suffix_of_the_frozen_range(tmp_path: Path) -> None:
+    """Extended context is only worth collecting for in-window sessions."""
+
+    plan_dir, collection_dir = _write_regular_layer(tmp_path)
+
+    full = build_extended_session_context_plan(
+        intraday_plan_directory=plan_dir,
+        intraday_collection_directory=collection_dir,
+        memberships_path=tmp_path / MEMBERSHIPS,
+        membership_audit_path=tmp_path / MEMBERSHIP_AUDIT,
+        policy_path=CONTEXT_POLICY,
+        output_directory=tmp_path / "full",
+        config=load_extended_session_context_config(CONTEXT_POLICY),
+    )
+    narrowed = build_extended_session_context_plan(
+        intraday_plan_directory=plan_dir,
+        intraday_collection_directory=collection_dir,
+        memberships_path=tmp_path / MEMBERSHIPS,
+        membership_audit_path=tmp_path / MEMBERSHIP_AUDIT,
+        policy_path=CONTEXT_POLICY,
+        output_directory=tmp_path / "narrow",
+        config=load_extended_session_context_config(CONTEXT_POLICY),
+        first_session=LAST_SESSION,
+    )
+
+    assert full["summary"]["planned_history_sessions"] == SESSION_COUNT
+    assert narrowed["summary"]["planned_history_sessions"] == 1
+    assert narrowed["summary"]["regular_layer_sessions"] == SESSION_COUNT
+    assert narrowed["summary"]["acquisition_units"] < full["summary"]["acquisition_units"]
+    # Narrowing changes acquisition identity, so units can never be confused.
+    assert narrowed["plan_fingerprint"] != full["plan_fingerprint"]
+
+
+def test_window_outside_the_frozen_range_fails_closed(tmp_path: Path) -> None:
+    plan_dir, collection_dir = _write_regular_layer(tmp_path)
+
+    with pytest.raises(DataReadinessError, match="outside the frozen ER1A range"):
+        build_extended_session_context_plan(
+            intraday_plan_directory=plan_dir,
+            intraday_collection_directory=collection_dir,
+            memberships_path=tmp_path / MEMBERSHIPS,
+            membership_audit_path=tmp_path / MEMBERSHIP_AUDIT,
+            policy_path=CONTEXT_POLICY,
+            output_directory=tmp_path / "bad",
+            config=load_extended_session_context_config(CONTEXT_POLICY),
+            first_session="2019-01-02",
+        )
+
+
 def test_context_plan_binds_to_the_frozen_regular_session_layer(
     tmp_path: Path,
 ) -> None:

@@ -77,8 +77,15 @@ def build_extended_session_context_plan(
     policy_path: Path,
     output_directory: Path,
     config: ExtendedSessionContextConfig,
+    first_session: str | None = None,
 ) -> dict[str, Any]:
-    """Plan pre/post-market context for exactly the frozen ER1A session set."""
+    """Plan pre/post-market context over the frozen ER1A session set.
+
+    `first_session` narrows the plan to a suffix of that set. Extended context is
+    only worth collecting for sessions that will reach the final dataset, and the
+    regular-session corpus deliberately extends further back than the research
+    window so the window can move without re-acquiring bars.
+    """
 
     if output_directory.exists():
         raise DataReadinessError(
@@ -100,6 +107,14 @@ def build_extended_session_context_plan(
         raise DataReadinessError(
             "ER1B universe differs from the frozen ER1A universe"
         )
+    regular_first = str(regular["first_history_session"])
+    regular_last = str(regular["last_history_session"])
+    window_first = first_session or regular_first
+    if not regular_first <= window_first <= regular_last:
+        raise DataReadinessError(
+            f"ER1B first session {window_first} is outside the frozen ER1A range "
+            f"{regular_first}..{regular_last}"
+        )
     request = {
         "schema": EXTENDED_CONTEXT_PLAN_SCHEMA,
         "policy_path": str(policy_path),
@@ -109,19 +124,20 @@ def build_extended_session_context_plan(
         "membership": membership_identity,
         "premarket_start_et": config.premarket_start_et,
         "postmarket_end_et": config.postmarket_end_et,
+        "window_first_session": window_first,
         "training_performed": False,
         "download_performed": False,
     }
     plan_fingerprint = json_sha256(request)
     calendar = xcals.get_calendar(config.calendar)
-    sessions = calendar.sessions_in_range(
-        str(regular["first_history_session"]),
-        str(regular["last_history_session"]),
-    )
-    if len(sessions) != int(str(regular["planned_history_sessions"])):
+    sessions = calendar.sessions_in_range(window_first, regular_last)
+    full_range = calendar.sessions_in_range(regular_first, regular_last)
+    if len(full_range) != int(str(regular["planned_history_sessions"])):
         raise DataReadinessError(
             "ER1B session window does not match the frozen ER1A session count"
         )
+    if not len(sessions):
+        raise DataReadinessError("ER1B session window is empty")
     window_frames, unit_frames, totals = _build_context_frames(
         memberships=memberships,
         sessions=sessions,
@@ -187,9 +203,11 @@ def build_extended_session_context_plan(
                 },
             },
             "summary": {
-                "first_history_session": regular["first_history_session"],
-                "last_history_session": regular["last_history_session"],
+                "regular_layer_first_session": regular_first,
+                "first_history_session": window_first,
+                "last_history_session": regular_last,
                 "planned_history_sessions": len(sessions),
+                "regular_layer_sessions": len(full_range),
                 "memory": memory_audit(
                     hard_budget_gib=config.maximum_process_memory_gib,
                     headroom_gib=config.memory_guard_headroom_gib,
