@@ -341,6 +341,28 @@ Frozen rules:
 6. Feature construction is out of scope. The context features are ER2 freeze
    inputs, built in ER3.
 
+### ER1B Completed Transport
+
+At the confirmed 3.25-year intraday window the context layer covers
+2023-04-10 through 2024-07-08.
+
+- Plan: `data/research/edge_rebuild_extended_session_context_plan_er1b_20260730`
+- Collection: `data/raw/edge_rebuild_extended_session_context_er1b_20260730`
+- 313 sessions, 528 historical tickers, 157,443 point-in-time ticker-sessions.
+- 3,443 pre-market and 3,443 post-market units; 6,886/6,886 completed with zero
+  failures, against 17,688 for the full regular-session range.
+- 1,925,863 canonical SIP/`all` five-minute bars across 541 observed symbols.
+- Peak collection RSS 0.284 GiB. Zero zero-volume bars.
+- Authority replay verified every unit hash and matching sidecar.
+- Zero regular-session bars: layer isolation holds at the transport boundary.
+
+**Segment classification must use exchange session bounds, never clock times.**
+On 2024-07-03 the session closed at 13:00 ET, so 396 genuine post-market bars
+fall inside a naive 09:30-16:00 band. Any code that separates regular from
+extended bars by fixed clock time will misclassify every early-close session.
+The planner uses `calendar.session_close`; materialization and feature code must
+do the same.
+
 ### ER1B Frozen Plan
 
 The immutable ER1B plan is
