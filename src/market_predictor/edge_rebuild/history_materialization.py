@@ -274,8 +274,14 @@ def reorganize_intraday_history(
             ).to_record(),
             **summary,
         }
-        report.raise_if_defective("materialized intraday corpus")
         published = staging / "published"
+        if report.defect_count:
+            # A refused build must still say why, or the next run starts blind.
+            rejection = output_dir.with_name(f"{output_dir.name}_rejected.json")
+            _write_json(rejection, manifest)
+            report.raise_if_defective(
+                f"materialized intraday corpus (findings written to {rejection})"
+            )
         _write_json(published / "_manifest.json", manifest)
         _write_json(
             published / "_authority.json",

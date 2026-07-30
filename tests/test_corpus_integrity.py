@@ -66,7 +66,7 @@ def test_truncated_session_is_caught_even_though_every_ticker_has_bars() -> None
 
 
 def test_single_truncated_ticker_session_is_caught() -> None:
-    frame = _clean()
+    frame = _clean(sessions=30)
     frame.loc[(frame["session"] == "2024-01-05") & (frame["ticker"] == "T2"), "bars"] = 3
 
     report = verify_corpus_integrity(frame, label="hole")
@@ -74,6 +74,66 @@ def test_single_truncated_ticker_session_is_caught() -> None:
     assert len(report.truncated_ticker_sessions) == 1
     assert report.truncated_ticker_sessions[0]["ticker"] == "T2"
     assert not report.truncated_sessions
+
+
+def test_consistently_thin_symbol_is_not_a_defect() -> None:
+    """AutoZone prints in roughly half the buckets every session.
+
+    That is correct data about a high-priced, low-share-volume symbol. Whether
+    it can be traded intraday is decided by the eligibility filter, not here.
+    """
+
+    # A realistic cross-section: mostly liquid symbols, one persistently thin.
+    frame = pd.DataFrame(
+        [
+            _row(f"2024-01-{day:02d}", f"T{i}", 78)
+            for day in range(2, 30)
+            for i in range(8)
+        ]
+        + [_row(f"2024-01-{day:02d}", "AZO", 37) for day in range(2, 30)]
+    )
+
+    report = verify_corpus_integrity(frame, label="thin")
+
+    assert report.defect_count == 0
+    report.raise_if_defective("thin")
+
+
+def test_liquid_symbol_collapsing_to_a_tenth_is_still_caught() -> None:
+    """The failure worth catching: normally full coverage, suddenly almost none."""
+
+    rows = [_row(f"2024-01-{day:02d}", "AAPL", 78) for day in range(2, 30)]
+    rows.append(_row("2024-01-30", "AAPL", 6))
+    frame = pd.DataFrame(rows)
+
+    report = verify_corpus_integrity(frame, label="collapse")
+
+    assert len(report.truncated_ticker_sessions) == 1
+    finding = report.truncated_ticker_sessions[0]
+    assert finding["session"] == "2024-01-30"
+    assert finding["symbol_typical_completeness"] == pytest.approx(1.0)
+    assert finding["share_of_typical"] < 0.1
+
+
+def test_frozen_price_outside_the_regular_session_is_not_a_defect() -> None:
+    """A liquid symbol resting at one price across a few pre-market prints."""
+
+    frame = pd.DataFrame(
+        [
+            _row(
+                "2024-01-02",
+                "PRU",
+                12,
+                segment="premarket",
+                expected=66,
+                distinct_close=1,
+            )
+        ]
+    )
+
+    report = verify_corpus_integrity(frame, label="premarket-flat")
+
+    assert report.defect_count == 0
 
 
 def test_reused_symbol_price_jump_is_caught() -> None:

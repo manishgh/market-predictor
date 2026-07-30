@@ -41,6 +41,8 @@ class IntegrityThresholds:
     """Frozen limits. Widening any of these requires new evidence, not preference."""
 
     minimum_regular_completeness: float = 0.50
+    minimum_relative_completeness: float = 0.35
+    minimum_sessions_for_baseline: int = 20
     minimum_session_median_completeness: float = 0.90
     maximum_session_close_ratio: float = 3.0
     maximum_interior_gap_sessions: int = 5
@@ -49,6 +51,10 @@ class IntegrityThresholds:
     def __post_init__(self) -> None:
         if not 0.0 < self.minimum_regular_completeness <= 1.0:
             raise ValueError("regular-session completeness floor must be in (0, 1]")
+        if not 0.0 < self.minimum_relative_completeness <= 1.0:
+            raise ValueError("relative completeness floor must be in (0, 1]")
+        if self.minimum_sessions_for_baseline < 2:
+            raise ValueError("a symbol baseline needs at least two sessions")
         if not 0.0 < self.minimum_session_median_completeness <= 1.0:
             raise ValueError("session median completeness floor must be in (0, 1]")
         if self.maximum_session_close_ratio <= 1.0:
@@ -161,10 +167,35 @@ def _check_regular_completeness(
     limits: IntegrityThresholds,
     report: IntegrityReport,
 ) -> None:
-    """An index member that barely traded a regular session is a transport gap."""
+    """A session far below what this symbol normally prints is a transport gap.
 
-    truncated = regular[regular["completeness"] < limits.minimum_regular_completeness]
-    for row in truncated.itertuples():
+    Completeness is judged against the symbol's own typical session, never a
+    global floor. A high-priced, low-share-volume symbol genuinely does not
+    trade in every five-minute bucket; AutoZone prints in roughly half of them
+    and that data is correct. A global floor would call every such session a
+    defect while missing a liquid symbol that dropped from full coverage to a
+    tenth of it, which is the failure actually worth catching.
+
+    Whether such a symbol is tradable is a separate question, answered by the
+    eligibility filter at decision time, not here.
+    """
+
+    if regular.empty:
+        return
+    baseline = regular.groupby("ticker")["completeness"].transform("median")
+    # A symbol needs enough history for its own baseline to mean anything.
+    observed = regular.groupby("ticker")["completeness"].transform("size")
+    relative = regular["completeness"] / baseline.where(baseline > 0)
+    truncated = regular[
+        (relative < limits.minimum_relative_completeness)
+        & (observed >= limits.minimum_sessions_for_baseline)
+    ]
+    for row, own, share in zip(
+        truncated.itertuples(),
+        baseline[truncated.index],
+        relative[truncated.index],
+        strict=True,
+    ):
         report.truncated_ticker_sessions.append(
             {
                 "session": str(row.session),
@@ -172,6 +203,8 @@ def _check_regular_completeness(
                 "bars": int(row.bars),
                 "expected_bars": int(row.expected_bars),
                 "completeness": round(float(row.completeness), 6),
+                "symbol_typical_completeness": round(float(own), 6),
+                "share_of_typical": round(float(share), 6),
             }
         )
 
@@ -216,7 +249,10 @@ def _check_fabricated_bars(
                 "bars": int(row.zero_volume_bars),
             }
         )
-    frozen = frame[(frame["bars"] >= 10) & (frame["distinct_close"] == 1)]
+    # A symbol resting at one price across a handful of pre-market prints is
+    # ordinary, so a frozen price only means anything during the regular session.
+    regular = frame[frame["segment"] == REGULAR_SEGMENT]
+    frozen = regular[(regular["bars"] >= 10) & (regular["distinct_close"] == 1)]
     for row in frozen.itertuples():
         report.fabricated_bars.append(
             {
