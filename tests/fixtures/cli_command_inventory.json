@@ -86,6 +86,7 @@
     "canonicalize-memberships",
     "canonicalize-source-collections",
     "combine-swing-datasets",
+    "materialize-edge-rebuild-intraday-history",
     "partition-v3-data",
     "plan-edge-rebuild-extended-session-context",
     "plan-edge-rebuild-intraday-history",

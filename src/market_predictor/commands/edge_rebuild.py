@@ -19,6 +19,9 @@ from market_predictor.edge_rebuild.history_contracts import (
     load_extended_session_context_config,
     load_intraday_history_config,
 )
+from market_predictor.edge_rebuild.history_materialization import (
+    reorganize_intraday_history,
+)
 from market_predictor.edge_rebuild.intraday_history import (
     build_intraday_history_plan,
 )
@@ -88,6 +91,47 @@ def register_edge_rebuild_commands(app: typer.Typer, console: Any) -> None:
                     "excluded_intervals",
                     "unevaluated_intervals",
                 )
+            }
+        )
+
+    @app.command("materialize-edge-rebuild-intraday-history")
+    @serialized_heavy_job("materialize-edge-rebuild-intraday-history")
+    def materialize_edge_rebuild_intraday_history(
+        regular_collection_dir: Path = typer.Option(...),
+        extended_collection_dir: Path = typer.Option(...),
+        legacy_stock_dir: Path = typer.Option(...),
+        legacy_benchmark_dir: Path = typer.Option(...),
+        universe: Path = typer.Option(
+            ...,
+            help="Verified canonical membership artifact.",
+        ),
+        out_dir: Path = typer.Option(...),
+        first_session: str = typer.Option(..., help="Window start YYYY-MM-DD."),
+        last_session: str = typer.Option(..., help="Window end YYYY-MM-DD."),
+    ) -> None:
+        """Reorganize downloaded bars into per-symbol regular and extended stores."""
+
+        result = reorganize_intraday_history(
+            collected_dirs={
+                "regular": regular_collection_dir,
+                "extended": extended_collection_dir,
+            },
+            legacy_dirs={
+                "legacy_stocks": legacy_stock_dir,
+                "legacy_benchmarks": legacy_benchmark_dir,
+            },
+            universe_path=universe,
+            output_dir=out_dir,
+            first_session=first_session,
+            last_session=last_session,
+        )
+        console.print(
+            {
+                "symbols": result["symbols"],
+                "total_rows": result["total_rows"],
+                "rows_by_segment": result["rows_by_segment"],
+                "window_sessions": result["window_sessions"],
+                "defects": result["integrity"]["defect_count"],
             }
         )
 

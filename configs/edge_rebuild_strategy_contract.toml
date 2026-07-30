@@ -1,0 +1,99 @@
+schema_version = "edge_rebuild.strategy_contract.v1"
+
+# Frozen once, before any validation outcome is seen. Every number here is
+# chosen from trading rationale and the design window only. Changing one after
+# looking at validation results is the failure that produced the V2 rejection.
+
+[swing]
+strategy_id = "SWING.SECTOR_RESIDUAL_MOMENTUM.10D.V1"
+# Decide after the completed daily bar, enter at the next session open, exit at
+# the close of the tenth exchange session. Exit is timeout-only: a daily-bar
+# strategy cannot know when an intraday stop was touched, and pretending
+# otherwise would score fills the data cannot support.
+horizon_sessions = 10
+entry_reference = "next_session_open"
+exit_rule = "horizon_close"
+decision_cutoff = "daily_bar_close"
+# Ten sessions rather than five. One round trip costs roughly 20 bps, so a
+# five-session hold must clear that in a week; doubling the hold halves the cost
+# burden per unit of expected move without assuming longer is better.
+round_trip_cost_bps = 20.0
+minimum_warmup_sessions = 250
+maximum_trades_per_decision = 10
+minimum_expected_net_edge_bps = 5.0
+
+[intraday]
+strategy_id = "INTRADAY.VWAP_EXHAUSTION_REVERSAL.30M.V1"
+# Decide on a completed five-minute bar, finalize after 60 seconds, enter at the
+# next one-minute open, exit at target, stop, or the thirtieth regular-session
+# minute, whichever comes first.
+horizon_minutes = 30
+entry_reference = "next_one_minute_open"
+exit_rule = "target_stop_timeout"
+decision_finalization_seconds = 60
+round_trip_cost_bps = 10.0
+target_atr_multiple = 1.0
+stop_atr_multiple = 0.75
+minimum_warmup_bars = 130
+maximum_trades_per_session = 5
+minimum_expected_net_edge_bps = 3.0
+# Opening, midday, and late sessions behave differently. A single unconditional
+# VWAP-distance rule ignoring this is what V2 did, and it produced negative
+# gross return before costs.
+session_segments = ["opening", "midday", "late"]
+opening_end_et = "11:00"
+midday_end_et = "14:00"
+
+[labels]
+# Benchmark excess is measured over the identical executable interval as the
+# stock return, and is already net of cost. It is never re-deducted.
+retained = [
+  "gross_return",
+  "cost",
+  "net_return",
+  "spy_excess_return",
+  "sector_excess_return",
+]
+benchmark_market = "SPY"
+benchmark_sector_source = "point_in_time_membership"
+
+[validation]
+purged_folds = 4
+minimum_test_sessions_per_fold = 60
+embargo_sessions = 10
+unseen_ticker_holdout_fraction = 0.2
+unseen_ticker_assignment = "deterministic_hash"
+
+[experiment_budget]
+# Trying many variants until one passes is how a random result becomes a
+# "discovery". The budget is the multiple-testing control.
+maximum_learned_candidates = 6
+maximum_feature_profiles = 2
+maximum_selection_policies = 2
+shadow_retries = 0
+
+[features]
+# Four groups, kept apart. Extended-hours bars never reach a regular-session
+# VWAP, moving average, ATR, or relative-volume denominator, because thin
+# pre-market prints are real trades but do not represent broad agreement.
+profiles = ["technical_market", "catalyst_full"]
+promotion_eligible_profile = "catalyst_full"
+extended_context_enabled = true
+# Raw event counts trend upward across the sample because provider news
+# coverage grew, not because issuers made more news. Counts must be compared
+# within a decision cross-section or against the ticker's own recent history.
+news_count_normalization = "cross_sectional_rank"
+raw_news_counts_prohibited = true
+# Sentiment decays from an impulse rather than switching off at a window edge.
+# The half-lives are frozen here and are never tuned on validation results.
+sentiment_decay_half_life_minutes_intraday = 60.0
+sentiment_decay_half_life_hours_swing = 36.0
+
+[stress]
+# Costs are widened, not the signal, to test whether the edge survives worse
+# fills than the base policy assumes.
+cost_multiplier = 2.0
+
+[retirement]
+# One rule, declared before any result is seen.
+rule = "a strategy version failing any ER3 admission gate is retired; its thresholds and cohorts are not re-searched on the same data"
