@@ -100,9 +100,10 @@ class IntradayUniverseContract(FrozenModel):
     index_restricted: bool
     minimum_average_volume_shares: int = Field(ge=100_000)
     average_volume_lookback_sessions: int = Field(ge=5, le=120)
-    minimum_price: float = Field(gt=0)
+    minimum_price: float = Field(ge=5.0)
     maximum_price: float = Field(gt=0)
     minimum_bar_continuity: float = Field(gt=0, le=1)
+    exclude_exchange_traded_products: bool
     minimum_relative_volume: float = Field(ge=1.0)
     relative_volume_lookback_sessions: int = Field(ge=5, le=120)
     relative_volume_excludes_current_session: bool
@@ -117,6 +118,14 @@ class IntradayUniverseContract(FrozenModel):
             )
         if self.minimum_price >= self.maximum_price:
             raise ValueError("price floor must be below the price ceiling")
+        # A fund has no issuer, so a catalyst-conditioned single-name reversal
+        # has nothing to condition on; leveraged single-stock products would
+        # also double-count an underlying already in the universe.
+        if not self.exclude_exchange_traded_products:
+            raise ValueError(
+                "exchange-traded products must be excluded from a single-name "
+                "catalyst setup"
+            )
         if self.minimum_relative_volume < 1.5:
             raise ValueError(
                 "relative volume below 1.5 does not select stocks in play"

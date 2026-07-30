@@ -564,8 +564,15 @@ Standard practice selects intraday candidates in two stages, and conflating them
 was a design error in this program.
 
 **Layer one, could this be traded at all.** Average volume at least one million
-shares over twenty sessions, price between five and five hundred dollars, and
-prints in at least 95% of five-minute buckets.
+shares over twenty sessions, price between eight and five hundred dollars,
+prints in at least 95% of five-minute buckets, and operating companies only.
+
+Exchange-traded products are excluded. The setup is a single-name reversal
+conditioned on an issuer catalyst and a fund has no issuer; measured article
+density is a median of 8 articles for exchange-traded products against 204 for
+operating companies. Leveraged single-stock products would additionally
+double-count exposure to an underlying already in the universe, and bond funds
+are not equities at all.
 
 **Layer two, is it moving today.** Relative volume at least 2.0 against its own
 twenty-session average, measured from prior sessions only so selection never

@@ -99,6 +99,7 @@
     "score-entry-exit-latest",
     "score-flashpoints",
     "score-swing-events",
+    "screen-edge-rebuild-intraday-universe",
     "train-entry-exit-model",
     "train-intraday-model",
     "train-intraday-specialists",

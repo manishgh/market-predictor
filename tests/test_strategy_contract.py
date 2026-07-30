@@ -131,6 +131,29 @@ def test_intraday_universe_cannot_be_index_restricted() -> None:
         StrategyContract.model_validate(raw)
 
 
+def test_exchange_traded_products_must_be_excluded() -> None:
+    """A fund has no issuer, so a catalyst setup has nothing to condition on.
+
+    Measured density is a median of 8 articles for exchange-traded products
+    against 204 for operating companies.
+    """
+
+    raw = _raw()
+    raw["intraday_universe"]["exclude_exchange_traded_products"] = False
+
+    with pytest.raises(ValueError, match="must be excluded"):
+        StrategyContract.model_validate(raw)
+
+
+def test_price_floor_matches_the_penny_stock_exclusion() -> None:
+    raw = _raw()
+    assert raw["intraday_universe"]["minimum_price"] == 8.0
+
+    raw["intraday_universe"]["minimum_price"] = 1.0
+    with pytest.raises(ValueError):
+        StrategyContract.model_validate(raw)
+
+
 def test_relative_volume_must_exclude_the_session_being_traded() -> None:
     """Selecting on today's volume uses information the decision cannot have."""
 

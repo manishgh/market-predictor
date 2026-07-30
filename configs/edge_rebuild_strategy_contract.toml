@@ -71,9 +71,15 @@ index_restricted = false
 # Layer one: could this be traded intraday at all.
 minimum_average_volume_shares = 1_000_000
 average_volume_lookback_sessions = 20
-minimum_price = 5.0
+minimum_price = 8.0
 maximum_price = 500.0
 minimum_bar_continuity = 0.95
+# Operating companies only. The setup is a single-name reversal that conditions
+# on an issuer catalyst, and a fund has no issuer: measured article density is a
+# median of 8 for exchange-traded products against 204 for operating companies.
+# Leveraged single-stock products would also double-count exposure to an
+# underlying already in the universe, and bond funds are not equities at all.
+exclude_exchange_traded_products = true
 
 # Layer two: is it in play today. Evaluated from the prior session's data only,
 # so selection never uses information from the session being traded.

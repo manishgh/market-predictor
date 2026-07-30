@@ -1,5 +1,6 @@
 """Edge-rebuild research audit commands."""
 
+from datetime import date
 from pathlib import Path
 from typing import Any
 
@@ -25,9 +26,14 @@ from market_predictor.edge_rebuild.history_materialization import (
 from market_predictor.edge_rebuild.intraday_history import (
     build_intraday_history_plan,
 )
+from market_predictor.edge_rebuild.intraday_selection import (
+    build_intraday_selection,
+    publish_intraday_selection,
+)
 from market_predictor.edge_rebuild.readiness import (
     run_edge_rebuild_readiness_audit,
 )
+from market_predictor.edge_rebuild.strategy_contract import load_strategy_contract
 from market_predictor.edge_rebuild.universe_identity import (
     publish_verified_universe,
 )
@@ -239,6 +245,52 @@ def register_edge_rebuild_commands(app: typer.Typer, console: Any) -> None:
             config=load_intraday_history_config(policy),
         )
         console.print(result["summary"])
+
+    @app.command("screen-edge-rebuild-intraday-universe")
+    @serialized_heavy_job("screen-edge-rebuild-intraday-universe")
+    def screen_edge_rebuild_intraday_universe(
+        collection_dir: Path = typer.Option(
+            ...,
+            help="Completed daily-bar collection supplying volume and price.",
+        ),
+        out_dir: Path = typer.Option(..., help="Hash-bound research output directory."),
+        first_session: str = typer.Option(..., help="Window start YYYY-MM-DD."),
+        last_session: str = typer.Option(..., help="Window end YYYY-MM-DD."),
+        contract: Path = typer.Option(
+            Path("configs/edge_rebuild_strategy_contract.toml"),
+            help="Frozen strategy contract supplying every screen threshold.",
+        ),
+        exclude_ticker: list[str] = typer.Option(
+            [],
+            help="Symbols collected as benchmarks rather than as candidates.",
+        ),
+    ) -> None:
+        """Screen daily bars into the frozen two-layer intraday stock-sessions."""
+
+        result = build_intraday_selection(
+            collection_dir=collection_dir,
+            contract=load_strategy_contract(contract),
+            first_session=date.fromisoformat(first_session),
+            last_session=date.fromisoformat(last_session),
+            exclude_tickers=frozenset(
+                value.strip().upper() for value in exclude_ticker if value.strip()
+            ),
+        )
+        manifest = publish_intraday_selection(result, output_directory=out_dir)
+        console.print(
+            {
+                key: manifest[key]
+                for key in (
+                    "symbols_read",
+                    "daily_rows_read",
+                    "zero_volume_rows_dropped",
+                    "liquidity_rows",
+                    "sessions_in_window",
+                    "layer_one",
+                    "layer_two",
+                )
+            }
+        )
 
     @app.command("audit-edge-rebuild-readiness")
     @serialized_heavy_job("audit-edge-rebuild-readiness")
