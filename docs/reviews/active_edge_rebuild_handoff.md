@@ -1,190 +1,134 @@
 # Active Edge Rebuild Handoff
 
-Status: ER1 completed; ER1A in progress; corpus defects diagnosed, fixes not yet built
-Last updated: 2026-07-29
+Status: data acquisition complete for swing; intraday complete for 298 tradable
+symbols with ~651 more in collection. ER3 setup admission is the next gate.
+Last updated: 2026-07-30
 Repository: `C:\project\market-predictor`
 Remote: `https://github.com/manishgh/market-predictor`
 Branch: `r3-lineage`
-Last implementation commit: `319dd3e`; last documentation commit: `08a5208`
+Last implementation commit: `9b0c5ce`
 
 Read first:
 
 1. `AGENTS.md`
-2. `docs/active_edge_rebuild_plan.md`
+2. `docs/active_edge_rebuild_plan.md`, especially sections 8A, 8B, 8C
 3. This file
 
 Do not infer current state from chat history.
 
 ## Objective
 
-Build a correct and complete dataset under a sound technical design, then train.
-The goal is predicting the market. Small per-ticker data loss is acceptable and
-must not drive the design.
+Build a correct dataset under a sound design, prove the deterministic setups
+earn money, and only then train. The goal is a predictive engine, not per-symbol
+data completeness. Losing under 5% of symbols is not worth escalating.
 
-## Scope Constraints Set By The User On 2026-07-29
+## Data Held, Measured From Disk On 2026-07-30
 
-These supersede the earlier five-year intraday research target.
-
-- No data earlier than 2016 is required for any horizon.
-- Intraday: three years of history, with catalysts.
-- Swing: seven years from now, with catalysts. Decided 2026-07-29; the ten-year
-  option is dropped. Swing price history already covers 2019-07-09 through
-  2026-07-08, so no additional swing price collection is required and no
-  collection before 2019 is needed for any horizon.
-- Some strategies, for example mean reversion, do not require catalysts.
-- Exclude a security only when its point-in-time identity cannot be proven.
-  Never exclude for thin trading or for delisting.
-
-## Two Conflicts To Resolve Before Building
-
-1. **Swing catalyst coverage is five years, not the decided seven.**
-   `data/raw/alpaca_news_20210709_20260708_v1` starts 2021-07-09 and holds
-   564,986 rows. Swing price history starts 2019-07-09. A catalyst-bearing swing
-   dataset therefore cannot exceed five years today. Options: probe whether the
-   provider serves news before 2021-07 and collect back to 2016; or use the
-   existing two-profile split, `technical_market` over the full window as the
-   baseline and `catalyst_full` over the catalyst window as the only
-   promotion-eligible profile; or run a catalyst-free strategy such as mean
-   reversion over the full window. Decide before ER2 freezes feature profiles.
-
-   Five years is ample in rows and marginal in independent evidence. ER1
-   measured 125 effective ten-session blocks over the current seven-year swing
-   corpus; five years yields roughly 90, or about 22 per purged fold, and
-   roughly 890 usable sessions against the frozen 1,000-session swing gate. A
-   window starting 2021-07 also excludes the 2020 volatility shock entirely, so
-   the surviving regime variety is the 2022 decline and the subsequent recovery.
-
-2. **Three years of intraday sits almost exactly on the frozen 750-session floor.**
-   2023-07-29 through 2026-07-08 is approximately 738 exchange sessions. The
-   frozen gate requires at least 750 causally usable sessions and four purged
-   folds retaining at least 60 test sessions each. Either widen the window
-   slightly beyond three years or change the gate. Do not silently accept 738.
-
-## What The Three-Year Intraday Window Changes
-
-Most diagnosed intraday defects fall outside it and become irrelevant:
-
-- The `FI` contamination window, 2021-04-27 to 2023-06-06, is entirely outside.
-- All three truncated sessions, 2021-10-25, 2022-01-24, and 2022-03-08, are
-  entirely outside.
-- Of the ER1A collection's 804 sessions, only roughly 236 fall inside.
-- The legacy corpus supplies the remaining approximately 501 sessions and
-  already carries 04:00-20:00 ET bars.
-
-Consequence for ER1B: extended-session context is needed only for the roughly
-236 in-window ER1A sessions, not 804. That is approximately 5,664 request units
-rather than 17,688. The ER1B plan and its stopped collection must be regenerated
-against the reduced window.
-
-## Verified Defect Inventory
-
-Independently derived at per-(ticker, session) bar-count granularity. Counts
-reconcile: 404,194 observed plus 517 missing equals 404,711 planned; 32,033,151
-bars matches the collection manifest.
-
-ER1A intraday corpus:
-
-| Defect | Magnitude | Class |
+| | Swing | Intraday |
 | --- | --- | --- |
-| `FI` identity contamination | 111 ticker-sessions, 8,599 bars | wrong data |
-| `FI` rename gap | 421 member ticker-sessions, zero bars | missing |
-| Truncated sessions | 2022-03-08 and 2021-10-25 median 1 bar; 2022-01-24 median 15 | missing |
-| Transport holes | 74 single-session gaps across 13 units | missing |
-| Delisting boundary | 22 ticker-sessions, zero of 22 traded | benign |
-| Thin-trading absence | 12,101 ticker-sessions below 95%, 10.7x lower volume | benign, never refill |
+| Universe | 654 tickers, 627 securities, verified point-in-time | 572 symbols with five-minute bars |
+| Bars | 1,084,622 daily | 31,630,145 regular plus 6,079,043 extended |
+| Coverage | 2019-07-09 to 2026-07-08, 7.00 years | 2023-04-10 to 2026-07-08, 3.24 years, 814 sessions |
+| News | 714,126 rows over the full 7 years | same corpus, fully covers the window |
 
-Interior gap-length distribution is `{1: 74, 421: 1}`. Exactly one price jump
-above 3x exists in 32,033,151 bars. Zero zero-volume bars. Zero frozen-price
-ticker-sessions.
+Artifacts:
 
-Legacy 730-day intraday corpus: clean under every detector.
+- Verified universe:
+  `data/canonical/swing_memberships_verified_20190709_20260708_v2.parquet`
+- Intraday per-symbol stores:
+  `data/canonical/edge_rebuild_intraday_5m_20260730/{regular,extended}/5m/`
+- Swing daily bars:
+  `data/raw/swing_daily_sip_sp500_pit_20190709_20260708_v3/bars/`
+- News: `data/raw/alpaca_news_20190709_20210708_v1` and
+  `data/raw/alpaca_news_20210709_20260708_v1`
 
-Swing daily corpus: nine ticker-reuse symbols in raw; eight are correctly
-filtered by membership interval. `FI` alone escapes into
-`swing_technical_decisions` (885,371 rows) as 111 wrong-security rows, 421
-fabricated zero-volume rows at a flat 3.15, and 272 correct rows. 421 of the 429
-zero-volume rows in that artifact are this one security.
+## The Intraday Universe Gap
 
-## Root Cause
+The 572 intraday symbols are S&P 500 members because that is what the corpus was
+built from. Against the frozen tradability screen:
 
-The point-in-time universe derives historical tickers by taking the current
-ticker from `data/universe/sp500_current_20260708.csv` and back-filling it,
-breaking the back-fill only where the provider's corporate-actions feed reports
-a change. Where that feed is incomplete the back-fill silently becomes a
-hindsight assertion. This is a bad derivation, not a bad row. It passed every
-hash, authority, and non-overlap check because it is structurally valid and
-factually wrong, and it defeats both existing defences: membership-interval
-filtering applies a wrong interval faithfully, and security-identity grouping
-cannot help because the contaminated rows carry the correct `security_id`.
+- 298 of the 572 pass and are usable now.
+- 274 fail on volume or price. They stay for swing and are not intraday-tradable.
+- ~651 further candidates, mostly non-index, have no bars yet.
 
-## The Four Design Fixes To Build
+A collection for those ~651 is in progress: daily bars, the point-in-time
+screen, then news. Estimated about ninety minutes unattended. The intraday
+universe is deliberately not index-restricted and the contract refuses an
+index-restricted one.
 
-Build these as fail-closed contracts with poison tests. They replace all
-per-ticker patching.
+Note that only 3.8% of eligible stock-sessions clear relative volume 2.0, a
+median of ten symbols per session. An unconditional population is therefore
+roughly 96% symbols that were not moving, which is the most likely reason the V2
+intraday setup showed negative average gross return before costs.
 
-1. **Point-in-time symbol derivation.** Never derive a historical ticker from a
-   current constituent list. Derive per interval from evidence and fail closed
-   where evidence is absent.
-2. **Completeness floor.** Segment-aware expected-versus-observed gate per
-   (ticker, session): strict for regular session, permissive for extended hours
-   where absence is a genuine no-trade observation.
-3. **Identity continuity assertion.** Gap-length and price-level continuity
-   checks run as a build gate, not as an ad-hoc audit.
-4. **Reject provider fabrication.** Zero-volume bars are not observations and
-   must never enter a canonical build.
+## Gates Now Enforced In Code
 
-## The Exclusion Rule
+Each was validated against real data, not only unit tests.
 
-Apply universally, never per ticker:
+1. **Corpus integrity** (`edge_rebuild/corpus_integrity.py`) — completeness
+   judged against each symbol's own history rather than a global floor,
+   whole-session truncation, identity continuity, and provider-fabricated bars.
+   Isolated single-symbol holes are recorded but do not block; clustering does.
+   Run blind against 31,220,235 bars it reproduced every known defect and found
+   fifty more.
+2. **Membership identity** (`edge_rebuild/universe_identity.py`) — a symbol
+   claim must be supported by bar evidence. Applied to 659 intervals it excluded
+   three securities, 0.48%, and independently rediscovered two exclusions that
+   had previously been hand-coded.
+3. **Setup economics** (`edge_rebuild/setup_economics.py`) — the ER3 admission
+   gate. Worst-phase aggregation, session-block bootstrap bounds, leave-one-out
+   concentration, frozen cost stress.
+4. **Strategy contract** (`edge_rebuild/strategy_contract.py`) — refuses random
+   cross-validation, raw news counts, a widened experiment budget, an
+   index-restricted intraday universe, a sub-1.0 ATR stop, and a daily ATR on a
+   thirty-minute hold.
 
-> A security whose point-in-time symbol cannot be proven from evidence is
-> excluded from the universe for the affected interval, and the exclusion is
-> recorded with its reason and row count.
+## Frozen Numbers And Where They Came From
 
-Never exclude for thin trading; that filters the cross-section by liquidity.
-Never exclude for delisting; that is survivorship bias and is why `TWTR`,
-`SIVB`, `FRC`, `ATVI`, and `CERN` are deliberately retained.
+Published methods, cited in plan section 8B: triple-barrier labels, purged
+k-fold with embargo, event-based sampling. Meta-labeling is deliberately
+deferred until one strategy passes admission alone.
 
-If the rule excludes materially more than one or two securities, stop and report
-before rebuilding anything on top of it.
+- Intraday stop 1.5 ATR, target 2.0 ATR, ATR(14) on five-minute bars. The
+  earlier 0.75 stop was below the entire standard range and would have been hit
+  by ordinary noise rather than by the thesis failing.
+- Swing exit is timeout-only at the tenth session close. Daily bars cannot show
+  when an intraday stop was touched.
+- Intraday sentiment half-life 90 minutes, evidence-backed. The swing half-life
+  of 36 hours is marked provisional: the sentiment literature describes an
+  intraday effect, and what persists over ten sessions is post-announcement
+  drift, a different mechanism.
+- Raw news counts are prohibited as estimator features. Provider coverage grew
+  from roughly 75,000 to 113,000 rows per year across the sample, so a raw count
+  encodes collection history rather than market behaviour.
 
 ## Exact Next Steps
 
-1. **First action on resume.** Probe whether the provider serves news before
-   2021-07-09, back to 2019-07. That single answer decides the swing catalyst
-   design: if yes, collect the gap and the seven-year window is fully
-   catalyst-covered; if no, fall back to the two-profile split and run
-   catalyst-free strategies over the full window. Do not build feature
-   contracts before this is answered.
-2. Resolve the remaining intraday session-floor conflict with the user.
-2. Build the four gates with poison tests.
-3. Re-run the universe build so exclusions fall out by rule; publish a corrected
-   universe artifact with provenance.
-4. Regenerate the ER1A and ER1B plans. Both fingerprints,
-   `96688b25df7abb24d0317649bde87bf29d9497f799d968801b8f5995bb7cb285` and
-   `89c91d178ed1095cc33047508c270a817d716e1c594bfe0940064d2de770a250`, are
-   invalidated by any universe change.
-5. Refill only what the reduced window needs.
-6. Materialize regular and extended layers, then ER2.
+1. ER3 swing setup admission. A build of `swing_setups.py` and its economics
+   gate run is in progress; the working tree carries
+   `src/market_predictor/edge_rebuild/swing_setups.py` and
+   `tests/test_swing_setups.py` uncommitted.
+2. ER3 intraday setup admission, once the ~651 collection completes.
+3. Only if a setup passes: ER5 training. Deterministic comparator, regularized
+   logistic, gradient boosting, grouped learning-to-rank. No deep learning — the
+   binding constraint is independent samples, roughly 125 ten-session blocks,
+   not model capacity.
 
-## Stopped Work
+**A reproducible rejection is a valid outcome.** V2 died because models were
+trained on populations with no edge. Nothing may be tuned to make a gate pass.
 
-The ER1B extended-session transport was stopped deliberately at 3,712 of 17,688
-units. Its output at `data/raw/edge_rebuild_extended_session_context_er1b_20260729`
-has no `_authority.json` and is not evidence. It must be discarded rather than
-resumed, because the universe correction and the reduced window both change the
-plan fingerprint and therefore every `unit_id`. Nothing else is running. The
-worktree is clean.
+## Do Not
 
-## Deferred, Already Recorded
-
-Section 9A of the plan queues retirement of the deprecated V1 relevance path in
-`v3/catalysts.py` for ER4, with the coefficients preserved and the deletion set
-verified self-contained.
+- hold any broker credential; this repository emits predictions and does not own
+  execution, orders, positions, or sizing;
+- use a current screener value in a historical decision;
+- exclude symbols for thin trading or delisting, only for unprovable identity;
+- merge extended-hours bars into regular-session indicator inputs;
+- weaken a frozen gate to make a build or an evaluation pass.
 
 ## Verification Commands
 
-Use the project virtual environment and one process at a time:
+Check real exit codes; never pipe these through `tail`, which masks them.
 
 ```powershell
 Set-Location C:\project\market-predictor
@@ -196,7 +140,6 @@ git diff --check
 git status --short --branch
 ```
 
-The local NumPy stubs use syntax newer than the project mypy 3.11 target. The
-verified local strict command therefore uses the installed Python 3.14
-environment. Do not reinterpret that environment fact as permission to add
-Python-3.14-only source syntax.
+The local NumPy stubs use syntax newer than the project mypy 3.11 target, so the
+verified strict command uses the installed Python 3.14 environment. That is an
+environment fact and not permission to add Python-3.14-only source syntax.
