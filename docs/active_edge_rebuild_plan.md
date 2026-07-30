@@ -531,6 +531,76 @@ therefore already ineligible. The only residual artifact is the unadjusted price
 step at the spin-off date, which is handled by excluding that single session
 from label generation.
 
+## 8B. Prescribed Methods And Their Sources
+
+This program implements published methods. It does not invent alternatives, and
+every method below is named so an implementation can be checked against its
+definition rather than against someone's recollection.
+
+| Concern | Method | Source |
+| --- | --- | --- |
+| Labels | Triple-barrier: whichever of target, stop, or timeout is touched first | López de Prado, *Advances in Financial Machine Learning*, 2018 |
+| Validation | Purged k-fold with embargo | López de Prado, 2017 |
+| Sampling | Event-based: sample when something happens, not on a fixed clock | López de Prado, 2018 |
+| Direction versus size | Meta-labeling, deferred until one strategy passes admission alone | López de Prado, 2017 |
+| Intraday selection | Average volume, relative volume, price band, spread | standard day-trading screen practice |
+
+References:
+
+- <https://en.wikipedia.org/wiki/Purged_cross-validation>
+- <https://en.wikipedia.org/wiki/Meta-Labeling>
+- <https://hudsonthames.org/does-meta-labeling-add-to-signal-efficacy-triple-barrier-method/>
+- <https://www.tradingsim.com/blog/how-to-find-the-best-stocks-for-day-trading>
+- <https://chartschool.stockcharts.com/table-of-contents/technical-indicators-and-overlays/technical-indicators/relative-volume-rvol>
+
+Published work finds that event-based sampling, triple-barrier labeling, and
+meta-labeling together improve strategy performance. The first two are in scope
+now; meta-labeling waits, because it adds a second model to validate and nothing
+has yet passed admission on its own.
+
+## 8C. Intraday Universe: Two Layers, Not One
+
+Standard practice selects intraday candidates in two stages, and conflating them
+was a design error in this program.
+
+**Layer one, could this be traded at all.** Average volume at least one million
+shares over twenty sessions, price between five and five hundred dollars, and
+prints in at least 95% of five-minute buckets.
+
+**Layer two, is it moving today.** Relative volume at least 2.0 against its own
+twenty-session average, measured from prior sessions only so selection never
+uses information from the session being traded. At most thirty candidates per
+session.
+
+Measured on the S&P 500 corpus:
+
+| Filter | Result |
+| --- | ---: |
+| Average volume at least 1M shares | 400 of 567 symbols |
+| Plus 95% bar continuity | 399 of 567 symbols |
+| Relative volume at least 1.5 | 10.6% of stock-days, median 29 per session |
+| Relative volume at least 2.0 | 3.8% of stock-days, median 10 per session |
+| Relative volume at least 3.0 | 1.0% of stock-days, median 3 per session |
+
+An unconditional population is therefore roughly 96% symbols that were not
+moving. Training on those teaches nothing and is the most likely reason the V2
+intraday setup showed negative average gross return before costs: the failure
+was in the population, not the estimator.
+
+**The intraday universe is deliberately not the S&P 500.** The most
+intraday-tradable names are frequently high-beta mid caps, recent listings, and
+catalyst-driven movers that are not index constituents. Restricting intraday to
+index membership excludes exactly the population the strategy needs. Swing
+remains index-based, because sector rotation and medium-term relative strength
+are index-shaped questions.
+
+Acquisition follows from this. Daily bars are collected for a broad
+point-in-time US universe, which is cheap at one bar per symbol per session and
+sufficient to compute average volume, relative volume, price, and range.
+Five-minute bars are then collected only for the stock-sessions that pass both
+layers, which is roughly ten to thirty symbols per session rather than the whole
+universe.
+
 ## 9A. ER4 Scope: Retire The Deprecated V1 Relevance Path
 
 ### Defect

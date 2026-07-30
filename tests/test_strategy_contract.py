@@ -101,6 +101,58 @@ def test_labels_must_retain_benchmark_relative_returns() -> None:
         StrategyContract.model_validate(raw)
 
 
+def test_intraday_universe_cannot_be_index_restricted() -> None:
+    """The most intraday-tradable names are often not index constituents."""
+
+    raw = _raw()
+    raw["intraday_universe"]["index_restricted"] = True
+
+    with pytest.raises(ValueError, match="must not be index-restricted"):
+        StrategyContract.model_validate(raw)
+
+
+def test_relative_volume_must_exclude_the_session_being_traded() -> None:
+    """Selecting on today's volume uses information the decision cannot have."""
+
+    raw = _raw()
+    raw["intraday_universe"]["relative_volume_excludes_current_session"] = False
+
+    with pytest.raises(ValueError, match="prior sessions only"):
+        StrategyContract.model_validate(raw)
+
+
+def test_relative_volume_floor_must_actually_select() -> None:
+    raw = _raw()
+    raw["intraday_universe"]["minimum_relative_volume"] = 1.0
+
+    with pytest.raises(ValueError, match="does not select stocks in play"):
+        StrategyContract.model_validate(raw)
+
+
+def test_fixed_clock_sampling_is_rejected() -> None:
+    """Only 3.8% of eligible stock-days are in play; the rest teach nothing."""
+
+    raw = _raw()
+    raw["methodology"]["sampling"] = "fixed_interval"
+
+    with pytest.raises(ValueError, match="stocks that were not moving"):
+        StrategyContract.model_validate(raw)
+
+
+def test_published_methods_cannot_be_swapped_for_ad_hoc_ones() -> None:
+    raw = _raw()
+    raw["methodology"]["cross_validation"] = "k_fold"
+
+    with pytest.raises(ValueError, match="purged and embargoed"):
+        StrategyContract.model_validate(raw)
+
+    raw = _raw()
+    raw["methodology"]["labeling"] = "fixed_horizon"
+
+    with pytest.raises(ValueError, match="target, stop, or timeout"):
+        StrategyContract.model_validate(raw)
+
+
 def test_unreadable_contract_fails_closed() -> None:
     with pytest.raises(DataReadinessError, match="unreadable"):
         load_strategy_contract(Path("configs/does_not_exist.toml"))

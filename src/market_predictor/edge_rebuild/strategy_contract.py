@@ -87,6 +87,66 @@ class IntradayContract(FrozenModel):
         return self
 
 
+class IntradayUniverseContract(FrozenModel):
+    """Two-layer selection: what could be traded, then what is moving today."""
+
+    scope: str
+    index_restricted: bool
+    minimum_average_volume_shares: int = Field(ge=100_000)
+    average_volume_lookback_sessions: int = Field(ge=5, le=120)
+    minimum_price: float = Field(gt=0)
+    maximum_price: float = Field(gt=0)
+    minimum_bar_continuity: float = Field(gt=0, le=1)
+    minimum_relative_volume: float = Field(ge=1.0)
+    relative_volume_lookback_sessions: int = Field(ge=5, le=120)
+    relative_volume_excludes_current_session: bool
+    maximum_candidates_per_session: int = Field(ge=1, le=200)
+
+    @model_validator(mode="after")
+    def validate_universe(self) -> Self:
+        if self.index_restricted:
+            raise ValueError(
+                "the intraday universe must not be index-restricted; the most "
+                "tradable names are frequently not index constituents"
+            )
+        if self.minimum_price >= self.maximum_price:
+            raise ValueError("price floor must be below the price ceiling")
+        if self.minimum_relative_volume < 1.5:
+            raise ValueError(
+                "relative volume below 1.5 does not select stocks in play"
+            )
+        # Selecting on the session being traded would use information the
+        # decision could not have had.
+        if not self.relative_volume_excludes_current_session:
+            raise ValueError(
+                "relative volume must be measured from prior sessions only"
+            )
+        return self
+
+
+class MethodologyContract(FrozenModel):
+    """Named published methods, so an implementation can be checked against them."""
+
+    labeling: str
+    cross_validation: str
+    sampling: str
+    meta_labeling_enabled: bool
+
+    @model_validator(mode="after")
+    def validate_methodology(self) -> Self:
+        if self.labeling != "triple_barrier":
+            raise ValueError("labels must resolve target, stop, or timeout first")
+        if self.cross_validation != "purged_k_fold_with_embargo":
+            raise ValueError(
+                "overlapping labels require purged and embargoed validation"
+            )
+        if self.sampling != "event_based":
+            raise ValueError(
+                "fixed-clock sampling trains mostly on stocks that were not moving"
+            )
+        return self
+
+
 class LabelContract(FrozenModel):
     retained: tuple[str, ...]
     benchmark_market: str
@@ -174,6 +234,8 @@ class StrategyContract(FrozenModel):
     schema_version: str
     swing: SwingContract
     intraday: IntradayContract
+    intraday_universe: IntradayUniverseContract
+    methodology: MethodologyContract
     labels: LabelContract
     validation: ValidationContract
     experiment_budget: ExperimentBudget

@@ -44,6 +44,47 @@ session_segments = ["opening", "midday", "late"]
 opening_end_et = "11:00"
 midday_end_et = "14:00"
 
+[intraday_universe]
+# Standard day-trading practice selects stocks in two layers, not one. Layer one
+# is which stocks could be traded at all; layer two is which are actually moving
+# today. Measured on our own corpus, only 3.8% of eligible stock-days clear
+# relative volume 2.0, so an unconditional population is 96% stocks that were
+# not moving. Training on those teaches nothing and is the likely reason the V2
+# intraday setup showed negative gross return before costs.
+#
+# This is event-based sampling: sample when something happens, not on a fixed
+# clock. See docs/active_edge_rebuild_plan.md for sources.
+scope = "broad_us_point_in_time"
+# The most intraday-tradable names are frequently high-beta mid caps, recent
+# listings, and catalyst-driven movers that are not index constituents, so the
+# intraday universe is deliberately not the S&P 500. Swing remains index-based.
+index_restricted = false
+
+# Layer one: could this be traded intraday at all.
+minimum_average_volume_shares = 1_000_000
+average_volume_lookback_sessions = 20
+minimum_price = 5.0
+maximum_price = 500.0
+minimum_bar_continuity = 0.95
+
+# Layer two: is it in play today. Evaluated from the prior session's data only,
+# so selection never uses information from the session being traded.
+minimum_relative_volume = 2.0
+relative_volume_lookback_sessions = 20
+relative_volume_excludes_current_session = true
+maximum_candidates_per_session = 30
+
+[methodology]
+# Established methods, not invented ones. Each is named so a reviewer can check
+# the implementation against the published definition.
+labeling = "triple_barrier"
+cross_validation = "purged_k_fold_with_embargo"
+sampling = "event_based"
+# Meta-labeling separates trade direction from trade sizing. It is a documented
+# improvement but is deferred until one strategy passes admission on its own,
+# because it adds a second model to validate.
+meta_labeling_enabled = false
+
 [labels]
 # Benchmark excess is measured over the identical executable interval as the
 # stock return, and is already net of cost. It is never re-deducted.
