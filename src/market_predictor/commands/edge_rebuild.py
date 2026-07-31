@@ -192,22 +192,65 @@ def register_edge_rebuild_commands(app: typer.Typer, console: Any) -> None:
     @app.command("plan-edge-rebuild-swing-history")
     @serialized_heavy_job("plan-edge-rebuild-swing-history")
     def plan_edge_rebuild_swing_history(
-        temporal_manifest_dir: Path = typer.Option(...),
-        memberships: Path = typer.Option(...),
-        universe_audit: Path = typer.Option(...),
-        current_daily_collection_dir: Path = typer.Option(...),
-        out_dir: Path = typer.Option(...),
-        repository_root: Path = typer.Option(Path(".")),
+        temporal_manifest_dir: Path = typer.Option(
+            ...,
+            help="Verified temporal gap authority directory.",
+        ),
+        membership_authority_dir: Path = typer.Option(
+            ...,
+            help="Verified 2018-2026 PIT membership authority directory.",
+        ),
+        raw_archive_dir: Path = typer.Option(
+            ...,
+            help="Raw S&P archive bound by the membership authority.",
+        ),
+        event_authority_dir: Path = typer.Option(
+            ...,
+            help="S&P event authority bound by the membership authority.",
+        ),
+        transition_authority_dir: Path = typer.Option(
+            ...,
+            help="S&P transition authority bound by the membership authority.",
+        ),
+        reviewed_transitions: Path = typer.Option(
+            ...,
+            help="Reviewed transition ledger bound by the authority.",
+        ),
+        anchor: Path = typer.Option(
+            ...,
+            help="Cutoff constituent anchor bound by the authority.",
+        ),
+        current_daily_collection_dir: Path = typer.Option(
+            ...,
+            help="Existing verified daily-bar collection directory.",
+        ),
+        out_dir: Path = typer.Option(
+            ...,
+            help="New immutable acquisition-plan directory.",
+        ),
+        security_exclusions: Path | None = typer.Option(
+            None,
+            help="Optional whole-security exclusion ledger used by the authority.",
+        ),
+        repository_root: Path = typer.Option(
+            Path("."),
+            help="Repository boundary for every input and output.",
+        ),
     ) -> None:
-        """Plan membership-first acquisition for missing swing history."""
+        """Plan missing swing history from the fully verified PIT authority."""
 
         result = publish_swing_history_acquisition_plan(
             repository_root=repository_root,
             temporal_manifest_directory=temporal_manifest_dir,
-            memberships_path=memberships,
-            universe_audit_path=universe_audit,
+            membership_authority_directory=membership_authority_dir,
+            raw_archive_directory=raw_archive_dir,
+            event_authority_directory=event_authority_dir,
+            transition_authority_directory=transition_authority_dir,
+            reviewed_transitions_path=reviewed_transitions,
+            anchor_path=anchor,
             current_daily_collection_directory=current_daily_collection_dir,
             output_directory=out_dir,
+            security_exclusions_path=security_exclusions,
         )
         membership = result["membership"]
         console.print(
@@ -218,11 +261,12 @@ def register_edge_rebuild_commands(app: typer.Typer, console: Any) -> None:
                     key: membership[key]
                     for key in (
                         "current_membership_start",
+                        "authority_cutoff",
                         "required_start",
                         "required_end",
-                        "reusable_official_sources",
-                        "total_official_sources",
-                        "invalid_official_sources",
+                        "security_count",
+                        "excluded_security_count",
+                        "universe_sha256",
                     )
                 },
                 "daily_bars": result["daily_bars"],

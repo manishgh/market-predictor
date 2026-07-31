@@ -1,4 +1,4 @@
-"""Outcome-blind acquisition planning for missing swing history."""
+"""Outcome-blind, authority-bound acquisition planning for swing history."""
 
 from __future__ import annotations
 
@@ -13,7 +13,11 @@ from zoneinfo import ZoneInfo
 
 import pandas as pd
 
-from market_predictor.canonical.store import file_sha256, manifest_path_for
+from market_predictor.canonical.store import file_sha256
+from market_predictor.edge_rebuild.sp500_memberships import (
+    MEMBERSHIP_REQUEST_SCHEMA,
+    require_sp500_membership_authority,
+)
 from market_predictor.resources import (
     assert_memory_budget,
     assert_peak_memory_budget,
@@ -21,14 +25,13 @@ from market_predictor.resources import (
 )
 from market_predictor.v3.errors import DataReadinessError
 
-PLAN_SCHEMA = "edge_rebuild.swing_history_acquisition_plan.v1"
-AUTHORITY_SCHEMA = "edge_rebuild.swing_history_acquisition_plan_authority.v1"
+PLAN_SCHEMA = "edge_rebuild.swing_history_acquisition_plan.v2"
+AUTHORITY_SCHEMA = "edge_rebuild.swing_history_acquisition_plan_authority.v2"
 TEMPORAL_SCHEMA = "edge_rebuild.temporal_manifest.v1"
 TEMPORAL_AUTHORITY_SCHEMA = "edge_rebuild.temporal_manifest_authority.v1"
-UNIVERSE_AUDIT_SCHEMA = "ml_v3.sp500_point_in_time_universe.v1"
-SOURCE_MANIFEST_SCHEMA = "ml_v3.sp500_change_sources.v1"
 DAILY_REQUEST_SCHEMA = "swing.daily_history_collection.v1"
 DAILY_MANIFEST_SCHEMA = "swing.daily_history_manifest.v1"
+DAILY_BAR_UNITS_FILE = "daily_bar_units.csv"
 MAX_MEMORY_GIB = 4.0
 MEMORY_HEADROOM_GIB = 0.75
 ANNOUNCEMENT_LEAD_DAYS = 45
@@ -39,17 +42,27 @@ def publish_swing_history_acquisition_plan(
     *,
     repository_root: Path,
     temporal_manifest_directory: Path,
-    memberships_path: Path,
-    universe_audit_path: Path,
+    membership_authority_directory: Path,
+    raw_archive_directory: Path,
+    event_authority_directory: Path,
+    transition_authority_directory: Path,
+    reviewed_transitions_path: Path,
+    anchor_path: Path,
     current_daily_collection_directory: Path,
     output_directory: Path,
+    security_exclusions_path: Path | None = None,
 ) -> dict[str, Any]:
-    """Publish membership-first acquisition scope without reading outcomes."""
+    """Publish exact missing-history units from a fully verified PIT universe."""
 
     root = repository_root.resolve()
     temporal_dir = _bound_directory(root, temporal_manifest_directory)
-    memberships = _bound_file(root, memberships_path)
-    universe_audit = _bound_file(root, universe_audit_path)
+    membership_dir = _bound_directory(root, membership_authority_directory)
+    raw_archive_dir = _bound_directory(root, raw_archive_directory)
+    event_authority_dir = _bound_directory(root, event_authority_directory)
+    transition_authority_dir = _bound_directory(root, transition_authority_directory)
+    reviewed_transitions = _bound_file(root, reviewed_transitions_path)
+    anchor = _bound_file(root, anchor_path)
+    security_exclusions = _bound_file(root, security_exclusions_path) if security_exclusions_path is not None else None
     daily_dir = _bound_directory(root, current_daily_collection_directory)
     output = _bound_output(root, output_directory)
     if output.exists():
@@ -60,107 +73,90 @@ def publish_swing_history_acquisition_plan(
     missing_ranges = _missing_ranges(temporal)
     missing_start = date.fromisoformat(str(missing_ranges[0]["first_session"]))
     missing_end = date.fromisoformat(str(missing_ranges[-1]["last_session"]))
-    membership_frame, membership_hashes = _load_memberships(memberships)
-    universe, universe_hashes = _load_universe_audit(root, universe_audit)
+    memberships, membership, membership_hashes = _load_membership_authority(
+        membership_directory=membership_dir,
+        raw_archive_directory=raw_archive_dir,
+        event_authority_directory=event_authority_dir,
+        transition_authority_directory=transition_authority_dir,
+        reviewed_transitions_path=reviewed_transitions,
+        anchor_path=anchor,
+        security_exclusions_path=security_exclusions,
+    )
     daily, daily_hashes = _load_daily_collection(root, daily_dir)
-    _validate_current_coverage(membership_frame, universe, daily, missing_end)
+    _validate_coverage(
+        memberships=memberships,
+        authority_start=membership["authority_start"],
+        authority_cutoff=membership["authority_cutoff"],
+        daily=daily,
+        missing_start=missing_start,
+        missing_end=missing_end,
+    )
+    units = _build_daily_bar_units(memberships, missing_ranges)
     _guard("swing acquisition-plan evidence")
 
-    membership_start = _membership_start(membership_frame)
-    universe_start = date.fromisoformat(str(universe["start_date"]))
-    source_ready = int(universe["invalid_source_count"]) == 0
-    membership_dates_ready = (
-        membership_start <= missing_start and universe_start <= missing_start
-    )
-    units = pd.DataFrame(
-        columns=["security_id", "ticker", "start_date", "end_date", "role"]
-    )
-    status = (
-        "official_source_reacquisition_required"
-        if not source_ready
-        else "official_source_archive_authority_required"
-    )
     request = {
         "schema": PLAN_SCHEMA,
         "temporal_manifest_sha256": temporal_hashes["manifest"],
         "temporal_authority_sha256": temporal_hashes["authority"],
-        **membership_hashes,
-        **universe_hashes,
+        "membership_authority": membership_hashes,
         **daily_hashes,
     }
+    stock_units = int(units["role"].eq("stock").sum())
+    benchmark_units = int(units["role"].eq("benchmark").sum())
     manifest: dict[str, Any] = {
         "schema": PLAN_SCHEMA,
-        "status": status,
+        "status": "ready_for_daily_history_collection",
         "outcomes_read": False,
         "missing_session_ranges": missing_ranges,
         "membership": {
-            "current_membership_start": membership_start.isoformat(),
-            "current_universe_audit_start": universe_start.isoformat(),
-            "membership_dates_cover_required_start": membership_dates_ready,
+            "authority_start": membership["authority_start"].isoformat(),
+            "authority_cutoff": membership["authority_cutoff"].isoformat(),
+            "current_membership_start": _membership_start(memberships).isoformat(),
+            "membership_dates_cover_required_window": True,
             "required_start": missing_start.isoformat(),
             "required_end": missing_end.isoformat(),
-            "official_announcement_discovery_start": (
-                missing_start - timedelta(days=ANNOUNCEMENT_LEAD_DAYS)
-            ).isoformat(),
+            "official_announcement_discovery_start": (missing_start - timedelta(days=ANNOUNCEMENT_LEAD_DAYS)).isoformat(),
             "official_announcement_discovery_end": missing_end.isoformat(),
-            "rebuild_cutoff": str(universe["cutoff_date"]),
-            "reusable_official_sources": universe["source_count"],
-            "total_official_sources": universe["total_source_count"],
-            "reusable_official_source_bytes": universe["source_bytes"],
-            "invalid_official_sources": universe["invalid_source_count"],
-            "invalid_official_source_records": universe["invalid_sources"],
-            "required_evidence": [
-                "official S&P Dow Jones Indices constituent-change releases",
-                "Alpaca corporate-action symbol transitions",
-                "reviewed primary-source security transitions",
-            ],
+            "security_count": membership["security_count"],
+            "excluded_security_count": membership["excluded_security_count"],
+            "excluded_security_fraction": membership["excluded_security_fraction"],
+            "benchmark_session_exclusions": 0,
+            "universe_sha256": membership["universe_sha256"],
+            "parent_lineage": membership["parent_lineage"],
         },
         "daily_bars": {
-            "status": (
-                "blocked_until_source_reacquisition"
-                if not source_ready
-                else "blocked_until_archive_authority"
-            ),
+            "status": "ready",
             "planned_units": len(units),
+            "stock_units": stock_units,
+            "benchmark_units": benchmark_units,
             "source": "alpaca",
             "timeframe": "1Day",
             "price_feed": "sip",
             "adjustment": "all",
             "unit_policy": (
                 "verified security/ticker membership interval intersected with "
-                "the missing session range"
+                "each missing session range; benchmarks cover every missing range"
             ),
             "current_collection_total_rows": daily["total_rows"],
-            "current_collection_reused": str(daily_dir.relative_to(root)).replace(
-                "\\", "/"
-            ),
-            "refusal_reason": (
-                "official source files fail their declared SHA-256 identities"
-                if not source_ready
-                else (
-                    "the legacy audit has no verified raw-archive to membership "
-                    "parent-hash authority"
-                )
-            ),
+            "current_collection_reused": str(daily_dir.relative_to(root)).replace("\\", "/"),
         },
-        "next_operations": (
-            [
-                "reacquire all invalid official S&P releases into an immutable archive",
-                "rebuild point-in-time membership from hash-valid source evidence",
-                "rerun this planner before any market-data request",
-            ]
-            if not source_ready
-            else [
-                "publish a hash-verified full-window official source archive",
-                "publish covered transition evidence and offline membership lineage",
-                "replace this blocker-only planner with authority-bound unit planning",
-            ]
-        ),
+        "next_operations": [
+            "collect exactly the published daily-bar units from Alpaca SIP",
+            "validate whole-security stock coverage and complete benchmark coverage",
+            "materialize the extended causal swing panel",
+        ],
     }
 
     staging = output.with_name(f".{output.name}.{uuid.uuid4().hex}.tmp")
     try:
         staging.mkdir(parents=True)
+        units_path = staging / DAILY_BAR_UNITS_FILE
+        units.to_csv(units_path, index=False, lineterminator="\n")
+        manifest["daily_bars"]["units_artifact"] = {
+            "path": DAILY_BAR_UNITS_FILE,
+            "bytes": units_path.stat().st_size,
+            "sha256": file_sha256(units_path),
+        }
         _write_json(staging / "_request.json", request)
         manifest["request_sha256"] = file_sha256(staging / "_request.json")
         assert_peak_memory_budget(
@@ -180,6 +176,9 @@ def publish_swing_history_acquisition_plan(
                 "state": "complete",
                 "artifact": "_manifest.json",
                 "artifact_sha256": file_sha256(staging / "_manifest.json"),
+                "request_sha256": manifest["request_sha256"],
+                "units_sha256": manifest["daily_bars"]["units_artifact"]["sha256"],
+                "universe_sha256": membership["universe_sha256"],
             },
         )
         output.parent.mkdir(parents=True, exist_ok=True)
@@ -248,91 +247,120 @@ def _missing_ranges(manifest: dict[str, Any]) -> list[dict[str, Any]]:
     return ranges
 
 
-def _load_memberships(path: Path) -> tuple[pd.DataFrame, dict[str, str]]:
-    sidecar = manifest_path_for(path)
-    manifest = _read_json(sidecar)
-    if (
-        manifest.get("schema") != "market_data.artifact_manifest.v1"
-        or manifest.get("artifact_type") != "memberships"
-        or manifest.get("artifact_sha256") != file_sha256(path)
-    ):
-        raise DataReadinessError("membership acquisition input is not authoritative")
-    columns = [
-        "security_id",
-        "ticker",
-        "effective_from_utc",
-        "effective_to_utc",
-        "primary_benchmark",
-    ]
-    frame = pd.read_parquet(path, columns=columns)
-    if frame.empty or len(frame) != int(manifest.get("rows", -1)):
-        raise DataReadinessError("membership acquisition input has invalid rows")
-    for column in ("security_id", "ticker"):
-        values = frame[column].astype("string").str.strip()
-        if bool(values.isna().any()) or bool(values.eq("").any()):
-            raise DataReadinessError(f"membership input has empty {column}")
-    return frame, {
-        "memberships_sha256": file_sha256(path),
-        "membership_manifest_sha256": file_sha256(sidecar),
+def _load_membership_authority(
+    *,
+    membership_directory: Path,
+    raw_archive_directory: Path,
+    event_authority_directory: Path,
+    transition_authority_directory: Path,
+    reviewed_transitions_path: Path,
+    anchor_path: Path,
+    security_exclusions_path: Path | None,
+) -> tuple[pd.DataFrame, dict[str, Any], dict[str, Any]]:
+    request_path = membership_directory / "_request.json"
+    manifest_path = membership_directory / "_manifest.json"
+    authority_path = membership_directory / "_authority.json"
+    request = _read_json(request_path)
+    if request.get("schema") != MEMBERSHIP_REQUEST_SCHEMA:
+        raise DataReadinessError("membership acquisition input is not a supported authority")
+    try:
+        start_date = date.fromisoformat(str(request["start_date"]))
+        cutoff_date = date.fromisoformat(str(request["cutoff_date"]))
+        maximum_exclusion_fraction = float(request["maximum_security_exclusion_fraction"])
+    except (KeyError, TypeError, ValueError) as exc:
+        raise DataReadinessError("membership authority request window is invalid") from exc
+    frame = require_sp500_membership_authority(
+        membership_directory,
+        archive_directory=raw_archive_directory,
+        event_directory=event_authority_directory,
+        transition_directory=transition_authority_directory,
+        reviewed_transitions_path=reviewed_transitions_path,
+        anchor_path=anchor_path,
+        start_date=start_date,
+        cutoff_date=cutoff_date,
+        security_exclusions_path=security_exclusions_path,
+        maximum_security_exclusion_fraction=maximum_exclusion_fraction,
+    )
+    manifest = _read_json(manifest_path)
+    parent_lineage = manifest.get("parent_lineage")
+    membership_artifact = manifest.get("membership_artifact")
+    if not isinstance(parent_lineage, dict) or not isinstance(membership_artifact, dict):
+        raise DataReadinessError("membership authority lineage inventory is invalid")
+    if int(manifest.get("benchmark_session_exclusions", -1)) != 0:
+        raise DataReadinessError("membership authority excludes benchmark sessions")
+    metadata: dict[str, Any] = {
+        "authority_start": start_date,
+        "authority_cutoff": cutoff_date,
+        "security_count": int(manifest.get("security_count", -1)),
+        "excluded_security_count": int(manifest.get("excluded_security_count", -1)),
+        "excluded_security_fraction": float(manifest.get("excluded_security_fraction", -1.0)),
+        "universe_sha256": str(manifest.get("universe_sha256", "")),
+        "parent_lineage": parent_lineage,
     }
+    if metadata["security_count"] < 1 or len(metadata["universe_sha256"]) != 64:
+        raise DataReadinessError("membership authority semantic identity is invalid")
+    hashes: dict[str, Any] = {
+        "request_sha256": file_sha256(request_path),
+        "manifest_sha256": file_sha256(manifest_path),
+        "authority_sha256": file_sha256(authority_path),
+        "membership_artifact_sha256": str(membership_artifact.get("sha256", "")),
+        "universe_sha256": metadata["universe_sha256"],
+        "parent_lineage": parent_lineage,
+    }
+    return frame, metadata, hashes
 
 
-def _load_universe_audit(root: Path, path: Path) -> tuple[dict[str, Any], dict[str, str]]:
-    audit = _read_json(path)
-    source_manifest = audit.get("source_manifest")
-    if (
-        audit.get("schema") != UNIVERSE_AUDIT_SCHEMA
-        or not isinstance(source_manifest, dict)
-        or source_manifest.get("schema") != SOURCE_MANIFEST_SCHEMA
-    ):
-        raise DataReadinessError("universe acquisition audit is unsupported")
-    sources = source_manifest.get("sources")
-    if not isinstance(sources, list) or not sources:
-        raise DataReadinessError("universe acquisition audit has no official sources")
-    source_bytes = 0
-    archive_records: list[dict[str, str]] = []
-    invalid_sources: list[dict[str, str]] = []
-    for source in sources:
-        if not isinstance(source, dict):
-            raise DataReadinessError("official S&P source record is invalid")
-        raw_path = _bound_file(root, Path(str(source.get("raw_path", ""))))
-        expected = str(source.get("sha256", ""))
-        actual = file_sha256(raw_path)
-        record = {
-            "path": str(raw_path.relative_to(root)).replace("\\", "/"),
-            "expected_sha256": expected,
-            "actual_sha256": actual,
+def _build_daily_bar_units(
+    memberships: pd.DataFrame,
+    missing_ranges: list[dict[str, Any]],
+) -> pd.DataFrame:
+    records: list[dict[str, str]] = []
+    for missing in missing_ranges:
+        range_start = date.fromisoformat(str(missing["first_session"]))
+        range_end = date.fromisoformat(str(missing["last_session"]))
+        for row in memberships.to_dict(orient="records"):
+            membership_start = _eastern_date(row["effective_from_utc"], field="effective_from_utc")
+            raw_end = row.get("effective_to_utc")
+            membership_end = range_end if pd.isna(raw_end) else _eastern_date(raw_end, field="effective_to_utc") - timedelta(days=1)
+            unit_start = max(range_start, membership_start)
+            unit_end = min(range_end, membership_end)
+            if unit_start <= unit_end:
+                records.append(
+                    {
+                        "security_id": str(row["security_id"]),
+                        "ticker": str(row["ticker"]),
+                        "start_date": unit_start.isoformat(),
+                        "end_date": unit_end.isoformat(),
+                        "role": "stock",
+                    }
+                )
+        benchmarks = {
+            "SPY",
+            "QQQ",
+            *memberships["primary_benchmark"].astype(str).str.strip(),
         }
-        archive_records.append(record)
-        if actual == expected:
-            source_bytes += raw_path.stat().st_size
-        else:
-            invalid_sources.append(record)
-    anchor = _bound_file(root, Path(str(audit.get("anchor_source", ""))))
-    transitions = audit.get("security_transition_evidence")
-    if not isinstance(transitions, dict):
-        raise DataReadinessError("universe acquisition audit lacks transitions")
-    for path_key, hash_key in (
-        ("provider_path", "provider_sha256"),
-        ("reviewed_path", "reviewed_sha256"),
-    ):
-        evidence_path = _bound_file(root, Path(str(transitions.get(path_key, ""))))
-        if file_sha256(evidence_path) != str(transitions.get(hash_key, "")):
-            raise DataReadinessError(f"security transition hash mismatch: {evidence_path}")
-    return {
-        "start_date": str(audit.get("start_date")),
-        "cutoff_date": str(audit.get("cutoff_date")),
-        "source_count": len(sources) - len(invalid_sources),
-        "total_source_count": len(sources),
-        "source_bytes": source_bytes,
-        "invalid_source_count": len(invalid_sources),
-        "invalid_sources": invalid_sources,
-    }, {
-        "universe_audit_sha256": file_sha256(path),
-        "anchor_file_sha256": file_sha256(anchor),
-        "anchor_semantic_snapshot_sha256": str(audit.get("snapshot_sha256", "")),
-        "official_archive_fingerprint": _json_sha256(archive_records),
-    }
+        for ticker in sorted(benchmarks):
+            if not ticker:
+                raise DataReadinessError("membership authority has an empty benchmark")
+            records.append(
+                {
+                    "security_id": f"benchmark:{ticker}",
+                    "ticker": ticker,
+                    "start_date": range_start.isoformat(),
+                    "end_date": range_end.isoformat(),
+                    "role": "benchmark",
+                }
+            )
+    units = pd.DataFrame(
+        records,
+        columns=["security_id", "ticker", "start_date", "end_date", "role"],
+    ).drop_duplicates()
+    if units.empty or not bool(units["role"].eq("stock").any()):
+        raise DataReadinessError("membership authority produces no stock acquisition units")
+    return units.sort_values(
+        ["role", "ticker", "start_date", "security_id"],
+        kind="stable",
+    ).reset_index(drop=True)
 
 
 def _load_daily_collection(root: Path, directory: Path) -> tuple[dict[str, Any], dict[str, str]]:
@@ -343,9 +371,7 @@ def _load_daily_collection(root: Path, directory: Path) -> tuple[dict[str, Any],
     status = _read_json(status_path)
     manifest = _read_json(manifest_path)
     payload = {key: value for key, value in request.items() if key != "request_sha256"}
-    request_hash = hashlib.sha256(
-        json.dumps(payload, sort_keys=True).encode("utf-8")
-    ).hexdigest()
+    request_hash = hashlib.sha256(json.dumps(payload, sort_keys=True).encode("utf-8")).hexdigest()
     if (
         request.get("schema") != DAILY_REQUEST_SCHEMA
         or request.get("request_sha256") != request_hash
@@ -375,17 +401,21 @@ def _load_daily_collection(root: Path, directory: Path) -> tuple[dict[str, Any],
     }
 
 
-def _validate_current_coverage(
+def _validate_coverage(
+    *,
     memberships: pd.DataFrame,
-    universe: dict[str, Any],
+    authority_start: date,
+    authority_cutoff: date,
     daily: dict[str, Any],
+    missing_start: date,
     missing_end: date,
 ) -> None:
     membership_start = _membership_start(memberships)
-    universe_start = date.fromisoformat(str(universe["start_date"]))
     daily_start = date.fromisoformat(str(daily["start_date"]))
-    if membership_start != universe_start:
-        raise DataReadinessError("membership and universe-audit starts disagree")
+    if authority_start > missing_start or membership_start > missing_start:
+        raise DataReadinessError("membership authority does not cover the missing-history start")
+    if authority_cutoff < missing_end:
+        raise DataReadinessError("membership authority does not cover the missing-history end")
     if missing_end >= daily_start:
         raise DataReadinessError("missing temporal range overlaps reusable daily history")
     if int(daily["total_rows"]) < 1:
@@ -396,8 +426,18 @@ def _membership_start(frame: pd.DataFrame) -> date:
     values = pd.to_datetime(frame["effective_from_utc"], utc=True, errors="coerce")
     if bool(values.isna().any()):
         raise DataReadinessError("membership effective start is invalid")
-    minimum = pd.Timestamp(values.min()).tz_convert(EASTERN)
-    return date(int(minimum.year), int(minimum.month), int(minimum.day))
+    return _eastern_date(values.min(), field="effective_from_utc")
+
+
+def _eastern_date(value: object, *, field: str) -> date:
+    try:
+        timestamp = pd.Timestamp(value)
+    except (TypeError, ValueError) as exc:
+        raise DataReadinessError(f"membership {field} is invalid") from exc
+    if pd.isna(timestamp) or timestamp.tzinfo is None:
+        raise DataReadinessError(f"membership {field} is invalid")
+    eastern = timestamp.tz_convert(EASTERN)
+    return date(eastern.year, eastern.month, eastern.day)
 
 
 def _bound_file(root: Path, path: Path) -> Path:
@@ -440,12 +480,6 @@ def _write_json(path: Path, payload: dict[str, Any]) -> None:
         json.dumps(payload, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
     )
-
-
-def _json_sha256(payload: object) -> str:
-    return hashlib.sha256(
-        json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
-    ).hexdigest()
 
 
 def _guard(stage: str) -> None:
