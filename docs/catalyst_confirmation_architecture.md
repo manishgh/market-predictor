@@ -244,6 +244,15 @@ Reason:
 
 ### Canonical Swing Model
 
+Training, split, sector, and evaluation semantics for both horizons are governed
+by [the model training and validation protocol](model_training_validation_protocol.md),
+which resolves the retained quantitative trading PDF into repository-testable
+rules. In particular, every decision session is assigned wholly to one temporal
+fold; unseen-security validation is separate from future-session validation.
+ER3 population evidence exposes `ready_for_modeling` separately from
+`baseline_economics_passed`; deterministic baseline failure cannot veto a
+distinct preregistered learned model.
+
 The production C4 swing contract is `swing.features.v1` -> `swing.model.v1`.
 
 Swing feature profiles are explicit and hash-bound. `technical_market` contains

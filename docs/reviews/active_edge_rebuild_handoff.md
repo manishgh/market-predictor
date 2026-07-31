@@ -1,16 +1,16 @@
 # Active Edge Rebuild Handoff
 
-Status: intraday corpus published and verified. Swing rejected and being rebuilt
-as a ranking strategy. Labels, cross-sectional scaling, and causal technical
-relationship primitives are built. The full seven-year causal swing panel is
-published and immutable. The frozen technical ordering gate ran and failed;
-the top-25 portfolio and model fitting are blocked. No model exists. Nothing is
-running.
+Status: intraday corpus published and verified. Swing labels, cross-sectional
+scaling, causal technical relationship primitives, and the full seven-year panel
+are published and immutable. The frozen equal-weight technical ordering
+benchmark failed and is rejected; that formula may not be tuned or used for a
+portfolio. It does not block preregistered learned models under the PDF-aligned
+temporal protocol. No model exists. Nothing is running.
 Last updated: 2026-07-31
 Repository: `C:\project\market-predictor`
 Remote: `https://github.com/manishgh/market-predictor`
 Branch: `r3-lineage`
-Last completed implementation commit: `de37067`
+Last completed implementation commit: `84afb07`
 
 ## Repository Cleanup
 
@@ -191,7 +191,7 @@ Verification: 751 tests passed with 85 existing warnings; Ruff, strict mypy
 across 193 source files, compileall, and `git diff --check` passed. No Python
 worker remains.
 
-## Swing Ordering Gate Failed
+## Swing Technical Benchmark Failed
 
 Commit `de37067` added the immutable audit and froze its equal-weighted,
 directional technical score before reading outcomes. The report at
@@ -200,13 +200,58 @@ sessions and failed two of four gates. Top-decile rows averaged +14.34 bps;
 bottom-decile rows averaged +32.84 bps. The session-neutral mean spread was
 -18.41 bps with a -1.355 ten-session Newey-West t-statistic. Although the
 median was +17.28 bps and 53.53% of sessions were positive, adverse tails made
-overall ordering negative. No top-25 replay and no estimator are permitted.
+overall ordering negative. The exact equal-weight score and any portfolio ranked
+by it are rejected. The result does not reject all nonlinear or grouped
+relationships in the causal features and does not prohibit estimator fitting.
 
 The report manifest SHA-256 is
 `01e5795854c64260aea377f71226bc2684bf48010587913c1a9490ab60a63f3a`.
-The next work is failure attribution under the unchanged score, followed by a
-new preregistered hypothesis. Never tune this score against its own failed
-full-sample result.
+Never tune this score against its own failed full-sample result. Retain it as a
+failed comparison baseline.
+
+## PDF-Aligned Temporal Protocol
+
+The unchanged source PDF is retained at
+`docs/references/comprehensive_quantitative_trading_model_implementation_plan_intraday_and_swing.pdf`
+with SHA-256
+`ea8df4ad6f3c1d17666cadff2672887b01ee46211ef11a040715f9890cb2b75b`.
+The repository-specific decisions are in
+`docs/model_training_validation_protocol.md`.
+
+For swing, all point-in-time S&P 500 rows from one decision date remain in one
+fold. The primary design uses repeated five-year fit plus one-year validation
+windows, followed by one locked temporal test year and a ten-session
+purge/embargo. A security may occur in different chronological folds. A separate
+deterministic unseen-security holdout measures transfer to names absent from
+fitting. The first learned sequence is one global sector-aware barrier classifier
+and one decision-group ranker; sector specialists are conditional later work.
+
+The current seven-year panel is sufficient for causal panel diagnostics but not
+for final five-year fit plus one-year validation plus one-year locked-test
+evidence after the 250-session warm-up. A final conformant swing run needs 9 to
+10 raw calendar years. A shorter run must be labeled interim and cannot be
+promoted.
+
+The ER3 implementation is aligned. `edge_rebuild/setup_economics.py` classifies
+every gate as `readiness` or `baseline_economics` and exposes separate
+`ready_for_modeling` and `baseline_economics_passed` decisions. The old
+`admitted` field, universal veto, and unregistered retired attribution script
+are removed. Negative deterministic economics remain visible evidence but do
+not make an otherwise causal, sufficiently large population model-unready.
+
+Implementation commit `84afb07` is pushed. Current identities:
+
+- strategy contract:
+  `8577ed61307a215e997608c0791a679b836ccdfcb93f3b63cb5daa2ce1edbe59`;
+- deterministic baseline configuration:
+  `761c57dd7248560da36620295e86f466c6c3daae04b8389a291c63ab185a31df`;
+- retained source PDF:
+  `ea8df4ad6f3c1d17666cadff2672887b01ee46211ef11a040715f9890cb2b75b`.
+
+Verification passed 756 tests with 85 existing warnings, repository-wide Ruff,
+strict mypy across 194 source files, compileall, and `git diff --check`. The
+focused ER3, strategy-contract, architecture, and temporal-grouping battery
+passed 71 tests. No Python process remained.
 
 Ordering-gate verification passed 754 tests with 85 existing warnings, Ruff,
 strict mypy across 194 source files, compileall, and `git diff --check`.
@@ -241,9 +286,13 @@ windows spanning the overnight gap, and either label scheme alone.
 Technical relationship semantics are frozen in the same contract: a two-bar
 span on each side of the RSI pivot, 20-bar normalized OBV, and 20-bar Kaufman
 Efficiency Ratio. The same contract now freezes 1% within-session
-winsorization plus z-score, centred-rank, and sector-relative outputs. Contract
-hash:
-`16709f3686ec737caa206dc1f45a80ea24f61d2dd1d18ded0b78cf978a433e38`.
+winsorization plus z-score, centred-rank, and sector-relative outputs. The
+current contract hash is
+`8577ed61307a215e997608c0791a679b836ccdfcb93f3b63cb5daa2ce1edbe59`.
+The prior
+`16709f3686ec737caa206dc1f45a80ea24f61d2dd1d18ded0b78cf978a433e38`
+identity remains bound only to artifacts produced before the ER3 semantic
+correction.
 
 ## Intraday Corpus Is Published
 
@@ -288,19 +337,24 @@ recur, the correct answer is a volume-confirmed exemption, not a bigger number.
 
 ## Exact Next Steps
 
-1. **Freeze and run swing failure attribution.** Do not change the audited
-   score. Decompose the adverse session tails by existing market regime,
-   sector, barrier outcome, and score-component contribution. The audit must
-   explain why a 53.53% positive-session share and +17.28 bps median still
-   produce a -18.41 bps mean spread.
-2. **Declare the replacement hypothesis before evaluating it.** It must be
-   justified from market mechanism or established literature, hash-bound, and
-   consume the next experiment-budget entry. Do not tune weights against the
-   failed full-sample report.
-3. **Deterministic top-25 portfolio remains blocked** until a replacement
-   ordering gate passes. A learned ranker remains blocked behind that portfolio.
-4. **Intraday setup and its economics gate**, same order: population first,
-   model only if the population earns.
+1. **Freeze the temporal manifests before model diagnostics.** Group every row
+   by decision session, define the development folds, unseen-security scope,
+   purge/embargo, and locked test without reading test outcomes.
+2. **Extend swing raw history to 9-10 calendar years.** Rebuild the causal panel
+   with the same contracts so the 250-session warm-up does not consume the
+   required five-year fit, one-year validation, and one-year locked test.
+3. **Run training-only feature diagnostics.** Measure rank IC, stability,
+   redundancy, missingness, and sector/regime behavior within development folds;
+   never select features on the locked test.
+4. **Train the bounded global models sequentially.** Compare deterministic and
+   logistic baselines with a barrier classifier and decision-group ranker under
+   the same folds, labels, costs, and top-k policy.
+5. **Evaluate once.** Select with validation, then open the locked temporal test
+   once; report session-block economics and sector/regime breakdowns. Keep the
+   independent unseen-security result separate.
+6. **Build the intraday equivalent separately.** Use complete sessions,
+   one-minute executable paths, five-minute or volume-bar decision features,
+   minute-duration purging, and overnight isolation.
 
 ## Not Started
 
@@ -309,14 +363,8 @@ recur, the correct answer is a volume-confirmed exemption, not a bigger number.
 - One-minute intraday bars, required before volume bars can be built. Roughly
   790 units over the in-play sessions. Time bars remain in use until then and
   this is recorded, not silently substituted.
-- Any model. Nothing has been trained in this program.
-
-## Deferred Diagnostic
-
-- A swing failure attribution decomposing the rejected population by
-  pre-declared cohorts, concentration, and a benchmark decomposition asking
-  whether the problem is stock selection or market timing. Worth restarting only
-  if the redesign stalls; the redesign supersedes most of its questions.
+- Any model under the PDF-aligned protocol. Nothing has been trained in this
+  program.
 
 The five-minute merge is complete and must not be rerun unless a reproducible
 artifact or invariant failure is recorded.
@@ -339,9 +387,9 @@ The local NumPy stubs use syntax newer than the project mypy 3.11 target, so the
 verified strict command uses the installed Python 3.14 environment. That is an
 environment fact, not permission to write Python-3.14-only source.
 
-Last full verification after the swing feature builder: 748 tests passed with
-85 existing warnings; Ruff passed; strict mypy passed across 192 source files;
-compileall and `git diff --check` passed; no Python worker remained.
+Last full verification after implementation commit `84afb07`: 756 tests passed
+with 85 existing warnings; Ruff passed; strict mypy passed across 194 source
+files; compileall and `git diff --check` passed; no Python worker remained.
 
 ## Standing Prohibitions
 

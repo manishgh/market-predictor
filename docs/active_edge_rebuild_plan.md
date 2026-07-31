@@ -13,6 +13,11 @@ lineage, cost, validation, promotion, memory, or repository-boundary contracts.
 The companion continuation document is
 `docs/reviews/active_edge_rebuild_handoff.md`.
 
+The dual-horizon training and evaluation method is governed by
+`docs/model_training_validation_protocol.md`, aligned to the retained source PDF
+at
+`docs/references/comprehensive_quantitative_trading_model_implementation_plan_intraday_and_swing.pdf`.
+
 ## 1. Problem
 
 KS0 through KS4 are complete. Their implementations are valid, but every evaluated
@@ -36,18 +41,21 @@ specialist. No rejected V1 or V2 artifact may be used as a KS5 input.
 
 ## 2. Objective
 
-Create new, semantically honest setup populations that demonstrate repeatable gross,
-net, and benchmark-relative economics before learned ranking. Then train bounded
-specialists, add causal catalyst confirmation, and resume KS5 only if at least one
-specialist passes independently.
+Create semantically honest candidate populations with exact labels and sufficient
+independent evidence. Publish their deterministic economics as a baseline, then
+train bounded specialists under the governed temporal protocol. Add causal
+catalyst confirmation and resume KS5 only if at least one learned specialist
+passes independently.
 
 This plan does not promise a profitable model. Its outcome may be a reproducible
 rejection. Gates may not be weakened to manufacture a pass.
 
 ## 3. Non-Negotiable Design Changes
 
-1. **Setup before estimator.** A deterministic setup must pass economic admission
-   before model-family comparison.
+1. **Population before estimator.** Eligibility, timing, labels, costs, and split
+   manifests must pass causal readiness before model-family comparison. A failed
+   deterministic score rejects that score; it does not veto a distinct
+   preregistered learned relationship.
 2. **Independent time matters.** Intraday readiness is measured in causally complete
    sessions and regimes, not bar count. Swing overlapping labels remain phase-separated.
 3. **No forced trades.** Abstention is the default. A top-k cap limits qualifying
@@ -120,9 +128,9 @@ Only one checkpoint may be `in_progress`.
 | ER1 | completed | Audit effective independent history and causal data readiness | Closed by implementation commits `5ffa3d3`, `d9d93c8`, and `7b0ce6d`; immutable audit request `f80f70ae299bd5e5a6aeae6aeaa503ef4775573696b7d88856d539dbd1355080` reports one ER2 blocker |
 | ER1A | in_progress | Complete targeted intraday history and re-audit readiness | PIT inventory, regular and extended transport, canonical five-minute corpus, and causal relationship primitives are complete; derive setups, collect selective one-minute paths, and republish ER1 |
 | ER2 | pending | Freeze new strategy contracts and bounded experiment budget | New IDs, setup eligibility, entry/exit/labels, design window, folds, costs, features, abstention, and retirement rules are immutable and tested |
-| ER3 | pending | Build deterministic setup populations and exact labels | Each setup replays from immutable bars; gross/net/benchmark economics and sample sufficiency are published before ML |
+| ER3 | pending | Build candidate populations, exact labels, and deterministic baselines | Each population replays from immutable bars; readiness, gross/net/benchmark baseline economics, and sample sufficiency are published before ML |
 | ER4 | pending | Complete causal catalyst confirmation evidence | Direct/business/sector/global relations and event timing reconcile; technical-only, catalyst-only, and confirmation-overlay rows are identical and auditable; the deprecated V1 relevance path is retired per section 9A |
-| ER5 | pending | Train bounded strategy specialists | Only ER3-admitted populations are trained; deterministic/logistic/HGB comparisons and ablations complete under frozen folds |
+| ER5 | pending | Train bounded strategy specialists | Only ER3-ready populations are trained; deterministic/logistic/boosted-tree/ranker comparisons and ablations complete under frozen folds |
 | ER6 | pending | Resume KS5 and KS6 conditionally | Quantiles, competing risks, and volatility sidecars run only for an independently passed ER5 specialist and must add out-of-sample economic value |
 | ER7 | pending | Prospective shadow, promotion, API, and TradingFlow boundary | One-use untouched shadow passes; signed atomic serving bundle exposes predictions only; TradingFlow retains alerts and execution |
 
@@ -503,8 +511,10 @@ Immutable replay verified every partition hash. Verification passed 751 tests
 with 85 existing warnings, Ruff, strict mypy across 193 source files,
 compileall, and `git diff --check`. No Python worker remained.
 
-Panel materialization is complete. No estimator may be trained before the
-simple top-decile versus bottom-decile technical ordering test passes.
+Panel materialization is complete. The simple top-decile versus bottom-decile
+technical ordering test is a deterministic benchmark. It does not have authority
+to prohibit a preregistered learned model from testing a different functional
+relationship under the governed temporal protocol.
 
 ### ER1A Deterministic Swing Ordering Gate
 
@@ -523,17 +533,67 @@ The gate **failed** over 1,500 scored sessions from 2020-07-02 through
 - positive-session share: 53.53%;
 - ten-session Newey-West t-statistic: -1.355.
 
-The positive median and majority-positive session count do not rescue the
+The positive median and majority-positive session count do not rescue this
 signal. Adverse tail sessions make the mean economic ordering negative, and the
 bottom decile outperforms the top decile overall. The minimum spread and
-significance gates failed. Therefore the deterministic top-25 portfolio and all
-model fitting remain prohibited.
+significance gates failed. This rejects the frozen equal-weight technical
+composite and any portfolio whose ranking is produced by that exact score. It
+does not establish that every nonlinear or grouped relationship in the same
+causal features is absent.
 
-The next admissible action is a frozen failure-attribution audit, not score
-tuning: decompose adverse session tails by pre-existing market regime, sector,
-barrier outcome, and score-component contribution. Any replacement hypothesis
-must be declared before that replacement reads outcomes and consumes another
-entry in the experiment budget.
+The failed score must not be tuned against its full-sample result. It remains a
+comparison baseline. Subsequent learned experiments must be preregistered and
+use session-grouped, purged walk-forward development, an independent
+unseen-security scope, and one locked temporal test as specified in
+`docs/model_training_validation_protocol.md`.
+
+### ER1A PDF-Aligned Training And Validation Decision
+
+The retained PDF calls for purged walk-forward validation, cross-sectional
+normalization, triple-barrier labels, point-in-time S&P 500 membership, and
+bounded tree-model comparisons. The repository resolves those requirements as
+follows:
+
+- a split groups the full point-in-time cross-section by decision session;
+- the same security may appear in multiple chronological folds, while a separate
+  deterministic holdout measures unseen-security transfer;
+- swing uses repeated five-year fit and one-year validation windows followed by
+  one locked test year, with at least a ten-session purge/embargo;
+- intraday uses session-grouped folds, minute-horizon purging, and an overnight
+  embargo;
+- one global S&P 500 model is the first learned model, with sector-relative
+  features and sector-stratified evaluation; sector specialists require later
+  independent evidence;
+- the bounded learned sequence includes a barrier classifier and a grouped
+  cross-sectional ranker, compared with deterministic and logistic baselines.
+
+The current seven-year swing panel remains authoritative for causal feature and
+panel validation. After its 250-session indicator warm-up, it cannot provide a
+strict five-year fit, one-year validation, and one-year locked test. Final
+protocol-conformant swing training therefore requires a 9-to-10-calendar-year
+raw history backfill. Any shorter run is explicitly interim research and cannot
+be promoted.
+
+The ER3 implementation now exposes separate `ready_for_modeling` and
+`baseline_economics_passed` decisions. Readiness covers causal integrity,
+independent phase/session sufficiency, and representation. Baseline economics
+remain fully reported but cannot veto fitting. The prior `admitted` schema and
+the unregistered retired attribution script were removed; there is no
+compatibility alias that could preserve the superseded behavior.
+
+Implementation commit `84afb07` also binds the unchanged four-page PDF in the
+repository, verifies its SHA-256, and strengthens the canonical temporal-split
+test so every row from a decision session remains in one fold role. The current
+strategy-contract SHA-256 is
+`8577ed61307a215e997608c0791a679b836ccdfcb93f3b63cb5daa2ce1edbe59`;
+the baseline-economics configuration SHA-256 is
+`761c57dd7248560da36620295e86f466c6c3daae04b8389a291c63ab185a31df`.
+The earlier contract hash attached to the published seven-year panel remains
+that artifact's immutable provenance and is not rewritten.
+
+Verification passed 756 tests with 85 existing warnings, repository-wide Ruff,
+strict mypy across 194 source files, compileall, and `git diff --check`. No
+Python worker remained.
 
 ### ER1A Repository And Data Convergence
 
@@ -585,21 +645,26 @@ first-observed evidence that ER1 reported as not ready; both remain ER4
 catalyst-overlay work and may not enter the estimator before a preregistered
 causal ablation.
 
-## 8. ER3: Setup Economic Admission
+## 8. ER3: Population Readiness And Deterministic Baseline
 
-ER3 evaluates deterministic setups before fitting any model. A strategy may proceed to
-ER5 only when both walk-forward and unseen-ticker evidence satisfy:
+ER3 builds each candidate population and reproduces exact labels before fitting a
+model. A population may proceed to ER5 only when both temporal-development and
+unseen-security scopes satisfy causal readiness:
 
 - required independent rows/sessions and every swing overlap phase;
-- positive average gross, net, SPY-excess, and sector-excess return;
-- positive session-block 95% lower bounds for net and SPY excess;
-- profit factor at least 1.05;
-- maximum drawdown no greater than 20%;
-- positive economics under the frozen cost/adverse-fill stress;
-- no result dependent on one ticker, one sector, one regime, or one session segment.
+- complete point-in-time identity, feature availability, benchmark, and label paths;
+- exact gross, net, SPY-excess, and sector-excess return reproduction;
+- frozen costs and adverse-fill stress;
+- sufficient representation across years, sectors, regimes, and session segments;
+- no threshold or cohort selected from validation or locked-test outcomes.
 
-If a deterministic population fails, retire that semantic version. Do not search the
-failed holdout for a better threshold or cohort.
+ER3 must publish the deterministic comparator's average return, confidence
+interval, profit factor, drawdown, concentration, and stressed economics. Negative
+baseline economics is evidence against that comparator, but is not by itself a
+data-readiness failure and does not prohibit a preregistered classifier or ranker.
+ER5 determines whether learned selection adds out-of-sample economic value over
+the baseline. If the learned policies fail, retire the semantic version without
+searching the locked test for a better threshold or cohort.
 
 ## 9. ER4-ER7 Rules
 

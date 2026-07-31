@@ -16,8 +16,10 @@ may become serving candidates.
 
 - Branch: `r3-lineage`.
 - Active program: ER1A edge rebuild.
-- Swing: causal two-stage ranking-panel builder implemented; the seven-year panel
-  is not yet materialized and no model has been trained under this program.
+- Swing: the seven-year causal panel is published and immutable. The frozen
+  equal-weight technical benchmark failed and is rejected, but it does not block
+  preregistered model training. Final five-year-fit/one-year-validation/one-year-
+  test evidence requires a longer 9-to-10-calendar-year raw history after warm-up.
 - Intraday: verified canonical SIP five-minute corpus contains 38,586,501 bars,
   814 sessions, and 1,104 symbols. Volume-bar setup construction and selective
   one-minute executable paths remain pending.
@@ -31,6 +33,8 @@ Read these documents in order:
 3. [Active handoff](docs/reviews/active_edge_rebuild_handoff.md)
 4. [Prediction architecture](docs/catalyst_confirmation_architecture.md)
 5. [Implementation guide](docs/implementation_guide.md)
+6. [Model training and validation protocol](docs/model_training_validation_protocol.md)
+7. [Source quantitative trading plan](docs/references/comprehensive_quantitative_trading_model_implementation_plan_intraday_and_swing.pdf)
 
 Additional retained contracts and evidence:
 
