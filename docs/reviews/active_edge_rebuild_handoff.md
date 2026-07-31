@@ -1,13 +1,14 @@
 # Active Edge Rebuild Handoff
 
 Status: intraday corpus published and verified. Swing rejected and being rebuilt
-as a ranking strategy. Labels and cross-sectional scaling are built. Feature
-builder and model are not. Nothing is running.
+as a ranking strategy. Labels, cross-sectional scaling, and causal technical
+relationship primitives are built. Feature builder and model are not. Nothing
+is running.
 Last updated: 2026-07-31
 Repository: `C:\project\market-predictor`
 Remote: `https://github.com/manishgh/market-predictor`
 Branch: `r3-lineage`
-Last completed implementation commit: `12f5283`
+Last completed implementation commit: `3403866`
 
 Read in this order:
 
@@ -109,6 +110,17 @@ Two consequences drive everything below:
 - Every group is one timestamp. A test asserts that adding a later session
   leaves earlier scores bit-identical; if it ever fails, future data is leaking.
 
+`edge_rebuild/technical_relationships.py` - causal path relationships, 7 tests.
+
+- Five-bar RSI pivot divergence is emitted only after both following bars have
+  completed. Bullish and bearish paths are tested separately.
+- Normalized On-Balance Volume measures whether volume confirms or contradicts
+  the price path.
+- Kaufman's Efficiency Ratio separates directional movement from a noisy range;
+  RSI is conditioned on both states rather than converted into threshold flags.
+- Intraday grouping includes the exchange session, so all state resets
+  overnight. Appending future bars leaves earlier features bit-identical.
+
 ## Contract, As Frozen
 
 Names are `swing` and `intraday`. No version suffixes — nothing is in
@@ -135,6 +147,11 @@ features, a widened experiment budget, an index-restricted intraday universe, a
 stop below one average range, a daily ATR on a thirty-minute hold, clock bars
 for intraday decisions, volume bars from coarser than one-minute input, rolling
 windows spanning the overnight gap, and either label scheme alone.
+
+Technical relationship semantics are frozen in the same contract: a two-bar
+span on each side of the RSI pivot, 20-bar normalized OBV, and 20-bar Kaufman
+Efficiency Ratio. Contract hash:
+`f60666809a1c8c9df230b13fb875d224dd271a4393ae764dd49075ef3014dee8`.
 
 ## Intraday Corpus Is Published
 
@@ -179,29 +196,21 @@ recur, the correct answer is a volume-confirmed exemption, not a bigger number.
 
 ## Exact Next Steps
 
-1. **Indicator semantics and relationship features.** The user asked for domain
-   knowledge to be built into the engine. The correct scope is narrow: a tree
-   finds a threshold like "RSI above 70" by itself, so threshold flags add
-   nothing. What a tree cannot derive from one row are **relationships** —
-   divergence between price and an indicator across two peaks, volume confirming
-   or contradicting a price move, and the same reading meaning opposite things
-   in a trend versus a range. Encode those; skip the flags. Note that the
-   textbook "RSI above 70 is overbought" is actively wrong in a trend, where RSI
-   stays high for weeks.
-2. **Swing feature builder.** Assemble one row per security per session:
+1. **Swing feature builder.** Assemble one row per security per session:
    momentum, trend, pullback, volume and catalyst features, each passed through
-   `add_cross_sectional_features`, plus both labels.
-3. **Check the signal orders stocks correctly, before training anything.** Sort
+   `add_cross_sectional_features`, plus both labels. Consume the shared
+   relationship primitives; do not copy their calculations.
+2. **Check the signal orders stocks correctly, before training anything.** Sort
    each session by a simple score and compare the top tenth against the bottom
    tenth over the next ten days. If that spread is near zero there is nothing to
    rank and no model will help; stop and change the signal. This replaces the
    test that misfired.
-4. **Deterministic top-25 portfolio, no model.** Build the equity curve against
+3. **Deterministic top-25 portfolio, no model.** Build the equity curve against
    SPY. This is the number any model must beat.
-5. **Train** LambdaMART or LightGBM ranking, purged splits with embargo, then
+4. **Train** LambdaMART or LightGBM ranking, purged splits with embargo, then
    the unseen-stock holdout. Published work reports roughly threefold better
    risk-adjusted return from learning-to-rank on exactly this strategy family.
-6. **Intraday setup and its economics gate**, same order: population first,
+5. **Intraday setup and its economics gate**, same order: population first,
    model only if the population earns.
 
 ## Not Started
@@ -241,9 +250,9 @@ The local NumPy stubs use syntax newer than the project mypy 3.11 target, so the
 verified strict command uses the installed Python 3.14 environment. That is an
 environment fact, not permission to write Python-3.14-only source.
 
-Last full verification after publication: 732 tests passed with 85 existing
-warnings; Ruff passed; strict mypy passed across 190 source files; compileall
-and `git diff --check` passed; no Python worker remained.
+Last full verification after relationship features: 740 tests passed with 85
+existing warnings; Ruff passed; strict mypy passed across 191 source files;
+compileall and `git diff --check` passed; no Python worker remained.
 
 ## Standing Prohibitions
 

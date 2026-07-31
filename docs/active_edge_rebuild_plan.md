@@ -118,7 +118,7 @@ Only one checkpoint may be `in_progress`.
 | --- | --- | --- | --- |
 | ER0 | completed | Establish this active plan and companion handoff | Closed by implementation commit `8c28df9`; both documents and repository guidance are pushed |
 | ER1 | completed | Audit effective independent history and causal data readiness | Closed by implementation commits `5ffa3d3`, `d9d93c8`, and `7b0ce6d`; immutable audit request `f80f70ae299bd5e5a6aeae6aeaa503ef4775573696b7d88856d539dbd1355080` reports one ER2 blocker |
-| ER1A | in_progress | Complete targeted intraday history and re-audit readiness | PIT inventory, regular and extended transport, and the canonical five-minute corpus are complete; add relationship features, derive setups, collect selective one-minute paths, and republish ER1 |
+| ER1A | in_progress | Complete targeted intraday history and re-audit readiness | PIT inventory, regular and extended transport, canonical five-minute corpus, and causal relationship primitives are complete; derive setups, collect selective one-minute paths, and republish ER1 |
 | ER2 | pending | Freeze new strategy contracts and bounded experiment budget | New IDs, setup eligibility, entry/exit/labels, design window, folds, costs, features, abstention, and retirement rules are immutable and tested |
 | ER3 | pending | Build deterministic setup populations and exact labels | Each setup replays from immutable bars; gross/net/benchmark economics and sample sufficiency are published before ML |
 | ER4 | pending | Complete causal catalyst confirmation evidence | Direct/business/sector/global relations and event timing reconcile; technical-only, catalyst-only, and confirmation-overlay rows are identical and auditable; the deprecated V1 relevance path is retired per section 9A |
@@ -417,9 +417,32 @@ The authoritative materialization is
   Repository verification after publication passed 732 tests, Ruff, strict
   mypy across 190 source files, and compileall.
 
-This closes five-minute transport and materialization, not ER1A. Relationship
-features, setup derivation, selective one-minute executable paths, and the ER1
-readiness re-audit remain before ER2 can start.
+This closes five-minute transport and materialization, not ER1A. Setup
+derivation, selective one-minute executable paths, and the ER1 readiness
+re-audit remain before ER2 can start.
+
+### ER1A Causal Technical Relationship Primitives
+
+Implementation commit `3403866` added one shared implementation at
+`src/market_predictor/edge_rebuild/technical_relationships.py`.
+
+- RSI divergence compares two strictly confirmed five-bar pivots. A middle bar
+  becomes observable as a pivot only after two later bars complete, and a poison
+  test proves appending future bars cannot change any earlier output.
+- Price/volume agreement uses normalized On-Balance Volume over 20 bars.
+- Trend versus range state uses Kaufman's 20-bar Efficiency Ratio. RSI is
+  decomposed into trend alignment and range position instead of adding an
+  "overbought" threshold that means different things in different regimes.
+- Every output is continuous. No buy, sell, overbought, or oversold flag exists.
+- Intraday callers group by both ticker and exchange session, and tests prove
+  all rolling state restarts at the session boundary.
+- The frozen strategy contract hash is
+  `f60666809a1c8c9df230b13fb875d224dd271a4393ae764dd49075ef3014dee8`.
+- Verification passed 740 tests, Ruff, strict mypy across 191 source files,
+  compileall, and `git diff --check`.
+
+These are feature primitives, not a finished training table. The swing feature
+builder is the next consumer; no model was trained in this step.
 
 ## 7. ER2: Frozen Research Contract
 
@@ -575,6 +598,9 @@ definition rather than against someone's recollection.
 | Sampling | Event-based: sample when something happens, not on a fixed clock | López de Prado, 2018 |
 | Direction versus size | Meta-labeling, deferred until one strategy passes admission alone | López de Prado, 2017 |
 | Intraday selection | Average volume, relative volume, price band, spread | standard day-trading screen practice |
+| RSI divergence pivots | Five-bar confirmed pivot plus RSI divergence | Bill Williams, *Trading Chaos*; J. Welles Wilder Jr., *New Concepts in Technical Trading Systems* |
+| Price/volume confirmation | On-Balance Volume | Joseph Granville, *Granville's New Key to Stock Market Profits* |
+| Trend versus range | Efficiency Ratio | Perry Kaufman, *Trading Systems and Methods* |
 
 References:
 
