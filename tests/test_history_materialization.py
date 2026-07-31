@@ -3,6 +3,7 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
+from market_predictor.edge_rebuild.corpus_integrity import IntegrityThresholds
 from market_predictor.edge_rebuild.history_materialization import (
     POSTMARKET,
     PREMARKET,
@@ -13,7 +14,6 @@ from market_predictor.edge_rebuild.history_materialization import (
     expected_bars_per_session_segment,
     session_bounds_for,
 )
-from market_predictor.edge_rebuild.corpus_integrity import IntegrityThresholds
 from market_predictor.v3.errors import DataReadinessError
 
 
@@ -137,6 +137,7 @@ def _session_bars(
     close: float,
     *,
     distinct_prices: bool = True,
+    volume: int = 1_000,
 ) -> pd.DataFrame:
     start = pd.Timestamp(f"{session} 14:30", tz="UTC")
     times = pd.date_range(start, periods=78, freq="5min")
@@ -155,7 +156,7 @@ def _session_bars(
             "high": closes,
             "low": closes,
             "close": closes,
-            "volume": 1_000,
+            "volume": volume,
         }
     )
 
@@ -186,7 +187,13 @@ def test_fabricated_session_is_removed_without_losing_other_history() -> None:
     bounds = session_bounds_for("2024-01-02", "2024-01-03")
     ordered = pd.concat(
         [
-            _session_bars("STRC", "2024-01-02", 100.0, distinct_prices=False),
+            _session_bars(
+                "STRC",
+                "2024-01-02",
+                100.0,
+                distinct_prices=False,
+                volume=0,
+            ),
             _session_bars("STRC", "2024-01-03", 101.0),
         ],
         ignore_index=True,
