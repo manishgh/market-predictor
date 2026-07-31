@@ -1,170 +1,199 @@
 # Active Edge Rebuild Handoff
 
-Status: swing REJECTED at ER3 admission. Intraday universe built; five-minute
-bars for the selected sessions are collecting.
+Status: swing rejected and being rebuilt as a ranking strategy. Labels and
+cross-sectional scaling are built. Feature builder and model are not.
 Last updated: 2026-07-31
 Repository: `C:\project\market-predictor`
 Remote: `https://github.com/manishgh/market-predictor`
 Branch: `r3-lineage`
-Last implementation commit: `9b0c5ce`
+Last commit: `7f018f5`
 
-Read first:
+Read in this order:
 
 1. `AGENTS.md`
-2. `docs/active_edge_rebuild_plan.md`, especially sections 8A, 8B, 8C
+2. `docs/active_edge_rebuild_plan.md`, sections 8A, 8B, 8C
 3. This file
+4. `configs/edge_rebuild_strategy_contract.toml` — every threshold lives here
 
-Do not infer current state from chat history.
+Do not infer state from chat history.
 
-## Objective
+## How To Work Here
 
-Build a correct dataset under a sound design, prove the deterministic setups
-earn money, and only then train. The goal is a predictive engine, not per-symbol
-data completeness. Losing under 5% of symbols is not worth escalating.
+The user is a strong systems thinker and is not a machine-learning specialist.
+Name the problem before the technique. Do not use jargon without unpacking it,
+and do not use metaphors like "load-bearing" or "blast radius" — say what would
+actually break. This was asked for repeatedly.
 
-## Data Held, Measured From Disk On 2026-07-30
+Do not investigate individual tickers. Record exclusions with a reason and move
+on. Escalate only if the universe loses more than 5% of symbols.
+
+Do not invent methodology. Use published methods, cite them, and name them so an
+implementation can be checked against its definition. Sources are in plan
+section 8B.
+
+Update this handoff after every successful step, not only at checkpoints.
+
+Never pipe `pytest` through `tail` or `head`. It masks the exit code, and a
+failing test has already been committed that way. Redirect to a file and echo
+`$?`.
+
+The shell working directory drifts back to `C:\project\trading_flow`. Run
+`cd /c/project/market-predictor` at the start of every command.
+
+The heavy-job lease is exclusive. Running the test suite while a collection
+holds it produces exit code 75 on CLI tests, which looks like failure and is not.
+
+## Data Held, Measured From Disk
 
 | | Swing | Intraday |
 | --- | --- | --- |
-| Universe | 654 tickers, 627 securities, verified point-in-time | 572 symbols with five-minute bars |
-| Bars | 1,084,622 daily | 31,630,145 regular plus 6,079,043 extended |
-| Coverage | 2019-07-09 to 2026-07-08, 7.00 years | 2023-04-10 to 2026-07-08, 3.24 years, 814 sessions |
-| News | 714,126 rows over the full 7 years | same corpus, fully covers the window |
+| Universe | 627 securities, verified point-in-time, delisted included | 533 operating companies, volume-screened, deliberately not index-restricted |
+| Bars | 1,084,622 daily, 2019-07-09 to 2026-07-08, 7.00 years | 37.7M five-minute, 2023-04-10 to 2026-07-08, 814 sessions |
+| Selection | n/a | 11,340 in-play stock-sessions, median 13 per session |
+| News | 714,126 rows over the full 7 years | 165,142 rows, median 204 articles per company |
 
-Artifacts:
+Key artifacts:
 
-- Verified universe:
-  `data/canonical/swing_memberships_verified_20190709_20260708_v2.parquet`
-- Intraday per-symbol stores:
-  `data/canonical/edge_rebuild_intraday_5m_20260730/{regular,extended}/5m/`
-- Swing daily bars:
-  `data/raw/swing_daily_sip_sp500_pit_20190709_20260708_v3/bars/`
-- News: `data/raw/alpaca_news_20190709_20210708_v1` and
-  `data/raw/alpaca_news_20210709_20260708_v1`
+- `data/canonical/swing_memberships_verified_20190709_20260708_v2.parquet`
+- `data/canonical/edge_rebuild_intraday_5m_20260730/{regular,extended}/5m/`
+- `data/raw/swing_daily_sip_sp500_pit_20190709_20260708_v3/bars/`
+- `data/research/intraday_universe_selection_20230410_20260708_v2/`
+- `data/raw/edge_rebuild_selected_session_5m_20260731` — 790/790 units,
+  875,425 rows, 532 symbols, zero failures, authority present
 
-## ER3 Result: Swing Is Rejected
+## What Failed, And Why It Matters
 
-`SWING.SECTOR_RESIDUAL_MOMENTUM.10D.V1` failed admission in both scopes and is
-retired. Implementation commit `e43f6a3`; module
-`src/market_predictor/edge_rebuild/swing_setups.py`.
+The first swing strategy was rejected. It earned +0.724% gross and +0.524% net
+per ten-day trade — a real edge that survives costs — but SPY excess was
+-0.180%, losing to simply holding the index in four of seven years.
 
-Population: 3,449 rows, 941 decision dates, 526 securities, ten phases in both
-scopes, 0.59 GiB peak.
+**The rejection was measured on a flawed test and does not mean the signal is
+dead.** The population applied a ten-per-day cap ranked by *dollar volume*, so
+the tested portfolio was roughly ten arbitrary qualifying S&P stocks per day. An
+unranked basket of index constituents approximately reproduces the index, so
+measuring its excess return mostly measured costs. It could not have passed.
 
-| Measure | Whole population |
-| --- | ---: |
-| gross return per ten-day trade | +0.724% |
-| net return after 20 bps | +0.524% |
-| SPY excess | **-0.180%** |
-| sector excess | **-0.158%** |
+Two consequences drive everything below:
 
-**The setup earns a real, cost-surviving edge and still loses to holding the
-benchmark** over the identical executable interval, in four of seven years. ER3
-makes benchmark-relative return primary, so that alone disqualifies it.
-Worst-phase drawdown is 57% against a 20% limit, and the unseen-ticker worst
-phase is negative before costs.
+1. The strategy must **rank** stocks and hold the top ones, not filter them and
+   pick arbitrarily. Standard practice for cross-sectional strategies is
+   learning-to-rank; the repo's own earlier V3 work already had a grouped ranker.
+2. Features must be expressed **relative to other stocks at the same moment**,
+   or a model learns "buy when the indicator is high", which fires on everything
+   at once and reproduces the index.
 
-By year, net and SPY excess: 2020 +1.95%/-0.58%, 2021 +0.94%/-0.14%,
-2022 -0.72%/**+0.45%**, 2023 -0.10%/-1.25%, 2024 +0.75%/-0.67%,
-2025 +0.60%/+0.06%, 2026 +1.26%/+0.94%. It beats SPY mainly when SPY is weak,
-which is the expected signature of a selective long-only rule: out of the market
-most of the time, so it lags rallies.
+## Built And Verified
 
-This differs from the V2 failure. V2 had negative gross return before costs, so
-there was no edge at all. This one has an edge that is not worth the opportunity
-cost. **No feature set or estimator fixes that** — a replacement hypothesis needs
-different mechanics, for example a sector-relative or market-neutral target, or
-higher participation than 6.6 firings per security over six years.
+`edge_rebuild/labeling.py` — two labels on every row, 14 tests.
 
-Nothing was adjusted to chase a pass.
+- Barrier label: from the entry price, did the position reach its target, hit
+  its stop, or survive to expiry. Entry is the next session's open so no part of
+  the decision bar prices the fill. A bar whose range spans both barriers
+  resolves to the **stop**, because the bar proves both prices traded but not in
+  what order. A horizon running past available data is left **unresolved**, not
+  labelled a timeout, which would invent an observation.
+- Rank label: top fifth, bottom fifth, middle, computed inside one session and
+  inside one sector. A cross-section below 50 rows yields no labels.
+- The contract refuses either alone. Barrier-only reproduces the failure above.
+  Rank-only assumes a position is held to expiry however far it moves against it.
 
-## The Intraday Universe Gap
+`edge_rebuild/cross_sectional.py` — feature scaling, 11 tests.
 
-The 572 intraday symbols are S&P 500 members because that is what the corpus was
-built from. Against the frozen tradability screen:
+- Z-score against the same timestamp's cross-section, tails winsorised first so
+  one stock halving cannot dominate the mean and flatten every other score.
+- Rank within the cross-section, centred at zero, immune to outliers.
+- Sector-relative z-score, without which a sector-wide rally reads as stock
+  selection.
+- Every group is one timestamp. A test asserts that adding a later session
+  leaves earlier scores bit-identical; if it ever fails, future data is leaking.
 
-- 298 of the 572 pass and are usable now.
-- 274 fail on volume or price. They stay for swing and are not intraday-tradable.
-- ~651 further candidates, mostly non-index, have no bars yet.
+## Contract, As Frozen
 
-A collection for those ~651 is in progress: daily bars, the point-in-time
-screen, then news. Estimated about ninety minutes unattended. The intraday
-universe is deliberately not index-restricted and the contract refuses an
-index-restricted one.
+Names are `swing` and `intraday`. No version suffixes — nothing is in
+production, so there is no promoted artifact a rename could invalidate.
 
-Note that only 3.8% of eligible stock-sessions clear relative volume 2.0, a
-median of ten symbols per session. An unconditional population is therefore
-roughly 96% symbols that were not moving, which is the most likely reason the V2
-intraday setup showed negative average gross return before costs.
+Swing: enter next session open; exit at target, stop, or the tenth session
+close, whichever first; 3.0 / 1.5 daily ATR(14); same-bar ties resolve stop
+first; hourly features over daily context; 25 positions; 20% sector cap;
+sector-neutral scoring; 20 bps round trip.
 
-## Gates Now Enforced In Code
+Intraday: volume bars built from one-minute input, ~78 per session sized off
+trailing median session volume; rolling features reset overnight; 2.0 / 1.5
+five-minute ATR(14); 10 bps round trip; opening / midday / late segments.
 
-Each was validated against real data, not only unit tests.
+Intraday universe: not index-restricted; average volume at least 1M shares over
+20 sessions; price 8 to 500 dollars; relative volume at least 2.0 measured from
+prior sessions only; at most 30 candidates per session; exchange-traded products
+excluded because a fund has no issuer and a catalyst setup has nothing to
+condition on — measured density is a median of 8 articles for funds against 204
+for operating companies.
 
-1. **Corpus integrity** (`edge_rebuild/corpus_integrity.py`) — completeness
-   judged against each symbol's own history rather than a global floor,
-   whole-session truncation, identity continuity, and provider-fabricated bars.
-   Isolated single-symbol holes are recorded but do not block; clustering does.
-   Run blind against 31,220,235 bars it reproduced every known defect and found
-   fifty more.
-2. **Membership identity** (`edge_rebuild/universe_identity.py`) — a symbol
-   claim must be supported by bar evidence. Applied to 659 intervals it excluded
-   three securities, 0.48%, and independently rediscovered two exclusions that
-   had previously been hand-coded.
-3. **Setup economics** (`edge_rebuild/setup_economics.py`) — the ER3 admission
-   gate. Worst-phase aggregation, session-block bootstrap bounds, leave-one-out
-   concentration, frozen cost stress.
-4. **Strategy contract** (`edge_rebuild/strategy_contract.py`) — refuses random
-   cross-validation, raw news counts, a widened experiment budget, an
-   index-restricted intraday universe, a sub-1.0 ATR stop, and a daily ATR on a
-   thirty-minute hold.
+Validators refuse: random cross-validation, raw news counts as estimator
+features, a widened experiment budget, an index-restricted intraday universe, a
+stop below one average range, a daily ATR on a thirty-minute hold, clock bars
+for intraday decisions, volume bars from coarser than one-minute input, rolling
+windows spanning the overnight gap, and either label scheme alone.
 
-## Frozen Numbers And Where They Came From
+## Running Right Now
 
-Published methods, cited in plan section 8B: triple-barrier labels, purged
-k-fold with embargo, event-based sampling. Meta-labeling is deliberately
-deferred until one strategy passes admission alone.
-
-- Intraday stop 1.5 ATR, target 2.0 ATR, ATR(14) on five-minute bars. The
-  earlier 0.75 stop was below the entire standard range and would have been hit
-  by ordinary noise rather than by the thesis failing.
-- Swing exit is timeout-only at the tenth session close. Daily bars cannot show
-  when an intraday stop was touched.
-- Intraday sentiment half-life 90 minutes, evidence-backed. The swing half-life
-  of 36 hours is marked provisional: the sentiment literature describes an
-  intraday effect, and what persists over ten sessions is post-announcement
-  drift, a different mechanism.
-- Raw news counts are prohibited as estimator features. Provider coverage grew
-  from roughly 75,000 to 113,000 rows per year across the sample, so a raw count
-  encodes collection history rather than market behaviour.
+`materialize-edge-rebuild-intraday-history` is merging the selected-session
+five-minute bars into a new corpus at
+`data/canonical/edge_rebuild_intraday_5m_20260731`. It holds the workspace
+lease. Output directory does not exist yet. If it refused the build it writes
+findings to `edge_rebuild_intraday_5m_20260731_rejected.json`; a refusal is
+information, and no threshold may be weakened to make it pass.
 
 ## Exact Next Steps
 
-1. ER3 swing setup admission. A build of `swing_setups.py` and its economics
-   gate run is in progress; the working tree carries
-   `src/market_predictor/edge_rebuild/swing_setups.py` and
-   `tests/test_swing_setups.py` uncommitted.
-2. ER3 intraday setup admission, once the ~651 collection completes.
-3. Only if a setup passes: ER5 training. Deterministic comparator, regularized
-   logistic, gradient boosting, grouped learning-to-rank. No deep learning — the
-   binding constraint is independent samples, roughly 125 ten-session blocks,
-   not model capacity.
+1. **Confirm the merge.** Then re-run the full suite; the four CLI tests that
+   exited 75 during the last run were lease contention, not failures.
+2. **Indicator semantics and relationship features.** The user asked for domain
+   knowledge to be built into the engine. The correct scope is narrow: a tree
+   finds a threshold like "RSI above 70" by itself, so threshold flags add
+   nothing. What a tree cannot derive from one row are **relationships** —
+   divergence between price and an indicator across two peaks, volume confirming
+   or contradicting a price move, and the same reading meaning opposite things
+   in a trend versus a range. Encode those; skip the flags. Note that the
+   textbook "RSI above 70 is overbought" is actively wrong in a trend, where RSI
+   stays high for weeks.
+3. **Swing feature builder.** Assemble one row per security per session:
+   momentum, trend, pullback, volume and catalyst features, each passed through
+   `add_cross_sectional_features`, plus both labels.
+4. **Check the signal orders stocks correctly, before training anything.** Sort
+   each session by a simple score and compare the top tenth against the bottom
+   tenth over the next ten days. If that spread is near zero there is nothing to
+   rank and no model will help; stop and change the signal. This replaces the
+   test that misfired.
+5. **Deterministic top-25 portfolio, no model.** Build the equity curve against
+   SPY. This is the number any model must beat.
+6. **Train** LambdaMART or LightGBM ranking, purged splits with embargo, then
+   the unseen-stock holdout. Published work reports roughly threefold better
+   risk-adjusted return from learning-to-rank on exactly this strategy family.
+7. **Intraday setup and its economics gate**, same order: population first,
+   model only if the population earns.
 
-**A reproducible rejection is a valid outcome.** V2 died because models were
-trained on populations with no edge. Nothing may be tuned to make a gate pass.
+## Not Started
 
-## Do Not
+- Hourly swing bars. The contract specifies hourly features; only daily exists.
+  About 6M bars, one to two hours unattended.
+- One-minute intraday bars, required before volume bars can be built. Roughly
+  790 units over the in-play sessions. Time bars remain in use until then and
+  this is recorded, not silently substituted.
+- Any model. Nothing has been trained in this program.
 
-- hold any broker credential; this repository emits predictions and does not own
-  execution, orders, positions, or sizing;
-- use a current screener value in a historical decision;
-- exclude symbols for thin trading or delisting, only for unprovable identity;
-- merge extended-hours bars into regular-session indicator inputs;
-- weaken a frozen gate to make a build or an evaluation pass.
+## Two Audits That Died Unfinished
+
+Both were killed by a session limit, neither committed anything.
+
+- A swing failure attribution decomposing the rejected population by
+  pre-declared cohorts, concentration, and a benchmark decomposition asking
+  whether the problem is stock selection or market timing. Worth restarting only
+  if the redesign stalls; the redesign supersedes most of its questions.
+- The five-minute merge, which is the job now running.
 
 ## Verification Commands
 
-Check real exit codes; never pipe these through `tail`, which masks them.
+Check real exit codes on each.
 
 ```powershell
 Set-Location C:\project\market-predictor
@@ -178,4 +207,20 @@ git status --short --branch
 
 The local NumPy stubs use syntax newer than the project mypy 3.11 target, so the
 verified strict command uses the installed Python 3.14 environment. That is an
-environment fact and not permission to add Python-3.14-only source syntax.
+environment fact, not permission to write Python-3.14-only source.
+
+## Standing Prohibitions
+
+- No broker credential. This repository emits predictions; `trading_flow` owns
+  execution, orders, positions, and sizing.
+- No current screener value in a historical decision. Finviz numbers choose
+  which tickers to consider and nothing more.
+- Exclude a security only for unprovable point-in-time identity, never for thin
+  trading or delisting.
+- Extended-hours bars never reach a regular-session VWAP, moving average, ATR,
+  or relative-volume denominator.
+- Segment classification uses real exchange session bounds, never clock times.
+  An early close at 13:00 ET would otherwise file three hours of post-market
+  bars as regular session.
+- No gate is weakened to make a build or an evaluation pass. A reproducible
+  rejection is a valid outcome.
