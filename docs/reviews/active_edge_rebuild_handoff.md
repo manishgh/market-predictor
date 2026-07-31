@@ -1,7 +1,8 @@
 # Active Edge Rebuild Handoff
 
-Status: swing rejected and being rebuilt as a ranking strategy. Labels and
-cross-sectional scaling are built. Feature builder and model are not.
+Status: intraday corpus published and verified. Swing rejected and being rebuilt
+as a ranking strategy. Labels and cross-sectional scaling are built. Feature
+builder and model are not. Nothing is running.
 Last updated: 2026-07-31
 Repository: `C:\project\market-predictor`
 Remote: `https://github.com/manishgh/market-predictor`
@@ -47,8 +48,8 @@ holds it produces exit code 75 on CLI tests, which looks like failure and is not
 
 | | Swing | Intraday |
 | --- | --- | --- |
-| Universe | 627 securities, verified point-in-time, delisted included | 533 operating companies, volume-screened, deliberately not index-restricted |
-| Bars | 1,084,622 daily, 2019-07-09 to 2026-07-08, 7.00 years | 37.7M five-minute, 2023-04-10 to 2026-07-08, 814 sessions |
+| Universe | 627 securities, verified point-in-time, delisted included | 1,104 symbols, index members plus volume-screened non-index names |
+| Bars | 1,084,622 daily, 2019-07-09 to 2026-07-08, 7.00 years | 38,586,501 five-minute, 2023-04-10 to 2026-07-08, 814 sessions |
 | Selection | n/a | 11,340 in-play stock-sessions, median 13 per session |
 | News | 714,126 rows over the full 7 years | 165,142 rows, median 204 articles per company |
 
@@ -134,20 +135,46 @@ stop below one average range, a daily ATR on a thirty-minute hold, clock bars
 for intraday decisions, volume bars from coarser than one-minute input, rolling
 windows spanning the overnight gap, and either label scheme alone.
 
-## Running Right Now
+## Intraday Corpus Is Published
 
-`materialize-edge-rebuild-intraday-history` is merging the selected-session
-five-minute bars into a new corpus at
-`data/canonical/edge_rebuild_intraday_5m_20260731`. It holds the workspace
-lease. Output directory does not exist yet. If it refused the build it writes
-findings to `edge_rebuild_intraday_5m_20260731_rejected.json`; a refusal is
-information, and no threshold may be weakened to make it pass.
+`data/canonical/edge_rebuild_intraday_5m_20260731`, authority complete, 1.5 GiB.
+1,104 regular per-symbol files and 573 extended. 38,586,501 rows: 32,506,506
+regular, 3,190,687 pre-market, 2,889,308 post-market, over 814 sessions.
+Availability is exactly sixty seconds after each bar's end on every row in both
+eras. Two isolated truncations recorded and tolerated. All 732 tests pass.
+
+Supersedes `edge_rebuild_intraday_5m_20260730`, which lacked the screened
+non-index names.
+
+The build refused three times before publishing. Each refusal was a check
+assuming a property the data no longer had, and each fix narrowed what the gate
+asks without narrowing what it can catch:
+
+1. **Duplicate bars.** Sources overlap by design; a symbol can be an index
+   member with legacy coverage and also be selected by the screen. Identical
+   deliveries now collapse to the collected copy, which carries observed rather
+   than derived timestamps. Deliveries disagreeing on price or volume still
+   refuse, because one instant cannot have traded at two prices.
+2. **Eleven false identity breaks.** The level test compared consecutive rows,
+   which assumed continuous coverage. Screened symbols are collected only on
+   selected sessions, so consecutive rows can sit months apart; FTAI moved 1.09x
+   on the day the check reported 3.41x. The test now applies only between
+   sessions a few calendar days apart. A symbol that genuinely changed hands is
+   still caught by the gap test, which caught FI independently.
+3. **One false fabrication.** STRC printed a whole session at 95.99 on 15.8
+   million shares, a par-pegged preferred trading heavily at a stable price. A
+   frozen price now requires the absence of trades; zero volume remains the
+   placeholder signature.
+
+**The close-ratio ceiling was deliberately left at 3.0.** CAPR rose 4.71x on 33
+times median volume and SRRK 4.62x on 44 times, both real news moves in the
+high-beta names the broad universe exists to hold. Widening a threshold to admit
+the data it just rejected is how a gate stops meaning anything. If such moves
+recur, the correct answer is a volume-confirmed exemption, not a bigger number.
 
 ## Exact Next Steps
 
-1. **Confirm the merge.** Then re-run the full suite; the four CLI tests that
-   exited 75 during the last run were lease contention, not failures.
-2. **Indicator semantics and relationship features.** The user asked for domain
+1. **Indicator semantics and relationship features.** The user asked for domain
    knowledge to be built into the engine. The correct scope is narrow: a tree
    finds a threshold like "RSI above 70" by itself, so threshold flags add
    nothing. What a tree cannot derive from one row are **relationships** —
