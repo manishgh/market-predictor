@@ -124,6 +124,7 @@ def test_activation_uses_same_slot_prior_session_median() -> None:
     assert row["activation_rank"] == 1
     assert pd.Timestamp(row["activation_time_utc"]) == pd.Timestamp("2024-01-30 14:36:00+00:00")
     assert int(activity.iloc[-1]["prior_sessions_available"]) == LOOKBACK
+    assert float(activity.iloc[-1]["average_bar_continuity_prior_sessions"]) == pytest.approx(1.0)
 
 
 def test_future_same_session_volume_cannot_change_earlier_activation() -> None:
@@ -188,6 +189,62 @@ def test_missing_exact_historical_slot_is_not_imputed() -> None:
     _, selected = select_intraday_activations(bars, universe=_universe())
 
     assert selected.empty
+
+
+def test_trailing_bar_continuity_gate_uses_only_prior_sessions() -> None:
+    bars = _history_and_current()
+    local = pd.to_datetime(bars["bar_start_utc"], utc=True).dt.tz_convert(
+        "America/New_York"
+    )
+    sessions = sorted(local.dt.date.unique())
+    historical = local.dt.date != sessions[-1]
+    slot = ((local.dt.hour * 60 + local.dt.minute) - (9 * 60 + 30)) // 5
+    bars = bars.loc[~(historical & slot.ge(70))].reset_index(drop=True)
+
+    activity, selected = select_intraday_activations(
+        bars,
+        universe=_universe(),
+        expected_bars_by_session={session: SLOTS for session in sessions},
+    )
+
+    assert selected.empty
+    assert float(activity.iloc[-1]["average_bar_continuity_prior_sessions"]) == pytest.approx(70 / 78)
+
+
+def test_early_close_full_session_counts_as_complete() -> None:
+    calendar = xcals.get_calendar("XNYS")
+    sessions = [
+        pd.Timestamp(value).date()
+        for value in calendar.sessions_in_range("2024-11-01", "2024-12-02")
+    ][-(LOOKBACK + 1) :]
+    expected = {
+        session: (42 if session == date(2024, 11, 29) else SLOTS)
+        for session in sessions
+    }
+    frames = [
+        _session_rows(
+            pd.Timestamp(session),
+            ticker="AAA",
+            volumes=[20_000.0] * expected[session],
+        )
+        for session in sessions[:-1]
+    ]
+    frames.append(
+        _session_rows(
+            pd.Timestamp(sessions[-1]),
+            ticker="AAA",
+            volumes=[40_000.0] + [20_000.0] * (SLOTS - 1),
+        )
+    )
+
+    activity, selected = select_intraday_activations(
+        pd.concat(frames, ignore_index=True),
+        universe=_universe(),
+        expected_bars_by_session=expected,
+    )
+
+    assert len(selected) == 1
+    assert float(activity.iloc[-1]["average_bar_continuity_prior_sessions"]) == pytest.approx(1.0)
 
 
 @pytest.mark.parametrize(

@@ -57,6 +57,7 @@ ACTIVITY_AUDIT_COLUMNS = (
     "prior_sessions_available",
     "average_volume_prior_sessions",
     "median_volume_prior_sessions",
+    "average_bar_continuity_prior_sessions",
     "exact_slot_baseline_ready",
 )
 SELECTION_COLUMNS = (
@@ -114,6 +115,7 @@ class _SessionProfile:
     session_date_et: date
     total_observed_volume: float
     cumulative_volume_by_slot: Mapping[int, float]
+    bar_continuity: float
 
 
 @dataclass(frozen=True, slots=True)
@@ -134,18 +136,42 @@ def select_intraday_activations(
     *,
     universe: IntradayUniverseContract,
     session_eligibility: Mapping[str, Collection[date]] | None = None,
+    expected_bars_by_session: Mapping[date, int] | None = None,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Select activations from canonical five-minute rows in causal order."""
 
     if bars.empty:
         return _empty_activity(), _empty_selection()
     normalized = _validate_canonical_five_minute_rows(bars)
+    expected = (
+        _normalize_expected_bars(expected_bars_by_session)
+        if expected_bars_by_session is not None
+        else {
+            session_date: int(
+                frame.groupby("ticker", observed=True)["slot"].nunique().max()
+            )
+            for session_date, frame in normalized.groupby(
+                "session_date_et", sort=True
+            )
+        }
+    )
     sessions = ((session_date, frame.reset_index(drop=True)) for session_date, frame in normalized.groupby("session_date_et", sort=True))
     return _screen_sessions(
         sessions,
         universe=universe,
         session_eligibility=_normalize_session_eligibility(session_eligibility),
+        expected_bars_by_session=expected,
     )
+
+
+def _normalize_expected_bars(value: Mapping[date, int]) -> dict[date, int]:
+    normalized: dict[date, int] = {}
+    for session_date, raw_count in value.items():
+        count = int(raw_count)
+        if not isinstance(session_date, date) or count < 1:
+            raise DataReadinessError("expected five-minute session bars are invalid")
+        normalized[session_date] = count
+    return normalized
 
 
 def _normalize_session_eligibility(
@@ -168,6 +194,7 @@ def _screen_sessions(
     universe: IntradayUniverseContract,
     session_eligibility: Mapping[str, frozenset[date]] | None = None,
     cold_start_sessions: Mapping[str, frozenset[date]] | None = None,
+    expected_bars_by_session: Mapping[date, int],
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     lookback = universe.relative_volume_lookback_sessions
     history: dict[str, deque[_SessionProfile]] = {}
@@ -176,6 +203,11 @@ def _screen_sessions(
     selected_rows: list[dict[str, object]] = []
 
     for session_date, session_rows in sessions:
+        expected_bar_count = expected_bars_by_session.get(session_date)
+        if expected_bar_count is None or expected_bar_count < 1:
+            raise DataReadinessError(
+                f"missing expected five-minute bar count for {session_date}"
+            )
         if session_eligibility is not None:
             for ticker in tuple(history):
                 if session_date not in session_eligibility.get(ticker, frozenset()) or session_date in (cold_start_sessions or {}).get(
@@ -198,7 +230,11 @@ def _screen_sessions(
             if session_eligibility is not None and session_date not in session_eligibility.get(normalized_ticker, frozenset()):
                 continue
             ordered = ticker_rows.sort_values("slot", kind="stable").reset_index(drop=True)
-            profile = _session_profile(session_date, ordered)
+            profile = _session_profile(
+                session_date,
+                ordered,
+                expected_bar_count=expected_bar_count,
+            )
             current_profiles[normalized_ticker] = profile
             prior = tuple(history.get(normalized_ticker, ()))
             baseline_ready = (
@@ -206,6 +242,11 @@ def _screen_sessions(
             )
             average_volume = float(np.mean([item.total_observed_volume for item in prior])) if baseline_ready else np.nan
             median_volume = float(np.median([item.total_observed_volume for item in prior])) if baseline_ready else np.nan
+            average_continuity = (
+                float(np.mean([item.bar_continuity for item in prior]))
+                if baseline_ready
+                else np.nan
+            )
             activity_rows.append(
                 {
                     "ticker": str(ticker),
@@ -214,10 +255,15 @@ def _screen_sessions(
                     "prior_sessions_available": int(len(prior)),
                     "average_volume_prior_sessions": average_volume,
                     "median_volume_prior_sessions": median_volume,
+                    "average_bar_continuity_prior_sessions": average_continuity,
                     "exact_slot_baseline_ready": baseline_ready,
                 }
             )
-            if not baseline_ready or average_volume < universe.minimum_average_volume_shares:
+            if (
+                not baseline_ready
+                or average_volume < universe.minimum_average_volume_shares
+                or average_continuity < universe.minimum_bar_continuity
+            ):
                 continue
             activation = _first_activation(
                 ordered,
@@ -280,12 +326,23 @@ def _append_capped_decision_activations(
             )
 
 
-def _session_profile(session_date: date, rows: pd.DataFrame) -> _SessionProfile:
+def _session_profile(
+    session_date: date,
+    rows: pd.DataFrame,
+    *,
+    expected_bar_count: int,
+) -> _SessionProfile:
+    observed_bar_count = int(rows["slot"].nunique())
+    if observed_bar_count > expected_bar_count:
+        raise DataReadinessError(
+            f"observed five-minute bars exceed the XNYS session for {session_date}"
+        )
     cumulative = pd.to_numeric(rows["volume"], errors="raise").cumsum()
     return _SessionProfile(
         session_date_et=session_date,
         total_observed_volume=float(cumulative.iloc[-1]),
         cumulative_volume_by_slot={int(slot): float(value) for slot, value in zip(rows["slot"], cumulative, strict=True)},
+        bar_continuity=observed_bar_count / expected_bar_count,
     )
 
 
@@ -392,6 +449,10 @@ def build_intraday_selection(
     market_sessions = tuple(pd.Timestamp(value).date() for value in calendar.sessions_in_range(first_session, last_session))
     if not market_sessions:
         raise DataReadinessError("activity screen window contains no XNYS sessions")
+    expected_bars_by_session = _xnys_expected_five_minute_bars(
+        calendar,
+        market_sessions,
+    )
     membership = _load_sp500_membership_eligibility(
         membership_authority_dir,
         market_sessions=market_sessions,
@@ -418,6 +479,7 @@ def build_intraday_selection(
             universe=contract.intraday_universe,
             session_eligibility=membership.sessions_by_ticker,
             cold_start_sessions=membership.cold_start_sessions_by_ticker,
+            expected_bars_by_session=expected_bars_by_session,
         )
         if not activity.empty:
             activity_parts.append(activity)
@@ -451,7 +513,11 @@ def build_intraday_selection(
     if bool(selection.duplicated(["ticker", "session_date_et"]).any()):
         raise DataReadinessError("event-time screen emitted duplicate stock-sessions")
     per_session = selection.groupby("session_date_et", sort=True).size()
-    eligible = activity["average_volume_prior_sessions"].ge(contract.intraday_universe.minimum_average_volume_shares)
+    eligible = activity["average_volume_prior_sessions"].ge(
+        contract.intraday_universe.minimum_average_volume_shares
+    ) & activity["average_bar_continuity_prior_sessions"].ge(
+        contract.intraday_universe.minimum_bar_continuity
+    )
     audit: dict[str, Any] = {
         "schema": INTRADAY_SELECTION_SCHEMA,
         "strategy_id": contract.intraday.strategy_id,
@@ -475,6 +541,7 @@ def build_intraday_selection(
         "sessions_in_window": int(activity["session_date_et"].nunique()),
         "layer_one": {
             "minimum_average_volume_shares": (contract.intraday_universe.minimum_average_volume_shares),
+            "minimum_bar_continuity": contract.intraday_universe.minimum_bar_continuity,
             "average_volume_lookback_sessions": (contract.intraday_universe.average_volume_lookback_sessions),
             "stock_sessions": int(eligible.sum()),
         },
@@ -497,6 +564,25 @@ def build_intraday_selection(
         selection=selection,
         audit=audit,
     )
+
+
+def _xnys_expected_five_minute_bars(
+    calendar: Any,
+    market_sessions: Collection[date],
+) -> dict[date, int]:
+    expected: dict[date, int] = {}
+    for session_date in market_sessions:
+        session = pd.Timestamp(session_date)
+        opened = pd.Timestamp(calendar.session_open(session))
+        closed = pd.Timestamp(calendar.session_close(session))
+        duration = closed - opened
+        count = int(duration / pd.Timedelta(minutes=5))
+        if count < 1 or duration != count * pd.Timedelta(minutes=5):
+            raise DataReadinessError(
+                f"XNYS session is not divisible into exact five-minute bars: {session_date}"
+            )
+        expected[session_date] = count
+    return expected
 
 
 def _verify_canonical_regular_store(
