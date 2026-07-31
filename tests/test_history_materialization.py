@@ -1,14 +1,17 @@
 from __future__ import annotations
 
 import pandas as pd
+import pytest
 
 from market_predictor.edge_rebuild.history_materialization import (
     POSTMARKET,
     PREMARKET,
     REGULAR,
+    _resolve_overlapping_sources,
     classify_segments,
     session_bounds_for,
 )
+from market_predictor.v3.errors import DataReadinessError
 
 
 def _bars(times_utc: list[str]) -> pd.DataFrame:
@@ -84,3 +87,42 @@ def test_session_bounds_cover_every_session_in_range() -> None:
 
     assert len(bounds) == 21
     assert all(b.open_at < b.close_at for b in bounds.values())
+
+
+def _dual_source_bars(price: float, other_price: float | None = None) -> pd.DataFrame:
+    """The same bar delivered by two sources, optionally disagreeing."""
+
+    base = {
+        "ticker": "FISV",
+        "bar_start_utc": pd.Timestamp("2024-01-03 15:00", tz="UTC"),
+        "session_date_et": "2024-01-03",
+        "session_segment": REGULAR,
+        "open": price,
+        "high": price,
+        "low": price,
+        "close": price,
+        "volume": 1_000,
+    }
+    second = dict(base)
+    second["history_era"] = "legacy_ohlcv_v1"
+    if other_price is not None:
+        second |= {"open": other_price, "high": other_price,
+                   "low": other_price, "close": other_price}
+    return pd.DataFrame([base | {"history_era": "collected"}, second])
+
+
+def test_identical_bars_from_two_sources_collapse_to_one() -> None:
+    """A symbol can be an index member and also be screened in-play."""
+
+    out = _resolve_overlapping_sources(_dual_source_bars(50.0), "FISV")
+
+    assert len(out) == 1
+    # The collected copy wins: it carries observed timestamps, not derived ones.
+    assert out.iloc[0]["history_era"] == "collected"
+
+
+def test_sources_disagreeing_on_price_refuse_the_build() -> None:
+    """The same instant cannot have traded at two prices."""
+
+    with pytest.raises(DataReadinessError, match="conflicting bars"):
+        _resolve_overlapping_sources(_dual_source_bars(50.0, 51.0), "FISV")

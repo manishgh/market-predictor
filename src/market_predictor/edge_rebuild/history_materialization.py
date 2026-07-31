@@ -40,7 +40,7 @@ from collections.abc import Iterator, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Final
 
 import exchange_calendars as xcals
 import pandas as pd
@@ -460,11 +460,9 @@ def _write_symbol_stores(
             continue
         frame = pd.concat([pd.read_parquet(p) for p in parts], ignore_index=True)
         for ticker, group in frame.groupby("ticker", sort=True):
-            ordered = group.sort_values("bar_start_utc")
-            if bool(ordered.duplicated(["bar_start_utc"]).any()):
-                raise DataReadinessError(
-                    f"materialized {ticker} has duplicate bar_start_utc rows"
-                )
+            ordered = _resolve_overlapping_sources(
+                group.sort_values("bar_start_utc"), str(ticker)
+            )
             for segment, store in ((REGULAR, "regular"), (None, "extended")):
                 part = (
                     ordered[ordered["session_segment"] == REGULAR]
@@ -502,6 +500,52 @@ def _write_symbol_stores(
         "total_rows": int(sum(totals.values())),
         "_ticker_sessions": combined,
     }
+
+
+_PRICE_COLUMNS: Final = ("open", "high", "low", "close", "volume")
+
+
+def _resolve_overlapping_sources(ordered: pd.DataFrame, ticker: str) -> pd.DataFrame:
+    """Collapse a bar that arrived from more than one source.
+
+    Sources overlap by design. A symbol can be an index member with legacy
+    coverage and also be selected by the in-play screen, so the same bar is
+    delivered twice. Identical deliveries are the same observation counted
+    twice, not a conflict, and one copy is kept.
+
+    Deliveries that disagree on price or volume are a different matter: the same
+    instant cannot have traded at two prices, so one source is wrong and the
+    build refuses rather than silently choosing a winner.
+
+    Where copies agree, the collected canonical bar is preferred over the legacy
+    one because it carries observed interval and availability timestamps rather
+    than derived ones.
+    """
+
+    duplicated = ordered.duplicated(["bar_start_utc"], keep=False)
+    if not bool(duplicated.any()):
+        return ordered
+
+    contested = ordered.loc[duplicated]
+    disagreement = (
+        contested.groupby("bar_start_utc")[list(_PRICE_COLUMNS)].nunique().gt(1).any(axis=1)
+    )
+    if bool(disagreement.any()):
+        first = disagreement.index[disagreement][0]
+        raise DataReadinessError(
+            f"{ticker} has conflicting bars at {first}: two sources report "
+            f"different prices or volume for the same instant"
+        )
+    # Stable ordering puts the collected era first, so keeping the first copy
+    # keeps observed timestamps over derived ones.
+    ranked = ordered.assign(
+        _era_rank=(ordered["history_era"] != ERA_COLLECTED).astype(int)
+    ).sort_values(["bar_start_utc", "_era_rank"], kind="stable")
+    return (
+        ranked.drop_duplicates(["bar_start_utc"], keep="first")
+        .drop(columns="_era_rank")
+        .sort_values("bar_start_utc")
+    )
 
 
 def _ticker_session_rows(
