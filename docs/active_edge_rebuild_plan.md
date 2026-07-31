@@ -567,12 +567,12 @@ follows:
 - the bounded learned sequence includes a barrier classifier and a grouped
   cross-sectional ranker, compared with deterministic and logistic baselines.
 
-The current seven-year swing panel remains authoritative for causal feature and
-panel validation. After its 250-session indicator warm-up, it cannot provide a
-strict five-year fit, one-year validation, and one-year locked test. Final
-protocol-conformant swing training therefore requires a 9-to-10-calendar-year
-raw history backfill. Any shorter run is explicitly interim research and cannot
-be promoted.
+The approved swing modeling horizon is seven usable years: five years fit, one
+year validation, and one locked test year. The preceding 250 sessions are
+warm-up only. The current seven-year panel remains authoritative for causal
+feature and panel validation but lacks that pre-fit warm-up and the first 29 fit
+sessions. Final training requires only the exact frozen 2018-05-29 through
+2019-07-08 gap, not a 9-to-10-calendar-year model horizon.
 
 The ER3 implementation now exposes separate `ready_for_modeling` and
 `baseline_economics_passed` decisions. Readiness covers causal integrity,
@@ -585,7 +585,7 @@ Implementation commit `84afb07` also binds the unchanged four-page PDF in the
 repository, verifies its SHA-256, and strengthens the canonical temporal-split
 test so every row from a decision session remains in one fold role. The current
 strategy-contract SHA-256 is
-`0b9c2c71f43460f76ac61ee8bbb9e002f00633acb7c25d7b49ddec2e828e1f3c`;
+`a77ccb4d635cc604b49b9c8bd5277aa281ca36afaf25abbe14c1c44d45b6460a`;
 the baseline-economics configuration SHA-256 is
 `761c57dd7248560da36620295e86f466c6c3daae04b8389a291c63ab185a31df`.
 The earlier contract hash attached to the published seven-year panel remains
@@ -598,9 +598,11 @@ Python worker remained.
 ### ER1C PDF-Aligned Temporal Manifest
 
 Status: complete as a bounded ER1A sub-step. It opened no model outcomes and
-performed no training. Implementation commit `7de78a0` is pushed.
+performed no training. Implementation commits `7de78a0` and `d72d1c2` are
+pushed; the latter freezes the approved seven-year horizon and 5% exclusion
+rule.
 
-The canonical manifest freezes three XNYS session-grouped validation folds,
+The canonical manifest freezes one XNYS session-grouped validation year,
 1,260 fit sessions per fold, 252 validation sessions per fold, a ten-session
 embargo, 250 warm-up sessions, and the untouched 2025-07-01 through 2026-06-30
 locked test. It also freezes a 20% `security_id` hash holdout independently of
@@ -612,15 +614,15 @@ a permissive shorter split.
 The immutable audit is
 `data/research/edge_rebuild_swing_temporal_manifest_20260731_v1`. Its manifest
 SHA-256 is
-`b2153fee949791b17f37c09bdd6a5abfe118a660daecae42cdff60a7d1806194`.
-It proves the required raw target is 2,557 XNYS sessions from 2016-04-28 through
+`8d073839eb31e1baa734c9068c957798f1884e9bb2bbe871d80be0b82affe6cf`.
+It proves the required raw target is 2,033 XNYS sessions from 2018-05-29 through
 2026-06-30. The current panel supplies 1,754 of those sessions and is missing
-exactly 803 contiguous sessions from 2016-04-28 through 2019-07-08. No shorter
-split is permitted. Peak working set was 0.283 GiB.
+exactly 279 contiguous sessions from 2018-05-29 through 2019-07-08. No shorter
+split is permitted. Peak working set was 0.285 GiB.
 
 The hash-bound request, fold file, session-assignment file, manifest, authority,
 partition-tamper refusal, full-session ownership tests, exact coverage report,
-and memory gate all pass. Repository verification passed 761 tests with 85
+and memory gate all pass. Repository verification passed 764 tests with 85
 existing warnings, Ruff, strict mypy across 195 source files, compileall, and
 `git diff --check`.
 
@@ -651,8 +653,11 @@ For each strategy freeze:
 - gross return, cost, net return, SPY excess, and sector excess labels;
 - deterministic comparator;
 - no-trade rule and maximum qualifying trades per period;
-- the horizon-specific frozen fold count: three swing walk-forward folds and
+- the horizon-specific frozen fold count: one full swing validation year and
   four intraday folds, plus deterministic unseen-security assignment;
+- whole-security exclusion for unavailable or unverifiable stock data through
+  a hard 5% ceiling of the filtered universe; benchmarks and market-wide
+  session gaps remain non-excludable;
 - cost/adverse-fill stress;
 - no more than six learned candidates, two feature profiles, and two selection policies;
 - one retirement rule and no shadow retry.

@@ -10,7 +10,7 @@ Last updated: 2026-07-31
 Repository: `C:\project\market-predictor`
 Remote: `https://github.com/manishgh/market-predictor`
 Branch: `r3-lineage`
-Last completed implementation commit: `7de78a0`
+Last completed implementation commit: `d72d1c2`
 
 ## Repository Cleanup
 
@@ -226,22 +226,21 @@ deterministic unseen-security holdout measures transfer to names absent from
 fitting. The first learned sequence is one global sector-aware barrier classifier
 and one decision-group ranker; sector specialists are conditional later work.
 
-The current seven-year panel is sufficient for causal panel diagnostics but not
-for final five-year fit plus one-year validation plus one-year locked-test
-evidence after the 250-session warm-up. A final conformant swing run needs 9 to
-10 raw calendar years. A shorter run must be labeled interim and cannot be
-promoted.
+The approved swing horizon is seven usable years: five years fit, one year
+validation, and one locked test year. The preceding 250 sessions are warm-up
+only. The current panel is sufficient for causal diagnostics but lacks the
+pre-fit warm-up and first 29 fit sessions. A shorter fit is prohibited.
 
 The outcome-blind temporal audit is published at
 `data/research/edge_rebuild_swing_temporal_manifest_20260731_v1`. It freezes
-three 1,260-session fit / 252-session validation folds, ten-session embargoes,
+one 1,260-session fit / 252-session validation window, ten-session embargoes,
 250 warm-up sessions, the 2025-07-01 through 2026-06-30 locked test, and a
 separate deterministic 20% `security_id` holdout policy. The audit read only
 `session_date_et` and `decision_group_id` after verifying panel authority and
-partition hashes. It reports `insufficient_history`: 803 required XNYS sessions
-from 2016-04-28 through 2019-07-08 are absent. Peak working set was 0.283 GiB.
+partition hashes. It reports `insufficient_history`: 279 required XNYS sessions
+from 2018-05-29 through 2019-07-08 are absent. Peak working set was 0.285 GiB.
 The manifest SHA-256 is
-`b2153fee949791b17f37c09bdd6a5abfe118a660daecae42cdff60a7d1806194`.
+`8d073839eb31e1baa734c9068c957798f1884e9bb2bbe871d80be0b82affe6cf`.
 
 The ER3 implementation is aligned. `edge_rebuild/setup_economics.py` classifies
 every gate as `readiness` or `baseline_economics` and exposes separate
@@ -253,7 +252,7 @@ not make an otherwise causal, sufficiently large population model-unready.
 Implementation commit `84afb07` is pushed. Current identities:
 
 - strategy contract:
-  `0b9c2c71f43460f76ac61ee8bbb9e002f00633acb7c25d7b49ddec2e828e1f3c`;
+  `a77ccb4d635cc604b49b9c8bd5277aa281ca36afaf25abbe14c1c44d45b6460a`;
 - deterministic baseline configuration:
   `761c57dd7248560da36620295e86f466c6c3daae04b8389a291c63ab185a31df`;
 - retained source PDF:
@@ -299,15 +298,22 @@ span on each side of the RSI pivot, 20-bar normalized OBV, and 20-bar Kaufman
 Efficiency Ratio. The same contract now freezes 1% within-session
 winsorization plus z-score, centred-rank, and sector-relative outputs. The
 current contract hash is
-`0b9c2c71f43460f76ac61ee8bbb9e002f00633acb7c25d7b49ddec2e828e1f3c`.
-The immediately prior ER3 contract hash
-`8577ed61307a215e997608c0791a679b836ccdfcb93f3b63cb5daa2ce1edbe59`
-used four generic validation folds. The PDF-aligned temporal manifest replaces
-that generic swing setting with three explicit walk-forward validation years.
+`a77ccb4d635cc604b49b9c8bd5277aa281ca36afaf25abbe14c1c44d45b6460a`.
+The superseded temporal-manifest contract hash
+`0b9c2c71f43460f76ac61ee8bbb9e002f00633acb7c25d7b49ddec2e828e1f3c`
+required three validation years and therefore exceeded the approved seven-year
+swing horizon. The active contract separates one full swing validation year
+from the unchanged four-fold intraday requirement.
 The prior
 `16709f3686ec737caa206dc1f45a80ea24f61d2dd1d18ded0b78cf978a433e38`
 identity remains bound only to artifacts produced before the ER3 semantic
 correction.
+
+Data-specific exclusions are settled: remove the complete security and record
+the reason and dates, then continue while no more than 5% of the filtered
+point-in-time universe is lost. Refuse above 5%. Do not investigate isolated
+names beyond producing that evidence. Missing SPY/sector benchmarks or
+market-wide sessions are structural gaps and cannot be waived by this rule.
 
 ## Intraday Corpus Is Published
 
@@ -353,9 +359,9 @@ recur, the correct answer is a volume-confirmed exemption, not a bigger number.
 ## Exact Next Steps
 
 1. **Publish a point-in-time acquisition plan for the missing swing history.**
-   Prove historical membership and security identity for 2016-04-28 through
+   Prove historical membership and security identity for 2018-05-29 through
    2019-07-08 before requesting bars. A current S&P 500 list is prohibited.
-2. **Extend swing raw history to the frozen 2,557-session target.** Rebuild the causal panel
+2. **Extend swing raw history to the frozen 2,033-session target.** Rebuild the causal panel
    with the same contracts so the 250-session warm-up does not consume the
    required five-year fit, one-year validation, and one-year locked test.
 3. **Run training-only feature diagnostics.** Measure rank IC, stability,
@@ -402,7 +408,7 @@ The local NumPy stubs use syntax newer than the project mypy 3.11 target, so the
 verified strict command uses the installed Python 3.14 environment. That is an
 environment fact, not permission to write Python-3.14-only source.
 
-Last full verification after implementation commit `7de78a0`: 761 tests passed
+Last full verification after implementation commit `d72d1c2`: 764 tests passed
 with 85 existing warnings; Ruff passed; strict mypy passed across 195 source
 files; compileall and `git diff --check` passed; no Python worker remained.
 

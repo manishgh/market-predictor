@@ -32,24 +32,28 @@ the market regime and cross-sectional normalization state.
 
 - Universe: point-in-time S&P 500 membership, including historical members and
   delisted securities where identity and bars are provable.
-- Raw history target: 9 to 10 calendar years. The first 250 trading sessions are
-  indicator warm-up and do not count toward a five-year fitting window.
+- Modeling horizon: seven usable years: five years for fitting, one year for
+  validation, and one untouched test year. The preceding 250 trading sessions
+  are indicator warm-up only and are not training examples.
 - Decision frequency: one cross-section per exchange session.
 - Feature normalization: winsorization, z-scores, ranks, sector-relative values,
   imputation, and feature selection are fit or computed without future sessions.
 - Labels: exact next-open entry and preregistered target, stop, and timeout paths;
   stock, SPY, and sector returns use the identical executable interval.
+- Data-quality tolerance: exclude the complete security, with an audited reason
+  and affected dates, when its data is unavailable or unverifiable. Continue
+  through a maximum 5% loss of the filtered point-in-time universe; refuse above
+  5%. SPY, sector-benchmark, and market-wide session gaps cannot use this rule.
 
-The final evaluation uses multiple walk-forward folds before one locked test.
-Calendar dates are illustrative and must be derived from the available exchange
-sessions before the run is frozen:
+The final evaluation uses one full validation year before one locked test year.
+This is the maximum complete train/validation/test design within the approved
+seven-year swing horizon. Dates are derived from XNYS sessions and frozen in the
+temporal manifest:
 
 | Fold | Fit window | Validation window |
 | --- | --- | --- |
-| 1 | 2017-2021 | 2022 |
-| 2 | 2018-2022 | 2023 |
-| 3 | 2019-2023 | 2024 |
-| Final refit | 2020-2024 | none |
+| 1 | May 2019-May 2024 | June 2024-June 2025 |
+| Final refit | June 2020-June 2025 | none |
 | Locked test | none | July 2025-June 2026 |
 
 The split generator must use actual session boundaries, group by decision date,
@@ -59,9 +63,9 @@ test is opened once after the model, feature profile, selection policy, costs,
 and thresholds are frozen.
 
 The current 2019-07-09 through 2026-07-08 panel is valid for causal panel and
-feature diagnostics. After a 250-session warm-up, it is not long enough for the
-strict five-year fit plus one-year validation plus one-year locked-test design.
-It cannot supply final promotion evidence for this protocol.
+feature diagnostics. It lacks the 250-session pre-fit warm-up and the first 29
+fit sessions required by the frozen schedule. It therefore cannot supply final
+promotion evidence until the exact 2018-05-29 through 2019-07-08 gap is filled.
 
 ## 3. Intraday Dataset And Splits
 

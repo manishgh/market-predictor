@@ -253,23 +253,27 @@ ER3 population evidence exposes `ready_for_modeling` separately from
 `baseline_economics_passed`; deterministic baseline failure cannot veto a
 distinct preregistered learned model.
 
-The production C4 swing contract is `swing.features.v1` -> `swing.model.v1`.
-
-Swing feature profiles are explicit and hash-bound. `technical_market` contains
-only stock technical, benchmark-relative, regime, and eligible-cohort
-cross-sectional features. It consumes no news/source artifacts, never converts
-missing catalysts to zero, excludes membership proxy buckets from the
-estimator, and is baseline-only. `catalyst_full` is the only promotion-eligible
-profile and retains the complete event, source-coverage, alignment, and
-catalyst gates.
+No swing model is promoted. The active contract is
+`configs/edge_rebuild_strategy_contract.toml`; older C4 model identities are
+historical evidence, not serving or compatibility contracts. Technical,
+benchmark-relative, regime, sector-relative, and cross-sectional features form
+the first estimator profile. Catalyst evidence remains a confirmation and
+ranking overlay unless a preregistered causal ablation improves validation and
+unseen-security evidence.
 
 - Decision: after the completed daily bar and all required feature/source timestamps.
 - Entry reference: next exchange session open.
-- Primary horizon: fifth exchange session close.
-- Target: stock return after configured round-trip costs is positive.
+- Primary horizon: target, stop, or the tenth exchange-session close, whichever
+  occurs first.
+- Barrier: 3.0 daily ATR target and 1.5 daily ATR stop; same-bar ambiguity
+  resolves stop first.
 - Retained outcomes: gross/net return, SPY/QQQ/sector excess return, MFE, MAE, exact path, and label availability.
 - Features: daily technical state, SPY/QQQ/sector regime and relative strength, ticker catalysts, observed global context, point-in-time membership, optional as-of fundamentals, and decision-group cross-sectional ranks.
-- Validation: horizon-purged expanding walk-forward, cross-fitted probability calibration, deterministic unseen-ticker holdout, and non-overlapping horizon-phase top-k economics.
+- Validation: five fit years, one full validation year, one locked test year,
+  ten-session embargoes, and an independent deterministic 20% security holdout.
+- Missing-stock policy: exclude the complete security with an audited reason;
+  continue through at most 5% of the filtered universe and refuse above it.
+  Benchmark and market-wide session gaps remain fatal.
 - Promotion: both validation scopes, conservative economics, drawdown, regime, catalyst, alignment, memory, model hash, evidence hashes, and one matching `model_run_id` must pass.
 
 Catalyst assessment remains an explanation and ranking overlay at serving time. It does not overwrite the estimator probability. Production serving rejects every older volatile schema even if an older registry manifest says `promoted`.
@@ -277,6 +281,8 @@ Catalyst assessment remains an explanation and ranking overlay at serving time. 
 ### Intraday Warm-Up
 
 Intraday prediction is a supported model view. Its readiness gates apply only when an intraday route is requested; they must not block a daily-only swing response.
+Intraday evidence uses one to three years of complete sessions and retains four
+session-purged folds; it never inherits the swing year boundaries.
 
 Minimum:
 

@@ -18,8 +18,8 @@ may become serving candidates.
 - Active program: ER1A edge rebuild.
 - Swing: the seven-year causal panel is published and immutable. The frozen
   equal-weight technical benchmark failed and is rejected, but it does not block
-  preregistered model training. The frozen temporal audit requires 2,557 XNYS
-  sessions and identifies one exact missing range: 803 sessions from 2016-04-28
+  preregistered model training. The frozen temporal audit requires 2,033 XNYS
+  sessions and identifies one exact missing range: 279 sessions from 2018-05-29
   through 2019-07-08. Final model training remains blocked until the causal
   point-in-time history is extended and the panel is rebuilt.
 - Intraday: verified canonical SIP five-minute corpus contains 38,586,501 bars,
@@ -125,6 +125,9 @@ git status --short --branch
   separate evidence.
 - Membership, ticker identity, corporate actions, and benchmarks are
   point-in-time.
+- Security-specific missing or unverifiable data excludes the complete security
+  and continues while at most 5% of the filtered universe is lost. Benchmark or
+  market-wide session gaps are never waived.
 - Swing and intraday labels use the shared target/stop/timeout evaluators.
 - Costs are applied exactly once and benchmark comparisons use the same holding
   interval.
