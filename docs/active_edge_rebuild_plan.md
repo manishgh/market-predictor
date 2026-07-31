@@ -118,7 +118,7 @@ Only one checkpoint may be `in_progress`.
 | --- | --- | --- | --- |
 | ER0 | completed | Establish this active plan and companion handoff | Closed by implementation commit `8c28df9`; both documents and repository guidance are pushed |
 | ER1 | completed | Audit effective independent history and causal data readiness | Closed by implementation commits `5ffa3d3`, `d9d93c8`, and `7b0ce6d`; immutable audit request `f80f70ae299bd5e5a6aeae6aeaa503ef4775573696b7d88856d539dbd1355080` reports one ER2 blocker |
-| ER1A | in_progress | Complete targeted intraday history and re-audit readiness | PIT inventory, the two-tier acquisition plan, and the regular-session transport are complete; complete the ER1B extended-session context layer, materialize both layers, derive setups, collect selective 1-minute paths, and republish ER1 |
+| ER1A | in_progress | Complete targeted intraday history and re-audit readiness | PIT inventory, regular and extended transport, and the canonical five-minute corpus are complete; add relationship features, derive setups, collect selective one-minute paths, and republish ER1 |
 | ER2 | pending | Freeze new strategy contracts and bounded experiment budget | New IDs, setup eligibility, entry/exit/labels, design window, folds, costs, features, abstention, and retirement rules are immutable and tested |
 | ER3 | pending | Build deterministic setup populations and exact labels | Each setup replays from immutable bars; gross/net/benchmark economics and sample sufficiency are published before ML |
 | ER4 | pending | Complete causal catalyst confirmation evidence | Direct/business/sector/global relations and event timing reconcile; technical-only, catalyst-only, and confirmation-overlay rows are identical and auditable; the deprecated V1 relevance path is retired per section 9A |
@@ -389,6 +389,37 @@ in 04:00-09:25 ET with zero regular-session rows, confirming layer isolation
 at the transport boundary; `available_at_utc` minus `bar_end_utc` was exactly
 60 seconds on every row. Only 173 of roughly 300 requested symbols returned
 any pre-market bar, which is why the no-imputation policy governs this layer.
+
+### ER1A Published Canonical Five-Minute Corpus
+
+The authoritative materialization is
+`data/canonical/edge_rebuild_intraday_5m_20260731`.
+
+- Authority state is `complete`; the manifest SHA-256 is
+  `f71d25ec1a98d38b75a3175a1508f8529426623857a09f255aeacc7bd19db0e0`.
+- 38,586,501 bars cover 814 sessions from 2023-04-10 through 2026-07-08:
+  32,506,506 regular, 3,190,687 pre-market, and 2,889,308 post-market.
+- 1,104 regular per-symbol files and 573 extended per-symbol files were
+  published. The union includes point-in-time index members and the screened
+  non-index intraday names.
+- All 1,677 registered file hashes replayed exactly. A full Parquet scan proved
+  that every regular file contains only regular-session rows and every extended
+  file contains only pre-market or post-market rows.
+- Corpus integrity reports zero blocking defects. Two isolated sparse
+  ticker-sessions remain recorded and tolerated under the frozen
+  `0.0001` maximum isolated-defect share.
+- Zero symbols were excluded. The materializer would quarantine unprovable
+  identities or fabricated observations and refuses when more than 5% of input
+  symbols would be lost.
+- Peak working-set memory recorded in the immutable manifest was 1.251 GiB,
+  below the 4 GiB process ceiling.
+- Implementation checkpoints are `39a50bd`, `93d073f`, and `12f5283`.
+  Repository verification after publication passed 732 tests, Ruff, strict
+  mypy across 190 source files, and compileall.
+
+This closes five-minute transport and materialization, not ER1A. Relationship
+features, setup derivation, selective one-minute executable paths, and the ER1
+readiness re-audit remain before ER2 can start.
 
 ## 7. ER2: Frozen Research Contract
 

@@ -7,7 +7,7 @@ Last updated: 2026-07-31
 Repository: `C:\project\market-predictor`
 Remote: `https://github.com/manishgh/market-predictor`
 Branch: `r3-lineage`
-Last commit: `7f018f5`
+Last completed implementation commit: `12f5283`
 
 Read in this order:
 
@@ -38,8 +38,9 @@ Never pipe `pytest` through `tail` or `head`. It masks the exit code, and a
 failing test has already been committed that way. Redirect to a file and echo
 `$?`.
 
-The shell working directory drifts back to `C:\project\trading_flow`. Run
-`cd /c/project/market-predictor` at the start of every command.
+Set every command's working directory explicitly to
+`C:\project\market-predictor`. Do not inspect or modify `trading_flow`; it is
+only the future consumer boundary for promoted prediction intelligence.
 
 The heavy-job lease is exclusive. Running the test suite while a collection
 holds it produces exit code 75 on CLI tests, which looks like failure and is not.
@@ -56,7 +57,7 @@ holds it produces exit code 75 on CLI tests, which looks like failure and is not
 Key artifacts:
 
 - `data/canonical/swing_memberships_verified_20190709_20260708_v2.parquet`
-- `data/canonical/edge_rebuild_intraday_5m_20260730/{regular,extended}/5m/`
+- `data/canonical/edge_rebuild_intraday_5m_20260731/{regular,extended}/5m/`
 - `data/raw/swing_daily_sip_sp500_pit_20190709_20260708_v3/bars/`
 - `data/research/intraday_universe_selection_20230410_20260708_v2/`
 - `data/raw/edge_rebuild_selected_session_5m_20260731` — 790/790 units,
@@ -141,7 +142,11 @@ windows spanning the overnight gap, and either label scheme alone.
 1,104 regular per-symbol files and 573 extended. 38,586,501 rows: 32,506,506
 regular, 3,190,687 pre-market, 2,889,308 post-market, over 814 sessions.
 Availability is exactly sixty seconds after each bar's end on every row in both
-eras. Two isolated truncations recorded and tolerated. All 732 tests pass.
+eras. Two isolated truncations are recorded and tolerated. The authority
+manifest hash is
+`f71d25ec1a98d38b75a3175a1508f8529426623857a09f255aeacc7bd19db0e0`.
+All 1,677 registered file hashes replayed exactly, and a full Parquet scan found
+no regular/extended segment contamination.
 
 Supersedes `edge_rebuild_intraday_5m_20260730`, which lacked the screened
 non-index names.
@@ -183,20 +188,20 @@ recur, the correct answer is a volume-confirmed exemption, not a bigger number.
    in a trend versus a range. Encode those; skip the flags. Note that the
    textbook "RSI above 70 is overbought" is actively wrong in a trend, where RSI
    stays high for weeks.
-3. **Swing feature builder.** Assemble one row per security per session:
+2. **Swing feature builder.** Assemble one row per security per session:
    momentum, trend, pullback, volume and catalyst features, each passed through
    `add_cross_sectional_features`, plus both labels.
-4. **Check the signal orders stocks correctly, before training anything.** Sort
+3. **Check the signal orders stocks correctly, before training anything.** Sort
    each session by a simple score and compare the top tenth against the bottom
    tenth over the next ten days. If that spread is near zero there is nothing to
    rank and no model will help; stop and change the signal. This replaces the
    test that misfired.
-5. **Deterministic top-25 portfolio, no model.** Build the equity curve against
+4. **Deterministic top-25 portfolio, no model.** Build the equity curve against
    SPY. This is the number any model must beat.
-6. **Train** LambdaMART or LightGBM ranking, purged splits with embargo, then
+5. **Train** LambdaMART or LightGBM ranking, purged splits with embargo, then
    the unseen-stock holdout. Published work reports roughly threefold better
    risk-adjusted return from learning-to-rank on exactly this strategy family.
-7. **Intraday setup and its economics gate**, same order: population first,
+6. **Intraday setup and its economics gate**, same order: population first,
    model only if the population earns.
 
 ## Not Started
@@ -208,15 +213,15 @@ recur, the correct answer is a volume-confirmed exemption, not a bigger number.
   this is recorded, not silently substituted.
 - Any model. Nothing has been trained in this program.
 
-## Two Audits That Died Unfinished
-
-Both were killed by a session limit, neither committed anything.
+## Deferred Diagnostic
 
 - A swing failure attribution decomposing the rejected population by
   pre-declared cohorts, concentration, and a benchmark decomposition asking
   whether the problem is stock selection or market timing. Worth restarting only
   if the redesign stalls; the redesign supersedes most of its questions.
-- The five-minute merge, which is the job now running.
+
+The five-minute merge is complete and must not be rerun unless a reproducible
+artifact or invariant failure is recorded.
 
 ## Verification Commands
 
@@ -235,6 +240,10 @@ git status --short --branch
 The local NumPy stubs use syntax newer than the project mypy 3.11 target, so the
 verified strict command uses the installed Python 3.14 environment. That is an
 environment fact, not permission to write Python-3.14-only source.
+
+Last full verification after publication: 732 tests passed with 85 existing
+warnings; Ruff passed; strict mypy passed across 190 source files; compileall
+and `git diff --check` passed; no Python worker remained.
 
 ## Standing Prohibitions
 
