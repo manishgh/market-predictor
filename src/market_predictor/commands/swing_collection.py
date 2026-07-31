@@ -8,6 +8,11 @@ import pandas as pd
 import typer
 
 from market_predictor.config import get_settings
+from market_predictor.edge_rebuild.swing_history_collection import (
+    AlpacaSwingDailyPageSource,
+    SwingDailyPageSource,
+    collect_swing_history_plan,
+)
 from market_predictor.heavy_jobs import serialized_heavy_job
 from market_predictor.sources.alpaca import AlpacaNewsPage, AlpacaSource
 from market_predictor.sources.seeking_alpha import SeekingAlphaRapidApiSource
@@ -20,6 +25,65 @@ from market_predictor.symbols import PROVIDER_ALPACA, provider_symbol
 
 
 def register_swing_collection_commands(app: typer.Typer, console: Any) -> None:
+    @app.command("collect-edge-rebuild-swing-history")
+    @serialized_heavy_job("collect-edge-rebuild-swing-history")
+    def collect_edge_rebuild_swing_history_command(
+        plan_dir: Path = typer.Option(
+            ...,
+            help="Complete swing_history_acquisition_plan.v2 authority directory.",
+        ),
+        out_dir: Path = typer.Option(
+            ...,
+            help="New or matching resumable exact-unit collection directory.",
+        ),
+        max_units: int | None = typer.Option(
+            None,
+            min=1,
+            help="Optional resumable operational batch limit.",
+        ),
+    ) -> None:
+        """Collect exact authority-bound swing daily units from Alpaca SIP."""
+
+        settings = get_settings()
+        if not settings.has_alpaca:
+            raise typer.BadParameter(
+                "ALPACA_API_KEY_ID and ALPACA_API_SECRET_KEY are required"
+            )
+        if settings.alpaca_stock_feed.strip().lower() != "sip":
+            raise typer.BadParameter("ALPACA_STOCK_FEED must be sip")
+
+        def source_factory() -> SwingDailyPageSource:
+            return AlpacaSwingDailyPageSource(AlpacaSource(settings))
+
+        result = collect_swing_history_plan(
+            plan_directory=plan_dir,
+            output_directory=out_dir,
+            source_factory=source_factory,
+            provider_symbol_for=lambda ticker: provider_symbol(
+                ticker,
+                PROVIDER_ALPACA,
+            ),
+            maximum_units_this_run=max_units,
+        )
+        console.print(
+            {
+                key: result[key]
+                for key in (
+                    "status",
+                    "requested_units",
+                    "terminal_units",
+                    "observed_units",
+                    "unavailable_units",
+                    "failed_units",
+                    "unattempted_units",
+                    "resumed_units",
+                    "stop_reason",
+                )
+            }
+        )
+        if result["status"] not in {"complete", "complete_with_unavailable"}:
+            raise typer.Exit(code=2)
+
     @app.command("collect-seeking-alpha-profiles")
     def collect_seeking_alpha_profiles_command(
         memberships: Path = typer.Option(

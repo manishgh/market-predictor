@@ -10,6 +10,7 @@ COLLECTION_COMMANDS = frozenset(
         "collect",
         "collect-alpaca-news-history",
         "collect-edge-rebuild-intraday-history",
+        "collect-edge-rebuild-swing-history",
         "collect-gdelt-context",
         "collect-intraday-specialist-one-minute",
         "collect-market-context",
