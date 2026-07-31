@@ -109,6 +109,11 @@ def publish_verified_universe(
     if kept.empty:
         raise DataReadinessError("verification excluded every membership interval")
     dropped_share = 1.0 - (kept["security_id"].nunique() / memberships["security_id"].nunique())
+    validate_security_exclusion_share(
+        source_securities=int(memberships["security_id"].nunique()),
+        excluded_securities=len(excluded_securities),
+        thresholds=thresholds,
+    )
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     # Historical membership availability is a provider-publication proxy, so the
@@ -141,11 +146,38 @@ def publish_verified_universe(
         "source_securities": int(memberships["security_id"].nunique()),
         "kept_securities": int(kept["security_id"].nunique()),
         "excluded_security_share": round(dropped_share, 6),
+        "maximum_excluded_security_share": (
+            thresholds or IntegrityThresholds()
+        ).maximum_excluded_symbol_share,
         **result.to_record(),
     }
     audit_path.parent.mkdir(parents=True, exist_ok=True)
     audit_path.write_text(json.dumps(audit, indent=2, sort_keys=True), encoding="utf-8")
     return audit
+
+
+def validate_security_exclusion_share(
+    *,
+    source_securities: int,
+    excluded_securities: int,
+    thresholds: IntegrityThresholds | None = None,
+) -> float:
+    """Allow audited whole-security exclusions only through the frozen 5% cap."""
+
+    if source_securities < 1:
+        raise ValueError("source security count must be positive")
+    if not 0 <= excluded_securities <= source_securities:
+        raise ValueError("excluded security count is outside the source universe")
+    limits = thresholds or IntegrityThresholds()
+    share = excluded_securities / source_securities
+    if share > limits.maximum_excluded_symbol_share:
+        raise DataReadinessError(
+            "membership verification excluded "
+            f"{excluded_securities} of {source_securities} securities "
+            f"({share:.2%}), above the frozen "
+            f"{limits.maximum_excluded_symbol_share:.2%} ceiling"
+        )
+    return share
 
 
 def verify_membership_identity(

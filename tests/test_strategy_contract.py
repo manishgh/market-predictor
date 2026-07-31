@@ -181,6 +181,30 @@ def test_random_cross_validation_cannot_be_configured() -> None:
         StrategyContract.model_validate(raw)
 
 
+def test_swing_and_intraday_validation_counts_are_independent() -> None:
+    raw = _raw()
+    raw["validation"]["swing_walk_forward_folds"] = 2
+    with pytest.raises(ValueError, match="seven-year swing"):
+        StrategyContract.model_validate(raw)
+
+    raw = _raw()
+    raw["validation"]["intraday_purged_folds"] = 3
+    with pytest.raises(ValueError, match="four purged folds"):
+        StrategyContract.model_validate(raw)
+
+
+def test_security_exclusion_rule_cannot_be_relaxed_or_applied_to_benchmarks() -> None:
+    raw = _raw()
+    raw["data_quality"]["maximum_security_exclusion_fraction"] = 0.06
+    with pytest.raises(ValueError):
+        StrategyContract.model_validate(raw)
+
+    raw = _raw()
+    raw["data_quality"]["benchmark_exclusions_allowed"] = True
+    with pytest.raises(ValueError, match="cannot be excluded"):
+        StrategyContract.model_validate(raw)
+
+
 def test_both_label_schemes_are_required() -> None:
     """Either alone reproduces a failure already on record."""
 

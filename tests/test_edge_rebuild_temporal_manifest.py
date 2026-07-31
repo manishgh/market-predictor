@@ -30,7 +30,10 @@ def test_schedule_freezes_full_year_windows_and_embargoes() -> None:
     config = load_temporal_manifest_config(POLICY)
     schedule = build_temporal_schedule(config)
 
-    assert len(schedule.folds) == 3
+    assert len(schedule.folds) == 1
+    assert schedule.first_session.isoformat() == "2018-05-29"
+    assert schedule.last_session.isoformat() == "2026-06-30"
+    assert len(schedule.target_sessions) == 2_033
     assert len(schedule.warmup_sessions) == 250
     assert len(schedule.final_refit_sessions) == 1_260
     assert len(schedule.final_embargo_sessions) == 10
@@ -43,6 +46,8 @@ def test_schedule_freezes_full_year_windows_and_embargoes() -> None:
         assert not set(fold.train_sessions) & set(fold.validation_sessions)
         assert fold.train_sessions[-1] < fold.embargo_sessions[0]
         assert fold.embargo_sessions[-1] < fold.validation_sessions[0]
+    assert schedule.folds[0].train_sessions[0].isoformat() == "2019-05-28"
+    assert schedule.folds[0].validation_sessions[0].isoformat() == "2024-06-12"
     assert not set(schedule.locked_test_sessions) & set(
         schedule.final_refit_sessions
     )
@@ -75,7 +80,7 @@ def test_complete_panel_publishes_hash_bound_assignments(tmp_path: Path) -> None
         "development",
         "locked_test",
     }
-    for fold in range(1, 4):
+    for fold in range(1, 2):
         assert set(assignments[f"fold_{fold}_role"]) == {
             "not_used",
             "train",
@@ -132,7 +137,7 @@ def test_contract_cannot_relax_pdf_aligned_windows() -> None:
     with pytest.raises(ValidationError):
         TemporalManifestConfig.model_validate(payload)
     payload = load_temporal_manifest_config(POLICY).model_dump()
-    payload["validation_folds"] = 4
+    payload["validation_folds"] = 2
     with pytest.raises(ValidationError):
         TemporalManifestConfig.model_validate(payload)
 

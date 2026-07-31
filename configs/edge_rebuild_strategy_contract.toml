@@ -185,7 +185,8 @@ rank_within_sector = true
 minimum_cross_section_for_ranking = 50
 
 [validation]
-purged_folds = 3
+swing_walk_forward_folds = 1
+intraday_purged_folds = 4
 minimum_test_sessions_per_fold = 60
 embargo_sessions = 10
 unseen_ticker_holdout_fraction = 0.2
@@ -252,6 +253,17 @@ technical_relationship_methods = [
 rsi_pivot_span_bars = 2
 obv_confirmation_lookback_bars = 20
 efficiency_ratio_lookback_bars = 20
+
+[data_quality]
+# Missing or unverifiable data for a few stocks must not stall the whole
+# cross-section. Exclude the complete security, preserve its reason and affected
+# dates in the audit, and continue while no more than 5% of the filtered
+# point-in-time universe is lost. Market-wide sessions and benchmarks cannot be
+# waived because their absence changes every stock's comparison state.
+maximum_security_exclusion_fraction = 0.05
+exclusion_unit = "entire_security"
+benchmark_exclusions_allowed = false
+market_session_exclusions_allowed = false
 
 [stress]
 # Costs are widened, not the signal, to test whether the edge survives worse

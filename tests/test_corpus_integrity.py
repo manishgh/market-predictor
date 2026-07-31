@@ -259,6 +259,8 @@ def test_thresholds_reject_incoherent_limits() -> None:
         IntegrityThresholds(maximum_session_close_ratio=1.0)
     with pytest.raises(ValueError, match="excluded-symbol share"):
         IntegrityThresholds(maximum_excluded_symbol_share=1.01)
+    with pytest.raises(ValueError, match="frozen at 5%"):
+        IntegrityThresholds(maximum_excluded_symbol_share=0.04)
 
 
 def test_missing_input_columns_fail_closed() -> None:

@@ -32,6 +32,7 @@ import pandas as pd
 from market_predictor.v3.errors import DataReadinessError
 
 CORPUS_INTEGRITY_SCHEMA = "edge_rebuild.corpus_integrity.v1"
+MAXIMUM_SECURITY_EXCLUSION_FRACTION = 0.05
 REGULAR_SEGMENT = "regular"
 EXTENDED_SEGMENTS = frozenset({"premarket", "postmarket"})
 
@@ -53,7 +54,7 @@ class IntegrityThresholds:
     # that the coverage is sparse by design and a level comparison is meaningless.
     maximum_adjacent_session_days: int = 5
     maximum_interior_gap_sessions: int = 5
-    maximum_excluded_symbol_share: float = 0.05
+    maximum_excluded_symbol_share: float = MAXIMUM_SECURITY_EXCLUSION_FRACTION
     reject_zero_volume: bool = True
 
     def __post_init__(self) -> None:
@@ -69,8 +70,8 @@ class IntegrityThresholds:
             raise ValueError("close-ratio ceiling must exceed 1.0")
         if self.maximum_interior_gap_sessions < 1:
             raise ValueError("interior gap ceiling must be positive")
-        if not 0.0 <= self.maximum_excluded_symbol_share <= 1.0:
-            raise ValueError("excluded-symbol share must be in [0, 1]")
+        if self.maximum_excluded_symbol_share != MAXIMUM_SECURITY_EXCLUSION_FRACTION:
+            raise ValueError("excluded-symbol share ceiling is frozen at 5%")
 
 
 @dataclass

@@ -42,7 +42,7 @@ class TemporalManifestConfig(BaseModel):
     calendar: str
     fit_sessions: int = Field(ge=1_260, le=1_260)
     validation_sessions: int = Field(ge=252, le=252)
-    validation_folds: int = Field(ge=3, le=3)
+    validation_folds: int = Field(ge=1, le=1)
     warmup_sessions: int = Field(ge=250, le=250)
     embargo_sessions: int = Field(ge=10, le=10)
     label_horizon_sessions: int = Field(ge=10, le=10)
@@ -332,7 +332,7 @@ def _validate_strategy_alignment(
     contract: StrategyContract,
 ) -> None:
     mismatches = []
-    if config.validation_folds != contract.validation.purged_folds:
+    if config.validation_folds != contract.validation.swing_walk_forward_folds:
         mismatches.append("validation fold count")
     if config.embargo_sessions != contract.validation.embargo_sessions:
         mismatches.append("embargo sessions")

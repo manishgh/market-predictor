@@ -3,7 +3,10 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
-from market_predictor.edge_rebuild.universe_identity import verify_membership_identity
+from market_predictor.edge_rebuild.universe_identity import (
+    validate_security_exclusion_share,
+    verify_membership_identity,
+)
 from market_predictor.v3.errors import DataReadinessError
 
 
@@ -160,4 +163,17 @@ def test_missing_columns_fail_closed() -> None:
         verify_membership_identity(
             pd.DataFrame({"ticker": ["AAPL"]}),
             _evidence([("2024-01-02", "AAPL", 1.0)]),
+        )
+
+
+def test_security_exclusions_continue_through_five_percent_then_refuse() -> None:
+    assert validate_security_exclusion_share(
+        source_securities=20,
+        excluded_securities=1,
+    ) == pytest.approx(0.05)
+
+    with pytest.raises(DataReadinessError, match="above the frozen 5.00% ceiling"):
+        validate_security_exclusion_share(
+            source_securities=20,
+            excluded_securities=2,
         )

@@ -251,7 +251,8 @@ class LabelContract(FrozenModel):
 
 
 class ValidationContract(FrozenModel):
-    purged_folds: int = Field(ge=3, le=10)
+    swing_walk_forward_folds: int = Field(ge=1, le=10)
+    intraday_purged_folds: int = Field(ge=3, le=10)
     minimum_test_sessions_per_fold: int = Field(ge=30)
     embargo_sessions: int = Field(ge=1)
     unseen_ticker_holdout_fraction: float = Field(gt=0, lt=0.5)
@@ -259,6 +260,10 @@ class ValidationContract(FrozenModel):
 
     @model_validator(mode="after")
     def validate_validation(self) -> Self:
+        if self.swing_walk_forward_folds != 1:
+            raise ValueError("the seven-year swing protocol has one validation year")
+        if self.intraday_purged_folds != 4:
+            raise ValueError("the intraday protocol retains four purged folds")
         if self.unseen_ticker_assignment != "deterministic_hash":
             raise ValueError("unseen-ticker assignment must be deterministic")
         return self
@@ -331,6 +336,23 @@ class StressContract(FrozenModel):
     cost_multiplier: float = Field(ge=1.5, le=5.0)
 
 
+class DataQualityContract(FrozenModel):
+    maximum_security_exclusion_fraction: float = Field(ge=0.0, le=0.05)
+    exclusion_unit: str
+    benchmark_exclusions_allowed: bool
+    market_session_exclusions_allowed: bool
+
+    @model_validator(mode="after")
+    def validate_data_quality(self) -> Self:
+        if self.maximum_security_exclusion_fraction != 0.05:
+            raise ValueError("security exclusion ceiling is frozen at 5%")
+        if self.exclusion_unit != "entire_security":
+            raise ValueError("missing stock data must exclude the entire security")
+        if self.benchmark_exclusions_allowed or self.market_session_exclusions_allowed:
+            raise ValueError("benchmark and market-wide session gaps cannot be excluded")
+        return self
+
+
 class RetirementContract(FrozenModel):
     rule: str
 
@@ -353,6 +375,7 @@ class StrategyContract(FrozenModel):
     validation: ValidationContract
     experiment_budget: ExperimentBudget
     features: FeatureContract
+    data_quality: DataQualityContract
     stress: StressContract
     retirement: RetirementContract
 
