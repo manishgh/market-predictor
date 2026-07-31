@@ -31,6 +31,19 @@ class V3ValidationTests(unittest.TestCase):
             train = frame.iloc[fold.train_indices]
             test = frame.iloc[fold.test_indices]
             self.assertFalse(set(train["decision_group_id"]) & set(test["decision_group_id"]))
+            train_sessions = set(train["session_date_et"])
+            test_sessions = set(test["session_date_et"])
+            self.assertFalse(train_sessions & test_sessions)
+            combined = pd.concat([train, test])
+            for session in train_sessions | test_sessions:
+                assigned = combined.loc[combined["session_date_et"].eq(session)]
+                expected = frame.loc[frame["session_date_et"].eq(session)]
+                self.assertEqual(len(assigned), len(expected))
+                self.assertEqual(
+                    set(assigned.index),
+                    set(expected.index),
+                    "a decision session was split across fold roles",
+                )
             train_end = pd.Timestamp(fold.train_end)
             test_start = pd.Timestamp(fold.test_start)
             self.assertGreaterEqual((test_start - train_end).days, 2)

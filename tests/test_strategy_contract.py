@@ -30,6 +30,16 @@ def test_frozen_contract_loads_and_is_hashable() -> None:
     assert contract.sha256() == load_strategy_contract(CONTRACT_PATH).sha256()
 
 
+def test_retirement_applies_to_learned_oos_failure_not_baseline_failure() -> None:
+    contract = load_strategy_contract(CONTRACT_PATH)
+    rule = contract.retirement.rule.lower()
+
+    assert "learned strategy" in rule
+    assert "out-of-sample economic acceptance" in rule
+    assert "deterministic baseline failure alone does not block fitting" in rule
+    assert "er3 admission" not in rule
+
+
 def test_swing_exit_must_resolve_a_barrier() -> None:
     """Timeout-only holds through drawdowns a real stop would have closed."""
 

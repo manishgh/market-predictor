@@ -530,11 +530,11 @@ def test_scope_assignment_is_deterministic(
     pd.testing.assert_frame_equal(repeated, population, check_exact=True)
 
 
-def test_the_gate_accepts_the_emitted_population(
+def test_evaluator_accepts_the_emitted_population_schema(
     contract: StrategyContract,
     population: pd.DataFrame,
 ) -> None:
-    """The frame is a valid admission input. Whether it passes is a separate question."""
+    """The frame is valid evidence; this small fixture may fail sample readiness."""
 
     report = evaluate_setup_economics(
         population,
@@ -544,6 +544,8 @@ def test_the_gate_accepts_the_emitted_population(
     assert report.strategy_id == contract.swing.strategy_id
     assert {scope.scope for scope in report.scopes} == {WALK_FORWARD_SCOPE, UNSEEN_TICKER_SCOPE}
     assert all(gate.gate for scope in report.scopes for gate in scope.gates)
+    assert report.ready_for_modeling is False
+    assert report.readiness_failure_reasons
 
 
 def test_an_empty_candidate_frame_fails_closed(

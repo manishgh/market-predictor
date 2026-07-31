@@ -1,4 +1,4 @@
-"""Poison tests for the ER3 deterministic setup-economics admission harness.
+"""Poison tests for ER3 population readiness and baseline economics.
 
 Every synthetic population below reproduces a real failure mode. The frames are
 built in the test; no corpus is read.
@@ -15,7 +15,7 @@ import pytest
 from pydantic import ValidationError
 
 from market_predictor.edge_rebuild.setup_economics import (
-    ADMISSION_SCOPES,
+    EVALUATION_SCOPES,
     UNSEEN_TICKER_SCOPE,
     WALK_FORWARD_SCOPE,
     SetupEconomicsConfig,
@@ -122,8 +122,8 @@ def _population(
     )
 
 
-def _admitting_spec() -> ReturnSpec:
-    """A population that genuinely clears every frozen gate."""
+def _economically_passing_spec() -> ReturnSpec:
+    """A population that genuinely clears every frozen baseline gate."""
 
     return ReturnSpec(net_mean=0.0030, cost=0.0005, row_dispersion=0.0040)
 
@@ -138,9 +138,10 @@ def _report(setups: pd.DataFrame) -> SetupEconomicsReport:
 def test_costs_that_consume_a_positive_gross_edge_are_rejected() -> None:
     report = _report(_population(walk_forward=ReturnSpec(net_mean=-0.0004, cost=0.0020)))
 
-    assert report.admitted is False
-    assert "average_net_return" in report.failed_gates
-    for scope in ADMISSION_SCOPES:
+    assert report.ready_for_modeling is True
+    assert report.baseline_economics_passed is False
+    assert "average_net_return" in report.failed_baseline_gates
+    for scope in EVALUATION_SCOPES:
         assert report.gate(scope, "average_gross_return").passed is True
         assert report.gate(scope, "average_gross_return").measured > 0
         net_gate = report.gate(scope, "average_net_return")
@@ -155,18 +156,27 @@ def test_costs_that_consume_a_positive_gross_edge_are_rejected() -> None:
 def test_negative_gross_before_costs_names_the_gross_gate() -> None:
     report = _report(_population(walk_forward=ReturnSpec(net_mean=-0.0015, cost=0.0010)))
 
-    assert report.admitted is False
-    assert "average_gross_return" in report.failed_gates
-    for scope in ADMISSION_SCOPES:
+    assert report.ready_for_modeling is True
+    assert report.baseline_economics_passed is False
+    assert "average_gross_return" in report.failed_baseline_gates
+    for scope in EVALUATION_SCOPES:
         gross_gate = report.gate(scope, "average_gross_return")
         assert gross_gate.passed is False
         assert gross_gate.measured < 0
         assert any(
             reason.startswith(f"{scope}: average_gross_return")
-            for reason in report.failure_reasons
+            for reason in report.baseline_economic_shortfalls
         )
-    # No estimator can rescue this, and the diagnosis must survive serialization.
-    assert "average_gross_return" in report.as_dict()["failed_gates"]
+    # The baseline failure is serialized but cannot make valid rows model-unready.
+    payload = report.as_dict()
+    assert payload["ready_for_modeling"] is True
+    assert "admitted" not in payload
+    assert "average_gross_return" in payload["failed_baseline_gates"]
+    assert {
+        gate["category"]
+        for scope in payload["scopes"]
+        for gate in scope["gates"]
+    } == {"readiness", "baseline_economics"}
 
 
 # --------------------------------------------------------------------------- #
@@ -175,14 +185,15 @@ def test_negative_gross_before_costs_names_the_gross_gate() -> None:
 def test_unseen_ticker_failure_rejects_a_passing_walk_forward() -> None:
     report = _report(
         _population(
-            walk_forward=_admitting_spec(),
+            walk_forward=_economically_passing_spec(),
             unseen_ticker=ReturnSpec(net_mean=-0.0002, cost=0.0005),
         )
     )
 
-    assert report.scope(WALK_FORWARD_SCOPE).admitted is True
-    assert report.scope(UNSEEN_TICKER_SCOPE).admitted is False
-    assert report.admitted is False
+    assert report.ready_for_modeling is True
+    assert report.scope(WALK_FORWARD_SCOPE).baseline_economics_passed is True
+    assert report.scope(UNSEEN_TICKER_SCOPE).baseline_economics_passed is False
+    assert report.baseline_economics_passed is False
     assert report.gate(UNSEEN_TICKER_SCOPE, "average_net_return").passed is False
 
 
@@ -217,24 +228,26 @@ def test_single_ticker_dependence_is_rejected_by_leave_one_out() -> None:
 
     report = _report(setups)
 
-    assert report.admitted is False
+    assert report.ready_for_modeling is True
+    assert report.baseline_economics_passed is False
     for scope, dominant in (
         (WALK_FORWARD_SCOPE, "AAA"),
         (UNSEEN_TICKER_SCOPE, "III"),
     ):
         scope_report = report.scope(scope)
         # The pooled population itself looks perfectly healthy.
-        assert scope_report.baseline.admitted is True
+        assert scope_report.baseline.baseline_economics_passed is True
         assert report.gate(scope, "concentration:ticker").passed is False
         collapsed = [
             result
             for result in scope_report.leave_one_out
-            if result.dimension == "ticker" and not result.report.admitted
+            if result.dimension == "ticker"
+            and not result.report.baseline_economics_passed
         ]
         assert [result.excluded_value for result in collapsed] == [dominant]
         assert collapsed[0].largest_contributor is True
         assert collapsed[0].contribution_share > 0.9
-        assert "average_net_return" in collapsed[0].report.failed_gates
+        assert "average_net_return" in collapsed[0].report.failed_baseline_gates
     # Every leave-one-out result is reported, not only the failing one.
     tested = {
         (result.dimension, result.excluded_value)
@@ -260,8 +273,9 @@ def test_positive_mean_with_negative_session_block_lower_bound_is_rejected() -> 
         )
     )
 
-    assert report.admitted is False
-    for scope in ADMISSION_SCOPES:
+    assert report.ready_for_modeling is True
+    assert report.baseline_economics_passed is False
+    for scope in EVALUATION_SCOPES:
         assert report.gate(scope, "average_net_return").passed is True
         assert report.gate(scope, "average_net_return").measured > 0
         bound_gate = report.gate(scope, "net_return_block_ci_low")
@@ -313,17 +327,23 @@ def test_session_block_bound_is_wider_than_the_same_mean_without_session_shock()
 # --------------------------------------------------------------------------- #
 # 6. A population that genuinely clears every gate.
 # --------------------------------------------------------------------------- #
-def test_population_with_real_economics_is_admitted() -> None:
-    report = _report(_population(walk_forward=_admitting_spec()))
+def test_population_with_real_economics_passes_the_baseline() -> None:
+    report = _report(_population(walk_forward=_economically_passing_spec()))
 
-    assert report.admitted is True, report.failure_reasons
-    assert report.failure_reasons == ()
-    for scope in ADMISSION_SCOPES:
+    assert report.ready_for_modeling is True, report.readiness_failure_reasons
+    assert report.baseline_economics_passed is True
+    assert report.readiness_failure_reasons == ()
+    assert report.baseline_economic_shortfalls == ()
+    for scope in EVALUATION_SCOPES:
         scope_report = report.scope(scope)
-        assert scope_report.admitted is True
+        assert scope_report.ready_for_modeling is True
+        assert scope_report.baseline_economics_passed is True
         assert scope_report.baseline.phases_present == tuple(range(PHASES))
         assert all(gate.passed for gate in scope_report.gates)
-        assert all(result.report.admitted for result in scope_report.leave_one_out)
+        assert all(
+            result.report.baseline_economics_passed
+            for result in scope_report.leave_one_out
+        )
         # Every frozen gate is present, not merely non-failing.
         names = {gate.gate for gate in scope_report.gates}
         assert {
@@ -355,7 +375,7 @@ def test_population_with_real_economics_is_admitted() -> None:
 # 7. A malformed population fails closed with a clear error, never a crash.
 # --------------------------------------------------------------------------- #
 def test_missing_required_column_fails_closed() -> None:
-    setups = _population(walk_forward=_admitting_spec()).drop(
+    setups = _population(walk_forward=_economically_passing_spec()).drop(
         columns=["sector_excess_return", "market_regime"]
     )
 
@@ -372,28 +392,29 @@ def test_missing_required_column_fails_closed() -> None:
 # Fail-closed contract details.
 # --------------------------------------------------------------------------- #
 def test_absent_scope_fails_instead_of_being_skipped() -> None:
-    setups = _population(walk_forward=_admitting_spec())
+    setups = _population(walk_forward=_economically_passing_spec())
     setups = setups.loc[setups["scope"].eq(WALK_FORWARD_SCOPE)]
 
     report = _report(setups)
 
-    assert report.admitted is False
+    assert report.ready_for_modeling is False
+    assert report.baseline_economics_passed is False
     unseen = report.scope(UNSEEN_TICKER_SCOPE)
-    assert unseen.admitted is False
+    assert unseen.ready_for_modeling is False
     assert unseen.baseline.rows == 0
     assert all(not gate.passed for gate in unseen.baseline.gates)
     assert math.isnan(report.gate(UNSEEN_TICKER_SCOPE, "average_gross_return").measured)
 
 
 def test_missing_phase_fails_the_coverage_gate() -> None:
-    setups = _population(walk_forward=_admitting_spec())
+    setups = _population(walk_forward=_economically_passing_spec())
     setups = setups.loc[
         ~(setups["scope"].eq(WALK_FORWARD_SCOPE) & setups["phase"].eq(1))
     ]
 
     report = _report(setups)
 
-    assert report.admitted is False
+    assert report.ready_for_modeling is False
     coverage = report.gate(WALK_FORWARD_SCOPE, "phase_coverage")
     assert coverage.passed is False
     assert coverage.measured == 1.0
@@ -401,7 +422,7 @@ def test_missing_phase_fails_the_coverage_gate() -> None:
 
 
 def test_double_counted_cost_violates_the_single_cost_identity() -> None:
-    setups = _population(walk_forward=_admitting_spec())
+    setups = _population(walk_forward=_economically_passing_spec())
     setups.loc[:, "net_return"] = setups["net_return"] - setups["cost"]
 
     with pytest.raises(DataReadinessError, match="single-cost identity"):
@@ -409,7 +430,7 @@ def test_double_counted_cost_violates_the_single_cost_identity() -> None:
 
 
 def test_repeated_decision_rows_are_rejected() -> None:
-    setups = _population(walk_forward=_admitting_spec())
+    setups = _population(walk_forward=_economically_passing_spec())
     setups = pd.concat([setups, setups.iloc[:1]], ignore_index=True)
 
     with pytest.raises(DataReadinessError, match="repeats a"):
@@ -417,13 +438,14 @@ def test_repeated_decision_rows_are_rejected() -> None:
 
 
 def test_single_valued_concentration_dimension_cannot_pass() -> None:
-    setups = _population(walk_forward=_admitting_spec())
+    setups = _population(walk_forward=_economically_passing_spec())
     setups.loc[:, "market_regime"] = "risk_on"
 
     report = _report(setups)
 
-    assert report.admitted is False
-    for scope in ADMISSION_SCOPES:
+    assert report.ready_for_modeling is False
+    assert report.baseline_economics_passed is False
+    for scope in EVALUATION_SCOPES:
         assert report.gate(scope, "concentration:market_regime:distinct_values").passed is False
         assert report.gate(scope, "concentration:market_regime").passed is False
 

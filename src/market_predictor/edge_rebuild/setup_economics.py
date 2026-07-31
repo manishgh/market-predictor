@@ -1,11 +1,11 @@
-"""ER3 deterministic setup-economics admission harness.
+"""ER3 population-readiness and deterministic-economics baseline harness.
 
-A deterministic setup population must prove its economics *before* any estimator is
-fitted. V1 and V2 both trained on populations that had no gross edge at all: the
-intraday V2 setup averaged a negative gross return before costs, which no ranking
-model can rescue. This module inverts that order and applies the frozen ER3
-admission gates from ``docs/active_edge_rebuild_plan.md`` section 8 to a plain
-population of setup rows.
+The harness answers two separate questions. ``ready_for_modeling`` proves that a
+candidate population is causal, complete, and statistically evaluable.
+``baseline_economics_passed`` records whether the unlearned comparator clears the
+frozen economic floor. A negative comparator is useful evidence but cannot veto a
+distinct preregistered classifier or ranker; learned-policy economics are evaluated
+out of sample after fitting.
 
 Contract of the input frame (one row per ``security_id`` / decision timestamp):
 
@@ -34,8 +34,8 @@ Statistical semantics, aligned with ``AGENTS.md`` 4.4:
 - Row counts are not sample size. Overlapping labels are evaluated inside
   non-overlapping phases, and within a phase the confidence bound comes from a
   session-block bootstrap (:func:`session_block_mean_interval`) over whole sessions.
-- Every economic gate is aggregated conservatively across phases: the worst phase
-  decides. A population that only works in one phase is not admitted.
+- Every economic baseline gate is aggregated conservatively across phases: the
+  worst phase decides.
 
 Fail-closed behavior:
 
@@ -44,7 +44,7 @@ Fail-closed behavior:
 - Anything computable but unevaluable (empty scope, missing phase, single-valued
   concentration dimension, non-finite statistic) is reported as a failing gate.
 - Every gate is always evaluated and reported. Nothing short-circuits, because a
-  reproducible rejection has to be as informative as an admission.
+  reproducible negative baseline has to remain informative.
 """
 
 from __future__ import annotations
@@ -73,11 +73,11 @@ from market_predictor.regime_evidence import (
 )
 from market_predictor.v3.errors import DataReadinessError
 
-SETUP_ECONOMICS_SCHEMA = "edge_rebuild.setup_economics.v1"
+SETUP_ECONOMICS_SCHEMA = "edge_rebuild.setup_economics.v2"
 
 WALK_FORWARD_SCOPE = "walk_forward"
 UNSEEN_TICKER_SCOPE = "unseen_ticker"
-ADMISSION_SCOPES = (WALK_FORWARD_SCOPE, UNSEEN_TICKER_SCOPE)
+EVALUATION_SCOPES = (WALK_FORWARD_SCOPE, UNSEEN_TICKER_SCOPE)
 
 MANDATORY_CONCENTRATION_DIMENSIONS = ("ticker", "sector", "market_regime")
 DEFAULT_CONCENTRATION_DIMENSIONS = (
@@ -110,10 +110,11 @@ _SESSION_DATE_COLUMN = "__setup_session_date"
 _UNKNOWN_CATEGORY = "unknown"
 
 _Direction = Literal["minimum", "minimum_inclusive", "maximum_inclusive"]
+_GateCategory = Literal["readiness", "baseline_economics"]
 
 
 class SetupEconomicsConfig(BaseModel):
-    """Frozen ER3 admission thresholds.
+    """Frozen ER3 readiness and deterministic-baseline thresholds.
 
     Every bound is declared so that the model cannot be weakened: the pydantic
     constraints pin each threshold at or above the plan's frozen value.
@@ -195,9 +196,10 @@ DEFAULT_SETUP_ECONOMICS_CONFIG = SetupEconomicsConfig()
 
 @dataclass(frozen=True)
 class GateResult:
-    """One frozen admission gate: status, measured value, threshold, and margin."""
+    """One frozen readiness or baseline gate and its measured margin."""
 
     gate: str
+    category: _GateCategory
     passed: bool
     measured: float
     threshold: float
@@ -208,6 +210,7 @@ class GateResult:
     def as_dict(self) -> dict[str, Any]:
         return {
             "gate": self.gate,
+            "category": self.category,
             "passed": self.passed,
             "measured": self.measured,
             "threshold": self.threshold,
@@ -251,7 +254,7 @@ class PhaseEconomics:
 
 @dataclass(frozen=True)
 class PopulationReport:
-    """Gate results for one evaluated population (baseline or leave-one-out subset)."""
+    """Readiness and baseline evidence for one population or subset."""
 
     label: str
     rows: int
@@ -259,15 +262,40 @@ class PopulationReport:
     phases_present: tuple[int, ...]
     phase_economics: tuple[PhaseEconomics, ...]
     gates: tuple[GateResult, ...]
-    admitted: bool
+    ready_for_modeling: bool
+    baseline_economics_passed: bool
 
     @property
-    def failure_reasons(self) -> tuple[str, ...]:
-        return tuple(_gate_reason(gate) for gate in self.gates if not gate.passed)
+    def readiness_failure_reasons(self) -> tuple[str, ...]:
+        return tuple(
+            _gate_reason(gate)
+            for gate in self.gates
+            if gate.category == "readiness" and not gate.passed
+        )
 
     @property
-    def failed_gates(self) -> tuple[str, ...]:
-        return tuple(gate.gate for gate in self.gates if not gate.passed)
+    def baseline_economic_shortfalls(self) -> tuple[str, ...]:
+        return tuple(
+            _gate_reason(gate)
+            for gate in self.gates
+            if gate.category == "baseline_economics" and not gate.passed
+        )
+
+    @property
+    def failed_readiness_gates(self) -> tuple[str, ...]:
+        return tuple(
+            gate.gate
+            for gate in self.gates
+            if gate.category == "readiness" and not gate.passed
+        )
+
+    @property
+    def failed_baseline_gates(self) -> tuple[str, ...]:
+        return tuple(
+            gate.gate
+            for gate in self.gates
+            if gate.category == "baseline_economics" and not gate.passed
+        )
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -277,9 +305,12 @@ class PopulationReport:
             "phases_present": list(self.phases_present),
             "phase_economics": [phase.as_dict() for phase in self.phase_economics],
             "gates": [gate.as_dict() for gate in self.gates],
-            "admitted": self.admitted,
-            "failed_gates": list(self.failed_gates),
-            "failure_reasons": list(self.failure_reasons),
+            "ready_for_modeling": self.ready_for_modeling,
+            "baseline_economics_passed": self.baseline_economics_passed,
+            "failed_readiness_gates": list(self.failed_readiness_gates),
+            "failed_baseline_gates": list(self.failed_baseline_gates),
+            "readiness_failure_reasons": list(self.readiness_failure_reasons),
+            "baseline_economic_shortfalls": list(self.baseline_economic_shortfalls),
         }
 
 
@@ -305,20 +336,29 @@ class LeaveOneOutResult:
 
 @dataclass(frozen=True)
 class ScopeReport:
-    """Complete admission evidence for one validation scope."""
+    """Complete readiness and baseline evidence for one validation scope."""
 
     scope: str
     baseline: PopulationReport
     leave_one_out: tuple[LeaveOneOutResult, ...]
     gates: tuple[GateResult, ...]
-    admitted: bool
+    ready_for_modeling: bool
+    baseline_economics_passed: bool
 
     @property
-    def failure_reasons(self) -> tuple[str, ...]:
+    def readiness_failure_reasons(self) -> tuple[str, ...]:
         return tuple(
             f"{self.scope}: {_gate_reason(gate)}"
             for gate in self.gates
-            if not gate.passed
+            if gate.category == "readiness" and not gate.passed
+        )
+
+    @property
+    def baseline_economic_shortfalls(self) -> tuple[str, ...]:
+        return tuple(
+            f"{self.scope}: {_gate_reason(gate)}"
+            for gate in self.gates
+            if gate.category == "baseline_economics" and not gate.passed
         )
 
     def as_dict(self) -> dict[str, Any]:
@@ -327,19 +367,22 @@ class ScopeReport:
             "baseline": self.baseline.as_dict(),
             "leave_one_out": [result.as_dict() for result in self.leave_one_out],
             "gates": [gate.as_dict() for gate in self.gates],
-            "admitted": self.admitted,
-            "failure_reasons": list(self.failure_reasons),
+            "ready_for_modeling": self.ready_for_modeling,
+            "baseline_economics_passed": self.baseline_economics_passed,
+            "readiness_failure_reasons": list(self.readiness_failure_reasons),
+            "baseline_economic_shortfalls": list(self.baseline_economic_shortfalls),
         }
 
 
 @dataclass(frozen=True)
 class SetupEconomicsReport:
-    """The ER3 admission decision plus every measured gate behind it."""
+    """The ER3 readiness decision plus deterministic baseline evidence."""
 
     strategy_id: str
     schema_version: str
     config_sha256: str
-    admitted: bool
+    ready_for_modeling: bool
+    baseline_economics_passed: bool
     scopes: tuple[ScopeReport, ...]
 
     def scope(self, name: str) -> ScopeReport:
@@ -355,19 +398,40 @@ class SetupEconomicsReport:
         raise KeyError(f"setup-economics scope {scope} has no gate: {gate}")
 
     @property
-    def failure_reasons(self) -> tuple[str, ...]:
+    def readiness_failure_reasons(self) -> tuple[str, ...]:
         return tuple(
-            reason for report in self.scopes for reason in report.failure_reasons
+            reason
+            for report in self.scopes
+            for reason in report.readiness_failure_reasons
         )
 
     @property
-    def failed_gates(self) -> tuple[str, ...]:
+    def baseline_economic_shortfalls(self) -> tuple[str, ...]:
+        return tuple(
+            reason
+            for report in self.scopes
+            for reason in report.baseline_economic_shortfalls
+        )
+
+    @property
+    def failed_readiness_gates(self) -> tuple[str, ...]:
         return tuple(
             dict.fromkeys(
                 gate.gate
                 for report in self.scopes
                 for gate in report.gates
-                if not gate.passed
+                if gate.category == "readiness" and not gate.passed
+            )
+        )
+
+    @property
+    def failed_baseline_gates(self) -> tuple[str, ...]:
+        return tuple(
+            dict.fromkeys(
+                gate.gate
+                for report in self.scopes
+                for gate in report.gates
+                if gate.category == "baseline_economics" and not gate.passed
             )
         )
 
@@ -376,10 +440,13 @@ class SetupEconomicsReport:
             "strategy_id": self.strategy_id,
             "schema_version": self.schema_version,
             "config_sha256": self.config_sha256,
-            "admitted": self.admitted,
+            "ready_for_modeling": self.ready_for_modeling,
+            "baseline_economics_passed": self.baseline_economics_passed,
             "scopes": [report.as_dict() for report in self.scopes],
-            "failed_gates": list(self.failed_gates),
-            "failure_reasons": list(self.failure_reasons),
+            "failed_readiness_gates": list(self.failed_readiness_gates),
+            "failed_baseline_gates": list(self.failed_baseline_gates),
+            "readiness_failure_reasons": list(self.readiness_failure_reasons),
+            "baseline_economic_shortfalls": list(self.baseline_economic_shortfalls),
         }
 
 
@@ -389,11 +456,10 @@ def evaluate_setup_economics(
     strategy_id: str,
     config: SetupEconomicsConfig | None = None,
 ) -> SetupEconomicsReport:
-    """Apply the frozen ER3 admission gates to a deterministic setup population.
+    """Evaluate ER3 readiness and deterministic economics without gating ML on edge.
 
-    Both ``walk_forward`` and ``unseen_ticker`` scopes must satisfy every gate. A
-    scope that is absent from ``setups`` is evaluated as an empty population and
-    fails, so a missing scope can never be mistaken for an admission.
+    Both ``walk_forward`` and ``unseen_ticker`` scopes must satisfy readiness. A
+    missing scope is evaluated as empty and cannot be mistaken for model-ready.
     """
 
     resolved = config or DEFAULT_SETUP_ECONOMICS_CONFIG
@@ -406,13 +472,16 @@ def evaluate_setup_economics(
             scope=scope,
             config=resolved,
         )
-        for scope in ADMISSION_SCOPES
+        for scope in EVALUATION_SCOPES
     )
     return SetupEconomicsReport(
         strategy_id=strategy_id.strip(),
         schema_version=resolved.schema_version,
         config_sha256=resolved.sha256(),
-        admitted=all(report.admitted for report in scopes),
+        ready_for_modeling=all(report.ready_for_modeling for report in scopes),
+        baseline_economics_passed=all(
+            report.baseline_economics_passed for report in scopes
+        ),
         scopes=scopes,
     )
 
@@ -474,7 +543,7 @@ def _apply_identity_columns(
         frame[column] = identity
 
     scope = _normalized_category(frame["scope"])
-    if unknown := sorted(set(scope).difference(ADMISSION_SCOPES)):
+    if unknown := sorted(set(scope).difference(EVALUATION_SCOPES)):
         raise DataReadinessError(
             "setup population has unknown validation scopes: " + ", ".join(unknown)
         )
@@ -541,7 +610,11 @@ def _evaluate_scope(
         baseline=baseline,
         leave_one_out=tuple(leave_one_out),
         gates=gates,
-        admitted=all(gate.passed for gate in gates),
+        ready_for_modeling=_all_category_gates_pass(gates, "readiness"),
+        baseline_economics_passed=(
+            _all_category_gates_pass(gates, "readiness")
+            and _all_category_gates_pass(gates, "baseline_economics")
+        ),
     )
 
 
@@ -566,6 +639,7 @@ def _concentration_evidence(
     distinct = int(len(contributions))
     cardinality_gate = _gate_result(
         gate=f"concentration:{dimension}:distinct_values",
+        category="readiness",
         measured=float(distinct),
         threshold=2.0,
         direction="minimum_inclusive",
@@ -577,6 +651,7 @@ def _concentration_evidence(
     if distinct < 2:
         unevaluable = _gate_result(
             gate=f"concentration:{dimension}",
+            category="baseline_economics",
             measured=float("nan"),
             threshold=0.0,
             direction="maximum_inclusive",
@@ -611,7 +686,11 @@ def _concentration_evidence(
                 ),
             )
         )
-    failing = tuple(result for result in results if not result.report.admitted)
+    failing = tuple(
+        result
+        for result in results
+        if not result.report.baseline_economics_passed
+    )
     detail = (
         f"{dimension} leave-one-out: {len(results)} of {distinct} value(s) removed; "
         f"largest contributor {largest}"
@@ -625,6 +704,7 @@ def _concentration_evidence(
         cardinality_gate,
         _gate_result(
             gate=f"concentration:{dimension}",
+            category="baseline_economics",
             measured=float(len(failing)),
             threshold=0.0,
             direction="maximum_inclusive",
@@ -634,7 +714,10 @@ def _concentration_evidence(
 
 
 def _first_failure(report: PopulationReport) -> str:
-    reasons = report.failure_reasons
+    reasons = (
+        *report.readiness_failure_reasons,
+        *report.baseline_economic_shortfalls,
+    )
     return reasons[0] if reasons else "no failing gate"
 
 
@@ -668,7 +751,11 @@ def _evaluate_population(
         phases_present=present,
         phase_economics=phase_economics,
         gates=gates,
-        admitted=all(gate.passed for gate in gates),
+        ready_for_modeling=_all_category_gates_pass(gates, "readiness"),
+        baseline_economics_passed=(
+            _all_category_gates_pass(gates, "readiness")
+            and _all_category_gates_pass(gates, "baseline_economics")
+        ),
     )
 
 
@@ -777,6 +864,7 @@ def _population_gates(
     return (
         _gate_result(
             gate="phase_coverage",
+            category="readiness",
             measured=float(phases_present),
             threshold=float(config.required_phases),
             direction="minimum_inclusive",
@@ -787,6 +875,7 @@ def _population_gates(
         ),
         _gate_result(
             gate="rows_per_phase",
+            category="readiness",
             measured=worst("rows"),
             threshold=float(config.minimum_rows_per_phase),
             direction="minimum_inclusive",
@@ -794,6 +883,7 @@ def _population_gates(
         ),
         _gate_result(
             gate="session_blocks_per_phase",
+            category="readiness",
             measured=worst("session_blocks"),
             threshold=float(config.minimum_sessions_per_phase),
             direction="minimum_inclusive",
@@ -893,6 +983,7 @@ def _worst(values: Sequence[float], *, maximum: bool) -> float:
 def _gate_result(
     *,
     gate: str,
+    category: _GateCategory = "baseline_economics",
     measured: float,
     threshold: float,
     direction: _Direction,
@@ -904,6 +995,7 @@ def _gate_result(
     if not evaluable:
         return GateResult(
             gate=gate,
+            category=category,
             passed=False,
             measured=value,
             threshold=threshold,
@@ -914,6 +1006,7 @@ def _gate_result(
     if direction == "minimum":
         return GateResult(
             gate=gate,
+            category=category,
             passed=value > threshold,
             measured=value,
             threshold=threshold,
@@ -924,6 +1017,7 @@ def _gate_result(
     if direction == "minimum_inclusive":
         return GateResult(
             gate=gate,
+            category=category,
             passed=value >= threshold,
             measured=value,
             threshold=threshold,
@@ -933,6 +1027,7 @@ def _gate_result(
         )
     return GateResult(
         gate=gate,
+        category=category,
         passed=value <= threshold,
         measured=value,
         threshold=threshold,
@@ -940,6 +1035,14 @@ def _gate_result(
         direction=direction,
         detail=detail,
     )
+
+
+def _all_category_gates_pass(
+    gates: Sequence[GateResult],
+    category: _GateCategory,
+) -> bool:
+    selected = tuple(gate for gate in gates if gate.category == category)
+    return bool(selected) and all(gate.passed for gate in selected)
 
 
 def _gate_reason(gate: GateResult) -> str:

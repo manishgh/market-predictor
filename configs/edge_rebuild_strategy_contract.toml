@@ -138,8 +138,9 @@ labeling = "triple_barrier_and_cross_sectional_rank"
 cross_validation = "purged_k_fold_with_embargo"
 sampling = "event_based"
 # Meta-labeling separates trade direction from trade sizing. It is a documented
-# improvement but is deferred until one strategy passes admission on its own,
-# because it adds a second model to validate.
+# improvement but is deferred until one learned strategy passes frozen
+# out-of-sample economic acceptance on its own, because it adds a second model
+# to validate.
 meta_labeling_enabled = false
 
 [labels]
@@ -259,4 +260,4 @@ cost_multiplier = 2.0
 
 [retirement]
 # One rule, declared before any result is seen.
-rule = "a strategy version failing any ER3 admission gate is retired; its thresholds and cohorts are not re-searched on the same data"
+rule = "a learned strategy version failing frozen out-of-sample economic acceptance is retired; deterministic baseline failure alone does not block fitting, and thresholds or cohorts are never re-searched on the locked test"

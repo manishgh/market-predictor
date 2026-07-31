@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import unittest
 from pathlib import Path
 
@@ -11,6 +12,35 @@ from market_predictor.research_cli import app as research_app
 
 
 class ArchitectureBoundaryTests(unittest.TestCase):
+    def test_quantitative_methodology_reference_is_hash_bound(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        reference = (
+            root
+            / "docs"
+            / "references"
+            / "comprehensive_quantitative_trading_model_implementation_plan_"
+            "intraday_and_swing.pdf"
+        )
+        protocol = (
+            root / "docs" / "model_training_validation_protocol.md"
+        ).read_text(encoding="utf-8")
+        normalized_protocol = " ".join(protocol.split())
+
+        digest = hashlib.sha256(reference.read_bytes()).hexdigest()
+        self.assertEqual(
+            digest,
+            "ea8df4ad6f3c1d17666cadff2672887b01ee46211ef11a040715f9890cb2b75b",
+        )
+        self.assertIn(digest, protocol)
+        self.assertIn(
+            "Every row from one decision session belongs to one split",
+            normalized_protocol,
+        )
+        self.assertIn(
+            "It cannot veto all estimators",
+            normalized_protocol,
+        )
+
     def test_predictor_has_no_runtime_alert_module_or_cli_commands(self) -> None:
         package_root = Path(__file__).resolve().parents[1] / "src" / "market_predictor"
         self.assertFalse((package_root / "alerts.py").exists())

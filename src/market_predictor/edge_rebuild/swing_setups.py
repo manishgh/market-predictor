@@ -99,7 +99,7 @@ The rule, evaluated after the completed daily bar of session ``t`` at the frozen
     rather than a thinned residue of a single global replay.
 
 ``session_segment``
-    A daily post-close decision has exactly one segment, so the swing admission
+    A daily post-close decision has exactly one segment, so the swing baseline
     config declares only the three mandatory concentration dimensions. The column
     is still emitted, and its single value is honest evidence rather than a
     fabricated split.
@@ -143,7 +143,7 @@ SWING_SESSION_SEGMENT = "post_close"
 SWING_HOLDOUT_SEED = 42
 
 #: A daily decision has one session segment, so only the mandatory dimensions are
-#: declared. Every economic threshold stays at its frozen default.
+#: declared. Every baseline threshold stays at its frozen default.
 SWING_SETUP_ECONOMICS_CONFIG = SetupEconomicsConfig(
     concentration_dimensions=MANDATORY_CONCENTRATION_DIMENSIONS,
 )
@@ -297,7 +297,7 @@ def _candidate_frame(
     contract: StrategyContract,
     horizon: int,
 ) -> pd.DataFrame:
-    """Project the admitted rows onto the economics contract and verify the cost identity."""
+    """Project candidate rows onto the economics contract and verify cost identity."""
 
     cost = contract.swing.round_trip_cost_bps / 10_000.0
     frame = pd.DataFrame(
