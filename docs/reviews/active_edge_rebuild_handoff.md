@@ -1,16 +1,51 @@
 # Active Edge Rebuild Handoff
 
-Status: official S&P raw-source acquisition and offline event extraction are
-complete and verified. Swing transition authority and anchor-bound membership
-reconstruction remain pending. The intraday five-minute corpus and selected
-stock-session one-minute transport are complete and verified. Intraday
-benchmark minute paths, volume-bar features, exact labels, and readiness remain;
-no active-program model exists. Nothing is running.
-Last updated: 2026-07-31
+Status: official S&P source, event, transition, and anchor-bound point-in-time
+membership authorities are complete and verified for 2018-05-29 through
+2026-07-08. The swing acquisition plan is ready for exact daily collection. The old
+intraday selected-session artifacts are raw transport evidence only: their
+selection used same-session future volume and cannot authorize training. The
+causal completed-bar selector, broad acquisition planner, volume-bar builder,
+feature builder, and exact label builder are implemented and tested. Benchmark
+transport, causal selection publication, artifact assembly, readiness, and training remain. No
+active-program model exists.
+Last updated: 2026-08-01
 Repository: `C:\project\market-predictor`
 Remote: `https://github.com/manishgh/market-predictor`
 Branch: `r3-lineage`
-Last pushed checkpoint: `ccc269a`
+Last pushed checkpoint: `85517cb`
+
+## 2026-08-01 Causal Correction
+
+- Commit `dba8786` replaced full-session intraday RVOL with cumulative volume
+  through each completed five-minute bar divided by the prior 20 sessions at
+  the same slot. Availability is bar end plus 60 seconds. Focused verification:
+  89 tests, Ruff, and strict mypy under the installed Python 3.14 runtime.
+- Commit `4328ae7` added session-reset causal intraday features with exact stock,
+  SPY, QQQ, and point-in-time sector synchronization. Poison tests prove future
+  rows cannot alter earlier features.
+- Commit `9624e63` added verified transition and membership authorities. The
+  published membership artifact has 666 intervals for 658 retained securities;
+  5 of 663 securities were excluded (0.754%, below the 5% ceiling).
+- Commit `55dafa5` reduced broad-plan runtime from more than 20 minutes to 44.6
+  seconds while preserving the exact plan fingerprint. The immutable plan at
+  `data/research/edge_rebuild_broad_intraday_5m_plan_20260801_v2` records 9,428
+  resumable units and 34,793,778 maximum rows; peak memory was 0.832 GiB.
+- Commit `2ac3a29` removed the obsolete 2019-start audit dependency from swing
+  planning and verifies the complete raw/event/transition/anchor/membership
+  lineage. The real plan is `ready_for_daily_history_collection`: 536 exact
+  stock units plus 13 benchmark units for the missing 279 sessions.
+- Commit `85517cb` added next-exact-minute 30-minute target/stop/timeout labels,
+  conservative same-minute collision handling, 10 bps round-trip costs, and
+  exact SPY/sector-relative outcomes. Focused integration verification passed
+  80 tests.
+- Published swing authorities:
+  `data/canonical/index_membership/sp500_transitions_20180529_20260708_v1`
+  and `data/canonical/index_membership/sp500_memberships_20180529_20260708_v1`.
+
+The next code path must not read the old V2/V3/V4 selected-session artifacts as
+training authority. They may only be reused as raw bytes after a new causal plan
+proves that an exact ticker/session/minute request is identical.
 
 ## Repository Cleanup
 
