@@ -3,13 +3,14 @@
 Status: intraday corpus published and verified. Swing rejected and being rebuilt
 as a ranking strategy. Labels, cross-sectional scaling, and causal technical
 relationship primitives are built. The full seven-year causal swing panel is
-published and immutable; the technical ordering gate has not run and no model
-exists. Nothing is running.
+published and immutable. The frozen technical ordering gate ran and failed;
+the top-25 portfolio and model fitting are blocked. No model exists. Nothing is
+running.
 Last updated: 2026-07-31
 Repository: `C:\project\market-predictor`
 Remote: `https://github.com/manishgh/market-predictor`
 Branch: `r3-lineage`
-Last completed implementation commit: `b91c5ee`
+Last completed implementation commit: `de37067`
 
 ## Repository Cleanup
 
@@ -190,6 +191,26 @@ Verification: 751 tests passed with 85 existing warnings; Ruff, strict mypy
 across 193 source files, compileall, and `git diff --check` passed. No Python
 worker remains.
 
+## Swing Ordering Gate Failed
+
+Commit `de37067` added the immutable audit and froze its equal-weighted,
+directional technical score before reading outcomes. The report at
+`data/reports/edge_rebuild_swing_ordering_20190709_20260708_v1` covers 1,500
+sessions and failed two of four gates. Top-decile rows averaged +14.34 bps;
+bottom-decile rows averaged +32.84 bps. The session-neutral mean spread was
+-18.41 bps with a -1.355 ten-session Newey-West t-statistic. Although the
+median was +17.28 bps and 53.53% of sessions were positive, adverse tails made
+overall ordering negative. No top-25 replay and no estimator are permitted.
+
+The report manifest SHA-256 is
+`01e5795854c64260aea377f71226bc2684bf48010587913c1a9490ab60a63f3a`.
+The next work is failure attribution under the unchanged score, followed by a
+new preregistered hypothesis. Never tune this score against its own failed
+full-sample result.
+
+Ordering-gate verification passed 754 tests with 85 existing warnings, Ruff,
+strict mypy across 194 source files, compileall, and `git diff --check`.
+
 ## Contract, As Frozen
 
 Names are `swing` and `intraday`. No version suffixes — nothing is in
@@ -267,17 +288,17 @@ recur, the correct answer is a volume-confirmed exemption, not a bigger number.
 
 ## Exact Next Steps
 
-1. **Check the technical signal orders stocks correctly, before training
-   anything.** Sort
-   each session by a simple score and compare the top tenth against the bottom
-   tenth over the next ten days. If that spread is near zero there is nothing to
-   rank and no model will help; stop and change the signal. This replaces the
-   test that misfired.
-2. **Deterministic top-25 portfolio, no model.** Build the equity curve against
-   SPY. This is the number any model must beat.
-3. **Train** LambdaMART or LightGBM ranking, purged splits with embargo, then
-   the unseen-stock holdout. Published work reports roughly threefold better
-   risk-adjusted return from learning-to-rank on exactly this strategy family.
+1. **Freeze and run swing failure attribution.** Do not change the audited
+   score. Decompose the adverse session tails by existing market regime,
+   sector, barrier outcome, and score-component contribution. The audit must
+   explain why a 53.53% positive-session share and +17.28 bps median still
+   produce a -18.41 bps mean spread.
+2. **Declare the replacement hypothesis before evaluating it.** It must be
+   justified from market mechanism or established literature, hash-bound, and
+   consume the next experiment-budget entry. Do not tune weights against the
+   failed full-sample report.
+3. **Deterministic top-25 portfolio remains blocked** until a replacement
+   ordering gate passes. A learned ranker remains blocked behind that portfolio.
 4. **Intraday setup and its economics gate**, same order: population first,
    model only if the population earns.
 

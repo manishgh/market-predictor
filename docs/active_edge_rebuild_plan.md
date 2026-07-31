@@ -506,6 +506,35 @@ compileall, and `git diff --check`. No Python worker remained.
 Panel materialization is complete. No estimator may be trained before the
 simple top-decile versus bottom-decile technical ordering test passes.
 
+### ER1A Deterministic Swing Ordering Gate
+
+Implementation commit `de37067` froze the outcome-blind technical composite in
+`configs/edge_rebuild_swing_ordering.toml` before reading the published panel's
+outcomes. The audit is immutable at
+`data/reports/edge_rebuild_swing_ordering_20190709_20260708_v1`.
+
+The gate **failed** over 1,500 scored sessions from 2020-07-02 through
+2026-06-23:
+
+- top decile: 73,442 rows, +14.34 bps weighted mean managed return;
+- bottom decile: 71,950 rows, +32.84 bps weighted mean managed return;
+- session-neutral top-minus-bottom mean: -18.41 bps;
+- median session spread: +17.28 bps;
+- positive-session share: 53.53%;
+- ten-session Newey-West t-statistic: -1.355.
+
+The positive median and majority-positive session count do not rescue the
+signal. Adverse tail sessions make the mean economic ordering negative, and the
+bottom decile outperforms the top decile overall. The minimum spread and
+significance gates failed. Therefore the deterministic top-25 portfolio and all
+model fitting remain prohibited.
+
+The next admissible action is a frozen failure-attribution audit, not score
+tuning: decompose adverse session tails by pre-existing market regime, sector,
+barrier outcome, and score-component contribution. Any replacement hypothesis
+must be declared before that replacement reads outcomes and consumes another
+entry in the experiment budget.
+
 ### ER1A Repository And Data Convergence
 
 The 2026-07-31 cleanup removed legacy compatibility narratives and 24.775 GiB
