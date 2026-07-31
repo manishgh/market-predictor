@@ -43,6 +43,10 @@ from market_predictor.edge_rebuild.swing_materialization import (
     materialize_swing_feature_panel,
 )
 from market_predictor.edge_rebuild.swing_ordering import audit_swing_ordering
+from market_predictor.edge_rebuild.temporal_manifest import (
+    load_temporal_manifest_config,
+    publish_temporal_manifest,
+)
 from market_predictor.edge_rebuild.universe_identity import (
     publish_verified_universe,
 )
@@ -55,6 +59,39 @@ from market_predictor.v3.errors import DataReadinessError
 
 
 def register_edge_rebuild_commands(app: typer.Typer, console: Any) -> None:
+    @app.command("freeze-edge-rebuild-temporal-manifest")
+    @serialized_heavy_job("freeze-edge-rebuild-temporal-manifest")
+    def freeze_edge_rebuild_temporal_manifest(
+        panel_dir: Path = typer.Option(
+            ...,
+            help="Published swing panel used only for provenance and session coverage.",
+        ),
+        out_dir: Path = typer.Option(..., help="New immutable manifest directory."),
+        policy: Path = typer.Option(
+            Path("configs/edge_rebuild_temporal_manifest.toml")
+        ),
+        contract: Path = typer.Option(
+            Path("configs/edge_rebuild_strategy_contract.toml")
+        ),
+    ) -> None:
+        """Freeze train, validation, embargo, holdout, and locked-test scopes."""
+
+        result = publish_temporal_manifest(
+            panel_directory=panel_dir,
+            policy_path=policy,
+            strategy_contract=load_strategy_contract(contract),
+            output_directory=out_dir,
+            config=load_temporal_manifest_config(policy),
+        )
+        console.print(
+            {
+                "status": result["status"],
+                "target": result["target"],
+                "locked_test": result["locked_test"],
+                "coverage": result["coverage"],
+            }
+        )
+
     @app.command("audit-edge-rebuild-swing-ordering")
     @serialized_heavy_job("audit-edge-rebuild-swing-ordering")
     def audit_edge_rebuild_swing_ordering(

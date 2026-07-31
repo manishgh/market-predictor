@@ -185,7 +185,7 @@ rank_within_sector = true
 minimum_cross_section_for_ranking = 50
 
 [validation]
-purged_folds = 4
+purged_folds = 3
 minimum_test_sessions_per_fold = 60
 embargo_sessions = 10
 unseen_ticker_holdout_fraction = 0.2

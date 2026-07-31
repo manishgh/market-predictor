@@ -87,6 +87,7 @@
     "canonicalize-memberships",
     "canonicalize-source-collections",
     "combine-swing-datasets",
+    "freeze-edge-rebuild-temporal-manifest",
     "materialize-edge-rebuild-intraday-history",
     "materialize-edge-rebuild-swing-panel",
     "partition-v3-data",

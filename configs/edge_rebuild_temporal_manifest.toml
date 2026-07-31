@@ -1,0 +1,15 @@
+schema_version = "edge_rebuild.temporal_manifest.v1"
+calendar = "XNYS"
+fit_sessions = 1260
+validation_sessions = 252
+validation_folds = 3
+warmup_sessions = 250
+embargo_sessions = 10
+label_horizon_sessions = 10
+locked_test_start = 2025-07-01
+locked_test_end = 2026-06-30
+unseen_security_holdout_fraction = 0.20
+unseen_security_hash_seed = 42
+unseen_security_assignment = "sha256_threshold_security_id_v1"
+maximum_process_memory_gib = 4.0
+memory_guard_headroom_gib = 0.75
