@@ -48,7 +48,7 @@ from market_predictor.swing.dataset import build_swing_feature_history
 from market_predictor.swing.labels import add_exact_swing_labels
 from market_predictor.v3.errors import DataReadinessError
 
-SWING_FEATURE_PANEL_SCHEMA: Final = "edge_rebuild.swing_feature_panel.v1"
+SWING_FEATURE_PANEL_SCHEMA: Final = "edge_rebuild.swing_feature_panel.v2"
 SWING_FEATURE_PROFILE: Final = "technical_market"
 
 MOMENTUM_FEATURES: Final = (
@@ -239,6 +239,7 @@ def build_swing_feature_rows(
         global_events=global_events,
         global_source_collections=global_source_collections,
         config=effective,
+        defer_cross_sectional=True,
     )
     labelled = add_exact_swing_labels(
         features,
@@ -379,17 +380,11 @@ def finalize_swing_feature_panel(
         .groupby(data["session_date_et"], sort=False)
         .transform("sum")
     )
-    metadata = pd.DataFrame(
-        {
-            "rank_label": rank_label,
-            "rank_percentile": rank_percentile,
-            "cross_section_eligible": eligible_count.ge(
-                contract.labels.minimum_cross_section_for_ranking
-            ),
-        },
-        index=data.index,
+    data["rank_label"] = rank_label
+    data["rank_percentile"] = rank_percentile
+    data["cross_section_eligible"] = eligible_count.ge(
+        contract.labels.minimum_cross_section_for_ranking
     )
-    data = pd.concat([data, metadata], axis=1)
     return data.sort_values(
         ["session_date_et", "security_id"],
         kind="stable",

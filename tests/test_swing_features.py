@@ -45,6 +45,7 @@ def _panel(*, sessions: int = 2, securities: int = 60) -> pd.DataFrame:
                 "sector": "Technology",
                 "feature_profile": "technical_market",
                 "feature_eligible": True,
+                "cross_section_eligible": False,
                 "daily_bar_count": 300,
                 "forward_return": (base - 30.0) / 1_000.0,
                 "barrier_label": 1 if base > 30.0 else -1,
@@ -61,6 +62,8 @@ def test_complete_panel_has_one_row_and_both_labels(
     output = finalize_swing_feature_panel(_panel(), contract=contract)
 
     assert not output.duplicated(["security_id", "session_date_et"]).any()
+    assert output.columns.tolist().count("cross_section_eligible") == 1
+    assert output["cross_section_eligible"].all()
     assert output["barrier_label"].notna().all()
     assert output["rank_label"].notna().all()
     assert "forward_return" in output
@@ -229,6 +232,8 @@ def test_row_builder_uses_shared_relationships_and_barrier_labels(
 
     assert not rows.duplicated(["security_id", "session_date_et"]).any()
     assert not resolved.empty
+    assert rows["feature_eligible"].any()
+    assert rows["cross_section_size"].isna().all()
     assert rows["kaufman_efficiency_ratio"].notna().any()
     assert rows["price_obv_confirmation"].notna().any()
     assert np.allclose(

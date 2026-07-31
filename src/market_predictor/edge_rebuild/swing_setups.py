@@ -441,7 +441,7 @@ def collect_swing_setup_population(
         expected_type="memberships",
         allow_research=True,
     )
-    artifacts = _collection_artifacts(collection_dir)
+    artifacts = load_collection_artifact_index(collection_dir)
     benchmark_tickers = tuple(
         sorted(
             {
@@ -452,7 +452,7 @@ def collect_swing_setup_population(
         )
     )
     benchmark_bars = pd.concat(
-        [_load_bars(ticker, artifacts) for ticker in benchmark_tickers],
+        [load_daily_bars(ticker, artifacts) for ticker in benchmark_tickers],
         ignore_index=True,
     )
     zero_volume_benchmark = int(benchmark_bars["volume"].le(0).sum())
@@ -465,8 +465,8 @@ def collect_swing_setup_population(
     batches: list[pd.DataFrame] = []
     zero_volume_dropped = 0
     securities_replayed = 0
-    for group in _security_batches(memberships, securities_per_batch):
-        stock_bars, dropped = _batch_stock_bars(group, artifacts)
+    for group in iter_security_batches(memberships, securities_per_batch):
+        stock_bars, dropped = load_security_batch_bars(group, artifacts)
         zero_volume_dropped += dropped
         securities_replayed += int(group["security_id"].nunique())
         if stock_bars.empty:
@@ -512,7 +512,9 @@ def collect_swing_setup_population(
     return population, audit
 
 
-def _collection_artifacts(collection_dir: Path) -> dict[str, tuple[Path, str]]:
+def load_collection_artifact_index(
+    collection_dir: Path,
+) -> dict[str, tuple[Path, str]]:
     manifest_path = collection_dir / "_manifest.json"
     payload = json.loads(manifest_path.read_text(encoding="utf-8"))
     if not isinstance(payload, dict):
@@ -530,7 +532,10 @@ def _collection_artifacts(collection_dir: Path) -> dict[str, tuple[Path, str]]:
     return artifacts
 
 
-def _load_bars(ticker: str, artifacts: dict[str, tuple[Path, str]]) -> pd.DataFrame:
+def load_daily_bars(
+    ticker: str,
+    artifacts: dict[str, tuple[Path, str]],
+) -> pd.DataFrame:
     normalized = ticker.strip().upper()
     if normalized not in artifacts:
         raise DataReadinessError(f"daily-history artifact is absent for {normalized}")
@@ -543,14 +548,17 @@ def _load_bars(ticker: str, artifacts: dict[str, tuple[Path, str]]) -> pd.DataFr
     return bars
 
 
-def _security_batches(memberships: pd.DataFrame, size: int) -> Iterator[pd.DataFrame]:
+def iter_security_batches(
+    memberships: pd.DataFrame,
+    size: int,
+) -> Iterator[pd.DataFrame]:
     identities = sorted(memberships["security_id"].astype(str).unique())
     for start in range(0, len(identities), size):
         selected = set(identities[start : start + size])
         yield memberships.loc[memberships["security_id"].astype(str).isin(selected)]
 
 
-def _batch_stock_bars(
+def load_security_batch_bars(
     group: pd.DataFrame,
     artifacts: dict[str, tuple[Path, str]],
 ) -> tuple[pd.DataFrame, int]:
@@ -567,7 +575,9 @@ def _batch_stock_bars(
     for ticker, intervals in group.groupby("ticker", sort=True):
         name = str(ticker).strip().upper()
         if name not in cache:
-            traded, placeholders = drop_placeholder_bars(_load_bars(name, artifacts))
+            traded, placeholders = drop_placeholder_bars(
+                load_daily_bars(name, artifacts)
+            )
             dropped += placeholders
             cache[name] = traded
         bars = cache[name]

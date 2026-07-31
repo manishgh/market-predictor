@@ -39,6 +39,9 @@ from market_predictor.edge_rebuild.selected_session_history import (
     build_selected_session_history_plan,
 )
 from market_predictor.edge_rebuild.strategy_contract import load_strategy_contract
+from market_predictor.edge_rebuild.swing_materialization import (
+    materialize_swing_feature_panel,
+)
 from market_predictor.edge_rebuild.universe_identity import (
     publish_verified_universe,
 )
@@ -51,6 +54,56 @@ from market_predictor.v3.errors import DataReadinessError
 
 
 def register_edge_rebuild_commands(app: typer.Typer, console: Any) -> None:
+    @app.command("materialize-edge-rebuild-swing-panel")
+    @serialized_heavy_job("materialize-edge-rebuild-swing-panel")
+    def materialize_edge_rebuild_swing_panel(
+        collection_dir: Path = typer.Option(
+            ...,
+            help="Completed canonical daily-bar collection.",
+        ),
+        memberships: Path = typer.Option(
+            ...,
+            help="Verified point-in-time membership artifact.",
+        ),
+        out_dir: Path = typer.Option(
+            ...,
+            help="New or matching resumable materialization directory.",
+        ),
+        contract: Path = typer.Option(
+            Path("configs/edge_rebuild_strategy_contract.toml"),
+        ),
+        securities_per_shard: int = typer.Option(32, min=1),
+        max_stage_one_shards: int | None = typer.Option(
+            None,
+            min=1,
+            help="Optional resumable operational limit; stage two waits.",
+        ),
+    ) -> None:
+        """Publish the complete seven-year causal swing ranking panel."""
+
+        result = materialize_swing_feature_panel(
+            collection_dir=collection_dir,
+            memberships_path=memberships,
+            contract=load_strategy_contract(contract),
+            output_dir=out_dir,
+            securities_per_shard=securities_per_shard,
+            maximum_stage_one_shards_this_run=max_stage_one_shards,
+        )
+        console.print(
+            {
+                key: result[key]
+                for key in (
+                    "status",
+                    "completed_stage_one_shards",
+                    "total_stage_one_shards",
+                    "rows",
+                    "securities",
+                    "sessions",
+                )
+                if key in result
+            }
+        )
+
     @app.command("publish-verified-universe")
     @serialized_heavy_job("publish-verified-universe")
     def publish_verified_universe_command(

@@ -144,8 +144,14 @@ def build_swing_feature_history(
     global_events: pd.DataFrame | None = None,
     global_source_collections: pd.DataFrame | None = None,
     config: SwingDatasetConfig | None = None,
+    defer_cross_sectional: bool = False,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Build causal swing feature history without any future label columns."""
+    """Build causal swing feature history without any future label columns.
+
+    ``defer_cross_sectional`` is reserved for bounded population replay. It
+    keeps within-security eligibility but leaves peer ranks for the later pass
+    that holds the complete decision-session population.
+    """
 
     effective = config or SwingDatasetConfig()
     return _build_swing_feature_history(
@@ -154,6 +160,7 @@ def build_swing_feature_history(
         global_events=global_events,
         global_source_collections=global_source_collections,
         config=effective,
+        defer_cross_sectional=defer_cross_sectional,
     )
 
 
@@ -220,6 +227,7 @@ def _build_swing_feature_history(
     global_events: pd.DataFrame | None,
     global_source_collections: pd.DataFrame | None,
     config: SwingDatasetConfig,
+    defer_cross_sectional: bool = False,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     _require_columns(decisions, DECISION_REQUIRED_COLUMNS, "canonical decisions")
     if config.feature_profile == "catalyst_full":
@@ -275,7 +283,11 @@ def _build_swing_feature_history(
         )
     if config.feature_profile == "catalyst_full":
         data = _add_membership_features(data)
-    data = _add_cross_sectional_features(data, config)
+    data = _add_cross_sectional_features(
+        data,
+        config,
+        defer=defer_cross_sectional,
+    )
     _assert_build_memory(config, "swing cross-sectional features")
     if config.decision_start_date is not None:
         data = data[
@@ -753,7 +765,12 @@ def _add_membership_features(frame: pd.DataFrame) -> pd.DataFrame:
     return data
 
 
-def _add_cross_sectional_features(frame: pd.DataFrame, config: SwingDatasetConfig) -> pd.DataFrame:
+def _add_cross_sectional_features(
+    frame: pd.DataFrame,
+    config: SwingDatasetConfig,
+    *,
+    defer: bool = False,
+) -> pd.DataFrame:
     data = frame.copy()
     rank_inputs = {
         "return_5d": "xs_rank_return_5d",
@@ -771,6 +788,17 @@ def _add_cross_sectional_features(frame: pd.DataFrame, config: SwingDatasetConfi
         & data["price_feed"].astype(str).str.lower().eq(config.required_price_feed)
         & data["adjustment"].astype(str).str.lower().eq(config.required_adjustment)
     )
+    if defer:
+        data["cross_section_size"] = pd.Series(
+            pd.NA,
+            index=data.index,
+            dtype="Int32",
+        )
+        data["cross_section_eligible"] = False
+        data["feature_eligible"] = provisional
+        for target in rank_inputs.values():
+            data[target] = np.nan
+        return data
     eligible_count = provisional.groupby(data["decision_group_id"]).transform("sum")
     data["cross_section_size"] = eligible_count.astype("int32")
     data["cross_section_eligible"] = eligible_count.ge(config.minimum_cross_section)
