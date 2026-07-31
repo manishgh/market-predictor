@@ -17,8 +17,10 @@ from market_predictor.edge_rebuild.history_collection import (
     collect_intraday_history,
 )
 from market_predictor.edge_rebuild.history_contracts import (
+    load_collection_transport_config,
     load_extended_session_context_config,
     load_intraday_history_config,
+    load_selected_session_history_config,
 )
 from market_predictor.edge_rebuild.history_materialization import (
     reorganize_intraday_history,
@@ -32,6 +34,9 @@ from market_predictor.edge_rebuild.intraday_selection import (
 )
 from market_predictor.edge_rebuild.readiness import (
     run_edge_rebuild_readiness_audit,
+)
+from market_predictor.edge_rebuild.selected_session_history import (
+    build_selected_session_history_plan,
 )
 from market_predictor.edge_rebuild.strategy_contract import load_strategy_contract
 from market_predictor.edge_rebuild.universe_identity import (
@@ -114,14 +119,33 @@ def register_edge_rebuild_commands(app: typer.Typer, console: Any) -> None:
         out_dir: Path = typer.Option(...),
         first_session: str = typer.Option(..., help="Window start YYYY-MM-DD."),
         last_session: str = typer.Option(..., help="Window end YYYY-MM-DD."),
+        selected_session_collection_dir: Path | None = typer.Option(
+            None,
+            help="Collected bars for the screened in-play stock-sessions.",
+        ),
+        selected_sessions: Path | None = typer.Option(
+            None,
+            help=(
+                "Published two-layer screen making those stock-sessions "
+                "eligible; required with --selected-session-collection-dir."
+            ),
+        ),
     ) -> None:
         """Reorganize downloaded bars into per-symbol regular and extended stores."""
 
+        if (selected_session_collection_dir is None) != (selected_sessions is None):
+            raise DataReadinessError(
+                "selected-session bars and their published screen must be "
+                "supplied together"
+            )
+        collected = {
+            "regular": regular_collection_dir,
+            "extended": extended_collection_dir,
+        }
+        if selected_session_collection_dir is not None:
+            collected["selected_sessions"] = selected_session_collection_dir
         result = reorganize_intraday_history(
-            collected_dirs={
-                "regular": regular_collection_dir,
-                "extended": extended_collection_dir,
-            },
+            collected_dirs=collected,
             legacy_dirs={
                 "legacy_stocks": legacy_stock_dir,
                 "legacy_benchmarks": legacy_benchmark_dir,
@@ -130,6 +154,7 @@ def register_edge_rebuild_commands(app: typer.Typer, console: Any) -> None:
             output_dir=out_dir,
             first_session=first_session,
             last_session=last_session,
+            selected_sessions_path=selected_sessions,
         )
         console.print(
             {
@@ -184,23 +209,15 @@ def register_edge_rebuild_commands(app: typer.Typer, console: Any) -> None:
         policy: Path = typer.Option(
             Path("configs/edge_rebuild_intraday_history.toml"),
             help=(
-                "ER1A regular-session policy, or the ER1B extended-session "
-                "context policy when collecting that plan."
+                "Collection policy for the layer being collected. The layer "
+                "comes from the policy's own schema_version."
             ),
         ),
-        extended_session_context: bool = typer.Option(
-            False,
-            help="Collect an ER1B extended-session context plan.",
-        ),
     ) -> None:
-        """Collect resumable PIT SIP five-minute ER1A or ER1B history."""
+        """Collect resumable PIT SIP five-minute bars for any planned layer."""
 
         settings = get_settings()
-        config = (
-            load_extended_session_context_config(policy)
-            if extended_session_context
-            else load_intraday_history_config(policy)
-        )
+        config = load_collection_transport_config(policy)
         result = collect_intraday_history(
             plan_directory=plan_dir,
             policy_path=policy,
@@ -216,6 +233,28 @@ def register_edge_rebuild_commands(app: typer.Typer, console: Any) -> None:
                 "requested_units": result["requested_units"],
             }
         )
+
+    @app.command("plan-edge-rebuild-selected-session-history")
+    @serialized_heavy_job("plan-edge-rebuild-selected-session-history")
+    def plan_edge_rebuild_selected_session_history(
+        selection_dir: Path = typer.Option(
+            ...,
+            help="Published two-layer screen supplying the stock-sessions.",
+        ),
+        out_dir: Path = typer.Option(...),
+        policy: Path = typer.Option(
+            Path("configs/edge_rebuild_selected_session_history.toml")
+        ),
+    ) -> None:
+        """Plan five-minute bars for exactly the selected in-play stock-sessions."""
+
+        result = build_selected_session_history_plan(
+            selection_directory=selection_dir,
+            policy_path=policy,
+            output_directory=out_dir,
+            config=load_selected_session_history_config(policy),
+        )
+        console.print(result["summary"])
 
     @app.command("plan-edge-rebuild-intraday-history")
     @serialized_heavy_job("plan-edge-rebuild-intraday-history")

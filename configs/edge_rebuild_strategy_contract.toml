@@ -5,25 +5,48 @@ schema_version = "edge_rebuild.strategy_contract.v1"
 # looking at validation results is the failure that produced the V2 rejection.
 
 [swing]
-strategy_id = "SWING.SECTOR_RESIDUAL_MOMENTUM.10D.V1"
-# Decide after the completed daily bar, enter at the next session open, exit at
-# the close of the tenth exchange session. Exit is timeout-only: a daily-bar
-# strategy cannot know when an intraday stop was touched, and pretending
-# otherwise would score fills the data cannot support.
+# One name, no version suffix. Nothing is in production, so there is no promoted
+# artifact a rename could invalidate, and version proliferation costs more in
+# confusion than it buys in safety. What the strategy does is described by the
+# fields below and its change history lives in the plan document.
+strategy_id = "swing"
+# Decide after the completed bar, enter at the next session open, exit at
+# whichever barrier is touched first: profit target, stop, or the tenth session
+# close.
+#
+# V1 was timeout-only on the argument that daily bars cannot show when an
+# intraday stop was touched. That was too conservative. A daily bar's high and
+# low do reveal whether a barrier was breached; only the intra-bar sequence is
+# unknown. Standard practice resolves that by assuming the stop filled first
+# whenever both barriers fall inside one bar, which is the conservative
+# direction. Timeout-only systematically overstates results by holding through
+# drawdowns a real stop would have closed.
 horizon_sessions = 10
 entry_reference = "next_session_open"
-exit_rule = "horizon_close"
-decision_cutoff = "daily_bar_close"
+exit_rule = "target_stop_timeout"
+decision_cutoff = "bar_close"
+same_bar_barrier_resolution = "stop_first"
+target_atr_multiple = 3.0
+stop_atr_multiple = 1.5
+atr_timeframe = "1Day"
+atr_lookback_bars = 14
 # Ten sessions rather than five. One round trip costs roughly 20 bps, so a
 # five-session hold must clear that in a week; doubling the hold halves the cost
 # burden per unit of expected move without assuming longer is better.
 round_trip_cost_bps = 20.0
 minimum_warmup_sessions = 250
-maximum_trades_per_decision = 10
+maximum_trades_per_decision = 25
 minimum_expected_net_edge_bps = 5.0
+# Bar structure. Hourly is the finer entry clock; daily supplies the trend and
+# barrier context. Both are required.
+feature_timeframe = "1Hour"
+context_timeframe = "1Day"
+# Selection must not concentrate in one sector, however strong its signals.
+maximum_sector_weight = 0.20
+sector_neutral_scoring = true
 
 [intraday]
-strategy_id = "INTRADAY.VWAP_EXHAUSTION_REVERSAL.30M.V1"
+strategy_id = "intraday"
 # Decide on a completed five-minute bar, finalize after 60 seconds, enter at the
 # next one-minute open, exit at target, stop, or the thirtieth regular-session
 # minute, whichever comes first.
@@ -51,6 +74,26 @@ minimum_expected_net_edge_bps = 3.0
 session_segments = ["opening", "midday", "late"]
 opening_end_et = "11:00"
 midday_end_et = "14:00"
+# Bar structure. Clock bars sample market activity unevenly: the 09:30 bar
+# routinely carries thirty to fifty times the volume of the 12:30 bar, so
+# returns sampled on the clock have variance driven by time of day rather than
+# by information. Volume bars close on a fixed quantity traded instead, so each
+# observation represents the same amount of activity and the return series is
+# closer to independent and identically distributed.
+#
+# Faithful volume bars require one-minute or tick input. Built from five-minute
+# aggregates the boundaries quantise to five-minute edges, which defeats the
+# purpose near the open where one bar can exceed the whole threshold. One-minute
+# bars are therefore collected for the selected sessions before volume bars are
+# constructed, and time bars remain in use until then.
+decision_bar_structure = "volume"
+volume_bar_source_timeframe = "1Min"
+volume_bar_threshold_basis = "trailing_median_session_volume"
+volume_bars_per_session_target = 78
+# Rolling features must not span an overnight gap. Positions close before the
+# end of the session, so a window that reaches back across the close mixes two
+# regimes and prices a move that could not have been held.
+reset_rolling_features_overnight = true
 
 [intraday_universe]
 # Standard day-trading practice selects stocks in two layers, not one. Layer one
@@ -91,7 +134,7 @@ maximum_candidates_per_session = 30
 [methodology]
 # Established methods, not invented ones. Each is named so a reviewer can check
 # the implementation against the published definition.
-labeling = "triple_barrier"
+labeling = "triple_barrier_and_cross_sectional_rank"
 cross_validation = "purged_k_fold_with_embargo"
 sampling = "event_based"
 # Meta-labeling separates trade direction from trade sizing. It is a documented
@@ -111,6 +154,34 @@ retained = [
 ]
 benchmark_market = "SPY"
 benchmark_sector_source = "point_in_time_membership"
+
+# Two labels, both computed on every row. They answer different questions and
+# neither replaces the other.
+#
+# The barrier label asks: for THIS stock, did the trade work? Target hit is +1,
+# stop hit is -1, neither before expiry is 0. It encodes the exit rule, so it
+# accounts for the fact that a position is closed early rather than held to a
+# fixed horizon.
+#
+# The rank label asks: among ALL stocks on this date, was this one of the best?
+# Forward return is computed for the whole cross-section, then the top fifth is
+# +1, the bottom fifth is -1, and the middle three fifths are 0.
+#
+# The barrier label alone produced the failure already on record: it says which
+# trades were good but gives no way to choose among the many that qualify on the
+# same day, so selection fell back to something unrelated to expected return.
+# The rank label alone ignores that a real position is stopped out. Together the
+# model learns which stocks to prefer and what happens when the trade is
+# actually managed.
+barrier_labels_enabled = true
+rank_labels_enabled = true
+rank_top_quantile = 0.20
+rank_bottom_quantile = 0.20
+# Ranking within a sector rather than across the whole universe, so a stock is
+# compared with its peers instead of with whichever sector is in favour.
+rank_within_sector = true
+# A cross-section too small to rank produces meaningless quantiles.
+minimum_cross_section_for_ranking = 50
 
 [validation]
 purged_folds = 4

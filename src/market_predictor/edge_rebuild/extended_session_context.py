@@ -38,6 +38,7 @@ from market_predictor.edge_rebuild.intraday_history import (
     EXTENDED_CONTEXT_PLAN_AUTHORITY_SCHEMA,
     chunk_request_symbols,
     expected_five_minute_bars,
+    file_record,
     iter_point_in_time_sessions,
     json_sha256,
     load_complete_intraday_history_plan,
@@ -156,15 +157,15 @@ def build_extended_session_context_plan(
             path = temporary / "session_windows" / f"{month}.parquet"
             path.parent.mkdir(parents=True, exist_ok=True)
             frame.to_parquet(path, index=False)
-            files.append(_file_record(path, temporary, len(frame)))
+            files.append(file_record(path, temporary, len(frame)))
         for month, frame in sorted(unit_frames.items()):
             path = temporary / "units" / "5Min" / f"{month}.parquet"
             path.parent.mkdir(parents=True, exist_ok=True)
             frame.to_parquet(path, index=False)
-            files.append(_file_record(path, temporary, len(frame)))
+            files.append(file_record(path, temporary, len(frame)))
         request["plan_fingerprint"] = plan_fingerprint
         write_plan_json(temporary / "_request.json", request)
-        files.append(_file_record(temporary / "_request.json", temporary, 1))
+        files.append(file_record(temporary / "_request.json", temporary, 1))
         manifest: dict[str, Any] = {
             "schema": EXTENDED_CONTEXT_PLAN_SCHEMA,
             "created_at_utc": datetime.now(UTC).isoformat(),
@@ -420,15 +421,6 @@ def _exchange_moment(session_date: object, clock: str) -> pd.Timestamp:
         f"{session_date} {clock}",
         tz=EXCHANGE_TIMEZONE,
     ).tz_convert("UTC")
-
-
-def _file_record(path: Path, root: Path, rows: int) -> dict[str, object]:
-    return {
-        "path": path.relative_to(root).as_posix(),
-        "sha256": file_sha256(path),
-        "bytes": path.stat().st_size,
-        "rows": rows,
-    }
 
 
 def _assert_memory(config: ExtendedSessionContextConfig, stage: str) -> None:

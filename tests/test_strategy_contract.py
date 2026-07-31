@@ -22,21 +22,65 @@ def _raw() -> dict[str, Any]:
 def test_frozen_contract_loads_and_is_hashable() -> None:
     contract = load_strategy_contract(CONTRACT_PATH)
 
-    assert contract.swing.strategy_id == "SWING.SECTOR_RESIDUAL_MOMENTUM.10D.V1"
-    assert contract.intraday.strategy_id == "INTRADAY.VWAP_EXHAUSTION_REVERSAL.30M.V1"
+    assert contract.swing.strategy_id == "swing"
+    assert contract.intraday.strategy_id == "intraday"
     assert len(contract.sha256()) == 64
     # The same content must always hash the same, or the contract cannot be bound
     # to the evidence produced under it.
     assert contract.sha256() == load_strategy_contract(CONTRACT_PATH).sha256()
 
 
-def test_swing_exit_must_be_timeout_only() -> None:
-    """Daily bars cannot show when an intraday stop was touched."""
+def test_swing_exit_must_resolve_a_barrier() -> None:
+    """Timeout-only holds through drawdowns a real stop would have closed."""
 
     raw = _raw()
-    raw["swing"]["exit_rule"] = "target_stop_timeout"
+    raw["swing"]["exit_rule"] = "horizon_close"
 
-    with pytest.raises(ValueError, match="timeout-only"):
+    with pytest.raises(ValueError, match="target, stop, or timeout"):
+        StrategyContract.model_validate(raw)
+
+
+def test_same_bar_ambiguity_must_resolve_conservatively() -> None:
+    """A daily bar shows both barriers were touched, not which came first."""
+
+    raw = _raw()
+    raw["swing"]["same_bar_barrier_resolution"] = "target_first"
+
+    with pytest.raises(ValueError, match="stop-first"):
+        StrategyContract.model_validate(raw)
+
+
+def test_swing_scoring_must_be_sector_neutral() -> None:
+    raw = _raw()
+    raw["swing"]["sector_neutral_scoring"] = False
+
+    with pytest.raises(ValueError, match="sector-neutral"):
+        StrategyContract.model_validate(raw)
+
+
+def test_clock_bars_are_rejected_for_intraday_decisions() -> None:
+    """The opening bar carries tens of times the volume of a midday bar."""
+
+    raw = _raw()
+    raw["intraday"]["decision_bar_structure"] = "time"
+
+    with pytest.raises(ValueError, match="time of day rather than information"):
+        StrategyContract.model_validate(raw)
+
+
+def test_volume_bars_require_one_minute_input() -> None:
+    raw = _raw()
+    raw["intraday"]["volume_bar_source_timeframe"] = "5Min"
+
+    with pytest.raises(ValueError, match="one-minute or finer"):
+        StrategyContract.model_validate(raw)
+
+
+def test_rolling_features_must_reset_overnight() -> None:
+    raw = _raw()
+    raw["intraday"]["reset_rolling_features_overnight"] = False
+
+    with pytest.raises(ValueError, match="reset overnight"):
         StrategyContract.model_validate(raw)
 
 
@@ -103,13 +147,27 @@ def test_random_cross_validation_cannot_be_configured() -> None:
         StrategyContract.model_validate(raw)
 
 
-def test_strategy_identity_must_be_versioned() -> None:
-    """A redefined setup reusing an old name invalidates every comparison."""
+def test_both_label_schemes_are_required() -> None:
+    """Either alone reproduces a failure already on record."""
 
     raw = _raw()
-    raw["swing"]["strategy_id"] = "SWING.SECTOR_RESIDUAL_MOMENTUM.10D"
+    raw["labels"]["barrier_labels_enabled"] = False
+    with pytest.raises(ValueError, match="closed early"):
+        StrategyContract.model_validate(raw)
 
-    with pytest.raises(ValueError, match="must be versioned"):
+    raw = _raw()
+    raw["labels"]["rank_labels_enabled"] = False
+    with pytest.raises(ValueError, match="unrelated to"):
+        StrategyContract.model_validate(raw)
+
+
+def test_rank_quantiles_cannot_swallow_the_middle_band() -> None:
+    """A tail of half the cross-section is not a tail."""
+
+    raw = _raw()
+    raw["labels"]["rank_top_quantile"] = 0.5
+
+    with pytest.raises(ValueError):
         StrategyContract.model_validate(raw)
 
 
@@ -192,7 +250,7 @@ def test_published_methods_cannot_be_swapped_for_ad_hoc_ones() -> None:
     raw = _raw()
     raw["methodology"]["labeling"] = "fixed_horizon"
 
-    with pytest.raises(ValueError, match="target, stop, or timeout"):
+    with pytest.raises(ValueError, match="barrier outcome and the"):
         StrategyContract.model_validate(raw)
 
 

@@ -36,21 +36,44 @@ class SwingContract(FrozenModel):
     entry_reference: str
     exit_rule: str
     decision_cutoff: str
+    same_bar_barrier_resolution: str
+    target_atr_multiple: float = Field(gt=0, le=10)
+    stop_atr_multiple: float = Field(ge=1.0, le=10)
+    atr_timeframe: str
+    atr_lookback_bars: int = Field(ge=5, le=50)
     round_trip_cost_bps: float = Field(gt=0, le=100)
     minimum_warmup_sessions: int = Field(ge=250)
     maximum_trades_per_decision: int = Field(ge=1, le=50)
     minimum_expected_net_edge_bps: float = Field(ge=0)
+    feature_timeframe: str
+    context_timeframe: str
+    maximum_sector_weight: float = Field(gt=0, le=1)
+    sector_neutral_scoring: bool
 
     @model_validator(mode="after")
     def validate_swing(self) -> Self:
         if self.entry_reference != "next_session_open":
             raise ValueError("swing entry must be the next session open")
-        # A daily-bar strategy cannot observe when an intraday stop was touched,
-        # so a target/stop exit would score fills the data cannot support.
-        if self.exit_rule != "horizon_close":
-            raise ValueError("swing exit must be timeout-only at the horizon close")
+        if self.exit_rule != "target_stop_timeout":
+            raise ValueError(
+                "swing exit must resolve target, stop, or timeout; timeout-only "
+                "holds through drawdowns a real stop would have closed"
+            )
+        # A daily bar's high and low reveal whether a barrier was breached; only
+        # the order within the bar is unknown. Assuming the stop filled first is
+        # the conservative resolution.
+        if self.same_bar_barrier_resolution != "stop_first":
+            raise ValueError(
+                "same-bar barrier ambiguity must resolve stop-first"
+            )
+        if self.target_atr_multiple <= self.stop_atr_multiple:
+            raise ValueError("target must exceed stop")
         if self.minimum_expected_net_edge_bps >= self.round_trip_cost_bps:
             raise ValueError("required net edge cannot exceed the round trip cost")
+        # Concentration in one sector converts a stock-selection strategy into a
+        # sector bet.
+        if not self.sector_neutral_scoring:
+            raise ValueError("swing scoring must be sector-neutral")
         return self
 
 
@@ -71,6 +94,11 @@ class IntradayContract(FrozenModel):
     session_segments: tuple[str, ...]
     opening_end_et: str
     midday_end_et: str
+    decision_bar_structure: str
+    volume_bar_source_timeframe: str
+    volume_bar_threshold_basis: str
+    volume_bars_per_session_target: int = Field(ge=10, le=400)
+    reset_rolling_features_overnight: bool
 
     @model_validator(mode="after")
     def validate_intraday(self) -> Self:
@@ -90,6 +118,21 @@ class IntradayContract(FrozenModel):
             raise ValueError("intraday segments must remain opening, midday, and late")
         if self.opening_end_et >= self.midday_end_et:
             raise ValueError("opening must end before midday ends")
+        if self.decision_bar_structure != "volume":
+            raise ValueError(
+                "clock bars sample activity unevenly; the opening bar carries "
+                "tens of times the volume of a midday bar, so variance tracks "
+                "time of day rather than information"
+            )
+        # Volume bars built from five-minute aggregates quantise to five-minute
+        # edges, which defeats the purpose near the open where a single bar can
+        # exceed the whole threshold.
+        if self.volume_bar_source_timeframe != "1Min":
+            raise ValueError("volume bars require one-minute or finer input")
+        # A window reaching back across the close mixes two regimes and prices a
+        # move that could not have been held.
+        if not self.reset_rolling_features_overnight:
+            raise ValueError("intraday rolling features must reset overnight")
         return self
 
 
@@ -149,8 +192,11 @@ class MethodologyContract(FrozenModel):
 
     @model_validator(mode="after")
     def validate_methodology(self) -> Self:
-        if self.labeling != "triple_barrier":
-            raise ValueError("labels must resolve target, stop, or timeout first")
+        if self.labeling != "triple_barrier_and_cross_sectional_rank":
+            raise ValueError(
+                "labels must carry both the barrier outcome and the "
+                "cross-sectional rank"
+            )
         if self.cross_validation != "purged_k_fold_with_embargo":
             raise ValueError(
                 "overlapping labels require purged and embargoed validation"
@@ -166,6 +212,12 @@ class LabelContract(FrozenModel):
     retained: tuple[str, ...]
     benchmark_market: str
     benchmark_sector_source: str
+    barrier_labels_enabled: bool
+    rank_labels_enabled: bool
+    rank_top_quantile: float = Field(gt=0, lt=0.5)
+    rank_bottom_quantile: float = Field(gt=0, lt=0.5)
+    rank_within_sector: bool
+    minimum_cross_section_for_ranking: int = Field(ge=20)
 
     @model_validator(mode="after")
     def validate_labels(self) -> Self:
@@ -180,6 +232,21 @@ class LabelContract(FrozenModel):
             raise ValueError(f"labels must retain {sorted(required)}")
         if self.benchmark_sector_source != "point_in_time_membership":
             raise ValueError("sector benchmark must come from point-in-time membership")
+        # The barrier label says which trades worked but gives no way to choose
+        # among the many qualifying on one date. The rank label chooses but
+        # ignores that a position is stopped out. Either alone reproduces a
+        # failure already on record.
+        if not self.barrier_labels_enabled:
+            raise ValueError(
+                "barrier labels are required; without them a label ignores that "
+                "a position is closed early rather than held to a fixed horizon"
+            )
+        if not self.rank_labels_enabled:
+            raise ValueError(
+                "rank labels are required; without them selection among "
+                "same-day qualifiers falls back to something unrelated to "
+                "expected return"
+            )
         return self
 
 
@@ -265,11 +332,6 @@ class StrategyContract(FrozenModel):
             raise ValueError("unsupported strategy contract schema")
         if self.swing.strategy_id == self.intraday.strategy_id:
             raise ValueError("strategies must have distinct identities")
-        for strategy_id in (self.swing.strategy_id, self.intraday.strategy_id):
-            # New semantics get new identities; a redefined setup reusing an old
-            # name silently invalidates every comparison against it.
-            if not strategy_id.endswith(".V1"):
-                raise ValueError(f"strategy identity must be versioned: {strategy_id}")
         return self
 
     def sha256(self) -> str:

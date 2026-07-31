@@ -1,0 +1,21 @@
+schema_version = "edge_rebuild.selected_session_history.v1"
+provider = "alpaca"
+calendar = "XNYS"
+required_price_feed = "sip"
+required_adjustment = "all"
+history_timeframe = "5Min"
+# Regular session only. The pre/post-market layer for these stock-sessions is a
+# separate acquisition and stays in its own store.
+session_segments = [
+  "regular",
+]
+maximum_expected_rows_per_unit = 10000
+maximum_symbols_per_unit = 50
+collection_workers = 2
+collection_retries = 4
+request_timeout_seconds = 60.0
+maximum_pages_per_unit = 4
+maximum_failures_before_stop = 5
+intraday_finalization_delay_seconds = 60
+maximum_process_memory_gib = 4.0
+memory_guard_headroom_gib = 0.75

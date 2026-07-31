@@ -20,6 +20,7 @@ from market_predictor.canonical.store import file_sha256
 from market_predictor.edge_rebuild.history_contracts import (
     EXTENDED_CONTEXT_PLAN_SCHEMA,
     INTRADAY_HISTORY_PLAN_SCHEMA,
+    SELECTED_SESSION_PLAN_SCHEMA,
     IntradayHistoryConfig,
 )
 from market_predictor.edge_rebuild.readiness import (
@@ -37,9 +38,13 @@ PLAN_AUTHORITY_SCHEMA = "edge_rebuild.intraday_history_plan_authority.v1"
 EXTENDED_CONTEXT_PLAN_AUTHORITY_SCHEMA = (
     "edge_rebuild.extended_session_context_plan_authority.v1"
 )
+SELECTED_SESSION_PLAN_AUTHORITY_SCHEMA = (
+    "edge_rebuild.selected_session_history_plan_authority.v1"
+)
 ACCEPTED_PLAN_SCHEMAS = {
     INTRADAY_HISTORY_PLAN_SCHEMA: PLAN_AUTHORITY_SCHEMA,
     EXTENDED_CONTEXT_PLAN_SCHEMA: EXTENDED_CONTEXT_PLAN_AUTHORITY_SCHEMA,
+    SELECTED_SESSION_PLAN_SCHEMA: SELECTED_SESSION_PLAN_AUTHORITY_SCHEMA,
 }
 SESSION_MEMBERSHIP_COLUMNS = (
     "session_date_et",
@@ -153,16 +158,16 @@ def build_intraday_history_plan(
             path = temporary / "session_memberships" / f"{month}.parquet"
             path.parent.mkdir(parents=True, exist_ok=True)
             frame.to_parquet(path, index=False)
-            files.append(_file_record(path, temporary, len(frame)))
+            files.append(file_record(path, temporary, len(frame)))
         for month, frame in sorted(unit_frames.items()):
             path = temporary / "units" / "5Min" / f"{month}.parquet"
             path.parent.mkdir(parents=True, exist_ok=True)
             frame.to_parquet(path, index=False)
-            files.append(_file_record(path, temporary, len(frame)))
+            files.append(file_record(path, temporary, len(frame)))
         request["plan_fingerprint"] = plan_fingerprint
         write_plan_json(temporary / "_request.json", request)
         files.append(
-            _file_record(
+            file_record(
                 temporary / "_request.json",
                 temporary,
                 1,
@@ -709,7 +714,9 @@ def _build_plan_frames(
     }
 
 
-def _file_record(path: Path, root: Path, rows: int) -> dict[str, object]:
+def file_record(path: Path, root: Path, rows: int) -> dict[str, object]:
+    """Describe one plan artifact the way `_manifest.json` registers it."""
+
     return {
         "path": path.relative_to(root).as_posix(),
         "sha256": file_sha256(path),

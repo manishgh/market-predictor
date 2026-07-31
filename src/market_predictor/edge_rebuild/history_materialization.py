@@ -22,6 +22,12 @@ Segment is decided by the exchange session's real open and close, never by clock
 time. On an early-close session the market shuts at 13:00 ET, so a fixed
 09:30-16:00 rule would file three hours of genuine post-market bars as regular
 session.
+
+A bar is kept only if its symbol was eligible on that exact session. Eligibility
+comes from point-in-time index membership and, when a published screen is
+supplied, from the in-play stock-sessions that screen selected. The intraday
+universe is deliberately not index-restricted, so membership alone would discard
+every non-index name the screen exists to find.
 """
 
 from __future__ import annotations
@@ -44,6 +50,9 @@ from market_predictor.canonical.store import file_sha256, load_canonical_artifac
 from market_predictor.edge_rebuild.corpus_integrity import (
     IntegrityThresholds,
     verify_corpus_integrity,
+)
+from market_predictor.edge_rebuild.intraday_selection import (
+    load_complete_intraday_selection,
 )
 from market_predictor.resources import (
     assert_memory_budget,
@@ -202,6 +211,7 @@ def reorganize_intraday_history(
     output_dir: Path,
     first_session: str,
     last_session: str,
+    selected_sessions_path: Path | None = None,
     thresholds: IntegrityThresholds | None = None,
     memory_budget_gib: float = 4.0,
     memory_headroom_gib: float = 0.75,
@@ -219,6 +229,14 @@ def reorganize_intraday_history(
         allow_research=True,
     )
     eligible = _eligible_ticker_sessions(memberships, bounds)
+    selection_identity: dict[str, Any] | None = None
+    if selected_sessions_path is not None:
+        selected, selection_identity = selected_ticker_sessions(
+            selected_sessions_path,
+            bounds,
+        )
+        for ticker, sessions in selected.items():
+            eligible.setdefault(ticker, set()).update(sessions)
     if not eligible:
         raise DataReadinessError("no eligible ticker-sessions in the window")
 
@@ -253,6 +271,7 @@ def reorganize_intraday_history(
             "window_sessions": len(bounds),
             "universe_path": str(universe_path),
             "universe_sha256": str(universe_manifest["artifact_sha256"]),
+            "selected_stock_sessions": selection_identity,
             "sources": {
                 name: {"path": str(path), "role": "collected"}
                 for name, path in collected_dirs.items()
@@ -322,6 +341,45 @@ def _eligible_ticker_sessions(
         for ticker in active["ticker"].astype(str):
             eligible.setdefault(ticker, set()).add(session)
     return eligible
+
+
+def selected_ticker_sessions(
+    selected_sessions_path: Path,
+    bounds: Mapping[str, SessionBounds],
+) -> tuple[dict[str, set[str]], dict[str, Any]]:
+    """Eligibility from the frozen screen, with the screen's own identity.
+
+    Index membership answers whether a security belonged to the swing universe
+    that session. It cannot answer for a security that was never in the index,
+    and the intraday universe is deliberately not index-restricted. A stock-
+    session that passed the frozen two-layer screen is eligible on exactly the
+    session it was selected for and on no other, so bars collected for it are
+    kept while any bar outside its selection is still dropped.
+
+    The screen is read only after its published authority verifies, so an edited
+    selection table cannot widen what reaches the corpus.
+    """
+
+    manifest = load_complete_intraday_selection(selected_sessions_path)
+    frame = pd.read_parquet(
+        selected_sessions_path / "selected_stock_sessions.parquet",
+        columns=["ticker", "session_date_et"],
+    )
+    tickers = frame["ticker"].astype(str).str.upper().str.strip()
+    sessions = frame["session_date_et"].astype(str)
+    inside = sessions.isin(bounds.keys())
+    eligible: dict[str, set[str]] = {}
+    for ticker, session in zip(tickers[inside], sessions[inside], strict=True):
+        eligible.setdefault(ticker, set()).add(session)
+    return eligible, {
+        "path": str(selected_sessions_path),
+        "manifest_sha256": file_sha256(selected_sessions_path / "_manifest.json"),
+        "request_sha256": str(manifest["request_sha256"]),
+        "strategy_id": str(manifest["strategy_id"]),
+        "stock_sessions": int(len(frame)),
+        "stock_sessions_inside_window": int(inside.sum()),
+        "symbols": int(tickers.nunique()),
+    }
 
 
 def _shuffle_into_buckets(

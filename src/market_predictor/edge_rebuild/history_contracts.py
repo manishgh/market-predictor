@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import tomllib
+from collections.abc import Callable
 from datetime import time
 from pathlib import Path
 from typing import Self, TypeVar
@@ -17,6 +18,8 @@ INTRADAY_HISTORY_SCHEMA = "edge_rebuild.intraday_history.v1"
 INTRADAY_HISTORY_PLAN_SCHEMA = "edge_rebuild.intraday_history_plan.v1"
 EXTENDED_CONTEXT_SCHEMA = "edge_rebuild.extended_session_context.v1"
 EXTENDED_CONTEXT_PLAN_SCHEMA = "edge_rebuild.extended_session_context_plan.v1"
+SELECTED_SESSION_HISTORY_SCHEMA = "edge_rebuild.selected_session_history.v1"
+SELECTED_SESSION_PLAN_SCHEMA = "edge_rebuild.selected_session_history_plan.v1"
 REGULAR_SEGMENT = "regular"
 PREMARKET_SEGMENT = "premarket"
 POSTMARKET_SEGMENT = "postmarket"
@@ -35,7 +38,6 @@ class IntradayTransportConfig(FrozenModel):
     calendar: str
     required_price_feed: str
     required_adjustment: str
-    minimum_session_cross_section: int = Field(ge=300)
     maximum_expected_rows_per_unit: int = Field(ge=1_000, le=10_000)
     maximum_symbols_per_unit: int = Field(ge=1, le=50)
     collection_workers: int = Field(ge=1, le=4)
@@ -46,7 +48,6 @@ class IntradayTransportConfig(FrozenModel):
     intraday_finalization_delay_seconds: int = Field(ge=0, le=300)
     maximum_process_memory_gib: float = Field(ge=1, le=4)
     memory_guard_headroom_gib: float = Field(ge=0.5, le=2)
-    benchmark_tickers: tuple[str, ...]
 
     @model_validator(mode="after")
     def validate_transport_contract(self) -> Self:
@@ -68,9 +69,33 @@ class IntradayTransportConfig(FrozenModel):
             raise ValueError("ER1 finalization delay must remain 60 seconds")
         if self.memory_guard_headroom_gib >= self.maximum_process_memory_gib:
             raise ValueError("memory headroom must be below the hard budget")
-        normalized = tuple(
-            ticker.strip().upper() for ticker in self.benchmark_tickers
-        )
+        return self
+
+    def sha256(self) -> str:
+        payload = json.dumps(
+            self.model_dump(mode="json"),
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode()
+        return hashlib.sha256(payload).hexdigest()
+
+
+class PointInTimeUniverseConfig(IntradayTransportConfig):
+    """Transport plus the cross-section a whole-universe plan enumerates.
+
+    A plan that walks the point-in-time universe on every session needs a floor
+    on how many securities that cross-section may contain, and needs benchmarks
+    added to each request. A plan that requests an already-selected handful of
+    stock-sessions has neither obligation, so both live here rather than on the
+    shared transport contract.
+    """
+
+    minimum_session_cross_section: int = Field(ge=300)
+    benchmark_tickers: tuple[str, ...]
+
+    @model_validator(mode="after")
+    def validate_universe_contract(self) -> Self:
+        normalized = self.normalized_benchmarks()
         if (
             "SPY" not in normalized
             or "QQQ" not in normalized
@@ -82,21 +107,13 @@ class IntradayTransportConfig(FrozenModel):
             )
         return self
 
-    def sha256(self) -> str:
-        payload = json.dumps(
-            self.model_dump(mode="json"),
-            sort_keys=True,
-            separators=(",", ":"),
-        ).encode()
-        return hashlib.sha256(payload).hexdigest()
-
     def normalized_benchmarks(self) -> tuple[str, ...]:
         return tuple(
             ticker.strip().upper() for ticker in self.benchmark_tickers
         )
 
 
-class IntradayHistoryConfig(IntradayTransportConfig):
+class IntradayHistoryConfig(PointInTimeUniverseConfig):
     """The frozen ER1A regular-session history contract."""
 
     feature_timeframe: str
@@ -118,7 +135,7 @@ class IntradayHistoryConfig(IntradayTransportConfig):
         return self
 
 
-class ExtendedSessionContextConfig(IntradayTransportConfig):
+class ExtendedSessionContextConfig(PointInTimeUniverseConfig):
     """The frozen ER1B extended-session context contract.
 
     Extended-hours bars are a separate context layer. They are never merged
@@ -150,6 +167,36 @@ class ExtendedSessionContextConfig(IntradayTransportConfig):
 
     def postmarket_end_time(self) -> time:
         return _exchange_clock_time(self.postmarket_end_et, "postmarket_end_et")
+
+
+class SelectedSessionHistoryConfig(IntradayTransportConfig):
+    """The frozen contract for bars covering only selected stock-sessions.
+
+    The two whole-universe layers request every point-in-time member on every
+    session. This one requests only the stock-sessions that already passed the
+    frozen two-layer screen, which is roughly one request unit per session
+    rather than eleven. It therefore carries no cross-section floor.
+
+    It also adds no benchmarks. Benchmark and sector-ETF bars already span the
+    whole research window in the regular-session corpus, so re-requesting them
+    here would spend units on bars that exist and would collide with them on
+    materialization.
+    """
+
+    history_timeframe: str
+    session_segments: tuple[str, ...]
+
+    @model_validator(mode="after")
+    def validate_selected_session_contract(self) -> Self:
+        if self.schema_version != SELECTED_SESSION_HISTORY_SCHEMA:
+            raise ValueError("unsupported selected-session history schema")
+        if self.history_timeframe != "5Min":
+            raise ValueError("selected-session history must use five-minute bars")
+        if tuple(self.session_segments) != (REGULAR_SEGMENT,):
+            raise ValueError(
+                "selected-session history covers exactly the regular session"
+            )
+        return self
 
 
 ConfigT = TypeVar("ConfigT", bound=IntradayTransportConfig)
@@ -188,3 +235,41 @@ def load_extended_session_context_config(
         ExtendedSessionContextConfig,
         "ER1B extended-session context",
     )
+
+
+def load_selected_session_history_config(
+    path: Path,
+) -> SelectedSessionHistoryConfig:
+    return _load_config(
+        path,
+        SelectedSessionHistoryConfig,
+        "selected-session history",
+    )
+
+
+_TRANSPORT_CONFIG_LOADERS: dict[str, Callable[[Path], IntradayTransportConfig]] = {
+    INTRADAY_HISTORY_SCHEMA: load_intraday_history_config,
+    EXTENDED_CONTEXT_SCHEMA: load_extended_session_context_config,
+    SELECTED_SESSION_HISTORY_SCHEMA: load_selected_session_history_config,
+}
+
+
+def load_collection_transport_config(path: Path) -> IntradayTransportConfig:
+    """Load whichever collection policy the file itself declares.
+
+    The collector is generic across plan layers, so the layer must be named
+    once. Taking it from the policy's own `schema_version` removes the second
+    place an operator could name it, and with it the chance of collecting one
+    layer under another layer's transport identity.
+    """
+
+    try:
+        raw = tomllib.loads(path.read_text(encoding="utf-8"))
+    except (OSError, tomllib.TOMLDecodeError) as exc:
+        raise DataReadinessError(f"collection policy is unreadable: {path}") from exc
+    loader = _TRANSPORT_CONFIG_LOADERS.get(str(raw.get("schema_version", "")))
+    if loader is None:
+        raise DataReadinessError(
+            f"collection policy declares no known schema_version: {path}"
+        )
+    return loader(path)
