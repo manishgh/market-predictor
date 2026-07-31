@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pandas as pd
 
+import market_predictor.v3.universe as universe_module
 from market_predictor.v3.errors import DataReadinessError
 from market_predictor.v3.universe import (
     build_point_in_time_sp500_universe,
@@ -18,6 +19,12 @@ from market_predictor.v3.universe import (
 
 
 class V3PointInTimeUniverseTests(unittest.TestCase):
+    def test_universe_module_has_no_hidden_network_collection_api(self) -> None:
+        self.assertFalse(hasattr(universe_module, "collect_sp500_changes"))
+        self.assertFalse(
+            hasattr(universe_module, "discover_sp500_change_announcements")
+        )
+
     def test_reviewed_transition_ledger_overrides_unapproved_provider_merger(self) -> None:
         reviewed = load_reviewed_security_transitions(Path("configs/sp500_security_transition_review.csv"))
         provider = pd.DataFrame(

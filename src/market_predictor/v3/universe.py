@@ -3,17 +3,13 @@ from __future__ import annotations
 import hashlib
 import json
 import re
-import time
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, replace
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
-from urllib.parse import urljoin
 from zoneinfo import ZoneInfo
 
 import pandas as pd
-import requests
 from bs4 import BeautifulSoup
 
 from market_predictor.v3.contracts import normalized_ticker
@@ -21,7 +17,6 @@ from market_predictor.v3.errors import DataReadinessError
 
 SP_GLOBAL_ARCHIVE_URL = "https://press.spglobal.com/index.php"
 ARCHIVE_QUERY = {"keywords": "s & p 500 index", "l": "100", "s": "2429"}
-USER_AGENT = "market-predictor/0.1 point-in-time-universe-audit"
 SECTOR_BENCHMARKS = {
     "Communication Services": "XLC",
     "Consumer Discretionary": "XLY",
@@ -35,20 +30,11 @@ SECTOR_BENCHMARKS = {
     "Real Estate": "XLRE",
     "Utilities": "XLU",
 }
-_PUBLISHED_DATE = re.compile(r"/(20\d{2}-\d{2}-\d{2})-")
-_CHANGE_TITLE = re.compile(r"\b(?:set|sets)\s+to\s+join\s+S&P\s+500\b", re.IGNORECASE)
 _TABLE_COLUMNS = ("Effective Date", "Index Name", "Action", "Company Name", "Ticker", "GICS Sector")
 _LEGACY_TABLE_TITLE = re.compile(r"^S&P\s+500\s+INDEX\s*[-–—]\s*(.+)$", re.IGNORECASE)
 _LEGACY_ACTIONS = {"ADDED": "addition", "DELETED": "deletion"}
 _ANY_LEGACY_TABLE_TITLE = re.compile(r"^S&P\s+.+?\s+INDEX\s*[-\u2013\u2014]", re.IGNORECASE)
 _EXCHANGE_TICKER = r"\((?:NYSE|NASD|NASDAQ|NYSE\s+American|OTC(?:QX|QB)?)\s*:\s*([A-Z0-9.-]+)\)"
-
-
-@dataclass(frozen=True)
-class AnnouncementLink:
-    published_date: date
-    title: str
-    url: str
 
 
 @dataclass(frozen=True)
@@ -279,42 +265,6 @@ def _is_temporary_security_symbol(ticker: str) -> bool:
     return ticker.endswith((".WI", ".PR", ".WS", "V"))
 
 
-def discover_sp500_change_announcements(
-    *,
-    start_date: date,
-    end_date: date,
-    timeout_seconds: float = 30.0,
-    maximum_pages: int = 10,
-) -> list[AnnouncementLink]:
-    """Discover official constituent-change releases covering an effective-date window."""
-    if start_date > end_date:
-        raise ValueError("start_date must not be after end_date")
-    earliest_publication = start_date - timedelta(days=45)
-    discovered: dict[str, AnnouncementLink] = {}
-    for page in range(maximum_pages):
-        params = dict(ARCHIVE_QUERY)
-        params["o"] = str(page * 100)
-        response = _request(SP_GLOBAL_ARCHIVE_URL, params=params, timeout_seconds=timeout_seconds)
-        soup = BeautifulSoup(response.text, "html.parser")
-        page_dates: list[date] = []
-        for anchor in soup.find_all("a", href=True):
-            url = urljoin(SP_GLOBAL_ARCHIVE_URL, str(anchor["href"]))
-            match = _PUBLISHED_DATE.search(url)
-            if match is None:
-                continue
-            published = date.fromisoformat(match.group(1))
-            page_dates.append(published)
-            title = anchor.get_text(" ", strip=True)
-            if _CHANGE_TITLE.search(title) and earliest_publication <= published <= end_date:
-                discovered[url] = AnnouncementLink(published_date=published, title=title, url=url)
-        if page_dates and min(page_dates) < earliest_publication:
-            break
-    links = sorted(discovered.values(), key=lambda item: (item.published_date, item.url))
-    if not links:
-        raise DataReadinessError("No official S&P 500 change announcements were discovered for the requested window")
-    return links
-
-
 def parse_sp500_changes(
     html: str,
     *,
@@ -502,49 +452,6 @@ def _legacy_company_ticker(body_text: str, company: str, *, source_url: str) -> 
     return tickers.pop()
 
 
-def collect_sp500_changes(
-    *,
-    start_date: date,
-    end_date: date,
-    raw_directory: Path,
-    workers: int = 6,
-    timeout_seconds: float = 30.0,
-) -> tuple[list[IndexChange], dict[str, Any]]:
-    """Persist each source independently, then fail closed if any required release fails."""
-    links = discover_sp500_change_announcements(start_date=start_date, end_date=end_date, timeout_seconds=timeout_seconds)
-    raw_directory.mkdir(parents=True, exist_ok=True)
-    changes: list[IndexChange] = []
-    sources: list[dict[str, Any]] = []
-    failures: list[dict[str, str]] = []
-    with ThreadPoolExecutor(max_workers=max(1, workers)) as executor:
-        futures = {executor.submit(_download_announcement, link, raw_directory, timeout_seconds): link for link in links}
-        for future in as_completed(futures):
-            link = futures[future]
-            try:
-                parsed, source = future.result()
-                changes.extend(parsed)
-                sources.append(source)
-            except Exception as exc:
-                failures.append({"url": link.url, "error": f"{type(exc).__name__}: {exc}"})
-    manifest = {
-        "schema": "ml_v3.sp500_change_sources.v1",
-        "collected_at_utc": datetime.now(UTC).isoformat(),
-        "start_date": start_date.isoformat(),
-        "end_date": end_date.isoformat(),
-        "sources": sorted(sources, key=lambda item: str(item["url"])),
-        "failures": sorted(failures, key=lambda item: item["url"]),
-    }
-    (raw_directory / "manifest.json").write_text(json.dumps(manifest, indent=2, sort_keys=True), encoding="utf-8")
-    if failures:
-        raise DataReadinessError(f"{len(failures)} official S&P announcement downloads failed; see {raw_directory / 'manifest.json'}")
-    deduplicated = {
-        (item.effective_at_utc, item.action, item.ticker): item
-        for item in changes
-        if start_date <= item.effective_at_utc.astimezone(ZoneInfo("America/New_York")).date() <= end_date
-    }
-    return sorted(deduplicated.values(), key=lambda item: (item.effective_at_utc, item.action, item.ticker)), manifest
-
-
 def _ticker_at(
     ticker: str,
     published_date: date,
@@ -726,36 +633,6 @@ def build_point_in_time_sp500_universe(
         "contradictions": contradictions,
     }
     return universe, audit
-
-
-def _download_announcement(link: AnnouncementLink, raw_directory: Path, timeout_seconds: float) -> tuple[list[IndexChange], dict[str, Any]]:
-    response = _request(link.url, timeout_seconds=timeout_seconds)
-    digest = hashlib.sha256(response.text.encode("utf-8")).hexdigest()
-    path = raw_directory / f"{link.published_date.isoformat()}_{digest[:12]}.html"
-    path.write_text(response.text, encoding="utf-8")
-    changes = parse_sp500_changes(response.text, source_url=link.url, published_date=link.published_date)
-    return changes, {
-        "url": link.url,
-        "title": link.title,
-        "published_date": link.published_date.isoformat(),
-        "sha256": digest,
-        "raw_path": str(path),
-        "change_rows": len(changes),
-    }
-
-
-def _request(url: str, *, timeout_seconds: float, params: dict[str, str] | None = None) -> requests.Response:
-    last_error: Exception | None = None
-    for attempt in range(3):
-        try:
-            response = requests.get(url, params=params, headers={"User-Agent": USER_AGENT}, timeout=timeout_seconds)
-            response.raise_for_status()
-            return response
-        except requests.RequestException as exc:
-            last_error = exc
-            if attempt < 2:
-                time.sleep(0.5 * (2**attempt))
-    raise DataReadinessError(f"Failed to fetch {url}: {last_error}")
 
 
 def _normalize_current_snapshot(frame: pd.DataFrame) -> pd.DataFrame:

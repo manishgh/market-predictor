@@ -25,6 +25,8 @@ _SAFE_RESPONSE_HEADERS = (
     "x-ratelimit-reset",
 )
 _MAX_SAFE_HEADER_VALUE_LENGTH = 2_048
+_DEFAULT_MAXIMUM_BODY_BYTES = 16 * 1024 * 1024
+_READ_CHUNK_BYTES = 64 * 1024
 
 
 @dataclass(frozen=True, slots=True)
@@ -41,14 +43,14 @@ class HttpByteResponse:
     last_modified: str | None
     body_length: int
     sha256: str
+    body_representation: str
     safe_headers: tuple[tuple[str, str], ...]
 
 
 def _http_error_message(method: str, url: str, error: Exception | None) -> str:
     if isinstance(error, requests.HTTPError) and error.response is not None:
         response = error.response
-        body = response.text[:300].replace("\n", " ").replace("\r", " ")
-        return f"{method} failed: {url} status={response.status_code} body={body}"
+        return f"{method} failed: {url} status={response.status_code}"
     if error is not None:
         return f"{method} failed: {url} error={error}"
     return f"{method} failed: {url}"
@@ -135,15 +137,21 @@ class HttpClient:
         headers: dict[str, str] | None = None,
         retries: int = 3,
         pause: float = 1.0,
+        maximum_body_bytes: int = _DEFAULT_MAXIMUM_BODY_BYTES,
     ) -> HttpByteResponse:
+        if maximum_body_bytes < 1:
+            raise ValueError("maximum_body_bytes must be positive")
         last_error: Exception | None = None
         for attempt in range(retries):
+            response: requests.Response | None = None
             try:
+                request_headers = {"Accept-Encoding": "identity", **(headers or {})}
                 response = self.session.get(
                     url,
                     params=params,
-                    headers=headers,
+                    headers=request_headers,
                     timeout=self.timeout,
+                    stream=True,
                 )
                 if (
                     _is_retriable_status(response.status_code)
@@ -158,10 +166,18 @@ class HttpClient:
                     )
                     continue
                 response.raise_for_status()
-                body = response.content
+                body = _read_bounded_http_entity(
+                    response,
+                    maximum_body_bytes=maximum_body_bytes,
+                )
                 safe_headers = _bounded_safe_headers(response.headers)
                 safe_header_map = dict(safe_headers)
                 final_url = response.url or url
+                requested_url = (
+                    response.request.url
+                    if response.request is not None and response.request.url
+                    else url
+                )
                 redirect_chain = tuple(
                     [*(hop.url for hop in response.history), final_url]
                     if response.history
@@ -169,7 +185,7 @@ class HttpClient:
                 )
                 return HttpByteResponse(
                     body=body,
-                    requested_url=url,
+                    requested_url=requested_url,
                     final_url=final_url,
                     redirect_chain=redirect_chain,
                     status_code=response.status_code,
@@ -180,6 +196,7 @@ class HttpClient:
                     last_modified=safe_header_map.get("last-modified"),
                     body_length=len(body),
                     sha256=sha256(body).hexdigest(),
+                    body_representation="http_entity_encoded",
                     safe_headers=safe_headers,
                 )
             except requests.RequestException as exc:
@@ -197,6 +214,9 @@ class HttpClient:
                         pause * (2**attempt)
                         + random.uniform(0.0, pause)
                     )
+            finally:
+                if response is not None:
+                    response.close()
         raise RuntimeError(_http_error_message("GET", url, last_error)) from last_error
 
     def post_json_with_headers(
@@ -285,6 +305,43 @@ def _retry_delay(
         ),
         120.0,
     )
+
+
+def _read_bounded_http_entity(
+    response: requests.Response,
+    *,
+    maximum_body_bytes: int,
+) -> bytes:
+    """Read transfer-decoded but content-encoded entity bytes within a hard limit."""
+
+    content_length = response.headers.get("Content-Length")
+    if content_length is not None:
+        try:
+            declared_length = int(content_length)
+        except ValueError as exc:
+            raise RuntimeError("HTTP response Content-Length is invalid") from exc
+        if declared_length < 0 or declared_length > maximum_body_bytes:
+            raise RuntimeError(
+                "HTTP response exceeds maximum_body_bytes: "
+                f"declared={declared_length} limit={maximum_body_bytes}"
+            )
+    response.raw.decode_content = False
+    chunks: list[bytes] = []
+    total = 0
+    while True:
+        chunk = response.raw.read(
+            min(_READ_CHUNK_BYTES, maximum_body_bytes - total + 1)
+        )
+        if not chunk:
+            break
+        total += len(chunk)
+        if total > maximum_body_bytes:
+            raise RuntimeError(
+                "HTTP response exceeds maximum_body_bytes: "
+                f"observed>{maximum_body_bytes} limit={maximum_body_bytes}"
+            )
+        chunks.append(bytes(chunk))
+    return b"".join(chunks)
 
 
 def _bounded_safe_headers(

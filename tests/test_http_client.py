@@ -3,6 +3,7 @@ from __future__ import annotations
 import unittest
 from datetime import UTC
 from hashlib import sha256
+from io import BytesIO
 from typing import Any
 from unittest.mock import Mock, patch
 
@@ -78,6 +79,54 @@ class HttpClientTests(unittest.TestCase):
             ),
         )
         self.assertEqual(result.status_code, 200)
+
+    def test_get_bytes_records_prepared_url_with_query_parameters(self) -> None:
+        response = _Response(200, body=b"archive")
+        response.request = requests.Request(
+            "GET",
+            "https://example.test/archive",
+            params={"o": "100", "l": "100"},
+        ).prepare()
+        client = HttpClient()
+        client.session = Mock()
+        client.session.get.return_value = response
+
+        result = client.get_bytes_with_metadata(
+            "https://example.test/archive",
+            params={"o": "100", "l": "100"},
+        )
+
+        self.assertEqual(
+            result.requested_url,
+            "https://example.test/archive?o=100&l=100",
+        )
+
+    def test_get_bytes_preserves_content_encoded_entity_bytes(self) -> None:
+        encoded = b"encoded-gzip-representation"
+        client = HttpClient()
+        client.session = Mock()
+        client.session.get.return_value = _Response(
+            200,
+            body=encoded,
+            headers={"Content-Encoding": "gzip"},
+        )
+
+        result = client.get_bytes_with_metadata("https://example.test/raw")
+
+        self.assertEqual(result.body, encoded)
+        self.assertEqual(result.content_encoding, "gzip")
+        self.assertEqual(result.body_representation, "http_entity_encoded")
+
+    def test_get_bytes_rejects_oversized_stream(self) -> None:
+        client = HttpClient()
+        client.session = Mock()
+        client.session.get.return_value = _Response(200, body=b"12345")
+
+        with self.assertRaisesRegex(RuntimeError, "exceeds maximum_body_bytes"):
+            client.get_bytes_with_metadata(
+                "https://example.test/raw",
+                maximum_body_bytes=4,
+            )
 
     @patch("market_predictor.sources.http.time.sleep")
     def test_get_bytes_retries_408_429_and_all_server_errors(
@@ -230,12 +279,17 @@ class _Response(requests.Response):
         self._payload = payload
         self.headers = requests.structures.CaseInsensitiveDict(headers or {})
         self._content = body if body is not None else b"test response"
+        self.raw = _RawBody(self._content)
         self.url = url
         self.history = history or []
 
     def json(self, **kwargs: Any) -> object:
         del kwargs
         return self._payload
+
+
+class _RawBody(BytesIO):
+    decode_content: bool = False
 
 
 if __name__ == "__main__":

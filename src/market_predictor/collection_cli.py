@@ -16,6 +16,7 @@ COLLECTION_COMMANDS = frozenset(
         "collect-seeking-alpha",
         "collect-seeking-alpha-profiles",
         "collect-seeking-alpha-universe",
+        "collect-sp500-official-source-archive",
         "collect-swing",
         "collect-swing-daily-history",
         "download-finviz",
