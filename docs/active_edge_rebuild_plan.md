@@ -657,6 +657,61 @@ Only a `ready_for_daily_bar_collection` result may authorize the exact
 Repository verification passed 768 tests with 85 existing warnings, Ruff,
 strict mypy across 196 source files, compileall, and `git diff --check`.
 
+### ER1E Official Source Reacquisition And Membership Lineage
+
+Status: `in_progress` within ER1A. Independent provenance and collector reviews
+were completed before implementation. They found that the ER1D blocker artifact
+is conservative and valid, but its future authorization path is insufficient:
+source files, universe audit, and final memberships are not yet joined by one
+verified parent-hash chain. No Alpaca bar request may rely on the current
+`ready_for_daily_bar_collection` branch.
+
+The frozen source scope is publication discovery from 2018-04-14 through the
+2026-07-08 reconstruction cutoff. Reacquiring only the 2018-2019 gap is
+insufficient because the backward membership replay depends on the complete
+release chain through the cutoff. The 83 retained canonical release URLs are
+seed identities, not valid payload evidence; discovery must independently cover
+the full window and may add releases missed by the old narrow title matcher.
+
+The source collector must:
+
+- persist exact HTTP response bytes with `write_bytes()` and verify the stored
+  SHA-256 after writing;
+- record requested and final URL, redirect chain, retrieval time, status,
+  content type and encoding, ETag, Last-Modified, byte length, and byte hash;
+- retain and hash every archive discovery page and prove pagination crossed the
+  lower publication boundary;
+- reject unexpected domains, browser-save markers, generic landing pages,
+  incomplete discovery, and releases with no parseable S&P 500 membership rows;
+- publish an immutable request before collection, per-unit content-addressed
+  payload and sidecar, hash-verified resume, partial status, and final authority
+  only when all units pass;
+- use at most two download workers and stay below the 4 GiB process limit.
+
+Deterministic reconstruction remains offline and reuses the existing parser and
+backward interval builder. Its authority must bind raw archive authority,
+canonical sorted event hash, cutoff anchor, transition evidence, PIT universe,
+and identity-filtered membership by parent hashes. Cutoff membership must replay
+to the anchor exactly.
+
+Transition evidence is an independent blocker. The retained provider artifact
+begins on 2019-09-13 and the reviewed ledger begins on 2019-11-05. A new
+immutable transition request and authority must cover 2018-05-29 through the
+cutoff, or explicitly prove that no transition occurred in each uncovered
+interval from primary evidence. Absence of a row is not proof of no transition.
+
+Exit gates:
+
+1. raw-byte HTTP transport and resumable source collector pass focused and full
+   verification;
+2. an independent code/provenance review finds no unresolved critical or high
+   issue before the first authoritative network run;
+3. the official archive authority covers the full frozen publication window;
+4. transition authority covers the full membership interval;
+5. offline replay publishes the complete parent-hash chain and exact anchor
+   reconciliation;
+6. only then may the swing acquisition planner emit exact Alpaca units.
+
 ### ER1A Repository And Data Convergence
 
 The 2026-07-31 cleanup removed legacy compatibility narratives and 24.775 GiB
