@@ -42,6 +42,7 @@ from market_predictor.edge_rebuild.strategy_contract import load_strategy_contra
 from market_predictor.edge_rebuild.swing_materialization import (
     materialize_swing_feature_panel,
 )
+from market_predictor.edge_rebuild.swing_ordering import audit_swing_ordering
 from market_predictor.edge_rebuild.universe_identity import (
     publish_verified_universe,
 )
@@ -54,6 +55,36 @@ from market_predictor.v3.errors import DataReadinessError
 
 
 def register_edge_rebuild_commands(app: typer.Typer, console: Any) -> None:
+    @app.command("audit-edge-rebuild-swing-ordering")
+    @serialized_heavy_job("audit-edge-rebuild-swing-ordering")
+    def audit_edge_rebuild_swing_ordering(
+        panel_dir: Path = typer.Option(...),
+        out_dir: Path = typer.Option(...),
+        policy: Path = typer.Option(
+            Path("configs/edge_rebuild_swing_ordering.toml"),
+        ),
+    ) -> None:
+        """Test deterministic technical ordering before fitting a model."""
+
+        result = audit_swing_ordering(
+            panel_dir=panel_dir,
+            config_path=policy,
+            output_dir=out_dir,
+        )
+        console.print(
+            {
+                key: result[key]
+                for key in (
+                    "status",
+                    "sessions",
+                    "mean_session_spread_bps",
+                    "positive_session_share",
+                    "newey_west_t_stat",
+                    "gates",
+                )
+            }
+        )
+
     @app.command("materialize-edge-rebuild-swing-panel")
     @serialized_heavy_job("materialize-edge-rebuild-swing-panel")
     def materialize_edge_rebuild_swing_panel(

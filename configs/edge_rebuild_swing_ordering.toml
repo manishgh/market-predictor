@@ -1,0 +1,31 @@
+schema_version = "edge_rebuild.swing_ordering.v1"
+
+# Frozen before this audit reads an outcome. Every input is a same-session
+# centred rank, so scale and market-wide level cannot dominate the composite.
+score_features = [
+  "residual_return_20d_vs_spy_xs_rank",
+  "residual_return_20d_vs_sector_xs_rank",
+  "residual_return_60d_vs_spy_xs_rank",
+  "residual_return_60d_vs_sector_xs_rank",
+  "sma_200_slope_20d_xs_rank",
+  "kaufman_efficiency_ratio_xs_rank",
+  "price_obv_confirmation_xs_rank",
+  "volume_ratio_20_xs_rank",
+  "dist_ema_10_xs_rank",
+  "prior_dist_ema_10_xs_rank",
+  "intraday_return_xs_rank",
+]
+
+# Positive means a larger feature raises the score. A pullback reclaim is the
+# sole negative direction: the prior close should sit below EMA10 before the
+# current close and intraday move recover.
+score_directions = [1, 1, 1, 1, 1, 1, 1, 1, 1, -1, 1]
+
+top_quantile = 0.10
+bottom_quantile = 0.10
+minimum_scored_securities_per_session = 50
+minimum_sessions = 500
+minimum_mean_spread_bps = 5.0
+minimum_positive_session_share = 0.50
+minimum_newey_west_t_stat = 2.0
+newey_west_lag_sessions = 10
