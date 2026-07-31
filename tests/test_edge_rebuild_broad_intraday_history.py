@@ -107,6 +107,93 @@ def test_plan_rejects_wrong_existing_feed_or_timeframe(
         )
 
 
+def test_plan_rejects_corrupt_existing_file_hash(tmp_path: Path) -> None:
+    broad, pit, corpus = _inputs(tmp_path)
+    path = corpus / "regular" / "5m" / "AAA.parquet"
+    frame = pd.read_parquet(path)
+    frame.loc[0, "source"] = "corrupt"
+    frame.to_parquet(path, index=False)
+
+    with pytest.raises(DataReadinessError, match="file does not verify"):
+        build_broad_intraday_history_plan(
+            broad_memberships_path=broad,
+            pit_memberships_path=pit,
+            existing_corpus_directory=corpus,
+            policy_path=POLICY,
+            output_directory=tmp_path / "plan",
+            config=_config(),
+        )
+
+
+def test_plan_rejects_manifest_row_count_mismatch(tmp_path: Path) -> None:
+    broad, pit, corpus = _inputs(tmp_path)
+    manifest_path = corpus / "_manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["files"][0]["rows"] += 1
+    manifest_path.write_text(
+        json.dumps(manifest, indent=2, sort_keys=True),
+        encoding="utf-8",
+    )
+    _write_corpus_authority(corpus)
+
+    with pytest.raises(DataReadinessError, match="row count differs"):
+        build_broad_intraday_history_plan(
+            broad_memberships_path=broad,
+            pit_memberships_path=pit,
+            existing_corpus_directory=corpus,
+            policy_path=POLICY,
+            output_directory=tmp_path / "plan",
+            config=_config(),
+        )
+
+
+def test_plan_rejects_regular_bar_outside_session(tmp_path: Path) -> None:
+    broad, pit, corpus = _inputs(tmp_path)
+    path = corpus / "regular" / "5m" / "AAA.parquet"
+    frame = pd.read_parquet(path)
+    frame.loc[frame["session_date_et"].eq(pd.Timestamp(FULL_SESSION).date()), "bar_start_utc"] = pd.Timestamp(
+        "2024-07-05 12:00",
+        tz="UTC",
+    )
+    frame.to_parquet(path, index=False)
+    _resign_corpus_file(corpus, ticker="AAA")
+
+    with pytest.raises(DataReadinessError, match="exceed XNYS bounds"):
+        build_broad_intraday_history_plan(
+            broad_memberships_path=broad,
+            pit_memberships_path=pit,
+            existing_corpus_directory=corpus,
+            policy_path=POLICY,
+            output_directory=tmp_path / "plan",
+            config=_config(),
+        )
+
+
+def test_plan_replans_exact_missing_session(tmp_path: Path) -> None:
+    broad, pit, corpus = _inputs(tmp_path)
+    _publish_corpus(
+        corpus,
+        {
+            "AAA": [EARLY_CLOSE],
+            "PITCO": [EARLY_CLOSE],
+        },
+    )
+    output = tmp_path / "plan"
+
+    build_broad_intraday_history_plan(
+        broad_memberships_path=broad,
+        pit_memberships_path=pit,
+        existing_corpus_directory=corpus,
+        policy_path=POLICY,
+        output_directory=output,
+        config=_config(),
+    )
+    missing = pd.read_parquet(output / "missing_symbol_sessions" / "2024-07.parquet")
+    aaa = missing.loc[missing["ticker"].eq("AAA"), "session_date_et"]
+
+    assert set(aaa) == {pd.Timestamp(FULL_SESSION).date()}
+
+
 def test_policy_and_generic_collector_registration_prohibit_one_minute() -> None:
     config = load_broad_intraday_history_config(POLICY)
     generic = load_collection_transport_config(POLICY)

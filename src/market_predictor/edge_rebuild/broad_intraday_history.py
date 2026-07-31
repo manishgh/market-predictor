@@ -12,7 +12,11 @@ from pathlib import Path
 from typing import Any
 
 import exchange_calendars as xcals
+import numpy as np
 import pandas as pd
+import pyarrow as pa
+import pyarrow.compute as pc
+import pyarrow.parquet as pq
 
 from market_predictor.canonical.store import file_sha256
 from market_predictor.edge_rebuild.history_contracts import (
@@ -50,6 +54,16 @@ _MEMBERSHIP_COLUMNS = {
 }
 _CORPUS_SCHEMA = "edge_rebuild.intraday_materialization.v1"
 _CORPUS_AUTHORITY_SCHEMA = "edge_rebuild.intraday_materialization_authority.v1"
+_CORPUS_IDENTITY = {
+    "ticker": None,
+    "session_segment": "regular",
+    "timeframe": "5m",
+    "source": "alpaca",
+    "price_feed": "sip",
+    "adjustment": "all",
+}
+_COVERAGE_COLUMNS = ("session_date_et", "bar_start_utc")
+_PARQUET_BATCH_SIZE = 262_144
 
 
 def build_broad_intraday_history_plan(
@@ -368,31 +382,23 @@ def _load_existing_coverage(
         path = _resolve_inside(directory, str(raw["path"]))
         if not path.is_file() or file_sha256(path) != raw.get("sha256"):
             raise DataReadinessError(f"canonical corpus file does not verify: {path}")
-        frame = pd.read_parquet(
-            path,
-            columns=[
-                "ticker",
-                "session_date_et",
-                "session_segment",
-                "timeframe",
-                "bar_start_utc",
-                "source",
-                "price_feed",
-                "adjustment",
-            ],
-        )
-        if len(frame) != int(raw.get("rows", -1)):
+        parquet = _open_parquet(path)
+        rows = parquet.metadata.num_rows
+        if rows != int(raw.get("rows", -1)):
             raise DataReadinessError(f"canonical corpus row count differs: {path}")
-        _validate_corpus_frame(frame, ticker=ticker, bounds=bounds)
-        dates = pd.to_datetime(frame["session_date_et"], errors="raise").dt.date
-        for session in dates.unique():
+        observed_sessions = _read_validated_corpus_coverage(
+            parquet,
+            ticker=ticker,
+            bounds=bounds,
+        )
+        for session in observed_sessions:
             if first_session <= session <= last_session:
                 covered.add((ticker, session))
         consulted.append(
             {
                 "path": str(path),
                 "sha256": str(raw["sha256"]),
-                "rows": len(frame),
+                "rows": rows,
             }
         )
     replanned_truncated = len(truncated.intersection(covered))
@@ -412,32 +418,145 @@ def _load_existing_coverage(
     }
 
 
-def _validate_corpus_frame(
-    frame: pd.DataFrame,
+def _open_parquet(path: Path) -> pq.ParquetFile:
+    try:
+        parquet = pq.ParquetFile(path, memory_map=True)  # type: ignore[no-untyped-call]
+    except (OSError, pa.ArrowException) as exc:
+        raise DataReadinessError(f"canonical corpus Parquet is unreadable: {path}") from exc
+    if parquet.metadata is None or parquet.metadata.num_rows <= 0:
+        raise DataReadinessError(f"canonical regular 5m identity failed for {path.stem}")
+    return parquet
+
+
+def _read_validated_corpus_coverage(
+    parquet: pq.ParquetFile,
     *,
     ticker: str,
     bounds: Mapping[date, tuple[pd.Timestamp, pd.Timestamp]],
-) -> None:
-    starts = pd.to_datetime(frame["bar_start_utc"], utc=True, errors="coerce")
-    if (
-        frame.empty
-        or bool(starts.isna().any())
-        or set(frame["ticker"].astype(str).str.upper()) != {ticker}
-        or set(frame["session_segment"].astype(str)) != {"regular"}
-        or set(frame["timeframe"].astype(str).str.lower()) != {"5m"}
-        or set(frame["source"].astype(str).str.lower()) != {"alpaca"}
-        or set(frame["price_feed"].astype(str).str.lower()) != {"sip"}
-        or set(frame["adjustment"].astype(str).str.lower()) != {"all"}
-        or bool((starts.dt.minute.mod(5).ne(0) | starts.dt.second.ne(0) | starts.dt.microsecond.ne(0)).any())
-    ):
+) -> set[date]:
+    required = set(_COVERAGE_COLUMNS).union(_CORPUS_IDENTITY)
+    missing = required.difference(parquet.schema_arrow.names)
+    if missing:
         raise DataReadinessError(f"canonical regular 5m identity failed for {ticker}")
-    dates = pd.to_datetime(frame["session_date_et"], errors="raise").dt.date
-    relevant = dates.isin(bounds)
-    for session in dates[relevant].unique():
+
+    expected_identity = dict(_CORPUS_IDENTITY)
+    expected_identity["ticker"] = ticker.lower()
+    scan_identity = [
+        column
+        for column, expected in expected_identity.items()
+        if not _metadata_proves_constant(parquet, column=column, expected=str(expected))
+    ]
+    columns = [*_COVERAGE_COLUMNS, *scan_identity]
+    observed: set[date] = set()
+    rows_seen = 0
+    try:
+        batches = parquet.iter_batches(  # type: ignore[no-untyped-call]
+            batch_size=_PARQUET_BATCH_SIZE,
+            columns=columns,
+            use_threads=True,
+        )
+        for batch in batches:
+            rows_seen += batch.num_rows
+            _validate_identity_columns(
+                batch,
+                expected={column: str(expected_identity[column]) for column in scan_identity},
+                ticker=ticker,
+            )
+            observed.update(_validated_batch_sessions(batch, ticker=ticker, bounds=bounds))
+    except DataReadinessError:
+        raise
+    except (OSError, ValueError, TypeError, pa.ArrowException) as exc:
+        raise DataReadinessError(f"canonical regular 5m identity failed for {ticker}") from exc
+    if rows_seen != parquet.metadata.num_rows or not observed:
+        raise DataReadinessError(f"canonical regular 5m identity failed for {ticker}")
+    return observed
+
+
+def _metadata_proves_constant(
+    parquet: pq.ParquetFile,
+    *,
+    column: str,
+    expected: str,
+) -> bool:
+    column_index = parquet.schema_arrow.get_field_index(column)
+    if column_index < 0:
+        return False
+    for row_group_index in range(parquet.metadata.num_row_groups):
+        row_group = parquet.metadata.row_group(row_group_index)
+        chunk = row_group.column(column_index)
+        statistics = chunk.statistics
+        if statistics is None or not statistics.has_min_max or statistics.null_count != 0:
+            return False
+        minimum = _statistic_text(statistics.min)
+        maximum = _statistic_text(statistics.max)
+        if minimum != maximum or minimum.lower() != expected:
+            return False
+    return bool(parquet.metadata.num_row_groups > 0)
+
+
+def _statistic_text(value: object) -> str:
+    if isinstance(value, bytes):
+        return value.decode("utf-8")
+    return str(value)
+
+
+def _validate_identity_columns(
+    batch: pa.RecordBatch,
+    *,
+    expected: Mapping[str, str],
+    ticker: str,
+) -> None:
+    for column, expected_value in expected.items():
+        values = batch.column(batch.schema.get_field_index(column))
+        if values.null_count:
+            raise DataReadinessError(f"canonical regular 5m identity failed for {ticker}")
+        normalized = pc.utf8_lower(  # type: ignore[attr-defined]
+            pc.cast(values, pa.string(), safe=True)  # type: ignore[no-untyped-call]
+        )
+        matches = pc.all(  # type: ignore[attr-defined]
+            pc.equal(normalized, pa.scalar(expected_value))  # type: ignore[attr-defined]
+        )
+        if matches.as_py() is not True:
+            raise DataReadinessError(f"canonical regular 5m identity failed for {ticker}")
+
+
+def _validated_batch_sessions(
+    batch: pa.RecordBatch,
+    *,
+    ticker: str,
+    bounds: Mapping[date, tuple[pd.Timestamp, pd.Timestamp]],
+) -> set[date]:
+    raw_dates = batch.column(batch.schema.get_field_index("session_date_et"))
+    raw_starts = batch.column(batch.schema.get_field_index("bar_start_utc"))
+    if raw_dates.null_count or raw_starts.null_count:
+        raise DataReadinessError(f"canonical regular 5m identity failed for {ticker}")
+    session_dates = pc.cast(raw_dates, pa.date32(), safe=True)  # type: ignore[no-untyped-call]
+    starts = pc.cast(  # type: ignore[no-untyped-call]
+        raw_starts,
+        pa.timestamp("ns", tz="UTC"),
+        safe=True,
+    )
+    start_ns = pc.cast(  # type: ignore[no-untyped-call]
+        starts,
+        pa.int64(),
+        safe=True,
+    ).to_numpy(zero_copy_only=False)
+    if bool(np.any(np.mod(start_ns, 300_000_000_000) != 0)):
+        raise DataReadinessError(f"canonical regular 5m identity failed for {ticker}")
+    session_days = session_dates.to_numpy(zero_copy_only=False)
+    observed: set[date] = set()
+    for raw_day in np.unique(session_days):
+        session = date.fromisoformat(np.datetime_as_string(raw_day, unit="D"))
+        observed.add(session)
+        if session not in bounds:
+            continue
         open_at, close_at = bounds[session]
-        session_starts = starts[dates.eq(session)]
-        if bool(session_starts.lt(open_at).any() or session_starts.ge(close_at).any()):
+        mask = session_days == raw_day
+        open_ns = int(open_at.value)
+        close_ns = int(close_at.value)
+        if bool(np.any(start_ns[mask] < open_ns) or np.any(start_ns[mask] >= close_ns)):
             raise DataReadinessError(f"canonical regular bars exceed XNYS bounds for {ticker} {session}")
+    return observed
 
 
 def _build_missing_frames(
