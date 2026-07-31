@@ -679,10 +679,14 @@ The source collector must:
   SHA-256 after writing;
 - record requested and final URL, redirect chain, retrieval time, status,
   content type and encoding, ETag, Last-Modified, byte length, and byte hash;
-- retain and hash every archive discovery page and prove pagination crossed the
-  lower publication boundary;
-- reject unexpected domains, browser-save markers, generic landing pages,
-  incomplete discovery, and releases with no parseable S&P 500 membership rows;
+- retain and hash every archive discovery page, use one-result overlap between
+  adjacent pages, and prove pagination crossed both frozen publication bounds;
+- reject unexpected domains, generic landing pages, incomplete discovery, and
+  response-identity failures. The live provider template itself contains a
+  `saved from url` comment, so that marker is not provenance evidence;
+- retain parser failures as explicitly unresolved raw evidence. Raw archive
+  authority uses state `raw_complete`; event reconstruction must remain blocked
+  until `parser_unresolved_releases` is zero and `event_extraction_ready` is true;
 - publish an immutable request before collection, per-unit content-addressed
   payload and sidecar, hash-verified resume, partial status, and final authority
   only when all units pass;

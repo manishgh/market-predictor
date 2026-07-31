@@ -442,7 +442,9 @@ def test_final_archive_preserves_exact_bytes_and_parser_source_hash(tmp_path: Pa
     assert all(record["parser_source_sha256"] == record["sha256"] for record in manifest["releases"])
     authority = _read_json(tmp_path / "out" / "_authority.json")
     assert authority["schema"] == ARCHIVE_AUTHORITY_SCHEMA
-    assert authority["state"] == "complete"
+    assert authority["state"] == "raw_complete"
+    assert authority["event_extraction_ready"] is True
+    archive_module.require_spglobal_event_reconstruction_ready(tmp_path / "out")
 
 
 def test_partial_run_resumes_search_page_without_network(tmp_path: Path) -> None:
@@ -813,6 +815,128 @@ def test_provider_template_marker_is_accepted_with_verified_http_lineage(
 
     assert manifest["status"] == "complete"
     assert (tmp_path / "out" / "_authority.json").exists()
+
+
+def test_raw_archive_retains_release_with_unresolved_parser(
+    tmp_path: Path,
+) -> None:
+    audit_path, audit_hash, seeds = _write_source_audit(tmp_path)
+    transport = _complete_transport(seeds)
+    transport.bodies[seeds[0]] = (
+        b"<html><body><h1>Official S&amp;P 500 announcement</h1></body></html>"
+    )
+
+    manifest = collect_spglobal_archive(
+        source_audit_path=audit_path,
+        expected_source_audit_sha256=audit_hash,
+        output_directory=tmp_path / "out",
+        client_factory=transport.factory,
+    )
+
+    record = next(item for item in manifest["releases"] if item["url"] == seeds[0])
+    assert manifest["status"] == "complete"
+    assert manifest["parser_unresolved_releases"] == 1
+    assert record["parser_status"] == "parser_unresolved"
+    assert record["change_rows"] == 0
+    assert record["parser_source_sha256"] is None
+    assert record["parser_error"]
+    authority = _read_json(tmp_path / "out" / "_authority.json")
+    assert authority["state"] == "raw_complete"
+    assert authority["event_extraction_ready"] is False
+    with pytest.raises(DataReadinessError, match="blocked by 1 unresolved"):
+        archive_module.require_spglobal_event_reconstruction_ready(
+            tmp_path / "out"
+        )
+
+
+def test_unexpected_parser_exception_is_retained_as_unresolved_raw_evidence(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    audit_path, audit_hash, seeds = _write_source_audit(tmp_path)
+    transport = _complete_transport(seeds)
+
+    def fail_parser(*_: Any, **__: Any) -> list[Any]:
+        raise ValueError("unexpected historical date format")
+
+    monkeypatch.setattr(archive_module, "_parse_release_changes", fail_parser)
+    manifest = collect_spglobal_archive(
+        source_audit_path=audit_path,
+        expected_source_audit_sha256=audit_hash,
+        output_directory=tmp_path / "out",
+        client_factory=transport.factory,
+    )
+
+    assert manifest["status"] == "complete"
+    assert manifest["parser_unresolved_releases"] == 84
+    assert all(
+        record["parser_status"] == "parser_unresolved"
+        for record in manifest["releases"]
+    )
+
+
+def test_decode_failure_is_retained_as_unresolved_raw_evidence(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    audit_path, audit_hash, seeds = _write_source_audit(tmp_path)
+    transport = _complete_transport(seeds)
+    original = archive_module._decode_http_entity
+
+    def fail_release_decode(
+        body: bytes,
+        content_encoding: str,
+        *,
+        maximum_decoded_bytes: int = archive_module.MAXIMUM_DECODED_BYTES,
+    ) -> bytes:
+        if b"Effective Date" in body:
+            raise UnicodeError("historical release encoding failure")
+        return original(
+            body,
+            content_encoding,
+            maximum_decoded_bytes=maximum_decoded_bytes,
+        )
+
+    monkeypatch.setattr(archive_module, "_decode_http_entity", fail_release_decode)
+    manifest = collect_spglobal_archive(
+        source_audit_path=audit_path,
+        expected_source_audit_sha256=audit_hash,
+        output_directory=tmp_path / "out",
+        client_factory=transport.factory,
+    )
+
+    assert manifest["status"] == "complete"
+    assert manifest["parser_unresolved_releases"] == 84
+    assert all(
+        (tmp_path / "out" / str(record["path"])).is_file()
+        for record in manifest["releases"]
+    )
+
+
+def test_event_readiness_recomputes_manifest_counts_and_release_set(
+    tmp_path: Path,
+) -> None:
+    audit_path, audit_hash, seeds = _write_source_audit(tmp_path)
+    output = tmp_path / "out"
+    collect_spglobal_archive(
+        source_audit_path=audit_path,
+        expected_source_audit_sha256=audit_hash,
+        output_directory=output,
+        client_factory=_complete_transport(seeds).factory,
+    )
+    manifest_path = output / "_manifest.json"
+    authority_path = output / "_authority.json"
+    manifest = _read_json(manifest_path)
+    manifest["completed_releases"] = int(manifest["completed_releases"]) - 1
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    authority = _read_json(authority_path)
+    authority["artifact_sha256"] = hashlib.sha256(
+        manifest_path.read_bytes()
+    ).hexdigest()
+    authority_path.write_text(json.dumps(authority), encoding="utf-8")
+
+    with pytest.raises(DataReadinessError, match="lineage or release counts"):
+        archive_module.require_spglobal_event_reconstruction_ready(output)
 
 
 def _write_source_audit(tmp_path: Path) -> tuple[Path, str, list[str]]:

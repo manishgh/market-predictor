@@ -63,6 +63,11 @@ def register_v3_readiness_commands(app: typer.Typer, console: Console) -> None:
                     "network_units_this_run",
                 )
             }
+            | {
+                "parser_unresolved_releases": result.get(
+                    "parser_unresolved_releases", 0
+                )
+            }
         )
         if result["status"] != "complete":
             raise typer.Exit(code=2)

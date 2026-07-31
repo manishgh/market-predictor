@@ -274,6 +274,13 @@ def _collect_spglobal_archive_locked(
         failed_releases={},
         network_units=used_network_units,
     )
+    parser_unresolved_releases = sum(
+        str(record["parser_status"]) != "parsed"
+        for record in release_records
+    )
+    status["parser_unresolved_releases"] = parser_unresolved_releases
+    status["archive_scope"] = "raw_official_responses"
+    status["event_extraction_ready"] = parser_unresolved_releases == 0
     discovery_path = output_directory / "_discovery.json"
     manifest: dict[str, Any] = {
         **status,
@@ -291,6 +298,7 @@ def _collect_spglobal_archive_locked(
                     "url": record["url"],
                     "sha256": record["sha256"],
                     "change_rows": record["change_rows"],
+                    "parser_status": record["parser_status"],
                 }
                 for record in release_records
             ]
@@ -299,16 +307,95 @@ def _collect_spglobal_archive_locked(
     _atomic_json(output_directory / "_manifest.json", manifest)
     authority = {
         "schema": ARCHIVE_AUTHORITY_SCHEMA,
-        "state": "complete",
+        "state": "raw_complete",
+        "archive_scope": "raw_official_responses",
         "artifact": "_manifest.json",
         "artifact_sha256": _file_sha256(output_directory / "_manifest.json"),
         "request_sha256": request_sha256,
         "source_audit_sha256": audit_sha256,
         "release_set_sha256": manifest["release_set_sha256"],
+        "parser_unresolved_releases": parser_unresolved_releases,
+        "event_extraction_state": (
+            "ready"
+            if parser_unresolved_releases == 0
+            else "blocked_parser_unresolved"
+        ),
+        "event_extraction_ready": parser_unresolved_releases == 0,
     }
     _atomic_json(output_directory / "_authority.json", authority)
     _atomic_json(output_directory / "_status.json", status)
     return manifest
+
+
+def require_spglobal_event_reconstruction_ready(
+    archive_directory: Path,
+) -> dict[str, Any]:
+    """Verify raw authority and refuse event replay while parser cases remain."""
+
+    authority = _load_json(archive_directory / "_authority.json")
+    artifact = _resolve_inside(
+        archive_directory,
+        str(authority.get("artifact", "")),
+    )
+    if (
+        authority.get("schema") != ARCHIVE_AUTHORITY_SCHEMA
+        or authority.get("state") != "raw_complete"
+        or authority.get("archive_scope") != "raw_official_responses"
+        or not artifact.is_file()
+        or authority.get("artifact_sha256") != _file_sha256(artifact)
+    ):
+        raise DataReadinessError("S&P raw archive authority is invalid")
+    manifest = _load_json(artifact)
+    releases = _records(manifest, "releases")
+    release_count = len(releases)
+    release_set_sha256 = _json_sha256(
+        [
+            {
+                "url": record.get("url"),
+                "sha256": record.get("sha256"),
+                "change_rows": record.get("change_rows"),
+                "parser_status": record.get("parser_status"),
+            }
+            for record in releases
+        ]
+    )
+    if (
+        manifest.get("schema") != ARCHIVE_MANIFEST_SCHEMA
+        or manifest.get("status") != "complete"
+        or manifest.get("archive_scope") != "raw_official_responses"
+        or manifest.get("request_sha256") != authority.get("request_sha256")
+        or manifest.get("source_audit_sha256")
+        != authority.get("source_audit_sha256")
+        or manifest.get("release_set_sha256") != release_set_sha256
+        or authority.get("release_set_sha256") != release_set_sha256
+        or int(manifest.get("requested_releases", -1)) != release_count
+        or int(manifest.get("completed_releases", -1)) != release_count
+        or int(manifest.get("release_url_count", -1)) != release_count
+    ):
+        raise DataReadinessError(
+            "S&P raw archive manifest lineage or release counts are invalid"
+        )
+    unresolved = sum(
+        str(record.get("parser_status", "")) != "parsed"
+        for record in releases
+    )
+    if (
+        int(authority.get("parser_unresolved_releases", -1)) != unresolved
+        or int(manifest.get("parser_unresolved_releases", -1)) != unresolved
+    ):
+        raise DataReadinessError(
+            "S&P raw archive parser-readiness counts are inconsistent"
+        )
+    if (
+        unresolved != 0
+        or authority.get("event_extraction_state") != "ready"
+        or authority.get("event_extraction_ready") is not True
+        or manifest.get("event_extraction_ready") is not True
+    ):
+        raise DataReadinessError(
+            f"S&P event reconstruction is blocked by {unresolved} unresolved releases"
+        )
+    return authority
 
 
 def _replay_complete_archive(
@@ -618,26 +705,35 @@ def _persist_release(
             f"{announcement.url} -> {response.final_url}"
         )
     body = response.body
+    body_path = _write_content_addressed(root, body)
+    changes: list[IndexChange] = []
+    parser_status = "parsed"
+    parser_error: str | None = None
     with _HTML_PARSE_LOCK:
-        decoded_body = _decode_http_entity(
-            body,
-            str(response.content_encoding or ""),
-        )
-        html = _decode_html(decoded_body, response.content_type)
-        changes = _parse_release_changes(
-            html,
-            source_url=announcement.url,
-            published_date=announcement.published_date,
-            source_sha256=str(metadata["sha256"]),
-        )
+        try:
+            decoded_body = _decode_http_entity(
+                body,
+                str(response.content_encoding or ""),
+            )
+            html = _decode_html(decoded_body, response.content_type)
+            changes = _parse_release_changes(
+                html,
+                source_url=announcement.url,
+                published_date=announcement.published_date,
+                source_sha256=str(metadata["sha256"]),
+            )
+        except Exception as exc:  # noqa: BLE001 - parser defects must not discard raw evidence
+            parser_status = "parser_unresolved"
+            parser_error = f"{type(exc).__name__}: {exc}"
     if not changes:
-        raise DataReadinessError(f"official release contains no parseable S&P 500 changes: {announcement.url}")
+        if parser_status == "parsed":
+            parser_status = "no_effective_rows"
+            parser_error = "parser returned no effective S&P 500 membership rows"
     parser_hashes = {item.source_sha256 for item in changes}
-    if parser_hashes != {metadata["sha256"]}:
+    if changes and parser_hashes != {metadata["sha256"]}:
         raise DataReadinessError(
             f"parser source hash does not equal exact response-byte hash: {announcement.url}"
         )
-    body_path = _write_content_addressed(root, body)
     unit_id = _release_unit_id(announcement.url)
     record = {
         "schema": ARCHIVE_UNIT_SCHEMA,
@@ -651,7 +747,11 @@ def _persist_release(
         "origin": announcement.origin,
         "path": str(body_path.relative_to(root)),
         "change_rows": len(changes),
-        "parser_source_sha256": next(iter(parser_hashes)),
+        "parser_status": parser_status,
+        "parser_error": parser_error,
+        "parser_source_sha256": (
+            next(iter(parser_hashes)) if parser_hashes else None
+        ),
         **metadata,
     }
     sealed = _with_unit_integrity_hash(record)
@@ -922,6 +1022,7 @@ def _validate_stored_unit_metadata(
 
 
 def _validate_release_record(root: Path, record: Mapping[str, Any], announcement: _Announcement) -> None:
+    parser_status = str(record.get("parser_status", ""))
     if (
         record.get("url") != announcement.url
         or record.get("published_date") != announcement.published_date.isoformat()
@@ -929,10 +1030,29 @@ def _validate_release_record(root: Path, record: Mapping[str, Any], announcement
         != _canonical_release_path(announcement.url)
         or _canonical_release_path(str(record.get("final_url", "")))
         != _canonical_release_path(announcement.url)
-        or int(record.get("change_rows", 0)) < 1
-        or record.get("parser_source_sha256") != record.get("sha256")
+        or parser_status
+        not in {"parsed", "no_effective_rows", "parser_unresolved"}
     ):
         raise DataReadinessError(f"S&P official release resume metadata failed: {announcement.url}")
+    change_rows = int(record.get("change_rows", -1))
+    if parser_status != "parsed":
+        if (
+            change_rows != 0
+            or record.get("parser_source_sha256") is not None
+            or not str(record.get("parser_error") or "").strip()
+        ):
+            raise DataReadinessError(
+                f"S&P official release unresolved parser metadata failed: {announcement.url}"
+            )
+        return
+    if (
+        change_rows < 1
+        or record.get("parser_source_sha256") != record.get("sha256")
+        or record.get("parser_error") is not None
+    ):
+        raise DataReadinessError(
+            f"S&P official release parsed metadata failed: {announcement.url}"
+        )
     html = _decode_html(
         _decode_http_entity(
             _read_unit_body(root, record),
@@ -946,7 +1066,7 @@ def _validate_release_record(root: Path, record: Mapping[str, Any], announcement
         published_date=announcement.published_date,
         source_sha256=str(record["sha256"]),
     )
-    if len(changes) != int(record["change_rows"]) or {item.source_sha256 for item in changes} != {record["sha256"]}:
+    if len(changes) != change_rows or {item.source_sha256 for item in changes} != {record["sha256"]}:
         raise DataReadinessError(f"S&P official release resume parse failed: {announcement.url}")
 
 
