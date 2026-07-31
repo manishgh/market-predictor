@@ -231,6 +231,20 @@ sentiment_decay_half_life_minutes_intraday = 90.0
 sentiment_decay_half_life_hours_swing = 36.0
 swing_sentiment_decay_evidence = "provisional_pending_er4_ablation"
 
+# Continuous technical relationships. These are published indicator semantics,
+# not buy/sell thresholds. A five-bar Williams pivot is known only after the two
+# following bars complete; OBV and Kaufman's efficiency ratio use one standard
+# 20-bar context. Intraday callers must include the session in their grouping so
+# none of these windows crosses the overnight gap.
+technical_relationship_methods = [
+  "williams_five_bar_rsi_divergence",
+  "granville_obv_confirmation",
+  "kaufman_efficiency_ratio_regime",
+]
+rsi_pivot_span_bars = 2
+obv_confirmation_lookback_bars = 20
+efficiency_ratio_lookback_bars = 20
+
 [stress]
 # Costs are widened, not the signal, to test whether the edge survives worse
 # fills than the base policy assumes.

@@ -280,6 +280,10 @@ class FeatureContract(FrozenModel):
     sentiment_decay_half_life_minutes_intraday: float = Field(gt=0, le=1_440)
     sentiment_decay_half_life_hours_swing: float = Field(gt=0, le=336)
     swing_sentiment_decay_evidence: str
+    technical_relationship_methods: tuple[str, ...]
+    rsi_pivot_span_bars: int = Field(ge=1, le=5)
+    obv_confirmation_lookback_bars: int = Field(ge=5, le=60)
+    efficiency_ratio_lookback_bars: int = Field(ge=5, le=60)
 
     @model_validator(mode="after")
     def validate_features(self) -> Self:
@@ -294,6 +298,19 @@ class FeatureContract(FrozenModel):
             "trailing_baseline_ratio",
         }:
             raise ValueError("news counts must be normalized within a cross-section")
+        expected_relationships = (
+            "williams_five_bar_rsi_divergence",
+            "granville_obv_confirmation",
+            "kaufman_efficiency_ratio_regime",
+        )
+        if self.technical_relationship_methods != expected_relationships:
+            raise ValueError(
+                "technical relationships must use the frozen published methods"
+            )
+        if self.rsi_pivot_span_bars != 2:
+            raise ValueError(
+                "RSI divergence must use the frozen five-bar confirmed pivot"
+            )
         return self
 
 

@@ -123,6 +123,22 @@ def test_raw_news_counts_cannot_be_enabled() -> None:
         StrategyContract.model_validate(raw)
 
 
+def test_relationship_features_use_the_frozen_published_methods() -> None:
+    raw = _raw()
+    raw["features"]["technical_relationship_methods"] = [
+        "ad_hoc_divergence",
+        "granville_obv_confirmation",
+        "kaufman_efficiency_ratio_regime",
+    ]
+    with pytest.raises(ValueError, match="frozen published methods"):
+        StrategyContract.model_validate(raw)
+
+    raw = _raw()
+    raw["features"]["rsi_pivot_span_bars"] = 3
+    with pytest.raises(ValueError, match="five-bar confirmed pivot"):
+        StrategyContract.model_validate(raw)
+
+
 def test_experiment_budget_cannot_be_widened() -> None:
     """Trying enough variants guarantees one passes by luck."""
 
