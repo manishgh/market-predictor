@@ -170,27 +170,13 @@ def materialize_swing_feature_panel(
 
         del benchmark_bars
         release_process_memory()
-        panel = _load_complete_stage_one_population(
-            output_dir,
-            shard_records=shard_records,
-            request_sha256=request_sha256,
-            expected_security_ids=security_ids,
-        )
-        _guard(budget, "swing panel stage-two input")
-        finalized = finalize_swing_feature_panel(
-            panel,
-            contract=contract,
-            expected_security_ids=security_ids,
-        )
-        del panel
-        release_process_memory()
-        _guard(budget, "swing panel stage-two finalization")
-        manifest = _publish_final_panel(
-            finalized,
+        manifest = _finalize_and_publish_stage_one(
             output_dir=output_dir,
             request_sha256=request_sha256,
             request=request,
             shard_records=shard_records,
+            expected_security_ids=security_ids,
+            contract=contract,
             budget=budget,
         )
         return {"status": "complete", **manifest}
@@ -352,14 +338,15 @@ def _load_stage_one_shard_record(
     return record
 
 
-def _load_complete_stage_one_population(
+def _verified_stage_one_paths(
     output_dir: Path,
     *,
     shard_records: list[dict[str, Any]],
     request_sha256: str,
     expected_security_ids: list[str],
-) -> pd.DataFrame:
-    parts: list[pd.DataFrame] = []
+) -> list[Path]:
+    paths: list[Path] = []
+    observed_security_ids: set[str] = set()
     for index, record in enumerate(shard_records):
         path = output_dir / "stage1" / f"shard-{index:04d}.parquet"
         verified = _load_stage_one_shard_record(
@@ -370,13 +357,13 @@ def _load_complete_stage_one_population(
         )
         if verified is None:
             raise DataReadinessError(f"stage-one shard disappeared: {path}")
-        frame = pd.read_parquet(path)
-        if len(frame) != int(verified["rows"]):
-            raise DataReadinessError(f"stage-one shard row count differs: {path}")
-        parts.append(frame)
-    panel = pd.concat(parts, ignore_index=True)
-    _validate_stage_one_rows(panel, expected_security_ids)
-    return panel
+        observed_security_ids.update(str(value) for value in verified["security_ids"])
+        paths.append(path)
+    if sorted(observed_security_ids) != expected_security_ids:
+        raise DataReadinessError(
+            "complete swing stage-one security population differs from its request"
+        )
+    return paths
 
 
 def _validate_stage_one_rows(
@@ -398,58 +385,138 @@ def _validate_stage_one_rows(
         raise DataReadinessError("swing stage-one rows violate feature availability")
 
 
-def _publish_final_panel(
-    panel: pd.DataFrame,
+def _finalize_and_publish_stage_one(
     *,
     output_dir: Path,
     request_sha256: str,
     request: Mapping[str, Any],
     shard_records: list[dict[str, Any]],
+    expected_security_ids: list[str],
+    contract: StrategyContract,
     budget: tuple[float, float],
 ) -> dict[str, Any]:
-    _validate_final_panel(panel)
+    paths = _verified_stage_one_paths(
+        output_dir,
+        shard_records=shard_records,
+        request_sha256=request_sha256,
+        expected_security_ids=expected_security_ids,
+    )
+    first_year = min(int(str(item["first_session"])[:4]) for item in shard_records)
+    last_year = max(int(str(item["last_session"])[:4]) for item in shard_records)
     staging = output_dir / f".final.{uuid.uuid4().hex}.staging"
     final_dir = output_dir / "final"
     staging.mkdir(parents=True)
     try:
         files: list[dict[str, Any]] = []
-        years = pd.to_datetime(panel["session_date_et"]).dt.year
-        for year in sorted(years.unique()):
-            part = panel.loc[years.eq(year)]
+        columns: list[str] | None = None
+        observed_security_ids: set[str] = set()
+        totals = {
+            "rows": 0,
+            "sessions": 0,
+            "feature_eligible_rows": 0,
+            "barrier_resolved_rows": 0,
+            "rank_eligible_rows": 0,
+            "cross_section_eligible_rows": 0,
+        }
+        first_session: str | None = None
+        last_session: str | None = None
+        profiles: set[str] = set()
+        for year in range(first_year, last_year + 1):
+            parts: list[pd.DataFrame] = []
+            for path in paths:
+                frame = pd.read_parquet(path)
+                selected = pd.to_datetime(frame["session_date_et"]).dt.year.eq(year)
+                if bool(selected.any()):
+                    parts.append(frame.loc[selected].copy())
+                del frame
+            if not parts:
+                continue
+            rows = pd.concat(parts, ignore_index=True)
+            del parts
+            _guard(budget, f"swing panel stage-two input year {year}")
+            finalized = finalize_swing_feature_panel(
+                rows,
+                contract=contract,
+            )
+            del rows
+            release_process_memory()
+            _guard(budget, f"swing panel stage-two finalization year {year}")
+            _validate_final_panel(finalized)
+            session_values = pd.to_datetime(finalized["session_date_et"])
+            if not bool(session_values.dt.year.eq(year).all()):
+                raise DataReadinessError(
+                    f"swing panel stage two mixed session years in {year}"
+                )
             path = staging / "panel" / f"year={int(year)}" / "part.parquet"
             path.parent.mkdir(parents=True, exist_ok=True)
-            part.to_parquet(path, index=False)
+            finalized.to_parquet(path, index=False)
             files.append(
                 {
                     "path": str(path.relative_to(staging)).replace("\\", "/"),
                     "sha256": file_sha256(path),
-                    "rows": int(len(part)),
+                    "rows": int(len(finalized)),
                     "year": int(year),
                 }
             )
+            year_columns = list(finalized.columns)
+            if columns is None:
+                columns = year_columns
+            elif columns != year_columns:
+                raise DataReadinessError("swing panel year partitions change schema")
+            observed_security_ids.update(finalized["security_id"].astype(str))
+            profiles.update(finalized["feature_profile"].astype(str))
+            year_first = str(session_values.min().date())
+            year_last = str(session_values.max().date())
+            first_session = min(first_session, year_first) if first_session else year_first
+            last_session = max(last_session, year_last) if last_session else year_last
+            totals["rows"] += int(len(finalized))
+            totals["sessions"] += int(session_values.nunique())
+            totals["feature_eligible_rows"] += int(
+                finalized["feature_eligible"].fillna(False).sum()
+            )
+            totals["barrier_resolved_rows"] += int(
+                finalized["barrier_label"].notna().sum()
+            )
+            totals["rank_eligible_rows"] += int(
+                finalized["rank_label"].notna().sum()
+            )
+            totals["cross_section_eligible_rows"] += int(
+                finalized["cross_section_eligible"].fillna(False).sum()
+            )
+            del finalized
+            release_process_memory()
             _guard(budget, f"swing panel publish year {year}")
-        sessions = pd.to_datetime(panel["session_date_et"])
-        profile = sorted(panel["feature_profile"].astype(str).unique())
+        expected_rows = sum(int(item["rows"]) for item in shard_records)
+        if totals["rows"] != expected_rows:
+            raise DataReadinessError(
+                f"swing panel stage two retained {totals['rows']} of {expected_rows} rows"
+            )
+        if sorted(observed_security_ids) != expected_security_ids:
+            raise DataReadinessError(
+                "swing panel final security population differs from its request"
+            )
+        if columns is None or first_session is None or last_session is None:
+            raise DataReadinessError("swing panel stage two produced no partitions")
         manifest: dict[str, Any] = {
             "schema": SWING_MATERIALIZATION_MANIFEST_SCHEMA,
             "created_at_utc": datetime.now(UTC).isoformat(),
             "request_sha256": request_sha256,
             "strategy_contract_sha256": request["strategy_contract_sha256"],
-            "feature_profiles": profile,
-            "rows": int(len(panel)),
-            "columns": list(panel.columns),
-            "securities": int(panel["security_id"].nunique()),
-            "sessions": int(sessions.nunique()),
-            "first_session": str(sessions.min().date()),
-            "last_session": str(sessions.max().date()),
-            "feature_eligible_rows": int(panel["feature_eligible"].fillna(False).sum()),
-            "barrier_resolved_rows": int(panel["barrier_label"].notna().sum()),
-            "rank_eligible_rows": int(panel["rank_label"].notna().sum()),
-            "cross_section_eligible_rows": int(
-                panel["cross_section_eligible"].fillna(False).sum()
-            ),
+            "feature_profiles": sorted(profiles),
+            "rows": totals["rows"],
+            "columns": columns,
+            "securities": len(observed_security_ids),
+            "sessions": totals["sessions"],
+            "first_session": first_session,
+            "last_session": last_session,
+            "feature_eligible_rows": totals["feature_eligible_rows"],
+            "barrier_resolved_rows": totals["barrier_resolved_rows"],
+            "rank_eligible_rows": totals["rank_eligible_rows"],
+            "cross_section_eligible_rows": totals[
+                "cross_section_eligible_rows"
+            ],
             "stage_one_shards": len(shard_records),
-            "stage_one_rows": int(sum(int(item["rows"]) for item in shard_records)),
+            "stage_one_rows": expected_rows,
             "zero_volume_bars_dropped": int(
                 sum(int(item["zero_volume_bars_dropped"]) for item in shard_records)
             ),

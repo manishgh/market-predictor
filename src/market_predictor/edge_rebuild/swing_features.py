@@ -349,9 +349,10 @@ def finalize_swing_feature_panel(
         columns=transformed_names,
         dtype="float32",
     )
-    transformed_block.loc[eligible, :] = transformed.loc[
-        :, transformed_names
-    ].to_numpy(dtype=np.float32)
+    if not transformed.empty:
+        transformed_block.loc[eligible, :] = transformed.loc[
+            :, transformed_names
+        ].to_numpy(dtype=np.float32)
     data = pd.concat([data, transformed_block], axis=1)
 
     rank_eligible = (

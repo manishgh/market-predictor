@@ -106,6 +106,7 @@ def materialization_inputs(
         **_kwargs: Any,
     ) -> pd.DataFrame:
         calls["finalize"] += 1
+        assert rows.groupby("session_date_et")["security_id"].nunique().eq(4).all()
         return rows.assign(rank_label=1, cross_section_eligible=True)
 
     monkeypatch.setattr(module, "build_swing_feature_rows", build)

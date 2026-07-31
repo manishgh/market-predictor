@@ -128,6 +128,25 @@ def test_under_warm_rows_do_not_enter_peer_scaling(
     )
 
 
+def test_all_under_warm_partition_retains_null_transforms(
+    contract: StrategyContract,
+) -> None:
+    source = _panel()
+    source["daily_bar_count"] = contract.swing.minimum_warmup_sessions - 1
+
+    output = finalize_swing_feature_panel(source, contract=contract)
+
+    rank_columns = [
+        column
+        for column in output.columns
+        if column.endswith(("_xs_z", "_xs_rank", "_sector_z"))
+    ]
+    assert len(output) == len(source)
+    assert output[rank_columns].isna().all(axis=None)
+    assert output["rank_label"].isna().all()
+    assert not output["cross_section_eligible"].any()
+
+
 def test_catalyst_raw_counts_never_enter_estimator_schema(
     contract: StrategyContract,
 ) -> None:
