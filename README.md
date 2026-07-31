@@ -45,10 +45,8 @@ Candidate identity comes from an immutable `.manifest.json`. Effective promoted 
 
 The V2 contract, exact timing semantics, frozen hypotheses, and acceptance gates
 are in [Primary V2 strategy research plan](docs/primary_strategy_v2_plan_2026-07-28.md).
-The completed evidence and failure interpretation are in the
-[Primary V2 model card](docs/model_cards/primary_v2_20260728.md).
-The subsequent validation-population audit is in the
-[Primary V2 failure-attribution model card](docs/model_cards/primary_v2_failure_attribution_20260728.md).
+The completed rejection evidence and subsequent redesign are summarized in the
+[active edge-rebuild plan](docs/active_edge_rebuild_plan.md).
 At this checkpoint, 574 repository tests pass, repository-wide Ruff is clean,
 strict mypy passes across 172 source files in the current local
 Python environment, and both complete V2 runs pass recursive artifact-authority
@@ -206,7 +204,7 @@ ML V3 checkpoints C1-C8 are complete with no selected candidate. B0/B1/B2/R1 and
 
 The post-C8 failure-attribution audit motivated V4-H1: a 120-minute primary target and decision stride with the same universe, features, costs, and R1 family. Its first dataset audit exposed 11,781 rank-eligible rows whose 24 observed bars spanned more than 120 wall-clock minutes. The labeler now requires a contiguous exact five-minute path and persists `ml_v3.labels.v2`; the invalid v1 dataset was never trained.
 
-The corrected V4-H1 fingerprint contains 505,049 physical rows and 495,513 rank-eligible rows over 474 sessions. B0 and R1 remain negative after costs in both development scopes, so V4-H1 is rejected and shadow remains closed. See the [failure-attribution card](docs/model_cards/v3_c8_failure_attribution_20260721.md) and [V4-H1 card](docs/model_cards/v4_h1_120m_20260721.md).
+The corrected V4-H1 fingerprint contains 505,049 physical rows and 495,513 rank-eligible rows over 474 sessions. B0 and R1 remain negative after costs in both development scopes, so V4-H1 is rejected and shadow remains closed. See the [V4-H1 card](docs/model_cards/v4_h1_120m_20260721.md).
 
 ## Architecture Documents
 
@@ -218,14 +216,12 @@ The corrected V4-H1 fingerprint contains 505,049 physical rows and 495,513 rank-
 - [ML model V3 improvement plan](docs/ml_model_v3_plan.md)
 - [Known strategy expansion sequence](docs/known_strategy_expansion_sequence_2026-07-26.md)
 - [Primary V2 strategy research plan](docs/primary_strategy_v2_plan_2026-07-28.md)
-- [Primary V2 model card](docs/model_cards/primary_v2_20260728.md)
 - [Strategy execution traceability](docs/strategy_execution_traceability.md)
 - [Machine-readable strategy execution ledger](docs/strategy_execution_ledger.json)
 - [Bounded strategy hypothesis registry](docs/strategy_hypothesis_registry.json)
 - [Non-serving reference model inventory](docs/reference_model_inventory.json)
 - [TradingFlow integration plan](docs/trading_flow_integration_plan.md)
 - [Legacy alert rule parity](docs/legacy_alert_rule_parity.md)
-- [Disk and dead-code cleanup audit](docs/reviews/disk_and_dead_code_cleanup_2026-07-26.md)
 
 ## Source Strategy
 
@@ -324,7 +320,7 @@ market-predictor-research build-v3-development-dataset --bars-dir data/artifacts
 market-predictor-research train-v3-models --dataset data/features/v3_c8_development_20260711_v9 --families R1 --max-training-memory-gb 4
 ```
 
-The loader rejects missing, modified, or unregistered monthly shards and carries the dataset fingerprint into training evidence. It projects only required training/audit columns; the trainer compacts features to `float32`, releases fold models, and enforces a configurable process-memory guard. The completed C8 dataset has 1,063,587 rows across 24 months. B0, B1, B2, R1, D1, and the external O1 catalyst overlay were evaluated and rejected; R2 could not be evaluated because the frozen rows contain no microstructure observations. See the [B0](docs/model_cards/v3_c8_b0_20260711.md), [B1](docs/model_cards/v3_c8_b1_20260711.md), [B2](docs/model_cards/v3_c8_b2_20260711.md), [R1](docs/model_cards/v3_c8_r1_20260720.md), [D1](docs/model_cards/v3_c8_d1_20260711.md), and [O1](docs/model_cards/v3_c8_o1_20260721.md) model cards.
+The loader rejects missing, modified, or unregistered monthly shards and carries the dataset fingerprint into training evidence. It projects only required training/audit columns; the trainer compacts features to `float32`, releases fold models, and enforces a configurable process-memory guard. The completed C8 dataset has 1,063,587 rows across 24 months. All evaluated families were rejected on cost-adjusted evidence; R2 could not be evaluated because the frozen rows contain no microstructure observations. The retained non-serving comparison is the [R1 card](docs/model_cards/v3_c8_r1_20260720.md).
 
 V4-H1 was built with `--horizons 6,12,24 --primary-horizon-bars 24 --decision-stride-bars 24`. The corrected v2 dataset fingerprint is `c2906f10b543327cc265798ecd81e019c5365dc9ede3e432b33ba881970cc612`. Its audit verifies all 24 shard hashes, exact 120-minute exits on every row, exact 120-minute eligible decision cadence, SIP provenance, PIT groups, and the development cutoff. B0/R1 training stayed below 1.96 GiB; both candidates were rejected without opening shadow data.
 
