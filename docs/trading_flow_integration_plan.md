@@ -29,7 +29,8 @@ There is no shared database and no shared OHLCV repository. Each project retains
 
 ## 3. Alert Ownership
 
-Runtime alerting is out of scope for `market-predictor`. ML V3 checkpoint C1 removed the legacy alert module, CLI commands, polling, backtesting command, and alert CSV ownership. The former rules and TradingFlow parity gaps are preserved in [Legacy Alert Rule Parity](legacy_alert_rule_parity.md).
+Runtime alerting is out of scope for `market-predictor`. Alert persistence,
+deduplication, acknowledgement, and delivery belong to `trading_flow`.
 
 `market-predictor` may return fields named `signal` as model classifications, but it does not persist alerts, deduplicate notifications, acknowledge alerts, send webhooks/push messages, or trigger automation. Prediction-only sector/theme analysis is exposed as ranking rather than monitoring.
 
@@ -320,7 +321,8 @@ Exit gate: explicit operational approval after paper and shadow evidence.
 ### Phase 5: Intraday ML
 
 - Promote an intraday model on fresh shadow data first.
-- Follow the frozen development/shadow and checkpoint sequence in [ML Model V3 Improvement Plan](ml_model_v3_plan.md).
+- Follow the frozen development/shadow sequence in the
+  [active edge-rebuild plan](active_edge_rebuild_plan.md).
 - Add completed-bar event handoff from TradingFlow.
 - Validate feature parity and bar timing.
 - Repeat Phases 1-4 for the intraday view; do not inherit swing thresholds.

@@ -483,6 +483,19 @@ stage-one shards and one complete stage-two pass, with immutable lineage and
 peak-memory evidence. No estimator may be trained before the simple top-decile
 versus bottom-decile ordering test passes.
 
+### ER1A Repository And Data Convergence
+
+The 2026-07-31 cleanup removed legacy compatibility narratives and 24.775 GiB
+of rejected, reproducible, or superseded local data. Current raw provider
+archives and authoritative edge-rebuild inputs were verified present after the
+deletion. `data/` now occupies 14.828 GiB. Generated feature directories remain
+absent until rebuilt through the current causal panel builder.
+
+The cleanup does not change model evidence or checkpoint status. It prevents a
+later command from accidentally selecting an old feature matrix or superseded
+canonical corpus. Focused governance and architecture tests passed 17/17; the
+documentation and data cleanup is isolated from model code.
+
 ## 7. ER2: Frozen Research Contract
 
 ER2 creates a design-only window that is disjoint from evaluation. Thresholds may be

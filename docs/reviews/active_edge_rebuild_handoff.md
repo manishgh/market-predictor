@@ -11,6 +11,28 @@ Remote: `https://github.com/manishgh/market-predictor`
 Branch: `r3-lineage`
 Last completed implementation commit: `fccda19`
 
+## Repository Cleanup
+
+On 2026-07-31, obsolete generated data and legacy narratives were removed under
+the new-only policy. No runtime compatibility path is supported.
+
+- Deleted 26,602,214,748 bytes (24.775 GiB): rejected/superseded feature
+  matrices, scratch work, the superseded `20260730` intraday corpus, old V2
+  research outputs, and redundant June/early-July raw experiments.
+- `data/` decreased from 39.603 GiB to 14.828 GiB.
+- Protected seven-year Alpaca news, current daily and intraday edge-rebuild
+  collections, the verified `20260731` corpus, point-in-time membership,
+  Seeking Alpha cache, and reusable one-minute raw history all remain.
+- The README was replaced with a current-state guide. Superseded V2/V3 plans,
+  review chains, rejected unregistered model cards, and stale runbooks were
+  deleted. Governance-required compact evidence and registered reference cards
+  remain.
+- Focused governance and architecture verification passed 17 tests. No Python
+  process was left running.
+
+Generated feature directories are intentionally absent until the next canonical
+build. Their absence is not a readiness defect.
+
 Read in this order:
 
 1. `AGENTS.md`

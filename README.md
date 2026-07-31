@@ -1,1089 +1,134 @@
 # Market Predictor
 
-All contributors and coding agents must follow the mandatory convergence and ML
-engineering rules in [AGENTS.md](AGENTS.md) before changing this repository.
+Market Predictor produces evidence-backed prediction intelligence for swing and
+intraday research. It owns market and catalyst data curation, causal feature
+construction, model training, validation, prediction, outcome maturation, and
+model governance.
 
-The only current execution queue is the
-[Active Edge Rebuild Execution Plan](docs/active_edge_rebuild_plan.md), with exact
-continuation state in the
-[Active Edge Rebuild Handoff](docs/reviews/active_edge_rebuild_handoff.md).
-Older dated plans and handoffs are historical contracts and evidence.
+It does **not** own alerts, broker execution, orders, positions, portfolio risk,
+or final sizing. Those responsibilities belong to `trading_flow`.
 
-Python prediction-intelligence project for ticker-level swing, daily momentum, and intraday setup scoring using:
+This system is not deployed. There are no supported legacy models, schemas,
+fallbacks, or compatibility paths. Only artifacts passing the current contracts
+may become serving candidates.
 
-- Alpaca premium news, ticker universe, and market bars as the primary live source.
-- Reddit API crawling as the required attention/community signal.
-- Seeking Alpha via RapidAPI for SA news/analysis, earnings, and quant/rating snapshots.
-- SEC EDGAR filing events with acceptance-time alignment.
-- Market-wide context from SPY/QQQ/sector ETF/news proxy events so global news can affect predictions even when it is not ticker-specific.
-- FinBERT sentiment features plus price movement labels for next-day and swing-horizon prediction targets.
+## Current State
 
-This is research and prediction tooling, not investment advice and not an automated trading system.
+- Branch: `r3-lineage`.
+- Active program: ER1A edge rebuild.
+- Swing: causal two-stage ranking-panel builder implemented; the seven-year panel
+  is not yet materialized and no model has been trained under this program.
+- Intraday: verified canonical SIP five-minute corpus contains 38,586,501 bars,
+  814 sessions, and 1,104 symbols. Volume-bar setup construction and selective
+  one-minute executable paths remain pending.
+- Promotion: no swing or intraday model is promoted or serveable.
+- Runtime: no alerting or execution behavior exists in this repository.
 
-The repository produces prediction intelligence: probabilities, catalyst summaries, feature/audit context, and watchlist rankings. It does not own broker execution, portfolio state, final sizing, stops, exits, or order lifecycle. Those responsibilities belong in a trading/runtime system such as `trading_flow`.
+Read these documents in order:
 
-The current data-reuse, five-year expansion, and memory-bounded training sequence
-is defined in the
-[five-year swing and intraday execution plan](docs/five_year_swing_intraday_execution_plan_2026-07-25.md).
+1. [Engineering covenant](AGENTS.md)
+2. [Active edge-rebuild plan](docs/active_edge_rebuild_plan.md)
+3. [Active handoff](docs/reviews/active_edge_rebuild_handoff.md)
+4. [Prediction architecture](docs/catalyst_confirmation_architecture.md)
+5. [Implementation guide](docs/implementation_guide.md)
 
-## Current Model State (2026-07-28)
+Additional retained contracts and evidence:
 
-Candidate identity comes from an immutable `.manifest.json`. Effective promoted state exists only when a content-addressed promotion attestation verifies the candidate, evidence manifest, causal identity chain, predeclared baseline/hypothesis, untouched-shadow confidence interval, gate configuration, and distinct OIDC-authenticated build/approver principals. Unregistered, unattested, unauthenticated, or hash-mismatched artifacts cannot be served.
-
-| Serving view | Artifact / family | State | Current evidence |
-| --- | --- | --- | --- |
-| Swing 5D | Canonical `swing.model.v1` | Five-year technical baselines completed and rejected; no promoted artifact | The 2021-07-09 through 2026-07-08 dataset has 607,909 eligible rows and 581 training tickers. Logistic/HGB walk-forward AUC is 0.4962/0.5000 and conservative return is -0.2343%/-0.0303%; neither has predictive or economic edge. The five-year Alpaca archive is audited; catalyst-full training remains blocked until sentiment artifacts are completed, audited, and joined causally. |
-| Swing Long Cross-Sectional Momentum - Next 5 Trading Sessions - Version 2 | `SWING.CROSS_SECTIONAL_MOMENTUM.5D.V2` | Distributional replay complete and rejected; no model retained | Reuses 113,884 exact KS3 rows, 53 technical features, four purged folds, and a separate unseen-ticker cohort. Expected-return HGB has worst-phase walk-forward net/SPY-relative return of -0.1937%/-0.4691%, profit factor 0.8998, and 45.99% drawdown. Its paired V1 net-return confidence lower bound is -0.2403%. |
-| Legacy swing 1D/5D volatile models | Pre-C4 artifacts | Deprecated and not serveable | Their feature/target schemas do not satisfy the canonical C4 contract, regardless of an older manifest status. |
-| Intraday 30m/60m KS4 | Seven named causal specialists | Development replay complete; all 22 technical candidates rejected; no promoted artifact | The exact-path corpus contains 479,879 rows derived from 81,349,171 Alpaca SIP one-minute bars. All seven technical populations completed four purged temporal folds and separate unseen-ticker evaluation. Five strategy hypotheses are reference-rejected; catalyst-dependent Gap Continuation and Gap Fade remain data-blocked pending immutable first-observed event lineage. No model artifact was retained. |
-| Intraday Long VWAP Mean Reversion - Up to 30 Regular-Session Minutes - Version 2 | `INTRADAY.VWAP_REVERSION.30M.V2` | Competing-risk and quantile replay complete and rejected; no model retained | Reuses 65,344 eligible exact-path KS4 rows and 70 technical features. The multinomial baseline loses -0.0855%/-0.0860% net in walk-forward/unseen-ticker validation. HGB competing risks is worse, with 0.4036 minimum profit factor and 26.80% drawdown. The distributional safety policy correctly selects zero rows because no predicted 10th-percentile return is positive. |
-| Legacy intraday 12 bars | 2026-07-09 technical ablation | Candidate; not serveable | ROC AUC 0.6014 and lift 1.4719. It predates the canonical C5 contract and fails its historical gates. |
-| Intraday opening V2 | 2026-07-10 non-overlapping, cost-aware experiment | Candidate; promotion rejected | Best exact-path AUC 0.5806, lift 1.1764, selected net return -0.184% per trade, profit factor 0.7076, max drawdown 30.28%. |
-| Intraday V3 R1 | 2026-07-20 grouped XGBoost ranker | Candidate; promotion rejected | Walk-forward/holdout NDCG@10 0.4930/0.5123, but top-10 cost-adjusted excess return is -0.0715%/-0.0764%. |
-| Intraday V3 O1 | 2026-07-21 fixed ticker-catalyst overlay on R1 | Research ablation; rejected | Walk-forward top-10 excess return improves from -0.0574% to -0.0487%, but ticker holdout worsens from -0.0642% to -0.0669%; both paired confidence intervals include zero. |
-| Intraday V4-H1 120m | 2026-07-21 exact-path B0/R1 experiment | Research candidates; rejected | R1 top-10 cost-adjusted excess return is -0.0802%/-0.0629% walk-forward/holdout. The longer horizon does not cover costs. |
-
-The V2 contract, exact timing semantics, frozen hypotheses, and acceptance gates
-are in [Primary V2 strategy research plan](docs/primary_strategy_v2_plan_2026-07-28.md).
-The completed rejection evidence and subsequent redesign are summarized in the
-[active edge-rebuild plan](docs/active_edge_rebuild_plan.md).
-At this checkpoint, 574 repository tests pass, repository-wide Ruff is clean,
-strict mypy passes across 172 source files in the current local
-Python environment, and both complete V2 runs pass recursive artifact-authority
-replay.
-
-```powershell
-.\.venv\Scripts\python.exe -m market_predictor.research_cli train-primary-v2 `
-  --strategy-id SWING.CROSS_SECTIONAL_MOMENTUM.5D.V2 `
-  --source-dir data\features\swing\specialist_datasets_20210709_20260708_v4 `
-  --out-dir data\research\primary_v2_swing_authoritative_v2_20260728
-
-.\.venv\Scripts\python.exe -m market_predictor.research_cli train-primary-v2 `
-  --strategy-id INTRADAY.VWAP_REVERSION.30M.V2 `
-  --source-dir data\features\ks4_intraday_training_causal_v3_20260727 `
-  --out-dir data\research\primary_v2_intraday_authoritative_v2_20260728
-
-.\.venv\Scripts\python.exe -m market_predictor.research_cli audit-primary-v2-failures `
-  --strategy-id SWING.CROSS_SECTIONAL_MOMENTUM.5D.V2 `
-  --v2-run-dir data\research\primary_v2_swing_authoritative_v2_20260728 `
-  --source-dir data\features\swing\specialist_datasets_20210709_20260708_v4 `
-  --out-dir data\research\primary_v2_failure_attribution_swing_phase_v3_20260728
-
-.\.venv\Scripts\python.exe -m market_predictor.research_cli audit-primary-v2-failures `
-  --strategy-id INTRADAY.VWAP_REVERSION.30M.V2 `
-  --v2-run-dir data\research\primary_v2_intraday_authoritative_v2_20260728 `
-  --source-dir data\features\ks4_intraday_training_causal_v3_20260727 `
-  --out-dir data\research\primary_v2_failure_attribution_intraday_phase_v3_20260728
-```
-
-The setup audit found no replicated viable cohort. Intraday VWAP reversion is
-negative before costs in both validation scopes. Swing momentum has positive
-average gross movement, but stamped costs consume the edge, both scopes
-underperform SPY, and all five non-overlapping phases of every predeclared
-cohort fail confidence or risk gates.
-The audit does not authorize model promotion or a narrower V3 population.
-
-### Swing research inventory
-
-`audit-swing-research-inventory` is the S0 gate for new swing-model research. It reads
-one ticker at a time, enforces the 4 GiB process budget, and writes a ticker-level CSV
-plus a hash-bound JSON summary. Technical readiness, catalyst research readiness, and
-catalyst promotion evidence are separate states: publication-time backfills may support
-controlled research, but they never satisfy prospective first-observed or
-source-collection evidence.
-
-The 2026-07-25 audit of the existing large-cap corpus found 318 tickers, 224,681
-sanitized events, 787 median daily bars, and 23.81 median news months. All 318 rows are
-ineligible for the new research threshold. The corpus has no historical first-observed
-evidence, source-collection ledger, SIP provenance, or point-in-time membership input.
-Five tickers have news/candle alignment failures and BRK-B has no matching daily feature
-file. Peak process working set was 0.57 GiB.
-
-```powershell
-.\.venv\Scripts\python.exe -m market_predictor.research_cli audit-swing-research-inventory `
-  --raw-event-dir data\raw\largecap_50b_2y_20260630_curated `
-  --feature-dir data\features\largecap_50b_2y_news_volume_20260630 `
-  --out data\reports\swing_research_inventory_largecap_20260725_v2.csv `
-  --summary-out data\reports\swing_research_inventory_largecap_20260725_v2.json `
-  --config configs\swing_research_inventory.toml
-```
-
-### Swing S1 market history
-
-S1 reconstructs a seven-year point-in-time S&P 500 universe from a frozen
-current snapshot, official S&P change releases, Alpaca corporate-action
-candidates, and the primary-source review ledger in
-`configs/sp500_security_transition_review.csv`.
-Membership intervals carry `security_id`; ticker reuse such as the two distinct
-`IR` companies and simultaneous issuer share classes are kept separate.
-Publication-to-effective ticker resolution is bounded by the official release
-date so an old ticker alias cannot rewrite a later reused symbol.
-
-`collect-swing-daily-history` is the canonical raw daily collector. It calls
-Alpaca directly without a Yahoo fallback, requires SIP/all-adjusted provenance,
-uses at most four per-symbol workers, writes hash-verified canonical bar
-artifacts plus a source-collection ledger, resumes only matching requests, and
-finalizes output immutably. Successful empty responses remain explicit
-`observed_empty` coverage gaps. `audit-swing-daily-history` replays every
-artifact hash and classifies each missing member session without interpolation.
-
-The frozen 2019-07-09 through 2026-07-08 v3 run contains 670 observed symbols,
-1,088,146 daily rows, and full 1,759-session history for SPY, QQQ, and all 11
-sector ETFs. The reviewed lineage repairs `SYMC -> NLOK -> GEN`,
-`CBS -> VIAC -> PARA -> PSKY`, `ARNC -> HWM`, `MYL -> VTRS`, `LB -> BBWI`,
-and `DISCA -> WBD`. Coverage is 885,371 of 885,538 expected point-in-time
-member sessions, or 99.9811%. All 24 partial gaps are terminal non-trading
-sessions around acquisitions or delistings. Historical `RHT` is
-`observed_empty`; historical SunTrust `STI` is explicitly excluded because the
-provider now resolves that ticker to a different security. There are zero
-interior or initial gaps, zero blocking intervals, and peak audit memory is
-0.258 GiB.
-
-`build-swing-market-panel-inputs` replays the membership, collection, source
-ledger, coverage-report, and per-symbol artifact hashes before constructing
-training inputs. It filters stock bars strictly to approved `[effective_from,
-effective_to)` membership windows, preserves terminal gaps without filling,
-keeps the 13 benchmarks separate, and carries mandatory `security_id` through
-canonical membership and decision joins. The v1 assembly contains 885,371
-point-in-time stock rows across 656 tickers, 22,867 benchmark rows, and 657
-approved membership intervals across 628 security identities. It has zero
-duplicate ticker/session rows, retains the two audited exclusions, and peaked
-at 0.881 GiB. Stock and benchmark bars are production-quality SIP artifacts.
-Historical membership availability is a `provider_publication_proxy`, so the
-membership artifact and resulting bundle remain research-only. Event,
-fundamental, exact-label, and source-availability joins are separate remaining
-S1 gates; no model is promoted by this step.
-
-```powershell
-.\.venv\Scripts\python.exe -m market_predictor.collection_cli collect-swing-daily-history `
-  --memberships data\universe\sp500_point_in_time_20190709_20260708_v3.parquet `
-  --start-date 2019-07-09 `
-  --end-date 2026-07-08 `
-  --out-dir data\raw\swing_daily_sip_sp500_pit_20190709_20260708_v3 `
-  --workers 4
-
-.\.venv\Scripts\python.exe -m market_predictor.research_cli audit-swing-daily-history `
-  --memberships data\universe\sp500_point_in_time_20190709_20260708_v3.parquet `
-  --collection-dir data\raw\swing_daily_sip_sp500_pit_20190709_20260708_v3 `
-  --out data\reports\swing_daily_history_coverage_20190709_20260708_v3.csv `
-  --summary-out data\reports\swing_daily_history_coverage_20190709_20260708_v3.json
-
-.\.venv\Scripts\python.exe -m market_predictor.research_cli build-swing-market-panel-inputs `
-  --memberships data\universe\sp500_point_in_time_20190709_20260708_v3.parquet `
-  --collection-dir data\raw\swing_daily_sip_sp500_pit_20190709_20260708_v3 `
-  --coverage-report data\reports\swing_daily_history_coverage_20190709_20260708_v3.csv `
-  --coverage-summary data\reports\swing_daily_history_coverage_20190709_20260708_v3.json `
-  --stock-bars-out data\artifacts\swing_market_panel_inputs_20190709_20260708_v1\stock_bars.parquet `
-  --benchmark-bars-out data\artifacts\swing_market_panel_inputs_20190709_20260708_v1\benchmark_bars.parquet `
-  --memberships-out data\artifacts\swing_market_panel_inputs_20190709_20260708_v1\memberships.parquet `
-  --audit-out data\reports\swing_market_panel_inputs_20190709_20260708_v1_audit.json
-```
-
-Production API implications:
-
-- Production routes are server-owned and always require a promoted, hash-verified artifact.
-- The configured swing route is deliberately not ready until a real canonical candidate passes every C4 promotion gate; there is no legacy fallback.
-- Unified mode may return explicit swing and intraday errors until each requested view has its own promoted canonical artifact.
-- Candidate scoring is available only through research commands or an explicitly constructed test service, never through the HTTP request contract.
-- R4 promotion and local release infrastructure is complete: immutable candidate manifests and attestations, predeclared hypotheses, one-use shadow evidence, paired session-block confidence gates, versioned local releases, atomic activation, and verified rollback are implemented. This does not change the model state above; no real canonical model has passed promotion.
-- Azure publication, synchronization, rollback, and disaster-recovery rehearsal are `environment_pending` and are not evidence for R4 completion.
-- R7.3 exact catalyst lineage, R7.4 source-path label reproduction, R7.5 causal
-  shadow evidence, R7.6 selected-policy monitoring, and R7.7 atomic serving
-  bundles are implemented locally.
-  R7.6 evaluates a bounded rolling decision window, keeps pending selections
-  explicit, and binds every cohort to the exact model, feature, prediction,
-  label, execution, intent, and outcome identities.
-- Real selected-policy monitoring evidence remains `environment_pending` until a
-  promoted release has accumulated sufficient live matured outcomes.
-- At the R7.7 checkpoint, all 357 repository tests pass, repository-wide Ruff is
-  clean, and strict mypy passes across 136 source/script files.
-
-The next valid intraday promotion attempt requires a new predeclared development hypothesis that first passes both economic scopes, followed by matured shadow data after 2026-07-08 and all current promotion audits. See [Intraday model promotion](docs/intraday_model_promotion.md).
-
-ML V3 checkpoints C1-C8 are complete with no selected candidate. B0/B1/B2/R1 and the fixed O1 catalyst overlay all have negative cost-adjusted top-10 excess return, while D1 is near-random as a downside gate. R2 is unavailable because every frozen C8 row lacks microstructure inputs; the system does not impute them. O1 is rejected on paired walk-forward and ticker-holdout evidence. C9 shadow evaluation remains closed because there is no candidate to promote or serve.
-
-The post-C8 failure-attribution audit motivated V4-H1: a 120-minute primary target and decision stride with the same universe, features, costs, and R1 family. Its first dataset audit exposed 11,781 rank-eligible rows whose 24 observed bars spanned more than 120 wall-clock minutes. The labeler now requires a contiguous exact five-minute path and persists `ml_v3.labels.v2`; the invalid v1 dataset was never trained.
-
-The corrected V4-H1 fingerprint contains 505,049 physical rows and 495,513 rank-eligible rows over 474 sessions. B0 and R1 remain negative after costs in both development scopes, so V4-H1 is rejected and shadow remains closed. See the [V4-H1 card](docs/model_cards/v4_h1_120m_20260721.md).
-
-## Architecture Documents
-
-- [Implementation guide](docs/implementation_guide.md)
-- [Production ML rebuild plan](docs/production_ml_rebuild_plan.md)
+- [Known strategy sequence](docs/known_strategy_expansion_sequence_2026-07-26.md)
+- [Strategy traceability](docs/strategy_execution_traceability.md)
+- [TradingFlow integration boundary](docs/trading_flow_integration_plan.md)
 - [Azure deployment plan](docs/azure_deployment_plan.md)
-- [Market prediction intelligence architecture](docs/catalyst_confirmation_architecture.md)
-- [Intraday model promotion](docs/intraday_model_promotion.md)
-- [ML model V3 improvement plan](docs/ml_model_v3_plan.md)
-- [Known strategy expansion sequence](docs/known_strategy_expansion_sequence_2026-07-26.md)
-- [Primary V2 strategy research plan](docs/primary_strategy_v2_plan_2026-07-28.md)
-- [Strategy execution traceability](docs/strategy_execution_traceability.md)
-- [Machine-readable strategy execution ledger](docs/strategy_execution_ledger.json)
-- [Bounded strategy hypothesis registry](docs/strategy_hypothesis_registry.json)
-- [Non-serving reference model inventory](docs/reference_model_inventory.json)
-- [TradingFlow integration plan](docs/trading_flow_integration_plan.md)
-- [Legacy alert rule parity](docs/legacy_alert_rule_parity.md)
 
-## Source Strategy
+## Data Sources
 
-Primary:
+- **Alpaca premium:** SIP market bars, ticker universe, and primary news.
+- **Reddit API:** community attention and ticker discussion, with strict symbol
+  relevance checks.
+- **Seeking Alpha through RapidAPI:** SA news, analysis, earnings, financials,
+  and quant/rating snapshots. Credentials belong in environment variables.
+- **SEC EDGAR:** filing events aligned by SEC acceptance time.
+- **Finviz Elite:** candidate screening and current market metadata; it is not a
+  substitute for point-in-time historical membership.
+- **Market context:** SPY, QQQ, sector ETFs, and explicitly global events.
 
-- **Alpaca premium**: active/tradable ticker universe, latest news, and historical bars. Use this for reliable, timestamped market data and recent ticker news.
-- **Reddit API**: subreddit search and ticker mentions. Use this for retail attention, sentiment, score, comments, and upvote-ratio signals.
-- **Seeking Alpha via RapidAPI**: SA-owned news/analysis, earnings, and quant/rating snapshots. This is the only quant/rating API path.
-- **SEC EDGAR APIs**: keyless filing events with acceptance-time alignment.
+Historical publication-time news backfills are research-only when historical
+first-observed timestamps are unavailable. They cannot be relabeled as live
+observations.
 
-Seeking Alpha premium account access:
+## Authoritative Local Data
 
-- Do not paste your Seeking Alpha password into chat.
-- Your premium subscription can be used manually to export/check data until June 17, 2026.
-- Automated collection should use RapidAPI key-based access through `.env`.
+Current protected inputs include:
+
+- `data/raw/swing_daily_sip_sp500_pit_20190709_20260708_v3`
+- `data/raw/alpaca_news_20190709_20210708_v1`
+- `data/raw/alpaca_news_20210709_20260708_v1`
+- `data/raw/alpaca_news_intraday_candidates_20230410_20260708_v1`
+- `data/canonical/swing_memberships_verified_20190709_20260708_v2.parquet`
+- `data/canonical/edge_rebuild_intraday_5m_20260731`
+- `data/raw/edge_rebuild_selected_session_5m_20260731`
+- `data/research/intraday_universe_selection_20230410_20260708_v2`
+- `data/universe/sp500_point_in_time_20190709_20260708_v3.parquet`
+
+Generated feature matrices are reproducible working data and are not retained
+after rejection or supersession. Raw provider archives are retained only when
+they have unique, expensive-to-recreate coverage and sufficient provenance to
+pass the current canonical validators.
 
 ## Setup
 
+Requires Python 3.11 or newer. The verified local environment currently uses
+Python 3.14.
+
 ```powershell
-cd C:\project\market-predictor
+Set-Location C:\project\market-predictor
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
-python -m pip install --require-hashes --no-deps -r requirements/development.lock
-python -m pip install --no-build-isolation --no-deps -e .
+python -m pip install -e ".[dev]"
 Copy-Item .env.example .env
 ```
 
-The committed locks have distinct scopes:
+Configure credentials only in `.env` or a managed secret store. Never place
+keys or passwords in source, tests, reports, screenshots, or command arguments.
 
-- `production.lock`: API serving, signed releases, outcomes, and drift only.
-- `collection.lock`: production plus Alpaca/Reddit/Finviz/Seeking Alpha/Azure
-  collection dependencies.
-- `training.lock`: production plus FinBERT and XGBoost.
-- `validation.lock`: collection, XGBoost, test/type/lint, audit, license, build,
-  and lock tooling without Torch/Transformers.
-- `development.lock`: complete research, training, and validation environment.
-
-All locks are universal for Python 3.11+ and contain artifact hashes. Maintainers
-regenerate all five with pinned uv 0.11.32:
+Use the command help as the authoritative CLI surface:
 
 ```powershell
-python scripts/lock_dependencies.py
-git diff --exit-code -- requirements
-```
-
-Fill `.env` with Alpaca keys and any optional service keys.
-
-Minimum runtime:
-
-- Python 3.11 or newer.
-- Alpaca keys for bars, ticker universe, and news.
-- Reddit credentials if Reddit chatter should be collected.
-- RapidAPI key if Seeking Alpha feeds should be collected.
-- SEC needs no key, but `SEC_USER_AGENT` should contain real contact information.
-
-Verify each operational surface:
-
-```powershell
-market-predictor-prod --help
 market-predictor-collect --help
 market-predictor-research --help
+market-predictor-api --help
 ```
 
-`market-predictor-prod` is the only runtime surface installed in the serving
-container. It exposes API serving, validated live-feature publication, signed
-local-release activation, and deterministic outcome/drift operations. Provider
-collection and model development are isolated behind the other two executables
-so importing production commands does not load provider, NLP, or training code.
+## Verification
 
-V3 development workflow after the raw data audit passes:
+Run one heavy process at a time and keep working-set memory below 4 GiB.
 
 ```powershell
-market-predictor-research build-v3-features --bars data/curated/v3_bars.parquet --benchmarks data/curated/v3_benchmarks.parquet --source-availability data/curated/v3_source_availability.parquet --out data/features/v3_features_latest.parquet
-market-predictor-research build-v3-labels --bars data/features/v3_features_latest.parquet --benchmarks data/curated/v3_benchmarks.parquet --out data/features/v3_training_latest.parquet
-market-predictor-research train-v3-models --dataset data/features/v3_training_latest.parquet --output-dir models/v3/candidates
-market-predictor-research audit-v3-ranking --predictions data/reports/v3_oof_predictions_latest.parquet --opportunity-family R1 --downside-family D1
+.\.venv\Scripts\python.exe -m pytest -q
+.\.venv\Scripts\ruff.exe check --no-cache .
+.\.venv\Scripts\mypy.exe --strict --python-version 3.14 src\market_predictor
+.\.venv\Scripts\python.exe -m compileall -q src tests
+git diff --check
+git status --short --branch
 ```
 
-The label builder drops any decision whose maximum configured path is not contiguous at the declared bar interval. The training command refuses shadow rows, non-SIP volume provenance, future feature availability, cross-session labels, malformed ranking groups, and stale feature schemas. It writes per-family candidate manifests, walk-forward OOF predictions, deterministic ticker-holdout evidence, and a fold feature-coverage audit. One family failure is reported without discarding successful families; the command exits nonzero if any requested family failed.
-
-`audit-v3-ranking` fits the chosen D1 calibrator on earlier OOF sessions and evaluates top-k economics only on later sessions. It requires calibrated downside probabilities and independent event IDs, and resamples whole sessions for confidence intervals. The calibration method, candidate family, risk threshold, and promotion thresholds must be frozen in C8 before the audit can be used for model selection or shadow evaluation.
-
-Before C8, run the fail-closed development gate:
-
-```powershell
-market-predictor-research build-v3-sp500-point-in-time-universe --current-snapshot data/universe/sp500_current_20260708.csv --start-date 2024-07-09 --cutoff-date 2026-07-08 --out data/universe/sp500_point_in_time_20240709_20260708.parquet --raw-dir data/raw/index_membership/spglobal_20240709_20260708 --audit-out data/reports/sp500_point_in_time_20240709_20260708_audit.json
-market-predictor-research audit-v3-development-readiness --bars data/artifacts/ohlcv/v3_sp500_current_730d_20260708/5m --universe data/universe/sp500_point_in_time_20240709_20260708.parquet --benchmark-dir data/artifacts/ohlcv/v3_development_benchmarks_730d_20260708/5m --out data/reports/v3_development_readiness_pit_20260711.json
-```
-
-The universe builder hashes official S&P Global add/drop announcements, joins Alpaca name-change events, and reverses those events from the frozen constituent anchor. As of 2026-07-11, the local development audit passes with 546 point-in-time symbols, 501 sessions, SIP provenance, non-overlapping membership windows, bars for every historical member, and all 13 market/sector benchmarks. This establishes data readiness only; no V3 candidate is selected or promoted by this audit.
-
-Build the monthly development rows through the hash-verified, XNYS-calendar-aware path, then train only from that registered directory:
-
-```powershell
-market-predictor-research build-v3-development-dataset --bars-dir data/artifacts/ohlcv/v3_sp500_current_730d_20260708/5m --benchmark-dir data/artifacts/ohlcv/v3_development_benchmarks_730d_20260708/5m --memberships data/universe/sp500_point_in_time_20240709_20260708.parquet --technical-dir data/work/v3_c8_technical_20260711 --out-dir data/features/v3_c8_development_20260711_v9 --decision-start-date 2024-08-09 --minimum-cross-section 300 --decision-stride-bars 12 --reuse-technical
-market-predictor-research train-v3-models --dataset data/features/v3_c8_development_20260711_v9 --families R1 --max-training-memory-gb 4
-```
-
-The loader rejects missing, modified, or unregistered monthly shards and carries the dataset fingerprint into training evidence. It projects only required training/audit columns; the trainer compacts features to `float32`, releases fold models, and enforces a configurable process-memory guard. The completed C8 dataset has 1,063,587 rows across 24 months. All evaluated families were rejected on cost-adjusted evidence; R2 could not be evaluated because the frozen rows contain no microstructure observations. The retained non-serving comparison is the [R1 card](docs/model_cards/v3_c8_r1_20260720.md).
-
-V4-H1 was built with `--horizons 6,12,24 --primary-horizon-bars 24 --decision-stride-bars 24`. The corrected v2 dataset fingerprint is `c2906f10b543327cc265798ecd81e019c5365dc9ede3e432b33ba881970cc612`. Its audit verifies all 24 shard hashes, exact 120-minute exits on every row, exact 120-minute eligible decision cadence, SIP provenance, PIT groups, and the development cutoff. B0/R1 training stayed below 1.96 GiB; both candidates were rejected without opening shadow data.
-
-O1 remains outside the estimator. Historical catalyst scoring is resumable and provenance-bound:
-
-```powershell
-market-predictor-research score-swing-events --tickers $tickers --raw-dir data/raw/sp500_6m_20260708 --out-dir data/raw/sp500_6m_20260708_scored --text-mode title_summary --max-length 128 --batch-size 64
-market-predictor-research audit-v3-o1-overlay --predictions data/reports/v3_c8_r1_oof_20260720.parquet --event-dir data/raw/sp500_6m_20260708_scored --coverage-start 2026-01-09T00:00:00Z --coverage-end 2026-07-08T23:59:59Z --availability-policy provider_publication_backfill
-```
-
-Publication-time backfill is always research-only. A global-context file is accepted only when its first and last available events cover the declared interval within the configured boundary tolerance.
-
-## Repository Artifact Policy
-
-The repository contains source code, configuration examples, scripts, and documentation only. Runtime secrets, downloaded market data, feature tables, trained model binaries, cached API responses, and generated reports stay out of Git.
-
-Ignored local paths include:
-
-- `.env`
-- `.venv/`
-- `data/`
-- `models/`
-- Python caches and log files
-
-Use Azure Blob Storage or another artifact store for durable datasets, reports, and active model files.
-
-## Quick Start
-
-Download FinBERT once:
-
-```powershell
-market-predictor-collect download-model
-```
-
-Collect and sentiment-score a small research universe:
-
-```powershell
-market-predictor-collect collect-swing --tickers "LUNR,MXL,RGTI" --days 30 --out-dir data/raw/research --workers 4
-market-predictor-research score-swing-events --tickers "LUNR,MXL,RGTI" --raw-dir data/raw/research --out-dir data/raw/research_scored
-```
-
-Start the prediction API:
-
-```powershell
-market-predictor-prod serve-api --host 127.0.0.1 --port 8000
-```
-
-Export project-owned OHLCV artifacts for Azure upload:
-
-```powershell
-market-predictor-collect export-ohlcv-artifacts --tickers "LUNR,MXL,RGTI" --days 730 --timeframes 1d,1h
-```
-
-Upload project artifacts to Azure Blob Storage after Azure env vars are configured:
-
-```powershell
-market-predictor-collect azure-upload-artifacts --root data/artifacts
-```
-
-Azure serving publication, hydration, rollback, and disaster-recovery rehearsal are
-`environment_pending` and are not exposed as production CLI commands. The verified
-local release repository is the current serving authority.
-
-For implementation details and file responsibilities, read:
-
-```text
-docs/implementation_guide.md
-docs/azure_deployment_plan.md
-```
-
-## Access Required
-
-Alpaca:
-
-- Already configured from your TradingFlow local config.
-- Required fields in `.env`: `ALPACA_API_KEY_ID`, `ALPACA_API_SECRET_KEY`, `ALPACA_STOCK_FEED=sip`, `ALPACA_TRADING_BASE_URL`.
-- Used for `/v1beta1/news`, daily bars, and `/v2/assets` ticker universe.
-
-Configuration:
-
-- Secrets live in `.env`.
-- Non-secret behavior lives in `configs/default.toml`: universe filters, enabled sources, Reddit subreddits/chatter settings, Seeking Alpha endpoint templates, default horizons, and watch-score weights.
-
-Reddit:
-
-- Create a Reddit app at `https://old.reddit.com/prefs/apps/`.
-- Choose app type `script`.
-- Required fields in `.env`: `REDDIT_CLIENT_ID`, `REDDIT_CLIENT_SECRET`, `REDDIT_USERNAME`, `REDDIT_PASSWORD`, `REDDIT_USER_AGENT`.
-- `REDDIT_USER_AGENT` should identify the project and your Reddit username, for example `market-predictor/0.1 by myusername`.
-- Default subreddits and chatter settings are in `configs/default.toml`.
-- Reddit search can provide past post chatter within Reddit API listing limits, but it is not a guaranteed full historical archive. The collector also fetches top comments from matched posts and keeps only comments that mention the ticker.
-
-Seeking Alpha RapidAPI:
-
-- Subscribe to the Seeking Alpha API on RapidAPI basic tier.
-- Required field in `.env`: `RAPIDAPI_KEY`.
-- Optional account-token fields in `.env`: `SEEKING_ALPHA_ACCOUNT_EMAIL`, `SEEKING_ALPHA_ACCOUNT_PASSWORD`.
-- Defaults assume host `seeking-alpha.p.rapidapi.com`.
-- Event feeds and snapshot feeds are configurable in `configs/default.toml`.
-- Default event feeds include ticker news, press releases, SA analysis, and broad market/context feeds.
-- Default snapshot feeds include metadata, profile, financials, analyst recommendations, analyst price targets, earnings, SEC filings, sector metrics, metric grades, and historical-price attempts where the API supports them.
-- If RapidAPI changes parameter names, update the template values in config instead of changing Python code.
-- Your current basic plan screenshot shows 200 requests/month, 1000 requests/hour, and 10240 MB/month bandwidth.
-- The project caches Seeking Alpha analysis and ratings for 24 hours by default and tracks local monthly usage in `data/usage/rapidapi_usage.json`.
-- Check local usage and the last RapidAPI limit headers with `market-predictor-collect seeking-alpha-limits`.
-- If an endpoint requires a Seeking Alpha account token, cache it with `market-predictor-collect seeking-alpha-token`. The token is stored locally and never printed.
-
-SEC:
-
-- No API key required.
-- Keep `SEC_USER_AGENT` descriptive and include contact info.
-
-## Download FinBERT
-
-```powershell
-market-predictor-collect download-model
-```
-
-The default model is `ProsusAI/finbert`. Override with `FINBERT_MODEL`.
-
-## Collect Data
-
-```powershell
-market-predictor-collect alpaca-tickers --out data/universe/alpaca_tickers.csv
-market-predictor-collect collect AAPL --days 90 --out data/raw/aapl_events.parquet
-market-predictor-collect collect-seeking-alpha AAPL --out data/external/seeking_alpha_quant.csv
-```
-
-Data collection is separate from training and serving. Use the volatile-mover or V3 workflows below for model research; use the prediction API only after an audited live feature snapshot has been published.
-
-## Prediction API
-
-The API is a serving layer over server-registered promoted model artifacts and live feature snapshots. It does not train models, collect live news, place trades, or bypass promotion gates.
-
-Endpoints:
-
-- `GET /v1/health/live`
-- `GET /v1/health/ready`
-- `GET /v1/operations/health`
-- `GET /v1/metrics`
-- `POST /v1/predictions/swing`
-- `POST /v1/predictions/intraday`
-- `POST /v1/predictions/unified`
-- `POST /v1/replays/investment`
-
-Liveness and the minimal readiness status are public for platform probes. All other endpoints require a bearer access token. Production accepts only Entra-signed RS256 access tokens whose signature, issuer, audience, expiry, and not-before claims validate against the read-only local JWKS. Authorization accepts delegated `scp` values or application `roles`: `predictions.read`, `operations.read`, `metrics.read`, and `replay.execute`. TradingFlow should use its managed identity or service principal with only `predictions.read`; grant `replay.execute` separately. Replay is disabled unless `API_REPLAY_ENABLED=true`.
-
-The API caps request bodies at 64 KiB, accepts at most 100 canonical US ticker symbols per request, applies bounded principal/token-bucket limits per scope, and returns `Retry-After` with HTTP 429. Production startup fails when Entra issuer, audience, or JWKS configuration is absent. Static bearer tokens are accepted only when both `API_ENVIRONMENT=development` and `API_AUTH_MODE=development`; OpenAPI UI is disabled in Entra mode.
-
-Example request:
-
-```json
-{
-  "tickers": ["MSFT", "NVDA"],
-  "mode": "unified",
-  "horizon": "auto",
-  "as_of": "2026-07-09T20:15:00Z"
-}
-```
-
-`as_of` is optional, but when supplied it must include a timezone or UTC offset. Daily close-derived rows are available only from 16:00 America/New_York on their trading date. Intraday rows are available only after the inferred bar closes. These rules also apply to historical replay, preventing a request from reading a feature row that was not tradable at the requested time.
-
-Use `horizon: "auto"` for unified prediction so each server route resolves its native horizon. The only configured production route is `5d` swing, and it remains not-ready until a real artifact is promoted. Canonical intraday uses a `60m` horizon and remains unregistered until a real C5 candidate passes promotion. An explicit unsupported horizon is rejected; a registered model whose target conflicts with its route is also rejected. Responses include `resolved_horizons` and each model's `resolved_horizon` for auditability.
-
-The unified response returns separate `swing` and `intraday` model views plus a final orchestration signal. It does not average unrelated model probabilities into one opaque number. Readiness reports daily and intraday history separately and treats unknown feed tiers as unproven; only explicit SIP/consolidated provenance satisfies the full-volume gate. A `warn` or `invalid` view is diagnostic only and returns `signal: "not_ready"` with no decision score, model decision, or rank.
-
-The production service reads only the immutable generation referenced by each route's `active_serving_bundle.json`. The mutable files under `data/live/features/` are validated staging inputs and are never request-path authority. A bundle contains an immutable feature copy and binds it to one signed model release, embedded calibration, prediction/label/execution policies, feature schema/source/columns, and complete hashes. Startup verifies the transitive bundle and public-key attestation, then loads one model-plus-feature context per route through bounded same-handle reads. Requests never deserialize joblib artifacts or reopen feature files. The request schema rejects filesystem paths, data-source overrides, and promotion overrides.
-
-Production routes are declared under `[prediction_serving.routes]` with a
-`release_repository`, `bar_timeframe`, and conservative
-`estimated_resident_gib` plus hard model-byte, feature-byte, and feature-row
-limits; `[prediction_serving]` also names the read-only public attestation trust
-store. Direct model paths are rejected.
-
-The API preloads active contexts during lifespan startup. Readiness does not
-deserialize models or load full feature frames. Inference has one process-wide,
-non-queueing lease, a bounded ticker batch, an incremental-memory reservation,
-and current/projected RSS guards under the 4 GiB budget. Capacity and memory
-pressure return typed retryable HTTP 503 responses. Real-size soak evidence is
-still required before deployment.
-
-Build a label-free canonical inference artifact, validate it into the live staging
-store, then publish the exact promoted model release and staged feature generation
-as one immutable serving bundle:
-
-```powershell
-market-predictor-research build-intraday-live-features `
-  --decisions data/canonical/intraday_decisions_5m.parquet `
-  --one-minute-bars data/canonical/intraday_bars_1m.parquet `
-  --benchmark-bars data/canonical/intraday_benchmarks_5m.parquet `
-  --global-events data/canonical/global_events.parquet `
-  --global-source-collections data/canonical/global_source_collections.parquet `
-  --config configs/intraday_dataset.toml `
-  --out data/live/staging/intraday_60m.parquet
-
-market-predictor-prod publish-live-features `
-  --mode intraday `
-  --input-path data/live/staging/intraday_60m.parquet `
-  --live-dir data/live
-
-market-predictor-prod publish-serving-bundle `
-  --mode intraday `
-  --horizon 60m `
-  --model-release-id <64-character-model-release-id> `
-  --feature-snapshot data/live/features/intraday.parquet `
-  --release-root data/releases/intraday_60m `
-  --attestation-trust-store configs/attestation_trust_store.json
-```
-
-`publish-live-features` accepts only the matching `swing_inference_features` or `intraday_inference_features` canonical artifact. Arbitrary Parquet, label-bearing training rows, caller-supplied feed overrides, mixed decision timestamps, stale rows, and future feature availability are rejected. This registered file is a staging input, not a serving authority. `publish-serving-bundle` copies it into a content-addressed generation and binds the exact model release, embedded calibration, prediction/label/execution policies, feature schema, canonical feature source, columns, and artifact hashes. Only `active_serving_bundle.json` is read for production activation. Partial, stale, mutated, or incompatible bundles cannot replace it.
-
-Catalyst evidence is returned separately from model probabilities. Swing exposes its unmodified probability. Canonical intraday exposes independent `opportunity_probability` and `downside_probability`; its exact decision score is `opportunity_probability * (1 - downside_probability)`. The model artifact binds the complete content-addressed selection policy: swing and intraday top-k, intraday downside ceiling, per-session cap, deterministic tie-breakers, action thresholds, and readiness requirements. Serving scores and selects against the complete published decision cross-section before returning the caller's requested tickers, so a one-ticker request cannot bypass the evaluated top-k policy. Responses distinguish `selection_eligible` from `selected_for_policy`; non-ready or non-finite rows never consume a selection slot. Catalyst reports confirmation, conflict, veto, mixed, or absent evidence, but remains an explanation and confirmation overlay and does not change estimator probabilities, decision scores, or policy selection.
-
-Every prediction served through the top-level API is written as an immutable, content-addressed JSON snapshot under `data/predictions/snapshots/`. The response returns `snapshot_id` and `snapshot_sha256`; both identify the exact request, response, model hashes, per-view prediction-policy hashes, per-view serving-bundle ids and their ordered bundle-set hash, resolved horizons, feature cutoff, and generation time used for later outcome evaluation.
-
-Live model validation is separate from investment replay. Identity-complete live snapshots are converted into immutable maturation intents, then matured only from a hash-verified canonical bar artifact using the exact label policy frozen into the model release:
-
-```powershell
-market-predictor-prod register-outcome-intents `
-  --snapshot-id <64-character-snapshot-id>
-
-market-predictor-prod mature-outcomes `
-  --bars data/canonical/exact_outcome_bars.parquet
-
-market-predictor-prod build-outcome-performance-report `
-  --minimum-samples 30 `
-  --lookback-days 60
-
-market-predictor-prod publish-drift-assessment `
-  --mode swing `
-  --horizon 5d `
-  --model-release-id <64-character-release-id> `
-  --model-artifact-sha256 <64-character-model-artifact-hash> `
-  --prediction-policy-sha256 <64-character-prediction-policy-hash> `
-  --label-policy-sha256 <64-character-label-policy-hash> `
-  --execution-policy-sha256 <64-character-execution-policy-hash> `
-  --feature-drift-report data/monitoring/feature-drift/swing-5d.json
-```
-
-The outcome repository deduplicates repeated snapshots by semantic prediction identity and persists intents, attempts, exact bar evidence, and matured outcomes independently. Each maturation intent binds its view's complete prediction-policy payload and hash plus rank, eligibility, and selected state; only a ready row selected by that exact policy is actionable. Swing and intraday may carry distinct policy hashes, while unified responses bind the ordered per-view map into one serving-bundle hash. Performance reports are content-addressed rolling selected-policy reports. All canonical intents form the selection-rate denominator, while calibration and economics use only selected, actionable, matured outcomes. Reports keep pending selections explicit and include score/rank distributions, selection rate, opportunity calibration, separate intraday downside calibration, net and SPY-relative return, win rate, drawdown, and last-matured freshness by release, view, horizon, regime, sector, market-cap, liquidity, and calibration bin. `configs/drift_policy.toml` is the versioned actionability policy. Missing, stale, warming, insufficient, severe, tampered, or identity-mismatched drift state prevents actionable serving; warning state remains actionable and visible in readiness.
-
-Replay an investment from a stored prediction:
-
-```json
-{
-  "snapshot_id": "<64-character snapshot SHA-256>",
-  "ticker": "MSFT",
-  "model_view": "swing",
-  "evaluation_as_of": "2026-07-17T21:00:00Z",
-  "initial_capital": 10000,
-  "slippage_bps": 5,
-  "commission_bps": 0,
-  "force_entry": false
-}
-```
-
-The replay uses Alpaca adjusted bars, enters at the next tradable bar open, exits at the last completed bar at `evaluation_as_of`, applies configured slippage and commissions on both sides, and evaluates SPY and QQQ over the stock's exact entry/exit window. It returns ending value, P&L, return, and excess return versus both benchmarks.
-
-Replay refuses to invest when the snapshot has invalid readiness, missing model identity, a model created after the decision time, or training data extending beyond the decision time. A neutral signal returns `not_entered`; `force_entry` is available for explicit what-if research but cannot override invalid readiness or temporal leakage gates.
-
-## Swing Engine Workflow
-
-The configured swing universe starts with your seed symbols:
-
-```text
-POET, MXL, RDW, LASE, RGTI, MRVL
-```
-
-It also includes a broader high-beta US-listed and liquid ADR/ETF universe in `configs/default.toml`, currently about 188 configured symbols across technology, semiconductors, space/defense/quantum, biotech, fintech/crypto, consumer/EV/meme, plus benchmark ETFs.
-
-Bulk workflow:
-
-```powershell
-market-predictor-collect swing-universe --out data/universe/swing_candidates.csv
-market-predictor-collect collect-swing --days 180 --out-dir data/raw/swing
-market-predictor-research score-swing-events --raw-dir data/raw/swing --out-dir data/raw/swing_scored
-market-predictor-research build-swing-datasets --horizon-days 1 --raw-dir data/raw/swing --out-dir data/features/swing
-```
-
-Use a custom list:
-
-```powershell
-market-predictor-collect collect-swing --tickers "POET,MXL,RDW,LASE,RGTI,MRVL,IONQ,QBTS" --days 180
-```
-
-Stage separation:
-
-- `collect-swing`: API/data download only by default. Alpaca, Finviz, Reddit, Seeking Alpha, and SEC failures are isolated per source and per ticker. Uses parallel workers for I/O. Seeking Alpha is enabled by default when RapidAPI credentials are configured; use `--no-seeking-alpha` only for an explicit quota outage or diagnostic run.
-- `score-swing-events`: FinBERT scoring only. Loads the model once, uses GPU if PyTorch detects CUDA, records inference provenance, then writes per-ticker files.
-- `build-swing-datasets`: research-only daily/hourly joins, event reaction features, technical features, and labels. It never injects current Seeking Alpha or SEC snapshots into historical rows. Production training uses the canonical point-in-time path below.
-
-Performance knobs live in `configs/default.toml`:
-
-```toml
-[performance]
-max_workers = 6
-finbert_batch_size = 32
-```
-
-Override workers per command:
-
-```powershell
-market-predictor-collect collect-swing --days 180 --workers 8
-market-predictor-research score-swing-events --batch-size 64
-market-predictor-research build-swing-datasets --horizon-days 1 --workers 8
-```
-
-The engine separates event timing buckets:
-
-- `pre_market`: news before 9:30 ET, with open gap and day return features.
-- `intraday`: news during regular hours, with first-2-hour hourly-candle reaction and to-close reaction.
-- `after_hours`: news after 16:00 ET, rolled to the next feature date with next-open gap and next-day return features.
-
-Hourly reaction features require Alpaca bars. If hourly bars are unavailable, the daily gap/day-return features still build.
-
-## Removed Legacy Paths
-
-The former four-model watchlist average, heuristic watch/behavior commands, event/daily baseline trainers, `live-once`, `live-run`, and accuracy-only `live-train-event` path were removed. They mixed incompatible horizons, accepted unregistered artifacts, and could republish research features as live data. The API is the only operational prediction surface; research scorers require a registered, hash-matching candidate or promoted model.
-
-The canonical point-in-time data boundary, C4 swing pipeline, C5 intraday pipeline, and C6 serving/deployment infrastructure are implemented. Scheduling remains an external Azure Container Apps responsibility. `/v1/health/ready` remains HTTP 503 while a promoted canonical model or audited live snapshot is absent.
-
-## Canonical Point-In-Time Data
-
-Production model inputs are immutable, hash-verified Parquet artifacts. The normal path is:
-
-```powershell
-market-predictor-research canonicalize-bars --input-path data/raw/bars.parquet --out data/canonical/bars.parquet --timeframe 5m --price-feed sip
-market-predictor-research canonicalize-event-directory --input-dir data/raw/swing_scored --out data/canonical/events.parquet
-market-predictor-research canonicalize-source-collections --input-path data/raw/swing/_source_collections.parquet --out data/canonical/source_collections.parquet
-market-predictor-research canonicalize-memberships --input-path data/raw/universe_memberships.parquet --out data/canonical/memberships.parquet
-market-predictor-research build-canonical-decisions --bars data/canonical/bars.parquet --events data/canonical/events.parquet --source-collections data/canonical/source_collections.parquet --memberships data/canonical/memberships.parquet --out data/canonical/decisions.parquet
-```
-
-Canonical guarantees:
-
-- Alpaca bar timestamps are treated as interval starts. A five-minute bar is unavailable until its interval ends plus the configured finalization delay; daily bars use the actual XNYS close, including early closes.
-- Event features use `feature_available_at_utc`, which includes provider updates, first observation, and FinBERT scoring time.
-- Every required source is `observed` or `observed_empty` by each production decision, and its request coverage end must be within the configured freshness limit. A past successful pull cannot be carried forward indefinitely. `failed`, `partial`, `disabled`, `not_collected`, and stale coverage fail readiness.
-- Universe sector, industry, market-cap bucket, liquidity bucket, and benchmark are joined only from an effective membership snapshot already available at the decision time.
-- SEC/quant facts are joined by versioned availability. A current snapshot is never copied backward over historical rows.
-- SIP is mandatory for production volume features. IEX and unknown feed provenance fail the production bar audit.
-
-A historical news pull performed today does not recreate historical first-seen time. Publication-time proxy backfills must be marked `--research`; they cannot be loaded by a production decision build. This permits controlled research while preventing the same artifact from being presented as live-valid evidence.
-
-Market Predictor has no runtime alert commands or alert persistence. Alert evaluation, deduplication, acknowledgement, and web/mobile delivery belong to `trading_flow`. The removed rule behavior is preserved in [Legacy alert rule parity](docs/legacy_alert_rule_parity.md). Do not build new alert behavior in this repository.
-
-## Canonical Swing Model Pipeline
-
-The production swing path consumes only hash-verified canonical artifacts. SPY, QQQ, and every sector ETF used by a membership row must be present in `benchmark_bars`.
-
-The five-year technical baseline is an explicit `technical_market` profile. It
-uses stock technicals, SPY/QQQ/sector-relative features, and ranks calculated
-only inside the eligible point-in-time cohort. It does not read event artifacts,
-does not create event/source placeholders, and excludes membership cap/liquidity
-buckets from the estimator because those buckets do not yet have complete
-historical availability evidence. This profile is baseline-only and cannot be
-promoted. Build it from the existing seven-year SIP bars:
-
-```powershell
-market-predictor-research build-canonical-decisions `
-  --bars data/artifacts/swing_market_panel_inputs_20190709_20260708_v1/stock_bars.parquet `
-  --memberships data/canonical/swing_memberships_20190709_20260708_v1.parquet `
-  --feature-profile technical_market `
-  --decision-mode swing-nightly `
-  --research `
-  --out data/canonical/swing_technical_decisions_20190709_20260708_v1.parquet
-
-market-predictor-research build-swing-dataset `
-  --decisions data/canonical/swing_technical_decisions_20190709_20260708_v1.parquet `
-  --benchmark-bars data/artifacts/swing_market_panel_inputs_20190709_20260708_v1/benchmark_bars.parquet `
-  --config configs/swing_technical_dataset.toml `
-  --research `
-  --out data/features/swing/swing_technical_5d_20210709_20260708_v1.parquet
-
-market-predictor-research build-swing-strategy-labels `
-  --decisions data/canonical/swing_technical_decisions_20190709_20260708_v1.parquet `
-  --benchmark-bars data/artifacts/swing_market_panel_inputs_20190709_20260708_v1/benchmark_bars.parquet `
-  --config configs/swing_technical_dataset.toml `
-  --strategy-policy configs/swing_strategy_labels.toml `
-  --research `
-  --out-dir data/features/swing/strategy_labels_20210709_20260708_v4
-```
-
-Memory-heavy commands share one non-queueing workspace lease under
-`MARKET_PREDICTOR_RUNTIME_DIR` (default `data/runtime`). A competing heavy
-command exits with code 75 before loading data. Application guards stop at
-3.25 GiB RSS under the 4 GiB process/container budget.
-
-The strategy-label command publishes six independently replayed, resumable
-artifacts rather than reusing the generic five-day direction target. Setup
-causality, exact stock/SPY/QQQ/sector paths, cost-once accounting, conservative
-breakout fills, and bounded abstentions are defined in the
-[swing strategy label contract](docs/swing_strategy_label_contract.md). These
-are research labels, not promoted models or evidence of predictive edge.
-
-The completed baselines are documented in the
-[logistic model card](docs/model_cards/swing_technical_5d_logistic_20260725.md)
-and [HGB model card](docs/model_cards/swing_technical_5d_hgb_20260725.md).
-Both are immutable comparison candidates and are rejected for use.
-
-The five-year catalyst path starts with an isolated Alpaca/Benzinga backfill.
-This command archives and hashes each provider page, resumes from the last
-verified page, binds every article to the effective financial `security_id`,
-and rejects articles whose provider symbol list does not contain the requested
-ticker. It publishes unscored `provider_publication_proxy` events as
-research-only artifacts. Sentiment inference and training are separate
-sequential heavy jobs.
-
-```powershell
-market-predictor-collect collect-alpaca-news-history `
-  --memberships data/canonical/swing_memberships_20190709_20260708_v1.parquet `
-  --start-date 2021-07-09 `
-  --end-date 2026-07-08 `
-  --out-dir data/raw/alpaca_news_20210709_20260708_v1 `
-  --workers 2 `
-  --chunk-days 92
-
-market-predictor-research audit-alpaca-news-history `
-  --collection-dir data/raw/alpaca_news_20210709_20260708_v1 `
-  --out data/reports/alpaca_news_20210709_20260708_v1_audit.csv `
-  --summary-out data/reports/alpaca_news_20210709_20260708_v1_audit.json
-
-market-predictor-research score-alpaca-news-history `
-  --collection-dir data/raw/alpaca_news_20210709_20260708_v1 `
-  --collection-audit data/reports/alpaca_news_20210709_20260708_v1_audit.json `
-  --universe data/universe/sp500_point_in_time_20190709_20260708_v3.parquet `
-  --out-dir data/features/swing/alpaca_finbert_20210709_20260708_v1 `
-  --text-mode title_summary `
-  --max-length 128 `
-  --batch-size 32 `
-  --torch-threads 4 `
-  --fixed-latency-minutes 5
-
-market-predictor-research build-security-business-labels `
-  --memberships data/canonical/swing_memberships_20190709_20260708_v1.parquet `
-  --universe data/universe/sp500_point_in_time_20190709_20260708_v3.parquet `
-  --profiles data/external/seeking_alpha_profiles_sp500_20260726_v2/profiles.parquet `
-  --training-dataset data/features/swing/swing_technical_5d_20210709_20260708_v1.parquet `
-  --policy configs/security_business_labels.toml `
-  --assignments-out data/canonical/security_business_labels_sp500_20210709_20260708_v1.parquet `
-  --coverage-out data/reports/security_business_label_coverage_sp500_20210709_20260708_v1.parquet `
-  --summary-out data/reports/security_business_label_summary_sp500_20210709_20260708_v1.json
-
-market-predictor-research attribute-alpaca-news-history `
-  --collection-dir data/raw/alpaca_news_20210709_20260708_v1 `
-  --collection-audit data/reports/alpaca_news_20210709_20260708_v1_audit.json `
-  --business-labels data/canonical/security_business_labels_sp500_20210709_20260708_v1.parquet `
-  --security-identities data/reports/security_business_label_coverage_sp500_20210709_20260708_v1.parquet `
-  --out-dir data/features/swing/alpaca_event_relations_20210709_20260708_v1
-```
-
-The completed archive contains 564,986 events across 612 effective tickers and
-592 financial security identities. The streaming replay verified all 12,663
-raw pages and every event artifact with zero duplicate event IDs at 0.320 GiB
-peak RSS. Alpaca has a confirmed recent class-share news blind spot for `BF-B`
-and `BRK-B`; catalyst training excludes those identities instead of treating
-missing history as zero events, leaving 590 catalyst-eligible identities.
-The sentiment command reads one audited chunk at a time, uses one local
-FinBERT process, and resumes only artifacts whose request and source hashes
-still match. It records actual inference time separately from the hypothetical
-publication-plus-latency research timestamp; neither field converts the
-historical archive into production-observed evidence. Provider tagging is not
-treated as proof of full relevance: deterministic issuer, ticker, industry,
-materiality, and generic-roundup evidence is retained for later ablation.
-
-Business tags are security metadata, not future-return outcome labels. The
-closed taxonomy assigns at most three active tags per `security_id`; it never
-infers tags from ticker or company-name strings. Every industry observed in the
-frozen point-in-time universe is explicitly registered in configuration, so an
-unrecognized provider industry fails to `insufficient_evidence` instead of
-creating a new runtime label. Profile phrases can add an offering or driver
-only when that label is explicitly compatible with the point-in-time primary
-industry. End-market matches remain context.
-
-The current audit reconciles 607,909 eligible rows, 563 securities, and 581
-ticker histories. Historical point-in-time industry evidence assigns
-context-only tags to 480 securities; 83 have explicit insufficient evidence.
-The coverage artifact remains the point-in-time identity registry for all 563
-securities, so full company-name issuer matching still works when no thematic
-tag is assigned.
-Of 475 training securities with a current Seeking Alpha profile, 59 have a
-controlled prospective tag and 37 have at least one exposure-enabled tag.
-Current profiles become available no earlier than the completed profile
-artifact, expire after the configured 90-day validity window, and are never
-backdated into the five-year training window. The membership context tag
-resumes after profile expiry until a new immutable profile artifact is built.
-Historical
-exposure attribution remains blocked until point-in-time SEC Item 1, segment,
-or equivalent business evidence exists.
-
-`swing/event_attribution.py` keeps `direct_issuer`,
-`business_exposure`, and `sector_context` separate. Direct issuer requires an
-explicit ticker form or full normalized company name; a provider symbol tag
-plus generic business text is not enough. Ambiguous symbols such as `IT`, `ON`,
-`APP`, `ALL`, `FOR`, `NOW`, and `ARE` require explicit notation such as
-`$APP`, `(APP)`, or `NASDAQ:APP`. The retrospective relevance column in the
-five-year sentiment v1 artifacts is not valid model-attribution evidence.
-Numeric FinBERT sentiment can be reused by `event_id`, but model joins must use
-the separate point-in-time event-security relation artifact.
-`attribute-alpaca-news-history` publishes that artifact one verified source
-chunk at a time, resumes only hash-matching chunks, and records channel counts
-without loading the full news archive into memory.
-
-```powershell
-market-predictor-research build-swing-dataset `
-  --decisions data/canonical/decisions.parquet `
-  --benchmark-bars data/canonical/benchmark_daily_bars.parquet `
-  --global-events data/canonical/global_events.parquet `
-  --global-source-collections data/canonical/global_source_collections.parquet `
-  --config configs/swing_dataset.toml `
-  --out data/features/swing/swing_5d.parquet
-
-market-predictor-research train-swing-model `
-  --dataset data/features/swing/swing_5d.parquet `
-  --config configs/swing_training.toml `
-  --model-out models/swing/candidates/swing_5d.joblib `
-  --evidence-dir data/reports/swing_5d_candidate
-
-market-predictor-research promote-swing-model `
-  --model models/swing/candidates/swing_5d.joblib `
-  --evidence-dir data/reports/swing_5d_candidate `
-  --hypothesis-registry data/governance `
-  --hypothesis-id swing-5d-h001 `
-  --shadow-bundle data/governance/shadow/<shadow-fingerprint>.json `
-  --outcome-repository data/outcomes `
-  --baseline-artifact models/swing/baselines/swing_5d.joblib `
-  --identity-issuer https://login.microsoftonline.com/<tenant>/v2.0 `
-  --identity-audience market-predictor-promotion `
-  --identity-jwks C:\run\secrets\promotion-jwks.json `
-  --signing-private-key <secure-ed25519-private-key.pem> `
-  --attestation-trust-store configs/attestation_trust_store.json `
-  --signer-id promotion-ci-prod `
-  --config configs/swing_promotion.toml
-```
-
-Set `MARKET_PREDICTOR_PROMOTION_BUILD_TOKEN` and `MARKET_PREDICTOR_PROMOTION_APPROVER_TOKEN` in the promotion process environment. Tokens are never accepted as command arguments. They must be RS256 JWTs issued for the configured audience with `promotion.build` and `promotion.approve` roles respectively, and they must resolve to distinct principals.
-
-`build-swing-dataset` uses a post-close decision, next-session-open entry, and fifth-session-close exit. It writes exact entry/exit/label timestamps, costs, stock and benchmark returns, MFE/MAE, and eligibility evidence. Before publication, the audit independently replays every material label from the daily stock and benchmark paths and stamps content-addressed material and reconciliation hashes. Training and promotion require those hashes and zero replay errors. `train-swing-model` publishes an immutable candidate plus a hash inventory for every promotion file. `promote-swing-model` verifies that inventory, the frozen candidate and baseline artifacts, a predeclared shadow workload, and distinct OIDC-authenticated build/approver principals. It then reopens the outcome repository, reproduces paired row-level candidate/baseline source evidence and session economics, consumes the causal bundle once, requires a positive paired session-block confidence lower bound, and writes an immutable attestation. Operator-supplied aggregate shadow returns and identity strings are not accepted. Editing a model, manifest, metric, audit, source outcome, shadow bundle, ledger receipt, identity evidence, or attestation invalidates authorization.
-
-The removed `build-volatile-dataset`, `train-volatile-model`, and `score-volatile-latest` commands are not compatibility aliases. Old volatile artifacts cannot be loaded by the production swing API.
-
-## Canonical Intraday Model Pipeline
-
-The production intraday path consumes hash-verified canonical 5-minute decisions, 1-minute stock/benchmark bars, 5-minute benchmark bars, and global context. Dataset construction and training use column projection, `float32` matrices, sequential fold-model release, and fail before the configured 4 GiB process limit.
-
-```powershell
-market-predictor-research build-intraday-dataset `
-  --decisions data/canonical/intraday_decisions_5m.parquet `
-  --one-minute-bars data/canonical/intraday_bars_1m.parquet `
-  --benchmark-bars data/canonical/intraday_benchmarks_5m.parquet `
-  --global-events data/canonical/global_events.parquet `
-  --global-source-collections data/canonical/global_source_collections.parquet `
-  --config configs/intraday_dataset.toml `
-  --out data/features/intraday/intraday_60m.parquet
-
-market-predictor-research train-intraday-model `
-  --dataset data/features/intraday/intraday_60m.parquet `
-  --config configs/intraday_training.toml `
-  --model-out models/intraday/candidates/intraday_60m.joblib `
-  --evidence-dir data/reports/intraday_60m_candidate
-
-market-predictor-research promote-intraday-model `
-  --model models/intraday/candidates/intraday_60m.joblib `
-  --evidence-dir data/reports/intraday_60m_candidate `
-  --hypothesis-registry data/governance `
-  --hypothesis-id intraday-60m-h001 `
-  --shadow-bundle data/governance/shadow/<shadow-fingerprint>.json `
-  --outcome-repository data/outcomes `
-  --baseline-artifact models/intraday/baselines/intraday_60m.joblib `
-  --identity-issuer https://login.microsoftonline.com/<tenant>/v2.0 `
-  --identity-audience market-predictor-promotion `
-  --identity-jwks C:\run\secrets\promotion-jwks.json `
-  --signing-private-key <secure-ed25519-private-key.pem> `
-  --attestation-trust-store configs/attestation_trust_store.json `
-  --signer-id promotion-ci-prod `
-  --config configs/intraday_promotion.toml
-```
-
-Each decision is made only after a completed 5-minute bar. Entry is the open of the exact 1-minute bar that starts at the decision timestamp. The default 60-minute path uses exact consecutive 1-minute bars, a 1 ATR target, a 0.75 ATR stop, and stop-first resolution when both barriers occur in one bar. SPY, QQQ, and sector returns use the same actual entry/exit interval. A missing entry, path, or benchmark bar invalidates the row; labels are never shifted or filled. Dataset publication independently replays target, stop, timeout, executable fill, cost, MFE/MAE, and benchmark-relative returns from canonical one-minute bars. The resulting reconciliation identities are mandatory model and promotion evidence.
-
-The candidate contains two estimators and is promoted atomically: opportunity estimates target-before-stop, while downside estimates stop-before-target. Catalyst/news features are audited and returned as a confirmation/ranking overlay, but are deliberately excluded from both estimators until fresh ablation evidence proves incremental value. No real C5 candidate has been promoted, so no canonical intraday route belongs in `configs/default.toml` yet.
-
-Current Finviz screener fields are ranking overlays only. A current candidate
-score, same-session change/dollar volume, or theme classification is never an
-estimator feature and cannot be joined by ticker across historical training
-rows. Historical training uses only point-in-time market and catalyst evidence;
-Finviz current snapshots narrow and rank the live inference workload.
-
-## Trusted Local Releases
-
-Only an attested model can enter the local release repository. Publication copies the model, immutable candidate manifest, promotion attestation, evidence manifest, and every evidence file into a versioned content-addressed directory. Every hash and the attestation are reverified before one locked active pointer is replaced.
-
-```powershell
-market-predictor-prod publish-local-release `
-  --model models/swing/candidates/swing_5d.joblib `
-  --evidence-manifest data/reports/swing_5d_candidate/evidence.manifest.json `
-  --release-root data/local_release_repository `
-  --attestation-trust-store configs/attestation_trust_store.json
-
-market-predictor-prod show-active-local-release `
-  --release-root data/local_release_repository `
-  --attestation-trust-store configs/attestation_trust_store.json
-
-market-predictor-prod rollback-local-release `
-  --release-id <64-character-release-id> `
-  --release-root data/local_release_repository `
-  --attestation-trust-store configs/attestation_trust_store.json
-```
-
-A partial, mutated, candidate-only, unsigned, untrusted, or unattested release cannot become active. The public trust store is server-owned and should be mounted read-only; the signing private key belongs only to the promotion workload and must not be stored in this repository. Set `MARKET_PREDICTOR_ATTESTATION_TRUST_STORE` for serving-time verification. The local pointer is the current R4 activation authority. Azure activation remains `environment_pending`.
-
-## Entry / Exit Path Models
-
-Direction models answer whether a stock is likely to move. Entry/exit path models answer whether a long setup is tradable from the next bar's open: does price hit an ATR profit target before an ATR stop inside the configured horizon?
-
-Build swing entry/exit labels from daily feature rows:
-
-```powershell
-market-predictor-research build-entry-exit-dataset `
-  --input data/features/volatile_mover_daily_20260704.parquet `
-  --horizon-bars 5 `
-  --take-profit-atr 1.5 `
-  --stop-loss-atr 1.0 `
-  --bar-kind swing `
-  --out data/features/entry_exit_swing_5b_20260704.parquet `
-  --audit-out data/reports/entry_exit_swing_5b_audit_20260704.csv
-```
-
-Train separate entry and exit-risk models:
-
-```powershell
-market-predictor-research train-entry-exit-model `
-  --dataset data/features/entry_exit_swing_5b_20260704.parquet `
-  --target-col target_entry_success_5b `
-  --model-out models/entry_exit_swing_entry_success_5b_20260704_candidate.joblib
-
-market-predictor-research train-entry-exit-model `
-  --dataset data/features/entry_exit_swing_5b_20260704.parquet `
-  --target-col target_exit_risk_5b `
-  --model-out models/entry_exit_swing_exit_risk_5b_20260704_candidate.joblib
-```
-
-Score the latest row per ticker:
-
-```powershell
-market-predictor-research score-entry-exit-latest `
-  --dataset data/features/entry_exit_swing_5b_20260704.parquet `
-  --model models/entry_exit_swing_entry_success_5b_20260704_candidate.joblib `
-  --out data/reports/entry_exit_swing_entry_latest_20260704.csv
-```
-
-The same commands work for intraday datasets when the input rows are hourly or 5-minute OHLCV features. Labels always enter at the next bar open and evaluate only future high/low bars, which prevents same-bar leakage. Build labels from the complete consecutive bar stream, never from an already setup-filtered table.
-
-Opening-session V2 example for a 60-minute horizon on 5-minute bars:
-
-```powershell
-market-predictor-research build-entry-exit-dataset `
-  --input data/features/intraday_full_5m.parquet `
-  --context data/features/intraday_point_in_time_context.parquet `
-  --horizon-bars 12 `
-  --bar-kind 5min `
-  --session-scope opening `
-  --min-setup-score 2 `
-  --setup-cooldown-bars 13 `
-  --round-trip-cost-bps 10 `
-  --out data/features/entry_exit_intraday_opening_v2.parquet `
-  --audit-out data/reports/entry_exit_intraday_opening_v2_audit.csv
-```
-
-`--session-scope opening` means 09:30 through 11:29 ET. Cooldown is measured in original bars, not filtered row positions, and is never shorter than `horizon_bars + 1`. The optional context join only adds approved missing model features; it cannot replace OHLCV or labels. V2 emits raw and cost-adjusted horizon returns, modeled target/stop/timeout realized returns, `target_entry_success_*`, `target_exit_risk_*`, and `target_net_positive_*`.
-
-Controlled estimator comparisons use the same purged walk-forward folds:
-
-```powershell
-market-predictor-research train-entry-exit-model `
-  --dataset data/features/entry_exit_intraday_opening_v2.parquet `
-  --target-col target_entry_success_12b `
-  --feature-set technical `
-  --estimator hist_gradient_boosting `
-  --model-out models/intraday_opening_candidate.joblib
-```
-
-Supported estimators are `hist_gradient_boosting`, `extra_trees`, and `logistic`. Selecting the best estimator on an inspected OOS interval does not make it promotable; it still requires an untouched shadow interval and all promotion gates.
-
-Before promotion, build production-readiness audits from the feature table and out-of-sample predictions:
-
-```powershell
-market-predictor-research audit-promotion-readiness `
-  --dataset data/features/entry_exit_swing_5b_20260704.parquet `
-  --predictions data/reports/entry_exit_swing_entry_success_5b_oos_predictions_20260704.csv `
-  --out-prefix data/reports/entry_exit_swing_entry_success_5b_promotion_20260704
-```
-
-The audit writes separate profitability, selected-trade, market-regime, and catalyst/news CSVs. `promote-model` can require those files so a model is not promoted on ROC AUC alone. The default gate checks out-of-sample selected-trade return, profit factor, drawdown, market-regime coverage, catalyst/news presence, and news/candle alignment.
-
-Automated retraining remains disabled until the canonical dataset builder, shadow evaluator, and promotion workflow are connected end to end. Model retraining is never triggered from prediction traffic.
-
-## Azure
-
-Azure is project-specific. This project stores its own artifacts under `AZURE_BLOB_PREFIX`, defaulting to:
-
-```text
-market-predictor
-```
-
-Recommended deployment is:
-
-```text
-Azure Blob Storage + Azure Container Apps Jobs + Azure ML GPU compute on demand
-```
-
-Build context files:
-
-```text
-Dockerfile
-.dockerignore
-requirements/production.lock
-```
-
-The production image is pinned to an immutable Python 3.11.15 Bookworm digest,
-installs only `production.lock` with hash enforcement, contains no compiler or
-packaging toolchain, runs as UID/GID 10001, and starts Uvicorn directly from the
-read-only source tree.
-
-The image runs the API as UID/GID 10001, exposes port 8000, and probes
-`/v1/health/live`. Configure a 4 GiB container memory limit in addition to the
-in-process guard. Azure model-release synchronization is not currently an
-activation path.
-
-The deployment rationale, identity/secret requirements, release ordering, and job schedule are in `docs/azure_deployment_plan.md`.
-
-## Reddit Signals
-
-Reddit is treated as an attention and sentiment source, not as normal news. The feature set includes:
-
-- Reddit mention count by day.
-- Reddit-only FinBERT sentiment.
-- Sum of post scores.
-- Sum of comment counts.
-- Mean upvote ratio.
-
-For swing trades, these features are most useful when they diverge from price/volume: high attention plus improving sentiment after a down move, or high attention plus negative sentiment into elevated volume.
-
-## Seeking Alpha Quant Feed
-
-Do not scrape account-gated Seeking Alpha pages unless your license explicitly permits it. RapidAPI snapshots and licensed exports are stored under `data/external/` and cached under `data/cache/`.
-
-```text
-data/external/seeking_alpha_quant.csv
-```
-
-The legacy daily-model quant compatibility columns are:
-
-```text
-timestamp,ticker,quant_rating,valuation,growth,profitability,momentum,eps_revision,eps_actual,eps_estimate
-```
-
-The RapidAPI adapter writes this CSV through `market-predictor-collect collect-seeking-alpha`.
-
-## Useful Official Docs
-
-- Alpaca news endpoint: https://docs.alpaca.markets/us/reference/news-3
-- SEC EDGAR data APIs: https://www.sec.gov/search-filings/edgar-application-programming-interfaces
-- Reddit API docs: https://www.reddit.com/dev/api/
-- Reddit app registration: https://old.reddit.com/prefs/apps/
-- Seeking Alpha RapidAPI page: https://rapidapi.com/apidojo/api/seeking-alpha
+## Core Invariants
+
+- Features are usable only at or after their recorded availability timestamp.
+- News relevance, publication time, first-observed time, and source coverage are
+  separate evidence.
+- Membership, ticker identity, corporate actions, and benchmarks are
+  point-in-time.
+- Swing and intraday labels use the shared target/stop/timeout evaluators.
+- Costs are applied exactly once and benchmark comparisons use the same holding
+  interval.
+- Validation is time ordered, purged, and embargoed; random cross-validation is
+  prohibited.
+- Catalyst starts as confirmation and ranking context unless causal ablation
+  proves it improves the estimator.
+- A model is not actionable merely because tests pass. It must pass economic,
+  calibration, drawdown, unseen-security, shadow, and promotion gates.
+
+## Disclaimer
+
+This repository is research and prediction tooling, not investment advice and
+not an automated trading system.

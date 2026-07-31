@@ -81,8 +81,6 @@ Integration contract:
 
 The phased contract, failure policy, alert migration, backtest handoff, and live completed-bar design are defined in [TradingFlow integration plan](trading_flow_integration_plan.md).
 
-The removed predictor alert rules and TradingFlow parity decisions are recorded in [Legacy Alert Rule Parity](legacy_alert_rule_parity.md).
-
 The canonical names, hypotheses, implementation order, and independent promotion
 gates for known swing and intraday strategies are defined in
 [Known Strategy Expansion Sequence](known_strategy_expansion_sequence_2026-07-26.md).
@@ -101,36 +99,6 @@ The KS0 research freeze is defined by
 models have no named-strategy identity and are not serving eligible. The
 research hypotheses precede model development; the separate immutable promotion
 hypothesis binds a built candidate and untouched shadow workload later.
-
-### Primary V2 distributional research
-
-Two primary V2 strategies extend the named-strategy architecture without
-changing KS3, KS4, or KS5 V1:
-
-- `SWING.CROSS_SECTIONAL_MOMENTUM.5D.V2` means **Swing Long
-  Cross-Sectional Momentum - Next 5 Trading Sessions - Version 2**. A decision
-  is made after a completed exchange session, entry is the next exact session
-  open, and timeout is the close of the fifth future exchange session.
-- `INTRADAY.VWAP_REVERSION.30M.V2` means **Intraday Long VWAP Mean
-  Reversion - Up to 30 Regular-Session Minutes - Version 2**. A completed
-  five-minute signal is finalized after 30 seconds, entry is the next
-  one-minute open, and the position resolves target-first, stop-first, or at
-  the close of the thirtieth one-minute bar. Overnight paths are invalid.
-
-V2 reuses the exact verified V1 labels and split algorithms. It adds
-expected-return regression, return quantiles, competing target/stop/timeout
-probabilities, and time-to-resolution. Catalyst/news remains a separate
-confirmation and explanation overlay; it is not an estimator input for these
-experiments.
-
-Every learned candidate is compared with its exact V1 baseline on paired
-sessions. Promotion requires positive cost-adjusted and benchmark-relative
-economics in both purged walk-forward and unseen-ticker scopes, strictly
-positive paired bootstrap lower bounds, bounded drawdown, regime support, and
-calibration overall and by market regime. Rejected candidates retain evidence
-but no model artifact. Runs are serialized, resumable, immutable, and guarded
-below 4 GiB. The frozen details are in
-[Primary V2 Strategy Research Plan](primary_strategy_v2_plan_2026-07-28.md).
 
 ## 3. Prediction Output Contract
 
@@ -491,9 +459,8 @@ Serving rules:
 - One process admits one inference request at a time with no queue. Ticker batches, incremental memory reservations, and projected/current RSS are bounded below the 4 GiB limit.
 - Azure publication and rollback remain `environment_pending`; they are not current activation evidence.
 
-The data, target, ranking, validation, cleanup, and Git checkpoint sequence for the next model generation is defined in [ML Model V3 Improvement Plan](ml_model_v3_plan.md).
-
-The production serving, cleanup, canonical-data, swing, intraday, deployment, and release sequence is defined in [Production ML Rebuild Plan](production_ml_rebuild_plan.md).
+The only current implementation sequence is the
+[active edge-rebuild plan](active_edge_rebuild_plan.md).
 
 V3 checkpoints C1-C7 now provide strict point-in-time contracts, immutable development/shadow partitioning, exact next-open labels and costs, batch/live feature parity, cross-sectional ranks, session-purged walk-forward validation, deterministic ticker holdout, candidate adapters for B0/B1/B2/R1/D1, disjoint classifier calibration, and session-blocked independent-event economics. This changes research capability only. V3 artifacts remain outside production serving until the gate freeze and one-time shadow evaluation are completed.
 
