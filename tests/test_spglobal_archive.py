@@ -794,21 +794,25 @@ def test_authoritative_archive_cannot_be_overwritten(tmp_path: Path) -> None:
     assert len(transport.calls) == calls
 
 
-def test_browser_saved_release_is_rejected(tmp_path: Path) -> None:
+def test_provider_template_marker_is_accepted_with_verified_http_lineage(
+    tmp_path: Path,
+) -> None:
     audit_path, audit_hash, seeds = _write_source_audit(tmp_path)
     transport = _complete_transport(seeds)
-    transport.bodies[seeds[0]] = b"<!-- saved from url=(0014)https://press.spglobal.com/example --><html></html>"
+    transport.bodies[seeds[0]] = (
+        b"<!-- saved from url=(0051)https://www.spglobal.com/press/press-releases -->"
+        + _release_body()
+    )
 
-    status = collect_spglobal_archive(
+    manifest = collect_spglobal_archive(
         source_audit_path=audit_path,
         expected_source_audit_sha256=audit_hash,
         output_directory=tmp_path / "out",
         client_factory=transport.factory,
     )
 
-    assert seeds[0] in status["failed_releases"]
-    assert "browser-saved" in status["failed_releases"][seeds[0]]
-    assert not (tmp_path / "out" / "_authority.json").exists()
+    assert manifest["status"] == "complete"
+    assert (tmp_path / "out" / "_authority.json").exists()
 
 
 def _write_source_audit(tmp_path: Path) -> tuple[Path, str, list[str]]:

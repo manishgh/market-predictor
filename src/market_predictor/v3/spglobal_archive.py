@@ -64,7 +64,6 @@ _MEMBERSHIP_TITLE = re.compile(
     r"|\b(?:join|joins|joining|replace|replaces|replacing|change|changes|changed|addition|deletion|added|deleted)\b.{0,180}\bS&P\s*500\b)",
     re.IGNORECASE,
 )
-_BROWSER_SAVE_MARKERS = (b"<!-- saved from url=", b"<!--saved from url=")
 _OBJECT_WRITE_LOCK = threading.Lock()
 _HTML_PARSE_LOCK = threading.Lock()
 
@@ -576,7 +575,6 @@ def _persist_search_page(
     offset: int,
 ) -> dict[str, Any]:
     metadata = _validate_response(response, expected_release=False)
-    _reject_browser_saved_response(response)
     for observed_url in (
         response.requested_url,
         *response.redirect_chain,
@@ -621,7 +619,6 @@ def _persist_release(
         )
     body = response.body
     with _HTML_PARSE_LOCK:
-        _reject_browser_saved_response(response)
         decoded_body = _decode_http_entity(
             body,
             str(response.content_encoding or ""),
@@ -698,21 +695,6 @@ def _validate_response(response: BytesResponse, *, expected_release: bool) -> di
         "sha256": digest,
         "body_representation": response.body_representation,
     }
-
-
-def _reject_browser_saved_response(response: BytesResponse) -> None:
-    decoded_content = _decode_http_entity(
-        bytes(response.body),
-        str(response.content_encoding or ""),
-    )
-    if any(
-        marker in decoded_content[:4096].lower()
-        for marker in _BROWSER_SAVE_MARKERS
-    ):
-        raise DataReadinessError(
-            "browser-saved HTML is not official response evidence: "
-            f"{response.requested_url}"
-        )
 
 
 def _parse_search_page(
