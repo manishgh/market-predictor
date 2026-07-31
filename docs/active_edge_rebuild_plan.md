@@ -126,7 +126,7 @@ Only one checkpoint may be `in_progress`.
 | --- | --- | --- | --- |
 | ER0 | completed | Establish this active plan and companion handoff | Closed by implementation commit `8c28df9`; both documents and repository guidance are pushed |
 | ER1 | completed | Audit effective independent history and causal data readiness | Closed by implementation commits `5ffa3d3`, `d9d93c8`, and `7b0ce6d`; immutable audit request `f80f70ae299bd5e5a6aeae6aeaa503ef4775573696b7d88856d539dbd1355080` reports one ER2 blocker |
-| ER1A | in_progress | Complete targeted intraday history and re-audit readiness | PIT inventory, regular and extended transport, canonical five-minute corpus, and causal relationship primitives are complete; derive setups, collect selective one-minute paths, and republish ER1 |
+| ER1A | in_progress | Complete targeted history and re-audit readiness | Intraday transport and canonical five-minute corpus are complete. Swing acquisition scope is frozen, but all 83 retained official membership sources fail their declared byte hashes; reacquire immutable official evidence before bars |
 | ER2 | pending | Freeze new strategy contracts and bounded experiment budget | New IDs, setup eligibility, entry/exit/labels, design window, folds, costs, features, abstention, and retirement rules are immutable and tested |
 | ER3 | pending | Build candidate populations, exact labels, and deterministic baselines | Each population replays from immutable bars; readiness, gross/net/benchmark baseline economics, and sample sufficiency are published before ML |
 | ER4 | pending | Complete causal catalyst confirmation evidence | Direct/business/sector/global relations and event timing reconcile; technical-only, catalyst-only, and confirmation-overlay rows are identical and auditable; the deprecated V1 relevance path is retired per section 9A |
@@ -625,6 +625,37 @@ partition-tamper refusal, full-session ownership tests, exact coverage report,
 and memory gate all pass. Repository verification passed 764 tests with 85
 existing warnings, Ruff, strict mypy across 195 source files, compileall, and
 `git diff --check`.
+
+### ER1D Outcome-Blind Swing History Acquisition Plan
+
+Status: implementation complete; acquisition remains blocked by invalid source
+provenance. Implementation commit `18bb896` is pushed.
+
+`plan-edge-rebuild-swing-history` verifies the frozen temporal authority,
+point-in-time membership sidecar, universe audit, official source archive,
+security-transition evidence, and current Alpaca daily collection without
+reading outcomes. It publishes immutable request, manifest, and authority files.
+It emits Alpaca SIP/all daily-bar units only after historical membership and
+source identities are authoritative.
+
+The real audit is
+`data/research/edge_rebuild_swing_history_acquisition_20260731_v2`. Its manifest
+SHA-256 is
+`6a689951035fd8b236cc23ab5530a570158eda7d1c0d09eab8867da4eec6de48`.
+The result is `official_source_reacquisition_required`: zero of 83 retained
+official S&P release files match their declared SHA-256 identities. The audit
+therefore publishes zero Alpaca request units and records
+`blocked_until_source_reacquisition`. The complete expected/actual hash pairs
+remain in the manifest. Peak working set was 0.230 GiB.
+
+The next operation is not bar collection. Reacquire the official S&P
+constituent-change releases into a new immutable byte-hashed archive, rebuild
+and verify point-in-time membership through 2018-05-29, then rerun the planner.
+Only a `ready_for_daily_bar_collection` result may authorize the exact
+2018-05-29 through 2019-07-08 Alpaca units.
+
+Repository verification passed 768 tests with 85 existing warnings, Ruff,
+strict mypy across 196 source files, compileall, and `git diff --check`.
 
 ### ER1A Repository And Data Convergence
 

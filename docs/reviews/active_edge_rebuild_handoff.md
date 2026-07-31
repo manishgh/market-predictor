@@ -10,7 +10,7 @@ Last updated: 2026-07-31
 Repository: `C:\project\market-predictor`
 Remote: `https://github.com/manishgh/market-predictor`
 Branch: `r3-lineage`
-Last completed implementation commit: `d72d1c2`
+Last completed implementation commit: `18bb896`
 
 ## Repository Cleanup
 
@@ -242,6 +242,22 @@ from 2018-05-29 through 2019-07-08 are absent. Peak working set was 0.285 GiB.
 The manifest SHA-256 is
 `8d073839eb31e1baa734c9068c957798f1884e9bb2bbe871d80be0b82affe6cf`.
 
+The outcome-blind acquisition planner is implemented and published at
+`data/research/edge_rebuild_swing_history_acquisition_20260731_v2`. Its
+manifest SHA-256 is
+`6a689951035fd8b236cc23ab5530a570158eda7d1c0d09eab8867da4eec6de48`.
+It verified every upstream authority and did not read model outcomes. The result
+is `official_source_reacquisition_required`: all 83 retained official S&P
+release files fail their declared byte hashes. They are browser-saved documents,
+not byte-identical collector responses, and none is reusable as immutable source
+evidence. The planner emitted zero Alpaca units and explicitly records
+`blocked_until_source_reacquisition`. Peak working set was 0.230 GiB.
+
+Do not request the missing bars yet. Reacquire official S&P constituent-change
+releases into a new immutable archive, rebuild point-in-time membership through
+2018-05-29, and rerun `plan-edge-rebuild-swing-history`. Only status
+`ready_for_daily_bar_collection` authorizes market-data acquisition.
+
 The ER3 implementation is aligned. `edge_rebuild/setup_economics.py` classifies
 every gate as `readiness` or `baseline_economics` and exposes separate
 `ready_for_modeling` and `baseline_economics_passed` decisions. The old
@@ -358,22 +374,26 @@ recur, the correct answer is a volume-confirmed exemption, not a bigger number.
 
 ## Exact Next Steps
 
-1. **Publish a point-in-time acquisition plan for the missing swing history.**
-   Prove historical membership and security identity for 2018-05-29 through
-   2019-07-08 before requesting bars. A current S&P 500 list is prohibited.
-2. **Extend swing raw history to the frozen 2,033-session target.** Rebuild the causal panel
+1. **Reacquire immutable official membership evidence.** Fetch the official S&P
+   constituent-change releases into a new byte-hashed archive, including the
+   evidence required to extend membership through 2018-05-29. Do not rewrite or
+   bless the 83 invalid retained files.
+2. **Rebuild membership and rerun the acquisition planner.** Require
+   `ready_for_daily_bar_collection`; any blocker still means zero Alpaca calls.
+3. **Extend swing raw history to the frozen 2,033-session target.** Collect only
+   the published exact SIP/all units, then rebuild the causal panel
    with the same contracts so the 250-session warm-up does not consume the
    required five-year fit, one-year validation, and one-year locked test.
-3. **Run training-only feature diagnostics.** Measure rank IC, stability,
+4. **Run training-only feature diagnostics.** Measure rank IC, stability,
    redundancy, missingness, and sector/regime behavior within development folds;
    never select features on the locked test.
-4. **Train the bounded global models sequentially.** Compare deterministic and
+5. **Train the bounded global models sequentially.** Compare deterministic and
    logistic baselines with a barrier classifier and decision-group ranker under
    the same folds, labels, costs, and top-k policy.
-5. **Evaluate once.** Select with validation, then open the locked temporal test
+6. **Evaluate once.** Select with validation, then open the locked temporal test
    once; report session-block economics and sector/regime breakdowns. Keep the
    independent unseen-security result separate.
-6. **Build the intraday equivalent separately.** Use complete sessions,
+7. **Build the intraday equivalent separately.** Use complete sessions,
    one-minute executable paths, five-minute or volume-bar decision features,
    minute-duration purging, and overnight isolation.
 
@@ -408,8 +428,8 @@ The local NumPy stubs use syntax newer than the project mypy 3.11 target, so the
 verified strict command uses the installed Python 3.14 environment. That is an
 environment fact, not permission to write Python-3.14-only source.
 
-Last full verification after implementation commit `d72d1c2`: 764 tests passed
-with 85 existing warnings; Ruff passed; strict mypy passed across 195 source
+Last full verification after implementation commit `18bb896`: 768 tests passed
+with 85 existing warnings; Ruff passed; strict mypy passed across 196 source
 files; compileall and `git diff --check` passed; no Python worker remained.
 
 ## Standing Prohibitions

@@ -20,8 +20,11 @@ may become serving candidates.
   equal-weight technical benchmark failed and is rejected, but it does not block
   preregistered model training. The frozen temporal audit requires 2,033 XNYS
   sessions and identifies one exact missing range: 279 sessions from 2018-05-29
-  through 2019-07-08. Final model training remains blocked until the causal
-  point-in-time history is extended and the panel is rebuilt.
+  through 2019-07-08. The outcome-blind acquisition audit found that all 83
+  retained official S&P release files fail their declared byte hashes, emitted
+  zero Alpaca units, and requires immutable source reacquisition before the
+  causal point-in-time history can be extended. Final model training remains
+  blocked until that evidence is repaired and the panel is rebuilt.
 - Intraday: verified canonical SIP five-minute corpus contains 38,586,501 bars,
   814 sessions, and 1,104 symbols. Volume-bar setup construction and selective
   one-minute executable paths remain pending.
