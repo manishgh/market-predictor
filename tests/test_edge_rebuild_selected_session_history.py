@@ -15,6 +15,7 @@ from market_predictor.edge_rebuild.history_contracts import (
     SELECTED_SESSION_PLAN_SCHEMA,
     load_collection_transport_config,
     load_selected_session_history_config,
+    load_selected_session_one_minute_config,
 )
 from market_predictor.edge_rebuild.history_materialization import (
     selected_ticker_sessions,
@@ -31,9 +32,14 @@ from market_predictor.edge_rebuild.selected_session_history import (
     build_selected_session_history_plan,
     verify_selected_stock_sessions,
 )
+from market_predictor.edge_rebuild.strategy_contract import load_strategy_contract
 from market_predictor.v3.errors import DataReadinessError
 
 POLICY = Path("configs/edge_rebuild_selected_session_history.toml")
+ONE_MINUTE_POLICY = Path(
+    "configs/edge_rebuild_selected_session_one_minute.toml"
+)
+STRATEGY_CONTRACT_PATH = Path("configs/edge_rebuild_strategy_contract.toml")
 # 2024-07-03 is a half day closing at 13:00 ET; 2024-07-05 is a full session.
 EARLY_CLOSE = "2024-07-03"
 FULL_SESSION = "2024-07-05"
@@ -43,6 +49,7 @@ def _publish_selection(
     directory: Path,
     *,
     rows: list[tuple[str, str]] | None = None,
+    strategy_contract_sha256: str | None = None,
 ) -> Path:
     records = rows or [
         (EARLY_CLOSE, "AAA"),
@@ -62,10 +69,13 @@ def _publish_selection(
             "session_rank": list(range(1, len(records) + 1)),
         }
     )
+    contract = load_strategy_contract(STRATEGY_CONTRACT_PATH)
     audit = {
         "schema": "edge_rebuild.intraday_universe_selection.v1",
-        "strategy_id": "INTRADAY.VWAP_EXHAUSTION_REVERSAL.30M.V1",
-        "strategy_contract_sha256": "0" * 64,
+        "strategy_id": contract.intraday.strategy_id,
+        "strategy_contract_sha256": (
+            strategy_contract_sha256 or contract.sha256()
+        ),
         "collection_dir": str(directory / "daily"),
         "first_session_et": EARLY_CLOSE,
         "last_session_et": FULL_SESSION,
@@ -93,6 +103,8 @@ def test_plan_requests_one_unit_per_session_at_real_session_bounds(
         policy_path=POLICY,
         output_directory=plan_dir,
         config=load_selected_session_history_config(POLICY),
+        strategy_contract=load_strategy_contract(STRATEGY_CONTRACT_PATH),
+        strategy_contract_path=STRATEGY_CONTRACT_PATH,
     )
     verified = load_complete_intraday_history_plan(plan_dir)
     units = pd.concat(
@@ -126,6 +138,8 @@ def test_generic_collector_accepts_the_registered_plan_schema(
         policy_path=POLICY,
         output_directory=plan_dir,
         config=load_selected_session_history_config(POLICY),
+        strategy_contract=load_strategy_contract(STRATEGY_CONTRACT_PATH),
+        strategy_contract_path=STRATEGY_CONTRACT_PATH,
     )
     output = tmp_path / "collection"
 
@@ -143,6 +157,89 @@ def test_generic_collector_accepts_the_registered_plan_schema(
     assert verified["observed_symbols"] == ["AAA", "BBB", "CCC"]
 
 
+def test_one_minute_plan_uses_real_bounds_and_row_bounded_chunks(
+    tmp_path: Path,
+) -> None:
+    rows = [(FULL_SESSION, f"S{index:02d}") for index in range(30)]
+    plan_dir = tmp_path / "one-minute-plan"
+    manifest = build_selected_session_history_plan(
+        selection_directory=_publish_selection(tmp_path / "screen", rows=rows),
+        policy_path=ONE_MINUTE_POLICY,
+        output_directory=plan_dir,
+        config=load_selected_session_one_minute_config(ONE_MINUTE_POLICY),
+        strategy_contract=load_strategy_contract(STRATEGY_CONTRACT_PATH),
+        strategy_contract_path=STRATEGY_CONTRACT_PATH,
+    )
+    verified = load_complete_intraday_history_plan(plan_dir)
+    units = pd.read_parquet(plan_dir / "units" / "1Min" / "2024-07.parquet")
+
+    assert verified["schema"] == "edge_rebuild.selected_session_one_minute_plan.v1"
+    assert manifest["acquisition"]["timeframe"] == "1Min"
+    assert manifest["acquisition"]["exact_path_labels"]["planned_in_this_artifact"]
+    assert len(units) == 2
+    assert set(units["expected_bars_per_symbol"]) == {390}
+    assert int(units["maximum_expected_rows"].max()) <= 10_000
+
+
+def test_generic_collector_collects_one_minute_plan(tmp_path: Path) -> None:
+    plan_dir = tmp_path / "one-minute-plan"
+    build_selected_session_history_plan(
+        selection_directory=_publish_selection(tmp_path / "screen"),
+        policy_path=ONE_MINUTE_POLICY,
+        output_directory=plan_dir,
+        config=load_selected_session_one_minute_config(ONE_MINUTE_POLICY),
+        strategy_contract=load_strategy_contract(STRATEGY_CONTRACT_PATH),
+        strategy_contract_path=STRATEGY_CONTRACT_PATH,
+    )
+    source = _FakeAlpacaSource(expected_timeframe="1Min")
+    output = tmp_path / "one-minute-collection"
+
+    result = collect_intraday_history(
+        plan_directory=plan_dir,
+        policy_path=ONE_MINUTE_POLICY,
+        output_directory=output,
+        config=load_collection_transport_config(ONE_MINUTE_POLICY),
+        source_factory=lambda: source,
+    )
+
+    assert result["status"] == "transport_complete"
+    assert source.timeframes == ["1Min", "1Min"]
+    bars = pd.concat(
+        [pd.read_parquet(path) for path in (output / "bars").rglob("*.parquet")]
+    )
+    assert set(bars["timeframe"]) == {"1m"}
+
+
+def test_one_minute_collection_rejects_subminute_timestamps(
+    tmp_path: Path,
+) -> None:
+    plan_dir = tmp_path / "one-minute-plan"
+    build_selected_session_history_plan(
+        selection_directory=_publish_selection(tmp_path / "screen"),
+        policy_path=ONE_MINUTE_POLICY,
+        output_directory=plan_dir,
+        config=load_selected_session_one_minute_config(ONE_MINUTE_POLICY),
+        strategy_contract=load_strategy_contract(STRATEGY_CONTRACT_PATH),
+        strategy_contract_path=STRATEGY_CONTRACT_PATH,
+    )
+
+    result = collect_intraday_history(
+        plan_directory=plan_dir,
+        policy_path=ONE_MINUTE_POLICY,
+        output_directory=tmp_path / "collection",
+        config=load_collection_transport_config(ONE_MINUTE_POLICY),
+        source_factory=lambda: _FakeAlpacaSource(
+            expected_timeframe="1Min",
+            timestamp_offset_seconds=30,
+        ),
+    )
+
+    assert result["status"] == "transport_incomplete"
+    assert "canonical unit content is invalid" in next(
+        iter(result["failed_units"].values())
+    )
+
+
 def test_plan_refuses_a_date_that_is_not_an_exchange_session(
     tmp_path: Path,
 ) -> None:
@@ -157,6 +254,27 @@ def test_plan_refuses_a_date_that_is_not_an_exchange_session(
             policy_path=POLICY,
             output_directory=tmp_path / "plan",
             config=load_selected_session_history_config(POLICY),
+            strategy_contract=load_strategy_contract(STRATEGY_CONTRACT_PATH),
+            strategy_contract_path=STRATEGY_CONTRACT_PATH,
+        )
+
+
+def test_plan_refuses_selection_from_obsolete_strategy_contract(
+    tmp_path: Path,
+) -> None:
+    selection = _publish_selection(
+        tmp_path / "screen",
+        strategy_contract_sha256="0" * 64,
+    )
+
+    with pytest.raises(DataReadinessError, match="active intraday strategy"):
+        build_selected_session_history_plan(
+            selection_directory=selection,
+            policy_path=ONE_MINUTE_POLICY,
+            output_directory=tmp_path / "plan",
+            config=load_selected_session_one_minute_config(ONE_MINUTE_POLICY),
+            strategy_contract=load_strategy_contract(STRATEGY_CONTRACT_PATH),
+            strategy_contract_path=STRATEGY_CONTRACT_PATH,
         )
 
 
@@ -189,9 +307,16 @@ def test_screen_makes_non_index_stock_sessions_eligible(tmp_path: Path) -> None:
 
 
 class _FakeAlpacaSource:
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        expected_timeframe: str = "5Min",
+        timestamp_offset_seconds: int = 0,
+    ) -> None:
         self.settings = SimpleNamespace(alpaca_stock_feed="sip")
         self.client = SimpleNamespace(timeout=30)
+        self.expected_timeframe = expected_timeframe
+        self.timestamp_offset_seconds = timestamp_offset_seconds
+        self.timeframes: list[str] = []
 
     def fetch_bars_page(
         self,
@@ -203,10 +328,14 @@ class _FakeAlpacaSource:
         from market_predictor.sources.alpaca import AlpacaBarsPage
 
         del end
-        assert kwargs["timeframe"] == "5Min"
+        assert kwargs["timeframe"] == self.expected_timeframe
+        self.timeframes.append(str(kwargs["timeframe"]))
         timestamps = [
-            pd.Timestamp(str(start)),
-            pd.Timestamp(str(start)) + pd.Timedelta(minutes=5),
+            pd.Timestamp(str(start))
+            + pd.Timedelta(seconds=self.timestamp_offset_seconds),
+            pd.Timestamp(str(start))
+            + pd.Timedelta(seconds=self.timestamp_offset_seconds)
+            + pd.Timedelta(minutes=1 if self.expected_timeframe == "1Min" else 5),
         ]
         return AlpacaBarsPage(
             request_page_token=None,

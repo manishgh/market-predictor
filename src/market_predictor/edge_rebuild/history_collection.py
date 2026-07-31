@@ -57,6 +57,8 @@ def collect_intraday_history(
     """Collect every immutable ER1A unit with hash-verified resume."""
 
     plan = load_complete_intraday_history_plan(plan_directory)
+    timeframe = _transport_timeframe(config)
+    normalized_timeframe = _canonical_timeframe(timeframe)
     if plan.get("policy_sha256") != config.sha256():
         raise DataReadinessError("plan and collection policy differ")
     if (output_directory / "_authority.json").exists():
@@ -68,11 +70,13 @@ def collect_intraday_history(
     unit_parts = [
         pd.read_parquet(path)
         for path in sorted(
-            (plan_directory / "units" / "5Min").glob("*.parquet")
+            (plan_directory / "units" / timeframe).glob("*.parquet")
         )
     ]
     if not unit_parts:
-        raise DataReadinessError("ER1A plan contains no five-minute units")
+        raise DataReadinessError(
+            f"intraday plan contains no {timeframe} units"
+        )
     units = pd.concat(unit_parts, ignore_index=True)
     if bool(units["unit_id"].duplicated().any()):
         raise DataReadinessError("ER1A plan contains duplicate units")
@@ -89,7 +93,7 @@ def collect_intraday_history(
         "policy_file_sha256": file_sha256(policy_path),
         "policy_sha256": config.sha256(),
         "provider": "alpaca",
-        "timeframe": "5Min",
+        "timeframe": timeframe,
         "price_feed": "sip",
         "adjustment": "all",
         "workers": config.collection_workers,
@@ -124,6 +128,7 @@ def collect_intraday_history(
             expected_unit=row,
             plan_fingerprint=plan_fingerprint,
             request_sha256=request_sha256,
+            timeframe=normalized_timeframe,
         )
         if existing is None:
             pending.append(row)
@@ -155,6 +160,7 @@ def collect_intraday_history(
             plan_fingerprint=plan_fingerprint,
             request_sha256=request_sha256,
             config=config,
+            timeframe=timeframe,
         )
 
     scheduled = (
@@ -344,6 +350,7 @@ def load_complete_intraday_history_collection(
             raise DataReadinessError(
                 f"ER1A history unit does not verify: {path}"
             )
+        _verify_raw_pages(directory, raw)
     return manifest
 
 
@@ -358,6 +365,7 @@ def _collect_unit(
     plan_fingerprint: str,
     request_sha256: str,
     config: IntradayTransportConfig,
+    timeframe: str,
 ) -> dict[str, Any]:
     unit_id = str(row["unit_id"])
     started_at = datetime.now(UTC)
@@ -386,7 +394,7 @@ def _collect_unit(
                 provider_symbols,
                 start,
                 end - timedelta(microseconds=1),
-                timeframe="5Min",
+                timeframe=timeframe,
                 page_token=page_token,
                 asof=asof,
                 limit=10_000,
@@ -467,6 +475,7 @@ def _collect_unit(
             raw_rows,
             config=config,
             ingested_at=datetime.now(UTC),
+            timeframe=_canonical_timeframe(timeframe),
         )
         if not bars.empty:
             outside = bars["bar_start_utc"].lt(start) | bars[
@@ -478,7 +487,7 @@ def _collect_unit(
                 or bool(
                     bars.duplicated(["ticker", "bar_start_utc"]).any()
                 )
-                or bool((starts.dt.minute.mod(5) != 0).any())
+                or not _timestamps_aligned(starts, timeframe)
                 or not set(bars["ticker"].astype(str)).issubset(
                     canonical_symbols
                 )
@@ -513,7 +522,7 @@ def _collect_unit(
                 end - timedelta(microseconds=1)
             ).isoformat(),
             "asof_date": asof.isoformat(),
-            "timeframe": "5m",
+            "timeframe": _canonical_timeframe(timeframe),
             "price_feed": "sip",
             "adjustment": "all",
             "started_at_utc": started_at.isoformat(),
@@ -555,11 +564,12 @@ def _canonical_bars(
     *,
     config: IntradayTransportConfig,
     ingested_at: datetime,
+    timeframe: str,
 ) -> pd.DataFrame:
     if rows:
         return canonicalize_bars(
             pd.DataFrame(rows),
-            timeframe="5m",
+            timeframe=timeframe,
             source="alpaca",
             price_feed="sip",
             adjustment="all",
@@ -573,7 +583,7 @@ def _canonical_bars(
         pd.DataFrame(
             columns=["open", "high", "low", "close", "volume"]
         ),
-        timeframe="5m",
+        timeframe=timeframe,
         source="alpaca",
         price_feed="sip",
         adjustment="all",
@@ -587,6 +597,7 @@ def _load_existing_unit(
     expected_unit: Mapping[str, Any],
     plan_fingerprint: str,
     request_sha256: str,
+    timeframe: str,
 ) -> dict[str, Any] | None:
     sidecar = path.with_suffix(".manifest.json")
     if not path.exists() and not sidecar.exists():
@@ -615,7 +626,7 @@ def _load_existing_unit(
         or manifest.get("path") != str(path.relative_to(root))
         or manifest.get("requested_start_utc") != start.isoformat()
         or manifest.get("requested_end_utc") != end.isoformat()
-        or manifest.get("timeframe") != "5m"
+        or manifest.get("timeframe") != timeframe
         or manifest.get("price_feed") != "sip"
         or manifest.get("adjustment") != "all"
         or not isinstance(manifest.get("symbol_rows"), Mapping)
@@ -626,6 +637,7 @@ def _load_existing_unit(
         raise DataReadinessError(
             f"ER1A collected unit integrity failed: {path}"
         )
+    _verify_raw_pages(root, manifest)
     frame = pd.read_parquet(
         path,
         columns=[
@@ -646,11 +658,11 @@ def _load_existing_unit(
                 bool(frame["price_feed"].ne("sip").any())
                 or bool(frame["adjustment"].ne("all").any())
                 or bool(frame["source"].ne("alpaca").any())
-                or bool(frame["timeframe"].ne("5m").any())
+                or bool(frame["timeframe"].ne(timeframe).any())
                 or not set(frame["ticker"].astype(str)).issubset(symbols)
                 or bool(starts.lt(start).any())
                 or bool(starts.ge(end).any())
-                or bool((starts.dt.minute.mod(5) != 0).any())
+                or not _timestamps_aligned(starts, timeframe)
                 or bool(
                     frame.duplicated(["ticker", "bar_start_utc"]).any()
                 )
@@ -661,6 +673,58 @@ def _load_existing_unit(
             f"ER1A collected unit content failed: {path}"
         )
     return manifest
+
+
+def _verify_raw_pages(root: Path, unit: Mapping[str, Any]) -> None:
+    pages = unit.get("pages")
+    if not isinstance(pages, list) or not pages:
+        raise DataReadinessError("collected unit has no raw provider pages")
+    for raw in pages:
+        if not isinstance(raw, Mapping):
+            raise DataReadinessError("collected unit has a malformed raw page")
+        path = _resolve_inside(root, str(raw.get("raw_page_path", "")))
+        expected_bytes = int(raw.get("raw_page_bytes", -1))
+        if (
+            not path.is_file()
+            or path.stat().st_size != expected_bytes
+            or file_sha256(path) != raw.get("raw_page_sha256")
+        ):
+            raise DataReadinessError(
+                f"collected raw provider page failed integrity: {path}"
+            )
+
+
+def _transport_timeframe(config: IntradayTransportConfig) -> str:
+    for field in ("history_timeframe", "feature_timeframe", "context_timeframe"):
+        value = getattr(config, field, None)
+        if value in {"1Min", "5Min"}:
+            return str(value)
+    raise DataReadinessError("collection policy has no supported intraday timeframe")
+
+
+def _timeframe_minutes(timeframe: str) -> int:
+    normalized = timeframe.lower()
+    if normalized == "1m" or normalized == "1min":
+        return 1
+    if normalized == "5m" or normalized == "5min":
+        return 5
+    raise DataReadinessError(f"unsupported intraday timeframe: {timeframe}")
+
+
+def _canonical_timeframe(timeframe: str) -> str:
+    minutes = _timeframe_minutes(timeframe)
+    return f"{minutes}m"
+
+
+def _timestamps_aligned(starts: pd.Series, timeframe: str) -> bool:
+    minutes = _timeframe_minutes(timeframe)
+    return not bool(
+        (
+            starts.dt.minute.mod(minutes).ne(0)
+            | starts.dt.second.ne(0)
+            | starts.dt.microsecond.ne(0)
+        ).any()
+    )
 
 
 def _json_string_list(value: object) -> tuple[str, ...]:

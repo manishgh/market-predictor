@@ -88,7 +88,7 @@ class IntradayContract(FrozenModel):
     stop_atr_multiple: float = Field(ge=1.0, le=5)
     atr_timeframe: str
     atr_lookback_bars: int = Field(ge=5, le=50)
-    minimum_warmup_bars: int = Field(ge=130)
+    minimum_warmup_bars: int = Field(ge=5, le=100)
     maximum_trades_per_session: int = Field(ge=1, le=50)
     minimum_expected_net_edge_bps: float = Field(ge=0)
     session_segments: tuple[str, ...]
@@ -385,6 +385,23 @@ class StrategyContract(FrozenModel):
             raise ValueError("unsupported strategy contract schema")
         if self.swing.strategy_id == self.intraday.strategy_id:
             raise ValueError("strategies must have distinct identities")
+        required_intraday_warmup = max(
+            self.features.obv_confirmation_lookback_bars,
+            self.features.efficiency_ratio_lookback_bars,
+            2 * self.features.rsi_pivot_span_bars + 1,
+        )
+        if self.intraday.minimum_warmup_bars != required_intraday_warmup:
+            raise ValueError(
+                "intraday warm-up must equal the longest session-reset feature "
+                "lookback"
+            )
+        if (
+            self.intraday.minimum_warmup_bars
+            >= self.intraday.volume_bars_per_session_target
+        ):
+            raise ValueError(
+                "intraday warm-up must leave decision bars in a normal session"
+            )
         return self
 
     def sha256(self) -> str:

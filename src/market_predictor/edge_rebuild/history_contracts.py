@@ -20,6 +20,12 @@ EXTENDED_CONTEXT_SCHEMA = "edge_rebuild.extended_session_context.v1"
 EXTENDED_CONTEXT_PLAN_SCHEMA = "edge_rebuild.extended_session_context_plan.v1"
 SELECTED_SESSION_HISTORY_SCHEMA = "edge_rebuild.selected_session_history.v1"
 SELECTED_SESSION_PLAN_SCHEMA = "edge_rebuild.selected_session_history_plan.v1"
+SELECTED_SESSION_ONE_MINUTE_SCHEMA = (
+    "edge_rebuild.selected_session_one_minute.v1"
+)
+SELECTED_SESSION_ONE_MINUTE_PLAN_SCHEMA = (
+    "edge_rebuild.selected_session_one_minute_plan.v1"
+)
 REGULAR_SEGMENT = "regular"
 PREMARKET_SEGMENT = "premarket"
 POSTMARKET_SEGMENT = "postmarket"
@@ -199,6 +205,25 @@ class SelectedSessionHistoryConfig(IntradayTransportConfig):
         return self
 
 
+class SelectedSessionOneMinuteConfig(IntradayTransportConfig):
+    """Exact-path and volume-bar input for the screened stock-sessions."""
+
+    history_timeframe: str
+    session_segments: tuple[str, ...]
+
+    @model_validator(mode="after")
+    def validate_selected_session_contract(self) -> Self:
+        if self.schema_version != SELECTED_SESSION_ONE_MINUTE_SCHEMA:
+            raise ValueError("unsupported selected-session one-minute schema")
+        if self.history_timeframe != "1Min":
+            raise ValueError("selected-session exact paths require one-minute bars")
+        if tuple(self.session_segments) != (REGULAR_SEGMENT,):
+            raise ValueError(
+                "selected-session one-minute history covers exactly the regular session"
+            )
+        return self
+
+
 ConfigT = TypeVar("ConfigT", bound=IntradayTransportConfig)
 
 
@@ -247,10 +272,21 @@ def load_selected_session_history_config(
     )
 
 
+def load_selected_session_one_minute_config(
+    path: Path,
+) -> SelectedSessionOneMinuteConfig:
+    return _load_config(
+        path,
+        SelectedSessionOneMinuteConfig,
+        "selected-session one-minute history",
+    )
+
+
 _TRANSPORT_CONFIG_LOADERS: dict[str, Callable[[Path], IntradayTransportConfig]] = {
     INTRADAY_HISTORY_SCHEMA: load_intraday_history_config,
     EXTENDED_CONTEXT_SCHEMA: load_extended_session_context_config,
     SELECTED_SESSION_HISTORY_SCHEMA: load_selected_session_history_config,
+    SELECTED_SESSION_ONE_MINUTE_SCHEMA: load_selected_session_one_minute_config,
 }
 
 

@@ -190,6 +190,24 @@ def test_collector_rejects_mutated_resume_unit(tmp_path: Path) -> None:
         )
 
 
+def test_complete_authority_rejects_missing_raw_provider_page(
+    tmp_path: Path,
+) -> None:
+    output = tmp_path / "collection"
+    result = collect_intraday_history(
+        plan_directory=_write_plan(tmp_path / "plan"),
+        policy_path=POLICY_PATH,
+        output_directory=output,
+        config=load_intraday_history_config(POLICY_PATH),
+        source_factory=_FakeAlpacaSource,
+    )
+    raw_page = output / result["artifacts"][0]["pages"][0]["raw_page_path"]
+    raw_page.unlink()
+
+    with pytest.raises(DataReadinessError, match="raw provider page"):
+        load_complete_intraday_history_collection(output)
+
+
 class _FakeAlpacaSource:
     def __init__(self) -> None:
         self.settings = SimpleNamespace(alpaca_stock_feed="sip")

@@ -94,6 +94,22 @@ def test_rolling_features_must_reset_overnight() -> None:
         StrategyContract.model_validate(raw)
 
 
+def test_intraday_warmup_matches_longest_session_reset_feature() -> None:
+    raw = _raw()
+    raw["intraday"]["minimum_warmup_bars"] = 19
+
+    with pytest.raises(ValueError, match="longest session-reset feature"):
+        StrategyContract.model_validate(raw)
+
+
+def test_intraday_warmup_leaves_decisions_in_a_normal_session() -> None:
+    raw = _raw()
+    raw["intraday"]["volume_bars_per_session_target"] = 20
+
+    with pytest.raises(ValueError, match="leave decision bars"):
+        StrategyContract.model_validate(raw)
+
+
 def test_intraday_target_must_exceed_stop() -> None:
     raw = _raw()
     raw["intraday"]["target_atr_multiple"] = 1.2

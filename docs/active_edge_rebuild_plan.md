@@ -126,7 +126,7 @@ Only one checkpoint may be `in_progress`.
 | --- | --- | --- | --- |
 | ER0 | completed | Establish this active plan and companion handoff | Closed by implementation commit `8c28df9`; both documents and repository guidance are pushed |
 | ER1 | completed | Audit effective independent history and causal data readiness | Closed by implementation commits `5ffa3d3`, `d9d93c8`, and `7b0ce6d`; immutable audit request `f80f70ae299bd5e5a6aeae6aeaa503ef4775573696b7d88856d539dbd1355080` reports one ER2 blocker |
-| ER1A | in_progress | Complete targeted history and re-audit readiness | Intraday transport and canonical five-minute corpus are complete. Swing acquisition scope is frozen, but all 83 retained official membership sources fail their declared byte hashes; reacquire immutable official evidence before bars |
+| ER1A | in_progress | Complete targeted history and re-audit readiness | Intraday five-minute corpus and selected-session stock one-minute paths are complete. SPY/QQQ minute paths, volume-bar features, exact labels, and the readiness replay remain. Swing transition/anchor authority remains separate work. |
 | ER2 | pending | Freeze new strategy contracts and bounded experiment budget | New IDs, setup eligibility, entry/exit/labels, design window, folds, costs, features, abstention, and retirement rules are immutable and tested |
 | ER3 | pending | Build candidate populations, exact labels, and deterministic baselines | Each population replays from immutable bars; readiness, gross/net/benchmark baseline economics, and sample sufficiency are published before ML |
 | ER4 | pending | Complete causal catalyst confirmation evidence | Direct/business/sector/global relations and event timing reconcile; technical-only, catalyst-only, and confirmation-overlay rows are identical and auditable; the deprecated V1 relevance path is retired per section 9A |
@@ -800,6 +800,42 @@ causal ablation.
 
 ## 8. ER3: Population Readiness And Deterministic Baseline
 
+### Intraday One-Minute Acquisition Checkpoint (2026-07-31)
+
+The active intraday contract now binds session-reset feature warm-up to the
+longest declared relationship lookback: 20 volume bars. The prior 130-bar value
+belonged to the retired clock-bar/MACD design and was impossible inside a normal
+session targeting about 78 volume bars.
+
+The broad-universe screen was replayed from existing SIP daily bars under
+contract hash
+`255a736108963b27a2b0383ae64585ee12a9aaa813a69215af0ab64e22905019`.
+It reproduces 11,340 selected stock-sessions, 533 symbols, and 790 sessions.
+Its authoritative artifact is
+`data/research/intraday_universe_selection_20230410_20260708_v4`.
+
+The resumable one-minute plan contains 907 bounded Alpaca SIP/all units and at
+most 4,419,720 rows. Collection completed 907/907 with 4,324,682 observed rows;
+all unit and authority hashes replay. Peak working set was 0.254 GiB. Coverage
+contains 11,235 observed and 105 empty stock-sessions. The missing sessions
+touch `CNH`, `DFTX`, `DJT`, `FISV`, `HAPN`, `PENG`, `PPLI`, and `VISN`; all
+eight securities are excluded in full under the frozen rule (8/533, 1.50%),
+below the 5% ceiling.
+The audit also records 129 stock-sessions below the 95% five-minute print
+threshold. That threshold is evaluated at the frozen security-history level,
+not as an any-session veto; the eight excluded securities are the complete set
+with an empty one-minute path or aggregate five-minute continuity below 95%.
+The operational coverage authority is
+`data/research/edge_rebuild_selected_session_1m_coverage_v4_20260731`, manifest
+SHA-256
+`c05c11f9cbcc6e0b9273ec440e90a961b617602be32a367f1d16e47003e2d962`;
+it reports `ready_for_feature_build=true`.
+
+This closes stock-path transport only. ER3 still requires complete SPY/QQQ
+one-minute paths, causal volume-bar construction, technical/market features,
+exact target/stop/timeout labels, benchmark-relative labels, four purged folds,
+and the readiness report before any estimator fits.
+
 ER3 builds each candidate population and reproduces exact labels before fitting a
 model. A population may proceed to ER5 only when both temporal-development and
 unseen-security scopes satisfy causal readiness:
@@ -839,7 +875,7 @@ Decided 2026-07-29. These replace the earlier five-year intraday research target
 
 | | Swing | Intraday |
 | --- | --- | --- |
-| Universe | point-in-time S&P 500 membership | same, then eligibility-filtered |
+| Universe | point-in-time S&P 500 membership | broad point-in-time US operating companies, then two-layer eligibility screen |
 | Eligibility | index membership is the filter | price > $8, dollar ADV >= $25M, bar continuity >= 95% |
 | Approximate size | 503 per session | 554 of 570 historical securities |
 | History | seven years from 2019-07 | approximately 3.25 years from 2023-04 |

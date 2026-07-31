@@ -39,10 +39,13 @@ import pandas as pd
 from market_predictor.canonical.store import file_sha256
 from market_predictor.edge_rebuild.history_contracts import (
     REGULAR_SEGMENT,
+    SELECTED_SESSION_ONE_MINUTE_PLAN_SCHEMA,
     SELECTED_SESSION_PLAN_SCHEMA,
     SelectedSessionHistoryConfig,
+    SelectedSessionOneMinuteConfig,
 )
 from market_predictor.edge_rebuild.intraday_history import (
+    SELECTED_SESSION_ONE_MINUTE_PLAN_AUTHORITY_SCHEMA,
     SELECTED_SESSION_PLAN_AUTHORITY_SCHEMA,
     chunk_request_symbols,
     expected_five_minute_bars,
@@ -55,6 +58,7 @@ from market_predictor.edge_rebuild.intraday_history import (
 from market_predictor.edge_rebuild.intraday_selection import (
     load_complete_intraday_selection,
 )
+from market_predictor.edge_rebuild.strategy_contract import StrategyContract
 from market_predictor.resources import (
     assert_memory_budget,
     assert_peak_memory_budget,
@@ -126,9 +130,11 @@ def build_selected_session_history_plan(
     selection_directory: Path,
     policy_path: Path,
     output_directory: Path,
-    config: SelectedSessionHistoryConfig,
+    config: SelectedSessionHistoryConfig | SelectedSessionOneMinuteConfig,
+    strategy_contract: StrategyContract,
+    strategy_contract_path: Path,
 ) -> dict[str, Any]:
-    """Plan regular-session five-minute bars for a verified selection."""
+    """Plan regular-session bars for a verified selected stock-session set."""
 
     if output_directory.exists():
         raise DataReadinessError(
@@ -138,11 +144,34 @@ def build_selected_session_history_plan(
     selection, selection_identity = verify_selected_stock_sessions(
         selection_directory
     )
+    if (
+        selection_identity["strategy_id"]
+        != strategy_contract.intraday.strategy_id
+        or selection_identity["strategy_contract_sha256"]
+        != strategy_contract.sha256()
+    ):
+        raise DataReadinessError(
+            "selected-session plan requires a selection published under the "
+            "active intraday strategy contract"
+        )
+    plan_schema = (
+        SELECTED_SESSION_PLAN_SCHEMA
+        if config.history_timeframe == "5Min"
+        else SELECTED_SESSION_ONE_MINUTE_PLAN_SCHEMA
+    )
+    authority_schema = (
+        SELECTED_SESSION_PLAN_AUTHORITY_SCHEMA
+        if config.history_timeframe == "5Min"
+        else SELECTED_SESSION_ONE_MINUTE_PLAN_AUTHORITY_SCHEMA
+    )
     request = {
-        "schema": SELECTED_SESSION_PLAN_SCHEMA,
+        "schema": plan_schema,
         "policy_path": str(policy_path),
         "policy_file_sha256": file_sha256(policy_path),
         "policy_sha256": config.sha256(),
+        "strategy_contract_path": str(strategy_contract_path),
+        "strategy_contract_file_sha256": file_sha256(strategy_contract_path),
+        "strategy_contract_sha256": strategy_contract.sha256(),
         "selection": selection_identity,
         "session_segments": list(config.session_segments),
         "benchmark_symbols_requested": 0,
@@ -172,7 +201,7 @@ def build_selected_session_history_plan(
             frame.to_parquet(path, index=False)
             files.append(file_record(path, temporary, len(frame)))
         for month, frame in sorted(unit_frames.items()):
-            path = temporary / "units" / "5Min" / f"{month}.parquet"
+            path = temporary / "units" / config.history_timeframe / f"{month}.parquet"
             path.parent.mkdir(parents=True, exist_ok=True)
             frame.to_parquet(path, index=False)
             files.append(file_record(path, temporary, len(frame)))
@@ -180,10 +209,12 @@ def build_selected_session_history_plan(
         write_plan_json(temporary / "_request.json", request)
         files.append(file_record(temporary / "_request.json", temporary, 1))
         manifest: dict[str, Any] = {
-            "schema": SELECTED_SESSION_PLAN_SCHEMA,
+            "schema": plan_schema,
             "created_at_utc": datetime.now(UTC).isoformat(),
             "plan_fingerprint": plan_fingerprint,
             "policy_sha256": config.sha256(),
+            "selection": selection_identity,
+            "strategy_contract_sha256": strategy_contract.sha256(),
             "research_only": True,
             "promotion_eligible": False,
             "acquisition": {
@@ -192,7 +223,7 @@ def build_selected_session_history_plan(
                 "calendar_version": version("exchange-calendars"),
                 "price_feed": "sip",
                 "adjustment": "all",
-                "timeframe": "5Min",
+                "timeframe": config.history_timeframe,
                 "layer": "selected_stock_sessions",
                 "segments": list(config.session_segments),
                 "window_rule": (
@@ -210,8 +241,10 @@ def build_selected_session_history_plan(
                 ),
                 "exact_path_labels": {
                     "timeframe": "1Min",
-                    "scope": "selective_after_causal_setup_extraction",
-                    "planned_in_this_artifact": False,
+                    "scope": "all causally screened stock-sessions",
+                    "planned_in_this_artifact": (
+                        config.history_timeframe == "1Min"
+                    ),
                     "missing_trade_policy": "no_trade_no_imputation",
                 },
             },
@@ -231,7 +264,7 @@ def build_selected_session_history_plan(
         write_plan_json(
             temporary / "_authority.json",
             {
-                "schema": SELECTED_SESSION_PLAN_AUTHORITY_SCHEMA,
+                "schema": authority_schema,
                 "state": "complete",
                 "artifact": "_manifest.json",
                 "artifact_sha256": file_sha256(temporary / "_manifest.json"),
@@ -350,7 +383,7 @@ def _build_plan_frames(
     selection: pd.DataFrame,
     sessions: pd.DatetimeIndex,
     calendar: Any,
-    config: SelectedSessionHistoryConfig,
+    config: SelectedSessionHistoryConfig | SelectedSessionOneMinuteConfig,
     plan_fingerprint: str,
 ) -> tuple[dict[str, pd.DataFrame], dict[str, pd.DataFrame], dict[str, int]]:
     selection_rows: dict[str, list[dict[str, object]]] = {}
@@ -370,9 +403,14 @@ def _build_plan_frames(
         symbols = sorted(set(entry.tickers))
         all_tickers.update(symbols)
         stock_sessions += len(symbols)
-        expected_bars = expected_five_minute_bars(entry.open_at, entry.close_at)
-        # A half-day shuts at 13:00 ET and holds 42 regular bars, not 78.
-        if expected_bars != 78:
+        session_minutes = int((entry.close_at - entry.open_at).total_seconds() // 60)
+        expected_bars = (
+            expected_five_minute_bars(entry.open_at, entry.close_at)
+            if config.history_timeframe == "5Min"
+            else session_minutes
+        )
+        expected_full_session_bars = 78 if config.history_timeframe == "5Min" else 390
+        if expected_bars != expected_full_session_bars:
             early_closes += 1
         for chunk, mapping in chunk_request_symbols(
             symbols,
@@ -388,7 +426,7 @@ def _build_plan_frames(
                 entry.open_at.isoformat(),
                 entry.close_at.isoformat(),
                 *sorted(mapping),
-                "5Min",
+                config.history_timeframe,
                 "sip",
                 "all",
             )
@@ -436,7 +474,10 @@ def _build_plan_frames(
     )
 
 
-def _assert_memory(config: SelectedSessionHistoryConfig, stage: str) -> None:
+def _assert_memory(
+    config: SelectedSessionHistoryConfig | SelectedSessionOneMinuteConfig,
+    stage: str,
+) -> None:
     assert_memory_budget(
         hard_budget_gib=config.maximum_process_memory_gib,
         headroom_gib=config.memory_guard_headroom_gib,
@@ -447,5 +488,3 @@ def _assert_memory(config: SelectedSessionHistoryConfig, stage: str) -> None:
         headroom_gib=config.memory_guard_headroom_gib,
         stage=stage,
     )
-
-

@@ -65,7 +65,11 @@ target_atr_multiple = 2.0
 stop_atr_multiple = 1.5
 atr_timeframe = "5Min"
 atr_lookback_bars = 14
-minimum_warmup_bars = 130
+# Rolling state restarts each session. The longest active relationship feature
+# is the 20-bar OBV / Efficiency Ratio window, so 20 bars are both necessary
+# and sufficient. The former 130-bar MACD stabilization rule belonged to the
+# retired clock-bar feature set and made a 78-volume-bar session impossible.
+minimum_warmup_bars = 20
 maximum_trades_per_session = 5
 minimum_expected_net_edge_bps = 3.0
 # Opening, midday, and late sessions behave differently. A single unconditional

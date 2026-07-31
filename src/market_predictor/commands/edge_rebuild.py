@@ -21,6 +21,7 @@ from market_predictor.edge_rebuild.history_contracts import (
     load_extended_session_context_config,
     load_intraday_history_config,
     load_selected_session_history_config,
+    load_selected_session_one_minute_config,
 )
 from market_predictor.edge_rebuild.history_materialization import (
     reorganize_intraday_history,
@@ -31,6 +32,9 @@ from market_predictor.edge_rebuild.intraday_history import (
 from market_predictor.edge_rebuild.intraday_selection import (
     build_intraday_selection,
     publish_intraday_selection,
+)
+from market_predictor.edge_rebuild.one_minute_coverage import (
+    publish_selected_session_one_minute_coverage,
 )
 from market_predictor.edge_rebuild.readiness import (
     run_edge_rebuild_readiness_audit,
@@ -378,7 +382,7 @@ def register_edge_rebuild_commands(app: typer.Typer, console: Any) -> None:
             ),
         ),
     ) -> None:
-        """Collect resumable PIT SIP five-minute bars for any planned layer."""
+        """Collect resumable PIT SIP intraday bars for any planned layer."""
 
         settings = get_settings()
         config = load_collection_transport_config(policy)
@@ -409,6 +413,9 @@ def register_edge_rebuild_commands(app: typer.Typer, console: Any) -> None:
         policy: Path = typer.Option(
             Path("configs/edge_rebuild_selected_session_history.toml")
         ),
+        contract: Path = typer.Option(
+            Path("configs/edge_rebuild_strategy_contract.toml")
+        ),
     ) -> None:
         """Plan five-minute bars for exactly the selected in-play stock-sessions."""
 
@@ -417,8 +424,66 @@ def register_edge_rebuild_commands(app: typer.Typer, console: Any) -> None:
             policy_path=policy,
             output_directory=out_dir,
             config=load_selected_session_history_config(policy),
+            strategy_contract=load_strategy_contract(contract),
+            strategy_contract_path=contract,
         )
         console.print(result["summary"])
+
+    @app.command("plan-edge-rebuild-selected-session-one-minute")
+    @serialized_heavy_job("plan-edge-rebuild-selected-session-one-minute")
+    def plan_edge_rebuild_selected_session_one_minute(
+        selection_dir: Path = typer.Option(
+            ...,
+            help="Published two-layer screen supplying the stock-sessions.",
+        ),
+        out_dir: Path = typer.Option(...),
+        policy: Path = typer.Option(
+            Path("configs/edge_rebuild_selected_session_one_minute.toml")
+        ),
+        contract: Path = typer.Option(
+            Path("configs/edge_rebuild_strategy_contract.toml")
+        ),
+    ) -> None:
+        """Plan one-minute bars for volume features and exact trade paths."""
+
+        result = build_selected_session_history_plan(
+            selection_directory=selection_dir,
+            policy_path=policy,
+            output_directory=out_dir,
+            config=load_selected_session_one_minute_config(policy),
+            strategy_contract=load_strategy_contract(contract),
+            strategy_contract_path=contract,
+        )
+        console.print(result["summary"])
+
+    @app.command("audit-edge-rebuild-selected-session-one-minute")
+    @serialized_heavy_job("audit-edge-rebuild-selected-session-one-minute")
+    def audit_edge_rebuild_selected_session_one_minute(
+        plan_dir: Path = typer.Option(...),
+        collection_dir: Path = typer.Option(...),
+        five_minute_collection_dir: Path = typer.Option(...),
+        out_dir: Path = typer.Option(...),
+        contract: Path = typer.Option(
+            Path("configs/edge_rebuild_strategy_contract.toml")
+        ),
+    ) -> None:
+        """Publish stock-session coverage and whole-security exclusions."""
+
+        result = publish_selected_session_one_minute_coverage(
+            plan_directory=plan_dir,
+            collection_directory=collection_dir,
+            five_minute_collection_directory=five_minute_collection_dir,
+            strategy_contract=load_strategy_contract(contract),
+            strategy_contract_path=contract,
+            output_directory=out_dir,
+        )
+        console.print(
+            {
+                "status": result["status"],
+                "ready_for_feature_build": result["ready_for_feature_build"],
+                **result["summary"],
+            }
+        )
 
     @app.command("plan-edge-rebuild-intraday-history")
     @serialized_heavy_job("plan-edge-rebuild-intraday-history")

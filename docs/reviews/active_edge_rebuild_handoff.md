@@ -1,16 +1,16 @@
 # Active Edge Rebuild Handoff
 
 Status: official S&P raw-source acquisition and offline event extraction are
-complete and verified. Transition authority, membership reconstruction, and
-Alpaca history extension have not started. Intraday corpus,
-swing labels, cross-sectional scaling, causal technical relationship primitives,
-and the current seven-year panel remain published and immutable. No model exists.
-Nothing is running.
+complete and verified. Swing transition authority and anchor-bound membership
+reconstruction remain pending. The intraday five-minute corpus and selected
+stock-session one-minute transport are complete and verified. Intraday
+benchmark minute paths, volume-bar features, exact labels, and readiness remain;
+no active-program model exists. Nothing is running.
 Last updated: 2026-07-31
 Repository: `C:\project\market-predictor`
 Remote: `https://github.com/manishgh/market-predictor`
 Branch: `r3-lineage`
-Last pushed checkpoint: `ea9fe14`
+Last pushed checkpoint: `ccc269a`
 
 ## Repository Cleanup
 
@@ -76,7 +76,7 @@ holds it produces exit code 75 on CLI tests, which looks like failure and is not
 | | Swing | Intraday |
 | --- | --- | --- |
 | Universe | 627 securities, verified point-in-time, delisted included | 1,104 symbols, index members plus volume-screened non-index names |
-| Bars | 1,084,622 daily, 2019-07-09 to 2026-07-08, 7.00 years | 38,586,501 five-minute, 2023-04-10 to 2026-07-08, 814 sessions |
+| Bars | 1,084,622 daily, 2019-07-09 to 2026-07-08, 7.00 years | 38,586,501 five-minute plus 4,324,682 selected-stock one-minute rows, 2023-04-10 to 2026-07-08 |
 | Selection | n/a | 11,340 in-play stock-sessions, median 13 per session |
 | News | 714,126 rows over the full 7 years | 165,142 rows, median 204 articles per company |
 
@@ -85,9 +85,20 @@ Key artifacts:
 - `data/canonical/swing_memberships_verified_20190709_20260708_v2.parquet`
 - `data/canonical/edge_rebuild_intraday_5m_20260731/{regular,extended}/5m/`
 - `data/raw/swing_daily_sip_sp500_pit_20190709_20260708_v3/bars/`
-- `data/research/intraday_universe_selection_20230410_20260708_v2/`
+- `data/research/intraday_universe_selection_20230410_20260708_v4/`
 - `data/raw/edge_rebuild_selected_session_5m_20260731` — 790/790 units,
   875,425 rows, 532 symbols, zero failures, authority present
+- `data/research/edge_rebuild_selected_session_1m_plan_20260731` - 907
+  bounded SIP/all units for all 11,340 selected stock-sessions
+- `data/raw/edge_rebuild_selected_session_1m_20260731` - 907/907 units,
+  4,324,682 rows, 532 observed symbols, authority replayed successfully;
+  11,235/11,340 stock-sessions have rows. The 105 empty sessions touch eight
+  securities (`CNH`, `DFTX`, `DJT`, `FISV`, `HAPN`, `PENG`, `PPLI`, `VISN`),
+  all excluded in full (1.50% of 533, below the 5% ceiling)
+- `data/research/edge_rebuild_selected_session_1m_coverage_v4_20260731` -
+  operational coverage/exclusion authority, manifest SHA-256
+  `c05c11f9cbcc6e0b9273ec440e90a961b617602be32a367f1d16e47003e2d962`,
+  `ready_for_feature_build=true`
 
 ## What Failed, And Why It Matters
 
@@ -411,17 +422,18 @@ recur, the correct answer is a volume-confirmed exemption, not a bigger number.
 7. **Evaluate once.** Select with validation, then open the locked temporal test
    once; report session-block economics and sector/regime breakdowns. Keep the
    independent unseen-security result separate.
-8. **Build the intraday equivalent separately.** Use complete sessions,
-   one-minute executable paths, five-minute or volume-bar decision features,
-   minute-duration purging, and overnight isolation.
+8. **Finish intraday ER3 separately.** Collect hash-bound SPY/QQQ one-minute
+   paths for the 790 selected sessions, construct approximately 78 causal
+   volume bars per stock-session, build the 20-bar session-reset features and
+   exact next-minute target/stop/timeout labels, then publish four purged folds
+   and rerun readiness. Only a passing artifact may enter sequential fitting.
 
 ## Not Started
 
 - Hourly swing bars. The contract specifies hourly features; only daily exists.
   About 6M bars, one to two hours unattended.
-- One-minute intraday bars, required before volume bars can be built. Roughly
-  790 units over the in-play sessions. Time bars remain in use until then and
-  this is recorded, not silently substituted.
+- SPY/QQQ one-minute benchmark paths for the selected sessions.
+- The active volume-bar, feature, exact-label, fold, and readiness artifacts.
 - Any model under the PDF-aligned protocol. Nothing has been trained in this
   program.
 
