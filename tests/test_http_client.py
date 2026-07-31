@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import unittest
+from datetime import UTC
+from hashlib import sha256
+from typing import Any
 from unittest.mock import Mock, patch
 
 import requests
@@ -9,6 +12,117 @@ from market_predictor.sources.http import HttpClient, _retry_delay
 
 
 class HttpClientTests(unittest.TestCase):
+    def test_get_bytes_preserves_non_utf8_and_crlf_body(self) -> None:
+        body = b"\xff\xfeheader\r\nvalue\x80\r\n"
+        client = HttpClient()
+        client.session = Mock()
+        client.session.get.return_value = _Response(
+            200,
+            body=body,
+            headers={
+                "Content-Type": "text/plain; charset=windows-1252",
+                "Content-Encoding": "identity",
+                "ETag": '"v1"',
+                "Last-Modified": "Wed, 30 Jul 2026 20:00:00 GMT",
+                "Set-Cookie": "secret=true",
+                "X-Untrusted": "ignore-me",
+            },
+        )
+
+        result = client.get_bytes_with_metadata("https://example.test/raw")
+
+        self.assertEqual(result.body, body)
+        self.assertEqual(result.body_length, len(body))
+        self.assertEqual(result.sha256, sha256(body).hexdigest())
+        self.assertEqual(
+            result.content_type,
+            "text/plain; charset=windows-1252",
+        )
+        self.assertEqual(result.content_encoding, "identity")
+        self.assertEqual(result.etag, '"v1"')
+        self.assertEqual(
+            result.last_modified,
+            "Wed, 30 Jul 2026 20:00:00 GMT",
+        )
+        self.assertEqual(result.retrieved_at_utc.tzinfo, UTC)
+        self.assertNotIn("set-cookie", dict(result.safe_headers))
+        self.assertNotIn("x-untrusted", dict(result.safe_headers))
+
+    def test_get_bytes_records_redirect_metadata(self) -> None:
+        first = _Response(
+            301,
+            url="https://example.test/source",
+            headers={"Location": "https://cdn.example.test/archive"},
+        )
+        final = _Response(
+            200,
+            body=b"archive",
+            url="https://cdn.example.test/archive",
+            history=[first],
+        )
+        client = HttpClient()
+        client.session = Mock()
+        client.session.get.return_value = final
+
+        result = client.get_bytes_with_metadata(
+            "https://example.test/source",
+        )
+
+        self.assertEqual(result.requested_url, "https://example.test/source")
+        self.assertEqual(result.final_url, "https://cdn.example.test/archive")
+        self.assertEqual(
+            result.redirect_chain,
+            (
+                "https://example.test/source",
+                "https://cdn.example.test/archive",
+            ),
+        )
+        self.assertEqual(result.status_code, 200)
+
+    @patch("market_predictor.sources.http.time.sleep")
+    def test_get_bytes_retries_408_429_and_all_server_errors(
+        self,
+        sleep: Mock,
+    ) -> None:
+        client = HttpClient()
+        client.session = Mock()
+        client.session.get.side_effect = [
+            _Response(408, headers={"Retry-After": "0"}),
+            _Response(429, headers={"Retry-After": "0"}),
+            _Response(599, headers={"Retry-After": "0"}),
+            _Response(200, body=b"ok"),
+        ]
+
+        result = client.get_bytes_with_metadata(
+            "https://example.test/raw",
+            retries=4,
+        )
+
+        self.assertEqual(result.body, b"ok")
+        self.assertEqual(client.session.get.call_count, 4)
+        self.assertEqual(
+            [call.args[0] for call in sleep.call_args_list],
+            [0.0] * 3,
+        )
+
+    @patch("market_predictor.sources.http.time.sleep")
+    def test_get_bytes_does_not_retry_terminal_client_error(
+        self,
+        sleep: Mock,
+    ) -> None:
+        client = HttpClient()
+        client.session = Mock()
+        client.session.get.return_value = _Response(404)
+
+        with self.assertRaisesRegex(RuntimeError, "status=404"):
+            client.get_bytes_with_metadata(
+                "https://example.test/missing",
+                retries=5,
+            )
+
+        self.assertEqual(client.session.get.call_count, 1)
+        sleep.assert_not_called()
+
     @patch("market_predictor.sources.http.time.sleep")
     def test_retry_after_controls_429_delay(self, sleep: Mock) -> None:
         client = HttpClient()
@@ -32,8 +146,9 @@ class HttpClientTests(unittest.TestCase):
     def test_server_error_uses_exponential_retry(
         self,
         sleep: Mock,
-        _: Mock,
+        random_uniform: Mock,
     ) -> None:
+        del random_uniform
         client = HttpClient()
         client.session = Mock()
         client.session.get.side_effect = [
@@ -99,27 +214,27 @@ class HttpClientTests(unittest.TestCase):
         )
 
 
-class _Response:
+class _Response(requests.Response):
     def __init__(
         self,
         status_code: int,
         *,
         payload: object | None = None,
+        body: bytes | None = None,
         headers: dict[str, str] | None = None,
+        url: str = "https://example.test",
+        history: list[requests.Response] | None = None,
     ) -> None:
+        super().__init__()
         self.status_code = status_code
         self._payload = payload
-        self.headers = headers or {}
-        self.text = "test response"
+        self.headers = requests.structures.CaseInsensitiveDict(headers or {})
+        self._content = body if body is not None else b"test response"
+        self.url = url
+        self.history = history or []
 
-    def raise_for_status(self) -> None:
-        if self.status_code >= 400:
-            response = requests.Response()
-            response.status_code = self.status_code
-            response._content = self.text.encode()
-            raise requests.HTTPError(response=response)
-
-    def json(self) -> object:
+    def json(self, **kwargs: Any) -> object:
+        del kwargs
         return self._payload
 
 

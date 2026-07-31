@@ -19,7 +19,6 @@ from market_predictor.resources import (
     assert_peak_memory_budget,
     memory_audit,
 )
-from market_predictor.swing.market_history import DEFAULT_BENCHMARKS
 from market_predictor.v3.errors import DataReadinessError
 
 PLAN_SCHEMA = "edge_rebuild.swing_history_acquisition_plan.v1"
@@ -73,20 +72,13 @@ def publish_swing_history_acquisition_plan(
     membership_dates_ready = (
         membership_start <= missing_start and universe_start <= missing_start
     )
-    membership_ready = source_ready and membership_dates_ready
-    units = (
-        _build_daily_units(membership_frame, missing_start, missing_end)
-        if membership_ready
-        else pd.DataFrame(
-            columns=["security_id", "ticker", "start_date", "end_date", "role"]
-        )
+    units = pd.DataFrame(
+        columns=["security_id", "ticker", "start_date", "end_date", "role"]
     )
     status = (
         "official_source_reacquisition_required"
         if not source_ready
-        else "ready_for_daily_bar_collection"
-        if membership_ready
-        else "membership_evidence_required"
+        else "official_source_archive_authority_required"
     )
     request = {
         "schema": PLAN_SCHEMA,
@@ -104,6 +96,7 @@ def publish_swing_history_acquisition_plan(
         "membership": {
             "current_membership_start": membership_start.isoformat(),
             "current_universe_audit_start": universe_start.isoformat(),
+            "membership_dates_cover_required_start": membership_dates_ready,
             "required_start": missing_start.isoformat(),
             "required_end": missing_end.isoformat(),
             "official_announcement_discovery_start": (
@@ -126,9 +119,7 @@ def publish_swing_history_acquisition_plan(
             "status": (
                 "blocked_until_source_reacquisition"
                 if not source_ready
-                else "ready"
-                if membership_ready
-                else "blocked_until_membership_authority"
+                else "blocked_until_archive_authority"
             ),
             "planned_units": len(units),
             "source": "alpaca",
@@ -144,11 +135,12 @@ def publish_swing_history_acquisition_plan(
                 "\\", "/"
             ),
             "refusal_reason": (
-                None
-                if membership_ready
-                else "official source files fail their declared SHA-256 identities"
+                "official source files fail their declared SHA-256 identities"
                 if not source_ready
-                else "historical ticker/date ownership is not yet authoritative"
+                else (
+                    "the legacy audit has no verified raw-archive to membership "
+                    "parent-hash authority"
+                )
             ),
         },
         "next_operations": (
@@ -158,17 +150,10 @@ def publish_swing_history_acquisition_plan(
                 "rerun this planner before any market-data request",
             ]
             if not source_ready
-            else
-            [
-                "collect only missing official membership releases and transitions",
-                "rebuild and verify point-in-time membership",
-                "rerun this planner to publish immutable daily-bar units",
-            ]
-            if not membership_ready
             else [
-                "collect the published Alpaca SIP/all units sequentially",
-                "verify whole-security exclusions remain at or below 5%",
-                "rebuild the swing panel and rerun temporal coverage",
+                "publish a hash-verified full-window official source archive",
+                "publish covered transition evidence and offline membership lineage",
+                "replace this blocker-only planner with authority-bound unit planning",
             ]
         ),
     }
@@ -178,10 +163,6 @@ def publish_swing_history_acquisition_plan(
         staging.mkdir(parents=True)
         _write_json(staging / "_request.json", request)
         manifest["request_sha256"] = file_sha256(staging / "_request.json")
-        if membership_ready:
-            units_path = staging / "daily_bar_units.csv"
-            units.to_csv(units_path, index=False, lineterminator="\n")
-            manifest["daily_bars"]["units_sha256"] = file_sha256(units_path)
         assert_peak_memory_budget(
             hard_budget_gib=MAX_MEMORY_GIB,
             headroom_gib=MEMORY_HEADROOM_GIB,
@@ -417,53 +398,6 @@ def _membership_start(frame: pd.DataFrame) -> date:
         raise DataReadinessError("membership effective start is invalid")
     minimum = pd.Timestamp(values.min()).tz_convert(EASTERN)
     return date(int(minimum.year), int(minimum.month), int(minimum.day))
-
-
-def _build_daily_units(frame: pd.DataFrame, start: date, end: date) -> pd.DataFrame:
-    records: list[dict[str, str]] = []
-    for row in frame.itertuples(index=False):
-        effective_start = pd.Timestamp(row.effective_from_utc).tz_convert(EASTERN).date()
-        effective_end = (
-            None
-            if pd.isna(row.effective_to_utc)
-            else pd.Timestamp(row.effective_to_utc).tz_convert(EASTERN).date()
-        )
-        unit_start = max(start, effective_start)
-        unit_end = min(end, effective_end - timedelta(days=1) if effective_end else end)
-        if unit_start <= unit_end:
-            records.append(
-                {
-                    "security_id": str(row.security_id),
-                    "ticker": str(row.ticker),
-                    "start_date": unit_start.isoformat(),
-                    "end_date": unit_end.isoformat(),
-                    "role": "stock",
-                }
-            )
-    benchmarks = set(DEFAULT_BENCHMARKS) | set(
-        frame["primary_benchmark"].dropna().astype("string").str.strip()
-    )
-    records.extend(
-        {
-            "security_id": f"benchmark:{ticker}",
-            "ticker": ticker,
-            "start_date": start.isoformat(),
-            "end_date": end.isoformat(),
-            "role": "benchmark",
-        }
-        for ticker in sorted(benchmarks - {""})
-    )
-    units = pd.DataFrame.from_records(records)
-    if units.empty:
-        raise DataReadinessError("extended membership produced no daily-bar units")
-    duplicates = units.duplicated(
-        subset=["security_id", "ticker", "start_date", "end_date", "role"]
-    )
-    if bool(duplicates.any()):
-        raise DataReadinessError("daily-bar acquisition units are duplicated")
-    return units.sort_values(
-        ["role", "ticker", "start_date", "security_id"], kind="stable"
-    ).reset_index(drop=True)
 
 
 def _bound_file(root: Path, path: Path) -> Path:

@@ -26,10 +26,10 @@ def test_plan_blocks_bar_units_until_membership_is_extended(tmp_path: Path) -> N
     )
 
     assert manifest["schema"] == PLAN_SCHEMA
-    assert manifest["status"] == "membership_evidence_required"
+    assert manifest["status"] == "official_source_archive_authority_required"
     assert manifest["outcomes_read"] is False
     assert manifest["daily_bars"]["planned_units"] == 0
-    assert manifest["daily_bars"]["status"] == "blocked_until_membership_authority"
+    assert manifest["daily_bars"]["status"] == "blocked_until_archive_authority"
     assert not (tmp_path / "out" / "daily_bar_units.csv").exists()
     assert manifest["membership"]["required_start"] == "2018-05-29"
     assert manifest["membership"]["reusable_official_sources"] == 1
@@ -40,7 +40,7 @@ def test_plan_blocks_bar_units_until_membership_is_extended(tmp_path: Path) -> N
     )
 
 
-def test_extended_membership_emits_exact_stock_and_benchmark_units(
+def test_extended_membership_cannot_bypass_missing_archive_authority(
     tmp_path: Path,
 ) -> None:
     inputs = _fixture(tmp_path, membership_start="2018-05-29")
@@ -51,24 +51,11 @@ def test_extended_membership_emits_exact_stock_and_benchmark_units(
         **inputs,
     )
 
-    assert manifest["status"] == "ready_for_daily_bar_collection"
-    units = pd.read_csv(tmp_path / "out" / "daily_bar_units.csv")
-    stock = units.loc[units["role"].eq("stock")]
-    assert stock.to_dict(orient="records") == [
-        {
-            "security_id": "security:AAA",
-            "ticker": "AAA",
-            "start_date": "2018-05-29",
-            "end_date": "2019-07-08",
-            "role": "stock",
-        }
-    ]
-    benchmarks = set(units.loc[units["role"].eq("benchmark"), "ticker"])
-    assert {"SPY", "QQQ", "XLK"}.issubset(benchmarks)
-    assert len(units) == manifest["daily_bars"]["planned_units"]
-    assert manifest["daily_bars"]["units_sha256"] == file_sha256(
-        tmp_path / "out" / "daily_bar_units.csv"
-    )
+    assert manifest["status"] == "official_source_archive_authority_required"
+    assert manifest["membership"]["membership_dates_cover_required_start"] is True
+    assert manifest["daily_bars"]["planned_units"] == 0
+    assert manifest["daily_bars"]["status"] == "blocked_until_archive_authority"
+    assert not (tmp_path / "out" / "daily_bar_units.csv").exists()
 
 
 def test_official_source_tampering_refuses_bar_units(tmp_path: Path) -> None:
