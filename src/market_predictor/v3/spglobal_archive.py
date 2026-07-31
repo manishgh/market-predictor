@@ -32,17 +32,12 @@ from market_predictor.resources import (
 )
 from market_predictor.sources.http import HttpClient
 from market_predictor.v3.errors import DataReadinessError
-from market_predictor.v3.universe import (
-    ARCHIVE_QUERY,
-    SP_GLOBAL_ARCHIVE_URL,
-    IndexChange,
-    parse_sp500_changes,
-)
+from market_predictor.v3.universe import ARCHIVE_QUERY, SP_GLOBAL_ARCHIVE_URL
 
 ARCHIVE_REQUEST_SCHEMA = "ml_v3.spglobal_official_archive_request.v1"
 ARCHIVE_STATUS_SCHEMA = "ml_v3.spglobal_official_archive_status.v1"
-ARCHIVE_MANIFEST_SCHEMA = "ml_v3.spglobal_official_archive_manifest.v1"
-ARCHIVE_AUTHORITY_SCHEMA = "ml_v3.spglobal_official_archive_authority.v1"
+ARCHIVE_MANIFEST_SCHEMA = "ml_v3.spglobal_official_archive_manifest.v2"
+ARCHIVE_AUTHORITY_SCHEMA = "ml_v3.spglobal_official_archive_authority.v2"
 ARCHIVE_UNIT_SCHEMA = "ml_v3.spglobal_official_archive_unit.v1"
 DISCOVERY_SCHEMA = "ml_v3.spglobal_official_archive_discovery.v1"
 DISCOVERY_START = date(2018, 4, 14)
@@ -65,7 +60,6 @@ _MEMBERSHIP_TITLE = re.compile(
     re.IGNORECASE,
 )
 _OBJECT_WRITE_LOCK = threading.Lock()
-_HTML_PARSE_LOCK = threading.Lock()
 
 
 class BytesResponse(Protocol):
@@ -118,6 +112,14 @@ class ArchiveCollectionConfig:
             raise ValueError("retry_pause_seconds must not be negative")
         if self.maximum_units_this_run is not None and self.maximum_units_this_run < 1:
             raise ValueError("maximum_units_this_run must be positive")
+
+
+@dataclass(frozen=True)
+class VerifiedSpGlobalRawArchive:
+    root: Path
+    authority: dict[str, Any]
+    manifest: dict[str, Any]
+    releases: tuple[dict[str, Any], ...]
 
 
 @dataclass(frozen=True)
@@ -274,14 +276,9 @@ def _collect_spglobal_archive_locked(
         failed_releases={},
         network_units=used_network_units,
     )
-    parser_unresolved_releases = sum(
-        str(record["parser_status"]) == "parser_unresolved"
-        for record in release_records
-    )
-    status["parser_unresolved_releases"] = parser_unresolved_releases
     status["archive_scope"] = "raw_official_responses"
-    status["event_extraction_ready"] = parser_unresolved_releases == 0
     discovery_path = output_directory / "_discovery.json"
+    raw_release_records = [_raw_release_record(record) for record in release_records]
     manifest: dict[str, Any] = {
         **status,
         "schema": ARCHIVE_MANIFEST_SCHEMA,
@@ -291,17 +288,9 @@ def _collect_spglobal_archive_locked(
         "release_url_count": len(announcements),
         "discovery_sha256": _file_sha256(discovery_path),
         "search_pages": _records(discovery, "search_pages"),
-        "releases": release_records,
+        "releases": raw_release_records,
         "release_set_sha256": _json_sha256(
-            [
-                {
-                    "url": record["url"],
-                    "sha256": record["sha256"],
-                    "change_rows": record["change_rows"],
-                    "parser_status": record["parser_status"],
-                }
-                for record in release_records
-            ]
+            [_raw_release_identity(record) for record in raw_release_records]
         ),
     }
     _atomic_json(output_directory / "_manifest.json", manifest)
@@ -314,23 +303,16 @@ def _collect_spglobal_archive_locked(
         "request_sha256": request_sha256,
         "source_audit_sha256": audit_sha256,
         "release_set_sha256": manifest["release_set_sha256"],
-        "parser_unresolved_releases": parser_unresolved_releases,
-        "event_extraction_state": (
-            "ready"
-            if parser_unresolved_releases == 0
-            else "blocked_parser_unresolved"
-        ),
-        "event_extraction_ready": parser_unresolved_releases == 0,
     }
     _atomic_json(output_directory / "_authority.json", authority)
     _atomic_json(output_directory / "_status.json", status)
     return manifest
 
 
-def require_spglobal_event_reconstruction_ready(
+def require_spglobal_raw_archive_complete(
     archive_directory: Path,
-) -> dict[str, Any]:
-    """Verify raw authority and refuse event replay while parser cases remain."""
+) -> VerifiedSpGlobalRawArchive:
+    """Replay all retained units and verify immutable raw-source authority."""
 
     authority = _load_json(archive_directory / "_authority.json")
     artifact = _resolve_inside(
@@ -349,15 +331,7 @@ def require_spglobal_event_reconstruction_ready(
     releases = _records(manifest, "releases")
     release_count = len(releases)
     release_set_sha256 = _json_sha256(
-        [
-            {
-                "url": record.get("url"),
-                "sha256": record.get("sha256"),
-                "change_rows": record.get("change_rows"),
-                "parser_status": record.get("parser_status"),
-            }
-            for record in releases
-        ]
+        [_raw_release_identity(record) for record in releases]
     )
     if (
         manifest.get("schema") != ARCHIVE_MANIFEST_SCHEMA
@@ -375,27 +349,80 @@ def require_spglobal_event_reconstruction_ready(
         raise DataReadinessError(
             "S&P raw archive manifest lineage or release counts are invalid"
         )
-    unresolved = sum(
-        str(record.get("parser_status", "")) == "parser_unresolved"
-        for record in releases
+    request = _load_json(archive_directory / "_request.json")
+    request_payload = {
+        key: value for key, value in request.items() if key != "request_sha256"
+    }
+    if (
+        request.get("schema") != ARCHIVE_REQUEST_SCHEMA
+        or request.get("request_sha256") != _json_sha256(request_payload)
+        or request.get("request_sha256") != authority.get("request_sha256")
+    ):
+        raise DataReadinessError(
+            "S&P raw archive request identity is invalid"
+        )
+    discovery = _load_json(archive_directory / "_discovery.json")
+    request_seed_urls = request.get("seed_urls")
+    if not isinstance(request_seed_urls, list) or not all(
+        isinstance(url, str) for url in request_seed_urls
+    ):
+        raise DataReadinessError("S&P raw archive request seed set is invalid")
+    seeds = [
+        _announcement_from_record(record)
+        for record in _records(discovery, "announcements")
+        if record.get("origin") == "seed"
+    ]
+    if (
+        len(seeds) != EXPECTED_SEED_URLS
+        or [seed.url for seed in seeds] != request_seed_urls
+    ):
+        raise DataReadinessError(
+            "S&P raw archive discovery does not retain the frozen seed set"
+        )
+    replayed_discovery, replayed_releases = _replay_complete_archive(
+        archive_directory,
+        seeds=seeds,
+        request_sha256=str(authority["request_sha256"]),
     )
     if (
-        int(authority.get("parser_unresolved_releases", -1)) != unresolved
-        or int(manifest.get("parser_unresolved_releases", -1)) != unresolved
+        replayed_discovery != discovery
+        or [_raw_release_record(record) for record in replayed_releases]
+        != releases
+        or manifest.get("discovery_sha256")
+        != _file_sha256(archive_directory / "_discovery.json")
     ):
         raise DataReadinessError(
-            "S&P raw archive parser-readiness counts are inconsistent"
+            "S&P raw archive manifest does not equal the retained unit replay"
         )
-    if (
-        unresolved != 0
-        or authority.get("event_extraction_state") != "ready"
-        or authority.get("event_extraction_ready") is not True
-        or manifest.get("event_extraction_ready") is not True
+    return VerifiedSpGlobalRawArchive(
+        root=archive_directory.resolve(),
+        authority=authority,
+        manifest=manifest,
+        releases=tuple(releases),
+    )
+
+
+def read_verified_spglobal_release_html(
+    archive: VerifiedSpGlobalRawArchive,
+    record: Mapping[str, Any],
+) -> str:
+    """Decode one release that belongs to a fully replayed raw archive."""
+
+    identity = (record.get("url"), record.get("sha256"), record.get("unit_id"))
+    if not any(
+        (item.get("url"), item.get("sha256"), item.get("unit_id")) == identity
+        for item in archive.releases
     ):
         raise DataReadinessError(
-            f"S&P event reconstruction is blocked by {unresolved} unresolved releases"
+            "S&P release is not a member of the verified raw archive"
         )
-    return authority
+    return _decode_html(
+        _decode_http_entity(
+            _read_unit_body(archive.root, record),
+            str(record.get("content_encoding") or ""),
+        ),
+        str(record.get("content_type") or ""),
+    )
 
 
 def _replay_complete_archive(
@@ -443,7 +470,7 @@ def _replay_complete_archive(
             raise DataReadinessError(
                 f"S&P official archive release is missing: {announcement.url}"
             )
-        _validate_release_record(root, record, announcement)
+        _validate_release_record(record, announcement)
         release_records.append(record)
     return discovery, release_records
 
@@ -608,7 +635,7 @@ def _collect_releases(
         if existing is None:
             pending.append(announcement)
         else:
-            _validate_release_record(output_directory, existing, announcement)
+            _validate_release_record(existing, announcement)
             completed[announcement.url] = existing
             resumed += 1
     scheduled = pending if network_budget is None else pending[:network_budget]
@@ -706,34 +733,6 @@ def _persist_release(
         )
     body = response.body
     body_path = _write_content_addressed(root, body)
-    changes: list[IndexChange] = []
-    parser_status = "parsed"
-    parser_error: str | None = None
-    with _HTML_PARSE_LOCK:
-        try:
-            decoded_body = _decode_http_entity(
-                body,
-                str(response.content_encoding or ""),
-            )
-            html = _decode_html(decoded_body, response.content_type)
-            changes = _parse_release_changes(
-                html,
-                source_url=announcement.url,
-                published_date=announcement.published_date,
-                source_sha256=str(metadata["sha256"]),
-            )
-        except Exception as exc:  # noqa: BLE001 - parser defects must not discard raw evidence
-            parser_status = "parser_unresolved"
-            parser_error = f"{type(exc).__name__}: {exc}"
-    if not changes:
-        if parser_status == "parsed":
-            parser_status = "no_effective_rows"
-            parser_error = "parser returned no effective S&P 500 membership rows"
-    parser_hashes = {item.source_sha256 for item in changes}
-    if changes and parser_hashes != {metadata["sha256"]}:
-        raise DataReadinessError(
-            f"parser source hash does not equal exact response-byte hash: {announcement.url}"
-        )
     unit_id = _release_unit_id(announcement.url)
     record = {
         "schema": ARCHIVE_UNIT_SCHEMA,
@@ -746,12 +745,6 @@ def _persist_release(
         "published_date": announcement.published_date.isoformat(),
         "origin": announcement.origin,
         "path": str(body_path.relative_to(root)),
-        "change_rows": len(changes),
-        "parser_status": parser_status,
-        "parser_error": parser_error,
-        "parser_source_sha256": (
-            next(iter(parser_hashes)) if parser_hashes else None
-        ),
         **metadata,
     }
     sealed = _with_unit_integrity_hash(record)
@@ -1021,8 +1014,10 @@ def _validate_stored_unit_metadata(
         )
 
 
-def _validate_release_record(root: Path, record: Mapping[str, Any], announcement: _Announcement) -> None:
-    parser_status = str(record.get("parser_status", ""))
+def _validate_release_record(
+    record: Mapping[str, Any],
+    announcement: _Announcement,
+) -> None:
     if (
         record.get("url") != announcement.url
         or record.get("published_date") != announcement.published_date.isoformat()
@@ -1030,44 +1025,61 @@ def _validate_release_record(root: Path, record: Mapping[str, Any], announcement
         != _canonical_release_path(announcement.url)
         or _canonical_release_path(str(record.get("final_url", "")))
         != _canonical_release_path(announcement.url)
-        or parser_status
-        not in {"parsed", "no_effective_rows", "parser_unresolved"}
     ):
         raise DataReadinessError(f"S&P official release resume metadata failed: {announcement.url}")
-    change_rows = int(record.get("change_rows", -1))
-    if parser_status != "parsed":
-        if (
-            change_rows != 0
-            or record.get("parser_source_sha256") is not None
-            or not str(record.get("parser_error") or "").strip()
-        ):
-            raise DataReadinessError(
-                f"S&P official release unresolved parser metadata failed: {announcement.url}"
-            )
-        return
-    if (
-        change_rows < 1
-        or record.get("parser_source_sha256") != record.get("sha256")
-        or record.get("parser_error") is not None
-    ):
+
+
+def _raw_release_record(record: Mapping[str, Any]) -> dict[str, Any]:
+    fields = (
+        "schema",
+        "kind",
+        "unit_id",
+        "identity",
+        "request_sha256",
+        "url",
+        "title",
+        "published_date",
+        "origin",
+        "path",
+        "requested_url",
+        "final_url",
+        "redirect_chain",
+        "status_code",
+        "retrieved_at_utc",
+        "content_type",
+        "content_encoding",
+        "etag",
+        "last_modified",
+        "body_length",
+        "sha256",
+        "body_representation",
+    )
+    missing = [field for field in fields if field not in record]
+    if missing:
         raise DataReadinessError(
-            f"S&P official release parsed metadata failed: {announcement.url}"
+            f"S&P raw release metadata is incomplete: {missing}"
         )
-    html = _decode_html(
-        _decode_http_entity(
-            _read_unit_body(root, record),
-            str(record.get("content_encoding") or ""),
-        ),
-        str(record.get("content_type", "")),
-    )
-    changes = _parse_release_changes(
-        html,
-        source_url=announcement.url,
-        published_date=announcement.published_date,
-        source_sha256=str(record["sha256"]),
-    )
-    if len(changes) != change_rows or {item.source_sha256 for item in changes} != {record["sha256"]}:
-        raise DataReadinessError(f"S&P official release resume parse failed: {announcement.url}")
+    return {field: record[field] for field in fields}
+
+
+def _raw_release_identity(record: Mapping[str, Any]) -> dict[str, Any]:
+    return {
+        key: record[key]
+        for key in (
+            "url",
+            "requested_url",
+            "final_url",
+            "redirect_chain",
+            "status_code",
+            "retrieved_at_utc",
+            "content_type",
+            "content_encoding",
+            "etag",
+            "last_modified",
+            "body_length",
+            "sha256",
+        )
+    }
 
 
 def _validate_discovery(
@@ -1482,21 +1494,6 @@ def _decompress_bounded(
             "official response Content-Encoding is truncated"
         )
     return b"".join(output)
-
-
-def _parse_release_changes(
-    html: str,
-    *,
-    source_url: str,
-    published_date: date,
-    source_sha256: str,
-) -> list[IndexChange]:
-    return parse_sp500_changes(
-        html,
-        source_url=source_url,
-        published_date=published_date,
-        source_sha256=source_sha256,
-    )
 
 
 def _resolve_inside(root: Path, relative: str) -> Path:

@@ -33,8 +33,32 @@ SECTOR_BENCHMARKS = {
 _TABLE_COLUMNS = ("Effective Date", "Index Name", "Action", "Company Name", "Ticker", "GICS Sector")
 _LEGACY_TABLE_TITLE = re.compile(r"^S&P\s+500\s+INDEX\s*[-–—]\s*(.+)$", re.IGNORECASE)
 _LEGACY_ACTIONS = {"ADDED": "addition", "DELETED": "deletion"}
+_LEGACY_INVALID_MIDCAP_500_TITLE = re.compile(
+    r"^S&P\s+MIDCAP\s+500\s+INDEX\s*[-\u2013\u2014\u0426]\s*(.+)$",
+    re.IGNORECASE,
+)
 _ANY_LEGACY_TABLE_TITLE = re.compile(r"^S&P\s+.+?\s+INDEX\s*[-\u2013\u2014]", re.IGNORECASE)
-_EXCHANGE_TICKER = r"\((?:NYSE|NASD|NASDAQ|NYSE\s+American|OTC(?:QX|QB)?)\s*:\s*([A-Z0-9.-]+)\)"
+_EXCHANGE_TICKERS = (
+    r"\((?:NYSE|NASD|NASDAQ|NYSE\s+American|OTC(?:QX|QB)?)\s*:\s*"
+    r"(?P<exchange_tickers>[A-Z0-9.-]+(?:\s*[,;/]\s*[A-Z0-9.-]+)*)\)"
+)
+_TWITTER_2018_SOURCE_SHA256 = (
+    "7d43cdaaf5d8735a87ad28a3fb0ff0feb236e221574384507ca060c1a1273f18"
+)
+
+
+@dataclass(frozen=True)
+class IndexChangeSource:
+    source_url: str
+    source_published_date: date
+    source_sha256: str
+
+    def to_record(self) -> dict[str, str]:
+        return {
+            "source_url": self.source_url,
+            "source_published_date": self.source_published_date.isoformat(),
+            "source_sha256": self.source_sha256,
+        }
 
 
 @dataclass(frozen=True)
@@ -47,6 +71,18 @@ class IndexChange:
     source_url: str
     source_published_date: date
     source_sha256: str
+    supporting_sources: tuple[IndexChangeSource, ...] = ()
+
+    def source_evidence(self) -> tuple[IndexChangeSource, ...]:
+        if self.supporting_sources:
+            return self.supporting_sources
+        return (
+            IndexChangeSource(
+                source_url=self.source_url,
+                source_published_date=self.source_published_date,
+                source_sha256=self.source_sha256,
+            ),
+        )
 
     def to_record(self) -> dict[str, Any]:
         return {
@@ -58,7 +94,17 @@ class IndexChange:
             "source_url": self.source_url,
             "source_published_date": self.source_published_date.isoformat(),
             "source_sha256": self.source_sha256,
+            "supporting_sources": [
+                source.to_record() for source in self.source_evidence()
+            ],
         }
+
+
+@dataclass(frozen=True)
+class VerifiedIndexChanges:
+    changes: tuple[IndexChange, ...]
+    authority_sha256: str
+    event_set_sha256: str
 
 
 @dataclass(frozen=True)
@@ -277,6 +323,11 @@ def parse_sp500_changes(
     if not re.fullmatch(r"[0-9a-f]{64}", digest):
         raise DataReadinessError("Official announcement source SHA-256 is invalid")
     soup = BeautifulSoup(html, "html.parser")
+    body = soup.select_one(".wd_news_body") or soup
+    body_text = body.get_text(" ", strip=True)
+    prose_blocks = [
+        paragraph.get_text(" ", strip=True) for paragraph in body.find_all("p")
+    ]
     changes: list[IndexChange] = []
     deferred_rows = 0
     for table in soup.find_all("table"):
@@ -290,7 +341,13 @@ def parse_sp500_changes(
         last_effective_text: str | None = None
         for row in rows[1:]:
             if len(row) < len(header):
-                continue
+                if not any(cell.strip() for cell in row):
+                    continue
+                if len(row) == 1 and row[0].lstrip().startswith("*"):
+                    continue
+                raise DataReadinessError(
+                    f"Malformed S&P 500 structured row in {source_url}: {row}"
+                )
             row_effective_text = row[positions["Effective Date"]].strip()
             if row_effective_text:
                 last_effective_text = row_effective_text
@@ -328,9 +385,36 @@ def parse_sp500_changes(
                 source_sha256=digest,
             )
         )
-    unique = {(item.effective_at_utc, item.action, item.ticker): item for item in changes}
+    if not changes:
+        changes.extend(
+            _parse_prose_sp500_changes(
+                body_text,
+                source_url=source_url,
+                published_date=published_date,
+                source_sha256=digest,
+            )
+        )
+    unique: dict[tuple[datetime, str, str], IndexChange] = {}
+    for item in changes:
+        key = (item.effective_at_utc, item.action, item.ticker)
+        existing = unique.get(key)
+        if existing is not None and (
+            existing.company != item.company or existing.sector != item.sector
+        ):
+            raise DataReadinessError(
+                "Official announcement has conflicting duplicate S&P 500 rows: "
+                f"{source_url} {key}"
+            )
+        unique[key] = item
     parsed = sorted(unique.values(), key=lambda item: (item.effective_at_utc, item.action, item.ticker))
-    if not parsed and deferred_rows:
+    no_event_trigger = deferred_rows > 0 or _is_explicitly_deferred_sp500_continuity(
+        body_text
+    )
+    if (
+        not parsed
+        and no_event_trigger
+        and _all_sp500_prose_assertions_are_deferred(prose_blocks)
+    ):
         return []
     if not parsed:
         raise DataReadinessError(f"Official announcement contains no structured S&P 500 change rows: {source_url}")
@@ -367,6 +451,16 @@ def _parse_legacy_sp500_tables(
                 continue
             first_cell = row[0].strip()
             title_match = _LEGACY_TABLE_TITLE.match(first_cell)
+            if title_match is None:
+                invalid_title_match = _LEGACY_INVALID_MIDCAP_500_TITLE.match(
+                    first_cell
+                )
+                if (
+                    invalid_title_match is not None
+                    and source_sha256 == _TWITTER_2018_SOURCE_SHA256
+                    and _invalid_midcap_500_table_is_sp500(rows, body_text)
+                ):
+                    title_match = invalid_title_match
             if title_match is not None:
                 effective_text = title_match.group(1).strip()
                 effective_date = None
@@ -402,30 +496,38 @@ def _parse_legacy_sp500_tables(
                 current_action = explicit_action
             if current_action is None:
                 continue
+            if len(row) == 1 and first_cell.startswith("*"):
+                continue
             if company_position >= len(row) or sector_position >= len(row):
                 raise DataReadinessError(f"Legacy S&P 500 row is incomplete in {source_url}: {row}")
             company = row[company_position].strip()
             sector = row[sector_position].strip()
             if not company:
                 continue
-            ticker = _legacy_company_ticker(body_text, company, source_url=source_url)
+            tickers = _legacy_company_tickers(
+                body_text,
+                company,
+                action=current_action,
+                source_url=source_url,
+            )
             effective_at = datetime.combine(
                 effective_date,
                 datetime.min.time(),
                 tzinfo=ZoneInfo("America/New_York"),
             ).astimezone(UTC)
-            parsed.append(
-                IndexChange(
-                    effective_at_utc=effective_at,
-                    action=current_action,
-                    ticker=normalized_ticker(ticker),
-                    company=company,
-                    sector=sector,
-                    source_url=source_url,
-                    source_published_date=published_date,
-                    source_sha256=source_sha256,
+            for ticker in tickers:
+                parsed.append(
+                    IndexChange(
+                        effective_at_utc=effective_at,
+                        action=current_action,
+                        ticker=ticker,
+                        company=company,
+                        sector=sector,
+                        source_url=source_url,
+                        source_published_date=published_date,
+                        source_sha256=source_sha256,
+                    )
                 )
-            )
     return parsed
 
 
@@ -435,21 +537,244 @@ def _legacy_column_position(header: list[str], name: str) -> int:
     return header.index(name)
 
 
-def _legacy_company_ticker(body_text: str, company: str, *, source_url: str) -> str:
-    company_tokens = re.findall(r"[A-Z0-9]+", company, flags=re.IGNORECASE)
+def _legacy_company_tickers(
+    body_text: str,
+    company: str,
+    *,
+    action: str,
+    source_url: str,
+) -> tuple[str, ...]:
+    company_without_qualifier = re.sub(
+        r"\s*\([^)]*\)\s*",
+        " ",
+        company,
+    ).strip()
+    company_tokens = re.findall(
+        r"[A-Z0-9]+",
+        company_without_qualifier,
+        flags=re.IGNORECASE,
+    )
     if not company_tokens:
         raise DataReadinessError(f"Legacy S&P 500 company name is empty in {source_url}")
     flexible_company = r"[\W_]*".join(re.escape(token) for token in company_tokens)
-    legal_descriptor = r"(?:\s+(?:Holding|Holdings|Group|Global|Worldwide|Technologies|Systems))?"
-    corporate_suffix = r"(?:\s*,?\s*(?:Inc(?:orporated)?|Corp(?:oration)?|Co(?:mpany)?|Ltd|PLC|LLC)\.?)*"
+    bounded_extension = (
+        r"(?:\s+(?:&\s+)?(?:Associates|Bank|Holding|Holdings|Group|Global|"
+        r"Worldwide|Technologies|Systems))?"
+    )
+    corporate_suffix = (
+        r"(?:\s*,?\s*(?:Inc(?:orporated)?|Corp(?:oration)?|Co(?:mpany)?|Ltd|PLC|LLC)\.?)*"
+    )
     pattern = re.compile(
-        rf"\b{flexible_company}\b{legal_descriptor}{corporate_suffix}\s*[.,]?\s*{_EXCHANGE_TICKER}",
+        rf"\b{flexible_company}\b{bounded_extension}{corporate_suffix}"
+        rf"\s*[.,]?\s*{_EXCHANGE_TICKERS}",
         re.IGNORECASE,
     )
-    tickers = {match.group(1).upper() for match in pattern.finditer(body_text)}
-    if len(tickers) != 1:
-        raise DataReadinessError(f"Could not bind legacy S&P 500 company {company!r} to a ticker in {source_url}")
-    return tickers.pop()
+    candidates: list[tuple[int, tuple[str, ...]]] = []
+    for match in pattern.finditer(body_text):
+        before = body_text[max(0, match.start() - 100) : match.start()].casefold()
+        after = body_text[match.end() : match.end() + 100].casefold()
+        if action == "addition":
+            score = int(
+                any(
+                    phrase in after
+                    for phrase in ("will replace", "will be added", "will join")
+                )
+            )
+        else:
+            score = int(
+                "replace " in before
+                or "replacing " in before
+                or "will be removed" in after
+            )
+        candidates.append(
+            (score, _normalized_ticker_group(match.group("exchange_tickers")))
+        )
+
+    rename_pattern = re.compile(
+        rf"(?:renamed|called)\s+{flexible_company}\b[^.]*?"
+        r"trade\s+under\s+(?:the\s+)?symbol\s+([A-Z0-9.-]+)",
+        re.IGNORECASE,
+    )
+    candidates.extend(
+        (2, _normalized_ticker_group(match.group(1)))
+        for match in rename_pattern.finditer(body_text)
+    )
+    if candidates:
+        highest_score = max(score for score, _ in candidates)
+        ticker_groups = {
+            tickers for score, tickers in candidates if score == highest_score
+        }
+        if len(ticker_groups) == 1:
+            return ticker_groups.pop()
+    raise DataReadinessError(
+        f"Could not bind legacy S&P 500 company {company!r} to a ticker in {source_url}"
+    )
+
+
+def _normalized_ticker_group(raw: str) -> tuple[str, ...]:
+    tickers = tuple(
+        normalized_ticker(value.rstrip("."))
+        for value in re.split(r"\s*[,;/]\s*", raw)
+        if value.strip()
+    )
+    if not tickers:
+        raise DataReadinessError(f"Official ticker group is empty: {raw!r}")
+    return tickers
+
+
+def _invalid_midcap_500_table_is_sp500(
+    rows: list[list[str]],
+    body_text: str,
+) -> bool:
+    company_position: int | None = None
+    companies: list[str] = []
+    for row in rows:
+        normalized_row = [value.strip().upper() for value in row]
+        if "COMPANY" in normalized_row:
+            company_position = normalized_row.index("COMPANY")
+            continue
+        if company_position is None or company_position >= len(row):
+            continue
+        if row[0].strip().upper() in _LEGACY_ACTIONS:
+            company = row[company_position].strip()
+            if company:
+                companies.append(company)
+    if len(companies) < 2:
+        return False
+    normalized_companies = [_normalized_words(company) for company in companies]
+    normalized_body = _normalized_words(body_text)
+    for match in re.finditer(r"\bS P 500\b", normalized_body):
+        corroboration_window = normalized_body[
+            max(0, match.start() - 400) : match.end() + 100
+        ]
+        if "REPLACE" in corroboration_window and all(
+            company in corroboration_window for company in normalized_companies
+        ):
+            return True
+    return False
+
+
+def _normalized_words(value: str) -> str:
+    return " ".join(re.findall(r"[A-Z0-9]+", value.upper()))
+
+
+def _is_explicitly_deferred_sp500_continuity(body_text: str) -> bool:
+    normalized = " ".join(body_text.split()).casefold()
+    return (
+        "date to be announced" in normalized
+        and "continue to be included in the s&p 500" in normalized
+    )
+
+
+def _all_sp500_prose_assertions_are_deferred(
+    prose_blocks: list[str],
+) -> bool:
+    assertions: list[tuple[str, str]] = []
+    action_phrases = (
+        "will add",
+        "will be added",
+        "will join",
+        "will move to",
+        "will be removed",
+        "will be deleted",
+        "will leave",
+        "will replace",
+        "will be replaced",
+        "replacing",
+        "will continue to be included",
+        "will remain",
+    )
+    for block in prose_blocks:
+        normalized = " ".join(block.split()).casefold()
+        for clause in re.split(r"(?<=[.!?;])\s+", normalized):
+            if "s&p 500" in clause and any(
+                phrase in clause for phrase in action_phrases
+            ):
+                assertions.append((block.casefold(), clause))
+    if not assertions:
+        return True
+    return all(
+        (
+            "date to be announced" in clause
+            or " tba" in clause
+            or "to be named later" in clause
+            or "to be named in a separate press release" in clause
+            or (
+                "date to be announced" in block
+                and not _contains_independent_effective_timing(block)
+            )
+        )
+        for block, clause in assertions
+    )
+
+
+def _contains_independent_effective_timing(value: str) -> bool:
+    months = (
+        "january|february|march|april|may|june|july|august|"
+        "september|october|november|december"
+    )
+    explicit_date = re.search(
+        rf"\b(?:{months})\s+\d{{1,2}},?\s+\d{{4}}\b", value
+    )
+    relative_effective_time = re.search(r"\beffective\b(?!\s+date\b)", value)
+    return explicit_date is not None or relative_effective_time is not None
+
+
+def _parse_prose_sp500_changes(
+    body_text: str,
+    *,
+    source_url: str,
+    published_date: date,
+    source_sha256: str,
+) -> list[IndexChange]:
+    company = r"(?P<company>[A-Z][A-Za-z0-9&'., -]{1,100}?)"
+    effective_date = (
+        r"effective\s+prior\s+to\s+the\s+open\s+of\s+trading\s+on\s+"
+        r"(?:Monday|Tuesday|Wednesday|Thursday|Friday),?\s+"
+        r"(?P<effective_date>[A-Z][a-z]+\s+\d{1,2},\s+\d{4})"
+    )
+    patterns = (
+        re.compile(
+            rf"will\s+add\s+{company}\s+{_EXCHANGE_TICKERS}\s+to\s+the\s+"
+            rf"S&P\s+500\b.{{0,300}}?{effective_date}",
+            re.IGNORECASE,
+        ),
+        re.compile(
+            rf"{company}\s+{_EXCHANGE_TICKERS}\s+will\s+be\s+added\s+to\s+the\s+"
+            rf"S&P\s+500\b.{{0,300}}?{effective_date}",
+            re.IGNORECASE,
+        ),
+    )
+    parsed: list[IndexChange] = []
+    for pattern in patterns:
+        for match in pattern.finditer(body_text):
+            try:
+                parsed_date = pd.Timestamp(match.group("effective_date")).date()
+            except (TypeError, ValueError) as exc:
+                raise DataReadinessError(
+                    f"Prose S&P 500 announcement has an invalid effective date in {source_url}"
+                ) from exc
+            effective_at = datetime.combine(
+                parsed_date,
+                datetime.min.time(),
+                tzinfo=ZoneInfo("America/New_York"),
+            ).astimezone(UTC)
+            for ticker in _normalized_ticker_group(
+                match.group("exchange_tickers")
+            ):
+                parsed.append(
+                    IndexChange(
+                        effective_at_utc=effective_at,
+                        action="addition",
+                        ticker=ticker,
+                        company=match.group("company").strip(),
+                        sector="",
+                        source_url=source_url,
+                        source_published_date=published_date,
+                        source_sha256=source_sha256,
+                    )
+                )
+    return parsed
 
 
 def _ticker_at(
@@ -477,7 +802,37 @@ def _ticker_at(
 def build_point_in_time_sp500_universe(
     *,
     current_snapshot: pd.DataFrame,
-    changes: list[IndexChange],
+    event_directory: Path,
+    archive_directory: Path,
+    symbol_changes: list[SymbolChange] | None = None,
+    start_date: date,
+    cutoff_date: date,
+    anchor_source: str,
+) -> tuple[pd.DataFrame, dict[str, Any]]:
+    """Verify official event authority and reconstruct effective intervals."""
+
+    from market_predictor.v3.spglobal_events import (
+        require_spglobal_event_reconstruction_ready,
+    )
+
+    verified_changes = require_spglobal_event_reconstruction_ready(
+        event_directory,
+        archive_directory=archive_directory,
+    )
+    return _build_point_in_time_sp500_universe(
+        current_snapshot=current_snapshot,
+        verified_changes=verified_changes,
+        symbol_changes=symbol_changes,
+        start_date=start_date,
+        cutoff_date=cutoff_date,
+        anchor_source=anchor_source,
+    )
+
+
+def _build_point_in_time_sp500_universe(
+    *,
+    current_snapshot: pd.DataFrame,
+    verified_changes: VerifiedIndexChanges,
     symbol_changes: list[SymbolChange] | None = None,
     start_date: date,
     cutoff_date: date,
@@ -486,6 +841,11 @@ def build_point_in_time_sp500_universe(
     """Reverse official changes from a frozen current snapshot into effective intervals."""
     if start_date > cutoff_date:
         raise ValueError("start_date must not be after cutoff_date")
+    if not re.fullmatch(r"[0-9a-f]{64}", verified_changes.authority_sha256):
+        raise DataReadinessError("S&P event authority SHA-256 is invalid")
+    if not re.fullmatch(r"[0-9a-f]{64}", verified_changes.event_set_sha256):
+        raise DataReadinessError("S&P event-set SHA-256 is invalid")
+    changes = list(verified_changes.changes)
     current = _normalize_current_snapshot(current_snapshot)
     aliases = symbol_changes or []
     relevant = [
@@ -507,6 +867,8 @@ def build_point_in_time_sp500_universe(
         "start_date": start_date.isoformat(),
         "cutoff_date": cutoff_date.isoformat(),
         "anchor_source": anchor_source,
+        "event_authority_sha256": verified_changes.authority_sha256,
+        "event_set_sha256": verified_changes.event_set_sha256,
         "current_tickers": sorted(current.index.astype(str)),
         "changes": [item.to_record() for item in relevant],
         "symbol_changes": [item.to_record() for item in aliases],
@@ -535,7 +897,9 @@ def build_point_in_time_sp500_universe(
             if not states.get(change.ticker, False):
                 contradictions.append(f"{change.ticker} addition at {effective_at.isoformat()} is not present immediately after the event")
                 continue
-            interval_sources.setdefault(change.ticker, set()).add(change.source_url)
+            interval_sources.setdefault(change.ticker, set()).update(
+                source.source_url for source in change.source_evidence()
+            )
             intervals.append(
                 _membership_record(
                     change.ticker,
@@ -555,7 +919,10 @@ def build_point_in_time_sp500_universe(
                 continue
             states[change.ticker] = True
             interval_ends[change.ticker] = effective_at
-            interval_sources[change.ticker] = {anchor_source, change.source_url}
+            interval_sources[change.ticker] = {
+                anchor_source,
+                *(source.source_url for source in change.source_evidence()),
+            }
         for alias in aliases_by_time.get(effective_at, []):
             if alias.old_ticker == alias.new_ticker or not states.get(alias.new_ticker, False):
                 continue
@@ -629,7 +996,23 @@ def build_point_in_time_sp500_universe(
             if original.ticker != resolved.ticker
         ],
         "security_identity": security_audit,
-        "source_urls": sorted({item.source_url for item in relevant}),
+        "source_urls": sorted(
+            {
+                source.source_url
+                for item in relevant
+                for source in item.source_evidence()
+            }
+        ),
+        "source_evidence": [
+            {"source_url": source_url, "source_sha256": source_sha256}
+            for source_url, source_sha256 in sorted(
+                {
+                    (source.source_url, source.source_sha256)
+                    for item in relevant
+                    for source in item.source_evidence()
+                }
+            )
+        ],
         "contradictions": contradictions,
     }
     return universe, audit

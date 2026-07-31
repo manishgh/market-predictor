@@ -1,8 +1,8 @@
 # Active Edge Rebuild Handoff
 
-Status: official S&P raw-source acquisition is complete and verified. Event
-extraction is blocked by eight known historical parser cases, so membership
-reconstruction and Alpaca history extension have not started. Intraday corpus,
+Status: official S&P raw-source acquisition and offline event extraction are
+complete and verified. Transition authority, membership reconstruction, and
+Alpaca history extension have not started. Intraday corpus,
 swing labels, cross-sectional scaling, causal technical relationship primitives,
 and the current seven-year panel remain published and immutable. No model exists.
 Nothing is running.
@@ -10,7 +10,7 @@ Last updated: 2026-07-31
 Repository: `C:\project\market-predictor`
 Remote: `https://github.com/manishgh/market-predictor`
 Branch: `r3-lineage`
-Last completed implementation commit: `be21bcd`
+Last pushed checkpoint: `ea9fe14`
 
 ## Repository Cleanup
 
@@ -257,18 +257,22 @@ Official reacquisition is now complete at
 `data/raw/index_membership/spglobal_official_20180414_20260708_v1`. It contains
 107 of 107 releases and nine discovery pages. Offline replay resumed every unit
 with zero network requests. Manifest SHA-256:
-`6fb65e11d12f5cd1b1b4305e0accd62a45cb281441a831ffe0f88f14542555c5`.
-The result is 98 parsed releases, one valid no-effective-row release (Kenvue,
-effective date TBA), and eight parser failures. Raw authority is complete;
-event extraction is not ready. The readiness gate correctly fails with
-`S&P event reconstruction is blocked by 8 unresolved releases`.
-
-The unresolved fixtures are 2018-05-31 Evergy, 2018-06-04 Twitter, 2018-11-07
-Jack Henry, 2018-12-27 First Republic, 2019-01-29 new Fox continuity, 2019-03-14
-Fox, 2019-03-26 Dow footnote, and 2020-11-30 Tesla implementation. Resolve these
-from the retained raw response bytes, then replay all 107 releases offline into
-a separate event authority. Do not reacquire the source archive and do not
-manually manufacture event rows.
+`72579c0aa8a56def5be64937bb5010ccd1625fe01cd6a115a5e68befbd4c9417`.
+Raw release-set SHA-256:
+`8fe52d77b96cbab4a37fef5c5ee69e5a521c51c92f4a6f7cce59fcb0a24e3bb1`.
+The separate offline event authority is complete at
+`data/canonical/index_membership/spglobal_events_20180414_20260708_v1`.
+Manifest SHA-256:
+`682ef590ea3d2bbe86e7bedae0eb08ca0f4a19202946ed793eb5420d993e94e8`.
+Event-set SHA-256:
+`29ad7c04bbada385b4f3464cd63b2dd6c4af45daa33392cd26a5aa357369fc87`.
+All 107 releases were replayed offline: 105 parsed, two explicit no-effective
+events, zero unresolved, and zero conflicts. The extractor retained 305 source
+assertions as 303 unique events. Tesla's 2020-12-21 addition has three official
+supporting source hashes. The event verifier replayed the raw parent and every
+event artifact successfully. The public reconstruction API accepts only the raw
+and event authority directories, replays both verifiers, and preserves every
+supporting source URL and SHA-256.
 
 The ER3 implementation is aligned. `edge_rebuild/setup_economics.py` classifies
 every gate as `readiness` or `baseline_economics` and exposes separate
@@ -386,14 +390,12 @@ recur, the correct answer is a volume-confirmed exemption, not a bigger number.
 
 ## Exact Next Steps
 
-1. **Resolve eight retained parser fixtures offline.** Add exact regression
-   fixtures for the historical table, company-name, continuity, and footnote
-   formats listed above. Reparse all 107 retained responses and publish a
-   separate event authority only when no parser failures remain.
-2. **Complete transition evidence and rebuild membership.** Publish independent
+1. **Complete transition evidence.** Publish independent
    transition authority covering 2018-05-29 through 2026-07-08, bind raw-source,
-   event, transition, anchor, and universe hashes, and prove exact cutoff-anchor
-   replay.
+   event, and transition hashes. In particular, resolve the 2019 Fox temporary
+   symbols without chaining same-time transitions.
+2. **Rebuild point-in-time membership.** Bind the raw, event, transition,
+   cutoff-anchor, and universe hashes, then prove exact cutoff-anchor replay.
 3. **Rerun the acquisition planner.** Require
    `ready_for_daily_bar_collection`; any blocker still means zero Alpaca calls.
 4. **Extend swing raw history to the frozen 2,033-session target.** Collect only

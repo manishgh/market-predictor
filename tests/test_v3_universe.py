@@ -4,6 +4,7 @@ import unittest
 from dataclasses import replace
 from datetime import date, datetime
 from pathlib import Path
+from unittest.mock import patch
 
 import pandas as pd
 
@@ -133,6 +134,25 @@ class V3PointInTimeUniverseTests(unittest.TestCase):
             [("addition", "NEW"), ("deletion", "UA"), ("deletion", "UAA")],
         )
 
+    def test_conflicting_duplicate_rows_fail_closed(self) -> None:
+        html = _announcement_html().replace(
+            "</table>",
+            """
+            <tr>
+              <td>January 5, 2026</td><td>S&amp;P 500</td><td>Addition</td>
+              <td>Different Company</td><td>NEW</td><td>Industrials</td>
+            </tr>
+            </table>
+            """,
+        )
+
+        with self.assertRaisesRegex(DataReadinessError, "conflicting duplicate"):
+            parse_sp500_changes(
+                html,
+                source_url="https://press.spglobal.com/2026-01-01-conflict",
+                published_date=date(2026, 1, 1),
+            )
+
     def test_parses_legacy_official_table_using_same_release_tickers(self) -> None:
         changes = parse_sp500_changes(
             _legacy_announcement_html(),
@@ -215,6 +235,19 @@ class V3PointInTimeUniverseTests(unittest.TestCase):
 
         self.assertEqual(changes, [])
 
+    def test_modern_table_fails_closed_on_short_candidate_row(self) -> None:
+        html = _announcement_html().replace(
+            "<td>Deletion</td><td>Old Company</td><td>OLD</td><td>Industrials</td>",
+            "<td>Deletion</td><td>Old Company</td><td>OLD</td>",
+        )
+
+        with self.assertRaisesRegex(DataReadinessError, "Malformed S&P 500"):
+            parse_sp500_changes(
+                html,
+                source_url="https://press.spglobal.com/2026-01-01-short-row",
+                published_date=date(2026, 1, 1),
+            )
+
     def test_legacy_table_fails_when_company_cannot_be_bound_to_ticker(self) -> None:
         html = _legacy_announcement_html().replace("(NYSE: RHT)", "")
         with self.assertRaises(DataReadinessError):
@@ -266,6 +299,343 @@ class V3PointInTimeUniverseTests(unittest.TestCase):
 
         self.assertEqual([(item.action, item.ticker) for item in changes], [("addition", "CDW"), ("addition", "GDI")])
 
+    def test_legacy_ticker_binding_accepts_explicit_rename_symbol(self) -> None:
+        html = """
+        <html><body><div class="wd_news_body">
+          <p>
+            Westar Energy Inc. (NYSE: WR), to be renamed Evergy, will replace
+            Navient Corp. (NASD: NAVI) in the S&amp;P 500. The combined company,
+            which will be renamed Evergy, will trade under the symbol EVRG.
+          </p>
+          <table>
+            <tr><td>S&amp;P 500 INDEX &ndash; JUNE 5, 2018</td></tr>
+            <tr><td></td><td>COMPANY</td><td>GICS ECONOMIC SECTOR</td></tr>
+            <tr><td>ADDED</td><td>Evergy (renamed from Westar Energy)</td><td>Utilities</td></tr>
+            <tr><td>DELETED</td><td>Navient</td><td>Financials</td></tr>
+          </table>
+        </div></body></html>
+        """
+
+        changes = parse_sp500_changes(
+            html,
+            source_url="https://press.spglobal.com/2018-05-31-evergy",
+            published_date=date(2018, 5, 31),
+        )
+
+        self.assertEqual(
+            [(item.action, item.ticker) for item in changes],
+            [("addition", "EVRG"), ("deletion", "NAVI")],
+        )
+
+    def test_legacy_ticker_binding_accepts_unique_company_extensions(self) -> None:
+        html = """
+        <html><body><div class="wd_news_body">
+          <p>
+            Jack Henry &amp; Associates Inc. (NASD: JKHY) and First Republic Bank
+            (NYSE: FRC) will join the S&amp;P 500.
+          </p>
+          <table>
+            <tr><td>S&amp;P 500 INDEX &ndash; NOVEMBER 13, 2018</td></tr>
+            <tr><td></td><td>COMPANY</td><td>GICS ECONOMIC SECTOR</td></tr>
+            <tr><td>ADDED</td><td>Jack Henry</td><td>Information Technology</td></tr>
+            <tr><td></td><td>First Republic</td><td>Financials</td></tr>
+          </table>
+        </div></body></html>
+        """
+
+        changes = parse_sp500_changes(
+            html,
+            source_url="https://press.spglobal.com/2018-11-07-company-extensions",
+            published_date=date(2018, 11, 7),
+        )
+
+        self.assertEqual(
+            [(item.action, item.ticker) for item in changes],
+            [("addition", "FRC"), ("addition", "JKHY")],
+        )
+
+    def test_legacy_ticker_binding_emits_multiple_share_classes(self) -> None:
+        html = """
+        <html><body><div class="wd_news_body">
+          <p>
+            Fox Corp. (NASD: FOXAV; FOXBV) will be added to the S&amp;P 500.
+            Fox will replace Twenty-First Century Fox Inc. (NASD: FOXA; FOX),
+            which will be removed from the S&amp;P 500.
+          </p>
+          <table>
+            <tr><td>S&amp;P 500 INDEX &ndash; MARCH 19, 2019</td></tr>
+            <tr><td></td><td>COMPANY</td><td>GICS ECONOMIC SECTOR</td></tr>
+            <tr><td>ADDED</td><td>Fox</td><td>Communication Services</td></tr>
+            <tr><td>*GICS effective March 20</td></tr>
+            <tr><td>S&amp;P 500 INDEX &ndash; MARCH 20, 2019</td></tr>
+            <tr><td></td><td>COMPANY</td><td>GICS ECONOMIC SECTOR</td></tr>
+            <tr><td>DELETED</td><td>Twenty-First Century Fox</td><td>Communication Services</td></tr>
+          </table>
+        </div></body></html>
+        """
+
+        changes = parse_sp500_changes(
+            html,
+            source_url="https://press.spglobal.com/2019-03-14-fox",
+            published_date=date(2019, 3, 14),
+        )
+
+        self.assertEqual(
+            [(item.action, item.ticker) for item in changes],
+            [
+                ("addition", "FOXAV"),
+                ("addition", "FOXBV"),
+                ("deletion", "FOX"),
+                ("deletion", "FOXA"),
+            ],
+        )
+
+    def test_multi_cell_starred_row_is_not_silently_treated_as_footnote(self) -> None:
+        html = """
+        <html><body><div class="wd_news_body">
+          <p>Tesla Inc. (NASD: TSLA) will join the S&amp;P 500.</p>
+          <table>
+            <tr><td>S&amp;P 500 INDEX &ndash; DECEMBER 21, 2020</td></tr>
+            <tr><td></td><td>COMPANY</td><td>GICS ECONOMIC SECTOR</td></tr>
+            <tr><td>ADDED</td><td>Tesla</td><td>Consumer Discretionary</td></tr>
+            <tr><td>*DELETED</td><td>Apartment Investment</td><td>Real Estate</td></tr>
+          </table>
+        </div></body></html>
+        """
+
+        with self.assertRaises(DataReadinessError):
+            parse_sp500_changes(
+                html,
+                source_url="https://press.spglobal.com/2020-12-11-malformed-row",
+                published_date=date(2020, 12, 11),
+            )
+
+    def test_invalid_midcap_500_heading_requires_prose_corroboration(self) -> None:
+        table = """
+        <table>
+          <tr><td>S&amp;P MIDCAP 500 INDEX &ndash; JUNE 7, 2018</td></tr>
+          <tr><td></td><td>COMPANY</td><td>GICS ECONOMIC SECTOR</td></tr>
+          <tr><td>ADDED</td><td>Twitter</td><td>Information Technology</td></tr>
+          <tr><td>DELETED</td><td>Monsanto</td><td>Materials</td></tr>
+        </table>
+        """
+        corroborated = f"""
+        <html><body><div class="wd_news_body">
+          <p>
+            Twitter Inc. (NYSE: TWTR) will replace Monsanto Company (NYSE: MON)
+            in the S&amp;P 500.
+          </p>
+          {table}
+        </div></body></html>
+        """
+
+        changes = parse_sp500_changes(
+            corroborated,
+            source_url="https://press.spglobal.com/2018-06-04-twitter",
+            published_date=date(2018, 6, 4),
+            source_sha256=(
+                "7d43cdaaf5d8735a87ad28a3fb0ff0feb236e221574384507ca060c1a1273f18"
+            ),
+        )
+        self.assertEqual(
+            [(item.action, item.ticker) for item in changes],
+            [("addition", "TWTR"), ("deletion", "MON")],
+        )
+
+        uncorroborated = f"<html><body><div class='wd_news_body'>{table}</div></body></html>"
+        with self.assertRaisesRegex(DataReadinessError, "no structured S&P 500"):
+            parse_sp500_changes(
+                uncorroborated,
+                source_url="https://press.spglobal.com/2018-06-04-uncorroborated",
+                published_date=date(2018, 6, 4),
+            )
+
+    def test_deferred_membership_continuity_emits_no_event(self) -> None:
+        html = """
+        <html><body><div class="wd_news_body"><p>
+          On a date to be announced, new Fox will be considered the surviving
+          entity and will continue to be included in the S&amp;P 500.
+        </p></div></body></html>
+        """
+
+        changes = parse_sp500_changes(
+            html,
+            source_url="https://press.spglobal.com/2019-01-29-fox-continuity",
+            published_date=date(2019, 1, 29),
+        )
+
+        self.assertEqual(changes, [])
+
+    def test_deferred_row_does_not_hide_an_effective_prose_assertion(self) -> None:
+        html = _announcement_html().replace("January 5, 2026", "TBA").replace(
+            "<body>",
+            """
+            <body><p>
+              Another Company will be added to the S&amp;P 500 effective tomorrow.
+            </p>
+            """,
+        )
+
+        with self.assertRaisesRegex(DataReadinessError, "no structured S&P 500"):
+            parse_sp500_changes(
+                html,
+                source_url="https://press.spglobal.com/2026-01-01-mixed-deferred",
+                published_date=date(2026, 1, 1),
+            )
+
+    def test_deferred_row_does_not_hide_effective_removal_prose(self) -> None:
+        html = _announcement_html().replace("January 5, 2026", "TBA").replace(
+            "<body>",
+            """
+            <body><p>
+              Old Company will be removed from the S&amp;P 500 effective June 5, 2026.
+            </p>
+            """,
+        )
+
+        with self.assertRaisesRegex(DataReadinessError, "no structured S&P 500"):
+            parse_sp500_changes(
+                html,
+                source_url="https://press.spglobal.com/2026-01-01-mixed-removal",
+                published_date=date(2026, 1, 1),
+            )
+
+    def test_deferred_context_does_not_mask_dated_removal_in_same_paragraph(self) -> None:
+        html = _announcement_html().replace("January 5, 2026", "TBA").replace(
+            "<body>",
+            """
+            <body><p>
+              On a date to be announced, New Company will be added to the S&amp;P 500;
+              Old Company will be removed from the S&amp;P 500 effective June 5, 2026.
+            </p>
+            """,
+        )
+
+        with self.assertRaisesRegex(DataReadinessError, "no structured S&P 500"):
+            parse_sp500_changes(
+                html,
+                source_url="https://press.spglobal.com/2026-01-01-mixed-paragraph",
+                published_date=date(2026, 1, 1),
+            )
+
+    def test_deferred_context_does_not_mask_relative_effective_time(self) -> None:
+        html = _announcement_html().replace("January 5, 2026", "TBA").replace(
+            "<body>",
+            """
+            <body><p>
+              On a date to be announced, New Company will be added to the S&amp;P 500;
+              Old Company will be removed from the S&amp;P 500 effective tomorrow.
+            </p>
+            """,
+        )
+
+        with self.assertRaisesRegex(DataReadinessError, "no structured S&P 500"):
+            parse_sp500_changes(
+                html,
+                source_url="https://press.spglobal.com/2026-01-01-relative-time",
+                published_date=date(2026, 1, 1),
+            )
+
+    def test_deferred_context_does_not_mask_unlisted_effective_wording(self) -> None:
+        html = _announcement_html().replace("January 5, 2026", "TBA").replace(
+            "<body>",
+            """
+            <body><p>
+              On a date to be announced, New Company will be added to the S&amp;P 500;
+              Old Company will be removed from the S&amp;P 500 effective before the open tomorrow.
+            </p>
+            """,
+        )
+
+        with self.assertRaisesRegex(DataReadinessError, "no structured S&P 500"):
+            parse_sp500_changes(
+                html,
+                source_url="https://press.spglobal.com/2026-01-01-effective-wording",
+                published_date=date(2026, 1, 1),
+            )
+
+    def test_deferred_context_does_not_mask_date_in_adjacent_clause(self) -> None:
+        html = _announcement_html().replace("January 5, 2026", "TBA").replace(
+            "<body>",
+            """
+            <body><p>
+              On a date to be announced, New Company will be added to the S&amp;P 500.
+              Old Company will be removed from the S&amp;P 500.
+              The removal will be effective June 5, 2026.
+            </p>
+            """,
+        )
+
+        with self.assertRaisesRegex(DataReadinessError, "no structured S&P 500"):
+            parse_sp500_changes(
+                html,
+                source_url="https://press.spglobal.com/2026-01-01-adjacent-date",
+                published_date=date(2026, 1, 1),
+            )
+
+    def test_prose_only_addition_requires_complete_effective_date(self) -> None:
+        html = """
+        <html><body><div class="wd_news_body"><p>
+          S&amp;P Dow Jones Indices has determined it will add Tesla Inc.
+          (NASD: TSLA) to the S&amp;P 500 effective prior to the open of trading on
+          Monday, December 21, 2020. The replaced company will be announced later.
+        </p></div></body></html>
+        """
+
+        changes = parse_sp500_changes(
+            html,
+            source_url="https://press.spglobal.com/2020-11-30-tesla",
+            published_date=date(2020, 11, 30),
+        )
+
+        self.assertEqual(
+            [(item.action, item.ticker, item.sector) for item in changes],
+            [("addition", "TSLA", "")],
+        )
+        self.assertEqual(
+            changes[0].effective_at_utc.isoformat(),
+            "2020-12-21T05:00:00+00:00",
+        )
+
+        incomplete = html.replace("Monday, December 21, 2020", "a later date")
+        with self.assertRaisesRegex(DataReadinessError, "no structured S&P 500"):
+            parse_sp500_changes(
+                incomplete,
+                source_url="https://press.spglobal.com/2020-11-30-incomplete",
+                published_date=date(2020, 11, 30),
+            )
+
+    def test_public_reconstruction_verifies_event_directories(self) -> None:
+        changes = parse_sp500_changes(
+            _announcement_html(),
+            source_url="https://press.spglobal.com/2026-01-01-example",
+            published_date=date(2026, 1, 1),
+        )
+        verified = _verified_changes(changes)
+        current = pd.DataFrame(
+            {
+                "ticker": ["AAA", "NEW"],
+                "sector": ["Industrials", "Information Technology"],
+            }
+        )
+
+        with patch(
+            "market_predictor.v3.spglobal_events.require_spglobal_event_reconstruction_ready",
+            return_value=verified,
+        ) as verifier:
+            build_point_in_time_sp500_universe(
+                current_snapshot=current,
+                event_directory=Path("events"),
+                archive_directory=Path("raw"),
+                start_date=date(2025, 7, 1),
+                cutoff_date=date(2026, 7, 1),
+                anchor_source="anchor.csv",
+            )
+
+        verifier.assert_called_once_with(
+            Path("events"), archive_directory=Path("raw")
+        )
+
     def test_reverses_changes_into_non_overlapping_intervals(self) -> None:
         changes = parse_sp500_changes(
             _announcement_html(),
@@ -280,9 +650,9 @@ class V3PointInTimeUniverseTests(unittest.TestCase):
                 "industry": ["Services", "Software"],
             }
         )
-        universe, audit = build_point_in_time_sp500_universe(
+        universe, audit = universe_module._build_point_in_time_sp500_universe(
             current_snapshot=current,
-            changes=changes,
+            verified_changes=_verified_changes(changes),
             start_date=date(2025, 7, 1),
             cutoff_date=date(2026, 7, 1),
             anchor_source="anchor.csv",
@@ -303,9 +673,9 @@ class V3PointInTimeUniverseTests(unittest.TestCase):
         )
         current = pd.DataFrame({"ticker": ["AAA", "NEW"], "sector": ["Industrials", "Information Technology"]})
         with self.assertRaises(DataReadinessError):
-            build_point_in_time_sp500_universe(
+            universe_module._build_point_in_time_sp500_universe(
                 current_snapshot=current,
-                changes=changes,
+                verified_changes=_verified_changes(changes),
                 start_date=date(2025, 7, 1),
                 cutoff_date=date(2026, 7, 1),
                 anchor_source="anchor.csv",
@@ -329,9 +699,9 @@ class V3PointInTimeUniverseTests(unittest.TestCase):
             )
         )
         current = pd.DataFrame({"ticker": ["NEW"], "sector": ["Information Technology"]})
-        universe, _ = build_point_in_time_sp500_universe(
+        universe, _ = universe_module._build_point_in_time_sp500_universe(
             current_snapshot=current,
-            changes=changes,
+            verified_changes=_verified_changes(changes),
             symbol_changes=aliases,
             start_date=date(2025, 7, 1),
             cutoff_date=date(2026, 7, 1),
@@ -382,9 +752,9 @@ class V3PointInTimeUniverseTests(unittest.TestCase):
             }
         )
 
-        universe, _ = build_point_in_time_sp500_universe(
+        universe, _ = universe_module._build_point_in_time_sp500_universe(
             current_snapshot=current,
-            changes=[],
+            verified_changes=_verified_changes([]),
             symbol_changes=transitions,
             start_date=date(2025, 1, 1),
             cutoff_date=date(2026, 1, 1),
@@ -422,9 +792,9 @@ class V3PointInTimeUniverseTests(unittest.TestCase):
             }
         )
 
-        universe, audit = build_point_in_time_sp500_universe(
+        universe, audit = universe_module._build_point_in_time_sp500_universe(
             current_snapshot=current,
-            changes=changes,
+            verified_changes=_verified_changes(changes),
             symbol_changes=aliases,
             start_date=date(2019, 7, 1),
             cutoff_date=date(2020, 7, 1),
@@ -469,9 +839,9 @@ class V3PointInTimeUniverseTests(unittest.TestCase):
         )
         current = pd.DataFrame({"ticker": ["AAA"], "sector": ["Industrials"]})
 
-        universe, _ = build_point_in_time_sp500_universe(
+        universe, _ = universe_module._build_point_in_time_sp500_universe(
             current_snapshot=current,
-            changes=[addition, deletion],
+            verified_changes=_verified_changes([addition, deletion]),
             symbol_changes=aliases,
             start_date=date(2019, 7, 1),
             cutoff_date=date(2020, 7, 1),
@@ -503,9 +873,9 @@ class V3PointInTimeUniverseTests(unittest.TestCase):
         )
         current = pd.DataFrame({"ticker": ["AAA"], "sector": ["Industrials"]})
 
-        universe, audit = build_point_in_time_sp500_universe(
+        universe, audit = universe_module._build_point_in_time_sp500_universe(
             current_snapshot=current,
-            changes=deletion,
+            verified_changes=_verified_changes(deletion),
             symbol_changes=aliases,
             start_date=date(2019, 7, 1),
             cutoff_date=date(2026, 7, 1),
@@ -525,15 +895,25 @@ class V3PointInTimeUniverseTests(unittest.TestCase):
             }
         )
 
-        universe, _ = build_point_in_time_sp500_universe(
+        universe, _ = universe_module._build_point_in_time_sp500_universe(
             current_snapshot=current,
-            changes=[],
+            verified_changes=_verified_changes([]),
             start_date=date(2025, 7, 1),
             cutoff_date=date(2026, 7, 1),
             anchor_source="anchor.csv",
         )
 
         self.assertEqual(universe["security_id"].nunique(), 2)
+
+
+def _verified_changes(
+    changes: list[universe_module.IndexChange],
+) -> universe_module.VerifiedIndexChanges:
+    return universe_module.VerifiedIndexChanges(
+        changes=tuple(changes),
+        authority_sha256="a" * 64,
+        event_set_sha256="b" * 64,
+    )
 
 
 def _announcement_html() -> str:

@@ -12,6 +12,7 @@ from market_predictor.v3.spglobal_archive import (
     ArchiveCollectionConfig,
     collect_spglobal_archive,
 )
+from market_predictor.v3.spglobal_events import extract_spglobal_events
 
 
 def register_v3_readiness_commands(app: typer.Typer, console: Console) -> None:
@@ -63,9 +64,41 @@ def register_v3_readiness_commands(app: typer.Typer, console: Console) -> None:
                     "network_units_this_run",
                 )
             }
-            | {
-                "parser_unresolved_releases": result.get(
-                    "parser_unresolved_releases", 0
+        )
+        if result["status"] != "complete":
+            raise typer.Exit(code=2)
+
+    @app.command("extract-sp500-official-events")
+    @serialized_heavy_job("extract-sp500-official-events")
+    def extract_sp500_official_events(
+        archive_dir: Path = typer.Option(
+            ...,
+            help="Verified immutable official S&P raw archive.",
+        ),
+        out_dir: Path = typer.Option(
+            ...,
+            help="New immutable offline event-extraction directory.",
+        ),
+    ) -> None:
+        """Extract and reconcile S&P membership events without network access."""
+
+        result = extract_spglobal_events(
+            archive_directory=archive_dir,
+            output_directory=out_dir,
+        )
+        console.print(
+            {
+                key: result[key]
+                for key in (
+                    "status",
+                    "release_count",
+                    "parsed_release_count",
+                    "no_effective_event_release_count",
+                    "unresolved_release_count",
+                    "assertion_count",
+                    "event_count",
+                    "duplicate_support_count",
+                    "conflict_count",
                 )
             }
         )

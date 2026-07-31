@@ -659,8 +659,8 @@ strict mypy across 196 source files, compileall, and `git diff --check`.
 
 ### ER1E Official Source Reacquisition And Membership Lineage
 
-Status: raw official-source acquisition is complete; offline event extraction
-is in progress within ER1A. Independent provenance and collector reviews were
+Status: raw official-source acquisition and offline event extraction are
+complete; transition evidence is next within ER1A. Independent provenance and collector reviews were
 completed before implementation. They found that the ER1D blocker artifact is
 conservative and valid, but its future authorization path is insufficient:
 source files, universe audit, and final memberships are not yet joined by one
@@ -685,9 +685,10 @@ The source collector must:
 - reject unexpected domains, generic landing pages, incomplete discovery, and
   response-identity failures. The live provider template itself contains a
   `saved from url` comment, so that marker is not provenance evidence;
-- retain parser failures as explicitly unresolved raw evidence. Raw archive
-  authority uses state `raw_complete`; event reconstruction must remain blocked
-  until `parser_unresolved_releases` is zero and `event_extraction_ready` is true;
+- keep parsing and parser diagnostics out of raw-source collection. Raw
+  authority proves exact bytes and HTTP lineage only; the separate offline
+  event authority records parser outcomes and must have zero unresolved
+  releases and zero event conflicts;
 - publish an immutable request before collection, per-unit content-addressed
   payload and sidecar, hash-verified resume, partial status, and final authority
   only when all units pass;
@@ -698,20 +699,25 @@ The authoritative raw run is retained at
 107 of 107 releases and nine discovery pages. A subsequent offline replay
 resumed all 107 units and used zero network requests. The final manifest
 SHA-256 is
-`6fb65e11d12f5cd1b1b4305e0accd62a45cb281441a831ffe0f88f14542555c5`,
-and the authority hash matches it exactly. Of the 107 releases, 98 parsed, one
-Kenvue announcement correctly produced no effective row because its effective
-date was TBA, and eight remain genuine parser failures. Therefore raw authority
-is `raw_complete`, but `event_extraction_ready` is false. The public readiness
-gate was exercised against the real archive and refused reconstruction with
-`S&P event reconstruction is blocked by 8 unresolved releases`.
+`72579c0aa8a56def5be64937bb5010ccd1625fe01cd6a115a5e68befbd4c9417`,
+and the raw release-set SHA-256 is
+`8fe52d77b96cbab4a37fef5c5ee69e5a521c51c92f4a6f7cce59fcb0a24e3bb1`.
+The raw verifier re-hashes and replays all search pages, sidecars, and response
+objects without invoking the event parser.
 
-The eight unresolved fixtures are the releases dated 2018-05-31 (Evergy),
-2018-06-04 (Twitter), 2018-11-07 (Jack Henry), 2018-12-27 (First Republic),
-2019-01-29 (new Fox continuity), 2019-03-14 (Fox), 2019-03-26 (Dow footnote),
-and 2020-11-30 (Tesla implementation). Resolve them from retained raw bytes and
-replay offline; do not reacquire the archive or patch generated event rows by
-hand.
+Offline event authority is published at
+`data/canonical/index_membership/spglobal_events_20180414_20260708_v1`.
+Its manifest SHA-256 is
+`682ef590ea3d2bbe86e7bedae0eb08ca0f4a19202946ed793eb5420d993e94e8`
+and event-set SHA-256 is
+`29ad7c04bbada385b4f3464cd63b2dd6c4af45daa33392cd26a5aa357369fc87`.
+All 107 retained releases were replayed: 105 yielded effective assertions, two
+were explicit no-effective-event notices, and zero were unresolved. The build
+retains 305 source assertions as 303 unique events, including all three official
+sources supporting Tesla's 2020-12-21 addition. There are zero conflicts. The
+event readiness verifier replayed the raw parent and all event artifact hashes
+successfully. Reconstruction receives this evidence only through the directory-
+backed verifier and preserves every supporting source URL and SHA-256.
 
 Deterministic reconstruction remains offline and reuses the existing parser and
 backward interval builder. Its authority must bind raw archive authority,
@@ -732,10 +738,11 @@ Exit gates:
 2. an independent code/provenance review finds no unresolved critical or high
    issue before the first authoritative network run;
 3. the official archive authority covers the full frozen publication window;
-4. transition authority covers the full membership interval;
-5. offline replay publishes the complete parent-hash chain and exact anchor
+4. event authority contains zero unresolved releases and zero conflicts;
+5. transition authority covers the full membership interval;
+6. offline replay publishes the complete parent-hash chain and exact anchor
    reconciliation;
-6. only then may the swing acquisition planner emit exact Alpaca units.
+7. only then may the swing acquisition planner emit exact Alpaca units.
 
 ### ER1A Repository And Data Convergence
 
