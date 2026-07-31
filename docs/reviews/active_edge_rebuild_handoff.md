@@ -2,13 +2,14 @@
 
 Status: intraday corpus published and verified. Swing rejected and being rebuilt
 as a ranking strategy. Labels, cross-sectional scaling, and causal technical
-relationship primitives are built. Feature builder and model are not. Nothing
-is running.
+relationship primitives are built. The causal swing feature-panel builder is
+built; the full seven-year panel has not been materialized and no model exists.
+Nothing is running.
 Last updated: 2026-07-31
 Repository: `C:\project\market-predictor`
 Remote: `https://github.com/manishgh/market-predictor`
 Branch: `r3-lineage`
-Last completed implementation commit: `3403866`
+Last completed implementation commit: `fccda19`
 
 Read in this order:
 
@@ -121,6 +122,31 @@ Two consequences drive everything below:
 - Intraday grouping includes the exchange session, so all state resets
   overnight. Appending future bars leaves earlier features bit-identical.
 
+`edge_rebuild/swing_features.py` - two-stage ranking panel, implementation
+commit `fccda19`.
+
+- Stage one is safe to run in bounded security batches. It reuses the canonical
+  daily history, exact next-open labels, residual-strength components, and the
+  shared technical relationship primitives.
+- Target, stop, and timeout outcomes come from the existing conservative
+  triple-barrier evaluator. Managed return is calculated from its actual exit
+  price, not from the pre-existing timeout-close column. The outcome records
+  when its exit session became available.
+- Stage two requires the complete tradable population. It excludes cold and
+  unresolved rows, then adds same-session z-scores, centred ranks, sector
+  z-scores, and the within-sector managed-return rank label. It refuses missing
+  or unexpected securities, duplicate security/session rows, and mixed feature
+  profiles.
+- Momentum, trend, pullback, volume, relationship, and ticker-catalyst inputs
+  have named schemas. Raw news counts remain audit inputs only; the estimator
+  schema exposes their normalized same-session derivatives.
+- Ticker catalyst aggregates must already carry canonical event-assignment
+  lineage on the input decisions. Global context uses the canonical dataset
+  arguments. This builder does not perform a second, untracked news join.
+- Cross-sectional outputs are assembled as contiguous `float32` blocks. This
+  removed DataFrame fragmentation and avoids repeating a large schema string on
+  every one of the roughly one million rows.
+
 ## Contract, As Frozen
 
 Names are `swing` and `intraday`. No version suffixes — nothing is in
@@ -150,8 +176,10 @@ windows spanning the overnight gap, and either label scheme alone.
 
 Technical relationship semantics are frozen in the same contract: a two-bar
 span on each side of the RSI pivot, 20-bar normalized OBV, and 20-bar Kaufman
-Efficiency Ratio. Contract hash:
-`f60666809a1c8c9df230b13fb875d224dd271a4393ae764dd49075ef3014dee8`.
+Efficiency Ratio. The same contract now freezes 1% within-session
+winsorization plus z-score, centred-rank, and sector-relative outputs. Contract
+hash:
+`16709f3686ec737caa206dc1f45a80ea24f61d2dd1d18ded0b78cf978a433e38`.
 
 ## Intraday Corpus Is Published
 
@@ -196,11 +224,14 @@ recur, the correct answer is a volume-confirmed exemption, not a bigger number.
 
 ## Exact Next Steps
 
-1. **Swing feature builder.** Assemble one row per security per session:
-   momentum, trend, pullback, volume and catalyst features, each passed through
-   `add_cross_sectional_features`, plus both labels. Consume the shared
-   relationship primitives; do not copy their calculations.
-2. **Check the signal orders stocks correctly, before training anything.** Sort
+1. **Materialize the seven-year swing panel.** Run stage one in bounded security
+   batches, concatenate only the row shards, then run the single
+   population-wide stage-two pass. Publish an immutable manifest with row,
+   security, session, feature-eligibility, barrier-resolution,
+   rank-eligibility, source-profile, hash, and peak-memory evidence. Do not
+   split stage two by security.
+2. **Check the technical signal orders stocks correctly, before training
+   anything.** Sort
    each session by a simple score and compare the top tenth against the bottom
    tenth over the next ten days. If that spread is near zero there is nothing to
    rank and no model will help; stop and change the signal. This replaces the
@@ -250,8 +281,8 @@ The local NumPy stubs use syntax newer than the project mypy 3.11 target, so the
 verified strict command uses the installed Python 3.14 environment. That is an
 environment fact, not permission to write Python-3.14-only source.
 
-Last full verification after relationship features: 740 tests passed with 85
-existing warnings; Ruff passed; strict mypy passed across 191 source files;
+Last full verification after the swing feature builder: 748 tests passed with
+85 existing warnings; Ruff passed; strict mypy passed across 192 source files;
 compileall and `git diff --check` passed; no Python worker remained.
 
 ## Standing Prohibitions

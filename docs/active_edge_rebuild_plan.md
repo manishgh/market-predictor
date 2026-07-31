@@ -442,7 +442,46 @@ Implementation commit `3403866` added one shared implementation at
   compileall, and `git diff --check`.
 
 These are feature primitives, not a finished training table. The swing feature
-builder is the next consumer; no model was trained in this step.
+builder is their first consumer; no model was trained in this step.
+
+### ER1A Causal Swing Ranking Panel
+
+Implementation commit `fccda19` added the two-stage builder at
+`src/market_predictor/edge_rebuild/swing_features.py`.
+
+- Stage one can replay complete security histories in memory-bounded batches.
+  It consumes the canonical daily feature history, shared residual-strength
+  components, and shared technical relationships. It adds conservative
+  triple-barrier outcomes without computing any population-relative value.
+- Stage two is deliberately population-wide. Same-session z-scores, centred
+  ranks, sector-relative z-scores, and within-sector rank labels would be wrong
+  if they were calculated inside security batches, so missing or extra
+  securities and mixed feature profiles are refused.
+- Feature families are named and stable: momentum, trend, pullback, volume,
+  technical relationships, and ticker catalysts. Ticker catalyst aggregates
+  retain the upstream canonical event-assignment boundary; global context uses
+  the existing explicit canonical inputs.
+- Raw news counts are never estimator columns. They may enter the
+  same-session transformation, after which only normalized derivatives are
+  returned by the estimator schema.
+- Cold rows and unresolved barrier paths do not count toward scaling or rank
+  label sample size. Appending and poisoning a later session leaves all earlier
+  transforms and labels bit-identical.
+- Cross-sectional outputs are emitted as a contiguous `float32` block to keep
+  the million-row materialization within the 4 GiB process ceiling.
+
+The contract now freezes 1% within-session winsorization and requires z-score,
+centred-rank, and sector-relative outputs. Its SHA-256 is
+`16709f3686ec737caa206dc1f45a80ea24f61d2dd1d18ded0b78cf978a433e38`.
+Verification passed 748 tests with 85 existing warnings, Ruff, strict mypy
+across 192 source files, compileall, and `git diff --check`. No Python worker
+remained.
+
+This completes the feature-builder implementation, not panel materialization.
+The exact next action is to publish the full seven-year panel through bounded
+stage-one shards and one complete stage-two pass, with immutable lineage and
+peak-memory evidence. No estimator may be trained before the simple top-decile
+versus bottom-decile ordering test passes.
 
 ## 7. ER2: Frozen Research Contract
 
