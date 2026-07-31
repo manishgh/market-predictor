@@ -849,6 +849,29 @@ def test_raw_archive_retains_release_with_unresolved_parser(
         )
 
 
+def test_no_effective_rows_are_not_reported_as_parser_unresolved(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    audit_path, audit_hash, seeds = _write_source_audit(tmp_path)
+    monkeypatch.setattr(archive_module, "_parse_release_changes", lambda *_, **__: [])
+
+    manifest = collect_spglobal_archive(
+        source_audit_path=audit_path,
+        expected_source_audit_sha256=audit_hash,
+        output_directory=tmp_path / "out",
+        client_factory=_complete_transport(seeds).factory,
+    )
+
+    assert manifest["parser_unresolved_releases"] == 0
+    assert manifest["event_extraction_ready"] is True
+    assert all(
+        record["parser_status"] == "no_effective_rows"
+        for record in manifest["releases"]
+    )
+    archive_module.require_spglobal_event_reconstruction_ready(tmp_path / "out")
+
+
 def test_unexpected_parser_exception_is_retained_as_unresolved_raw_evidence(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

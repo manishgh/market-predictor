@@ -659,9 +659,10 @@ strict mypy across 196 source files, compileall, and `git diff --check`.
 
 ### ER1E Official Source Reacquisition And Membership Lineage
 
-Status: `in_progress` within ER1A. Independent provenance and collector reviews
-were completed before implementation. They found that the ER1D blocker artifact
-is conservative and valid, but its future authorization path is insufficient:
+Status: raw official-source acquisition is complete; offline event extraction
+is in progress within ER1A. Independent provenance and collector reviews were
+completed before implementation. They found that the ER1D blocker artifact is
+conservative and valid, but its future authorization path is insufficient:
 source files, universe audit, and final memberships are not yet joined by one
 verified parent-hash chain. No Alpaca bar request may rely on the current
 `ready_for_daily_bar_collection` branch.
@@ -691,6 +692,26 @@ The source collector must:
   payload and sidecar, hash-verified resume, partial status, and final authority
   only when all units pass;
 - use at most two download workers and stay below the 4 GiB process limit.
+
+The authoritative raw run is retained at
+`data/raw/index_membership/spglobal_official_20180414_20260708_v1`. It completed
+107 of 107 releases and nine discovery pages. A subsequent offline replay
+resumed all 107 units and used zero network requests. The final manifest
+SHA-256 is
+`6fb65e11d12f5cd1b1b4305e0accd62a45cb281441a831ffe0f88f14542555c5`,
+and the authority hash matches it exactly. Of the 107 releases, 98 parsed, one
+Kenvue announcement correctly produced no effective row because its effective
+date was TBA, and eight remain genuine parser failures. Therefore raw authority
+is `raw_complete`, but `event_extraction_ready` is false. The public readiness
+gate was exercised against the real archive and refused reconstruction with
+`S&P event reconstruction is blocked by 8 unresolved releases`.
+
+The eight unresolved fixtures are the releases dated 2018-05-31 (Evergy),
+2018-06-04 (Twitter), 2018-11-07 (Jack Henry), 2018-12-27 (First Republic),
+2019-01-29 (new Fox continuity), 2019-03-14 (Fox), 2019-03-26 (Dow footnote),
+and 2020-11-30 (Tesla implementation). Resolve them from retained raw bytes and
+replay offline; do not reacquire the archive or patch generated event rows by
+hand.
 
 Deterministic reconstruction remains offline and reuses the existing parser and
 backward interval builder. Its authority must bind raw archive authority,

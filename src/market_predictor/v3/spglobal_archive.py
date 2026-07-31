@@ -275,7 +275,7 @@ def _collect_spglobal_archive_locked(
         network_units=used_network_units,
     )
     parser_unresolved_releases = sum(
-        str(record["parser_status"]) != "parsed"
+        str(record["parser_status"]) == "parser_unresolved"
         for record in release_records
     )
     status["parser_unresolved_releases"] = parser_unresolved_releases
@@ -376,7 +376,7 @@ def require_spglobal_event_reconstruction_ready(
             "S&P raw archive manifest lineage or release counts are invalid"
         )
     unresolved = sum(
-        str(record.get("parser_status", "")) != "parsed"
+        str(record.get("parser_status", "")) == "parser_unresolved"
         for record in releases
     )
     if (

@@ -1,16 +1,16 @@
 # Active Edge Rebuild Handoff
 
-Status: intraday corpus published and verified. Swing labels, cross-sectional
-scaling, causal technical relationship primitives, and the full seven-year panel
-are published and immutable. The frozen equal-weight technical ordering
-benchmark failed and is rejected; that formula may not be tuned or used for a
-portfolio. It does not block preregistered learned models under the PDF-aligned
-temporal protocol. No model exists. Nothing is running.
+Status: official S&P raw-source acquisition is complete and verified. Event
+extraction is blocked by eight known historical parser cases, so membership
+reconstruction and Alpaca history extension have not started. Intraday corpus,
+swing labels, cross-sectional scaling, causal technical relationship primitives,
+and the current seven-year panel remain published and immutable. No model exists.
+Nothing is running.
 Last updated: 2026-07-31
 Repository: `C:\project\market-predictor`
 Remote: `https://github.com/manishgh/market-predictor`
 Branch: `r3-lineage`
-Last completed implementation commit: `18bb896`
+Last completed implementation commit: `be21bcd`
 
 ## Repository Cleanup
 
@@ -253,10 +253,22 @@ not byte-identical collector responses, and none is reusable as immutable source
 evidence. The planner emitted zero Alpaca units and explicitly records
 `blocked_until_source_reacquisition`. Peak working set was 0.230 GiB.
 
-Do not request the missing bars yet. Reacquire official S&P constituent-change
-releases into a new immutable archive, rebuild point-in-time membership through
-2018-05-29, and rerun `plan-edge-rebuild-swing-history`. Only status
-`ready_for_daily_bar_collection` authorizes market-data acquisition.
+Official reacquisition is now complete at
+`data/raw/index_membership/spglobal_official_20180414_20260708_v1`. It contains
+107 of 107 releases and nine discovery pages. Offline replay resumed every unit
+with zero network requests. Manifest SHA-256:
+`6fb65e11d12f5cd1b1b4305e0accd62a45cb281441a831ffe0f88f14542555c5`.
+The result is 98 parsed releases, one valid no-effective-row release (Kenvue,
+effective date TBA), and eight parser failures. Raw authority is complete;
+event extraction is not ready. The readiness gate correctly fails with
+`S&P event reconstruction is blocked by 8 unresolved releases`.
+
+The unresolved fixtures are 2018-05-31 Evergy, 2018-06-04 Twitter, 2018-11-07
+Jack Henry, 2018-12-27 First Republic, 2019-01-29 new Fox continuity, 2019-03-14
+Fox, 2019-03-26 Dow footnote, and 2020-11-30 Tesla implementation. Resolve these
+from the retained raw response bytes, then replay all 107 releases offline into
+a separate event authority. Do not reacquire the source archive and do not
+manually manufacture event rows.
 
 The ER3 implementation is aligned. `edge_rebuild/setup_economics.py` classifies
 every gate as `readiness` or `baseline_economics` and exposes separate
@@ -374,26 +386,30 @@ recur, the correct answer is a volume-confirmed exemption, not a bigger number.
 
 ## Exact Next Steps
 
-1. **Reacquire immutable official membership evidence.** Fetch the official S&P
-   constituent-change releases into a new byte-hashed archive, including the
-   evidence required to extend membership through 2018-05-29. Do not rewrite or
-   bless the 83 invalid retained files.
-2. **Rebuild membership and rerun the acquisition planner.** Require
+1. **Resolve eight retained parser fixtures offline.** Add exact regression
+   fixtures for the historical table, company-name, continuity, and footnote
+   formats listed above. Reparse all 107 retained responses and publish a
+   separate event authority only when no parser failures remain.
+2. **Complete transition evidence and rebuild membership.** Publish independent
+   transition authority covering 2018-05-29 through 2026-07-08, bind raw-source,
+   event, transition, anchor, and universe hashes, and prove exact cutoff-anchor
+   replay.
+3. **Rerun the acquisition planner.** Require
    `ready_for_daily_bar_collection`; any blocker still means zero Alpaca calls.
-3. **Extend swing raw history to the frozen 2,033-session target.** Collect only
+4. **Extend swing raw history to the frozen 2,033-session target.** Collect only
    the published exact SIP/all units, then rebuild the causal panel
    with the same contracts so the 250-session warm-up does not consume the
    required five-year fit, one-year validation, and one-year locked test.
-4. **Run training-only feature diagnostics.** Measure rank IC, stability,
+5. **Run training-only feature diagnostics.** Measure rank IC, stability,
    redundancy, missingness, and sector/regime behavior within development folds;
    never select features on the locked test.
-5. **Train the bounded global models sequentially.** Compare deterministic and
+6. **Train the bounded global models sequentially.** Compare deterministic and
    logistic baselines with a barrier classifier and decision-group ranker under
    the same folds, labels, costs, and top-k policy.
-6. **Evaluate once.** Select with validation, then open the locked temporal test
+7. **Evaluate once.** Select with validation, then open the locked temporal test
    once; report session-block economics and sector/regime breakdowns. Keep the
    independent unseen-security result separate.
-7. **Build the intraday equivalent separately.** Use complete sessions,
+8. **Build the intraday equivalent separately.** Use complete sessions,
    one-minute executable paths, five-minute or volume-bar decision features,
    minute-duration purging, and overnight isolation.
 
