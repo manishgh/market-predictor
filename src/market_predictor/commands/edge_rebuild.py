@@ -50,6 +50,12 @@ from market_predictor.edge_rebuild.readiness import (
 from market_predictor.edge_rebuild.selected_session_history import (
     build_selected_session_history_plan,
 )
+from market_predictor.edge_rebuild.sp500_memberships import (
+    publish_sp500_membership_authority,
+)
+from market_predictor.edge_rebuild.sp500_transitions import (
+    publish_sp500_transition_authority,
+)
 from market_predictor.edge_rebuild.strategy_contract import load_strategy_contract
 from market_predictor.edge_rebuild.swing_history_acquisition import (
     publish_swing_history_acquisition_plan,
@@ -71,6 +77,13 @@ from market_predictor.intraday.specialist_contracts import (
 )
 from market_predictor.sources.alpaca import AlpacaSource
 from market_predictor.v3.errors import DataReadinessError
+
+
+def _iso_date(value: str, *, option: str) -> date:
+    try:
+        return date.fromisoformat(value)
+    except ValueError as exc:
+        raise typer.BadParameter("expected YYYY-MM-DD", param_hint=option) from exc
 
 
 def register_edge_rebuild_commands(app: typer.Typer, console: Any) -> None:
@@ -96,7 +109,86 @@ def register_edge_rebuild_commands(app: typer.Typer, console: Any) -> None:
             config=load_broad_intraday_history_config(policy),
         )
         console.print(result["summary"])
+    @app.command("publish-edge-rebuild-sp500-transitions")
+    @serialized_heavy_job("publish-edge-rebuild-sp500-transitions")
+    def publish_edge_rebuild_sp500_transitions(
+        archive_dir: Path = typer.Option(..., help="Verified official S&P raw archive."),
+        event_dir: Path = typer.Option(..., help="Verified offline S&P event authority."),
+        reviewed_transitions: Path = typer.Option(
+            Path("configs/sp500_security_transition_review.csv"),
+            help="Reviewed security-transition ledger.",
+        ),
+        start_date: str = typer.Option(..., help="Inclusive YYYY-MM-DD start date."),
+        cutoff_date: str = typer.Option(..., help="Inclusive YYYY-MM-DD cutoff date."),
+        out_dir: Path = typer.Option(..., help="New immutable transition authority directory."),
+    ) -> None:
+        """Publish independent S&P ticker-transition authority offline."""
 
+        result = publish_sp500_transition_authority(
+            archive_directory=archive_dir,
+            event_directory=event_dir,
+            reviewed_transitions_path=reviewed_transitions,
+            start_date=_iso_date(start_date, option="--start-date"),
+            cutoff_date=_iso_date(cutoff_date, option="--cutoff-date"),
+            output_directory=out_dir,
+        )
+        console.print(
+            {
+                "status": result["status"],
+                "transitions": result["transition_count"],
+                "transition_set_sha256": result["transition_set_sha256"],
+                "out_dir": str(out_dir),
+            }
+        )
+
+    @app.command("publish-edge-rebuild-sp500-memberships")
+    @serialized_heavy_job("publish-edge-rebuild-sp500-memberships")
+    def publish_edge_rebuild_sp500_memberships(
+        archive_dir: Path = typer.Option(..., help="Verified official S&P raw archive."),
+        event_dir: Path = typer.Option(..., help="Verified offline S&P event authority."),
+        transition_dir: Path = typer.Option(..., help="Verified S&P transition authority."),
+        anchor: Path = typer.Option(..., help="Cutoff-date S&P constituent anchor CSV."),
+        reviewed_transitions: Path = typer.Option(
+            Path("configs/sp500_security_transition_review.csv"),
+            help="Reviewed security-transition ledger bound by transition authority.",
+        ),
+        start_date: str = typer.Option(..., help="Inclusive YYYY-MM-DD start date."),
+        cutoff_date: str = typer.Option(..., help="Inclusive YYYY-MM-DD cutoff date."),
+        out_dir: Path = typer.Option(..., help="New immutable membership authority directory."),
+        security_exclusions: Path | None = typer.Option(
+            None,
+            help="Optional whole-security exclusion ledger.",
+        ),
+        maximum_security_exclusion_fraction: float = typer.Option(
+            0.05,
+            min=0.0,
+            max=0.05,
+        ),
+    ) -> None:
+        """Reconstruct anchor-bound point-in-time S&P membership offline."""
+
+        result = publish_sp500_membership_authority(
+            archive_directory=archive_dir,
+            event_directory=event_dir,
+            transition_directory=transition_dir,
+            reviewed_transitions_path=reviewed_transitions,
+            anchor_path=anchor,
+            start_date=_iso_date(start_date, option="--start-date"),
+            cutoff_date=_iso_date(cutoff_date, option="--cutoff-date"),
+            output_directory=out_dir,
+            security_exclusions_path=security_exclusions,
+            maximum_security_exclusion_fraction=maximum_security_exclusion_fraction,
+        )
+        console.print(
+            {
+                "status": result["status"],
+                "membership_intervals": result["membership_intervals"],
+                "securities": result["security_count"],
+                "excluded_securities": result["excluded_security_count"],
+                "universe_sha256": result["universe_sha256"],
+                "out_dir": str(out_dir),
+            }
+        )
     @app.command("plan-edge-rebuild-swing-history")
     @serialized_heavy_job("plan-edge-rebuild-swing-history")
     def plan_edge_rebuild_swing_history(
