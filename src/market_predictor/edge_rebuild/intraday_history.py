@@ -18,8 +18,10 @@ import pandas as pd
 
 from market_predictor.canonical.store import file_sha256
 from market_predictor.edge_rebuild.history_contracts import (
+    BROAD_INTRADAY_HISTORY_PLAN_SCHEMA,
     EXTENDED_CONTEXT_PLAN_SCHEMA,
     INTRADAY_HISTORY_PLAN_SCHEMA,
+    SELECTED_SESSION_BENCHMARK_PLAN_SCHEMA,
     SELECTED_SESSION_ONE_MINUTE_PLAN_SCHEMA,
     SELECTED_SESSION_PLAN_SCHEMA,
     IntradayHistoryConfig,
@@ -45,6 +47,12 @@ SELECTED_SESSION_PLAN_AUTHORITY_SCHEMA = (
 SELECTED_SESSION_ONE_MINUTE_PLAN_AUTHORITY_SCHEMA = (
     "edge_rebuild.selected_session_one_minute_plan_authority.v1"
 )
+SELECTED_SESSION_BENCHMARK_PLAN_AUTHORITY_SCHEMA = (
+    "edge_rebuild.selected_session_benchmark_one_minute_plan_authority.v1"
+)
+BROAD_INTRADAY_HISTORY_PLAN_AUTHORITY_SCHEMA = (
+    "edge_rebuild.broad_intraday_history_plan_authority.v1"
+)
 ACCEPTED_PLAN_SCHEMAS = {
     INTRADAY_HISTORY_PLAN_SCHEMA: PLAN_AUTHORITY_SCHEMA,
     EXTENDED_CONTEXT_PLAN_SCHEMA: EXTENDED_CONTEXT_PLAN_AUTHORITY_SCHEMA,
@@ -52,6 +60,10 @@ ACCEPTED_PLAN_SCHEMAS = {
     SELECTED_SESSION_ONE_MINUTE_PLAN_SCHEMA: (
         SELECTED_SESSION_ONE_MINUTE_PLAN_AUTHORITY_SCHEMA
     ),
+    SELECTED_SESSION_BENCHMARK_PLAN_SCHEMA: (
+        SELECTED_SESSION_BENCHMARK_PLAN_AUTHORITY_SCHEMA
+    ),
+    BROAD_INTRADAY_HISTORY_PLAN_SCHEMA: BROAD_INTRADAY_HISTORY_PLAN_AUTHORITY_SCHEMA,
 }
 SESSION_MEMBERSHIP_COLUMNS = (
     "session_date_et",
@@ -603,8 +615,12 @@ def request_unit_record(
     mapping: dict[str, str],
     expected_bars_per_symbol: int,
     plan_fingerprint: str,
+    timeframe: str,
 ) -> dict[str, object]:
-    """Build the one canonical five-minute SIP request-unit record."""
+    """Build one canonical SIP request-unit record."""
+
+    if timeframe not in {"1Min", "5Min"}:
+        raise ValueError("request-unit timeframe must be 1Min or 5Min")
 
     return {
         "unit_id": unit_id,
@@ -624,7 +640,7 @@ def request_unit_record(
         "symbol_count": len(chunk),
         "expected_bars_per_symbol": expected_bars_per_symbol,
         "maximum_expected_rows": expected_bars_per_symbol * len(chunk),
-        "timeframe": "5Min",
+        "timeframe": timeframe,
         "price_feed": "sip",
         "adjustment": "all",
         "sort": "asc",
@@ -694,6 +710,7 @@ def _build_plan_frames(
                     mapping=mapping,
                     expected_bars_per_symbol=expected_bars_per_symbol,
                     plan_fingerprint=plan_fingerprint,
+                    timeframe="5Min",
                 )
             )
             total_expected_rows += expected_bars_per_symbol * len(chunk)

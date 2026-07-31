@@ -115,12 +115,14 @@ def _collect(
         {
             "ticker": symbols,
             "session_date_et": [SESSION] * len(symbols),
-            "session_volume": [5_000_000] * len(symbols),
             "average_volume_prior_sessions": [1_500_000.0] * len(symbols),
-            "relative_volume": [3.3] * len(symbols),
-            "session_close": [42.5] * len(symbols),
-            "baseline_sessions": [20.0] * len(symbols),
-            "session_rank": range(1, len(symbols) + 1),
+            "median_volume_prior_sessions": [1_400_000.0] * len(symbols),
+            "relative_volume_at_activation": [3.3] * len(symbols),
+            "price_at_activation": [42.5] * len(symbols),
+            "activation_time_utc": [
+                pd.Timestamp(f"{SESSION} 14:36:00+00:00") for _ in symbols
+            ],
+            "activation_rank": range(1, len(symbols) + 1),
         }
     )
     screen = root / "screen"
@@ -129,10 +131,10 @@ def _collect(
             liquidity=selection,
             selection=selection,
             audit={
-                "schema": "edge_rebuild.intraday_universe_selection.v1",
+                "schema": "edge_rebuild.intraday_universe_selection.v2",
                 "strategy_id": contract.intraday.strategy_id,
                 "strategy_contract_sha256": contract.sha256(),
-                "collection_dir": str(root / "daily"),
+                "canonical_dir": str(root / "canonical"),
                 "first_session_et": SESSION,
                 "last_session_et": SESSION,
                 "excluded_tickers": [],

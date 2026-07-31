@@ -287,7 +287,7 @@ def test_price_floor_matches_the_penny_stock_exclusion() -> None:
 
 
 def test_relative_volume_must_exclude_the_session_being_traded() -> None:
-    """Selecting on today's volume uses information the decision cannot have."""
+    """Today's cumulative numerator must never enter its historical baseline."""
 
     raw = _raw()
     raw["intraday_universe"]["relative_volume_excludes_current_session"] = False
@@ -300,7 +300,47 @@ def test_relative_volume_floor_must_actually_select() -> None:
     raw = _raw()
     raw["intraday_universe"]["minimum_relative_volume"] = 1.0
 
-    with pytest.raises(ValueError, match="does not select stocks in play"):
+    with pytest.raises(ValueError, match="exactly 2.0"):
+        StrategyContract.model_validate(raw)
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "message"),
+    (
+        ("selection_timing", "end_of_session", "cumulative-to-decision"),
+        ("activity_timeframe", "1Day", "five-minute"),
+        ("activity_numerator", "full_session_volume", "cumulative observed"),
+        ("activity_baseline", "mean_session_volume", "same-slot"),
+        ("exact_slot_matching", False, "exact slots"),
+        ("activity_resets_each_session", False, "reset"),
+        ("imputation_allowed", True, "without imputation"),
+        ("activation_delay_seconds", 0, "plus 60 seconds"),
+        ("maximum_candidates_per_decision", 31, "capped at 30"),
+    ),
+)
+def test_intraday_activity_screen_is_frozen_causally(
+    field: str,
+    value: object,
+    message: str,
+) -> None:
+    raw = _raw()
+    raw["intraday_universe"][field] = value
+
+    with pytest.raises(ValueError, match=message):
+        StrategyContract.model_validate(raw)
+
+
+def test_rank_settings_are_split_by_horizon() -> None:
+    contract = load_strategy_contract(CONTRACT_PATH)
+
+    assert contract.labels.swing_rank_within_sector is True
+    assert contract.labels.swing_minimum_cross_section_for_ranking == 50
+    assert contract.labels.intraday_rank_within_sector is False
+    assert contract.labels.intraday_minimum_cross_section_for_ranking == 10
+
+    raw = _raw()
+    raw["labels"]["intraday_rank_within_sector"] = True
+    with pytest.raises(ValueError, match="contemporaneous group"):
         StrategyContract.model_validate(raw)
 
 

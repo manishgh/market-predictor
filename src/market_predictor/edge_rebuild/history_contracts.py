@@ -6,7 +6,7 @@ import hashlib
 import json
 import tomllib
 from collections.abc import Callable
-from datetime import time
+from datetime import date, time
 from pathlib import Path
 from typing import Self, TypeVar
 
@@ -25,6 +25,16 @@ SELECTED_SESSION_ONE_MINUTE_SCHEMA = (
 )
 SELECTED_SESSION_ONE_MINUTE_PLAN_SCHEMA = (
     "edge_rebuild.selected_session_one_minute_plan.v1"
+)
+SELECTED_SESSION_BENCHMARK_SCHEMA = (
+    "edge_rebuild.selected_session_benchmark_one_minute.v1"
+)
+SELECTED_SESSION_BENCHMARK_PLAN_SCHEMA = (
+    "edge_rebuild.selected_session_benchmark_one_minute_plan.v1"
+)
+BROAD_INTRADAY_HISTORY_SCHEMA = "edge_rebuild.broad_intraday_history.v1"
+BROAD_INTRADAY_HISTORY_PLAN_SCHEMA = (
+    "edge_rebuild.broad_intraday_history_plan.v1"
 )
 REGULAR_SEGMENT = "regular"
 PREMARKET_SEGMENT = "premarket"
@@ -224,6 +234,95 @@ class SelectedSessionOneMinuteConfig(IntradayTransportConfig):
         return self
 
 
+class SelectedSessionBenchmarkConfig(IntradayTransportConfig):
+    """One-minute market and sector paths for selected decision sessions."""
+
+    history_timeframe: str
+    session_segments: tuple[str, ...]
+    benchmark_tickers: tuple[str, ...]
+
+    @model_validator(mode="after")
+    def validate_benchmark_contract(self) -> Self:
+        if self.schema_version != SELECTED_SESSION_BENCHMARK_SCHEMA:
+            raise ValueError("unsupported selected-session benchmark schema")
+        if self.history_timeframe != "1Min":
+            raise ValueError("selected-session benchmarks require one-minute bars")
+        if tuple(self.session_segments) != (REGULAR_SEGMENT,):
+            raise ValueError(
+                "selected-session benchmarks cover exactly the regular session"
+            )
+        normalized = self.normalized_benchmarks()
+        required = {
+            "SPY",
+            "QQQ",
+            "XLB",
+            "XLC",
+            "XLE",
+            "XLF",
+            "XLI",
+            "XLK",
+            "XLP",
+            "XLRE",
+            "XLU",
+            "XLV",
+            "XLY",
+        }
+        if set(normalized) != required or len(normalized) != len(set(normalized)):
+            raise ValueError(
+                "benchmark tickers must contain SPY, QQQ, and all eleven "
+                "Select Sector SPDR funds exactly once"
+            )
+        return self
+
+    def normalized_benchmarks(self) -> tuple[str, ...]:
+        return tuple(ticker.strip().upper() for ticker in self.benchmark_tickers)
+
+
+class BroadIntradayHistoryConfig(IntradayTransportConfig):
+    """Bounded five-minute acquisition policy for the broad research universe."""
+
+    history_timeframe: str
+    session_segments: tuple[str, ...]
+    first_session: date
+    last_session: date
+    explicit_fund_exclusions: tuple[str, ...]
+
+    @model_validator(mode="after")
+    def validate_broad_history_contract(self) -> Self:
+        if self.schema_version != BROAD_INTRADAY_HISTORY_SCHEMA:
+            raise ValueError("unsupported broad intraday-history schema")
+        if self.history_timeframe != "5Min":
+            raise ValueError("broad intraday history must use five-minute bars")
+        if tuple(self.session_segments) != (REGULAR_SEGMENT,):
+            raise ValueError("broad intraday history is regular-session only")
+        if self.first_session > self.last_session:
+            raise ValueError("broad intraday history window is reversed")
+        exclusions = self.normalized_fund_exclusions()
+        required = {
+            "SPY",
+            "QQQ",
+            "XLB",
+            "XLC",
+            "XLE",
+            "XLF",
+            "XLI",
+            "XLK",
+            "XLP",
+            "XLRE",
+            "XLU",
+            "XLV",
+            "XLY",
+        }
+        if not required.issubset(exclusions) or len(exclusions) != len(set(exclusions)):
+            raise ValueError(
+                "fund exclusions must be unique and include broad and sector ETFs"
+            )
+        return self
+
+    def normalized_fund_exclusions(self) -> tuple[str, ...]:
+        return tuple(value.strip().upper() for value in self.explicit_fund_exclusions)
+
+
 ConfigT = TypeVar("ConfigT", bound=IntradayTransportConfig)
 
 
@@ -282,11 +381,31 @@ def load_selected_session_one_minute_config(
     )
 
 
+def load_selected_session_benchmark_config(
+    path: Path,
+) -> SelectedSessionBenchmarkConfig:
+    return _load_config(
+        path,
+        SelectedSessionBenchmarkConfig,
+        "selected-session benchmark one-minute history",
+    )
+
+
+def load_broad_intraday_history_config(path: Path) -> BroadIntradayHistoryConfig:
+    return _load_config(
+        path,
+        BroadIntradayHistoryConfig,
+        "broad intraday history",
+    )
+
+
 _TRANSPORT_CONFIG_LOADERS: dict[str, Callable[[Path], IntradayTransportConfig]] = {
     INTRADAY_HISTORY_SCHEMA: load_intraday_history_config,
     EXTENDED_CONTEXT_SCHEMA: load_extended_session_context_config,
     SELECTED_SESSION_HISTORY_SCHEMA: load_selected_session_history_config,
     SELECTED_SESSION_ONE_MINUTE_SCHEMA: load_selected_session_one_minute_config,
+    SELECTED_SESSION_BENCHMARK_SCHEMA: load_selected_session_benchmark_config,
+    BROAD_INTRADAY_HISTORY_SCHEMA: load_broad_intraday_history_config,
 }
 
 

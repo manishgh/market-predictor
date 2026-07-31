@@ -378,6 +378,7 @@ def _build_context_frames(
                             mapping=mapping,
                             expected_bars_per_symbol=expected_bars,
                             plan_fingerprint=plan_fingerprint,
+                            timeframe=config.context_timeframe,
                         ),
                         "session_segment": segment,
                         "session_open_utc": entry.open_at,

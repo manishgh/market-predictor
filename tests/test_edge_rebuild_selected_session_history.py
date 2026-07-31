@@ -61,22 +61,25 @@ def _publish_selection(
         {
             "ticker": [ticker for _, ticker in records],
             "session_date_et": [session for session, _ in records],
-            "session_volume": [5_000_000] * len(records),
             "average_volume_prior_sessions": [1_500_000.0] * len(records),
-            "relative_volume": [3.3] * len(records),
-            "session_close": [42.5] * len(records),
-            "baseline_sessions": [20.0] * len(records),
-            "session_rank": list(range(1, len(records) + 1)),
+            "median_volume_prior_sessions": [1_400_000.0] * len(records),
+            "relative_volume_at_activation": [3.3] * len(records),
+            "price_at_activation": [42.5] * len(records),
+            "activation_time_utc": [
+                pd.Timestamp(f"{session} 14:36:00+00:00")
+                for session, _ in records
+            ],
+            "activation_rank": list(range(1, len(records) + 1)),
         }
     )
     contract = load_strategy_contract(STRATEGY_CONTRACT_PATH)
     audit = {
-        "schema": "edge_rebuild.intraday_universe_selection.v1",
+        "schema": "edge_rebuild.intraday_universe_selection.v2",
         "strategy_id": contract.intraday.strategy_id,
         "strategy_contract_sha256": (
             strategy_contract_sha256 or contract.sha256()
         ),
-        "collection_dir": str(directory / "daily"),
+        "canonical_dir": str(directory / "canonical"),
         "first_session_et": EARLY_CLOSE,
         "last_session_et": FULL_SESSION,
         "excluded_tickers": [],
@@ -178,6 +181,7 @@ def test_one_minute_plan_uses_real_bounds_and_row_bounded_chunks(
     assert manifest["acquisition"]["exact_path_labels"]["planned_in_this_artifact"]
     assert len(units) == 2
     assert set(units["expected_bars_per_symbol"]) == {390}
+    assert set(units["timeframe"]) == {"1Min"}
     assert int(units["maximum_expected_rows"].max()) <= 10_000
 
 

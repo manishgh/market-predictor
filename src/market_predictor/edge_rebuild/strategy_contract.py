@@ -137,7 +137,7 @@ class IntradayContract(FrozenModel):
 
 
 class IntradayUniverseContract(FrozenModel):
-    """Two-layer selection: what could be traded, then what is moving today."""
+    """Two-layer causal selection: tradable history, then activity at decision."""
 
     scope: str
     index_restricted: bool
@@ -150,7 +150,15 @@ class IntradayUniverseContract(FrozenModel):
     minimum_relative_volume: float = Field(ge=1.0)
     relative_volume_lookback_sessions: int = Field(ge=5, le=120)
     relative_volume_excludes_current_session: bool
-    maximum_candidates_per_session: int = Field(ge=1, le=200)
+    selection_timing: str
+    activity_timeframe: str
+    activity_numerator: str
+    activity_baseline: str
+    exact_slot_matching: bool
+    activity_resets_each_session: bool
+    imputation_allowed: bool
+    activation_delay_seconds: int = Field(ge=0, le=300)
+    maximum_candidates_per_decision: int = Field(ge=1, le=200)
 
     @model_validator(mode="after")
     def validate_universe(self) -> Self:
@@ -169,16 +177,37 @@ class IntradayUniverseContract(FrozenModel):
                 "exchange-traded products must be excluded from a single-name "
                 "catalyst setup"
             )
-        if self.minimum_relative_volume < 1.5:
+        if self.minimum_relative_volume != 2.0:
             raise ValueError(
-                "relative volume below 1.5 does not select stocks in play"
+                "intraday activation requires relative volume of exactly 2.0"
             )
-        # Selecting on the session being traded would use information the
-        # decision could not have had.
         if not self.relative_volume_excludes_current_session:
             raise ValueError(
-                "relative volume must be measured from prior sessions only"
+                "the relative-volume baseline must use prior sessions only"
             )
+        if (
+            self.average_volume_lookback_sessions != 20
+            or self.relative_volume_lookback_sessions != 20
+        ):
+            raise ValueError("intraday activity baselines require 20 prior sessions")
+        if self.selection_timing != "cumulative_to_decision":
+            raise ValueError("intraday selection must be cumulative-to-decision")
+        if self.activity_timeframe != "5Min":
+            raise ValueError("intraday activity selection requires five-minute bars")
+        if self.activity_numerator != "cumulative_observed_volume":
+            raise ValueError("activity numerator must be cumulative observed volume")
+        if self.activity_baseline != "median_cumulative_same_slot_prior_sessions":
+            raise ValueError(
+                "activity baseline must be the same-slot prior-session median"
+            )
+        if not self.exact_slot_matching or self.imputation_allowed:
+            raise ValueError("activity history requires exact slots without imputation")
+        if not self.activity_resets_each_session:
+            raise ValueError("intraday activity must reset at every session open")
+        if self.activation_delay_seconds != 60:
+            raise ValueError("intraday activation availability is bar end plus 60 seconds")
+        if self.maximum_candidates_per_decision != 30:
+            raise ValueError("each intraday decision is capped at 30 activations")
         return self
 
 
@@ -216,8 +245,10 @@ class LabelContract(FrozenModel):
     rank_labels_enabled: bool
     rank_top_quantile: float = Field(gt=0, lt=0.5)
     rank_bottom_quantile: float = Field(gt=0, lt=0.5)
-    rank_within_sector: bool
-    minimum_cross_section_for_ranking: int = Field(ge=20)
+    swing_rank_within_sector: bool
+    swing_minimum_cross_section_for_ranking: int = Field(ge=50)
+    intraday_rank_within_sector: bool
+    intraday_minimum_cross_section_for_ranking: int = Field(ge=10)
 
     @model_validator(mode="after")
     def validate_labels(self) -> Self:
@@ -247,7 +278,23 @@ class LabelContract(FrozenModel):
                 "same-day qualifiers falls back to something unrelated to "
                 "expected return"
             )
+        if not self.swing_rank_within_sector:
+            raise ValueError("swing ranking must remain within sector")
+        if self.intraday_rank_within_sector:
+            raise ValueError("intraday ranking must use the contemporaneous group")
         return self
+
+    @property
+    def rank_within_sector(self) -> bool:
+        """Swing feature builders consume the explicitly swing-scoped policy."""
+
+        return self.swing_rank_within_sector
+
+    @property
+    def minimum_cross_section_for_ranking(self) -> int:
+        """Swing feature builders consume the explicitly swing-scoped minimum."""
+
+        return self.swing_minimum_cross_section_for_ranking
 
 
 class ValidationContract(FrozenModel):
@@ -401,6 +448,13 @@ class StrategyContract(FrozenModel):
         ):
             raise ValueError(
                 "intraday warm-up must leave decision bars in a normal session"
+            )
+        if (
+            self.intraday_universe.activation_delay_seconds
+            != self.intraday.decision_finalization_seconds
+        ):
+            raise ValueError(
+                "activity activation delay must equal decision finalization delay"
             )
         return self
 

@@ -72,19 +72,23 @@ SELECTED_SESSION_COLUMNS = (
     "session_close_utc",
     "session_segment",
     "ticker",
-    "session_rank",
-    "relative_volume",
+    "activation_time_utc",
+    "activation_rank",
+    "relative_volume_at_activation",
     "average_volume_prior_sessions",
-    "session_close",
+    "median_volume_prior_sessions",
+    "price_at_activation",
 )
 REQUIRED_SELECTION_COLUMNS = frozenset(
     {
         "ticker",
         "session_date_et",
-        "session_rank",
-        "relative_volume",
+        "activation_time_utc",
+        "activation_rank",
+        "relative_volume_at_activation",
         "average_volume_prior_sessions",
-        "session_close",
+        "median_volume_prior_sessions",
+        "price_at_activation",
     }
 )
 
@@ -114,12 +118,18 @@ class SelectedSession:
                 "session_close_utc": self.close_at,
                 "session_segment": REGULAR_SEGMENT,
                 "ticker": str(row["ticker"]),
-                "session_rank": int(row["session_rank"]),
-                "relative_volume": float(row["relative_volume"]),
+                "activation_time_utc": pd.Timestamp(row["activation_time_utc"]),
+                "activation_rank": int(row["activation_rank"]),
+                "relative_volume_at_activation": float(
+                    row["relative_volume_at_activation"]
+                ),
                 "average_volume_prior_sessions": float(
                     row["average_volume_prior_sessions"]
                 ),
-                "session_close": float(row["session_close"]),
+                "median_volume_prior_sessions": float(
+                    row["median_volume_prior_sessions"]
+                ),
+                "price_at_activation": float(row["price_at_activation"]),
             }
             for row in self.selected.to_dict(orient="records")
         ]
@@ -441,6 +451,7 @@ def _build_plan_frames(
                         mapping=mapping,
                         expected_bars_per_symbol=expected_bars,
                         plan_fingerprint=plan_fingerprint,
+                        timeframe=config.history_timeframe,
                     ),
                     "session_segment": REGULAR_SEGMENT,
                     "session_open_utc": entry.open_at,

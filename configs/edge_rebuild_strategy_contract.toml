@@ -128,12 +128,24 @@ minimum_bar_continuity = 0.95
 # underlying already in the universe, and bond funds are not equities at all.
 exclude_exchange_traded_products = true
 
-# Layer two: is it in play today. Evaluated from the prior session's data only,
-# so selection never uses information from the session being traded.
+# Layer two: is it in play at this completed five-minute bar. Current cumulative
+# observed volume is divided by the median cumulative volume at the exact same
+# regular-session slot over the prior twenty sessions. The current session is
+# the numerator, never part of either historical denominator.
 minimum_relative_volume = 2.0
 relative_volume_lookback_sessions = 20
 relative_volume_excludes_current_session = true
-maximum_candidates_per_session = 30
+selection_timing = "cumulative_to_decision"
+activity_timeframe = "5Min"
+activity_numerator = "cumulative_observed_volume"
+activity_baseline = "median_cumulative_same_slot_prior_sessions"
+exact_slot_matching = true
+activity_resets_each_session = true
+imputation_allowed = false
+# The completed bar is treated as available one minute after its end. This
+# equals the frozen intraday decision-finalization delay above.
+activation_delay_seconds = 60
+maximum_candidates_per_decision = 30
 
 [methodology]
 # Established methods, not invented ones. Each is named so a reviewer can check
@@ -182,11 +194,13 @@ barrier_labels_enabled = true
 rank_labels_enabled = true
 rank_top_quantile = 0.20
 rank_bottom_quantile = 0.20
-# Ranking within a sector rather than across the whole universe, so a stock is
-# compared with its peers instead of with whichever sector is in favour.
-rank_within_sector = true
-# A cross-section too small to rank produces meaningless quantiles.
-minimum_cross_section_for_ranking = 50
+# Swing compares a stock with sector peers. Intraday compares all stocks whose
+# activations are available at the same decision time; sector slices would be
+# too small and would answer a different question.
+swing_rank_within_sector = true
+swing_minimum_cross_section_for_ranking = 50
+intraday_rank_within_sector = false
+intraday_minimum_cross_section_for_ranking = 10
 
 [validation]
 swing_walk_forward_folds = 1

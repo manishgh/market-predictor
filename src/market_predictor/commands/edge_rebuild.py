@@ -7,6 +7,12 @@ from typing import Any
 import typer
 
 from market_predictor.config import get_settings
+from market_predictor.edge_rebuild.benchmark_history import (
+    build_selected_session_benchmark_plan,
+)
+from market_predictor.edge_rebuild.broad_intraday_history import (
+    build_broad_intraday_history_plan,
+)
 from market_predictor.edge_rebuild.contracts import (
     load_edge_rebuild_readiness_config,
 )
@@ -17,9 +23,11 @@ from market_predictor.edge_rebuild.history_collection import (
     collect_intraday_history,
 )
 from market_predictor.edge_rebuild.history_contracts import (
+    load_broad_intraday_history_config,
     load_collection_transport_config,
     load_extended_session_context_config,
     load_intraday_history_config,
+    load_selected_session_benchmark_config,
     load_selected_session_history_config,
     load_selected_session_one_minute_config,
 )
@@ -66,6 +74,29 @@ from market_predictor.v3.errors import DataReadinessError
 
 
 def register_edge_rebuild_commands(app: typer.Typer, console: Any) -> None:
+    @app.command("plan-edge-rebuild-broad-intraday-history")
+    @serialized_heavy_job("plan-edge-rebuild-broad-intraday-history")
+    def plan_edge_rebuild_broad_intraday_history(
+        broad_memberships: Path = typer.Option(...),
+        pit_memberships: Path = typer.Option(...),
+        existing_corpus_dir: Path = typer.Option(...),
+        out_dir: Path = typer.Option(...),
+        policy: Path = typer.Option(
+            Path("configs/edge_rebuild_broad_intraday_history.toml")
+        ),
+    ) -> None:
+        """Plan missing causal five-minute history for the broad universe."""
+
+        result = build_broad_intraday_history_plan(
+            broad_memberships_path=broad_memberships,
+            pit_memberships_path=pit_memberships,
+            existing_corpus_directory=existing_corpus_dir,
+            policy_path=policy,
+            output_directory=out_dir,
+            config=load_broad_intraday_history_config(policy),
+        )
+        console.print(result["summary"])
+
     @app.command("plan-edge-rebuild-swing-history")
     @serialized_heavy_job("plan-edge-rebuild-swing-history")
     def plan_edge_rebuild_swing_history(
@@ -456,6 +487,33 @@ def register_edge_rebuild_commands(app: typer.Typer, console: Any) -> None:
         )
         console.print(result["summary"])
 
+    @app.command("plan-edge-rebuild-selected-session-benchmarks")
+    @serialized_heavy_job("plan-edge-rebuild-selected-session-benchmarks")
+    def plan_edge_rebuild_selected_session_benchmarks(
+        selection_dir: Path = typer.Option(
+            ...,
+            help="Published causal screen supplying the decision sessions.",
+        ),
+        out_dir: Path = typer.Option(...),
+        policy: Path = typer.Option(
+            Path("configs/edge_rebuild_selected_session_benchmarks.toml")
+        ),
+        contract: Path = typer.Option(
+            Path("configs/edge_rebuild_strategy_contract.toml")
+        ),
+    ) -> None:
+        """Plan one-minute SPY, QQQ, and sector-ETF paths."""
+
+        result = build_selected_session_benchmark_plan(
+            selection_directory=selection_dir,
+            policy_path=policy,
+            output_directory=out_dir,
+            config=load_selected_session_benchmark_config(policy),
+            strategy_contract=load_strategy_contract(contract),
+            strategy_contract_path=contract,
+        )
+        console.print(result["summary"])
+
     @app.command("audit-edge-rebuild-selected-session-one-minute")
     @serialized_heavy_job("audit-edge-rebuild-selected-session-one-minute")
     def audit_edge_rebuild_selected_session_one_minute(
@@ -517,9 +575,9 @@ def register_edge_rebuild_commands(app: typer.Typer, console: Any) -> None:
     @app.command("screen-edge-rebuild-intraday-universe")
     @serialized_heavy_job("screen-edge-rebuild-intraday-universe")
     def screen_edge_rebuild_intraday_universe(
-        collection_dir: Path = typer.Option(
+        canonical_dir: Path = typer.Option(
             ...,
-            help="Completed daily-bar collection supplying volume and price.",
+            help="Verified merged canonical regular-session five-minute corpus.",
         ),
         out_dir: Path = typer.Option(..., help="Hash-bound research output directory."),
         first_session: str = typer.Option(..., help="Window start YYYY-MM-DD."),
@@ -533,10 +591,10 @@ def register_edge_rebuild_commands(app: typer.Typer, console: Any) -> None:
             help="Symbols collected as benchmarks rather than as candidates.",
         ),
     ) -> None:
-        """Screen daily bars into the frozen two-layer intraday stock-sessions."""
+        """Screen causal five-minute activity into selected stock-sessions."""
 
         result = build_intraday_selection(
-            collection_dir=collection_dir,
+            canonical_dir=canonical_dir,
             contract=load_strategy_contract(contract),
             first_session=date.fromisoformat(first_session),
             last_session=date.fromisoformat(last_session),
@@ -550,9 +608,8 @@ def register_edge_rebuild_commands(app: typer.Typer, console: Any) -> None:
                 key: manifest[key]
                 for key in (
                     "symbols_read",
-                    "daily_rows_read",
-                    "zero_volume_rows_dropped",
-                    "liquidity_rows",
+                    "five_minute_rows_read",
+                    "activity_rows",
                     "sessions_in_window",
                     "layer_one",
                     "layer_two",

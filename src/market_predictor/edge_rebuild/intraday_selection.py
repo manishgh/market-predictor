@@ -1,38 +1,27 @@
-"""The two-layer intraday universe screen, evaluated point-in-time.
+"""Causal event-time selection for the intraday research universe.
 
-Layer one asks whether a security could be traded intraday at all: a
-twenty-session average volume floor and a price band. Layer two asks whether it
-is moving today: relative volume against that same average, capped per session.
-Both layers come from the frozen strategy contract, never from a literal here.
-
-The one invariant that makes this screen usable is that the average volume a
-session is measured against never contains that session's own volume. A
-`rolling(20).mean()` taken on the raw volume series includes the current bar, so
-a single high-volume day inflates its own baseline and depresses its own
-relative volume; worse, the resulting selection has read the session it claims to
-be selecting for. Every baseline here is therefore taken on a series shifted one
-session forward within the symbol, and `assert_no_current_session_leak` proves
-it on the produced frame rather than trusting the construction.
-
-Finviz screener exports decide which tickers were considered for acquisition and
-nothing else. No value from that snapshot reaches this module: every number
-below is computed from collected SIP daily bars.
+The screen observes canonical regular-session five-minute bars in timestamp
+order.  A stock activates on the first completed bar where its cumulative
+observed volume is at least twice the median cumulative volume at the same
+five-minute slot over the prior twenty sessions.  Current-session bars never
+enter either historical denominator.
 """
 
 from __future__ import annotations
 
-import json
+from collections import deque
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 from zoneinfo import ZoneInfo
 
+import exchange_calendars as xcals
 import numpy as np
 import pandas as pd
-from pandas.core.groupby.generic import SeriesGroupBy
 
-from market_predictor.canonical.store import file_sha256, load_canonical_artifact
+from market_predictor.canonical.store import file_sha256
 from market_predictor.edge_rebuild.intraday_history import (
     json_sha256,
     load_plan_json,
@@ -42,7 +31,6 @@ from market_predictor.edge_rebuild.strategy_contract import (
     IntradayUniverseContract,
     StrategyContract,
 )
-from market_predictor.edge_rebuild.swing_setups import drop_placeholder_bars
 from market_predictor.resources import (
     assert_memory_budget,
     memory_audit,
@@ -50,23 +38,42 @@ from market_predictor.resources import (
 )
 from market_predictor.v3.errors import DataReadinessError
 
-INTRADAY_SELECTION_SCHEMA = "edge_rebuild.intraday_universe_selection.v1"
+INTRADAY_SELECTION_SCHEMA = "edge_rebuild.intraday_universe_selection.v2"
 INTRADAY_SELECTION_AUTHORITY_SCHEMA = (
-    "edge_rebuild.intraday_universe_selection_authority.v1"
+    "edge_rebuild.intraday_universe_selection_authority.v2"
 )
 EXCHANGE_TIMEZONE = ZoneInfo("America/New_York")
-SESSION_LIQUIDITY_COLUMNS = (
+ACTIVITY_AUDIT_COLUMNS = (
     "ticker",
     "session_date_et",
-    "session_volume",
+    "observed_5m_bars",
+    "prior_sessions_available",
     "average_volume_prior_sessions",
-    "relative_volume",
-    "session_close",
-    "baseline_sessions",
+    "median_volume_prior_sessions",
+    "exact_slot_baseline_ready",
 )
 SELECTION_COLUMNS = (
-    *SESSION_LIQUIDITY_COLUMNS,
-    "session_rank",
+    "ticker",
+    "session_date_et",
+    "activation_time_utc",
+    "activation_rank",
+    "relative_volume_at_activation",
+    "average_volume_prior_sessions",
+    "median_volume_prior_sessions",
+    "price_at_activation",
+)
+_REQUIRED_BAR_COLUMNS = frozenset(
+    {
+        "ticker",
+        "timeframe",
+        "bar_start_utc",
+        "bar_end_utc",
+        "available_at_utc",
+        "close",
+        "volume",
+        "price_feed",
+        "adjustment",
+    }
 )
 _MEMORY_BUDGET_GIB = 4.0
 _MEMORY_HEADROOM_GIB = 0.75
@@ -74,283 +81,453 @@ _MEMORY_HEADROOM_GIB = 0.75
 
 @dataclass(frozen=True, slots=True)
 class IntradaySelectionResult:
-    """Both screen layers plus the counts a reviewer needs to check them."""
+    """Causal screen diagnostics and unique selected stock-sessions."""
 
+    # The name remains neutral for callers constructing test artifacts.  The
+    # table now contains event-time audit rows, not end-of-day liquidity rows.
     liquidity: pd.DataFrame
     selection: pd.DataFrame
     audit: dict[str, Any]
 
 
-def session_liquidity(bars: pd.DataFrame, *, lookback_sessions: int) -> pd.DataFrame:
-    """Per symbol-session volume, its prior-session baseline, and relative volume.
+@dataclass(frozen=True, slots=True)
+class _SessionProfile:
+    session_date_et: date
+    total_observed_volume: float
+    cumulative_volume_by_slot: Mapping[int, float]
 
-    The baseline is a trailing mean over the `lookback_sessions` sessions that
-    ended before the measured session. Shifting inside the symbol group is what
-    keeps the measured session out of its own denominator.
-    """
 
-    if lookback_sessions < 2:
-        raise ValueError("lookback_sessions must cover at least two sessions")
-    required = {"ticker", "bar_start_utc", "close", "volume"}
-    missing = sorted(required.difference(bars.columns))
-    if missing:
-        raise DataReadinessError(f"daily bars are missing columns: {missing}")
+def select_intraday_activations(
+    bars: pd.DataFrame,
+    *,
+    universe: IntradayUniverseContract,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Select activations from canonical five-minute rows in causal order."""
+
     if bars.empty:
-        return pd.DataFrame(columns=list(SESSION_LIQUIDITY_COLUMNS))
-
-    frame = pd.DataFrame(
-        {
-            "ticker": bars["ticker"].astype(str),
-            "session_date_et": pd.to_datetime(bars["bar_start_utc"], utc=True)
-            .dt.tz_convert(EXCHANGE_TIMEZONE)
-            .dt.date,
-            "session_volume": pd.to_numeric(bars["volume"], errors="coerce"),
-            "session_close": pd.to_numeric(bars["close"], errors="coerce"),
-        }
+        return _empty_activity(), _empty_selection()
+    normalized = _validate_canonical_five_minute_rows(bars)
+    sessions = (
+        (session_date, frame.reset_index(drop=True))
+        for session_date, frame in normalized.groupby("session_date_et", sort=True)
     )
-    duplicates = int(frame.duplicated(["ticker", "session_date_et"]).sum())
-    if duplicates:
-        raise DataReadinessError(
-            f"daily bars contain {duplicates} duplicate symbol-session rows"
-        )
-    frame = frame.sort_values(
-        ["ticker", "session_date_et"],
-        kind="stable",
-    ).reset_index(drop=True)
-    prior_by_symbol = _prior_session_volume(frame)
-    frame["average_volume_prior_sessions"] = prior_by_symbol.transform(
-        lambda values: values.rolling(lookback_sessions, min_periods=lookback_sessions).mean()
-    )
-    frame["baseline_sessions"] = prior_by_symbol.transform(
-        lambda values: values.rolling(lookback_sessions, min_periods=lookback_sessions).count()
-    )
-    baseline = frame["average_volume_prior_sessions"]
-    frame["relative_volume"] = frame["session_volume"].div(baseline.where(baseline > 0))
-    return frame.loc[:, list(SESSION_LIQUIDITY_COLUMNS)].reset_index(drop=True)
+    return _screen_sessions(sessions, universe=universe)
 
 
-def assert_no_current_session_leak(
-    liquidity: pd.DataFrame,
+def _screen_sessions(
+    sessions: Iterable[tuple[date, pd.DataFrame]],
     *,
-    lookback_sessions: int,
+    universe: IntradayUniverseContract,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    lookback = universe.relative_volume_lookback_sessions
+    history: dict[str, deque[_SessionProfile]] = {}
+    previous_market_sessions: deque[date] = deque(maxlen=lookback)
+    activity_rows: list[dict[str, object]] = []
+    selected_rows: list[dict[str, object]] = []
+
+    for session_date, session_rows in sessions:
+        if session_rows.empty:
+            previous_market_sessions.append(session_date)
+            continue
+        if not session_rows["session_date_et"].eq(session_date).all():
+            raise DataReadinessError("five-minute session partition contains another date")
+        if bool(session_rows.duplicated(["ticker", "slot"]).any()):
+            raise DataReadinessError(
+                "canonical five-minute input contains duplicate symbol-slot rows"
+            )
+
+        prior_dates = tuple(previous_market_sessions)
+        activations: list[dict[str, object]] = []
+        current_profiles: dict[str, _SessionProfile] = {}
+        for ticker, ticker_rows in session_rows.groupby("ticker", sort=True):
+            ordered = ticker_rows.sort_values("slot", kind="stable").reset_index(drop=True)
+            profile = _session_profile(session_date, ordered)
+            current_profiles[str(ticker)] = profile
+            prior = tuple(history.get(str(ticker), ()))
+            baseline_ready = (
+                len(prior_dates) == lookback
+                and len(prior) == lookback
+                and tuple(item.session_date_et for item in prior) == prior_dates
+            )
+            average_volume = (
+                float(np.mean([item.total_observed_volume for item in prior]))
+                if baseline_ready
+                else np.nan
+            )
+            median_volume = (
+                float(np.median([item.total_observed_volume for item in prior]))
+                if baseline_ready
+                else np.nan
+            )
+            activity_rows.append(
+                {
+                    "ticker": str(ticker),
+                    "session_date_et": session_date,
+                    "observed_5m_bars": int(len(ordered)),
+                    "prior_sessions_available": int(len(prior)),
+                    "average_volume_prior_sessions": average_volume,
+                    "median_volume_prior_sessions": median_volume,
+                    "exact_slot_baseline_ready": baseline_ready,
+                }
+            )
+            if (
+                not baseline_ready
+                or average_volume < universe.minimum_average_volume_shares
+            ):
+                continue
+            activation = _first_activation(
+                ordered,
+                prior=prior,
+                average_volume=average_volume,
+                median_volume=median_volume,
+                universe=universe,
+            )
+            if activation is not None:
+                activations.append(activation)
+
+        _append_capped_decision_activations(
+            selected_rows,
+            activations,
+            session_date=session_date,
+            maximum_candidates_per_decision=(
+                universe.maximum_candidates_per_decision
+            ),
+        )
+
+        for ticker, profile in current_profiles.items():
+            values = history.setdefault(ticker, deque(maxlen=lookback))
+            values.append(profile)
+        previous_market_sessions.append(session_date)
+
+    activity = pd.DataFrame(activity_rows, columns=list(ACTIVITY_AUDIT_COLUMNS))
+    selection = pd.DataFrame(selected_rows, columns=list(SELECTION_COLUMNS))
+    return activity, selection
+
+
+def _append_capped_decision_activations(
+    destination: list[dict[str, object]],
+    activations: list[dict[str, object]],
+    *,
+    session_date: date,
+    maximum_candidates_per_decision: int,
 ) -> None:
-    """Fail if any baseline could have contained the session it measures.
+    """Cap only activations first available at the same decision timestamp."""
 
-    The replay deliberately shares no code with the production path: it sums an
-    explicit slice `volumes[i - lookback : i]`, which excludes position `i` by
-    construction, rather than reusing the shift-then-roll helper. A guard built
-    on the same helper would restate the implementation and pass in lockstep
-    with its own bug; this one disagrees whenever the window moves by a session.
-    """
-
-    if liquidity.empty:
+    if not activations:
         return
-    frame = liquidity.sort_values(
-        ["ticker", "session_date_et"],
-        kind="stable",
+    ordered = sorted(
+        activations,
+        key=lambda row: (
+            pd.Timestamp(row["activation_time_utc"]),
+            -float(cast(float, row["relative_volume_at_activation"])),
+            str(row["ticker"]),
+        ),
+    )
+    frame = pd.DataFrame(ordered)
+    for _, decision_rows in frame.groupby("activation_time_utc", sort=True):
+        for rank, activation in enumerate(
+            decision_rows.head(maximum_candidates_per_decision).to_dict(
+                orient="records"
+            ),
+            start=1,
+        ):
+            destination.append(
+                {
+                    **activation,
+                    "session_date_et": session_date,
+                    "activation_rank": rank,
+                }
+            )
+
+
+def _session_profile(session_date: date, rows: pd.DataFrame) -> _SessionProfile:
+    cumulative = pd.to_numeric(rows["volume"], errors="raise").cumsum()
+    return _SessionProfile(
+        session_date_et=session_date,
+        total_observed_volume=float(cumulative.iloc[-1]),
+        cumulative_volume_by_slot={
+            int(slot): float(value)
+            for slot, value in zip(rows["slot"], cumulative, strict=True)
+        },
+    )
+
+
+def _first_activation(
+    rows: pd.DataFrame,
+    *,
+    prior: tuple[_SessionProfile, ...],
+    average_volume: float,
+    median_volume: float,
+    universe: IntradayUniverseContract,
+) -> dict[str, object] | None:
+    cumulative_observed = 0.0
+    for row in rows.itertuples(index=False):
+        cumulative_observed += float(cast(float, row.volume))
+        historical = [
+            profile.cumulative_volume_by_slot.get(int(row.slot)) for profile in prior
+        ]
+        # Exact-slot matching means one absent observation invalidates this
+        # decision slot.  Filling or carrying a value forward is prohibited.
+        if any(value is None for value in historical):
+            continue
+        denominator = float(np.median(np.asarray(historical, dtype="float64")))
+        if denominator <= 0:
+            continue
+        relative_volume = cumulative_observed / denominator
+        price = float(row.close)
+        if (
+            relative_volume >= universe.minimum_relative_volume
+            and universe.minimum_price <= price <= universe.maximum_price
+        ):
+            return {
+                "ticker": str(row.ticker),
+                "activation_time_utc": pd.Timestamp(row.bar_end_utc)
+                + pd.Timedelta(seconds=universe.activation_delay_seconds),
+                "relative_volume_at_activation": relative_volume,
+                "average_volume_prior_sessions": average_volume,
+                "median_volume_prior_sessions": median_volume,
+                "price_at_activation": price,
+            }
+    return None
+
+
+def _validate_canonical_five_minute_rows(bars: pd.DataFrame) -> pd.DataFrame:
+    missing = sorted(_REQUIRED_BAR_COLUMNS.difference(bars.columns))
+    if missing:
+        raise DataReadinessError(f"five-minute bars are missing columns: {missing}")
+    frame = bars.loc[:, sorted(_REQUIRED_BAR_COLUMNS)].copy()
+    frame["ticker"] = frame["ticker"].astype(str).str.upper().str.strip()
+    frame["bar_start_utc"] = pd.to_datetime(frame["bar_start_utc"], utc=True)
+    frame["bar_end_utc"] = pd.to_datetime(frame["bar_end_utc"], utc=True)
+    frame["available_at_utc"] = pd.to_datetime(frame["available_at_utc"], utc=True)
+    frame["close"] = pd.to_numeric(frame["close"], errors="coerce")
+    frame["volume"] = pd.to_numeric(frame["volume"], errors="coerce")
+
+    normalized_timeframe = frame["timeframe"].astype(str).str.lower().str.strip()
+    normalized_feed = frame["price_feed"].astype(str).str.lower().str.strip()
+    normalized_adjustment = frame["adjustment"].astype(str).str.lower().str.strip()
+    if (
+        bool(normalized_timeframe.ne("5m").any())
+        or bool(normalized_feed.ne("sip").any())
+        or bool(normalized_adjustment.ne("all").any())
+    ):
+        raise DataReadinessError(
+            "intraday activity selection requires canonical 5m SIP/all rows"
+        )
+    if (
+        bool(frame["ticker"].eq("").any())
+        or bool(frame["close"].isna().any())
+        or bool(frame["close"].le(0).any())
+        or bool(frame["volume"].isna().any())
+        or bool(frame["volume"].lt(0).any())
+    ):
+        raise DataReadinessError("five-minute bars contain invalid identity or values")
+
+    starts = frame["bar_start_utc"]
+    ends = frame["bar_end_utc"]
+    expected_available = ends + pd.Timedelta(seconds=60)
+    local = starts.dt.tz_convert(EXCHANGE_TIMEZONE)
+    minutes_after_midnight = local.dt.hour * 60 + local.dt.minute
+    regular_slot = (minutes_after_midnight - (9 * 60 + 30)) // 5
+    aligned = (
+        minutes_after_midnight.ge(9 * 60 + 30)
+        & minutes_after_midnight.lt(16 * 60)
+        & minutes_after_midnight.sub(9 * 60 + 30).mod(5).eq(0)
+        & local.dt.second.eq(0)
+        & local.dt.microsecond.eq(0)
+    )
+    if bool(frame.duplicated(["ticker", "bar_start_utc"]).any()):
+        raise DataReadinessError(
+            "canonical five-minute input contains duplicate symbol-slot rows"
+        )
+    if (
+        bool((ends - starts).ne(pd.Timedelta(minutes=5)).any())
+        or bool(frame["available_at_utc"].ne(expected_available).any())
+        or not bool(aligned.all())
+    ):
+        raise DataReadinessError(
+            "intraday activity selection requires exact regular-session 5m slots "
+            "available at bar end plus 60 seconds"
+        )
+    frame["session_date_et"] = local.dt.date
+    frame["slot"] = regular_slot.astype("int16")
+    return frame.sort_values(
+        ["session_date_et", "bar_start_utc", "ticker"], kind="stable"
     ).reset_index(drop=True)
-    replay = pd.Series(index=frame.index, dtype="float64")
-    for _, group in frame.groupby("ticker", sort=False):
-        volumes = pd.to_numeric(group["session_volume"], errors="coerce").to_numpy(dtype="float64")
-        cumulative = np.concatenate(([0.0], np.cumsum(volumes)))
-        window_sums = cumulative[:-1][lookback_sessions:] - cumulative[:-lookback_sessions - 1]
-        values = np.full(len(volumes), np.nan)
-        values[lookback_sessions:] = window_sums / lookback_sessions
-        replay.iloc[group.index] = values
-    published = frame["average_volume_prior_sessions"]
-    both_present = replay.notna() & published.notna()
-    mismatched = int(
-        (
-            (replay[both_present] - published[both_present]).abs()
-            > 1e-6 * replay[both_present].abs().clip(lower=1.0)
-        ).sum()
-    )
-    disagreeing_presence = int((replay.notna() != published.notna()).sum())
-    if mismatched or disagreeing_presence:
-        raise DataReadinessError(
-            "relative-volume baseline does not match a prior-session-only replay: "
-            f"{mismatched} value mismatches, {disagreeing_presence} presence mismatches"
-        )
-    # A baseline built from exactly `lookback_sessions` prior observations can
-    # never span more; a larger count means the current session entered it.
-    over_wide = int(
-        pd.to_numeric(frame["baseline_sessions"], errors="coerce")
-        .fillna(0)
-        .gt(lookback_sessions)
-        .sum()
-    )
-    if over_wide:
-        raise DataReadinessError(
-            f"{over_wide} baselines span more than {lookback_sessions} prior sessions"
-        )
-
-
-def _prior_session_volume(frame: pd.DataFrame) -> SeriesGroupBy[Any, Any]:
-    """Group each symbol's volume series shifted one session forward.
-
-    Shifting before grouping is what removes the measured session from its own
-    baseline; every rolling statistic in this module is taken on this object.
-    """
-
-    ordered = frame.sort_index()
-    shifted = ordered.groupby("ticker", sort=False)["session_volume"].shift(1)
-    return shifted.groupby(ordered["ticker"], sort=False)
-
-
-def layer_one_mask(
-    liquidity: pd.DataFrame,
-    *,
-    universe: IntradayUniverseContract,
-) -> pd.Series:
-    """Layer one: could this security be traded intraday at all.
-
-    Bar continuity is the third layer-one filter in the contract and is not
-    applied here: it is measured on five-minute prints, which do not exist for
-    these candidates yet. It is enforced when those bars are collected.
-    """
-
-    return liquidity["average_volume_prior_sessions"].ge(
-        float(universe.minimum_average_volume_shares)
-    ) & liquidity["session_close"].between(
-        universe.minimum_price,
-        universe.maximum_price,
-    )
-
-
-def apply_intraday_universe_layers(
-    liquidity: pd.DataFrame,
-    *,
-    universe: IntradayUniverseContract,
-) -> pd.DataFrame:
-    """Apply layer one, then layer two, then the per-session candidate cap."""
-
-    if liquidity.empty:
-        return pd.DataFrame(columns=list(SELECTION_COLUMNS))
-    tradable = liquidity.loc[layer_one_mask(liquidity, universe=universe)]
-    in_play = tradable.loc[
-        tradable["relative_volume"].ge(universe.minimum_relative_volume)
-    ]
-    ranked = in_play.sort_values(
-        ["session_date_et", "relative_volume", "ticker"],
-        ascending=[True, False, True],
-        kind="stable",
-    )
-    ranked = ranked.assign(
-        session_rank=ranked.groupby("session_date_et", sort=False).cumcount() + 1
-    )
-    capped = ranked.loc[
-        ranked["session_rank"].le(universe.maximum_candidates_per_session)
-    ]
-    return capped.loc[:, list(SELECTION_COLUMNS)].reset_index(drop=True)
 
 
 def build_intraday_selection(
     *,
-    collection_dir: Path,
+    canonical_dir: Path,
     contract: StrategyContract,
     first_session: date,
     last_session: date,
     exclude_tickers: frozenset[str] = frozenset(),
 ) -> IntradaySelectionResult:
-    """Screen a completed daily-bar collection into selected stock-sessions."""
+    """Stream the verified per-symbol regular five-minute corpus causally."""
 
     if first_session > last_session:
         raise ValueError("first_session must not be after last_session")
-    universe = contract.intraday_universe
-    artifacts = _collection_artifacts(collection_dir)
-    excluded = sorted(exclude_tickers & set(artifacts))
-    frames: list[pd.DataFrame] = []
-    zero_volume_dropped = 0
+    _manifest, records = _verify_canonical_regular_store(canonical_dir)
+    calendar = xcals.get_calendar("XNYS")
+    market_sessions = tuple(
+        pd.Timestamp(value).date()
+        for value in calendar.sessions_in_range(first_session, last_session)
+    )
+    if not market_sessions:
+        raise DataReadinessError("activity screen window contains no XNYS sessions")
+    observed_tickers: set[str] = set()
     rows_read = 0
-    for ticker in sorted(artifacts):
+    activity_parts: list[pd.DataFrame] = []
+    activation_parts: list[pd.DataFrame] = []
+    root = canonical_dir.resolve()
+    empty = pd.DataFrame(
+        columns=[*sorted(_REQUIRED_BAR_COLUMNS), "session_date_et", "slot"]
+    )
+    for record in records:
+        ticker = str(record["ticker"]).upper()
         if ticker in exclude_tickers:
             continue
-        bars, _ = load_canonical_artifact(
-            artifacts[ticker],
-            expected_type="bars",
-            columns=["ticker", "bar_start_utc", "close", "volume"],
+        path = (root / str(record["path"])).resolve()
+        frame = pd.read_parquet(path, columns=sorted(_REQUIRED_BAR_COLUMNS))
+        rows_read += len(frame)
+        normalized = _validate_canonical_five_minute_rows(frame)
+        normalized = normalized.loc[
+            pd.Series(normalized["session_date_et"]).between(
+                first_session, last_session
+            )
+        ].reset_index(drop=True)
+        by_date = {
+            value: part.reset_index(drop=True)
+            for value, part in normalized.groupby("session_date_et", sort=True)
+        }
+        activity, activations = _screen_sessions(
+            ((value, by_date.get(value, empty)) for value in market_sessions),
+            universe=contract.intraday_universe,
         )
-        rows_read += len(bars)
-        traded, dropped = drop_placeholder_bars(bars)
-        zero_volume_dropped += dropped
-        if not traded.empty:
-            frames.append(traded)
-        del bars, traded
+        if not activity.empty:
+            activity_parts.append(activity)
+        if not activations.empty:
+            activation_parts.append(activations.drop(columns="activation_rank"))
+        observed_tickers.add(ticker)
+        del frame, normalized, by_date, activity, activations
         assert_memory_budget(
             hard_budget_gib=_MEMORY_BUDGET_GIB,
             headroom_gib=_MEMORY_HEADROOM_GIB,
-            stage=f"intraday screen read {ticker}",
+            stage=f"intraday event-time screen {ticker}",
         )
+
+    activity = (
+        pd.concat(activity_parts, ignore_index=True)
+        if activity_parts
+        else _empty_activity()
+    )
+    uncapped = (
+        pd.concat(activation_parts, ignore_index=True)
+        if activation_parts
+        else pd.DataFrame(
+            columns=[name for name in SELECTION_COLUMNS if name != "activation_rank"]
+        )
+    )
+    selected_rows: list[dict[str, object]] = []
+    if not uncapped.empty:
+        for session_date, group in uncapped.groupby("session_date_et", sort=True):
+            _append_capped_decision_activations(
+                selected_rows,
+                group.drop(columns="session_date_et").to_dict(orient="records"),
+                session_date=cast(date, session_date),
+                maximum_candidates_per_decision=(
+                    contract.intraday_universe.maximum_candidates_per_decision
+                ),
+            )
+    selection = pd.DataFrame(selected_rows, columns=list(SELECTION_COLUMNS))
     release_process_memory()
-    if not frames:
-        raise DataReadinessError(f"no traded daily bars found under {collection_dir}")
-    liquidity = session_liquidity(
-        pd.concat(frames, ignore_index=True),
-        lookback_sessions=universe.average_volume_lookback_sessions,
-    )
-    del frames
-    assert_no_current_session_leak(
-        liquidity,
-        lookback_sessions=universe.average_volume_lookback_sessions,
-    )
-    liquidity = liquidity.loc[
-        pd.Series(liquidity["session_date_et"]).between(first_session, last_session)
-    ].reset_index(drop=True)
-    selection = apply_intraday_universe_layers(liquidity, universe=universe)
+    if bool(selection.duplicated(["ticker", "session_date_et"]).any()):
+        raise DataReadinessError("event-time screen emitted duplicate stock-sessions")
     per_session = selection.groupby("session_date_et", sort=True).size()
-    layer_one = liquidity.loc[layer_one_mask(liquidity, universe=universe)]
+    eligible = activity["average_volume_prior_sessions"].ge(
+        contract.intraday_universe.minimum_average_volume_shares
+    )
     audit: dict[str, Any] = {
         "schema": INTRADAY_SELECTION_SCHEMA,
         "strategy_id": contract.intraday.strategy_id,
         "strategy_contract_sha256": contract.sha256(),
-        "collection_dir": str(collection_dir.resolve()),
+        "canonical_dir": str(canonical_dir.resolve()),
+        "canonical_manifest_sha256": file_sha256(canonical_dir / "_manifest.json"),
         "first_session_et": first_session.isoformat(),
         "last_session_et": last_session.isoformat(),
-        "symbols_read": len(artifacts) - len(excluded),
-        "excluded_tickers": excluded,
-        "daily_rows_read": rows_read,
-        "zero_volume_rows_dropped": zero_volume_dropped,
-        "liquidity_rows": int(len(liquidity)),
-        "sessions_in_window": int(liquidity["session_date_et"].nunique()),
+        "excluded_tickers": sorted(exclude_tickers),
+        "symbols_read": len(observed_tickers),
+        "five_minute_rows_read": rows_read,
+        "activity_rows": int(len(activity)),
+        "sessions_in_window": int(activity["session_date_et"].nunique()),
         "layer_one": {
-            "minimum_average_volume_shares": universe.minimum_average_volume_shares,
+            "minimum_average_volume_shares": (
+                contract.intraday_universe.minimum_average_volume_shares
+            ),
             "average_volume_lookback_sessions": (
-                universe.average_volume_lookback_sessions
+                contract.intraday_universe.average_volume_lookback_sessions
             ),
-            "minimum_price": universe.minimum_price,
-            "maximum_price": universe.maximum_price,
-            "stock_sessions": int(len(layer_one)),
-            "symbols": int(layer_one["ticker"].nunique()),
-            "bar_continuity_evaluated": False,
-            "bar_continuity_reason": (
-                "five-minute bars do not yet exist for these candidates; the "
-                "continuity gate is evaluated when they are collected"
-            ),
+            "stock_sessions": int(eligible.sum()),
         },
         "layer_two": {
-            "minimum_relative_volume": universe.minimum_relative_volume,
-            "relative_volume_lookback_sessions": (
-                universe.relative_volume_lookback_sessions
+            "selection_timing": contract.intraday_universe.selection_timing,
+            "minimum_relative_volume": (
+                contract.intraday_universe.minimum_relative_volume
             ),
-            "maximum_candidates_per_session": (
-                universe.maximum_candidates_per_session
+            "maximum_candidates_per_decision": (
+                contract.intraday_universe.maximum_candidates_per_decision
             ),
             "stock_sessions": int(len(selection)),
             "symbols": int(selection["ticker"].nunique()),
             "sessions_with_candidates": int(len(per_session)),
-            "per_session_minimum": int(per_session.min()) if len(per_session) else 0,
-            "per_session_median": float(per_session.median()) if len(per_session) else 0.0,
             "per_session_maximum": int(per_session.max()) if len(per_session) else 0,
-            "sessions_without_candidates": (
-                int(liquidity["session_date_et"].nunique()) - int(len(per_session))
-            ),
         },
         "memory": memory_audit(
             hard_budget_gib=_MEMORY_BUDGET_GIB,
             headroom_gib=_MEMORY_HEADROOM_GIB,
         ).to_record(),
     }
-    return IntradaySelectionResult(liquidity=liquidity, selection=selection, audit=audit)
+    return IntradaySelectionResult(
+        liquidity=activity,
+        selection=selection,
+        audit=audit,
+    )
+
+
+def _verify_canonical_regular_store(
+    directory: Path,
+) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    manifest = load_plan_json(directory / "_manifest.json")
+    authority = load_plan_json(directory / "_authority.json")
+    if (
+        manifest.get("schema") != "edge_rebuild.intraday_materialization.v1"
+        or authority.get("schema")
+        != "edge_rebuild.intraday_materialization_authority.v1"
+        or authority.get("state") != "complete"
+        or authority.get("artifact") != "_manifest.json"
+        or authority.get("artifact_sha256")
+        != file_sha256(directory / "_manifest.json")
+    ):
+        raise DataReadinessError(
+            f"intraday canonical store lacks matching authority: {directory}"
+        )
+    raw_files = manifest.get("files")
+    if not isinstance(raw_files, list):
+        raise DataReadinessError("intraday canonical manifest has no files")
+    records: list[dict[str, Any]] = []
+    root = directory.resolve()
+    for raw in raw_files:
+        if not isinstance(raw, Mapping) or raw.get("store") != "regular":
+            continue
+        record = {str(key): value for key, value in raw.items()}
+        path = (root / str(record.get("path", ""))).resolve()
+        if root not in path.parents or file_sha256(path) != record.get("sha256"):
+            raise DataReadinessError(f"canonical regular file failed its hash: {path}")
+        records.append(record)
+    if not records:
+        raise DataReadinessError("intraday canonical store has no regular files")
+    return manifest, sorted(records, key=lambda item: str(item["ticker"]))
 
 
 def publish_intraday_selection(
@@ -358,12 +535,7 @@ def publish_intraday_selection(
     *,
     output_directory: Path,
 ) -> dict[str, Any]:
-    """Write the screen as a hash-bound, replayable research artifact.
-
-    The manifest carries each table's sha256 and row count; the authority binds
-    the manifest's own hash to the request identity. A reader that verifies both
-    cannot be handed a table that was edited after publication.
-    """
+    """Write the event-time screen as a hash-bound research artifact."""
 
     if (output_directory / "_authority.json").exists():
         raise DataReadinessError(
@@ -376,7 +548,7 @@ def publish_intraday_selection(
             "schema",
             "strategy_id",
             "strategy_contract_sha256",
-            "collection_dir",
+            "canonical_dir",
             "first_session_et",
             "last_session_et",
             "excluded_tickers",
@@ -387,9 +559,8 @@ def publish_intraday_selection(
         output_directory / "_request.json",
         {**request, "request_sha256": request_sha256},
     )
-
     tables = {
-        "session_liquidity.parquet": result.liquidity,
+        "session_activity_audit.parquet": result.liquidity,
         "selected_stock_sessions.parquet": result.selection,
     }
     records: list[dict[str, Any]] = []
@@ -457,20 +628,9 @@ def load_complete_intraday_selection(directory: Path) -> dict[str, Any]:
     return manifest
 
 
-def _collection_artifacts(collection_dir: Path) -> dict[str, Path]:
-    """Resolve per-symbol bar artifacts from a completed collection manifest."""
+def _empty_activity() -> pd.DataFrame:
+    return pd.DataFrame(columns=list(ACTIVITY_AUDIT_COLUMNS))
 
-    manifest_path = collection_dir / "_manifest.json"
-    if not manifest_path.is_file():
-        raise DataReadinessError(
-            f"daily collection is not finalized, no manifest at {manifest_path}"
-        )
-    payload = json.loads(manifest_path.read_text(encoding="utf-8"))
-    records = payload.get("artifacts")
-    if not isinstance(records, list) or not records:
-        raise DataReadinessError(f"daily collection manifest has no artifacts: {manifest_path}")
-    artifacts: dict[str, Path] = {}
-    for record in records:
-        ticker = str(record["ticker"]).strip().upper()
-        artifacts[ticker] = Path(str(record["path"]))
-    return artifacts
+
+def _empty_selection() -> pd.DataFrame:
+    return pd.DataFrame(columns=list(SELECTION_COLUMNS))
