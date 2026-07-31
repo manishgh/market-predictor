@@ -152,6 +152,29 @@ def test_discovery_refuses_authority_when_page_limit_does_not_reach_boundary(tmp
     assert transport.calls == ["search:0", "search:99"]
 
 
+def test_period_used_urls_may_be_subset_of_complete_source_manifest(
+    tmp_path: Path,
+) -> None:
+    audit_path, _, _ = _write_source_audit(tmp_path)
+    audit = _read_json(audit_path)
+    audit["source_urls"] = audit["source_urls"][:-5]
+    audit_path.write_text(json.dumps(audit), encoding="utf-8")
+
+    assert len(archive_module._load_seed_announcements(audit_path)) == 83
+
+
+def test_period_used_urls_cannot_reference_unknown_source(tmp_path: Path) -> None:
+    audit_path, _, _ = _write_source_audit(tmp_path)
+    audit = _read_json(audit_path)
+    audit["source_urls"].append(
+        "https://press.spglobal.com/2026-07-01-unknown-source"
+    )
+    audit_path.write_text(json.dumps(audit), encoding="utf-8")
+
+    with pytest.raises(DataReadinessError, match="outside source_manifest"):
+        archive_module._load_seed_announcements(audit_path)
+
+
 def test_discovery_unions_seed_urls_and_broad_membership_title(tmp_path: Path) -> None:
     audit_path, audit_hash, seeds = _write_source_audit(tmp_path)
     extra = "https://press.spglobal.com/2018-05-01-Netflix-and-Twitter-to-Join-S-P-500"

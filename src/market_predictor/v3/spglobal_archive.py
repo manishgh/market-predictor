@@ -830,8 +830,12 @@ def _load_seed_announcements(path: Path) -> list[_Announcement]:
             f"frozen source audit must contain exactly {EXPECTED_SEED_URLS} distinct URLs, got {len(by_url)}"
         )
     audit_urls = audit.get("source_urls")
-    if isinstance(audit_urls, list) and {str(item) for item in audit_urls} != set(by_url):
-        raise DataReadinessError("source audit URL inventory conflicts with source_manifest.sources")
+    if isinstance(audit_urls, list) and not {
+        str(item) for item in audit_urls
+    }.issubset(by_url):
+        raise DataReadinessError(
+            "source audit URL inventory contains URLs outside source_manifest.sources"
+        )
     return sorted(by_url.values(), key=lambda item: (item.published_date, item.url))
 
 
