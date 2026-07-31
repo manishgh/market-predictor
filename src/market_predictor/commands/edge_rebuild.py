@@ -39,6 +39,9 @@ from market_predictor.edge_rebuild.selected_session_history import (
     build_selected_session_history_plan,
 )
 from market_predictor.edge_rebuild.strategy_contract import load_strategy_contract
+from market_predictor.edge_rebuild.swing_history_acquisition import (
+    publish_swing_history_acquisition_plan,
+)
 from market_predictor.edge_rebuild.swing_materialization import (
     materialize_swing_feature_panel,
 )
@@ -59,6 +62,46 @@ from market_predictor.v3.errors import DataReadinessError
 
 
 def register_edge_rebuild_commands(app: typer.Typer, console: Any) -> None:
+    @app.command("plan-edge-rebuild-swing-history")
+    @serialized_heavy_job("plan-edge-rebuild-swing-history")
+    def plan_edge_rebuild_swing_history(
+        temporal_manifest_dir: Path = typer.Option(...),
+        memberships: Path = typer.Option(...),
+        universe_audit: Path = typer.Option(...),
+        current_daily_collection_dir: Path = typer.Option(...),
+        out_dir: Path = typer.Option(...),
+        repository_root: Path = typer.Option(Path(".")),
+    ) -> None:
+        """Plan membership-first acquisition for missing swing history."""
+
+        result = publish_swing_history_acquisition_plan(
+            repository_root=repository_root,
+            temporal_manifest_directory=temporal_manifest_dir,
+            memberships_path=memberships,
+            universe_audit_path=universe_audit,
+            current_daily_collection_directory=current_daily_collection_dir,
+            output_directory=out_dir,
+        )
+        membership = result["membership"]
+        console.print(
+            {
+                "status": result["status"],
+                "missing_session_ranges": result["missing_session_ranges"],
+                "membership": {
+                    key: membership[key]
+                    for key in (
+                        "current_membership_start",
+                        "required_start",
+                        "required_end",
+                        "reusable_official_sources",
+                        "total_official_sources",
+                        "invalid_official_sources",
+                    )
+                },
+                "daily_bars": result["daily_bars"],
+            }
+        )
+
     @app.command("freeze-edge-rebuild-temporal-manifest")
     @serialized_heavy_job("freeze-edge-rebuild-temporal-manifest")
     def freeze_edge_rebuild_temporal_manifest(

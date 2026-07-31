@@ -94,6 +94,7 @@
     "plan-edge-rebuild-extended-session-context",
     "plan-edge-rebuild-intraday-history",
     "plan-edge-rebuild-selected-session-history",
+    "plan-edge-rebuild-swing-history",
     "plan-intraday-specialist-one-minute",
     "promote-intraday-model",
     "promote-swing-model",
