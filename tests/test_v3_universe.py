@@ -77,6 +77,27 @@ class V3PointInTimeUniverseTests(unittest.TestCase):
         self.assertEqual([(item.action, item.ticker) for item in changes], [("addition", "NEW"), ("deletion", "OLD")])
         self.assertEqual(changes[0].effective_at_utc.isoformat(), "2026-01-05T05:00:00+00:00")
 
+    def test_parser_binds_exact_stored_source_hash(self) -> None:
+        source_sha256 = "a" * 64
+
+        changes = parse_sp500_changes(
+            _announcement_html(),
+            source_url="https://press.spglobal.com/2026-01-01-example",
+            published_date=date(2026, 1, 1),
+            source_sha256=source_sha256,
+        )
+
+        self.assertEqual({item.source_sha256 for item in changes}, {source_sha256})
+
+    def test_parser_rejects_invalid_explicit_source_hash(self) -> None:
+        with self.assertRaisesRegex(DataReadinessError, "source SHA-256"):
+            parse_sp500_changes(
+                _announcement_html(),
+                source_url="https://press.spglobal.com/2026-01-01-example",
+                published_date=date(2026, 1, 1),
+                source_sha256="not-a-hash",
+            )
+
     def test_structured_table_forward_fills_effective_date(self) -> None:
         html = _announcement_html().replace(
             "<tr><td>January 5, 2026</td><td>S&amp;P 500</td><td>Deletion</td>",

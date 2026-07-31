@@ -315,9 +315,17 @@ def discover_sp500_change_announcements(
     return links
 
 
-def parse_sp500_changes(html: str, *, source_url: str, published_date: date) -> list[IndexChange]:
+def parse_sp500_changes(
+    html: str,
+    *,
+    source_url: str,
+    published_date: date,
+    source_sha256: str | None = None,
+) -> list[IndexChange]:
     """Parse exact S&P 500 addition/deletion rows from one official release."""
-    digest = hashlib.sha256(html.encode("utf-8")).hexdigest()
+    digest = source_sha256 or hashlib.sha256(html.encode("utf-8")).hexdigest()
+    if not re.fullmatch(r"[0-9a-f]{64}", digest):
+        raise DataReadinessError("Official announcement source SHA-256 is invalid")
     soup = BeautifulSoup(html, "html.parser")
     changes: list[IndexChange] = []
     deferred_rows = 0
