@@ -123,6 +123,14 @@ def test_raw_news_counts_cannot_be_enabled() -> None:
         StrategyContract.model_validate(raw)
 
 
+def test_cross_sectional_outputs_cannot_be_disabled() -> None:
+    raw = _raw()
+    raw["features"]["cross_sectional_emit_sector_relative"] = False
+
+    with pytest.raises(ValueError, match="sector-relative"):
+        StrategyContract.model_validate(raw)
+
+
 def test_relationship_features_use_the_frozen_published_methods() -> None:
     raw = _raw()
     raw["features"]["technical_relationship_methods"] = [

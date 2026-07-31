@@ -127,8 +127,11 @@ from market_predictor.edge_rebuild.setup_economics import (
     SetupEconomicsConfig,
 )
 from market_predictor.edge_rebuild.strategy_contract import StrategyContract
+from market_predictor.edge_rebuild.swing_features import (
+    attach_setup_components,
+    swing_dataset_config,
+)
 from market_predictor.resources import assert_memory_budget
-from market_predictor.swing.contracts import SwingDatasetConfig
 from market_predictor.swing.dataset import build_swing_feature_history
 from market_predictor.swing.labels import add_exact_swing_labels
 from market_predictor.v3.errors import DataReadinessError
@@ -214,65 +217,9 @@ def drop_placeholder_bars(bars: pd.DataFrame) -> tuple[pd.DataFrame, int]:
     return traded, int(len(bars) - len(traded))
 
 
-def swing_dataset_config(contract: StrategyContract) -> SwingDatasetConfig:
-    """Bind the shared feature/label builder to the frozen swing contract."""
-
-    swing = contract.swing
-    return SwingDatasetConfig(
-        feature_profile=SWING_SETUP_FEATURE_PROFILE,
-        horizon_sessions=swing.horizon_sessions,
-        round_trip_cost_bps=swing.round_trip_cost_bps,
-        min_daily_bars=swing.minimum_warmup_sessions,
-        required_ticker_sources=(),
-        required_global_sources=(),
-    )
-
-
 # --------------------------------------------------------------------------- #
 # The deterministic setup rule
 # --------------------------------------------------------------------------- #
-def attach_setup_components(
-    features: pd.DataFrame,
-    benchmark_features: pd.DataFrame,
-) -> pd.DataFrame:
-    """Attach every setup component from bars at or before the decision.
-
-    The 20-session benchmark returns are already joined by the shared builder. The
-    60-session ones are projected from the *same* benchmark technical frame the
-    builder computed, so there is no second benchmark-return implementation.
-    """
-
-    horizon_returns = benchmark_features.loc[:, ["ticker", "session_date_et", "return_60d"]]
-    spy_rows = horizon_returns.loc[horizon_returns["ticker"].astype(str).str.upper().eq("SPY")]
-    if spy_rows.empty:
-        raise DataReadinessError("swing setup residuals require SPY benchmark features")
-    spy = spy_rows.rename(columns={"return_60d": "spy_return_60d"}).drop(columns="ticker")
-    sector = horizon_returns.rename(
-        columns={"ticker": "primary_benchmark", "return_60d": "sector_return_60d"}
-    )
-    data = features.merge(spy, on="session_date_et", how="left", validate="many_to_one")
-    data = data.merge(
-        sector,
-        on=["primary_benchmark", "session_date_et"],
-        how="left",
-        validate="many_to_one",
-    )
-
-    for window in (20, 60):
-        stock = data[f"return_{window}d"]
-        data[f"residual_return_{window}d_vs_spy"] = stock - data[f"spy_return_{window}d"]
-        data[f"residual_return_{window}d_vs_sector"] = stock - data[f"sector_return_{window}d"]
-
-    # Explicit within-security lags. The pullback is measured on the bar before the
-    # decision bar, which is what makes the reclaim on the decision bar a crossing.
-    data = data.sort_values(["security_id", "session_date_et"], kind="stable")
-    grouped = data.groupby("security_id", sort=False)
-    data["prior_dist_ema_10"] = grouped["dist_ema_10"].shift(1)
-    data["prior_dist_sma_200"] = grouped["dist_sma_200"].shift(1)
-    data["dollar_volume"] = data["close"] * data["volume"]
-    return data
-
-
 def swing_setup_mask(components: pd.DataFrame, *, contract: StrategyContract) -> pd.Series:
     """The deterministic one-shot qualification test. Missing evidence never qualifies."""
 

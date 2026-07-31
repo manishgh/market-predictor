@@ -277,6 +277,10 @@ class FeatureContract(FrozenModel):
     extended_context_enabled: bool
     news_count_normalization: str
     raw_news_counts_prohibited: bool
+    cross_sectional_winsorize_quantile: float = Field(ge=0, lt=0.25)
+    cross_sectional_emit_zscore: bool
+    cross_sectional_emit_rank: bool
+    cross_sectional_emit_sector_relative: bool
     sentiment_decay_half_life_minutes_intraday: float = Field(gt=0, le=1_440)
     sentiment_decay_half_life_hours_swing: float = Field(gt=0, le=336)
     swing_sentiment_decay_evidence: str
@@ -298,6 +302,15 @@ class FeatureContract(FrozenModel):
             "trailing_baseline_ratio",
         }:
             raise ValueError("news counts must be normalized within a cross-section")
+        if not (
+            self.cross_sectional_emit_zscore
+            and self.cross_sectional_emit_rank
+            and self.cross_sectional_emit_sector_relative
+        ):
+            raise ValueError(
+                "swing ranking requires cross-sectional z-score, rank, and "
+                "sector-relative outputs"
+            )
         expected_relationships = (
             "williams_five_bar_rsi_divergence",
             "granville_obv_confirmation",

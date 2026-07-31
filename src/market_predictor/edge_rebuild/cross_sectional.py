@@ -92,17 +92,22 @@ def add_cross_sectional_features(
     frame = panel.copy()
     by_time = frame.groupby(timestamp_column, sort=False)
     eligible = by_time[timestamp_column].transform("size") >= spec.minimum_cross_section
+    derived: dict[str, pd.Series] = {}
 
     for name in features:
         values = pd.to_numeric(frame[name], errors="coerce")
         clipped = _winsorize(values, by_time, spec.winsorize_quantile)
         if spec.emit_zscore:
-            frame[f"{name}{Z_SUFFIX}"] = _zscore(clipped, by_time).where(eligible)
+            derived[f"{name}{Z_SUFFIX}"] = _zscore(clipped, by_time).where(
+                eligible
+            )
         if spec.emit_rank:
             # Centred on zero so the middle of the cross-section is neutral and
             # the sign carries meaning on its own.
             ranked = clipped.groupby(frame[timestamp_column]).rank(pct=True)
-            frame[f"{name}{RANK_SUFFIX}"] = (ranked * 2.0 - 1.0).where(eligible)
+            derived[f"{name}{RANK_SUFFIX}"] = (ranked * 2.0 - 1.0).where(
+                eligible
+            )
 
     if spec.emit_sector_relative:
         keys = [timestamp_column, sector_column]
@@ -113,10 +118,21 @@ def add_cross_sectional_features(
         for name in features:
             values = pd.to_numeric(frame[name], errors="coerce")
             clipped = _winsorize(values, by_sector, spec.winsorize_quantile)
-            frame[f"{name}{SECTOR_Z_SUFFIX}"] = _zscore(clipped, by_sector).where(
+            derived[f"{name}{SECTOR_Z_SUFFIX}"] = _zscore(
+                clipped,
+                by_sector,
+            ).where(
                 sector_eligible
             )
-    return frame
+    collisions = sorted(set(derived).intersection(frame.columns))
+    if collisions:
+        raise DataReadinessError(
+            f"cross-sectional output columns already exist: {collisions}"
+        )
+    return pd.concat(
+        [frame, pd.DataFrame(derived, index=frame.index)],
+        axis=1,
+    )
 
 
 def cross_sectional_feature_names(

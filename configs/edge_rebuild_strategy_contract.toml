@@ -210,6 +210,13 @@ extended_context_enabled = true
 # within a decision cross-section or against the ticker's own recent history.
 news_count_normalization = "cross_sectional_rank"
 raw_news_counts_prohibited = true
+# Cross-sectional values are computed only from feature-eligible securities in
+# the same decision session. Tails are clipped before z-scoring so one extreme
+# move cannot flatten the rest of the day's distribution.
+cross_sectional_winsorize_quantile = 0.01
+cross_sectional_emit_zscore = true
+cross_sectional_emit_rank = true
+cross_sectional_emit_sector_relative = true
 # Sentiment decays from an impulse rather than switching off at a window edge.
 # Frozen here and never tuned on validation results.
 #
