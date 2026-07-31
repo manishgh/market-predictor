@@ -2,14 +2,14 @@
 
 Status: intraday corpus published and verified. Swing rejected and being rebuilt
 as a ranking strategy. Labels, cross-sectional scaling, and causal technical
-relationship primitives are built. The causal swing feature-panel builder is
-built; the full seven-year panel has not been materialized and no model exists.
-Nothing is running.
+relationship primitives are built. The full seven-year causal swing panel is
+published and immutable; the technical ordering gate has not run and no model
+exists. Nothing is running.
 Last updated: 2026-07-31
 Repository: `C:\project\market-predictor`
 Remote: `https://github.com/manishgh/market-predictor`
 Branch: `r3-lineage`
-Last completed implementation commit: `fccda19`
+Last completed implementation commit: `b91c5ee`
 
 ## Repository Cleanup
 
@@ -30,8 +30,9 @@ the new-only policy. No runtime compatibility path is supported.
 - Focused governance and architecture verification passed 17 tests. No Python
   process was left running.
 
-Generated feature directories are intentionally absent until the next canonical
-build. Their absence is not a readiness defect.
+The current generated feature authority is
+`data/features/edge_rebuild_swing_panel_20190709_20260708_v1`. No superseded
+feature directory is retained.
 
 Read in this order:
 
@@ -169,6 +170,26 @@ commit `fccda19`.
   removed DataFrame fragmentation and avoids repeating a large schema string on
   every one of the roughly one million rows.
 
+## Swing Panel Is Published
+
+`data/features/edge_rebuild_swing_panel_20190709_20260708_v1` has complete
+authority. It contains 883,604 rows, 627 securities, and 1,759 sessions from
+2019-07-09 through 2026-07-08. Of those rows, 733,515 are feature-eligible,
+869,242 have resolved barrier outcomes, and 450,074 are rank-eligible. The
+source replay removed 2,897 zero-volume provider placeholders.
+
+Stage one consists of 20 hash-verified security shards. Stage two processes
+eight disjoint session-year partitions, each containing the complete security
+population for every date; it is never partitioned by security. The initial
+all-years pandas pass was correctly refused at 8.06 GiB peak RSS. The published
+pass peaked at 1.7724 GiB under the 3.25 GiB safety threshold. Immutable replay
+verified all final partition hashes. Final manifest SHA-256:
+`a939de80ba7cc76821dde07ad73d0e7edab0af1cbaa7b938816ad20a9dd6b55b`.
+
+Verification: 751 tests passed with 85 existing warnings; Ruff, strict mypy
+across 193 source files, compileall, and `git diff --check` passed. No Python
+worker remains.
+
 ## Contract, As Frozen
 
 Names are `swing` and `intraday`. No version suffixes — nothing is in
@@ -246,24 +267,18 @@ recur, the correct answer is a volume-confirmed exemption, not a bigger number.
 
 ## Exact Next Steps
 
-1. **Materialize the seven-year swing panel.** Run stage one in bounded security
-   batches, concatenate only the row shards, then run the single
-   population-wide stage-two pass. Publish an immutable manifest with row,
-   security, session, feature-eligibility, barrier-resolution,
-   rank-eligibility, source-profile, hash, and peak-memory evidence. Do not
-   split stage two by security.
-2. **Check the technical signal orders stocks correctly, before training
+1. **Check the technical signal orders stocks correctly, before training
    anything.** Sort
    each session by a simple score and compare the top tenth against the bottom
    tenth over the next ten days. If that spread is near zero there is nothing to
    rank and no model will help; stop and change the signal. This replaces the
    test that misfired.
-3. **Deterministic top-25 portfolio, no model.** Build the equity curve against
+2. **Deterministic top-25 portfolio, no model.** Build the equity curve against
    SPY. This is the number any model must beat.
-4. **Train** LambdaMART or LightGBM ranking, purged splits with embargo, then
+3. **Train** LambdaMART or LightGBM ranking, purged splits with embargo, then
    the unseen-stock holdout. Published work reports roughly threefold better
    risk-adjusted return from learning-to-rank on exactly this strategy family.
-5. **Intraday setup and its economics gate**, same order: population first,
+4. **Intraday setup and its economics gate**, same order: population first,
    model only if the population earns.
 
 ## Not Started

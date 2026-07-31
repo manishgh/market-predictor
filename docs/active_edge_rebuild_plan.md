@@ -477,11 +477,34 @@ Verification passed 748 tests with 85 existing warnings, Ruff, strict mypy
 across 192 source files, compileall, and `git diff --check`. No Python worker
 remained.
 
-This completes the feature-builder implementation, not panel materialization.
-The exact next action is to publish the full seven-year panel through bounded
-stage-one shards and one complete stage-two pass, with immutable lineage and
-peak-memory evidence. No estimator may be trained before the simple top-decile
-versus bottom-decile ordering test passes.
+Implementation commits `c292b7d` and `b91c5ee` added the resumable materializer
+and bounded its complete-population pass by disjoint session years. Stage two
+is never split by security: every decision date is transformed against its full
+tradable cross-section. The time partition reduced measured peak RSS from a
+refused 8.06 GiB all-at-once attempt to 1.7724 GiB.
+
+The authoritative panel is
+`data/features/edge_rebuild_swing_panel_20190709_20260708_v1`:
+
+- 883,604 rows, 627 securities, and 1,759 sessions from 2019-07-09 through
+  2026-07-08;
+- 733,515 feature-eligible rows, 869,242 resolved barrier outcomes, and
+  450,074 rank-eligible rows;
+- 20 verified stage-one shards and eight immutable yearly final partitions;
+- 2,897 zero-volume provider placeholders removed before feature computation;
+- request SHA-256
+  `815ade0c661f6f35ecb1f9c49d7fd35c6f3e96cf2b02b0f6faaef0288b55252f`;
+- final manifest SHA-256
+  `a939de80ba7cc76821dde07ad73d0e7edab0af1cbaa7b938816ad20a9dd6b55b`;
+- frozen strategy-contract SHA-256
+  `16709f3686ec737caa206dc1f45a80ea24f61d2dd1d18ded0b78cf978a433e38`.
+
+Immutable replay verified every partition hash. Verification passed 751 tests
+with 85 existing warnings, Ruff, strict mypy across 193 source files,
+compileall, and `git diff --check`. No Python worker remained.
+
+Panel materialization is complete. No estimator may be trained before the
+simple top-decile versus bottom-decile technical ordering test passes.
 
 ### ER1A Repository And Data Convergence
 
