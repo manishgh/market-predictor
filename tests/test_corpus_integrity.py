@@ -20,6 +20,7 @@ def _row(
     zero_volume: int = 0,
     distinct_close: int = 40,
     last_close: float = 100.0,
+    total_volume: int = 1_000_000,
 ) -> dict[str, object]:
     return {
         "session": session,
@@ -30,6 +31,7 @@ def _row(
         "zero_volume_bars": zero_volume,
         "distinct_close": distinct_close,
         "last_close": last_close,
+        "total_volume": total_volume,
     }
 
 
@@ -209,7 +211,17 @@ def test_zero_volume_and_frozen_price_bars_are_rejected() -> None:
     """Provider placeholders for a dead symbol are not observations."""
 
     frame = pd.DataFrame(
-        [_row("2024-01-02", "DEAD", 78, zero_volume=78, distinct_close=1, last_close=3.15)]
+        [
+            _row(
+                "2024-01-02",
+                "DEAD",
+                78,
+                zero_volume=78,
+                distinct_close=1,
+                last_close=3.15,
+                total_volume=0,
+            )
+        ]
     )
 
     report = verify_corpus_integrity(frame, label="fabricated")
@@ -245,6 +257,8 @@ def test_thresholds_reject_incoherent_limits() -> None:
         IntegrityThresholds(minimum_regular_completeness=0.0)
     with pytest.raises(ValueError, match="close-ratio ceiling"):
         IntegrityThresholds(maximum_session_close_ratio=1.0)
+    with pytest.raises(ValueError, match="excluded-symbol share"):
+        IntegrityThresholds(maximum_excluded_symbol_share=1.01)
 
 
 def test_missing_input_columns_fail_closed() -> None:
@@ -253,3 +267,43 @@ def test_missing_input_columns_fail_closed() -> None:
             pd.DataFrame({"session": ["2024-01-02"], "ticker": ["T0"]}),
             label="partial",
         )
+
+
+def test_a_flat_price_on_real_volume_is_trading_not_a_placeholder() -> None:
+    """A par-pegged preferred prints a whole session at one price on 15M shares."""
+
+    frame = pd.DataFrame(
+        [
+            _row(
+                "2024-01-02",
+                "STRC",
+                78,
+                distinct_close=1,
+                last_close=95.99,
+                total_volume=15_824_325,
+            )
+        ]
+    )
+
+    report = verify_corpus_integrity(frame, label="pegged")
+
+    assert report.defect_count == 0
+
+
+def test_a_level_jump_across_sparse_coverage_is_not_an_identity_break() -> None:
+    """Screened symbols are collected only on selected sessions.
+
+    Two consecutive rows can sit months apart, so the ratio between them
+    measures months of drift rather than one move.
+    """
+
+    frame = pd.DataFrame(
+        [
+            _row("2024-01-02", "CAPR", 78, last_close=6.36),
+            _row("2024-06-14", "CAPR", 78, last_close=29.96),
+        ]
+    )
+
+    report = verify_corpus_integrity(frame, label="sparse")
+
+    assert not [b for b in report.identity_breaks if b["reason"] == "close_ratio"]

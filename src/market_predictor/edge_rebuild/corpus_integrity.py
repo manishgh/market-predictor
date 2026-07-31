@@ -49,7 +49,11 @@ class IntegrityThresholds:
     maximum_isolated_defect_share: float = 0.0001
     minimum_session_median_completeness: float = 0.90
     maximum_session_close_ratio: float = 3.0
+    # Two sessions are adjacent across a weekend or a holiday weekend. Beyond
+    # that the coverage is sparse by design and a level comparison is meaningless.
+    maximum_adjacent_session_days: int = 5
     maximum_interior_gap_sessions: int = 5
+    maximum_excluded_symbol_share: float = 0.05
     reject_zero_volume: bool = True
 
     def __post_init__(self) -> None:
@@ -65,6 +69,8 @@ class IntegrityThresholds:
             raise ValueError("close-ratio ceiling must exceed 1.0")
         if self.maximum_interior_gap_sessions < 1:
             raise ValueError("interior gap ceiling must be positive")
+        if not 0.0 <= self.maximum_excluded_symbol_share <= 1.0:
+            raise ValueError("excluded-symbol share must be in [0, 1]")
 
 
 @dataclass
@@ -167,6 +173,7 @@ def verify_corpus_integrity(
         "zero_volume_bars",
         "distinct_close",
         "last_close",
+        "total_volume",
     }
     missing = sorted(required.difference(ticker_sessions.columns))
     if missing:
@@ -286,8 +293,16 @@ def _check_fabricated_bars(
         )
     # A symbol resting at one price across a handful of pre-market prints is
     # ordinary, so a frozen price only means anything during the regular session.
+    #
+    # It also only means anything when nothing traded. An instrument designed to
+    # hold a fixed value, such as a par-pegged preferred, prints a whole session
+    # at one price on real volume; that is genuine trading at a stable price,
+    # not a placeholder. The placeholder signature is the absence of trades.
     regular = frame[frame["segment"] == REGULAR_SEGMENT]
-    frozen = regular[(regular["bars"] >= 10) & (regular["distinct_close"] == 1)]
+    traded = pd.to_numeric(regular["total_volume"], errors="coerce").fillna(0)
+    frozen = regular[
+        (regular["bars"] >= 10) & (regular["distinct_close"] == 1) & (traded <= 0)
+    ]
     for row in frozen.itertuples():
         report.fabricated_bars.append(
             {
@@ -305,7 +320,15 @@ def _check_identity_continuity(
     report: IntegrityReport,
     member_sessions: Mapping[str, Iterable[str]] | None,
 ) -> None:
-    """A reused or renamed symbol shows a long gap, a level jump, or both."""
+    """A reused or renamed symbol shows a long gap, a level jump, or both.
+
+    The level test only means anything between sessions that are actually
+    adjacent. Coverage is deliberately sparse for symbols collected only on the
+    sessions a screen selected, so two consecutive rows can sit months apart and
+    the ratio between them measures months of drift rather than one move. A
+    symbol that genuinely changed hands is still caught, by the gap test, which
+    is the correct instrument for a break across missing time.
+    """
 
     if regular.empty:
         return
@@ -316,7 +339,12 @@ def _check_identity_continuity(
     ratio = pd.concat([ordered["close_value"], previous], axis=1).max(axis=1) / pd.concat(
         [ordered["close_value"], previous], axis=1
     ).min(axis=1)
-    jumped = ordered[(ratio > limits.maximum_session_close_ratio) & previous.notna()]
+    stamps = pd.to_datetime(ordered["session"], errors="coerce")
+    calendar_gap = stamps.groupby(ordered["ticker"]).diff().dt.days
+    adjacent = calendar_gap <= limits.maximum_adjacent_session_days
+    jumped = ordered[
+        (ratio > limits.maximum_session_close_ratio) & previous.notna() & adjacent
+    ]
     for row, value in zip(jumped.itertuples(), ratio[jumped.index], strict=True):
         report.identity_breaks.append(
             {

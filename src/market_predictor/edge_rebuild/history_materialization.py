@@ -243,6 +243,7 @@ def reorganize_intraday_history(
     staging = output_dir.with_name(f".{output_dir.name}.{uuid.uuid4().hex}.staging")
     staging.mkdir(parents=True)
     try:
+        limits = thresholds or IntegrityThresholds()
         buckets = _shuffle_into_buckets(
             collected_dirs=collected_dirs,
             legacy_dirs=legacy_dirs,
@@ -257,12 +258,21 @@ def reorganize_intraday_history(
             output_root=staging / "published",
             budget=(memory_budget_gib, memory_headroom_gib),
             expected_bars=expected_bars_per_session_segment(bounds),
+            thresholds=limits,
         )
         report = verify_corpus_integrity(
             summary.pop("_ticker_sessions"),
             label="materialized intraday corpus",
-            thresholds=thresholds,
+            thresholds=limits,
         )
+        exclusions = summary.pop("_exclusions")
+        input_symbols = int(summary.pop("_input_symbols"))
+        fully_excluded = {
+            str(item["ticker"])
+            for item in exclusions
+            if item["scope"] == "ticker"
+        }
+        excluded_symbol_share = len(fully_excluded) / max(1, input_symbols)
         manifest: dict[str, Any] = {
             "schema": MATERIALIZATION_SCHEMA,
             "created_at_utc": datetime.now(UTC).isoformat(),
@@ -287,6 +297,15 @@ def reorganize_intraday_history(
             ),
             "segment_rule": "exchange session open/close, never clock time",
             "integrity": report.to_record(),
+            "exclusion_policy": {
+                "input_symbols": input_symbols,
+                "fully_excluded_symbols": len(fully_excluded),
+                "fully_excluded_symbol_share": excluded_symbol_share,
+                "maximum_excluded_symbol_share": (
+                    limits.maximum_excluded_symbol_share
+                ),
+                "exclusions": exclusions,
+            },
             "memory": memory_audit(
                 hard_budget_gib=memory_budget_gib,
                 headroom_gib=memory_headroom_gib,
@@ -294,10 +313,21 @@ def reorganize_intraday_history(
             **summary,
         }
         published = staging / "published"
-        if report.defect_count:
+        if (
+            report.blocking_defect_count
+            or excluded_symbol_share > limits.maximum_excluded_symbol_share
+        ):
             # A refused build must still say why, or the next run starts blind.
             rejection = output_dir.with_name(f"{output_dir.name}_rejected.json")
             _write_json(rejection, manifest)
+            if excluded_symbol_share > limits.maximum_excluded_symbol_share:
+                raise DataReadinessError(
+                    "materialized intraday corpus excluded "
+                    f"{len(fully_excluded)} of {input_symbols} symbols "
+                    f"({excluded_symbol_share:.2%}), above the frozen "
+                    f"{limits.maximum_excluded_symbol_share:.2%} ceiling "
+                    f"(findings written to {rejection})"
+                )
             report.raise_if_defective(
                 f"materialized intraday corpus (findings written to {rejection})"
             )
@@ -446,6 +476,7 @@ def _write_symbol_stores(
     output_root: Path,
     budget: tuple[float, float],
     expected_bars: Mapping[tuple[str, str], int],
+    thresholds: IntegrityThresholds,
 ) -> dict[str, Any]:
     """Second pass: one bucket at a time, write final per-symbol files."""
 
@@ -453,6 +484,8 @@ def _write_symbol_stores(
     output_root.mkdir(parents=True, exist_ok=True)
     records: list[dict[str, Any]] = []
     ticker_sessions: list[pd.DataFrame] = []
+    exclusions: list[dict[str, Any]] = []
+    input_symbols: set[str] = set()
     totals = {REGULAR: 0, PREMARKET: 0, POSTMARKET: 0}
     for index in range(buckets):
         parts = sorted((bucket_dir / f"{index:02d}").glob("*.parquet"))
@@ -460,9 +493,19 @@ def _write_symbol_stores(
             continue
         frame = pd.concat([pd.read_parquet(p) for p in parts], ignore_index=True)
         for ticker, group in frame.groupby("ticker", sort=True):
+            input_symbols.add(str(ticker))
             ordered = _resolve_overlapping_sources(
                 group.sort_values("bar_start_utc"), str(ticker)
             )
+            ordered, findings = _quarantine_ticker_defects(
+                ordered,
+                str(ticker),
+                expected_bars,
+                thresholds,
+            )
+            exclusions.extend(findings)
+            if ordered.empty:
+                continue
             for segment, store in ((REGULAR, "regular"), (None, "extended")):
                 part = (
                     ordered[ordered["session_segment"] == REGULAR]
@@ -491,6 +534,10 @@ def _write_symbol_stores(
         release_process_memory()
         _guard(budget, f"materialization publish bucket {index}")
 
+    if not ticker_sessions:
+        raise DataReadinessError(
+            "materialization quarantined every symbol; no corpus can be published"
+        )
     combined = pd.concat(ticker_sessions, ignore_index=True)
     _assert_stores_disjoint(records)
     return {
@@ -499,7 +546,63 @@ def _write_symbol_stores(
         "rows_by_segment": totals,
         "total_rows": int(sum(totals.values())),
         "_ticker_sessions": combined,
+        "_exclusions": exclusions,
+        "_input_symbols": len(input_symbols),
     }
+
+
+def _quarantine_ticker_defects(
+    ordered: pd.DataFrame,
+    ticker: str,
+    expected_bars: Mapping[tuple[str, str], int],
+    thresholds: IntegrityThresholds,
+) -> tuple[pd.DataFrame, list[dict[str, Any]]]:
+    """Remove observations whose identity or trade evidence cannot be proved.
+
+    An identity break invalidates the complete ticker history because its rows
+    cannot be assigned safely to one issuer. Fabricated bars invalidate only
+    that ticker-session. Both exclusions remain explicit in the manifest.
+    """
+
+    rows = _ticker_session_rows(ordered, ticker, expected_bars)
+    report = verify_corpus_integrity(
+        rows,
+        label=f"{ticker} materialization input",
+        thresholds=thresholds,
+    )
+    if report.identity_breaks:
+        return ordered.iloc[0:0].copy(), [
+            {
+                "ticker": ticker,
+                "scope": "ticker",
+                "reason": "unprovable_identity",
+                "findings": report.identity_breaks,
+            }
+        ]
+
+    fabricated_sessions = sorted(
+        {str(item["session"]) for item in report.fabricated_bars}
+    )
+    if not fabricated_sessions:
+        return ordered, []
+    findings = [
+        {
+            "ticker": ticker,
+            "scope": "ticker_session",
+            "session": session,
+            "reason": "fabricated_bars",
+            "findings": [
+                item
+                for item in report.fabricated_bars
+                if str(item["session"]) == session
+            ],
+        }
+        for session in fabricated_sessions
+    ]
+    clean = ordered.loc[
+        ~ordered["session_date_et"].astype(str).isin(fabricated_sessions)
+    ].copy()
+    return clean, findings
 
 
 _PRICE_COLUMNS: Final = ("open", "high", "low", "close", "volume")
@@ -558,6 +661,7 @@ def _ticker_session_rows(
         bars=("close", "size"),
         distinct_close=("close", "nunique"),
         zero_volume_bars=("volume", lambda values: int((values == 0).sum())),
+        total_volume=("volume", "sum"),
         last_close=("close", "last"),
     ).reset_index()
     rows["ticker"] = ticker

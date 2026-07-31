@@ -7,10 +7,13 @@ from market_predictor.edge_rebuild.history_materialization import (
     POSTMARKET,
     PREMARKET,
     REGULAR,
+    _quarantine_ticker_defects,
     _resolve_overlapping_sources,
     classify_segments,
+    expected_bars_per_session_segment,
     session_bounds_for,
 )
+from market_predictor.edge_rebuild.corpus_integrity import IntegrityThresholds
 from market_predictor.v3.errors import DataReadinessError
 
 
@@ -126,3 +129,77 @@ def test_sources_disagreeing_on_price_refuse_the_build() -> None:
 
     with pytest.raises(DataReadinessError, match="conflicting bars"):
         _resolve_overlapping_sources(_dual_source_bars(50.0, 51.0), "FISV")
+
+
+def _session_bars(
+    ticker: str,
+    session: str,
+    close: float,
+    *,
+    distinct_prices: bool = True,
+) -> pd.DataFrame:
+    start = pd.Timestamp(f"{session} 14:30", tz="UTC")
+    times = pd.date_range(start, periods=78, freq="5min")
+    offsets = pd.Series(range(78), dtype=float) * (
+        0.001 if distinct_prices else 0.0
+    )
+    closes = close + offsets
+    return pd.DataFrame(
+        {
+            "ticker": ticker,
+            "session_date_et": session,
+            "session_segment": REGULAR,
+            "history_era": "collected",
+            "bar_start_utc": times,
+            "open": closes,
+            "high": closes,
+            "low": closes,
+            "close": closes,
+            "volume": 1_000,
+        }
+    )
+
+
+def test_unprovable_identity_quarantines_the_complete_ticker() -> None:
+    bounds = session_bounds_for("2024-01-02", "2024-01-03")
+    ordered = pd.concat(
+        [
+            _session_bars("FI", "2024-01-02", 3.15),
+            _session_bars("FI", "2024-01-03", 115.88),
+        ],
+        ignore_index=True,
+    )
+
+    clean, exclusions = _quarantine_ticker_defects(
+        ordered,
+        "FI",
+        expected_bars_per_session_segment(bounds),
+        IntegrityThresholds(),
+    )
+
+    assert clean.empty
+    assert exclusions[0]["scope"] == "ticker"
+    assert exclusions[0]["reason"] == "unprovable_identity"
+
+
+def test_fabricated_session_is_removed_without_losing_other_history() -> None:
+    bounds = session_bounds_for("2024-01-02", "2024-01-03")
+    ordered = pd.concat(
+        [
+            _session_bars("STRC", "2024-01-02", 100.0, distinct_prices=False),
+            _session_bars("STRC", "2024-01-03", 101.0),
+        ],
+        ignore_index=True,
+    )
+
+    clean, exclusions = _quarantine_ticker_defects(
+        ordered,
+        "STRC",
+        expected_bars_per_session_segment(bounds),
+        IntegrityThresholds(),
+    )
+
+    assert set(clean["session_date_et"]) == {"2024-01-03"}
+    assert exclusions[0]["scope"] == "ticker_session"
+    assert exclusions[0]["session"] == "2024-01-02"
+    assert exclusions[0]["reason"] == "fabricated_bars"
