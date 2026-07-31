@@ -18,8 +18,10 @@ may become serving candidates.
 - Active program: ER1A edge rebuild.
 - Swing: the seven-year causal panel is published and immutable. The frozen
   equal-weight technical benchmark failed and is rejected, but it does not block
-  preregistered model training. Final five-year-fit/one-year-validation/one-year-
-  test evidence requires a longer 9-to-10-calendar-year raw history after warm-up.
+  preregistered model training. The frozen temporal audit requires 2,557 XNYS
+  sessions and identifies one exact missing range: 803 sessions from 2016-04-28
+  through 2019-07-08. Final model training remains blocked until the causal
+  point-in-time history is extended and the panel is rebuilt.
 - Intraday: verified canonical SIP five-minute corpus contains 38,586,501 bars,
   814 sessions, and 1,104 symbols. Volume-bar setup construction and selective
   one-minute executable paths remain pending.
@@ -72,6 +74,7 @@ Current protected inputs include:
 - `data/raw/edge_rebuild_selected_session_5m_20260731`
 - `data/research/intraday_universe_selection_20230410_20260708_v2`
 - `data/universe/sp500_point_in_time_20190709_20260708_v3.parquet`
+- `data/research/edge_rebuild_swing_temporal_manifest_20260731_v1`
 
 Generated feature matrices are reproducible working data and are not retained
 after rejection or supersession. Raw provider archives are retained only when

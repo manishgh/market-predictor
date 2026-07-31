@@ -585,7 +585,7 @@ Implementation commit `84afb07` also binds the unchanged four-page PDF in the
 repository, verifies its SHA-256, and strengthens the canonical temporal-split
 test so every row from a decision session remains in one fold role. The current
 strategy-contract SHA-256 is
-`8577ed61307a215e997608c0791a679b836ccdfcb93f3b63cb5daa2ce1edbe59`;
+`0b9c2c71f43460f76ac61ee8bbb9e002f00633acb7c25d7b49ddec2e828e1f3c`;
 the baseline-economics configuration SHA-256 is
 `761c57dd7248560da36620295e86f466c6c3daae04b8389a291c63ab185a31df`.
 The earlier contract hash attached to the published seven-year panel remains
@@ -594,6 +594,35 @@ that artifact's immutable provenance and is not rewritten.
 Verification passed 756 tests with 85 existing warnings, repository-wide Ruff,
 strict mypy across 194 source files, compileall, and `git diff --check`. No
 Python worker remained.
+
+### ER1C PDF-Aligned Temporal Manifest
+
+Status: complete as a bounded ER1A sub-step. It opened no model outcomes and
+performed no training. Implementation commit `7de78a0` is pushed.
+
+The canonical manifest freezes three XNYS session-grouped validation folds,
+1,260 fit sessions per fold, 252 validation sessions per fold, a ten-session
+embargo, 250 warm-up sessions, and the untouched 2025-07-01 through 2026-06-30
+locked test. It also freezes a 20% `security_id` hash holdout independently of
+time. The published seven-year panel is read only for authority, partition
+hashes, `session_date_et`, and `decision_group_id`; outcome columns are
+prohibited. Missing history produces an immutable acquisition gap rather than
+a permissive shorter split.
+
+The immutable audit is
+`data/research/edge_rebuild_swing_temporal_manifest_20260731_v1`. Its manifest
+SHA-256 is
+`b2153fee949791b17f37c09bdd6a5abfe118a660daecae42cdff60a7d1806194`.
+It proves the required raw target is 2,557 XNYS sessions from 2016-04-28 through
+2026-06-30. The current panel supplies 1,754 of those sessions and is missing
+exactly 803 contiguous sessions from 2016-04-28 through 2019-07-08. No shorter
+split is permitted. Peak working set was 0.283 GiB.
+
+The hash-bound request, fold file, session-assignment file, manifest, authority,
+partition-tamper refusal, full-session ownership tests, exact coverage report,
+and memory gate all pass. Repository verification passed 761 tests with 85
+existing warnings, Ruff, strict mypy across 195 source files, compileall, and
+`git diff --check`.
 
 ### ER1A Repository And Data Convergence
 
@@ -622,7 +651,8 @@ For each strategy freeze:
 - gross return, cost, net return, SPY excess, and sector excess labels;
 - deterministic comparator;
 - no-trade rule and maximum qualifying trades per period;
-- four purged folds and deterministic unseen-ticker assignment;
+- the horizon-specific frozen fold count: three swing walk-forward folds and
+  four intraday folds, plus deterministic unseen-security assignment;
 - cost/adverse-fill stress;
 - no more than six learned candidates, two feature profiles, and two selection policies;
 - one retirement rule and no shadow retry.
