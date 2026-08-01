@@ -114,7 +114,53 @@ def test_identity_refuses_same_ticker_for_two_securities_on_one_session() -> Non
             "AAA",
             memberships=memberships,
             benchmark_tickers=("SPY",),
+            benchmark_start_sessions={"SPY": module.START_DATE},
             all_sessions=(pd.Timestamp("2024-01-02").date(),),
+        )
+
+
+def test_xlc_contiguous_pre_inception_prefix_is_accepted() -> None:
+    sessions = tuple(
+        pd.Timestamp(value).date()
+        for value in xcals.get_calendar("XNYS").sessions_in_range(
+            module.START_DATE,
+            "2018-07-10",
+        )
+    )
+    record = module._benchmark_coverage_record(
+        "XLC",
+        observed_sessions=set(sessions[15:]),
+        market_sessions=sessions,
+    )
+    assert record["first_observed_session"] == sessions[15].isoformat()
+    assert record["pre_inception_missing_session_count"] == 15
+    assert record["missing_session_count"] == 15
+
+    expected = module._expected_ticker_sessions(
+        "XLC",
+        memberships=pd.DataFrame(),
+        benchmark_tickers=("XLC",),
+        benchmark_start_sessions={"XLC": sessions[15]},
+        all_sessions=sessions,
+    )
+    assert expected == set(sessions[15:])
+
+
+def test_sector_benchmark_internal_gap_is_rejected() -> None:
+    sessions = tuple(
+        pd.Timestamp(value).date()
+        for value in xcals.get_calendar("XNYS").sessions_in_range(
+            module.START_DATE,
+            "2018-07-10",
+        )
+    )
+    observed = set(sessions[15:])
+    observed.remove(sessions[20])
+    with pytest.raises(DataReadinessError, match="internal or post-inception"):
+        module._benchmark_coverage_record(
+            "XLC",
+            observed_sessions=observed,
+            market_sessions=sessions,
         )
 
 
@@ -182,7 +228,7 @@ def test_preflight_refuses_benchmark_session_gap(
         "load_canonical_artifact",
         lambda path, **_kwargs: (frames[Path(path).stem].copy(), {}),
     )
-    with pytest.raises(DataReadinessError, match="cannot be excluded or imputed"):
+    with pytest.raises(DataReadinessError, match="requires exact full-window"):
         module._preflight_exact_coverage(
             memberships=memberships,
             pre_records=(),
@@ -213,7 +259,7 @@ def test_combined_store_is_exact_resumable_and_refuses_corruption(tmp_path: Path
     ]
     post_path = tmp_path / "source" / "post.parquet"
     _write_bars(_canonical_bars("SPY", post_starts), post_path)
-    coverage_audit = _coverage_audit()
+    coverage_audit = _coverage_audit(benchmark_tickers=("SPY",))
     verified = module.VerifiedCombinedInputs(
         memberships=pd.DataFrame(
             columns=[
@@ -231,6 +277,7 @@ def test_combined_store_is_exact_resumable_and_refuses_corruption(tmp_path: Path
             "excluded_security_ids_sha256": "e",
             "coverage_audit_sha256": module._json_sha256(coverage_audit),
             "security_exclusions": [],
+            "benchmark_coverage": coverage_audit["benchmark_audit"],
         },
         pre_records=(
             {
@@ -616,11 +663,27 @@ def _coverage_audit(
     *,
     excluded: int = 0,
     security_count: int = 0,
+    benchmark_tickers: tuple[str, ...] = (),
 ) -> dict[str, object]:
     return {
         "schema": module.COVERAGE_AUDIT_SCHEMA,
         "security_count": security_count,
         "excluded_security_count": excluded,
         "security_audit": [],
-        "benchmark_audit": [],
+        "benchmark_audit": [
+            {
+                "ticker": ticker,
+                "coverage_policy": "exact_full_window",
+                "requested_first_session": module.START_DATE.isoformat(),
+                "requested_last_session": module.CUTOFF_DATE.isoformat(),
+                "first_observed_session": module.START_DATE.isoformat(),
+                "expected_session_count": 1,
+                "observed_session_count": 1,
+                "missing_session_count": 0,
+                "pre_inception_missing_session_count": 0,
+                "first_missing_session": None,
+                "action": "retain",
+            }
+            for ticker in benchmark_tickers
+        ],
     }

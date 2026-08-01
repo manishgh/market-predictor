@@ -8,6 +8,7 @@ import pandas as pd
 import pytest
 
 from market_predictor.canonical.normalize import canonicalize_bars
+from market_predictor.edge_rebuild import swing_features as swing_feature_module
 from market_predictor.edge_rebuild.cross_sectional import RANK_SUFFIX
 from market_predictor.edge_rebuild.strategy_contract import (
     StrategyContract,
@@ -176,6 +177,61 @@ def test_duplicate_security_session_is_refused(
 
     with pytest.raises(DataReadinessError, match="one row"):
         finalize_swing_feature_panel(duplicated, contract=contract)
+
+
+def test_unavailable_sector_benchmark_makes_rows_abstain() -> None:
+    rows = pd.DataFrame(
+        {
+            "feature_eligible": [True, True, True],
+            "label_eligible": [True, True, True],
+            "sector_available_at_utc": [
+                pd.NaT,
+                pd.Timestamp("2024-01-02T21:00:00Z"),
+                pd.Timestamp("2024-01-02T21:00:00Z"),
+            ],
+            "sector_return_5d": [np.nan, 0.01, 0.01],
+            "sector_return_20d": [np.nan, 0.02, 0.02],
+            "sector_return_60d": [np.nan, 0.03, 0.03],
+            "future_sector_return_5d": [np.nan, np.nan, 0.04],
+        }
+    )
+
+    eligible = swing_feature_module._apply_sector_benchmark_eligibility(
+        rows,
+        horizon_sessions=5,
+    )
+
+    assert eligible["feature_eligible"].tolist() == [False, True, True]
+    assert eligible["label_eligible"].tolist() == [False, False, True]
+    assert eligible["sector_benchmark_abstention_reason"].tolist() == [
+        "sector_benchmark_feature_unavailable",
+        "sector_benchmark_label_window_unavailable",
+        "",
+    ]
+
+    for column in (
+        "barrier_label",
+        "barrier_exit_session_date_et",
+        "barrier_exit_price",
+        "barrier_holding_sessions",
+        "barrier_target_price",
+        "barrier_stop_price",
+        "barrier_label_available_at_utc",
+        "barrier_gross_return",
+        "barrier_cost",
+        "barrier_net_return",
+        "forward_return",
+    ):
+        eligible[column] = [1, 1, 1]
+
+    masked = swing_feature_module._mask_sector_benchmark_ineligible_outcomes(
+        eligible
+    )
+
+    assert masked.loc[:1, "barrier_label"].isna().all()
+    assert masked.loc[:1, "forward_return"].isna().all()
+    assert masked.loc[2, "barrier_label"] == 1
+    assert masked.loc[2, "forward_return"] == 1
 
 
 def _canonical_bars(

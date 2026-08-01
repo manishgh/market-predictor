@@ -48,7 +48,7 @@ from market_predictor.swing.dataset import build_swing_feature_history
 from market_predictor.swing.labels import add_exact_swing_labels
 from market_predictor.v3.errors import DataReadinessError
 
-SWING_FEATURE_PANEL_SCHEMA: Final = "edge_rebuild.swing_feature_panel.v2"
+SWING_FEATURE_PANEL_SCHEMA: Final = "edge_rebuild.swing_feature_panel.v3"
 SWING_FEATURE_PROFILE: Final = "technical_market"
 
 MOMENTUM_FEATURES: Final = (
@@ -248,6 +248,10 @@ def build_swing_feature_rows(
         inplace=True,
     )
     rows = attach_setup_components(labelled, benchmark_features)
+    rows = _apply_sector_benchmark_eligibility(
+        rows,
+        horizon_sessions=effective.horizon_sessions,
+    )
     rows = add_technical_relationship_features(
         rows,
         spec=relationship_spec_from_contract(
@@ -257,6 +261,7 @@ def build_swing_feature_rows(
         ),
     )
     rows = _add_barrier_outcomes(rows, contract=contract)
+    rows = _mask_sector_benchmark_ineligible_outcomes(rows)
     rows["swing_feature_panel_schema"] = SWING_FEATURE_PANEL_SCHEMA
     rows["strategy_contract_sha256"] = contract.sha256()
     return rows.sort_values(
@@ -510,6 +515,87 @@ def _add_barrier_outcomes(
     # constant across the same decision cross-section, gross and net ordering
     # are identical; net is retained so the label reflects tradable economics.
     data["forward_return"] = data["barrier_net_return"]
+    return data
+
+
+def _apply_sector_benchmark_eligibility(
+    rows: pd.DataFrame,
+    *,
+    horizon_sessions: int,
+) -> pd.DataFrame:
+    required = {
+        "feature_eligible",
+        "label_eligible",
+        "sector_available_at_utc",
+        "sector_return_5d",
+        "sector_return_20d",
+        "sector_return_60d",
+        f"future_sector_return_{horizon_sessions}d",
+    }
+    missing = sorted(required.difference(rows.columns))
+    if missing:
+        raise DataReadinessError(
+            f"sector benchmark eligibility inputs are missing: {missing}"
+        )
+    data = rows.copy()
+    feature_ready = data[
+        [
+            "sector_available_at_utc",
+            "sector_return_5d",
+            "sector_return_20d",
+            "sector_return_60d",
+        ]
+    ].notna().all(axis=1)
+    label_ready = pd.to_numeric(
+        data[f"future_sector_return_{horizon_sessions}d"],
+        errors="coerce",
+    ).notna()
+    data["sector_benchmark_feature_eligible"] = feature_ready
+    data["sector_benchmark_label_eligible"] = feature_ready & label_ready
+    data["sector_benchmark_abstention_reason"] = np.select(
+        [~feature_ready, feature_ready & ~label_ready],
+        [
+            "sector_benchmark_feature_unavailable",
+            "sector_benchmark_label_window_unavailable",
+        ],
+        default="",
+    )
+    data["feature_eligible"] = (
+        data["feature_eligible"].fillna(False).astype(bool) & feature_ready
+    )
+    data["label_eligible"] = (
+        data["label_eligible"].fillna(False).astype(bool)
+        & data["sector_benchmark_label_eligible"]
+    )
+    return data
+
+
+def _mask_sector_benchmark_ineligible_outcomes(rows: pd.DataFrame) -> pd.DataFrame:
+    if "sector_benchmark_label_eligible" not in rows.columns:
+        raise DataReadinessError(
+            "managed swing outcomes require sector benchmark label eligibility"
+        )
+    data = rows.copy()
+    abstain = ~data["sector_benchmark_label_eligible"].fillna(False).astype(bool)
+    outcome_columns = [
+        "barrier_label",
+        "barrier_exit_session_date_et",
+        "barrier_exit_price",
+        "barrier_holding_sessions",
+        "barrier_target_price",
+        "barrier_stop_price",
+        "barrier_label_available_at_utc",
+        "barrier_gross_return",
+        "barrier_cost",
+        "barrier_net_return",
+        "forward_return",
+    ]
+    missing = sorted(set(outcome_columns).difference(data.columns))
+    if missing:
+        raise DataReadinessError(
+            f"managed swing outcome columns are missing: {missing}"
+        )
+    data.loc[abstain, outcome_columns] = pd.NA
     return data
 
 

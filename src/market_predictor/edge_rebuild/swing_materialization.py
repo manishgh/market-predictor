@@ -43,13 +43,13 @@ from market_predictor.resources import (
 from market_predictor.v3.errors import DataReadinessError
 
 SWING_MATERIALIZATION_REQUEST_SCHEMA: Final = (
-    "edge_rebuild.swing_panel_materialization_request.v3"
+    "edge_rebuild.swing_panel_materialization_request.v4"
 )
 SWING_MATERIALIZATION_MANIFEST_SCHEMA: Final = (
-    "edge_rebuild.swing_panel_materialization.v3"
+    "edge_rebuild.swing_panel_materialization.v4"
 )
 SWING_MATERIALIZATION_AUTHORITY_SCHEMA: Final = (
-    "edge_rebuild.swing_panel_materialization_authority.v3"
+    "edge_rebuild.swing_panel_materialization_authority.v4"
 )
 SWING_STAGE_ONE_SHARD_SCHEMA: Final = "edge_rebuild.swing_panel_stage_one_shard.v1"
 
@@ -556,6 +556,9 @@ def _finalize_and_publish_stage_one(
                 ],
                 "security_exclusions": request["combined_daily_inputs"][
                     "security_exclusions"
+                ],
+                "benchmark_coverage": request["combined_daily_inputs"][
+                    "benchmark_coverage"
                 ],
             },
             "memory": memory_audit(

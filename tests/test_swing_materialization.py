@@ -81,6 +81,7 @@ def materialization_inputs(
             "excluded_security_ids_sha256": "e",
             "coverage_audit_sha256": "f",
             "security_exclusions": [],
+            "benchmark_coverage": [],
         },
         pre_records=(),
         post_records={},
