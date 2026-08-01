@@ -256,8 +256,8 @@ def test_session_worker_limit_is_enforced_before_input_loading(
     verified = _verified_inputs(tmp_path)
     monkeypatch.setattr(dataset_module, "_verify_inputs", lambda **_: verified)
 
-    with pytest.raises(ValueError, match="between 1 and 4"):
-        _publish(tmp_path, monkeypatch, verified, session_workers=5)
+    with pytest.raises(ValueError, match="between 1 and 8"):
+        _publish(tmp_path, monkeypatch, verified, session_workers=9)
 
 
 def test_incomplete_five_minute_pair_is_audited_abstention(
