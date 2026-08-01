@@ -126,13 +126,49 @@ Only one checkpoint may be `in_progress`.
 | --- | --- | --- | --- |
 | ER0 | completed | Establish this active plan and companion handoff | Closed by implementation commit `8c28df9`; both documents and repository guidance are pushed |
 | ER1 | completed | Audit effective independent history and causal data readiness | Closed by implementation commits `5ffa3d3`, `d9d93c8`, and `7b0ce6d`; immutable audit request `f80f70ae299bd5e5a6aeae6aeaa503ef4775573696b7d88856d539dbd1355080` reports one ER2 blocker |
-| ER1A | in_progress | Complete targeted history and re-audit readiness | Swing authority and its exact 549-unit acquisition plan are ready; collect and rematerialize the missing 279 sessions. Intraday selection is corrected to completed-bar cumulative RVOL, and the old selected-session transport is ineligible for training. Publish a PIT-filtered causal selection, collect its stock and benchmark minute paths, assemble the tested volume-bar/features/labels artifacts, and rerun readiness. |
+| ER1A | in_progress | Complete all causal data and feature authorities before training | Intraday market data and the causal technical dataset are complete. Close the reopened feature audit: publish ticker catalyst and global-event authorities, wire catalyst-full swing materialization, add normalized intraday activity features and catalyst overlay parity, resolve sparse swing gaps without imputation or weakening the 5% whole-security limit, and rerun readiness. No training may publish before these exits pass. |
 | ER2 | pending | Freeze new strategy contracts and bounded experiment budget | New IDs, setup eligibility, entry/exit/labels, design window, folds, costs, features, abstention, and retirement rules are immutable and tested |
 | ER3 | pending | Build candidate populations, exact labels, and deterministic baselines | Each population replays from immutable bars; readiness, gross/net/benchmark baseline economics, and sample sufficiency are published before ML |
 | ER4 | pending | Complete causal catalyst confirmation evidence | Direct/business/sector/global relations and event timing reconcile; technical-only, catalyst-only, and confirmation-overlay rows are identical and auditable; the deprecated V1 relevance path is retired per section 9A |
 | ER5 | pending | Train bounded strategy specialists | Only ER3-ready populations are trained; deterministic/logistic/boosted-tree/ranker comparisons and ablations complete under frozen folds |
 | ER6 | pending | Resume KS5 and KS6 conditionally | Quantiles, competing risks, and volatility sidecars run only for an independently passed ER5 specialist and must add out-of-sample economic value |
 | ER7 | pending | Prospective shadow, promotion, API, and TradingFlow boundary | One-use untouched shadow passes; signed atomic serving bundle exposes predictions only; TradingFlow retains alerts and execution |
+
+### ER1A Reopening Evidence - 2026-08-01
+
+The checkpoint was reopened because the active feature path violated the mandatory
+catalyst contract. The evidence is recorded in
+`docs/reviews/feature_engineering_audit_20260801.md`.
+
+- The immutable intraday dataset is complete: 4,173,230 rows, 1,410,447 eligible
+  rows, 43,109 published stock-sessions, and verified request SHA-256
+  `efbe4abcce8a91abb036e506209534b2d482dc5b3b639443e3b7af931ea46001`.
+- Historical Alpaca news is collected for 2019-07-09 through 2026-07-08, but the
+  active edge-rebuild materializer does not consume its sentiment, attribution,
+  assignment, or source-coverage evidence.
+- The active swing materializer hard-codes `technical_market`; therefore it cannot
+  produce the required catalyst-plus-technical candidate.
+- Historical global market-context evidence covers only 2024-06-14 onward and is
+  not an immutable edge-rebuild authority.
+- Exact swing coverage preflight reports 51/658 whole-security exclusions. Sparse
+  missing sessions and genuinely unusable histories are not yet distinguished.
+- An intraday training run was stopped without publication after audit found seven
+  learned candidates against the six-candidate experiment limit. Commit `febd2d5`
+  enforces the limit and reduces the grid to five learned candidates.
+
+ER1A exit gates are now explicit:
+
+1. Ticker catalyst rows are direct-issuer relevant, sentiment-scored, assigned to
+   exact decisions by feature availability, and coverage-unknown rows abstain.
+2. Global events use a separate authority and cannot be attached as ticker news.
+3. Swing `catalyst_full` and `technical_market` ablation panels share identical
+   market rows and labels.
+4. Intraday activity features are scale-normalized and available in both batch and
+   live paths; catalyst remains a separately evaluated confirmation/ranking overlay.
+5. Sparse daily gaps create audited session abstentions and cannot be bridged by a
+   rolling feature or future label; whole-security exclusions remain at or below 5%.
+6. Focused poison tests, full tests, Ruff, strict mypy, immutable authority replay,
+   and the 4 GiB memory gate pass before training restarts.
 
 ## 6. ER1: Independent Data Readiness Audit
 

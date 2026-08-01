@@ -1,19 +1,49 @@
 # Active Edge Rebuild Handoff
 
-Status: official S&P source, event, transition, and anchor-bound point-in-time
-membership authorities are complete and verified for 2018-05-29 through
-2026-07-08. The swing acquisition plan is ready for exact daily collection. The old
-intraday selected-session artifacts are raw transport evidence only: their
-selection used same-session future volume and cannot authorize training. The
-causal completed-bar selector, broad acquisition planner, volume-bar builder,
-feature builder, and exact label builder are implemented and tested. Benchmark
-transport, causal selection publication, artifact assembly, readiness, and training remain. No
-active-program model exists.
+Status: ER1A is reopened. Market-data collection and the causal intraday technical
+dataset are complete, but training is intentionally stopped because the active
+edge-rebuild path does not yet satisfy the mandatory catalyst-plus-technical
+contract. Ticker news sentiment/attribution/decision aggregation, global-event
+authority, catalyst-full swing materialization, normalized intraday activity
+features, catalyst overlay serving parity, and sparse swing-session abstention must
+all verify before training restarts. No active-program model exists.
 Last updated: 2026-08-01
 Repository: `C:\project\market-predictor`
 Remote: `https://github.com/manishgh/market-predictor`
 Branch: `r3-lineage`
-Last pushed checkpoint: `85517cb`
+Last pushed checkpoint: `a4e9740`
+
+## 2026-08-01 Feature Audit Reopening
+
+- Intraday dataset authority:
+  `data/features/edge_rebuild_intraday_dataset_causal_20260801_v1`, request
+  SHA-256 `efbe4abcce8a91abb036e506209534b2d482dc5b3b639443e3b7af931ea46001`.
+  It contains 4,173,230 rows and 1,410,447 eligible causal rows across 43,109
+  published stock-sessions.
+- Historical Alpaca news exists in
+  `data/raw/alpaca_news_20190709_20210708_v1` and
+  `data/raw/alpaca_news_20210709_20260708_v1`. The latter has a passed audit with
+  564,986 unique events. Neither collection has completed active sentiment,
+  attribution, catalyst-lineage, and edge-rebuild feature authorities.
+- Existing `market_context_events_scored.parquet` starts on 2024-06-14 and is not
+  an immutable edge-rebuild global-event authority.
+- Swing exact coverage reports 51/658 securities with at least one gap. The current
+  code incorrectly turns every gap into a whole-security exclusion, exceeding the
+  5% gate. Sparse gaps must become session abstentions; no imputation is allowed.
+- Commit `febd2d5` enforces the six-learned-candidate limit and configures five.
+  Focused tests passed 18/18 and Ruff passed. Mypy 1.20.2 crashed internally when
+  targeting Python 3.13/3.14; it reported no source diagnostic.
+- Commit `a4e9740` added the feature audit. A corrected technical-only trainer was
+  then started, but was stopped without output when the catalyst contract failure
+  was confirmed.
+
+Immediate sequence:
+
+1. Publish strict ticker catalyst and global-event authorities from existing data.
+2. Wire catalyst-full swing materialization and technical/catalyst ablation identity.
+3. Add normalized causal intraday activity features and catalyst overlay parity.
+4. Resolve sparse swing gaps with audited abstention while preserving the 5% limit.
+5. Run consolidated causal tests and only then rebuild datasets and train sequentially.
 
 ## 2026-08-01 Causal Correction
 
