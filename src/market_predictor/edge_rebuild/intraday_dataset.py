@@ -73,6 +73,7 @@ INTRADAY_DATASET_AUTHORITY_SCHEMA: Final = "edge_rebuild.intraday_dataset_author
 MEMORY_HARD_BUDGET_GIB: Final = 4.0
 MEMORY_HEADROOM_GIB: Final = 0.75
 MAX_PAIR_WORKERS: Final = 4
+WORKING_SET_RELEASE_INTERVAL_SESSIONS: Final = 25
 _SAFE_TICKER = re.compile(r"^[A-Z0-9][A-Z0-9.-]{0,31}$")
 _REQUIRED_BENCHMARKS: Final = frozenset(
     {
@@ -232,6 +233,7 @@ def publish_intraday_dataset(
         "processing_unit": "one_selected_stock_session",
         "ranking_unit": "one_exchange_session",
         "pair_workers": pair_workers,
+        "working_set_release_interval_sessions": WORKING_SET_RELEASE_INTERVAL_SESSIONS,
         "memory_hard_budget_gib": MEMORY_HARD_BUDGET_GIB,
     }
     request_sha256 = json_sha256(request)
@@ -265,8 +267,9 @@ def publish_intraday_dataset(
             max_workers=pair_workers,
             thread_name_prefix="intraday-pair",
         ) as executor:
-            for session_date, session_selection in usable.groupby(
-                "session_date_et", sort=True, observed=True
+            for session_number, (session_date, session_selection) in enumerate(
+                usable.groupby("session_date_et", sort=True, observed=True),
+                start=1,
             ):
                 session_result = _publish_session(
                     session_date=str(session_date),
@@ -282,10 +285,12 @@ def publish_intraday_dataset(
                 partition_records.extend(session_result.partitions)
                 pair_audits.extend(session_result.pair_audits)
                 abstentions.extend(session_result.abstentions)
-                release_process_memory()
+                if session_number % WORKING_SET_RELEASE_INTERVAL_SESSIONS == 0:
+                    release_process_memory()
                 _guard_memory(
                     f"intraday dataset session {str(session_date)} complete"
                 )
+        release_process_memory()
 
         if not partition_records:
             raise DataReadinessError("intraday dataset produced no feature-label partitions")
