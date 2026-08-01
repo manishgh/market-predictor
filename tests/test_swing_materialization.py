@@ -79,11 +79,14 @@ def materialization_inputs(
             "post_collection": {"manifest_sha256": "c"},
             "membership_authority": {"authority_sha256": "d"},
             "excluded_security_ids_sha256": "e",
+            "coverage_audit_sha256": "f",
+            "security_exclusions": [],
         },
         pre_records=(),
         post_records={},
         excluded_security_ids=(),
         benchmark_tickers=("SPY", "QQQ", "XLK"),
+        coverage_audit={},
     )
     monkeypatch.setattr(
         module,

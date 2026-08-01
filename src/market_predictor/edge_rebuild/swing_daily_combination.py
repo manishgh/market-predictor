@@ -38,10 +38,11 @@ from market_predictor.resources import (
 )
 from market_predictor.v3.errors import DataReadinessError
 
-COMBINED_REQUEST_SCHEMA: Final = "edge_rebuild.swing_combined_daily_request.v1"
-COMBINED_MANIFEST_SCHEMA: Final = "edge_rebuild.swing_combined_daily_manifest.v1"
-COMBINED_AUTHORITY_SCHEMA: Final = "edge_rebuild.swing_combined_daily_authority.v1"
-COMBINED_TICKER_SCHEMA: Final = "edge_rebuild.swing_combined_daily_ticker.v1"
+COMBINED_REQUEST_SCHEMA: Final = "edge_rebuild.swing_combined_daily_request.v2"
+COMBINED_MANIFEST_SCHEMA: Final = "edge_rebuild.swing_combined_daily_manifest.v2"
+COMBINED_AUTHORITY_SCHEMA: Final = "edge_rebuild.swing_combined_daily_authority.v2"
+COMBINED_TICKER_SCHEMA: Final = "edge_rebuild.swing_combined_daily_ticker.v2"
+COVERAGE_AUDIT_SCHEMA: Final = "edge_rebuild.swing_combined_daily_coverage.v1"
 POST_REQUEST_SCHEMA: Final = "swing.daily_history_collection.v1"
 POST_MANIFEST_SCHEMA: Final = "swing.daily_history_manifest.v1"
 START_DATE: Final = date(2018, 5, 29)
@@ -60,6 +61,14 @@ class VerifiedCombinedInputs:
     post_records: dict[str, dict[str, Any]]
     excluded_security_ids: tuple[str, ...]
     benchmark_tickers: tuple[str, ...]
+    coverage_audit: dict[str, Any]
+
+
+@dataclass(frozen=True, slots=True)
+class _CoveragePreflight:
+    audit: dict[str, Any]
+    excluded_security_ids: tuple[str, ...]
+    exclusion_records: tuple[dict[str, Any], ...]
 
 
 @dataclass(frozen=True, slots=True)
@@ -150,16 +159,25 @@ def verify_combined_swing_inputs(
         start=POST_START_DATE,
         end=CUTOFF_DATE,
     )
-    excluded = tuple(sorted(pre_unavailable.union(post_unavailable_ids)))
     all_security_ids = set(memberships["security_id"].astype(str))
-    unknown = sorted(set(excluded).difference(all_security_ids))
+    initially_excluded = pre_unavailable.union(post_unavailable_ids)
+    unknown = sorted(initially_excluded.difference(all_security_ids))
     if unknown:
         raise DataReadinessError(f"unavailable security identities are absent: {unknown}")
-    fraction = len(excluded) / len(all_security_ids) if all_security_ids else 1.0
-    if not all_security_ids or fraction > MAXIMUM_EXCLUSION_FRACTION:
-        raise DataReadinessError(
-            f"combined daily security exclusions exceed 5%: {len(excluded)}/{len(all_security_ids)}"
-        )
+    initial_reasons: dict[str, set[str]] = defaultdict(set)
+    for security_id in pre_unavailable:
+        initial_reasons[security_id].add("pre_collection_unavailable")
+    for security_id in post_unavailable_ids:
+        initial_reasons[security_id].add("post_collection_unavailable")
+    coverage = _preflight_exact_coverage(
+        memberships=memberships,
+        pre_records=pre_records,
+        post_records=post_records,
+        benchmark_tickers=benchmark_tickers,
+        initial_reasons=initial_reasons,
+    )
+    excluded = coverage.excluded_security_ids
+    fraction = len(excluded) / len(all_security_ids)
     retained = memberships.loc[
         ~memberships["security_id"].astype(str).isin(excluded)
     ].copy()
@@ -201,6 +219,9 @@ def verify_combined_swing_inputs(
         "excluded_security_fraction": fraction,
         "excluded_security_ids": list(excluded),
         "excluded_security_ids_sha256": _json_sha256(list(excluded)),
+        "security_exclusions": list(coverage.exclusion_records),
+        "coverage_audit_schema": COVERAGE_AUDIT_SCHEMA,
+        "coverage_audit_sha256": _json_sha256(coverage.audit),
         "retained_security_count": int(retained["security_id"].nunique()),
         "benchmark_tickers": list(benchmark_tickers),
         "pre_request_identity_sha256": str(pre_request["request_sha256"]),
@@ -213,6 +234,7 @@ def verify_combined_swing_inputs(
         post_records=post_records,
         excluded_security_ids=excluded,
         benchmark_tickers=benchmark_tickers,
+        coverage_audit=coverage.audit,
     )
 
 
@@ -226,6 +248,13 @@ def prepare_combined_daily_store(
 ) -> CombinedDailyStore:
     """Publish or verify one canonical combined bar artifact per ticker."""
 
+    coverage_audit_sha256 = _json_sha256(verified.coverage_audit)
+    if (
+        verified.coverage_audit.get("schema") != COVERAGE_AUDIT_SCHEMA
+        or verified.request_payload.get("coverage_audit_sha256")
+        != coverage_audit_sha256
+    ):
+        raise DataReadinessError("combined daily coverage audit identity is invalid")
     request = {
         **verified.request_payload,
         "parent_materialization_request_sha256": parent_request_sha256,
@@ -239,6 +268,12 @@ def prepare_combined_daily_store(
     else:
         output_directory.mkdir(parents=True, exist_ok=True)
         _write_json_atomic(request_path, bound_request)
+    coverage_audit_path = output_directory / "_coverage_audit.json"
+    if coverage_audit_path.exists():
+        if _load_json(coverage_audit_path) != verified.coverage_audit:
+            raise DataReadinessError("combined daily coverage audit differs on resume")
+    else:
+        _write_json_atomic(coverage_audit_path, verified.coverage_audit)
 
     if (output_directory / "_authority.json").exists():
         return _load_complete_combined_store(
@@ -336,6 +371,12 @@ def prepare_combined_daily_store(
         "rows": sum(int(record["rows"]) for record in records),
         "excluded_security_ids": list(verified.excluded_security_ids),
         "excluded_security_count": len(verified.excluded_security_ids),
+        "security_exclusions": verified.request_payload["security_exclusions"],
+        "coverage_audit": {
+            "path": "_coverage_audit.json",
+            "sha256": file_sha256(coverage_audit_path),
+            "semantic_sha256": coverage_audit_sha256,
+        },
         "source_lineage": {
             "pre_collection": verified.request_payload["pre_collection"],
             "post_collection": verified.request_payload["post_collection"],
@@ -362,6 +403,7 @@ def prepare_combined_daily_store(
             "post_collection_manifest_sha256": verified.request_payload[
                 "post_collection"
             ]["manifest_sha256"],
+            "coverage_audit_sha256": file_sha256(coverage_audit_path),
         },
     )
     return _load_complete_combined_store(
@@ -664,6 +706,187 @@ def _security_ids_for_unavailable_tickers(
     return result
 
 
+def _preflight_exact_coverage(
+    *,
+    memberships: pd.DataFrame,
+    pre_records: tuple[dict[str, Any], ...],
+    post_records: Mapping[str, dict[str, Any]],
+    benchmark_tickers: tuple[str, ...],
+    initial_reasons: Mapping[str, set[str]],
+) -> _CoveragePreflight:
+    """Resolve all stock gaps to deterministic whole-security exclusions."""
+
+    calendar = xcals.get_calendar("XNYS")
+    all_sessions = tuple(
+        pd.Timestamp(value).date()
+        for value in calendar.sessions_in_range(START_DATE, CUTOFF_DATE)
+    )
+    market_sessions = set(all_sessions)
+    pre_by_ticker: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for record in pre_records:
+        pre_by_ticker[str(record["ticker"]).strip().upper()].append(record)
+
+    security_ids = sorted(memberships["security_id"].astype(str).unique())
+    if not security_ids:
+        raise DataReadinessError("coverage preflight has no stock securities")
+    expected_by_security: dict[str, set[date]] = {
+        security_id: set() for security_id in security_ids
+    }
+    observed_by_security: dict[str, set[date]] = {
+        security_id: set() for security_id in security_ids
+    }
+    tickers_by_security: dict[str, set[str]] = {
+        security_id: set() for security_id in security_ids
+    }
+    benchmark_audit: list[dict[str, Any]] = []
+    stock_tickers = set(memberships["ticker"].astype(str).str.strip().str.upper())
+    for ticker in sorted(stock_tickers.union(benchmark_tickers)):
+        observed = _load_observed_ticker_sessions(
+            ticker,
+            pre_records=pre_by_ticker.get(ticker, []),
+            post_record=post_records.get(ticker),
+        )
+        if ticker in benchmark_tickers:
+            missing = sorted(market_sessions.difference(observed))
+            benchmark_audit.append(
+                {
+                    "ticker": ticker,
+                    "expected_session_count": len(market_sessions),
+                    "observed_session_count": len(market_sessions.intersection(observed)),
+                    "missing_session_count": len(missing),
+                    "first_missing_session": (
+                        missing[0].isoformat() if missing else None
+                    ),
+                    "action": "fail" if missing else "retain",
+                }
+            )
+            if missing:
+                raise DataReadinessError(
+                    "benchmark daily history has required XNYS gaps and cannot be "
+                    f"excluded or imputed: {ticker}; missing={len(missing)}; "
+                    f"first={missing[0]}"
+                )
+        rows = memberships.loc[
+            memberships["ticker"].astype(str).str.strip().str.upper().eq(ticker)
+        ]
+        session_owner: dict[date, str] = {}
+        for row in rows.itertuples(index=False):
+            security_id = str(row.security_id)
+            start = max(START_DATE, _eastern_date(row.effective_from_utc))
+            end = (
+                CUTOFF_DATE
+                if pd.isna(row.effective_to_utc)
+                else min(
+                    CUTOFF_DATE,
+                    _eastern_date(row.effective_to_utc) - timedelta(days=1),
+                )
+            )
+            expected = {value for value in all_sessions if start <= value <= end}
+            for session in expected:
+                prior = session_owner.setdefault(session, security_id)
+                if prior != security_id:
+                    raise DataReadinessError(
+                        f"ticker {ticker} maps to multiple securities on {session}"
+                    )
+            overlap = expected_by_security[security_id].intersection(expected)
+            if overlap:
+                first = min(overlap)
+                raise DataReadinessError(
+                    f"security {security_id} has overlapping ticker identities on {first}"
+                )
+            expected_by_security[security_id].update(expected)
+            observed_by_security[security_id].update(expected.intersection(observed))
+            tickers_by_security[security_id].add(ticker)
+        release_process_memory()
+        _guard(4.0, 0.75, f"combined daily coverage preflight {ticker}")
+
+    security_audit: list[dict[str, Any]] = []
+    exclusion_records: list[dict[str, Any]] = []
+    for security_id in security_ids:
+        expected = expected_by_security[security_id]
+        if not expected:
+            raise DataReadinessError(
+                f"coverage preflight has no membership sessions for {security_id}"
+            )
+        observed = observed_by_security[security_id]
+        missing = sorted(expected.difference(observed))
+        reasons = set(initial_reasons.get(security_id, set()))
+        if missing:
+            reasons.add("membership_session_gap")
+        record = {
+            "security_id": security_id,
+            "tickers": sorted(tickers_by_security[security_id]),
+            "expected_session_count": len(expected),
+            "observed_session_count": len(observed),
+            "missing_session_count": len(missing),
+            "first_missing_session": missing[0].isoformat() if missing else None,
+            "reasons": sorted(reasons),
+            "action": "exclude_security" if reasons else "retain",
+        }
+        security_audit.append(record)
+        if reasons:
+            exclusion_records.append(record)
+    excluded = tuple(
+        sorted(str(record["security_id"]) for record in exclusion_records)
+    )
+    fraction = len(excluded) / len(security_ids)
+    if fraction > MAXIMUM_EXCLUSION_FRACTION:
+        raise DataReadinessError(
+            "combined daily whole-security exclusions exceed 5% after exact "
+            f"coverage preflight: {len(excluded)}/{len(security_ids)}"
+        )
+    audit: dict[str, Any] = {
+        "schema": COVERAGE_AUDIT_SCHEMA,
+        "calendar": "XNYS",
+        "start_date": START_DATE.isoformat(),
+        "cutoff_date": CUTOFF_DATE.isoformat(),
+        "source": "alpaca",
+        "timeframe": "1Day",
+        "price_feed": "sip",
+        "adjustment": "all",
+        "maximum_security_exclusion_fraction": MAXIMUM_EXCLUSION_FRACTION,
+        "security_count": len(security_ids),
+        "excluded_security_count": len(excluded),
+        "excluded_security_fraction": fraction,
+        "retained_security_count": len(security_ids) - len(excluded),
+        "benchmark_audit": benchmark_audit,
+        "security_audit": security_audit,
+    }
+    return _CoveragePreflight(
+        audit=audit,
+        excluded_security_ids=excluded,
+        exclusion_records=tuple(exclusion_records),
+    )
+
+
+def _load_observed_ticker_sessions(
+    ticker: str,
+    *,
+    pre_records: list[dict[str, Any]],
+    post_record: dict[str, Any] | None,
+) -> set[date]:
+    sessions: list[date] = []
+    for record in pre_records:
+        frame = pd.read_parquet(Path(str(record["resolved_path"])))
+        _validate_pre_unit(frame, record=record)
+        sessions.extend(_session_dates(frame["bar_start_utc"]))
+        del frame
+    if post_record is not None:
+        frame, _ = load_canonical_artifact(
+            Path(str(post_record["resolved_path"])),
+            expected_type="bars",
+        )
+        _validate_ohlcv(frame, ticker=ticker)
+        _validate_post_timestamps(frame, ticker=ticker)
+        sessions.extend(_session_dates(frame["bar_start_utc"]))
+        del frame
+    if len(sessions) != len(set(sessions)):
+        raise DataReadinessError(
+            f"combined daily source sessions overlap for {ticker}"
+        )
+    return set(sessions)
+
+
 def _expected_ticker_sessions(
     ticker: str,
     *,
@@ -864,9 +1087,12 @@ def _load_complete_combined_store(
     request_sha256: str,
 ) -> CombinedDailyStore:
     manifest_path = directory / "_manifest.json"
+    request = _load_json(directory / "_request.json")
     manifest = _load_json(manifest_path)
     authority = _load_json(directory / "_authority.json")
     raw = manifest.get("artifacts")
+    coverage_record = manifest.get("coverage_audit")
+    coverage_path = directory / "_coverage_audit.json"
     if (
         manifest.get("schema") != COMBINED_MANIFEST_SCHEMA
         or manifest.get("status") != "complete"
@@ -878,6 +1104,17 @@ def _load_complete_combined_store(
         or authority.get("request_sha256") != request_sha256
         or authority.get("artifact") != "_manifest.json"
         or authority.get("artifact_sha256") != file_sha256(manifest_path)
+        or not isinstance(coverage_record, Mapping)
+        or coverage_record.get("path") != "_coverage_audit.json"
+        or not coverage_path.is_file()
+        or coverage_record.get("sha256") != file_sha256(coverage_path)
+        or authority.get("coverage_audit_sha256") != file_sha256(coverage_path)
+        or coverage_record.get("semantic_sha256")
+        != request.get("coverage_audit_sha256")
+        or _json_sha256(_load_json(coverage_path))
+        != request.get("coverage_audit_sha256")
+        or manifest.get("security_exclusions")
+        != request.get("security_exclusions")
     ):
         raise DataReadinessError("combined daily authority is invalid")
     artifacts: dict[str, tuple[Path, str]] = {}

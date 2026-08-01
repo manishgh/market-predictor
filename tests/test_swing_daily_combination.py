@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -31,6 +32,10 @@ def test_verifier_combines_lineage_and_excludes_unavailable_securities_in_full(
     assert verified.request_payload["pre_collection"]["authority_sha256"]
     assert verified.request_payload["post_collection"]["manifest_sha256"]
     assert verified.request_payload["membership_authority"]["authority_sha256"]
+    assert len(verified.request_payload["security_exclusions"]) == 2
+    assert verified.request_payload["coverage_audit_sha256"] == module._json_sha256(
+        verified.coverage_audit
+    )
 
 
 def test_verifier_refuses_a_corrupted_post_partition(
@@ -113,6 +118,83 @@ def test_identity_refuses_same_ticker_for_two_securities_on_one_session() -> Non
         )
 
 
+def test_preflight_excludes_aet_style_gap_and_rejects_more_than_five_percent(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    memberships = _one_session_memberships(20)
+    session = pd.Timestamp("2024-01-02")
+    session_open = pd.Timestamp(
+        xcals.get_calendar("XNYS").session_open(session)
+    ).tz_convert("UTC")
+    frames = {
+        ticker: _canonical_bars(ticker, [session_open])
+        for ticker in memberships["ticker"].astype(str)
+        if ticker != "AET"
+    }
+    monkeypatch.setattr(
+        module,
+        "load_canonical_artifact",
+        lambda path, **_kwargs: (frames[Path(path).stem].copy(), {}),
+    )
+    post_records = {
+        ticker: {"resolved_path": str(Path(f"{ticker}.parquet"))}
+        for ticker in frames
+    }
+
+    coverage = module._preflight_exact_coverage(
+        memberships=memberships,
+        pre_records=(),
+        post_records=post_records,
+        benchmark_tickers=(),
+        initial_reasons={},
+    )
+    assert coverage.excluded_security_ids == ("sec:AET",)
+    exclusion = coverage.exclusion_records[0]
+    assert exclusion["reasons"] == ["membership_session_gap"]
+    assert exclusion["missing_session_count"] == 1
+    assert exclusion["first_missing_session"] == "2024-01-02"
+
+    too_many_records = dict(post_records)
+    too_many_records.pop("T01")
+    with pytest.raises(DataReadinessError, match="exclusions exceed 5%"):
+        module._preflight_exact_coverage(
+            memberships=memberships,
+            pre_records=(),
+            post_records=too_many_records,
+            benchmark_tickers=(),
+            initial_reasons={},
+        )
+
+
+def test_preflight_refuses_benchmark_session_gap(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    memberships = _one_session_memberships(1)
+    session_open = pd.Timestamp(
+        xcals.get_calendar("XNYS").session_open("2024-01-02")
+    ).tz_convert("UTC")
+    frames = {
+        "AET": _canonical_bars("AET", [session_open]),
+        "SPY": _canonical_bars("SPY", [session_open]),
+    }
+    monkeypatch.setattr(
+        module,
+        "load_canonical_artifact",
+        lambda path, **_kwargs: (frames[Path(path).stem].copy(), {}),
+    )
+    with pytest.raises(DataReadinessError, match="cannot be excluded or imputed"):
+        module._preflight_exact_coverage(
+            memberships=memberships,
+            pre_records=(),
+            post_records={
+                ticker: {"resolved_path": str(Path(f"{ticker}.parquet"))}
+                for ticker in frames
+            },
+            benchmark_tickers=("SPY",),
+            initial_reasons={},
+        )
+
+
 def test_combined_store_is_exact_resumable_and_refuses_corruption(tmp_path: Path) -> None:
     calendar = xcals.get_calendar("XNYS")
     sessions = [
@@ -131,6 +213,7 @@ def test_combined_store_is_exact_resumable_and_refuses_corruption(tmp_path: Path
     ]
     post_path = tmp_path / "source" / "post.parquet"
     _write_bars(_canonical_bars("SPY", post_starts), post_path)
+    coverage_audit = _coverage_audit()
     verified = module.VerifiedCombinedInputs(
         memberships=pd.DataFrame(
             columns=[
@@ -146,6 +229,8 @@ def test_combined_store_is_exact_resumable_and_refuses_corruption(tmp_path: Path
             "post_collection": {"manifest_sha256": "c"},
             "membership_authority": {"authority_sha256": "d"},
             "excluded_security_ids_sha256": "e",
+            "coverage_audit_sha256": module._json_sha256(coverage_audit),
+            "security_exclusions": [],
         },
         pre_records=(
             {
@@ -161,6 +246,7 @@ def test_combined_store_is_exact_resumable_and_refuses_corruption(tmp_path: Path
         post_records={"SPY": {"resolved_path": str(post_path)}},
         excluded_security_ids=(),
         benchmark_tickers=("SPY",),
+        coverage_audit=coverage_audit,
     )
     output = tmp_path / "combined"
 
@@ -180,6 +266,27 @@ def test_combined_store_is_exact_resumable_and_refuses_corruption(tmp_path: Path
     )
     assert first.manifest["rows"] == len(sessions)
     assert replay.manifest == first.manifest
+    assert first.manifest["coverage_audit"]["semantic_sha256"] == module._json_sha256(
+        coverage_audit
+    )
+
+    changed_audit = {**coverage_audit, "security_count": 1}
+    changed_request = {
+        **verified.request_payload,
+        "coverage_audit_sha256": module._json_sha256(changed_audit),
+    }
+    with pytest.raises(DataReadinessError, match="resume request differs"):
+        module.prepare_combined_daily_store(
+            verified=replace(
+                verified,
+                request_payload=changed_request,
+                coverage_audit=changed_audit,
+            ),
+            output_directory=output,
+            parent_request_sha256="p" * 64,
+            memory_budget_gib=4.0,
+            memory_headroom_gib=0.75,
+        )
 
     artifact = next(iter(first.artifacts.values()))[0]
     with artifact.open("ab") as handle:
@@ -268,6 +375,35 @@ def _authority_inputs(
         module,
         "load_complete_swing_history_collection",
         lambda *_args, **_kwargs: pre_manifest,
+    )
+    exclusion_records = (
+        {
+            "security_id": "sec:bbb",
+            "missing_session_count": 1,
+            "first_missing_session": module.POST_START_DATE.isoformat(),
+            "reasons": ["post_collection_unavailable"],
+            "action": "exclude_security",
+        },
+        {
+            "security_id": "sec:ccc",
+            "missing_session_count": 1,
+            "first_missing_session": module.START_DATE.isoformat(),
+            "reasons": ["pre_collection_unavailable"],
+            "action": "exclude_security",
+        },
+    )
+    coverage_audit = _coverage_audit(
+        excluded=2,
+        security_count=40,
+    )
+    monkeypatch.setattr(
+        module,
+        "_preflight_exact_coverage",
+        lambda **_kwargs: module._CoveragePreflight(
+            audit=coverage_audit,
+            excluded_security_ids=("sec:bbb", "sec:ccc"),
+            exclusion_records=exclusion_records,
+        ),
     )
 
     post_hashes = _post_collection(post, unavailable=unavailable)
@@ -385,6 +521,19 @@ def _memberships() -> pd.DataFrame:
     )
 
 
+def _one_session_memberships(count: int) -> pd.DataFrame:
+    tickers = ["AET", *[f"T{index:02d}" for index in range(1, count)]]
+    return pd.DataFrame(
+        {
+            "ticker": tickers,
+            "security_id": [f"sec:{ticker}" for ticker in tickers],
+            "effective_from_utc": pd.Timestamp("2024-01-02T05:00:00Z"),
+            "effective_to_utc": pd.Timestamp("2024-01-03T05:00:00Z"),
+            "primary_benchmark": "XLK",
+        }
+    )
+
+
 def _canonical_bars(ticker: str, starts: list[pd.Timestamp]) -> pd.DataFrame:
     calendar = xcals.get_calendar("XNYS")
     closes = [
@@ -461,3 +610,17 @@ def _write_bars(
 
 def _write_json(path: Path, value: object) -> None:
     path.write_text(json.dumps(value, sort_keys=True), encoding="utf-8")
+
+
+def _coverage_audit(
+    *,
+    excluded: int = 0,
+    security_count: int = 0,
+) -> dict[str, object]:
+    return {
+        "schema": module.COVERAGE_AUDIT_SCHEMA,
+        "security_count": security_count,
+        "excluded_security_count": excluded,
+        "security_audit": [],
+        "benchmark_audit": [],
+    }
