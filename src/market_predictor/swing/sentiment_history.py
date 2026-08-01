@@ -114,14 +114,7 @@ def score_alpaca_news_history(
     )
     universe = _read_universe(universe_path)
     metadata = _metadata_by_security_and_ticker(universe)
-    artifacts_raw = collection.get("artifacts")
-    if not isinstance(artifacts_raw, list):
-        raise DataReadinessError("collection manifest has no artifact inventory")
-    artifacts = [
-        {str(key): value for key, value in record.items()}
-        for record in artifacts_raw
-        if isinstance(record, dict)
-    ]
+    artifacts = _source_shard_inventory(collection_dir, collection)
 
     request = {
         "schema": SENTIMENT_REQUEST_SCHEMA,
@@ -219,7 +212,6 @@ def score_alpaca_news_history(
             security_id=security_id,
         )
         if existing is not None:
-            flush_prepared()
             observed[chunk_id] = existing
             skipped += 1
             _progress(
@@ -234,6 +226,40 @@ def score_alpaca_news_history(
 
         started_at = datetime.now(UTC)
         try:
+            if bool(artifact.get("source_empty")):
+                security_metadata = metadata.get((security_id, ticker))
+                if security_metadata is None:
+                    raise DataReadinessError(
+                        "no point-in-time company metadata for "
+                        f"{security_id}/{ticker}"
+                    )
+                empty_events, empty_scores, empty_inputs = (
+                    _empty_sentiment_inputs()
+                )
+                prepared_empty = _PreparedChunk(
+                    index=index,
+                    artifact=artifact,
+                    events=empty_events,
+                    inputs=empty_inputs,
+                    started_at=started_at,
+                )
+                _publish_scored_chunk(
+                    prepared_empty,
+                    empty_scores,
+                    model_name=model_name,
+                    model_revision=model_revision,
+                    text_mode=text_mode,
+                    max_length=max_length,
+                    fixed_latency_minutes=fixed_latency_minutes,
+                    request_hash=request_hash,
+                    scored_dir=scored_dir,
+                    attempts_dir=attempts_dir,
+                    observed=observed,
+                    failures=failures,
+                    progress=progress,
+                    total=len(eligible_artifacts),
+                )
+                continue
             source_path = Path(str(artifact["path"]))
             events, event_manifest = load_canonical_artifact(
                 source_path,
@@ -255,10 +281,34 @@ def score_alpaca_news_history(
             inputs = build_sentiment_inputs(relevant, mode=text_mode)
             event_count = len(relevant)
             if event_count > max_batch_events:
-                raise DataReadinessError(
-                    f"chunk {chunk_id} has {event_count} events, above "
-                    f"max_batch_events={max_batch_events}"
+                flush_prepared()
+                scorer_calls += _score_and_publish_sliced_chunk(
+                    _PreparedChunk(
+                        index=index,
+                        artifact=artifact,
+                        events=relevant,
+                        inputs=inputs,
+                        started_at=started_at,
+                    ),
+                    scorer=scorer,
+                    scorer_batch_size=batch_size,
+                    max_batch_events=max_batch_events,
+                    model_name=model_name,
+                    model_revision=model_revision,
+                    text_mode=text_mode,
+                    max_length=max_length,
+                    fixed_latency_minutes=fixed_latency_minutes,
+                    request_hash=request_hash,
+                    scored_dir=scored_dir,
+                    attempts_dir=attempts_dir,
+                    observed=observed,
+                    failures=failures,
+                    progress=progress,
+                    total=len(eligible_artifacts),
+                    memory_budget_gib=memory_budget_gib,
+                    memory_headroom_gib=memory_headroom_gib,
                 )
+                continue
             if prepared and (
                 len(prepared) >= max_batch_shards
                 or prepared_events + event_count > max_batch_events
@@ -409,88 +459,225 @@ def _score_and_publish_batch(
 
     offset = 0
     for chunk in prepared:
-        artifact = chunk.artifact
-        chunk_id = str(artifact.get("chunk_id", ""))
         row_count = len(chunk.events)
         chunk_scores = scores.iloc[offset : offset + row_count].reset_index(
             drop=True
         )
         offset += row_count
-        completed_at = datetime.now(UTC)
-        try:
-            sentiment = _sentiment_frame(
-                chunk.events,
-                chunk_scores,
-                inputs=chunk.inputs,
-                model_name=model_name,
-                model_revision=model_revision,
-                text_mode=text_mode,
-                max_length=max_length,
-                fixed_latency_minutes=fixed_latency_minutes,
-                computed_at_utc=completed_at,
+        _publish_scored_chunk(
+            chunk,
+            chunk_scores,
+            model_name=model_name,
+            model_revision=model_revision,
+            text_mode=text_mode,
+            max_length=max_length,
+            fixed_latency_minutes=fixed_latency_minutes,
+            request_hash=request_hash,
+            scored_dir=scored_dir,
+            attempts_dir=attempts_dir,
+            observed=observed,
+            failures=failures,
+            progress=progress,
+            total=total,
+        )
+
+
+def _score_and_publish_sliced_chunk(
+    chunk: _PreparedChunk,
+    *,
+    scorer: TextScorer,
+    scorer_batch_size: int,
+    max_batch_events: int,
+    model_name: str,
+    model_revision: str,
+    text_mode: str,
+    max_length: int,
+    fixed_latency_minutes: int,
+    request_hash: str,
+    scored_dir: Path,
+    attempts_dir: Path,
+    observed: dict[str, dict[str, Any]],
+    failures: dict[str, str],
+    progress: Callable[[dict[str, Any]], None] | None,
+    total: int,
+    memory_budget_gib: float,
+    memory_headroom_gib: float,
+) -> int:
+    score_parts: list[pd.DataFrame] = []
+    scorer_calls = 0
+    texts = chunk.inputs.astype(str).tolist()
+    try:
+        for start in range(0, len(texts), max_batch_events):
+            batch = texts[start : start + max_batch_events]
+            scorer_calls += 1
+            scores = scorer.score_texts(
+                batch,
+                batch_size=scorer_batch_size,
             )
-            _audit_sentiment_frame(sentiment)
-            target = scored_dir / f"{chunk_id}.parquet"
-            manifest = write_canonical_artifact(
-                sentiment,
-                target,
-                artifact_type="event_sentiment_research",
-                audit=_passing_audit(len(sentiment)),
-                inputs={
-                    "sentiment_request_sha256": request_hash,
-                    "source_event_artifact_sha256": str(artifact["sha256"]),
-                    "chunk_id": chunk_id,
-                },
-                production_ready=False,
+            if len(scores) != len(batch):
+                raise DataReadinessError(
+                    "FinBERT row count mismatch for sliced chunk "
+                    f"{chunk.artifact['chunk_id']}: expected {len(batch)}, "
+                    f"observed {len(scores)}"
+                )
+            score_parts.append(scores.reset_index(drop=True))
+            assert_memory_budget(
+                hard_budget_gib=memory_budget_gib,
+                headroom_gib=memory_headroom_gib,
+                stage=(
+                    "historical sentiment slice "
+                    f"{chunk.artifact['chunk_id']}:{scorer_calls}"
+                ),
             )
-            observed[chunk_id] = _artifact_record(
-                artifact,
-                target,
-                sentiment,
-                manifest,
-                started_at=chunk.started_at,
-                completed_at=completed_at,
-            )
-            failures.pop(chunk_id, None)
-            _write_attempt(
-                attempts_dir,
-                chunk_id=chunk_id,
-                request_hash=request_hash,
-                status="observed",
-                started_at=chunk.started_at,
-                completed_at=completed_at,
-                rows=len(sentiment),
-                error=None,
-            )
-            _progress(
-                progress,
-                index=chunk.index + 1,
-                total=total,
-                chunk_id=chunk_id,
-                status="observed",
-                rows=len(sentiment),
-            )
-        except Exception as exc:
-            error = f"{type(exc).__name__}: {str(exc)[:500]}"
-            failures[chunk_id] = error
-            _write_attempt(
-                attempts_dir,
-                chunk_id=chunk_id,
-                request_hash=request_hash,
-                status="failed",
-                started_at=chunk.started_at,
-                completed_at=completed_at,
-                rows=0,
-                error=error,
-            )
-            _progress(
-                progress,
-                index=chunk.index + 1,
-                total=total,
-                chunk_id=chunk_id,
-                status="failed",
-                rows=0,
-            )
+    except Exception as exc:
+        _record_chunk_failure(
+            chunk,
+            exc,
+            request_hash=request_hash,
+            attempts_dir=attempts_dir,
+            failures=failures,
+            progress=progress,
+            total=total,
+        )
+        return scorer_calls
+
+    combined = pd.concat(score_parts, ignore_index=True)
+    _publish_scored_chunk(
+        chunk,
+        combined,
+        model_name=model_name,
+        model_revision=model_revision,
+        text_mode=text_mode,
+        max_length=max_length,
+        fixed_latency_minutes=fixed_latency_minutes,
+        request_hash=request_hash,
+        scored_dir=scored_dir,
+        attempts_dir=attempts_dir,
+        observed=observed,
+        failures=failures,
+        progress=progress,
+        total=total,
+    )
+    return scorer_calls
+
+
+def _publish_scored_chunk(
+    chunk: _PreparedChunk,
+    scores: pd.DataFrame,
+    *,
+    model_name: str,
+    model_revision: str,
+    text_mode: str,
+    max_length: int,
+    fixed_latency_minutes: int,
+    request_hash: str,
+    scored_dir: Path,
+    attempts_dir: Path,
+    observed: dict[str, dict[str, Any]],
+    failures: dict[str, str],
+    progress: Callable[[dict[str, Any]], None] | None,
+    total: int,
+) -> None:
+    artifact = chunk.artifact
+    chunk_id = str(artifact.get("chunk_id", ""))
+    completed_at = datetime.now(UTC)
+    try:
+        sentiment = _sentiment_frame(
+            chunk.events,
+            scores,
+            inputs=chunk.inputs,
+            model_name=model_name,
+            model_revision=model_revision,
+            text_mode=text_mode,
+            max_length=max_length,
+            fixed_latency_minutes=fixed_latency_minutes,
+            computed_at_utc=completed_at,
+        )
+        _audit_sentiment_frame(sentiment)
+        target = scored_dir / f"{chunk_id}.parquet"
+        manifest = write_canonical_artifact(
+            sentiment,
+            target,
+            artifact_type="event_sentiment_research",
+            audit=_passing_audit(len(sentiment)),
+            inputs={
+                "sentiment_request_sha256": request_hash,
+                "source_event_artifact_sha256": str(artifact["sha256"]),
+                "chunk_id": chunk_id,
+            },
+            production_ready=False,
+        )
+        observed[chunk_id] = _artifact_record(
+            artifact,
+            target,
+            sentiment,
+            manifest,
+            started_at=chunk.started_at,
+            completed_at=completed_at,
+        )
+        failures.pop(chunk_id, None)
+        _write_attempt(
+            attempts_dir,
+            chunk_id=chunk_id,
+            request_hash=request_hash,
+            status="observed",
+            started_at=chunk.started_at,
+            completed_at=completed_at,
+            rows=len(sentiment),
+            error=None,
+        )
+        _progress(
+            progress,
+            index=chunk.index + 1,
+            total=total,
+            chunk_id=chunk_id,
+            status="observed",
+            rows=len(sentiment),
+        )
+    except Exception as exc:
+        _record_chunk_failure(
+            chunk,
+            exc,
+            request_hash=request_hash,
+            attempts_dir=attempts_dir,
+            failures=failures,
+            progress=progress,
+            total=total,
+        )
+
+
+def _record_chunk_failure(
+    chunk: _PreparedChunk,
+    exc: Exception,
+    *,
+    request_hash: str,
+    attempts_dir: Path,
+    failures: dict[str, str],
+    progress: Callable[[dict[str, Any]], None] | None,
+    total: int,
+) -> None:
+    chunk_id = str(chunk.artifact.get("chunk_id", ""))
+    completed_at = datetime.now(UTC)
+    error = f"{type(exc).__name__}: {str(exc)[:500]}"
+    failures[chunk_id] = error
+    _write_attempt(
+        attempts_dir,
+        chunk_id=chunk_id,
+        request_hash=request_hash,
+        status="failed",
+        started_at=chunk.started_at,
+        completed_at=completed_at,
+        rows=0,
+        error=error,
+    )
+    _progress(
+        progress,
+        index=chunk.index + 1,
+        total=total,
+        chunk_id=chunk_id,
+        status="failed",
+        rows=0,
+    )
 
 
 def _sentiment_frame(
@@ -566,8 +753,36 @@ def _sentiment_frame(
 
 
 def _audit_sentiment_frame(frame: pd.DataFrame) -> None:
+    required = {
+        "event_id",
+        "security_id",
+        "ticker",
+        "source_family",
+        "published_at_utc",
+        "event_available_at_utc",
+        "research_feature_available_at_utc",
+        "inference_computed_at_utc",
+        "sentiment_label",
+        "sentiment_confidence",
+        "sentiment_numeric",
+        "relevance",
+        "relevance_basis",
+        "relevance_policy_version",
+        "sentiment_input_sha256",
+        "sentiment_model",
+        "sentiment_model_revision",
+        "sentiment_input_mode",
+        "sentiment_max_length",
+        "sentiment_availability_policy",
+        "schema_version",
+    }
+    missing = sorted(required.difference(frame.columns))
+    if missing:
+        raise DataReadinessError(
+            f"sentiment artifact is missing columns: {missing}"
+        )
     if frame.empty:
-        raise DataReadinessError("sentiment artifact cannot be empty")
+        return
     if bool(frame["event_id"].astype(str).duplicated().any()):
         raise DataReadinessError("sentiment artifact has duplicate event IDs")
     confidence = pd.to_numeric(frame["sentiment_confidence"], errors="coerce")
@@ -603,6 +818,181 @@ def _audit_sentiment_frame(frame: pd.DataFrame) -> None:
         raise DataReadinessError(
             "sentiment timing precedes source evidence availability"
         )
+
+
+def _empty_sentiment_inputs(
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.Series]:
+    events = pd.DataFrame(
+        {
+            "event_id": pd.Series(dtype="string"),
+            "security_id": pd.Series(dtype="string"),
+            "ticker": pd.Series(dtype="string"),
+            "source_family": pd.Series(dtype="string"),
+            "published_at_utc": pd.Series(dtype="datetime64[ns, UTC]"),
+            "available_at_utc": pd.Series(dtype="datetime64[ns, UTC]"),
+            "relevance": pd.Series(dtype="float64"),
+            "relevance_basis": pd.Series(dtype="string"),
+        }
+    )
+    scores = pd.DataFrame(
+        {
+            "sentiment_label": pd.Series(dtype="string"),
+            "sentiment_score": pd.Series(dtype="float64"),
+            "sentiment_numeric": pd.Series(dtype="float64"),
+        }
+    )
+    return events, scores, pd.Series(dtype="string")
+
+
+def _source_shard_inventory(
+    collection_dir: Path,
+    collection: dict[str, Any],
+) -> list[dict[str, Any]]:
+    artifacts_raw = collection.get("artifacts")
+    if not isinstance(artifacts_raw, list):
+        raise DataReadinessError("collection manifest has no artifact inventory")
+    artifacts = {
+        str(record.get("chunk_id", "")): {
+            str(key): value for key, value in record.items()
+        }
+        for record in artifacts_raw
+        if isinstance(record, dict)
+    }
+    if "" in artifacts or len(artifacts) != len(artifacts_raw):
+        raise DataReadinessError(
+            "collection event artifact identities are invalid"
+        )
+
+    request_path = collection_dir / "_request.json"
+    request = _json_object(request_path)
+    if request.get("request_sha256") != collection.get("request_sha256"):
+        raise DataReadinessError(
+            "collection request and manifest identities do not match"
+        )
+    work_units_raw = request.get("work_units")
+    if not isinstance(work_units_raw, list):
+        raise DataReadinessError("collection request has no work-unit inventory")
+    work_units = [
+        {str(key): value for key, value in record.items()}
+        for record in work_units_raw
+        if isinstance(record, dict)
+    ]
+    if len(work_units) != len(work_units_raw):
+        raise DataReadinessError("collection work-unit inventory is invalid")
+
+    ledger_path = _recorded_artifact_path(
+        str(collection.get("source_collections_path", "")),
+        collection_dir=collection_dir,
+    )
+    ledger, ledger_manifest = load_canonical_artifact(
+        ledger_path,
+        expected_type="source_collections",
+        allow_research=True,
+    )
+    ledger_sha256 = str(ledger_manifest.get("artifact_sha256", ""))
+    if (
+        ledger_sha256 != str(collection.get("source_collections_sha256", ""))
+        or bool(ledger_manifest.get("production_ready"))
+    ):
+        raise DataReadinessError(
+            "collection source-ledger identity is invalid"
+        )
+    if "chunk_id" not in ledger.columns or bool(
+        ledger["chunk_id"].astype(str).duplicated().any()
+    ):
+        raise DataReadinessError(
+            "collection source-ledger chunk identities are invalid"
+        )
+    ledger_by_chunk = {
+        str(row["chunk_id"]): row
+        for row in ledger.to_dict(orient="records")
+    }
+    unit_ids = [str(unit.get("chunk_id", "")) for unit in work_units]
+    if (
+        "" in unit_ids
+        or len(set(unit_ids)) != len(unit_ids)
+        or set(ledger_by_chunk) != set(unit_ids)
+    ):
+        raise DataReadinessError(
+            "collection work units and source ledger do not match"
+        )
+
+    inventory: list[dict[str, Any]] = []
+    for unit in work_units:
+        chunk_id = str(unit["chunk_id"])
+        ticker = str(unit.get("ticker", ""))
+        security_id = str(unit.get("security_id", ""))
+        ledger_row = ledger_by_chunk[chunk_id]
+        if (
+            str(ledger_row.get("ticker", "")) != ticker
+            or str(ledger_row.get("security_id", "")) != security_id
+        ):
+            raise DataReadinessError(
+                f"collection source identity mismatch for {chunk_id}"
+            )
+        status = str(ledger_row.get("status", ""))
+        artifact = artifacts.get(chunk_id)
+        if status == "observed":
+            if artifact is None:
+                raise DataReadinessError(
+                    f"observed source shard has no artifact: {chunk_id}"
+                )
+            inventory.append({**artifact, "source_empty": False})
+            continue
+        if status != "observed_empty" or int(
+            ledger_row.get("row_count", -1)
+        ) != 0:
+            raise DataReadinessError(
+                f"source shard is not terminal for sentiment: {chunk_id}"
+            )
+        if artifact is not None:
+            raise DataReadinessError(
+                f"empty source shard unexpectedly has events: {chunk_id}"
+            )
+        empty_evidence_sha256 = _sha256_json(
+            {
+                "schema": "swing.empty_news_source_evidence.v1",
+                "collection_request_sha256": collection["request_sha256"],
+                "source_collections_sha256": ledger_sha256,
+                "chunk_id": chunk_id,
+                "ticker": ticker,
+                "security_id": security_id,
+                "start_utc": str(unit.get("start_utc", "")),
+                "end_exclusive_utc": str(
+                    unit.get("end_exclusive_utc", "")
+                ),
+                "status": status,
+                "row_count": 0,
+            }
+        )
+        inventory.append(
+            {
+                "chunk_id": chunk_id,
+                "ticker": ticker,
+                "security_id": security_id,
+                "sha256": empty_evidence_sha256,
+                "source_empty": True,
+            }
+        )
+    if set(artifacts).difference(unit_ids):
+        raise DataReadinessError(
+            "collection manifest has artifacts outside its work units"
+        )
+    return inventory
+
+
+def _recorded_artifact_path(
+    value: str,
+    *,
+    collection_dir: Path,
+) -> Path:
+    path = Path(value)
+    if path.exists():
+        return path
+    local = collection_dir / path.name
+    if local.exists():
+        return local
+    raise FileNotFoundError(path)
 
 
 def _metadata_by_security_and_ticker(
@@ -684,6 +1074,7 @@ def _load_existing_sentiment(
             f"existing sentiment artifact has another request identity: {path}"
         )
     _audit_sentiment_frame(frame)
+    first_feature, last_feature = _feature_time_bounds(frame)
     return {
         "chunk_id": chunk_id,
         "ticker": ticker,
@@ -693,14 +1084,8 @@ def _load_existing_sentiment(
         "manifest_path": str(manifest_path_for(path)),
         "sha256": str(manifest["artifact_sha256"]),
         "rows": len(frame),
-        "first_feature_available_at_utc": pd.to_datetime(
-            frame["research_feature_available_at_utc"],
-            utc=True,
-        ).min().isoformat(),
-        "last_feature_available_at_utc": pd.to_datetime(
-            frame["research_feature_available_at_utc"],
-            utc=True,
-        ).max().isoformat(),
+        "first_feature_available_at_utc": first_feature,
+        "last_feature_available_at_utc": last_feature,
     }
 
 
@@ -713,10 +1098,7 @@ def _artifact_record(
     started_at: datetime,
     completed_at: datetime,
 ) -> dict[str, Any]:
-    feature_time = pd.to_datetime(
-        frame["research_feature_available_at_utc"],
-        utc=True,
-    )
+    first_feature, last_feature = _feature_time_bounds(frame)
     return {
         "chunk_id": str(source_artifact["chunk_id"]),
         "ticker": str(source_artifact["ticker"]),
@@ -726,11 +1108,21 @@ def _artifact_record(
         "manifest_path": str(manifest_path_for(path)),
         "sha256": str(manifest["artifact_sha256"]),
         "rows": len(frame),
-        "first_feature_available_at_utc": feature_time.min().isoformat(),
-        "last_feature_available_at_utc": feature_time.max().isoformat(),
+        "first_feature_available_at_utc": first_feature,
+        "last_feature_available_at_utc": last_feature,
         "started_at_utc": started_at.isoformat(),
         "completed_at_utc": completed_at.isoformat(),
     }
+
+
+def _feature_time_bounds(frame: pd.DataFrame) -> tuple[str | None, str | None]:
+    if frame.empty:
+        return None, None
+    feature_time = pd.to_datetime(
+        frame["research_feature_available_at_utc"],
+        utc=True,
+    )
+    return feature_time.min().isoformat(), feature_time.max().isoformat()
 
 
 def _passing_audit(rows: int) -> CanonicalAuditReport:

@@ -32,9 +32,17 @@ from market_predictor.v3.errors import DataReadinessError
 
 
 class _DeterministicScorer:
-    def __init__(self, *, fail_call: int | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        fail_call: int | None = None,
+        fail_calls: set[int] | None = None,
+    ) -> None:
         self.calls = 0
-        self.fail_call = fail_call
+        self.call_sizes: list[int] = []
+        self.fail_calls = set(fail_calls or set())
+        if fail_call is not None:
+            self.fail_calls.add(fail_call)
 
     def score_texts(
         self,
@@ -43,7 +51,8 @@ class _DeterministicScorer:
     ) -> pd.DataFrame:
         del batch_size
         self.calls += 1
-        if self.calls == self.fail_call:
+        self.call_sizes.append(len(texts))
+        if self.calls in self.fail_calls:
             raise RuntimeError("injected scorer failure")
         return pd.DataFrame(
             {
@@ -277,10 +286,150 @@ class SwingSentimentHistoryTests(unittest.TestCase):
                 ["AAA", "BBB"],
             )
 
+    def test_empty_source_shards_publish_deterministic_zero_row_artifacts(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            collection_dir, audit_path, universe_path = _archive(
+                root,
+                events_per_ticker={"AAA": 0, "BBB": 0},
+            )
+            artifact_hashes: list[list[str]] = []
+            for suffix in ("first", "second"):
+                scorer = _DeterministicScorer()
+                result = score_alpaca_news_history(
+                    collection_dir=collection_dir,
+                    collection_audit_path=audit_path,
+                    universe_path=universe_path,
+                    out_dir=root / f"sentiment-{suffix}",
+                    scorer=scorer,
+                    model_name="test-finbert",
+                    model_revision="revision-1",
+                    execution_device="cpu",
+                )
 
-def _archive(root: Path) -> tuple[Path, Path, Path]:
-    memberships_path = _memberships(root / "memberships.parquet")
+                self.assertEqual(result["status"], "complete")
+                self.assertEqual(result["requested_chunks"], 2)
+                self.assertEqual(result["observed_chunks"], 2)
+                self.assertEqual(result["total_rows"], 0)
+                self.assertEqual(result["scorer_calls"], 0)
+                self.assertEqual(scorer.calls, 0)
+                artifact_hashes.append(
+                    [artifact["sha256"] for artifact in result["artifacts"]]
+                )
+                for artifact in result["artifacts"]:
+                    frame, _ = load_canonical_artifact(
+                        Path(artifact["path"]),
+                        expected_type="event_sentiment_research",
+                        allow_research=True,
+                    )
+                    self.assertTrue(frame.empty)
+                    self.assertIsNone(
+                        artifact["first_feature_available_at_utc"]
+                    )
+                    self.assertIsNone(
+                        artifact["last_feature_available_at_utc"]
+                    )
+            self.assertEqual(artifact_hashes[0], artifact_hashes[1])
+
+    def test_large_source_shard_is_scored_in_slices_and_published_once(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            collection_dir, audit_path, universe_path = _archive(
+                root,
+                tickers=("AAA",),
+                events_per_ticker={"AAA": 5},
+            )
+            scorer = _DeterministicScorer()
+
+            result = score_alpaca_news_history(
+                collection_dir=collection_dir,
+                collection_audit_path=audit_path,
+                universe_path=universe_path,
+                out_dir=root / "sentiment",
+                scorer=scorer,
+                model_name="test-finbert",
+                model_revision="revision-1",
+                execution_device="cpu",
+                max_batch_events=2,
+                max_batch_shards=10,
+            )
+
+            self.assertEqual(result["status"], "complete")
+            self.assertEqual(result["scorer_calls"], 3)
+            self.assertEqual(scorer.call_sizes, [2, 2, 1])
+            self.assertEqual(len(result["artifacts"]), 1)
+            self.assertEqual(result["artifacts"][0]["rows"], 5)
+            frame, _ = load_canonical_artifact(
+                Path(result["artifacts"][0]["path"]),
+                expected_type="event_sentiment_research",
+                allow_research=True,
+            )
+            self.assertEqual(len(frame), 5)
+            self.assertEqual(frame["event_id"].nunique(), 5)
+
+    def test_resume_skips_middle_chunk_without_flushing_pending_batch(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            collection_dir, audit_path, universe_path = _archive(
+                root,
+                tickers=("AAA", "BBB", "CCC"),
+            )
+            out_dir = root / "sentiment"
+            first = score_alpaca_news_history(
+                collection_dir=collection_dir,
+                collection_audit_path=audit_path,
+                universe_path=universe_path,
+                out_dir=out_dir,
+                scorer=_DeterministicScorer(fail_calls={1, 3}),
+                model_name="test-finbert",
+                model_revision="revision-1",
+                execution_device="cpu",
+                max_batch_shards=1,
+            )
+            self.assertEqual(first["status"], "incomplete")
+            self.assertEqual(first["observed_chunks"], 1)
+
+            resumed_scorer = _DeterministicScorer()
+            resumed = score_alpaca_news_history(
+                collection_dir=collection_dir,
+                collection_audit_path=audit_path,
+                universe_path=universe_path,
+                out_dir=out_dir,
+                scorer=resumed_scorer,
+                model_name="test-finbert",
+                model_revision="revision-1",
+                execution_device="cpu",
+                max_batch_shards=10,
+            )
+
+            self.assertEqual(resumed["status"], "complete")
+            self.assertEqual(resumed_scorer.calls, 1)
+            self.assertEqual(resumed_scorer.call_sizes, [2])
+            self.assertEqual(
+                [artifact["ticker"] for artifact in resumed["artifacts"]],
+                ["AAA", "BBB", "CCC"],
+            )
+
+
+def _archive(
+    root: Path,
+    *,
+    tickers: tuple[str, ...] = ("AAA", "BBB"),
+    events_per_ticker: dict[str, int] | None = None,
+) -> tuple[Path, Path, Path]:
+    memberships_path = _memberships(
+        root / "memberships.parquet",
+        tickers=tickers,
+    )
     collection_dir = root / "news"
+    event_counts = events_per_ticker or {ticker: 1 for ticker in tickers}
+    ticker_ids = {ticker: index + 1 for index, ticker in enumerate(tickers)}
 
     def fetch(
         symbol: str,
@@ -291,23 +440,24 @@ def _archive(root: Path) -> tuple[Path, Path, Path]:
         del start, end
         if token is not None:
             raise AssertionError("fixture has one page")
-        provider_id = 1 if symbol == "AAA" else 2
+        news = tuple(
+            {
+                "id": ticker_ids[symbol] * 1_000 + index,
+                "created_at": "2026-01-02T10:00:00Z",
+                "updated_at": "2026-01-02T10:05:00Z",
+                "headline": f"{symbol} wins contract {index}",
+                "source": "benzinga",
+                "symbols": [symbol],
+                "url": f"https://example.test/{symbol}/{index}",
+                "summary": "Revenue guidance increased.",
+                "content": "Management discussed the contract.",
+            }
+            for index in range(event_counts.get(symbol, 0))
+        )
         return AlpacaNewsPage(
             request_page_token=None,
             next_page_token=None,
-            news=(
-                {
-                    "id": provider_id,
-                    "created_at": "2026-01-02T10:00:00Z",
-                    "updated_at": "2026-01-02T10:05:00Z",
-                    "headline": f"{symbol} wins a material software contract",
-                    "source": "benzinga",
-                    "symbols": [symbol],
-                    "url": f"https://example.test/{provider_id}",
-                    "summary": "Revenue guidance increased.",
-                    "content": "Management discussed the contract.",
-                },
-            ),
+            news=news,
         )
 
     result = collect_alpaca_news_history(
@@ -330,41 +480,41 @@ def _archive(root: Path) -> tuple[Path, Path, Path]:
     universe_path = root / "universe.parquet"
     pd.DataFrame(
         {
-            "ticker": ["AAA", "BBB"],
-            "security_id": ["security:aaa", "security:bbb"],
-            "company": ["Alpha Analytics", "Beta Systems"],
-            "sector": ["Information Technology", "Information Technology"],
-            "industry": ["Software", "Software"],
+            "ticker": list(tickers),
+            "security_id": [f"security:{ticker.lower()}" for ticker in tickers],
+            "company": [f"{ticker} Systems" for ticker in tickers],
+            "sector": ["Information Technology"] * len(tickers),
+            "industry": ["Software"] * len(tickers),
         }
     ).to_parquet(universe_path, index=False)
     return collection_dir, audit_path, universe_path
 
 
-def _memberships(path: Path) -> Path:
+def _memberships(
+    path: Path,
+    *,
+    tickers: tuple[str, ...] = ("AAA", "BBB"),
+) -> Path:
     raw = pd.DataFrame(
         {
-            "ticker": ["AAA", "BBB"],
-            "security_id": ["security:aaa", "security:bbb"],
+            "ticker": list(tickers),
+            "security_id": [f"security:{ticker.lower()}" for ticker in tickers],
             "effective_from_utc": [
-                pd.Timestamp("2025-01-01T00:00:00Z"),
-                pd.Timestamp("2025-01-01T00:00:00Z"),
-            ],
-            "effective_to_utc": [pd.NaT, pd.NaT],
+                pd.Timestamp("2025-01-01T00:00:00Z")
+            ] * len(tickers),
+            "effective_to_utc": [pd.NaT] * len(tickers),
             "available_at_utc": [
-                pd.Timestamp("2026-01-01T00:00:00Z"),
-                pd.Timestamp("2026-01-01T00:00:00Z"),
-            ],
-            "sector": ["Information Technology", "Information Technology"],
-            "industry": ["Software", "Software"],
-            "market_cap_bucket": ["large", "large"],
-            "liquidity_bucket": ["high", "high"],
-            "primary_benchmark": ["XLK", "XLK"],
-            "universe_snapshot_id": ["test-memberships", "test-memberships"],
-            "source": ["test", "test"],
-            "availability_policy": [
-                "provider_publication_proxy",
-                "provider_publication_proxy",
-            ],
+                pd.Timestamp("2026-01-01T00:00:00Z")
+            ] * len(tickers),
+            "sector": ["Information Technology"] * len(tickers),
+            "industry": ["Software"] * len(tickers),
+            "market_cap_bucket": ["large"] * len(tickers),
+            "liquidity_bucket": ["high"] * len(tickers),
+            "primary_benchmark": ["XLK"] * len(tickers),
+            "universe_snapshot_id": ["test-memberships"] * len(tickers),
+            "source": ["test"] * len(tickers),
+            "availability_policy": ["provider_publication_proxy"]
+            * len(tickers),
         }
     )
     memberships = canonicalize_universe_memberships(raw)
