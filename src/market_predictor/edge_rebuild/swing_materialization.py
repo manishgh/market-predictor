@@ -15,10 +15,13 @@ import pandas as pd
 
 from market_predictor.canonical.store import (
     file_sha256,
-    load_canonical_artifact,
-    manifest_path_for,
 )
 from market_predictor.edge_rebuild.strategy_contract import StrategyContract
+from market_predictor.edge_rebuild.swing_daily_combination import (
+    VerifiedCombinedInputs,
+    prepare_combined_daily_store,
+    verify_combined_swing_inputs,
+)
 from market_predictor.edge_rebuild.swing_features import (
     SWING_FEATURE_PANEL_SCHEMA,
     SWING_FEATURE_PROFILE,
@@ -27,7 +30,6 @@ from market_predictor.edge_rebuild.swing_features import (
 )
 from market_predictor.edge_rebuild.swing_setups import (
     iter_security_batches,
-    load_collection_artifact_index,
     load_daily_bars,
     load_security_batch_bars,
 )
@@ -41,23 +43,31 @@ from market_predictor.resources import (
 from market_predictor.v3.errors import DataReadinessError
 
 SWING_MATERIALIZATION_REQUEST_SCHEMA: Final = (
-    "edge_rebuild.swing_panel_materialization_request.v1"
+    "edge_rebuild.swing_panel_materialization_request.v2"
 )
 SWING_MATERIALIZATION_MANIFEST_SCHEMA: Final = (
-    "edge_rebuild.swing_panel_materialization.v1"
+    "edge_rebuild.swing_panel_materialization.v2"
 )
 SWING_MATERIALIZATION_AUTHORITY_SCHEMA: Final = (
-    "edge_rebuild.swing_panel_materialization_authority.v1"
+    "edge_rebuild.swing_panel_materialization_authority.v2"
 )
 SWING_STAGE_ONE_SHARD_SCHEMA: Final = "edge_rebuild.swing_panel_stage_one_shard.v1"
 
 
 def materialize_swing_feature_panel(
     *,
-    collection_dir: Path,
-    memberships_path: Path,
+    pre_plan_directory: Path,
+    pre_collection_directory: Path,
+    post_collection_directory: Path,
+    membership_directory: Path,
+    raw_archive_directory: Path,
+    event_directory: Path,
+    transition_directory: Path,
+    reviewed_transitions_path: Path,
+    anchor_path: Path,
     contract: StrategyContract,
     output_dir: Path,
+    security_exclusions_path: Path | None = None,
     securities_per_shard: int = 32,
     maximum_stage_one_shards_this_run: int | None = None,
     memory_budget_gib: float = 4.0,
@@ -76,18 +86,24 @@ def materialize_swing_feature_panel(
     budget = (memory_budget_gib, memory_headroom_gib)
     output_dir.parent.mkdir(parents=True, exist_ok=True)
     with file_lock(output_dir.parent / f".{output_dir.name}.materialization"):
-        memberships, memberships_manifest = load_canonical_artifact(
-            memberships_path,
-            expected_type="memberships",
-            allow_research=True,
+        verified = verify_combined_swing_inputs(
+            pre_plan_directory=pre_plan_directory,
+            pre_collection_directory=pre_collection_directory,
+            post_collection_directory=post_collection_directory,
+            membership_directory=membership_directory,
+            raw_archive_directory=raw_archive_directory,
+            event_directory=event_directory,
+            transition_directory=transition_directory,
+            reviewed_transitions_path=reviewed_transitions_path,
+            anchor_path=anchor_path,
+            security_exclusions_path=security_exclusions_path,
         )
+        memberships = verified.memberships
         security_ids = sorted(memberships["security_id"].astype(str).unique())
         if not security_ids:
             raise DataReadinessError("swing materialization has no securities")
         request = _build_request(
-            collection_dir=collection_dir,
-            memberships_path=memberships_path,
-            memberships_manifest=memberships_manifest,
+            verified=verified,
             contract=contract,
             security_ids=security_ids,
             securities_per_shard=securities_per_shard,
@@ -97,10 +113,16 @@ def materialize_swing_feature_panel(
         request_sha256 = _json_sha256(request)
         _bind_request(output_dir, request, request_sha256)
         final_dir = output_dir / "final"
+        combined = prepare_combined_daily_store(
+            verified=verified,
+            output_directory=output_dir / "combined_daily",
+            parent_request_sha256=request_sha256,
+            memory_budget_gib=memory_budget_gib,
+            memory_headroom_gib=memory_headroom_gib,
+        )
         if final_dir.exists():
             return load_complete_swing_feature_panel(output_dir)
-
-        artifacts = load_collection_artifact_index(collection_dir)
+        artifacts = combined.artifacts
         benchmark_tickers = sorted(
             {
                 contract.labels.benchmark_market.upper(),
@@ -196,6 +218,8 @@ def load_complete_swing_feature_panel(output_dir: Path) -> dict[str, Any]:
         key: value for key, value in request.items() if key != "request_sha256"
     }
     request_sha256 = _json_sha256(request_payload)
+    source = manifest.get("source")
+    combined_authority = output_dir / "combined_daily" / "_authority.json"
     if (
         request.get("schema") != SWING_MATERIALIZATION_REQUEST_SCHEMA
         or request.get("request_sha256") != request_sha256
@@ -206,6 +230,10 @@ def load_complete_swing_feature_panel(output_dir: Path) -> dict[str, Any]:
         or authority.get("request_sha256") != request_sha256
         or authority.get("artifact") != "_manifest.json"
         or authority.get("artifact_sha256") != file_sha256(manifest_path)
+        or not isinstance(source, dict)
+        or not combined_authority.is_file()
+        or source.get("combined_daily_authority_sha256")
+        != file_sha256(combined_authority)
     ):
         raise DataReadinessError(
             f"swing panel authority does not verify: {output_dir}"
@@ -228,29 +256,16 @@ def load_complete_swing_feature_panel(output_dir: Path) -> dict[str, Any]:
 
 def _build_request(
     *,
-    collection_dir: Path,
-    memberships_path: Path,
-    memberships_manifest: Mapping[str, object],
+    verified: VerifiedCombinedInputs,
     contract: StrategyContract,
     security_ids: list[str],
     securities_per_shard: int,
     memory_budget_gib: float,
     memory_headroom_gib: float,
 ) -> dict[str, Any]:
-    collection_manifest = collection_dir / "_manifest.json"
-    if not collection_manifest.is_file():
-        raise DataReadinessError(
-            f"daily collection manifest is missing: {collection_manifest}"
-        )
     return {
         "schema": SWING_MATERIALIZATION_REQUEST_SCHEMA,
-        "collection_dir": str(collection_dir.resolve()),
-        "collection_manifest_sha256": file_sha256(collection_manifest),
-        "memberships_path": str(memberships_path.resolve()),
-        "memberships_sha256": str(memberships_manifest["artifact_sha256"]),
-        "memberships_manifest_sha256": file_sha256(
-            manifest_path_for(memberships_path)
-        ),
+        "combined_daily_inputs": verified.request_payload,
         "strategy_contract_sha256": contract.sha256(),
         "swing_feature_panel_schema": SWING_FEATURE_PANEL_SCHEMA,
         "feature_profile": SWING_FEATURE_PROFILE,
@@ -521,8 +536,21 @@ def _finalize_and_publish_stage_one(
                 sum(int(item["zero_volume_bars_dropped"]) for item in shard_records)
             ),
             "source": {
-                "collection_manifest_sha256": request["collection_manifest_sha256"],
-                "memberships_sha256": request["memberships_sha256"],
+                "combined_daily_authority_sha256": file_sha256(
+                    output_dir / "combined_daily" / "_authority.json"
+                ),
+                "pre_collection": request["combined_daily_inputs"][
+                    "pre_collection"
+                ],
+                "post_collection": request["combined_daily_inputs"][
+                    "post_collection"
+                ],
+                "membership_authority": request["combined_daily_inputs"][
+                    "membership_authority"
+                ],
+                "excluded_security_ids_sha256": request["combined_daily_inputs"][
+                    "excluded_security_ids_sha256"
+                ],
             },
             "memory": memory_audit(
                 hard_budget_gib=budget[0],

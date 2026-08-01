@@ -344,13 +344,41 @@ def register_edge_rebuild_commands(app: typer.Typer, console: Any) -> None:
     @app.command("materialize-edge-rebuild-swing-panel")
     @serialized_heavy_job("materialize-edge-rebuild-swing-panel")
     def materialize_edge_rebuild_swing_panel(
-        collection_dir: Path = typer.Option(
+        pre_plan_dir: Path = typer.Option(
             ...,
-            help="Completed canonical daily-bar collection.",
+            help="Verified exact pre-2019 acquisition-plan authority.",
         ),
-        memberships: Path = typer.Option(
+        pre_collection_dir: Path = typer.Option(
             ...,
-            help="Verified point-in-time membership artifact.",
+            help="Verified exact 2018-05-29 through 2019-07-08 collection.",
+        ),
+        post_collection_dir: Path = typer.Option(
+            ...,
+            help="Verified 2019-07-09 through 2026-07-08 collection.",
+        ),
+        membership_authority_dir: Path = typer.Option(
+            ...,
+            help="Verified 2018-2026 point-in-time membership authority.",
+        ),
+        raw_archive_dir: Path = typer.Option(
+            ...,
+            help="Raw S&P archive bound by the membership authority.",
+        ),
+        event_authority_dir: Path = typer.Option(
+            ...,
+            help="S&P event authority bound by the membership authority.",
+        ),
+        transition_authority_dir: Path = typer.Option(
+            ...,
+            help="S&P transition authority bound by the membership authority.",
+        ),
+        reviewed_transitions: Path = typer.Option(
+            ...,
+            help="Reviewed transition ledger bound by the authority.",
+        ),
+        anchor: Path = typer.Option(
+            ...,
+            help="Cutoff constituent anchor bound by the authority.",
         ),
         out_dir: Path = typer.Option(
             ...,
@@ -365,14 +393,26 @@ def register_edge_rebuild_commands(app: typer.Typer, console: Any) -> None:
             min=1,
             help="Optional resumable operational limit; stage two waits.",
         ),
+        security_exclusions: Path | None = typer.Option(
+            None,
+            help="Optional exclusions already bound by the membership authority.",
+        ),
     ) -> None:
-        """Publish the complete seven-year causal swing ranking panel."""
+        """Publish the complete 2018-2026 causal swing ranking panel."""
 
         result = materialize_swing_feature_panel(
-            collection_dir=collection_dir,
-            memberships_path=memberships,
+            pre_plan_directory=pre_plan_dir,
+            pre_collection_directory=pre_collection_dir,
+            post_collection_directory=post_collection_dir,
+            membership_directory=membership_authority_dir,
+            raw_archive_directory=raw_archive_dir,
+            event_directory=event_authority_dir,
+            transition_directory=transition_authority_dir,
+            reviewed_transitions_path=reviewed_transitions,
+            anchor_path=anchor,
             contract=load_strategy_contract(contract),
             output_dir=out_dir,
+            security_exclusions_path=security_exclusions,
             securities_per_shard=securities_per_shard,
             maximum_stage_one_shards_this_run=max_stage_one_shards,
         )

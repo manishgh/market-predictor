@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from typing import Any
 
@@ -8,6 +7,10 @@ import pandas as pd
 import pytest
 
 from market_predictor.edge_rebuild.strategy_contract import load_strategy_contract
+from market_predictor.edge_rebuild.swing_daily_combination import (
+    CombinedDailyStore,
+    VerifiedCombinedInputs,
+)
 from market_predictor.edge_rebuild.swing_materialization import (
     load_complete_swing_feature_panel,
     materialize_swing_feature_panel,
@@ -47,6 +50,20 @@ def _rows(group: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame.from_records(records)
 
 
+def _source_arguments(root: Path) -> dict[str, Path]:
+    return {
+        "pre_plan_directory": root / "plan",
+        "pre_collection_directory": root / "pre",
+        "post_collection_directory": root / "post",
+        "membership_directory": root / "membership",
+        "raw_archive_directory": root / "raw",
+        "event_directory": root / "events",
+        "transition_directory": root / "transitions",
+        "reviewed_transitions_path": root / "review.csv",
+        "anchor_path": root / "anchor.csv",
+    }
+
+
 @pytest.fixture
 def materialization_inputs(
     tmp_path: Path,
@@ -54,32 +71,37 @@ def materialization_inputs(
 ) -> tuple[Path, Path, dict[str, int]]:
     import market_predictor.edge_rebuild.swing_materialization as module
 
-    collection = tmp_path / "collection"
-    collection.mkdir()
-    (collection / "_manifest.json").write_text(
-        json.dumps({"artifacts": []}),
-        encoding="utf-8",
-    )
-    memberships_path = tmp_path / "memberships.parquet"
-    memberships_path.write_bytes(b"memberships")
-    memberships_path.with_suffix(".parquet.manifest.json").write_text(
-        "{}",
-        encoding="utf-8",
-    )
     memberships = _memberships()
-    monkeypatch.setattr(
-        module,
-        "load_canonical_artifact",
-        lambda *_args, **_kwargs: (
-            memberships.copy(),
-            {"artifact_sha256": "membership-artifact"},
-        ),
+    verified = VerifiedCombinedInputs(
+        memberships=memberships,
+        request_payload={
+            "pre_collection": {"manifest_sha256": "a", "authority_sha256": "b"},
+            "post_collection": {"manifest_sha256": "c"},
+            "membership_authority": {"authority_sha256": "d"},
+            "excluded_security_ids_sha256": "e",
+        },
+        pre_records=(),
+        post_records={},
+        excluded_security_ids=(),
+        benchmark_tickers=("SPY", "QQQ", "XLK"),
     )
     monkeypatch.setattr(
         module,
-        "load_collection_artifact_index",
-        lambda _path: {},
+        "verify_combined_swing_inputs",
+        lambda **_kwargs: verified,
     )
+
+    def prepare(**kwargs: Any) -> CombinedDailyStore:
+        output = Path(kwargs["output_directory"])
+        output.mkdir(parents=True, exist_ok=True)
+        (output / "_authority.json").write_text("{}", encoding="utf-8")
+        return CombinedDailyStore(
+            memberships=memberships,
+            artifacts={},
+            manifest={},
+        )
+
+    monkeypatch.setattr(module, "prepare_combined_daily_store", prepare)
     monkeypatch.setattr(
         module,
         "load_daily_bars",
@@ -111,14 +133,14 @@ def materialization_inputs(
 
     monkeypatch.setattr(module, "build_swing_feature_rows", build)
     monkeypatch.setattr(module, "finalize_swing_feature_panel", finalize)
-    return collection, memberships_path, calls
+    return tmp_path, tmp_path, calls
 
 
 def test_materialization_resumes_then_publishes_immutable_panel(
     tmp_path: Path,
     materialization_inputs: tuple[Path, Path, dict[str, int]],
 ) -> None:
-    collection, memberships, calls = materialization_inputs
+    source_root, _memberships, calls = materialization_inputs
     output = tmp_path / "panel"
     contract = load_strategy_contract(
         Path(__file__).resolve().parents[1]
@@ -127,8 +149,7 @@ def test_materialization_resumes_then_publishes_immutable_panel(
     )
 
     first = materialize_swing_feature_panel(
-        collection_dir=collection,
-        memberships_path=memberships,
+        **_source_arguments(source_root),
         contract=contract,
         output_dir=output,
         securities_per_shard=2,
@@ -139,8 +160,7 @@ def test_materialization_resumes_then_publishes_immutable_panel(
     assert calls == {"build": 1, "finalize": 0}
 
     complete = materialize_swing_feature_panel(
-        collection_dir=collection,
-        memberships_path=memberships,
+        **_source_arguments(source_root),
         contract=contract,
         output_dir=output,
         securities_per_shard=2,
@@ -152,8 +172,7 @@ def test_materialization_resumes_then_publishes_immutable_panel(
     assert calls == {"build": 2, "finalize": 1}
 
     replay = materialize_swing_feature_panel(
-        collection_dir=collection,
-        memberships_path=memberships,
+        **_source_arguments(source_root),
         contract=contract,
         output_dir=output,
         securities_per_shard=2,
@@ -163,8 +182,7 @@ def test_materialization_resumes_then_publishes_immutable_panel(
 
     with pytest.raises(DataReadinessError, match="resume request differs"):
         materialize_swing_feature_panel(
-            collection_dir=collection,
-            memberships_path=memberships,
+            **_source_arguments(source_root),
             contract=contract,
             output_dir=output,
             securities_per_shard=1,
@@ -175,7 +193,7 @@ def test_resume_refuses_a_corrupted_stage_one_shard(
     tmp_path: Path,
     materialization_inputs: tuple[Path, Path, dict[str, int]],
 ) -> None:
-    collection, memberships, _calls = materialization_inputs
+    source_root, _memberships, _calls = materialization_inputs
     output = tmp_path / "panel"
     contract = load_strategy_contract(
         Path(__file__).resolve().parents[1]
@@ -183,8 +201,7 @@ def test_resume_refuses_a_corrupted_stage_one_shard(
         / "edge_rebuild_strategy_contract.toml"
     )
     materialize_swing_feature_panel(
-        collection_dir=collection,
-        memberships_path=memberships,
+        **_source_arguments(source_root),
         contract=contract,
         output_dir=output,
         securities_per_shard=2,
@@ -195,8 +212,7 @@ def test_resume_refuses_a_corrupted_stage_one_shard(
 
     with pytest.raises(DataReadinessError, match="does not verify"):
         materialize_swing_feature_panel(
-            collection_dir=collection,
-            memberships_path=memberships,
+            **_source_arguments(source_root),
             contract=contract,
             output_dir=output,
             securities_per_shard=2,
