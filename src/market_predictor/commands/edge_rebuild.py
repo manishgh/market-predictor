@@ -655,7 +655,10 @@ def register_edge_rebuild_commands(app: typer.Typer, console: Any) -> None:
     def audit_edge_rebuild_selected_session_one_minute(
         plan_dir: Path = typer.Option(...),
         collection_dir: Path = typer.Option(...),
-        five_minute_collection_dir: Path = typer.Option(...),
+        five_minute_canonical_dir: Path = typer.Option(
+            ...,
+            help="Verified merged canonical regular-session five-minute store.",
+        ),
         out_dir: Path = typer.Option(...),
         contract: Path = typer.Option(
             Path("configs/edge_rebuild_strategy_contract.toml")
@@ -666,7 +669,7 @@ def register_edge_rebuild_commands(app: typer.Typer, console: Any) -> None:
         result = publish_selected_session_one_minute_coverage(
             plan_directory=plan_dir,
             collection_directory=collection_dir,
-            five_minute_collection_directory=five_minute_collection_dir,
+            five_minute_canonical_directory=five_minute_canonical_dir,
             strategy_contract=load_strategy_contract(contract),
             strategy_contract_path=contract,
             output_directory=out_dir,
