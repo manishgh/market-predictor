@@ -104,6 +104,16 @@ _IDENTITY_COLUMNS: Final = (
     "session_segment",
     "sector",
 )
+_TEXT_COLUMNS: Final = (
+    "dataset_row_id",
+    "ticker",
+    "security_id",
+    "session_date_et",
+    "decision_group_id",
+    "session_segment",
+    "sector",
+)
+_PARTITION_CONCAT_CHUNK_SIZE: Final = 512
 
 
 @dataclass(frozen=True, slots=True)
@@ -510,6 +520,7 @@ def load_published_intraday_dataset(directory: Path) -> PublishedIntradayDataset
         )
 
     parts: list[pd.DataFrame] = []
+    chunks: list[pd.DataFrame] = []
     for index, raw in enumerate(raw_partitions):
         record = _object(raw, "manifest partition")
         path = _resolve_inside(root, record.get("path"))
@@ -523,30 +534,28 @@ def load_published_intraday_dataset(directory: Path) -> PublishedIntradayDataset
                 part[column] = pd.to_numeric(part[column], errors="coerce").astype(
                     "float32"
                 )
+            for column in _TEXT_COLUMNS:
+                part[column] = part[column].astype("string[pyarrow]")
             parts.append(part)
+            if len(parts) >= _PARTITION_CONCAT_CHUNK_SIZE:
+                chunks.append(pd.concat(parts, ignore_index=True))
+                parts.clear()
         assert_memory_budget(
             hard_budget_gib=4.0,
             headroom_gib=0.75,
             stage=f"intraday dataset partition {index} load",
         )
-    if not parts:
+    if parts:
+        chunks.append(pd.concat(parts, ignore_index=True))
+        parts.clear()
+    if not chunks:
         raise DataReadinessError("published intraday dataset has no eligible training rows")
-    frame = pd.concat(parts, ignore_index=True)
-    del parts
+    frame = pd.concat(chunks, ignore_index=True)
+    del chunks, parts
     if len(frame) != projected_eligible_rows:
         raise DataReadinessError(
             "loaded eligible rows differ from the immutable dataset summary"
         )
-    for column in (
-        "dataset_row_id",
-        "ticker",
-        "security_id",
-        "session_date_et",
-        "decision_group_id",
-        "session_segment",
-        "sector",
-    ):
-        frame[column] = frame[column].astype("string[pyarrow]")
     release_process_memory()
     assert_peak_memory_budget(hard_budget_gib=4.0, headroom_gib=0.75, stage="intraday dataset load")
     frame["row_identity"] = frame["dataset_row_id"]
