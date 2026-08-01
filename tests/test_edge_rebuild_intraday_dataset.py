@@ -1,0 +1,338 @@
+from __future__ import annotations
+
+from dataclasses import replace
+from pathlib import Path
+from typing import Any
+
+import numpy as np
+import pandas as pd
+import pytest
+
+import market_predictor.edge_rebuild.intraday_dataset as dataset_module
+from market_predictor.edge_rebuild.intraday_dataset import (
+    INTRADAY_DATASET_SCHEMA,
+    _Artifact,
+    _VerifiedInputs,
+    load_complete_intraday_dataset,
+    publish_intraday_dataset,
+)
+from market_predictor.edge_rebuild.intraday_labels import (
+    build_exact_causal_intraday_labels,
+)
+from market_predictor.edge_rebuild.intraday_selection import (
+    INTRADAY_SELECTION_SCHEMA,
+)
+from market_predictor.edge_rebuild.strategy_contract import (
+    StrategyContract,
+    load_strategy_contract,
+)
+from market_predictor.v3.errors import DataReadinessError
+
+ROOT = Path(__file__).resolve().parents[1]
+CONTRACT_PATH = ROOT / "configs" / "edge_rebuild_strategy_contract.toml"
+DAY = "2026-07-08"
+BENCHMARKS = (
+    "SPY",
+    "QQQ",
+    "XLB",
+    "XLC",
+    "XLE",
+    "XLF",
+    "XLI",
+    "XLK",
+    "XLP",
+    "XLRE",
+    "XLU",
+    "XLV",
+    "XLY",
+)
+
+
+def _contract() -> StrategyContract:
+    return load_strategy_contract(CONTRACT_PATH)
+
+
+def _minute_bars(ticker: str, *, offset: float = 0.0) -> pd.DataFrame:
+    starts = pd.date_range(f"{DAY}T13:30:00Z", periods=390, freq="1min")
+    phase = np.arange(390, dtype="float64")
+    opens = 100.0 + offset + phase * 0.002 + np.sin(phase / 8.0) * 0.08
+    closes = opens + np.sin(phase / 3.0) * 0.03 + 0.01
+    return pd.DataFrame(
+        {
+            "ticker": ticker,
+            "timeframe": "1m",
+            "bar_start_utc": starts,
+            "bar_end_utc": starts + pd.Timedelta(minutes=1),
+            "available_at_utc": starts + pd.Timedelta(minutes=2),
+            "open": opens,
+            "high": np.maximum(opens, closes) + 0.08,
+            "low": np.minimum(opens, closes) - 0.08,
+            "close": closes,
+            "volume": 1_000.0,
+            "source": "alpaca",
+            "price_feed": "sip",
+            "adjustment": "all",
+        }
+    )
+
+
+def _verified_inputs(tmp_path: Path, *, tickers: tuple[str, ...] = ("AAA",)) -> _VerifiedInputs:
+    contract = _contract()
+    selection_rows: list[dict[str, object]] = []
+    membership_rows: list[dict[str, object]] = []
+    coverage_rows: list[dict[str, object]] = []
+    stock_artifacts: list[_Artifact] = []
+    for rank, ticker in enumerate(tickers, start=1):
+        selection_rows.append(
+            {
+                "ticker": ticker,
+                "session_date_et": DAY,
+                "activation_time_utc": pd.Timestamp(f"{DAY}T13:31:00Z"),
+                "activation_rank": rank,
+                "relative_volume_at_activation": 2.1,
+                "average_volume_prior_sessions": 390_000.0,
+                "median_volume_prior_sessions": 390_000.0,
+                "price_at_activation": 100.0,
+            }
+        )
+        membership_rows.append(
+            {
+                "ticker": ticker,
+                "security_id": f"SEC-{ticker}",
+                "effective_from_utc": pd.Timestamp("2020-01-01T00:00:00Z"),
+                "effective_to_utc": pd.NaT,
+                "available_at_utc": pd.Timestamp("2020-01-01T00:00:00Z"),
+                "sector": "Information Technology",
+                "industry": "Software",
+                "market_cap_bucket": "large_cap_sp500",
+                "liquidity_bucket": "sp500_constituent",
+                "primary_benchmark": "XLK",
+                "universe_snapshot_id": "pit-test",
+                "source": "spglobal_official_point_in_time",
+                "availability_policy": "provider_publication_proxy",
+                "schema_version": "market_data.v1",
+            }
+        )
+        stock = _minute_bars(ticker, offset=float(rank))
+        path = tmp_path / "stock" / f"{ticker}.parquet"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        stock.to_parquet(path, index=False)
+        stock_artifacts.append(_Artifact(path=path, session_date_et=DAY, symbol_rows={ticker: len(stock)}))
+        coverage_rows.append(
+            {
+                "ticker": ticker,
+                "session_date_et": DAY,
+                "observed_rows": len(stock),
+                "coverage_status": "complete",
+            }
+        )
+
+    benchmark = pd.concat(
+        [_minute_bars(ticker, offset=10.0 + index) for index, ticker in enumerate(BENCHMARKS)],
+        ignore_index=True,
+    )
+    benchmark_path = tmp_path / "benchmark" / "session.parquet"
+    benchmark_path.parent.mkdir(parents=True, exist_ok=True)
+    benchmark.to_parquet(benchmark_path, index=False)
+    benchmark_artifact = _Artifact(
+        path=benchmark_path,
+        session_date_et=DAY,
+        symbol_rows={ticker: 390 for ticker in BENCHMARKS},
+    )
+    lineage = {
+        "selection_authority_sha256": "1" * 64,
+        "selection_manifest_sha256": "2" * 64,
+        "selection_table_sha256": "3" * 64,
+        "stock_collection_authority_sha256": "4" * 64,
+        "stock_collection_manifest_sha256": "5" * 64,
+        "stock_coverage_authority_sha256": "6" * 64,
+        "stock_coverage_manifest_sha256": "7" * 64,
+        "benchmark_collection_authority_sha256": "8" * 64,
+        "benchmark_collection_manifest_sha256": "9" * 64,
+        "membership_authority_sha256": "a" * 64,
+        "membership_manifest_sha256": "b" * 64,
+        "membership_table_sha256": "c" * 64,
+        "strategy_contract_file_sha256": "d" * 64,
+        "strategy_contract_sha256": contract.sha256(),
+    }
+    return _VerifiedInputs(
+        selection=pd.DataFrame(selection_rows),
+        coverage=pd.DataFrame(coverage_rows),
+        excluded_tickers=frozenset(),
+        memberships=pd.DataFrame(membership_rows),
+        stock_artifacts=tuple(stock_artifacts),
+        benchmark_artifacts=(benchmark_artifact,),
+        benchmark_tickers=frozenset(BENCHMARKS),
+        parent_lineage=lineage,
+        contract=contract,
+        contract_sha256=contract.sha256(),
+    )
+
+
+def _publish(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    verified: _VerifiedInputs,
+    *,
+    output_name: str = "dataset",
+) -> dict[str, Any]:
+    monkeypatch.setattr(dataset_module, "_verify_inputs", lambda **_: verified)
+    return publish_intraday_dataset(
+        selection_directory=tmp_path / "selection",
+        stock_collection_directory=tmp_path / "stock_collection",
+        stock_coverage_directory=tmp_path / "coverage",
+        benchmark_collection_directory=tmp_path / "benchmark_collection",
+        membership_authority_directory=tmp_path / "memberships",
+        strategy_contract=verified.contract,
+        strategy_contract_path=CONTRACT_PATH,
+        output_directory=tmp_path / output_name,
+    )
+
+
+def test_publishes_hash_bound_partition_and_complete_abstention_audit(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    verified = _verified_inputs(tmp_path)
+    manifest = _publish(tmp_path, monkeypatch, verified)
+    output = tmp_path / "dataset"
+
+    assert manifest["schema"] == INTRADAY_DATASET_SCHEMA
+    assert manifest["status"] == "complete"
+    assert manifest["summary"]["published_stock_sessions"] == 1
+    assert len(manifest["partitions"]) == 1
+    partition = output / manifest["partitions"][0]["path"]
+    rows = pd.read_parquet(partition)
+    abstentions = pd.read_parquet(output / "audit" / "abstentions.parquet")
+
+    assert rows["dataset_request_sha256"].eq(manifest["request_sha256"]).all()
+    assert rows["parent_lineage_sha256"].eq(manifest["parent_lineage_sha256"]).all()
+    assert set(abstentions["dataset_row_id"].dropna()).issubset(set(rows["dataset_row_id"]))
+    assert (output / "_authority.json").is_file()
+    assert load_complete_intraday_dataset(output) == manifest
+
+
+def test_legacy_or_tampered_selection_parent_is_rejected_before_read(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        dataset_module,
+        "load_complete_intraday_selection",
+        lambda _: {"schema": "edge_rebuild.intraday_universe_selection.v2"},
+    )
+
+    with pytest.raises(DataReadinessError, match="legacy or leaked"):
+        dataset_module._verify_inputs(
+            selection_directory=tmp_path / "selection",
+            stock_collection_directory=tmp_path / "stock",
+            stock_coverage_directory=tmp_path / "coverage",
+            benchmark_collection_directory=tmp_path / "benchmarks",
+            membership_authority_directory=tmp_path / "memberships",
+            strategy_contract=_contract(),
+            strategy_contract_path=CONTRACT_PATH,
+        )
+
+
+def test_missing_benchmark_path_fails_closed_without_publication(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    verified = _verified_inputs(tmp_path)
+    verified.benchmark_artifacts[0].path.unlink()
+
+    with pytest.raises(DataReadinessError, match="benchmark one-minute path is missing"):
+        _publish(tmp_path, monkeypatch, verified)
+
+    assert not (tmp_path / "dataset").exists()
+    assert not list(tmp_path.glob(".dataset.*.staging"))
+
+
+def test_tampered_parent_authority_failure_is_not_bypassed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def reject(_: Path) -> dict[str, Any]:
+        raise DataReadinessError("intraday selection table failed its hash")
+
+    monkeypatch.setattr(dataset_module, "load_complete_intraday_selection", reject)
+    with pytest.raises(DataReadinessError, match="failed its hash"):
+        dataset_module._verify_inputs(
+            selection_directory=tmp_path / "selection",
+            stock_collection_directory=tmp_path / "stock",
+            stock_coverage_directory=tmp_path / "coverage",
+            benchmark_collection_directory=tmp_path / "benchmarks",
+            membership_authority_directory=tmp_path / "memberships",
+            strategy_contract=_contract(),
+            strategy_contract_path=CONTRACT_PATH,
+        )
+
+
+def test_leakage_timestamp_rejects_complete_publication(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    verified = _verified_inputs(tmp_path)
+    original = build_exact_causal_intraday_labels
+
+    def poisoned(*args: Any, **kwargs: Any) -> pd.DataFrame:
+        frame = original(*args, **kwargs)
+        eligible = frame["label_eligible"].astype(bool)
+        frame.loc[eligible, "label_available_at_utc"] = frame.loc[eligible, "exit_bar_end_utc"] - pd.Timedelta(seconds=1)
+        return frame
+
+    monkeypatch.setattr(dataset_module, "build_exact_causal_intraday_labels", poisoned)
+    with pytest.raises(DataReadinessError, match="leakage"):
+        _publish(tmp_path, monkeypatch, verified)
+
+    assert not (tmp_path / "dataset").exists()
+    assert not list(tmp_path.glob(".dataset.*.staging"))
+
+
+def test_partial_publication_is_removed_and_never_gets_authority(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    verified = _verified_inputs(tmp_path)
+    original = dataset_module._write_partition
+
+    def interrupted(*args: Any, **kwargs: Any) -> dict[str, Any]:
+        original(*args, **kwargs)
+        raise RuntimeError("simulated interruption")
+
+    monkeypatch.setattr(dataset_module, "_write_partition", interrupted)
+    with pytest.raises(RuntimeError, match="simulated interruption"):
+        _publish(tmp_path, monkeypatch, verified)
+
+    assert not (tmp_path / "dataset").exists()
+    assert not list(tmp_path.glob(".dataset.*.staging"))
+
+
+def test_idempotent_replay_preserves_immutable_dataset(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    verified = _verified_inputs(tmp_path)
+    first = _publish(tmp_path, monkeypatch, verified)
+    manifest_mtime = (tmp_path / "dataset" / "_manifest.json").stat().st_mtime_ns
+    second = _publish(tmp_path, monkeypatch, verified)
+
+    assert first == second
+    assert (tmp_path / "dataset" / "_manifest.json").stat().st_mtime_ns == manifest_mtime
+
+    changed_lineage = {**verified.parent_lineage, "selection_manifest_sha256": "f" * 64}
+    changed = replace(verified, parent_lineage=changed_lineage)
+    with pytest.raises(DataReadinessError, match="immutable"):
+        _publish(tmp_path, monkeypatch, changed)
+
+
+def test_tampered_published_partition_is_detected(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    verified = _verified_inputs(tmp_path)
+    manifest = _publish(tmp_path, monkeypatch, verified)
+    partition = tmp_path / "dataset" / manifest["partitions"][0]["path"]
+    with partition.open("ab") as handle:
+        handle.write(b"tamper")
+
+    with pytest.raises(DataReadinessError, match="failed integrity"):
+        load_complete_intraday_dataset(tmp_path / "dataset")
+
+
+def test_stock_loading_is_bounded_to_one_selected_stock_session(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    verified = _verified_inputs(tmp_path, tickers=("AAA", "BBB", "CCC"))
+    observed: list[tuple[int, int]] = []
+    original = dataset_module._load_stock_session
+
+    def tracked(*args: Any, **kwargs: Any) -> pd.DataFrame:
+        frame = original(*args, **kwargs)
+        observed.append((frame["ticker"].nunique(), len(frame)))
+        return frame
+
+    monkeypatch.setattr(dataset_module, "_load_stock_session", tracked)
+    manifest = _publish(tmp_path, monkeypatch, verified)
+
+    assert len(observed) == 3
+    assert all(symbols == 1 and rows == 390 for symbols, rows in observed)
+    assert manifest["summary"]["published_stock_sessions"] == 3
+
+
+def test_selection_schema_constant_is_current_causal_version() -> None:
+    assert INTRADAY_SELECTION_SCHEMA.endswith(".v3")
