@@ -125,6 +125,12 @@ def test_repository_training_policy_is_complete_and_frozen() -> None:
     assert config.maximum_label_horizon_minutes == 30
     assert config.top_k == 10
     assert config.maximum_process_memory_gib == 4.0
+    learned = sum(
+        spec.family != "deterministic"
+        for spec in intraday_training._candidate_specs(config)
+    )
+    assert learned == 5
+    assert learned <= config.maximum_learned_candidates
 
 
 def test_temporal_test_poison_cannot_change_validation_selection(tmp_path: Path) -> None:
@@ -340,6 +346,8 @@ def test_memory_guard_stops_before_any_artifact_is_published(
 
     with pytest.raises(ValueError, match="hard limit"):
         IntradayTrainingConfig(maximum_process_memory_gib=4.01)
+    with pytest.raises(ValueError, match="candidate budget"):
+        IntradayTrainingConfig(maximum_learned_candidates=7)
 
 
 def test_negative_deterministic_economics_do_not_veto_model_fitting(

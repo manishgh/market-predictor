@@ -140,6 +140,7 @@ class IntradayTrainingConfig:
     ranker_max_depths: tuple[int, ...] = (3,)
     ranker_n_estimators: int = 100
     ranker_max_bin: int = 127
+    maximum_learned_candidates: int = 6
     bootstrap_samples: int = 500
     random_seed: int = 42
     maximum_process_memory_gib: float = 4.0
@@ -174,6 +175,8 @@ class IntradayTrainingConfig:
             raise ValueError("ranker depths must be between 1 and 8")
         if not 10 <= self.ranker_n_estimators <= 500 or not 2 <= self.ranker_max_bin <= 255:
             raise ValueError("ranker estimator or bin bounds are invalid")
+        if not 1 <= self.maximum_learned_candidates <= 6:
+            raise ValueError("learned candidate budget must be between 1 and 6")
         if self.bootstrap_samples < 100 or self.bootstrap_samples > 5_000:
             raise ValueError("session bootstrap samples must be between 100 and 5000")
         if not 0 < self.maximum_process_memory_gib <= 4.0:
@@ -306,6 +309,14 @@ def train_intraday_edge_candidate(
     security_holdout = _deterministic_security_holdout(data, development_sessions)
 
     candidate_specs = _candidate_specs(policy)
+    learned_candidate_count = sum(
+        spec.family != "deterministic" for spec in candidate_specs
+    )
+    if learned_candidate_count > policy.maximum_learned_candidates:
+        raise DataReadinessError(
+            "intraday candidate grid exceeds the frozen learned-candidate budget: "
+            f"{learned_candidate_count} > {policy.maximum_learned_candidates}"
+        )
     validation_records: list[dict[str, Any]] = []
     for spec in candidate_specs:
         _guard_memory(policy, f"{spec.candidate_id} validation start", peak=False)
