@@ -152,14 +152,16 @@ def build_exact_causal_intraday_labels(
     benchmark_lookup = benchmarks.set_index(["ticker", "bar_start_utc"], drop=False).sort_index()
     output = _empty_label_columns(features.copy())
 
-    for row_index, row in output.iterrows():
-        if not bool(row["feature_eligible"]):
-            source_reason = row["feature_ineligible_reason"]
-            reason = "feature_ineligible"
-            if pd.notna(source_reason) and str(source_reason).strip():
-                reason = f"feature_ineligible:{str(source_reason).strip()}"
-            output.at[row_index, "label_ineligible_reason"] = reason
-            continue
+    feature_eligible = output["feature_eligible"].astype(bool)
+    feature_ineligible = ~feature_eligible
+    output.loc[feature_ineligible, "label_ineligible_reason"] = "feature_ineligible"
+    source_reasons = output["feature_ineligible_reason"].astype("string")
+    has_source_reason = feature_ineligible & source_reasons.notna() & source_reasons.str.strip().ne("")
+    output.loc[has_source_reason, "label_ineligible_reason"] = (
+        "feature_ineligible:" + source_reasons.loc[has_source_reason].str.strip()
+    )
+
+    for row_index, row in output.loc[feature_eligible].iterrows():
 
         session_key = (str(row["ticker"]), row["session_date_et"])
         session_bars = stock_groups.get(session_key)
