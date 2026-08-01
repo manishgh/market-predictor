@@ -103,7 +103,6 @@ _IDENTITY_COLUMNS: Final = (
     "exit_bar_end_utc",
     "session_segment",
     "sector",
-    "market_cap_bucket",
 )
 
 
@@ -492,7 +491,7 @@ def load_published_intraday_dataset(directory: Path) -> PublishedIntradayDataset
     projected_eligible_rows = int(summary.get("dataset_eligible_rows", -1))
     if projected_rows < 1 or projected_eligible_rows < 1 or projected_eligible_rows > projected_rows:
         raise DataReadinessError("published intraday dataset partition row counts are invalid")
-    text_columns = 7
+    text_columns = 6
     timestamp_columns = 5
     boolean_columns = 2
     economic_columns = 6
@@ -546,7 +545,6 @@ def load_published_intraday_dataset(directory: Path) -> PublishedIntradayDataset
         "decision_group_id",
         "session_segment",
         "sector",
-        "market_cap_bucket",
     ):
         frame[column] = frame[column].astype("string[pyarrow]")
     release_process_memory()
