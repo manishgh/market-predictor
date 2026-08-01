@@ -104,6 +104,7 @@
     "plan-intraday-specialist-one-minute",
     "promote-intraday-model",
     "promote-swing-model",
+    "publish-edge-rebuild-intraday-dataset",
     "publish-edge-rebuild-sp500-memberships",
     "publish-edge-rebuild-sp500-transitions",
     "publish-verified-universe",

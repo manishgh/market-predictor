@@ -49,6 +49,7 @@ from market_predictor.edge_rebuild.intraday_selection import (
 )
 from market_predictor.edge_rebuild.one_minute_coverage import (
     load_complete_one_minute_coverage,
+    verify_canonical_five_minute_store,
 )
 from market_predictor.edge_rebuild.selected_session_history import (
     verify_selected_stock_sessions,
@@ -538,19 +539,18 @@ def _verify_inputs(
         or not _same_path(coverage_manifest.get("collection_path"), stock_collection_directory)
     ):
         raise DataReadinessError("stock collection and coverage lineage differ")
-    five_minute_collection_directory = _existing_directory(
-        coverage_manifest.get("five_minute_collection_path"),
-        "five-minute coverage parent",
+    five_minute_canonical_directory = _existing_directory(
+        coverage_manifest.get("five_minute_canonical_path"),
+        "five-minute canonical coverage parent",
     )
-    load_complete_intraday_history_collection(five_minute_collection_directory)
-    five_minute_request = _load_json(five_minute_collection_directory / "_request.json")
-    _require_collection_request(
-        five_minute_request,
-        timeframe="5Min",
-        label="five-minute coverage parent",
+    _, canonical_identity = verify_canonical_five_minute_store(
+        five_minute_canonical_directory
     )
-    if coverage_manifest.get("five_minute_collection_manifest_sha256") != file_sha256(five_minute_collection_directory / "_manifest.json"):
-        raise DataReadinessError("coverage five-minute parent lineage differs")
+    if any(
+        coverage_manifest.get(key) != expected
+        for key, expected in canonical_identity.items()
+    ):
+        raise DataReadinessError("coverage canonical five-minute parent lineage differs")
     stock_plan_directory = _existing_directory(coverage_manifest.get("plan_path"), "stock plan")
     stock_plan = load_complete_intraday_history_plan(stock_plan_directory)
     if (
@@ -614,8 +614,15 @@ def _verify_inputs(
         "stock_collection_manifest_sha256": file_sha256(stock_collection_directory / "_manifest.json"),
         "stock_coverage_authority_sha256": file_sha256(stock_coverage_directory / "_authority.json"),
         "stock_coverage_manifest_sha256": file_sha256(stock_coverage_directory / "_manifest.json"),
-        "five_minute_collection_authority_sha256": file_sha256(five_minute_collection_directory / "_authority.json"),
-        "five_minute_collection_manifest_sha256": file_sha256(five_minute_collection_directory / "_manifest.json"),
+        "five_minute_canonical_authority_sha256": canonical_identity[
+            "five_minute_canonical_authority_sha256"
+        ],
+        "five_minute_canonical_manifest_sha256": canonical_identity[
+            "five_minute_canonical_manifest_sha256"
+        ],
+        "five_minute_canonical_file_inventory_sha256": canonical_identity[
+            "five_minute_canonical_file_inventory_sha256"
+        ],
         "benchmark_collection_authority_sha256": file_sha256(benchmark_collection_directory / "_authority.json"),
         "benchmark_collection_manifest_sha256": file_sha256(benchmark_collection_directory / "_manifest.json"),
         "membership_authority_sha256": file_sha256(membership_authority_directory / "_authority.json"),

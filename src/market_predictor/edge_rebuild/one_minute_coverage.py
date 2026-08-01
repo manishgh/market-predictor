@@ -271,7 +271,7 @@ def _canonical_pair_rows(
     *,
     required: pd.DataFrame,
 ) -> tuple[dict[tuple[str, str], int], dict[str, str]]:
-    records, identity = _verify_canonical_store(directory)
+    records, identity = verify_canonical_five_minute_store(directory)
     required_by_ticker = {str(ticker): group.copy() for ticker, group in required.groupby("ticker", sort=True)}
     regular = {str(record["ticker"]): record for record in records if record["store"] == "regular"}
     observed: dict[tuple[str, str], int] = {}
@@ -312,7 +312,7 @@ def _canonical_pair_rows(
     return observed, identity
 
 
-def _verify_canonical_store(
+def verify_canonical_five_minute_store(
     directory: Path,
 ) -> tuple[list[dict[str, Any]], dict[str, str]]:
     manifest_path = directory / "_manifest.json"

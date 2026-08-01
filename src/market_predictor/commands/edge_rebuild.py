@@ -34,6 +34,7 @@ from market_predictor.edge_rebuild.history_contracts import (
 from market_predictor.edge_rebuild.history_materialization import (
     reorganize_intraday_history,
 )
+from market_predictor.edge_rebuild.intraday_dataset import publish_intraday_dataset
 from market_predictor.edge_rebuild.intraday_history import (
     build_intraday_history_plan,
 )
@@ -681,6 +682,33 @@ def register_edge_rebuild_commands(app: typer.Typer, console: Any) -> None:
                 **result["summary"],
             }
         )
+
+    @app.command("publish-edge-rebuild-intraday-dataset")
+    @serialized_heavy_job("publish-edge-rebuild-intraday-dataset")
+    def publish_edge_rebuild_intraday_dataset(
+        selection_dir: Path = typer.Option(...),
+        stock_collection_dir: Path = typer.Option(...),
+        stock_coverage_dir: Path = typer.Option(...),
+        benchmark_collection_dir: Path = typer.Option(...),
+        membership_authority_dir: Path = typer.Option(...),
+        out_dir: Path = typer.Option(...),
+        contract: Path = typer.Option(
+            Path("configs/edge_rebuild_strategy_contract.toml")
+        ),
+    ) -> None:
+        """Publish the immutable causal intraday feature and label dataset."""
+
+        result = publish_intraday_dataset(
+            selection_directory=selection_dir,
+            stock_collection_directory=stock_collection_dir,
+            stock_coverage_directory=stock_coverage_dir,
+            benchmark_collection_directory=benchmark_collection_dir,
+            membership_authority_directory=membership_authority_dir,
+            strategy_contract=load_strategy_contract(contract),
+            strategy_contract_path=contract,
+            output_directory=out_dir,
+        )
+        console.print(result["summary"])
 
     @app.command("plan-edge-rebuild-intraday-history")
     @serialized_heavy_job("plan-edge-rebuild-intraday-history")
