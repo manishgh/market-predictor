@@ -489,18 +489,37 @@ def _process_pair(
 ) -> _PairResult:
     ticker = str(activation["ticker"])
     _guard_memory(f"intraday dataset {ticker} {session_date}")
+    membership = _membership_for_pair(
+        verified.memberships,
+        ticker=ticker,
+        session_date=session_date,
+    )
+    activation_reason = _activation_abstention_reason(
+        activation,
+        membership,
+        maximum_delay_seconds=verified.contract.intraday.decision_finalization_seconds,
+    )
+    if activation_reason is not None:
+        return _PairResult(
+            ticker=ticker,
+            labeled=None,
+            volume_audit=None,
+            pair_audit=_pair_audit(
+                ticker,
+                session_date,
+                status="abstained",
+                reason=activation_reason,
+            ),
+            abstention=_pair_abstention(
+                ticker, session_date, "activation", activation_reason
+            ),
+        )
     stock = _load_stock_session(
         session_date,
         ticker,
         artifacts=stock_index,
         coverage=verified.coverage,
     )
-    membership = _membership_for_pair(
-        verified.memberships,
-        ticker=ticker,
-        session_date=session_date,
-    )
-    _validate_activation_window(activation, membership)
     volume_result = build_causal_volume_bars(
         stock,
         pd.DataFrame([activation]),
@@ -928,12 +947,30 @@ def _membership_for_pair(
     return rows
 
 
-def _validate_activation_window(activation: Mapping[str, object], membership: pd.DataFrame) -> None:
+def _activation_abstention_reason(
+    activation: Mapping[str, object],
+    membership: pd.DataFrame,
+    *,
+    maximum_delay_seconds: int,
+) -> str | None:
     activated_at = pd.Timestamp(activation["activation_time_utc"])
     open_at = pd.Timestamp(membership.iloc[0]["session_open_utc"])
     close_at = pd.Timestamp(membership.iloc[0]["session_close_utc"])
-    if activated_at < open_at or activated_at >= close_at:
-        raise DataReadinessError("selection activation lies outside its exchange session")
+    identity = (str(activation["session_date_et"]), str(activation["ticker"]))
+    if activated_at < open_at:
+        raise DataReadinessError(
+            f"selection activation precedes the exchange open for {identity}"
+        )
+    if activated_at >= close_at:
+        latest_valid_availability = close_at + pd.Timedelta(
+            seconds=maximum_delay_seconds
+        )
+        if activated_at > latest_valid_availability:
+            raise DataReadinessError(
+                f"selection activation exceeds the frozen close delay for {identity}"
+            )
+        return "activation_not_executable_before_session_close"
+    return None
 
 
 def _finalize_dataset_rows(

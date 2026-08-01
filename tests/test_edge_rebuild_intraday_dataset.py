@@ -281,6 +281,28 @@ def test_incomplete_five_minute_pair_is_audited_abstention(
     assert row["reason"] == "incomplete_five_minute_continuity"
 
 
+def test_close_plus_delay_activation_is_audited_abstention(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    verified = _verified_inputs(tmp_path, tickers=("AAA", "BBB"))
+    selection = verified.selection.copy()
+    selection.loc[selection["ticker"].eq("AAA"), "activation_time_utc"] = (
+        pd.Timestamp(f"{DAY}T20:01:00Z")
+    )
+    verified = replace(verified, selection=selection)
+
+    manifest = _publish(tmp_path, monkeypatch, verified)
+    audit = pd.read_parquet(
+        tmp_path / "dataset" / "audit" / "stock_session_audit.parquet"
+    )
+
+    assert manifest["summary"]["published_stock_sessions"] == 1
+    row = audit.loc[audit["ticker"].eq("AAA")].iloc[0]
+    assert row["status"] == "abstained"
+    assert row["reason"] == "activation_not_executable_before_session_close"
+
+
 def test_legacy_or_tampered_selection_parent_is_rejected_before_read(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         dataset_module,
