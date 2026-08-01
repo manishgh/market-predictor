@@ -42,6 +42,10 @@ from market_predictor.edge_rebuild.intraday_selection import (
     build_intraday_selection,
     publish_intraday_selection,
 )
+from market_predictor.edge_rebuild.intraday_training import (
+    load_intraday_training_config,
+    train_intraday_edge_candidate,
+)
 from market_predictor.edge_rebuild.one_minute_coverage import (
     publish_selected_session_one_minute_coverage,
 )
@@ -695,6 +699,7 @@ def register_edge_rebuild_commands(app: typer.Typer, console: Any) -> None:
         contract: Path = typer.Option(
             Path("configs/edge_rebuild_strategy_contract.toml")
         ),
+        pair_workers: int = typer.Option(4, min=1, max=4),
     ) -> None:
         """Publish the immutable causal intraday feature and label dataset."""
 
@@ -707,8 +712,34 @@ def register_edge_rebuild_commands(app: typer.Typer, console: Any) -> None:
             strategy_contract=load_strategy_contract(contract),
             strategy_contract_path=contract,
             output_directory=out_dir,
+            pair_workers=pair_workers,
         )
         console.print(result["summary"])
+
+    @app.command("train-edge-rebuild-intraday-candidate")
+    @serialized_heavy_job("train-edge-rebuild-intraday-candidate")
+    def train_edge_rebuild_intraday_candidate(
+        dataset_dir: Path = typer.Option(...),
+        out_dir: Path = typer.Option(...),
+        policy: Path = typer.Option(
+            Path("configs/edge_rebuild_intraday_training.toml")
+        ),
+    ) -> None:
+        """Train and evaluate a non-promoted intraday candidate sequentially."""
+
+        result = train_intraday_edge_candidate(
+            dataset_authority_directory=dataset_dir,
+            output_directory=out_dir,
+            config=load_intraday_training_config(policy),
+        )
+        console.print(
+            {
+                "status": "candidate_only",
+                "selected_candidate_id": result.selected_candidate_id,
+                "final_test": result.evaluation["final_test"],
+                "out_dir": str(result.output_directory),
+            }
+        )
 
     @app.command("plan-edge-rebuild-intraday-history")
     @serialized_heavy_job("plan-edge-rebuild-intraday-history")

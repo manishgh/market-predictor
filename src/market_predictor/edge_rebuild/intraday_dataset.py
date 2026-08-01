@@ -7,6 +7,7 @@ import re
 import shutil
 import uuid
 from collections.abc import Mapping
+from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from pathlib import Path
@@ -71,6 +72,7 @@ INTRADAY_DATASET_SCHEMA: Final = "edge_rebuild.intraday_dataset.v1"
 INTRADAY_DATASET_AUTHORITY_SCHEMA: Final = "edge_rebuild.intraday_dataset_authority.v1"
 MEMORY_HARD_BUDGET_GIB: Final = 4.0
 MEMORY_HEADROOM_GIB: Final = 0.75
+MAX_PAIR_WORKERS: Final = 4
 _SAFE_TICKER = re.compile(r"^[A-Z0-9][A-Z0-9.-]{0,31}$")
 _REQUIRED_BENCHMARKS: Final = frozenset(
     {
@@ -159,6 +161,7 @@ class _VerifiedInputs:
     selection: pd.DataFrame
     coverage: pd.DataFrame
     excluded_tickers: frozenset[str]
+    incomplete_pairs: frozenset[tuple[str, str]]
     memberships: pd.DataFrame
     stock_artifacts: tuple[_Artifact, ...]
     benchmark_artifacts: tuple[_Artifact, ...]
@@ -166,6 +169,22 @@ class _VerifiedInputs:
     parent_lineage: dict[str, str]
     contract: StrategyContract
     contract_sha256: str
+
+
+@dataclass(frozen=True, slots=True)
+class _PairResult:
+    ticker: str
+    labeled: pd.DataFrame | None
+    volume_audit: Mapping[str, Any] | None
+    pair_audit: dict[str, Any] | None
+    abstention: dict[str, Any] | None
+
+
+@dataclass(frozen=True, slots=True)
+class _SessionResult:
+    partitions: tuple[dict[str, Any], ...]
+    pair_audits: tuple[dict[str, Any], ...]
+    abstentions: tuple[dict[str, Any], ...]
 
 
 def publish_intraday_dataset(
@@ -178,6 +197,7 @@ def publish_intraday_dataset(
     strategy_contract: StrategyContract,
     strategy_contract_path: Path,
     output_directory: Path,
+    pair_workers: int = MAX_PAIR_WORKERS,
 ) -> dict[str, Any]:
     """Publish verified feature/label partitions without loading the corpus.
 
@@ -186,6 +206,8 @@ def publish_intraday_dataset(
     cross-sectional ranks remain exact while memory stays bounded.
     """
 
+    if pair_workers < 1 or pair_workers > MAX_PAIR_WORKERS:
+        raise ValueError(f"pair_workers must be between 1 and {MAX_PAIR_WORKERS}")
     verified = _verify_inputs(
         selection_directory=selection_directory,
         stock_collection_directory=stock_collection_directory,
@@ -209,6 +231,7 @@ def publish_intraday_dataset(
         "partitioning": ["session_date_et", "ticker"],
         "processing_unit": "one_selected_stock_session",
         "ranking_unit": "one_exchange_session",
+        "pair_workers": pair_workers,
         "memory_hard_budget_gib": MEMORY_HARD_BUDGET_GIB,
     }
     request_sha256 = json_sha256(request)
@@ -238,118 +261,31 @@ def publish_intraday_dataset(
         if usable.empty:
             raise DataReadinessError("coverage excluded every selected security")
 
-        for session_date, session_selection in usable.groupby("session_date_et", sort=True, observed=True):
-            session_key = str(session_date)
-            benchmarks = _load_benchmark_session(
-                session_key,
-                artifacts=benchmark_index,
-                required_tickers=verified.benchmark_tickers,
-            )
-            labeled_parts: list[pd.DataFrame] = []
-            volume_audits: dict[str, Mapping[str, Any]] = {}
-            for activation in session_selection.sort_values(["activation_time_utc", "ticker"], kind="stable").to_dict(orient="records"):
-                ticker = str(activation["ticker"])
-                _guard_memory(f"intraday dataset {ticker} {session_key}")
-                stock = _load_stock_session(
-                    session_key,
-                    ticker,
-                    artifacts=stock_index,
-                    coverage=verified.coverage,
-                )
-                membership = _membership_for_pair(
-                    verified.memberships,
-                    ticker=ticker,
-                    session_date=session_key,
-                )
-                _validate_activation_window(activation, membership)
-                volume_result = build_causal_volume_bars(
-                    stock,
-                    pd.DataFrame([activation]),
-                    contract=verified.contract,
-                    strategy_contract_sha256=verified.contract_sha256,
-                )
-                volume_audits[ticker] = cast(Mapping[str, Any], volume_result.audit.iloc[0].to_dict())
-                if volume_result.bars.empty:
-                    pair_audits.append(
-                        _pair_audit(
-                            ticker,
-                            session_key,
-                            status="abstained",
-                            reason="no_completed_volume_bars",
-                            source_rows=len(stock),
-                        )
-                    )
-                    abstentions.append(_pair_abstention(ticker, session_key, "volume_bars", "no_completed_volume_bars"))
-                    release_process_memory()
-                    continue
-                features = build_causal_intraday_features(
-                    volume_result.bars,
-                    stock,
-                    benchmarks,
-                    membership,
-                    contract=verified.contract,
-                    strategy_contract_sha256=verified.contract_sha256,
-                )
-                decision_features, closed_features = _split_decision_features(features)
-                if decision_features.empty:
-                    labeled = _empty_label_columns(closed_features)
-                else:
-                    labeled = build_exact_causal_intraday_labels(
-                        decision_features,
-                        stock,
-                        benchmarks,
-                        contract=verified.contract,
-                        strategy_contract_sha256=verified.contract_sha256,
-                    )
-                    if not closed_features.empty:
-                        labeled = pd.concat(
-                            [labeled, _empty_label_columns(closed_features)],
-                            ignore_index=True,
-                        )
-                labeled_parts.append(labeled)
-                release_process_memory()
-
-            if not labeled_parts:
-                continue
-            session_rows = pd.concat(labeled_parts, ignore_index=True)
-            session_rows = _add_contemporaneous_rank(session_rows, verified.contract)
-            session_rows = _finalize_dataset_rows(
-                session_rows,
-                request_sha256=request_sha256,
-                parent_lineage_sha256=str(request["parent_lineage_sha256"]),
-            )
-            _validate_no_leakage(session_rows)
-            for ticker, pair in session_rows.groupby("ticker", sort=True, observed=True):
-                normalized = str(ticker)
-                pair = pair.sort_values("volume_bar_number", kind="stable").reset_index(drop=True)
-                record = _write_partition(
-                    pair,
+        with ThreadPoolExecutor(
+            max_workers=pair_workers,
+            thread_name_prefix="intraday-pair",
+        ) as executor:
+            for session_date, session_selection in usable.groupby(
+                "session_date_et", sort=True, observed=True
+            ):
+                session_result = _publish_session(
+                    session_date=str(session_date),
+                    session_selection=session_selection,
+                    verified=verified,
+                    stock_index=stock_index,
+                    benchmark_index=benchmark_index,
+                    request_sha256=request_sha256,
+                    parent_lineage_sha256=str(request["parent_lineage_sha256"]),
                     root=staging,
-                    session_date=session_key,
-                    ticker=normalized,
+                    executor=executor,
                 )
-                partition_records.append(record)
-                pair_abstentions = _row_abstentions(pair)
-                abstentions.extend(pair_abstentions)
-                audit = volume_audits[normalized]
-                pair_audits.append(
-                    _pair_audit(
-                        normalized,
-                        session_key,
-                        status="published",
-                        reason=None,
-                        source_rows=int(audit["source_rows"]),
-                        completed_volume_bars=len(pair),
-                        feature_rows=len(pair),
-                        feature_eligible_rows=int(pair["feature_eligible"].sum()),
-                        label_eligible_rows=int(pair["label_eligible"].sum()),
-                        dataset_eligible_rows=int(pair["dataset_eligible"].sum()),
-                        abstention_rows=len(pair_abstentions),
-                    )
+                partition_records.extend(session_result.partitions)
+                pair_audits.extend(session_result.pair_audits)
+                abstentions.extend(session_result.abstentions)
+                release_process_memory()
+                _guard_memory(
+                    f"intraday dataset session {str(session_date)} complete"
                 )
-            del session_rows, labeled_parts, benchmarks
-            release_process_memory()
-            _guard_memory(f"intraday dataset session {session_key} complete")
 
         if not partition_records:
             raise DataReadinessError("intraday dataset produced no feature-label partitions")
@@ -377,6 +313,7 @@ def publish_intraday_dataset(
             "summary": {
                 "selected_stock_sessions": int(len(verified.selection)),
                 "excluded_stock_sessions": int(verified.selection["ticker"].isin(verified.excluded_tickers).sum()),
+                "incomplete_stock_sessions": len(verified.incomplete_pairs),
                 "published_stock_sessions": len(partition_records),
                 "rows": total_rows,
                 "dataset_eligible_rows": eligible_rows,
@@ -426,6 +363,200 @@ def publish_intraday_dataset(
     except Exception:
         shutil.rmtree(staging, ignore_errors=True)
         raise
+
+
+def _publish_session(
+    *,
+    session_date: str,
+    session_selection: pd.DataFrame,
+    verified: _VerifiedInputs,
+    stock_index: Mapping[tuple[str, str], _Artifact],
+    benchmark_index: Mapping[str, tuple[_Artifact, ...]],
+    request_sha256: str,
+    parent_lineage_sha256: str,
+    root: Path,
+    executor: ThreadPoolExecutor,
+) -> _SessionResult:
+    benchmarks = _load_benchmark_session(
+        session_date,
+        artifacts=benchmark_index,
+        required_tickers=verified.benchmark_tickers,
+    )
+    pair_audits: list[dict[str, Any]] = []
+    abstentions: list[dict[str, Any]] = []
+    activations = session_selection.sort_values(
+        ["activation_time_utc", "ticker"], kind="stable"
+    ).to_dict(orient="records")
+    futures: list[Future[_PairResult]] = []
+    for activation in activations:
+        ticker = str(activation["ticker"])
+        if (session_date, ticker) in verified.incomplete_pairs:
+            pair_audits.append(
+                _pair_audit(
+                    ticker,
+                    session_date,
+                    status="abstained",
+                    reason="incomplete_five_minute_continuity",
+                )
+            )
+            abstentions.append(
+                _pair_abstention(
+                    ticker,
+                    session_date,
+                    "coverage",
+                    "incomplete_five_minute_continuity",
+                )
+            )
+            continue
+        futures.append(
+            executor.submit(
+                _process_pair,
+                activation=activation,
+                session_date=session_date,
+                verified=verified,
+                stock_index=stock_index,
+                benchmarks=benchmarks,
+            )
+        )
+
+    labeled_parts: list[pd.DataFrame] = []
+    volume_audits: dict[str, Mapping[str, Any]] = {}
+    for future in futures:
+        result = future.result()
+        if result.pair_audit is not None:
+            pair_audits.append(result.pair_audit)
+        if result.abstention is not None:
+            abstentions.append(result.abstention)
+        if result.labeled is not None:
+            labeled_parts.append(result.labeled)
+        if result.volume_audit is not None:
+            volume_audits[result.ticker] = result.volume_audit
+
+    if not labeled_parts:
+        return _SessionResult((), tuple(pair_audits), tuple(abstentions))
+    session_rows = pd.concat(labeled_parts, ignore_index=True)
+    session_rows = _add_contemporaneous_rank(session_rows, verified.contract)
+    session_rows = _finalize_dataset_rows(
+        session_rows,
+        request_sha256=request_sha256,
+        parent_lineage_sha256=parent_lineage_sha256,
+    )
+    _validate_no_leakage(session_rows)
+    partitions: list[dict[str, Any]] = []
+    for ticker, pair in session_rows.groupby("ticker", sort=True, observed=True):
+        normalized = str(ticker)
+        pair = pair.sort_values("volume_bar_number", kind="stable").reset_index(
+            drop=True
+        )
+        partitions.append(
+            _write_partition(
+                pair,
+                root=root,
+                session_date=session_date,
+                ticker=normalized,
+            )
+        )
+        pair_abstentions = _row_abstentions(pair)
+        abstentions.extend(pair_abstentions)
+        audit = volume_audits[normalized]
+        pair_audits.append(
+            _pair_audit(
+                normalized,
+                session_date,
+                status="published",
+                reason=None,
+                source_rows=int(audit["source_rows"]),
+                completed_volume_bars=len(pair),
+                feature_rows=len(pair),
+                feature_eligible_rows=int(pair["feature_eligible"].sum()),
+                label_eligible_rows=int(pair["label_eligible"].sum()),
+                dataset_eligible_rows=int(pair["dataset_eligible"].sum()),
+                abstention_rows=len(pair_abstentions),
+            )
+        )
+    return _SessionResult(
+        tuple(partitions), tuple(pair_audits), tuple(abstentions)
+    )
+
+
+def _process_pair(
+    *,
+    activation: Mapping[str, object],
+    session_date: str,
+    verified: _VerifiedInputs,
+    stock_index: Mapping[tuple[str, str], _Artifact],
+    benchmarks: pd.DataFrame,
+) -> _PairResult:
+    ticker = str(activation["ticker"])
+    _guard_memory(f"intraday dataset {ticker} {session_date}")
+    stock = _load_stock_session(
+        session_date,
+        ticker,
+        artifacts=stock_index,
+        coverage=verified.coverage,
+    )
+    membership = _membership_for_pair(
+        verified.memberships,
+        ticker=ticker,
+        session_date=session_date,
+    )
+    _validate_activation_window(activation, membership)
+    volume_result = build_causal_volume_bars(
+        stock,
+        pd.DataFrame([activation]),
+        contract=verified.contract,
+        strategy_contract_sha256=verified.contract_sha256,
+    )
+    volume_audit = cast(
+        Mapping[str, Any], volume_result.audit.iloc[0].to_dict()
+    )
+    if volume_result.bars.empty:
+        return _PairResult(
+            ticker=ticker,
+            labeled=None,
+            volume_audit=None,
+            pair_audit=_pair_audit(
+                ticker,
+                session_date,
+                status="abstained",
+                reason="no_completed_volume_bars",
+                source_rows=len(stock),
+            ),
+            abstention=_pair_abstention(
+                ticker, session_date, "volume_bars", "no_completed_volume_bars"
+            ),
+        )
+    features = build_causal_intraday_features(
+        volume_result.bars,
+        stock,
+        benchmarks,
+        membership,
+        contract=verified.contract,
+        strategy_contract_sha256=verified.contract_sha256,
+    )
+    decision_features, closed_features = _split_decision_features(features)
+    if decision_features.empty:
+        labeled = _empty_label_columns(closed_features)
+    else:
+        labeled = build_exact_causal_intraday_labels(
+            decision_features,
+            stock,
+            benchmarks,
+            contract=verified.contract,
+            strategy_contract_sha256=verified.contract_sha256,
+        )
+        if not closed_features.empty:
+            labeled = pd.concat(
+                [labeled, _empty_label_columns(closed_features)],
+                ignore_index=True,
+            )
+    return _PairResult(
+        ticker=ticker,
+        labeled=labeled,
+        volume_audit=volume_audit,
+        pair_audit=None,
+        abstention=None,
+    )
 
 
 def load_complete_intraday_dataset(directory: Path) -> dict[str, Any]:
@@ -603,7 +734,7 @@ def _verify_inputs(
     memberships, _ = load_canonical_artifact(membership_path, expected_type="memberships", allow_research=True)
 
     coverage, excluded = _load_coverage_tables(stock_coverage_directory, coverage_manifest)
-    _validate_coverage(selection, coverage, excluded)
+    incomplete_pairs = _validate_coverage(selection, coverage, excluded)
     stock_artifacts = _collection_artifacts(stock_collection_directory, stock_manifest)
     benchmark_artifacts = _collection_artifacts(benchmark_collection_directory, benchmark_manifest)
     parent_lineage = {
@@ -635,6 +766,7 @@ def _verify_inputs(
         selection=selection,
         coverage=coverage,
         excluded_tickers=frozenset(excluded),
+        incomplete_pairs=incomplete_pairs,
         memberships=memberships,
         stock_artifacts=stock_artifacts,
         benchmark_artifacts=benchmark_artifacts,
@@ -736,6 +868,18 @@ def _load_benchmark_session(
         raise DataReadinessError(f"benchmark one-minute path is missing: {missing_paths[0]}")
     frames = [pd.read_parquet(artifact.path) for artifact in paths]
     frame = pd.concat(frames, ignore_index=True)
+    expected_rows: dict[str, int] = {}
+    for artifact in paths:
+        for ticker, rows in artifact.symbol_rows.items():
+            expected_rows[ticker] = expected_rows.get(ticker, 0) + int(rows)
+    observed_rows = {
+        str(ticker): int(rows)
+        for ticker, rows in frame.groupby("ticker", observed=True).size().items()
+    }
+    if observed_rows != expected_rows:
+        raise DataReadinessError(
+            f"benchmark session {session_date} row counts differ from collection authority"
+        )
     observed = set(frame["ticker"].astype(str).str.upper().str.strip())
     if observed != set(required_tickers):
         missing = sorted(set(required_tickers).difference(observed))
@@ -750,8 +894,10 @@ def _load_benchmark_session(
     close_at = pd.Timestamp(calendar.session_close(session)).tz_convert("UTC")
     expected = set(pd.date_range(open_at, close_at, freq="1min", inclusive="left"))
     for ticker, indices in frame.groupby("ticker", sort=False, observed=True).groups.items():
-        if set(starts.loc[indices]) != expected:
-            raise DataReadinessError(f"benchmark minute path is incomplete for {(session_date, str(ticker))}")
+        if not set(starts.loc[indices]).issubset(expected):
+            raise DataReadinessError(
+                f"benchmark minute path exceeds the exchange session for {(session_date, str(ticker))}"
+            )
     return frame
 
 
@@ -862,7 +1008,7 @@ def _validate_no_leakage(frame: pd.DataFrame) -> None:
         bool(feature_at.ge(entry_at).any())
         or bool(entry_at.ge(exit_end).any())
         or bool(exit_end.gt(label_at).any())
-        or bool(label_at.gt(session_close).any())
+        or bool(exit_end.gt(session_close).any())
     ):
         raise DataReadinessError("dataset contains leakage or invalid label availability timestamps")
 
@@ -987,6 +1133,20 @@ def _write_audits(
     abstention_frame = pd.DataFrame(abstentions, columns=list(_ABSTENTION_COLUMNS)).sort_values(
         ["session_date_et", "ticker", "volume_bar_number"], kind="stable"
     )
+    if not pair_frame.empty:
+        pair_frame["session_date_et"] = pd.to_datetime(
+            pair_frame["session_date_et"], errors="raise"
+        ).dt.date.astype("string")
+    if not abstention_frame.empty:
+        abstention_frame["session_date_et"] = pd.to_datetime(
+            abstention_frame["session_date_et"], errors="raise"
+        ).dt.date.astype("string")
+        abstention_frame["volume_bar_number"] = pd.to_numeric(
+            abstention_frame["volume_bar_number"], errors="coerce"
+        ).astype("Int64")
+        abstention_frame["feature_available_at_utc"] = pd.to_datetime(
+            abstention_frame["feature_available_at_utc"], utc=True, errors="coerce"
+        )
     pair_path = audit_directory / "stock_session_audit.parquet"
     abstention_path = audit_directory / "abstentions.parquet"
     pair_frame.to_parquet(pair_path, index=False)
@@ -1013,7 +1173,11 @@ def _load_coverage_tables(root: Path, manifest: Mapping[str, Any]) -> tuple[pd.D
     return coverage, set(exclusions["ticker"].astype(str).str.upper().str.strip())
 
 
-def _validate_coverage(selection: pd.DataFrame, coverage: pd.DataFrame, excluded: set[str]) -> None:
+def _validate_coverage(
+    selection: pd.DataFrame,
+    coverage: pd.DataFrame,
+    excluded: set[str],
+) -> frozenset[tuple[str, str]]:
     if bool(coverage.duplicated(["ticker", "session_date_et"]).any()):
         raise DataReadinessError("coverage repeats a selected stock-session")
     selected_keys = set(zip(selection["session_date_et"], selection["ticker"], strict=True))
@@ -1022,11 +1186,18 @@ def _validate_coverage(selection: pd.DataFrame, coverage: pd.DataFrame, excluded
         raise DataReadinessError("coverage does not exactly match causal selection")
     if not excluded.issubset(set(selection["ticker"])):
         raise DataReadinessError("coverage excludes a security absent from selection")
-    usable = coverage[~coverage["ticker"].isin(excluded)]
-    if bool(usable["coverage_status"].astype(str).ne("complete").any()) or bool(
-        pd.to_numeric(usable["observed_rows"], errors="coerce").le(0).any()
-    ):
-        raise DataReadinessError("non-excluded stock-session coverage is incomplete")
+    usable = coverage[~coverage["ticker"].isin(excluded)].copy()
+    observed = pd.to_numeric(usable["observed_rows"], errors="coerce")
+    if bool(observed.isna().any()) or bool(observed.le(0).any()):
+        raise DataReadinessError("non-excluded stock-session one-minute coverage is empty")
+    status = usable["coverage_status"].astype(str)
+    if bool(~status.isin({"complete", "incomplete"}).any()):
+        raise DataReadinessError("stock-session coverage status is invalid")
+    incomplete = usable.loc[status.eq("incomplete"), ["session_date_et", "ticker"]]
+    return frozenset(
+        (str(row.session_date_et), str(row.ticker))
+        for row in incomplete.itertuples(index=False)
+    )
 
 
 def _require_selection_lineage(raw: object, expected: Mapping[str, object], label: str) -> None:

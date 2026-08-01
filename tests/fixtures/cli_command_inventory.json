@@ -114,6 +114,7 @@
     "score-flashpoints",
     "score-swing-events",
     "screen-edge-rebuild-intraday-universe",
+    "train-edge-rebuild-intraday-candidate",
     "train-entry-exit-model",
     "train-intraday-model",
     "train-intraday-specialists",

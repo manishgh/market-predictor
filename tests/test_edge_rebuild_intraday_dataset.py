@@ -159,6 +159,7 @@ def _verified_inputs(tmp_path: Path, *, tickers: tuple[str, ...] = ("AAA",)) -> 
         selection=pd.DataFrame(selection_rows),
         coverage=pd.DataFrame(coverage_rows),
         excluded_tickers=frozenset(),
+        incomplete_pairs=frozenset(),
         memberships=pd.DataFrame(membership_rows),
         stock_artifacts=tuple(stock_artifacts),
         benchmark_artifacts=(benchmark_artifact,),
@@ -175,6 +176,7 @@ def _publish(
     verified: _VerifiedInputs,
     *,
     output_name: str = "dataset",
+    pair_workers: int = 4,
 ) -> dict[str, Any]:
     monkeypatch.setattr(dataset_module, "_verify_inputs", lambda **_: verified)
     return publish_intraday_dataset(
@@ -186,6 +188,7 @@ def _publish(
         strategy_contract=verified.contract,
         strategy_contract_path=CONTRACT_PATH,
         output_directory=tmp_path / output_name,
+        pair_workers=pair_workers,
     )
 
 
@@ -207,6 +210,75 @@ def test_publishes_hash_bound_partition_and_complete_abstention_audit(tmp_path: 
     assert set(abstentions["dataset_row_id"].dropna()).issubset(set(rows["dataset_row_id"]))
     assert (output / "_authority.json").is_file()
     assert load_complete_intraday_dataset(output) == manifest
+
+
+def test_parallel_pair_processing_matches_single_worker_output(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    verified = _verified_inputs(tmp_path, tickers=("AAA", "BBB", "CCC", "DDD"))
+    single_manifest = _publish(
+        tmp_path,
+        monkeypatch,
+        verified,
+        output_name="single",
+        pair_workers=1,
+    )
+    parallel_manifest = _publish(
+        tmp_path,
+        monkeypatch,
+        verified,
+        output_name="parallel",
+        pair_workers=4,
+    )
+
+    def rows(root: Path, manifest: dict[str, Any]) -> pd.DataFrame:
+        frames = [pd.read_parquet(root / item["path"]) for item in manifest["partitions"]]
+        frame = pd.concat(frames, ignore_index=True).sort_values(
+            ["ticker", "volume_bar_number"], kind="stable"
+        )
+        return frame.drop(
+            columns=["dataset_row_id", "dataset_request_sha256"]
+        ).reset_index(drop=True)
+
+    pd.testing.assert_frame_equal(
+        rows(tmp_path / "single", single_manifest),
+        rows(tmp_path / "parallel", parallel_manifest),
+    )
+    assert single_manifest["summary"]["rows"] == parallel_manifest["summary"]["rows"]
+    assert single_manifest["request_sha256"] != parallel_manifest["request_sha256"]
+
+
+def test_pair_worker_limit_is_enforced_before_input_loading(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    verified = _verified_inputs(tmp_path)
+    monkeypatch.setattr(dataset_module, "_verify_inputs", lambda **_: verified)
+
+    with pytest.raises(ValueError, match="between 1 and 4"):
+        _publish(tmp_path, monkeypatch, verified, pair_workers=5)
+
+
+def test_incomplete_five_minute_pair_is_audited_abstention(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    verified = _verified_inputs(tmp_path, tickers=("AAA", "BBB"))
+    verified = replace(
+        verified,
+        incomplete_pairs=frozenset({(DAY, "AAA")}),
+    )
+
+    manifest = _publish(tmp_path, monkeypatch, verified)
+    output = tmp_path / "dataset"
+    pair_audit = pd.read_parquet(output / "audit" / "stock_session_audit.parquet")
+
+    assert manifest["summary"]["incomplete_stock_sessions"] == 1
+    assert manifest["summary"]["published_stock_sessions"] == 1
+    row = pair_audit.loc[pair_audit["ticker"].eq("AAA")].iloc[0]
+    assert row["status"] == "abstained"
+    assert row["reason"] == "incomplete_five_minute_continuity"
 
 
 def test_legacy_or_tampered_selection_parent_is_rejected_before_read(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -237,6 +309,50 @@ def test_missing_benchmark_path_fails_closed_without_publication(tmp_path: Path,
 
     assert not (tmp_path / "dataset").exists()
     assert not list(tmp_path.glob(".dataset.*.staging"))
+
+
+def test_sparse_observed_benchmark_minutes_are_not_imputed_or_rejected(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    verified = _verified_inputs(tmp_path)
+    artifact = verified.benchmark_artifacts[0]
+    frame = pd.read_parquet(artifact.path)
+    xlb_last = frame.index[frame["ticker"].eq("XLB")][-1]
+    frame = frame.drop(index=xlb_last).reset_index(drop=True)
+    frame.to_parquet(artifact.path, index=False)
+    symbol_rows = dict(artifact.symbol_rows)
+    symbol_rows["XLB"] -= 1
+    verified = replace(
+        verified,
+        benchmark_artifacts=(replace(artifact, symbol_rows=symbol_rows),),
+    )
+
+    manifest = _publish(tmp_path, monkeypatch, verified)
+
+    assert manifest["status"] == "complete"
+    assert manifest["summary"]["published_stock_sessions"] == 1
+
+
+def test_final_minute_label_may_finalize_after_session_close() -> None:
+    frame = pd.DataFrame(
+        {
+            "feature_schema_version": [dataset_module.FEATURE_SCHEMA_VERSION],
+            "label_schema_version": [dataset_module.LABEL_SCHEMA_VERSION],
+            "label_eligible": [True],
+            "feature_available_at_utc": [pd.Timestamp(f"{DAY}T19:28:00Z")],
+            "entry_time_utc": [pd.Timestamp(f"{DAY}T19:29:00Z")],
+            "exit_bar_end_utc": [pd.Timestamp(f"{DAY}T20:00:00Z")],
+            "label_available_at_utc": [pd.Timestamp(f"{DAY}T20:01:00Z")],
+            "session_close_utc": [pd.Timestamp(f"{DAY}T20:00:00Z")],
+        }
+    )
+
+    dataset_module._validate_no_leakage(frame)
+
+    frame.loc[0, "exit_bar_end_utc"] = pd.Timestamp(f"{DAY}T20:01:00Z")
+    with pytest.raises(DataReadinessError, match="leakage"):
+        dataset_module._validate_no_leakage(frame)
 
 
 def test_tampered_parent_authority_failure_is_not_bypassed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
