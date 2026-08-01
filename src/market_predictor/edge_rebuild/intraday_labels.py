@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from datetime import time
-from typing import Final, TypedDict
+from typing import Any, Final, TypedDict
 from zoneinfo import ZoneInfo
 
 import numpy as np
@@ -161,23 +161,39 @@ def build_exact_causal_intraday_labels(
         "feature_ineligible:" + source_reasons.loc[has_source_reason].str.strip()
     )
 
-    for row_index, row in output.loc[feature_eligible].iterrows():
-
-        session_key = (str(row["ticker"]), row["session_date_et"])
+    updates: list[dict[str, Any]] = []
+    for row in output.loc[feature_eligible].itertuples():
+        row_index = row.Index
+        session_key = (str(row.ticker), row.session_date_et)
         session_bars = stock_groups.get(session_key)
         if session_bars is None:
-            output.at[row_index, "label_ineligible_reason"] = "missing_exact_next_minute"
+            updates.append(
+                {
+                    "row_index": row_index,
+                    "label_ineligible_reason": "missing_exact_next_minute",
+                }
+            )
             continue
 
-        available_at = pd.Timestamp(row["feature_available_at_utc"])
+        available_at = pd.Timestamp(row.feature_available_at_utc)
         entry_time = available_at.floor("min") + _ONE_MINUTE
-        session_close = pd.Timestamp(row["session_close_utc"])
+        session_close = pd.Timestamp(row.session_close_utc)
         horizon_end = entry_time + contract.intraday.horizon_minutes * _ONE_MINUTE
         if horizon_end > session_close:
-            output.at[row_index, "label_ineligible_reason"] = "horizon_crosses_session_close"
+            updates.append(
+                {
+                    "row_index": row_index,
+                    "label_ineligible_reason": "horizon_crosses_session_close",
+                }
+            )
             continue
         if entry_time not in session_bars.index:
-            output.at[row_index, "label_ineligible_reason"] = "missing_exact_next_minute"
+            updates.append(
+                {
+                    "row_index": row_index,
+                    "label_ineligible_reason": "missing_exact_next_minute",
+                }
+            )
             continue
 
         expected_starts = pd.date_range(
@@ -188,10 +204,15 @@ def build_exact_causal_intraday_labels(
         )
         path = session_bars.reindex(expected_starts)
         if bool(path["bar_start_utc"].isna().any()):
-            output.at[row_index, "label_ineligible_reason"] = "missing_exact_one_minute_path"
+            updates.append(
+                {
+                    "row_index": row_index,
+                    "label_ineligible_reason": "missing_exact_one_minute_path",
+                }
+            )
             continue
 
-        atr = float(row["atr_14"])
+        atr = float(row.atr_14)
         path_result = _evaluate_path(
             path,
             atr=atr,
@@ -208,49 +229,81 @@ def build_exact_causal_intraday_labels(
         )
         sector_return = _benchmark_return(
             benchmark_lookup,
-            ticker=str(row["primary_benchmark"]),
+            ticker=str(row.primary_benchmark),
             entry_time=entry_time,
             exit_time=exit_time,
         )
         if spy_return is None:
-            output.at[row_index, "label_ineligible_reason"] = "missing_exact_spy_interval"
+            updates.append(
+                {
+                    "row_index": row_index,
+                    "label_ineligible_reason": "missing_exact_spy_interval",
+                }
+            )
             continue
         if sector_return is None:
-            output.at[row_index, "label_ineligible_reason"] = "missing_exact_sector_interval"
+            updates.append(
+                {
+                    "row_index": row_index,
+                    "label_ineligible_reason": "missing_exact_sector_interval",
+                }
+            )
             continue
 
-        output.at[row_index, "label_eligible"] = True
-        output.at[row_index, "label_ineligible_reason"] = pd.NA
-        output.at[row_index, "decision_group_id"] = available_at.isoformat()
-        output.at[row_index, "entry_time_utc"] = entry_time
-        output.at[row_index, "entry_bar_end_utc"] = entry_time + _ONE_MINUTE
-        output.at[row_index, "entry_price"] = path_result["entry_price"]
-        output.at[row_index, "target_price"] = path_result["target_price"]
-        output.at[row_index, "stop_price"] = path_result["stop_price"]
-        output.at[row_index, "exit_time_utc"] = exit_time
-        output.at[row_index, "exit_bar_end_utc"] = exit_time + _ONE_MINUTE
-        output.at[row_index, "label_available_at_utc"] = path.loc[exit_time, "available_at_utc"]
-        output.at[row_index, "exit_price"] = path_result["exit_price"]
-        output.at[row_index, "holding_minutes"] = path_result["outcome_offset"] + 1
-        output.at[row_index, "barrier_label"] = path_result["barrier_label"]
-        output.at[row_index, "label_outcome"] = path_result["outcome"]
-        output.at[row_index, "label_outcome_reason"] = path_result["reason"]
-        output.at[row_index, "target_hit"] = path_result["outcome"] == "target_first"
-        output.at[row_index, "stop_hit"] = path_result["outcome"] == "stop_first"
-        output.at[row_index, "timeout"] = path_result["outcome"] == "timeout"
-        output.at[row_index, "gross_return"] = path_result["gross_return"]
-        output.at[row_index, "cost"] = path_result["cost"]
-        output.at[row_index, "net_return"] = path_result["net_return"]
-        output.at[row_index, "spy_return"] = spy_return
-        output.at[row_index, "sector_return"] = sector_return
-        output.at[row_index, "spy_excess_return"] = path_result["net_return"] - spy_return
-        output.at[row_index, "sector_excess_return"] = path_result["net_return"] - sector_return
+        updates.append(
+            {
+                "row_index": row_index,
+                "label_eligible": True,
+                "decision_group_id": available_at.isoformat(),
+                "entry_time_utc": entry_time,
+                "entry_bar_end_utc": entry_time + _ONE_MINUTE,
+                "entry_price": path_result["entry_price"],
+                "target_price": path_result["target_price"],
+                "stop_price": path_result["stop_price"],
+                "exit_time_utc": exit_time,
+                "exit_bar_end_utc": exit_time + _ONE_MINUTE,
+                "label_available_at_utc": path.loc[exit_time, "available_at_utc"],
+                "exit_price": path_result["exit_price"],
+                "holding_minutes": path_result["outcome_offset"] + 1,
+                "barrier_label": path_result["barrier_label"],
+                "label_outcome": path_result["outcome"],
+                "label_outcome_reason": path_result["reason"],
+                "target_hit": path_result["outcome"] == "target_first",
+                "stop_hit": path_result["outcome"] == "stop_first",
+                "timeout": path_result["outcome"] == "timeout",
+                "gross_return": path_result["gross_return"],
+                "cost": path_result["cost"],
+                "net_return": path_result["net_return"],
+                "spy_return": spy_return,
+                "sector_return": sector_return,
+                "spy_excess_return": path_result["net_return"] - spy_return,
+                "sector_excess_return": path_result["net_return"] - sector_return,
+            }
+        )
+
+    _apply_label_updates(output, updates)
 
     output = _add_contemporaneous_rank(output, contract)
     return output.sort_values(
         ["session_date_et", "feature_available_at_utc", "ticker"],
         kind="stable",
     ).reset_index(drop=True)
+
+
+def _apply_label_updates(
+    output: pd.DataFrame,
+    updates: list[dict[str, Any]],
+) -> None:
+    if not updates:
+        return
+    frame = pd.DataFrame(updates).set_index("row_index")
+    if not frame.index.is_unique or not frame.index.isin(output.index).all():
+        raise DataReadinessError("intraday label updates contain invalid row identities")
+    for column in frame.columns:
+        values = frame[column].dropna()
+        if values.empty:
+            continue
+        output.loc[values.index, column] = values.tolist()
 
 
 def _evaluate_path(
