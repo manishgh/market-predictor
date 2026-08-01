@@ -73,6 +73,7 @@ INTRADAY_DATASET_SCHEMA: Final = "edge_rebuild.intraday_dataset.v1"
 INTRADAY_DATASET_AUTHORITY_SCHEMA: Final = "edge_rebuild.intraday_dataset_authority.v1"
 MEMORY_HARD_BUDGET_GIB: Final = 4.0
 MEMORY_HEADROOM_GIB: Final = 0.75
+MAXIMUM_SECURITY_EXCLUSION_FRACTION: Final = 0.05
 MAX_SESSION_WORKERS: Final = 4
 WORKING_SET_RELEASE_INTERVAL_SESSIONS: Final = 25
 _SAFE_TICKER = re.compile(r"^[A-Z0-9][A-Z0-9.-]{0,31}$")
@@ -163,6 +164,7 @@ class _VerifiedInputs:
     selection: pd.DataFrame
     coverage: pd.DataFrame
     excluded_tickers: frozenset[str]
+    membership_sector_excluded_tickers: frozenset[str]
     incomplete_pairs: frozenset[tuple[str, str]]
     memberships: pd.DataFrame
     stock_artifacts: tuple[_Artifact, ...]
@@ -223,6 +225,14 @@ def publish_intraday_dataset(
         "strategy_contract_sha256": verified.contract_sha256,
         "parent_lineage": verified.parent_lineage,
         "parent_lineage_sha256": json_sha256(verified.parent_lineage),
+        "membership_sector_excluded_tickers": sorted(
+            verified.membership_sector_excluded_tickers
+        ),
+        "all_excluded_tickers": sorted(verified.excluded_tickers),
+        "security_exclusion_fraction": (
+            len(verified.excluded_tickers)
+            / int(verified.selection["ticker"].nunique())
+        ),
         "partitioning": ["session_date_et", "ticker"],
         "processing_unit": "one_exchange_session",
         "ranking_unit": "one_exchange_session",
@@ -250,9 +260,21 @@ def publish_intraday_dataset(
         usable = verified.selection[~verified.selection["ticker"].isin(verified.excluded_tickers)].copy()
         _record_excluded_pairs(
             verified.selection,
-            verified.excluded_tickers,
+            verified.excluded_tickers.difference(
+                verified.membership_sector_excluded_tickers
+            ),
             pair_audits=pair_audits,
             abstentions=abstentions,
+            stage="coverage",
+            reason="whole_security_coverage_exclusion",
+        )
+        _record_excluded_pairs(
+            verified.selection,
+            verified.membership_sector_excluded_tickers,
+            pair_audits=pair_audits,
+            abstentions=abstentions,
+            stage="membership",
+            reason="whole_security_invalid_sector_benchmark_exclusion",
         )
         if usable.empty:
             raise DataReadinessError("coverage excluded every selected security")
@@ -328,6 +350,9 @@ def publish_intraday_dataset(
             "summary": {
                 "selected_stock_sessions": int(len(verified.selection)),
                 "excluded_stock_sessions": int(verified.selection["ticker"].isin(verified.excluded_tickers).sum()),
+                "membership_sector_excluded_securities": len(
+                    verified.membership_sector_excluded_tickers
+                ),
                 "incomplete_stock_sessions": len(verified.incomplete_pairs),
                 "published_stock_sessions": len(partition_records),
                 "rows": total_rows,
@@ -737,6 +762,20 @@ def _verify_inputs(
 
     coverage, excluded = _load_coverage_tables(stock_coverage_directory, coverage_manifest)
     incomplete_pairs = _validate_coverage(selection, coverage, excluded)
+    membership_sector_excluded = _membership_sector_exclusions(
+        memberships,
+        selected_tickers=set(selection["ticker"].astype(str)),
+    )
+    all_excluded = frozenset(excluded).union(membership_sector_excluded)
+    selected_security_count = int(selection["ticker"].nunique())
+    if (
+        selected_security_count <= 0
+        or len(all_excluded) / selected_security_count
+        > MAXIMUM_SECURITY_EXCLUSION_FRACTION
+    ):
+        raise DataReadinessError(
+            "combined intraday whole-security exclusions exceed 5%"
+        )
     stock_artifacts = _collection_artifacts(stock_collection_directory, stock_manifest)
     benchmark_artifacts = _collection_artifacts(benchmark_collection_directory, benchmark_manifest)
     parent_lineage = {
@@ -767,7 +806,8 @@ def _verify_inputs(
     return _VerifiedInputs(
         selection=selection,
         coverage=coverage,
-        excluded_tickers=frozenset(excluded),
+        excluded_tickers=all_excluded,
+        membership_sector_excluded_tickers=membership_sector_excluded,
         incomplete_pairs=incomplete_pairs,
         memberships=memberships,
         stock_artifacts=stock_artifacts,
@@ -777,6 +817,27 @@ def _verify_inputs(
         contract=strategy_contract,
         contract_sha256=contract_sha256,
     )
+
+
+def _membership_sector_exclusions(
+    memberships: pd.DataFrame,
+    *,
+    selected_tickers: set[str],
+) -> frozenset[str]:
+    required = {"ticker", "primary_benchmark"}
+    if not required.issubset(memberships.columns):
+        raise DataReadinessError(
+            "membership authority omits sector benchmark identity"
+        )
+    data = memberships.loc[:, sorted(required)].copy()
+    data["ticker"] = data["ticker"].astype(str).str.upper().str.strip()
+    data["primary_benchmark"] = (
+        data["primary_benchmark"].astype(str).str.upper().str.strip()
+    )
+    sector_benchmarks = _REQUIRED_BENCHMARKS.difference({"SPY", "QQQ"})
+    selected = data["ticker"].isin(selected_tickers)
+    invalid = selected & ~data["primary_benchmark"].isin(sector_benchmarks)
+    return frozenset(data.loc[invalid, "ticker"].astype(str))
 
 
 def _normalize_selection(frame: pd.DataFrame) -> pd.DataFrame:
@@ -1108,6 +1169,8 @@ def _record_excluded_pairs(
     *,
     pair_audits: list[dict[str, Any]],
     abstentions: list[dict[str, Any]],
+    stage: str,
+    reason: str,
 ) -> None:
     for row in selection[selection["ticker"].isin(excluded)].itertuples(index=False):
         pair_audits.append(
@@ -1115,15 +1178,15 @@ def _record_excluded_pairs(
                 str(row.ticker),
                 str(row.session_date_et),
                 status="excluded",
-                reason="whole_security_coverage_exclusion",
+                reason=reason,
             )
         )
         abstentions.append(
             _pair_abstention(
                 str(row.ticker),
                 str(row.session_date_et),
-                "coverage",
-                "whole_security_coverage_exclusion",
+                stage,
+                reason,
             )
         )
 

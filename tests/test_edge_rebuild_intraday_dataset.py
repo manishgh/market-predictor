@@ -159,6 +159,7 @@ def _verified_inputs(tmp_path: Path, *, tickers: tuple[str, ...] = ("AAA",)) -> 
         selection=pd.DataFrame(selection_rows),
         coverage=pd.DataFrame(coverage_rows),
         excluded_tickers=frozenset(),
+        membership_sector_excluded_tickers=frozenset(),
         incomplete_pairs=frozenset(),
         memberships=pd.DataFrame(membership_rows),
         stock_artifacts=tuple(stock_artifacts),
@@ -279,6 +280,29 @@ def test_incomplete_five_minute_pair_is_audited_abstention(
     row = pair_audit.loc[pair_audit["ticker"].eq("AAA")].iloc[0]
     assert row["status"] == "abstained"
     assert row["reason"] == "incomplete_five_minute_continuity"
+
+
+def test_invalid_membership_sector_benchmark_excludes_whole_security(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    verified = _verified_inputs(tmp_path, tickers=("AAA", "BBB"))
+    verified = replace(
+        verified,
+        excluded_tickers=frozenset({"AAA"}),
+        membership_sector_excluded_tickers=frozenset({"AAA"}),
+    )
+
+    manifest = _publish(tmp_path, monkeypatch, verified)
+    audit = pd.read_parquet(
+        tmp_path / "dataset" / "audit" / "stock_session_audit.parquet"
+    )
+
+    assert manifest["summary"]["membership_sector_excluded_securities"] == 1
+    assert manifest["summary"]["published_stock_sessions"] == 1
+    row = audit.loc[audit["ticker"].eq("AAA")].iloc[0]
+    assert row["status"] == "excluded"
+    assert row["reason"] == "whole_security_invalid_sector_benchmark_exclusion"
 
 
 def test_close_plus_delay_activation_is_audited_abstention(
@@ -476,3 +500,17 @@ def test_stock_loading_is_bounded_to_one_exchange_session(
 
 def test_selection_schema_constant_is_current_causal_version() -> None:
     assert INTRADAY_SELECTION_SCHEMA.endswith(".v3")
+
+
+def test_membership_sector_exclusions_are_scoped_to_selected_securities() -> None:
+    memberships = pd.DataFrame(
+        {
+            "ticker": ["AAA", "BBB", "CCC"],
+            "primary_benchmark": ["XLK", "SPY", "SPY"],
+        }
+    )
+
+    assert dataset_module._membership_sector_exclusions(
+        memberships,
+        selected_tickers={"AAA", "BBB"},
+    ) == frozenset({"BBB"})
