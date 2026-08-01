@@ -74,6 +74,7 @@ class SwingSentimentHistoryTests(unittest.TestCase):
                 model_revision="revision-1",
                 execution_device="cpu",
                 fixed_latency_minutes=5,
+                max_batch_shards=1,
             )
 
             self.assertEqual(first["status"], "incomplete")
@@ -92,12 +93,14 @@ class SwingSentimentHistoryTests(unittest.TestCase):
                 model_revision="revision-1",
                 execution_device="cpu",
                 fixed_latency_minutes=5,
+                max_batch_shards=8,
             )
 
             self.assertEqual(resumed["status"], "complete")
             self.assertEqual(resumed["observed_chunks"], 2)
             self.assertEqual(resumed["skipped_chunks"], 1)
             self.assertEqual(resumed_scorer.calls, 1)
+            self.assertEqual(resumed["scorer_calls"], 1)
             self.assertEqual(
                 {item["ticker"] for item in resumed["artifacts"]},
                 {"AAA", "BBB"},
@@ -177,6 +180,102 @@ class SwingSentimentHistoryTests(unittest.TestCase):
                 ["security:bbb"],
             )
             self.assertEqual(scorer.calls, 1)
+
+    def test_cross_shard_batch_scores_once_and_preserves_chunk_artifacts(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            collection_dir, audit_path, universe_path = _archive(root)
+            scorer = _DeterministicScorer()
+
+            result = score_alpaca_news_history(
+                collection_dir=collection_dir,
+                collection_audit_path=audit_path,
+                universe_path=universe_path,
+                out_dir=root / "sentiment",
+                scorer=scorer,
+                model_name="test-finbert",
+                model_revision="revision-1",
+                execution_device="cpu",
+                max_batch_events=10,
+                max_batch_shards=10,
+            )
+
+            self.assertEqual(result["status"], "complete")
+            self.assertEqual(result["scorer_calls"], 1)
+            self.assertEqual(scorer.calls, 1)
+            self.assertEqual(
+                [artifact["ticker"] for artifact in result["artifacts"]],
+                ["AAA", "BBB"],
+            )
+            for artifact in result["artifacts"]:
+                frame, manifest = load_canonical_artifact(
+                    Path(artifact["path"]),
+                    expected_type="event_sentiment_research",
+                    allow_research=True,
+                )
+                self.assertEqual(len(frame), 1)
+                self.assertEqual(frame.loc[0, "ticker"], artifact["ticker"])
+                self.assertEqual(manifest["artifact_sha256"], artifact["sha256"])
+
+    def test_batch_failure_records_each_chunk_and_publishes_none(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            collection_dir, audit_path, universe_path = _archive(root)
+
+            result = score_alpaca_news_history(
+                collection_dir=collection_dir,
+                collection_audit_path=audit_path,
+                universe_path=universe_path,
+                out_dir=root / "sentiment",
+                scorer=_DeterministicScorer(fail_call=1),
+                model_name="test-finbert",
+                model_revision="revision-1",
+                execution_device="cpu",
+                max_batch_events=10,
+                max_batch_shards=10,
+            )
+
+            self.assertEqual(result["status"], "incomplete")
+            self.assertEqual(result["observed_chunks"], 0)
+            self.assertEqual(len(result["failed_chunks"]), 2)
+            self.assertEqual(result["scorer_calls"], 1)
+            self.assertEqual(
+                len(list((root / "sentiment" / "attempts").glob("*.json"))),
+                2,
+            )
+            self.assertEqual(
+                list((root / "sentiment" / "sentiment").glob("*.parquet")),
+                [],
+            )
+
+    def test_event_bound_splits_batches_without_changing_chunk_order(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            collection_dir, audit_path, universe_path = _archive(root)
+            scorer = _DeterministicScorer()
+
+            result = score_alpaca_news_history(
+                collection_dir=collection_dir,
+                collection_audit_path=audit_path,
+                universe_path=universe_path,
+                out_dir=root / "sentiment",
+                scorer=scorer,
+                model_name="test-finbert",
+                model_revision="revision-1",
+                execution_device="cpu",
+                max_batch_events=1,
+                max_batch_shards=10,
+            )
+
+            self.assertEqual(result["status"], "complete")
+            self.assertEqual(result["scorer_calls"], 2)
+            self.assertEqual(scorer.calls, 2)
+            self.assertEqual(
+                [artifact["ticker"] for artifact in result["artifacts"]],
+                ["AAA", "BBB"],
+            )
 
 
 def _archive(root: Path) -> tuple[Path, Path, Path]:

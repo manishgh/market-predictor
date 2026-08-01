@@ -348,10 +348,22 @@ def register_swing_research_commands(app: typer.Typer, console: Console) -> None
         ),
         max_length: int = typer.Option(128, min=1, max=512),
         batch_size: int = typer.Option(32, min=1, max=256),
+        max_batch_events: int = typer.Option(
+            2_048,
+            min=1,
+            max=16_384,
+            help="Maximum events loaded across one FinBERT scorer call.",
+        ),
+        max_batch_shards: int = typer.Option(
+            32,
+            min=1,
+            max=256,
+            help="Maximum source chunks combined into one scorer call.",
+        ),
         torch_threads: int = typer.Option(4, min=1, max=32),
         fixed_latency_minutes: int = typer.Option(5, min=0, max=60),
     ) -> None:
-        """Score audited historical events sequentially with explicit proxy timing."""
+        """Score audited history in bounded batches with explicit proxy timing."""
 
         settings = get_settings()
         scorer = FinbertScorer(
@@ -390,6 +402,8 @@ def register_swing_research_commands(app: typer.Typer, console: Console) -> None
             text_mode=text_mode,
             max_length=max_length,
             batch_size=batch_size,
+            max_batch_events=max_batch_events,
+            max_batch_shards=max_batch_shards,
             fixed_latency_minutes=fixed_latency_minutes,
             progress=report_progress,
         )
@@ -399,6 +413,7 @@ def register_swing_research_commands(app: typer.Typer, console: Console) -> None
                 "requested_chunks": result["requested_chunks"],
                 "observed_chunks": result["observed_chunks"],
                 "failed_chunks": result["failed_chunks"],
+                "scorer_calls": result["scorer_calls"],
                 "excluded_security_ids": result["excluded_security_ids"],
                 "total_rows": result["total_rows"],
                 "peak_working_set_gib": result["memory"][

@@ -4,6 +4,7 @@ import hashlib
 import json
 import os
 from collections.abc import Callable
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Protocol
@@ -50,6 +51,15 @@ class TextScorer(Protocol):
     ) -> pd.DataFrame: ...
 
 
+@dataclass(frozen=True)
+class _PreparedChunk:
+    index: int
+    artifact: dict[str, Any]
+    events: pd.DataFrame
+    inputs: pd.Series
+    started_at: datetime
+
+
 def score_alpaca_news_history(
     *,
     collection_dir: Path,
@@ -63,15 +73,21 @@ def score_alpaca_news_history(
     text_mode: str = "title_summary",
     max_length: int = 128,
     batch_size: int = 32,
+    max_batch_events: int = 2_048,
+    max_batch_shards: int = 32,
     fixed_latency_minutes: int = 5,
     memory_budget_gib: float = 4.0,
     memory_headroom_gib: float = 0.75,
     progress: Callable[[dict[str, Any]], None] | None = None,
 ) -> dict[str, Any]:
-    """Score audited event chunks sequentially and publish research-only evidence."""
+    """Score audited event chunks in bounded batches and publish per-chunk evidence."""
 
     if batch_size < 1:
         raise ValueError("batch_size must be positive")
+    if max_batch_events < 1:
+        raise ValueError("max_batch_events must be positive")
+    if max_batch_shards < 1:
+        raise ValueError("max_batch_shards must be positive")
     if max_length < 1 or max_length > 512:
         raise ValueError("max_length must be between 1 and 512")
     if fixed_latency_minutes < 0 or fixed_latency_minutes > 60:
@@ -149,11 +165,46 @@ def score_alpaca_news_history(
     observed: dict[str, dict[str, Any]] = {}
     failures: dict[str, str] = {}
     skipped = 0
+    scorer_calls = 0
     eligible_artifacts = [
         artifact
         for artifact in artifacts
         if str(artifact.get("security_id", "")) not in excluded_security_ids
     ]
+    prepared: list[_PreparedChunk] = []
+    prepared_events = 0
+
+    def flush_prepared() -> None:
+        nonlocal prepared, prepared_events, scorer_calls
+        if not prepared:
+            return
+        scorer_calls += 1
+        _score_and_publish_batch(
+            prepared,
+            scorer=scorer,
+            scorer_batch_size=batch_size,
+            model_name=model_name,
+            model_revision=model_revision,
+            text_mode=text_mode,
+            max_length=max_length,
+            fixed_latency_minutes=fixed_latency_minutes,
+            request_hash=request_hash,
+            scored_dir=scored_dir,
+            attempts_dir=attempts_dir,
+            observed=observed,
+            failures=failures,
+            progress=progress,
+            total=len(eligible_artifacts),
+        )
+        prepared = []
+        prepared_events = 0
+        release_process_memory()
+        assert_memory_budget(
+            hard_budget_gib=memory_budget_gib,
+            headroom_gib=memory_headroom_gib,
+            stage="historical sentiment micro-batch",
+        )
+
     for index, artifact in enumerate(eligible_artifacts):
         chunk_id = str(artifact.get("chunk_id", ""))
         security_id = str(artifact.get("security_id", ""))
@@ -168,6 +219,7 @@ def score_alpaca_news_history(
             security_id=security_id,
         )
         if existing is not None:
+            flush_prepared()
             observed[chunk_id] = existing
             skipped += 1
             _progress(
@@ -201,68 +253,32 @@ def score_alpaca_news_history(
                 )
             relevant = add_event_relevance(events, security_metadata)
             inputs = build_sentiment_inputs(relevant, mode=text_mode)
-            scores = scorer.score_texts(
-                inputs.astype(str).tolist(),
-                batch_size=batch_size,
-            )
-            if len(scores) != len(events):
+            event_count = len(relevant)
+            if event_count > max_batch_events:
                 raise DataReadinessError(
-                    f"FinBERT row count mismatch for {chunk_id}"
+                    f"chunk {chunk_id} has {event_count} events, above "
+                    f"max_batch_events={max_batch_events}"
                 )
-            completed_at = datetime.now(UTC)
-            sentiment = _sentiment_frame(
-                relevant,
-                scores,
-                inputs=inputs,
-                model_name=model_name,
-                model_revision=model_revision,
-                text_mode=text_mode,
-                max_length=max_length,
-                fixed_latency_minutes=fixed_latency_minutes,
-                computed_at_utc=completed_at,
+            if prepared and (
+                len(prepared) >= max_batch_shards
+                or prepared_events + event_count > max_batch_events
+            ):
+                flush_prepared()
+            prepared.append(
+                _PreparedChunk(
+                    index=index,
+                    artifact=artifact,
+                    events=relevant,
+                    inputs=inputs,
+                    started_at=started_at,
+                )
             )
-            _audit_sentiment_frame(sentiment)
-            manifest = write_canonical_artifact(
-                sentiment,
-                target,
-                artifact_type="event_sentiment_research",
-                audit=_passing_audit(len(sentiment)),
-                inputs={
-                    "sentiment_request_sha256": request_hash,
-                    "source_event_artifact_sha256": str(
-                        event_manifest["artifact_sha256"]
-                    ),
-                    "chunk_id": chunk_id,
-                },
-                production_ready=False,
-            )
-            record = _artifact_record(
-                artifact,
-                target,
-                sentiment,
-                manifest,
-                started_at=started_at,
-                completed_at=completed_at,
-            )
-            observed[chunk_id] = record
-            _write_attempt(
-                attempts_dir,
-                chunk_id=chunk_id,
-                request_hash=request_hash,
-                status="observed",
-                started_at=started_at,
-                completed_at=completed_at,
-                rows=len(sentiment),
-                error=None,
-            )
-            _progress(
-                progress,
-                index=index + 1,
-                total=len(eligible_artifacts),
-                chunk_id=chunk_id,
-                status="observed",
-                rows=len(sentiment),
-            )
+            prepared_events += event_count
+            if (
+                len(prepared) >= max_batch_shards
+                or prepared_events >= max_batch_events
+            ):
+                flush_prepared()
         except Exception as exc:
             completed_at = datetime.now(UTC)
             failures[chunk_id] = f"{type(exc).__name__}: {str(exc)[:500]}"
@@ -285,12 +301,13 @@ def score_alpaca_news_history(
                 rows=0,
             )
         finally:
-            release_process_memory()
             assert_memory_budget(
                 hard_budget_gib=memory_budget_gib,
                 headroom_gib=memory_headroom_gib,
-                stage=f"historical sentiment {chunk_id}",
+                stage=f"historical sentiment prepare {chunk_id}",
             )
+
+    flush_prepared()
 
     status = (
         "complete"
@@ -310,6 +327,9 @@ def score_alpaca_news_history(
         "observed_chunks": len(observed),
         "failed_chunks": failures,
         "skipped_chunks": skipped,
+        "scorer_calls": scorer_calls,
+        "max_batch_events": max_batch_events,
+        "max_batch_shards": max_batch_shards,
         "excluded_security_ids": list(excluded_security_ids),
         "excluded_chunks": len(artifacts) - len(eligible_artifacts),
         "total_rows": sum(int(record["rows"]) for record in observed.values()),
@@ -329,6 +349,148 @@ def score_alpaca_news_history(
     }
     _atomic_json(final_path, final_payload)
     return final_payload
+
+
+def _score_and_publish_batch(
+    prepared: list[_PreparedChunk],
+    *,
+    scorer: TextScorer,
+    scorer_batch_size: int,
+    model_name: str,
+    model_revision: str,
+    text_mode: str,
+    max_length: int,
+    fixed_latency_minutes: int,
+    request_hash: str,
+    scored_dir: Path,
+    attempts_dir: Path,
+    observed: dict[str, dict[str, Any]],
+    failures: dict[str, str],
+    progress: Callable[[dict[str, Any]], None] | None,
+    total: int,
+) -> None:
+    texts = [
+        text
+        for chunk in prepared
+        for text in chunk.inputs.astype(str).tolist()
+    ]
+    try:
+        scores = scorer.score_texts(texts, batch_size=scorer_batch_size)
+        if len(scores) != len(texts):
+            raise DataReadinessError(
+                "FinBERT row count mismatch for micro-batch: "
+                f"expected {len(texts)}, observed {len(scores)}"
+            )
+    except Exception as exc:
+        error = f"{type(exc).__name__}: {str(exc)[:500]}"
+        completed_at = datetime.now(UTC)
+        for chunk in prepared:
+            chunk_id = str(chunk.artifact.get("chunk_id", ""))
+            failures[chunk_id] = error
+            _write_attempt(
+                attempts_dir,
+                chunk_id=chunk_id,
+                request_hash=request_hash,
+                status="failed",
+                started_at=chunk.started_at,
+                completed_at=completed_at,
+                rows=0,
+                error=error,
+            )
+            _progress(
+                progress,
+                index=chunk.index + 1,
+                total=total,
+                chunk_id=chunk_id,
+                status="failed",
+                rows=0,
+            )
+        return
+
+    offset = 0
+    for chunk in prepared:
+        artifact = chunk.artifact
+        chunk_id = str(artifact.get("chunk_id", ""))
+        row_count = len(chunk.events)
+        chunk_scores = scores.iloc[offset : offset + row_count].reset_index(
+            drop=True
+        )
+        offset += row_count
+        completed_at = datetime.now(UTC)
+        try:
+            sentiment = _sentiment_frame(
+                chunk.events,
+                chunk_scores,
+                inputs=chunk.inputs,
+                model_name=model_name,
+                model_revision=model_revision,
+                text_mode=text_mode,
+                max_length=max_length,
+                fixed_latency_minutes=fixed_latency_minutes,
+                computed_at_utc=completed_at,
+            )
+            _audit_sentiment_frame(sentiment)
+            target = scored_dir / f"{chunk_id}.parquet"
+            manifest = write_canonical_artifact(
+                sentiment,
+                target,
+                artifact_type="event_sentiment_research",
+                audit=_passing_audit(len(sentiment)),
+                inputs={
+                    "sentiment_request_sha256": request_hash,
+                    "source_event_artifact_sha256": str(artifact["sha256"]),
+                    "chunk_id": chunk_id,
+                },
+                production_ready=False,
+            )
+            observed[chunk_id] = _artifact_record(
+                artifact,
+                target,
+                sentiment,
+                manifest,
+                started_at=chunk.started_at,
+                completed_at=completed_at,
+            )
+            failures.pop(chunk_id, None)
+            _write_attempt(
+                attempts_dir,
+                chunk_id=chunk_id,
+                request_hash=request_hash,
+                status="observed",
+                started_at=chunk.started_at,
+                completed_at=completed_at,
+                rows=len(sentiment),
+                error=None,
+            )
+            _progress(
+                progress,
+                index=chunk.index + 1,
+                total=total,
+                chunk_id=chunk_id,
+                status="observed",
+                rows=len(sentiment),
+            )
+        except Exception as exc:
+            error = f"{type(exc).__name__}: {str(exc)[:500]}"
+            failures[chunk_id] = error
+            _write_attempt(
+                attempts_dir,
+                chunk_id=chunk_id,
+                request_hash=request_hash,
+                status="failed",
+                started_at=chunk.started_at,
+                completed_at=completed_at,
+                rows=0,
+                error=error,
+            )
+            _progress(
+                progress,
+                index=chunk.index + 1,
+                total=total,
+                chunk_id=chunk_id,
+                status="failed",
+                rows=0,
+            )
 
 
 def _sentiment_frame(
