@@ -176,7 +176,7 @@ def _publish(
     verified: _VerifiedInputs,
     *,
     output_name: str = "dataset",
-    pair_workers: int = 4,
+    session_workers: int = 4,
 ) -> dict[str, Any]:
     monkeypatch.setattr(dataset_module, "_verify_inputs", lambda **_: verified)
     return publish_intraday_dataset(
@@ -188,7 +188,7 @@ def _publish(
         strategy_contract=verified.contract,
         strategy_contract_path=CONTRACT_PATH,
         output_directory=tmp_path / output_name,
-        pair_workers=pair_workers,
+        session_workers=session_workers,
     )
 
 
@@ -212,7 +212,7 @@ def test_publishes_hash_bound_partition_and_complete_abstention_audit(tmp_path: 
     assert load_complete_intraday_dataset(output) == manifest
 
 
-def test_parallel_pair_processing_matches_single_worker_output(
+def test_parallel_session_processing_matches_single_worker_output(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -222,14 +222,14 @@ def test_parallel_pair_processing_matches_single_worker_output(
         monkeypatch,
         verified,
         output_name="single",
-        pair_workers=1,
+        session_workers=1,
     )
     parallel_manifest = _publish(
         tmp_path,
         monkeypatch,
         verified,
         output_name="parallel",
-        pair_workers=4,
+        session_workers=4,
     )
 
     def rows(root: Path, manifest: dict[str, Any]) -> pd.DataFrame:
@@ -249,7 +249,7 @@ def test_parallel_pair_processing_matches_single_worker_output(
     assert single_manifest["request_sha256"] != parallel_manifest["request_sha256"]
 
 
-def test_pair_worker_limit_is_enforced_before_input_loading(
+def test_session_worker_limit_is_enforced_before_input_loading(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -257,7 +257,7 @@ def test_pair_worker_limit_is_enforced_before_input_loading(
     monkeypatch.setattr(dataset_module, "_verify_inputs", lambda **_: verified)
 
     with pytest.raises(ValueError, match="between 1 and 4"):
-        _publish(tmp_path, monkeypatch, verified, pair_workers=5)
+        _publish(tmp_path, monkeypatch, verified, session_workers=5)
 
 
 def test_incomplete_five_minute_pair_is_audited_abstention(
@@ -454,21 +454,23 @@ def test_tampered_published_partition_is_detected(tmp_path: Path, monkeypatch: p
         load_complete_intraday_dataset(tmp_path / "dataset")
 
 
-def test_stock_loading_is_bounded_to_one_selected_stock_session(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_stock_loading_is_bounded_to_one_exchange_session(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     verified = _verified_inputs(tmp_path, tickers=("AAA", "BBB", "CCC"))
     observed: list[tuple[int, int]] = []
-    original = dataset_module._load_stock_session
+    original = dataset_module._load_stock_session_batch
 
     def tracked(*args: Any, **kwargs: Any) -> pd.DataFrame:
         frame = original(*args, **kwargs)
         observed.append((frame["ticker"].nunique(), len(frame)))
         return frame
 
-    monkeypatch.setattr(dataset_module, "_load_stock_session", tracked)
+    monkeypatch.setattr(dataset_module, "_load_stock_session_batch", tracked)
     manifest = _publish(tmp_path, monkeypatch, verified)
 
-    assert len(observed) == 3
-    assert all(symbols == 1 and rows == 390 for symbols, rows in observed)
+    assert observed == [(3, 1_170)]
     assert manifest["summary"]["published_stock_sessions"] == 3
 
 

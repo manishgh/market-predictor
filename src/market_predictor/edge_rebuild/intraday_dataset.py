@@ -7,9 +7,10 @@ import re
 import shutil
 import uuid
 from collections.abc import Mapping
-from concurrent.futures import Future, ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
+from itertools import islice
 from pathlib import Path
 from typing import Any, Final, cast
 
@@ -72,7 +73,7 @@ INTRADAY_DATASET_SCHEMA: Final = "edge_rebuild.intraday_dataset.v1"
 INTRADAY_DATASET_AUTHORITY_SCHEMA: Final = "edge_rebuild.intraday_dataset_authority.v1"
 MEMORY_HARD_BUDGET_GIB: Final = 4.0
 MEMORY_HEADROOM_GIB: Final = 0.75
-MAX_PAIR_WORKERS: Final = 4
+MAX_SESSION_WORKERS: Final = 4
 WORKING_SET_RELEASE_INTERVAL_SESSIONS: Final = 25
 _SAFE_TICKER = re.compile(r"^[A-Z0-9][A-Z0-9.-]{0,31}$")
 _REQUIRED_BENCHMARKS: Final = frozenset(
@@ -173,15 +174,6 @@ class _VerifiedInputs:
 
 
 @dataclass(frozen=True, slots=True)
-class _PairResult:
-    ticker: str
-    labeled: pd.DataFrame | None
-    volume_audit: Mapping[str, Any] | None
-    pair_audit: dict[str, Any] | None
-    abstention: dict[str, Any] | None
-
-
-@dataclass(frozen=True, slots=True)
 class _SessionResult:
     partitions: tuple[dict[str, Any], ...]
     pair_audits: tuple[dict[str, Any], ...]
@@ -198,7 +190,7 @@ def publish_intraday_dataset(
     strategy_contract: StrategyContract,
     strategy_contract_path: Path,
     output_directory: Path,
-    pair_workers: int = MAX_PAIR_WORKERS,
+    session_workers: int = MAX_SESSION_WORKERS,
 ) -> dict[str, Any]:
     """Publish verified feature/label partitions without loading the corpus.
 
@@ -207,8 +199,10 @@ def publish_intraday_dataset(
     cross-sectional ranks remain exact while memory stays bounded.
     """
 
-    if pair_workers < 1 or pair_workers > MAX_PAIR_WORKERS:
-        raise ValueError(f"pair_workers must be between 1 and {MAX_PAIR_WORKERS}")
+    if session_workers < 1 or session_workers > MAX_SESSION_WORKERS:
+        raise ValueError(
+            f"session_workers must be between 1 and {MAX_SESSION_WORKERS}"
+        )
     verified = _verify_inputs(
         selection_directory=selection_directory,
         stock_collection_directory=stock_collection_directory,
@@ -230,9 +224,9 @@ def publish_intraday_dataset(
         "parent_lineage": verified.parent_lineage,
         "parent_lineage_sha256": json_sha256(verified.parent_lineage),
         "partitioning": ["session_date_et", "ticker"],
-        "processing_unit": "one_selected_stock_session",
+        "processing_unit": "one_exchange_session",
         "ranking_unit": "one_exchange_session",
-        "pair_workers": pair_workers,
+        "session_workers": session_workers,
         "working_set_release_interval_sessions": WORKING_SET_RELEASE_INTERVAL_SESSIONS,
         "memory_hard_budget_gib": MEMORY_HARD_BUDGET_GIB,
     }
@@ -264,32 +258,48 @@ def publish_intraday_dataset(
             raise DataReadinessError("coverage excluded every selected security")
 
         with ThreadPoolExecutor(
-            max_workers=pair_workers,
-            thread_name_prefix="intraday-pair",
+            max_workers=session_workers,
+            thread_name_prefix="intraday-session",
         ) as executor:
-            for session_number, (session_date, session_selection) in enumerate(
-                usable.groupby("session_date_et", sort=True, observed=True),
-                start=1,
-            ):
-                session_result = _publish_session(
-                    session_date=str(session_date),
-                    session_selection=session_selection,
-                    verified=verified,
-                    stock_index=stock_index,
-                    benchmark_index=benchmark_index,
-                    request_sha256=request_sha256,
-                    parent_lineage_sha256=str(request["parent_lineage_sha256"]),
-                    root=staging,
-                    executor=executor,
-                )
-                partition_records.extend(session_result.partitions)
-                pair_audits.extend(session_result.pair_audits)
-                abstentions.extend(session_result.abstentions)
-                if session_number % WORKING_SET_RELEASE_INTERVAL_SESSIONS == 0:
-                    release_process_memory()
-                _guard_memory(
-                    f"intraday dataset session {str(session_date)} complete"
-                )
+            session_groups = iter(
+                usable.groupby("session_date_et", sort=True, observed=True)
+            )
+            completed_sessions = 0
+            while True:
+                batch = list(islice(session_groups, session_workers))
+                if not batch:
+                    break
+                futures = [
+                    executor.submit(
+                        _publish_session,
+                        session_date=str(session_date),
+                        session_selection=session_selection,
+                        verified=verified,
+                        stock_index=stock_index,
+                        benchmark_index=benchmark_index,
+                        request_sha256=request_sha256,
+                        parent_lineage_sha256=str(
+                            request["parent_lineage_sha256"]
+                        ),
+                        root=staging,
+                    )
+                    for session_date, session_selection in batch
+                ]
+                for (session_date, _), future in zip(batch, futures, strict=True):
+                    session_result = future.result()
+                    partition_records.extend(session_result.partitions)
+                    pair_audits.extend(session_result.pair_audits)
+                    abstentions.extend(session_result.abstentions)
+                    completed_sessions += 1
+                    if (
+                        completed_sessions
+                        % WORKING_SET_RELEASE_INTERVAL_SESSIONS
+                        == 0
+                    ):
+                        release_process_memory()
+                    _guard_memory(
+                        f"intraday dataset session {str(session_date)} complete"
+                    )
         release_process_memory()
 
         if not partition_records:
@@ -380,8 +390,8 @@ def _publish_session(
     request_sha256: str,
     parent_lineage_sha256: str,
     root: Path,
-    executor: ThreadPoolExecutor,
 ) -> _SessionResult:
+    _guard_memory(f"intraday dataset session {session_date} start")
     benchmarks = _load_benchmark_session(
         session_date,
         artifacts=benchmark_index,
@@ -392,7 +402,8 @@ def _publish_session(
     activations = session_selection.sort_values(
         ["activation_time_utc", "ticker"], kind="stable"
     ).to_dict(orient="records")
-    futures: list[Future[_PairResult]] = []
+    valid_activations: list[dict[str, Any]] = []
+    membership_parts: list[pd.DataFrame] = []
     for activation in activations:
         ticker = str(activation["ticker"])
         if (session_date, ticker) in verified.incomplete_pairs:
@@ -413,33 +424,99 @@ def _publish_session(
                 )
             )
             continue
-        futures.append(
-            executor.submit(
-                _process_pair,
-                activation=activation,
-                session_date=session_date,
-                verified=verified,
-                stock_index=stock_index,
-                benchmarks=benchmarks,
+        membership = _membership_for_pair(
+            verified.memberships,
+            ticker=ticker,
+            session_date=session_date,
+        )
+        activation_reason = _activation_abstention_reason(
+            activation,
+            membership,
+            maximum_delay_seconds=(
+                verified.contract.intraday.decision_finalization_seconds
+            ),
+        )
+        if activation_reason is not None:
+            pair_audits.append(
+                _pair_audit(
+                    ticker,
+                    session_date,
+                    status="abstained",
+                    reason=activation_reason,
+                )
+            )
+            abstentions.append(
+                _pair_abstention(
+                    ticker, session_date, "activation", activation_reason
+                )
+            )
+            continue
+        valid_activations.append(dict(activation))
+        membership_parts.append(membership)
+
+    if not valid_activations:
+        return _SessionResult((), tuple(pair_audits), tuple(abstentions))
+    valid_tickers = [str(row["ticker"]) for row in valid_activations]
+    stocks = _load_stock_session_batch(
+        session_date,
+        valid_tickers,
+        artifacts=stock_index,
+        coverage=verified.coverage,
+    )
+    memberships = pd.concat(membership_parts, ignore_index=True)
+    volume_result = build_causal_volume_bars(
+        stocks,
+        pd.DataFrame(valid_activations),
+        contract=verified.contract,
+        strategy_contract_sha256=verified.contract_sha256,
+    )
+    volume_audits = {
+        str(row["ticker"]): cast(Mapping[str, Any], row)
+        for row in volume_result.audit.to_dict(orient="records")
+    }
+    for ticker, audit in volume_audits.items():
+        if int(audit["completed_volume_bars"]) > 0:
+            continue
+        pair_audits.append(
+            _pair_audit(
+                ticker,
+                session_date,
+                status="abstained",
+                reason="no_completed_volume_bars",
+                source_rows=int(audit["source_rows"]),
             )
         )
-
-    labeled_parts: list[pd.DataFrame] = []
-    volume_audits: dict[str, Mapping[str, Any]] = {}
-    for future in futures:
-        result = future.result()
-        if result.pair_audit is not None:
-            pair_audits.append(result.pair_audit)
-        if result.abstention is not None:
-            abstentions.append(result.abstention)
-        if result.labeled is not None:
-            labeled_parts.append(result.labeled)
-        if result.volume_audit is not None:
-            volume_audits[result.ticker] = result.volume_audit
-
-    if not labeled_parts:
+        abstentions.append(
+            _pair_abstention(
+                ticker, session_date, "volume_bars", "no_completed_volume_bars"
+            )
+        )
+    if volume_result.bars.empty:
         return _SessionResult((), tuple(pair_audits), tuple(abstentions))
-    session_rows = pd.concat(labeled_parts, ignore_index=True)
+    features = build_causal_intraday_features(
+        volume_result.bars,
+        stocks,
+        benchmarks,
+        memberships,
+        contract=verified.contract,
+        strategy_contract_sha256=verified.contract_sha256,
+    )
+    decision_features, closed_features = _split_decision_features(features)
+    if decision_features.empty:
+        session_rows = _empty_label_columns(closed_features)
+    else:
+        session_rows = build_exact_causal_intraday_labels(
+            decision_features,
+            stocks,
+            benchmarks,
+            contract=verified.contract,
+            strategy_contract_sha256=verified.contract_sha256,
+        )
+        if not closed_features.empty:
+            session_rows = pd.concat(
+                [session_rows, _empty_label_columns(closed_features)],
+                ignore_index=True,
+            )
     session_rows = _add_contemporaneous_rank(session_rows, verified.contract)
     session_rows = _finalize_dataset_rows(
         session_rows,
@@ -481,105 +558,6 @@ def _publish_session(
         )
     return _SessionResult(
         tuple(partitions), tuple(pair_audits), tuple(abstentions)
-    )
-
-
-def _process_pair(
-    *,
-    activation: Mapping[str, object],
-    session_date: str,
-    verified: _VerifiedInputs,
-    stock_index: Mapping[tuple[str, str], _Artifact],
-    benchmarks: pd.DataFrame,
-) -> _PairResult:
-    ticker = str(activation["ticker"])
-    _guard_memory(f"intraday dataset {ticker} {session_date}")
-    membership = _membership_for_pair(
-        verified.memberships,
-        ticker=ticker,
-        session_date=session_date,
-    )
-    activation_reason = _activation_abstention_reason(
-        activation,
-        membership,
-        maximum_delay_seconds=verified.contract.intraday.decision_finalization_seconds,
-    )
-    if activation_reason is not None:
-        return _PairResult(
-            ticker=ticker,
-            labeled=None,
-            volume_audit=None,
-            pair_audit=_pair_audit(
-                ticker,
-                session_date,
-                status="abstained",
-                reason=activation_reason,
-            ),
-            abstention=_pair_abstention(
-                ticker, session_date, "activation", activation_reason
-            ),
-        )
-    stock = _load_stock_session(
-        session_date,
-        ticker,
-        artifacts=stock_index,
-        coverage=verified.coverage,
-    )
-    volume_result = build_causal_volume_bars(
-        stock,
-        pd.DataFrame([activation]),
-        contract=verified.contract,
-        strategy_contract_sha256=verified.contract_sha256,
-    )
-    volume_audit = cast(
-        Mapping[str, Any], volume_result.audit.iloc[0].to_dict()
-    )
-    if volume_result.bars.empty:
-        return _PairResult(
-            ticker=ticker,
-            labeled=None,
-            volume_audit=None,
-            pair_audit=_pair_audit(
-                ticker,
-                session_date,
-                status="abstained",
-                reason="no_completed_volume_bars",
-                source_rows=len(stock),
-            ),
-            abstention=_pair_abstention(
-                ticker, session_date, "volume_bars", "no_completed_volume_bars"
-            ),
-        )
-    features = build_causal_intraday_features(
-        volume_result.bars,
-        stock,
-        benchmarks,
-        membership,
-        contract=verified.contract,
-        strategy_contract_sha256=verified.contract_sha256,
-    )
-    decision_features, closed_features = _split_decision_features(features)
-    if decision_features.empty:
-        labeled = _empty_label_columns(closed_features)
-    else:
-        labeled = build_exact_causal_intraday_labels(
-            decision_features,
-            stock,
-            benchmarks,
-            contract=verified.contract,
-            strategy_contract_sha256=verified.contract_sha256,
-        )
-        if not closed_features.empty:
-            labeled = pd.concat(
-                [labeled, _empty_label_columns(closed_features)],
-                ignore_index=True,
-            )
-    return _PairResult(
-        ticker=ticker,
-        labeled=labeled,
-        volume_audit=volume_audit,
-        pair_audit=None,
-        abstention=None,
     )
 
 
@@ -860,22 +838,72 @@ def _benchmark_artifact_index(
     return {key: tuple(value) for key, value in by_session.items()}
 
 
-def _load_stock_session(
+def _load_stock_session_batch(
     session_date: str,
-    ticker: str,
+    tickers: list[str],
     *,
     artifacts: Mapping[tuple[str, str], _Artifact],
     coverage: pd.DataFrame,
 ) -> pd.DataFrame:
-    artifact = artifacts.get((session_date, ticker))
-    if artifact is None:
-        raise DataReadinessError(f"stock one-minute path is missing for {(session_date, ticker)}")
-    frame = pd.read_parquet(artifact.path, filters=[("ticker", "==", ticker)])
-    expected = int(artifact.symbol_rows[ticker])
-    coverage_row = coverage[coverage["session_date_et"].eq(session_date) & coverage["ticker"].eq(ticker)]
-    if len(frame) != expected or len(coverage_row) != 1 or expected != int(coverage_row.iloc[0]["observed_rows"]):
-        raise DataReadinessError(f"stock one-minute row count differs for {(session_date, ticker)}")
-    return frame
+    requested = set(tickers)
+    if not requested or len(requested) != len(tickers):
+        raise DataReadinessError(
+            f"stock session batch has empty or duplicate identities for {session_date}"
+        )
+    by_path: dict[Path, tuple[_Artifact, set[str]]] = {}
+    for ticker in sorted(requested):
+        artifact = artifacts.get((session_date, ticker))
+        if artifact is None:
+            raise DataReadinessError(
+                f"stock one-minute path is missing for {(session_date, ticker)}"
+            )
+        existing = by_path.get(artifact.path)
+        if existing is None:
+            by_path[artifact.path] = (artifact, {ticker})
+        else:
+            existing[1].add(ticker)
+
+    coverage_session = coverage.loc[
+        coverage["session_date_et"].eq(session_date)
+        & coverage["ticker"].isin(requested)
+    ].copy()
+    if len(coverage_session) != len(requested):
+        raise DataReadinessError(
+            f"stock one-minute coverage is incomplete for {session_date}"
+        )
+    expected_coverage = {
+        str(row.ticker): int(row.observed_rows)
+        for row in coverage_session.itertuples(index=False)
+    }
+    frames: list[pd.DataFrame] = []
+    for path, (artifact, path_tickers) in sorted(
+        by_path.items(), key=lambda item: str(item[0])
+    ):
+        frame = pd.read_parquet(path)
+        normalized = frame["ticker"].astype(str).str.upper().str.strip()
+        selected = frame.loc[normalized.isin(path_tickers)].copy()
+        selected["ticker"] = normalized.loc[selected.index]
+        observed = {
+            str(ticker): int(rows)
+            for ticker, rows in selected.groupby("ticker", observed=True).size().items()
+        }
+        expected = {ticker: int(artifact.symbol_rows[ticker]) for ticker in path_tickers}
+        if observed != expected:
+            raise DataReadinessError(
+                f"stock one-minute artifact rows differ for {session_date}: {path}"
+            )
+        for ticker, rows in expected.items():
+            if expected_coverage.get(ticker) != rows:
+                raise DataReadinessError(
+                    f"stock one-minute coverage row count differs for {(session_date, ticker)}"
+                )
+        frames.append(selected)
+    combined = pd.concat(frames, ignore_index=True)
+    if set(combined["ticker"].astype(str)) != requested:
+        raise DataReadinessError(
+            f"stock one-minute batch identity differs for {session_date}"
+        )
+    return combined
 
 
 def _load_benchmark_session(
