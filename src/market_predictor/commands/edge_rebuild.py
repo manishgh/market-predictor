@@ -739,7 +739,7 @@ def register_edge_rebuild_commands(app: typer.Typer, console: Any) -> None:
         contract: Path = typer.Option(
             Path("configs/edge_rebuild_strategy_contract.toml")
         ),
-        session_workers: int = typer.Option(8, min=1, max=8),
+        session_workers: int = typer.Option(4, min=1, max=4),
     ) -> None:
         """Publish the immutable causal intraday feature and label dataset."""
 
