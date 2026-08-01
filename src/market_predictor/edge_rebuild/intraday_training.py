@@ -488,9 +488,22 @@ def load_published_intraday_dataset(directory: Path) -> PublishedIntradayDataset
     if not isinstance(raw_partitions, list) or not raw_partitions:
         raise DataReadinessError("published intraday dataset has no partitions")
     projected_rows = sum(int(_object(raw, "manifest partition").get("rows", -1)) for raw in raw_partitions)
-    if projected_rows < 1:
+    summary = _object(manifest.get("summary"), "manifest.summary")
+    projected_eligible_rows = int(summary.get("dataset_eligible_rows", -1))
+    if projected_rows < 1 or projected_eligible_rows < 1 or projected_eligible_rows > projected_rows:
         raise DataReadinessError("published intraday dataset partition row counts are invalid")
-    projected_peak = projected_rows * len(required_columns) * 8 * 6
+    text_columns = 7
+    timestamp_columns = 5
+    boolean_columns = 2
+    economic_columns = 6
+    bytes_per_row = (
+        len(MODEL_FEATURE_COLUMNS) * 4
+        + economic_columns * 8
+        + timestamp_columns * 8
+        + boolean_columns
+        + text_columns * 48
+    )
+    projected_peak = projected_eligible_rows * bytes_per_row * 3
     safety_bytes = int((4.0 - 0.75) * 1024**3)
     if projected_peak > safety_bytes:
         raise DataReadinessError(
@@ -507,6 +520,10 @@ def load_published_intraday_dataset(directory: Path) -> PublishedIntradayDataset
             raise DataReadinessError(f"intraday dataset partition is missing trainer columns: {missing}")
         part = pd.read_parquet(path, columns=list(required_columns), filters=[("dataset_eligible", "==", True)])
         if not part.empty:
+            for column in MODEL_FEATURE_COLUMNS:
+                part[column] = pd.to_numeric(part[column], errors="coerce").astype(
+                    "float32"
+                )
             parts.append(part)
         assert_memory_budget(
             hard_budget_gib=4.0,
@@ -517,6 +534,21 @@ def load_published_intraday_dataset(directory: Path) -> PublishedIntradayDataset
         raise DataReadinessError("published intraday dataset has no eligible training rows")
     frame = pd.concat(parts, ignore_index=True)
     del parts
+    if len(frame) != projected_eligible_rows:
+        raise DataReadinessError(
+            "loaded eligible rows differ from the immutable dataset summary"
+        )
+    for column in (
+        "dataset_row_id",
+        "ticker",
+        "security_id",
+        "session_date_et",
+        "decision_group_id",
+        "session_segment",
+        "sector",
+        "market_cap_bucket",
+    ):
+        frame[column] = frame[column].astype("string[pyarrow]")
     release_process_memory()
     assert_peak_memory_budget(hard_budget_gib=4.0, headroom_gib=0.75, stage="intraday dataset load")
     frame["row_identity"] = frame["dataset_row_id"]
@@ -549,7 +581,7 @@ def load_published_intraday_dataset(directory: Path) -> PublishedIntradayDataset
 
 
 def _validate_training_frame(published: PublishedIntradayDataset, config: IntradayTrainingConfig) -> pd.DataFrame:
-    data = published.frame.copy()
+    data = published.frame
     required = {
         *_IDENTITY_COLUMNS,
         *published.feature_columns,
@@ -569,7 +601,7 @@ def _validate_training_frame(published: PublishedIntradayDataset, config: Intrad
     data["session_date_et"] = session_dates.dt.date.astype(str)
     if len(data) < config.minimum_rows:
         raise DataReadinessError(f"published intraday dataset has {len(data)} rows; requires {config.minimum_rows}")
-    if data["row_identity"].isna().any() or data["row_identity"].astype(str).duplicated().any():
+    if data["row_identity"].isna().any() or data["row_identity"].duplicated().any():
         raise DataReadinessError("row_identity must be present and unique")
     if data["decision_group_id"].isna().any() or data["security_id"].isna().any() or data["ticker"].isna().any():
         raise DataReadinessError("decision group and security identities cannot be missing")
@@ -622,11 +654,14 @@ def _validate_training_frame(published: PublishedIntradayDataset, config: Intrad
         published.spy_excess_return_column,
         published.sector_excess_return_column,
     ]
+    feature_columns = set(published.feature_columns)
     for column in dict.fromkeys(numeric_columns):
         values = pd.to_numeric(data[column], errors="coerce")
         if not np.isfinite(values.to_numpy(dtype="float64")).all():
             raise DataReadinessError(f"model input/economic column {column} must be finite")
-        data[column] = values.astype("float64")
+        data[column] = values.astype(
+            "float32" if column in feature_columns else "float64"
+        )
     expected_net = data[published.gross_return_column] - published.frozen_round_trip_cost_bps / 10_000.0
     if not np.allclose(
         expected_net.to_numpy(dtype="float64"),
