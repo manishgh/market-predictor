@@ -54,6 +54,7 @@ versioned prediction API.
 | Swing V10 | published; candidate v1 structurally rejected | `no_candidate` occurred before economic gates because the 50-stock hard sector floor often yielded four sectors while the 20% cap required five |
 | Swing V11 | published and replayed | 853,417 rows/profile; 604 securities; 1,759 sessions; 640,107 rank-eligible rows |
 | Swing candidate v2 | published `no_candidate` | six governed candidates trained; none passed both temporal and unseen-security economic gates; locked test unopened |
+| Swing candidate v3 | published `no_candidate` | overlay constraints yielded too few sessions and failed economic gates; locked test unopened |
 | Intraday V2 | published and rejected | economically failed after costs; not serveable |
 | Intraday V3 | future work only | development implementation reserved for a genuinely future holdout; no holdout run |
 | Promoted serving bundle | absent | API must fail closed |
@@ -136,6 +137,9 @@ are audit evidence, never fallbacks.
 - [x] Train and evaluate swing candidate v2 with corrected holding-aligned benchmark,
   full-calendar portfolio-bootstrap, doubled-cost path, and active-sector gates.
 - [x] Complete repository-wide verification and memory audit.
-- [x] Update final handoff, commit, and push the checkpoint.
+- [x] Train and evaluate swing candidate v3 with Catalyst (SEC + Alpaca) confirmation overlay. (Failed economic gates).
+- [x] Train and evaluate swing candidate v4 (Event-Driven Specialist) with global catalyst peer group. (Failed economic gates).
+- [x] Extract components from `swing_training.py` into cohesive modules without changing behavior.
+- [/] Update final handoff, commit, and push the checkpoint.
 - [ ] Collect and freeze a genuinely future intraday V3 holdout.
 - [ ] Promote only a model that passes every gate.

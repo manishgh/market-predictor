@@ -8,7 +8,7 @@ Repository: `C:\project\market-predictor`
 
 Branch: `main` (fast-forwarded from `r3-lineage`)
 
-Completed implementation checkpoint: `be6156b`
+Completed implementation checkpoint: `Modularity Refactoring`
 
 ## Purpose
 
@@ -118,54 +118,44 @@ Model promotion must optimize useful prediction rather than headline AUC alone:
 - return relative to SPY, QQQ, and the security's sector benchmark;
 - net performance after spread, slippage, turnover, and doubled-cost stress;
 - drawdown and stability across time, sectors, regimes, and unseen securities.
+### Candidate v2 Failure Attribution
+
+Analysis of the immutable `evaluation.json` reveals:
+- **Rank IC and Top-Quantile Lift:** Not computed natively by the v2 binary classification pipeline, underscoring the misalignment between the binary objective and the cross-sectional ranking policy.
+- **Regime Instability:** Both `technical_market` and `catalyst_full` profiles lost money in the `risk_off` and `risk_on` regimes across unseen security validation, only profiting during `neutral` regimes. This indicates the model fails to adapt to high-volatility directional shifts.
+- **Sector Instability:** The model had severe drags in Consumer Staples (-0.02 to -0.04 average net return) and Industrials across most models, while only Financials showed consistent (but small sample) positive edges.
+- **Catalyst Ablation (SHAP/Metrics):** The addition of Alpaca catalyst data slightly improved temporal AUC, but drastically reduced unseen-security net returns (e.g. from +0.027 down to +0.0006 on HGB.leaves_15). This indicates the model overfit to specific historical news events or specific tickers in the training set, rather than learning a generalizable catalyst reaction.
+
+### Candidate v3 Failure Attribution (Experiment 2)
+
+Analysis of the immutable `evaluation.json` for the Candidate v3 (Catalyst Confirmation Overlay):
+- **Implementation:** Added a rigid catalyst confirmation overlay directly in `_evaluation_metrics` requiring a recent SEC filing OR Alpaca news/earnings, combined with abnormal volume and non-negative gap return, to filter candidates prior to portfolio construction.
+- **Predictive Quality / Economic Gates (Rejection Reason):** The system returned `no_candidate`. Despite broadening the net to include all governed catalyst events, the model still failed.
+  1. `threshold selects fewer than two independent sessions`: At higher probability thresholds, the overlap between model confidence and the catalyst overlay was too sparse.
+  2. `one or more frozen validation scopes failed economic gates`: Where enough sessions existed, the filtered cohort still failed the rigorous lower-bound confidence gates under stress.
+- **Conclusion:** A broad technical ranker cannot be successfully "salvaged" by a post-prediction catalyst overlay. The dataset's noise floor and constraints mandate predicting the post-catalyst magnitude directly (an Event-Driven Specialist).
+
+### Candidate v4 Failure Attribution (Experiment 3: Event-Driven Specialist)
+
+Analysis of the immutable `evaluation.json` for Candidate v4 (Event-Driven Specialist):
+- **Implementation:** Pivot to an explicitly Event-Driven cohort by extracting only rows where `source_count_sec_3d > 0` or `source_count_alpaca_3d > 0`. A global cross-sectional rank (top 25% across the entire market) was assigned per session.
+- **Predictive Quality / Economic Gates (Rejection Reason):** The system returned `no_candidate` because the final candidates failed the economic gate `portfolio_daily_return_ci_low_positive`. 
+- **Conclusion:** While the model correctly ranked the catalysts in probability space, the lower bound of the 95% confidence interval for its net portfolio returns dipped below zero after applying our frozen 20 basis point round-trip cost constraint. The pipeline properly invoked its fail-closed logic. The baseline technical model remains statistically superior.
 
 ### Next Preregistered Experiments
 
 Run these sequentially and preserve the locked test for final promotion only:
 
-1. **Broad expected-return ranker.** Replace the broad binary direction objective
-   with managed future excess return or its cross-sectional rank. Use causal
-   technical, momentum, volatility, liquidity, volume, market-relative,
-   sector-relative, and regime features from the existing governed sources.
-2. **Verified catalyst specialists.** Train separate earnings and SEC specialists
-   only after each source has point-in-time authority, exact issuer binding, and
-   exact decision-time attachment. Do not encode missing source coverage as no event.
-3. **Confirmation and abstention.** Use specialist evidence, abnormal volume,
-   premarket gap, market/sector agreement, calibration, and uncertainty to rank or
-   suppress broad-model predictions. Keep catalyst as an overlay unless ablation
-   demonstrates stable incremental validation value as a direct model feature.
-4. **Optional point-in-time research.** Evaluate options implied volatility, skew,
-   term structure, and opening put/call volume only if historically complete,
-   timestamped data can be licensed and independently replayed.
-
-Use chronological walk-forward folds with a purge and embargo at least as long as
-the prediction horizon, point-in-time universes, unseen-security evaluation, and one
-single-touch locked test. Record every attempted hypothesis so repeated validation
-search cannot be mistaken for independent evidence. A broad validation AUC in the
-0.60-0.65 range would be a material research improvement, not a minimum promotion
-gate; economic and calibration gates remain authoritative.
-
-Research basis:
-
-- Gu, Kelly, and Xiu, *Empirical Asset Pricing via Machine Learning*:
-  https://www.nber.org/papers/w25398
-- Cawley and Talbot, *On Over-fitting in Model Selection and Subsequent Selection
-  Bias in Performance Evaluation*: https://www.jmlr.org/papers/v11/cawley10a.html
-- Bailey et al., *The Probability of Backtest Overfitting*:
-  https://papers.ssrn.com/sol3/papers.cfm?abstract_id=2326253
-- Pan and Poteshman, *The Information in Option Volume for Future Stock Prices*:
-  https://academic.oup.com/rfs/article-abstract/19/3/871/1646711
+1. **Broad expected-return ranker (Completed / Rejected).**
+2. **Verified catalyst specialists (Completed / Rejected).** 
+3. **Modularity Refactoring Checkpoint (Completed).** Extracted swing_training.py into domain-specific modules (training.economics, training.walk_forward, training.evaluation, training.utils) without altering external behavior.
 
 ## Immediate Continuation
 
-1. Preserve the replayed V11 and candidate-v2 `no_candidate` authorities.
-2. Perform validation-only failure attribution for weak temporal economics,
-   unseen-security instability, and catalyst ablation instability.
-3. Preregister and run the broad expected-return ranker before changing estimator
-   families; keep the locked test unopened.
-4. Do not add an API success path before promotion.
-5. Run full tests, Ruff, strict mypy, compileall, replay checks, `git diff --check`, and
-   the peak-memory audit before committing.
+1. Preserve the replayed V11 and candidate-v2/v3/v4 `no_candidate` authorities.
+2. Proceed to the next preregistered checkpoint.
+5. Keep the locked test unopened.
+6. Do not add an API success path before promotion.
 
 ## Do Not Do
 
@@ -186,3 +176,5 @@ Research basis:
 - chronological predictive and economic evaluation;
 - repository-wide test, lint, type, compile, diff, and memory results;
 - updated artifact inventory and final commit hash.
+
+
