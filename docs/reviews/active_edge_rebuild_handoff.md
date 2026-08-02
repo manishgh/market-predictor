@@ -59,7 +59,7 @@ workloads retain their 4 GiB limits.
 - Intraday V2 is published and replayable but economically rejected after costs. It
   is not a serving fallback.
 - Intraday V3 is development code reserved for a genuinely future holdout. No V3
-  future-holdout run has occurred.
+  future-holdout run has occurred. **The collection of the future holdout is currently blocked (environment-pending) because the requisite canonical membership data (`sp500_memberships`) and raw market data for `2026-07-09` onwards are not available in the current environment.**
 - No promoted bundle exists. All model API behavior must fail closed.
 - Documentation is consolidated to this handoff, the active plan, and the current
   feature audit. Unreferenced Azure and standalone TradingFlow plans were removed;

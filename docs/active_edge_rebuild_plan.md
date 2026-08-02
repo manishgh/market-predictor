@@ -140,6 +140,6 @@ are audit evidence, never fallbacks.
 - [x] Train and evaluate swing candidate v3 with Catalyst (SEC + Alpaca) confirmation overlay. (Failed economic gates).
 - [x] Train and evaluate swing candidate v4 (Event-Driven Specialist) with global catalyst peer group. (Failed economic gates).
 - [x] Extract components from `swing_training.py` into cohesive modules without changing behavior.
-- [/] Update final handoff, commit, and push the checkpoint.
-- [ ] Collect and freeze a genuinely future intraday V3 holdout.
+- [x] Update final handoff, commit, and push the checkpoint.
+- [ ] [environment-pending] Collect and freeze a genuinely future intraday V3 holdout. (Blocked: requires canonical membership and raw market data for 2026-07-09 onwards, which is unavailable in the current environment.)
 - [ ] Promote only a model that passes every gate.
