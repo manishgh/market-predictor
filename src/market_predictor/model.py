@@ -63,17 +63,6 @@ DEFAULT_FEATURES = [
     "market_context_news_count_z30",
     "market_context_sentiment_momentum_5d",
     "source_count_alpaca",
-    "source_count_reddit",
-    "source_count_seeking_alpha",
-    "source_count_sec",
-    "source_count_finviz",
-    "reddit_mentions",
-    "reddit_velocity_7d",
-    "reddit_newly_trending",
-    "reddit_sentiment_mean",
-    "reddit_score_sum",
-    "reddit_comments_sum",
-    "reddit_upvote_ratio_mean",
     "event_count",
     "event_earnings_count",
     "event_analyst_count",
@@ -81,7 +70,6 @@ DEFAULT_FEATURES = [
     "event_ma_count",
     "event_fda_count",
     "event_contract_count",
-    "event_sec_count",
     "event_offering_count",
     "event_insider_count",
     "event_reaction_2h_mean",
@@ -93,12 +81,27 @@ DEFAULT_FEATURES = [
     "intraday_to_close_mean",
     "afterhours_next_open_gap_mean",
     "afterhours_next_day_return_mean",
-    "buzz_spike_x_volume_z",
     "sentiment_x_news_attention",
     "catalyst_x_volume_z",
     "reaction_x_sentiment",
     "premarket_gap_x_sentiment",
 ]
+
+CONFIRMATION_ONLY_FEATURE_PREFIXES = (
+    "source_count_sec",
+    "source_count_finviz",
+    "event_sec_count",
+)
+
+
+def is_confirmation_only_feature(feature: str) -> bool:
+    """Return whether evidence is prohibited from every estimator matrix."""
+
+    normalized = feature.strip().lower()
+    return any(
+        normalized.startswith(prefix)
+        for prefix in CONFIRMATION_ONLY_FEATURE_PREFIXES
+    )
 
 
 class DateGroupedPurgedWalkForwardSplit:

@@ -40,6 +40,7 @@ from market_predictor.v3.errors import DataReadinessError
 class ActiveReleaseRoute:
     repository: Path
     attestation_trust_store: Path
+    promotion_gate_policy_sha256: str = ""
     bar_timeframe: str = "unknown"
     curated_dataset: Path | None = None
     estimated_resident_gib: float = 0.5

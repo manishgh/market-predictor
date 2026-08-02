@@ -22,7 +22,7 @@ DEFAULT_EVENT_WINDOWS: Mapping[str, pd.Timedelta] = {
     "1d": pd.Timedelta(days=1),
     "3d": pd.Timedelta(days=3),
 }
-ASSIGNMENT_SCHEMA_VERSION = "event_assignment.v2"
+ASSIGNMENT_SCHEMA_VERSION = "event_assignment.v3"
 ASSIGNMENT_STATUSES: tuple[str, ...] = (
     "assigned",
     "duplicate_event_id",
@@ -56,6 +56,16 @@ ASSIGNMENT_FEATURE_COLUMNS: tuple[str, ...] = (
     "sentiment_numeric",
     "relevance",
 )
+
+
+def stamp_canonical_decision_ids(
+    decisions: pd.DataFrame,
+    *,
+    inplace: bool = False,
+) -> pd.DataFrame:
+    """Validate decision identity inputs and attach their canonical hashes."""
+
+    return _prepare_decisions(decisions, inplace=inplace)
 
 
 def build_event_assignments(
@@ -832,8 +842,8 @@ def _assignment_record(
     return {
         "assignment_id": assignment_id,
         "event_id": str(event["event_id"]),
-        "ticker": str(event["ticker"]),
-        "security_id": str(event["security_id"]),
+        "ticker": str(decision["ticker"]),
+        "security_id": str(decision["security_id"]),
         "source_family": str(event["source_family"]),
         "feature_available_at_utc": event["feature_available_at_utc"],
         "decision_id": str(decision["decision_id"]),

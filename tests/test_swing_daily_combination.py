@@ -16,6 +16,61 @@ from market_predictor.edge_rebuild import swing_daily_combination as module
 from market_predictor.v3.errors import DataReadinessError
 
 
+def test_modeled_population_uses_exact_cutoffs_and_retains_warmup_intervals() -> None:
+    memberships = pd.DataFrame(
+        {
+            "ticker": ["OLD", "NEW", "ENDED", "LATE", "UNKNOWN"],
+            "security_id": [
+                "sec:active",
+                "sec:active",
+                "sec:ended",
+                "sec:late",
+                "sec:unknown",
+            ],
+            "effective_from_utc": pd.to_datetime(
+                [
+                    "2018-05-29T04:00:00Z",
+                    "2020-01-02T05:00:00Z",
+                    "2018-05-29T04:00:00Z",
+                    "2026-07-09T00:00:00Z",
+                    "2019-07-09T00:00:00Z",
+                ],
+                utc=True,
+            ),
+            "effective_to_utc": pd.to_datetime(
+                [
+                    "2020-01-02T05:00:00Z",
+                    None,
+                    "2019-07-09T22:01:00Z",
+                    None,
+                    None,
+                ],
+                utc=True,
+            ),
+            "available_at_utc": pd.to_datetime(
+                [
+                    "2018-05-29T04:00:00Z",
+                    "2020-01-02T05:00:00Z",
+                    "2018-05-29T04:00:00Z",
+                    "2026-07-09T00:00:00Z",
+                    "2026-07-09T00:00:00Z",
+                ],
+                utc=True,
+            ),
+        }
+    )
+
+    retained, modeled, warmup_only = module._modeled_security_population(
+        memberships,
+        decision_start=module.POST_START_DATE,
+        decision_cutoff=module.CUTOFF_DATE,
+    )
+
+    assert modeled == ("sec:active", "sec:ended")
+    assert warmup_only == ("sec:late", "sec:unknown")
+    assert retained["ticker"].tolist() == ["OLD", "NEW", "ENDED"]
+
+
 def test_verifier_combines_lineage_and_excludes_unavailable_securities_in_full(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -62,6 +117,49 @@ def test_verifier_refuses_benchmark_exclusion(
         module.verify_combined_swing_inputs(**inputs)
 
 
+def test_verifier_coverage_gate_receives_only_modeled_securities(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    inputs = _authority_inputs(tmp_path, monkeypatch)
+    memberships = _memberships()
+    memberships["effective_to_utc"] = pd.to_datetime(
+        memberships["effective_to_utc"], utc=True
+    )
+    memberships.loc[memberships.index[-1], "effective_to_utc"] = pd.Timestamp(
+        "2019-07-09T22:00:00Z"
+    )
+    monkeypatch.setattr(
+        module,
+        "require_sp500_membership_authority",
+        lambda *_args, **_kwargs: memberships.copy(),
+    )
+    observed: dict[str, int] = {}
+
+    def preflight(**kwargs: Any) -> module._CoveragePreflight:
+        population = kwargs["memberships"]
+        observed["security_count"] = int(population["security_id"].nunique())
+        audit = _coverage_audit(excluded=0, security_count=39)
+        return module._CoveragePreflight(
+            audit=audit,
+            excluded_security_ids=(),
+            exclusion_records=(),
+        )
+
+    monkeypatch.setattr(module, "_preflight_exact_coverage", preflight)
+
+    verified = module.verify_combined_swing_inputs(
+        **inputs,
+        model_decision_start=module.POST_START_DATE,
+        model_decision_cutoff=module.CUTOFF_DATE,
+    )
+
+    assert observed["security_count"] == 39
+    assert verified.request_payload["modeled_security_count"] == 39
+    assert verified.request_payload["warmup_only_security_count"] == 1
+    assert verified.warmup_only_security_ids == ("sec:36",)
+
+
 def test_combination_refuses_gap_overlap_and_invalid_ohlcv(tmp_path: Path) -> None:
     calendar = xcals.get_calendar("XNYS")
     first = pd.Timestamp(calendar.session_open("2019-07-08")).tz_convert("UTC")
@@ -77,6 +175,28 @@ def test_combination_refuses_gap_overlap_and_invalid_ohlcv(tmp_path: Path) -> No
             pre_records=[],
             post_record=post_record,
             expected_sessions={first.date(), second.date()},
+            calendar=calendar,
+        )
+
+    retained = module._combine_ticker(
+        "AAA",
+        pre_records=[],
+        post_record=post_record,
+        expected_sessions={second.date()},
+        abstained_sessions={first.date()},
+        calendar=calendar,
+    )
+    assert set(pd.to_datetime(retained["bar_start_utc"]).dt.date) == {
+        second.date()
+    }
+
+    with pytest.raises(DataReadinessError, match="session-gap audit is stale"):
+        module._combine_ticker(
+            "AAA",
+            pre_records=[],
+            post_record=post_record,
+            expected_sessions={first.date()},
+            abstained_sessions={second.date()},
             calendar=calendar,
         )
 
@@ -212,6 +332,121 @@ def test_preflight_excludes_aet_style_gap_and_rejects_more_than_five_percent(
         )
 
 
+def test_preflight_retains_sparse_gaps_as_bound_session_abstentions(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calendar = xcals.get_calendar("XNYS")
+    sessions = tuple(
+        pd.Timestamp(value).date()
+        for value in calendar.sessions_in_range("2024-01-02", "2025-12-31")
+    )
+    missing = {sessions[200], sessions[201]}
+    observed = [
+        pd.Timestamp(calendar.session_open(session)).tz_convert("UTC")
+        for session in sessions
+        if session not in missing
+    ]
+    frame = _canonical_bars("AAA", observed)
+    monkeypatch.setattr(
+        module,
+        "load_canonical_artifact",
+        lambda *_args, **_kwargs: (frame.copy(), {}),
+    )
+    memberships = pd.DataFrame(
+        {
+            "ticker": ["AAA"],
+            "security_id": ["sec:AAA"],
+            "effective_from_utc": [
+                pd.Timestamp(sessions[0]).tz_localize("America/New_York").tz_convert("UTC")
+            ],
+            "effective_to_utc": [
+                (pd.Timestamp(sessions[-1]) + pd.Timedelta(days=1))
+                .tz_localize("America/New_York")
+                .tz_convert("UTC")
+            ],
+            "primary_benchmark": ["XLK"],
+        }
+    )
+
+    coverage = module._preflight_exact_coverage(
+        memberships=memberships,
+        pre_records=(),
+        post_records={"AAA": {"resolved_path": "AAA.parquet"}},
+        benchmark_tickers=(),
+        initial_reasons={},
+    )
+
+    assert coverage.excluded_security_ids == ()
+    security = coverage.audit["security_audit"][0]
+    assert security["action"] == "retain_with_session_abstentions"
+    assert security["missing_session_count"] == 2
+    assert security["maximum_contiguous_missing_sessions"] == 2
+    gap_audit = coverage.audit["session_gap_audit"]
+    assert gap_audit["missing_session_count"] == 2
+    assert gap_audit["gaps"][0]["missing_sessions"] == [
+        session.isoformat() for session in sorted(missing)
+    ]
+    abstentions = module._session_abstentions_by_ticker(gap_audit)
+    exact_expected = module._expected_ticker_sessions(
+        "AAA",
+        memberships=memberships,
+        benchmark_tickers=(),
+        benchmark_start_sessions={},
+        all_sessions=sessions,
+        session_abstentions=abstentions["AAA"],
+    )
+    assert exact_expected == set(sessions).difference(missing)
+
+
+def test_preflight_excludes_long_contiguous_gap_even_when_fraction_is_sparse(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calendar = xcals.get_calendar("XNYS")
+    sessions = tuple(
+        pd.Timestamp(value).date()
+        for value in calendar.sessions_in_range("2020-01-02", "2026-07-08")
+    )
+    missing = set(sessions[500:506])
+    assert len(missing) / len(sessions) <= module.MAXIMUM_SPARSE_MISSING_FRACTION
+    frame = _canonical_bars(
+        "AAA",
+        [
+            pd.Timestamp(calendar.session_open(session)).tz_convert("UTC")
+            for session in sessions
+            if session not in missing
+        ],
+    )
+    monkeypatch.setattr(
+        module,
+        "load_canonical_artifact",
+        lambda *_args, **_kwargs: (frame.copy(), {}),
+    )
+    memberships = pd.DataFrame(
+        {
+            "ticker": ["AAA"],
+            "security_id": ["sec:AAA"],
+            "effective_from_utc": [
+                pd.Timestamp(sessions[0]).tz_localize("America/New_York").tz_convert("UTC")
+            ],
+            "effective_to_utc": [
+                (pd.Timestamp(sessions[-1]) + pd.Timedelta(days=1))
+                .tz_localize("America/New_York")
+                .tz_convert("UTC")
+            ],
+            "primary_benchmark": ["XLK"],
+        }
+    )
+
+    with pytest.raises(DataReadinessError, match="exclusions exceed 5%"):
+        module._preflight_exact_coverage(
+            memberships=memberships,
+            pre_records=(),
+            post_records={"AAA": {"resolved_path": "AAA.parquet"}},
+            benchmark_tickers=(),
+            initial_reasons={},
+        )
+
+
 def test_preflight_refuses_benchmark_session_gap(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -276,6 +511,11 @@ def test_combined_store_is_exact_resumable_and_refuses_corruption(tmp_path: Path
             "membership_authority": {"authority_sha256": "d"},
             "excluded_security_ids_sha256": "e",
             "coverage_audit_sha256": module._json_sha256(coverage_audit),
+            "session_gap_audit_schema": module.SESSION_GAP_AUDIT_SCHEMA,
+            "session_gap_audit_sha256": module._json_sha256(
+                coverage_audit["session_gap_audit"]
+            ),
+            "session_gap_abstention_count": 0,
             "security_exclusions": [],
             "benchmark_coverage": coverage_audit["benchmark_audit"],
         },
@@ -316,6 +556,9 @@ def test_combined_store_is_exact_resumable_and_refuses_corruption(tmp_path: Path
     assert first.manifest["coverage_audit"]["semantic_sha256"] == module._json_sha256(
         coverage_audit
     )
+    assert first.manifest["session_gap_audit"]["semantic_sha256"] == (
+        module._json_sha256(coverage_audit["session_gap_audit"])
+    )
 
     changed_audit = {**coverage_audit, "security_count": 1}
     changed_request = {
@@ -334,6 +577,20 @@ def test_combined_store_is_exact_resumable_and_refuses_corruption(tmp_path: Path
             memory_budget_gib=4.0,
             memory_headroom_gib=0.75,
         )
+
+    session_gap_path = output / "_session_gap_audit.json"
+    session_gap_raw = session_gap_path.read_text(encoding="utf-8")
+    session_gap_payload = json.loads(session_gap_raw)
+    _write_json(session_gap_path, {**session_gap_payload, "gap_count": 1})
+    with pytest.raises(DataReadinessError, match="session-gap audit differs"):
+        module.prepare_combined_daily_store(
+            verified=verified,
+            output_directory=output,
+            parent_request_sha256="p" * 64,
+            memory_budget_gib=4.0,
+            memory_headroom_gib=0.75,
+        )
+    session_gap_path.write_text(session_gap_raw, encoding="utf-8")
 
     artifact = next(iter(first.artifacts.values()))[0]
     with artifact.open("ab") as handle:
@@ -563,6 +820,7 @@ def _memberships() -> pd.DataFrame:
             "security_id": security_ids,
             "effective_from_utc": pd.Timestamp("2018-05-29T04:00:00Z"),
             "effective_to_utc": pd.NaT,
+            "available_at_utc": pd.Timestamp("2018-05-29T04:00:00Z"),
             "primary_benchmark": "XLK",
         }
     )
@@ -576,6 +834,7 @@ def _one_session_memberships(count: int) -> pd.DataFrame:
             "security_id": [f"sec:{ticker}" for ticker in tickers],
             "effective_from_utc": pd.Timestamp("2024-01-02T05:00:00Z"),
             "effective_to_utc": pd.Timestamp("2024-01-03T05:00:00Z"),
+            "available_at_utc": pd.Timestamp("2024-01-02T05:00:00Z"),
             "primary_benchmark": "XLK",
         }
     )
@@ -665,11 +924,33 @@ def _coverage_audit(
     security_count: int = 0,
     benchmark_tickers: tuple[str, ...] = (),
 ) -> dict[str, object]:
+    session_gap_audit = {
+        "schema": module.SESSION_GAP_AUDIT_SCHEMA,
+        "classification_policy": {
+            "maximum_missing_fraction": module.MAXIMUM_SPARSE_MISSING_FRACTION,
+            "maximum_contiguous_missing_sessions": (
+                module.MAXIMUM_SPARSE_CONTIGUOUS_SESSIONS
+            ),
+            "unavailable_source_action": "exclude_security",
+            "substantial_gap_action": "exclude_security",
+            "sparse_gap_action": "abstain",
+            "imputation": "prohibited",
+            "downstream_rule": (
+                "abstain from every feature or label row whose required "
+                "membership-session window intersects a missing session"
+            ),
+        },
+        "gap_count": 0,
+        "security_count": 0,
+        "missing_session_count": 0,
+        "gaps": [],
+    }
     return {
         "schema": module.COVERAGE_AUDIT_SCHEMA,
         "security_count": security_count,
         "excluded_security_count": excluded,
         "security_audit": [],
+        "session_gap_audit": session_gap_audit,
         "benchmark_audit": [
             {
                 "ticker": ticker,

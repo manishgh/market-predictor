@@ -198,8 +198,8 @@ def _write_inputs(
                 ("Makes dynamic random access memory, NAND flash, and high bandwidth memory for data center systems."),
             ],
             "source_document_id": [
-                "rapidapi:profile:wdc",
-                "rapidapi:profile:mu",
+                "external:profile:wdc",
+                "external:profile:mu",
             ],
             "source_content_sha256": ["a" * 64, "b" * 64],
             "observed_at_utc": [_OBSERVED, _OBSERVED],

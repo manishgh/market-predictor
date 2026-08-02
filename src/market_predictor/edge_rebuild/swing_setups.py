@@ -83,8 +83,7 @@ The rule, evaluated after the completed daily bar of session ``t`` at the frozen
 ``Phases.``
     Consecutive daily decisions share nine of their ten outcome sessions, so row
     counts are not sample size. ``phase = session_ordinal % horizon_sessions``
-    over the ordered SPY session calendar, which is the same phase convention
-    :mod:`market_predictor.swing.evaluation` already uses. Within one phase,
+    over the ordered SPY session calendar. Within one phase,
     consecutive decision sessions are a full horizon apart and their labels share
     no bar.
 

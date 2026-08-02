@@ -27,8 +27,8 @@ from market_predictor.v3.errors import DataReadinessError
 
 PLAN_SCHEMA = "edge_rebuild.swing_history_acquisition_plan.v2"
 AUTHORITY_SCHEMA = "edge_rebuild.swing_history_acquisition_plan_authority.v2"
-TEMPORAL_SCHEMA = "edge_rebuild.temporal_manifest.v1"
-TEMPORAL_AUTHORITY_SCHEMA = "edge_rebuild.temporal_manifest_authority.v1"
+TEMPORAL_SCHEMA = "edge_rebuild.temporal_manifest.v2"
+TEMPORAL_AUTHORITY_SCHEMA = "edge_rebuild.temporal_manifest_authority.v2"
 DAILY_REQUEST_SCHEMA = "swing.daily_history_collection.v1"
 DAILY_MANIFEST_SCHEMA = "swing.daily_history_manifest.v1"
 DAILY_BAR_UNITS_FILE = "daily_bar_units.csv"

@@ -30,7 +30,11 @@ from market_predictor.prediction_contracts import (
     PredictionServiceError,
     PredictionValidationError,
 )
-from market_predictor.prediction_service import PredictionService, serving_routes_from_config
+from market_predictor.prediction_service import (
+    PredictionService,
+    serving_routes_from_config,
+    swing_live_input_provider_from_config,
+)
 from market_predictor.telemetry import RuntimeTelemetry
 
 try:
@@ -63,6 +67,11 @@ def create_app(
         prediction_service = PredictionService(
             Path("."),
             routes=serving_routes_from_config(settings.app_config),
+            swing_live_input_provider=swing_live_input_provider_from_config(
+                settings.app_config,
+                memory_budget_gib=settings.runtime_memory_budget_gib,
+                memory_headroom_gib=settings.runtime_memory_headroom_gib,
+            ),
             memory_budget_gib=settings.runtime_memory_budget_gib,
             memory_headroom_gib=settings.runtime_memory_headroom_gib,
             max_concurrent_inference=settings.runtime_max_concurrent_inference,

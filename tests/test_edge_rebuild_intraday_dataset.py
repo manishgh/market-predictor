@@ -213,6 +213,180 @@ def test_publishes_hash_bound_partition_and_complete_abstention_audit(tmp_path: 
     assert load_complete_intraday_dataset(output) == manifest
 
 
+def test_monthly_writer_uses_one_file_with_session_row_groups(
+    tmp_path: Path,
+) -> None:
+    writer = dataset_module._MonthlyPartitionWriter(tmp_path)
+
+    def rows(session: str, ticker: str) -> pd.DataFrame:
+        return pd.DataFrame(
+            {
+                "session_date_et": [session],
+                "ticker": [ticker],
+                "volume_bar_number": [1],
+                "dataset_eligible": [True],
+                "feature_available_at_utc": [
+                    pd.Timestamp(f"{session}T15:00:00Z")
+                ],
+                "label_available_at_utc": [
+                    pd.Timestamp(f"{session}T15:30:00Z")
+                ],
+            }
+        )
+
+    assert writer.write(rows("2026-01-05", "AAA")) is None
+    assert writer.write(rows("2026-01-06", "BBB")) is None
+    january = writer.write(rows("2026-02-02", "AAA"))
+    february = writer.close()
+
+    assert january is not None
+    assert february is not None
+    assert january["stock_sessions"] == 2
+    january_path = tmp_path / january["path"]
+    assert dataset_module.pq.ParquetFile(january_path).metadata.num_row_groups == 2
+    assert len(list((tmp_path / "partitions").rglob("*.parquet"))) == 2
+    dataset_module._validate_monthly_partition_records(
+        [january, february],
+        expected_stock_sessions_by_month={"2026-01": 2, "2026-02": 1},
+    )
+    dataset_module._verify_monthly_partition_files(
+        tmp_path, [january, february]
+    )
+
+
+def test_sparse_interior_month_uses_causal_expected_coverage() -> None:
+    def record(month: str, stock_sessions: int = 1) -> dict[str, Any]:
+        return {
+            "path": (
+                f"partitions/session_month_et={month}/part-00000.parquet"
+            ),
+            "session_month_et": month,
+            "first_session_date_et": f"{month}-02",
+            "last_session_date_et": f"{month}-03",
+            "rows": stock_sessions,
+            "eligible_rows": stock_sessions,
+            "stock_sessions": stock_sessions,
+            "ticker_count": 1,
+        }
+
+    records = [record("2026-01"), record("2026-02"), record("2026-03")]
+    dataset_module._validate_monthly_partition_records(
+        records,
+        expected_stock_sessions_by_month={
+            "2026-01": 1,
+            "2026-02": 1,
+            "2026-03": 1,
+        },
+    )
+
+    with pytest.raises(DataReadinessError, match="layout contract"):
+        dataset_module._validate_monthly_partition_records(
+            [record("2026-01"), record("2026-02", stock_sessions=2)],
+            expected_stock_sessions_by_month={"2026-01": 1, "2026-02": 1},
+        )
+
+
+def test_monthly_writer_rejects_cross_month_schema_drift(tmp_path: Path) -> None:
+    writer = dataset_module._MonthlyPartitionWriter(tmp_path)
+    january = pd.DataFrame(
+        {
+            "session_date_et": ["2026-01-30"],
+            "ticker": ["AAA"],
+            "volume_bar_number": [1],
+            "dataset_eligible": [True],
+            "feature_available_at_utc": [pd.Timestamp("2026-01-30T15:00:00Z")],
+            "label_available_at_utc": [pd.Timestamp("2026-01-30T15:30:00Z")],
+        }
+    )
+    february = january.copy()
+    february["session_date_et"] = "2026-02-02"
+    february["volume_bar_number"] = february["volume_bar_number"].astype(float)
+
+    writer.write(january)
+    with pytest.raises(DataReadinessError, match="schema changed across"):
+        writer.write(february)
+    writer.abort()
+
+
+def test_monthly_writer_requires_strictly_increasing_sessions(tmp_path: Path) -> None:
+    writer = dataset_module._MonthlyPartitionWriter(tmp_path)
+
+    def rows(session: str) -> pd.DataFrame:
+        return pd.DataFrame(
+            {
+                "session_date_et": [session],
+                "ticker": ["AAA"],
+                "volume_bar_number": [1],
+                "dataset_eligible": [True],
+                "feature_available_at_utc": [pd.Timestamp(f"{session}T15:00:00Z")],
+                "label_available_at_utc": [pd.Timestamp(f"{session}T15:30:00Z")],
+            }
+        )
+
+    writer.write(rows("2026-01-06"))
+    with pytest.raises(DataReadinessError, match="strictly increasing"):
+        writer.write(rows("2026-01-05"))
+    writer.abort()
+
+
+def test_streaming_audit_writer_flushes_bounded_row_groups(tmp_path: Path) -> None:
+    writer = dataset_module._StreamingAuditWriter(tmp_path)
+    writer.write(
+        [dataset_module._pair_audit("AAA", "2026-01-05", status="published", reason=None)],
+        [],
+    )
+    writer.write(
+        [dataset_module._pair_audit("BBB", "2026-01-06", status="published", reason=None)],
+        [
+            dataset_module._pair_abstention(
+                "BBB", "2026-01-06", "label", "missing_future_bars"
+            )
+        ],
+    )
+    records = writer.close()
+
+    assert writer.pair_rows == 2
+    assert writer.abstention_rows == 1
+    assert len(records) == 2
+    pair_file = dataset_module.pq.ParquetFile(
+        tmp_path / "audit" / "stock_session_audit.parquet"
+    )
+    assert pair_file.metadata.num_row_groups == 2
+
+
+def test_physical_replay_rejects_multiple_sessions_in_one_row_group(
+    tmp_path: Path,
+) -> None:
+    path = (
+        tmp_path
+        / "partitions"
+        / "session_month_et=2026-01"
+        / "part-00000.parquet"
+    )
+    path.parent.mkdir(parents=True)
+    frame = pd.DataFrame(
+        {
+            "session_date_et": ["2026-01-05", "2026-01-06"],
+            "ticker": ["AAA", "AAA"],
+            "volume_bar_number": [1, 1],
+            "dataset_eligible": [True, True],
+        }
+    )
+    frame.to_parquet(path, index=False)
+    record = {
+        **dataset_module._file_record(path, tmp_path, rows=2),
+        "session_month_et": "2026-01",
+        "first_session_date_et": "2026-01-05",
+        "last_session_date_et": "2026-01-06",
+        "stock_sessions": 2,
+        "ticker_count": 1,
+        "eligible_rows": 2,
+    }
+
+    with pytest.raises(DataReadinessError, match="exactly one session"):
+        dataset_module._verify_monthly_partition_files(tmp_path, [record])
+
+
 def test_parallel_session_processing_matches_single_worker_output(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -438,18 +612,43 @@ def test_leakage_timestamp_rejects_complete_publication(tmp_path: Path, monkeypa
 
 def test_partial_publication_is_removed_and_never_gets_authority(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     verified = _verified_inputs(tmp_path)
-    original = dataset_module._write_partition
+    original = dataset_module._MonthlyPartitionWriter.write
 
-    def interrupted(*args: Any, **kwargs: Any) -> dict[str, Any]:
-        original(*args, **kwargs)
+    def interrupted(
+        writer: dataset_module._MonthlyPartitionWriter,
+        *args: Any,
+        **kwargs: Any,
+    ) -> dict[str, Any] | None:
+        original(writer, *args, **kwargs)
         raise RuntimeError("simulated interruption")
 
-    monkeypatch.setattr(dataset_module, "_write_partition", interrupted)
+    monkeypatch.setattr(
+        dataset_module._MonthlyPartitionWriter,
+        "write",
+        interrupted,
+    )
     with pytest.raises(RuntimeError, match="simulated interruption"):
         _publish(tmp_path, monkeypatch, verified)
 
     assert not (tmp_path / "dataset").exists()
     assert not list(tmp_path.glob(".dataset.*.staging"))
+
+
+def test_abort_suppresses_close_failure_and_resets_writer(tmp_path: Path) -> None:
+    class BrokenWriter:
+        def close(self) -> None:
+            raise OSError("simulated close failure")
+
+    writer = dataset_module._MonthlyPartitionWriter(tmp_path)
+    writer._writer = BrokenWriter()  # type: ignore[assignment]
+    writer._month = "2026-01"
+    writer._path = tmp_path / "partitions" / "broken.parquet"
+
+    writer.abort()
+
+    assert writer._writer is None
+    assert writer._month is None
+    assert writer._path is None
 
 
 def test_idempotent_replay_preserves_immutable_dataset(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

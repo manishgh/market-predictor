@@ -27,6 +27,7 @@ from typing import Final
 import numpy as np
 import pandas as pd
 
+from market_predictor.execution_policy import executable_fill_price
 from market_predictor.v3.errors import DataReadinessError
 
 TARGET_HIT: Final = 1
@@ -140,6 +141,20 @@ def apply_triple_barrier(
                 label, offset, exit_price = STOP_HIT, first_stop, stop
             else:
                 label, offset, exit_price = TARGET_HIT, first_target, target
+        trigger_open = float(opens[entry_index + offset])
+        exit_price = executable_fill_price(
+            outcome=(
+                "stop_first"
+                if label == STOP_HIT
+                else "target_first"
+                if label == TARGET_HIT
+                else "timeout"
+            ),
+            target_price=target,
+            stop_price=stop,
+            trigger_open=trigger_open,
+            final_price=exit_price,
+        )
 
         records.append(
             {
@@ -184,7 +199,11 @@ def apply_cross_sectional_rank(
     if top_quantile + bottom_quantile >= 1.0:
         raise ValueError("quantiles must leave a middle band")
     if panel.empty:
-        return panel.assign(rank_label=pd.Series(dtype=int), rank_percentile=np.nan)
+        return panel.assign(
+            rank_label=pd.Series(dtype=int),
+            rank_percentile=np.nan,
+            ranking_group_size=pd.Series(dtype="int32"),
+        )
 
     keys = ["session", "sector"] if within_sector else ["session"]
     frame = panel.copy()
@@ -194,7 +213,8 @@ def apply_cross_sectional_rank(
     # `pct=True` maps each row to its position in its own group, so the cut is
     # relative to that session rather than to a threshold carried across time.
     percentile = grouped.rank(pct=True, method="average")
-    eligible = grouped.transform("size") >= minimum_cross_section
+    group_size = grouped.transform("size").astype("int32")
+    eligible = group_size >= minimum_cross_section
 
     # Strict above, inclusive below, so the two tails hold equal counts: a
     # percentile of exactly the cut belongs to the middle on the top side and to
@@ -204,6 +224,7 @@ def apply_cross_sectional_rank(
     label[percentile <= bottom_quantile] = RANK_BOTTOM
     frame["rank_label"] = label.where(eligible & returns.notna())
     frame["rank_percentile"] = percentile.where(eligible & returns.notna())
+    frame["ranking_group_size"] = group_size
     return frame
 
 

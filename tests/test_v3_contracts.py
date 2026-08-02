@@ -50,7 +50,7 @@ class V3ContractTests(unittest.TestCase):
         now = datetime.now(UTC)
         missing = SourceAvailability(
             ticker="RGTI",
-            source_family="reddit",
+            source_family="sec",
             available=False,
             row_count=0,
             collected_at_utc=now,
@@ -59,7 +59,7 @@ class V3ContractTests(unittest.TestCase):
         with self.assertRaises(ValidationError):
             SourceAvailability(
                 ticker="RGTI",
-                source_family="reddit",
+                source_family="sec",
                 available=True,
                 row_count=0,
                 collected_at_utc=now,

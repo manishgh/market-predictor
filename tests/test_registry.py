@@ -9,6 +9,10 @@ from pathlib import Path
 import joblib
 import pandas as pd
 
+from market_predictor.intraday.contracts import (
+    INTRADAY_MODEL_SCHEMA_VERSION,
+    INTRADAY_MODEL_TYPE,
+)
 from market_predictor.registry import (
     feature_schema_hash,
     file_sha256,
@@ -54,8 +58,8 @@ class ModelRegistryTests(unittest.TestCase):
             with self.assertRaisesRegex(TypeError, "unexpected keyword argument 'status'"):
                 write_model_manifest(
                     model_path=path,
-                    model_type="swing_classifier_v1",
-                    schema_version="swing.model.v1",
+                    model_type=INTRADAY_MODEL_TYPE,
+                    schema_version=INTRADAY_MODEL_SCHEMA_VERSION,
                     target_col="target",
                     features=["return_1d"],
                     training_data=_training_frame(["return_1d"], rows=10, tickers=2),
@@ -95,13 +99,13 @@ class ModelRegistryTests(unittest.TestCase):
 def _write_candidate(path: Path) -> dict[str, object]:
     features = ["return_1d", "volume_z20"]
     metrics = {
-        **synthetic_identity_metrics(model_type="swing_classifier_v1", model_run_id="registry-test-run"),
+        **synthetic_identity_metrics(model_type=INTRADAY_MODEL_TYPE, model_run_id="registry-test-run"),
         "roc_auc": 0.7,
     }
     write_model_manifest(
         model_path=path,
-        model_type="swing_classifier_v1",
-        schema_version="swing.model.v1",
+        model_type=INTRADAY_MODEL_TYPE,
+        schema_version=INTRADAY_MODEL_SCHEMA_VERSION,
         target_col="target",
         features=features,
         training_data=_training_frame(features, rows=10, tickers=2),

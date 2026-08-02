@@ -10,6 +10,7 @@ from pathlib import Path
 from typer.testing import CliRunner
 
 from market_predictor.feature_store import LiveFeatureStore
+from market_predictor.intraday.contracts import INTRADAY_FEATURE_SCHEMA_VERSION
 from market_predictor.production_cli import app
 from market_predictor.release import publish_local_release
 from market_predictor.serving_bundle import (
@@ -20,9 +21,8 @@ from market_predictor.serving_bundle import (
     verify_serving_bundle,
 )
 from market_predictor.v3.errors import DataReadinessError
-from tests.r4_fixtures import test_signing_material
-from tests.test_feature_store import _frame, _publish
-from tests.test_serving_context import _promoted_swing_model
+from tests.r4_fixtures import test_signing_material as signing_material_for_test
+from tests.test_serving_context import _promoted_intraday_model, _publish_intraday
 
 
 class ServingBundleTests(unittest.TestCase):
@@ -36,9 +36,9 @@ class ServingBundleTests(unittest.TestCase):
                 [
                     "publish-serving-bundle",
                     "--mode",
-                    "swing",
+                    "intraday",
                     "--horizon",
-                    "5d",
+                    "60m",
                     "--model-release-id",
                     release_id,
                     "--feature-snapshot",
@@ -66,8 +66,8 @@ class ServingBundleTests(unittest.TestCase):
 
             published = publish_serving_bundle(
                 repository,
-                mode="swing",
-                horizon="5d",
+                mode="intraday",
+                horizon="60m",
                 model_release_id=release_id,
                 feature_path=feature_path,
                 attestation_trust_store_path=trust_store,
@@ -81,7 +81,10 @@ class ServingBundleTests(unittest.TestCase):
 
             self.assertEqual(active["bundle"]["bundle_id"], published["bundle_id"])
             self.assertEqual(active["bundle"]["model_release_id"], release_id)
-            self.assertEqual(active["bundle"]["feature_schema_version"], "swing.features.v1")
+            self.assertEqual(
+                active["bundle"]["feature_schema_version"],
+                INTRADAY_FEATURE_SCHEMA_VERSION,
+            )
             self.assertEqual(
                 active["bundle"]["calibration_method"],
                 "isotonic_prior_fold_only",
@@ -93,8 +96,8 @@ class ServingBundleTests(unittest.TestCase):
             repository, trust_store, release_id, feature_path = _inputs(root, "complete")
             complete = publish_serving_bundle(
                 repository,
-                mode="swing",
-                horizon="5d",
+                mode="intraday",
+                horizon="60m",
                 model_release_id=release_id,
                 feature_path=feature_path,
                 attestation_trust_store_path=trust_store,
@@ -126,8 +129,8 @@ class ServingBundleTests(unittest.TestCase):
             repository, trust_store, release_id, feature_path = _inputs(root, "mutation")
             published = publish_serving_bundle(
                 repository,
-                mode="swing",
-                horizon="5d",
+                mode="intraday",
+                horizon="60m",
                 model_release_id=release_id,
                 feature_path=feature_path,
                 attestation_trust_store_path=trust_store,
@@ -158,14 +161,14 @@ class ServingBundleTests(unittest.TestCase):
             repository, trust_store, first_release, feature_path = _inputs(root, "first")
             first = publish_serving_bundle(
                 repository,
-                mode="swing",
-                horizon="5d",
+                mode="intraday",
+                horizon="60m",
                 model_release_id=first_release,
                 feature_path=feature_path,
                 attestation_trust_store_path=trust_store,
                 generated_at=_timestamp(),
             )
-            second_model, second_evidence = _promoted_swing_model(root / "second", "second")
+            second_model, second_evidence = _promoted_intraday_model(root / "second", "second")
             second_release = publish_local_release(
                 repository,
                 model_path=second_model,
@@ -175,8 +178,8 @@ class ServingBundleTests(unittest.TestCase):
             )
             second = publish_serving_bundle(
                 repository,
-                mode="swing",
-                horizon="5d",
+                mode="intraday",
+                horizon="60m",
                 model_release_id=str(second_release["release_id"]),
                 feature_path=feature_path,
                 attestation_trust_store_path=trust_store,
@@ -200,7 +203,7 @@ class ServingBundleTests(unittest.TestCase):
             bundle_ids: list[str] = []
             for marker, release_id in (("one", first_release), ("two", "")):
                 if not release_id:
-                    model, evidence = _promoted_swing_model(root / marker, marker)
+                    model, evidence = _promoted_intraday_model(root / marker, marker)
                     release = publish_local_release(
                         repository,
                         model_path=model,
@@ -211,8 +214,8 @@ class ServingBundleTests(unittest.TestCase):
                     release_id = str(release["release_id"])
                 bundle = publish_serving_bundle(
                     repository,
-                    mode="swing",
-                    horizon="5d",
+                    mode="intraday",
+                    horizon="60m",
                     model_release_id=release_id,
                     feature_path=feature_path,
                     attestation_trust_store_path=trust_store,
@@ -251,8 +254,8 @@ class ServingBundleTests(unittest.TestCase):
             repository, trust_store, release_id, feature_path = _inputs(root, "policy")
             published = publish_serving_bundle(
                 repository,
-                mode="swing",
-                horizon="5d",
+                mode="intraday",
+                horizon="60m",
                 model_release_id=release_id,
                 feature_path=feature_path,
                 attestation_trust_store_path=trust_store,
@@ -276,8 +279,8 @@ class ServingBundleTests(unittest.TestCase):
 
 def _inputs(root: Path, marker: str) -> tuple[Path, Path, str, Path]:
     repository = root / "repository"
-    _, trust_store, _ = test_signing_material()
-    model, evidence = _promoted_swing_model(root / "models" / marker, marker)
+    _, trust_store, _ = signing_material_for_test()
+    model, evidence = _promoted_intraday_model(root / "models" / marker, marker)
     release = publish_local_release(
         repository,
         model_path=model,
@@ -286,8 +289,8 @@ def _inputs(root: Path, marker: str) -> tuple[Path, Path, str, Path]:
         activate=False,
     )
     store = LiveFeatureStore(root)
-    _publish(store, _frame(), _timestamp())
-    feature_path, _ = store.paths("swing")
+    _publish_intraday(store, _timestamp())
+    feature_path, _ = store.paths("intraday")
     return repository, trust_store, str(release["release_id"]), feature_path
 
 

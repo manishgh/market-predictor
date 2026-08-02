@@ -173,6 +173,27 @@ class HttpClientTests(unittest.TestCase):
         sleep.assert_not_called()
 
     @patch("market_predictor.sources.http.time.sleep")
+    def test_request_hooks_cover_each_sec_specific_retry(self, sleep: Mock) -> None:
+        before_request = Mock()
+        after_response = Mock()
+        client = HttpClient(
+            before_request=before_request,
+            after_response=after_response,
+            additional_retriable_statuses=frozenset({403}),
+        )
+        client.session = Mock()
+        forbidden = _Response(403)
+        client.session.get.side_effect = [forbidden, _Response(200, body=b"ok")]
+
+        result = client.get_bytes_with_metadata("https://example.test/raw", retries=2, pause=0)
+
+        self.assertEqual(result.body, b"ok")
+        self.assertEqual(before_request.call_count, 2)
+        self.assertEqual(after_response.call_count, 2)
+        after_response.assert_any_call(403, forbidden.headers)
+        sleep.assert_called_once_with(0.0)
+
+    @patch("market_predictor.sources.http.time.sleep")
     def test_retry_after_controls_429_delay(self, sleep: Mock) -> None:
         client = HttpClient()
         client.session = Mock()

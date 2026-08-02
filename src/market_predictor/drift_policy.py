@@ -97,7 +97,7 @@ class DriftAssessmentV2(BaseModel):
     )
     assessment_id: str = Field(pattern=SHA256_PATTERN)
     mode: Literal["swing", "intraday"]
-    horizon: str = Field(pattern=r"^[1-9]\d*(?:m|d)$")
+    horizon: str = Field(pattern=r"^[1-9]\d*(?:m|d|b)$")
     model_release_id: str = Field(pattern=SHA256_PATTERN)
     model_artifact_sha256: str = Field(pattern=SHA256_PATTERN)
     prediction_policy_sha256: str = Field(pattern=SHA256_PATTERN)
@@ -315,7 +315,7 @@ class DriftStateStore:
     def _path(self, mode: str, horizon: str, release_id: str) -> Path:
         if mode not in {"swing", "intraday"}:
             raise ValueError("drift state mode is invalid")
-        if not re.fullmatch(r"[1-9]\d*(?:m|d)", horizon):
+        if not re.fullmatch(r"[1-9]\d*(?:m|d|b)", horizon):
             raise ValueError("drift state horizon is invalid")
         if not re.fullmatch(SHA256_PATTERN, release_id):
             raise ValueError("drift state release identity is invalid")

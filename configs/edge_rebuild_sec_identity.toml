@@ -1,0 +1,5 @@
+[sec_identity]
+relation_start_date = "2019-07-09"
+relation_end_date = "2026-07-08"
+membership_start_date = "2018-05-29"
+maximum_whole_security_exclusion_fraction = 0.05

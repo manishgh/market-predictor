@@ -15,7 +15,10 @@ from market_predictor.canonical.store import (
     load_canonical_artifact,
     write_canonical_artifact,
 )
-from market_predictor.swing.catalyst_lineage import build_catalyst_lineage
+from market_predictor.swing.catalyst_lineage import (
+    _reconcile_sentiment_inventory,
+    build_catalyst_lineage,
+)
 from market_predictor.swing.event_attribution import (
     ATTRIBUTION_POLICY_SHA256,
     ATTRIBUTION_POLICY_VERSION,
@@ -107,6 +110,220 @@ class SwingCatalystLineageTests(unittest.TestCase):
             self.assertEqual(result["status"], "incomplete")
             self.assertIn("backdated availability", result["failed_chunks"]["chunk-1"])
 
+    def test_zero_row_sentiment_for_observed_empty_source_is_ignored(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            sentiment_dir = Path(temporary) / "sentiment-output"
+            empty_path = sentiment_dir / "sentiment" / "empty.parquet"
+            empty_manifest = write_canonical_artifact(
+                pd.DataFrame(),
+                empty_path,
+                artifact_type="event_sentiment_research",
+                audit=_audit(0),
+                inputs={
+                    "chunk_id": "empty",
+                    "sentiment_request_sha256": "sentiment-request",
+                    "source_event_artifact_sha256": "empty-source-sha",
+                },
+                production_ready=False,
+            )
+            records = {
+                "observed": {"rows": 2},
+                "empty": {
+                    "path": str(empty_path),
+                    "rows": 0,
+                    "sha256": empty_manifest["artifact_sha256"],
+                    "security_id": "security:wdc",
+                    "ticker": "WDC",
+                    "source_event_artifact_sha256": "empty-source-sha",
+                },
+            }
+            source_collections = pd.DataFrame(
+                {
+                    "chunk_id": ["observed", "empty"],
+                    "security_id": ["security:wdc", "security:wdc"],
+                    "ticker": ["WDC", "WDC"],
+                    "status": ["observed", "observed_empty"],
+                    "row_count": [2, 0],
+                }
+            )
+
+            reconciled = _reconcile_sentiment_inventory(
+                records,
+                eligible_chunk_ids={"observed"},
+                source_collections=source_collections,
+                excluded_security_ids=set(),
+                source_inventory={
+                    "empty": {"source_empty": True, "sha256": "empty-source-sha"}
+                },
+                sentiment_dir=sentiment_dir,
+                sentiment_request_sha256="sentiment-request",
+            )
+
+            self.assertEqual(reconciled, {"observed": {"rows": 2}})
+
+    def test_nonempty_extra_sentiment_chunk_fails_reconciliation(self) -> None:
+        source_collections = pd.DataFrame(
+            {
+                "chunk_id": ["observed", "extra"],
+                "security_id": ["security:wdc", "security:wdc"],
+                "ticker": ["WDC", "WDC"],
+                "status": ["observed", "observed_empty"],
+                "row_count": [2, 0],
+            }
+        )
+
+        with self.assertRaisesRegex(DataReadinessError, "sentiment chunk inventory"):
+            _reconcile_sentiment_inventory(
+                {"observed": {"rows": 2}, "extra": {"rows": 1}},
+                eligible_chunk_ids={"observed"},
+                source_collections=source_collections,
+                excluded_security_ids=set(),
+                source_inventory={
+                    "extra": {"source_empty": True, "sha256": "empty-source-sha"}
+                },
+                sentiment_dir=Path("sentiment"),
+                sentiment_request_sha256="sentiment-request",
+            )
+
+    def test_empty_sentiment_identity_mismatches_fail_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            sentiment_dir = root / "sentiment-output"
+            empty_path = sentiment_dir / "sentiment" / "empty.parquet"
+            manifest = write_canonical_artifact(
+                pd.DataFrame(),
+                empty_path,
+                artifact_type="event_sentiment_research",
+                audit=_audit(0),
+                inputs={
+                    "chunk_id": "empty",
+                    "sentiment_request_sha256": "sentiment-request",
+                    "source_event_artifact_sha256": "empty-source-sha",
+                },
+                production_ready=False,
+            )
+            base_record = {
+                "path": str(empty_path),
+                "rows": 0,
+                "sha256": manifest["artifact_sha256"],
+                "security_id": "security:wdc",
+                "ticker": "WDC",
+                "source_event_artifact_sha256": "empty-source-sha",
+            }
+            source_collections = pd.DataFrame(
+                {
+                    "chunk_id": ["observed", "empty"],
+                    "security_id": ["security:wdc", "security:wdc"],
+                    "ticker": ["WDC", "WDC"],
+                    "status": ["observed", "observed_empty"],
+                    "row_count": [2, 0],
+                }
+            )
+            cases = (
+                ("artifact hash", {"sha256": "0" * 64}, "sentiment-request", set()),
+                ("security", {"security_id": "security:other"}, "sentiment-request", set()),
+                (
+                    "source evidence",
+                    {"source_event_artifact_sha256": "wrong-source"},
+                    "sentiment-request",
+                    set(),
+                ),
+                ("request", {}, "wrong-request", set()),
+                ("excluded", {}, "sentiment-request", {"security:wdc"}),
+            )
+            for name, mutation, request_sha256, excluded in cases:
+                with self.subTest(name=name):
+                    with self.assertRaises(DataReadinessError):
+                        _reconcile_sentiment_inventory(
+                            {
+                                "observed": {"rows": 2},
+                                "empty": {**base_record, **mutation},
+                            },
+                            eligible_chunk_ids={"observed"},
+                            source_collections=source_collections,
+                            excluded_security_ids=excluded,
+                            source_inventory={
+                                "empty": {
+                                    "source_empty": True,
+                                    "sha256": "empty-source-sha",
+                                }
+                            },
+                            sentiment_dir=sentiment_dir,
+                            sentiment_request_sha256=request_sha256,
+                        )
+
+    def test_tampered_empty_sentiment_artifact_fails_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            sentiment_dir = Path(temporary) / "sentiment-output"
+            empty_path = sentiment_dir / "sentiment" / "empty.parquet"
+            manifest = write_canonical_artifact(
+                pd.DataFrame(),
+                empty_path,
+                artifact_type="event_sentiment_research",
+                audit=_audit(0),
+                inputs={
+                    "chunk_id": "empty",
+                    "sentiment_request_sha256": "sentiment-request",
+                    "source_event_artifact_sha256": "empty-source-sha",
+                },
+                production_ready=False,
+            )
+            empty_path.write_bytes(empty_path.read_bytes() + b"tampered")
+
+            with self.assertRaises(DataReadinessError):
+                _reconcile_sentiment_inventory(
+                    {
+                        "observed": {"rows": 2},
+                        "empty": {
+                            "path": str(empty_path),
+                            "rows": 0,
+                            "sha256": manifest["artifact_sha256"],
+                            "security_id": "security:wdc",
+                            "ticker": "WDC",
+                            "source_event_artifact_sha256": "empty-source-sha",
+                        },
+                    },
+                    eligible_chunk_ids={"observed"},
+                    source_collections=pd.DataFrame(
+                        {
+                            "chunk_id": ["observed", "empty"],
+                            "security_id": ["security:wdc", "security:wdc"],
+                            "ticker": ["WDC", "WDC"],
+                            "status": ["observed", "observed_empty"],
+                            "row_count": [2, 0],
+                        }
+                    ),
+                    excluded_security_ids=set(),
+                    source_inventory={
+                        "empty": {"source_empty": True, "sha256": "empty-source-sha"}
+                    },
+                    sentiment_dir=sentiment_dir,
+                    sentiment_request_sha256="sentiment-request",
+                )
+
+    def test_collection_source_ledger_hash_mismatch_fails(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            fixture = _Fixture(Path(temporary))
+            fixture.publish()
+            manifest_path = fixture.collection / "_manifest.json"
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            manifest["source_collections_sha256"] = "0" * 64
+            manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+            with self.assertRaisesRegex(DataReadinessError, "source-ledger identity"):
+                fixture.build()
+
+    def test_collection_audit_request_mismatch_fails(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            fixture = _Fixture(Path(temporary))
+            fixture.publish()
+            audit = json.loads(fixture.audit_path.read_text(encoding="utf-8"))
+            audit["request_sha256"] = "wrong-request"
+            fixture.audit_path.write_text(json.dumps(audit), encoding="utf-8")
+
+            with self.assertRaisesRegex(DataReadinessError, "passed collection audit"):
+                fixture.build()
+
 
 class _Fixture:
     def __init__(self, root: Path) -> None:
@@ -160,6 +377,23 @@ class _Fixture:
                             "ticker": "WDC",
                             "path": str(source_path),
                             "sha256": source_sha256,
+                        }
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
+        (self.collection / "_request.json").write_text(
+            json.dumps(
+                {
+                    "request_sha256": "collection-request",
+                    "work_units": [
+                        {
+                            "chunk_id": "chunk-1",
+                            "security_id": "security:wdc",
+                            "ticker": "WDC",
+                            "start_utc": "2025-01-01T00:00:00+00:00",
+                            "end_exclusive_utc": "2025-02-01T00:00:00+00:00",
                         }
                     ],
                 }
@@ -231,6 +465,7 @@ class _Fixture:
                 {
                     "status": "complete",
                     "production_ready": False,
+                    "request_sha256": "sentiment-request",
                     "total_rows": len(sentiment_frame),
                     "excluded_security_ids": [],
                     "artifacts": [

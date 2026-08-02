@@ -171,11 +171,11 @@ def _snapshot(
         global_context=GlobalContextInfo(),
     )
     model = ModelInfo(
-        path="models/swing.joblib",
+        path="models/edge-swing-10b.joblib",
         status="promoted",
         target="target_next_week_big_up",
         artifact_sha256="a" * 64,
-        resolved_horizon="5d",
+        resolved_horizon="10b",
         bar_timeframe="1Day",
         created_at_utc=model_created_at,
         training_data_start="2025-01-01",
@@ -184,7 +184,7 @@ def _snapshot(
     response = PredictionResponse(
         mode="swing",
         horizon="auto",
-        resolved_horizons={"swing": "5d"},
+        resolved_horizons={"swing": "10b"},
         models={"swing": model},
         predictions=[
             UnifiedTickerPrediction(

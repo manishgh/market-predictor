@@ -56,6 +56,30 @@ def test_stop_hit_resolves_to_the_stop_price() -> None:
     assert out.loc[0, "exit_price"] == pytest.approx(98.5)
 
 
+def test_gap_through_stop_fills_at_worse_open() -> None:
+    rows = _flat(8)
+    rows[2] = ("2024-01-03", 96.0, 97.0, 95.0, 96.5)
+    entries = pd.DataFrame({"session": ["2024-01-01"], "atr": [1.0]})
+
+    out = apply_triple_barrier(_bars(rows), entries, spec=SPEC)
+
+    assert out.loc[0, "barrier_label"] == STOP_HIT
+    assert out.loc[0, "stop_price"] == pytest.approx(98.5)
+    assert out.loc[0, "exit_price"] == pytest.approx(96.0)
+
+
+def test_gap_through_target_uses_conservative_resting_limit_fill() -> None:
+    rows = _flat(8)
+    rows[2] = ("2024-01-03", 106.0, 107.0, 105.0, 106.5)
+    entries = pd.DataFrame({"session": ["2024-01-01"], "atr": [1.0]})
+
+    out = apply_triple_barrier(_bars(rows), entries, spec=SPEC)
+
+    assert out.loc[0, "barrier_label"] == TARGET_HIT
+    assert out.loc[0, "target_price"] == pytest.approx(103.0)
+    assert out.loc[0, "exit_price"] == pytest.approx(103.0)
+
+
 def test_a_bar_touching_both_barriers_resolves_to_the_stop() -> None:
     """The bar records that both prices traded, not which came first."""
 

@@ -10,6 +10,7 @@ from pathlib import Path
 import joblib
 import pandas as pd
 
+from market_predictor.edge_rebuild.swing_training import MODEL_SCHEMA
 from market_predictor.hypothesis_registry import declare_hypothesis
 from market_predictor.promotion_attestation import (
     build_promotion_attestation,
@@ -27,11 +28,15 @@ from market_predictor.shadow_ledger import (
 from market_predictor.v3.errors import DataReadinessError
 from tests.r4_fixtures import (
     load_test_shadow_bundle,
-    test_authenticated_promotion_principals,
-    test_promotion_identity_material,
-    test_signing_material,
     write_test_shadow_bundle,
 )
+from tests.r4_fixtures import (
+    test_authenticated_promotion_principals as authenticated_principals_for_test,
+)
+from tests.r4_fixtures import (
+    test_promotion_identity_material as promotion_identity_for_test,
+)
+from tests.r4_fixtures import test_signing_material as signing_material_for_test
 
 
 class R4TrustChainTests(unittest.TestCase):
@@ -39,9 +44,9 @@ class R4TrustChainTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             shadow = root / "outside" / f"{'a' * 64}.json"
-            signing_key, trust_store, signer_id = test_signing_material()
+            signing_key, trust_store, signer_id = signing_material_for_test()
             identity_config, identity_tokens = (
-                test_promotion_identity_material()
+                promotion_identity_for_test()
             )
 
             with self.assertRaisesRegex(ValueError, "inside the hypothesis registry"):
@@ -77,7 +82,7 @@ class R4TrustChainTests(unittest.TestCase):
                     prediction_policy_sha256="f" * 64,
                     execution_policy_sha256="8" * 64,
                     shadow_view="swing",
-                    shadow_horizon="5d",
+                    shadow_horizon="10b",
                     shadow_decision_group_ids=(
                         "2026-07-10T20:00:00+00:00",
                         "2026-07-13T20:00:00+00:00",
@@ -218,9 +223,9 @@ class R4TrustChainTests(unittest.TestCase):
                 attestation_id=None,
                 transaction_id="6" * 64,
             )
-            signing_key, trust_store, signer_id = test_signing_material()
+            signing_key, trust_store, signer_id = signing_material_for_test()
             build_principal, approver_principal = (
-                test_authenticated_promotion_principals()
+                authenticated_principals_for_test()
             )
             attestation = build_promotion_attestation(
                 model_path=model,
@@ -313,9 +318,9 @@ class R4TrustChainTests(unittest.TestCase):
                 attestation_id=None,
                 transaction_id="7" * 64,
             )
-            signing_key, trust_store, signer_id = test_signing_material()
+            signing_key, trust_store, signer_id = signing_material_for_test()
             build_principal, approver_principal = (
-                test_authenticated_promotion_principals()
+                authenticated_principals_for_test()
             )
             attestation = build_promotion_attestation(
                 model_path=model,
@@ -354,7 +359,7 @@ def _declare(
     *,
     candidate_sha: str = "c" * 64,
 ) -> dict[str, object]:
-    test_signing_material()
+    signing_material_for_test()
     return declare_hypothesis(
         root,
         hypothesis_id="swing-alpha-001",
@@ -366,7 +371,7 @@ def _declare(
         prediction_policy_sha256="f" * 64,
         execution_policy_sha256="8" * 64,
         shadow_view="swing",
-        shadow_horizon="5d",
+        shadow_horizon="10b",
         shadow_decision_group_ids=(
             "2026-07-10T20:00:00+00:00",
             "2026-07-13T20:00:00+00:00",
@@ -405,7 +410,7 @@ def _shadow(
 
 
 def _candidate(root: Path) -> tuple[Path, dict[str, object], Path]:
-    model = root / "swing.joblib"
+    model = root / "edge-swing-10b.joblib"
     joblib.dump({"model": "candidate"}, model)
     metrics: dict[str, object] = {
         "model_run_id": "swing-test-run",
@@ -431,14 +436,14 @@ def _candidate(root: Path) -> tuple[Path, dict[str, object], Path]:
             "ticker": ["AAA", "BBB"],
             "date": pd.date_range("2026-01-01", periods=2),
             "return_1d": [0.01, -0.01],
-            "target_net_positive_5d": [1, 0],
+            "target_top_sector_relative_quantile_10b": [1, 0],
         }
     )
     manifest = write_model_manifest(
         model_path=model,
         model_type="canonical_swing",
-        schema_version="swing.model.v1",
-        target_col="target_net_positive_5d",
+        schema_version=MODEL_SCHEMA,
+        target_col="target_top_sector_relative_quantile_10b",
         features=["return_1d"],
         training_data=training,
         metrics=metrics,

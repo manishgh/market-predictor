@@ -3,16 +3,25 @@ from __future__ import annotations
 import json
 import shutil
 import tempfile
+import tomllib
 import unittest
+from datetime import date
 from pathlib import Path
 
 from pydantic import ValidationError
 
+from market_predictor.edge_rebuild.swing_features import CATALYST_RANKING_FEATURES
 from market_predictor.strategy_research_contracts import (
     ReferenceModelInventory,
     ResearchHypothesisRegistry,
     StrategyResearchGovernance,
     validate_strategy_research_contracts,
+)
+from market_predictor.swing.contracts import (
+    CATALYST_FEATURES,
+    MINIMUM_SWING_DECISION_DATE,
+    SwingDatasetConfig,
+    swing_features_for_profile,
 )
 from market_predictor.v3.errors import (
     ArtifactIntegrityError,
@@ -23,13 +32,46 @@ REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 
 
 class StrategyResearchContractTests(unittest.TestCase):
+    def test_swing_decision_start_fails_closed_before_verified_history(self) -> None:
+        self.assertEqual(
+            SwingDatasetConfig().decision_start_date,
+            MINIMUM_SWING_DECISION_DATE,
+        )
+        with self.assertRaises(ValidationError):
+            SwingDatasetConfig.model_validate({"decision_start_date": None})
+        with self.assertRaises(ValidationError):
+            SwingDatasetConfig(decision_start_date=date(2019, 7, 8))
+
+    def test_swing_ticker_catalyst_contract_starts_with_verified_news_history(self) -> None:
+        payload = tomllib.loads(
+            (REPOSITORY_ROOT / "configs" / "swing_dataset.toml").read_text(encoding="utf-8")
+        )
+        config = SwingDatasetConfig.model_validate(payload)
+
+        self.assertEqual(config.decision_start_date.isoformat(), "2019-07-09")
+        self.assertEqual(config.required_ticker_sources, ("alpaca",))
+        self.assertEqual(config.required_global_sources, ())
+        self.assertFalse(any(feature.startswith("global_") for feature in swing_features_for_profile(config.feature_profile)))
+        generic_sources = {
+            feature.removeprefix("source_count_").rsplit("_", 1)[0]
+            for feature in CATALYST_FEATURES
+            if feature.startswith("source_count_")
+        }
+        edge_sources = {
+            feature.removeprefix("source_count_").rsplit("_", 1)[0]
+            for feature in CATALYST_RANKING_FEATURES
+            if feature.startswith("source_count_")
+        }
+        self.assertEqual(generic_sources, {"alpaca"})
+        self.assertEqual(edge_sources, {"alpaca"})
+
     def test_repository_ks0_contracts_are_complete(self) -> None:
         report = _validate(REPOSITORY_ROOT)
 
         self.assertTrue(report["valid"])
         self.assertEqual(report["catalog_count"], 25)
         self.assertEqual(report["hypothesis_count"], 25)
-        self.assertEqual(report["reference_model_count"], 5)
+        self.assertEqual(report["reference_model_count"], 6)
         self.assertEqual(report["reference_models_serving_eligible"], 0)
         self.assertEqual(
             report["validation_scopes"],
@@ -200,8 +242,8 @@ class _repository_copy:
             "strategy_research_governance.toml",
             "catalyst_lineage.toml",
             "swing_dataset.toml",
-            "swing_training.toml",
-            "swing_promotion.toml",
+            "edge_rebuild_strategy_contract.toml",
+            "edge_rebuild_swing_training.toml",
             "intraday_dataset.toml",
             "intraday_training.toml",
             "intraday_promotion.toml",

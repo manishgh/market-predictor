@@ -60,7 +60,7 @@ def _response(cutoff: datetime) -> PredictionResponse:
     return PredictionResponse(
         request_id=request_id,
         mode="swing",
-        horizon="5d",
+        horizon="10b",
         evidence=PredictionEvidenceV3(
             request_id=request_id,
             correlation_id="correlation-1",

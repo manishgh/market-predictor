@@ -25,12 +25,13 @@ from market_predictor.resources import (
 )
 from market_predictor.v3.errors import DataReadinessError
 
-TEMPORAL_MANIFEST_SCHEMA = "edge_rebuild.temporal_manifest.v1"
-TEMPORAL_AUTHORITY_SCHEMA = "edge_rebuild.temporal_manifest_authority.v1"
+TEMPORAL_MANIFEST_SCHEMA = "edge_rebuild.temporal_manifest.v2"
+TEMPORAL_AUTHORITY_SCHEMA = "edge_rebuild.temporal_manifest_authority.v2"
 SWING_PANEL_MANIFEST_SCHEMA = "edge_rebuild.swing_panel_materialization.v1"
 SWING_PANEL_AUTHORITY_SCHEMA = (
     "edge_rebuild.swing_panel_materialization_authority.v1"
 )
+CAUSAL_MODELED_DECISION_START = date(2019, 7, 9)
 
 
 class TemporalManifestConfig(BaseModel):
@@ -40,14 +41,27 @@ class TemporalManifestConfig(BaseModel):
 
     schema_version: str
     calendar: str
-    fit_sessions: int = Field(ge=1_260, le=1_260)
-    validation_sessions: int = Field(ge=252, le=252)
-    validation_folds: int = Field(ge=1, le=1)
-    warmup_sessions: int = Field(ge=250, le=250)
-    embargo_sessions: int = Field(ge=10, le=10)
-    label_horizon_sessions: int = Field(ge=10, le=10)
+    modeled_decision_start: date
+    initial_fit_start: date
+    initial_fit_end: date
+    initial_fit_expected_sessions: int = Field(ge=1_231, le=1_231)
+    validation_embargo_start: date
+    validation_embargo_end: date
+    validation_embargo_expected_sessions: int = Field(ge=10, le=10)
+    validation_start: date
+    validation_end: date
+    validation_expected_sessions: int = Field(ge=252, le=252)
+    final_refit_start: date
+    final_refit_end: date
+    final_refit_expected_sessions: int = Field(ge=1_493, le=1_493)
+    final_embargo_start: date
+    final_embargo_end: date
+    final_embargo_expected_sessions: int = Field(ge=10, le=10)
     locked_test_start: date
     locked_test_end: date
+    locked_test_expected_sessions: int = Field(ge=251, le=251)
+    warmup_sessions: int = Field(ge=250, le=250)
+    label_horizon_sessions: int = Field(ge=10, le=10)
     unseen_security_holdout_fraction: float = Field(gt=0.0, lt=0.5)
     unseen_security_hash_seed: int
     unseen_security_assignment: str
@@ -60,10 +74,44 @@ class TemporalManifestConfig(BaseModel):
             raise ValueError("unsupported temporal-manifest schema")
         if self.calendar != "XNYS":
             raise ValueError("temporal manifest must use the XNYS calendar")
-        if self.locked_test_start >= self.locked_test_end:
-            raise ValueError("locked test start must precede its end")
-        if self.embargo_sessions < self.label_horizon_sessions:
-            raise ValueError("embargo must cover the complete label horizon")
+        governed_dates = (
+            (self.modeled_decision_start, CAUSAL_MODELED_DECISION_START, "modeled decision start"),
+            (self.initial_fit_start, CAUSAL_MODELED_DECISION_START, "initial fit start"),
+            (self.initial_fit_end, date(2024, 5, 28), "initial fit end"),
+            (self.validation_embargo_start, date(2024, 5, 29), "validation embargo start"),
+            (self.validation_embargo_end, date(2024, 6, 11), "validation embargo end"),
+            (self.validation_start, date(2024, 6, 12), "validation start"),
+            (self.validation_end, date(2025, 6, 13), "validation end"),
+            (self.final_refit_start, CAUSAL_MODELED_DECISION_START, "final refit start"),
+            (self.final_refit_end, date(2025, 6, 13), "final refit end"),
+            (self.final_embargo_start, date(2025, 6, 16), "final embargo start"),
+            (self.final_embargo_end, date(2025, 6, 30), "final embargo end"),
+            (self.locked_test_start, date(2025, 7, 1), "locked test start"),
+            (self.locked_test_end, date(2026, 6, 30), "locked test end"),
+        )
+        changed = [label for observed, expected, label in governed_dates if observed != expected]
+        if changed:
+            raise ValueError("governed temporal dates changed: " + ", ".join(changed))
+        if self.modeled_decision_start != self.initial_fit_start:
+            raise ValueError("initial fit must start at the causal decision cutoff")
+        ranges = (
+            (self.initial_fit_start, self.initial_fit_end, "initial fit"),
+            (self.validation_embargo_start, self.validation_embargo_end, "validation embargo"),
+            (self.validation_start, self.validation_end, "validation"),
+            (self.final_refit_start, self.final_refit_end, "final refit"),
+            (self.final_embargo_start, self.final_embargo_end, "final embargo"),
+            (self.locked_test_start, self.locked_test_end, "locked test"),
+        )
+        if any(start > end for start, end, _label in ranges):
+            raise ValueError("temporal range start must not follow its end")
+        if self.final_refit_start != self.modeled_decision_start:
+            raise ValueError("final refit must include every post-cutoff development session")
+        if self.final_refit_end != self.validation_end:
+            raise ValueError("final refit must end with the validation window")
+        if self.validation_embargo_expected_sessions < self.label_horizon_sessions:
+            raise ValueError("validation embargo must cover the complete label horizon")
+        if self.final_embargo_expected_sessions < self.label_horizon_sessions:
+            raise ValueError("final embargo must cover the complete label horizon")
         if self.unseen_security_holdout_fraction != 0.20:
             raise ValueError("unseen-security holdout fraction must remain 20%")
         if self.unseen_security_assignment != "sha256_threshold_security_id_v1":
@@ -140,68 +188,122 @@ def load_temporal_manifest_config(path: Path) -> TemporalManifestConfig:
 
 
 def build_temporal_schedule(config: TemporalManifestConfig) -> TemporalSchedule:
-    """Build the schedule from XNYS sessions without consulting market outcomes."""
+    """Build and verify explicit XNYS ranges without consulting market outcomes."""
 
     calendar = xcals.get_calendar(config.calendar)
-    search_start = config.locked_test_start.replace(
-        year=config.locked_test_start.year - 15
+    initial_fit = _verified_calendar_range(
+        calendar,
+        config.initial_fit_start,
+        config.initial_fit_end,
+        config.initial_fit_expected_sessions,
+        "initial fit",
     )
-    calendar_sessions = tuple(
-        pd.Timestamp(value).date()
-        for value in calendar.sessions_in_range(search_start, config.locked_test_end)
+    validation_embargo = _verified_calendar_range(
+        calendar,
+        config.validation_embargo_start,
+        config.validation_embargo_end,
+        config.validation_embargo_expected_sessions,
+        "validation embargo",
     )
-    position = {session: index for index, session in enumerate(calendar_sessions)}
-    locked = tuple(
-        session
-        for session in calendar_sessions
-        if config.locked_test_start <= session <= config.locked_test_end
+    validation = _verified_calendar_range(
+        calendar,
+        config.validation_start,
+        config.validation_end,
+        config.validation_expected_sessions,
+        "validation",
     )
-    if not locked:
-        raise DataReadinessError("locked temporal test contains no XNYS sessions")
-    locked_start = position[locked[0]]
+    final_refit = _verified_calendar_range(
+        calendar,
+        config.final_refit_start,
+        config.final_refit_end,
+        config.final_refit_expected_sessions,
+        "final refit",
+    )
+    final_embargo = _verified_calendar_range(
+        calendar,
+        config.final_embargo_start,
+        config.final_embargo_end,
+        config.final_embargo_expected_sessions,
+        "final embargo",
+    )
+    locked = _verified_calendar_range(
+        calendar,
+        config.locked_test_start,
+        config.locked_test_end,
+        config.locked_test_expected_sessions,
+        "locked test",
+    )
+    _require_adjacent_ranges(calendar, initial_fit, validation_embargo, "initial fit", "validation embargo")
+    _require_adjacent_ranges(calendar, validation_embargo, validation, "validation embargo", "validation")
+    if final_refit != (*initial_fit, *validation_embargo, *validation):
+        raise DataReadinessError("final refit is not the complete post-cutoff development range")
+    _require_adjacent_ranges(calendar, final_refit, final_embargo, "final refit", "final embargo")
+    _require_adjacent_ranges(calendar, final_embargo, locked, "final embargo", "locked test")
 
-    cursor = locked_start - config.embargo_sessions - 1
-    reverse_folds: list[TemporalFold] = []
-    for fold_number in range(config.validation_folds, 0, -1):
-        validation_end = cursor
-        validation_start = validation_end - config.validation_sessions + 1
-        train_end = validation_start - config.embargo_sessions - 1
-        train_start = train_end - config.fit_sessions + 1
-        if train_start < config.warmup_sessions:
-            raise DataReadinessError("calendar search window cannot satisfy temporal contract")
-        reverse_folds.append(
-            TemporalFold(
-                fold=fold_number,
-                train_sessions=calendar_sessions[train_start : train_end + 1],
-                embargo_sessions=calendar_sessions[
-                    train_end + 1 : validation_start
-                ],
-                validation_sessions=calendar_sessions[
-                    validation_start : validation_end + 1
-                ],
-            )
-        )
-        cursor = validation_start - config.embargo_sessions - 1
-    folds = tuple(sorted(reverse_folds, key=lambda item: item.fold))
-
-    final_train_end = locked_start - config.embargo_sessions - 1
-    final_train_start = final_train_end - config.fit_sessions + 1
-    earliest_train_start = position[folds[0].train_sessions[0]]
-    raw_start = earliest_train_start - config.warmup_sessions
-    if raw_start < 0:
-        raise DataReadinessError("calendar search window cannot provide warm-up")
-    target = calendar_sessions[raw_start : position[locked[-1]] + 1]
-    warmup = calendar_sessions[raw_start:earliest_train_start]
+    decision_position = calendar.sessions.get_loc(pd.Timestamp(config.modeled_decision_start))
+    warmup_values = calendar.sessions[
+        decision_position - config.warmup_sessions : decision_position
+    ]
+    warmup = tuple(pd.Timestamp(value).date() for value in warmup_values)
+    if len(warmup) != config.warmup_sessions:
+        raise DataReadinessError("calendar cannot provide the governed warm-up")
+    target = (*warmup, *final_refit, *final_embargo, *locked)
     return TemporalSchedule(
         target_sessions=target,
         warmup_sessions=warmup,
-        folds=folds,
-        final_refit_sessions=calendar_sessions[
-            final_train_start : final_train_end + 1
-        ],
-        final_embargo_sessions=calendar_sessions[final_train_end + 1 : locked_start],
+        folds=(
+            TemporalFold(
+                fold=1,
+                train_sessions=initial_fit,
+                embargo_sessions=validation_embargo,
+                validation_sessions=validation,
+            ),
+        ),
+        final_refit_sessions=final_refit,
+        final_embargo_sessions=final_embargo,
         locked_test_sessions=locked,
     )
+
+
+def _verified_calendar_range(
+    calendar: Any,
+    start: date,
+    end: date,
+    expected_sessions: int,
+    label: str,
+) -> tuple[date, ...]:
+    sessions = tuple(
+        pd.Timestamp(value).date()
+        for value in calendar.sessions_in_range(start, end)
+    )
+    if not sessions or sessions[0] != start or sessions[-1] != end:
+        raise DataReadinessError(label + " boundaries must be exact XNYS sessions")
+    if len(sessions) != expected_sessions:
+        raise DataReadinessError(
+            label
+            + " XNYS count differs from governance: expected="
+            + str(expected_sessions)
+            + ", observed="
+            + str(len(sessions))
+        )
+    return sessions
+
+
+def _require_adjacent_ranges(
+    calendar: Any,
+    left: tuple[date, ...],
+    right: tuple[date, ...],
+    left_label: str,
+    right_label: str,
+) -> None:
+    boundary = tuple(
+        pd.Timestamp(value).date()
+        for value in calendar.sessions_in_range(left[-1], right[0])
+    )
+    if boundary != (left[-1], right[0]):
+        raise DataReadinessError(
+            left_label + " and " + right_label + " are not adjacent XNYS ranges"
+        )
 
 
 def publish_temporal_manifest(
@@ -277,12 +379,20 @@ def publish_temporal_manifest(
                 coverage.manifest["strategy_contract_sha256"]
             ),
             "calendar": resolved.calendar,
+            "modeled_decision_start": resolved.modeled_decision_start.isoformat(),
+            "window_rationale": (
+                "approximately 4.9 years initial fit plus one validation year plus "
+                "one locked test year; causal-news cutoff is authoritative"
+            ),
             "target": _session_block(schedule.target_sessions),
             "warmup": _session_block(schedule.warmup_sessions),
-            "validation_folds": resolved.validation_folds,
-            "fit_sessions_per_fold": resolved.fit_sessions,
-            "validation_sessions_per_fold": resolved.validation_sessions,
-            "embargo_sessions": resolved.embargo_sessions,
+            "initial_fit": _session_block(schedule.folds[0].train_sessions),
+            "validation_embargo": _session_block(
+                schedule.folds[0].embargo_sessions
+            ),
+            "validation": _session_block(schedule.folds[0].validation_sessions),
+            "final_refit": _session_block(schedule.final_refit_sessions),
+            "final_embargo": _session_block(schedule.final_embargo_sessions),
             "label_horizon_sessions": resolved.label_horizon_sessions,
             "locked_test": _session_block(schedule.locked_test_sessions),
             "unseen_security_scope": {
@@ -332,9 +442,14 @@ def _validate_strategy_alignment(
     contract: StrategyContract,
 ) -> None:
     mismatches = []
-    if config.validation_folds != contract.validation.swing_walk_forward_folds:
+    if contract.validation.swing_walk_forward_folds != 1:
         mismatches.append("validation fold count")
-    if config.embargo_sessions != contract.validation.embargo_sessions:
+    if (
+        config.validation_embargo_expected_sessions
+        != contract.validation.embargo_sessions
+        or config.final_embargo_expected_sessions
+        != contract.validation.embargo_sessions
+    ):
         mismatches.append("embargo sessions")
     if config.label_horizon_sessions != contract.swing.horizon_sessions:
         mismatches.append("swing label horizon")

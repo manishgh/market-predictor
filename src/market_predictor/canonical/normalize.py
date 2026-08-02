@@ -14,7 +14,7 @@ from market_predictor.canonical.contracts import (
     CanonicalUniverseMembership,
 )
 from market_predictor.data_quality import sanitize_events_frame
-from market_predictor.features import source_family_for_source
+from market_predictor.source_taxonomy import source_family_for_source
 from market_predictor.v3.contracts import normalized_ticker
 from market_predictor.v3.errors import DataReadinessError, SchemaMismatchError
 

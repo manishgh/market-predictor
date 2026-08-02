@@ -26,28 +26,33 @@ POLICY = ROOT / "configs" / "edge_rebuild_temporal_manifest.toml"
 STRATEGY = ROOT / "configs" / "edge_rebuild_strategy_contract.toml"
 
 
-def test_schedule_freezes_full_year_windows_and_embargoes() -> None:
+def test_schedule_freezes_explicit_post_cutoff_windows_and_embargoes() -> None:
     config = load_temporal_manifest_config(POLICY)
     schedule = build_temporal_schedule(config)
 
     assert len(schedule.folds) == 1
-    assert schedule.first_session.isoformat() == "2018-05-29"
+    assert schedule.first_session.isoformat() == "2018-07-10"
     assert schedule.last_session.isoformat() == "2026-06-30"
-    assert len(schedule.target_sessions) == 2_033
+    assert len(schedule.target_sessions) == 2_004
     assert len(schedule.warmup_sessions) == 250
-    assert len(schedule.final_refit_sessions) == 1_260
+    assert len(schedule.final_refit_sessions) == 1_493
     assert len(schedule.final_embargo_sessions) == 10
-    assert schedule.locked_test_sessions[0] >= config.locked_test_start
-    assert schedule.locked_test_sessions[-1] <= config.locked_test_end
+    assert len(schedule.locked_test_sessions) == 251
+    assert schedule.locked_test_sessions[0] == config.locked_test_start
+    assert schedule.locked_test_sessions[-1] == config.locked_test_end
     for fold in schedule.folds:
-        assert len(fold.train_sessions) == 1_260
+        assert len(fold.train_sessions) == 1_231
         assert len(fold.embargo_sessions) == 10
         assert len(fold.validation_sessions) == 252
         assert not set(fold.train_sessions) & set(fold.validation_sessions)
         assert fold.train_sessions[-1] < fold.embargo_sessions[0]
         assert fold.embargo_sessions[-1] < fold.validation_sessions[0]
-    assert schedule.folds[0].train_sessions[0].isoformat() == "2019-05-28"
+    assert schedule.folds[0].train_sessions[0].isoformat() == "2019-07-09"
+    assert schedule.folds[0].train_sessions[-1].isoformat() == "2024-05-28"
     assert schedule.folds[0].validation_sessions[0].isoformat() == "2024-06-12"
+    assert schedule.folds[0].validation_sessions[-1].isoformat() == "2025-06-13"
+    assert schedule.final_refit_sessions[0].isoformat() == "2019-07-09"
+    assert schedule.final_refit_sessions[-1].isoformat() == "2025-06-13"
     assert not set(schedule.locked_test_sessions) & set(
         schedule.final_refit_sessions
     )
@@ -133,12 +138,28 @@ def test_partition_tampering_fails_before_publication(tmp_path: Path) -> None:
 
 def test_contract_cannot_relax_pdf_aligned_windows() -> None:
     payload = load_temporal_manifest_config(POLICY).model_dump()
-    payload["fit_sessions"] = 500
+    payload["initial_fit_expected_sessions"] = 500
     with pytest.raises(ValidationError):
         TemporalManifestConfig.model_validate(payload)
     payload = load_temporal_manifest_config(POLICY).model_dump()
-    payload["validation_folds"] = 2
+    payload["locked_test_expected_sessions"] = 250
     with pytest.raises(ValidationError):
+        TemporalManifestConfig.model_validate(payload)
+
+
+def test_explicit_range_count_is_verified_against_xnys() -> None:
+    payload = load_temporal_manifest_config(POLICY).model_dump()
+    payload["initial_fit_end"] = date_from("2024-05-24")
+    with pytest.raises(ValidationError, match="governed temporal dates changed"):
+        TemporalManifestConfig.model_validate(payload)
+
+
+def test_modeled_decision_cutoff_cannot_move_earlier() -> None:
+    payload = load_temporal_manifest_config(POLICY).model_dump()
+    payload["modeled_decision_start"] = date_from("2019-05-28")
+    payload["initial_fit_start"] = date_from("2019-05-28")
+
+    with pytest.raises(ValidationError, match="modeled decision start"):
         TemporalManifestConfig.model_validate(payload)
 
 

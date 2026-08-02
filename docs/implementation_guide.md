@@ -1,621 +1,150 @@
-# Implementation Guide
+# Market Predictor Implementation Guide
 
-This document explains how `market-predictor` is designed, which files own each responsibility, and why the pipeline is split the way it is.
+Status: current edge-rebuild path
 
-## Design Goals
+Last updated: 2026-08-02
 
-- Predict swing behavior and intraday setups, not trade execution.
-- Learn from event timing: pre-market, regular-hours, after-hours, and post-event price reaction.
-- Keep API download, sentiment scoring, feature building, model training, and prediction as separate stages.
-- Isolate failures by ticker and source. One failed ticker, Reddit request, or Seeking Alpha endpoint should not stop the rest of the run.
-- Prevent obvious leakage by using event timestamps, next-session labels, and walk-forward validation.
-- Keep Azure storage project-specific and avoid coupling it to any external repository layout.
+Read `AGENTS.md`, `docs/active_edge_rebuild_plan.md`, and
+`docs/reviews/active_edge_rebuild_handoff.md` first. Command `--help` output and code
+contracts are authoritative.
 
-## Main Runtime Flow
+## Runtime Surfaces
 
-For operational prediction:
+- `market-predictor-collect`: provider I/O and immutable raw/canonical collection.
+- `market-predictor-research`: authority publication, feature materialization,
+  training, validation, and promotion research.
+- `market-predictor-prod`: verified production release, outcome, drift, and API
+  infrastructure.
 
-```text
-audited upstream feature job
-  -> atomically publish registered live feature snapshot
-  -> readiness verifies feature and model manifests/hashes/freshness
-  -> API filters by point-in-time cutoff
-  -> score one server-registered promoted model per view
-  -> persist immutable prediction snapshot
-```
+No edge model is active. Production scoring must fail closed until a compatible
+promoted atomic bundle exists.
 
-For training:
+## Source Roles
 
-```text
-historical events and bars
-  -> canonicalize bar intervals, availability, source attempts, and universe membership
-  -> verify event timestamps, first-seen time, scoring time, and ticker relevance
-  -> score sentiment
-  -> perform strict as-of joins to observed market/sector/event/fundamental context
-  -> build event-level rows
-  -> align prior price context and future labels
-  -> train with purged walk-forward validation
-  -> promote only clean models
-```
+- Alpaca SIP/all bars: estimator market data.
+- Alpaca direct ticker news: the sole ticker catalyst source in the current estimator.
+- SEC filings: current issuer authority and causal audit. Known zero filings remain
+  distinct from unknown coverage. A separately ablated issuer-specific estimator
+  profile is planned after causal collection and exact attachment are verified.
+- Finviz Elite: screening and current metadata only.
+- Verified global and sector sources: separate overlays only.
+- Reddit and Seeking Alpha: removed and prohibited.
 
-## Important Commands
+These roles are model contracts, not suggestions. SEC cannot enter the current
+estimator without verified causal collection and attachment, a preregistered separate
+profile, causal ablation, and a new model version. Other overlay data cannot enter an
+estimator without the same governance.
 
-Setup and model download:
+## Package Map
 
-```powershell
-python -m pip install --require-hashes --no-deps -r requirements/development.lock
-python -m pip install --no-build-isolation --no-deps -e .
-market-predictor-collect download-model
-```
+### Shared controls
 
-Research collection and sentiment scoring:
+- `config.py`: environment-backed settings.
+- `canonical/contracts.py`, `canonical/store.py`: immutable data contracts and hashes.
+- `resources.py`, `heavy_jobs.py`: memory enforcement and one-heavy-process lease.
+- `edge_rebuild/strategy_contract.py`, `edge_rebuild/contracts.py`: frozen strategy
+  and readiness contracts.
 
-```powershell
-market-predictor-collect collect-swing --tickers "LUNR,MXL,RGTI" --days 30 --out-dir data/raw/research --workers 4
-market-predictor-research score-swing-events --tickers "LUNR,MXL,RGTI" --raw-dir data/raw/research --out-dir data/raw/research_scored
-```
+### Point-in-time evidence
 
-Strategy implementation is controlled by
-`docs/strategy_execution_ledger.json`. It binds the named-strategy design to an
-exact plan hash and pushed commit, inventories every strategy and component, and
-prevents a `KS0`-`KS9` checkpoint from closing without passed gates, verification
-commands, hash-verified evidence, and a pushed closure commit. Validate it before
-and after every strategy checkpoint:
+- `sp500_transitions.py`, `sp500_memberships.py`, `universe_identity.py`: historical
+  membership and security identity.
+- `history_collection.py`, `history_materialization.py`: Alpaca intraday transport and
+  canonical history.
+- `swing_history_collection.py`, `swing_daily_combination.py`: swing daily history.
+- `benchmark_history.py`, `corpus_integrity.py`, `readiness.py`: benchmark and corpus
+  admission checks.
 
-```powershell
-market-predictor-research validate-strategy-execution-ledger `
-  --ledger docs/strategy_execution_ledger.json `
-  --repository-root .
-```
+### Swing path
 
-`strategy_governance.py` owns the strict contracts and repository/Git
-reconciliation. `commands/strategy_governance.py` exposes validation only on the
-research CLI. The production serving import graph does not load this command.
-Current status belongs only in the JSON ledger; the human workflow and evidence
-mapping are documented in
-`docs/strategy_execution_traceability.md`.
+- `labeling.py`: next-open ten-session managed and rank outcomes.
+- `technical_relationships.py`, `cross_sectional.py`: causal technical and
+  cross-sectional relationships.
+- `swing_features.py`: ordered technical and Alpaca-catalyst profiles.
+- `catalyst_authority.py`: ticker catalyst decision and source-coverage authority.
+- `catalyst_identity_rebind.py`: immutable V5 canonical identity rebind.
+- `swing_materialization.py`: identical-population profile publication and replay.
+- `swing_live.py`: latest closed-session features using shared semantics.
 
-`strategy_research_contracts.py` owns the KS0 freeze. It requires exactly one H1
-research hypothesis for every catalog item, binds the six canonical
-swing/intraday dataset, training, and promotion configurations by SHA-256, binds
-the existing content-addressed execution policy, and verifies shared folds,
-holdouts, label-cost floors, SIP/all-adjusted feeds, benchmarks, random seed,
-memory ceiling, experiment budget, retirement rules, and non-serving reference
-models. The upstream strategy hypothesis registry is distinct from
-`hypothesis_registry.py`: the former freezes a research claim before development;
-the latter binds a built candidate, baseline, policies, and untouched workload
-before prospective shadow evaluation.
+Swing decisions begin on `2019-07-09`. Earlier bars initialize indicators only. V9 is
+invalid because managed labels were index-aligned incorrectly and is retained only as
+V5 lineage. V10 is published and replayed; candidate v1 produced `no_candidate`
+before economic evaluation because its 50-stock hard sector floor and 20% sector cap
+were structurally incompatible on sessions with only four eligible sectors.
 
-```powershell
-market-predictor-research validate-strategy-research-contracts `
-  --ledger docs/strategy_execution_ledger.json `
-  --hypotheses docs/strategy_hypothesis_registry.json `
-  --policy configs/strategy_research_governance.toml `
-  --reference-models docs/reference_model_inventory.json `
-  --repository-root . `
-  --report-out docs/evidence/ks0_strategy_research_contracts.json
-```
+The implemented policy uses a within-sector target of 50 and a hard floor of 30.
+Materialized rows persist sector peer count, sector rank eligibility, sector target
+status, and ranking reliability weight. Groups with 30-49 peers remain eligible at
+weight `decision_time_sector_peer_count / 50`; groups below 30 are ineligible. Portfolio selection targets
+20% per sector, adapts to 25% with four represented sectors and 33.3% with three, and
+skips sessions with fewer than three. Promotion gates use managed holding-aligned
+benchmarks, full-calendar portfolio returns including cash days and overlapping
+positions, doubled-cost portfolio stress, and the 33.3% active-sector ceiling. Live
+processing excludes individual unavailable securities through the governed 5% limit.
+V11 is published and replayed with 853,417 rows per profile, 604 securities, and
+1,759 sessions. Candidate v2 trained six governed models and published an immutable
+`no_candidate` result because no model passed economic gates in both temporal and
+unseen-security validation; the locked test remained unopened.
 
-Prediction API requests are point-in-time contracts. `PredictionRequest.as_of`, when present, must be timezone-aware. Canonical daily and intraday inference require `feature_available_at_utc` and filter directly on that timestamp; neither reconstructs availability from a date or bar label.
+### Intraday path
 
-`api_security.py` owns authentication and principal-scoped token buckets. Production startup permits only Entra mode and requires a local read-only JWKS, exact issuer, and exact audience. RS256 signature, `exp`, `iat`, optional `nbf`, issuer, and audience are validated before `scp` or `roles` authorization. The stable audit principal is tenant plus object id when available; the calling application id is retained separately. Static bearer auth is development-only. Liveness and minimal readiness are public; detailed operations, metrics, prediction, and replay routes require `operations.read`, `metrics.read`, `predictions.read`, and `replay.execute` respectively. Replay is disabled by default.
+- `intraday_selection.py`: point-in-time in-play selection.
+- `volume_bars.py`, `intraday_features.py`: causal completed volume bars and the shared
+  V2 feature builder.
+- `intraday_labels.py`, `one_minute_coverage.py`: exact next-minute entry and
+  thirty-minute outcome path.
+- `intraday_dataset.py`, `intraday_live.py`: immutable publication and live parity.
+- `intraday_development.py`: V3 expected-net-return development and future-holdout
+  controls.
+- `intraday_rejection.py`: immutable V2 rejection evidence.
 
-The API boundary rejects bodies above 64 KiB before Pydantic parsing, validates at most 100 canonical ticker symbols, rate-limits authenticated principals with bounded state, and emits opaque 401/403/413/429 envelopes. Structured audit events contain route templates, principal, scope, correlation id, release ids, and admission state; bearer tokens, request bodies, secrets, model paths, and exception details are never logged.
+Intraday V2 is published but economically rejected. V3 is reserved for a new future
+holdout beginning on or after `2026-07-09`; it has not been evaluated on such data.
 
-`PredictionRequest.horizon` defaults to `auto`. In that mode, the service resolves the horizon from the mode's server-owned route. Explicit horizons are validated against the registered model manifest. API clients cannot select a model, dataset, source mode, universe file, or promotion policy. `PredictionResponse.resolved_horizons` records the actual horizon used by each model, which is required for replay and downstream `trading_flow` audit records.
+### Overlay and serving paths
 
-Daily and intraday readiness are separate gates. Daily models require daily-history depth; intraday models require intraday-bar warm-up. Feed provider and feed coverage are not interchangeable: `alpaca` alone does not prove consolidated coverage, while an explicit `sip`/consolidated value does. IEX invalidates volume-sensitive production readiness.
+- `sources/sec.py`, `edge_rebuild/sec_filing_authority.py`: current SEC issuer
+  authority/audit and zero-versus-unknown coverage semantics; future separately
+  ablated estimator input after causal collection and attachment.
+- `edge_rebuild/global_event_collection.py`,
+  `edge_rebuild/global_event_authority.py`: separate global context overlay.
+- `edge_rebuild/serving.py`: promoted-bundle verification and strict prediction or
+  abstention response.
 
-Top-level predictions are persisted by `prediction_snapshot.py` as content-addressed immutable records. The SHA-256 identifier covers the normalized request, response, model metadata, cutoff, and recording time. Loading a snapshot recomputes the hash and rejects modified content. Generated snapshot files belong under `data/predictions/snapshots/` and are runtime audit artifacts, not repository source files.
+## Current Workflow
 
-`outcome_intents.py` freezes identity-complete live prediction rows into semantic maturation intents. `outcome_repository.py` durably and idempotently stores intents, attempts, exact bar evidence, and outcomes while selecting one canonical occurrence for repeated semantic snapshots. `outcome_maturation.py` applies the model's full hash-bound label policy to hash-verified canonical bars: swing requires the exact next-session open, full session path, horizon close, and aligned SPY/QQQ/sector intervals; intraday requires the exact 1-minute bar starting at the decision timestamp, a consecutive path, canonical gap-through fills, and stop-first same-bar ambiguity. A missing entry bar is never shifted forward. `outcome_worker.py` isolates per-intent data failures and records deterministic pending or blocked attempts.
+1. Preserve the replayed V11 and candidate-v2 rejection authorities.
+2. Attribute candidate-v2 failure using validation evidence only; do not open the
+   locked test or weaken gates.
+3. Preregister the next feature or estimator hypothesis before rerunning validation.
+4. Keep API scoring disabled unless a promoted bundle verifies at load time.
+5. Collect and freeze the future intraday holdout before any V3 holdout evaluation.
 
-`performance_monitoring.py` builds content-addressed rolling selected-policy cohorts from canonical semantic intents and outcomes. Every canonical intent in the bounded decision window contributes to the selection-rate denominator. Calibration and economics use only rows that were selected, actionable, and matured by the report timestamp; selected rows that have not matured remain explicit pending observations. Reports include opportunity calibration, separate intraday downside calibration, score/rank distributions, selection and actionable rates, net and SPY-relative economics, win rate, drawdown, and last-matured freshness for overall, regime, sector, market-cap, liquidity, and calibration-bin slices. Every row binds the exact release, model artifact, prediction policy, label policy, execution policy, feature-artifact set, source-intent set, and source-outcome set.
+## Data And Training Rules
 
-`drift_policy.py` combines that validated report with feature drift under `configs/drift_policy.toml`, persists a content-addressed route assessment, and verifies its hash when read. `prediction_service.py` requires the assessment to match the route's exact model artifact and prediction, label, and execution policies before it can be actionable. Missing, stale, warming, insufficient, severe, tampered, or identity-mismatched state suppresses actionable output; warning remains actionable and visible in readiness. Unified output fails closed when either requested view is unavailable or non-actionable. Real monitoring quality remains an external evidence requirement until a promoted release accumulates sufficient live matured outcomes.
+- Feature availability must be at or before the decision time; label availability is
+  after the complete outcome path.
+- Unknown, partial, late, or unreconciled source coverage is not zero.
+- No bar, timestamp, benchmark path, label, or coverage value is imputed.
+- Whole-security exclusions remain at or below 5% of the filtered universe.
+- Trainers consume verified immutable datasets and frozen chronological splits.
+- Costs are applied once; stock and benchmark returns use the same interval.
+- Evaluation includes calibration, net return, benchmark excess, drawdown, turnover,
+  capacity, cost stress, and temporal/unseen-security stability.
+- Failed models are immutable audit evidence, never serving fallbacks.
 
-`investment_replay.py` evaluates a stored prediction against subsequently available Alpaca bars. It enters the stock, SPY, and QQQ at an aligned next-bar open and exits them at the same completed-bar boundary. Slippage and commission assumptions apply on entry and exit. Replay validates model creation time, training-data end time, prediction readiness, and snapshot integrity before requesting price data. Historical requests made with a model that did not yet exist are invalid, even if the underlying feature row can be reconstructed.
+## Verification
 
-`POST /v1/replays/investment` is snapshot-driven and does not accept filesystem paths. This prevents an API client from selecting arbitrary local artifacts and ensures that every replay can be traced to a served prediction. Non-actionable signals return `not_entered`; `force_entry` is only a research override and cannot bypass invalid readiness or future-model checks.
-
-`live_features.py` owns the final inference-only selection gate. The swing and intraday dataset builders share feature-history construction with training, but live commands select one latest coherent decision cross-section and remove all labels, targets, and future paths. They reject future availability, under-warm history, stale or failed source state, schema mismatch, non-SIP volume, invalid cross sections, and any label-bearing output.
-
-`feature_store.py` owns validation of the live staging handoff. It accepts only canonical `swing_inference_features` or `intraday_inference_features` artifacts and writes a Parquet file plus sidecar manifest containing generation time, canonical source artifact type/hash, feature schema, source watermarks, feed tier, row/ticker/column identity, latest feature time, and artifact SHA-256. These paths are inputs to bundle publication, not production serving authority. Missing, modified, mixed-time, future-generated, stale, or label-bearing snapshots fail before they can enter a bundle. External API calls and FinBERT latency stay outside the request path.
-
-`serving_bundle.py` stages a content-addressed route generation containing an immutable feature copy and a transitive reference to one verified local model release. Its manifest binds the model artifact, embedded calibration method, prediction/label/execution policies, feature schema/source/columns, and every component hash. Publication verifies the complete generation before atomic activation. Rollback is restricted to the verified immediately previous generation.
-
-`serving_context.py` resolves each route only through `active_serving_bundle.json`, verifies the complete transitive bundle, and reads each model/feature artifact through one opened handle before deserialization. The resulting cached context owns both the model payload and its exact feature frame, so a pointer change during a request cannot mix generations. Model/feature byte limits and feature-row limits apply before loading; payload calibration, policy, model schema, and feature schema must match the bundle. Pointer changes are serialized globally, in-flight requests retain their prior immutable context, projected/current RSS is checked against the 4 GiB policy, and the next request loads the new generation. `admission.py` owns the single non-queueing inference lease and request memory reservation. `prediction_service.py` records model release and serving-bundle identities in v3 evidence. API startup preloads all routes; readiness never deserializes a model or independently reopens a feature frame.
-
-`telemetry.py` owns bounded in-process request, prediction-readiness, replay-outcome, model-hash, health, and memory metrics plus structured JSON events. `/v1/metrics` is intended for internal scraping, not public ingress. This is operational telemetry, not durable prediction-performance evidence; the immutable prediction/outcome repository and content-addressed performance reports are the validation source of truth.
-
-`configs/default.toml` declares production routes under `[prediction_serving.routes.<mode>."<horizon>"]` using `release_repository`, `bar_timeframe`, `estimated_resident_gib`, `max_model_bytes`, `max_feature_bytes`, and `max_feature_rows`. `[prediction_serving]` names the public attestation trust store. Direct model paths are rejected.
-
-The previous `live-once` publisher was removed because it also scored four incompatible legacy model families and averaged their probabilities. Scheduled jobs now call `build-swing-live-features` or `build-intraday-live-features`, validate staging with `publish-live-features`, and finish with `publish-serving-bundle`. No generic Parquet publisher or legacy scoring fallback exists; a failed build or bundle verification leaves the prior active bundle untouched and readiness eventually fails on freshness.
-
-`catalyst_overlay.py` is deliberately separate from estimator inference. It classifies recent evidence as confirmed, conflicting, veto, mixed, or absent. The original model probability is never modified. A separate `decision_score` adds a small confirmation bonus or conflict/veto penalty for ranking, and the API records the complete catalyst assessment so its incremental value can be ablated later.
-
-Historical event collection and sentiment build:
-
-```powershell
-market-predictor-collect collect-swing --days 730 --out-dir data/raw/swing --workers 8
-market-predictor-research verify-swing --raw-dir data/raw/swing --rewrite
-market-predictor-research score-swing-events --raw-dir data/raw/swing --out-dir data/raw/swing_scored
-```
-
-Canonical data publication and decision build:
+Run only one collection, materialization, or training process at a time and keep its
+peak RSS below the workload limit: 5 GiB for swing candidate training and
+4 GiB for intraday and serving workloads.
 
 ```powershell
-market-predictor-research canonicalize-bars --input-path data/raw/bars.parquet --out data/canonical/bars.parquet --timeframe 5m --price-feed sip
-market-predictor-research canonicalize-event-directory --input-dir data/raw/swing_scored --out data/canonical/events.parquet
-market-predictor-research canonicalize-source-collections --input-path data/raw/swing/_source_collections.parquet --out data/canonical/source_collections.parquet
-market-predictor-research canonicalize-memberships --input-path data/raw/universe_memberships.parquet --out data/canonical/memberships.parquet
-market-predictor-research build-canonical-decisions --bars data/canonical/bars.parquet --events data/canonical/events.parquet --source-collections data/canonical/source_collections.parquet --memberships data/canonical/memberships.parquet --out data/canonical/decisions.parquet
-```
-
-Each canonical output has a sidecar manifest containing its SHA-256, input hashes, row/column identity, availability range, audit evidence, and production-readiness state. A consumer verifies the manifest and hash before reading the table. Production decisions fail when any required source was not successfully observed through a fresh request coverage end, when membership is unknown or ambiguous, when volume is not SIP, or when a joined feature is from the future.
-
-Canonical swing build, training, and promotion:
-
-```powershell
-market-predictor-research build-swing-dataset --decisions data/canonical/decisions.parquet --benchmark-bars data/canonical/benchmark_daily_bars.parquet --global-events data/canonical/global_events.parquet --global-source-collections data/canonical/global_source_collections.parquet --config configs/swing_dataset.toml --out data/features/swing/swing_5d.parquet
-market-predictor-research train-swing-model --dataset data/features/swing/swing_5d.parquet --config configs/swing_training.toml --model-out models/swing/candidates/swing_5d.joblib --evidence-dir data/reports/swing_5d_candidate
-market-predictor-research promote-swing-model --model models/swing/candidates/swing_5d.joblib --evidence-dir data/reports/swing_5d_candidate --hypothesis-registry data/governance --hypothesis-id swing-5d-h001 --shadow-bundle data/governance/shadow/<shadow-fingerprint>.json --outcome-repository data/outcomes --baseline-artifact models/swing/baselines/swing_5d.joblib --identity-issuer https://login.microsoftonline.com/<tenant>/v2.0 --identity-audience market-predictor-promotion --identity-jwks C:\run\secrets\promotion-jwks.json --signing-private-key <secure-ed25519-private-key.pem> --attestation-trust-store configs/attestation_trust_store.json --signer-id promotion-ci-prod --config configs/swing_promotion.toml
-```
-
-`src/market_predictor/swing/contracts.py` freezes feature/model schemas and typed configs. `dataset.py` owns technical, benchmark-relative, catalyst/global, membership, cross-sectional, and exact future-path construction. `audits.py` owns fail-closed eligibility. `model.py` owns purged folds, unseen-ticker holdout, calibration, memory enforcement, immutable candidate registration, and scoring. `evaluation.py` owns classification, ranking-economics, regime, and catalyst validation. `promotion.py` owns hash-bound evidence bundles and fail-closed development gates, then delegates predeclared hypothesis, untouched-shadow, one-use ledger, and attestation enforcement to `promotion_workflow.py`. `commands/swing_model.py` is the only canonical research command entry point for those stages.
-
-Canonical intraday build, training, and promotion:
-
-```powershell
-market-predictor-research build-intraday-dataset --decisions data/canonical/intraday_decisions_5m.parquet --one-minute-bars data/canonical/intraday_bars_1m.parquet --benchmark-bars data/canonical/intraday_benchmarks_5m.parquet --global-events data/canonical/global_events.parquet --global-source-collections data/canonical/global_source_collections.parquet --config configs/intraday_dataset.toml --out data/features/intraday/intraday_60m.parquet
-market-predictor-research train-intraday-model --dataset data/features/intraday/intraday_60m.parquet --config configs/intraday_training.toml --model-out models/intraday/candidates/intraday_60m.joblib --evidence-dir data/reports/intraday_60m_candidate
-market-predictor-research promote-intraday-model --model models/intraday/candidates/intraday_60m.joblib --evidence-dir data/reports/intraday_60m_candidate --hypothesis-registry data/governance --hypothesis-id intraday-60m-h001 --shadow-bundle data/governance/shadow/<shadow-fingerprint>.json --outcome-repository data/outcomes --baseline-artifact models/intraday/baselines/intraday_60m.joblib --identity-issuer https://login.microsoftonline.com/<tenant>/v2.0 --identity-audience market-predictor-promotion --identity-jwks C:\run\secrets\promotion-jwks.json --signing-private-key <secure-ed25519-private-key.pem> --attestation-trust-store configs/attestation_trust_store.json --signer-id promotion-ci-prod --config configs/intraday_promotion.toml
-```
-
-`src/market_predictor/intraday/contracts.py` freezes the 5-minute decision, 1-minute execution, feature, model, and typed configuration contracts. `dataset.py` owns completed-bar technical state, the latest fully available 1-minute confirmation state, and benchmark/global/membership/cross-sectional context. Intraday feature contract v2 preserves ticker-local availability, delays each nominal 5-minute cross-section to the latest required peer/benchmark cutoff, and joins 1-minute confirmation state only after that common cutoff is fixed. `labels.py` owns the exact decision-time 1-minute entry and consecutive target/stop path, benchmark returns over the same interval, overlap weights, and independent-event identities. `audits.py` rejects future features, peer availability beyond the common cross-section cutoff, under-warm rows, non-SIP/partially adjusted bars, stale source state, missing paths, and missing benchmark intervals. `model.py` trains opportunity and downside estimators atomically with session-purged walk-forward validation, deterministic unseen-ticker holdout, cross-fitted calibration, overlap weights, `float32` matrices, and a 4 GiB guard. It keeps seen/unseen classification diagnostics separate but combines their fold predictions into one full decision cross-section for economic selection, then attributes already-selected trades back to each cohort. Capacity consumes that same selected stream, retains the complete capital curve, and treats absent liquidity inputs separately from genuine participation or minimum-volume no-fills. `evaluation.py` owns classification, non-overlapping top-k economics, the conservative overlap-evidence count (the minimum of summed label uniqueness and independently non-overlapping event IDs), and deterministic session-block regime confidence intervals. `promotion.py` verifies persisted candidate/evidence hashes, reproduces capacity summaries from the signed curve, and gates effective evidence in both development and ticker-holdout scopes alongside independent-session, dual-model, economics, drawdown, no-fill, all required market regimes, confidence lower bounds, catalyst-coverage, alignment, memory, and provenance evidence before the shared hypothesis/shadow/attestation workflow can authorize the artifact. `commands/intraday_model.py` is the only canonical C5 CLI entry point.
-
-The canonical intraday horizon is `60m`. Opportunity means target-before-stop; downside means stop-before-target. Catalyst/news is an external confirmation and ranking overlay and is not included in either estimator feature list. No real canonical intraday artifact is promoted yet.
-
-Finviz current-candidate metadata remains outside the estimator contract.
-`CURRENT_CANDIDATE_OVERLAY_COLUMNS` identifies current score, change, dollar
-volume, and theme fields; `entry_exit.py` rejects them for every feature set.
-They may rank the current inference workload but cannot become historical
-features through a ticker-only join.
-
-Historical provider backfills normally know publication time but not when this system first observed the item. Such events are publication-time proxies and are research-only. They must not be relabeled as observed history. The same rule applies to SEC and Seeking Alpha current snapshots: only versioned facts with explicit availability can enter historical production features.
-
-Trusted promotion and local release:
-
-```powershell
-market-predictor-prod publish-local-release --model models/swing/candidates/swing_5d.joblib --evidence-manifest data/reports/swing_5d_candidate/evidence.manifest.json --release-root data/local_release_repository --attestation-trust-store configs/attestation_trust_store.json
-market-predictor-prod show-active-local-release --release-root data/local_release_repository --attestation-trust-store configs/attestation_trust_store.json
-market-predictor-prod verify-local-release --release-id <64-character-release-id> --release-root data/local_release_repository --attestation-trust-store configs/attestation_trust_store.json
-market-predictor-prod rollback-local-release --release-id <64-character-release-id> --release-root data/local_release_repository --attestation-trust-store configs/attestation_trust_store.json
-```
-
-`registry.py` can publish only immutable candidate manifests; effective `promoted` state is derived from a strict Ed25519-signed attestation whose issuer exists in the server-owned trust store. `hypothesis_registry.py` freezes candidate and baseline hashes plus the exact shadow decision groups before observation. `causal_shadow.py` derives paired candidate/baseline rows only from prediction maturation intents and matured outcomes, verifies point-in-time policy and feature identity, compounds equal-weight selected returns by session, and independently reproduces the bundle from the outcome repository during promotion. `promotion_identity.py` verifies short-lived RS256 OIDC tokens against a deployment-owned local JWKS, requires exact issuer/audience, token lifetime and ID, enforces separate build/approve roles and principals, and emits bounded non-secret identity evidence including the exact JWKS hash. The CLI reads those tokens only from `MARKET_PREDICTOR_PROMOTION_BUILD_TOKEN` and `MARKET_PREDICTOR_PROMOTION_APPROVER_TOKEN` by default. `shadow_ledger.py` consumes each causal evidence fingerprint once in the governance root's canonical ledger and binds stable authenticated token/claims evidence into the transaction identity. `promotion_attestation.py` binds the artifact, candidate manifest, training evidence, causal source-row and workload identities, baseline artifact, ledger receipt, gates, authenticated principals, signer, and timestamp. `release.py` stages and verifies the complete model/attestation/evidence unit, renames it into a versioned directory, and moves one hash-protected active pointer under an OS-released file lock. Mutation, partial publication, untrusted signatures, and rollback targets are reverified before activation. The private signing key belongs only to the promotion workload; set `MARKET_PREDICTOR_ATTESTATION_TRUST_STORE` to a read-only public trust-store path for serving.
-
-Canonical live publication and external serving release:
-
-```powershell
-market-predictor-research build-swing-live-features --decisions data/canonical/decisions.parquet --benchmark-bars data/canonical/benchmark_daily_bars.parquet --global-events data/canonical/global_events.parquet --global-source-collections data/canonical/global_source_collections.parquet --config configs/swing_dataset.toml --out data/live/staging/swing_5d.parquet
-market-predictor-prod publish-live-features --mode swing --input-path data/live/staging/swing_5d.parquet --live-dir data/live
-market-predictor-prod publish-serving-bundle --mode swing --horizon 5d --model-release-id <release-id> --feature-snapshot data/live/features/swing.parquet --release-root data/releases/swing_5d --attestation-trust-store configs/attestation_trust_store.json
-```
-
-The obsolete Azure serving-release transport was removed. Azure release
-transport and disaster recovery remain `environment_pending`; the signed local
-repository is the only activation authority. `azure_store.py` remains a
-collection-side artifact utility and is not imported by production serving.
-
-## File Responsibilities
-
-### CLI and Orchestration
-
-The installed commands are intentionally split:
-
-- `src/market_predictor/production_cli.py` exposes only serving, live-feature
-  publication, signed local-release management, and outcome/drift operations.
-- `src/market_predictor/collection_cli.py` exposes provider collection, source
-  quota/token utilities, model download, and artifact upload/export.
-- `src/market_predictor/research_cli.py` exposes canonicalization, feature
-  engineering, model training, evaluation, and promotion.
-- `src/market_predictor/cli.py` is the internal research/collection command
-  registry used to construct the two non-production surfaces. It is not an
-  installed executable and is never imported by production.
-
-Why the split exists: the serving process has a small auditable import graph and
-cannot accidentally initialize provider clients, FinBERT, Torch, Transformers,
-XGBoost, or research promotion modules. Collection remains restartable and
-source-isolated; research retains all reproducible data/model workflows.
-
-Command ownership:
-
-- Collection: `collect`, `collect-swing`, `collect-swing-daily-history`,
-  `collect-alpaca-news-history`, `collect-seeking-alpha`, `alpaca-tickers`.
-- Verification: `verify-events`, `verify-swing`, `audit-swing-alignment`,
-  `audit-swing-daily-history`.
-- Sentiment: `download-model`, `score-swing-events`.
-- Feature building: canonical training `build-swing-dataset` / `build-intraday-dataset`, canonical inference `build-swing-live-features` / `build-intraday-live-features`, research-only builders, and V3 research builders.
-- Training/scoring: canonical swing and intraday train/promote commands, research-only entry-path commands, and V3 research evaluation.
-- Production: `serve-api`, `publish-live-features`, signed local-release and atomic
-  serving-bundle commands, and deterministic outcome/drift commands.
-- Azure data utilities: `export-ohlcv-artifacts` and `azure-upload-artifacts`.
-
-Canonical orchestration is registered by `src/market_predictor/commands/canonical_data.py`. `src/market_predictor/canonical/contracts.py` owns immutable schemas; `normalize.py` converts provider timestamps and provenance; `joins.py` performs strict as-of source, membership, and fundamental joins; `reconciliation.py` owns exact event-to-decision/window assignment and rebuilds event aggregates from that evidence; `audits.py` implements fail-closed readiness; and `store.py` publishes hash-verified artifacts with manifests written last.
-
-`build-canonical-decisions` publishes both the canonical decision table and a
-neighboring `*.event_assignments.parquet` artifact unless
-`--event-assignments-out` is supplied. An assigned row names the event,
-decision, window, ticker, stable financial security identity,
-feature-availability timestamp, source family,
-sentiment, and relevance used by the feature. Non-assigned events carry one
-explicit exclusion status. The build independently recreates event count,
-weighted sentiment, sentiment coverage, relevance quality, source counts/source
-diversity, and latest event availability. Missing, extra, duplicated,
-wrong-ticker, wrong-window, or misaggregated evidence fails readiness.
-
-The decision table carries `event_assignment_sha256` and
-`event_aggregate_sha256`. Swing and intraday training copy both identities into
-candidate metrics; promotion and signed attestation reject either a missing
-identity or nonzero stamped reconciliation counters.
-
-`src/market_predictor/label_paths.py` is the shared pure evaluator for swing
-open-to-close paths and intraday target/stop/timeout paths. Offline dataset
-labeling and live outcome maturation both call it, including executable
-gap-through fills, stop-first same-bar ambiguity, frozen round-trip cost, and
-MFE/MAE. `label_reconciliation.py` content-addresses material label rows in
-bounded chunks. Each canonical swing or intraday dataset audit independently
-rebuilds labels from the original stock and benchmark bars before publication.
-Training requires one valid `label_material_sha256`, one
-`label_source_reconciliation_sha256`, and zero reconciliation errors; promotion
-and signed attestation bind both hashes.
-
-`build-swing-datasets` remains research-only. Production swing feature engineering is `build-swing-dataset` on the canonical decision table. The production path never fetches while building features, never forward-fills current Seeking Alpha/SEC snapshots, and never accepts publication-proxy history.
-
-V3 orchestration is registered through focused modules under `src/market_predictor/commands/`: `v3_data.py`, `v3_features.py`, `v3_labels.py`, `v3_models.py`, and `v3_evaluation.py`. The corresponding implementation under `src/market_predictor/v3/` owns strict contracts, immutable development/shadow partitioning, exact labels, batch/live feature parity, session-purged validation, deterministic ticker holdout, B0/B1/B2/R1/D1 candidate training, disjoint calibration, and session-blocked ranking economics. Label schema `ml_v3.labels.v2` requires the maximum configured path to be contiguous at `bar_minutes`; decisions spanning a missing ticker candle are dropped rather than interpolated or shifted. These candidates and audit calibrators are research artifacts and are not connected to the promoted serving registry until later promotion checkpoints pass.
-
-`train-v3-models` loads versioned datasets through a hash-verified column projection. The trainer compacts selected features to `float32`, uses single-worker XGBoost histograms for R1, releases each fold/holdout model before the next fit, and records current/peak working set against `--max-training-memory-gb`. A guard violation fails the family without publishing a model artifact.
-
-`v3_readiness.py` scans large Parquet datasets in batches before C8. It rejects inadequate symbol/session coverage, post-cutoff rows, undeclared or non-SIP volume, current-only universe files, missing sector ETFs, and benchmark coverage gaps. `export-ohlcv-artifacts --end-date YYYY-MM-DD` creates reproducible frozen-cutoff exports and persists `price_feed` in every row and manifest.
-
-For new swing research, use `collect-swing-daily-history`, not the legacy
-`export-ohlcv-artifacts` path. `swing/market_history.py` reads the hash-frozen
-point-in-time membership artifact, adds SPY/QQQ/sector benchmarks, fetches one
-logical symbol per isolated Alpaca request, canonicalizes daily exchange
-sessions, audits SIP/OHLCV/timestamp integrity, and publishes one atomic
-Parquet/manifest pair per symbol. `_request.json` freezes the symbol set,
-membership hash, dates, feed, adjustment, and timeframe. `_status.json` records
-resumable progress; `_source_collections.parquet` distinguishes observed,
-observed-empty, and failed requests; `_manifest.json` makes a completed run
-immutable.
-
-`swing/news_history.py` owns historical Alpaca/Benzinga research collection.
-It intersects the frozen request window with point-in-time membership
-intervals, converts canonical tickers to Alpaca symbols, archives every page
-atomically, validates the pagination token chain, and resumes only unfinished
-chunks. Provider creation and update timestamps remain separate. Articles not
-explicitly tagged to the requested symbol are excluded, revisions are
-deduplicated deterministically, and canonical events are keyed by financial
-`security_id` so ticker reuse cannot cross-contaminate model rows. Historical
-availability is always `provider_publication_proxy`; these artifacts are never
-production-ready or a substitute for live first-seen evidence.
-`swing/news_history_audit.py` then replays the frozen request, source ledger,
-every archived page and token transition, every canonical event artifact,
-cross-chunk event-ID uniqueness, stock identity, and half-open publication
-window sequentially. It also emits explicit catalyst-training exclusions for
-long provider coverage gaps; missing source history is never imputed as zero.
-
-`swing/event_relevance.py` is retained only for the v1 research sentiment
-artifact. Its numeric FinBERT output remains reusable by `event_id`, but its
-retrospectively applied relevance value is not accepted as model-attribution
-evidence.
-
-`security_labels.py` loads the closed, versioned business-tag taxonomy. Runtime
-industry fallback IDs are prohibited. Point-in-time membership industry can
-produce one context-only primary tag; current profile text can add an offering,
-driver, or end-market tag only through an exact phrase and an explicit
-membership-compatibility rule. `swing/security_label_artifact.py` reconciles
-the frozen training population, publishes assignments plus explicit
-insufficient-evidence coverage, caps active tags at three, and delays current
-profile availability until the profile artifact has been published.
-Profile-derived assignments expire after the policy validity interval; the
-membership context assignment resumes until a newer immutable profile
-collection is supplied.
-The coverage artifact also carries every security's point-in-time ticker,
-company, effective interval, and availability timestamp. Direct issuer
-identity therefore does not depend on having a thematic assignment.
-
-`swing/event_attribution.py` produces separate direct-issuer,
-business-exposure, and sector-context relations. Direct issuer attribution
-requires an explicit ticker or full normalized company identity. Source-tagged
-generic offering text remains business exposure, and source-tagged industry or
-end-market text remains context. Short and frozen ambiguous tickers require
-cashtag, parenthetical, exchange, or `ticker:` notation. Event and label
-effective/availability timestamps are enforced as half-open point-in-time
-joins.
-
-`swing/event_attribution_history.py` is the bounded operational replay. It
-requires a completed news collection and passed collection audit, loads the
-business-label artifact once, processes one canonical event chunk at a time,
-and publishes immutable relation chunks plus a final hash-bound inventory.
-Resume accepts only matching collection, label, all-security identity,
-source-event, and attribution-policy hashes.
-
-`swing/sentiment_history.py` consumes only a completed collection and passed
-streaming audit. It excludes audited provider blind spots, reads one event
-chunk at a time, scores immutable title-plus-summary inputs with one local
-FinBERT instance, and publishes separate research-only sentiment artifacts.
-The request binds collection, audit, source, universe, model revision, input,
-latency, and relevance identities. Completed chunks resume only after canonical
-hash validation. Actual inference time is stored separately from the simulated
-publication-plus-fixed-latency research availability time.
-
-`swing/market_history_audit.py` reopens every canonical symbol artifact, verifies
-its hash against the final collection manifest, verifies the membership and
-source-collection identities, and uses SPY SIP dates as the observed session
-calendar. It classifies gaps as complete, terminal non-trading,
-observed-empty, ticker reuse, initial, interior, or no-overlap. Terminal gaps
-remain explicit and usable sessions are retained; whole-interval source/ticker
-reuse gaps are excluded; initial, interior, no-overlap, or benchmark gaps block
-panel construction. It never fills or shifts a missing bar.
-
-`swing/panel_inputs.py` owns the next immutable boundary. It refuses a coverage
-summary that is not training-ready, replays the membership, final collection,
-source ledger, coverage report, and every per-symbol artifact hash, and rejects
-any blocking interval. It removes only intervals explicitly classified
-`exclude_interval`, filters each stock bar to `[effective_from, effective_to)`,
-keeps SPY/QQQ/sector ETF bars separate, and does not fill, interpolate, or shift
-sessions. Canonical memberships require `security_id`; `canonical/joins.py`
-therefore carries that identity into every decision row. Swing technical
-windows and exact future labels group by `security_id`, never ticker alone. The
-command publishes
-hash-manifested stock bars, benchmark bars, and research memberships, then
-writes the bundle audit last. Historical membership availability uses
-`provider_publication_proxy`, making the membership and bundle research-only
-until observed availability evidence exists.
-
-```powershell
-market-predictor-research build-swing-market-panel-inputs `
-  --memberships data/universe/sp500_point_in_time_20190709_20260708_v3.parquet `
-  --collection-dir data/raw/swing_daily_sip_sp500_pit_20190709_20260708_v3 `
-  --coverage-report data/reports/swing_daily_history_coverage_20190709_20260708_v3.csv `
-  --coverage-summary data/reports/swing_daily_history_coverage_20190709_20260708_v3.json `
-  --stock-bars-out data/artifacts/swing_market_panel_inputs_20190709_20260708_v1/stock_bars.parquet `
-  --benchmark-bars-out data/artifacts/swing_market_panel_inputs_20190709_20260708_v1/benchmark_bars.parquet `
-  --memberships-out data/artifacts/swing_market_panel_inputs_20190709_20260708_v1/memberships.parquet `
-  --audit-out data/reports/swing_market_panel_inputs_20190709_20260708_v1_audit.json
-```
-
-The point-in-time universe builder expands official composite ticker rows,
-forward-fills only table-local effective dates, rejects ambiguous legacy
-company/ticker bindings, bounds symbol changes between release publication and
-effective date, and assigns interval-level security identities. Alpaca
-corporate actions are candidates. Same-security name changes may apply
-automatically; merger membership continuity requires an explicit row in
-`configs/sp500_security_transition_review.csv` backed by a primary-source URL.
-Reviewed rows override conflicting provider dates for the same old/new symbol
-pair. Corporate lineage must be complete before feature windows are grouped:
-neither bars nor returns may cross a security-identity boundary even when the
-ticker text is unchanged.
-
-`v3/catalysts.py` owns the O1 point-in-time overlay and paired ablation. It filters decisions to an explicit source interval, joins only events available by each decision timestamp, validates ticker-file and sentiment coverage, detects future matches, and compares R1/O1 on identical groups with a session-blocked paired bootstrap. Provider publication-time backfill is marked research-only. Optional global context must cover both declared interval boundaries or readiness fails.
-
-`score-alpaca-news-history` is the canonical five-year archive scorer. It keeps
-raw provider text unchanged and writes sentiment to separate per-chunk
-artifacts. `--text-mode title_summary --max-length 128` bounds inference to the
-immutable headline and provider summary. Every output row carries the FinBERT
-model/revision, input hash, mode, token limit, relevance policy, and research
-availability policy. Model inference loads the previously downloaded local
-cache and does not make hidden network requests.
-
-`audit-v3-failure-attribution` is a development-only diagnostic for a rejected ranker. It loads only registered, hash-verified monthly shards; validates exact OOF-to-label identities; rejects shadow timestamps; and writes fixed top-k horizon, score-decile, and stratum evidence. Its session bootstrap is vectorized over session sums/counts, preserving block-resampling semantics without repeated DataFrame concatenation. The report is explicitly non-promotional and cannot justify filters on the inspected strata.
-
-The V4-H1 audit sequence is deliberately fail-closed. The first 120-minute dataset was rejected before training after timing checks found non-contiguous 24-bar paths. The corrected immutable v2 dataset is separately fingerprinted and verifies exact wall-clock exits on every physical row, then verifies minimum cross-section and 120-minute cadence on rank-eligible rows. B0 and R1 are trained into separate directories so one family cannot overwrite or mask the other. Both were rejected on development economics; shadow was not read.
-
-### Configuration
-
-`src/market_predictor/config.py`
-
-Loads `.env` secrets and exposes typed settings. This is where Alpaca, Reddit, RapidAPI, Seeking Alpha account-token, FinBERT, Azure, and runtime defaults become usable by code.
-
-`src/market_predictor/app_config.py`
-
-Loads non-secret TOML behavior from `configs/default.toml`.
-
-`configs/default.toml`
-
-Owns universe lists, sector groups, benchmark mapping, source behavior, Seeking Alpha endpoint templates, Reddit subreddit settings, and performance knobs. Environment settings also define the API memory budget/headroom and optional Azure release sync at container startup.
-
-Why split config this way: secrets stay in `.env`; business/runtime behavior stays in TOML.
-
-### Data Schemas and Quality
-
-`src/market_predictor/schemas.py`
-
-Defines the normalized `NewsEvent` record used across Alpaca, Reddit, Seeking Alpha, and SEC.
-
-`src/market_predictor/data_quality.py`
-
-Sanitizes and verifies event data. It handles timestamp parsing, required fields, duplicate rows, ticker normalization, and basic data validity.
-
-Why it matters: the model is only useful if event timing and ticker relevance are clean. Bad timestamps create label leakage or false reactions.
-
-### Source Adapters
-
-`src/market_predictor/sources/alpaca.py`
-
-Fetches Alpaca assets, news, daily bars, and hourly bars. Alpaca is the primary market-data and recent-news source.
-
-`src/market_predictor/sources/reddit.py`
-
-Collects Reddit ticker chatter from configured subreddits and comments. Reddit is treated as attention and sentiment, not normal news.
-
-`src/market_predictor/sources/seeking_alpha.py`
-
-Calls Seeking Alpha through RapidAPI, manages local quota tracking and caching, fetches analysis/news-style events, quant/rating snapshots, and account access tokens when configured.
-
-It filters ticker-specific Seeking Alpha articles by ticker tags so unrelated market-wide articles are not blindly assigned to a ticker. Broad SA feeds are collected separately as market context and use ticker `MARKET`.
-
-The expanded RapidAPI snapshot collection is intentionally stored as external data. Daily historical model rows only consume canonical compatibility columns, because current snapshots should not be backfilled across two years of labels.
-
-`src/market_predictor/sources/sec.py`
-
-Fetches SEC filing events with no API key and preserves acceptance-time alignment.
-
-`src/market_predictor/sources/http.py`
-
-Small HTTP helper with retry/backoff behavior.
-
-### Price and Feature Engineering
-
-`src/market_predictor/price.py`
-
-Fetches daily and hourly bars through Alpaca wrappers.
-
-`src/market_predictor/features.py`
-
-Builds model rows from events and bars.
-
-Major responsibilities:
-
-- Daily direction datasets.
-- Event swing datasets.
-- Event timing buckets: pre-market, intraday, after-hours.
-- Prior return and volume context.
-- Open-gap, same-day, next-day, and next-week reaction labels.
-- Hourly reaction features when 1h bars are available.
-- Reddit, sentiment, Seeking Alpha, SEC, sector, and benchmark features.
-- Global market-context features such as market news count, market sentiment, negative/positive sentiment fractions, and 30-day news-volume z-score.
-
-Why this file is central: this is where market intuition becomes structured ML input.
-
-### Sentiment
-
-`src/market_predictor/sentiment.py`
-
-Downloads and runs FinBERT. It uses GPU if PyTorch detects CUDA, otherwise CPU. Sentiment scoring is a separate stage so expensive NLP work can be retried independently from API collection.
-
-### Modeling
-
-`src/market_predictor/model.py`
-
-Trains and scores the tabular models.
-
-Important design choices:
-
-- Uses scikit-learn pipelines.
-- Uses purged walk-forward validation to reduce time leakage.
-- Supports daily direction models and event-level swing models.
-- Returns metrics that the guarded live trainer can use before promotion.
-
-`DateGroupedPurgedWalkForwardSplit` keeps validation later in time than training and leaves an embargo gap between train and test sessions.
-
-### Quota and Azure
-
-`src/market_predictor/quota.py`
-
-Tracks monthly RapidAPI usage locally so Seeking Alpha calls can be throttled before exhausting the plan.
-
-`src/market_predictor/azure_store.py`
-
-Uploads and downloads project artifacts and release bytes to Azure Blob Storage. It supports either a connection string or managed identity/default credentials through Azure Identity.
-
-## Data Directories
-
-Recommended local layout:
-
-```text
-data/raw/                 raw downloaded event files
-data/raw/swing/           per-ticker swing event files
-data/raw/swing_scored/    FinBERT-scored event files
-data/features/            model-ready feature datasets
-data/live/                managed live pipeline state
-data/artifacts/           Azure-uploadable project artifacts
-data/reports/             readable outputs and score reports
-data/cache/               source cache files and SA account token cache
-data/usage/               RapidAPI usage tracking
-models/                   active and candidate model files
-```
-
-Do not treat `data/features` or `data/live` as public contracts. They are internal ML working sets and may evolve.
-
-## Model Artifacts
-
-The clean active model set lives in `models/`.
-
-Every scoreable Joblib artifact has a `model_registry_manifest.v1` sidecar. Candidate and promoted research scorers verify the manifest and SHA-256 before deserialization; production routes additionally require `promoted`. The current evidence and route state are maintained in the README and model cards rather than inferred from filenames.
-
-## Live Pipeline State
-
-Canonical label-free live feature construction, atomic publication, immutable release activation, startup hydration, and rollback are implemented. Azure schedules remain deployment configuration rather than application-owned timers. Retraining is deliberately separate and is never triggered by prediction traffic. If no real canonical model has passed promotion, release publication fails and the API remains not ready; candidate or legacy artifacts are not substituted.
-
-## Azure Deployment
-
-Use Azure Blob Storage for project artifacts and Azure Container Apps Jobs for scheduled runs. Use Azure ML GPU compute or a stopped-when-idle GPU VM only for heavy FinBERT/retraining work.
-
-Files:
-
-- `Dockerfile`: digest-pinned, non-root, read-only-compatible API image with 4
-  GiB defaults, hash-only production dependencies, and a liveness probe.
-- `.dockerignore`: keeps local data, models, secrets, and venv out of the build context.
-- `requirements/*.lock`: universal hash locks for production, collection,
-  training, validation, and full development.
-- `scripts/lock_dependencies.py`: pinned cross-platform lock regeneration.
-- `docs/azure_deployment_plan.md`: deployment recommendation, schedule, and operational rules.
-
-Azure model-release hydration is `environment_pending`; the current container
-starts only from mounted signed local release repositories. Keep `/v1/metrics`
-internal, configure readiness against `/v1/health/ready`, and enforce a 4 GiB
-container memory limit in addition to the application guard.
-
-## Why the Stages Are Separate
-
-API collection, NLP scoring, feature building, and model training fail for different reasons and have different costs.
-
-Keeping them separate gives:
-
-- Restartability after partial API failures.
-- Lower RapidAPI and Reddit waste.
-- Easier data validation before training.
-- Ability to run FinBERT on GPU later without changing collectors.
-- Cleaner model audit trails.
-
-## Adding a New Data Source
-
-1. Add a source adapter under `src/market_predictor/sources/`.
-2. Convert source records into `NewsEvent`.
-3. Add config knobs to `configs/default.toml` if needed.
-4. Wire the source into `collect_events_for_ticker` in `cli.py`.
-5. Update `data_quality.py` only if the normalized schema needs new validation.
-6. Add feature columns in `features.py` after the data is clean.
-
-## Adding a New Model
-
-1. Define a new immutable feature, target, model, and availability contract in the owning canonical package.
-2. Build labels from the unsampled exact future path and audit every excluded row before estimator filtering.
-3. Add purged time validation, unseen-ticker validation, calibration, benchmark-relative economics, drawdown, regime, alignment, provenance, and resource evidence.
-4. Publish a hash-verified candidate and hash-bound evidence bundle through a focused command module.
-5. Add a frozen promotion configuration; serving must reject the model type/schema until every gate passes and an operator registers the promoted route.
-6. Keep research families under `v3/` or another explicitly research-only package; they cannot reuse the canonical registry type without satisfying its complete contract.
-
-## Practical Debugging
-
-Check source/API issues:
-
-```powershell
-market-predictor-collect seeking-alpha-limits
-market-predictor-collect collect LUNR --days 3 --out data/raw/debug_lunr.parquet
-```
-
-Check event quality:
-
-```powershell
-market-predictor-research verify-events data/raw/debug_lunr.parquet --rewrite
-```
-
-Check Azure storage configuration:
-
-```powershell
-market-predictor-collect azure-upload-artifacts --root data/artifacts
+Set-Location C:\project\market-predictor
+.\.venv\Scripts\python.exe -m pytest -q
+.\.venv\Scripts\ruff.exe check --no-cache .
+.\.venv\Scripts\mypy.exe --strict --python-version 3.14 src\market_predictor
+.\.venv\Scripts\python.exe -m compileall -q src tests
+git diff --check
+git status --short --branch
 ```

@@ -125,7 +125,7 @@ def _fixture(
     temporal = tmp_path / "temporal"
     temporal.mkdir()
     temporal_manifest = {
-        "schema": "edge_rebuild.temporal_manifest.v1",
+        "schema": "edge_rebuild.temporal_manifest.v2",
         "status": "insufficient_history",
         "coverage": {
             "outcomes_read": False,
@@ -143,7 +143,7 @@ def _fixture(
     _write_json(
         temporal / "_authority.json",
         {
-            "schema": "edge_rebuild.temporal_manifest_authority.v1",
+            "schema": "edge_rebuild.temporal_manifest_authority.v2",
             "state": "complete",
             "artifact": "_manifest.json",
             "artifact_sha256": file_sha256(temporal / "_manifest.json"),

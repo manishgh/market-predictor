@@ -46,7 +46,7 @@ class SelectedPolicyCohortV2(BaseModel):
     source_intent_ids_sha256: str = Field(pattern=SHA256_PATTERN)
     source_outcome_ids_sha256: str = Field(pattern=SHA256_PATTERN)
     view: Literal["swing", "intraday"]
-    horizon: str = Field(pattern=r"^[1-9]\d*(?:m|d)$")
+    horizon: str = Field(pattern=r"^[1-9]\d*(?:m|d|b)$")
     cohort_type: Literal[
         "all",
         "market_regime",

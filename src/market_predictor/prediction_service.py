@@ -18,12 +18,26 @@ from market_predictor.catalyst_overlay import (
     assess_catalyst_overlay,
 )
 from market_predictor.drift_policy import DriftAssessmentV2, DriftStateStore
+from market_predictor.edge_rebuild.serving import (
+    LoadedSwingModelGeneration,
+    PromotedSwingBundle,
+    SwingModelGenerationCache,
+    score_promoted_swing_model,
+)
+from market_predictor.edge_rebuild.strategy_contract import StrategyContract, load_strategy_contract
+from market_predictor.edge_rebuild.swing_live import (
+    FileSwingLiveInputProvider,
+    SwingLiveInputProvider,
+    build_live_swing_features,
+)
+from market_predictor.edge_rebuild.swing_selection import (
+    select_constrained_swing_portfolio,
+)
 from market_predictor.feature_store import LiveFeatureStore
 from market_predictor.intraday.model import score_intraday_payload
 from market_predictor.prediction_contracts import (
     CatalystConfirmationInfo,
     FeatureArtifactIdentityV1,
-    GlobalContextInfo,
     IntradayPrediction,
     ModelInfo,
     PredictionConflictError,
@@ -31,6 +45,7 @@ from market_predictor.prediction_contracts import (
     PredictionDependencyError,
     PredictionDriftBlockedError,
     PredictionEvidenceV3,
+    PredictionModelUnavailableError,
     PredictionReadinessError,
     PredictionRequest,
     PredictionResponse,
@@ -38,6 +53,8 @@ from market_predictor.prediction_contracts import (
     PredictionServiceError,
     PredictionValidationError,
     ReadinessInfo,
+    SwingBenchmarkContext,
+    SwingManagedRiskContext,
     SwingPrediction,
     UnifiedTickerPrediction,
 )
@@ -57,29 +74,25 @@ from market_predictor.prediction_policy import (
     intraday_decision_score,
     parse_prediction_policy,
     select_intraday_candidates,
-    select_swing_candidates,
-    swing_action,
 )
 from market_predictor.prediction_snapshot import PredictionSnapshotStore
 from market_predictor.readiness import (
     INVALID,
     VALID,
     WARN,
-    assess_daily_readiness,
     assess_intraday_readiness,
 )
 from market_predictor.registry import file_sha256
-from market_predictor.resources import memory_audit
+from market_predictor.resources import assert_memory_budget, memory_audit
 from market_predictor.serving_context import (
     ActiveModelContext,
     ActiveModelContextCache,
     ActiveReleaseRoute,
     ModelContextProvider,
 )
-from market_predictor.swing.model import score_swing_payload
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.v3.errors import DataReadinessError, MarketPredictorError
 
-DEFAULT_MODE_HORIZONS = {"swing": "5d", "intraday": "60m"}
+DEFAULT_MODE_HORIZONS = {"swing": "10b", "intraday": "60m"}
 SERVING_POLICY_ID = "market_predictor.serving_policy_bundle.v2"
 # Serving thresholds are sourced from the canonical prediction policy so the
 # served signal semantics and the promotion-evaluated policy share one definition.
@@ -118,8 +131,20 @@ def serving_routes_from_config(config: Mapping[str, Any]) -> dict[str, dict[str,
         if isinstance(serving, dict)
         else ""
     )
+    promotion_gate_policy_sha256 = (
+        str(serving.get("promotion_gate_policy_sha256", "")).strip().lower()
+        if isinstance(serving, dict)
+        else ""
+    )
     if not trust_store:
         raise ValueError("prediction_serving.attestation_trust_store must be configured")
+    if len(promotion_gate_policy_sha256) != 64 or any(
+        character not in "0123456789abcdef"
+        for character in promotion_gate_policy_sha256
+    ):
+        raise ValueError(
+            "prediction_serving.promotion_gate_policy_sha256 must be configured"
+        )
     if not isinstance(route_config, dict):
         raise ValueError("prediction_serving.routes must be configured")
     routes: dict[str, dict[str, ServingRoute]] = {}
@@ -143,6 +168,10 @@ def serving_routes_from_config(config: Mapping[str, Any]) -> dict[str, dict[str,
                     f"prediction serving route {mode}.{horizon} cannot use a direct model path"
                 )
             canonical_horizon = _canonical_horizon(str(horizon))
+            if normalized_mode == "swing" and canonical_horizon != "10b":
+                raise ValueError(
+                    "public swing serving accepts only the ten-session 10b route"
+                )
             if canonical_horizon in parsed:
                 raise ValueError(f"duplicate prediction serving route after horizon normalization: {mode}.{canonical_horizon}")
             estimated_resident_gib = float(
@@ -168,6 +197,7 @@ def serving_routes_from_config(config: Mapping[str, Any]) -> dict[str, dict[str,
             parsed[canonical_horizon] = ServingRoute(
                 repository=Path(repository),
                 attestation_trust_store=Path(trust_store),
+                promotion_gate_policy_sha256=promotion_gate_policy_sha256,
                 bar_timeframe=str(raw_route.get("bar_timeframe", "unknown")).strip() or "unknown",
                 estimated_resident_gib=estimated_resident_gib,
                 max_model_bytes=max_model_bytes,
@@ -179,6 +209,24 @@ def serving_routes_from_config(config: Mapping[str, Any]) -> dict[str, dict[str,
     if not routes:
         raise ValueError("at least one production prediction serving route is required")
     return routes
+
+
+def swing_live_input_provider_from_config(
+    config: Mapping[str, Any],
+    *,
+    root: Path = Path("."),
+    memory_budget_gib: float = 4.0,
+    memory_headroom_gib: float = 0.5,
+) -> FileSwingLiveInputProvider:
+    serving = config.get("prediction_serving")
+    live = serving.get("swing_live") if isinstance(serving, Mapping) else None
+    configured = live.get("input_directory") if isinstance(live, Mapping) else None
+    path = Path(str(configured or "data/live/edge_rebuild/swing"))
+    return FileSwingLiveInputProvider(
+        path if path.is_absolute() else root / path,
+        memory_budget_gib=memory_budget_gib,
+        memory_headroom_gib=memory_headroom_gib,
+    )
 
 
 class PredictionService:
@@ -203,10 +251,13 @@ class PredictionService:
         drift_state_store: DriftStateStore | None = None,
         enforce_drift: bool = True,
         maximum_drift_assessment_age_minutes: int = 1_440,
+        swing_live_input_provider: SwingLiveInputProvider | None = None,
+        swing_model_generation_cache: SwingModelGenerationCache | None = None,
     ) -> None:
         self.root = Path(root)
         self.snapshot_store = snapshot_store or PredictionSnapshotStore(self.root / "data/predictions/snapshots")
         self.live_feature_store = live_feature_store or LiveFeatureStore(self.root)
+        self.swing_live_input_provider = swing_live_input_provider
         self.persist_snapshots = persist_snapshots
         if not routes:
             raise ValueError("at least one prediction serving route is required")
@@ -216,6 +267,19 @@ class PredictionService:
             raise ValueError("runtime memory budget and headroom are invalid")
         self.memory_budget_gib = memory_budget_gib
         self.memory_headroom_gib = memory_headroom_gib
+        if self.swing_live_input_provider is None:
+            self.swing_live_input_provider = FileSwingLiveInputProvider(
+                self.root / "data/live/edge_rebuild/swing",
+                memory_budget_gib=memory_budget_gib,
+                memory_headroom_gib=memory_headroom_gib,
+            )
+        self.swing_model_generation_cache = (
+            swing_model_generation_cache
+            or SwingModelGenerationCache(
+                memory_budget_gib=memory_budget_gib,
+                memory_headroom_gib=memory_headroom_gib,
+            )
+        )
         maximum_artifact_bytes = int(
             (memory_budget_gib - memory_headroom_gib) * 1024**3
         )
@@ -284,45 +348,103 @@ class PredictionService:
     def predict_swing(self, request: PredictionRequest) -> PredictionResponse:
         try:
             route, resolved_horizon = self._serving_route("swing", request)
-            context = self.model_context_cache.get("swing", resolved_horizon, route)
-            model = self._model_info_from_context(
-                context,
-                bar_timeframe=route.bar_timeframe,
+            try:
+                contract = load_strategy_contract(
+                    self._resolve(
+                        Path("configs/edge_rebuild_strategy_contract.toml")
+                    )
+                )
+            except DataReadinessError as exc:
+                repository = self._resolve(route.repository)
+                if not (repository / "active_generation.json").is_file():
+                    raise PredictionModelUnavailableError from exc
+                raise
+            generation = self._edge_swing_generation(route, contract=contract)
+            bundle = generation.bundle
+            as_of = request.as_of or datetime.now(UTC)
+            if bundle.promoted_at_utc > as_of.astimezone(UTC):
+                raise DataReadinessError(
+                    "promoted swing bundle was unavailable at the requested as_of"
+                )
+            if self.swing_live_input_provider is None:
+                raise DataReadinessError("swing live-input provider is unavailable")
+            inputs = self.swing_live_input_provider.load(
+                as_of_utc=as_of,
+                maximum_bytes=route.max_feature_bytes,
+                maximum_rows=route.max_feature_rows,
             )
-            prediction_policy = _prediction_policy_for_model(model)
-            source = self._load_feature_source(
-                "swing",
-                route,
-                request,
-                context=context,
+            live = build_live_swing_features(
+                inputs.stock_daily_bars,
+                inputs.benchmark_daily_bars,
+                inputs.point_in_time_memberships,
+                contract=contract,
+                catalyst_authority_directory=inputs.catalyst_authority_directory,
+                expected_catalyst_authority_sha256=inputs.catalyst_authority_sha256,
+                live_manifest_path=inputs.manifest_path,
+                expected_live_manifest_sha256=inputs.manifest_sha256,
+                as_of_utc=as_of,
+                memory_budget_gib=self.memory_budget_gib,
+                memory_headroom_gib=self.memory_headroom_gib,
             )
-            self._require_actionable_drift(
-                mode="swing",
-                horizon=resolved_horizon,
-                model=model,
+            scores = score_promoted_swing_model(
+                generation,
+                feature_frame=live.catalyst_full,
             )
-            frame = self._feature_frame(
-                source.frame,
+            assert_memory_budget(
+                hard_budget_gib=self.memory_budget_gib,
+                headroom_gib=self.memory_headroom_gib,
+                stage="after promoted swing scoring",
+            )
+            scored_context = live.context.reset_index(drop=True).copy()
+            scored_context["__probability"] = scores.probabilities
+            selected_ids = _selected_edge_swing_security_ids(
+                scored_context,
+                probability_threshold=scores.probability_threshold,
+                maximum_trades=contract.swing.maximum_trades_per_decision,
+                target_maximum_sector_weight=(
+                    contract.swing.target_maximum_sector_weight
+                ),
+                hard_maximum_sector_weight=(
+                    contract.swing.hard_maximum_sector_weight
+                ),
+                minimum_distinct_sectors=(
+                    contract.swing.minimum_distinct_sectors_for_selection
+                ),
+            )
+            predictions = _edge_swing_predictions(
                 request=request,
-                timeframe="daily",
+                context=scored_context,
+                bundle=bundle,
+                bundle_sha256=bundle.sha256(),
+                threshold=scores.probability_threshold,
+                selected_security_ids=selected_ids,
+                contract=contract,
+                model_as_of_utc=bundle.promoted_at_utc,
+                data_as_of_utc=inputs.generated_at_utc,
+                live_input_manifest_sha256=inputs.manifest_sha256,
+                catalyst_authority_sha256=inputs.catalyst_authority_sha256,
             )
-            scored = self._score_swing_frame(
-                frame=frame,
-                context=context,
+            model = _edge_swing_model_info(
+                generation,
+                bundle_root=self._resolve(route.repository),
+                resolved_horizon=resolved_horizon,
             )
-            predictions = self._swing_predictions(
-                scored,
-                frame,
-                model.status,
-                prediction_policy,
+            response = _edge_swing_response(
+                request=request,
+                model=model,
+                predictions=predictions,
+                context=scored_context,
+                bundle=bundle,
+                live_input_manifest_sha256=inputs.manifest_sha256,
+                catalyst_authority_sha256=inputs.catalyst_authority_sha256,
+                source_watermarks=dict(inputs.source_watermarks),
             )
-            return self._response(
-                request,
-                models={"swing": model},
-                feature_sources={"swing": source},
-                feature_frames={"swing": frame},
-                swing_predictions=predictions,
+            assert_memory_budget(
+                hard_budget_gib=self.memory_budget_gib,
+                headroom_gib=self.memory_headroom_gib,
+                stage="after swing response construction",
             )
+            return response
         except PredictionServiceError:
             raise
         except (
@@ -340,7 +462,18 @@ class PredictionService:
 
         for mode, mode_routes in sorted(self.routes.items()):
             for horizon, route in sorted(mode_routes.items()):
-                self.model_context_cache.get(mode, horizon, route)
+                if mode == "swing":
+                    try:
+                        contract = load_strategy_contract(
+                            self._resolve(Path("configs/edge_rebuild_strategy_contract.toml"))
+                        )
+                        self._edge_swing_generation(route, contract=contract)
+                    except (DataReadinessError, PredictionModelUnavailableError):
+                        # Absence is an expected fail-closed deployment state;
+                        # the API remains available and returns a typed 503.
+                        continue
+                else:
+                    self.model_context_cache.get(mode, horizon, route)
 
     def predict_intraday(self, request: PredictionRequest) -> PredictionResponse:
         try:
@@ -490,7 +623,7 @@ class PredictionService:
         )
 
     def health(self, *, as_of: datetime | None = None) -> dict[str, object]:
-        """Return deployment readiness without deserializing model artifacts."""
+        """Return deployment readiness from the verified cached generations."""
 
         checked_at = as_of or datetime.now(UTC)
         components: dict[str, dict[str, object]] = {}
@@ -499,6 +632,41 @@ class PredictionService:
             for horizon, route in mode_routes.items():
                 name = f"model:{mode}:{horizon}"
                 try:
+                    if mode == "swing":
+                        contract = load_strategy_contract(
+                            self._resolve(Path("configs/edge_rebuild_strategy_contract.toml"))
+                        )
+                        generation = self._edge_swing_generation(
+                            route,
+                            contract=contract,
+                        )
+                        bundle = generation.bundle
+                        components[name] = {
+                            "status": "ready",
+                            "model_status": bundle.model_status,
+                            "artifact_sha256": bundle.model_artifact_sha256,
+                            "serving_bundle_sha256": bundle.sha256(),
+                            "horizon_sessions": bundle.horizon_sessions,
+                        }
+                        if self.data_source == "live":
+                            if self.swing_live_input_provider is None:
+                                raise DataReadinessError(
+                                    "swing live-input provider is unavailable"
+                                )
+                            inputs = self.swing_live_input_provider.load(
+                                as_of_utc=checked_at,
+                                maximum_bytes=route.max_feature_bytes,
+                                maximum_rows=route.max_feature_rows,
+                            )
+                            components[f"features:{mode}:{horizon}"] = {
+                                "status": "ready",
+                                "manifest_sha256": inputs.manifest_sha256,
+                                "generated_at_utc": inputs.generated_at_utc.isoformat(),
+                                "catalyst_authority_sha256": inputs.catalyst_authority_sha256,
+                                "price_feed": "sip",
+                                "adjustment": "all",
+                            }
+                        continue
                     if not self.model_context_cache.is_current(mode, horizon, route):
                         raise DataReadinessError(
                             "active model context is missing or its pointer changed"
@@ -682,14 +850,25 @@ class PredictionService:
             raise DataReadinessError("route drift assessment is from the future")
         return assessment
 
-    def _score_swing_frame(
+    def _edge_swing_generation(
         self,
+        route: ServingRoute,
         *,
-        frame: pd.DataFrame,
-        context: ActiveModelContext,
-    ) -> pd.DataFrame:
-        latest = self._latest_rows(frame)
-        return score_swing_payload(latest, context.payload)
+        contract: StrategyContract,
+    ) -> LoadedSwingModelGeneration:
+        try:
+            return self.swing_model_generation_cache.get(
+                self._resolve(route.repository),
+                strategy_contract=contract,
+                attestation_trust_store_path=self._resolve(
+                    route.attestation_trust_store
+                ),
+                promotion_gate_policy_sha256=route.promotion_gate_policy_sha256,
+                maximum_model_bytes=route.max_model_bytes,
+                estimated_resident_gib=route.estimated_resident_gib,
+            )
+        except (MarketPredictorError, OSError, TypeError, ValueError) as exc:
+            raise PredictionModelUnavailableError from exc
 
     def _score_intraday_frame(
         self,
@@ -699,121 +878,6 @@ class PredictionService:
     ) -> pd.DataFrame:
         latest = self._latest_rows(frame)
         return score_intraday_payload(latest, context.payload)
-
-    def _swing_predictions(
-        self,
-        scored: pd.DataFrame,
-        source_frame: pd.DataFrame,
-        model_status: str,
-        prediction_policy: PredictionSelectionPolicy,
-    ) -> list[SwingPrediction]:
-        rows = scored.copy()
-        rows["_catalyst_assessment"] = rows.apply(
-            lambda row: assess_catalyst_overlay(
-                row,
-                model_probability=_float_or_none(row.get("swing_model_probability")),
-            ),
-            axis=1,
-        )
-        rows["_decision_score"] = rows["swing_model_probability"].map(_float_or_none)
-        rows = rows.sort_values("_decision_score", ascending=False, na_position="last").reset_index(drop=True)
-        daily_counts = pd.Series(dtype="int64")
-        if self.data_source == "curated":
-            daily_counts = (
-                source_frame.assign(
-                    ticker=source_frame["ticker"].astype(str).str.upper(),
-                    _trading_date=pd.to_datetime(source_frame["date"], errors="coerce").dt.date,
-                )
-                .groupby("ticker")["_trading_date"]
-                .nunique()
-            )
-        readiness_by_index: dict[int, ReadinessInfo] = {}
-        for row_index, row in rows.iterrows():
-            ticker = str(row["ticker"]).upper()
-            audited_count = _int_or_none(row.get("daily_bar_count"))
-            research_fallback = self.data_source == "curated" and audited_count is None
-            daily_bar_count = (
-                int(daily_counts.get(ticker, 0))
-                if research_fallback
-                else audited_count
-            )
-            readiness_by_index[int(row_index)] = self._daily_readiness(
-                row,
-                daily_bar_count,
-                model_status,
-                missing_audited_count=(
-                    audited_count is None and self.data_source == "live"
-                ),
-            )
-        ready_rows = rows.loc[
-            [
-                index
-                for index, readiness in readiness_by_index.items()
-                if readiness.status == VALID
-            ]
-        ]
-        selected_indexes = set(
-            select_swing_candidates(
-                ready_rows,
-                policy=prediction_policy,
-                probability_column="swing_model_probability",
-            ).index
-        )
-        predictions: list[SwingPrediction] = []
-        ready_rank = 0
-        for row_index, row in rows.iterrows():
-            ticker = str(row["ticker"]).upper()
-            catalyst = row["_catalyst_assessment"]
-            readiness = readiness_by_index[int(row_index)]
-            is_ready = readiness.status == VALID
-            if is_ready:
-                ready_rank += 1
-            predictions.append(
-                SwingPrediction(
-                    ticker=ticker,
-                    date=_string_or_none(row.get("date")),
-                    probability=_float_or_none(row.get("swing_model_probability")),
-                    decision_score=(_float_or_none(row.get("_decision_score")) if is_ready else None),
-                    model_prediction=(_int_or_none(row.get("swing_model_prediction")) if is_ready else None),
-                    signal=(_swing_signal(row.get("swing_model_probability")) if is_ready else "not_ready"),
-                    rank=ready_rank if is_ready else None,
-                    selection_eligible=(
-                        is_ready
-                        and _float_or_none(row.get("_decision_score")) is not None
-                    ),
-                    selected_for_policy=(
-                        is_ready and row_index in selected_indexes
-                    ),
-                    close=_float_or_none(row.get("close")),
-                    return_1d=_float_or_none(row.get("return_1d")),
-                    volume_z20=_float_or_none(row.get("volume_z20")),
-                    news_count=_float_or_none(row.get("event_count_3d")),
-                    event_count=_float_or_none(row.get("event_count_3d")),
-                    sentiment_mean=_float_or_none(row.get("sentiment_mean_3d")),
-                    monitor_theme=_string_or_none(row.get("monitor_theme")),
-                    global_context=GlobalContextInfo(
-                        net_impact=float(row.get("global_net_impact", 0.0) or 0.0),
-                        positive_impact=float(row.get("global_positive_impact", 0.0) or 0.0),
-                        negative_impact=float(row.get("global_negative_impact", 0.0) or 0.0),
-                    ),
-                    catalyst=_catalyst_info(catalyst),
-                    readiness=readiness,
-                    drivers=_drivers(
-                        row,
-                        [
-                            "volume_z20",
-                            "event_count_3d",
-                            "sentiment_mean_3d",
-                            "event_relevance_mean_3d",
-                            "return_1d",
-                            "sector_return_1d",
-                            "rel_return_1d_vs_sector",
-                            "global_net_impact",
-                        ],
-                    ),
-                )
-            )
-        return predictions
 
     def _intraday_predictions(
         self,
@@ -933,56 +997,6 @@ class PredictionService:
                 )
             )
         return predictions
-
-    def _daily_readiness(
-        self,
-        row: pd.Series,
-        daily_bar_count: int | None,
-        model_status: str,
-        *,
-        missing_audited_count: bool = False,
-    ) -> ReadinessInfo:
-        benchmark_present = _has_any_value(
-            row,
-            ["sector_return_1d", "rel_return_1d_vs_sector", "spy_return_1d"],
-        )
-        market_context_present = _has_any_value(
-            row,
-            [
-                "global_event_count_1d",
-                "global_event_count_3d",
-                "global_sentiment_mean_1d",
-                "global_net_impact",
-            ],
-        )
-        price_feed = str(row.get("price_feed", "unknown") or "unknown")
-        assessed = assess_daily_readiness(
-            daily_bar_count=int(daily_bar_count or 0),
-            latest_price_date=_string_or_none(row.get("date")),
-            price_feed=price_feed,
-            benchmark_present=benchmark_present,
-            market_context_present=market_context_present,
-            model_status=model_status,
-            news_candle_mismatch_count=int(row.get("news_candle_mismatch_count", 0) or 0),
-            stale_cache=bool(row.get("stale_cache", False)),
-        )
-        reasons = list(assessed.reasons)
-        if missing_audited_count:
-            reasons.insert(0, "live feature row is missing audited daily_bar_count")
-        return ReadinessInfo(
-            status=assessed.status,
-            reasons=reasons,
-            timeframe="daily",
-            daily_bar_count=assessed.daily_bar_count,
-            intraday_bar_count=assessed.intraday_bar_count,
-            required_bar_count=assessed.required_bar_count,
-            latest_price_date=assessed.latest_price_date,
-            price_feed=assessed.price_feed,
-            benchmark_status=assessed.benchmark_status,
-            market_context_status=assessed.market_context_status,
-            model_status=assessed.model_status,
-            source_status=assessed.source_status,
-        )
 
     def _intraday_readiness(
         self,
@@ -1514,6 +1528,400 @@ class PredictionService:
         return working.sort_values(["ticker", "date"]).groupby("ticker", as_index=False).tail(1)
 
 
+def _edge_swing_model_info(
+    generation: LoadedSwingModelGeneration,
+    *,
+    bundle_root: Path,
+    resolved_horizon: str,
+) -> ModelInfo:
+    bundle = generation.bundle
+    return ModelInfo(
+        path=str(
+            bundle_root
+            / "generations"
+            / generation.generation_id
+            / bundle.model_artifact_path
+        ),
+        status=bundle.model_status,
+        release_id=bundle.sha256(),
+        serving_bundle_id=bundle.sha256(),
+        model_type="ten_session_sector_relative_swing_classifier",
+        schema_version=bundle.feature_schema_version,
+        target="top_sector_relative_quantile_of_managed_barrier_net_return",
+        validation_split="purged_walk_forward_with_locked_final_test",
+        artifact_sha256=bundle.model_artifact_sha256,
+        resolved_horizon=resolved_horizon,
+        bar_timeframe="1Day",
+        created_at_utc=bundle.promoted_at_utc.isoformat(),
+        label_policy_sha256=bundle.strategy_contract_sha256,
+        label_policy={
+            "horizon_sessions": bundle.horizon_sessions,
+            "strategy_contract_sha256": bundle.strategy_contract_sha256,
+        },
+        execution_policy_sha256=bundle.strategy_contract_sha256,
+    )
+
+
+def _selected_edge_swing_security_ids(
+    frame: pd.DataFrame,
+    *,
+    probability_threshold: float,
+    maximum_trades: int,
+    target_maximum_sector_weight: float,
+    hard_maximum_sector_weight: float,
+    minimum_distinct_sectors: int,
+) -> set[str]:
+    eligible = frame.loc[
+        pd.to_numeric(frame["__probability"], errors="coerce").ge(
+            probability_threshold
+        )
+    ]
+    selected = select_constrained_swing_portfolio(
+        eligible,
+        maximum_trades=maximum_trades,
+        target_maximum_sector_weight=target_maximum_sector_weight,
+        hard_maximum_sector_weight=hard_maximum_sector_weight,
+        minimum_distinct_sectors=minimum_distinct_sectors,
+    )
+    return set(selected["security_id"].astype(str))
+
+
+def _edge_swing_predictions(
+    *,
+    request: PredictionRequest,
+    context: pd.DataFrame,
+    bundle: PromotedSwingBundle,
+    bundle_sha256: str,
+    threshold: float,
+    selected_security_ids: set[str],
+    contract: StrategyContract,
+    model_as_of_utc: datetime,
+    data_as_of_utc: datetime,
+    live_input_manifest_sha256: str,
+    catalyst_authority_sha256: str,
+) -> list[SwingPrediction]:
+    by_ticker = {
+        str(row["ticker"]).upper(): row
+        for _, row in context.iterrows()
+    }
+    ranked = context.sort_values(
+        ["__probability", "security_id"],
+        ascending=[False, True],
+        kind="stable",
+    )
+    ranks = {
+        str(row["security_id"]): rank
+        for rank, (_, row) in enumerate(ranked.iterrows(), start=1)
+    }
+    predictions: list[SwingPrediction] = []
+    for ticker in request.tickers:
+        row = by_ticker.get(ticker)
+        if row is None:
+            predictions.append(
+                SwingPrediction(
+                    ticker=ticker,
+                    signal="abstain",
+                    action="abstain",
+                    abstention_reasons=["out_of_universe"],
+                    model_id=bundle.model_id,
+                    serving_bundle_sha256=bundle_sha256,
+                    model_as_of_utc=model_as_of_utc,
+                    data_as_of_utc=data_as_of_utc,
+                    feature_schema_version=bundle.feature_schema_version,
+                    readiness=ReadinessInfo(
+                        status=INVALID,
+                        reasons=["Ticker is absent from the verified live reference universe."],
+                        daily_bar_count=0,
+                        required_bar_count=contract.swing.minimum_warmup_sessions,
+                        price_feed="sip",
+                        model_status="promoted",
+                        source_status="unavailable",
+                    ),
+                    lineage={
+                        "model_artifact_sha256": bundle.model_artifact_sha256,
+                        "live_input_manifest_sha256": live_input_manifest_sha256,
+                        "catalyst_authority_sha256": catalyst_authority_sha256,
+                    },
+                )
+            )
+            continue
+        probability = _required_edge_float(row, "__probability")
+        security_id = str(row["security_id"])
+        selected_for_policy = security_id in selected_security_ids
+        action = (
+            "watch_for_entry"
+            if selected_for_policy
+            else "observe_ranked_candidate"
+            if probability >= threshold
+            else "avoid"
+            if probability <= 0.40
+            else "hold_off"
+        )
+        signal = (
+            "positive_setup"
+            if action == "watch_for_entry"
+            else "ranked_candidate"
+            if action == "observe_ranked_candidate"
+            else "low_probability"
+            if action == "avoid"
+            else "neutral"
+        )
+        catalyst = _edge_catalyst_confirmation(row, positive_setup=probability >= threshold)
+        close = _required_edge_float(row, "close")
+        atr_pct = _required_edge_float(row, "atr_pct_14")
+        decision_time = _required_edge_datetime(row, "decision_time_utc")
+        predictions.append(
+            SwingPrediction(
+                ticker=ticker,
+                date=str(row["session_date_et"]),
+                probability=probability,
+                decision_score=probability,
+                model_prediction=int(probability >= threshold),
+                signal=signal,
+                action=action,
+                rank=ranks[security_id],
+                selection_eligible=probability >= threshold,
+                selected_for_policy=selected_for_policy,
+                close=close,
+                return_1d=_required_edge_float(row, "return_1d"),
+                volume_z20=_required_edge_float(row, "volume_z20"),
+                news_count=_required_edge_float(row, "event_count_3d"),
+                event_count=_required_edge_float(row, "event_count_3d"),
+                sentiment_mean=_required_edge_float(row, "sentiment_mean_3d"),
+                catalyst=catalyst,
+                benchmark_context=_edge_benchmark_context(row),
+                managed_risk=SwingManagedRiskContext(
+                    entry_reference="next_session_open",
+                    atr_fraction_of_latest_close=atr_pct,
+                    target_distance_fraction=(
+                        contract.swing.target_atr_multiple * atr_pct
+                    ),
+                    stop_distance_fraction=(
+                        contract.swing.stop_atr_multiple * atr_pct
+                    ),
+                    target_atr_multiple=contract.swing.target_atr_multiple,
+                    stop_atr_multiple=contract.swing.stop_atr_multiple,
+                    maximum_holding_sessions=10,
+                    exit_rule=contract.swing.exit_rule,
+                    round_trip_cost_bps=contract.swing.round_trip_cost_bps,
+                ),
+                model_as_of_utc=model_as_of_utc,
+                data_as_of_utc=data_as_of_utc,
+                feature_schema_version=bundle.feature_schema_version,
+                model_id=bundle.model_id,
+                serving_bundle_sha256=bundle_sha256,
+                readiness=ReadinessInfo(
+                    status=VALID,
+                    timeframe="daily",
+                    daily_bar_count=int(_required_edge_float(row, "daily_bar_count")),
+                    required_bar_count=contract.swing.minimum_warmup_sessions,
+                    latest_price_date=str(row["session_date_et"]),
+                    price_feed=str(row["price_feed"]),
+                    benchmark_status="SPY, QQQ, and sector context available",
+                    market_context_status="separate overlay; not used by estimator",
+                    model_status="promoted",
+                    source_status="Alpaca SIP/all and Alpaca catalyst coverage verified",
+                ),
+                drivers={
+                    "model_probability": probability,
+                    "promoted_probability_threshold": threshold,
+                    "atr_pct_14": atr_pct,
+                    "return_20d": _required_edge_float(row, "return_20d"),
+                    "relative_return_20d_vs_spy": _required_edge_float(
+                        row, "rel_return_20d_vs_spy"
+                    ),
+                    "decision_time_utc": decision_time.isoformat(),
+                    "sector": str(row["sector"]),
+                    "primary_benchmark": str(row["primary_benchmark"]),
+                },
+                lineage={
+                    "serving_bundle_sha256": bundle_sha256,
+                    "model_artifact_sha256": bundle.model_artifact_sha256,
+                    "strategy_contract_sha256": bundle.strategy_contract_sha256,
+                    "live_input_manifest_sha256": live_input_manifest_sha256,
+                    "catalyst_authority_sha256": catalyst_authority_sha256,
+                },
+            )
+        )
+    return predictions
+
+
+def _edge_benchmark_context(row: pd.Series) -> list[SwingBenchmarkContext]:
+    stock_5d = _required_edge_float(row, "return_5d")
+    stock_20d = _required_edge_float(row, "return_20d")
+    specifications = (
+        ("SPY", "broad_market", "spy"),
+        ("QQQ", "growth_market", "qqq"),
+        (str(row["primary_benchmark"]), "sector", "sector"),
+    )
+    output: list[SwingBenchmarkContext] = []
+    for symbol, role, prefix in specifications:
+        benchmark_5d = _required_edge_float(row, f"{prefix}_return_5d")
+        benchmark_20d = _required_edge_float(row, f"{prefix}_return_20d")
+        output.append(
+            SwingBenchmarkContext(
+                symbol=symbol,
+                role=cast(Any, role),
+                stock_return_5d=stock_5d,
+                benchmark_return_5d=benchmark_5d,
+                excess_return_5d=stock_5d - benchmark_5d,
+                stock_return_20d=stock_20d,
+                benchmark_return_20d=benchmark_20d,
+                excess_return_20d=stock_20d - benchmark_20d,
+            )
+        )
+    return output
+
+
+def _edge_catalyst_confirmation(
+    row: pd.Series,
+    *,
+    positive_setup: bool,
+) -> CatalystConfirmationInfo:
+    count = int(_required_edge_float(row, "event_count_3d"))
+    sentiment = _required_edge_float(row, "sentiment_mean_3d")
+    relevance = _required_edge_float(row, "event_relevance_mean_3d")
+    latest = _optional_edge_datetime(row.get("latest_event_feature_available_at_utc"))
+    decision = _required_edge_datetime(row, "decision_time_utc")
+    minutes = (
+        max(0.0, (decision - latest).total_seconds() / 60.0)
+        if latest is not None
+        else None
+    )
+    if count == 0:
+        status, direction = "absent", "none"
+    elif sentiment > 0.10:
+        status, direction = ("confirmed" if positive_setup else "mixed"), "positive"
+    elif sentiment < -0.10:
+        status, direction = ("conflicting" if positive_setup else "confirmed"), "negative"
+    else:
+        status, direction = "mixed", "mixed"
+    return CatalystConfirmationInfo(
+        status=cast(Any, status),
+        direction=cast(Any, direction),
+        score=max(-1.0, min(1.0, sentiment * relevance)),
+        event_count=count,
+        source_diversity=1 if count else 0,
+        sentiment=sentiment,
+        relevance=relevance,
+        minutes_since_latest=minutes,
+        material_event_count=count,
+        reasons=["Alpaca ticker news is incorporated in the promoted estimator."],
+    )
+
+
+def _edge_swing_response(
+    *,
+    request: PredictionRequest,
+    model: ModelInfo,
+    predictions: list[SwingPrediction],
+    context: pd.DataFrame,
+    bundle: PromotedSwingBundle,
+    live_input_manifest_sha256: str,
+    catalyst_authority_sha256: str,
+    source_watermarks: dict[str, str],
+) -> PredictionResponse:
+    request_id = str(uuid4())
+    latest = context.sort_values("decision_time_utc", kind="stable").groupby(
+        "ticker", as_index=False
+    ).tail(1)
+    requested = latest.loc[latest["ticker"].astype(str).str.upper().isin(request.tickers)]
+    row_evidence = [
+        PredictionRowEvidenceV1(
+            ticker=str(row["ticker"]).upper(),
+            view="swing",
+            decision_time_utc=_required_edge_datetime(row, "decision_time_utc"),
+            feature_available_at_utc=_required_edge_datetime(row, "feature_available_at_utc"),
+            canonical_security_id=str(row["security_id"]),
+            decision_group_id=str(row["decision_group_id"]),
+            session_date_et=str(row["session_date_et"]),
+            primary_benchmark=str(row["primary_benchmark"]),
+            market_regime=str(row["market_regime"]),
+            sector=str(row["sector"]),
+            price_feed=str(row["price_feed"]),
+        )
+        for _, row in requested.iterrows()
+    ]
+    cutoff = max((row.decision_time_utc for row in row_evidence), default=request.as_of or datetime.now(UTC))
+    bundle_sha256 = bundle.sha256()
+    policy_sha256 = hashlib.sha256(
+        json.dumps(
+            {
+                "bundle_sha256": bundle_sha256,
+                "horizon_sessions": 10,
+                "role": "prediction_intelligence_only_no_alerts_or_execution",
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("ascii")
+    ).hexdigest()
+    evidence = PredictionEvidenceV3(
+        request_id=request_id,
+        correlation_id=request.correlation_id or request_id,
+        prediction_cutoff_utc=cutoff,
+        row_feature_availability=row_evidence,
+        feature_artifacts={
+            "swing": FeatureArtifactIdentityV1(
+                mode="swing",
+                artifact_sha256=live_input_manifest_sha256,
+                source_artifact_sha256=catalyst_authority_sha256,
+                source_artifact_type="edge_rebuild_live_swing_inputs",
+                feature_schema_version=bundle.feature_schema_version,
+            )
+        },
+        release_id=bundle_sha256,
+        model_release_ids={"swing": bundle_sha256},
+        view_serving_bundle_ids={"swing": bundle_sha256},
+        serving_bundle_sha256=_serving_bundle_set_sha256({"swing": bundle_sha256}),
+        model_artifact_sha256={"swing": bundle.model_artifact_sha256},
+        source_watermarks={"swing": source_watermarks},
+        resolved_horizons={"swing": "10b"},
+        view_prediction_cutoffs_utc={"swing": cutoff},
+        view_prediction_policy_sha256={"swing": policy_sha256},
+        serving_policy_id="edge_rebuild.swing_prediction_intelligence.v1",
+        serving_policy_sha256=policy_sha256,
+        identity_status="complete",
+    )
+    unified = [
+        UnifiedTickerPrediction(
+            ticker=row.ticker,
+            swing=row,
+            final_signal=row.signal,
+            readiness_status=row.readiness.status,
+            errors=list(row.abstention_reasons),
+        )
+        for row in predictions
+    ]
+    return PredictionResponse(
+        request_id=request_id,
+        mode="swing",
+        data_source="live",
+        horizon="10b",
+        resolved_horizons={"swing": "10b"},
+        models={"swing": model},
+        predictions=unified,
+        evidence=evidence,
+    )
+
+
+def _required_edge_float(row: pd.Series, column: str) -> float:
+    value = _float_or_none(row.get(column))
+    if value is None:
+        raise DataReadinessError(f"live swing context is missing finite {column}")
+    return value
+
+
+def _required_edge_datetime(row: pd.Series, column: str) -> datetime:
+    value = _aware_datetime_or_none(row.get(column))
+    if value is None:
+        raise DataReadinessError(f"live swing context is missing {column}")
+    return value
+
+
+def _optional_edge_datetime(value: object) -> datetime | None:
+    return _aware_datetime_or_none(value)
+
+
 def _combined_readiness(
     swing: SwingPrediction | None,
     intraday: IntradayPrediction | None,
@@ -1556,10 +1964,6 @@ def _final_signal(swing: SwingPrediction | None, intraday: IntradayPrediction | 
     if swing_prob is not None and swing_prob >= _SWING_WATCH and intra_prob is not None and intra_prob < 0.50:
         return "swing_positive_wait_for_intraday"
     return "neutral"
-
-
-def _swing_signal(probability: Any) -> str:
-    return swing_action(_float_or_none(probability))
 
 
 def _intraday_signal(
@@ -1641,9 +2045,14 @@ def _suppress_swing_prediction(row: SwingPrediction, reason: str) -> SwingPredic
             "decision_score": None,
             "model_prediction": None,
             "signal": "not_ready",
+            "action": "abstain",
+            "abstention_reasons": list(
+                dict.fromkeys([*row.abstention_reasons, reason])
+            ),
             "rank": None,
             "selection_eligible": False,
             "selected_for_policy": False,
+            "managed_risk": None,
             "readiness": readiness,
         }
     )

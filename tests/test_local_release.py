@@ -11,6 +11,10 @@ import joblib
 import pandas as pd
 from typer.testing import CliRunner
 
+from market_predictor.intraday.contracts import (
+    INTRADAY_MODEL_SCHEMA_VERSION,
+    INTRADAY_MODEL_TYPE,
+)
 from market_predictor.production_cli import app
 from market_predictor.registry import write_model_manifest
 from market_predictor.release import (
@@ -20,16 +24,12 @@ from market_predictor.release import (
     rollback_local_release,
     verify_local_release,
 )
-from market_predictor.swing.contracts import (
-    SWING_MODEL_SCHEMA_VERSION,
-    SWING_MODEL_TYPE,
-)
 from market_predictor.v3.errors import DataReadinessError
 from tests.r4_fixtures import (
     authorize_candidate_for_test,
     synthetic_identity_metrics,
-    test_signing_material,
 )
+from tests.r4_fixtures import test_signing_material as signing_material_for_test
 
 
 class LocalReleaseTests(unittest.TestCase):
@@ -38,7 +38,7 @@ class LocalReleaseTests(unittest.TestCase):
             root = Path(temp_dir)
             model, evidence = _promoted_candidate(root / "source", "cli")
             release_root = root / "repository"
-            _, trust_store, _ = test_signing_material()
+            _, trust_store, _ = signing_material_for_test()
 
             result = CliRunner().invoke(
                 app,
@@ -248,12 +248,12 @@ class LocalReleaseTests(unittest.TestCase):
 
 def _promoted_candidate(root: Path, marker: str) -> tuple[Path, Path]:
     root.mkdir(parents=True, exist_ok=True)
-    model = root / f"swing-{marker}.joblib"
+    model = root / f"intraday-{marker}.joblib"
     joblib.dump({"marker": marker}, model)
     model_run_id = f"release-{marker}"
     metrics = {
         **synthetic_identity_metrics(
-            model_type=SWING_MODEL_TYPE,
+            model_type=INTRADAY_MODEL_TYPE,
             model_run_id=model_run_id,
         ),
         "roc_auc": 0.75,
@@ -263,14 +263,14 @@ def _promoted_candidate(root: Path, marker: str) -> tuple[Path, Path]:
             "ticker": ["AAA", "BBB"],
             "date": pd.date_range("2026-01-01", periods=2),
             "return_1d": [0.01, -0.01],
-            "target_net_positive_5d": [1, 0],
+            "target_before_stop_60m": [1, 0],
         }
     )
     write_model_manifest(
         model_path=model,
-        model_type=SWING_MODEL_TYPE,
-        schema_version=SWING_MODEL_SCHEMA_VERSION,
-        target_col="target_net_positive_5d",
+        model_type=INTRADAY_MODEL_TYPE,
+        schema_version=INTRADAY_MODEL_SCHEMA_VERSION,
+        target_col="target_before_stop_60m",
         features=["return_1d"],
         training_data=training,
         metrics=metrics,

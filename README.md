@@ -1,35 +1,66 @@
 # Market Predictor
 
-Market Predictor produces evidence-backed prediction intelligence for swing and
-intraday research. It owns market and catalyst data curation, causal feature
-construction, model training, validation, prediction, outcome maturation, and
-model governance.
+Market Predictor builds causal prediction intelligence for swing and intraday
+research. It owns data curation, feature construction, model training, temporal
+validation, outcome evaluation, and model governance.
 
-It does **not** own alerts, broker execution, orders, positions, portfolio risk,
-or final sizing. Those responsibilities belong to `trading_flow`.
+It does **not** own alerts, orders, positions, portfolio risk, or execution. Those
+responsibilities belong to `trading_flow`.
 
-This system is not deployed. There are no supported legacy models, schemas,
-fallbacks, or compatibility paths. Only artifacts passing the current contracts
-may become serving candidates.
+The system is not deployed. There are no supported legacy models or compatibility
+paths. Serving fails closed until a model passes validation and is published in a
+hash-verified promoted bundle.
 
-## Current State
+## Verified State
 
 - Branch: `r3-lineage`.
-- Active program: ER1A edge rebuild.
-- Swing: the seven-year causal panel is published and immutable. The frozen
-  equal-weight technical benchmark failed and is rejected, but it does not block
-  preregistered model training. The frozen temporal audit requires 2,033 XNYS
-  sessions and identifies one exact missing range: 279 sessions from 2018-05-29
-  through 2019-07-08. The outcome-blind acquisition audit found that all 83
-  retained official S&P release files fail their declared byte hashes, emitted
-  zero Alpaca units, and requires immutable source reacquisition before the
-  causal point-in-time history can be extended. Final model training remains
-  blocked until that evidence is repaired and the panel is rebuilt.
-- Intraday: verified canonical SIP five-minute corpus contains 38,586,501 bars,
-  814 sessions, and 1,104 symbols. Volume-bar setup construction and selective
-  one-minute executable paths remain pending.
-- Promotion: no swing or intraday model is promoted or serveable.
-- Runtime: no alerting or execution behavior exists in this repository.
+- **Current ticker catalyst estimator source:** Alpaca news only.
+- **SEC filings:** the current estimator does not consume SEC features. The SEC
+  authority distinguishes verified no-filing observations from unknown coverage.
+  After causal collection and exact issuer attachment, SEC will be evaluated as a
+  separate issuer-specific estimator profile rather than treated as a permanent
+  overlay-only source.
+- **Other overlay/audit sources:** Finviz and verified global or sector sources.
+  They cannot be attributed to a ticker as direct issuer news.
+- Reddit and Seeking Alpha are removed and prohibited from collection, features,
+  training, and serving.
+- Swing model decisions begin on `2019-07-09`. Earlier market bars are indicator
+  warm-up only and cannot produce model features, labels, train rows, validation
+  rows, or test rows.
+- Catalyst V5 identity rebind is published and replayed: 377,778 exact decision
+  matches and 6,359 source-coverage rows across all 604 target securities.
+- Swing V9 is invalid because managed labels were corrupted by Pandas index
+  alignment. It is retained only because V5 binds it as target-lineage evidence.
+- Swing V10 materialization replayed, but candidate v1 returned `no_candidate`
+  before economic evaluation. The cause was structural: the 50-stock hard sector
+  floor frequently left only four eligible sectors while the 20% sector cap required
+  at least five. This result does not establish that the model failed economic gates.
+- The implemented replacement policy keeps a within-sector ranking target of 50 and
+  uses a hard floor of 30. It persists sector peer count, rank eligibility, target
+  status, and ranking reliability weight. Groups with 30-49 peers remain eligible
+  with weight `decision_time_sector_peer_count / 50`.
+- Sector allocation targets 20%; it adapts to 25% when only four sectors are
+  represented and 33.3% when only three are represented. Sessions with fewer than
+  three represented sectors are skipped.
+- Economic acceptance uses managed holding-aligned benchmarks, includes cash days
+  and overlapping positions in the portfolio bootstrap, applies doubled costs to
+  the full daily path, and rejects active sector exposure above 33.3%.
+- Live inference excludes individual missing, cold, or catalyst-incomplete securities
+  through the governed 5% ceiling. Cached models are bound to the active contract,
+  trust store, promotion policy, and model-size limit.
+- Swing V11 is published and strictly replayed: 853,417 rows per ablation
+  profile, 604 modeled securities, 1,759 sessions from `2019-07-09` through
+  `2026-07-08`, and 640,107 rank-eligible rows.
+- Swing candidate v2 trained six governed logistic/HGB ablations and returned
+  `no_candidate`. AUC reached about 0.55-0.57, but no candidate had a positive
+  lower confidence bound for calendar, portfolio-daily, doubled-cost, and
+  holding-aligned benchmark economics in both validation scopes. The locked
+  test was not read.
+- Intraday V2 is published and replayable but economically rejected after costs.
+  It is not serveable. V3 is development code reserved for a genuinely future
+  holdout and has not been run on that holdout.
+- No swing or intraday model is promoted. The prediction API therefore returns no
+  model prediction and must fail closed.
 
 Read these documents in order:
 
@@ -38,56 +69,26 @@ Read these documents in order:
 3. [Active handoff](docs/reviews/active_edge_rebuild_handoff.md)
 4. [Prediction architecture](docs/catalyst_confirmation_architecture.md)
 5. [Implementation guide](docs/implementation_guide.md)
-6. [Model training and validation protocol](docs/model_training_validation_protocol.md)
-7. [Source quantitative trading plan](docs/references/comprehensive_quantitative_trading_model_implementation_plan_intraday_and_swing.pdf)
+6. [Training protocol](docs/model_training_validation_protocol.md)
 
-Additional retained contracts and evidence:
+## Data Boundaries
 
-- [Known strategy sequence](docs/known_strategy_expansion_sequence_2026-07-26.md)
-- [Strategy traceability](docs/strategy_execution_traceability.md)
-- [TradingFlow integration boundary](docs/trading_flow_integration_plan.md)
-- [Azure deployment plan](docs/azure_deployment_plan.md)
+- **Alpaca premium:** SIP market bars and direct ticker news used by estimators.
+- **SEC EDGAR:** current issuer authority and causal audit source; planned as a
+  separately ablated issuer-specific estimator profile after causal collection and
+  attachment are verified.
+- **Finviz Elite:** candidate screening and current metadata only; never historical
+  membership authority or ticker-news estimator input.
+- **Global and sector sources:** separately identified context overlays only.
+- **Benchmarks:** SPY, QQQ, and point-in-time sector ETFs.
 
-## Data Sources
-
-- **Alpaca premium:** SIP market bars, ticker universe, and primary news.
-- **Reddit API:** community attention and ticker discussion, with strict symbol
-  relevance checks.
-- **Seeking Alpha through RapidAPI:** SA news, analysis, earnings, financials,
-  and quant/rating snapshots. Credentials belong in environment variables.
-- **SEC EDGAR:** filing events aligned by SEC acceptance time.
-- **Finviz Elite:** candidate screening and current market metadata; it is not a
-  substitute for point-in-time historical membership.
-- **Market context:** SPY, QQQ, sector ETFs, and explicitly global events.
-
-Historical publication-time news backfills are research-only when historical
-first-observed timestamps are unavailable. They cannot be relabeled as live
-observations.
-
-## Authoritative Local Data
-
-Current protected inputs include:
-
-- `data/raw/swing_daily_sip_sp500_pit_20190709_20260708_v3`
-- `data/raw/alpaca_news_20190709_20210708_v1`
-- `data/raw/alpaca_news_20210709_20260708_v1`
-- `data/raw/alpaca_news_intraday_candidates_20230410_20260708_v1`
-- `data/canonical/swing_memberships_verified_20190709_20260708_v2.parquet`
-- `data/canonical/edge_rebuild_intraday_5m_20260731`
-- `data/raw/edge_rebuild_selected_session_5m_20260731`
-- `data/research/intraday_universe_selection_20230410_20260708_v2`
-- `data/universe/sp500_point_in_time_20190709_20260708_v3.parquet`
-- `data/research/edge_rebuild_swing_temporal_manifest_20260731_v1`
-
-Generated feature matrices are reproducible working data and are not retained
-after rejection or supersession. Raw provider archives are retained only when
-they have unique, expensive-to-recreate coverage and sufficient provenance to
-pass the current canonical validators.
+Unknown coverage is not converted to zero. Historical publication-time backfills are
+research evidence and cannot be represented as prospectively observed events.
 
 ## Setup
 
-Requires Python 3.11 or newer. The verified local environment currently uses
-Python 3.14.
+Requires Python 3.11 or newer. The verified local environment currently uses Python
+3.14.
 
 ```powershell
 Set-Location C:\project\market-predictor
@@ -97,20 +98,18 @@ python -m pip install -e ".[dev]"
 Copy-Item .env.example .env
 ```
 
-Configure credentials only in `.env` or a managed secret store. Never place
-keys or passwords in source, tests, reports, screenshots, or command arguments.
-
-Use the command help as the authoritative CLI surface:
+Credentials belong only in `.env` or a managed secret store.
 
 ```powershell
 market-predictor-collect --help
 market-predictor-research --help
-market-predictor-api --help
+market-predictor-prod --help
 ```
 
 ## Verification
 
-Run one heavy process at a time and keep working-set memory below 4 GiB.
+Run one heavy process at a time. Swing candidate training has a 5 GiB hard
+process limit; intraday and serving workloads retain their 4 GiB limits.
 
 ```powershell
 .\.venv\Scripts\python.exe -m pytest -q
@@ -123,25 +122,18 @@ git status --short --branch
 
 ## Core Invariants
 
-- Features are usable only at or after their recorded availability timestamp.
-- News relevance, publication time, first-observed time, and source coverage are
-  separate evidence.
-- Membership, ticker identity, corporate actions, and benchmarks are
+- Features are usable only after their recorded availability time.
+- Membership, ticker identity, corporate actions, sectors, and benchmarks are
   point-in-time.
-- Security-specific missing or unverifiable data excludes the complete security
-  and continues while at most 5% of the filtered universe is lost. Benchmark or
-  market-wide session gaps are never waived.
-- Swing and intraday labels use the shared target/stop/timeout evaluators.
-- Costs are applied exactly once and benchmark comparisons use the same holding
-  interval.
-- Validation is time ordered, purged, and embargoed; random cross-validation is
+- Market bars are Alpaca SIP with `adjustment=all`; bars and timestamps are not
+  imputed.
+- Sparse gaps invalidate affected windows. Whole-security exclusions cannot exceed
+  5% of the filtered universe; benchmark and market-wide failures are never waived.
+- Costs are applied once and benchmarks use the same executable holding interval.
+- Validation is chronological, purged, and embargoed. Random cross-validation is
   prohibited.
-- Catalyst starts as confirmation and ranking context unless causal ablation
-  proves it improves the estimator.
-- A model is not actionable merely because tests pass. It must pass economic,
-  calibration, drawdown, unseen-security, shadow, and promotion gates.
+- Passing software tests does not promote a model. Economic, calibration, drawdown,
+  stability, future-shadow, and bundle-verification gates must also pass.
 
-## Disclaimer
-
-This repository is research and prediction tooling, not investment advice and
-not an automated trading system.
+This repository is prediction research tooling, not investment advice or an automated
+trading system.

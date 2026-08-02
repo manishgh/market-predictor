@@ -32,7 +32,10 @@ from market_predictor.edge_rebuild.intraday_dataset import (
     INTRADAY_DATASET_SCHEMA,
     load_complete_intraday_dataset,
 )
-from market_predictor.edge_rebuild.intraday_features import FEATURE_SCHEMA_VERSION
+from market_predictor.edge_rebuild.intraday_features import (
+    CAUSAL_INTRADAY_MODEL_FEATURE_COLUMNS,
+    FEATURE_SCHEMA_VERSION,
+)
 from market_predictor.edge_rebuild.intraday_labels import LABEL_SCHEMA_VERSION
 from market_predictor.resources import (
     assert_memory_budget,
@@ -43,7 +46,7 @@ from market_predictor.resources import (
 from market_predictor.v3.errors import DataReadinessError
 
 DATASET_SCHEMA_VERSION: Final = INTRADAY_DATASET_SCHEMA
-MODEL_SCHEMA_VERSION: Final = "edge_rebuild.intraday_candidate.v1"
+MODEL_SCHEMA_VERSION: Final = "edge_rebuild.intraday_candidate.v2"
 EVALUATION_SCHEMA_VERSION: Final = "edge_rebuild.intraday_evaluation.v1"
 MODEL_CARD_SCHEMA_VERSION: Final = "edge_rebuild.intraday_model_card.v1"
 OUTPUT_AUTHORITY_SCHEMA_VERSION: Final = "edge_rebuild.intraday_candidate_authority.v1"
@@ -52,42 +55,7 @@ _AUTHORITY_NAME: Final = "_authority.json"
 _CANDIDATE_NAME: Final = "candidate.joblib"
 _EVALUATION_NAME: Final = "evaluation.json"
 _MODEL_CARD_NAME: Final = "model_card.json"
-MODEL_FEATURE_COLUMNS: Final = (
-    "return_1_bar",
-    "return_3_bars",
-    "return_5_bars",
-    "rsi_14",
-    "atr_14",
-    "ema_10_distance",
-    "ema_20_distance",
-    "realized_volatility_5",
-    "realized_volatility_20",
-    "granville_obv_confirmation",
-    "kaufman_efficiency_ratio",
-    "session_vwap_distance_atr",
-    "volume_bar_progress",
-    "stock_clock_return_1m",
-    "stock_clock_return_5m",
-    "stock_clock_return_20m",
-    "spy_return_1m",
-    "spy_return_5m",
-    "spy_return_20m",
-    "qqq_return_1m",
-    "qqq_return_5m",
-    "qqq_return_20m",
-    "sector_return_1m",
-    "sector_return_5m",
-    "sector_return_20m",
-    "spy_relative_strength_1m",
-    "spy_relative_strength_5m",
-    "spy_relative_strength_20m",
-    "qqq_relative_strength_1m",
-    "qqq_relative_strength_5m",
-    "qqq_relative_strength_20m",
-    "sector_relative_strength_1m",
-    "sector_relative_strength_5m",
-    "sector_relative_strength_20m",
-)
+MODEL_FEATURE_COLUMNS: Final = CAUSAL_INTRADAY_MODEL_FEATURE_COLUMNS
 
 _IDENTITY_COLUMNS: Final = (
     "dataset_row_id",

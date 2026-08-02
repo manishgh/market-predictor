@@ -1,4 +1,6 @@
-# Feature Engineering Audit - 2026-08-01
+# Current Feature Engineering Audit
+
+Last updated: 2026-08-02
 
 ## Scope
 
@@ -39,20 +41,20 @@ candidates: two logistic models, two histogram-gradient-boosting models, and
 one ranking model. The deterministic score remains a baseline and is not a
 learned candidate.
 
-### Candidate limitations
+### Current feature profile
 
-- Raw `atr_14` is price-scale dependent. A later preregistered feature profile
-  should compare it with `atr_14 / close`; the current run remains the frozen
-  baseline and must not be relabelled after seeing results.
-- Relative volume determines causal universe activation but is not currently an
-  estimator feature. A later profile should test activation relative volume,
-  minutes since activation, normalized volume overshoot, and volume-bar duration.
-- Session behavior is represented continuously by volume-bar progress and is
-  audited by opening/midday/late segment. A later ablation may test explicit
-  causal time-of-day encoding.
-- News/catalyst is deliberately not a direct intraday estimator input. Prior
-  evidence found it reduced entry-model validation quality. It remains a
-  confirmation, explanation, and ranking overlay.
+- Intraday schema V2 replaces price-scale ATR with normalized ATR and adds
+  activation relative volume, normalized volume overshoot, volume-bar duration,
+  minutes since activation, and session progress.
+- The same shared feature builder serves historical batch and live decisions.
+  Tests reject future evidence, missing exact benchmark context, stale decisions,
+  and any mismatch in the exact 39 estimator features.
+- News/catalyst remains outside the intraday entry estimator. It is a separately
+  hash-bound confirmation, explanation, and ranking overlay because the earlier
+  direct-feature ablation reduced validation quality.
+- Intraday V2 is published and replayable but economically rejected after costs.
+  It is not serveable. V3 development code is reserved for a genuinely future
+  holdout and has not been evaluated on that holdout.
 
 ## Swing
 
@@ -65,26 +67,66 @@ learned candidate.
 - Daily warm-up is at least 250 sessions. Cross-sectional transforms use only
   same-session eligible securities, are winsorized, and include rank, z-score,
   and sector-relative forms.
-- Barrier collisions are resolved stop-first. Return labels include the frozen
-  round-trip cost and matching SPY/sector comparisons.
+- Barrier collisions are resolved stop-first after executable overnight-gap handling:
+  stop gaps fill at the worse open and target gaps use the conservative resting-limit
+  target. Return labels include the frozen round-trip cost.
+- Promotion comparisons use holding-aligned SPY, QQQ, and sector returns from entry
+  open through the managed exit session close. Fixed-ten-session returns remain
+  diagnostics because daily bars cannot identify an intraday benchmark exit instant.
+- The governed split uses explicit dates with XNYS-verified counts, never percentages:
+  1,231-session initial fit from `2019-07-09` through `2024-05-28`, 10-session
+  validation embargo, 252-session validation, expanding 1,493-session final refit over
+  every post-cutoff development session, 10-session final embargo, and the 251-session
+  locked test from `2025-07-01` through `2026-06-30`. This is approximately 4.9 years
+  initial fit plus one validation year plus one locked-test year; the causal-news cutoff
+  is authoritative.
+- Temporal generalization on the full future point-in-time cross-section and stable 20%
+  unseen-security generalization are independent validation scopes and must both pass.
 
-### Blocking findings
+### Current implementation and result
 
-- The current edge-rebuild materializer publishes the `technical_market`
-  profile. The catalyst feature implementation exists, but ticker news, global
-  events, and source-coverage authorities are not yet wired into this
-  materializer. A technical swing candidate can be research evidence; it cannot
-  satisfy the contract's catalyst-full promotion profile.
-- Exact coverage preflight excludes 51 of 658 historical securities because of
-  unavailable generations, ticker transitions, delistings, and isolated missing
-  sessions. This is 7.75%, above the frozen 5% whole-security limit. No bars are
-  imputed. Raising that gate changes the research population and requires an
-  explicit approved policy change, recorded in the materialization request.
+- The materializer now publishes identical-row `technical_market` and
+  `catalyst_full` ablation profiles from one decision population and one label
+  authority. Catalyst inputs require immutable assignment and coverage lineage.
+- Sparse missing daily sessions now invalidate only affected 250-session warm-up
+  windows and 10-session labels. They are never imputed or bridged. The 5%
+  whole-security exclusion rule remains unchanged and applies only to genuinely
+  unusable full histories.
+- Historical ticker-news scoring, attribution, catalyst V5 identity, combined daily
+  authority, and dual-profile V11 materialization are complete and strictly replayed.
+  V11 contains 853,417 rows per profile, 604 modeled securities, 1,759 sessions,
+  and 640,107 rank-eligible rows.
+- Monthly profile partitions physically isolate locked-test outcomes. Development
+  training loads only requested months and projected columns; locked outcomes remain
+  unopened unless all validation gates pass. Replay verifies profile, decision and
+  security identities, session bounds/counts, canonical paths, and hashes.
+- Paired ablation joins the full common session calendar and gives no-position sessions
+  zero P&L. This prevents comparison on only the sessions where both policies traded.
+- Candidate v2 trained six governed logistic and histogram-gradient-boosting models.
+  Diagnostic AUC reached approximately 0.55-0.57, but every candidate failed at
+  least one calendar, portfolio-daily, doubled-cost, or holding-aligned benchmark
+  confidence gate across temporal and unseen-security validation. The result is an
+  immutable `no_candidate`; the locked test was not read.
+- The swing training process remained below its 5 GiB hard memory limit.
+
+## Vertical acceptance matrix
+
+`Verified code` means implementation plus focused tests. It does not mean a real
+immutable artifact exists. `Blocked` means training or serving is prohibited.
+
+| Capability | Source and immutable authority | Batch path | Live path | Model contract | Training / promotion / serving | API | Status |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Intraday technical estimator | SIP/all bar and V2 authorities verify | Verified | Verified; parity and staleness rejection | Exact 39-feature schema verified | V2 economically rejected; V3 future holdout unopened | Blocked until promotion | Rejected |
+| Intraday ticker-catalyst overlay | Alpaca archives exist; scored/attributed catalyst authority not yet published | Not an estimator input | Snapshot contract verified; runtime authority pending | Separate overlay hash, coverage, count, sentiment, and unknown state verified | Cannot alter entry probability; ranking use blocked until authority exists | Blocked until promoted bundle and orchestrator exist | Authority pending |
+| Intraday global overlay | GDELT collector and global authority verified in code; no production collection published | Not an estimator input | Observed-time collection, immutable query policy, and unknown/zero behavior verified | Separate global overlay contract verified | Ranking use blocked until runtime authority exists | Blocked until promoted bundle and orchestrator exist | Runtime artifact pending |
+| Swing technical estimator | Daily SIP/all, point-in-time membership, and V11 panel verify | Verified | Verified; latest closed session required | Technical profile schema verified | Candidate v2 rejected by economic gates | Blocked until promotion | Rejected |
+| Swing ticker-catalyst estimator | Alpaca catalyst V5 and V11 profile replay | Verified | Verified against exact authority | Required source set is exactly Alpaca | Catalyst increment unstable across validation scopes | Blocked until promotion | Rejected |
+| Swing global overlay | Global collector and decision authority verified in code | Separate overlay; never attached as ticker news | Verified code | Separate global authority hash and source policy | Cannot rescue or alter a rejected estimator; ranking use requires complete authority | Blocked until promoted bundle and orchestrator exist | Runtime artifact pending |
 
 ## Training decision
 
-The corrected intraday baseline training may proceed and remains candidate-only.
-Swing training waits for a documented coverage decision, then first trains the
-technical profile. Catalyst-full swing training follows only after causal news
-and global-event authorities are joined and independently audited.
-
+Data readiness no longer blocks swing training. Candidate v2 was trained correctly
+and rejected because its out-of-sample economic edge was not stable, not because data
+was missing or unsanitized. Any next experiment must be preregistered and use
+validation-only failure attribution; the locked test stays unopened. Global context
+remains a separate overlay unless a causal ablation is preregistered.

@@ -2,19 +2,13 @@ from __future__ import annotations
 
 import unittest
 from datetime import UTC, datetime
-from pathlib import Path
-from tempfile import TemporaryDirectory
 
 import exchange_calendars as xcals
 import numpy as np
 import pandas as pd
-from typer.testing import CliRunner
 
-from market_predictor.canonical.audits import CanonicalAuditCheck, CanonicalAuditReport
 from market_predictor.canonical.contracts import CanonicalEvent, SourceCollection
 from market_predictor.canonical.cutoffs import SWING_NIGHTLY_CUTOFF, swing_prediction_cutoffs
-from market_predictor.canonical.store import load_canonical_artifact, write_canonical_artifact
-from market_predictor.cli import app
 from market_predictor.swing.audits import audit_swing_dataset
 from market_predictor.swing.contracts import (
     CATALYST_FEATURES,
@@ -298,88 +292,6 @@ class SwingDatasetTests(unittest.TestCase):
         self.assertEqual(features["decision_time_utc"].nunique(), 1)
         self.assertFalse(any(column.startswith(("future_", "target_", "label_")) for column in features))
 
-    def test_cli_publishes_hash_verified_swing_dataset(self) -> None:
-        decisions, benchmarks, events, sources = _inputs()
-        with TemporaryDirectory() as temp_dir:
-            root = Path(temp_dir)
-            inputs = {
-                "decisions": (decisions, root / "decisions.parquet"),
-                "bars": (benchmarks, root / "benchmarks.parquet"),
-                "events": (events, root / "global_events.parquet"),
-                "source_collections": (sources, root / "global_sources.parquet"),
-            }
-            for artifact_type, (frame, path) in inputs.items():
-                write_canonical_artifact(
-                    frame,
-                    path,
-                    artifact_type=artifact_type,
-                    audit=_passing_audit(len(frame)),
-                )
-            config = root / "dataset.json"
-            config.write_text(
-                '{"required_global_sources":["alpaca"],"minimum_cross_section":2}',
-                encoding="utf-8",
-            )
-            output = root / "swing_dataset.parquet"
-            result = CliRunner().invoke(
-                app,
-                [
-                    "build-swing-dataset",
-                    "--decisions",
-                    str(inputs["decisions"][1]),
-                    "--benchmark-bars",
-                    str(inputs["bars"][1]),
-                    "--global-events",
-                    str(inputs["events"][1]),
-                    "--global-source-collections",
-                    str(inputs["source_collections"][1]),
-                    "--config",
-                    str(config),
-                    "--out",
-                    str(output),
-                ],
-            )
-            self.assertEqual(result.exit_code, 0, msg=f"{result.output}\n{result.exception}")
-            frame, manifest = load_canonical_artifact(output, expected_type="swing_dataset")
-            self.assertGreater(int(frame["label_eligible"].sum()), 0)
-            self.assertTrue(manifest["production_ready"])
-            self.assertEqual(
-                manifest["inputs"]["feature_profile"],
-                "catalyst_full",
-            )
-
-            live_output = root / "swing_live_features.parquet"
-            live_result = CliRunner().invoke(
-                app,
-                [
-                    "build-swing-live-features",
-                    "--decisions",
-                    str(inputs["decisions"][1]),
-                    "--benchmark-bars",
-                    str(inputs["bars"][1]),
-                    "--global-events",
-                    str(inputs["events"][1]),
-                    "--global-source-collections",
-                    str(inputs["source_collections"][1]),
-                    "--config",
-                    str(config),
-                    "--out",
-                    str(live_output),
-                ],
-            )
-            self.assertEqual(
-                live_result.exit_code,
-                0,
-                msg=f"{live_result.output}\n{live_result.exception}",
-            )
-            live_frame, live_manifest = load_canonical_artifact(
-                live_output,
-                expected_type="swing_inference_features",
-            )
-            self.assertEqual(live_frame["decision_time_utc"].nunique(), 1)
-            self.assertNotIn("future_net_return_5d", live_frame)
-            self.assertTrue(live_manifest["production_ready"])
-
     def test_builds_warm_exact_point_in_time_swing_rows(self) -> None:
         decisions, benchmarks, events, sources = _inputs()
         config = SwingDatasetConfig(
@@ -621,20 +533,6 @@ def _daily_rows(
     frame["source_status_available_at_utc_alpaca"] = cutoffs
     frame["source_coverage_end_utc_alpaca"] = cutoffs - pd.Timedelta(minutes=1)
     return frame
-
-
-def _passing_audit(rows: int) -> CanonicalAuditReport:
-    return CanonicalAuditReport(
-        checks=(
-            CanonicalAuditCheck(
-                name="fixture",
-                status="pass",
-                failures=0,
-                rows_checked=rows,
-                detail="test fixture",
-            ),
-        )
-    )
 
 
 if __name__ == "__main__":

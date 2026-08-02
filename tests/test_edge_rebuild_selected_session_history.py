@@ -25,6 +25,7 @@ from market_predictor.edge_rebuild.intraday_history import (
     load_complete_intraday_history_plan,
 )
 from market_predictor.edge_rebuild.intraday_selection import (
+    INTRADAY_SELECTION_SCHEMA,
     IntradaySelectionResult,
     publish_intraday_selection,
 )
@@ -74,12 +75,20 @@ def _publish_selection(
     )
     contract = load_strategy_contract(STRATEGY_CONTRACT_PATH)
     audit = {
-        "schema": "edge_rebuild.intraday_universe_selection.v2",
+        "schema": INTRADAY_SELECTION_SCHEMA,
         "strategy_id": contract.intraday.strategy_id,
         "strategy_contract_sha256": (
             strategy_contract_sha256 or contract.sha256()
         ),
         "canonical_dir": str(directory / "canonical"),
+        "membership_authority_dir": str(directory / "memberships"),
+        "membership_authority_sha256": "a" * 64,
+        "membership_manifest_sha256": "b" * 64,
+        "membership_table_sha256": "c" * 64,
+        "membership_universe_sha256": "d" * 64,
+        "membership_universe_snapshot_id": "test-membership-snapshot",
+        "membership_parent_lineage": {"test_parent": "e" * 64},
+        "membership_cold_start_policy": "reset_on_each_membership_entry",
         "first_session_et": EARLY_CLOSE,
         "last_session_et": FULL_SESSION,
         "excluded_tickers": [],

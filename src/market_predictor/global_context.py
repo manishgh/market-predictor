@@ -3,12 +3,9 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from pathlib import Path
 from typing import Any
 
 import pandas as pd
-
-from market_predictor.swing.model import score_swing_frame
 
 
 @dataclass(frozen=True)
@@ -137,120 +134,6 @@ def score_flashpoints(
     if not rows:
         return _empty_flashpoint_frame()
     return pd.DataFrame(rows).sort_values(["shock_score", "event_count"], ascending=[False, False]).reset_index(drop=True)
-
-
-def build_sector_theme_monitor(
-    *,
-    dataset: pd.DataFrame,
-    universe: pd.DataFrame,
-    model_path: Path,
-    flashpoints: pd.DataFrame | None = None,
-    require_promoted: bool = True,
-) -> tuple[pd.DataFrame, pd.DataFrame]:
-    date_column = "session_date_et" if "session_date_et" in dataset.columns else "date"
-    if date_column not in dataset.columns:
-        raise ValueError("sector ranking dataset has no decision date")
-    latest = dataset.sort_values(["ticker", date_column]).groupby("ticker", as_index=False).tail(1).copy()
-    scored = score_swing_frame(latest, model_path, require_promoted=require_promoted)
-    universe_themes = classify_universe_themes(universe)
-    scored = scored.merge(universe_themes, on="ticker", how="left")
-    scored["monitor_theme"] = scored["monitor_theme"].fillna("other")
-    scored["global_positive_impact"] = scored["monitor_theme"].map(lambda theme: _theme_impact(theme, flashpoints, "positive")).fillna(0.0)
-    scored["global_negative_impact"] = scored["monitor_theme"].map(lambda theme: _theme_impact(theme, flashpoints, "negative")).fillna(0.0)
-    scored["global_net_impact"] = scored["global_positive_impact"] - scored["global_negative_impact"]
-    scored["monitor_score"] = (
-        pd.to_numeric(scored["swing_model_probability"], errors="coerce").fillna(0.0)
-        + 0.10 * scored["global_net_impact"]
-        + 0.02 * _numeric_feature(scored, "volume_z20").clip(lower=0.0, upper=5.0)
-        + 0.01 * _numeric_feature(scored, "event_count_3d").clip(lower=0.0, upper=5.0)
-    )
-    scored["monitor_signal"] = scored.apply(_monitor_signal, axis=1)
-    ticker_report = scored.sort_values("monitor_score", ascending=False).reset_index(drop=True)
-    sector_report = _sector_report(ticker_report)
-    return sector_report, ticker_report
-
-
-def classify_universe_themes(universe: pd.DataFrame) -> pd.DataFrame:
-    if universe.empty:
-        return pd.DataFrame(columns=["ticker", "monitor_theme"])
-    frame = universe.copy()
-    frame["ticker"] = frame["ticker"].astype(str).str.upper().str.strip()
-    text = (
-        frame.get("sector", "").fillna("").astype(str)
-        + " "
-        + frame.get("industry", "").fillna("").astype(str)
-        + " "
-        + frame.get("company", "").fillna("").astype(str)
-    ).str.lower()
-    frame["monitor_theme"] = "other"
-    frame.loc[text.str.contains("biotechnology|life sciences|pharmaceutical", regex=True), "monitor_theme"] = "healthcare_biotech"
-    frame.loc[
-        text.str.contains("health care equipment|health care supplies|managed health|health care provider", regex=True), "monitor_theme"
-    ] = "healthcare_devices_services"
-    frame.loc[text.str.contains("semiconductor|semiconductors", regex=True), "monitor_theme"] = "semis_ai_hardware"
-    frame.loc[text.str.contains("software|application software|systems software", regex=True), "monitor_theme"] = "software"
-    frame.loc[text.str.contains("interactive media|communication|telecom|movies|broadcasting", regex=True), "monitor_theme"] = (
-        "communication_services"
-    )
-    frame.loc[text.str.contains("data center|cloud|internet services|it consulting|technology hardware", regex=True), "monitor_theme"] = (
-        "ai_data_centers"
-    )
-    frame.loc[text.str.contains("oil|gas|energy|drilling|refining|exploration", regex=True), "monitor_theme"] = "energy_oil_gas"
-    frame.loc[text.str.contains("aerospace|defense", regex=True), "monitor_theme"] = "defense_aerospace"
-    frame.loc[text.str.contains("airline|hotel|resort|cruise|travel", regex=True), "monitor_theme"] = "airlines_travel"
-    frame.loc[text.str.contains("bank|capital markets|insurance|financial", regex=True), "monitor_theme"] = "financials"
-    frame.loc[text.str.contains("electric utilities|multi-utilities|water utilities|utilities", regex=True), "monitor_theme"] = "utilities"
-    return frame[["ticker", "monitor_theme"]].drop_duplicates("ticker")
-
-
-def _sector_report(ticker_report: pd.DataFrame) -> pd.DataFrame:
-    numeric_cols = {
-        "tickers": ("ticker", "nunique"),
-        "avg_model_probability": ("swing_model_probability", "mean"),
-        "max_model_probability": ("swing_model_probability", "max"),
-        "avg_monitor_score": ("monitor_score", "mean"),
-        "avg_global_net_impact": ("global_net_impact", "mean"),
-        "avg_volume_z20": ("volume_z20", "mean"),
-        "avg_news_count": ("event_count_3d", "mean"),
-        "top_candidates": ("ticker", lambda values: ",".join(list(values.head(8)))),
-    }
-    grouped = ticker_report.sort_values("monitor_score", ascending=False).groupby("monitor_theme").agg(**numeric_cols)
-    grouped = grouped.reset_index().sort_values("avg_monitor_score", ascending=False)
-    return grouped
-
-
-def _numeric_feature(frame: pd.DataFrame, column: str, default: float = 0.0) -> pd.Series:
-    if column not in frame.columns:
-        return pd.Series(default, index=frame.index, dtype="float")
-    return pd.to_numeric(frame[column], errors="coerce").fillna(default)
-
-
-def _theme_impact(theme: str, flashpoints: pd.DataFrame | None, side: str) -> float:
-    if flashpoints is None or flashpoints.empty:
-        return 0.0
-    column = "positive_themes" if side == "positive" else "negative_themes"
-    total = 0.0
-    for _, row in flashpoints.iterrows():
-        themes = {item.strip() for item in str(row.get(column, "")).split(",") if item.strip()}
-        if theme in themes:
-            total += float(row.get("shock_score", 0.0) or 0.0)
-    return min(1.0, total)
-
-
-def _monitor_signal(row: pd.Series) -> str:
-    prob = float(row.get("swing_model_probability", 0.0) or 0.0)
-    net = float(row.get("global_net_impact", 0.0) or 0.0)
-    if prob >= 0.55 and net >= 0.15:
-        return "bullish_with_global_tailwind"
-    if prob >= 0.55 and net <= -0.15:
-        return "model_positive_but_global_headwind"
-    if prob >= 0.55:
-        return "bullish_watch"
-    if net <= -0.35:
-        return "global_downside_risk"
-    if abs(net) >= 0.20:
-        return "global_two_sided_watch"
-    return "neutral"
 
 
 def _event_text(frame: pd.DataFrame) -> pd.Series:

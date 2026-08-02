@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import shutil
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -18,6 +19,23 @@ from market_predictor.canonical.store import file_sha256
 from market_predictor.edge_rebuild import contracts
 from market_predictor.edge_rebuild.contracts import (
     EdgeRebuildReadinessConfig,
+)
+from market_predictor.edge_rebuild.serving import (
+    PromotedSwingBundle,
+    validate_file_backed_promoted_bundle,
+)
+from market_predictor.edge_rebuild.strategy_contract import (
+    StrategyContract,
+    load_strategy_contract,
+)
+from market_predictor.edge_rebuild.swing_features import (
+    SWING_CATALYST_FEATURE_PROFILE,
+)
+from market_predictor.edge_rebuild.swing_training import (
+    SwingPanelBinding,
+    load_swing_candidate_authority,
+    load_swing_panel_binding,
+    load_swing_training_config,
 )
 from market_predictor.intraday.specialist_contracts import (
     IntradaySpecialistResearchConfig,
@@ -33,8 +51,51 @@ from market_predictor.resources import (
 )
 from market_predictor.v3.errors import DataReadinessError
 
-READINESS_RUN_SCHEMA = "edge_rebuild.readiness.run.v1"
-READINESS_AUTHORITY_SCHEMA = "edge_rebuild.readiness.authority.v1"
+READINESS_RUN_SCHEMA = "edge_rebuild.readiness.run.v3"
+READINESS_AUTHORITY_SCHEMA = "edge_rebuild.readiness.authority.v3"
+_PROMOTED_BUNDLE_NAME = "bundle.json"
+_SWING_TECHNICAL_READINESS_COLUMNS = (
+    "adjustment",
+    "cross_section_eligible",
+    "daily_bar_count",
+    "decision_group_id",
+    "decision_time_utc",
+    "dollar_volume_log",
+    "feature_available_at_utc",
+    "feature_eligible",
+    "label_eligible",
+    "label_path_exact",
+    "market_regime",
+    "membership_available_at_utc",
+    "membership_effective_from_utc",
+    "membership_effective_to_utc",
+    "price_feed",
+    "round_trip_cost_bps",
+    "sector",
+    "session_date_et",
+    "ticker",
+    "universe_snapshot_id",
+)
+_SWING_PANEL_READINESS_COLUMNS = tuple(
+    dict.fromkeys(
+        (
+            *_SWING_TECHNICAL_READINESS_COLUMNS,
+            "barrier_cost",
+            "barrier_gross_return",
+            "barrier_net_return",
+            "catalyst_source_complete_3d",
+            "entry_time_utc",
+            "event_count_3d",
+            "latest_event_feature_available_at_utc",
+            "future_excess_return_10d_vs_sector",
+            "future_excess_return_10d_vs_spy",
+            "future_sector_return_10d",
+            "future_spy_return_10d",
+            "label_available_at_utc",
+            "barrier_label_available_at_utc",
+        )
+    )
+)
 _OUTPUT_NAMES = (
     "_request.json",
     "blockers.csv",
@@ -55,7 +116,9 @@ class VerifiedSwingSources:
     technical: pd.DataFrame
     proxy: pd.DataFrame
     identity: dict[str, object]
-    bundle_request: dict[str, Any]
+    panel_manifest: dict[str, Any]
+    candidate: dict[str, Any]
+    promoted_bundle: PromotedSwingBundle | None
 
 
 @dataclass(frozen=True)
@@ -78,8 +141,9 @@ class VerifiedCatalystSources:
 
 def run_edge_rebuild_readiness_audit(
     *,
-    swing_bundle_dir: Path,
-    swing_technical_path: Path,
+    swing_panel_dir: Path,
+    swing_candidate_dir: Path,
+    swing_promoted_bundle_dir: Path | None,
     intraday_training_dir: Path,
     intraday_collection_dir: Path,
     intraday_coverage_dir: Path,
@@ -88,7 +152,8 @@ def run_edge_rebuild_readiness_audit(
     out_dir: Path,
     config: EdgeRebuildReadinessConfig,
     policy_path: Path,
-    swing_policy_path: Path,
+    swing_training_policy_path: Path,
+    strategy_contract_path: Path,
     intraday_config: IntradaySpecialistResearchConfig,
     intraday_policy_path: Path,
 ) -> dict[str, object]:
@@ -96,9 +161,11 @@ def run_edge_rebuild_readiness_audit(
 
     _assert_memory(config, "ER1 source verification")
     swing = _verify_swing_sources(
-        swing_bundle_dir=swing_bundle_dir,
-        technical_path=swing_technical_path,
-        policy_path=swing_policy_path,
+        panel_dir=swing_panel_dir,
+        candidate_dir=swing_candidate_dir,
+        promoted_bundle_dir=swing_promoted_bundle_dir,
+        training_policy_path=swing_training_policy_path,
+        strategy_contract_path=strategy_contract_path,
         config=config,
     )
     _assert_memory(config, "ER1 swing verification")
@@ -114,11 +181,6 @@ def run_edge_rebuild_readiness_audit(
     catalyst = _verify_catalyst_sources(
         lineage_dir=catalyst_lineage_dir,
         news_dir=news_source_dir,
-        expected_lineage_sha256=_required_input_hash(
-            swing.bundle_request,
-            suffix="_manifest.json",
-            contains="alpaca_catalyst_lineage_",
-        ),
     )
     _assert_memory(config, "ER1 catalyst verification")
 
@@ -132,7 +194,12 @@ def run_edge_rebuild_readiness_audit(
         "schema": READINESS_RUN_SCHEMA,
         "policy_sha256": config.sha256(),
         "policy_file_sha256": file_sha256(policy_path),
-        "swing_policy_file_sha256": file_sha256(swing_policy_path),
+        "swing_training_policy_file_sha256": file_sha256(
+            swing_training_policy_path
+        ),
+        "strategy_contract_file_sha256": file_sha256(
+            strategy_contract_path
+        ),
         "intraday_policy_file_sha256": file_sha256(intraday_policy_path),
         "sources": {
             "swing": swing.identity,
@@ -175,142 +242,185 @@ def readiness_implementation_identity() -> dict[str, object]:
 
 def _verify_swing_sources(
     *,
-    swing_bundle_dir: Path,
-    technical_path: Path,
-    policy_path: Path,
+    panel_dir: Path,
+    candidate_dir: Path,
+    promoted_bundle_dir: Path | None,
+    training_policy_path: Path,
+    strategy_contract_path: Path,
     config: EdgeRebuildReadinessConfig,
 ) -> VerifiedSwingSources:
-    root = swing_bundle_dir.resolve()
-    request = _load_json(root / "_request.json")
-    manifest_path = root / "_manifest.json"
-    manifest = _load_json(manifest_path)
-    authority = _load_json(root / "_authority.json")
-    request_sha256 = _json_sha256_without_self_hash(request)
-    if (
-        request.get("schema") != "swing.specialist_dataset_bundle.v4"
-        or manifest.get("schema") != "swing.specialist_dataset_bundle.v4"
-        or request.get("request_sha256") != request_sha256
-        or manifest.get("request_sha256") != request_sha256
-        or authority.get("schema")
-        != "swing.specialist_dataset_authority.v1"
-        or authority.get("state") != "complete"
-        or authority.get("request_sha256") != request_sha256
-        or authority.get("artifact") != "_manifest.json"
-        or authority.get("artifact_sha256") != file_sha256(manifest_path)
-    ):
-        raise DataReadinessError("ER1 swing bundle authority does not verify")
-    policy_hash = _required_input_hash(
-        request,
-        suffix="swing_specialist_research.toml",
+    strategy_contract = load_strategy_contract(strategy_contract_path)
+    training_config = load_swing_training_config(training_policy_path)
+    binding = load_swing_panel_binding(
+        panel_dir,
+        strategy_contract=strategy_contract,
+        config=training_config,
     )
-    if file_sha256(policy_path) != policy_hash:
-        raise DataReadinessError("ER1 swing policy identity differs")
-    technical = technical_path.resolve()
-    technical_hash = file_sha256(technical)
-    if technical_hash != _required_input_hash(
-        request,
-        suffix=".parquet",
-        contains="swing_technical_",
-    ):
-        raise DataReadinessError("ER1 swing technical source identity differs")
-    technical_manifest_path = Path(f"{technical}.manifest.json")
-    if file_sha256(technical_manifest_path) != _required_input_hash(
-        request,
-        suffix=".parquet.manifest.json",
-        contains="swing_technical_",
-    ):
-        raise DataReadinessError("ER1 swing technical manifest identity differs")
-    technical_manifest = _load_json(technical_manifest_path)
-    if (
-        technical_manifest.get("artifact_type") != "swing_dataset"
-        or technical_manifest.get("artifact_sha256") != technical_hash
-    ):
-        raise DataReadinessError("ER1 swing technical artifact does not verify")
-
-    raw_artifacts = manifest.get("artifacts")
-    if not isinstance(raw_artifacts, list):
-        raise DataReadinessError("ER1 swing bundle has no strategy artifacts")
-    matches = [
-        cast(dict[str, Any], raw)
-        for raw in raw_artifacts
-        if isinstance(raw, dict)
-        and raw.get("strategy_id") == config.swing.proxy_strategy_id
-    ]
-    if len(matches) != 1:
-        raise DataReadinessError("ER1 swing proxy source is ambiguous")
-    proxy_record = matches[0]
-    proxy_path = _resolve_inside(root, str(proxy_record.get("path", "")))
-    if (
-        file_sha256(proxy_path) != proxy_record.get("sha256")
-        or file_sha256(Path(f"{proxy_path}.manifest.json"))
-        != proxy_record.get("manifest_sha256")
-    ):
-        raise DataReadinessError("ER1 swing proxy artifact integrity failed")
-    technical_frame = _read_required_columns(
-        technical,
-        {
-            "adjustment",
-            "cross_section_eligible",
-            "daily_bar_count",
-            "decision_group_id",
-            "decision_time_utc",
-            "dollar_volume_log",
-            "feature_available_at_utc",
-            "feature_eligible",
-            "label_eligible",
-            "label_path_exact",
-            "market_regime",
-            "membership_available_at_utc",
-            "membership_effective_from_utc",
-            "membership_effective_to_utc",
-            "price_feed",
-            "round_trip_cost_bps",
-            "sector",
-            "session_date_et",
-            "ticker",
-            "universe_snapshot_id",
-        },
+    if strategy_contract.swing.strategy_id != config.swing.strategy_id:
+        raise DataReadinessError("ER1 swing strategy identity differs")
+    candidate = load_swing_candidate_authority(candidate_dir)
+    _verify_candidate_panel_binding(candidate, binding)
+    promoted = _load_optional_promoted_swing_bundle(
+        promoted_bundle_dir,
+        strategy_contract=strategy_contract,
+        candidate=candidate,
     )
-    proxy_frame = _read_required_columns(
-        proxy_path,
-        {
-            "adjustment",
-            "catalyst_source_complete",
-            "decision_time_utc",
-            "event_count_3d",
-            "entry_time_utc",
-            "exit_time_utc",
-            "latest_event_feature_available_at_utc",
-            "price_feed",
-            "setup_eligible",
-            "strategy_decision_group_id",
-            "strategy_execution_cost_fraction",
-            "strategy_excess_return_vs_sector",
-            "strategy_excess_return_vs_spy",
-            "strategy_gross_return",
-            "strategy_label_eligible",
-            "strategy_net_return",
-            "strategy_sector_return",
-            "strategy_spy_return",
-            "ticker",
-        },
-    )
+    panel = _read_current_swing_panel(binding)
+    technical_frame = panel.loc[:, _SWING_TECHNICAL_READINESS_COLUMNS].copy()
+    proxy_frame = _current_swing_proxy(panel)
+    del panel
     return VerifiedSwingSources(
         technical=technical_frame,
         proxy=proxy_frame,
         identity={
-            "type": "verified_swing_research_sources",
-            "bundle_manifest_sha256": file_sha256(manifest_path),
-            "bundle_request_sha256": request_sha256,
-            "technical_artifact_sha256": technical_hash,
-            "technical_manifest_sha256": file_sha256(
-                technical_manifest_path
+            "type": "verified_edge_rebuild_swing_sources",
+            "strategy_id": config.swing.strategy_id,
+            "horizon_sessions": 10,
+            "panel_manifest_sha256": binding.manifest_sha256,
+            "panel_authority_sha256": binding.authority_sha256,
+            "panel_request_sha256": binding.request_sha256,
+            "candidate_status": str(candidate["status"]),
+            "candidate_id": candidate.get("candidate_id"),
+            "candidate_authority_sha256": file_sha256(
+                candidate_dir.resolve() / "_authority.json"
             ),
-            "proxy_artifact_sha256": str(proxy_record["sha256"]),
+            "promoted_bundle_status": (
+                "verified" if promoted is not None else "unavailable"
+            ),
+            "promoted_bundle_sha256": (
+                promoted.sha256() if promoted is not None else None
+            ),
             "technical_rows": len(technical_frame),
             "proxy_rows": len(proxy_frame),
         },
-        bundle_request=request,
+        panel_manifest=dict(binding.manifest),
+        candidate=candidate,
+        promoted_bundle=promoted,
+    )
+
+
+def _verify_candidate_panel_binding(
+    candidate: Mapping[str, Any],
+    binding: SwingPanelBinding,
+) -> None:
+    model_card = _mapping(candidate.get("model_card"))
+    dataset = _mapping(model_card.get("dataset"))
+    expected = {
+        "panel_manifest_sha256": binding.manifest_sha256,
+        "panel_authority_sha256": binding.authority_sha256,
+        "panel_request_sha256": binding.request_sha256,
+        "strategy_contract_sha256": binding.strategy_contract_sha256,
+    }
+    mismatches = sorted(
+        name for name, value in expected.items() if dataset.get(name) != value
+    )
+    if mismatches:
+        raise DataReadinessError(
+            "swing candidate does not bind the active panel: "
+            + ", ".join(mismatches)
+        )
+
+
+def _load_optional_promoted_swing_bundle(
+    directory: Path | None,
+    *,
+    strategy_contract: StrategyContract,
+    candidate: Mapping[str, Any],
+) -> PromotedSwingBundle | None:
+    if directory is None:
+        return None
+    root = directory.resolve()
+    payload = _load_json(root / _PROMOTED_BUNDLE_NAME)
+    bundle = cast(
+        PromotedSwingBundle,
+        validate_file_backed_promoted_bundle(
+            payload,
+            bundle_root=root,
+            strategy_contract=strategy_contract,
+            expected_mode="swing",
+        ),
+    )
+    if candidate.get("status") != "candidate":
+        raise DataReadinessError(
+            "a promoted swing bundle requires a verified training candidate"
+        )
+    candidate_files = _mapping(
+        _mapping(candidate.get("manifest")).get("files")
+    )
+    candidate_model = _mapping(candidate_files.get("candidate.joblib"))
+    if bundle.model_artifact_sha256 != candidate_model.get("sha256"):
+        raise DataReadinessError(
+            "promoted swing bundle does not bind the verified candidate model"
+        )
+    return bundle
+
+
+def _read_current_swing_panel(binding: SwingPanelBinding) -> pd.DataFrame:
+    files_by_profile = _mapping(binding.manifest.get("files_by_profile"))
+    records = files_by_profile.get(SWING_CATALYST_FEATURE_PROFILE)
+    if not isinstance(records, list) or not records:
+        raise DataReadinessError(
+            "swing panel has no catalyst ablation profile for readiness"
+        )
+    parts: list[pd.DataFrame] = []
+    for raw in records:
+        record = _mapping(raw)
+        path = _resolve_inside(
+            binding.root / "final",
+            str(record.get("path", "")),
+        )
+        part = _read_required_columns(
+            path,
+            set(_SWING_PANEL_READINESS_COLUMNS),
+        )
+        if len(part) != int(record.get("rows", -1)):
+            raise DataReadinessError(
+                "swing panel readiness partition row count differs"
+            )
+        parts.append(part)
+    frame = pd.concat(parts, ignore_index=True)
+    expected_rows = int(binding.manifest.get("rows_per_ablation_panel", -1))
+    if len(frame) != expected_rows:
+        raise DataReadinessError("swing panel readiness row count differs")
+    return frame
+
+
+def _current_swing_proxy(panel: pd.DataFrame) -> pd.DataFrame:
+    feature_eligible = _bool_series(panel["feature_eligible"])
+    cross_section_eligible = _bool_series(panel["cross_section_eligible"])
+    label_eligible = _bool_series(panel["label_eligible"])
+    return pd.DataFrame(
+        {
+            "adjustment": panel["adjustment"],
+            "catalyst_source_complete": panel[
+                "catalyst_source_complete_3d"
+            ],
+            "decision_time_utc": panel["decision_time_utc"],
+            "event_count_3d": panel["event_count_3d"],
+            "entry_time_utc": panel["entry_time_utc"],
+            "exit_time_utc": panel["label_available_at_utc"],
+            "latest_event_feature_available_at_utc": panel[
+                "latest_event_feature_available_at_utc"
+            ],
+            "price_feed": panel["price_feed"],
+            "setup_eligible": feature_eligible & cross_section_eligible,
+            "strategy_decision_group_id": panel["decision_group_id"],
+            "strategy_execution_cost_fraction": panel["barrier_cost"],
+            "strategy_excess_return_vs_sector": panel[
+                "future_excess_return_10d_vs_sector"
+            ],
+            "strategy_excess_return_vs_spy": panel[
+                "future_excess_return_10d_vs_spy"
+            ],
+            "strategy_gross_return": panel["barrier_gross_return"],
+            "strategy_label_eligible": label_eligible,
+            "strategy_net_return": panel["barrier_net_return"],
+            "strategy_sector_return": panel[
+                "future_sector_return_10d"
+            ],
+            "strategy_spy_return": panel["future_spy_return_10d"],
+            "ticker": panel["ticker"],
+        }
     )
 
 
@@ -426,7 +536,6 @@ def _verify_catalyst_sources(
     *,
     lineage_dir: Path,
     news_dir: Path,
-    expected_lineage_sha256: str,
 ) -> VerifiedCatalystSources:
     lineage_root = lineage_dir.resolve()
     lineage_manifest_path = lineage_root / "_manifest.json"
@@ -435,9 +544,8 @@ def _verify_catalyst_sources(
     lineage_request = _load_json(lineage_request_path)
     lineage_request_sha256 = _json_sha256_without_self_hash(lineage_request)
     if (
-        file_sha256(lineage_manifest_path) != expected_lineage_sha256
-        or lineage_manifest.get("schema")
-        != "swing.catalyst_lineage_manifest.v1"
+        lineage_manifest.get("schema")
+        != "swing.catalyst_lineage_manifest.v2"
         or lineage_manifest.get("status") != "complete"
         or lineage_manifest.get("request_sha256")
         != lineage_request_sha256
@@ -512,7 +620,7 @@ def _build_evidence(
             _session_calendar(
                 swing_rows,
                 strategy_id=config.swing.strategy_id,
-                proxy_strategy_id=config.swing.proxy_strategy_id,
+                proxy_strategy_id=config.swing.strategy_id,
                 decision_id_column="decision_group_id",
             ),
             _session_calendar(
@@ -588,6 +696,7 @@ def _build_evidence(
         phase_capacity=phases,
         costs=costs,
         catalyst_readiness=catalyst_readiness,
+        swing=swing,
         intraday=intraday,
         config=config,
     )
@@ -1156,8 +1265,8 @@ def _source_inventory(
     records = [
         {
             "strategy_id": config.swing.strategy_id,
-            "proxy_strategy_id": config.swing.proxy_strategy_id,
-            "source_role": "technical_daily_panel",
+            "proxy_strategy_id": config.swing.strategy_id,
+            "source_role": "edge_rebuild_ten_session_swing_panel",
             "raw_rows": len(swing_rows),
             "source_usable_rows": len(swing_usable),
             "proxy_setup_rows": int(
@@ -1189,8 +1298,8 @@ def _source_inventory(
                 if swing_sessions >= config.swing.minimum_valid_sessions
                 else "blocked"
             ),
-            "exact_new_horizon_labels": False,
-            "source_authority": "complete",
+            "exact_new_horizon_labels": True,
+            "source_authority": "hash_bound_panel_and_candidate",
             "coverage_exact_rate": 1.0,
             "collection_model_data_ready": True,
             "point_in_time_membership_status": (
@@ -1198,9 +1307,7 @@ def _source_inventory(
                 if swing_usable["universe_snapshot_id"].notna().all()
                 else "blocked"
             ),
-            "benchmark_interval_status": _swing_benchmark_status(
-                swing_proxy
-            ),
+            "benchmark_interval_status": _swing_benchmark_status(swing_proxy),
         },
         {
             "strategy_id": config.intraday.strategy_id,
@@ -1305,6 +1412,7 @@ def _blockers(
     phase_capacity: pd.DataFrame,
     costs: pd.DataFrame,
     catalyst_readiness: pd.DataFrame,
+    swing: VerifiedSwingSources,
     intraday: VerifiedIntradaySources,
     config: EdgeRebuildReadinessConfig,
 ) -> pd.DataFrame:
@@ -1327,19 +1435,19 @@ def _blockers(
             }
         )
 
-    swing = source_inventory.loc[
+    swing_inventory = source_inventory.loc[
         source_inventory["strategy_id"].eq(config.swing.strategy_id)
     ].iloc[0]
     intra = source_inventory.loc[
         source_inventory["strategy_id"].eq(config.intraday.strategy_id)
     ].iloc[0]
-    if swing["session_gate"] != "pass":
+    if swing_inventory["session_gate"] != "pass":
         add(
             "swing_session_history_below_gate",
             config.swing.strategy_id,
             True,
             "acquire or recover verified daily history",
-            f"valid_sessions={swing['valid_sessions']}; required={config.swing.minimum_valid_sessions}",
+            f"valid_sessions={swing_inventory['valid_sessions']}; required={config.swing.minimum_valid_sessions}",
         )
     if phase_capacity["status"].ne("pass").any():
         add(
@@ -1432,13 +1540,22 @@ def _blockers(
             "collect prospective first-observed timestamps before promotion",
             "provider publication proxies are research-only",
         )
-    add(
-        "new_strategy_setup_not_built",
-        config.swing.strategy_id,
-        False,
-        "freeze ER2 setup then build deterministic ER3 rows and exact ten-session labels",
-        "V1 proxy opportunities are reported but are not ER setup opportunities",
-    )
+    if swing.candidate.get("status") != "candidate":
+        add(
+            "swing_training_candidate_unavailable",
+            config.swing.strategy_id,
+            False,
+            "train a ten-session edge-rebuild candidate that passes frozen validation gates",
+            "the verified training run produced no eligible candidate",
+        )
+    if swing.promoted_bundle is None:
+        add(
+            "swing_promoted_bundle_unavailable",
+            config.swing.strategy_id,
+            False,
+            "promote an accepted ten-session candidate and publish its hash-bound bundle",
+            "public swing inference remains fail-closed until this artifact exists",
+        )
     add(
         "new_strategy_setup_not_built",
         config.intraday.strategy_id,

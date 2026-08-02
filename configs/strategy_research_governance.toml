@@ -28,21 +28,21 @@ retirement_triggers = [
   "semantic_change_requires_new_strategy_version",
 ]
 minimum_label_round_trip_cost_bps = 10.0
-maximum_process_memory_gib = 4.0
+maximum_process_memory_gib = 5.0
 swing_purge_rule = "label_horizon_sessions"
 minimum_intraday_embargo_sessions = 1
 
 [contract_bindings.swing_dataset]
 path = "configs/swing_dataset.toml"
-sha256 = "647dfc34345d89885e6ae2b0a73661038dd2de2e06abf92332c82ac2abd3af36"
+sha256 = "b534f23719762637885647fff21bf658c21658b281e48c71a2be69fbf3a58168"
 
-[contract_bindings.swing_training]
-path = "configs/swing_training.toml"
-sha256 = "33c4386679d8eff929c40f47d6254f762735af32f48e628c276a4546680137b1"
+[contract_bindings.edge_rebuild_strategy_contract]
+path = "configs/edge_rebuild_strategy_contract.toml"
+sha256 = "e19ce2b88ef348f2281016b0984177194ebd7739cc5f29071f4a20b84de12e0a"
 
-[contract_bindings.swing_promotion]
-path = "configs/swing_promotion.toml"
-sha256 = "3d191b01eb935c1e93c52fec91b5fc693c6b061ab728f0ada481fd4a2cefaf77"
+[contract_bindings.edge_rebuild_swing_training]
+path = "configs/edge_rebuild_swing_training.toml"
+sha256 = "d41204a4e3c315d3e1f29a5a74caedd68ebd1a204142f3ffd241710b3a2d5850"
 
 [contract_bindings.intraday_dataset]
 path = "configs/intraday_dataset.toml"

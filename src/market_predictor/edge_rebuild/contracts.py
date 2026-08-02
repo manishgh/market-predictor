@@ -12,10 +12,9 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from market_predictor.v3.errors import DataReadinessError
 
-READINESS_SCHEMA = "edge_rebuild.readiness.v1"
+READINESS_SCHEMA = "edge_rebuild.readiness.v2"
 SWING_STRATEGY_ID = "SWING.SECTOR_RESIDUAL_MOMENTUM.10D.V1"
 INTRADAY_STRATEGY_ID = "INTRADAY.VWAP_EXHAUSTION_REVERSAL.30M.V1"
-SWING_PROXY_STRATEGY_ID = "SWING.SECTOR_RESIDUAL_MOMENTUM.5D.V1"
 INTRADAY_PROXY_STRATEGY_ID = "INTRADAY.VWAP_REVERSION.30M.V1"
 
 
@@ -25,7 +24,6 @@ class FrozenModel(BaseModel):
 
 class SwingReadinessConfig(FrozenModel):
     strategy_id: str
-    proxy_strategy_id: str
     proposed_horizon_sessions: int = Field(ge=2, le=20)
     non_overlapping_phases: int = Field(ge=2, le=20)
     minimum_valid_sessions: int = Field(ge=1_000)
@@ -36,8 +34,6 @@ class SwingReadinessConfig(FrozenModel):
     def validate_swing(self) -> Self:
         if self.strategy_id != SWING_STRATEGY_ID:
             raise ValueError("swing readiness strategy ID is not frozen")
-        if self.proxy_strategy_id != SWING_PROXY_STRATEGY_ID:
-            raise ValueError("swing readiness proxy strategy ID is not frozen")
         if self.proposed_horizon_sessions != 10:
             raise ValueError("swing readiness horizon must be ten sessions")
         if self.non_overlapping_phases != self.proposed_horizon_sessions:
@@ -146,4 +142,3 @@ def load_edge_rebuild_readiness_config(
         raise DataReadinessError(
             f"edge-rebuild readiness policy is invalid: {path}"
         ) from exc
-

@@ -1,4 +1,4 @@
-schema_version = "edge_rebuild.readiness.v1"
+schema_version = "edge_rebuild.readiness.v2"
 required_price_feed = "sip"
 required_adjustment = "all"
 target_history_sessions = 1250
@@ -7,7 +7,6 @@ memory_guard_headroom_gib = 0.75
 
 [swing]
 strategy_id = "SWING.SECTOR_RESIDUAL_MOMENTUM.10D.V1"
-proxy_strategy_id = "SWING.SECTOR_RESIDUAL_MOMENTUM.5D.V1"
 proposed_horizon_sessions = 10
 non_overlapping_phases = 10
 minimum_valid_sessions = 1000
@@ -42,4 +41,3 @@ research_availability_policies = [
   "provider_publication_proxy",
 ]
 promotion_availability_policies = ["observed"]
-

@@ -6,16 +6,17 @@ import json
 import re
 import shutil
 import uuid
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from itertools import islice
 from pathlib import Path
-from typing import Any, Final, cast
+from typing import Any, Final, Protocol, cast
 
 import exchange_calendars as xcals
 import pandas as pd
+import pyarrow as pa
 import pyarrow.parquet as pq
 
 from market_predictor.canonical.store import (
@@ -69,14 +70,60 @@ from market_predictor.resources import (
 )
 from market_predictor.v3.errors import DataReadinessError
 
-INTRADAY_DATASET_SCHEMA: Final = "edge_rebuild.intraday_dataset.v1"
-INTRADAY_DATASET_AUTHORITY_SCHEMA: Final = "edge_rebuild.intraday_dataset_authority.v1"
+INTRADAY_DATASET_SCHEMA: Final = "edge_rebuild.intraday_dataset.v2"
+INTRADAY_DATASET_AUTHORITY_SCHEMA: Final = "edge_rebuild.intraday_dataset_authority.v2"
 MEMORY_HARD_BUDGET_GIB: Final = 4.0
 MEMORY_HEADROOM_GIB: Final = 0.75
 MAXIMUM_SECURITY_EXCLUSION_FRACTION: Final = 0.05
 MAX_SESSION_WORKERS: Final = 4
 WORKING_SET_RELEASE_INTERVAL_SESSIONS: Final = 25
 _SAFE_TICKER = re.compile(r"^[A-Z0-9][A-Z0-9.-]{0,31}$")
+
+
+class _ParquetWriterProtocol(Protocol):
+    def write_table(
+        self, table: pa.Table, row_group_size: int | None = None
+    ) -> None: ...
+
+    def close(self) -> None: ...
+
+
+class _ParquetWriterFactory(Protocol):
+    def __call__(
+        self,
+        where: Path,
+        schema: pa.Schema,
+        *,
+        compression: str,
+        use_dictionary: bool,
+        write_statistics: bool,
+    ) -> _ParquetWriterProtocol: ...
+
+
+class _ParquetMetadataProtocol(Protocol):
+    num_row_groups: int
+
+
+class _ParquetFileProtocol(Protocol):
+    schema_arrow: pa.Schema
+    metadata: _ParquetMetadataProtocol
+
+    def read_row_group(
+        self, index: int, columns: list[str] | None = None
+    ) -> pa.Table: ...
+
+
+class _ParquetFileFactory(Protocol):
+    def __call__(self, source: Path) -> _ParquetFileProtocol: ...
+
+
+class _WriteTable(Protocol):
+    def __call__(self, table: pa.Table, where: Path) -> None: ...
+
+
+_PARQUET_WRITER = cast(_ParquetWriterFactory, pq.ParquetWriter)
+_PARQUET_FILE = cast(_ParquetFileFactory, pq.ParquetFile)
+_WRITE_TABLE = cast(_WriteTable, pq.write_table)
 _REQUIRED_BENCHMARKS: Final = frozenset(
     {
         "SPY",
@@ -151,6 +198,33 @@ _PAIR_AUDIT_COLUMNS: Final = (
     "abstention_rows",
 )
 
+_PAIR_AUDIT_SCHEMA: Final = pa.schema(
+    [
+        pa.field("ticker", pa.string(), nullable=False),
+        pa.field("session_date_et", pa.string(), nullable=False),
+        pa.field("status", pa.string(), nullable=False),
+        pa.field("reason", pa.string()),
+        pa.field("source_rows", pa.int64(), nullable=False),
+        pa.field("completed_volume_bars", pa.int64(), nullable=False),
+        pa.field("feature_rows", pa.int64(), nullable=False),
+        pa.field("feature_eligible_rows", pa.int64(), nullable=False),
+        pa.field("label_eligible_rows", pa.int64(), nullable=False),
+        pa.field("dataset_eligible_rows", pa.int64(), nullable=False),
+        pa.field("abstention_rows", pa.int64(), nullable=False),
+    ]
+)
+_ABSTENTION_SCHEMA: Final = pa.schema(
+    [
+        pa.field("dataset_row_id", pa.string()),
+        pa.field("ticker", pa.string(), nullable=False),
+        pa.field("session_date_et", pa.string(), nullable=False),
+        pa.field("volume_bar_number", pa.int64()),
+        pa.field("feature_available_at_utc", pa.timestamp("ns", tz="UTC")),
+        pa.field("stage", pa.string(), nullable=False),
+        pa.field("reason", pa.string(), nullable=False),
+    ]
+)
+
 
 @dataclass(frozen=True, slots=True)
 class _Artifact:
@@ -177,9 +251,310 @@ class _VerifiedInputs:
 
 @dataclass(frozen=True, slots=True)
 class _SessionResult:
-    partitions: tuple[dict[str, Any], ...]
+    rows: pd.DataFrame | None
     pair_audits: tuple[dict[str, Any], ...]
     abstentions: tuple[dict[str, Any], ...]
+
+
+class _MonthlyPartitionWriter:
+    """Write ordered exchange sessions as row groups in one file per month."""
+
+    def __init__(self, root: Path) -> None:
+        self._root = root
+        self._month: str | None = None
+        self._path: Path | None = None
+        self._writer: _ParquetWriterProtocol | None = None
+        self._canonical_schema: pa.Schema | None = None
+        self._last_written_session: date | None = None
+        self._rows = 0
+        self._eligible_rows = 0
+        self._stock_sessions = 0
+        self._tickers: set[str] = set()
+        self._first_session: str | None = None
+        self._last_session: str | None = None
+        self._first_feature: pd.Timestamp | None = None
+        self._last_feature: pd.Timestamp | None = None
+        self._last_label: pd.Timestamp | None = None
+
+    def write(self, frame: pd.DataFrame) -> dict[str, Any] | None:
+        if frame.empty:
+            raise DataReadinessError("monthly partition writer received no rows")
+        sessions = sorted(set(frame["session_date_et"].astype(str)))
+        if len(sessions) != 1:
+            raise DataReadinessError(
+                "monthly partition writer requires exactly one exchange session"
+            )
+        session = sessions[0]
+        parsed_session = date.fromisoformat(session)
+        if (
+            self._last_written_session is not None
+            and parsed_session <= self._last_written_session
+        ):
+            raise DataReadinessError(
+                "intraday exchange sessions must be written in strictly increasing order"
+            )
+        month = parsed_session.strftime("%Y-%m")
+        completed = None
+        if self._month is not None and month != self._month:
+            if month <= self._month:
+                raise DataReadinessError(
+                    "monthly intraday partitions must be written chronologically"
+                )
+            completed = self.close()
+        if self._month is None:
+            self._open(month)
+
+        ordered = frame.sort_values(
+            ["session_date_et", "ticker", "volume_bar_number"],
+            kind="stable",
+        ).reset_index(drop=True)
+        table = pa.Table.from_pandas(
+            ordered, preserve_index=False
+        ).replace_schema_metadata(None)
+        if self._canonical_schema is None:
+            self._canonical_schema = table.schema
+        elif not table.schema.equals(self._canonical_schema):
+            raise DataReadinessError(
+                "intraday monthly partition schema changed across the publication"
+            )
+        if self._writer is None:
+            self._initialize()
+        if self._canonical_schema is None or self._writer is None:
+            raise RuntimeError("monthly partition writer was not initialized")
+        self._writer.write_table(table, row_group_size=len(table))
+        self._rows += len(ordered)
+        self._eligible_rows += int(ordered["dataset_eligible"].sum())
+        self._stock_sessions += int(
+            len(ordered.loc[:, ["session_date_et", "ticker"]].drop_duplicates())
+        )
+        self._tickers.update(ordered["ticker"].astype(str))
+        self._first_session = self._first_session or session
+        self._last_session = session
+        self._first_feature = _earliest_timestamp(
+            self._first_feature,
+            ordered["feature_available_at_utc"].min(),
+        )
+        self._last_feature = _latest_timestamp(
+            self._last_feature,
+            ordered["feature_available_at_utc"].max(),
+        )
+        self._last_label = _latest_timestamp(
+            self._last_label,
+            ordered["label_available_at_utc"].max(),
+        )
+        self._last_written_session = parsed_session
+        return completed
+
+    def close(self) -> dict[str, Any] | None:
+        if self._writer is None:
+            return None
+        writer = self._writer
+        self._writer = None
+        try:
+            writer.close()
+            if self._path is None or self._month is None:
+                raise RuntimeError("monthly partition writer lost its path identity")
+            return {
+                **_file_record(self._path, self._root, rows=self._rows),
+                "session_month_et": self._month,
+                "first_session_date_et": self._first_session,
+                "last_session_date_et": self._last_session,
+                "stock_sessions": self._stock_sessions,
+                "ticker_count": len(self._tickers),
+                "eligible_rows": self._eligible_rows,
+                "first_feature_available_at_utc": _iso(self._first_feature),
+                "last_feature_available_at_utc": _iso(self._last_feature),
+                "last_label_available_at_utc": _iso(self._last_label),
+            }
+        finally:
+            self._reset_month()
+
+    def abort(self) -> None:
+        writer = self._writer
+        self._writer = None
+        try:
+            if writer is not None:
+                writer.close()
+        except Exception:
+            pass
+        finally:
+            self._reset_month()
+            self._canonical_schema = None
+            self._last_written_session = None
+
+    def _open(self, month: str) -> None:
+        path = (
+            self._root
+            / "partitions"
+            / f"session_month_et={month}"
+            / "part-00000.parquet"
+        )
+        path.parent.mkdir(parents=True, exist_ok=True)
+        self._month = month
+        self._path = path
+        self._writer = None
+
+    def _initialize(self) -> None:
+        if self._path is None or self._canonical_schema is None:
+            raise RuntimeError("monthly partition path is unavailable")
+        self._writer = _PARQUET_WRITER(
+            self._path,
+            self._canonical_schema,
+            compression="zstd",
+            use_dictionary=True,
+            write_statistics=True,
+        )
+
+    def _reset_month(self) -> None:
+        self._month = None
+        self._path = None
+        self._writer = None
+        self._rows = 0
+        self._eligible_rows = 0
+        self._stock_sessions = 0
+        self._tickers.clear()
+        self._first_session = None
+        self._last_session = None
+        self._first_feature = None
+        self._last_feature = None
+        self._last_label = None
+
+
+class _StreamingAuditWriter:
+    """Flush audit rows incrementally so publication memory is session-bounded."""
+
+    def __init__(self, root: Path) -> None:
+        self._root = root
+        self._directory = root / "audit"
+        self._directory.mkdir(parents=True, exist_ok=True)
+        self._pair_path = self._directory / "stock_session_audit.parquet"
+        self._abstention_path = self._directory / "abstentions.parquet"
+        self._pair_writer: _ParquetWriterProtocol | None = None
+        self._abstention_writer: _ParquetWriterProtocol | None = None
+        self.pair_rows = 0
+        self.abstention_rows = 0
+
+    def write(
+        self,
+        pair_audits: Sequence[Mapping[str, Any]],
+        abstentions: Sequence[Mapping[str, Any]],
+    ) -> None:
+        if pair_audits:
+            records = sorted(
+                pair_audits,
+                key=lambda row: (str(row["session_date_et"]), str(row["ticker"])),
+            )
+            table = pa.Table.from_pylist(
+                _normalize_arrow_records(records, _PAIR_AUDIT_SCHEMA),
+                schema=_PAIR_AUDIT_SCHEMA,
+            )
+            if self._pair_writer is None:
+                self._pair_writer = _parquet_writer(self._pair_path, _PAIR_AUDIT_SCHEMA)
+            self._pair_writer.write_table(table, row_group_size=len(table))
+            self.pair_rows += len(table)
+        if abstentions:
+            records = sorted(
+                abstentions,
+                key=lambda row: (
+                    str(row["session_date_et"]),
+                    str(row["ticker"]),
+                    -1
+                    if _is_missing(row.get("volume_bar_number"))
+                    else int(cast(int, row["volume_bar_number"])),
+                ),
+            )
+            table = pa.Table.from_pylist(
+                _normalize_arrow_records(records, _ABSTENTION_SCHEMA),
+                schema=_ABSTENTION_SCHEMA,
+            )
+            if self._abstention_writer is None:
+                self._abstention_writer = _parquet_writer(
+                    self._abstention_path, _ABSTENTION_SCHEMA
+                )
+            self._abstention_writer.write_table(table, row_group_size=len(table))
+            self.abstention_rows += len(table)
+
+    def close(self) -> list[dict[str, Any]]:
+        self._close_or_create_empty(
+            "_pair_writer", self._pair_path, _PAIR_AUDIT_SCHEMA
+        )
+        self._close_or_create_empty(
+            "_abstention_writer", self._abstention_path, _ABSTENTION_SCHEMA
+        )
+        return [
+            _file_record(self._pair_path, self._root, rows=self.pair_rows),
+            _file_record(
+                self._abstention_path, self._root, rows=self.abstention_rows
+            ),
+        ]
+
+    def abort(self) -> None:
+        for attribute in ("_pair_writer", "_abstention_writer"):
+            writer = cast(_ParquetWriterProtocol | None, getattr(self, attribute))
+            setattr(self, attribute, None)
+            try:
+                if writer is not None:
+                    writer.close()
+            except Exception:
+                pass
+
+    def _close_or_create_empty(
+        self,
+        attribute: str,
+        path: Path,
+        schema: pa.Schema,
+    ) -> None:
+        writer = cast(_ParquetWriterProtocol | None, getattr(self, attribute))
+        setattr(self, attribute, None)
+        if writer is None:
+            _WRITE_TABLE(pa.Table.from_pylist([], schema=schema), path)
+            return
+        writer.close()
+
+
+def _parquet_writer(path: Path, schema: pa.Schema) -> _ParquetWriterProtocol:
+    return _PARQUET_WRITER(
+        path,
+        schema,
+        compression="zstd",
+        use_dictionary=True,
+        write_statistics=True,
+    )
+
+
+def _normalize_arrow_records(
+    records: Sequence[Mapping[str, Any]],
+    schema: pa.Schema,
+) -> list[dict[str, Any]]:
+    return [
+        {
+            field.name: _normalize_arrow_value(record.get(field.name), field.type)
+            for field in schema
+        }
+        for record in records
+    ]
+
+
+def _normalize_arrow_value(value: object, data_type: pa.DataType) -> object:
+    if _is_missing(value):
+        return None
+    if pa.types.is_string(data_type):
+        return str(value)
+    if pa.types.is_integer(data_type):
+        return int(cast(int, value))
+    if pa.types.is_timestamp(data_type):
+        return pd.Timestamp(value)
+    return value
+
+
+def _is_missing(value: object) -> bool:
+    if value is None:
+        return True
+    missing = pd.isna(value)
+    try:
+        return bool(missing)
+    except ValueError:
+        return False
 
 
 def publish_intraday_dataset(
@@ -214,6 +589,11 @@ def publish_intraday_dataset(
         strategy_contract=strategy_contract,
         strategy_contract_path=strategy_contract_path,
     )
+    usable_selection = verified.selection[
+        ~verified.selection["ticker"].isin(verified.excluded_tickers)
+    ].copy()
+    expected_selected_by_month = _monthly_stock_session_counts(verified.selection)
+    expected_usable_by_month = _monthly_stock_session_counts(usable_selection)
     request = {
         "schema": INTRADAY_DATASET_SCHEMA,
         "selection_directory": str(selection_directory.resolve()),
@@ -233,7 +613,11 @@ def publish_intraday_dataset(
             len(verified.excluded_tickers)
             / int(verified.selection["ticker"].nunique())
         ),
-        "partitioning": ["session_date_et", "ticker"],
+        "expected_selected_stock_sessions_by_month": expected_selected_by_month,
+        "expected_usable_stock_sessions_by_month": expected_usable_by_month,
+        "partitioning": ["session_month_et"],
+        "partition_layout": "one_parquet_file_per_calendar_month",
+        "partition_row_group": "one_completed_exchange_session",
         "processing_unit": "one_exchange_session",
         "ranking_unit": "one_exchange_session",
         "session_workers": session_workers,
@@ -250,34 +634,38 @@ def publish_intraday_dataset(
     _guard_memory("intraday dataset publication start")
     staging = output_directory.with_name(f".{output_directory.name}.{uuid.uuid4().hex}.staging")
     staging.mkdir(parents=True)
+    partition_writer = _MonthlyPartitionWriter(staging)
+    audit_writer = _StreamingAuditWriter(staging)
     try:
         _write_json(staging / "_request.json", {**request, "request_sha256": request_sha256})
         partition_records: list[dict[str, Any]] = []
-        pair_audits: list[dict[str, Any]] = []
-        abstentions: list[dict[str, Any]] = []
         stock_index = _stock_artifact_index(verified.stock_artifacts)
         benchmark_index = _benchmark_artifact_index(verified.benchmark_artifacts)
-        usable = verified.selection[~verified.selection["ticker"].isin(verified.excluded_tickers)].copy()
+        usable = usable_selection
+        initial_pair_audits: list[dict[str, Any]] = []
+        initial_abstentions: list[dict[str, Any]] = []
         _record_excluded_pairs(
             verified.selection,
             verified.excluded_tickers.difference(
                 verified.membership_sector_excluded_tickers
             ),
-            pair_audits=pair_audits,
-            abstentions=abstentions,
+            pair_audits=initial_pair_audits,
+            abstentions=initial_abstentions,
             stage="coverage",
             reason="whole_security_coverage_exclusion",
         )
         _record_excluded_pairs(
             verified.selection,
             verified.membership_sector_excluded_tickers,
-            pair_audits=pair_audits,
-            abstentions=abstentions,
+            pair_audits=initial_pair_audits,
+            abstentions=initial_abstentions,
             stage="membership",
             reason="whole_security_invalid_sector_benchmark_exclusion",
         )
         if usable.empty:
             raise DataReadinessError("coverage excluded every selected security")
+        audit_writer.write(initial_pair_audits, initial_abstentions)
+        del initial_pair_audits, initial_abstentions
 
         with ThreadPoolExecutor(
             max_workers=session_workers,
@@ -303,15 +691,21 @@ def publish_intraday_dataset(
                         parent_lineage_sha256=str(
                             request["parent_lineage_sha256"]
                         ),
-                        root=staging,
                     )
                     for session_date, session_selection in batch
                 ]
                 for (session_date, _), future in zip(batch, futures, strict=True):
                     session_result = future.result()
-                    partition_records.extend(session_result.partitions)
-                    pair_audits.extend(session_result.pair_audits)
-                    abstentions.extend(session_result.abstentions)
+                    if session_result.rows is not None:
+                        completed_partition = partition_writer.write(
+                            session_result.rows
+                        )
+                        if completed_partition is not None:
+                            partition_records.append(completed_partition)
+                    audit_writer.write(
+                        session_result.pair_audits,
+                        session_result.abstentions,
+                    )
                     completed_sessions += 1
                     if (
                         completed_sessions
@@ -322,11 +716,22 @@ def publish_intraday_dataset(
                     _guard_memory(
                         f"intraday dataset session {str(session_date)} complete"
                     )
+        final_partition = partition_writer.close()
+        if final_partition is not None:
+            partition_records.append(final_partition)
         release_process_memory()
 
         if not partition_records:
             raise DataReadinessError("intraday dataset produced no feature-label partitions")
-        audit_files = _write_audits(staging, pair_audits, abstentions)
+        _validate_monthly_partition_records(
+            partition_records,
+            expected_stock_sessions_by_month=expected_usable_by_month,
+        )
+        if audit_writer.pair_rows != len(verified.selection):
+            raise DataReadinessError(
+                "stock-session audit does not reconcile to the causal selection"
+            )
+        audit_files = audit_writer.close()
         request_record = _file_record(staging / "_request.json", staging, rows=1)
         files = sorted(
             [*partition_records, *audit_files, request_record],
@@ -345,6 +750,8 @@ def publish_intraday_dataset(
             "parent_lineage": verified.parent_lineage,
             "parent_lineage_sha256": request["parent_lineage_sha256"],
             "partitioning": request["partitioning"],
+            "partition_layout": request["partition_layout"],
+            "partition_row_group": request["partition_row_group"],
             "partitions": partition_records,
             "files": files,
             "summary": {
@@ -354,10 +761,14 @@ def publish_intraday_dataset(
                     verified.membership_sector_excluded_tickers
                 ),
                 "incomplete_stock_sessions": len(verified.incomplete_pairs),
-                "published_stock_sessions": len(partition_records),
+                "published_stock_sessions": sum(
+                    int(record["stock_sessions"])
+                    for record in partition_records
+                ),
+                "partition_files": len(partition_records),
                 "rows": total_rows,
                 "dataset_eligible_rows": eligible_rows,
-                "abstention_rows": len(abstentions),
+                "abstention_rows": audit_writer.abstention_rows,
                 "memory": memory_audit(
                     hard_budget_gib=MEMORY_HARD_BUDGET_GIB,
                     headroom_gib=MEMORY_HEADROOM_GIB,
@@ -401,6 +812,14 @@ def publish_intraday_dataset(
         staging.replace(output_directory)
         return load_complete_intraday_dataset(output_directory)
     except Exception:
+        try:
+            partition_writer.abort()
+        except Exception:
+            pass
+        try:
+            audit_writer.abort()
+        except Exception:
+            pass
         shutil.rmtree(staging, ignore_errors=True)
         raise
 
@@ -414,7 +833,6 @@ def _publish_session(
     benchmark_index: Mapping[str, tuple[_Artifact, ...]],
     request_sha256: str,
     parent_lineage_sha256: str,
-    root: Path,
 ) -> _SessionResult:
     _guard_memory(f"intraday dataset session {session_date} start")
     benchmarks = _load_benchmark_session(
@@ -480,7 +898,7 @@ def _publish_session(
         membership_parts.append(membership)
 
     if not valid_activations:
-        return _SessionResult((), tuple(pair_audits), tuple(abstentions))
+        return _SessionResult(None, tuple(pair_audits), tuple(abstentions))
     valid_tickers = [str(row["ticker"]) for row in valid_activations]
     stocks = _load_stock_session_batch(
         session_date,
@@ -517,7 +935,7 @@ def _publish_session(
             )
         )
     if volume_result.bars.empty:
-        return _SessionResult((), tuple(pair_audits), tuple(abstentions))
+        return _SessionResult(None, tuple(pair_audits), tuple(abstentions))
     features = build_causal_intraday_features(
         volume_result.bars,
         stocks,
@@ -549,19 +967,10 @@ def _publish_session(
         parent_lineage_sha256=parent_lineage_sha256,
     )
     _validate_no_leakage(session_rows)
-    partitions: list[dict[str, Any]] = []
     for ticker, pair in session_rows.groupby("ticker", sort=True, observed=True):
         normalized = str(ticker)
         pair = pair.sort_values("volume_bar_number", kind="stable").reset_index(
             drop=True
-        )
-        partitions.append(
-            _write_partition(
-                pair,
-                root=root,
-                session_date=session_date,
-                ticker=normalized,
-            )
         )
         pair_abstentions = _row_abstentions(pair)
         abstentions.extend(pair_abstentions)
@@ -582,7 +991,12 @@ def _publish_session(
             )
         )
     return _SessionResult(
-        tuple(partitions), tuple(pair_audits), tuple(abstentions)
+        session_rows.sort_values(
+            ["session_date_et", "ticker", "volume_bar_number"],
+            kind="stable",
+        ).reset_index(drop=True),
+        tuple(pair_audits),
+        tuple(abstentions),
     )
 
 
@@ -608,12 +1022,50 @@ def load_complete_intraday_dataset(directory: Path) -> dict[str, Any]:
         or authority.get("artifact_sha256") != file_sha256(directory / "_manifest.json")
         or authority.get("request_sha256") != request_sha256
         or authority.get("parent_lineage_sha256") != manifest.get("parent_lineage_sha256")
+        or request.get("partitioning") != ["session_month_et"]
+        or request.get("partition_layout")
+        != "one_parquet_file_per_calendar_month"
+        or request.get("partition_row_group")
+        != "one_completed_exchange_session"
+        or manifest.get("partitioning") != request.get("partitioning")
+        or manifest.get("partition_layout") != request.get("partition_layout")
+        or manifest.get("partition_row_group")
+        != request.get("partition_row_group")
     ):
         raise DataReadinessError(f"intraday dataset lacks matching complete authority: {directory}")
     files = manifest.get("files")
     partitions = manifest.get("partitions")
     if not isinstance(files, list) or not files or not isinstance(partitions, list) or not partitions:
         raise DataReadinessError("intraday dataset manifest inventory is empty")
+    partition_records = [
+        cast(Mapping[str, Any], item)
+        for item in partitions
+        if isinstance(item, Mapping)
+    ]
+    if len(partition_records) != len(partitions):
+        raise DataReadinessError("intraday dataset partition inventory is malformed")
+    expected_selected_by_month = _expected_monthly_counts(
+        request.get("expected_selected_stock_sessions_by_month"),
+        label="selected",
+    )
+    expected_usable_by_month = _expected_monthly_counts(
+        request.get("expected_usable_stock_sessions_by_month"),
+        label="usable",
+    )
+    if (
+        not set(expected_usable_by_month).issubset(expected_selected_by_month)
+        or any(
+            count > expected_selected_by_month[month]
+            for month, count in expected_usable_by_month.items()
+        )
+    ):
+        raise DataReadinessError(
+            "intraday dataset usable coverage exceeds its causal selection"
+        )
+    _validate_monthly_partition_records(
+        partition_records,
+        expected_stock_sessions_by_month=expected_usable_by_month,
+    )
     expected = {"_manifest.json", "_authority.json"}
     seen: set[str] = set()
     for raw in files:
@@ -635,8 +1087,21 @@ def load_complete_intraday_dataset(directory: Path) -> dict[str, Any]:
             raise DataReadinessError(f"intraday dataset row count moved: {path}")
     if {str(item.get("path", "")) for item in partitions if isinstance(item, Mapping)} - seen:
         raise DataReadinessError("intraday dataset partition is absent from file inventory")
+    _verify_monthly_partition_files(directory, partition_records)
     partition_rows = sum(int(item.get("rows", -1)) for item in partitions if isinstance(item, Mapping))
     partition_eligible = sum(int(item.get("eligible_rows", -1)) for item in partitions if isinstance(item, Mapping))
+    published_stock_sessions = sum(
+        int(item.get("stock_sessions", -1))
+        for item in partitions
+        if isinstance(item, Mapping)
+    )
+    inventory = {
+        str(item.get("path", "")): item
+        for item in files
+        if isinstance(item, Mapping)
+    }
+    pair_audit_record = inventory.get("audit/stock_session_audit.parquet")
+    abstention_record = inventory.get("audit/abstentions.parquet")
     parent_lineage = manifest.get("parent_lineage")
     summary = manifest.get("summary")
     if (
@@ -646,6 +1111,19 @@ def load_complete_intraday_dataset(directory: Path) -> dict[str, Any]:
         or not isinstance(summary, Mapping)
         or partition_rows != int(summary.get("rows", -1))
         or partition_eligible != int(summary.get("dataset_eligible_rows", -1))
+        or published_stock_sessions
+        != int(summary.get("published_stock_sessions", -1))
+        or int(summary.get("selected_stock_sessions", -1))
+        != sum(expected_selected_by_month.values())
+        or int(summary.get("excluded_stock_sessions", -1))
+        != sum(expected_selected_by_month.values())
+        - sum(expected_usable_by_month.values())
+        or not isinstance(pair_audit_record, Mapping)
+        or int(pair_audit_record.get("rows", -1))
+        != sum(expected_selected_by_month.values())
+        or not isinstance(abstention_record, Mapping)
+        or int(abstention_record.get("rows", -1))
+        != int(summary.get("abstention_rows", -1))
         or partition_rows != int(authority.get("rows", -1))
         or len(partitions) != int(authority.get("partitions", -1))
     ):
@@ -1232,62 +1710,200 @@ def _pair_audit(
     }
 
 
-def _write_partition(
-    frame: pd.DataFrame,
+def _validate_monthly_partition_records(
+    records: Sequence[Mapping[str, Any]],
     *,
-    root: Path,
-    session_date: str,
-    ticker: str,
-) -> dict[str, Any]:
-    if _SAFE_TICKER.fullmatch(ticker) is None or date.fromisoformat(session_date).isoformat() != session_date:
-        raise DataReadinessError("unsafe intraday dataset partition identity")
-    path = root / "partitions" / f"session_date_et={session_date}" / f"ticker={ticker}" / "part-00000.parquet"
-    path.parent.mkdir(parents=True, exist_ok=True)
-    frame.to_parquet(path, index=False)
-    return {
-        **_file_record(path, root, rows=len(frame)),
-        "session_date_et": session_date,
-        "ticker": ticker,
-        "eligible_rows": int(frame["dataset_eligible"].sum()),
-        "first_feature_available_at_utc": _iso(frame["feature_available_at_utc"].min()),
-        "last_feature_available_at_utc": _iso(frame["feature_available_at_utc"].max()),
-        "last_label_available_at_utc": _iso(frame["label_available_at_utc"].max()),
-    }
-
-
-def _write_audits(
-    root: Path,
-    pair_audits: list[dict[str, Any]],
-    abstentions: list[dict[str, Any]],
-) -> list[dict[str, Any]]:
-    audit_directory = root / "audit"
-    audit_directory.mkdir(parents=True, exist_ok=True)
-    pair_frame = pd.DataFrame(pair_audits, columns=list(_PAIR_AUDIT_COLUMNS)).sort_values(["session_date_et", "ticker"], kind="stable")
-    abstention_frame = pd.DataFrame(abstentions, columns=list(_ABSTENTION_COLUMNS)).sort_values(
-        ["session_date_et", "ticker", "volume_bar_number"], kind="stable"
-    )
-    if not pair_frame.empty:
-        pair_frame["session_date_et"] = pd.to_datetime(
-            pair_frame["session_date_et"], errors="raise"
-        ).dt.date.astype("string")
-    if not abstention_frame.empty:
-        abstention_frame["session_date_et"] = pd.to_datetime(
-            abstention_frame["session_date_et"], errors="raise"
-        ).dt.date.astype("string")
-        abstention_frame["volume_bar_number"] = pd.to_numeric(
-            abstention_frame["volume_bar_number"], errors="coerce"
-        ).astype("Int64")
-        abstention_frame["feature_available_at_utc"] = pd.to_datetime(
-            abstention_frame["feature_available_at_utc"], utc=True, errors="coerce"
+    expected_stock_sessions_by_month: Mapping[str, int],
+) -> None:
+    if not records:
+        raise DataReadinessError("intraday dataset has no monthly partitions")
+    months: list[str] = []
+    for record in records:
+        month = str(record.get("session_month_et", ""))
+        try:
+            month_start = date.fromisoformat(f"{month}-01")
+        except ValueError as exc:
+            raise DataReadinessError(
+                "intraday dataset has an invalid monthly partition identity"
+            ) from exc
+        if month_start.strftime("%Y-%m") != month:
+            raise DataReadinessError(
+                "intraday dataset has a noncanonical monthly partition identity"
+            )
+        expected_path = (
+            f"partitions/session_month_et={month}/part-00000.parquet"
         )
-    pair_path = audit_directory / "stock_session_audit.parquet"
-    abstention_path = audit_directory / "abstentions.parquet"
-    pair_frame.to_parquet(pair_path, index=False)
-    abstention_frame.to_parquet(abstention_path, index=False)
-    return [
-        _file_record(pair_path, root, rows=len(pair_frame)),
-        _file_record(abstention_path, root, rows=len(abstention_frame)),
-    ]
+        first_session = str(record.get("first_session_date_et", ""))
+        last_session = str(record.get("last_session_date_et", ""))
+        try:
+            first = date.fromisoformat(first_session)
+            last = date.fromisoformat(last_session)
+        except ValueError as exc:
+            raise DataReadinessError(
+                f"intraday monthly partition {month} has invalid session bounds"
+            ) from exc
+        rows = int(record.get("rows", -1))
+        eligible_rows = int(record.get("eligible_rows", -1))
+        if (
+            str(record.get("path", "")) != expected_path
+            or first.strftime("%Y-%m") != month
+            or last.strftime("%Y-%m") != month
+            or first > last
+            or rows < 1
+            or eligible_rows < 0
+            or eligible_rows > rows
+            or int(record.get("stock_sessions", -1)) < 1
+            or int(record.get("ticker_count", -1)) < 1
+            or month not in expected_stock_sessions_by_month
+            or int(record.get("stock_sessions", -1))
+            > int(expected_stock_sessions_by_month.get(month, -1))
+        ):
+            raise DataReadinessError(
+                f"intraday monthly partition {month} violates its layout contract"
+            )
+        months.append(month)
+    if months != sorted(set(months)):
+        raise DataReadinessError(
+            "intraday dataset must contain at most one ordered file per month"
+        )
+    first_period = pd.Period(months[0], freq="M")
+    last_period = pd.Period(months[-1], freq="M")
+    maximum_files = int(last_period.ordinal - first_period.ordinal + 1)
+    if len(records) > maximum_files:
+        raise DataReadinessError(
+            "intraday monthly partition count exceeds the calendar-month span"
+        )
+
+
+def _monthly_stock_session_counts(frame: pd.DataFrame) -> dict[str, int]:
+    if frame.empty:
+        return {}
+    months = pd.to_datetime(frame["session_date_et"], errors="raise").dt.strftime(
+        "%Y-%m"
+    )
+    counts = frame.assign(_session_month_et=months).groupby(
+        "_session_month_et", sort=True, observed=True
+    ).size()
+    return {str(month): int(count) for month, count in counts.items()}
+
+
+def _expected_monthly_counts(raw: object, *, label: str) -> dict[str, int]:
+    if not isinstance(raw, Mapping) or not raw:
+        raise DataReadinessError(
+            f"intraday dataset has no {label} monthly coverage contract"
+        )
+    output: dict[str, int] = {}
+    for raw_month, raw_count in raw.items():
+        month = str(raw_month)
+        try:
+            canonical = date.fromisoformat(f"{month}-01").strftime("%Y-%m")
+            count = int(raw_count)
+        except (TypeError, ValueError) as exc:
+            raise DataReadinessError(
+                f"intraday dataset has invalid {label} monthly coverage"
+            ) from exc
+        if canonical != month or count < 1:
+            raise DataReadinessError(
+                f"intraday dataset has invalid {label} monthly coverage"
+            )
+        output[month] = count
+    return dict(sorted(output.items()))
+
+
+def _verify_monthly_partition_files(
+    root: Path,
+    records: Sequence[Mapping[str, Any]],
+) -> None:
+    canonical_schema: pa.Schema | None = None
+    previous_session: date | None = None
+    required_columns = {
+        "session_date_et",
+        "ticker",
+        "volume_bar_number",
+        "dataset_eligible",
+    }
+    for record in records:
+        month = str(record["session_month_et"])
+        path = _resolve_inside(root, str(record["path"]))
+        parquet = _PARQUET_FILE(path)
+        schema = parquet.schema_arrow.remove_metadata()
+        if canonical_schema is None:
+            canonical_schema = schema
+        elif not schema.equals(canonical_schema):
+            raise DataReadinessError(
+                "intraday monthly partition schemas differ across the publication"
+            )
+        if not required_columns.issubset(schema.names):
+            raise DataReadinessError(
+                f"intraday monthly partition omits replay columns: {path}"
+            )
+
+        file_rows = 0
+        eligible_rows = 0
+        stock_sessions = 0
+        tickers: set[str] = set()
+        first_session: date | None = None
+        last_session: date | None = None
+        for row_group_index in range(parquet.metadata.num_row_groups):
+            table = parquet.read_row_group(
+                row_group_index,
+                columns=[
+                    "session_date_et",
+                    "ticker",
+                    "volume_bar_number",
+                    "dataset_eligible",
+                ],
+            )
+            if len(table) < 1:
+                raise DataReadinessError(
+                    f"intraday monthly partition has an empty row group: {path}"
+                )
+            sessions = {str(value) for value in table["session_date_et"].to_pylist()}
+            if len(sessions) != 1:
+                raise DataReadinessError(
+                    f"intraday row group does not contain exactly one session: {path}"
+                )
+            session = date.fromisoformat(sessions.pop())
+            if session.strftime("%Y-%m") != month:
+                raise DataReadinessError(
+                    f"intraday row group is stored in the wrong month: {path}"
+                )
+            if previous_session is not None and session <= previous_session:
+                raise DataReadinessError(
+                    "intraday row groups are not in strictly increasing session order"
+                )
+            previous_session = session
+            ticker_values = [str(value) for value in table["ticker"].to_pylist()]
+            bar_numbers = [int(value) for value in table["volume_bar_number"].to_pylist()]
+            ordering = list(zip(ticker_values, bar_numbers, strict=True))
+            if ordering != sorted(ordering):
+                raise DataReadinessError(
+                    f"intraday row group rows are not deterministically ordered: {path}"
+                )
+            group_tickers = set(ticker_values)
+            tickers.update(group_tickers)
+            stock_sessions += len(group_tickers)
+            eligible_rows += sum(
+                value is True for value in table["dataset_eligible"].to_pylist()
+            )
+            file_rows += len(table)
+            first_session = first_session or session
+            last_session = session
+
+        if (
+            parquet.metadata.num_row_groups < 1
+            or file_rows != int(record["rows"])
+            or eligible_rows != int(record["eligible_rows"])
+            or stock_sessions != int(record["stock_sessions"])
+            or len(tickers) != int(record["ticker_count"])
+            or first_session is None
+            or last_session is None
+            or first_session.isoformat() != str(record["first_session_date_et"])
+            or last_session.isoformat() != str(record["last_session_date_et"])
+        ):
+            raise DataReadinessError(
+                f"intraday monthly partition physical counts differ: {path}"
+            )
 
 
 def _load_coverage_tables(root: Path, manifest: Mapping[str, Any]) -> tuple[pd.DataFrame, set[str]]:
@@ -1406,6 +2022,26 @@ def _guard_memory(stage: str) -> None:
         headroom_gib=MEMORY_HEADROOM_GIB,
         stage=stage,
     )
+
+
+def _earliest_timestamp(
+    current: pd.Timestamp | None,
+    candidate: object,
+) -> pd.Timestamp | None:
+    if candidate is None or pd.isna(candidate):
+        return current
+    parsed = pd.Timestamp(candidate)
+    return parsed if current is None or parsed < current else current
+
+
+def _latest_timestamp(
+    current: pd.Timestamp | None,
+    candidate: object,
+) -> pd.Timestamp | None:
+    if candidate is None or pd.isna(candidate):
+        return current
+    parsed = pd.Timestamp(candidate)
+    return parsed if current is None or parsed > current else current
 
 
 def _iso(value: object) -> str | None:

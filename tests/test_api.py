@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import tempfile
 import unittest
 from datetime import UTC, datetime
+from pathlib import Path
 
 from fastapi.testclient import TestClient
 
@@ -13,6 +15,7 @@ from market_predictor.prediction_contracts import (
     PredictionConflictError,
     PredictionDependencyError,
     PredictionMemoryPressureError,
+    PredictionModelUnavailableError,
     PredictionNotFoundError,
     PredictionReadinessError,
     PredictionRequest,
@@ -21,6 +24,7 @@ from market_predictor.prediction_contracts import (
     PredictionThrottledError,
     PredictionValidationError,
 )
+from market_predictor.prediction_service import PredictionService, ServingRoute
 from market_predictor.telemetry import RuntimeTelemetry
 
 
@@ -66,6 +70,34 @@ class StubReplayService:
 
 
 class PredictionApiTests(unittest.TestCase):
+    def test_missing_ten_session_bundle_returns_explicit_unavailable(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            service = PredictionService(
+                root,
+                routes={
+                    "swing": {
+                        "10b": ServingRoute(
+                            repository=Path("models/edge-rebuild/swing"),
+                            attestation_trust_store=Path("unused.json"),
+                            promotion_gate_policy_sha256="a" * 64,
+                            bar_timeframe="1Day",
+                        )
+                    }
+                },
+            )
+            with TestClient(create_app(service)) as client:
+                response = client.post(
+                    "/v1/predictions/swing",
+                    json={"tickers": ["MSFT"]},
+                )
+
+            self.assertEqual(response.status_code, 503)
+            self.assertEqual(
+                response.json()["error"]["code"],
+                "prediction_model_unavailable",
+            )
+
     def test_swing_endpoint_forces_swing_mode(self) -> None:
         service = StubPredictionService()
         client = TestClient(create_app(service))  # type: ignore[arg-type]
@@ -126,6 +158,11 @@ class PredictionApiTests(unittest.TestCase):
             (PredictionThrottledError, 429, "prediction_throttled"),
             (PredictionCapacityError, 503, "inference_capacity_exhausted"),
             (PredictionMemoryPressureError, 503, "memory_pressure"),
+            (
+                PredictionModelUnavailableError,
+                503,
+                "prediction_model_unavailable",
+            ),
             (PredictionReadinessError, 503, "prediction_not_ready"),
             (PredictionDependencyError, 503, "prediction_dependency_unavailable"),
         ]

@@ -334,13 +334,32 @@ def test_rank_settings_are_split_by_horizon() -> None:
     contract = load_strategy_contract(CONTRACT_PATH)
 
     assert contract.labels.swing_rank_within_sector is True
-    assert contract.labels.swing_minimum_cross_section_for_ranking == 50
+    assert contract.labels.swing_target_cross_section_for_ranking == 50
+    assert contract.labels.swing_minimum_cross_section_for_ranking == 30
     assert contract.labels.intraday_rank_within_sector is False
     assert contract.labels.intraday_minimum_cross_section_for_ranking == 10
 
     raw = _raw()
     raw["labels"]["intraday_rank_within_sector"] = True
     with pytest.raises(ValueError, match="contemporaneous group"):
+        StrategyContract.model_validate(raw)
+
+
+def test_swing_sector_policy_has_target_and_bounded_fallback() -> None:
+    contract = load_strategy_contract(CONTRACT_PATH)
+
+    assert contract.swing.target_maximum_sector_weight == pytest.approx(0.20)
+    assert contract.swing.hard_maximum_sector_weight == pytest.approx(1.0 / 3.0)
+    assert contract.swing.minimum_distinct_sectors_for_selection == 3
+
+    raw = _raw()
+    raw["swing"]["target_maximum_sector_weight"] = 0.40
+    with pytest.raises(ValueError, match="target sector weight"):
+        StrategyContract.model_validate(raw)
+
+    raw = _raw()
+    raw["swing"]["maximum_trades_per_decision"] = 2
+    with pytest.raises(ValueError, match="required distinct sectors"):
         StrategyContract.model_validate(raw)
 
 

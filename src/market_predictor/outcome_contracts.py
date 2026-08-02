@@ -28,7 +28,7 @@ class PredictionMaturationIntentV2(FrozenContract):
     ticker: str = Field(min_length=1, max_length=16)
     canonical_security_id: str = Field(min_length=1, max_length=128)
     view: Literal["swing", "intraday"]
-    horizon: str = Field(pattern=r"^[1-9]\d*(?:m|d)$")
+    horizon: str = Field(pattern=r"^[1-9]\d*(?:m|d|b)$")
     decision_time_utc: datetime
     decision_session_et: date
     decision_group_id: str = Field(min_length=1, max_length=256)

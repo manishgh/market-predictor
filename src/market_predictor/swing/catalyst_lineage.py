@@ -33,10 +33,13 @@ from market_predictor.resources import (
     memory_audit,
     release_process_memory,
 )
+from market_predictor.swing.news_source_inventory import (
+    build_source_news_shard_inventory,
+)
 from market_predictor.v3.errors import DataReadinessError
 
-CATALYST_LINEAGE_REQUEST_SCHEMA = "swing.catalyst_lineage_request.v1"
-CATALYST_LINEAGE_MANIFEST_SCHEMA = "swing.catalyst_lineage_manifest.v1"
+CATALYST_LINEAGE_REQUEST_SCHEMA = "swing.catalyst_lineage_request.v2"
+CATALYST_LINEAGE_MANIFEST_SCHEMA = "swing.catalyst_lineage_manifest.v2"
 CATALYST_EVENT_SCHEMA = "swing.catalyst_event.v1"
 CATALYST_COVERAGE_SCHEMA = "swing.catalyst_source_coverage.v1"
 FEATURE_INVENTORY_SCHEMA = "swing.catalyst_feature_inventory.v1"
@@ -168,12 +171,31 @@ def build_catalyst_lineage(
     attribution = _complete_manifest(attribution_manifest_path, "event attribution")
     sentiment = _complete_manifest(sentiment_manifest_path, "event sentiment")
     collection_audit = _json_object(collection_audit_path)
-    if not bool(collection_audit.get("passed")):
+    if (
+        not bool(collection_audit.get("passed"))
+        or collection_audit.get("request_sha256") != collection.get("request_sha256")
+    ):
         raise DataReadinessError("catalyst lineage requires a passed collection audit")
     excluded = _validated_exclusions(collection_audit, attribution, sentiment)
+    source_inventory = {
+        str(record["chunk_id"]): record
+        for record in build_source_news_shard_inventory(collection_dir, collection)
+    }
     source_records = _records_by_chunk(collection, "news collection")
     relation_records = _records_by_chunk(attribution, "event attribution")
     sentiment_records = _records_by_chunk(sentiment, "event sentiment")
+    source_collections_path = Path(str(collection["source_collections_path"]))
+    source_collections, source_collection_manifest = load_canonical_artifact(
+        source_collections_path,
+        expected_type="source_collections",
+        allow_research=True,
+    )
+    if (
+        str(source_collection_manifest.get("artifact_sha256", ""))
+        != str(collection.get("source_collections_sha256", ""))
+        or bool(source_collection_manifest.get("production_ready"))
+    ):
+        raise DataReadinessError("collection source-ledger identity is invalid")
     eligible_chunk_ids = sorted(
         chunk_id
         for chunk_id, record in source_records.items()
@@ -181,8 +203,15 @@ def build_catalyst_lineage(
     )
     if set(relation_records) != set(eligible_chunk_ids):
         raise DataReadinessError("event attribution chunk inventory does not match eligible news chunks")
-    if set(sentiment_records) != set(eligible_chunk_ids):
-        raise DataReadinessError("sentiment chunk inventory does not match eligible news chunks")
+    sentiment_records = _reconcile_sentiment_inventory(
+        sentiment_records,
+        eligible_chunk_ids=set(eligible_chunk_ids),
+        source_collections=source_collections,
+        excluded_security_ids=excluded,
+        source_inventory=source_inventory,
+        sentiment_dir=sentiment_dir,
+        sentiment_request_sha256=_required_text(sentiment, "request_sha256"),
+    )
 
     decisions, decision_manifest = load_canonical_artifact(
         decisions_path,
@@ -195,12 +224,6 @@ def build_catalyst_lineage(
         str(security_id): indices
         for security_id, indices in decisions.groupby("security_id", sort=False).indices.items()
     }
-    source_collections_path = Path(str(collection["source_collections_path"]))
-    source_collections, source_collection_manifest = load_canonical_artifact(
-        source_collections_path,
-        expected_type="source_collections",
-        allow_research=True,
-    )
     request = {
         "schema": CATALYST_LINEAGE_REQUEST_SCHEMA,
         "collection_manifest_sha256": file_sha256(collection_manifest_path),
@@ -1004,6 +1027,95 @@ def _records_by_chunk(
             raise DataReadinessError(f"{name} has duplicate chunk IDs")
         records[chunk_id] = record
     return records
+
+
+def _reconcile_sentiment_inventory(
+    records: Mapping[str, dict[str, object]],
+    *,
+    eligible_chunk_ids: set[str],
+    source_collections: pd.DataFrame,
+    excluded_security_ids: set[str],
+    source_inventory: Mapping[str, Mapping[str, object]],
+    sentiment_dir: Path,
+    sentiment_request_sha256: str,
+) -> dict[str, dict[str, object]]:
+    missing = eligible_chunk_ids.difference(records)
+    if missing:
+        raise DataReadinessError("sentiment chunk inventory does not match eligible news chunks")
+    extras = set(records).difference(eligible_chunk_ids)
+    if not extras:
+        return dict(records)
+
+    required = {"chunk_id", "security_id", "ticker", "status", "row_count"}
+    if not required.issubset(source_collections.columns):
+        raise DataReadinessError("source collection inventory cannot reconcile empty sentiment chunks")
+    source_rows = source_collections.loc[
+        source_collections["chunk_id"].astype(str).isin(extras),
+        list(required),
+    ].copy()
+    if bool(source_rows["chunk_id"].astype(str).duplicated().any()):
+        raise DataReadinessError("source collection inventory has duplicate chunk IDs")
+    source_by_chunk = {
+        str(row["chunk_id"]): row
+        for row in source_rows.to_dict(orient="records")
+    }
+    for chunk_id in extras:
+        source = source_by_chunk.get(chunk_id)
+        sentiment = records[chunk_id]
+        source_evidence = source_inventory.get(chunk_id)
+        if (
+            source is None
+            or source_evidence is None
+            or not bool(source_evidence.get("source_empty"))
+            or str(source["security_id"]) in excluded_security_ids
+            or str(source["status"]) != "observed_empty"
+            or _required_int(source, "row_count") != 0
+            or _required_int(sentiment, "rows") != 0
+            or str(sentiment.get("security_id", "")) != str(source["security_id"])
+            or str(sentiment.get("ticker", "")).upper()
+            != str(source.get("ticker", "")).upper()
+            or _required_text(sentiment, "source_event_artifact_sha256")
+            != _required_text(source_evidence, "sha256")
+        ):
+            raise DataReadinessError("sentiment chunk inventory does not match eligible news chunks")
+        _validate_empty_sentiment_artifact(
+            chunk_id=chunk_id,
+            record=sentiment,
+            sentiment_dir=sentiment_dir,
+            sentiment_request_sha256=sentiment_request_sha256,
+            source_evidence_sha256=_required_text(source_evidence, "sha256"),
+        )
+    return {chunk_id: records[chunk_id] for chunk_id in eligible_chunk_ids}
+
+
+def _validate_empty_sentiment_artifact(
+    *,
+    chunk_id: str,
+    record: Mapping[str, object],
+    sentiment_dir: Path,
+    sentiment_request_sha256: str,
+    source_evidence_sha256: str,
+) -> None:
+    artifact_path = Path(_required_text(record, "path"))
+    expected_parent = (sentiment_dir / "sentiment").resolve()
+    resolved = artifact_path.resolve()
+    if resolved.parent != expected_parent or resolved.name != f"{chunk_id}.parquet":
+        raise DataReadinessError(f"empty sentiment artifact path mismatch for {chunk_id}")
+    frame, manifest = load_canonical_artifact(
+        resolved,
+        expected_type="event_sentiment_research",
+        allow_research=True,
+    )
+    inputs = manifest.get("inputs")
+    if (
+        not frame.empty
+        or str(manifest.get("artifact_sha256", "")) != _required_text(record, "sha256")
+        or not isinstance(inputs, dict)
+        or inputs.get("chunk_id") != chunk_id
+        or inputs.get("sentiment_request_sha256") != sentiment_request_sha256
+        or inputs.get("source_event_artifact_sha256") != source_evidence_sha256
+    ):
+        raise DataReadinessError(f"empty sentiment artifact integrity mismatch for {chunk_id}")
 
 
 def _complete_manifest(path: Path, name: str) -> dict[str, object]:

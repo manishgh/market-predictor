@@ -8,6 +8,8 @@ from typing import Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from market_predictor.edge_rebuild.strategy_contract import load_strategy_contract
+from market_predictor.edge_rebuild.swing_training import load_swing_training_config
 from market_predictor.execution_policy import (
     EXECUTION_POLICY_ID,
     EXECUTION_POLICY_SHA256,
@@ -22,19 +24,15 @@ from market_predictor.strategy_governance import (
     StrategyExecutionLedger,
     validate_strategy_execution_ledger,
 )
-from market_predictor.swing.contracts import (
-    SwingDatasetConfig,
-    SwingPromotionConfig,
-    SwingTrainingConfig,
-)
+from market_predictor.swing.contracts import SwingDatasetConfig
 from market_predictor.v3.errors import ArtifactIntegrityError, DataReadinessError
 
 SHA256_PATTERN = r"^[0-9a-f]{64}$"
 REQUIRED_CONTRACT_BINDINGS = frozenset(
     {
         "swing_dataset",
-        "swing_training",
-        "swing_promotion",
+        "edge_rebuild_strategy_contract",
+        "edge_rebuild_swing_training",
         "intraday_dataset",
         "intraday_training",
         "intraday_promotion",
@@ -98,7 +96,7 @@ class StrategyResearchGovernance(FrozenContract):
     allowed_selection_policies: tuple[str, ...] = Field(min_length=1)
     retirement_triggers: tuple[str, ...] = Field(min_length=1)
     minimum_label_round_trip_cost_bps: float = Field(ge=0, le=500)
-    maximum_process_memory_gib: float = Field(gt=0, le=4)
+    maximum_process_memory_gib: float = Field(gt=0, le=5)
     swing_purge_rule: Literal["label_horizon_sessions"]
     minimum_intraday_embargo_sessions: int = Field(ge=1, le=10)
     contract_bindings: dict[str, FileBinding]
@@ -202,7 +200,7 @@ class ResearchHypothesisRegistry(FrozenContract):
 class ReferenceModel(FrozenContract):
     reference_id: str = Field(pattern=r"^[a-z0-9][a-z0-9._-]{2,127}$")
     view: Literal["swing", "intraday"]
-    horizon: str = Field(pattern=r"^[1-9]\d*(?:m|d)$")
+    horizon: str = Field(pattern=r"^[1-9]\d*(?:m|d|b)$")
     family: str = Field(min_length=1, max_length=128)
     status: Literal["reference_rejected", "implementation_only"]
     strategy_id: None = None
@@ -357,11 +355,17 @@ def _validate_shared_assumptions(
     swing_dataset = SwingDatasetConfig.model_validate(
         _load_bound_toml(root, policy, "swing_dataset")
     )
-    swing_training = SwingTrainingConfig.model_validate(
-        _load_bound_toml(root, policy, "swing_training")
+    edge_strategy = load_strategy_contract(
+        _resolve_repository_path(
+            root,
+            Path(policy.contract_bindings["edge_rebuild_strategy_contract"].path),
+        )
     )
-    SwingPromotionConfig.model_validate(
-        _load_bound_toml(root, policy, "swing_promotion")
+    edge_swing_training = load_swing_training_config(
+        _resolve_repository_path(
+            root,
+            Path(policy.contract_bindings["edge_rebuild_swing_training"].path),
+        )
     )
     intraday_dataset = IntradayDatasetConfig.model_validate(
         _load_bound_toml(root, policy, "intraday_dataset")
@@ -373,24 +377,15 @@ def _validate_shared_assumptions(
         _load_bound_toml(root, policy, "intraday_promotion")
     )
 
-    if swing_dataset.round_trip_cost_bps != intraday_dataset.round_trip_cost_bps:
-        raise DataReadinessError("swing and intraday label-cost floors differ")
-    if (
-        swing_dataset.round_trip_cost_bps
-        < policy.minimum_label_round_trip_cost_bps
-    ):
+    if min(
+        edge_strategy.swing.round_trip_cost_bps,
+        intraday_dataset.round_trip_cost_bps,
+    ) < policy.minimum_label_round_trip_cost_bps:
         raise DataReadinessError("label-cost floor is below research policy")
-    if swing_training.n_splits != intraday_training.n_splits:
-        raise DataReadinessError("swing and intraday fold counts differ")
-    if (
-        swing_training.ticker_holdout_fraction
-        != intraday_training.ticker_holdout_fraction
-    ):
-        raise DataReadinessError("swing and intraday ticker holdouts differ")
-    if swing_training.top_k != intraday_training.top_k:
-        raise DataReadinessError("swing and intraday selection top-k differ")
-    if swing_training.random_seed != intraday_training.random_seed:
-        raise DataReadinessError("swing and intraday random seeds differ")
+    if edge_swing_training.horizon_sessions != edge_strategy.swing.horizon_sessions:
+        raise DataReadinessError("swing trainer horizon differs from the edge strategy")
+    if edge_swing_training.maximum_trades_per_decision != edge_strategy.swing.maximum_trades_per_decision:
+        raise DataReadinessError("swing selection limit differs from the edge strategy")
     if intraday_training.embargo_sessions < policy.minimum_intraday_embargo_sessions:
         raise DataReadinessError("intraday embargo is below research policy")
     if {
@@ -412,7 +407,7 @@ def _validate_shared_assumptions(
         raise DataReadinessError("swing and intraday benchmark contracts differ")
     memory_values = (
         swing_dataset.max_build_memory_gb,
-        swing_training.max_training_memory_gb,
+        edge_swing_training.maximum_process_memory_gib,
         intraday_dataset.max_build_memory_gb,
         intraday_training.max_training_memory_gb,
     )

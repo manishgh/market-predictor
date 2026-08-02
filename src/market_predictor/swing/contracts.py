@@ -7,7 +7,8 @@ from typing import Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-SWING_FEATURE_SCHEMA_VERSION = "swing.features.v1"
+MINIMUM_SWING_DECISION_DATE = date(2019, 7, 9)
+SWING_FEATURE_SCHEMA_VERSION = "swing.features.v3"
 SWING_MODEL_SCHEMA_VERSION = "swing.model.v1"
 SWING_MODEL_TYPE = "canonical_swing"
 SWING_VALIDATION_SPLIT = "session_purged_walk_forward_and_ticker_holdout"
@@ -97,16 +98,6 @@ CATALYST_FEATURES = (
     "low_relevance_event_fraction_1d",
     "low_relevance_event_fraction_3d",
     "source_count_alpaca_3d",
-    "source_count_reddit_3d",
-    "source_count_seeking_alpha_3d",
-    "source_count_sec_3d",
-    "source_count_finviz_3d",
-    "global_event_count_1d",
-    "global_event_count_3d",
-    "global_sentiment_mean_1d",
-    "global_sentiment_mean_3d",
-    "global_sentiment_coverage_1d",
-    "global_sentiment_coverage_3d",
 )
 
 FUNDAMENTAL_FEATURES = (
@@ -179,7 +170,7 @@ class FrozenConfig(BaseModel):
 
 class SwingDatasetConfig(FrozenConfig):
     feature_profile: SwingFeatureProfile = "catalyst_full"
-    decision_start_date: date | None = None
+    decision_start_date: date = MINIMUM_SWING_DECISION_DATE
     decision_end_date: date | None = None
     horizon_sessions: int = Field(default=5, ge=1, le=20)
     round_trip_cost_bps: float = Field(default=10.0, ge=0, le=500)
@@ -189,7 +180,7 @@ class SwingDatasetConfig(FrozenConfig):
     broad_benchmark: str = "SPY"
     growth_benchmark: str = "QQQ"
     required_ticker_sources: tuple[str, ...] = ("alpaca",)
-    required_global_sources: tuple[str, ...] = ("alpaca", "gdelt")
+    required_global_sources: tuple[str, ...] = ()
     source_coverage_max_age_minutes: int = Field(default=60, ge=0, le=1_440)
     minimum_cross_section: int = Field(default=20, ge=2)
     min_exact_label_coverage: float = Field(default=0.995, ge=0.95, le=1.0)
@@ -199,9 +190,13 @@ class SwingDatasetConfig(FrozenConfig):
 
     @model_validator(mode="after")
     def validate_profile(self) -> Self:
+        if self.decision_start_date < MINIMUM_SWING_DECISION_DATE:
+            raise ValueError(
+                "decision_start_date must be on or after "
+                f"{MINIMUM_SWING_DECISION_DATE.isoformat()}"
+            )
         if (
-            self.decision_start_date is not None
-            and self.decision_end_date is not None
+            self.decision_end_date is not None
             and self.decision_start_date > self.decision_end_date
         ):
             raise ValueError("decision_start_date must not follow decision_end_date")
@@ -215,13 +210,8 @@ class SwingDatasetConfig(FrozenConfig):
                 "required_global_sources=[]; "
                 "news coverage is not part of this baseline"
             )
-        if self.feature_profile == "catalyst_full" and (
-            not self.required_ticker_sources
-            or not self.required_global_sources
-        ):
-            raise ValueError(
-                "catalyst_full requires at least one ticker and global source"
-            )
+        if self.feature_profile == "catalyst_full" and not self.required_ticker_sources:
+            raise ValueError("catalyst_full requires at least one ticker source")
         return self
 
     def label_policy(self) -> dict[str, object]:

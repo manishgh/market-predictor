@@ -35,7 +35,7 @@ class PredictionReadinessTests(unittest.TestCase):
             benchmark_present=True,
             market_context_present=True,
             model_status="candidate",
-            required_sources={"alpaca", "reddit"},
+            required_sources={"alpaca", "sec"},
             available_sources={"alpaca"},
             news_candle_mismatch_count=2,
             stale_cache=True,
@@ -44,7 +44,7 @@ class PredictionReadinessTests(unittest.TestCase):
         self.assertEqual(readiness.status, INVALID)
         reasons = "; ".join(readiness.reasons)
         self.assertIn("model status is candidate", reasons)
-        self.assertIn("missing required source families: reddit", reasons)
+        self.assertIn("missing required source families: sec", reasons)
         self.assertIn("news/candle mismatches detected: 2", reasons)
         self.assertIn("stale cache", reasons)
 

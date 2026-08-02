@@ -8,6 +8,8 @@ from typing import Any
 import joblib
 import numpy as np
 import pandas as pd
+import pyarrow as pa
+import pyarrow.parquet as pq
 import pytest
 
 from market_predictor.canonical.store import file_sha256
@@ -117,20 +119,49 @@ def test_trains_sequential_candidates_and_publishes_immutable_evidence(tmp_path:
 
 
 def test_repository_training_policy_is_complete_and_frozen() -> None:
-    config = load_intraday_training_config(
-        Path("configs/edge_rebuild_intraday_training.toml")
-    )
+    config = load_intraday_training_config(Path("configs/edge_rebuild_intraday_training.toml"))
 
     assert config.validation_folds == 3
     assert config.maximum_label_horizon_minutes == 30
     assert config.top_k == 10
     assert config.maximum_process_memory_gib == 4.0
-    learned = sum(
-        spec.family != "deterministic"
-        for spec in intraday_training._candidate_specs(config)
-    )
+    learned = sum(spec.family != "deterministic" for spec in intraday_training._candidate_specs(config))
     assert learned == 5
     assert learned <= config.maximum_learned_candidates
+
+
+def test_trainer_uses_only_normalized_causal_price_features() -> None:
+    expected_new_features = {
+        "atr_fraction_of_close",
+        "normalized_volume_overshoot",
+        "volume_bar_duration_minutes",
+        "relative_volume_at_activation",
+        "minutes_since_causal_activation",
+        "regular_session_progress",
+    }
+    raw_price_features = {
+        "open",
+        "high",
+        "low",
+        "close",
+        "atr_14",
+        "stock_clock_context_close",
+        "stock_clock_session_vwap",
+    }
+
+    assert expected_new_features.issubset(MODEL_FEATURE_COLUMNS)
+    assert raw_price_features.isdisjoint(MODEL_FEATURE_COLUMNS)
+    assert not any(
+        token in column for column in MODEL_FEATURE_COLUMNS for token in ("news", "catalyst", "sentiment", "sec_filing", "source_count_sec")
+    )
+    assert len(intraday_training._candidate_specs(_config())) - 1 <= 6
+
+
+def test_loaded_model_features_are_finite_float32(tmp_path: Path) -> None:
+    published = load_published_intraday_dataset(_publish_dataset(tmp_path / "dataset", _training_frame()))
+
+    assert all(published.frame[column].dtype == np.dtype("float32") for column in MODEL_FEATURE_COLUMNS)
+    assert np.isfinite(published.frame.loc[:, MODEL_FEATURE_COLUMNS].to_numpy(dtype="float32")).all()
 
 
 def test_temporal_test_poison_cannot_change_validation_selection(tmp_path: Path) -> None:
@@ -461,33 +492,123 @@ def _training_frame() -> pd.DataFrame:
 
 def _publish_dataset(directory: Path, frame: pd.DataFrame) -> Path:
     directory.mkdir(parents=True)
-    partition_path = directory / "partitions" / "part-00000.parquet"
-    partition_path.parent.mkdir(parents=True)
-    frame.to_parquet(partition_path, index=False)
     parent_lineage = {"selection_manifest_sha256": "a" * 64, "strategy_contract_sha256": "b" * 64}
     parent_lineage_sha256 = json_sha256(parent_lineage)
+    prepared = frame.copy()
+    if "volume_bar_number" not in prepared.columns:
+        prepared["volume_bar_number"] = prepared.groupby(["session_date_et", "ticker"], sort=False, observed=True).cumcount() + 1
+    prepared["session_month_et"] = pd.to_datetime(prepared["session_date_et"], errors="raise").dt.strftime("%Y-%m")
+    expected_by_month = {
+        str(month): int(len(rows.loc[:, ["session_date_et", "ticker"]].drop_duplicates()))
+        for month, rows in prepared.groupby("session_month_et", sort=True, observed=True)
+    }
     request_payload = {
         "schema": DATASET_SCHEMA_VERSION,
         "parent_lineage": parent_lineage,
         "parent_lineage_sha256": parent_lineage_sha256,
         "strategy_contract_sha256": "b" * 64,
+        "partitioning": ["session_month_et"],
+        "partition_layout": "one_parquet_file_per_calendar_month",
+        "partition_row_group": "one_completed_exchange_session",
+        "expected_selected_stock_sessions_by_month": expected_by_month,
+        "expected_usable_stock_sessions_by_month": expected_by_month,
     }
     request_sha256 = json_sha256(request_payload)
     request_path = directory / "_request.json"
     _write_json(request_path, {**request_payload, "request_sha256": request_sha256})
-    partition_record = {
-        "path": partition_path.relative_to(directory).as_posix(),
-        "sha256": file_sha256(partition_path),
-        "bytes": partition_path.stat().st_size,
-        "rows": len(frame),
-        "eligible_rows": int(frame["dataset_eligible"].sum()),
-    }
+    partition_records: list[dict[str, Any]] = []
+    canonical_schema: pa.Schema | None = None
+    for month, month_rows in prepared.groupby("session_month_et", sort=True, observed=True):
+        month_rows = month_rows.drop(columns="session_month_et")
+        partition_path = directory / "partitions" / f"session_month_et={month}" / "part-00000.parquet"
+        partition_path.parent.mkdir(parents=True)
+        writer: pq.ParquetWriter | None = None
+        try:
+            for _, session_rows in month_rows.groupby("session_date_et", sort=True, observed=True):
+                ordered = session_rows.sort_values(
+                    ["session_date_et", "ticker", "volume_bar_number"],
+                    kind="stable",
+                ).reset_index(drop=True)
+                table = pa.Table.from_pandas(ordered, preserve_index=False).replace_schema_metadata(None)
+                if canonical_schema is None:
+                    canonical_schema = table.schema
+                else:
+                    assert table.schema.equals(canonical_schema)
+                if writer is None:
+                    writer = pq.ParquetWriter(
+                        partition_path,
+                        canonical_schema,
+                        compression="zstd",
+                        use_dictionary=True,
+                        write_statistics=True,
+                    )
+                writer.write_table(table, row_group_size=len(table))
+        finally:
+            if writer is not None:
+                writer.close()
+        sessions = pd.to_datetime(month_rows["session_date_et"], errors="raise").dt.date
+        partition_records.append(
+            {
+                "path": partition_path.relative_to(directory).as_posix(),
+                "sha256": file_sha256(partition_path),
+                "bytes": partition_path.stat().st_size,
+                "rows": len(month_rows),
+                "eligible_rows": int(month_rows["dataset_eligible"].sum()),
+                "session_month_et": str(month),
+                "first_session_date_et": sessions.min().isoformat(),
+                "last_session_date_et": sessions.max().isoformat(),
+                "stock_sessions": int(len(month_rows.loc[:, ["session_date_et", "ticker"]].drop_duplicates())),
+                "ticker_count": int(month_rows["ticker"].nunique()),
+            }
+        )
     request_record = {
         "path": request_path.name,
         "sha256": file_sha256(request_path),
         "bytes": request_path.stat().st_size,
         "rows": 1,
     }
+    audit_directory = directory / "audit"
+    audit_directory.mkdir()
+    pair_audit = prepared.loc[:, ["ticker", "session_date_et"]].drop_duplicates()
+    pair_audit = pair_audit.assign(
+        status="published",
+        reason=pd.NA,
+        source_rows=1,
+        completed_volume_bars=1,
+        feature_rows=1,
+        feature_eligible_rows=1,
+        label_eligible_rows=1,
+        dataset_eligible_rows=1,
+        abstention_rows=0,
+    )
+    pair_path = audit_directory / "stock_session_audit.parquet"
+    pair_audit.to_parquet(pair_path, index=False)
+    abstention_path = audit_directory / "abstentions.parquet"
+    pd.DataFrame(
+        columns=[
+            "dataset_row_id",
+            "ticker",
+            "session_date_et",
+            "volume_bar_number",
+            "feature_available_at_utc",
+            "stage",
+            "reason",
+        ]
+    ).to_parquet(abstention_path, index=False)
+    audit_records = [
+        {
+            "path": pair_path.relative_to(directory).as_posix(),
+            "sha256": file_sha256(pair_path),
+            "bytes": pair_path.stat().st_size,
+            "rows": len(pair_audit),
+        },
+        {
+            "path": abstention_path.relative_to(directory).as_posix(),
+            "sha256": file_sha256(abstention_path),
+            "bytes": abstention_path.stat().st_size,
+            "rows": 0,
+        },
+    ]
     manifest = {
         "schema": DATASET_SCHEMA_VERSION,
         "status": "complete",
@@ -496,9 +617,19 @@ def _publish_dataset(directory: Path, frame: pd.DataFrame) -> Path:
         "parent_lineage_sha256": parent_lineage_sha256,
         "feature_schema_version": FEATURE_SCHEMA_VERSION,
         "label_schema_version": LABEL_SCHEMA_VERSION,
-        "partitions": [partition_record],
-        "files": [partition_record, request_record],
-        "summary": {"rows": len(frame), "dataset_eligible_rows": int(frame["dataset_eligible"].sum())},
+        "partitioning": request_payload["partitioning"],
+        "partition_layout": request_payload["partition_layout"],
+        "partition_row_group": request_payload["partition_row_group"],
+        "partitions": partition_records,
+        "files": [*partition_records, *audit_records, request_record],
+        "summary": {
+            "rows": len(frame),
+            "dataset_eligible_rows": int(frame["dataset_eligible"].sum()),
+            "selected_stock_sessions": sum(expected_by_month.values()),
+            "excluded_stock_sessions": 0,
+            "published_stock_sessions": sum(expected_by_month.values()),
+            "abstention_rows": 0,
+        },
         "training_contract": {
             "eligibility_column": "dataset_eligible",
             "feature_columns_exclude": [
@@ -520,10 +651,14 @@ def _publish_dataset(directory: Path, frame: pd.DataFrame) -> Path:
         "artifact_sha256": file_sha256(manifest_path),
         "request_sha256": request_sha256,
         "parent_lineage_sha256": parent_lineage_sha256,
-        "partitions": 1,
+        "partitions": len(partition_records),
         "rows": len(frame),
     }
     _write_json(directory / "_authority.json", authority)
+    for record in partition_records:
+        parquet = pq.ParquetFile(directory / str(record["path"]))
+        month_rows = prepared.loc[prepared["session_month_et"].eq(record["session_month_et"])]
+        assert parquet.metadata.num_row_groups == month_rows["session_date_et"].nunique()
     return directory
 
 

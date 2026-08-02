@@ -58,6 +58,7 @@ def _activations(
     day: str = "2026-07-08",
     activation: str = "2026-07-08 13:34:00Z",
     median: float = 7_800.0,
+    relative_volume: float = 2.5,
 ) -> pd.DataFrame:
     return pd.DataFrame(
         {
@@ -65,6 +66,7 @@ def _activations(
             "session_date_et": [date.fromisoformat(day)],
             "activation_time_utc": [pd.Timestamp(activation)],
             "median_volume_prior_sessions": [median],
+            "relative_volume_at_activation": [relative_volume],
         }
     )
 
@@ -87,6 +89,7 @@ def test_builds_fixed_threshold_ohlcv_and_audits_incomplete_remainder() -> None:
     assert first["volume_threshold"] == 100.0
     assert first["volume"] == 110.0
     assert first["volume_overshoot"] == 10.0
+    assert first["relative_volume_at_activation"] == 2.5
     assert first["source_row_count"] == 2
     assert first["open"] == 100.0
     assert first["high"] == 102.0
@@ -101,6 +104,7 @@ def test_builds_fixed_threshold_ohlcv_and_audits_incomplete_remainder() -> None:
     assert audit["incomplete_remainder_source_rows"] == 1
     assert audit["incomplete_remainder_volume"] == 10.0
     assert audit["completed_volume_bars"] == 2
+    assert audit["relative_volume_at_activation"] == 2.5
     assert audit["model_eligible_volume_bars"] == 0
     assert result.memory["hard_budget_gib"] == 4.0
 
@@ -222,3 +226,8 @@ def test_rejects_contract_hash_mismatch() -> None:
             contract=contract,
             strategy_contract_sha256="0" * 64,
         )
+
+
+def test_rejects_activation_below_frozen_relative_volume_threshold() -> None:
+    with pytest.raises(DataReadinessError, match="activation rows"):
+        _build(_bars(), _activations(relative_volume=1.99))

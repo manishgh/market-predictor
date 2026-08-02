@@ -66,6 +66,13 @@ class PredictionReadinessError(PredictionServiceError):
     public_message = "Prediction inputs or models are not ready."
 
 
+class PredictionModelUnavailableError(PredictionServiceError):
+    code = "prediction_model_unavailable"
+    status_code = 503
+    retryable = True
+    public_message = "No promoted model is available for the requested prediction."
+
+
 class PredictionDriftBlockedError(PredictionServiceError):
     code = "prediction_drift_blocked"
     status_code = 503
@@ -339,6 +346,29 @@ class CatalystConfirmationInfo(BaseModel):
     reasons: list[str] = Field(default_factory=list)
 
 
+class SwingBenchmarkContext(BaseModel):
+    symbol: str
+    role: Literal["broad_market", "growth_market", "sector"]
+    stock_return_5d: float
+    benchmark_return_5d: float
+    excess_return_5d: float
+    stock_return_20d: float
+    benchmark_return_20d: float
+    excess_return_20d: float
+
+
+class SwingManagedRiskContext(BaseModel):
+    entry_reference: Literal["next_session_open"] = "next_session_open"
+    price_levels_available: Literal[False] = False
+    atr_fraction_of_latest_close: float = Field(gt=0.0)
+    target_distance_fraction: float = Field(gt=0.0)
+    stop_distance_fraction: float = Field(gt=0.0)
+    target_atr_multiple: float = Field(gt=0.0)
+    stop_atr_multiple: float = Field(gt=0.0)
+    maximum_holding_sessions: Literal[10] = 10
+    exit_rule: str
+    round_trip_cost_bps: float = Field(ge=0.0)
+
 class SwingPrediction(BaseModel):
     ticker: str
     date: str | None = None
@@ -346,6 +376,15 @@ class SwingPrediction(BaseModel):
     decision_score: float | None = None
     model_prediction: int | None = None
     signal: str
+    action: Literal[
+        "watch_for_entry",
+        "observe_ranked_candidate",
+        "hold_off",
+        "avoid",
+        "abstain",
+    ] = "abstain"
+    expected_horizon: Literal["up to 10 trading sessions"] = "up to 10 trading sessions"
+    abstention_reasons: list[str] = Field(default_factory=list)
     rank: int | None = None
     selection_eligible: bool = False
     selected_for_policy: bool = False
@@ -358,6 +397,14 @@ class SwingPrediction(BaseModel):
     monitor_theme: str | None = None
     global_context: GlobalContextInfo = Field(default_factory=GlobalContextInfo)
     catalyst: CatalystConfirmationInfo = Field(default_factory=CatalystConfirmationInfo)
+    benchmark_context: list[SwingBenchmarkContext] = Field(default_factory=list)
+    managed_risk: SwingManagedRiskContext | None = None
+    model_as_of_utc: datetime | None = None
+    data_as_of_utc: datetime | None = None
+    feature_schema_version: str | None = None
+    model_id: str | None = None
+    serving_bundle_sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+    lineage: dict[str, str] = Field(default_factory=dict)
     readiness: ReadinessInfo
     drivers: dict[str, float | int | str | None] = Field(default_factory=dict)
 
@@ -367,6 +414,17 @@ class SwingPrediction(BaseModel):
             not self.selection_eligible or self.readiness.status != "valid"
         ):
             raise ValueError("selected swing prediction must be eligible and ready")
+        if self.action == "watch_for_entry" and not self.selected_for_policy:
+            raise ValueError("watch_for_entry requires policy selection")
+        if self.selected_for_policy and self.action != "watch_for_entry":
+            raise ValueError("policy-selected swing prediction must use watch_for_entry")
+        if self.model_id is not None and self.readiness.status == "valid" and self.probability is not None:
+            if self.action == "abstain" or self.abstention_reasons:
+                raise ValueError("scored swing prediction cannot be abstained")
+            if self.managed_risk is None or len(self.benchmark_context) < 3:
+                raise ValueError("scored swing prediction requires risk and benchmark context")
+        if self.model_id is not None and self.readiness.status == "invalid" and not self.abstention_reasons:
+            raise ValueError("invalid swing prediction requires abstention reasons")
         return self
 
 

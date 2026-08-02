@@ -14,10 +14,38 @@ from market_predictor.edge_rebuild.readiness import (
     _prepare_intraday_rows,
     _publish_audit,
     _swing_phase_capacity,
+    _verify_candidate_panel_binding,
     _verify_intraday_coverage,
     load_complete_readiness_audit,
 )
+from market_predictor.edge_rebuild.swing_training import SwingPanelBinding
 from market_predictor.v3.errors import DataReadinessError
+
+
+def test_candidate_must_bind_current_ten_session_panel(tmp_path: Path) -> None:
+    binding = SwingPanelBinding(
+        root=tmp_path,
+        manifest={},
+        manifest_sha256="a" * 64,
+        authority_sha256="b" * 64,
+        request_sha256="c" * 64,
+        strategy_contract_sha256="d" * 64,
+    )
+    candidate = {
+        "model_card": {
+            "dataset": {
+                "panel_manifest_sha256": "a" * 64,
+                "panel_authority_sha256": "b" * 64,
+                "panel_request_sha256": "c" * 64,
+                "strategy_contract_sha256": "d" * 64,
+            }
+        }
+    }
+
+    _verify_candidate_panel_binding(candidate, binding)
+    candidate["model_card"]["dataset"]["panel_manifest_sha256"] = "e" * 64
+    with pytest.raises(DataReadinessError, match="active panel"):
+        _verify_candidate_panel_binding(candidate, binding)
 
 
 def test_ten_session_phase_capacity_uses_independent_sessions() -> None:
@@ -176,7 +204,7 @@ def test_immutable_readiness_publication_detects_tampering(
     tmp_path: Path,
 ) -> None:
     request = {
-        "schema": "edge_rebuild.readiness.run.v1",
+        "schema": "edge_rebuild.readiness.run.v3",
         "training_performed": False,
     }
     request_sha256 = _json_sha256(request)

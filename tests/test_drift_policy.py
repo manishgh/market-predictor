@@ -98,7 +98,7 @@ class DriftPolicyTests(unittest.TestCase):
 
         assessment = evaluate_drift(
             mode="swing",
-            horizon="5d",
+            horizon="10b",
             model_release_id=self.release_id,
             model_artifact_sha256="f" * 64,
             prediction_policy_sha256=self.prediction_policy_sha,
@@ -131,16 +131,16 @@ class DriftPolicyTests(unittest.TestCase):
             store.publish(assessment)
 
             self.assertEqual(
-                store.load("swing", "5d", self.release_id),
+                store.load("swing", "10b", self.release_id),
                 assessment,
             )
 
-            path = Path(temp_dir) / "swing" / "5d" / f"{self.release_id}.json"
+            path = Path(temp_dir) / "swing" / "10b" / f"{self.release_id}.json"
             payload = json.loads(path.read_text(encoding="utf-8"))
             payload["state"] = "warning"
             path.write_text(json.dumps(payload), encoding="utf-8")
             with self.assertRaises(PredictionConflictError):
-                store.load("swing", "5d", self.release_id)
+                store.load("swing", "10b", self.release_id)
 
     def _evaluate(
         self,
@@ -148,7 +148,7 @@ class DriftPolicyTests(unittest.TestCase):
         *,
         feature_status: str = "stable",
         mode: str = "swing",
-        horizon: str = "5d",
+        horizon: str = "10b",
     ):
         return evaluate_drift(
             mode=mode,
@@ -174,7 +174,7 @@ class DriftPolicyTests(unittest.TestCase):
         drawdown: float = 0.05,
         generated_at: datetime | None = None,
         view: str = "swing",
-        horizon: str = "5d",
+        horizon: str = "10b",
     ) -> dict[str, object]:
         generated = generated_at or self.now
         window_start = generated - timedelta(days=60)

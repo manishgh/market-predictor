@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import random
 import time
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from email.utils import parsedate_to_datetime
@@ -57,10 +58,32 @@ def _http_error_message(method: str, url: str, error: Exception | None) -> str:
 
 
 class HttpClient:
-    def __init__(self, user_agent: str = "market-predictor/0.1", timeout: int = 30) -> None:
+    def __init__(
+        self,
+        user_agent: str = "market-predictor/0.1",
+        timeout: int = 30,
+        *,
+        before_request: Callable[[], None] | None = None,
+        after_response: Callable[[int, Mapping[str, str]], None] | None = None,
+        additional_retriable_statuses: frozenset[int] = frozenset(),
+    ) -> None:
         self.session = requests.Session()
         self.session.headers.update({"User-Agent": user_agent})
         self.timeout = timeout
+        self.before_request = before_request
+        self.after_response = after_response
+        self.additional_retriable_statuses = additional_retriable_statuses
+
+    def _before_request(self) -> None:
+        if self.before_request is not None:
+            self.before_request()
+
+    def _after_response(self, response: requests.Response) -> None:
+        if self.after_response is not None:
+            self.after_response(response.status_code, response.headers)
+
+    def _is_retriable(self, status: int) -> bool:
+        return _is_retriable_status(status) or status in self.additional_retriable_statuses
 
     def get_json(
         self,
@@ -92,16 +115,15 @@ class HttpClient:
         last_error: Exception | None = None
         for attempt in range(retries):
             try:
+                self._before_request()
                 response = self.session.get(
                     url,
                     params=params,
                     headers=headers,
                     timeout=self.timeout,
                 )
-                if (
-                    _is_retriable_status(response.status_code)
-                    and attempt < retries - 1
-                ):
+                self._after_response(response)
+                if self._is_retriable(response.status_code) and attempt < retries - 1:
                     time.sleep(
                         _retry_delay(
                             response,
@@ -114,19 +136,11 @@ class HttpClient:
                 return response.json(), dict(response.headers)
             except requests.RequestException as exc:
                 last_error = exc
-                status = (
-                    exc.response.status_code
-                    if isinstance(exc, requests.HTTPError)
-                    and exc.response is not None
-                    else None
-                )
-                if status is not None and not _is_retriable_status(status):
+                status = exc.response.status_code if isinstance(exc, requests.HTTPError) and exc.response is not None else None
+                if status is not None and not self._is_retriable(status):
                     break
                 if attempt < retries - 1:
-                    time.sleep(
-                        pause * (2**attempt)
-                        + random.uniform(0.0, pause)
-                    )
+                    time.sleep(pause * (2**attempt) + random.uniform(0.0, pause))
         raise RuntimeError(_http_error_message("GET", url, last_error)) from last_error
 
     def get_bytes_with_metadata(
@@ -146,6 +160,7 @@ class HttpClient:
             response: requests.Response | None = None
             try:
                 request_headers = {"Accept-Encoding": "identity", **(headers or {})}
+                self._before_request()
                 response = self.session.get(
                     url,
                     params=params,
@@ -153,10 +168,8 @@ class HttpClient:
                     timeout=self.timeout,
                     stream=True,
                 )
-                if (
-                    _is_retriable_status(response.status_code)
-                    and attempt < retries - 1
-                ):
+                self._after_response(response)
+                if self._is_retriable(response.status_code) and attempt < retries - 1:
                     time.sleep(
                         _retry_delay(
                             response,
@@ -173,16 +186,8 @@ class HttpClient:
                 safe_headers = _bounded_safe_headers(response.headers)
                 safe_header_map = dict(safe_headers)
                 final_url = response.url or url
-                requested_url = (
-                    response.request.url
-                    if response.request is not None and response.request.url
-                    else url
-                )
-                redirect_chain = tuple(
-                    [*(hop.url for hop in response.history), final_url]
-                    if response.history
-                    else []
-                )
+                requested_url = response.request.url if response.request is not None and response.request.url else url
+                redirect_chain = tuple([*(hop.url for hop in response.history), final_url] if response.history else [])
                 return HttpByteResponse(
                     body=body,
                     requested_url=requested_url,
@@ -201,19 +206,11 @@ class HttpClient:
                 )
             except requests.RequestException as exc:
                 last_error = exc
-                status = (
-                    exc.response.status_code
-                    if isinstance(exc, requests.HTTPError)
-                    and exc.response is not None
-                    else None
-                )
-                if status is not None and not _is_retriable_status(status):
+                status = exc.response.status_code if isinstance(exc, requests.HTTPError) and exc.response is not None else None
+                if status is not None and not self._is_retriable(status):
                     break
                 if attempt < retries - 1:
-                    time.sleep(
-                        pause * (2**attempt)
-                        + random.uniform(0.0, pause)
-                    )
+                    time.sleep(pause * (2**attempt) + random.uniform(0.0, pause))
             finally:
                 if response is not None:
                     response.close()
@@ -231,16 +228,15 @@ class HttpClient:
         last_error: Exception | None = None
         for attempt in range(retries):
             try:
+                self._before_request()
                 response = self.session.post(
                     url,
                     json=payload or {},
                     headers=headers,
                     timeout=self.timeout,
                 )
-                if (
-                    _is_retriable_status(response.status_code)
-                    and attempt < retries - 1
-                ):
+                self._after_response(response)
+                if self._is_retriable(response.status_code) and attempt < retries - 1:
                     time.sleep(
                         _retry_delay(
                             response,
@@ -253,19 +249,11 @@ class HttpClient:
                 return response.json(), dict(response.headers)
             except requests.RequestException as exc:
                 last_error = exc
-                status = (
-                    exc.response.status_code
-                    if isinstance(exc, requests.HTTPError)
-                    and exc.response is not None
-                    else None
-                )
-                if status is not None and not _is_retriable_status(status):
+                status = exc.response.status_code if isinstance(exc, requests.HTTPError) and exc.response is not None else None
+                if status is not None and not self._is_retriable(status):
                     break
                 if attempt < retries - 1:
-                    time.sleep(
-                        pause * (2**attempt)
-                        + random.uniform(0.0, pause)
-                    )
+                    time.sleep(pause * (2**attempt) + random.uniform(0.0, pause))
         raise RuntimeError(_http_error_message("POST", url, last_error)) from last_error
 
 
@@ -285,9 +273,7 @@ def _retry_delay(
                 target = parsedate_to_datetime(retry_after)
                 if target.tzinfo is None:
                     target = target.replace(tzinfo=UTC)
-                delay = (
-                    target.astimezone(UTC) - datetime.now(UTC)
-                ).total_seconds()
+                delay = (target.astimezone(UTC) - datetime.now(UTC)).total_seconds()
                 return min(max(delay, 0.0), 120.0)
             except (TypeError, ValueError, OverflowError):
                 pass
@@ -321,25 +307,17 @@ def _read_bounded_http_entity(
         except ValueError as exc:
             raise RuntimeError("HTTP response Content-Length is invalid") from exc
         if declared_length < 0 or declared_length > maximum_body_bytes:
-            raise RuntimeError(
-                "HTTP response exceeds maximum_body_bytes: "
-                f"declared={declared_length} limit={maximum_body_bytes}"
-            )
+            raise RuntimeError(f"HTTP response exceeds maximum_body_bytes: declared={declared_length} limit={maximum_body_bytes}")
     response.raw.decode_content = False
     chunks: list[bytes] = []
     total = 0
     while True:
-        chunk = response.raw.read(
-            min(_READ_CHUNK_BYTES, maximum_body_bytes - total + 1)
-        )
+        chunk = response.raw.read(min(_READ_CHUNK_BYTES, maximum_body_bytes - total + 1))
         if not chunk:
             break
         total += len(chunk)
         if total > maximum_body_bytes:
-            raise RuntimeError(
-                "HTTP response exceeds maximum_body_bytes: "
-                f"observed>{maximum_body_bytes} limit={maximum_body_bytes}"
-            )
+            raise RuntimeError(f"HTTP response exceeds maximum_body_bytes: observed>{maximum_body_bytes} limit={maximum_body_bytes}")
         chunks.append(bytes(chunk))
     return b"".join(chunks)
 
@@ -348,11 +326,7 @@ def _bounded_safe_headers(
     headers: requests.structures.CaseInsensitiveDict[str] | dict[str, str],
 ) -> tuple[tuple[str, str], ...]:
     normalized = {str(name).lower(): str(value) for name, value in headers.items()}
-    return tuple(
-        (name, normalized[name][:_MAX_SAFE_HEADER_VALUE_LENGTH])
-        for name in _SAFE_RESPONSE_HEADERS
-        if name in normalized
-    )
+    return tuple((name, normalized[name][:_MAX_SAFE_HEADER_VALUE_LENGTH]) for name in _SAFE_RESPONSE_HEADERS if name in normalized)
 
 
 def _is_retriable_status(status: int) -> bool:

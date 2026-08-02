@@ -14,11 +14,52 @@ from pandas.api.types import is_bool_dtype
 from market_predictor.edge_rebuild.strategy_contract import StrategyContract
 from market_predictor.v3.errors import DataReadinessError
 
-FEATURE_SCHEMA_VERSION: Final = "edge_rebuild.intraday_features.v1"
+FEATURE_SCHEMA_VERSION: Final = "edge_rebuild.intraday_features.v2"
 EXCHANGE_TIMEZONE: Final = ZoneInfo("America/New_York")
 _REGULAR_OPEN: Final = time(9, 30)
 _REGULAR_CLOSE: Final = time(16, 0)
 _HORIZONS: Final = (1, 5, 20)
+CAUSAL_INTRADAY_MODEL_FEATURE_COLUMNS: Final = (
+    "return_1_bar",
+    "return_3_bars",
+    "return_5_bars",
+    "rsi_14",
+    "atr_fraction_of_close",
+    "ema_10_distance",
+    "ema_20_distance",
+    "realized_volatility_5",
+    "realized_volatility_20",
+    "granville_obv_confirmation",
+    "kaufman_efficiency_ratio",
+    "session_vwap_distance_atr",
+    "volume_bar_progress",
+    "normalized_volume_overshoot",
+    "volume_bar_duration_minutes",
+    "relative_volume_at_activation",
+    "minutes_since_causal_activation",
+    "regular_session_progress",
+    "stock_clock_return_1m",
+    "stock_clock_return_5m",
+    "stock_clock_return_20m",
+    "spy_return_1m",
+    "spy_return_5m",
+    "spy_return_20m",
+    "qqq_return_1m",
+    "qqq_return_5m",
+    "qqq_return_20m",
+    "sector_return_1m",
+    "sector_return_5m",
+    "sector_return_20m",
+    "spy_relative_strength_1m",
+    "spy_relative_strength_5m",
+    "spy_relative_strength_20m",
+    "qqq_relative_strength_1m",
+    "qqq_relative_strength_5m",
+    "qqq_relative_strength_20m",
+    "sector_relative_strength_1m",
+    "sector_relative_strength_5m",
+    "sector_relative_strength_20m",
+)
 _SECTOR_BENCHMARKS: Final = frozenset({"XLB", "XLC", "XLE", "XLF", "XLI", "XLK", "XLP", "XLRE", "XLU", "XLV", "XLY"})
 _VOLUME_BAR_REQUIRED: Final = frozenset(
     {
@@ -38,6 +79,7 @@ _VOLUME_BAR_REQUIRED: Final = frozenset(
         "source_row_count",
         "volume_threshold",
         "volume_overshoot",
+        "relative_volume_at_activation",
         "activation_time_utc",
         "model_eligible",
         "source",
@@ -150,7 +192,27 @@ def build_causal_intraday_features(
     data["session_vwap_distance_atr"] = ((data["close"] - data["stock_clock_session_vwap"]) / data["atr_14"].replace(0.0, np.nan)).astype(
         "float32"
     )
-    local_clock = data["feature_available_at_utc"].dt.tz_convert(EXCHANGE_TIMEZONE).dt.strftime("%H:%M")
+    data["atr_fraction_of_close"] = (data["atr_14"] / data["close"]).astype("float32")
+    data["normalized_volume_overshoot"] = (data["volume_overshoot"] / data["volume_threshold"]).astype("float32")
+    data["volume_bar_duration_minutes"] = (
+        (data["bar_end_utc"] - data["bar_start_utc"]) / pd.Timedelta(minutes=1)
+    ).astype("float32")
+    data["minutes_since_causal_activation"] = (
+        (data["feature_available_at_utc"] - data["activation_time_utc"]) / pd.Timedelta(minutes=1)
+    ).astype("float32")
+
+    local_timestamp = data["feature_available_at_utc"].dt.tz_convert(EXCHANGE_TIMEZONE)
+    regular_minutes = (
+        local_timestamp.dt.hour * 60.0
+        + local_timestamp.dt.minute
+        + local_timestamp.dt.second / 60.0
+        - (_REGULAR_OPEN.hour * 60 + _REGULAR_OPEN.minute)
+    ).clip(lower=0.0, upper=390.0)
+    data["regular_session_progress"] = (regular_minutes / 390.0).astype(
+        "float32"
+    )
+
+    local_clock = local_timestamp.dt.strftime("%H:%M")
     data["session_segment"] = np.select(
         [
             local_clock.lt(contract.intraday.opening_end_et),
@@ -177,25 +239,9 @@ def build_causal_intraday_features(
             f"missing_exact_{prefix}_minute_context",
         )
 
-    mandatory_numeric = [
-        "return_1_bar",
-        "return_3_bars",
-        "return_5_bars",
-        "rsi_14",
-        "atr_14",
-        "ema_10_distance",
-        "ema_20_distance",
-        "realized_volatility_5",
-        "realized_volatility_20",
-        "granville_obv_confirmation",
-        "kaufman_efficiency_ratio",
-        "session_vwap_distance_atr",
-        "stock_clock_return_1m",
-        "spy_return_1m",
-        "qqq_return_1m",
-        "sector_return_1m",
-    ]
-    finite_required = np.isfinite(data[mandatory_numeric].to_numpy(dtype="float64")).all(axis=1)
+    finite_required = np.isfinite(
+        data[list(CAUSAL_INTRADAY_MODEL_FEATURE_COLUMNS)].to_numpy(dtype="float64")
+    ).all(axis=1)
     _reject(
         data,
         pd.Series(~finite_required, index=data.index),
@@ -227,7 +273,10 @@ def build_causal_intraday_features(
                 "_relative_strength_20m",
             )
         )
-        or column in {"session_vwap_distance_atr", "volume_bar_progress"}
+        or column in {
+            *CAUSAL_INTRADAY_MODEL_FEATURE_COLUMNS,
+            "atr_14",
+        }
     ]
     for column in float_columns:
         data[column] = pd.to_numeric(data[column], errors="coerce").astype("float32")
@@ -468,6 +517,7 @@ def _validate_volume_bars(
         "source_row_count",
         "volume_threshold",
         "volume_overshoot",
+        "relative_volume_at_activation",
         "volume_bar_number",
     )
     for column in numeric_columns:
@@ -489,6 +539,11 @@ def _validate_volume_bars(
         or not bool(np.isfinite(numeric).all())
         or bool(data[["open", "high", "low", "close", "volume", "source_row_count", "volume_threshold"]].le(0.0).any().any())
         or bool(data["volume_overshoot"].lt(0.0).any())
+        or bool(
+            data["relative_volume_at_activation"]
+            .lt(contract.intraday_universe.minimum_relative_volume)
+            .any()
+        )
         or bool(data["high"].lt(data[["open", "close"]].max(axis=1)).any())
         or bool(data["low"].gt(data[["open", "close"]].min(axis=1)).any())
         or bool(data["high"].lt(data["low"]).any())
@@ -507,6 +562,10 @@ def _validate_volume_bars(
             raise DataReadinessError("volume-bar numbering must be contiguous and start at one per session")
         if bool(ordered["bar_start_utc"].iloc[1:].reset_index(drop=True).lt(ordered["bar_end_utc"].iloc[:-1].reset_index(drop=True)).any()):
             raise DataReadinessError("completed volume bars overlap within a stock-session")
+        if ordered["relative_volume_at_activation"].nunique(dropna=False) != 1:
+            raise DataReadinessError(
+                "activation relative volume must be constant within a stock-session"
+            )
 
     expected_eligible = data["volume_bar_number"].ge(contract.intraday.minimum_warmup_bars) & data["available_at_utc"].ge(
         data["activation_time_utc"]

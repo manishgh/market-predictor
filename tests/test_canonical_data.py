@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import unittest
 from datetime import UTC, datetime
@@ -86,7 +86,7 @@ class CanonicalContractTests(unittest.TestCase):
         observed_empty = SourceCollection(
             collection_id="collection-1",
             ticker="MSFT",
-            source_family="reddit",
+            source_family="sec",
             requested_start_utc=now,
             requested_end_utc=now,
             started_at_utc=now,
@@ -387,9 +387,9 @@ class CanonicalJoinAndAuditTests(unittest.TestCase):
         collections = pd.DataFrame(
             [
                 SourceCollection(
-                    collection_id="reddit-1",
+                    collection_id="sec-test-1",
                     ticker="MSFT",
-                    source_family="reddit",
+                    source_family="sec",
                     requested_start_utc=datetime(2026, 7, 20, tzinfo=UTC),
                     requested_end_utc=datetime(2026, 7, 21, 10, 0, tzinfo=UTC),
                     started_at_utc=datetime(2026, 7, 21, 10, 5, tzinfo=UTC),
@@ -399,11 +399,11 @@ class CanonicalJoinAndAuditTests(unittest.TestCase):
                 ).model_dump()
             ]
         )
-        joined = join_source_collection_status(decisions, collections, source_families=["reddit"])
-        self.assertEqual(joined["source_status_reddit"].tolist(), ["not_collected", "observed_empty"])
-        self.assertEqual(joined.loc[1, "source_coverage_end_utc_reddit"], pd.Timestamp("2026-07-21T10:00:00Z"))
+        joined = join_source_collection_status(decisions, collections, source_families=["sec"])
+        self.assertEqual(joined["source_status_sec"].tolist(), ["not_collected", "observed_empty"])
+        self.assertEqual(joined.loc[1, "source_coverage_end_utc_sec"], pd.Timestamp("2026-07-21T10:00:00Z"))
         self.assertTrue(all(check.status == "pass" for check in audit_source_collections(collections)))
-        coverage = audit_decision_source_coverage(joined, required_sources=["reddit"])
+        coverage = audit_decision_source_coverage(joined, required_sources=["sec"])
         self.assertEqual(coverage[0].status, "fail")
         self.assertEqual(coverage[0].failures, 1)
 
@@ -415,9 +415,9 @@ class CanonicalJoinAndAuditTests(unittest.TestCase):
                 }
             ),
             collections,
-            source_families=["reddit"],
+            source_families=["sec"],
         )
-        stale_coverage = audit_decision_source_coverage(stale, required_sources=["reddit"])
+        stale_coverage = audit_decision_source_coverage(stale, required_sources=["sec"])
         self.assertEqual(stale_coverage[0].status, "fail")
         self.assertEqual(stale_coverage[0].failures, 1)
 

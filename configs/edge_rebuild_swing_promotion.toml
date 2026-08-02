@@ -1,0 +1,12 @@
+[promotion_gate_policy]
+schema = "edge_rebuild.swing_promotion_gate_policy.v1"
+strategy_id = "swing"
+horizon_sessions = 10
+required_validation_scopes = ["temporal", "unseen_security"]
+minimum_expected_net_edge_source = "strategy_contract.swing.minimum_expected_net_edge_bps"
+managed_net_return_ci_low_must_be_positive = true
+all_exact_10_session_benchmark_ci_lows_must_be_positive = true
+required_benchmarks = ["SPY", "QQQ", "sector"]
+cost_stress_multiplier_source = "strategy_contract.stress.cost_multiplier"
+cost_stress_ci_low_must_be_positive = true
+allow_no_candidate = true

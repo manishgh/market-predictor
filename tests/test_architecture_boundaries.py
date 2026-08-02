@@ -73,7 +73,22 @@ class ArchitectureBoundaryTests(unittest.TestCase):
             "watch",
         }
         self.assertTrue(obsolete_prediction_commands.isdisjoint(research_commands))
-        self.assertTrue({"build-swing-dataset", "train-swing-model", "promote-swing-model"}.issubset(research_commands))
+        retired_swing_commands = {
+            "build-swing-dataset",
+            "build-swing-strategy-labels",
+            "build-swing-specialist-datasets",
+            "train-swing-model",
+            "train-swing-specialists",
+            "promote-swing-model",
+            "rank-sector-themes",
+        }
+        self.assertTrue(retired_swing_commands.isdisjoint(research_commands))
+        self.assertTrue(
+            {
+                "materialize-edge-rebuild-swing-panel",
+                "train-edge-rebuild-swing-candidate",
+            }.issubset(research_commands)
+        )
         self.assertTrue(
             {
                 "build-intraday-dataset",
@@ -83,20 +98,12 @@ class ArchitectureBoundaryTests(unittest.TestCase):
         )
         self.assertTrue(
             {
-                "build-swing-live-features",
-                "build-intraday-live-features",
-                "publish-live-features",
-            }.issubset(research_commands | production_commands)
-        )
-        self.assertTrue(
-            {
                 "azure-publish-serving-release",
                 "azure-rollback-serving-release",
                 "azure-sync-serving-release",
             }.isdisjoint(research_commands | production_commands)
         )
         self.assertNotIn("azure-publish-models", research_commands)
-        self.assertIn("rank-sector-themes", research_commands)
         self.assertFalse((package_root / "deployment.py").exists())
 
         prediction_service = (package_root / "prediction_service.py").read_text(encoding="utf-8")

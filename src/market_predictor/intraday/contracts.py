@@ -155,8 +155,6 @@ CATALYST_AUDIT_FEATURES = (
     "low_relevance_event_fraction_2h",
     "low_relevance_event_fraction_1d",
     "source_count_alpaca_2h",
-    "source_count_reddit_2h",
-    "source_count_seeking_alpha_2h",
     "source_count_sec_2h",
     "source_count_finviz_2h",
     "global_event_count_2h",

@@ -1,0 +1,21 @@
+[training]
+decision_start_date = "2019-07-09"
+horizon_sessions = 10
+calibration_fraction = 0.20
+minimum_calibration_sessions = 63
+minimum_rows = 100000
+minimum_securities = 100
+maximum_trades_per_decision = 25
+probability_thresholds = [0.10, 0.15, 0.20, 0.25, 0.30, 0.35]
+logistic_c_values = [1.0]
+hgb_learning_rates = [0.05]
+hgb_max_leaf_nodes = [15, 31]
+hgb_max_iter = 150
+hgb_max_bins = 127
+maximum_learned_candidates = 6
+bootstrap_samples = 2000
+bootstrap_block_sessions = 20
+random_seed = 42
+expected_round_trip_cost_bps = 20.0
+maximum_process_memory_gib = 5.0
+memory_guard_headroom_gib = 0.75

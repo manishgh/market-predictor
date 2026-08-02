@@ -40,6 +40,7 @@ _ACTIVATION_COLUMNS = frozenset(
         "session_date_et",
         "activation_time_utc",
         "median_volume_prior_sessions",
+        "relative_volume_at_activation",
     }
 )
 VOLUME_BAR_COLUMNS = (
@@ -59,6 +60,7 @@ VOLUME_BAR_COLUMNS = (
     "source_row_count",
     "volume_threshold",
     "volume_overshoot",
+    "relative_volume_at_activation",
     "activation_time_utc",
     "model_eligible",
     "source",
@@ -72,6 +74,7 @@ AUDIT_COLUMNS = (
     "session_date_et",
     "activation_time_utc",
     "median_volume_prior_sessions",
+    "relative_volume_at_activation",
     "volume_bars_per_session_target",
     "volume_threshold",
     "source_rows",
@@ -116,7 +119,10 @@ def build_causal_volume_bars(
         stage="volume-bar input validation",
     )
     source = _validate_one_minute_bars(one_minute_bars)
-    selected = _validate_activations(activations)
+    selected = _validate_activations(
+        activations,
+        minimum_relative_volume=contract.intraday_universe.minimum_relative_volume,
+    )
     source_group_indices = source.groupby(["ticker", "session_date_et"], sort=False, observed=True).indices
     output_rows: list[dict[str, Any]] = []
     audit_rows: list[dict[str, Any]] = []
@@ -134,6 +140,9 @@ def build_causal_volume_bars(
             ordered,
             threshold=threshold,
             activation_time=pd.Timestamp(activation.activation_time_utc),
+            relative_volume_at_activation=float(
+                activation.relative_volume_at_activation
+            ),
             minimum_warmup_bars=contract.intraday.minimum_warmup_bars,
             strategy_contract_sha256=strategy_contract_sha256,
         )
@@ -145,6 +154,9 @@ def build_causal_volume_bars(
                 "session_date_et": key[1],
                 "activation_time_utc": activation.activation_time_utc,
                 "median_volume_prior_sessions": float(activation.median_volume_prior_sessions),
+                "relative_volume_at_activation": float(
+                    activation.relative_volume_at_activation
+                ),
                 "volume_bars_per_session_target": target,
                 "volume_threshold": threshold,
                 "source_rows": int(len(ordered)),
@@ -184,6 +196,7 @@ def _build_one_session(
     *,
     threshold: float,
     activation_time: pd.Timestamp,
+    relative_volume_at_activation: float,
     minimum_warmup_bars: int,
     strategy_contract_sha256: str,
 ) -> tuple[list[dict[str, Any]], list[Any]]:
@@ -219,6 +232,7 @@ def _build_one_session(
                 "source_row_count": len(pending),
                 "volume_threshold": threshold,
                 "volume_overshoot": pending_volume - threshold,
+                "relative_volume_at_activation": relative_volume_at_activation,
                 "activation_time_utc": activation_time,
                 "model_eligible": (
                     available_at >= activation_time
@@ -293,7 +307,11 @@ def _validate_one_minute_bars(bars: pd.DataFrame) -> pd.DataFrame:
     return frame
 
 
-def _validate_activations(activations: pd.DataFrame) -> pd.DataFrame:
+def _validate_activations(
+    activations: pd.DataFrame,
+    *,
+    minimum_relative_volume: float,
+) -> pd.DataFrame:
     missing = sorted(_ACTIVATION_COLUMNS.difference(activations.columns))
     if missing:
         raise DataReadinessError(f"activation rows are missing columns: {missing}")
@@ -304,13 +322,21 @@ def _validate_activations(activations: pd.DataFrame) -> pd.DataFrame:
     frame["session_date_et"] = pd.to_datetime(frame["session_date_et"], errors="raise").dt.date
     frame["activation_time_utc"] = pd.to_datetime(frame["activation_time_utc"], utc=True, errors="raise")
     frame["median_volume_prior_sessions"] = pd.to_numeric(frame["median_volume_prior_sessions"], errors="coerce")
+    frame["relative_volume_at_activation"] = pd.to_numeric(
+        frame["relative_volume_at_activation"], errors="coerce"
+    )
     medians = frame["median_volume_prior_sessions"].to_numpy(dtype="float64")
+    relative_volume = frame["relative_volume_at_activation"].to_numpy(
+        dtype="float64"
+    )
     activation_local_date = frame["activation_time_utc"].dt.tz_convert(EXCHANGE_TIMEZONE).dt.date
     if (
         bool(frame["ticker"].eq("").any())
         or bool(frame.duplicated(["ticker", "session_date_et"]).any())
         or not bool(np.isfinite(medians).all())
         or bool((medians <= 0).any())
+        or not bool(np.isfinite(relative_volume).all())
+        or bool((relative_volume < minimum_relative_volume).any())
         or bool(activation_local_date.ne(frame["session_date_et"]).any())
         or bool(frame["activation_time_utc"].dt.second.ne(0).any())
         or bool(frame["activation_time_utc"].dt.microsecond.ne(0).any())

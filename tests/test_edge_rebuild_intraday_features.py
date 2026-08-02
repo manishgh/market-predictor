@@ -9,6 +9,7 @@ import pandas.testing as pdt
 import pytest
 
 from market_predictor.edge_rebuild.intraday_features import (
+    CAUSAL_INTRADAY_MODEL_FEATURE_COLUMNS,
     FEATURE_SCHEMA_VERSION,
     build_causal_intraday_features,
 )
@@ -61,6 +62,7 @@ def _volume_bars(
             "source_row_count": 1,
             "volume_threshold": 100.0,
             "volume_overshoot": 0.0,
+            "relative_volume_at_activation": 2.5,
             "activation_time_utc": activation,
             "model_eligible": numbers >= contract.intraday.minimum_warmup_bars,
             "source": "alpaca",
@@ -179,6 +181,70 @@ def test_builds_exact_synchronized_context_after_frozen_warmup() -> None:
     assert eligible["stock_clock_context_close"] == pytest.approx(eligible["close"])
 
 
+def test_builds_finite_float32_normalized_decision_features() -> None:
+    volume, stock, benchmarks, memberships = _inputs()
+    volume.loc[19, "volume"] = 125.0
+    volume.loc[19, "volume_overshoot"] = 25.0
+
+    result = _build(volume, stock, benchmarks, memberships)
+    eligible = result.loc[result["volume_bar_number"].eq(20)].iloc[0]
+
+    assert eligible["atr_fraction_of_close"] == pytest.approx(
+        eligible["atr_14"] / eligible["close"]
+    )
+    assert eligible["normalized_volume_overshoot"] == pytest.approx(0.25)
+    assert eligible["volume_bar_duration_minutes"] == pytest.approx(1.0)
+    assert eligible["relative_volume_at_activation"] == pytest.approx(2.5)
+    assert eligible["minutes_since_causal_activation"] == pytest.approx(20.0)
+    assert eligible["regular_session_progress"] == pytest.approx(21.0 / 390.0)
+    assert np.isfinite(
+        eligible[list(CAUSAL_INTRADAY_MODEL_FEATURE_COLUMNS)].to_numpy(dtype="float64")
+    ).all()
+    assert all(result[column].dtype == np.dtype("float32") for column in CAUSAL_INTRADAY_MODEL_FEATURE_COLUMNS)
+
+
+def test_rejects_changed_activation_relative_volume_inside_session() -> None:
+    volume, stock, benchmarks, memberships = _inputs()
+    volume.loc[20, "relative_volume_at_activation"] = 3.0
+
+    with pytest.raises(DataReadinessError, match="constant within a stock-session"):
+        _build(volume, stock, benchmarks, memberships)
+
+
+def test_model_features_are_price_scale_invariant_and_exclude_raw_prices() -> None:
+    baseline = _inputs()
+    scaled = tuple(frame.copy() for frame in baseline)
+    scaled_volume, scaled_stock, scaled_benchmarks, scaled_memberships = scaled
+    for frame in (scaled_volume, scaled_stock):
+        frame.loc[:, ["open", "high", "low", "close"]] *= 10.0
+
+    original = _build(*baseline)
+    rescaled = _build(
+        scaled_volume,
+        scaled_stock,
+        scaled_benchmarks,
+        scaled_memberships,
+    )
+
+    raw_price_columns = {
+        "open",
+        "high",
+        "low",
+        "close",
+        "atr_14",
+        "stock_clock_context_close",
+        "stock_clock_session_vwap",
+    }
+    assert raw_price_columns.isdisjoint(CAUSAL_INTRADAY_MODEL_FEATURE_COLUMNS)
+    pdt.assert_frame_equal(
+        original.loc[:, CAUSAL_INTRADAY_MODEL_FEATURE_COLUMNS],
+        rescaled.loc[:, CAUSAL_INTRADAY_MODEL_FEATURE_COLUMNS],
+        check_exact=False,
+        rtol=1e-5,
+        atol=1e-6,
+    )
+
+
 def test_appended_and_poisoned_future_rows_cannot_change_feature_prefix() -> None:
     initial = _inputs(rows=25)
     extended = _inputs(rows=30)
@@ -187,6 +253,9 @@ def test_appended_and_poisoned_future_rows_cannot_change_feature_prefix() -> Non
     extended_volume, extended_stock, extended_benchmarks, memberships = extended
     future_volume = extended_volume["volume_bar_number"].gt(25)
     extended_volume.loc[future_volume, ["open", "high", "low", "close"]] += 10_000.0
+    extended_volume.loc[future_volume, "volume"] = 10_000.0
+    extended_volume.loc[future_volume, "volume_threshold"] = 8_000.0
+    extended_volume.loc[future_volume, "volume_overshoot"] = 2_000.0
     future_stock = extended_stock["bar_start_utc"].gt(initial[1]["bar_start_utc"].max())
     extended_stock.loc[future_stock, ["open", "high", "low", "close"]] = extended_volume.loc[
         future_volume, ["open", "high", "low", "close"]

@@ -24,7 +24,7 @@ class UnknownRelevanceTest(unittest.TestCase):
             {
                 "ticker": ["AAA", "AAA"],
                 "security_id": ["security:aaa", "security:aaa"],
-                "source_family": ["alpaca", "reddit"],
+                "source_family": ["alpaca", "finviz"],
                 "feature_available_at_utc": [
                     decision_time - pd.Timedelta(hours=1),
                     decision_time - pd.Timedelta(minutes=30),

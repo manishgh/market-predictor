@@ -1,0 +1,48 @@
+candidate_reference_id = "intraday.edge_rebuild.30m.20260802.v1"
+candidate_directory = "models/edge_rebuild_intraday_candidate_20260802_v1"
+
+[dataset]
+authority_sha256 = "5225b37838a9dcf902533aad9cfd32d1db825fc5979e8e0ec5bbed3d8893006b"
+dataset_sha256 = "93c67179ff5438fd16c98e701d1d7f79d6ecdc9e35601a68b9d46605a7b4c4ea"
+manifest_sha256 = "93c67179ff5438fd16c98e701d1d7f79d6ecdc9e35601a68b9d46605a7b4c4ea"
+schema_version = "edge_rebuild.intraday_dataset.v2"
+
+[candidate_files."_authority.json"]
+bytes = 231
+sha256 = "4615ceaea0252d652e747c49b0787a261ee67477870bd6f66248a8b2fc62b10e"
+
+[candidate_files."_manifest.json"]
+bytes = 495
+sha256 = "ae08511c026acd7cf4e40b3f951c6b70ecd6624f6251ea83b915c8e42c23ab33"
+
+[candidate_files."candidate.joblib"]
+bytes = 3452
+sha256 = "44d5e9f03c054876d3973d9f8f855c1026d3a1b38e923dbcf7d9eb1a3c71df51"
+
+[candidate_files."evaluation.json"]
+bytes = 447687
+sha256 = "97eefc21acee81c2a8a3b02030110081fc863e9dc2d35a94e6229218bed1f94f"
+
+[candidate_files."model_card.json"]
+bytes = 3317
+sha256 = "934f452dee35635a68ce883f6557b7a3e6c5c1c82dd50c029f6aac86999d3e00"
+
+[[reasons]]
+code = "negative_net_economics"
+detail = "Validation top-10 net return was -10.01 bp/trade and opened-test net return was -9.58 bp/trade after the frozen 10 bp cost."
+
+[[reasons]]
+code = "negative_confidence_interval"
+detail = "Opened-test session-bootstrap net-return interval was entirely negative: -11.11 to -8.81 bp."
+
+[[reasons]]
+code = "objective_policy_mismatch"
+detail = "The classifier optimized target-hit probability, while selected-trade rank IC was -0.00996 and top-minus-bottom spread was -0.26 bp."
+
+[[reasons]]
+code = "forced_trading_without_abstention"
+detail = "The evaluator selected ten rows in every decision group and created 193100 opened-test trades without an expected-value no-trade threshold."
+
+[[reasons]]
+code = "non_executable_portfolio_accounting"
+detail = "Reported turnover, drawdown, and compounding did not model concurrent positions, capital allocation, cooldowns, or exact exits."

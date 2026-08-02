@@ -137,7 +137,7 @@ class PromotionAuditTests(unittest.TestCase):
                 "ticker": ["MSFT", "MSFT"],
                 "date": pd.date_range("2026-07-01", periods=2),
                 "news_count": [2, 0],
-                "source_count_seeking_alpha": [1, 0],
+                "source_count_sec": [1, 0],
                 "event_relevance_score": [0.8, 0.2],
             }
         )
@@ -147,7 +147,7 @@ class PromotionAuditTests(unittest.TestCase):
 
         self.assertTrue(bool(audit.iloc[0]["has_catalyst_features"]))
         self.assertEqual(int(audit.iloc[0]["alignment_error_total"]), 1)
-        self.assertEqual(int(audit.iloc[0]["seeking_alpha_rows"]), 1)
+        self.assertEqual(int(audit.iloc[0]["sec_rows"]), 1)
 
 
 if __name__ == "__main__":

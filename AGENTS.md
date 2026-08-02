@@ -41,14 +41,16 @@ When instructions disagree, use this order:
 
 1. Current user instruction.
 2. This `AGENTS.md`.
-3. `docs/catalyst_confirmation_architecture.md`.
-4. The single active execution plan:
+3. The single active execution plan:
    `docs/active_edge_rebuild_plan.md`.
-5. The companion current handoff:
+4. The companion current handoff:
    `docs/reviews/active_edge_rebuild_handoff.md`.
+5. The current feature acceptance audit:
+   `docs/reviews/feature_engineering_audit_20260801.md`.
 6. Current code contracts and tests.
-7. Older review, planning, and handoff documents.
-8. Chat history.
+7. `docs/catalyst_confirmation_architecture.md` and the implementation guide.
+8. Historical evidence and rejected model cards.
+9. Chat history.
 
 Never infer current state from chat alone. Inspect the branch, working tree, recent
 commits, tests, and authoritative documents first.
@@ -164,6 +166,74 @@ The handoff must never claim unrun tests, unverified artifacts, model profitabil
 external readiness. If interrupted before the implementation commit, record the dirty
 files and exact unfinished command instead of marking the step complete.
 
+### 3.8 Documentation And Audit Retention
+
+Keep the repository documentation small and authoritative:
+
+1. Update the active plan, handoff, and feature audit in place. Do not create a dated
+   replacement for current state or leave two documents claiming to be current.
+2. At every checkpoint, consolidate useful conclusions from temporary reviews into the
+   active handoff or feature audit, then delete the superseded narrative review.
+3. Delete generated reports, rejected-model outputs, and incomplete materializations
+   after confirming that no source, test, manifest, model card, or active document
+   references them and that they are reproducible from protected inputs.
+4. Retain immutable evidence only when a governance contract, content hash, accepted
+   model card, or reproducibility test depends on it. Label retained historical evidence
+   as historical so it cannot be mistaken for active work.
+5. Never delete raw provider data, canonical authorities, accepted model bundles, or
+   hash-bound evidence as routine cleanup. Their removal requires an explicit retention
+   decision recorded in the active handoff.
+6. Before committing documentation cleanup, run a repository reference scan and the
+   affected governance tests. Broken links or dangling evidence paths are failures.
+
+The current continuity set is exactly the documents named in section 3.7. The current
+feature audit is `docs/reviews/feature_engineering_audit_20260801.md`; replace its
+contents in place until the active program closes.
+
+### 3.9 Vertical Feature Completion
+
+A feature is not implemented when only its calculation exists. It is complete only
+when one evidence chain covers every applicable layer:
+
+1. source collection and source-coverage semantics;
+2. immutable causal authority and availability timestamp;
+3. historical batch construction;
+4. live construction from the same transformation;
+5. ordered model-feature contract and manifest hash;
+6. training, validation, promotion, and serving consumption;
+7. API representation with unavailable values kept distinct from zero;
+8. batch/live parity, future-poison, missingness, and artifact-tamper tests.
+
+Before training, maintain one acceptance matrix for every proposed feature group with
+those layers marked `verified`, `not_applicable`, or `blocked` and linked to concrete
+artifacts/tests. `not_applicable` requires a recorded design reason, such as an
+intraday catalyst being an overlay rather than an estimator input. Any other missing
+layer blocks training and serving. Do not describe calculation-only, batch-only, or
+API-only work as complete.
+
+Source families are part of the model contract. A model may consume only the exact
+source set represented throughout its training history. Additional live sources may
+be exposed as separately evaluated overlays, but they may not silently change model
+inputs. Missing optional sources remain unavailable; missing required sources force
+abstention.
+
+### 3.10 Frozen Swing Data Contract
+
+- The first permitted swing decision date is 2019-07-09.
+- Bars before 2019-07-09 are warm-up history only. They may initialize causal
+  indicators but may not produce decision features, labels, training rows,
+  validation rows, or test rows.
+- Missing catalyst coverage before 2019-07-09 is not a readiness failure because no
+  modeled decision may exist in that period.
+- Ticker catalyst sources are direct-issuer Alpaca news and SEC issuer filing events.
+  Each source requires reproducible provenance and an explicit availability timestamp.
+- Verified open-source global and sector events are separate context overlays. They
+  must not be converted into ticker catalyst.
+- Reddit and Seeking Alpha are retired and prohibited. Do not collect, materialize,
+  feature, train, serve, or document them as available dependencies.
+- No model training may begin until all required causal source, feature, and label
+  authorities pass coverage validation, immutable replay, and lineage verification.
+
 ## 4. Mandatory ML And Trading Invariants
 
 ### 4.1 Point-In-Time Causality
@@ -236,8 +306,9 @@ files and exact unfinished command instead of marking the step complete.
 - Provider limits are configuration and telemetry, not hard-coded assumptions.
 - Price/volume features that require consolidated volume must fail when the feed is not
   SIP/consolidated.
-- Keep peak process memory below 4 GiB. Use bounded batches, projected columns,
-  `float32` matrices where appropriate, and sequential model release.
+- Keep swing candidate training below 5 GiB process memory. Intraday and serving
+  workloads retain 4 GiB limits. Use bounded batches, projected columns, `float32`
+  matrices where appropriate, and sequential model release.
 - Do not leave Python workers or test servers running after verification.
 - Do not run multiple heavy test/training processes concurrently.
 - Every heavy CLI build or training entry point must acquire the shared
@@ -252,13 +323,14 @@ For every checkpoint:
 2. Preserve unrelated user changes. Never reset or revert them.
 3. Write or update the failing/poison test before or with the fix.
 4. Change contracts before consumers and consumers before documentation.
-5. Run focused tests after each subsystem.
-6. Run repository-wide Ruff and strict mypy.
-7. Run the complete unit test suite once after the final code change.
-8. Check `git diff --check`, process state, and memory.
-9. Update README, architecture, implementation guide, and handoff only where behavior
+5. Update the vertical feature acceptance matrix before model training.
+6. Run focused tests after each subsystem.
+7. Run repository-wide Ruff and strict mypy.
+8. Run the complete unit test suite once after the final code change.
+9. Check `git diff --check`, process state, and memory.
+10. Update README, architecture, implementation guide, and handoff only where behavior
    actually changed.
-10. Commit and push the implementation, then close the two continuity documents before
+11. Commit and push the implementation, then close the two continuity documents before
     starting the next checkpoint.
 
 Do not mix unfinished work from different checkpoints in one commit. If the working

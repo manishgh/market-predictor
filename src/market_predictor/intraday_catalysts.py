@@ -8,7 +8,8 @@ import numpy as np
 import pandas as pd
 
 from market_predictor.data_quality import sanitize_events_frame
-from market_predictor.features import EVENT_KEYWORDS, add_event_taxonomy, source_family_for_source
+from market_predictor.features import EVENT_KEYWORDS, add_event_taxonomy
+from market_predictor.source_taxonomy import source_family_for_source
 
 CATALYST_WINDOWS = {
     "30m": pd.Timedelta(minutes=30),
@@ -16,7 +17,7 @@ CATALYST_WINDOWS = {
     "1d": pd.Timedelta(days=1),
 }
 
-SOURCE_FAMILIES = ["alpaca", "reddit", "seeking_alpha", "sec", "finviz"]
+SOURCE_FAMILIES = ["alpaca", "sec", "finviz"]
 
 INTRADAY_CATALYST_FEATURES = [
     "minutes_since_last_catalyst",
@@ -196,8 +197,6 @@ def _add_compatibility_columns(frame: pd.DataFrame) -> pd.DataFrame:
         "sentiment_pos_frac": "sentiment_pos_frac_1d",
         "sentiment_neg_frac": "sentiment_neg_frac_1d",
         "source_count_alpaca": "source_count_alpaca_1d",
-        "source_count_reddit": "source_count_reddit_1d",
-        "source_count_seeking_alpha": "source_count_seeking_alpha_1d",
         "source_count_sec": "source_count_sec_1d",
         "source_count_finviz": "source_count_finviz_1d",
         "market_context_news_count": "market_context_news_count_1d",

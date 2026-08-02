@@ -23,7 +23,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from market_predictor.v3.errors import DataReadinessError
 
-STRATEGY_CONTRACT_SCHEMA = "edge_rebuild.strategy_contract.v1"
+STRATEGY_CONTRACT_SCHEMA = "edge_rebuild.strategy_contract.v2"
 
 
 class FrozenModel(BaseModel):
@@ -47,7 +47,9 @@ class SwingContract(FrozenModel):
     minimum_expected_net_edge_bps: float = Field(ge=0)
     feature_timeframe: str
     context_timeframe: str
-    maximum_sector_weight: float = Field(gt=0, le=1)
+    target_maximum_sector_weight: float = Field(gt=0, le=1)
+    hard_maximum_sector_weight: float = Field(gt=0, le=1)
+    minimum_distinct_sectors_for_selection: int = Field(ge=3, le=11)
     sector_neutral_scoring: bool
 
     @model_validator(mode="after")
@@ -70,6 +72,22 @@ class SwingContract(FrozenModel):
             raise ValueError("target must exceed stop")
         if self.minimum_expected_net_edge_bps >= self.round_trip_cost_bps:
             raise ValueError("required net edge cannot exceed the round trip cost")
+        if self.target_maximum_sector_weight > self.hard_maximum_sector_weight:
+            raise ValueError("target sector weight cannot exceed the hard maximum")
+        if (
+            self.hard_maximum_sector_weight
+            < 1.0 / self.minimum_distinct_sectors_for_selection
+        ):
+            raise ValueError(
+                "hard sector weight cannot support the required distinct sectors"
+            )
+        if (
+            self.maximum_trades_per_decision
+            < self.minimum_distinct_sectors_for_selection
+        ):
+            raise ValueError(
+                "maximum swing trades cannot be below the required distinct sectors"
+            )
         # Concentration in one sector converts a stock-selection strategy into a
         # sector bet.
         if not self.sector_neutral_scoring:
@@ -246,7 +264,8 @@ class LabelContract(FrozenModel):
     rank_top_quantile: float = Field(gt=0, lt=0.5)
     rank_bottom_quantile: float = Field(gt=0, lt=0.5)
     swing_rank_within_sector: bool
-    swing_minimum_cross_section_for_ranking: int = Field(ge=50)
+    swing_target_cross_section_for_ranking: int = Field(ge=30)
+    swing_minimum_cross_section_for_ranking: int = Field(ge=20)
     intraday_rank_within_sector: bool
     intraday_minimum_cross_section_for_ranking: int = Field(ge=10)
 
@@ -280,6 +299,11 @@ class LabelContract(FrozenModel):
             )
         if not self.swing_rank_within_sector:
             raise ValueError("swing ranking must remain within sector")
+        if (
+            self.swing_minimum_cross_section_for_ranking
+            > self.swing_target_cross_section_for_ranking
+        ):
+            raise ValueError("swing ranking minimum cannot exceed its target")
         if self.intraday_rank_within_sector:
             raise ValueError("intraday ranking must use the contemporaneous group")
         return self

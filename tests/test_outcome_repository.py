@@ -90,7 +90,7 @@ def _intent(snapshot_id: str = "1" * 64) -> PredictionMaturationIntentV2:
         "ticker": "MSFT",
         "canonical_security_id": "security:MSFT",
         "view": "swing",
-        "horizon": "5d",
+        "horizon": "10b",
         "decision_time_utc": decision,
         "decision_session_et": date(2026, 7, 24),
         "decision_group_id": decision.isoformat(),

@@ -8,9 +8,9 @@ import pandas as pd
 from market_predictor.v3.contracts import SourceAvailability
 from market_predictor.v3.errors import DataReadinessError, SchemaMismatchError
 
-V3_FEATURE_SCHEMA_VERSION = "ml_v3.features.v1"
+V3_FEATURE_SCHEMA_VERSION = "ml_v3.features.v2"
 RETURN_WINDOWS = (1, 3, 6, 12)
-SOURCE_FAMILIES = ("alpaca", "seeking_alpha", "sec", "finviz", "reddit", "global_context")
+SOURCE_FAMILIES = ("alpaca", "sec", "finviz", "global_context")
 CROSS_SECTIONAL_BASE_FEATURES = (
     "return_1bar",
     "return_3bar",

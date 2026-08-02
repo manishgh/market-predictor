@@ -47,7 +47,7 @@ class EventReconciliationTest(unittest.TestCase):
                     "security:aaa",
                     "security:aaa",
                 ],
-                "source_family": ["alpaca", "alpaca", "reddit", "sec", "finviz"],
+                "source_family": ["alpaca", "alpaca", "open_source", "sec", "finviz"],
                 "event_id": ["m1", "m1", "w1", "f1", "o1"],
                 "feature_available_at_utc": [
                     self.decision - hour,
@@ -146,6 +146,25 @@ class EventReconciliationTest(unittest.TestCase):
             .fillna(True)
             .all()
         )
+
+    def test_assigned_identity_uses_decision_ticker_after_symbol_change(self) -> None:
+        for event_ticker, decision_ticker in (
+            ("FB", "META"),
+            ("NLOK", "GEN"),
+            ("VIAC", "PARA"),
+        ):
+            with self.subTest(event_ticker=event_ticker, decision_ticker=decision_ticker):
+                decisions = self.decisions.copy()
+                decisions["ticker"] = decision_ticker
+                events = self.events.iloc[[0]].copy()
+                events["ticker"] = event_ticker
+
+                assignments = build_event_assignments(decisions, events)
+                assigned = assignments.loc[assignments["status"].eq("assigned")]
+
+                self.assertEqual(set(assigned["ticker"]), {decision_ticker})
+                self.assertEqual(set(assigned["security_id"]), {"security:aaa"})
+                self.assertEqual(assigned["decision_id"].nunique(), 1)
 
     def test_aggregates_reproduce_from_assignment_rows(self) -> None:
         assignments = self._artifact()

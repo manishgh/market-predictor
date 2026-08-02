@@ -54,7 +54,7 @@ class CatalystOverlayTests(unittest.TestCase):
                     "sentiment_mean_2h": -0.60,
                     "event_relevance_mean_2h": 1.5,
                     "source_count_alpaca_2h": 1,
-                    "source_count_seeking_alpha_2h": 1,
+                    "source_count_finviz_2h": 1,
                     "event_guidance_count_2h": 1,
                 }
             ),

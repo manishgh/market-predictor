@@ -28,16 +28,16 @@
     },
     {
       "evidence_paths": [
-        "docs/catalyst_confirmation_architecture.md"
+        "docs/model_cards/edge_rebuild_swing_candidate_v2_20260802.md"
       ],
-      "family": "opening_v2_multifamily",
-      "horizon": "60m",
-      "reason": "The opening experiment lost after costs, failed drawdown gates, and was rejected for promotion.",
-      "reference_id": "intraday.opening_v2.multifamily.60m.20260710",
+      "family": "logistic_and_hist_gradient_boosting",
+      "horizon": "10d",
+      "reason": "Six governed technical and Alpaca-catalyst candidates failed calendar, portfolio-daily, doubled-cost, or holding-aligned benchmark confidence gates in temporal and unseen-security validation; the locked test remained unopened.",
+      "reference_id": "swing.edge_rebuild.10_sessions.20260802.v2",
       "serving_eligible": false,
       "status": "reference_rejected",
       "strategy_id": null,
-      "view": "intraday"
+      "view": "swing"
     },
     {
       "evidence_paths": [
@@ -60,6 +60,19 @@
       "horizon": "120m",
       "reason": "The longer exact-path candidate remained negative after costs in both development scopes.",
       "reference_id": "intraday.v4_h1.r1.120m.20260721",
+      "serving_eligible": false,
+      "status": "reference_rejected",
+      "strategy_id": null,
+      "view": "intraday"
+    },
+    {
+      "evidence_paths": [
+        "docs/evidence/edge_rebuild_intraday_candidate_20260802_v1_rejection/rejection.json"
+      ],
+      "family": "logistic_classifier",
+      "horizon": "30m",
+      "reason": "Opened validation and test evidence showed negative net economics after costs, weak economic ranking, forced trading, and non-executable portfolio accounting.",
+      "reference_id": "intraday.edge_rebuild.30m.20260802.v1",
       "serving_eligible": false,
       "status": "reference_rejected",
       "strategy_id": null,

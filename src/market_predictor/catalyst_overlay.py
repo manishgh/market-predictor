@@ -7,7 +7,7 @@ from typing import Any, cast
 import numpy as np
 import pandas as pd
 
-SOURCE_FAMILIES = ["alpaca", "reddit", "seeking_alpha", "sec", "finviz"]
+SOURCE_FAMILIES = ["alpaca", "sec", "finviz"]
 MATERIAL_EVENT_TYPES = ["earnings", "guidance", "analyst", "ma", "fda", "contract", "offering", "insider"]
 VETO_EVENT_TYPES = ["guidance", "fda", "offering"]
 

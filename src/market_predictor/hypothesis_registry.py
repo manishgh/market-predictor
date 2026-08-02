@@ -46,7 +46,7 @@ def declare_hypothesis(
     _require_sha256(baseline_artifact_sha256, "baseline_artifact_sha256")
     _require_sha256(prediction_policy_sha256, "prediction_policy_sha256")
     _require_sha256(execution_policy_sha256, "execution_policy_sha256")
-    if not re.fullmatch(r"^[1-9]\d*(?:m|d)$", shadow_horizon):
+    if not re.fullmatch(r"^[1-9]\d*(?:m|d|b)$", shadow_horizon):
         raise ValueError("shadow_horizon is invalid")
     groups = tuple(group.strip() for group in shadow_decision_group_ids)
     if (

@@ -260,16 +260,17 @@ def _build_swing_feature_history(
     data = _add_relative_and_regime_features(data)
     _assert_build_memory(config, "swing benchmark and regime joins")
     if config.feature_profile == "catalyst_full":
-        if global_events is None or global_source_collections is None:
+        if (global_events is None) != (global_source_collections is None):
             raise DataReadinessError(
-                "catalyst_full requires global events and source collections"
+                "global overlay events and source collections must be supplied together"
             )
-        data = _add_global_event_features(data, global_events)
-        data = _add_global_source_status(
-            data,
-            global_source_collections,
-            config.required_global_sources,
-        )
+        if global_events is not None and global_source_collections is not None:
+            data = _add_global_event_features(data, global_events)
+            data = _add_global_source_status(
+                data,
+                global_source_collections,
+                config.required_global_sources,
+            )
         data = _add_canonical_optional_features(
             data,
             required_ticker_sources=config.required_ticker_sources,
@@ -289,10 +290,9 @@ def _build_swing_feature_history(
         defer=defer_cross_sectional,
     )
     _assert_build_memory(config, "swing cross-sectional features")
-    if config.decision_start_date is not None:
-        data = data[
-            data["session_date_et"].ge(config.decision_start_date)
-        ].copy()
+    data = data[
+        data["session_date_et"].ge(config.decision_start_date)
+    ].copy()
     if config.decision_end_date is not None:
         data = data[
             data["session_date_et"].le(config.decision_end_date)
@@ -302,11 +302,7 @@ def _build_swing_feature_history(
             "swing decision window contains no rows after feature warm-up"
         )
     data["feature_profile"] = config.feature_profile
-    data["decision_start_date"] = (
-        config.decision_start_date.isoformat()
-        if config.decision_start_date is not None
-        else ""
-    )
+    data["decision_start_date"] = config.decision_start_date.isoformat()
     data["decision_end_date"] = (
         config.decision_end_date.isoformat()
         if config.decision_end_date is not None

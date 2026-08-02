@@ -12,6 +12,7 @@ import pandas as pd
 
 from market_predictor.config import Settings
 from market_predictor.price import fetch_daily_prices, fetch_hourly_prices
+from market_predictor.source_taxonomy import source_family_for_source
 
 NY_TZ = ZoneInfo("America/New_York")
 MARKET_CLOSE = time(16, 0)
@@ -45,21 +46,6 @@ def events_to_frame(events: list[dict[str, object]]) -> pd.DataFrame:
             frame[col] = 0.0
         frame[col] = frame[col].fillna(0.0)
     return frame
-
-
-def source_family_for_source(value: object) -> str:
-    raw = str(value or "").strip().lower()
-    if raw.startswith("seeking_alpha"):
-        return "seeking_alpha"
-    if raw.startswith("alpaca"):
-        return "alpaca"
-    if raw.startswith("reddit"):
-        return "reddit"
-    if raw.startswith("sec"):
-        return "sec"
-    if raw.startswith("finviz"):
-        return "finviz"
-    return raw.split(":", 1)[0] if raw else "unknown"
 
 
 def feature_date_for_timestamp(timestamp: pd.Timestamp | datetime) -> date:
@@ -190,19 +176,8 @@ def build_daily_dataset(
         aggfunc="count",
         fill_value=0,
     ).add_prefix("source_count_")
-    reddit_events = events[events["source_family"] == "reddit"]
-    if reddit_events.empty:
-        reddit_daily = pd.DataFrame(index=text_daily.index)
-    else:
-        reddit_daily = reddit_events.groupby("date").agg(
-            reddit_mentions=("title", "count"),
-            reddit_sentiment_mean=("sentiment_numeric", "mean"),
-            reddit_score_sum=("engagement_score", "sum"),
-            reddit_comments_sum=("engagement_comments", "sum"),
-            reddit_upvote_ratio_mean=("engagement_upvote_ratio", "mean"),
-        )
     event_daily = _event_daily_features(events)
-    text_daily = text_daily.join(family_counts, how="left").join(reddit_daily, how="left").join(event_daily, how="left")
+    text_daily = text_daily.join(family_counts, how="left").join(event_daily, how="left")
     text_daily = _add_text_rolling_features(text_daily.reset_index())
     reaction_daily = build_event_reaction_features(events, prices, ticker, start, end, settings)
     if not reaction_daily.empty:
@@ -222,17 +197,6 @@ def build_daily_dataset(
         "news_count_z30",
         "sentiment_momentum_5d",
         "source_count_alpaca",
-        "source_count_reddit",
-        "source_count_seeking_alpha",
-        "source_count_sec",
-        "source_count_finviz",
-        "reddit_mentions",
-        "reddit_velocity_7d",
-        "reddit_newly_trending",
-        "reddit_sentiment_mean",
-        "reddit_score_sum",
-        "reddit_comments_sum",
-        "reddit_upvote_ratio_mean",
         "event_count",
         "event_reaction_2h_mean",
         "event_reaction_2h_abs_max",
@@ -252,7 +216,9 @@ def build_daily_dataset(
         "market_context_news_count_z30",
         "market_context_sentiment_momentum_5d",
     ]
-    fill_zero_cols.extend([f"event_{name}_count" for name in EVENT_KEYWORDS])
+    fill_zero_cols.extend(
+        f"event_{name}_count" for name in EVENT_KEYWORDS if name != "sec"
+    )
     for col in fill_zero_cols:
         if col not in dataset.columns:
             dataset[col] = 0.0
@@ -536,24 +502,17 @@ def _add_text_rolling_features(text_daily: pd.DataFrame) -> pd.DataFrame:
         frame["news_count"] - frame["news_count"].rolling(30, min_periods=5).mean()
     ) / frame["news_count"].rolling(30, min_periods=5).std()
     frame["sentiment_momentum_5d"] = frame["sentiment_mean"] - frame["sentiment_mean"].rolling(5, min_periods=2).mean()
-    if "reddit_mentions" not in frame.columns:
-        frame["reddit_mentions"] = 0.0
-    baseline = frame["reddit_mentions"].rolling(7, min_periods=2).mean().shift(1)
-    frame["reddit_velocity_7d"] = frame["reddit_mentions"] / baseline.replace(0, np.nan)
-    frame["reddit_newly_trending"] = ((frame["reddit_mentions"] >= 3) & (baseline.fillna(0) < 1)).astype(int)
     return frame
 
 
 def add_interaction_features(dataset: pd.DataFrame) -> pd.DataFrame:
     frame = dataset.copy()
-    reddit_velocity = _feature_series(frame, "reddit_velocity_7d")
     volume_z = _feature_series(frame, "volume_z20")
     sentiment = _feature_series(frame, "sentiment_mean")
     news_count_z = _feature_series(frame, "news_count_z30")
     event_count = _feature_series(frame, "event_count")
     reaction_2h = _feature_series(frame, "event_reaction_2h_mean")
     premarket_gap = _feature_series(frame, "premarket_gap_mean")
-    frame["buzz_spike_x_volume_z"] = reddit_velocity * volume_z.clip(lower=0)
     frame["sentiment_x_news_attention"] = sentiment * news_count_z
     frame["catalyst_x_volume_z"] = event_count * volume_z.clip(lower=0)
     frame["reaction_x_sentiment"] = reaction_2h * sentiment

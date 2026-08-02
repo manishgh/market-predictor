@@ -1,0 +1,8 @@
+{
+  "manifest_path": "_manifest.json",
+  "manifest_sha256": "f6da2149be5c696972539c1cddfecf47fde9376ed92f881ace09b00fb1c29c37",
+  "promotion_permitted": false,
+  "schema_version": "edge_rebuild.intraday_candidate_rejection_authority.v1",
+  "serving_eligible": false,
+  "state": "rejected"
+}

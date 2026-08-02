@@ -1,0 +1,3 @@
+# Preserve hash-bound Windows artifacts while keeping normal whitespace checks.
+configs/sec_identity_reviewed_overrides.csv whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
+docs/evidence/edge_rebuild_intraday_candidate_20260802_v1_rejection/*.json whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol

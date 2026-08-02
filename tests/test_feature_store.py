@@ -85,7 +85,11 @@ class LiveFeatureStoreTests(unittest.TestCase):
                 _publish(store, mixed_freshness, generated)
 
             with self.assertRaisesRegex(ValueError, "labels or future paths"):
-                _publish(store, _frame().assign(target_net_positive_5d=1), generated)
+                _publish(
+                    store,
+                    _frame().assign(target_top_sector_relative_quantile_10b=1),
+                    generated,
+                )
 
     def test_live_audit_uses_frozen_cutoff_for_features_and_source_freshness(self) -> None:
         frame = _frame()
@@ -224,7 +228,7 @@ def _publish(
         "swing",
         frame,
         price_feed="sip",
-        feature_schema_version="swing.features.v1",
+        feature_schema_version=SWING_FEATURE_SCHEMA_VERSION,
         source_artifact_sha256="a" * 64,
         source_artifact_type="swing_inference_features",
         generated_at=generated,

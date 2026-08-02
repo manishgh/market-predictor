@@ -19,7 +19,7 @@ class IntradayCatalystTests(unittest.TestCase):
                     {
                         "ticker": "MSFT",
                         "timestamp": "2026-07-08T13:40:00Z",
-                        "source": "seeking_alpha:rapidapi_news",
+                        "source": "finviz:ticker_news",
                         "title": "MSFT wins large AI cloud contract",
                         "summary": "",
                         "text": "MSFT wins large AI cloud contract",
@@ -64,7 +64,7 @@ class IntradayCatalystTests(unittest.TestCase):
             enriched, audit = add_intraday_catalyst_features(bars, event_dirs=[event_dir], market_context_path=market_path)
 
             self.assertEqual(enriched["news_count_2h"].tolist(), [0.0, 1.0])
-            self.assertEqual(enriched["source_count_seeking_alpha_2h"].tolist(), [0.0, 1.0])
+            self.assertEqual(enriched["source_count_finviz_2h"].tolist(), [0.0, 1.0])
             self.assertEqual(enriched["source_count_alpaca_2h"].tolist(), [0.0, 0.0])
             self.assertEqual(enriched["market_context_news_count_2h"].tolist(), [0.0, 1.0])
             self.assertIn("catalyst_attention_score_2h", enriched.columns)

@@ -129,7 +129,7 @@ def trust_context_for_candidate(
         shadow_view=(
             "swing" if model_type == "canonical_swing" else "intraday"
         ),
-        shadow_horizon=("5d" if model_type == "canonical_swing" else "60m"),
+        shadow_horizon=("10b" if model_type == "canonical_swing" else "60m"),
         shadow_decision_group_ids=decisions,
         shadow_minimum_tickers_per_group=1,
         objective="Synthetic test declaration for the immutable promotion trust path.",
@@ -186,7 +186,7 @@ def _write_synthetic_shadow_outcomes(
     prediction_policy_sha: str,
 ) -> None:
     view = "swing" if model_type == "canonical_swing" else "intraday"
-    horizon = "5d" if view == "swing" else "60m"
+    horizon = "10b" if view == "swing" else "60m"
     label_config = (
         SwingDatasetConfig()
         if view == "swing"

@@ -14,6 +14,12 @@ import pandas as pd
 
 from market_predictor import serving_context as serving_context_module
 from market_predictor.feature_store import LiveFeatureStore
+from market_predictor.intraday.contracts import (
+    INTRADAY_FEATURE_SCHEMA_VERSION,
+    INTRADAY_MODEL_SCHEMA_VERSION,
+    INTRADAY_MODEL_TYPE,
+)
+from market_predictor.live_features import live_feature_columns
 from market_predictor.registry import write_model_manifest
 from market_predictor.release import publish_local_release
 from market_predictor.serving_bundle import (
@@ -24,18 +30,12 @@ from market_predictor.serving_context import (
     ActiveModelContextCache,
     ActiveReleaseRoute,
 )
-from market_predictor.swing.contracts import (
-    SWING_FEATURE_SCHEMA_VERSION,
-    SWING_MODEL_SCHEMA_VERSION,
-    SWING_MODEL_TYPE,
-)
 from market_predictor.v3.errors import DataReadinessError
 from tests.r4_fixtures import (
     authorize_candidate_for_test,
     synthetic_identity_metrics,
-    test_signing_material,
 )
-from tests.test_feature_store import _frame, _publish
+from tests.r4_fixtures import test_signing_material as signing_material_for_test
 
 
 class ProbabilityEstimatorStub:
@@ -49,8 +49,8 @@ class ActiveModelContextCacheTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             repository = root / "repository"
-            _, trust_store, _ = test_signing_material()
-            model, evidence = _promoted_swing_model(root / "source", "first")
+            _, trust_store, _ = signing_material_for_test()
+            model, evidence = _promoted_intraday_model(root / "source", "first")
             with patch.dict(
                 os.environ,
                 {"MARKET_PREDICTOR_ATTESTATION_TRUST_STORE": ""},
@@ -78,15 +78,15 @@ class ActiveModelContextCacheTests(unittest.TestCase):
                 route = ActiveReleaseRoute(
                     repository=repository,
                     attestation_trust_store=trust_store,
-                    bar_timeframe="1Day",
+                    bar_timeframe="5Min",
                 )
 
                 with patch(
                     "market_predictor.serving_context.joblib.load",
                     wraps=joblib.load,
                 ) as load:
-                    first = cache.get("swing", "5d", route)
-                    second = cache.get("swing", "5d", route)
+                    first = cache.get("intraday", "60m", route)
+                    second = cache.get("intraday", "60m", route)
 
             self.assertIs(first, second)
             self.assertEqual(load.call_count, 1)
@@ -98,9 +98,9 @@ class ActiveModelContextCacheTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             repository = root / "repository"
-            _, trust_store, _ = test_signing_material()
-            first_model, first_evidence = _promoted_swing_model(root / "first", "first")
-            second_model, second_evidence = _promoted_swing_model(root / "second", "second")
+            _, trust_store, _ = signing_material_for_test()
+            first_model, first_evidence = _promoted_intraday_model(root / "first", "first")
+            second_model, second_evidence = _promoted_intraday_model(root / "second", "second")
             first_release = publish_local_release(
                 repository,
                 model_path=first_model,
@@ -125,7 +125,7 @@ class ActiveModelContextCacheTests(unittest.TestCase):
                 repository=repository,
                 attestation_trust_store=trust_store,
             )
-            first = cache.get("swing", "5d", route)
+            first = cache.get("intraday", "60m", route)
 
             second_release = publish_local_release(
                 repository,
@@ -141,7 +141,7 @@ class ActiveModelContextCacheTests(unittest.TestCase):
                 str(second_release["release_id"]),
                 generated_at=_timestamp() + timedelta(minutes=1),
             )
-            second = cache.get("swing", "5d", route)
+            second = cache.get("intraday", "60m", route)
 
             self.assertEqual(first.release_id, first_release["release_id"])
             self.assertEqual(second.release_id, second_release["release_id"])
@@ -154,9 +154,9 @@ class ActiveModelContextCacheTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             repository = root / "repository"
-            _, trust_store, _ = test_signing_material()
-            first_model, first_evidence = _promoted_swing_model(root / "first", "first")
-            second_model, second_evidence = _promoted_swing_model(root / "second", "second")
+            _, trust_store, _ = signing_material_for_test()
+            first_model, first_evidence = _promoted_intraday_model(root / "first", "first")
+            second_model, second_evidence = _promoted_intraday_model(root / "second", "second")
             first_release = publish_local_release(
                 repository,
                 model_path=first_model,
@@ -216,7 +216,7 @@ class ActiveModelContextCacheTests(unittest.TestCase):
                 side_effect=blocking_load,
             ):
                 with ThreadPoolExecutor(max_workers=1) as pool:
-                    pending = pool.submit(cache.get, "swing", "5d", route)
+                    pending = pool.submit(cache.get, "intraday", "60m", route)
                     self.assertTrue(entered.wait(timeout=5))
                     activate_serving_bundle(
                         repository,
@@ -227,7 +227,7 @@ class ActiveModelContextCacheTests(unittest.TestCase):
                     release.set()
                     in_flight = pending.result(timeout=5)
 
-            current = cache.get("swing", "5d", route)
+            current = cache.get("intraday", "60m", route)
             self.assertEqual(in_flight.serving_bundle_id, first_bundle["bundle_id"])
             self.assertEqual(in_flight.payload["marker"], "first")
             self.assertEqual(current.serving_bundle_id, second_bundle["bundle_id"])
@@ -237,8 +237,8 @@ class ActiveModelContextCacheTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             repository = root / "repository"
-            _, trust_store, _ = test_signing_material()
-            model, evidence = _promoted_swing_model(
+            _, trust_store, _ = signing_material_for_test()
+            model, evidence = _promoted_intraday_model(
                 root / "model",
                 "mismatch",
                 payload_prediction_policy_sha256="0" * 64,
@@ -269,8 +269,8 @@ class ActiveModelContextCacheTests(unittest.TestCase):
                 "prediction policy is incompatible",
             ):
                 cache.get(
-                    "swing",
-                    "5d",
+                    "intraday",
+                    "60m",
                     ActiveReleaseRoute(
                         repository=repository,
                         attestation_trust_store=trust_store,
@@ -281,8 +281,8 @@ class ActiveModelContextCacheTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             repository = root / "repository"
-            _, trust_store, _ = test_signing_material()
-            model, evidence = _promoted_swing_model(root / "model", "row-limit")
+            _, trust_store, _ = signing_material_for_test()
+            model, evidence = _promoted_intraday_model(root / "model", "row-limit")
             release = publish_local_release(
                 repository,
                 model_path=model,
@@ -306,8 +306,8 @@ class ActiveModelContextCacheTests(unittest.TestCase):
 
             with self.assertRaisesRegex(DataReadinessError, "feature row limit"):
                 cache.get(
-                    "swing",
-                    "5d",
+                    "intraday",
+                    "60m",
                     ActiveReleaseRoute(
                         repository=repository,
                         attestation_trust_store=trust_store,
@@ -316,31 +316,38 @@ class ActiveModelContextCacheTests(unittest.TestCase):
                 )
 
 
-def _promoted_swing_model(
+def _promoted_intraday_model(
     root: Path,
     marker: str,
     *,
     payload_prediction_policy_sha256: str | None = None,
 ) -> tuple[Path, Path]:
     root.mkdir(parents=True, exist_ok=True)
-    model = root / f"swing-{marker}.joblib"
+    model = root / f"intraday-{marker}.joblib"
     model_run_id = f"serving-context-{marker}"
     metrics = {
         **synthetic_identity_metrics(
-            model_type=SWING_MODEL_TYPE,
+            model_type=INTRADAY_MODEL_TYPE,
             model_run_id=model_run_id,
         ),
         "roc_auc": 0.75,
     }
     joblib.dump(
         {
-            "model_type": SWING_MODEL_TYPE,
-            "model_schema_version": SWING_MODEL_SCHEMA_VERSION,
-            "feature_schema_version": SWING_FEATURE_SCHEMA_VERSION,
-            "features": ["return_1d"],
-            "model": ProbabilityEstimatorStub(),
-            "calibrator": object(),
-            "target_col": "target_net_positive_5d",
+            "model_type": INTRADAY_MODEL_TYPE,
+            "model_schema_version": INTRADAY_MODEL_SCHEMA_VERSION,
+            "feature_schema_version": INTRADAY_FEATURE_SCHEMA_VERSION,
+            "features": ["return_1bar_5m"],
+            "opportunity_target_col": "target_before_stop_60m",
+            "downside_target_col": "stop_before_target_60m",
+            "models": {
+                "target_before_stop_60m": ProbabilityEstimatorStub(),
+                "stop_before_target_60m": ProbabilityEstimatorStub(),
+            },
+            "calibrators": {
+                "target_before_stop_60m": object(),
+                "stop_before_target_60m": object(),
+            },
             "calibration_method": "isotonic_prior_fold_only",
             "prediction_policy_sha256": (
                 payload_prediction_policy_sha256
@@ -354,16 +361,16 @@ def _promoted_swing_model(
         {
             "ticker": ["AAA", "BBB"],
             "date": pd.date_range("2026-01-01", periods=2),
-            "return_1d": [0.01, -0.01],
-            "target_net_positive_5d": [1, 0],
+            "return_1bar_5m": [0.01, -0.01],
+            "target_before_stop_60m": [1, 0],
         }
     )
     write_model_manifest(
         model_path=model,
-        model_type=SWING_MODEL_TYPE,
-        schema_version=SWING_MODEL_SCHEMA_VERSION,
-        target_col="target_net_positive_5d",
-        features=["return_1d"],
+        model_type=INTRADAY_MODEL_TYPE,
+        schema_version=INTRADAY_MODEL_SCHEMA_VERSION,
+        target_col="target_before_stop_60m",
+        features=["return_1bar_5m"],
         training_data=training,
         metrics=metrics,
         validation_split="session_purged_walk_forward_and_ticker_holdout",
@@ -382,15 +389,47 @@ def _publish_bundle(
     generated_at: datetime,
 ) -> dict[str, object]:
     store = LiveFeatureStore(root)
-    _publish(store, _frame(), generated_at)
-    feature_path, _ = store.paths("swing")
+    _publish_intraday(store, generated_at)
+    feature_path, _ = store.paths("intraday")
     return publish_serving_bundle(
         repository,
-        mode="swing",
-        horizon="5d",
+        mode="intraday",
+        horizon="60m",
         model_release_id=release_id,
         feature_path=feature_path,
         attestation_trust_store_path=trust_store,
+        generated_at=generated_at,
+    )
+
+
+def _publish_intraday(
+    store: LiveFeatureStore,
+    generated_at: datetime,
+) -> dict[str, object]:
+    decision = pd.Timestamp(generated_at).tz_convert("UTC") - pd.Timedelta(minutes=1)
+    frame = pd.DataFrame(
+        {
+            "ticker": ["MSFT", "AAPL"],
+            "date": [decision, decision],
+            "decision_time_utc": [decision, decision],
+            "feature_available_at_utc": [decision, decision],
+            "price_feed": ["sip", "sip"],
+        }
+    )
+    missing = {
+        column: pd.Series(0.0, index=frame.index)
+        for column in live_feature_columns("intraday")
+        if column not in frame
+    }
+    complete = pd.concat([frame, pd.DataFrame(missing)], axis=1)
+    return store.publish(
+        "intraday",
+        complete,
+        price_feed="sip",
+        feature_schema_version=INTRADAY_FEATURE_SCHEMA_VERSION,
+        source_artifact_sha256="a" * 64,
+        source_artifact_type="intraday_inference_features",
+        source_watermarks={"market:alpaca": decision.isoformat()},
         generated_at=generated_at,
     )
 

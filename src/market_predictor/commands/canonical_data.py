@@ -251,7 +251,7 @@ def register_canonical_data_commands(app: typer.Typer, console: Any) -> None:
         fundamentals: Path | None = typer.Option(None, help="Optional canonical fundamental facts."),
         fundamental_metrics: str = typer.Option("", help="Comma-separated metrics to join as of decision time."),
         required_sources: str = typer.Option(
-            "alpaca,reddit,seeking_alpha,sec,finviz",
+            "alpaca",
             help="Sources that must be observed for every ticker in production.",
         ),
         source_max_age_minutes: int = typer.Option(

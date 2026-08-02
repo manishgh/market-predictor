@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import uuid
+from bisect import bisect_left
 from collections import defaultdict
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -17,6 +18,7 @@ import exchange_calendars as xcals
 import pandas as pd
 
 from market_predictor.canonical.audits import CanonicalAuditReport, audit_canonical_bars
+from market_predictor.canonical.cutoffs import swing_prediction_cutoffs
 from market_predictor.canonical.store import (
     file_sha256,
     load_canonical_artifact,
@@ -38,11 +40,12 @@ from market_predictor.resources import (
 )
 from market_predictor.v3.errors import DataReadinessError
 
-COMBINED_REQUEST_SCHEMA: Final = "edge_rebuild.swing_combined_daily_request.v3"
-COMBINED_MANIFEST_SCHEMA: Final = "edge_rebuild.swing_combined_daily_manifest.v3"
-COMBINED_AUTHORITY_SCHEMA: Final = "edge_rebuild.swing_combined_daily_authority.v3"
-COMBINED_TICKER_SCHEMA: Final = "edge_rebuild.swing_combined_daily_ticker.v3"
-COVERAGE_AUDIT_SCHEMA: Final = "edge_rebuild.swing_combined_daily_coverage.v2"
+COMBINED_REQUEST_SCHEMA: Final = "edge_rebuild.swing_combined_daily_request.v5"
+COMBINED_MANIFEST_SCHEMA: Final = "edge_rebuild.swing_combined_daily_manifest.v5"
+COMBINED_AUTHORITY_SCHEMA: Final = "edge_rebuild.swing_combined_daily_authority.v5"
+COMBINED_TICKER_SCHEMA: Final = "edge_rebuild.swing_combined_daily_ticker.v5"
+COVERAGE_AUDIT_SCHEMA: Final = "edge_rebuild.swing_combined_daily_coverage.v4"
+SESSION_GAP_AUDIT_SCHEMA: Final = "edge_rebuild.swing_session_gap_audit.v1"
 POST_REQUEST_SCHEMA: Final = "swing.daily_history_collection.v1"
 POST_MANIFEST_SCHEMA: Final = "swing.daily_history_manifest.v1"
 START_DATE: Final = date(2018, 5, 29)
@@ -50,6 +53,10 @@ PRE_END_DATE: Final = date(2019, 7, 8)
 POST_START_DATE: Final = date(2019, 7, 9)
 CUTOFF_DATE: Final = date(2026, 7, 8)
 MAXIMUM_EXCLUSION_FRACTION: Final = 0.05
+# A sparse source defect must be both rare over the security's membership lifetime
+# and short in exchange-session time. Larger gaps remove the whole security.
+MAXIMUM_SPARSE_MISSING_FRACTION: Final = 0.005
+MAXIMUM_SPARSE_CONTIGUOUS_SESSIONS: Final = 5
 FULL_COVERAGE_BENCHMARKS: Final = frozenset({"SPY", "QQQ"})
 EASTERN: Final = ZoneInfo("America/New_York")
 
@@ -63,6 +70,7 @@ class VerifiedCombinedInputs:
     excluded_security_ids: tuple[str, ...]
     benchmark_tickers: tuple[str, ...]
     coverage_audit: dict[str, Any]
+    warmup_only_security_ids: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -91,6 +99,8 @@ def verify_combined_swing_inputs(
     reviewed_transitions_path: Path,
     anchor_path: Path,
     security_exclusions_path: Path | None = None,
+    model_decision_start: date | None = None,
+    model_decision_cutoff: date | None = None,
 ) -> VerifiedCombinedInputs:
     """Verify both collection generations and the complete membership lineage."""
 
@@ -109,7 +119,7 @@ def verify_combined_swing_inputs(
         raise DataReadinessError(
             "S&P membership authority does not cover 2018-05-29 through 2026-07-08"
         )
-    memberships = require_sp500_membership_authority(
+    all_memberships = require_sp500_membership_authority(
         membership_directory,
         archive_directory=raw_archive_directory,
         event_directory=event_directory,
@@ -121,6 +131,24 @@ def verify_combined_swing_inputs(
         security_exclusions_path=security_exclusions_path,
         maximum_security_exclusion_fraction=maximum_exclusion,
     )
+    if (model_decision_start is None) != (model_decision_cutoff is None):
+        raise ValueError(
+            "model_decision_start and model_decision_cutoff must be provided together"
+        )
+    if model_decision_start is None or model_decision_cutoff is None:
+        memberships = all_memberships
+        modeled_security_ids = tuple(
+            sorted(memberships["security_id"].astype(str).unique())
+        )
+        warmup_only_security_ids: tuple[str, ...] = ()
+    else:
+        memberships, modeled_security_ids, warmup_only_security_ids = (
+            _modeled_security_population(
+                all_memberships,
+                decision_start=model_decision_start,
+                decision_cutoff=model_decision_cutoff,
+            )
+        )
     membership_hashes = _membership_hashes(membership_directory)
 
     pre_manifest = load_complete_swing_history_collection(
@@ -142,7 +170,10 @@ def verify_combined_swing_inputs(
     )
     _validate_source_windows(pre_records, post_records)
 
-    pre_unavailable = _pre_unavailable_security_ids(pre_manifest)
+    modeled_security_id_set = set(modeled_security_ids)
+    pre_unavailable = _pre_unavailable_security_ids(pre_manifest).intersection(
+        modeled_security_id_set
+    )
     benchmark_tickers = tuple(
         sorted(
             {
@@ -155,11 +186,11 @@ def verify_combined_swing_inputs(
     if set(post_unavailable).intersection(benchmark_tickers):
         raise DataReadinessError("a benchmark is unavailable in post-2019 history")
     post_unavailable_ids = _security_ids_for_unavailable_tickers(
-        memberships,
+        all_memberships,
         post_unavailable,
         start=POST_START_DATE,
         end=CUTOFF_DATE,
-    )
+    ).intersection(modeled_security_id_set)
     all_security_ids = set(memberships["security_id"].astype(str))
     initially_excluded = pre_unavailable.union(post_unavailable_ids)
     unknown = sorted(initially_excluded.difference(all_security_ids))
@@ -178,6 +209,7 @@ def verify_combined_swing_inputs(
         initial_reasons=initial_reasons,
     )
     excluded = coverage.excluded_security_ids
+    session_gap_audit = coverage.audit["session_gap_audit"]
     fraction = len(excluded) / len(all_security_ids)
     retained = memberships.loc[
         ~memberships["security_id"].astype(str).isin(excluded)
@@ -223,8 +255,32 @@ def verify_combined_swing_inputs(
         "security_exclusions": list(coverage.exclusion_records),
         "coverage_audit_schema": COVERAGE_AUDIT_SCHEMA,
         "coverage_audit_sha256": _json_sha256(coverage.audit),
+        "session_gap_audit_schema": SESSION_GAP_AUDIT_SCHEMA,
+        "session_gap_audit_sha256": _json_sha256(session_gap_audit),
+        "session_gap_abstention_count": int(
+            session_gap_audit["missing_session_count"]
+        ),
         "benchmark_coverage": coverage.audit["benchmark_audit"],
         "retained_security_count": int(retained["security_id"].nunique()),
+        "modeled_security_count": len(modeled_security_ids),
+        "modeled_security_ids_sha256": _json_sha256(
+            list(modeled_security_ids)
+        ),
+        "warmup_only_security_count": len(warmup_only_security_ids),
+        "warmup_only_security_ids": list(warmup_only_security_ids),
+        "warmup_only_security_ids_sha256": _json_sha256(
+            list(warmup_only_security_ids)
+        ),
+        "model_decision_start": (
+            model_decision_start.isoformat()
+            if model_decision_start is not None
+            else None
+        ),
+        "model_decision_cutoff": (
+            model_decision_cutoff.isoformat()
+            if model_decision_cutoff is not None
+            else None
+        ),
         "benchmark_tickers": list(benchmark_tickers),
         "pre_request_identity_sha256": str(pre_request["request_sha256"]),
         "pre_authority_unit_set_sha256": str(pre_authority["unit_set_sha256"]),
@@ -237,7 +293,103 @@ def verify_combined_swing_inputs(
         excluded_security_ids=excluded,
         benchmark_tickers=benchmark_tickers,
         coverage_audit=coverage.audit,
+        warmup_only_security_ids=warmup_only_security_ids,
     )
+
+
+def _modeled_security_population(
+    memberships: pd.DataFrame,
+    *,
+    decision_start: date,
+    decision_cutoff: date,
+) -> tuple[pd.DataFrame, tuple[str, ...], tuple[str, ...]]:
+    """Return modeled identities while preserving their complete warm-up history."""
+
+    if decision_start > decision_cutoff:
+        raise ValueError("modeled decision start is after its cutoff")
+    required = {
+        "security_id",
+        "effective_from_utc",
+        "effective_to_utc",
+        "available_at_utc",
+    }
+    missing = sorted(required.difference(memberships.columns))
+    if missing:
+        raise DataReadinessError(
+            f"swing memberships lack modeled-population fields: {missing}"
+        )
+    frame = memberships.copy()
+    security_ids = frame["security_id"].astype("string").str.strip()
+    effective_from = _strict_utc_membership_series(
+        frame["effective_from_utc"], field="effective_from_utc"
+    )
+    effective_to = _strict_utc_membership_series(
+        frame["effective_to_utc"], field="effective_to_utc", optional=True
+    )
+    available_at = _strict_utc_membership_series(
+        frame["available_at_utc"], field="available_at_utc"
+    )
+    if (
+        security_ids.isna().any()
+        or security_ids.eq("").any()
+        or bool((effective_to.notna() & effective_to.le(effective_from)).any())
+    ):
+        raise DataReadinessError("swing memberships have invalid identity intervals")
+
+    calendar = xcals.get_calendar("XNYS")
+    sessions = pd.Series(
+        [
+            pd.Timestamp(value).date()
+            for value in calendar.sessions_in_range(
+                decision_start, decision_cutoff
+            )
+        ]
+    )
+    if sessions.empty:
+        raise DataReadinessError("modeled decision window has no XNYS sessions")
+    cutoffs = list(swing_prediction_cutoffs(sessions).sort_values())
+    modeled: set[str] = set()
+    for index, security_id in enumerate(security_ids.astype(str)):
+        active_from = max(effective_from.iloc[index], available_at.iloc[index])
+        first = bisect_left(cutoffs, active_from)
+        if first < len(cutoffs) and (
+            pd.isna(effective_to.iloc[index])
+            or cutoffs[first] < effective_to.iloc[index]
+        ):
+            modeled.add(security_id)
+    all_ids = set(security_ids.astype(str))
+    modeled_ids = tuple(sorted(modeled))
+    warmup_only_ids = tuple(sorted(all_ids.difference(modeled)))
+    retained = frame.loc[security_ids.astype(str).isin(modeled_ids)].copy()
+    if not modeled_ids or sorted(
+        retained["security_id"].astype(str).unique()
+    ) != list(modeled_ids):
+        raise DataReadinessError("swing modeled-population filtering is inconsistent")
+    return retained.reset_index(drop=True), modeled_ids, warmup_only_ids
+
+
+def _strict_utc_membership_series(
+    values: pd.Series,
+    *,
+    field: str,
+    optional: bool = False,
+) -> pd.Series:
+    def parse(value: object) -> pd.Timestamp:
+        if optional and pd.isna(value):
+            return pd.NaT
+        try:
+            timestamp = pd.Timestamp(value)
+        except (TypeError, ValueError):
+            return pd.NaT
+        if pd.isna(timestamp) or timestamp.tzinfo is None:
+            return pd.NaT
+        return timestamp.tz_convert("UTC")
+
+    parsed = pd.to_datetime(values.map(parse), utc=True)
+    invalid = parsed.isna() & (~values.isna() if optional else pd.Series(True, index=values.index))
+    if bool(invalid.any()) or (not optional and bool(parsed.isna().any())):
+        raise DataReadinessError(f"swing memberships contain invalid {field}")
+    return parsed
 
 
 def prepare_combined_daily_store(
@@ -251,12 +403,20 @@ def prepare_combined_daily_store(
     """Publish or verify one canonical combined bar artifact per ticker."""
 
     coverage_audit_sha256 = _json_sha256(verified.coverage_audit)
+    session_gap_audit = _require_session_gap_audit(verified.coverage_audit)
+    session_gap_audit_sha256 = _json_sha256(session_gap_audit)
     if (
         verified.coverage_audit.get("schema") != COVERAGE_AUDIT_SCHEMA
         or verified.request_payload.get("coverage_audit_sha256")
         != coverage_audit_sha256
         or verified.request_payload.get("benchmark_coverage")
         != verified.coverage_audit.get("benchmark_audit")
+        or verified.request_payload.get("session_gap_audit_sha256")
+        != session_gap_audit_sha256
+        or verified.request_payload.get("session_gap_audit_schema")
+        != SESSION_GAP_AUDIT_SCHEMA
+        or verified.request_payload.get("session_gap_abstention_count")
+        != session_gap_audit.get("missing_session_count")
     ):
         raise DataReadinessError("combined daily coverage audit identity is invalid")
     request = {
@@ -278,6 +438,14 @@ def prepare_combined_daily_store(
             raise DataReadinessError("combined daily coverage audit differs on resume")
     else:
         _write_json_atomic(coverage_audit_path, verified.coverage_audit)
+    session_gap_audit_path = output_directory / "_session_gap_audit.json"
+    if session_gap_audit_path.exists():
+        if _load_json(session_gap_audit_path) != session_gap_audit:
+            raise DataReadinessError(
+                "combined daily session-gap audit differs on resume"
+            )
+    else:
+        _write_json_atomic(session_gap_audit_path, session_gap_audit)
 
     if (output_directory / "_authority.json").exists():
         return _load_complete_combined_store(
@@ -304,14 +472,23 @@ def prepare_combined_daily_store(
         verified.coverage_audit,
         expected_tickers=verified.benchmark_tickers,
     )
+    session_abstentions = _session_abstentions_by_ticker(session_gap_audit)
+    unknown_gap_tickers = sorted(set(session_abstentions).difference(tickers))
+    if unknown_gap_tickers:
+        raise DataReadinessError(
+            "session-gap audit contains tickers outside retained membership: "
+            f"{unknown_gap_tickers}"
+        )
     records: list[dict[str, Any]] = []
     for ticker in tickers:
+        abstained_sessions = session_abstentions.get(ticker, set())
         expected_sessions = _expected_ticker_sessions(
             ticker,
             memberships=verified.memberships,
             benchmark_tickers=verified.benchmark_tickers,
             benchmark_start_sessions=benchmark_starts,
             all_sessions=all_sessions,
+            session_abstentions=abstained_sessions,
         )
         if not expected_sessions:
             raise DataReadinessError(f"combined daily ticker has no expected sessions: {ticker}")
@@ -324,6 +501,8 @@ def prepare_combined_daily_store(
             request_sha256=request_sha256,
             ticker=ticker,
             expected_sessions=expected_sessions,
+            abstained_sessions=abstained_sessions,
+            session_gap_audit_sha256=session_gap_audit_sha256,
         )
         if existing is None:
             bars = _combine_ticker(
@@ -331,6 +510,7 @@ def prepare_combined_daily_store(
                 pre_records=pre_by_ticker.get(ticker, []),
                 post_record=verified.post_records.get(ticker),
                 expected_sessions=expected_sessions,
+                abstained_sessions=abstained_sessions,
                 calendar=calendar,
             )
             inputs = {
@@ -362,7 +542,13 @@ def prepare_combined_daily_store(
                 "rows": len(bars),
                 "first_session": min(expected_sessions).isoformat(),
                 "last_session": max(expected_sessions).isoformat(),
+                "coverage_policy": "exact_observed_membership_sessions",
                 "expected_sessions_sha256": _session_set_sha256(expected_sessions),
+                "session_abstention_count": len(abstained_sessions),
+                "session_abstentions_sha256": _session_set_sha256(
+                    abstained_sessions
+                ),
+                "session_gap_audit_sha256": session_gap_audit_sha256,
             }
             _write_json_atomic(record_path, existing)
             del bars
@@ -386,6 +572,15 @@ def prepare_combined_daily_store(
             "path": "_coverage_audit.json",
             "sha256": file_sha256(coverage_audit_path),
             "semantic_sha256": coverage_audit_sha256,
+        },
+        "session_gap_audit": {
+            "path": "_session_gap_audit.json",
+            "sha256": file_sha256(session_gap_audit_path),
+            "semantic_sha256": session_gap_audit_sha256,
+            "gap_count": int(session_gap_audit["gap_count"]),
+            "missing_session_count": int(
+                session_gap_audit["missing_session_count"]
+            ),
         },
         "source_lineage": {
             "pre_collection": verified.request_payload["pre_collection"],
@@ -414,6 +609,7 @@ def prepare_combined_daily_store(
                 "post_collection"
             ]["manifest_sha256"],
             "coverage_audit_sha256": file_sha256(coverage_audit_path),
+            "session_gap_audit_sha256": file_sha256(session_gap_audit_path),
         },
     )
     return _load_complete_combined_store(
@@ -724,7 +920,7 @@ def _preflight_exact_coverage(
     benchmark_tickers: tuple[str, ...],
     initial_reasons: Mapping[str, set[str]],
 ) -> _CoveragePreflight:
-    """Resolve all stock gaps to deterministic whole-security exclusions."""
+    """Classify stock gaps without imputing or weakening whole-security limits."""
 
     calendar = xcals.get_calendar("XNYS")
     all_sessions = tuple(
@@ -746,6 +942,9 @@ def _preflight_exact_coverage(
     }
     tickers_by_security: dict[str, set[str]] = {
         security_id: set() for security_id in security_ids
+    }
+    ticker_by_security_session: dict[str, dict[date, str]] = {
+        security_id: {} for security_id in security_ids
     }
     benchmark_audit: list[dict[str, Any]] = []
     stock_tickers = set(memberships["ticker"].astype(str).str.strip().str.upper())
@@ -794,11 +993,14 @@ def _preflight_exact_coverage(
             expected_by_security[security_id].update(expected)
             observed_by_security[security_id].update(expected.intersection(observed))
             tickers_by_security[security_id].add(ticker)
+            for session in expected:
+                ticker_by_security_session[security_id][session] = ticker
         release_process_memory()
         _guard(4.0, 0.75, f"combined daily coverage preflight {ticker}")
 
     security_audit: list[dict[str, Any]] = []
     exclusion_records: list[dict[str, Any]] = []
+    session_gap_records: list[dict[str, Any]] = []
     for security_id in security_ids:
         expected = expected_by_security[security_id]
         if not expected:
@@ -808,20 +1010,82 @@ def _preflight_exact_coverage(
         observed = observed_by_security[security_id]
         missing = sorted(expected.difference(observed))
         reasons = set(initial_reasons.get(security_id, set()))
-        if missing:
+        missing_fraction = len(missing) / len(expected)
+        missing_blocks = _contiguous_session_blocks(missing, expected)
+        maximum_contiguous_gap = max(
+            (len(block) for block in missing_blocks),
+            default=0,
+        )
+        sparse = bool(missing) and not reasons and (
+            missing_fraction <= MAXIMUM_SPARSE_MISSING_FRACTION
+            and maximum_contiguous_gap <= MAXIMUM_SPARSE_CONTIGUOUS_SESSIONS
+        )
+        if missing and not sparse:
             reasons.add("membership_session_gap")
+        if sparse:
+            missing_by_ticker: dict[str, list[date]] = defaultdict(list)
+            for session in missing:
+                missing_by_ticker[
+                    ticker_by_security_session[security_id][session]
+                ].append(session)
+            ordered_expected = sorted(expected)
+            expected_rank = {
+                session: index for index, session in enumerate(ordered_expected)
+            }
+            for ticker, ticker_missing in sorted(missing_by_ticker.items()):
+                for block in _contiguous_session_blocks(ticker_missing, expected):
+                    first_rank = expected_rank[block[0]]
+                    last_rank = expected_rank[block[-1]]
+                    session_gap_records.append(
+                        {
+                            "security_id": security_id,
+                            "ticker": ticker,
+                            "missing_sessions": [
+                                session.isoformat() for session in block
+                            ],
+                            "missing_session_count": len(block),
+                            "first_missing_session": block[0].isoformat(),
+                            "last_missing_session": block[-1].isoformat(),
+                            "previous_membership_session": (
+                                ordered_expected[first_rank - 1].isoformat()
+                                if first_rank > 0
+                                else None
+                            ),
+                            "next_membership_session": (
+                                ordered_expected[last_rank + 1].isoformat()
+                                if last_rank + 1 < len(ordered_expected)
+                                else None
+                            ),
+                            "required_downstream_action": (
+                                "abstain_if_feature_or_label_window_crosses_gap"
+                            ),
+                        }
+                    )
+        action = (
+            "exclude_security"
+            if reasons
+            else "retain_with_session_abstentions"
+            if sparse
+            else "retain"
+        )
         record = {
             "security_id": security_id,
             "tickers": sorted(tickers_by_security[security_id]),
             "expected_session_count": len(expected),
             "observed_session_count": len(observed),
             "missing_session_count": len(missing),
+            "missing_fraction": missing_fraction,
+            "maximum_contiguous_missing_sessions": maximum_contiguous_gap,
             "first_missing_session": missing[0].isoformat() if missing else None,
-            "reasons": sorted(reasons),
-            "action": "exclude_security" if reasons else "retain",
+            "reasons": (
+                ["verified_sparse_membership_session_gap"]
+                if sparse
+                else sorted(reasons)
+            ),
+            "action": action,
         }
         security_audit.append(record)
-        if reasons:
+        if action == "exclude_security":
             exclusion_records.append(record)
     excluded = tuple(
         sorted(str(record["security_id"]) for record in exclusion_records)
@@ -842,6 +1106,32 @@ def _preflight_exact_coverage(
         "price_feed": "sip",
         "adjustment": "all",
         "maximum_security_exclusion_fraction": MAXIMUM_EXCLUSION_FRACTION,
+        "session_gap_audit": {
+            "schema": SESSION_GAP_AUDIT_SCHEMA,
+            "classification_policy": {
+                "maximum_missing_fraction": MAXIMUM_SPARSE_MISSING_FRACTION,
+                "maximum_contiguous_missing_sessions": (
+                    MAXIMUM_SPARSE_CONTIGUOUS_SESSIONS
+                ),
+                "unavailable_source_action": "exclude_security",
+                "substantial_gap_action": "exclude_security",
+                "sparse_gap_action": "abstain",
+                "imputation": "prohibited",
+                "downstream_rule": (
+                    "abstain from every feature or label row whose required "
+                    "membership-session window intersects a missing session"
+                ),
+            },
+            "gap_count": len(session_gap_records),
+            "security_count": len(
+                {record["security_id"] for record in session_gap_records}
+            ),
+            "missing_session_count": sum(
+                int(record["missing_session_count"])
+                for record in session_gap_records
+            ),
+            "gaps": session_gap_records,
+        },
         "security_count": len(security_ids),
         "excluded_security_count": len(excluded),
         "excluded_security_fraction": fraction,
@@ -854,6 +1144,30 @@ def _preflight_exact_coverage(
         excluded_security_ids=excluded,
         exclusion_records=tuple(exclusion_records),
     )
+
+
+def _contiguous_session_blocks(
+    missing_sessions: list[date],
+    expected_sessions: set[date],
+) -> list[list[date]]:
+    """Group gaps by adjacent expected XNYS sessions, not calendar days."""
+
+    if not missing_sessions:
+        return []
+    rank = {
+        session: index for index, session in enumerate(sorted(expected_sessions))
+    }
+    blocks: list[list[date]] = []
+    for session in sorted(missing_sessions):
+        if session not in rank:
+            raise DataReadinessError(
+                f"missing session is outside membership coverage: {session}"
+            )
+        if not blocks or rank[session] != rank[blocks[-1][-1]] + 1:
+            blocks.append([session])
+        else:
+            blocks[-1].append(session)
+    return blocks
 
 
 def _benchmark_coverage_record(
@@ -946,8 +1260,14 @@ def _expected_ticker_sessions(
     benchmark_tickers: tuple[str, ...],
     benchmark_start_sessions: Mapping[str, date],
     all_sessions: tuple[date, ...],
+    session_abstentions: set[date] | None = None,
 ) -> set[date]:
+    abstentions = session_abstentions or set()
     if ticker in benchmark_tickers:
+        if abstentions:
+            raise DataReadinessError(
+                f"benchmark cannot have stock session abstentions: {ticker}"
+            )
         start = benchmark_start_sessions.get(ticker)
         if start is None:
             raise DataReadinessError(
@@ -970,7 +1290,13 @@ def _expected_ticker_sessions(
                     raise DataReadinessError(
                         f"ticker {ticker} maps to multiple securities on {session}"
                     )
-    return set(expected)
+    unknown = abstentions.difference(expected)
+    if unknown:
+        raise DataReadinessError(
+            f"session abstention is outside ticker membership: {ticker}; "
+            f"first={min(unknown)}"
+        )
+    return set(expected).difference(abstentions)
 
 
 def _benchmark_start_sessions(
@@ -1010,6 +1336,136 @@ def _benchmark_start_sessions(
     return starts
 
 
+def _require_session_gap_audit(
+    coverage_audit: Mapping[str, Any],
+) -> dict[str, Any]:
+    raw = coverage_audit.get("session_gap_audit")
+    if not isinstance(raw, Mapping):
+        raise DataReadinessError("combined daily session-gap audit is absent")
+    policy = raw.get("classification_policy")
+    gaps = raw.get("gaps")
+    security_audit = coverage_audit.get("security_audit")
+    expected_policy = {
+        "maximum_missing_fraction": MAXIMUM_SPARSE_MISSING_FRACTION,
+        "maximum_contiguous_missing_sessions": (
+            MAXIMUM_SPARSE_CONTIGUOUS_SESSIONS
+        ),
+        "unavailable_source_action": "exclude_security",
+        "substantial_gap_action": "exclude_security",
+        "sparse_gap_action": "abstain",
+        "imputation": "prohibited",
+        "downstream_rule": (
+            "abstain from every feature or label row whose required "
+            "membership-session window intersects a missing session"
+        ),
+    }
+    if (
+        raw.get("schema") != SESSION_GAP_AUDIT_SCHEMA
+        or policy != expected_policy
+        or not isinstance(gaps, list)
+        or not isinstance(security_audit, list)
+    ):
+        raise DataReadinessError("combined daily session-gap audit is invalid")
+    seen: set[tuple[str, date]] = set()
+    security_ids: set[str] = set()
+    missing_count = 0
+    for item in gaps:
+        if not isinstance(item, Mapping):
+            raise DataReadinessError("combined daily session-gap record is invalid")
+        security_id = str(item.get("security_id", "")).strip()
+        ticker = str(item.get("ticker", "")).strip().upper()
+        raw_sessions = item.get("missing_sessions")
+        if not security_id or not ticker or not isinstance(raw_sessions, list):
+            raise DataReadinessError("combined daily session-gap record is invalid")
+        try:
+            sessions = [date.fromisoformat(str(value)) for value in raw_sessions]
+        except ValueError as exc:
+            raise DataReadinessError(
+                "combined daily session-gap record has an invalid session"
+            ) from exc
+        if (
+            not sessions
+            or sessions != sorted(set(sessions))
+            or len(sessions) > MAXIMUM_SPARSE_CONTIGUOUS_SESSIONS
+            or int(item.get("missing_session_count", -1)) != len(sessions)
+            or item.get("first_missing_session") != sessions[0].isoformat()
+            or item.get("last_missing_session") != sessions[-1].isoformat()
+            or item.get("required_downstream_action")
+            != "abstain_if_feature_or_label_window_crosses_gap"
+            or any(session < START_DATE or session > CUTOFF_DATE for session in sessions)
+        ):
+            raise DataReadinessError("combined daily session-gap record is invalid")
+        for session in sessions:
+            identity = (ticker, session)
+            if identity in seen:
+                raise DataReadinessError(
+                    "combined daily session-gap audit contains duplicate sessions"
+                )
+            seen.add(identity)
+        security_ids.add(security_id)
+        missing_count += len(sessions)
+    if (
+        int(raw.get("gap_count", -1)) != len(gaps)
+        or int(raw.get("security_count", -1)) != len(security_ids)
+        or int(raw.get("missing_session_count", -1)) != missing_count
+    ):
+        raise DataReadinessError("combined daily session-gap totals are invalid")
+    sparse_security_counts: dict[str, int] = {}
+    for item in security_audit:
+        if not isinstance(item, Mapping):
+            raise DataReadinessError("combined daily security coverage is invalid")
+        if item.get("action") != "retain_with_session_abstentions":
+            continue
+        security_id = str(item.get("security_id", "")).strip()
+        try:
+            item_missing_count = int(item["missing_session_count"])
+            item_missing_fraction = float(item["missing_fraction"])
+            item_maximum_gap = int(item["maximum_contiguous_missing_sessions"])
+        except (KeyError, TypeError, ValueError) as exc:
+            raise DataReadinessError(
+                "combined daily sparse security coverage is invalid"
+            ) from exc
+        if (
+            not security_id
+            or item_missing_count <= 0
+            or item_missing_fraction > MAXIMUM_SPARSE_MISSING_FRACTION
+            or item_maximum_gap > MAXIMUM_SPARSE_CONTIGUOUS_SESSIONS
+            or item.get("reasons")
+            != ["verified_sparse_membership_session_gap"]
+        ):
+            raise DataReadinessError(
+                "combined daily sparse security coverage is invalid"
+            )
+        sparse_security_counts[security_id] = item_missing_count
+    gap_security_counts: dict[str, int] = defaultdict(int)
+    for item in gaps:
+        gap_security_counts[str(item["security_id"])] += int(
+            item["missing_session_count"]
+        )
+    if sparse_security_counts != dict(gap_security_counts):
+        raise DataReadinessError(
+            "combined daily sparse coverage and session-gap audit differ"
+        )
+    return dict(raw)
+
+
+def _session_abstentions_by_ticker(
+    session_gap_audit: Mapping[str, Any],
+) -> dict[str, set[date]]:
+    result: dict[str, set[date]] = defaultdict(set)
+    gaps = session_gap_audit.get("gaps")
+    if not isinstance(gaps, list):
+        raise DataReadinessError("combined daily session-gap records are absent")
+    for item in gaps:
+        if not isinstance(item, Mapping):
+            raise DataReadinessError("combined daily session-gap record is invalid")
+        ticker = str(item["ticker"]).strip().upper()
+        result[ticker].update(
+            date.fromisoformat(str(value)) for value in item["missing_sessions"]
+        )
+    return dict(result)
+
+
 def _combine_ticker(
     ticker: str,
     *,
@@ -1017,7 +1473,9 @@ def _combine_ticker(
     post_record: dict[str, Any] | None,
     expected_sessions: set[date],
     calendar: Any,
+    abstained_sessions: set[date] | None = None,
 ) -> pd.DataFrame:
+    abstentions = abstained_sessions or set()
     parts: list[pd.DataFrame] = []
     for record in pre_records:
         frame = pd.read_parquet(Path(str(record["resolved_path"])))
@@ -1037,6 +1495,12 @@ def _combine_ticker(
     if bool(combined.duplicated(["ticker", "_session"]).any()):
         raise DataReadinessError(f"combined daily history overlaps for {ticker}")
     observed = set(cast(pd.Series, combined["_session"]).tolist())
+    stale_abstentions = sorted(observed.intersection(abstentions))
+    if stale_abstentions:
+        raise DataReadinessError(
+            "combined daily session-gap audit is stale for "
+            f"{ticker}; first={stale_abstentions[0]}"
+        )
     missing = sorted(expected_sessions.difference(observed))
     if missing:
         raise DataReadinessError(
@@ -1151,7 +1615,10 @@ def _load_ticker_record(
     request_sha256: str,
     ticker: str,
     expected_sessions: set[date],
+    abstained_sessions: set[date] | None = None,
+    session_gap_audit_sha256: str | None = None,
 ) -> dict[str, Any] | None:
+    abstentions = abstained_sessions or set()
     if not path.exists() and not record_path.exists() and not manifest_path_for(path).exists():
         return None
     if not path.is_file() or not record_path.is_file() or not manifest_path_for(path).is_file():
@@ -1167,7 +1634,14 @@ def _load_ticker_record(
         or record.get("sha256") != manifest.get("artifact_sha256")
         or record.get("canonical_manifest_sha256") != file_sha256(manifest_path_for(path))
         or int(record.get("rows", -1)) != len(bars)
+        or record.get("coverage_policy")
+        != "exact_observed_membership_sessions"
         or record.get("expected_sessions_sha256") != _session_set_sha256(expected_sessions)
+        or int(record.get("session_abstention_count", -1)) != len(abstentions)
+        or record.get("session_abstentions_sha256")
+        != _session_set_sha256(abstentions)
+        or record.get("session_gap_audit_sha256")
+        != session_gap_audit_sha256
         or sessions != expected_sessions
         or set(bars["ticker"].astype(str)) != {ticker}
     ):
@@ -1187,8 +1661,13 @@ def _load_complete_combined_store(
     authority = _load_json(directory / "_authority.json")
     raw = manifest.get("artifacts")
     coverage_record = manifest.get("coverage_audit")
+    session_gap_record = manifest.get("session_gap_audit")
     coverage_path = directory / "_coverage_audit.json"
+    session_gap_path = directory / "_session_gap_audit.json"
     coverage_audit = _load_json(coverage_path) if coverage_path.is_file() else None
+    session_gap_audit = (
+        _load_json(session_gap_path) if session_gap_path.is_file() else None
+    )
     if (
         manifest.get("schema") != COMBINED_MANIFEST_SCHEMA
         or manifest.get("status") != "complete"
@@ -1212,12 +1691,26 @@ def _load_complete_combined_store(
         != request.get("coverage_audit_sha256")
         or coverage_audit.get("benchmark_audit")
         != request.get("benchmark_coverage")
+        or not isinstance(session_gap_record, Mapping)
+        or session_gap_record.get("path") != "_session_gap_audit.json"
+        or not session_gap_path.is_file()
+        or session_gap_record.get("sha256") != file_sha256(session_gap_path)
+        or authority.get("session_gap_audit_sha256")
+        != file_sha256(session_gap_path)
+        or not isinstance(session_gap_audit, Mapping)
+        or _json_sha256(session_gap_audit)
+        != request.get("session_gap_audit_sha256")
+        or session_gap_record.get("semantic_sha256")
+        != request.get("session_gap_audit_sha256")
+        or coverage_audit.get("session_gap_audit") != session_gap_audit
         or manifest.get("security_exclusions")
         != request.get("security_exclusions")
         or manifest.get("benchmark_coverage")
         != request.get("benchmark_coverage")
     ):
         raise DataReadinessError("combined daily authority is invalid")
+    if _require_session_gap_audit(coverage_audit) != session_gap_audit:
+        raise DataReadinessError("combined daily session-gap authority is invalid")
     artifacts: dict[str, tuple[Path, str]] = {}
     rows = 0
     for item in raw:
@@ -1225,7 +1718,12 @@ def _load_complete_combined_store(
             raise DataReadinessError("combined daily artifact record is malformed")
         ticker = str(item.get("ticker", ""))
         path = _resolve_inside(directory, str(item.get("path", "")))
-        if ticker in artifacts or file_sha256(path) != item.get("sha256"):
+        if (
+            ticker in artifacts
+            or file_sha256(path) != item.get("sha256")
+            or item.get("session_gap_audit_sha256")
+            != request.get("session_gap_audit_sha256")
+        ):
             raise DataReadinessError(f"combined daily artifact is invalid: {ticker}")
         if file_sha256(manifest_path_for(path)) != item.get("canonical_manifest_sha256"):
             raise DataReadinessError(f"combined daily sidecar is invalid: {ticker}")

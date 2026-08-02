@@ -54,7 +54,7 @@ class V3FeatureTests(unittest.TestCase):
         availability = pd.DataFrame(
             {
                 "ticker": ["AAA"],
-                "source_family": ["reddit"],
+                "source_family": ["sec"],
                 "available": [True],
                 "row_count": [25],
                 "first_available_at_utc": [self.times[0] - pd.Timedelta(days=1)],
@@ -69,9 +69,9 @@ class V3FeatureTests(unittest.TestCase):
             minimum_cross_section=3,
         )
         aaa = features[features["ticker"] == "AAA"].sort_values("decision_time_utc")
-        self.assertEqual(int(aaa.iloc[0]["source_available_reddit"]), 0)
-        self.assertEqual(int(aaa.iloc[1]["source_available_reddit"]), 1)
-        self.assertEqual(int(aaa.iloc[1]["source_rows_reddit"]), 25)
+        self.assertEqual(int(aaa.iloc[0]["source_available_sec"]), 0)
+        self.assertEqual(int(aaa.iloc[1]["source_available_sec"]), 1)
+        self.assertEqual(int(aaa.iloc[1]["source_rows_sec"]), 25)
 
     def test_missing_microstructure_is_explicit_and_not_in_core(self) -> None:
         features = build_v3_features(self.bars, self.benchmarks, minimum_cross_section=3)

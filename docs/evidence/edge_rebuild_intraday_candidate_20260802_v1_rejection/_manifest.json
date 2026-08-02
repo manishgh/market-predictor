@@ -1,0 +1,13 @@
+{
+  "created_at_utc": "2026-08-02T03:24:08.646727+00:00",
+  "files": {
+    "rejection.json": {
+      "bytes": 2808,
+      "sha256": "e57515133d35f4e17d7153dbddaac1ce169edf59d639ac11e3ba76c5f99ea88b"
+    }
+  },
+  "promotion_permitted": false,
+  "schema_version": "edge_rebuild.intraday_candidate_rejection.v1",
+  "serving_eligible": false,
+  "state": "rejected"
+}

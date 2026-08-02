@@ -1,4 +1,4 @@
-schema_version = "edge_rebuild.strategy_contract.v1"
+schema_version = "edge_rebuild.strategy_contract.v2"
 
 # Frozen once, before any validation outcome is seen. Every number here is
 # chosen from trading rationale and the design window only. Changing one after
@@ -41,8 +41,13 @@ minimum_expected_net_edge_bps = 5.0
 # barrier context. Both are required.
 feature_timeframe = "1Hour"
 context_timeframe = "1Day"
-# Selection must not concentrate in one sector, however strong its signals.
-maximum_sector_weight = 0.20
+# Diversification has a preferred limit and a bounded fallback. The fallback
+# prevents a valid four- or three-sector opportunity set from becoming
+# impossible while still refusing a portfolio drawn from fewer than three
+# sectors.
+target_maximum_sector_weight = 0.20
+hard_maximum_sector_weight = 0.3333333333333333
+minimum_distinct_sectors_for_selection = 3
 sector_neutral_scoring = true
 
 [intraday]
@@ -198,7 +203,11 @@ rank_bottom_quantile = 0.20
 # activations are available at the same decision time; sector slices would be
 # too small and would answer a different question.
 swing_rank_within_sector = true
-swing_minimum_cross_section_for_ranking = 50
+# Fifty peers is preferred. Thirty is the approved hard floor; smaller sector
+# groups receive no rank label. The actual peer count and target status are
+# persisted with every row and used as a training reliability weight.
+swing_target_cross_section_for_ranking = 50
+swing_minimum_cross_section_for_ranking = 30
 intraday_rank_within_sector = false
 intraday_minimum_cross_section_for_ranking = 10
 
