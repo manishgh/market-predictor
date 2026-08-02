@@ -8,6 +8,8 @@ Repository: `C:\project\market-predictor`
 
 Branch: `r3-lineage`
 
+Completed implementation checkpoint: `be6156b`
+
 ## Purpose
 
 Continue the prediction-only edge rebuild without reviving retired sources, invalid
