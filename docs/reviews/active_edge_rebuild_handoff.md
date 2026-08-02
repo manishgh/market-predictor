@@ -95,13 +95,74 @@ workloads retain their 4 GiB limits.
 Global or sector context cannot become ticker catalyst through topic similarity.
 Unknown coverage remains unknown and may cause abstention; it is never encoded as zero.
 
+## Predictive Quality and AUC Direction
+
+An ROC-AUC of 0.85 is not a credible promotion target for broad S&P 500 daily or
+swing direction prediction from public market and news data. The current governed
+validation result of approximately 0.55-0.57 is weak, but plausible. A sudden broad
+result near 0.85 must be treated as a leakage incident until overlapping labels,
+post-decision data, revised fundamentals, duplicate events, repeated validation
+selection, universe survivorship, and cross-fold security overlap are disproved.
+
+A high AUC may be valid for a narrow event specialist, such as a verified earnings
+or material SEC event with abnormal-volume confirmation. Such a result must never be
+reported as broad-market performance. Every specialist report must include eligible
+event count, security count, calendar coverage, prediction coverage, abstention rate,
+sector coverage, and confidence intervals alongside AUC.
+
+Model promotion must optimize useful prediction rather than headline AUC alone:
+
+- expected net excess return or cross-sectional return rank;
+- rank information coefficient and top-quantile lift;
+- calibrated probability and explicit abstention;
+- return relative to SPY, QQQ, and the security's sector benchmark;
+- net performance after spread, slippage, turnover, and doubled-cost stress;
+- drawdown and stability across time, sectors, regimes, and unseen securities.
+
+### Next Preregistered Experiments
+
+Run these sequentially and preserve the locked test for final promotion only:
+
+1. **Broad expected-return ranker.** Replace the broad binary direction objective
+   with managed future excess return or its cross-sectional rank. Use causal
+   technical, momentum, volatility, liquidity, volume, market-relative,
+   sector-relative, and regime features from the existing governed sources.
+2. **Verified catalyst specialists.** Train separate earnings and SEC specialists
+   only after each source has point-in-time authority, exact issuer binding, and
+   exact decision-time attachment. Do not encode missing source coverage as no event.
+3. **Confirmation and abstention.** Use specialist evidence, abnormal volume,
+   premarket gap, market/sector agreement, calibration, and uncertainty to rank or
+   suppress broad-model predictions. Keep catalyst as an overlay unless ablation
+   demonstrates stable incremental validation value as a direct model feature.
+4. **Optional point-in-time research.** Evaluate options implied volatility, skew,
+   term structure, and opening put/call volume only if historically complete,
+   timestamped data can be licensed and independently replayed.
+
+Use chronological walk-forward folds with a purge and embargo at least as long as
+the prediction horizon, point-in-time universes, unseen-security evaluation, and one
+single-touch locked test. Record every attempted hypothesis so repeated validation
+search cannot be mistaken for independent evidence. A broad validation AUC in the
+0.60-0.65 range would be a material research improvement, not a minimum promotion
+gate; economic and calibration gates remain authoritative.
+
+Research basis:
+
+- Gu, Kelly, and Xiu, *Empirical Asset Pricing via Machine Learning*:
+  https://www.nber.org/papers/w25398
+- Cawley and Talbot, *On Over-fitting in Model Selection and Subsequent Selection
+  Bias in Performance Evaluation*: https://www.jmlr.org/papers/v11/cawley10a.html
+- Bailey et al., *The Probability of Backtest Overfitting*:
+  https://papers.ssrn.com/sol3/papers.cfm?abstract_id=2326253
+- Pan and Poteshman, *The Information in Option Volume for Future Stock Prices*:
+  https://academic.oup.com/rfs/article-abstract/19/3/871/1646711
+
 ## Immediate Continuation
 
 1. Preserve the replayed V11 and candidate-v2 `no_candidate` authorities.
 2. Perform validation-only failure attribution for weak temporal economics,
    unseen-security instability, and catalyst ablation instability.
-3. Preregister the next hypothesis before changing features or estimator family;
-   keep the locked test unopened.
+3. Preregister and run the broad expected-return ranker before changing estimator
+   families; keep the locked test unopened.
 4. Do not add an API success path before promotion.
 5. Run full tests, Ruff, strict mypy, compileall, replay checks, `git diff --check`, and
    the peak-memory audit before committing.
