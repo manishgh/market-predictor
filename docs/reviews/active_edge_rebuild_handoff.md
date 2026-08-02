@@ -6,7 +6,7 @@ Last updated: 2026-08-02
 
 Repository: `C:\project\market-predictor`
 
-Branch: `r3-lineage`
+Branch: `main` (fast-forwarded from `r3-lineage`)
 
 Completed implementation checkpoint: `be6156b`
 

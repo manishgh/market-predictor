@@ -136,6 +136,6 @@ are audit evidence, never fallbacks.
 - [x] Train and evaluate swing candidate v2 with corrected holding-aligned benchmark,
   full-calendar portfolio-bootstrap, doubled-cost path, and active-sector gates.
 - [x] Complete repository-wide verification and memory audit.
-- [ ] Update final handoff, commit, and push the checkpoint.
+- [x] Update final handoff, commit, and push the checkpoint.
 - [ ] Collect and freeze a genuinely future intraday V3 holdout.
 - [ ] Promote only a model that passes every gate.
