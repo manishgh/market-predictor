@@ -56,8 +56,9 @@ workloads retain their 4 GiB limits.
 - Swing candidate v5 trained on V12 features resulted in an immutable `no_candidate` result. All 14 governed candidates failed strict economic gates.
 - Intraday V2 is published and replayable but economically rejected after costs. It
   is not a serving fallback.
-- **Intraday V3** is fully materialized with technical indicators. Feature predictive efficacies on target-hits were evaluated (MACD ~0.514, EMA/SMA dist ~0.504). It is still reserved for a genuinely future holdout. No V3
-  future-holdout run has occurred. **The collection of the future holdout is currently blocked (environment-pending) because the requisite canonical membership data (`sp500_memberships`) and raw market data for `2026-07-09` onwards are not available in the current environment.**
+- **Intraday V3** is fully materialized with technical indicators. Feature predictive efficacies on target-hits were evaluated (MACD ~0.514, EMA/SMA dist ~0.504).
+- Intraday V3 candidate training was executed. The baseline logistic regression model was selected over HGB and XGB Ranker candidates but it returned an immutable `status=candidate` with `promotion_permitted=false` because it failed strict economic gates across validation folds (e.g., negative net returns after 10 bps costs).
+- It is still reserved for a genuinely future holdout. No V3 future-holdout run has occurred. **The collection of the future holdout is currently blocked (environment-pending) because the requisite canonical membership data (`sp500_memberships`) and raw market data for `2026-07-09` onwards are not available in the current environment.**
 - No promoted bundle exists. All model API behavior must fail closed.
 - Documentation is consolidated to this handoff, the active plan, and the current
   feature audit. Unreferenced Azure and standalone TradingFlow plans were removed;
