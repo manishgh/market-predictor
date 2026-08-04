@@ -62,7 +62,7 @@ class IntradayTransportConfig(FrozenModel):
     maximum_pages_per_unit: int = Field(ge=1, le=10)
     maximum_failures_before_stop: int = Field(ge=1, le=20)
     intraday_finalization_delay_seconds: int = Field(ge=0, le=300)
-    maximum_process_memory_gib: float = Field(ge=1, le=4)
+    maximum_process_memory_gib: float = Field(ge=1, le=5)
     memory_guard_headroom_gib: float = Field(ge=0.5, le=2)
 
     @model_validator(mode="after")

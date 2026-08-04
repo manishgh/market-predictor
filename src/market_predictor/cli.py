@@ -1098,3 +1098,6 @@ def build_market_context_from_proxies(
     summary_path = out.parent / "market_context_proxy_summary.csv"
     pd.DataFrame(summary).to_csv(summary_path, index=False)
     console.print({"rows": len(combined), "out": str(out), "summary": str(summary_path)})
+
+if __name__ == '__main__':
+    app()

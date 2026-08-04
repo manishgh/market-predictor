@@ -375,7 +375,7 @@ def test_memory_guard_stops_before_any_artifact_is_published(
     assert calls == [(4.0, 0.75, "intraday training start")]
     assert not output.exists()
 
-    with pytest.raises(ValueError, match="hard limit"):
+    with pytest.raises(ValueError, match=r"\(0, 4\] GiB"):
         IntradayTrainingConfig(maximum_process_memory_gib=4.01)
     with pytest.raises(ValueError, match="candidate budget"):
         IntradayTrainingConfig(maximum_learned_candidates=7)

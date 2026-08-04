@@ -129,7 +129,7 @@ def test_promoted_ten_session_swing_api_returns_human_contract(
         "feature_columns": features,
         "ablation_profile": "catalyst_full",
         "probability_threshold": 0.60,
-        "fitted_candidate": _Fitted(),
+        "fitted_models": {"classifier": _Fitted()},
     }
     joblib.dump(model_payload, model_path)
     attestation_id = "f" * 64

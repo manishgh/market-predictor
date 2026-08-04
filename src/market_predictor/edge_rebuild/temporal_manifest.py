@@ -65,7 +65,7 @@ class TemporalManifestConfig(BaseModel):
     unseen_security_holdout_fraction: float = Field(gt=0.0, lt=0.5)
     unseen_security_hash_seed: int
     unseen_security_assignment: str
-    maximum_process_memory_gib: float = Field(ge=1.0, le=4.0)
+    maximum_process_memory_gib: float = Field(ge=1.0, le=5.0)
     memory_guard_headroom_gib: float = Field(ge=0.5, le=2.0)
 
     @model_validator(mode="after")

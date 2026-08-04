@@ -13,6 +13,7 @@ import pytest
 
 from market_predictor.canonical.store import file_sha256
 from market_predictor.edge_rebuild import swing_training
+from market_predictor.edge_rebuild.training import walk_forward, evaluation
 from market_predictor.edge_rebuild.strategy_contract import (
     StrategyContract,
     load_strategy_contract,
@@ -54,7 +55,7 @@ def test_repository_policy_is_frozen_for_ten_session_candidate_training() -> Non
     assert config.horizon_sessions == 10
     assert config.maximum_process_memory_gib == 5.0
     assert config.probability_thresholds == (0.10, 0.15, 0.20, 0.25, 0.30, 0.35)
-    assert len(swing_training._candidate_specs(config)) == 6
+    assert len(swing_training._candidate_specs(config)) == 14
     temporal = load_temporal_manifest_config(
         Path("configs/edge_rebuild_temporal_manifest.toml")
     )
@@ -258,9 +259,9 @@ def test_trains_sequential_ablations_and_publishes_candidate_only(
         "temporal_generalization_full_pit_cross_section",
         "unseen_security_generalization_stable_20pct",
     }
-    metrics = result.evaluation["final_test"][
+    metrics = next(iter(result.evaluation["final_test"][
         "temporal_generalization_full_pit_cross_section"
-    ]
+    ].values()))
     assert {
         "roc_auc",
         "pr_auc",
@@ -426,9 +427,9 @@ def test_stable_security_holdout_is_deterministic_and_disjoint() -> None:
     contract = _contract()
     frame = pd.DataFrame({"security_id": [f"sec:{index:04d}" for index in range(1_000)]})
 
-    first = swing_training._security_holdout_mask(frame, contract)
+    first = evaluation._security_holdout_mask(frame, contract)
     shuffled = frame.sample(frac=1.0, random_state=7)
-    second = swing_training._security_holdout_mask(shuffled, contract)
+    second = evaluation._security_holdout_mask(shuffled, contract)
     first_ids = set(frame.loc[first, "security_id"])
     second_ids = set(shuffled.loc[second, "security_id"])
 
@@ -661,10 +662,9 @@ def _config() -> SwingTrainingConfig:
         probability_thresholds=(0.10, 0.20),
         logistic_c_values=(1.0,),
         hgb_learning_rates=(0.05,),
-        hgb_max_leaf_nodes=(7,),
+        hgb_max_depths=(7,),
         hgb_max_iter=20,
-        hgb_max_bins=31,
-        maximum_learned_candidates=4,
+        maximum_learned_candidates=8,
         bootstrap_samples=2_000,
         bootstrap_block_sessions=20,
     )
@@ -724,6 +724,7 @@ def _profiles(contract: StrategyContract) -> tuple[SwingProfileData, SwingProfil
                     "barrier_gross_return": gross,
                     "barrier_cost": 0.002,
                     "barrier_net_return": gross - 0.002,
+                    "relevance_score": 1.0,
                     "future_gross_return_10d": fixed_gross,
                     "future_net_return_10d": fixed_gross - 0.002,
                     "future_spy_return_10d": 0.001,
@@ -865,7 +866,7 @@ def _patch_inputs(
 
 def _poison_final_test(frame: pd.DataFrame, config: SwingTrainingConfig) -> pd.DataFrame:
     poisoned = frame.copy()
-    sessions = swing_training._ordered_sessions(poisoned)
+    sessions = walk_forward._ordered_sessions(poisoned)
     test = sessions[-60:]
     selected = poisoned["session_date_et"].isin(test)
     poisoned.loc[selected, "barrier_gross_return"] *= -1
@@ -883,7 +884,7 @@ def _poison_final_test(frame: pd.DataFrame, config: SwingTrainingConfig) -> pd.D
 
 def _test_schedule(frame: pd.DataFrame) -> TemporalSchedule:
     sessions = tuple(
-        date.fromisoformat(value) for value in swing_training._ordered_sessions(frame)
+        date.fromisoformat(value) for value in walk_forward._ordered_sessions(frame)
     )
     return TemporalSchedule(
         target_sessions=sessions,

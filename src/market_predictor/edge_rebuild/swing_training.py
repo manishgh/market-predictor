@@ -19,7 +19,6 @@ import pandas as pd
 import pyarrow as pa
 import pyarrow.dataset as pds
 import pyarrow.parquet as pq
-import xgboost as xgb
 from sklearn.impute import SimpleImputer
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import average_precision_score, brier_score_loss, roc_auc_score
@@ -132,9 +131,10 @@ class SwingTrainingConfig:
         0.35,
     )
     logistic_c_values: tuple[float, ...] = (1.0,)
-    xgb_learning_rates: tuple[float, ...] = (0.05,)
-    xgb_max_depths: tuple[int, ...] = (3, 5)
-    xgb_n_estimators: int = 150
+    hgb_learning_rates: tuple[float, ...] = (0.05,)
+    hgb_max_leaf_nodes: tuple[int, ...] = (15, 31)
+    hgb_max_iter: int = 150
+    hgb_max_bins: int = 127
     maximum_learned_candidates: int = 6
     bootstrap_samples: int = 2_000
     bootstrap_block_sessions: int = 20
@@ -164,15 +164,15 @@ class SwingTrainingConfig:
             raise ValueError("probability thresholds must be unique and ascending")
         if not self.logistic_c_values or any(value <= 0 for value in self.logistic_c_values):
             raise ValueError("logistic C values must be positive")
-        if not self.xgb_learning_rates or any(value <= 0 for value in self.xgb_learning_rates):
-            raise ValueError("XGB learning rates must be positive")
-        if not self.xgb_max_depths or any(value < 1 for value in self.xgb_max_depths):
-            raise ValueError("XGB depth limits must be at least one")
-        if self.xgb_n_estimators < 10:
-            raise ValueError("XGB estimators bound is invalid")
+        if not self.hgb_learning_rates or any(value <= 0 for value in self.hgb_learning_rates):
+            raise ValueError("hgb learning rates must be positive")
+        if not self.hgb_max_leaf_nodes or any(value < 2 for value in self.hgb_max_leaf_nodes):
+            raise ValueError("hgb max leaf nodes must be at least 2")
+        if self.hgb_max_iter < 1:
+            raise ValueError("hgb max iter must be at least 1")
         candidate_count = len(ALLOWED_PROFILES) * (
             len(self.logistic_c_values)
-            + len(self.xgb_learning_rates) * len(self.xgb_max_depths) * 3
+            + len(self.hgb_learning_rates) * len(self.hgb_max_leaf_nodes)
         )
         if candidate_count > self.maximum_learned_candidates:
             raise ValueError("candidate grid exceeds the frozen sequential budget")
@@ -209,8 +209,8 @@ def load_swing_training_config(path: Path) -> SwingTrainingConfig:
     for name in (
         "probability_thresholds",
         "logistic_c_values",
-        "xgb_learning_rates",
-        "xgb_max_depths",
+        "hgb_learning_rates",
+        "hgb_max_leaf_nodes",
     ):
         value = values[name]
         if not isinstance(value, list):
@@ -977,6 +977,7 @@ def train_swing_edge_candidate(
         "decision_time_utc",
         "label_available_at_utc",
         "target",
+        "barrier_net_return",
         "ranking_reliability_weight",
         *selected_data.feature_columns,
     )))
@@ -1159,6 +1160,9 @@ def train_swing_edge_candidate(
         "ablation_profile": reference_spec.profile,
         "feature_columns": list(selected_data.feature_columns),
         "feature_set_sha256": _sequence_sha256(selected_data.feature_columns),
+        "dataset": _binding_record(binding, profile_identity),
+        "training_config_sha256": config_sha256,
+        "temporal_manifest_policy_sha256": temporal_policy_sha256,
         "strategy_contract_sha256": strategy_contract.sha256(),
         "fitted_models": fitted_models,
         "probability_thresholds": selected_thresholds,
@@ -1190,8 +1194,8 @@ def _candidate_specs(config: SwingTrainingConfig) -> tuple[CandidateSpec, ...]:
                     hyperparameters={"C": value, "solver": "lbfgs", "threads": 1},
                 )
             )
-        for rate in config.xgb_learning_rates:
-            for depth in config.xgb_max_depths:
+        for rate in config.hgb_learning_rates:
+            for depth in (3, 5):
                 specs.append(
                     CandidateSpec(
                         candidate_id=f"{family_name}.xgbranker.lr_{rate:g}.depth_{depth}",
@@ -1200,7 +1204,7 @@ def _candidate_specs(config: SwingTrainingConfig) -> tuple[CandidateSpec, ...]:
                         hyperparameters={
                             "learning_rate": rate,
                             "max_depth": depth,
-                            "n_estimators": config.xgb_n_estimators,
+                            "n_estimators": config.hgb_max_iter,
                             "threads": 1,
                         },
                     )
@@ -1213,7 +1217,7 @@ def _candidate_specs(config: SwingTrainingConfig) -> tuple[CandidateSpec, ...]:
                         hyperparameters={
                             "learning_rate": rate,
                             "max_depth": depth,
-                            "n_estimators": config.xgb_n_estimators,
+                            "n_estimators": config.hgb_max_iter,
                             "threads": 1,
                         },
                     )
@@ -1226,7 +1230,7 @@ def _candidate_specs(config: SwingTrainingConfig) -> tuple[CandidateSpec, ...]:
                         hyperparameters={
                             "learning_rate": rate,
                             "max_depth": depth,
-                            "n_estimators": config.xgb_n_estimators,
+                            "n_estimators": config.hgb_max_iter,
                             "threads": 1,
                         },
                     )
@@ -1558,6 +1562,7 @@ def _fit_candidate(
             ]
         )
     elif spec.estimator_family == "xgboost_ranker":
+        import xgboost as xgb
         constraints = tuple(
             1 if col in ("dollar_volume_log", "volume_ratio_20", "volume_z20") else 0
             for col in columns
@@ -1572,6 +1577,7 @@ def _fit_candidate(
             monotone_constraints=constraints,
         )
     elif spec.estimator_family == "xgboost_regressor":
+        import xgboost as xgb
         estimator = xgb.XGBRegressor(
             objective=_linex_objective,
             learning_rate=float(spec.hyperparameters["learning_rate"]),
@@ -1669,6 +1675,7 @@ class DualHurdleEstimator:
         n_estimators: int,
         random_state: int,
     ):
+        import xgboost as xgb
         self.classifier = xgb.XGBClassifier(
             learning_rate=learning_rate,
             max_depth=max_depth,

@@ -6,12 +6,19 @@ from typing import Any, cast
 import pandas as pd
 
 from market_predictor.edge_rebuild.strategy_contract import StrategyContract
-from market_predictor.edge_rebuild.swing_training import (
-    HORIZON_SESSIONS,
-    SwingTrainingConfig,
-    WalkForwardFold,
-    _ordered_sessions,
-)
+from dataclasses import dataclass
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from market_predictor.edge_rebuild.swing_training import SwingTrainingConfig
+
+
+@dataclass(frozen=True, slots=True)
+class WalkForwardFold:
+    fold: int
+    train_sessions: tuple[str, ...]
+    purge_sessions: tuple[str, ...]
+    embargo_sessions: tuple[str, ...]
+    validation_sessions: tuple[str, ...]
 from market_predictor.edge_rebuild.temporal_manifest import (
     TemporalManifestConfig,
     TemporalSchedule,
@@ -33,6 +40,17 @@ def _governed_folds(schedule: TemporalSchedule) -> tuple[WalkForwardFold, ...]:
         for fold in schedule.folds
     )
 
+
+def _ordered_sessions(data: pd.DataFrame) -> tuple[str, ...]:
+    sessions = (
+        data.groupby("session_date_et", as_index=False, observed=True)["decision_time_utc"]
+        .min()
+        .sort_values(["decision_time_utc", "session_date_et"], kind="stable")
+    )
+    order = tuple(sessions["session_date_et"].astype(str))
+    if len(order) != len(set(order)):
+        raise DataReadinessError("exchange sessions are not unique")
+    return order
 
 
 def _governed_model_sessions(schedule: TemporalSchedule) -> tuple[str, ...]:
@@ -118,7 +136,7 @@ def _split_fit_calibration(
         math.ceil(len(sessions) * config.calibration_fraction),
     )
     calibration_start = len(sessions) - calibration_count
-    fit_end = calibration_start - HORIZON_SESSIONS
+    fit_end = calibration_start - config.horizon_sessions
     if fit_end < 20:
         raise DataReadinessError("training fold is too short for calibration embargo")
     fit_sessions = sessions[:fit_end]

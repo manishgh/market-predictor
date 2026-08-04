@@ -62,7 +62,7 @@ class StrategyResearchContractTests(unittest.TestCase):
             for feature in CATALYST_RANKING_FEATURES
             if feature.startswith("source_count_")
         }
-        self.assertEqual(generic_sources, {"alpaca"})
+        self.assertEqual(generic_sources, {"alpaca", "finviz", "sec"})
         self.assertEqual(edge_sources, {"alpaca"})
 
     def test_repository_ks0_contracts_are_complete(self) -> None:

@@ -77,15 +77,24 @@ MOMENTUM_FEATURES: Final = (
     "residual_return_20d_vs_sector",
     "residual_return_60d_vs_spy",
     "residual_return_60d_vs_sector",
+    "rsi_14",
+    "macd",
+    "macd_signal",
+    "macd_hist",
+    "volatility_20d",
 )
 TREND_FEATURES: Final = (
     "dist_ema_20",
     "dist_ema_50",
+    "dist_sma_50",
     "dist_sma_200",
     "sma_200_slope_20d",
     "macd_signal_diff_pct",
     "rsi_trend_alignment",
     "kaufman_efficiency_ratio",
+    "bb_upper_dist",
+    "bb_lower_dist",
+    "bb_pb",
 )
 PULLBACK_FEATURES: Final = (
     "return_1d",
@@ -200,63 +209,6 @@ def swing_dataset_config(
     )
 
 
-def attach_setup_components(
-    features: pd.DataFrame,
-    benchmark_features: pd.DataFrame,
-) -> pd.DataFrame:
-    """Attach residual momentum, prior-bar pullback state, and dollar volume."""
-
-    horizon_returns = benchmark_features.loc[
-        :, ["ticker", "session_date_et", "return_60d"]
-    ]
-    spy_rows = horizon_returns.loc[
-        horizon_returns["ticker"].astype(str).str.upper().eq("SPY")
-    ]
-    if spy_rows.empty:
-        raise DataReadinessError(
-            "swing residual features require SPY benchmark features"
-        )
-    spy = spy_rows.rename(
-        columns={"return_60d": "spy_return_60d"}
-    ).drop(columns="ticker")
-    sector = horizon_returns.rename(
-        columns={
-            "ticker": "primary_benchmark",
-            "return_60d": "sector_return_60d",
-        }
-    )
-    data = features.merge(
-        spy,
-        on="session_date_et",
-        how="left",
-        validate="many_to_one",
-    )
-    data = data.merge(
-        sector,
-        on=["primary_benchmark", "session_date_et"],
-        how="left",
-        validate="many_to_one",
-    )
-    for window in (20, 60):
-        stock = pd.to_numeric(data[f"return_{window}d"], errors="coerce")
-        data[f"residual_return_{window}d_vs_spy"] = (
-            stock - data[f"spy_return_{window}d"]
-        )
-        data[f"residual_return_{window}d_vs_sector"] = (
-            stock - data[f"sector_return_{window}d"]
-        )
-
-    data = data.sort_values(
-        ["security_id", "session_date_et"],
-        kind="stable",
-    )
-    grouped = data.groupby("security_id", sort=False)
-    data["prior_dist_ema_10"] = grouped["dist_ema_10"].shift(1)
-    data["prior_dist_sma_200"] = grouped["dist_sma_200"].shift(1)
-    data["dollar_volume"] = data["close"] * data["volume"]
-    return data
-
-
 def build_swing_feature_rows(
     stock_bars: pd.DataFrame,
     benchmark_bars: pd.DataFrame,
@@ -307,18 +259,23 @@ def build_swing_feature_rows(
         effective,
         inplace=True,
     )
-    rows = attach_setup_components(labelled, benchmark_features)
+    from market_predictor.edge_rebuild.pipeline import FeaturePipeline
+    from market_predictor.edge_rebuild.swing_pipeline_steps import (
+        SetupComponentsStep,
+        TechnicalRelationshipsStep,
+        AdvancedIndicatorsStep,
+    )
+    
+    pipeline = FeaturePipeline([
+        SetupComponentsStep(benchmark_features),
+        TechnicalRelationshipsStep(contract),
+        AdvancedIndicatorsStep(),
+    ])
+    rows = pipeline.transform(labelled)
+    
     rows = _apply_sector_benchmark_eligibility(
         rows,
         horizon_sessions=effective.horizon_sessions,
-    )
-    rows = add_technical_relationship_features(
-        rows,
-        spec=relationship_spec_from_contract(
-            contract,
-            group_columns=("security_id",),
-            time_column="session_date_et",
-        ),
     )
     rows = _add_barrier_outcomes(
         rows,

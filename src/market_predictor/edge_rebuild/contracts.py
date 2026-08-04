@@ -100,7 +100,7 @@ class EdgeRebuildReadinessConfig(FrozenModel):
     required_price_feed: str
     required_adjustment: str
     target_history_sessions: int = Field(ge=1_000)
-    maximum_process_memory_gib: float = Field(ge=1, le=4)
+    maximum_process_memory_gib: float = Field(ge=1, le=5)
     memory_guard_headroom_gib: float = Field(ge=0.5, le=2)
     swing: SwingReadinessConfig
     intraday: IntradayReadinessConfig

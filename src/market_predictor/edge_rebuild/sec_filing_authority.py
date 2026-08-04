@@ -53,7 +53,7 @@ FORM_FEATURES: Final[Mapping[str, frozenset[str]]] = {
 }
 _ET = ZoneInfo("America/New_York")
 _IDENTITY_COLUMNS = ("decision_id", "security_id", "ticker", "decision_time_utc")
-_MAXIMUM_MEMORY_GIB = 4.0
+_MAXIMUM_MEMORY_GIB = 6.0
 _MEMORY_HEADROOM_GIB = 0.75
 
 

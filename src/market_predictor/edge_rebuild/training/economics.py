@@ -14,7 +14,9 @@ from market_predictor.edge_rebuild.swing_features import (
     MANAGED_PATH_NET_RETURN_COLUMNS,
     MANAGED_PATH_SESSION_ORDINAL_COLUMNS,
 )
-from market_predictor.edge_rebuild.swing_training import SwingTrainingConfig
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from market_predictor.edge_rebuild.swing_training import SwingTrainingConfig
 from market_predictor.edge_rebuild.training.utils import _finite, _mapping
 from market_predictor.v3.errors import DataReadinessError
 

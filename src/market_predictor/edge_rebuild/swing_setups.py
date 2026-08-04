@@ -126,10 +126,8 @@ from market_predictor.edge_rebuild.setup_economics import (
     SetupEconomicsConfig,
 )
 from market_predictor.edge_rebuild.strategy_contract import StrategyContract
-from market_predictor.edge_rebuild.swing_features import (
-    attach_setup_components,
-    swing_dataset_config,
-)
+from market_predictor.edge_rebuild.swing_features import swing_dataset_config
+from market_predictor.edge_rebuild.swing_pipeline_steps import SetupComponentsStep
 from market_predictor.resources import assert_memory_budget
 from market_predictor.swing.dataset import build_swing_feature_history
 from market_predictor.swing.labels import add_exact_swing_labels
@@ -284,7 +282,8 @@ def build_swing_setup_candidates(
     del decisions
     labelled = add_exact_swing_labels(features, benchmark_features, config, inplace=True)
     del features
-    components = attach_setup_components(labelled, benchmark_features)
+    step = SetupComponentsStep(benchmark_features)
+    components = step.transform(labelled)
     del labelled
     selected = components.loc[swing_setup_mask(components, contract=contract)]
     return _candidate_frame(selected, contract=contract, horizon=horizon)

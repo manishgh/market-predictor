@@ -97,7 +97,12 @@ CATALYST_FEATURES = (
     "event_relevance_mean_3d",
     "low_relevance_event_fraction_1d",
     "low_relevance_event_fraction_3d",
+    "source_count_alpaca_1d",
     "source_count_alpaca_3d",
+    "source_count_sec_1d",
+    "source_count_sec_3d",
+    "source_count_finviz_1d",
+    "source_count_finviz_3d",
 )
 
 FUNDAMENTAL_FEATURES = (
@@ -184,7 +189,7 @@ class SwingDatasetConfig(FrozenConfig):
     source_coverage_max_age_minutes: int = Field(default=60, ge=0, le=1_440)
     minimum_cross_section: int = Field(default=20, ge=2)
     min_exact_label_coverage: float = Field(default=0.995, ge=0.95, le=1.0)
-    max_build_memory_gb: float = Field(default=4.0, ge=1.0, le=4.0)
+    max_build_memory_gb: float = Field(default=4.0, ge=1.0, le=5.0)
     memory_guard_headroom_gb: float = Field(default=0.75, ge=0.5, le=2.0)
     schema_version: str = SWING_FEATURE_SCHEMA_VERSION
 
@@ -252,7 +257,7 @@ class SwingTrainingConfig(FrozenConfig):
     learning_rate: float = Field(default=0.04, gt=0, le=1)
     l2_regularization: float = Field(default=1.0, ge=0)
     random_seed: int = 42
-    max_training_memory_gb: float = Field(default=4.0, ge=1.0, le=4.0)
+    max_training_memory_gb: float = Field(default=4.0, ge=1.0, le=5.0)
     memory_guard_headroom_gb: float = Field(default=0.75, ge=0.5, le=2.0)
     schema_version: str = SWING_MODEL_SCHEMA_VERSION
 

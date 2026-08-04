@@ -83,7 +83,7 @@ class IntradayDevelopmentConfig:
     stress_cost_bps: float = 20.0
     minimum_stress_average_daily_return_bps: float = 0.0
     cost_curve_bps: tuple[float, ...] = (0.0, 5.0, 10.0, 20.0)
-    maximum_process_memory_gib: float = 4.0
+    maximum_process_memory_gib: float = 5.0
     memory_guard_headroom_gib: float = 0.75
 
     def __post_init__(self) -> None:
@@ -131,8 +131,8 @@ class IntradayDevelopmentConfig:
             raise ValueError("cost curve must contain the configured stress cost")
         if tuple(sorted(set(self.cost_curve_bps))) != self.cost_curve_bps:
             raise ValueError("cost curve must be unique and ordered")
-        if not 0.0 < self.maximum_process_memory_gib <= 4.0:
-            raise ValueError("process memory hard limit must be in (0, 4] GiB")
+        if not 0.0 < self.maximum_process_memory_gib <= 5.0:
+            raise ValueError("process memory hard limit must be in (0, 5] GiB")
         if not 0.0 < self.memory_guard_headroom_gib < self.maximum_process_memory_gib:
             raise ValueError("memory headroom must be below the hard limit")
 

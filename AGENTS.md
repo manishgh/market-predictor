@@ -225,7 +225,7 @@ abstention.
   validation rows, or test rows.
 - Missing catalyst coverage before 2019-07-09 is not a readiness failure because no
   modeled decision may exist in that period.
-- Ticker catalyst sources are direct-issuer Alpaca news and SEC issuer filing events.
+- Ticker catalyst sources are direct-issuer Alpaca news, SEC issuer filing events, and Finviz Elite news.
   Each source requires reproducible provenance and an explicit availability timestamp.
 - Verified open-source global and sector events are separate context overlays. They
   must not be converted into ticker catalyst.

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 from collections.abc import Mapping, Sequence
 from typing import Any, cast
 
@@ -7,8 +8,28 @@ import numpy as np
 import pandas as pd
 
 from market_predictor.edge_rebuild.strategy_contract import StrategyContract
-from market_predictor.edge_rebuild.swing_training import _iso, _security_holdout_mask
 from market_predictor.v3.errors import DataReadinessError
+def _iso(value: object) -> str:
+    parsed = pd.Timestamp(value)
+    if parsed.tzinfo is None:
+        parsed = parsed.tz_localize('UTC')
+    return cast(str, parsed.tz_convert('UTC').isoformat())
+
+
+def _security_holdout_mask(
+    data: pd.DataFrame,
+    strategy_contract: StrategyContract,
+) -> pd.Series:
+    fraction = strategy_contract.validation.unseen_ticker_holdout_fraction
+    threshold = int(fraction * 2**64)
+    identities = data["security_id"].astype(str)
+    assigned = identities.map(
+        lambda value: int(hashlib.sha256(value.encode("utf-8")).hexdigest()[:16], 16)
+        < threshold
+    )
+    if not assigned.any() or assigned.all():
+        raise DataReadinessError("stable security holdout produced an empty partition")
+    return assigned.astype(bool)
 
 
 def _calibration_bins(

@@ -81,7 +81,7 @@ class V3TrainingConfig(FrozenContract):
     xgboost_max_depth: int = Field(default=5, ge=1, le=16)
     xgboost_max_bin: int = Field(default=64, ge=32, le=1024)
     xgboost_n_jobs: int = Field(default=1, ge=1)
-    max_training_memory_gb: float = Field(default=4.0, ge=1.0, le=4.0)
+    max_training_memory_gb: float = Field(default=4.0, ge=1.0, le=5.0)
     memory_guard_headroom_gb: float = Field(default=0.75, ge=0.5, le=2.0)
     training_dataset_fingerprint: str | None = Field(default=None, min_length=64, max_length=64)
     continue_on_family_error: bool = True

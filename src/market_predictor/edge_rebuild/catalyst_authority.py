@@ -802,8 +802,9 @@ def _aggregate_rows(
     )
     if bool(identities[["ticker_count", "security_count", "decision_time_count"]].ne(1).any(axis=None)):
         raise DataReadinessError("decision identity conflicts across catalyst lineage generations")
+    deduped_frame = _temporal_deduplicate(frame)
     aggregates = aggregate_event_assignments(
-        frame,
+        deduped_frame,
         windows=WINDOWS,
         source_families=source_families,
     ).set_index("decision_id")
@@ -813,6 +814,43 @@ def _aggregate_rows(
         validate="one_to_one",
     )
     return output.reset_index()
+
+
+def _temporal_deduplicate(frame: pd.DataFrame) -> pd.DataFrame:
+    events = frame[["event_id", "source_family", "feature_available_at_utc"]].drop_duplicates()
+    if events.empty:
+        return frame
+    events = events.sort_values("feature_available_at_utc")
+    
+    priority = {"sec": 0, "alpaca": 1, "finviz": 2}
+    events["_priority"] = events["source_family"].map(priority).fillna(99)
+    
+    dropped_event_ids = set()
+    records = events.to_dict(orient="records")
+    for i in range(len(records)):
+        event = records[i]
+        event_id = event["event_id"]
+        if event_id in dropped_event_ids:
+            continue
+            
+        for j in range(i + 1, len(records)):
+            next_event = records[j]
+            if next_event["event_id"] in dropped_event_ids:
+                continue
+                
+            time_diff = next_event["feature_available_at_utc"] - event["feature_available_at_utc"]
+            if time_diff > pd.Timedelta(minutes=30):
+                break
+                
+            if next_event["_priority"] > event["_priority"]:
+                dropped_event_ids.add(next_event["event_id"])
+            elif next_event["_priority"] < event["_priority"]:
+                dropped_event_ids.add(event_id)
+                break
+                
+    if dropped_event_ids:
+        return frame[~frame["event_id"].isin(dropped_event_ids)].copy()
+    return frame
 
 
 def _merge_coverage(frames: list[pd.DataFrame]) -> pd.DataFrame:

@@ -22,10 +22,10 @@ from market_predictor.edge_rebuild.setup_economics import (
     evaluate_setup_economics,
 )
 from market_predictor.edge_rebuild.strategy_contract import StrategyContract
+from market_predictor.edge_rebuild.swing_pipeline_steps import SetupComponentsStep
 from market_predictor.edge_rebuild.swing_setups import (
     SWING_SETUP_COLUMNS,
     SWING_SETUP_ECONOMICS_CONFIG,
-    attach_setup_components,
     build_swing_setup_candidates,
     drop_placeholder_bars,
     finalize_swing_setup_population,
@@ -569,5 +569,6 @@ def test_residual_components_require_spy_benchmark_features(
     assert config.horizon_sessions == contract.swing.horizon_sessions
     assert config.min_daily_bars == contract.swing.minimum_warmup_sessions
     benchmarks = pd.DataFrame({"ticker": ["XLK"], "session_date_et": [sessions[0]], "return_60d": [0.1]})
-    with pytest.raises(DataReadinessError):
-        attach_setup_components(pd.DataFrame({"session_date_et": [sessions[0]]}), benchmarks)
+    with pytest.raises(DataReadinessError, match="require SPY benchmark features"):
+        step = SetupComponentsStep(benchmarks)
+        step.transform(pd.DataFrame({"session_date_et": [sessions[0]]}))

@@ -148,7 +148,7 @@ class IntradayTrainingConfig:
         if self.bootstrap_samples < 100 or self.bootstrap_samples > 5_000:
             raise ValueError("session bootstrap samples must be between 100 and 5000")
         if not 0 < self.maximum_process_memory_gib <= 4.0:
-            raise ValueError("the process memory hard limit must be in (0, 4] GiB")
+            raise ValueError("maximum_process_memory_gib must be in (0, 4] GiB")
         if not 0 < self.memory_guard_headroom_gib < self.maximum_process_memory_gib:
             raise ValueError("memory headroom must be below the hard limit")
 
