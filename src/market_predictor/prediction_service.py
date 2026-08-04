@@ -22,6 +22,7 @@ from market_predictor.edge_rebuild.serving import (
     LoadedSwingModelGeneration,
     PromotedSwingBundle,
     SwingModelGenerationCache,
+    SwingInferenceEngine,
     score_promoted_swing_model,
 )
 from market_predictor.edge_rebuild.strategy_contract import StrategyContract, load_strategy_contract
@@ -59,21 +60,15 @@ from market_predictor.prediction_contracts import (
     UnifiedTickerPrediction,
 )
 from market_predictor.prediction_policy import (
-    INTRADAY_AVOID_DOWNSIDE,
-    INTRADAY_DOWNSIDE_VETO,
-    INTRADAY_ENTRY,
-    INTRADAY_ENTRY_MAX_DOWNSIDE,
-    INTRADAY_LOW,
-    INTRADAY_WATCH,
-    INTRADAY_WATCH_MAX_DOWNSIDE,
-    SWING_LOW,
-    SWING_STRONG,
-    SWING_WATCH,
     PredictionSelectionPolicy,
-    intraday_action,
     intraday_decision_score,
     parse_prediction_policy,
     select_intraday_candidates,
+)
+from market_predictor.edge_rebuild.policy import (
+    combined_readiness,
+    determine_final_signal,
+    determine_intraday_signal,
 )
 from market_predictor.prediction_snapshot import PredictionSnapshotStore
 from market_predictor.readiness import (
@@ -96,16 +91,6 @@ DEFAULT_MODE_HORIZONS = {"swing": "10b", "intraday": "60m"}
 SERVING_POLICY_ID = "market_predictor.serving_policy_bundle.v2"
 # Serving thresholds are sourced from the canonical prediction policy so the
 # served signal semantics and the promotion-evaluated policy share one definition.
-_SWING_STRONG = SWING_STRONG
-_SWING_WATCH = SWING_WATCH
-_SWING_LOW = SWING_LOW
-_INTRADAY_DOWNSIDE_VETO = INTRADAY_DOWNSIDE_VETO
-_INTRADAY_ENTRY = INTRADAY_ENTRY
-_INTRADAY_ENTRY_MAX_DOWNSIDE = INTRADAY_ENTRY_MAX_DOWNSIDE
-_INTRADAY_WATCH = INTRADAY_WATCH
-_INTRADAY_WATCH_MAX_DOWNSIDE = INTRADAY_WATCH_MAX_DOWNSIDE
-_INTRADAY_LOW = INTRADAY_LOW
-_INTRADAY_AVOID_DOWNSIDE = INTRADAY_AVOID_DOWNSIDE
 ServingRoute = ActiveReleaseRoute
 
 
@@ -386,9 +371,10 @@ class PredictionService:
                 memory_budget_gib=self.memory_budget_gib,
                 memory_headroom_gib=self.memory_headroom_gib,
             )
-            scores = score_promoted_swing_model(
-                generation,
+            engine = SwingInferenceEngine(generation)
+            raw_scores = engine.predict(
                 feature_frame=live.catalyst_full,
+                requested_models=request.requested_models,
             )
             assert_memory_budget(
                 hard_budget_gib=self.memory_budget_gib,
@@ -396,10 +382,16 @@ class PredictionService:
                 stage="after promoted swing scoring",
             )
             scored_context = live.context.reset_index(drop=True).copy()
-            scored_context["__probability"] = scores.probabilities
+            scored_context["__probability"] = raw_scores.get("classifier", tuple())
+            if "classifier" in raw_scores:
+                scored_context["__classifier_probability"] = raw_scores["classifier"]
+            if "xgboost_regressor" in raw_scores:
+                scored_context["__regressor_probability"] = raw_scores["xgboost_regressor"]
+            if "dualhurdle" in raw_scores:
+                scored_context["__unified_probability"] = raw_scores["dualhurdle"]
             selected_ids = _selected_edge_swing_security_ids(
                 scored_context,
-                probability_threshold=scores.probability_threshold,
+                probability_threshold=engine.threshold,
                 maximum_trades=contract.swing.maximum_trades_per_decision,
                 target_maximum_sector_weight=(
                     contract.swing.target_maximum_sector_weight
@@ -416,7 +408,7 @@ class PredictionService:
                 context=scored_context,
                 bundle=bundle,
                 bundle_sha256=bundle.sha256(),
-                threshold=scores.probability_threshold,
+                threshold=engine.threshold,
                 selected_security_ids=selected_ids,
                 contract=contract,
                 model_as_of_utc=bundle.promoted_at_utc,
@@ -576,12 +568,12 @@ class PredictionService:
                     final_signal=(
                         "not_ready"
                         if row_errors
-                        else _final_signal(swing_row, intraday_row)
+                        else determine_final_signal(swing_row, intraday_row)
                     ),
                     readiness_status=(
                         INVALID
                         if row_errors
-                        else _combined_readiness(swing_row, intraday_row)
+                        else combined_readiness(swing_row, intraday_row)
                     ),
                     errors=row_errors,
                 )
@@ -951,7 +943,7 @@ class PredictionService:
                     opportunity_prediction=(_int_or_none(row.get("intraday_opportunity_prediction")) if is_ready else None),
                     downside_prediction=(_int_or_none(row.get("intraday_downside_prediction")) if is_ready else None),
                     signal=(
-                        _intraday_signal(
+                        determine_intraday_signal(
                             row.get(opportunity_col),
                             row.get(downside_col),
                         )
@@ -1237,8 +1229,8 @@ class PredictionService:
                     ticker=ticker,
                     swing=swing_row,
                     intraday=intraday_row,
-                    final_signal=_final_signal(swing_row, intraday_row),
-                    readiness_status=_combined_readiness(swing_row, intraday_row),
+                    final_signal=determine_final_signal(swing_row, intraday_row),
+                    readiness_status=combined_readiness(swing_row, intraday_row),
                     errors=[],
                 )
             )
@@ -1628,6 +1620,9 @@ def _edge_swing_predictions(
                     model_as_of_utc=model_as_of_utc,
                     data_as_of_utc=data_as_of_utc,
                     feature_schema_version=bundle.feature_schema_version,
+                    classifier_score=None,
+                    regressor_score=None,
+                    unified_score=None,
                     readiness=ReadinessInfo(
                         status=INVALID,
                         reasons=["Ticker is absent from the verified live reference universe."],
@@ -1676,6 +1671,9 @@ def _edge_swing_predictions(
                 date=str(row["session_date_et"]),
                 probability=probability,
                 decision_score=probability,
+                classifier_score=_float_or_none(row.get("__classifier_probability")),
+                regressor_score=_float_or_none(row.get("__regressor_probability")),
+                unified_score=_float_or_none(row.get("__unified_probability")),
                 model_prediction=int(probability >= threshold),
                 signal=signal,
                 action=action,
@@ -1922,60 +1920,6 @@ def _optional_edge_datetime(value: object) -> datetime | None:
     return _aware_datetime_or_none(value)
 
 
-def _combined_readiness(
-    swing: SwingPrediction | None,
-    intraday: IntradayPrediction | None,
-) -> str:
-    statuses = [row.readiness.status for row in [swing, intraday] if row is not None]
-    if not statuses:
-        return INVALID
-    if INVALID in statuses:
-        return INVALID
-    if WARN in statuses:
-        return WARN
-    return VALID
-
-
-def _final_signal(swing: SwingPrediction | None, intraday: IntradayPrediction | None) -> str:
-    if swing is None and intraday is None:
-        return "not_ready"
-    if swing is not None and swing.readiness.status != VALID:
-        return "not_ready"
-    if intraday is not None and intraday.readiness.status != VALID:
-        return "not_ready"
-    swing_prob = swing.probability if swing else None
-    intra_prob = intraday.opportunity_probability if intraday else None
-    intra_downside = intraday.downside_probability if intraday else None
-    intraday_supports_entry = intra_prob is None or (
-        intra_prob >= _INTRADAY_WATCH
-        and (intra_downside is None or intra_downside <= _INTRADAY_WATCH_MAX_DOWNSIDE)
-    )
-    if swing_prob is not None and swing_prob >= _SWING_STRONG and intraday_supports_entry:
-        return "high_conviction_watch"
-    if swing_prob is not None and swing_prob >= _SWING_WATCH and intraday_supports_entry:
-        return "watch_for_entry"
-    if (
-        intra_prob is not None
-        and intra_prob >= _SWING_STRONG
-        and (intra_downside is None or intra_downside <= _SWING_LOW)
-        and swing_prob is None
-    ):
-        return "intraday_watch"
-    if swing_prob is not None and swing_prob >= _SWING_WATCH and intra_prob is not None and intra_prob < 0.50:
-        return "swing_positive_wait_for_intraday"
-    return "neutral"
-
-
-def _intraday_signal(
-    opportunity_probability: Any,
-    downside_probability: Any,
-) -> str:
-    return intraday_action(
-        _float_or_none(opportunity_probability),
-        _float_or_none(downside_probability),
-    )
-
-
 def _risk_adjusted_intraday_score(
     row: pd.Series,
     opportunity_column: str,
@@ -2052,6 +1996,9 @@ def _suppress_swing_prediction(row: SwingPrediction, reason: str) -> SwingPredic
             "rank": None,
             "selection_eligible": False,
             "selected_for_policy": False,
+            "classifier_score": None,
+            "regressor_score": None,
+            "unified_score": None,
             "managed_risk": None,
             "readiness": readiness,
         }

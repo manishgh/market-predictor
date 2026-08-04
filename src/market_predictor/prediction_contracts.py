@@ -110,6 +110,7 @@ class PredictionRequest(BaseModel):
     tickers: list[str] = Field(..., min_length=1, max_length=100)
     mode: PredictionMode = "unified"
     horizon: str = "auto"
+    requested_models: list[str] | None = None
     as_of: datetime | None = None
     correlation_id: str | None = Field(default=None, min_length=1, max_length=128, pattern=r"^[A-Za-z0-9._:-]+$")
 
@@ -375,6 +376,9 @@ class SwingPrediction(BaseModel):
     probability: float | None = None
     decision_score: float | None = None
     model_prediction: int | None = None
+    classifier_score: float | None = None
+    regressor_score: float | None = None
+    unified_score: float | None = None
     signal: str
     action: Literal[
         "watch_for_entry",
@@ -436,6 +440,9 @@ class IntradayPrediction(BaseModel):
     decision_score: float | None = None
     opportunity_prediction: int | None = None
     downside_prediction: int | None = None
+    classifier_score: float | None = None
+    regressor_score: float | None = None
+    unified_score: float | None = None
     signal: str
     rank: int | None = None
     selection_eligible: bool = False

@@ -554,10 +554,16 @@ class SwingModelScores(_FrozenModel):
 
     probabilities: tuple[float, ...]
     probability_threshold: float = Field(gt=0.0, lt=1.0)
+    
+    classifier_probabilities: tuple[float, ...] | None = None
+    regressor_probabilities: tuple[float, ...] | None = None
+    unified_probabilities: tuple[float, ...] | None = None
 
-    @field_validator("probabilities")
+    @field_validator("probabilities", "classifier_probabilities", "regressor_probabilities", "unified_probabilities")
     @classmethod
-    def validate_probabilities(cls, values: tuple[float, ...]) -> tuple[float, ...]:
+    def validate_probabilities(cls, values: tuple[float, ...] | None) -> tuple[float, ...] | None:
+        if values is None:
+            return None
         if not values or any(not np.isfinite(value) or value < 0.0 or value > 1.0 for value in values):
             raise ValueError("swing probabilities must be a non-empty finite sequence in [0, 1]")
         return values
@@ -1189,8 +1195,10 @@ def _validate_swing_model_payload(
         raise SchemaMismatchError("promoted model feature order differs from its bundle")
     if str(payload.get("ablation_profile", "")) != bundle.feature_profile:
         raise SchemaMismatchError("promoted model feature profile differs from its bundle")
-    _finite_probability(payload.get("probability_threshold"), "probability_threshold")
-    fitted = payload.get("fitted_candidate")
+    fitted_models = payload.get("fitted_models")
+    if not isinstance(fitted_models, dict) or not fitted_models:
+        raise SchemaMismatchError("promoted swing model is missing fitted models")
+    fitted = fitted_models.get("classifier")
     if getattr(fitted, "estimator", None) is None or getattr(fitted, "calibrator", None) is None:
         raise SchemaMismatchError("promoted swing model is missing estimator or calibrator")
 
@@ -1282,44 +1290,79 @@ def validate_ordered_feature_frame(
     return cast(np.ndarray[Any, np.dtype[np.float64]], values)
 
 
+class SwingInferenceEngine:
+    def __init__(self, generation: LoadedSwingModelGeneration):
+        self.generation = generation
+        self.bundle = generation.bundle
+        self.payload = generation.model_payload
+        _validate_swing_model_payload(self.payload, self.bundle)
+        self.fitted_models = self.payload.get("fitted_models") or {}
+        probability_thresholds = self.payload.get("probability_thresholds") or {}
+        self.threshold = _finite_probability(probability_thresholds.get("classifier", 0.5), "probability_threshold")
+
+    def predict(
+        self,
+        feature_frame: pd.DataFrame,
+        requested_models: list[str] | None = None,
+    ) -> dict[str, tuple[float, ...]]:
+        matrix = validate_ordered_feature_frame(
+            feature_frame,
+            self.bundle.ordered_feature_columns,
+            frame_name="promoted swing",
+        ).astype("float32", copy=False)
+        
+        def _score_model(fitted: object) -> tuple[float, ...] | None:
+            if fitted is None:
+                return None
+            estimator = getattr(fitted, "estimator", None)
+            calibrator = getattr(fitted, "calibrator", None)
+            if estimator is None or calibrator is None:
+                return None
+            try:
+                raw = np.asarray(estimator.predict_proba(matrix), dtype="float64")
+                if raw.ndim != 2 or raw.shape != (len(matrix), 2):
+                    raise ValueError("estimator probability shape is invalid")
+                calibrated = np.asarray(
+                    calibrator.predict_proba(raw[:, 1].reshape(-1, 1))[:, 1],
+                    dtype="float64",
+                )
+            except (AttributeError, TypeError, ValueError) as exc:
+                raise DataReadinessError("promoted swing model could not score live features") from exc
+            if calibrated.shape != (len(matrix),) or not np.isfinite(calibrated).all():
+                raise DataReadinessError("promoted swing model produced invalid probabilities")
+            if bool(((calibrated < 0.0) | (calibrated > 1.0)).any()):
+                raise DataReadinessError("promoted swing probabilities are outside [0, 1]")
+            return tuple(float(value) for value in calibrated)
+
+        if not requested_models or "all" in requested_models:
+            models_to_score = ["classifier", "xgboost_regressor", "dualhurdle"]
+        else:
+            models_to_score = [m for m in requested_models if m in self.fitted_models]
+
+        results = {}
+        for model_name in models_to_score:
+            scores = _score_model(self.fitted_models.get(model_name))
+            if scores is not None:
+                results[model_name] = scores
+        return results
+
+
 def score_promoted_swing_model(
     generation: LoadedSwingModelGeneration,
     *,
     feature_frame: pd.DataFrame,
 ) -> SwingModelScores:
     """Score with the already verified, immutable in-memory model generation."""
-
-    bundle = generation.bundle
-    payload = generation.model_payload
-    _validate_swing_model_payload(payload, bundle)
-    threshold = _finite_probability(payload.get("probability_threshold"), "probability_threshold")
-    fitted = payload.get("fitted_candidate")
-    estimator = getattr(fitted, "estimator", None)
-    calibrator = getattr(fitted, "calibrator", None)
-    if estimator is None or calibrator is None:
-        raise SchemaMismatchError("promoted model is missing estimator or calibrator")
-    matrix = validate_ordered_feature_frame(
-        feature_frame,
-        bundle.ordered_feature_columns,
-        frame_name="promoted swing",
-    ).astype("float32", copy=False)
-    try:
-        raw = np.asarray(estimator.predict_proba(matrix), dtype="float64")
-        if raw.ndim != 2 or raw.shape != (len(matrix), 2):
-            raise ValueError("estimator probability shape is invalid")
-        calibrated = np.asarray(
-            calibrator.predict_proba(raw[:, 1].reshape(-1, 1))[:, 1],
-            dtype="float64",
-        )
-    except (AttributeError, TypeError, ValueError) as exc:
-        raise DataReadinessError("promoted swing model could not score live features") from exc
-    if calibrated.shape != (len(matrix),) or not np.isfinite(calibrated).all():
-        raise DataReadinessError("promoted swing model produced invalid probabilities")
-    if bool(((calibrated < 0.0) | (calibrated > 1.0)).any()):
-        raise DataReadinessError("promoted swing probabilities are outside [0, 1]")
+    
+    engine = SwingInferenceEngine(generation)
+    scores = engine.predict(feature_frame, requested_models=["all"])
+    
     return SwingModelScores(
-        probabilities=tuple(float(value) for value in calibrated),
-        probability_threshold=threshold,
+        probabilities=scores.get("classifier", tuple()),
+        probability_threshold=engine.threshold,
+        classifier_probabilities=scores.get("classifier"),
+        regressor_probabilities=scores.get("xgboost_regressor"),
+        unified_probabilities=scores.get("dualhurdle"),
     )
 
 

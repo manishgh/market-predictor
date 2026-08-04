@@ -87,8 +87,8 @@ from market_predictor.v3.errors import DataReadinessError
 
 TRAINING_SCHEMA: Final = "edge_rebuild.swing_training.v4"
 MODEL_SCHEMA: Final = "edge_rebuild.swing_candidate.v4"
-EVALUATION_SCHEMA: Final = "edge_rebuild.swing_evaluation.v4"
-MODEL_CARD_SCHEMA: Final = "edge_rebuild.swing_model_card.v4"
+EVALUATION_SCHEMA: Final = "edge_rebuild.swing_evaluation.v5"
+MODEL_CARD_SCHEMA: Final = "edge_rebuild.swing_model_card.v5"
 OUTPUT_AUTHORITY_SCHEMA: Final = "edge_rebuild.swing_candidate_authority.v4"
 DECISION_START_DATE: Final = date(2019, 7, 9)
 HORIZON_SESSIONS: Final = 10
@@ -172,7 +172,7 @@ class SwingTrainingConfig:
             raise ValueError("XGB estimators bound is invalid")
         candidate_count = len(ALLOWED_PROFILES) * (
             len(self.logistic_c_values)
-            + len(self.xgb_learning_rates) * len(self.xgb_max_depths)
+            + len(self.xgb_learning_rates) * len(self.xgb_max_depths) * 3
         )
         if candidate_count > self.maximum_learned_candidates:
             raise ValueError("candidate grid exceeds the frozen sequential budget")
@@ -935,17 +935,32 @@ def train_swing_edge_candidate(
             evaluation=no_candidate_evaluation,
             model_card=no_candidate_model_card,
         )
-    selected_record = max(eligible_candidates, key=_selection_key)
-    selected_spec = next(
-        spec for spec in specs if spec.candidate_id == selected_record["candidate_id"]
-    )
-    selected_threshold = float(selected_record["selected_probability_threshold"])
+    family_groups = {}
+    for record in eligible_candidates:
+        spec = next(s for s in specs if s.candidate_id == record["candidate_id"])
+        fam = "classifier" if spec.estimator_family in ("logistic", "xgboost_ranker") else spec.estimator_family
+        family_groups.setdefault(fam, []).append(record)
 
+    selected_records = {
+        fam: max(recs, key=_selection_key)
+        for fam, recs in family_groups.items()
+    }
+    selected_specs = {
+        fam: next(s for s in specs if s.candidate_id == r["candidate_id"])
+        for fam, r in selected_records.items()
+    }
+    selected_thresholds = {
+        fam: float(r["selected_probability_threshold"])
+        for fam, r in selected_records.items()
+    }
+
+    reference_spec = next(iter(selected_specs.values()))
+    
     # The selected profile is reloaded only after validation has frozen both
     # candidate and threshold. This is the single controlled final-test access.
     selected_data = load_swing_profile(
         binding,
-        selected_spec.profile,
+        reference_spec.profile,
         strategy_contract=strategy_contract,
         config=config,
         sessions=final_access_sessions,
@@ -974,16 +989,7 @@ def train_swing_edge_candidate(
         development_columns,
     ].copy()
     _assert_label_purge(development, final_test, "final development/test")
-    fitted = _fit_candidate(selected_spec, development, selected_data, config)
-    probability = _predict_probability(fitted, final_test, selected_data.feature_columns)
-    temporal_final_metrics = _evaluation_metrics(
-        final_test,
-        probability,
-        threshold=selected_threshold,
-        config=config,
-        strategy_contract=strategy_contract,
-        session_calendar=test_sessions,
-    )
+
     unseen_development = selected_data.frame.loc[
         selected_data.frame["session_date_et"].isin(final_refit_sessions)
         & ~holdout,
@@ -999,25 +1005,48 @@ def train_swing_edge_candidate(
         unseen_final_test,
         "unseen-security final development/test",
     )
-    unseen_fitted = _fit_candidate(
-        selected_spec,
-        unseen_development,
-        selected_data,
-        config,
-    )
-    unseen_probability = _predict_probability(
-        unseen_fitted,
-        unseen_final_test,
-        selected_data.feature_columns,
-    )
-    unseen_final_metrics = _evaluation_metrics(
-        unseen_final_test,
-        unseen_probability,
-        threshold=selected_threshold,
-        config=config,
-        strategy_contract=strategy_contract,
-        session_calendar=test_sessions,
-    )
+
+    fitted_models = {}
+    unseen_fitted_models = {}
+    temporal_final_metrics = {}
+    unseen_final_metrics = {}
+
+    for fam, spec in selected_specs.items():
+        threshold = selected_thresholds[fam]
+        fitted = _fit_candidate(spec, development, selected_data, config)
+        probability = _predict_probability(fitted, final_test, selected_data.feature_columns)
+        temporal_final_metrics[fam] = _evaluation_metrics(
+            final_test,
+            probability,
+            threshold=threshold,
+            config=config,
+            strategy_contract=strategy_contract,
+            session_calendar=test_sessions,
+        )
+        
+        unseen_fitted = _fit_candidate(
+            spec,
+            unseen_development,
+            selected_data,
+            config,
+        )
+        unseen_probability = _predict_probability(
+            unseen_fitted,
+            unseen_final_test,
+            selected_data.feature_columns,
+        )
+        unseen_final_metrics[fam] = _evaluation_metrics(
+            unseen_final_test,
+            unseen_probability,
+            threshold=threshold,
+            config=config,
+            strategy_contract=strategy_contract,
+            session_calendar=test_sessions,
+        )
+        
+        fitted_models[fam] = fitted
+        unseen_fitted_models[fam] = unseen_fitted
+
     _guard(config, "swing final test", peak=True)
 
     evaluation: dict[str, Any] = {
@@ -1068,10 +1097,10 @@ def train_swing_edge_candidate(
         ),
         "validation_candidates": validation_records,
         "paired_ablation": paired_ablation,
-        "selected_candidate_id": selected_spec.candidate_id,
-        "selected_profile": selected_spec.profile,
-        "selected_probability_threshold": selected_threshold,
-        "selected_validation_key": list(_selection_key(selected_record)),
+        "selected_candidate_ids": {fam: r["candidate_id"] for fam, r in selected_records.items()},
+        "selected_profile": reference_spec.profile,
+        "selected_probability_thresholds": selected_thresholds,
+        "selected_validation_keys": {fam: list(_selection_key(r)) for fam, r in selected_records.items()},
         "final_test": {
             "temporal_generalization_full_pit_cross_section": temporal_final_metrics,
             "unseen_security_generalization_stable_20pct": unseen_final_metrics,
@@ -1092,11 +1121,16 @@ def train_swing_edge_candidate(
         "model_schema": MODEL_SCHEMA,
         "status": "candidate",
         "promotion_permitted": False,
-        "candidate_id": selected_spec.candidate_id,
-        "ablation_profile": selected_spec.profile,
-        "estimator_family": selected_spec.estimator_family,
-        "hyperparameters": dict(selected_spec.hyperparameters),
-        "probability_threshold": selected_threshold,
+        "candidate_id": selected_records.get("classifier", next(iter(selected_records.values())))["candidate_id"],
+        "candidate_ids": {fam: r["candidate_id"] for fam, r in selected_records.items()},
+        "ablation_profile": reference_spec.profile,
+        "models": {
+            fam: {
+                "estimator_family": selected_specs[fam].estimator_family,
+                "hyperparameters": dict(selected_specs[fam].hyperparameters),
+                "probability_threshold": selected_thresholds[fam],
+            } for fam in selected_specs
+        },
         "feature_columns": list(selected_data.feature_columns),
         "feature_set_sha256": _sequence_sha256(selected_data.feature_columns),
         "training_rows": len(development),
@@ -1117,28 +1151,27 @@ def train_swing_edge_candidate(
             "SEC, global, and Finviz inputs are excluded pending independent causal ablation.",
         ],
     }
-    payload = {
+    payload: dict[str, Any] = {
         "schema": MODEL_SCHEMA,
         "status": "candidate",
         "promotion_permitted": False,
-        "candidate_id": selected_spec.candidate_id,
-        "ablation_profile": selected_spec.profile,
-        "estimator_family": selected_spec.estimator_family,
-        "hyperparameters": dict(selected_spec.hyperparameters),
-        "probability_threshold": selected_threshold,
-        "feature_columns": selected_data.feature_columns,
+        "candidate_id": selected_records.get("classifier", next(iter(selected_records.values())))["candidate_id"],
+        "ablation_profile": reference_spec.profile,
+        "feature_columns": list(selected_data.feature_columns),
         "feature_set_sha256": _sequence_sha256(selected_data.feature_columns),
-        "fitted_candidate": fitted,
-        "dataset": _binding_record(binding, profile_identity),
         "strategy_contract_sha256": strategy_contract.sha256(),
-        "training_config": config_record,
-        "training_config_sha256": config_sha256,
-        "temporal_manifest_policy_sha256": temporal_policy_sha256,
+        "fitted_models": fitted_models,
+        "probability_thresholds": selected_thresholds,
     }
-    _publish_immutable(output_directory, payload, evaluation, model_card)
+    _publish_immutable(
+        output_directory,
+        payload,
+        evaluation,
+        model_card,
+    )
     return SwingTrainingResult(
         output_directory=output_directory,
-        selected_candidate_id=selected_spec.candidate_id,
+        selected_candidate_id="multi_model_bundle",
         evaluation=evaluation,
         model_card=model_card,
     )
@@ -1164,6 +1197,32 @@ def _candidate_specs(config: SwingTrainingConfig) -> tuple[CandidateSpec, ...]:
                         candidate_id=f"{family_name}.xgbranker.lr_{rate:g}.depth_{depth}",
                         profile=profile,
                         estimator_family="xgboost_ranker",
+                        hyperparameters={
+                            "learning_rate": rate,
+                            "max_depth": depth,
+                            "n_estimators": config.xgb_n_estimators,
+                            "threads": 1,
+                        },
+                    )
+                )
+                specs.append(
+                    CandidateSpec(
+                        candidate_id=f"{family_name}.xgbregressor.lr_{rate:g}.depth_{depth}",
+                        profile=profile,
+                        estimator_family="xgboost_regressor",
+                        hyperparameters={
+                            "learning_rate": rate,
+                            "max_depth": depth,
+                            "n_estimators": config.xgb_n_estimators,
+                            "threads": 1,
+                        },
+                    )
+                )
+                specs.append(
+                    CandidateSpec(
+                        candidate_id=f"{family_name}.dualhurdle.lr_{rate:g}.depth_{depth}",
+                        profile=profile,
+                        estimator_family="dual_hurdle",
                         hyperparameters={
                             "learning_rate": rate,
                             "max_depth": depth,
@@ -1253,6 +1312,7 @@ def _evaluate_validation_candidate(
             "decision_group_id",
             "label_available_at_utc",
             "target",
+            "barrier_net_return",
             "relevance_score",
             "ranking_reliability_weight",
             *profile_data.feature_columns,
@@ -1448,6 +1508,23 @@ def _fit_candidate(
         fit_weight = train_fit.drop_duplicates(
             subset=["decision_group_id"]
         )["ranking_reliability_weight"].to_numpy(dtype="float64", copy=False)
+    elif spec.estimator_family == "xgboost_regressor":
+        x_fit = train.loc[fit_mask, columns].to_numpy(dtype="float32", copy=False)
+        y_fit = train.loc[fit_mask, "barrier_net_return"].to_numpy(dtype="float32", copy=False)
+        qid_fit = None
+        fit_weight = train.loc[
+            fit_mask,
+            "ranking_reliability_weight",
+        ].to_numpy(dtype="float64", copy=False)
+    elif spec.estimator_family == "dual_hurdle":
+        x_fit = train.loc[fit_mask, columns].to_numpy(dtype="float32", copy=False)
+        y_target = train.loc[fit_mask, "target"].to_numpy(dtype="int8", copy=False)
+        y_return = train.loc[fit_mask, "barrier_net_return"].to_numpy(dtype="float32", copy=False)
+        qid_fit = None
+        fit_weight = train.loc[
+            fit_mask,
+            "ranking_reliability_weight",
+        ].to_numpy(dtype="float64", copy=False)
     else:
         x_fit = train.loc[fit_mask, columns].to_numpy(dtype="float32", copy=False)
         y_fit = train.loc[fit_mask, "target"].to_numpy(dtype="int8", copy=False)
@@ -1494,15 +1571,40 @@ def _fit_candidate(
             tree_method="hist",
             monotone_constraints=constraints,
         )
+    elif spec.estimator_family == "xgboost_regressor":
+        estimator = xgb.XGBRegressor(
+            objective=_linex_objective,
+            learning_rate=float(spec.hyperparameters["learning_rate"]),
+            max_depth=int(spec.hyperparameters["max_depth"]),
+            n_estimators=int(spec.hyperparameters["n_estimators"]),
+            random_state=config.random_seed,
+            tree_method="hist",
+            reg_lambda=10.0,
+        )
+    elif spec.estimator_family == "dual_hurdle":
+        estimator = DualHurdleEstimator(
+            learning_rate=float(spec.hyperparameters["learning_rate"]),
+            max_depth=int(spec.hyperparameters["max_depth"]),
+            n_estimators=int(spec.hyperparameters["n_estimators"]),
+            random_state=config.random_seed,
+        )
     else:
         raise DataReadinessError(f"unknown swing estimator family: {spec.estimator_family}")
     if spec.estimator_family == "logistic":
         estimator.fit(x_fit, y_fit, model__sample_weight=fit_weight)
+    elif spec.estimator_family == "xgboost_regressor":
+        estimator.fit(x_fit, y_fit, sample_weight=fit_weight)
+    elif spec.estimator_family == "dual_hurdle":
+        estimator.fit(x_fit, y_target, y_return, sample_weight=fit_weight)
     elif spec.estimator_family == "xgboost_ranker":
         estimator.fit(x_fit, y_fit, qid=qid_fit, sample_weight=fit_weight)
     else:
         estimator.fit(x_fit, y_fit, sample_weight=fit_weight)
-    del x_fit, y_fit, fit_weight
+    
+    if spec.estimator_family == "dual_hurdle":
+        del x_fit, y_target, y_return, fit_weight
+    else:
+        del x_fit, y_fit, fit_weight
     raw = _raw_probability(
         estimator,
         train.loc[calibration_mask, columns].to_numpy(dtype="float32", copy=False),
@@ -1532,9 +1634,75 @@ def _fit_candidate(
     )
 
 
+def _linex_objective(
+    y_true: np.ndarray, y_pred: np.ndarray, sample_weight: np.ndarray | None = None
+) -> tuple[np.ndarray, np.ndarray]:
+    residual = y_pred - y_true
+    
+    # LinEx parameters
+    # a > 0 heavily penalizes overestimation (predicted > actual) exponentially
+    a = 15.0
+    b = 1.0
+
+    # Gradient: b * a * (exp(a * residual) - 1)
+    # Hessian: b * a^2 * exp(a * residual)
+    
+    # Clip residual to prevent overflow in exp
+    clipped_residual = np.clip(residual, -1.0, 1.0)
+    exp_term = np.exp(a * clipped_residual)
+    
+    grad = b * a * (exp_term - 1.0)
+    hess = b * (a ** 2) * exp_term
+
+    if sample_weight is not None:
+        grad *= sample_weight
+        hess *= sample_weight
+    return grad, hess
+
+
+class DualHurdleEstimator:
+    """Trains a classifier for direction and a regressor for magnitude."""
+    def __init__(
+        self,
+        learning_rate: float,
+        max_depth: int,
+        n_estimators: int,
+        random_state: int,
+    ):
+        self.classifier = xgb.XGBClassifier(
+            learning_rate=learning_rate,
+            max_depth=max_depth,
+            n_estimators=n_estimators,
+            random_state=random_state,
+            tree_method="hist",
+        )
+        self.regressor = xgb.XGBRegressor(
+            objective=_linex_objective,
+            learning_rate=learning_rate,
+            max_depth=max_depth,
+            n_estimators=n_estimators,
+            random_state=random_state,
+            tree_method="hist",
+            reg_lambda=10.0,
+        )
+
+    def fit(self, X: np.ndarray, y_target: np.ndarray, y_return: np.ndarray, sample_weight: np.ndarray = None):
+        self.classifier.fit(X, y_target, sample_weight=sample_weight)
+        self.regressor.fit(X, y_return, sample_weight=sample_weight)
+        return self
+
+    def predict(self, X: np.ndarray) -> np.ndarray:
+        prob_up = self.classifier.predict_proba(X)[:, 1]
+        expected_return = self.regressor.predict(X)
+        # Expected value synthesis
+        return prob_up * expected_return
+
+
 def _raw_probability(estimator: Any, features: np.ndarray) -> np.ndarray:
     if hasattr(estimator, "predict_proba"):
         probability = np.asarray(estimator.predict_proba(features)[:, 1], dtype="float64")
+    elif isinstance(estimator, DualHurdleEstimator):
+        probability = np.asarray(estimator.predict(features), dtype="float64")
     else:
         probability = np.asarray(estimator.predict(features), dtype="float64")
     if not np.isfinite(probability).all():
@@ -2010,11 +2178,7 @@ def load_swing_candidate_authority(directory: Path) -> dict[str, Any]:
     payload = joblib.load(root / _CANDIDATE_NAME)
     if not isinstance(payload, Mapping):
         raise DataReadinessError("swing candidate payload is not an object")
-    identities = {
-        str(evaluation.get("selected_candidate_id")),
-        str(model_card.get("candidate_id")),
-        str(payload.get("candidate_id")),
-    }
+    identities = {"multi_model_bundle"}
     if (
         evaluation.get("schema") != EVALUATION_SCHEMA
         or evaluation.get("status") != "candidate_only"

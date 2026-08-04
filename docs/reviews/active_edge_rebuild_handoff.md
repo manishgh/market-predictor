@@ -51,14 +51,12 @@ workloads retain their 4 GiB limits.
   cached serving identity includes contract, trust store, promotion policy, and size.
 - Swing V11 is published and strictly replayed: 853,417 rows per profile, 604
   modeled securities, 1,759 sessions, and 640,107 rank-eligible rows.
-- Swing candidate v2 is an immutable `no_candidate` result. Six governed models
-  trained, but none passed both temporal and unseen-security economic gates. The
-  best HGB AUC was approximately 0.55-0.57; all candidates retained a non-positive
-  lower confidence bound in at least the calendar, portfolio-daily, doubled-cost,
-  and holding-aligned benchmark gates. Locked-test access count is zero.
+- Swing candidate v2, v3, and v4 all resulted in an immutable `no_candidate` result (none passed both temporal and unseen-security economic gates).
+- **Swing V12** is published and strict-replayed, containing advanced technical indicators (`macd`, `rsi`, `dist_15m_high`, `ema_10`, etc.) and cross-sectional rankings/Z-scores.
+- Swing candidate v5 trained on V12 features resulted in an immutable `no_candidate` result. All 14 governed candidates failed strict economic gates.
 - Intraday V2 is published and replayable but economically rejected after costs. It
   is not a serving fallback.
-- Intraday V3 is development code reserved for a genuinely future holdout. No V3
+- **Intraday V3** is fully materialized with technical indicators. Feature predictive efficacies on target-hits were evaluated (MACD ~0.514, EMA/SMA dist ~0.504). It is still reserved for a genuinely future holdout. No V3
   future-holdout run has occurred. **The collection of the future holdout is currently blocked (environment-pending) because the requisite canonical membership data (`sp500_memberships`) and raw market data for `2026-07-09` onwards are not available in the current environment.**
 - No promoted bundle exists. All model API behavior must fail closed.
 - Documentation is consolidated to this handoff, the active plan, and the current

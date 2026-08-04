@@ -167,8 +167,8 @@ def _publish_signed_swing_generation(
         "strategy_contract_sha256": CONTRACT.sha256(),
         "feature_columns": features,
         "ablation_profile": "catalyst_full",
-        "probability_threshold": 0.60,
-        "fitted_candidate": _VerifiedFittedCandidate(),
+        "probability_thresholds": {"classifier": 0.60},
+        "fitted_models": {"classifier": _VerifiedFittedCandidate()},
         "marker": marker,
     }
     joblib.dump(payload, model_path)
