@@ -35,8 +35,8 @@ CONTRACT_PATH = Path("configs/edge_rebuild_strategy_contract.toml")
 
 def _universe(**overrides: object) -> IntradayUniverseContract:
     payload: dict[str, object] = {
-        "scope": "broad_us_point_in_time",
-        "index_restricted": False,
+        "scope": "sp500_point_in_time",
+        "index_restricted": True,
         "minimum_average_volume_shares": 1_000_000,
         "average_volume_lookback_sessions": LOOKBACK,
         "minimum_price": 5.0,

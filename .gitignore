@@ -19,3 +19,9 @@ models/
 
 .DS_Store
 Thumbs.db
+
+# Throwaway migration and analysis scripts do not belong in the repo. One-shot
+# work goes in a scratch directory that is never committed; anything worth
+# keeping earns a place under scripts/ with a test.
+scratch/
+/*.py

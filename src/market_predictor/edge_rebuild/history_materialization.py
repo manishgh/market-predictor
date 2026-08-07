@@ -25,9 +25,9 @@ session.
 
 A bar is kept only if its symbol was eligible on that exact session. Eligibility
 comes from point-in-time index membership and, when a published screen is
-supplied, from the in-play stock-sessions that screen selected. The intraday
-universe is deliberately not index-restricted, so membership alone would discard
-every non-index name the screen exists to find.
+supplied, from the in-play stock-sessions that screen selected. Both strategies
+run on the point-in-time S&P 500, so membership is the outer bound and the screen
+narrows it to the names actually moving that session.
 """
 
 from __future__ import annotations

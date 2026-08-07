@@ -180,10 +180,14 @@ class IntradayUniverseContract(FrozenModel):
 
     @model_validator(mode="after")
     def validate_universe(self) -> Self:
-        if self.index_restricted:
+        # Both strategies run on the point-in-time S&P 500. The field is asserted
+        # rather than merely declared because `intraday_selection` loads index
+        # membership unconditionally: an unenforced contract field that disagrees
+        # with the code is worse than no field at all.
+        if not self.index_restricted or self.scope != "sp500_point_in_time":
             raise ValueError(
-                "the intraday universe must not be index-restricted; the most "
-                "tradable names are frequently not index constituents"
+                "the intraday universe is the point-in-time S&P 500; set "
+                "index_restricted = true and scope = 'sp500_point_in_time'"
             )
         if self.minimum_price >= self.maximum_price:
             raise ValueError("price floor must be below the price ceiling")

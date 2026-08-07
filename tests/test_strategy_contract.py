@@ -253,13 +253,23 @@ def test_labels_must_retain_benchmark_relative_returns() -> None:
         StrategyContract.model_validate(raw)
 
 
-def test_intraday_universe_cannot_be_index_restricted() -> None:
-    """The most intraday-tradable names are often not index constituents."""
+def test_intraday_universe_must_be_the_point_in_time_index() -> None:
+    """`intraday_selection` loads index membership unconditionally.
+
+    The field is asserted rather than declared so the contract cannot drift away
+    from what the selection code actually does.
+    """
 
     raw = _raw()
-    raw["intraday_universe"]["index_restricted"] = True
+    raw["intraday_universe"]["index_restricted"] = False
 
-    with pytest.raises(ValueError, match="must not be index-restricted"):
+    with pytest.raises(ValueError, match="point-in-time S&P 500"):
+        StrategyContract.model_validate(raw)
+
+    raw = _raw()
+    raw["intraday_universe"]["scope"] = "broad_us_point_in_time"
+
+    with pytest.raises(ValueError, match="point-in-time S&P 500"):
         StrategyContract.model_validate(raw)
 
 

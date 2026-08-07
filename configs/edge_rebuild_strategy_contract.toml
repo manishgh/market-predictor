@@ -114,11 +114,15 @@ reset_rolling_features_overnight = true
 #
 # This is event-based sampling: sample when something happens, not on a fixed
 # clock. See docs/active_edge_rebuild_plan.md for sources.
-scope = "broad_us_point_in_time"
-# The most intraday-tradable names are frequently high-beta mid caps, recent
-# listings, and catalyst-driven movers that are not index constituents, so the
-# intraday universe is deliberately not the S&P 500. Swing remains index-based.
-index_restricted = false
+scope = "sp500_point_in_time"
+# Both strategies run on the point-in-time S&P 500. A broader universe was
+# considered on the argument that high-beta mid caps and recent listings are the
+# most intraday-tradable names, but it was not adopted: the identity, sector and
+# benchmark authorities are all built and verified against index membership, and
+# a second universe would need its own point-in-time survivorship controls
+# before it could be trusted. Index membership is the liquidity screen; the two
+# layers below are the screens membership does not supply.
+index_restricted = true
 
 # Layer one: could this be traded intraday at all.
 minimum_average_volume_shares = 1_000_000
