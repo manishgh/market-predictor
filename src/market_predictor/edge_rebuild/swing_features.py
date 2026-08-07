@@ -74,10 +74,12 @@ MOMENTUM_FEATURES: Final = (
     "residual_return_60d_vs_spy",
     "residual_return_60d_vs_sector",
     "rsi_14",
-    "macd",
-    "macd_signal",
-    "macd_hist",
-    "volatility_20d",
+    # `macd`, `macd_signal` and `macd_hist` were raw dollar differences of two
+    # EMAs, so a $500 stock's MACD ran ~10x a $50 stock's for the same
+    # percentage move (measured spearman(|macd|, close) = 0.635). Cross-sectional
+    # z-scoring cannot repair that -- the rank stays a price proxy. The
+    # scale-free form is `macd_signal_diff_pct` in TREND_FEATURES.
+    "realized_vol_20d",
 )
 TREND_FEATURES: Final = (
     "dist_ema_20",
@@ -257,18 +259,21 @@ def build_swing_feature_rows(
     )
     from market_predictor.edge_rebuild.pipeline import FeaturePipeline
     from market_predictor.edge_rebuild.swing_pipeline_steps import (
-        AdvancedIndicatorsStep,
         SetupComponentsStep,
         TechnicalRelationshipsStep,
     )
-    
+
+    # Indicators are computed inside `build_swing_feature_history`, which sees the
+    # full warm-up history. Nothing here may recompute them: an AdvancedIndicators
+    # step used to run at this point with min_periods=1, after warm-up rows had
+    # been dropped, and overwrote the correct values for 88,999 eligible rows
+    # (11%) with a "200-day average" built from as little as one bar.
     pipeline = FeaturePipeline([
         SetupComponentsStep(benchmark_features),
         TechnicalRelationshipsStep(contract),
-        AdvancedIndicatorsStep(),
     ])
     rows = pipeline.transform(labelled)
-    
+
     rows = _apply_sector_benchmark_eligibility(
         rows,
         horizon_sessions=effective.horizon_sessions,

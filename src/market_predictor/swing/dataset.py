@@ -510,6 +510,7 @@ def _add_complete_identity_technical_features(
             ).mean()
         )
         data[f"dist_ema_{window}"] = close / ema - 1.0
+    sma_20: pd.Series | None = None
     for window in (20, 50, 200):
         sma = close_groups.transform(
             lambda values, period=window: values.rolling(
@@ -518,10 +519,30 @@ def _add_complete_identity_technical_features(
             ).mean()
         )
         data[f"dist_sma_{window}"] = close / sma - 1.0
+        if window == 20:
+            sma_20 = sma
         if window == 200:
             data["sma_200_slope_20d"] = (
                 sma / sma.groupby(identity, sort=False).shift(20) - 1.0
             )
+    # Bollinger bands share the twenty-session mean above. Population standard
+    # deviation (ddof=0) is Bollinger's definition; the sample deviation widens
+    # the bands by roughly 2.5%. `min_periods` matches the window so a partial
+    # band is absent rather than wrong, and %B is left missing when the band has
+    # no width: 0.0 would read as "price sitting exactly on the lower band",
+    # which is a strong signal invented out of absent data.
+    assert sma_20 is not None
+    std_20 = close_groups.transform(
+        lambda values: values.rolling(20, min_periods=20).std(ddof=0)
+    )
+    bb_upper = sma_20 + 2.0 * std_20
+    bb_lower = sma_20 - 2.0 * std_20
+    bb_width = (bb_upper - bb_lower).replace(0.0, np.nan)
+    # A security whose twenty-session dispersion exceeds half its mean drives the
+    # lower band to zero or below, where a ratio to it is meaningless.
+    data["bb_upper_dist"] = close / bb_upper.where(bb_upper > 0) - 1.0
+    data["bb_lower_dist"] = close / bb_lower.where(bb_lower > 0) - 1.0
+    data["bb_pb"] = (close - bb_lower) / bb_width
     data["gap_return"] = open_price / prior_close - 1.0
     data["intraday_return"] = close / open_price - 1.0
     data["range_pct"] = (high - low) / prior_close
