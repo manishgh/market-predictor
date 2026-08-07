@@ -1,3 +1,25 @@
-# Preserve hash-bound Windows artifacts while keeping normal whitespace checks.
+# Source normalizes to LF. Everything in this tree was CRLF, which made the
+# 0eecc60 commit report 9,161 insertions where only 1,858 were real: whole files
+# such as strategy_contract.py showed a 1,000-line diff for zero change. A
+# one-word parameter regression that disabled seven leakage tests went unseen
+# inside that noise.
+*.py text eol=lf
+*.md text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+.gitignore text eol=lf
+.gitattributes text eol=lf
+
+# Hash-bound bytes are never normalized. The governance chain
+# (configs/strategy_research_governance.toml -> contract_bindings) and
+# docs/strategy_hypothesis_registry.json pin the raw sha256 of these files, so
+# rewriting a line ending would silently break every pin above them.
+configs/** -text
+docs/evidence/** -text
+docs/strategy_hypothesis_registry.json -text
+docs/strategy_execution_ledger.json -text
+docs/reference_model_inventory.json -text
+
+# Whitespace checks for the hash-bound Windows artifacts that must keep CRLF.
 configs/sec_identity_reviewed_overrides.csv whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
 docs/evidence/edge_rebuild_intraday_candidate_20260802_v1_rejection/*.json whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
