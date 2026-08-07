@@ -8,7 +8,7 @@ Repository: `C:\project\market-predictor`
 
 Branch: `main` (fast-forwarded from `r3-lineage`)
 
-Completed implementation checkpoint: `Modularity Refactoring`
+Completed implementation checkpoint: `Intraday ML Fix`
 
 ## Purpose
 
@@ -148,6 +148,7 @@ Run these sequentially and preserve the locked test for final promotion only:
 1. **Broad expected-return ranker (Completed / Rejected).**
 2. **Verified catalyst specialists (Completed / Rejected).** 
 3. **Modularity Refactoring Checkpoint (Completed).** Extracted swing_training.py into domain-specific modules (training.economics, training.walk_forward, training.evaluation, training.utils) without altering external behavior.
+4. **Intraday ML Fix Checkpoint (Completed).** Solved the intraday 0.66 AUC macro-regime leakage by shifting the primary validation pipeline objective from Pointwise Binary Classification to Learning-to-Rank (`xgb_ranker`). Prioritized `decision_group_rank_ic_mean` over Brier/ECE calibration penalties to ensure optimal cross-sectional ordering. Appended Cross-Sectional Z-Scoring in `intraday_pipeline_steps.py` to strip out macro drift from technical indicators.
 
 ## Immediate Continuation
 

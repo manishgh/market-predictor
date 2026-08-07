@@ -145,6 +145,8 @@ are audit evidence, never fallbacks.
 - [x] Materialize Intraday V3 dataset with MACD, EMA distance, and SMA distance features.
 - [x] Evaluate Intraday V3 Technical Features for target-hit predictive efficacy (AUC ~0.50-0.51).
 - [x] Train and evaluate intraday candidate v3 using V3 features (Failed economic gates).
+- [x] Fix Intraday 0.66 AUC issue by shifting from Binary Classification to Learning-to-Rank (XGB Ranker) prioritizing Rank IC.
+- [x] Add Cross-Sectional Z-Scoring for Intraday advanced technical indicators.
 - [x] Update final handoff, commit, and push the checkpoint.
 - [ ] [environment-pending] Collect and freeze a genuinely future intraday V3 holdout. (Blocked: requires canonical membership and raw market data for 2026-07-09 onwards, which is unavailable in the current environment.)
 - [ ] Promote only a model that passes every gate.
