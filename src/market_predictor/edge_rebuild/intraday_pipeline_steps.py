@@ -1,7 +1,9 @@
-import numpy as np
-import pandas as pd
 from datetime import time
 from zoneinfo import ZoneInfo
+
+import numpy as np
+import pandas as pd
+
 from market_predictor.edge_rebuild.strategy_contract import StrategyContract
 
 EXCHANGE_TIMEZONE = ZoneInfo("America/New_York")
@@ -73,7 +75,10 @@ class IntradayAdvancedIndicatorsStep:
             interval_log_return.iloc[0] = np.log(close[0] / open_[0])
             squared = interval_log_return.pow(2.0)
             for horizon in (5, 20):
-                part[f"realized_volatility_{horizon}"] = np.sqrt(squared.rolling(horizon, min_periods=horizon).sum()).to_numpy(dtype="float32")
+                window = squared.rolling(horizon, min_periods=horizon).sum()
+                part[f"realized_volatility_{horizon}"] = np.sqrt(window).to_numpy(
+                    dtype="float32"
+                )
 
             part["williams_five_bar_rsi_divergence"] = _williams_divergence(high, low, part["rsi_14"].to_numpy(dtype="float64"))
             obv, efficiency = _granville_and_kaufman(close, volume, lookback=20)
@@ -110,9 +115,10 @@ class IntradaySessionContextStep:
                     "float32"
                 )
 
-        data["session_vwap_distance_atr"] = ((data["close"] - data["stock_clock_session_vwap"]) / data["atr_14"].replace(0.0, np.nan)).astype(
-            "float32"
-        )
+        vwap_gap = data["close"] - data["stock_clock_session_vwap"]
+        data["session_vwap_distance_atr"] = (
+            vwap_gap / data["atr_14"].replace(0.0, np.nan)
+        ).astype("float32")
         data["atr_fraction_of_close"] = (data["atr_14"] / data["close"]).astype("float32")
         data["normalized_volume_overshoot"] = (data["volume_overshoot"] / data["volume_threshold"]).astype("float32")
         data["volume_bar_duration_minutes"] = (

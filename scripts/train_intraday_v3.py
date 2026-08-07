@@ -1,6 +1,7 @@
 import warnings
 from pathlib import Path
-from market_predictor.edge_rebuild.intraday_training import train_intraday_edge_candidate, load_intraday_training_config
+
+from market_predictor.edge_rebuild.intraday_training import load_intraday_training_config, train_intraday_edge_candidate
 
 if __name__ == "__main__":
     dataset_dir = Path("data/features/edge_rebuild_intraday_dataset_causal_20260804_v3")

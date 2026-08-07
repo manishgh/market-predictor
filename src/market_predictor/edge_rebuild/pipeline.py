@@ -1,7 +1,9 @@
 """Declarative Feature Pipeline for executing feature steps consistently."""
 
 from typing import Protocol
+
 import pandas as pd
+
 
 class FeatureStep(Protocol):
     """A single transformation step in a feature pipeline."""

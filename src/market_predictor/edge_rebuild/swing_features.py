@@ -48,10 +48,6 @@ from market_predictor.edge_rebuild.labeling import (
     forward_return_from_barrier,
 )
 from market_predictor.edge_rebuild.strategy_contract import StrategyContract
-from market_predictor.edge_rebuild.technical_relationships import (
-    add_technical_relationship_features,
-    relationship_spec_from_contract,
-)
 from market_predictor.swing.contracts import SwingDatasetConfig
 from market_predictor.swing.dataset import build_swing_feature_history
 from market_predictor.swing.labels import add_exact_swing_labels
@@ -261,9 +257,9 @@ def build_swing_feature_rows(
     )
     from market_predictor.edge_rebuild.pipeline import FeaturePipeline
     from market_predictor.edge_rebuild.swing_pipeline_steps import (
+        AdvancedIndicatorsStep,
         SetupComponentsStep,
         TechnicalRelationshipsStep,
-        AdvancedIndicatorsStep,
     )
     
     pipeline = FeaturePipeline([

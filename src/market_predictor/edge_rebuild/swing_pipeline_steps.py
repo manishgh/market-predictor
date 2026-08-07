@@ -1,7 +1,8 @@
 import pandas as pd
-from market_predictor.v3.errors import DataReadinessError
+
 from market_predictor.edge_rebuild.strategy_contract import StrategyContract
-from market_predictor.edge_rebuild.pipeline import FeatureStep, FeaturePipeline
+from market_predictor.v3.errors import DataReadinessError
+
 
 class SetupComponentsStep:
     def __init__(self, benchmark_features: pd.DataFrame):

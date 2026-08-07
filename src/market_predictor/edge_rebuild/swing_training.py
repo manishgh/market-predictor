@@ -70,6 +70,7 @@ from market_predictor.edge_rebuild.training.utils import (
     _mapping,
 )
 from market_predictor.edge_rebuild.training.walk_forward import (
+    WalkForwardFold,
     _assert_label_purge,
     _governed_folds,
     _governed_model_sessions,
@@ -95,6 +96,15 @@ ALLOWED_PROFILES: Final = (
     SWING_FEATURE_PROFILE,
     SWING_CATALYST_FEATURE_PROFILE,
 )
+# The learned families, per profile and per (rate, depth) point. `dual_hurdle`
+# was dropped: it scored 0.452-0.462 AUC on the v12 run -- below chance -- had no
+# test covering it, and its four slots pushed the grid past the contract's
+# six-candidate experiment budget.
+_XGB_GRID: Final = (
+    ("xgbranker", "xgboost_ranker"),
+    ("xgbregressor", "xgboost_regressor"),
+)
+_XGB_FAMILIES: Final = len(_XGB_GRID)
 _MANIFEST_NAME: Final = "_manifest.json"
 _AUTHORITY_NAME: Final = "_authority.json"
 _CANDIDATE_NAME: Final = "candidate.joblib"
@@ -135,6 +145,11 @@ class SwingTrainingConfig:
     hgb_max_leaf_nodes: tuple[int, ...] = (15, 31)
     hgb_max_iter: int = 150
     hgb_max_bins: int = 127
+    # Tree depth is a policy field rather than a literal in the grid builder. It
+    # was hard-coded to (3, 5), which put half the candidate count outside the
+    # budget arithmetic below and let the real grid grow to fourteen while the
+    # constructor still reported six.
+    xgb_max_depths: tuple[int, ...] = (3,)
     maximum_learned_candidates: int = 6
     bootstrap_samples: int = 2_000
     bootstrap_block_sessions: int = 20
@@ -170,9 +185,15 @@ class SwingTrainingConfig:
             raise ValueError("hgb max leaf nodes must be at least 2")
         if self.hgb_max_iter < 1:
             raise ValueError("hgb max iter must be at least 1")
+        if not self.xgb_max_depths or any(value < 1 for value in self.xgb_max_depths):
+            raise ValueError("xgb max depths must be at least 1")
+        # This must equal len(_candidate_specs(self)). The previous formula
+        # counted an HGB grid the builder no longer emits, so it undercounted the
+        # real grid by more than half and the multiple-testing control it exists
+        # to provide was not being applied.
         candidate_count = len(ALLOWED_PROFILES) * (
             len(self.logistic_c_values)
-            + len(self.hgb_learning_rates) * len(self.hgb_max_leaf_nodes)
+            + len(self.hgb_learning_rates) * len(self.xgb_max_depths) * _XGB_FAMILIES
         )
         if candidate_count > self.maximum_learned_candidates:
             raise ValueError("candidate grid exceeds the frozen sequential budget")
@@ -239,15 +260,6 @@ class SwingProfileData:
     feature_columns: tuple[str, ...]
     decision_ids_sha256: str
     panel: SwingPanelBinding
-
-
-@dataclass(frozen=True, slots=True)
-class WalkForwardFold:
-    fold: int
-    train_sessions: tuple[str, ...]
-    purge_sessions: tuple[str, ...]
-    embargo_sessions: tuple[str, ...]
-    validation_sessions: tuple[str, ...]
 
 
 @dataclass(frozen=True, slots=True)
@@ -472,7 +484,10 @@ def load_swing_profile(
     if profile == "catalyst_full":
         import pyarrow.dataset as ds
         sec_dir = r"c:\project\market-predictor\data\canonical\sec_filing_authority_20190709_20260708_v1\partitions"
-        sec_df = ds.dataset(sec_dir, format="parquet").to_table(columns=["decision_id", "sec_filing_count_3d"]).to_pandas()
+        sec_dataset = ds.dataset(sec_dir, format="parquet")  # type: ignore[no-untyped-call]
+        sec_df = sec_dataset.to_table(
+            columns=["decision_id", "sec_filing_count_3d"]
+        ).to_pandas()
         frame = frame.drop(columns=["source_count_sec_3d"], errors="ignore")
         frame = frame.merge(sec_df, on="decision_id", how="left")
         frame["source_count_sec_3d"] = frame["sec_filing_count_3d"].fillna(0)
@@ -935,7 +950,7 @@ def train_swing_edge_candidate(
             evaluation=no_candidate_evaluation,
             model_card=no_candidate_model_card,
         )
-    family_groups = {}
+    family_groups: dict[str, list[dict[str, Any]]] = {}
     for record in eligible_candidates:
         spec = next(s for s in specs if s.candidate_id == record["candidate_id"])
         fam = "classifier" if spec.estimator_family in ("logistic", "xgboost_ranker") else spec.estimator_family
@@ -1195,46 +1210,21 @@ def _candidate_specs(config: SwingTrainingConfig) -> tuple[CandidateSpec, ...]:
                 )
             )
         for rate in config.hgb_learning_rates:
-            for depth in (3, 5):
-                specs.append(
-                    CandidateSpec(
-                        candidate_id=f"{family_name}.xgbranker.lr_{rate:g}.depth_{depth}",
-                        profile=profile,
-                        estimator_family="xgboost_ranker",
-                        hyperparameters={
-                            "learning_rate": rate,
-                            "max_depth": depth,
-                            "n_estimators": config.hgb_max_iter,
-                            "threads": 1,
-                        },
+            for depth in config.xgb_max_depths:
+                for label, family in _XGB_GRID:
+                    specs.append(
+                        CandidateSpec(
+                            candidate_id=f"{family_name}.{label}.lr_{rate:g}.depth_{depth}",
+                            profile=profile,
+                            estimator_family=family,
+                            hyperparameters={
+                                "learning_rate": rate,
+                                "max_depth": depth,
+                                "n_estimators": config.hgb_max_iter,
+                                "threads": 1,
+                            },
+                        )
                     )
-                )
-                specs.append(
-                    CandidateSpec(
-                        candidate_id=f"{family_name}.xgbregressor.lr_{rate:g}.depth_{depth}",
-                        profile=profile,
-                        estimator_family="xgboost_regressor",
-                        hyperparameters={
-                            "learning_rate": rate,
-                            "max_depth": depth,
-                            "n_estimators": config.hgb_max_iter,
-                            "threads": 1,
-                        },
-                    )
-                )
-                specs.append(
-                    CandidateSpec(
-                        candidate_id=f"{family_name}.dualhurdle.lr_{rate:g}.depth_{depth}",
-                        profile=profile,
-                        estimator_family="dual_hurdle",
-                        hyperparameters={
-                            "learning_rate": rate,
-                            "max_depth": depth,
-                            "n_estimators": config.hgb_max_iter,
-                            "threads": 1,
-                        },
-                    )
-                )
     return tuple(specs)
 
 
@@ -1520,15 +1510,6 @@ def _fit_candidate(
             fit_mask,
             "ranking_reliability_weight",
         ].to_numpy(dtype="float64", copy=False)
-    elif spec.estimator_family == "dual_hurdle":
-        x_fit = train.loc[fit_mask, columns].to_numpy(dtype="float32", copy=False)
-        y_target = train.loc[fit_mask, "target"].to_numpy(dtype="int8", copy=False)
-        y_return = train.loc[fit_mask, "barrier_net_return"].to_numpy(dtype="float32", copy=False)
-        qid_fit = None
-        fit_weight = train.loc[
-            fit_mask,
-            "ranking_reliability_weight",
-        ].to_numpy(dtype="float64", copy=False)
     else:
         x_fit = train.loc[fit_mask, columns].to_numpy(dtype="float32", copy=False)
         y_fit = train.loc[fit_mask, "target"].to_numpy(dtype="int8", copy=False)
@@ -1587,30 +1568,15 @@ def _fit_candidate(
             tree_method="hist",
             reg_lambda=10.0,
         )
-    elif spec.estimator_family == "dual_hurdle":
-        estimator = DualHurdleEstimator(
-            learning_rate=float(spec.hyperparameters["learning_rate"]),
-            max_depth=int(spec.hyperparameters["max_depth"]),
-            n_estimators=int(spec.hyperparameters["n_estimators"]),
-            random_state=config.random_seed,
-        )
     else:
         raise DataReadinessError(f"unknown swing estimator family: {spec.estimator_family}")
     if spec.estimator_family == "logistic":
         estimator.fit(x_fit, y_fit, model__sample_weight=fit_weight)
-    elif spec.estimator_family == "xgboost_regressor":
-        estimator.fit(x_fit, y_fit, sample_weight=fit_weight)
-    elif spec.estimator_family == "dual_hurdle":
-        estimator.fit(x_fit, y_target, y_return, sample_weight=fit_weight)
     elif spec.estimator_family == "xgboost_ranker":
         estimator.fit(x_fit, y_fit, qid=qid_fit, sample_weight=fit_weight)
     else:
         estimator.fit(x_fit, y_fit, sample_weight=fit_weight)
-    
-    if spec.estimator_family == "dual_hurdle":
-        del x_fit, y_target, y_return, fit_weight
-    else:
-        del x_fit, y_fit, fit_weight
+    del x_fit, y_fit, fit_weight
     raw = _raw_probability(
         estimator,
         train.loc[calibration_mask, columns].to_numpy(dtype="float32", copy=False),
@@ -1666,50 +1632,9 @@ def _linex_objective(
     return grad, hess
 
 
-class DualHurdleEstimator:
-    """Trains a classifier for direction and a regressor for magnitude."""
-    def __init__(
-        self,
-        learning_rate: float,
-        max_depth: int,
-        n_estimators: int,
-        random_state: int,
-    ):
-        import xgboost as xgb
-        self.classifier = xgb.XGBClassifier(
-            learning_rate=learning_rate,
-            max_depth=max_depth,
-            n_estimators=n_estimators,
-            random_state=random_state,
-            tree_method="hist",
-        )
-        self.regressor = xgb.XGBRegressor(
-            objective=_linex_objective,
-            learning_rate=learning_rate,
-            max_depth=max_depth,
-            n_estimators=n_estimators,
-            random_state=random_state,
-            tree_method="hist",
-            reg_lambda=10.0,
-        )
-
-    def fit(self, X: np.ndarray, y_target: np.ndarray, y_return: np.ndarray, sample_weight: np.ndarray = None):
-        self.classifier.fit(X, y_target, sample_weight=sample_weight)
-        self.regressor.fit(X, y_return, sample_weight=sample_weight)
-        return self
-
-    def predict(self, X: np.ndarray) -> np.ndarray:
-        prob_up = self.classifier.predict_proba(X)[:, 1]
-        expected_return = self.regressor.predict(X)
-        # Expected value synthesis
-        return prob_up * expected_return
-
-
 def _raw_probability(estimator: Any, features: np.ndarray) -> np.ndarray:
     if hasattr(estimator, "predict_proba"):
         probability = np.asarray(estimator.predict_proba(features)[:, 1], dtype="float64")
-    elif isinstance(estimator, DualHurdleEstimator):
-        probability = np.asarray(estimator.predict(features), dtype="float64")
     else:
         probability = np.asarray(estimator.predict(features), dtype="float64")
     if not np.isfinite(probability).all():

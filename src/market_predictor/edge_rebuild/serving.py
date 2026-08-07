@@ -1296,9 +1296,15 @@ class SwingInferenceEngine:
         self.bundle = generation.bundle
         self.payload = generation.model_payload
         _validate_swing_model_payload(self.payload, self.bundle)
-        self.fitted_models = self.payload.get("fitted_models") or {}
-        probability_thresholds = self.payload.get("probability_thresholds") or {}
-        self.threshold = _finite_probability(probability_thresholds.get("classifier", 0.5), "probability_threshold")
+        self.fitted_models = cast(
+            dict[str, Any], self.payload.get("fitted_models") or {}
+        )
+        thresholds = cast(
+            dict[str, Any], self.payload.get("probability_thresholds") or {}
+        )
+        self.threshold = _finite_probability(
+            thresholds.get("classifier", 0.5), "probability_threshold"
+        )
 
     def predict(
         self,
@@ -1335,11 +1341,13 @@ class SwingInferenceEngine:
             return tuple(float(value) for value in calibrated)
 
         if not requested_models or "all" in requested_models:
-            models_to_score = ["classifier", "xgboost_regressor", "dualhurdle"]
+            # "dualhurdle" was dropped from the candidate grid; naming a family
+            # that can never be fitted would silently score nothing.
+            models_to_score = ["classifier", "xgboost_regressor"]
         else:
             models_to_score = [m for m in requested_models if m in self.fitted_models]
 
-        results = {}
+        results: dict[str, tuple[float, ...]] = {}
         for model_name in models_to_score:
             scores = _score_model(self.fitted_models.get(model_name))
             if scores is not None:
@@ -1362,7 +1370,6 @@ def score_promoted_swing_model(
         probability_threshold=engine.threshold,
         classifier_probabilities=scores.get("classifier"),
         regressor_probabilities=scores.get("xgboost_regressor"),
-        unified_probabilities=scores.get("dualhurdle"),
     )
 
 

@@ -28,7 +28,7 @@ def test_edge_rebuild_readiness_contract_is_frozen() -> None:
     assert config.intraday.required_purged_folds == 4
     assert config.required_price_feed == "sip"
     assert config.required_adjustment == "all"
-    assert config.maximum_process_memory_gib == 5.0
+    assert config.maximum_process_memory_gib == 4.0
     assert len(config.sha256()) == 64
 
 

@@ -79,7 +79,11 @@ select = ["E", "F", "I", "UP", "B"]
 ignore = ["B008"] # Typer declares CLI metadata through Option/Argument defaults.
 
 [tool.mypy]
-python_version = "3.11"
+# No python_version pin: mypy follows whichever interpreter runs it. Pinning to
+# 3.11 while developing on 3.14 made mypy reject the installed numpy stubs
+# ("Type statement is only supported in Python 3.12 and greater") and abort
+# before checking a single project file, so strict typing had silently stopped
+# running. requires-python still declares the supported floor.
 strict = true
 plugins = ["pydantic.mypy"]
 

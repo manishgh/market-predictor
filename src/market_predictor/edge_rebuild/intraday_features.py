@@ -180,11 +180,11 @@ def build_causal_intraday_features(
     )
     _validate_stock_context_identity(data)
 
-    from market_predictor.edge_rebuild.pipeline import FeaturePipeline
     from market_predictor.edge_rebuild.intraday_pipeline_steps import (
         IntradayAdvancedIndicatorsStep,
         IntradaySessionContextStep,
     )
+    from market_predictor.edge_rebuild.pipeline import FeaturePipeline
     
     pipeline = FeaturePipeline([
         IntradayAdvancedIndicatorsStep(contract),

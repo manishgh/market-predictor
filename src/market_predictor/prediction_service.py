@@ -18,12 +18,16 @@ from market_predictor.catalyst_overlay import (
     assess_catalyst_overlay,
 )
 from market_predictor.drift_policy import DriftAssessmentV2, DriftStateStore
+from market_predictor.edge_rebuild.policy import (
+    combined_readiness,
+    determine_final_signal,
+    determine_intraday_signal,
+)
 from market_predictor.edge_rebuild.serving import (
     LoadedSwingModelGeneration,
     PromotedSwingBundle,
-    SwingModelGenerationCache,
     SwingInferenceEngine,
-    score_promoted_swing_model,
+    SwingModelGenerationCache,
 )
 from market_predictor.edge_rebuild.strategy_contract import StrategyContract, load_strategy_contract
 from market_predictor.edge_rebuild.swing_live import (
@@ -65,16 +69,10 @@ from market_predictor.prediction_policy import (
     parse_prediction_policy,
     select_intraday_candidates,
 )
-from market_predictor.edge_rebuild.policy import (
-    combined_readiness,
-    determine_final_signal,
-    determine_intraday_signal,
-)
 from market_predictor.prediction_snapshot import PredictionSnapshotStore
 from market_predictor.readiness import (
     INVALID,
     VALID,
-    WARN,
     assess_intraday_readiness,
 )
 from market_predictor.registry import file_sha256
@@ -387,8 +385,6 @@ class PredictionService:
                 scored_context["__classifier_probability"] = raw_scores["classifier"]
             if "xgboost_regressor" in raw_scores:
                 scored_context["__regressor_probability"] = raw_scores["xgboost_regressor"]
-            if "dualhurdle" in raw_scores:
-                scored_context["__unified_probability"] = raw_scores["dualhurdle"]
             selected_ids = _selected_edge_swing_security_ids(
                 scored_context,
                 probability_threshold=engine.threshold,

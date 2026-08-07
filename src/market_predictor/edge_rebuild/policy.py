@@ -1,8 +1,8 @@
 ﻿"""Trading policy functions for determining actionable signals from raw predictions."""
 
 from typing import Any
-from market_predictor.prediction_contracts import SwingPrediction, IntradayPrediction
-from market_predictor.readiness import INVALID, VALID, WARN
+
+from market_predictor.prediction_contracts import IntradayPrediction, SwingPrediction
 from market_predictor.prediction_policy import (
     INTRADAY_WATCH,
     INTRADAY_WATCH_MAX_DOWNSIDE,
@@ -11,6 +11,8 @@ from market_predictor.prediction_policy import (
     SWING_WATCH,
     intraday_action,
 )
+from market_predictor.readiness import INVALID, VALID, WARN
+
 
 def _float_or_none(value: Any) -> float | None:
     if value is None:

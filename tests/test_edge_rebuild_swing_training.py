@@ -13,7 +13,6 @@ import pytest
 
 from market_predictor.canonical.store import file_sha256
 from market_predictor.edge_rebuild import swing_training
-from market_predictor.edge_rebuild.training import walk_forward, evaluation
 from market_predictor.edge_rebuild.strategy_contract import (
     StrategyContract,
     load_strategy_contract,
@@ -41,6 +40,7 @@ from market_predictor.edge_rebuild.temporal_manifest import (
     build_temporal_schedule,
     load_temporal_manifest_config,
 )
+from market_predictor.edge_rebuild.training import evaluation, walk_forward
 from market_predictor.process_memory import process_memory_snapshot, release_process_memory
 from market_predictor.v3.errors import DataReadinessError
 
@@ -55,7 +55,10 @@ def test_repository_policy_is_frozen_for_ten_session_candidate_training() -> Non
     assert config.horizon_sessions == 10
     assert config.maximum_process_memory_gib == 5.0
     assert config.probability_thresholds == (0.10, 0.15, 0.20, 0.25, 0.30, 0.35)
-    assert len(swing_training._candidate_specs(config)) == 14
+    # The grid must fit the contract's six-candidate experiment budget, and the
+    # constructor's arithmetic must agree with what the builder actually emits.
+    assert len(swing_training._candidate_specs(config)) == 6
+    assert len(swing_training._candidate_specs(config)) <= config.maximum_learned_candidates
     temporal = load_temporal_manifest_config(
         Path("configs/edge_rebuild_temporal_manifest.toml")
     )
@@ -662,9 +665,10 @@ def _config() -> SwingTrainingConfig:
         probability_thresholds=(0.10, 0.20),
         logistic_c_values=(1.0,),
         hgb_learning_rates=(0.05,),
-        hgb_max_depths=(7,),
+        hgb_max_leaf_nodes=(7,),
         hgb_max_iter=20,
-        maximum_learned_candidates=8,
+        hgb_max_bins=31,
+        maximum_learned_candidates=6,
         bootstrap_samples=2_000,
         bootstrap_block_sessions=20,
     )

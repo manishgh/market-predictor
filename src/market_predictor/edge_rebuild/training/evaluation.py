@@ -9,6 +9,8 @@ import pandas as pd
 
 from market_predictor.edge_rebuild.strategy_contract import StrategyContract
 from market_predictor.v3.errors import DataReadinessError
+
+
 def _iso(value: object) -> str:
     parsed = pd.Timestamp(value)
     if parsed.tzinfo is None:

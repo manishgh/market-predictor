@@ -1,13 +1,18 @@
 from __future__ import annotations
 
 import math
-from typing import Any, cast
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any, cast
 
 import pandas as pd
 
 from market_predictor.edge_rebuild.strategy_contract import StrategyContract
-from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from market_predictor.edge_rebuild.temporal_manifest import (
+    TemporalManifestConfig,
+    TemporalSchedule,
+)
+from market_predictor.v3.errors import DataReadinessError
+
 if TYPE_CHECKING:
     from market_predictor.edge_rebuild.swing_training import SwingTrainingConfig
 
@@ -19,11 +24,6 @@ class WalkForwardFold:
     purge_sessions: tuple[str, ...]
     embargo_sessions: tuple[str, ...]
     validation_sessions: tuple[str, ...]
-from market_predictor.edge_rebuild.temporal_manifest import (
-    TemporalManifestConfig,
-    TemporalSchedule,
-)
-from market_predictor.v3.errors import DataReadinessError
 
 
 def _governed_folds(schedule: TemporalSchedule) -> tuple[WalkForwardFold, ...]:

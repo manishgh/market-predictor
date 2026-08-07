@@ -1,7 +1,9 @@
 ﻿"""Abstract inference engine for scoring models."""
 
 from typing import Protocol
+
 import pandas as pd
+
 
 class InferenceEngine(Protocol):
     """Protocol for abstracting model scoring execution."""
