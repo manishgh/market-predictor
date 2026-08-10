@@ -106,6 +106,26 @@ market-predictor-research --help
 market-predictor-prod --help
 ```
 
+### Research Workbench
+
+The local research workbench inventories four configured experiments: swing and
+intraday, each with and without catalyst features. It reports the real training
+state of every experiment. A `no_candidate` result remains unavailable rather than
+being replaced by a fallback model.
+
+```powershell
+.\.venv\Scripts\python.exe -m uvicorn `
+  market_predictor.research_api.server:app `
+  --host 127.0.0.1 `
+  --port 8123
+```
+
+Open `http://127.0.0.1:8123`. The workbench is non-actionable and does not alter the
+production API. Scoring reads only integrity-checked snapshots registered through
+the canonical live feature store. Missing, stale, non-finite, or schema-incomplete
+features cause a readiness error; the workbench does not substitute zero values or
+proxy ETF approximations for missing cross-sectional features.
+
 ## Verification
 
 Run one heavy process at a time. Swing candidate training has a 5 GiB hard

@@ -1,0 +1,29 @@
+schema = "market_predictor.research_model_catalog.v1"
+
+[[models]]
+id = "swing_event_driven"
+label = "Swing - Event Driven"
+mode = "swing"
+uses_catalyst = true
+artifact_directory = "data/models/swing_v13_with_catalyst"
+
+[[models]]
+id = "swing_baseline"
+label = "Swing - Technical Baseline"
+mode = "swing"
+uses_catalyst = false
+artifact_directory = "data/models/swing_v13_event_driven"
+
+[[models]]
+id = "intraday_event_driven"
+label = "Intraday - Event Driven"
+mode = "intraday"
+uses_catalyst = true
+artifact_directory = "data/models/intraday_v5_with_catalyst"
+
+[[models]]
+id = "intraday_baseline"
+label = "Intraday - Technical Baseline"
+mode = "intraday"
+uses_catalyst = false
+artifact_directory = "data/models/intraday_v5_no_catalyst"
