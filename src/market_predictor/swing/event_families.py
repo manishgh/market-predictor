@@ -18,7 +18,7 @@ import pandas as pd
 
 from market_predictor.v3.errors import DataReadinessError
 
-EVENT_FAMILY_POLICY_VERSION: Final = "swing.issuer_event_family.v1"
+EVENT_FAMILY_POLICY_VERSION: Final = "swing.issuer_event_family.v2"
 EVENT_FAMILIES: Final = (
     "earnings",
     "guidance",
@@ -29,6 +29,16 @@ EVENT_FAMILIES: Final = (
     "regulatory_decision",
     "product_event",
 )
+ALLOWED_SOURCE_FAMILIES_BY_FAMILY: Final[Mapping[str, tuple[str, ...]]] = {
+    "earnings": ("alpaca", "finviz"),
+    "guidance": ("alpaca", "finviz"),
+    "sec_material_event": ("sec",),
+    "analyst_revision": ("alpaca", "finviz"),
+    "offering": ("alpaca", "finviz", "sec"),
+    "merger_acquisition": ("alpaca", "finviz"),
+    "regulatory_decision": ("alpaca", "finviz"),
+    "product_event": ("alpaca", "finviz"),
+}
 EVENT_FAMILY_COLUMNS: Final = (
     "event_id",
     "event_family",
@@ -46,7 +56,8 @@ class _Rule:
     family: str
     rule_id: str
     patterns: tuple[str, ...]
-    source_families: tuple[str, ...] = ()
+    exclusion_patterns: tuple[str, ...] = ()
+    issuer_targeted: bool = False
 
 
 _RULES: Final = (
@@ -56,6 +67,10 @@ _RULES: Final = (
         (
             r"\b(?:reports?|announces?|posts?)\b.{0,80}\b(?:quarterly|fiscal|full[ -]year|q[1-4])\b.{0,40}\b(?:results|earnings)\b",
             r"\b(?:quarterly|fiscal|full[ -]year|q[1-4])\b.{0,40}\b(?:results|earnings)\b",
+        ),
+        (
+            r"\b(?:earnings|results?)\s+(?:preview|outlook)\b",
+            r"\b(?:preview|ahead of|what to expect from|estimates? for)\b.{0,50}\b(?:earnings|results?)\b",
         ),
     ),
     _Rule(
@@ -70,10 +85,14 @@ _RULES: Final = (
         "analyst_revision",
         "analyst_rating_or_target_revision",
         (
-            r"\b(?:upgrades?|downgrades?|initiates? coverage|resumes? coverage)\b",
-            r"\bprice target\b.{0,40}\b(?:raised|lowered|increased|cut|boosted|reduced)\b",
-            r"\b(?:raises?|lowers?|cuts?|boosts?|reduces?)\b.{0,30}\bprice target\b",
+            r"\b(?:upgrades?|downgrades?)\s+(?:shares?\s+(?:of|in)\s+)?{issuer}",
+            r"{issuer}\s+(?:is\s+)?(?:upgraded|downgraded)\b",
+            r"\b(?:initiates?|resumes?)\s+coverage\s+(?:on\s+)?{issuer}",
+            r"\b(?:raises?|lowers?|cuts?|boosts?|reduces?)\s+(?:the\s+)?price target\s+(?:on|for)\s+{issuer}",
+            r"\bprice target\s+(?:on|for)\s+{issuer}.{0,30}\b(?:raised|lowered|increased|cut|boosted|reduced)\b",
+            r"{issuer}(?:'s)?\s+price target.{0,30}\b(?:raised|lowered|increased|cut|boosted|reduced)\b",
         ),
+        issuer_targeted=True,
     ),
     _Rule(
         "offering",
@@ -89,8 +108,14 @@ _RULES: Final = (
         "merger_acquisition",
         "transaction_announced",
         (
-            r"\b(?:agrees? to acquire|to acquire|will acquire|acquires|acquisition of|to be acquired)\b",
+            r"\b(?:agrees? to acquire|will acquire|acquires|acquisition of|to be acquired)\b",
             r"\b(?:merger agreement|merges? with|takeover offer|buyout)\b",
+        ),
+        (
+            r"\b(?:could|may|might|would|likely to|plans? to|seeks? to|considering|"
+            r"explores?|evaluates?|potential|possible|rumou?red)\b.{0,80}"
+            r"\b(?:acquire|acquisition|merger|buyout)\b",
+            r"\b(?:in talks?|weighs?|mulls?|bid)\b.{0,80}\b(?:acquire|acquisition|merger|buyout)\b",
         ),
     ),
     _Rule(
@@ -130,16 +155,52 @@ _SEC_OFFERING_FORMS: Final = frozenset(
         "424B5",
     }
 )
+_COMPANY_SUFFIXES: Final = frozenset(
+    {
+        "co",
+        "company",
+        "corp",
+        "corporation",
+        "inc",
+        "incorporated",
+        "limited",
+        "ltd",
+        "plc",
+    }
+)
+_AMBIGUOUS_COMPANY_PREFIXES: Final = frozenset(
+    {
+        "advanced",
+        "american",
+        "first",
+        "general",
+        "global",
+        "international",
+        "national",
+        "new",
+        "united",
+    }
+)
 _POLICY_MATERIAL: Final = {
     "version": EVENT_FAMILY_POLICY_VERSION,
-    "classification": "multi_label_high_precision_title_rules",
+    "classification": "multi_label_high_precision_issuer_targeted_title_rules",
+    "issuer_binding": {
+        "structured": "provider_security_id_and_ticker_or_causal_company",
+        "title": "explicit_ticker_or_causally_available_company_alias",
+        "analyst": "action_syntactically_targets_issuer_alias",
+    },
     "unmatched_policy": "unclassified_not_zero",
+    "allowed_source_families_by_family": {
+        family: list(ALLOWED_SOURCE_FAMILIES_BY_FAMILY[family])
+        for family in EVENT_FAMILIES
+    },
     "rules": [
         {
             "family": rule.family,
             "rule_id": rule.rule_id,
             "patterns": list(rule.patterns),
-            "source_families": list(rule.source_families),
+            "exclusion_patterns": list(rule.exclusion_patterns),
+            "issuer_targeted": rule.issuer_targeted,
         }
         for rule in _RULES
     ],
@@ -156,6 +217,8 @@ def classify_event_families(events: pd.DataFrame) -> pd.DataFrame:
 
     required = {
         "event_id",
+        "security_id",
+        "ticker",
         "source_family",
         "feature_available_at_utc",
         "title",
@@ -178,6 +241,8 @@ def classify_event_families(events: pd.DataFrame) -> pd.DataFrame:
     data["source_family"] = (
         data["source_family"].fillna("").astype(str).str.lower().str.strip()
     )
+    data["security_id"] = data["security_id"].fillna("").astype(str).str.strip()
+    data["ticker"] = data["ticker"].fillna("").astype(str).str.upper().str.strip()
     available = pd.to_datetime(
         data["feature_available_at_utc"], utc=True, errors="coerce"
     )
@@ -191,6 +256,11 @@ def classify_event_families(events: pd.DataFrame) -> pd.DataFrame:
         event_id = str(event["event_id"])
         source_family = str(event["source_family"])
         title = _normalized_text(event.get("title"))
+        issuer_patterns = _issuer_patterns(
+            event,
+            event_available_at=available.iloc[position],
+        )
+        title_has_issuer = _first_match(title, issuer_patterns) is not None
         matched_families: set[str] = set()
 
         sec_form = str(event.get("sec_form") or "").upper().strip()
@@ -220,9 +290,19 @@ def classify_event_families(events: pd.DataFrame) -> pd.DataFrame:
             matched_families.add("offering")
 
         for rule in _RULES:
-            if rule.source_families and source_family not in rule.source_families:
+            if source_family not in ALLOWED_SOURCE_FAMILIES_BY_FAMILY[rule.family]:
                 continue
-            match = _first_match(title, rule.patterns)
+            if not title_has_issuer or _first_match(title, rule.exclusion_patterns) is not None:
+                continue
+            patterns = (
+                tuple(
+                    pattern.replace("{issuer}", _issuer_alternation(issuer_patterns))
+                    for pattern in rule.patterns
+                )
+                if rule.issuer_targeted
+                else rule.patterns
+            )
+            match = _first_match(title, patterns)
             if match is None or rule.family in matched_families:
                 continue
             records.append(
@@ -230,7 +310,11 @@ def classify_event_families(events: pd.DataFrame) -> pd.DataFrame:
                     event_id=event_id,
                     family=rule.family,
                     rule_id=rule.rule_id,
-                    basis="deterministic_title_rule",
+                    basis=(
+                        "issuer_targeted_title_rule"
+                        if rule.issuer_targeted
+                        else "issuer_anchored_title_rule"
+                    ),
                     matched_text=match,
                     available_at=available.iloc[position],
                 )
@@ -291,6 +375,69 @@ def _first_match(text: str, patterns: Sequence[str]) -> str | None:
         if matched is not None:
             return matched.group(0)
     return None
+
+
+def _issuer_patterns(
+    event: Mapping[str, object],
+    *,
+    event_available_at: pd.Timestamp,
+) -> tuple[str, ...]:
+    security_id = str(event.get("security_id") or "").strip()
+    ticker = str(event.get("ticker") or "").upper().strip()
+    company = _normalized_text(event.get("issuer_company"))
+    if not security_id:
+        raise DataReadinessError("event-family classification requires issuer security_id")
+
+    patterns: set[str] = set()
+    if ticker:
+        escaped_ticker = re.escape(ticker.lower())
+        patterns.update(
+            {
+                rf"\${escaped_ticker}(?![a-z0-9])",
+                rf"\({escaped_ticker}\)",
+                rf"\b(?:nasdaq|nyse|amex)\s*:\s*{escaped_ticker}\b",
+                rf"\bticker\s*:\s*{escaped_ticker}\b",
+            }
+        )
+    if company:
+        company_available = pd.to_datetime(
+            event.get("issuer_company_available_at_utc"),
+            utc=True,
+            errors="coerce",
+        )
+        if pd.isna(company_available) or pd.Timestamp(company_available) > event_available_at:
+            raise DataReadinessError(
+                "event-family issuer company availability is missing or post-event"
+            )
+        patterns.update(
+            rf"(?<![a-z0-9]){re.escape(alias)}(?![a-z0-9])"
+            for alias in _company_aliases(company)
+        )
+    if not patterns:
+        raise DataReadinessError(
+            "event-family classification requires ticker or causal issuer company"
+        )
+    return tuple(sorted(patterns, key=lambda value: (-len(value), value)))
+
+
+def _company_aliases(company: str) -> set[str]:
+    tokens = re.findall(r"[a-z0-9]+", company)
+    while tokens and tokens[-1] in _COMPANY_SUFFIXES:
+        tokens.pop()
+    if not tokens:
+        return set()
+    aliases = {" ".join(tokens)}
+    if (
+        len(tokens) > 1
+        and len(tokens[0]) >= 4
+        and tokens[0] not in _AMBIGUOUS_COMPANY_PREFIXES
+    ):
+        aliases.add(tokens[0])
+    return aliases
+
+
+def _issuer_alternation(patterns: Sequence[str]) -> str:
+    return "(?:" + "|".join(patterns) + ")"
 
 
 def _normalized_text(value: object) -> str:

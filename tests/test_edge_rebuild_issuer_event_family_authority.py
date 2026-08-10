@@ -52,6 +52,16 @@ def test_publishes_immutable_multilabel_authority(tmp_path: Path) -> None:
     assert set(authority.events["event_family"]) == {"earnings", "guidance"}
     assert authority.events["research_eligible"].astype(bool).all()
     assert not authority.events["production_eligible"].astype(bool).any()
+    assert authority.manifest["family_status"] == {
+        "earnings": "admitted",
+        "guidance": "admitted",
+        "sec_material_event": "blocked_missing_source",
+        "analyst_revision": "absent",
+        "offering": "absent",
+        "merger_acquisition": "absent",
+        "regulatory_decision": "absent",
+        "product_event": "absent",
+    }
     assigned = authority.assignments.loc[authority.assignments["status"].eq("assigned")]
     assert set(assigned["event_family"]) == {"earnings", "guidance"}
     assert set(assigned["window_name"]) == {"1d", "3d"}
@@ -215,6 +225,222 @@ def test_known_coverage_uses_consistent_timestamp_units() -> None:
     assert known == {"covered"}
 
 
+def test_causal_issuer_company_is_attached_from_identity_authority() -> None:
+    events = _events(_event()).drop(
+        columns=["issuer_company", "issuer_company_available_at_utc"]
+    )
+    intervals = authority_module._identity_intervals_by_security(
+        _identities(events)
+    )
+
+    attached = authority_module._attach_causal_issuer_companies(events, intervals)
+
+    assert attached["issuer_company"].tolist() == ["Acme"]
+    assert attached["issuer_company_available_at_utc"].tolist() == [
+        pd.Timestamp("2020-01-01T00:00:00Z")
+    ]
+
+
+def test_alpaca_coverage_does_not_cover_sec_material_events() -> None:
+    policy = authority_module.load_swing_event_family_policy(_POLICY_PATH)
+    coverage = authority_module._build_family_coverage(
+        _coverage(
+            _coverage_row(
+                chunk_id="chunk-1",
+                security_id="security:acme",
+                ticker="ACME",
+                status="observed",
+            )
+        ),
+        relation_chunk_ids={"chunk-1"},
+        blind_security_ids=set(),
+        policy=policy,
+        collection_completed_at=pd.Timestamp("2025-01-04T00:00:00Z"),
+    )
+
+    assert "sec_material_event" not in set(coverage["event_family"])
+
+
+@pytest.mark.parametrize("target", ["events", "coverage"])
+def test_source_family_outside_policy_is_rejected(target: str) -> None:
+    policy = authority_module.load_swing_event_family_policy(_POLICY_PATH)
+    if target == "events":
+        events = _events(_event(source_family="unsupported"))
+        with pytest.raises(DataReadinessError, match="outside policy"):
+            authority_module._build_family_events(
+                events,
+                _relations(_relation(event_id="event-1", relation_id="relation-1")),
+                policy=policy,
+                coverage_known=True,
+            )
+    else:
+        coverage_row = _coverage_row(
+            chunk_id="chunk-1",
+            security_id="security:acme",
+            ticker="ACME",
+            status="observed",
+        )
+        coverage_row["source_family"] = "unsupported"
+        with pytest.raises(DataReadinessError, match="outside policy"):
+            authority_module._build_family_coverage(
+                _coverage(coverage_row),
+                relation_chunk_ids={"chunk-1"},
+                blind_security_ids=set(),
+                policy=policy,
+                collection_completed_at=pd.Timestamp("2025-01-04T00:00:00Z"),
+            )
+
+
+def test_cohort_assignments_require_corresponding_source_coverage() -> None:
+    policy = authority_module.load_swing_event_family_policy(_POLICY_PATH)
+    coverage = authority_module._build_family_coverage(
+        _coverage(
+            _coverage_row(
+                chunk_id="chunk-1",
+                security_id="security:acme",
+                ticker="ACME",
+                status="observed",
+            )
+        ),
+        relation_chunk_ids={"chunk-1"},
+        blind_security_ids=set(),
+        policy=policy,
+        collection_completed_at=pd.Timestamp("2025-01-04T00:00:00Z"),
+    )
+    events = pd.DataFrame.from_records(
+        [
+            {
+                "family_event_id": "alpaca-event",
+                "event_family": "earnings",
+                "source_family": "alpaca",
+                "security_id": "security:acme",
+                "feature_available_at_utc": pd.Timestamp("2025-01-01T12:00:00Z"),
+                "research_eligible": True,
+            },
+            {
+                "family_event_id": "sec-event",
+                "event_family": "earnings",
+                "source_family": "sec",
+                "security_id": "security:acme",
+                "feature_available_at_utc": pd.Timestamp("2025-01-01T13:00:00Z"),
+                "research_eligible": True,
+            },
+        ]
+    )
+    decisions = pd.DataFrame.from_records(
+        [
+            {
+                "decision_id": "alpaca-covered",
+                "security_id": "security:acme",
+                "decision_time_utc": pd.Timestamp("2025-01-02T14:00:00Z"),
+                "sector": "Technology",
+            },
+            {
+                "decision_id": "sec-not-covered",
+                "security_id": "security:acme",
+                "decision_time_utc": pd.Timestamp("2025-01-03T14:00:00Z"),
+                "sector": "Technology",
+            },
+        ]
+    )
+    assignments = pd.DataFrame.from_records(
+        [
+            {
+                "status": "assigned",
+                "event_family": "earnings",
+                "original_source_family": "alpaca",
+                "decision_id": "alpaca-covered",
+                "event_id": "alpaca-event",
+            },
+            {
+                "status": "assigned",
+                "event_family": "earnings",
+                "original_source_family": "sec",
+                "decision_id": "sec-not-covered",
+                "event_id": "sec-event",
+            },
+        ]
+    )
+
+    audit = authority_module._build_cohort_audit(
+        events,
+        assignments,
+        coverage,
+        decisions,
+        policy=policy,
+    )
+
+    overall = audit.loc[
+        audit["event_family"].eq("earnings")
+        & audit["dimension_type"].eq("overall")
+    ].iloc[0]
+    assert overall["known_coverage_decision_count"] == 2
+    assert overall["assigned_decision_count"] == 1
+    assert overall["abstention_count"] == 1
+    assert overall["abstention_rate"] == pytest.approx(0.5)
+    for dimension in ("calendar_month", "sector"):
+        row = audit.loc[
+            audit["event_family"].eq("earnings")
+            & audit["dimension_type"].eq(dimension)
+        ].iloc[0]
+        assert row["known_coverage_decision_count"] == 2
+        assert row["assigned_decision_count"] == 1
+    source_rows = audit.loc[
+        audit["event_family"].eq("earnings")
+        & audit["dimension_type"].eq("source_family")
+    ].set_index("dimension_value")
+    assert source_rows.loc["alpaca", "assigned_decision_count"] == 1
+    assert source_rows.loc["sec", "assigned_decision_count"] == 0
+    assert source_rows.loc["sec", "known_coverage_decision_count"] == 0
+
+
+def test_cohort_record_rejects_more_assignments_than_known_coverage() -> None:
+    with pytest.raises(DataReadinessError, match="exceed known coverage"):
+        authority_module._cohort_record(
+            "earnings",
+            "overall",
+            "all",
+            pd.DataFrame(columns=["security_id", "feature_available_at_utc"]),
+            pd.DataFrame({"decision_id": ["not-covered"]}),
+            0,
+        )
+
+
+@pytest.mark.parametrize(
+    ("abstention_count", "abstention_rate"),
+    [(0, 0.5), (1, 0.25)],
+)
+def test_cohort_audit_rejects_inconsistent_abstention(
+    abstention_count: int,
+    abstention_rate: float,
+) -> None:
+    frame = pd.DataFrame.from_records(
+        [
+            {
+                "event_family": "earnings",
+                "dimension_type": "overall",
+                "dimension_value": "all",
+                "event_count": 1,
+                "security_count": 1,
+                "assigned_decision_count": 1,
+                "known_coverage_decision_count": 2,
+                "abstention_count": abstention_count,
+                "abstention_rate": abstention_rate,
+                "first_event_available_at_utc": pd.Timestamp(
+                    "2025-01-01T12:00:00Z"
+                ),
+                "last_event_available_at_utc": pd.Timestamp(
+                    "2025-01-01T12:00:00Z"
+                ),
+                "schema_version": authority_module.AUTHORITY_SCHEMA,
+            }
+        ]
+    )
+
+    with pytest.raises(DataReadinessError):
+        authority_module._cohort_audit(frame).raise_for_failure()
+
+
 @pytest.mark.parametrize("target", ["child", "authority"])
 def test_tampered_child_or_authority_is_rejected(
     tmp_path: Path,
@@ -233,6 +459,74 @@ def test_tampered_child_or_authority_is_rejected(
         _write_json(authority_path, payload)
 
     with pytest.raises(DataReadinessError):
+        load_issuer_event_family_authority(inputs.output_directory)
+
+
+def test_manifest_family_status_is_recomputed_by_loader(tmp_path: Path) -> None:
+    inputs = _write_inputs(tmp_path)
+    _publish(inputs)
+    manifest_path = inputs.output_directory / "_manifest.json"
+    authority_path = inputs.output_directory / "_authority.json"
+    manifest = _read_json(manifest_path)
+    family_status = manifest["family_status"]
+    assert isinstance(family_status, dict)
+    family_status["earnings"] = "absent"
+    _write_json(manifest_path, manifest)
+    authority = _read_json(authority_path)
+    authority["artifact_sha256"] = file_sha256(manifest_path)
+    _write_json(authority_path, authority)
+
+    with pytest.raises(DataReadinessError, match="family status"):
+        load_issuer_event_family_authority(inputs.output_directory)
+
+
+def test_coherently_resigned_cohort_tamper_fails_semantic_replay(
+    tmp_path: Path,
+) -> None:
+    inputs = _write_inputs(tmp_path)
+    _publish(inputs)
+    cohort_path = inputs.output_directory / "cohort_audit.parquet"
+    cohort, child = load_canonical_artifact(
+        cohort_path,
+        expected_type="issuer_event_family_cohort_audit",
+        allow_research=True,
+    )
+    target = cohort.index[
+        cohort["dimension_type"].eq("overall")
+        & cohort["event_family"].eq("earnings")
+    ][0]
+    assigned = int(cohort.loc[target, "assigned_decision_count"])
+    known = int(cohort.loc[target, "known_coverage_decision_count"])
+    assert assigned > 0 and known >= assigned
+    cohort.loc[target, "assigned_decision_count"] = assigned - 1
+    cohort.loc[target, "abstention_count"] = known - assigned + 1
+    cohort.loc[target, "abstention_rate"] = (known - assigned + 1) / known
+    child_inputs = child["inputs"]
+    assert isinstance(child_inputs, dict)
+    rewritten = write_canonical_artifact(
+        cohort,
+        cohort_path,
+        artifact_type="issuer_event_family_cohort_audit",
+        audit=authority_module._cohort_audit(cohort),
+        inputs={str(key): value for key, value in child_inputs.items()},
+        production_ready=False,
+    )
+    cohort_path.with_name(f"{cohort_path.name}.lock").unlink(missing_ok=True)
+
+    manifest_path = inputs.output_directory / "_manifest.json"
+    authority_path = inputs.output_directory / "_authority.json"
+    manifest = _read_json(manifest_path)
+    artifacts = manifest["artifacts"]
+    assert isinstance(artifacts, dict)
+    cohort_record = artifacts["cohort_audit"]
+    assert isinstance(cohort_record, dict)
+    cohort_record["sha256"] = rewritten["artifact_sha256"]
+    _write_json(manifest_path, manifest)
+    authority = _read_json(authority_path)
+    authority["artifact_sha256"] = file_sha256(manifest_path)
+    _write_json(authority_path, authority)
+
+    with pytest.raises(DataReadinessError, match="semantic replay"):
         load_issuer_event_family_authority(inputs.output_directory)
 
 
@@ -435,12 +729,15 @@ def _event(
     title: str = "Acme reports Q2 earnings and raises full-year guidance",
     published_at: str = "2025-01-02T13:50:00Z",
     available_at: str = "2025-01-02T14:00:00Z",
+    source_family: str = "alpaca",
 ) -> dict[str, object]:
     return {
         "event_id": event_id,
         "security_id": security_id,
         "ticker": ticker,
-        "source_family": "alpaca",
+        "source_family": source_family,
+        "issuer_company": "Acme Corporation",
+        "issuer_company_available_at_utc": pd.Timestamp("2020-01-01T00:00:00Z"),
         "title": title,
         "summary": "",
         "text": "",
@@ -490,8 +787,8 @@ def _coverage_row(
         "security_id": security_id,
         "ticker": ticker,
         "source_family": "alpaca",
-        "requested_start_utc": pd.Timestamp("2025-01-01T00:00:00Z"),
-        "requested_end_utc": pd.Timestamp("2025-01-03T00:00:00Z"),
+        "requested_start_utc": pd.Timestamp("2024-12-30T00:00:00Z"),
+        "requested_end_utc": pd.Timestamp("2025-01-04T00:00:00Z"),
         "completed_at_utc": pd.Timestamp("2025-01-04T00:00:00Z"),
         "status": status,
     }

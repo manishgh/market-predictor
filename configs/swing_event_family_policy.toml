@@ -1,5 +1,5 @@
-schema_version = "market_predictor.swing_event_family_authority.v1"
-event_family_policy_version = "swing.issuer_event_family.v1"
+schema_version = "market_predictor.swing_event_family_authority.v2"
+event_family_policy_version = "swing.issuer_event_family.v2"
 minimum_decision_date = "2019-07-09"
 training_eligible_relation_channels = ["direct_issuer"]
 research_source_families = ["alpaca", "sec", "finviz"]
@@ -19,6 +19,16 @@ event_families = [
   "regulatory_decision",
   "product_event",
 ]
+
+[allowed_source_families]
+earnings = ["alpaca", "finviz"]
+guidance = ["alpaca", "finviz"]
+sec_material_event = ["sec"]
+analyst_revision = ["alpaca", "finviz"]
+offering = ["alpaca", "finviz", "sec"]
+merger_acquisition = ["alpaca", "finviz"]
+regulatory_decision = ["alpaca", "finviz"]
+product_event = ["alpaca", "finviz"]
 
 [assignment_windows]
 "1d" = "1D"
