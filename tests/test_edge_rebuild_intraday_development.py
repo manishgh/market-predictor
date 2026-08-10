@@ -35,8 +35,18 @@ def test_repository_development_policy_freezes_future_boundary_and_economics() -
     assert config.maximum_process_memory_gib == 4.0
 
 
-def test_development_run_publishes_no_candidate_without_opening_future(tmp_path: Path) -> None:
+def test_development_run_publishes_no_candidate_without_opening_future(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     dataset = _publish_dataset(tmp_path / "dataset", _training_frame())
+    published = intraday_development.load_published_intraday_dataset(dataset)
+    original = published.frame.copy(deep=True)
+    monkeypatch.setattr(
+        intraday_development,
+        "load_published_intraday_dataset",
+        lambda _: published,
+    )
     output = tmp_path / "development"
     result = train_intraday_development_candidate(dataset, output, config=_rejecting_config())
 
@@ -56,6 +66,7 @@ def test_development_run_publishes_no_candidate_without_opening_future(tmp_path:
         for record in evaluation["validation_candidates"]
     )
     assert evaluation["auditable_policy_ledger"]["selection_status"] == "best_failed_diagnostic_only"
+    pd.testing.assert_frame_equal(published.frame, original)
 
     with pytest.raises(DataReadinessError, match="locked until validation"):
         evaluate_future_intraday_holdout(output, tmp_path / "must-not-be-opened", tmp_path / "future")

@@ -202,24 +202,3 @@ def _granville_and_kaufman(
         path = float(path_change[start + 1 : index + 1].sum())
         efficiency[index] = np.float32(abs(close[index] - close[start]) / path if path > 0.0 else 0.0)
     return obv, efficiency
-
- c l a s s   I n t r a d a y C r o s s S e c t i o n a l S t e p : 
-         d e f   _ _ i n i t _ _ ( s e l f ,   c o n t r a c t :   S t r a t e g y C o n t r a c t ) : 
-                 s e l f . c o n t r a c t   =   c o n t r a c t 
- 
-         d e f   t r a n s f o r m ( s e l f ,   d a t a :   p d . D a t a F r a m e )   - >   p d . D a t a F r a m e : 
-                 i f   d a t a . e m p t y : 
-                         r e t u r n   d a t a 
-                         
-                 d a t a   =   d a t a . c o p y ( ) 
-                 i n d i c a t o r s   =   [ 
-                         ' r s i _ 1 4 ' ,   ' m a c d ' ,   ' e m a _ 1 0 _ d i s t a n c e ' ,   ' s m a _ 1 0 _ d i s t a n c e ' ,   ' s e s s i o n _ v w a p _ d i s t a n c e _ a t r ' 
-                 ] 
-                 f o r   c o l   i n   i n d i c a t o r s : 
-                         i f   c o l   i n   d a t a . c o l u m n s : 
-                                 m e a n   =   d a t a . g r o u p b y ( ' f e a t u r e _ a v a i l a b l e _ a t _ u t c ' ) [ c o l ] . t r a n s f o r m ( ' m e a n ' ) 
-                                 s t d   =   d a t a . g r o u p b y ( ' f e a t u r e _ a v a i l a b l e _ a t _ u t c ' ) [ c o l ] . t r a n s f o r m ( ' s t d ' ) . r e p l a c e ( 0 . 0 ,   n p . n a n ) 
-                                 d a t a [ f ' { c o l } _ z s c o r e ' ]   =   ( ( d a t a [ c o l ]   -   m e a n )   /   s t d ) . a s t y p e ( ' f l o a t 3 2 ' ) 
-                 r e t u r n   d a t a 
-  
- 

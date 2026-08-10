@@ -573,6 +573,22 @@ def test_economic_gate_uses_holding_aligned_benchmarks_and_portfolio_path() -> N
     assert "portfolio_daily_return_ci_low_positive" in gate["checks"]
 
 
+def test_validation_threshold_requires_every_scope_economic_gate() -> None:
+    assert not swing_training._validation_scopes_pass_economic_gates({})
+    assert not swing_training._validation_scopes_pass_economic_gates(
+        {
+            "temporal": {"economic_gate": {"passed": True}},
+            "unseen_security": {"economic_gate": {"passed": False}},
+        }
+    )
+    assert swing_training._validation_scopes_pass_economic_gates(
+        {
+            "temporal": {"economic_gate": {"passed": True}},
+            "unseen_security": {"economic_gate": {"passed": True}},
+        }
+    )
+
+
 def test_no_candidate_evidence_is_immutable_and_does_not_open_test(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

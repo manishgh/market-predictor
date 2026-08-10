@@ -152,7 +152,9 @@ def test_trainer_uses_only_normalized_causal_price_features() -> None:
     assert expected_new_features.issubset(MODEL_FEATURE_COLUMNS)
     assert raw_price_features.isdisjoint(MODEL_FEATURE_COLUMNS)
     assert not any(
-        token in column for column in MODEL_FEATURE_COLUMNS for token in ("news", "catalyst", "sentiment", "sec_filing", "source_count_sec")
+        token in column
+        for column in MODEL_FEATURE_COLUMNS
+        for token in ("news", "catalyst", "sentiment", "sec_filing", "source_count_sec")
     )
     assert len(intraday_training._candidate_specs(_config())) - 1 <= 6
 
@@ -688,6 +690,7 @@ def _selection_record(
         "max_drawdown_after_costs": 0.02,
         "expected_calibration_error": 0.05,
         "brier_score": 0.20,
+        "decision_group_rank_ic_mean": 0.1,
         "session_block_bootstrap_95_ci": {
             "top_k_average_net_return": {"low": net_ci_low},
             "top_k_average_spy_excess_return": {"low": benchmark_ci_low},

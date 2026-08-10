@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import gc
 import hashlib
 import json
 import math
@@ -212,13 +213,36 @@ def train_intraday_development_candidate(
     data = _validate_development_frame(published, policy)
     sessions = _ordered_sessions(data)
     folds = _walk_forward_folds(data, sessions, policy)
+    # Keep one compact feature matrix; candidate fits are sequential.
+    features_full = data[list(MODEL_FEATURE_COLUMNS)].to_numpy(dtype="float32", copy=True)
+    target_full = data["net_return"].to_numpy(dtype="float64", copy=True)
+    data.drop(columns=list(MODEL_FEATURE_COLUMNS), inplace=True)
+
+    frozen_cost_bps = published.frozen_round_trip_cost_bps
+    dataset_identity_val = _dataset_identity(published)
+    gc.collect()
+
     validation_records: list[dict[str, Any]] = []
-    validation_predictions: dict[str, pd.DataFrame] = {}
+    retained_predictions: dict[str, pd.DataFrame] = {}
     for spec in _candidate_specs(policy):
-        scored, fold_records = _walk_forward_predictions(spec, data, folds, policy)
-        validation_predictions[spec.candidate_id] = scored
-        record = _evaluate_spec(spec, scored, fold_records, policy, published.frozen_round_trip_cost_bps)
+        scored, fold_records = _walk_forward_predictions(spec, data, features_full, target_full, folds, policy)
+        record = _evaluate_spec(spec, scored, fold_records, policy, frozen_cost_bps)
         validation_records.append(record)
+        passed = [r for r in validation_records if bool(r["validation_passed"])]
+        current_selected = max(passed, key=_selection_key) if passed else None
+        current_audit_candidate, _, _ = _audit_policy_choice(validation_records, current_selected)
+
+        retained_predictions[spec.candidate_id] = scored
+        keys_to_keep = {current_audit_candidate}
+        if current_selected is not None:
+            keys_to_keep.add(str(current_selected["candidate_id"]))
+
+        for k in list(retained_predictions.keys()):
+            if k not in keys_to_keep:
+                del retained_predictions[k]
+
+        gc.collect()
+
         _guard_memory(policy, f"{spec.candidate_id} validation", peak=True)
 
     passed = [record for record in validation_records if bool(record["validation_passed"])]
@@ -238,7 +262,7 @@ def train_intraday_development_candidate(
         "future_holdout_opened": False,
         "future_holdout_start_date": policy.future_holdout_start_date,
         "development_end_date": policy.development_end_date,
-        "dataset": _dataset_identity(published),
+        "dataset": dataset_identity_val,
         "training_config": config_payload,
         "training_config_sha256": config_hash,
         "validation_candidates": validation_records,
@@ -251,9 +275,9 @@ def train_intraday_development_candidate(
         selected,
     )
     audit_ledger = _position_ledger(
-        validation_predictions[audit_candidate],
+        retained_predictions[audit_candidate],
         audit_threshold,
-        published.frozen_round_trip_cost_bps,
+        frozen_cost_bps,
         policy,
     )
     evaluation["auditable_policy_ledger"] = {
@@ -285,7 +309,7 @@ def train_intraday_development_candidate(
     candidate: dict[str, Any] | None = None
     if selected is not None:
         spec = next(item for item in _candidate_specs(policy) if item.candidate_id == selected_id)
-        fitted = _fit(spec, data, policy)
+        fitted = _fit(spec, features_full, target_full, policy)
         candidate = {
             "schema_version": MODEL_SCHEMA_VERSION,
             "status": "candidate",
@@ -295,10 +319,10 @@ def train_intraday_development_candidate(
             "family": spec.family,
             "hyperparameters": dict(spec.hyperparameters),
             "expected_net_return_threshold_bps": float(selected["selected_threshold_bps"]),
-            "frozen_round_trip_cost_bps": published.frozen_round_trip_cost_bps,
+            "frozen_round_trip_cost_bps": frozen_cost_bps,
             "feature_columns": list(MODEL_FEATURE_COLUMNS),
             "estimator": fitted,
-            "dataset": _dataset_identity(published),
+            "dataset": dataset_identity_val,
             "training_config": config_payload,
             "training_config_sha256": config_hash,
             "future_data_contract": _future_data_contract(policy),
@@ -542,14 +566,17 @@ def _candidate_specs(config: IntradayDevelopmentConfig) -> tuple[_CandidateSpec,
     return ridge + hgb
 
 
-def _fit(spec: _CandidateSpec, frame: pd.DataFrame, config: IntradayDevelopmentConfig) -> Any:
-    features = frame.loc[:, MODEL_FEATURE_COLUMNS]
-    target = frame["net_return"].to_numpy(dtype="float64")
+def _fit(
+    spec: _CandidateSpec,
+    features: np.ndarray,
+    target: np.ndarray,
+    config: IntradayDevelopmentConfig,
+) -> Any:
     if spec.family == "ridge_expected_net":
         estimator: Any = Pipeline(
             [
-                ("scale", StandardScaler()),
-                ("regressor", Ridge(alpha=float(spec.hyperparameters["alpha"]))),
+                ("scale", StandardScaler(copy=False)),
+                ("regressor", Ridge(alpha=float(spec.hyperparameters["alpha"]), solver="cholesky")),
             ]
         )
     elif spec.family == "hgb_expected_net":
@@ -569,20 +596,44 @@ def _fit(spec: _CandidateSpec, frame: pd.DataFrame, config: IntradayDevelopmentC
 def _walk_forward_predictions(
     spec: _CandidateSpec,
     data: pd.DataFrame,
+    features_full: np.ndarray,
+    target_full: np.ndarray,
     folds: tuple[_Fold, ...],
     config: IntradayDevelopmentConfig,
 ) -> tuple[pd.DataFrame, list[dict[str, Any]]]:
     evidence: list[pd.DataFrame] = []
     records: list[dict[str, Any]] = []
     for fold in folds:
-        train = data[data["session_date_et"].isin(fold.train_sessions)]
-        validation = data[data["session_date_et"].isin(fold.validation_sessions)].copy()
-        max_label = train["label_available_at_utc"].max()
-        min_decision = validation["decision_time_utc"].min()
+        train_mask = data["session_date_et"].isin(fold.train_sessions).to_numpy()
+        max_label = data.loc[train_mask, "label_available_at_utc"].max()
+        validation_mask = data["session_date_et"].isin(fold.validation_sessions).to_numpy()
+        min_decision = data.loc[validation_mask, "decision_time_utc"].min()
         if max_label >= min_decision:
             raise DataReadinessError(f"fold {fold.fold} violates label-time purging")
-        estimator = _fit(spec, train, config)
-        score = np.asarray(estimator.predict(validation.loc[:, MODEL_FEATURE_COLUMNS]), dtype="float64")
+
+        gc.collect()
+
+        train_features = features_full[train_mask]
+        train_target = target_full[train_mask]
+        estimator = _fit(spec, train_features, train_target, config)
+
+        del train_features, train_target
+        gc.collect()
+
+        score = np.asarray(estimator.predict(features_full[validation_mask]), dtype="float64")
+
+        keep_columns = (
+            "session_date_et",
+            "decision_group_id",
+            "entry_time_utc",
+            "exit_bar_end_utc",
+            "security_id",
+            "dataset_row_id",
+            "ticker",
+            "net_return",
+            "gross_return",
+        )
+        validation = data.loc[validation_mask, keep_columns].copy()
         validation["predicted_net_return"] = score
         validation["fold"] = fold.fold
         evidence.append(validation)

@@ -1401,10 +1401,7 @@ def _evaluate_validation_candidate(
                 )
                 for scope, frame in pooled.items()
             }
-            passed = all(
-                bool(metrics["economic_gate"]["passed"])
-                for metrics in scope_metrics.values()
-            )
+            passed = _validation_scopes_pass_economic_gates(scope_metrics)
             threshold_records.append({
                 "probability_threshold": threshold,
                 "eligible": passed,
@@ -1460,6 +1457,17 @@ def _evaluate_validation_candidate(
     if eligible:
         record["selection_key"] = list(_selection_key(record))
     return record
+
+
+def _validation_scopes_pass_economic_gates(
+    scope_metrics: Mapping[str, Mapping[str, Any]],
+) -> bool:
+    if not scope_metrics:
+        return False
+    return all(
+        bool(_mapping(metrics.get("economic_gate"), "economic gate")["passed"])
+        for metrics in scope_metrics.values()
+    )
 
 
 def _probability_distribution(probability: np.ndarray) -> dict[str, float]:

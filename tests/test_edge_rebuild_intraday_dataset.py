@@ -677,6 +677,25 @@ def test_tampered_published_partition_is_detected(tmp_path: Path, monkeypatch: p
         load_complete_intraday_dataset(tmp_path / "dataset")
 
 
+def test_dataset_loader_enforces_partition_metadata_verification(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    verified = _verified_inputs(tmp_path)
+    _publish(tmp_path, monkeypatch, verified)
+
+    def reject_partition_metadata(*_: object, **__: object) -> None:
+        raise DataReadinessError("partition metadata rejected")
+
+    monkeypatch.setattr(
+        dataset_module,
+        "_verify_monthly_partition_files",
+        reject_partition_metadata,
+    )
+    with pytest.raises(DataReadinessError, match="partition metadata rejected"):
+        load_complete_intraday_dataset(tmp_path / "dataset")
+
+
 def test_stock_loading_is_bounded_to_one_exchange_session(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

@@ -5,6 +5,7 @@ minimum_train_sessions = 60
 minimum_validation_sessions = 20
 embargo_sessions = 1
 maximum_label_horizon_minutes = 30
+target_atr_multiple = 2.0
 calibration_fraction = 0.20
 minimum_calibration_sessions = 5
 minimum_rows = 1000
