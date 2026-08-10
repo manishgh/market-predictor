@@ -8,7 +8,7 @@ Repository: `C:\project\market-predictor`
 
 Branch: `er-intraday-refactoring`
 
-Last completed implementation commit: `cb2aba5` (`Build governed swing baseline ablations`)
+Last completed implementation commit: `527e20f` (`Optimize A3 cohort semantic replay`)
 
 ## Purpose
 
@@ -20,6 +20,11 @@ scopes.
 
 This repository produces prediction intelligence and abstention. Alerts, orders,
 positions, portfolio risk, and execution remain in `trading_flow`.
+
+Checkpoint names: A0 restores research integrity; A1 verifies labels and leakage;
+A2 builds the technical swing baseline; A3 builds catalyst-driven swing specialists;
+A4 builds the technical intraday baseline; A5 builds catalyst-driven intraday
+specialists; A6 performs locked evaluation and promotion.
 
 ## Verified State
 
@@ -42,7 +47,7 @@ positions, portfolio risk, and execution remain in `trading_flow`.
   `not_applicable_single_class`, never fabricated metrics.
 - Intraday remains capped at 4 GiB and swing candidate training at 5 GiB.
 
-## A2 Verification
+## A2: Technical Swing Baseline Verification
 
 - Commit `cb2aba5` freezes four nested baseline groups: momentum/volatility, trend
   confirmation, pullback timing, and volume/liquidity.
@@ -61,7 +66,28 @@ positions, portfolio risk, and execution remain in `trading_flow`.
   Tracked Ruff, strict mypy on five changed production modules, compileall, governance
   hash replay, and diff checks passed.
 
-## A1 Verification
+## A3.1/A3.2: Issuer Event Authority Verification
+
+- V2 title-derived classifications require a causal issuer anchor and an approved
+  source/family pair. Ambiguous bare tickers, another issuer's catalyst, and
+  preview/conditional language do not become training events.
+- The `2019-07-09` through `2021-07-08` authority strictly replays 9,018 classified
+  events, 30,875 assignments, and 28,462 coverage rows. Peak observed memory was
+  1.998 GiB.
+- The `2021-07-09` through `2026-07-08` authority strictly replays 26,370 classified
+  and research-eligible events across 525 securities, 90,136 assignments, and 18,333
+  coverage rows. Manifest-recorded peak memory was 2.157 GiB.
+- The second authority was rebuilt entirely from the existing 2,608-chunk Alpaca
+  archive: 2,608 chunks verified, zero failures, and 980,034 attribution relations.
+  No provider request or redownload occurred.
+- Seven Alpaca-supported families are admitted. `sec_material_event` is
+  `blocked_missing_source`; missing SEC authority is not represented by Alpaca
+  coverage or a numeric zero.
+- Both authorities are retrospective, research-only evidence. A3.3 precision review
+  is still required. No A3 training dataset, model, locked-test metric, or promotion
+  exists.
+
+## A1: Label and Leakage-Control Verification
 
 - Consolidated A1 label, dataset, outcome, and trainer tests: 87 passed, 1 skipped;
   the final corrected swing feature-time poison test also passed.
@@ -93,16 +119,16 @@ for repeated locked-test tuning. Promotion also requires ranking, calibration,
 after-cost benchmark-relative economics, drawdown, turnover, capacity, stability, and
 coverage.
 
-## Exact Next Step: A3
+## Exact Next Step: A3.3 - Audit Event Precision and Coverage
 
-1. Inventory issuer-event histories for earnings/guidance, SEC material events,
-   analyst revisions, offerings, M&A, regulatory decisions, and product events.
-2. Admit a family only when publication/acceptance time, first availability, issuer
-   identity, relevance, source coverage, and exact decision assignment replay.
-3. Publish event-family cohort counts by calendar period, sector, security, and event
-   type. Unknown coverage remains null and causes exclusion or abstention.
-4. Preregister technical-only, event-only, and technical-plus-event comparisons on
-   identical decisions. Train no specialist until its complete causal horizon verifies.
+1. **A3.3 - Audit event precision and coverage:** publish deterministic,
+   proportionally sampled event clusters for both authority generations. Use two blind
+   reviewers, explicit adjudication, one-sided confidence bounds, issuer-error gates,
+   agreement diagnostics, and bounded-memory immutable replay.
+2. **A3.4 - Build identical-decision ablations:** technical-only, event-only, and
+   technical-plus-event must share decisions and labels.
+3. **A3.5 - Train and evaluate specialists:** train only after the complete causal
+   horizon and precision gates verify; remain abstaining outside verified cohorts.
 
 ## Source Boundary
 

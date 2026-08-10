@@ -144,7 +144,7 @@ immutable artifact exists. `Blocked` means training or serving is prohibited.
 | Intraday ticker-catalyst overlay | Alpaca archives exist; scored/attributed catalyst authority not yet published | Not an estimator input | Snapshot contract verified; runtime authority pending | Separate overlay hash, coverage, count, sentiment, and unknown state verified | Cannot alter entry probability; ranking use blocked until authority exists | Blocked until promoted bundle and orchestrator exist | Authority pending |
 | Intraday global overlay | GDELT collector and global authority verified in code; no production collection published | Not an estimator input | Observed-time collection, immutable query policy, and unknown/zero behavior verified | Separate global overlay contract verified | Ranking use blocked until runtime authority exists | Blocked until promoted bundle and orchestrator exist | Runtime artifact pending |
 | Swing technical estimator | Daily SIP/all, point-in-time membership, and V11 panel verify | Verified | Verified; latest closed session required | A2 nested technical schema and per-model subsets verified | Replacement trainer complete; new candidate not run | Blocked until promotion | Implementation ready |
-| Swing ticker-catalyst estimator | Alpaca catalyst V5 and V11 profile replay | Verified | Verified against exact authority | Separate A3 event-driven family; source set exactly Alpaca until a new authority is approved | Prior broad catalyst candidates rejected; specialists not trained | Blocked until promotion | A3 pending |
+| Swing ticker-catalyst estimator | Two immutable V2 Alpaca issuer-event authorities cover `2019-07-09` through `2026-07-08`; strict replay verified | Verified for issuer identity, availability, source-family mapping, assignment, and coverage | Batch feature dataset not yet published | Separate A3 event-driven family; seven Alpaca-supported event families; SEC material event blocked without SEC authority | Precision audit, identical-decision ablation, and specialist training remain open | Blocked until promotion | A3.1/A3.2 verified; A3.3 active |
 | Swing global overlay | Global collector and decision authority verified in code | Separate overlay; never attached as ticker news | Verified code | Separate global authority hash and source policy | Cannot rescue or alter a rejected estimator; ranking use requires complete authority | Blocked until promoted bundle and orchestrator exist | Runtime artifact pending |
 
 ## Training decision
@@ -152,6 +152,8 @@ immutable artifact exists. `Blocked` means training or serving is prohibited.
 Technical data readiness does not block the A2 baseline. Candidate v2 was trained
 correctly and rejected because its out-of-sample economic edge was not stable, not
 because data was missing. The replacement trainer is verified but has not produced a
-new statistical result. A3 event families remain blocked until their complete causal
-authorities and identical-decision ablations are preregistered. The locked test stays
-unopened during selection; global context remains a separate overlay.
+new statistical result. A3 causal event authorities now exist for the complete
+development horizon, but event-family precision review and identical-decision
+ablations are not complete. No event specialist may train until those gates pass. The
+locked test stays unopened during selection; global context remains a separate
+overlay.

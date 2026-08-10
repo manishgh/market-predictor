@@ -107,7 +107,17 @@ their comparable binary outcome view; it is not permission to optimize repeatedl
 the locked test. Ranking quality, calibration, benchmark-relative net economics,
 drawdown, turnover, capacity, and coverage remain co-equal promotion gates.
 
-### A0 - Research-integrity recovery (`completed`)
+| Code | Descriptive checkpoint | State |
+| --- | --- | --- |
+| A0 | Restore research integrity | Completed |
+| A1 | Verify labels and leakage controls | Completed |
+| A2 | Build the technical swing baseline | Completed |
+| A3 | Build catalyst-driven swing specialists | In progress |
+| A4 | Build the technical intraday baseline | Not started |
+| A5 | Build catalyst-driven intraday specialists | Not started |
+| A6 | Run locked evaluation and promote qualified models | Not started |
+
+### A0 - Restore Research Integrity (`completed`)
 
 Problem: the current working tree contains unfinished experimental edits that bypass
 economic validation, partition verification, source missingness, and governed sector
@@ -140,7 +150,7 @@ columns that had no valid decision-cohort implementation. Focused verification p
 repository-lock permission failures passed independently with normal repository access.
 Ruff, strict mypy, compileall, and staged diff checks passed.
 
-### A1 - Labels, metrics, and negative controls (`completed`)
+### A1 - Verify Labels and Leakage Controls (`completed`)
 
 - Freeze one comparable binary diagnostic for each model plus the economic training
   target: managed and exact-ten-session benchmark-relative swing return and
@@ -161,7 +171,7 @@ poison tests cannot alter validation selection. The canonical suite passed 1,110
 with two skipped; tracked Ruff, changed-module strict mypy, compileall, and diff checks
 passed.
 
-### A2 - Swing baseline rebuild (`completed`)
+### A2 - Build the Technical Swing Baseline (`completed`)
 
 - Evaluate compact, evidence-backed groups sequentially: benchmark/sector residual
   momentum, volatility, liquidity, turnover, quality, profitability, investment,
@@ -185,16 +195,45 @@ No new real model was trained or promoted in A2. The canonical suite passed 1,11
 tests with two skipped; tracked Ruff, changed-module strict mypy, compileall, and
 governance hash replay passed.
 
-### A3 - Swing event specialists (`in_progress`)
+### A3 - Build Catalyst-Driven Swing Specialists (`in_progress`)
 
-- Build separate earnings/guidance, SEC material-event, analyst-revision, offering,
-  M&A, regulatory, and product-event cohorts only when exact availability and issuer
-  relevance verify.
-- Model event reaction and excess-return magnitude, not generic sentiment. Report
-  event count, security count, calendar/sector coverage, abstention, and confidence
-  intervals for every specialist.
+1. **A3.1 - Verify the issuer-targeted event taxonomy.** Build separate
+   earnings/guidance, SEC material-event, analyst-revision, offering, M&A, regulatory,
+   and product-event cohorts only when exact availability and issuer relevance verify.
+2. **A3.2 - Backfill and replay historical event authorities.** Publish immutable
+   direct-issuer event, source-coverage, assignment, and cohort authorities for the
+   complete development horizon. A source cannot imply coverage for a family it does
+   not provide.
+3. **A3.3 - Audit event precision and coverage.** Use deterministic stratified review
+   samples and a preregistered lower confidence-bound precision gate. Report event,
+   security, calendar, sector, source, abstention, and unknown-coverage counts.
+4. **A3.4 - Build identical-decision ablation datasets.** Compare technical-only,
+   event-only, and technical-plus-event profiles on the same decisions and labels.
+5. **A3.5 - Train and evaluate swing event specialists.** Model event reaction and
+   benchmark-relative excess-return magnitude, not generic sentiment. A specialist
+   abstains outside its verified family and source coverage.
 
-### A4 - Intraday baseline rebuild
+Completed A3.1/A3.2 evidence: commits `6ae703c`, `58ccc3d`, and `527e20f` publish the
+V2 issuer-targeted classifier and immutable authority replay. Title-derived events
+require a causal issuer anchor; bare ambiguous ticker words, preview/conditional deal
+language, unsupported source/family pairs, and unknown coverage abstain. Two strict
+historical authorities now cover the full development horizon without new network
+collection:
+
+- `2019-07-09` through `2021-07-08`: 9,018 classified events, 30,875 assignments,
+  28,462 coverage rows, and 1.998 GiB observed peak memory;
+- `2021-07-09` through `2026-07-08`: 26,370 classified and research-eligible events
+  across 525 securities, 90,136 assignments, 18,333 coverage rows, and 2.157 GiB
+  manifest-recorded peak memory.
+
+Earnings, guidance, analyst revision, offering, merger/acquisition, regulatory
+decision, and product event are admitted as Alpaca source families. SEC material
+events remain `blocked_missing_source`; Alpaca coverage cannot imply SEC coverage.
+Both authorities are research-only retrospective evidence and cannot authorize
+production. A3.3 precision review remains open; therefore no A3 dataset, estimator,
+locked-test result, or promotion exists.
+
+### A4 - Build the Technical Intraday Baseline
 
 - Backfill Alpaca SIP one-minute bars, trades, and NBBO quotes across the complete
   intraday training horizon before adding spread or microstructure features.
@@ -202,7 +241,7 @@ governance hash replay passed.
   intensity, volume clock, VWAP displacement, opening-range, volatility, and exact
   market/sector residual features through the shared batch/live transformation.
 
-### A5 - Intraday event specialists
+### A5 - Build Catalyst-Driven Intraday Specialists
 
 - Restrict training to verified event cohorts. Use publication regime, time since
   event, premarket gap, abnormal volume, initial 5/15-minute reaction, spread,
@@ -210,7 +249,7 @@ governance hash replay passed.
 - Catalyst remains outside the broad intraday estimator unless causal ablation passes.
   Unknown coverage causes abstention, never neutral sentiment or zero event counts.
 
-### A6 - Locked evaluation and promotion
+### A6 - Run Locked Evaluation and Promote Qualified Models
 
 - Use purged, embargoed walk-forward validation plus independent unseen-security
   validation. Swing uses the frozen approximately 5/1/1-year sequence; intraday uses
