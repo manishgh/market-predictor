@@ -69,6 +69,10 @@ from market_predictor.edge_rebuild.intraday_selection import (
 from market_predictor.edge_rebuild.issuer_event_family_authority import (
     publish_issuer_event_family_authority,
 )
+from market_predictor.edge_rebuild.issuer_event_precision_audit import (
+    finalize_issuer_event_precision_audit,
+    publish_issuer_event_precision_sample,
+)
 from market_predictor.edge_rebuild.one_minute_coverage import (
     publish_selected_session_one_minute_coverage,
 )
@@ -336,11 +340,86 @@ def register_edge_rebuild_commands(app: typer.Typer, console: Any) -> None:
             {
                 "status": "complete",
                 "event_rows": len(result.events),
-                "research_eligible_event_rows": int(
-                    result.events["research_eligible"].astype(bool).sum()
-                ),
+                "research_eligible_event_rows": int(result.events["research_eligible"].astype(bool).sum()),
                 "assignment_rows": len(result.assignments),
                 "coverage_rows": len(result.coverage),
+                "production_ready": False,
+                "directory": str(result.directory),
+            }
+        )
+
+    @app.command("publish-edge-issuer-event-precision-sample")
+    @serialized_heavy_job("publish-edge-issuer-event-precision-sample")
+    def publish_edge_issuer_event_precision_sample(
+        authority_dir: Path = typer.Option(
+            ...,
+            help="Strictly verified issuer event-family authority directory.",
+        ),
+        policy: Path = typer.Option(
+            Path("configs/issuer_event_precision_audit.toml"),
+            help="Frozen issuer event-family precision audit policy.",
+        ),
+        out_dir: Path = typer.Option(
+            ...,
+            help="New immutable precision sample and blind review templates.",
+        ),
+    ) -> None:
+        """Publish a deterministic causal event-family precision sample."""
+
+        result = publish_issuer_event_precision_sample(
+            authority_directory=authority_dir,
+            policy_path=policy,
+            output_directory=out_dir,
+        )
+        console.print(
+            {
+                "status": "complete",
+                "sample_rows": len(result.sample),
+                "inferential_sample_counts": result.manifest["inferential_sample_counts"],
+                "diagnostic_sample_counts": result.manifest["diagnostic_sample_counts"],
+                "production_ready": False,
+                "directory": str(result.directory),
+            }
+        )
+
+    @app.command("finalize-edge-issuer-event-precision-audit")
+    @serialized_heavy_job("finalize-edge-issuer-event-precision-audit")
+    def finalize_edge_issuer_event_precision_audit(
+        sample_dir: Path = typer.Option(
+            ...,
+            help="Immutable issuer event-family precision sample directory.",
+        ),
+        reviewer_one: Path = typer.Option(
+            ...,
+            help="Completed reviewer-one ledger based on its blind template.",
+        ),
+        reviewer_two: Path = typer.Option(
+            ...,
+            help="Completed reviewer-two ledger based on its blind template.",
+        ),
+        adjudication: Path = typer.Option(
+            ...,
+            help="Adjudication ledger; unresolved disagreements remain blank.",
+        ),
+        out_dir: Path = typer.Option(
+            ...,
+            help="New immutable finalized precision audit directory.",
+        ),
+    ) -> None:
+        """Finalize two blind reviews and publish family admission gates."""
+
+        result = finalize_issuer_event_precision_audit(
+            sample_directory=sample_dir,
+            reviewer_one_path=reviewer_one,
+            reviewer_two_path=reviewer_two,
+            adjudication_path=adjudication,
+            output_directory=out_dir,
+        )
+        console.print(
+            {
+                "status": result.manifest["audit_status"],
+                "admitted_families": result.manifest["admitted_families"],
+                "blocked_families": result.manifest["blocked_families"],
                 "production_ready": False,
                 "directory": str(result.directory),
             }
@@ -1147,9 +1226,7 @@ def register_edge_rebuild_commands(app: typer.Typer, console: Any) -> None:
         out_dir: Path = typer.Option(...),
         policy: Path = typer.Option(Path("configs/edge_rebuild_swing_training.toml")),
         contract: Path = typer.Option(Path("configs/edge_rebuild_strategy_contract.toml")),
-        temporal_policy: Path = typer.Option(
-            Path("configs/edge_rebuild_temporal_manifest.toml")
-        ),
+        temporal_policy: Path = typer.Option(Path("configs/edge_rebuild_temporal_manifest.toml")),
     ) -> None:
         """Train and evaluate a non-promoted ten-session swing candidate."""
 

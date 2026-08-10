@@ -1,0 +1,87 @@
+schema_version = "market_predictor.issuer_event_precision_audit.v2"
+confidence_level = 0.95
+reviewers_per_item = 2
+unresolved_policy = "failure"
+require_distinct_reviewers = true
+no_wrong_issuer = true
+maximum_process_memory_gib = 5.0
+memory_guard_headroom_gib = 0.5
+paired_wrong_issuer_diagnostics_per_cluster = 1
+minimum_reviewer_agreement = 0.90
+minimum_reviewer_kappa = 0.80
+minimum_kappa_decisions = 30
+rule_variant_gate_minimum_population_clusters = 50
+minimum_rule_variant_sample_clusters = 10
+minimum_rule_variant_joint_lcb = 0.80
+
+[family.earnings]
+sample_clusters = 300
+minimum_population_clusters = 100
+minimum_population_issuers = 75
+minimum_family_lcb = 0.95
+minimum_issuer_lcb = 0.98
+minimum_event_lcb = 0.95
+minimum_joint_lcb = 0.95
+
+[family.guidance]
+sample_clusters = 250
+minimum_population_clusters = 100
+minimum_population_issuers = 60
+minimum_family_lcb = 0.95
+minimum_issuer_lcb = 0.98
+minimum_event_lcb = 0.95
+minimum_joint_lcb = 0.95
+
+[family.sec_material_event]
+sample_clusters = 200
+minimum_population_clusters = 100
+minimum_population_issuers = 30
+minimum_family_lcb = 0.98
+minimum_issuer_lcb = 0.98
+minimum_event_lcb = 0.98
+minimum_joint_lcb = 0.98
+
+[family.analyst_revision]
+sample_clusters = 500
+minimum_population_clusters = 100
+minimum_population_issuers = 125
+minimum_family_lcb = 0.95
+minimum_issuer_lcb = 0.98
+minimum_event_lcb = 0.95
+minimum_joint_lcb = 0.95
+
+[family.offering]
+sample_clusters = 150
+minimum_population_clusters = 100
+minimum_population_issuers = 40
+minimum_family_lcb = 0.93
+minimum_issuer_lcb = 0.98
+minimum_event_lcb = 0.93
+minimum_joint_lcb = 0.93
+
+[family.merger_acquisition]
+sample_clusters = 250
+minimum_population_clusters = 100
+minimum_population_issuers = 60
+minimum_family_lcb = 0.95
+minimum_issuer_lcb = 0.98
+minimum_event_lcb = 0.95
+minimum_joint_lcb = 0.95
+
+[family.regulatory_decision]
+sample_clusters = 200
+minimum_population_clusters = 100
+minimum_population_issuers = 40
+minimum_family_lcb = 0.95
+minimum_issuer_lcb = 0.98
+minimum_event_lcb = 0.95
+minimum_joint_lcb = 0.95
+
+[family.product_event]
+sample_clusters = 180
+minimum_population_clusters = 100
+minimum_population_issuers = 40
+minimum_family_lcb = 0.90
+minimum_issuer_lcb = 0.98
+minimum_event_lcb = 0.90
+minimum_joint_lcb = 0.90
