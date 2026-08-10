@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import gc
 import hashlib
 import json
 import os
@@ -21,6 +22,7 @@ from market_predictor.canonical.store import (
     manifest_path_for,
     write_canonical_artifact,
 )
+from market_predictor.resources import assert_memory_budget, release_process_memory
 from market_predictor.swing.event_attribution import (
     ATTRIBUTION_POLICY_SHA256,
     ATTRIBUTION_POLICY_VERSION,
@@ -43,6 +45,9 @@ _ROOT_INVENTORY = {
     "_status.json",
     "relations",
 }
+_MAXIMUM_REPLAY_MEMORY_GIB = 5.0
+_REPLAY_MEMORY_HEADROOM_GIB = 0.5
+_REPLAY_RELEASE_INTERVAL = 32
 
 
 @dataclass(frozen=True, slots=True)
@@ -353,7 +358,7 @@ def load_event_attribution_history(
 
     total_rows = 0
     channel_totals = {channel: 0 for channel in _RELATION_CHANNELS}
-    for chunk_id in sorted(records_by_chunk):
+    for index, chunk_id in enumerate(sorted(records_by_chunk), start=1):
         record = records_by_chunk[chunk_id]
         source_record = eligible_sources[chunk_id]
         expected_path = (relations_directory / f"{chunk_id}.parquet").resolve()
@@ -403,6 +408,15 @@ def load_event_attribution_history(
         total_rows += len(relations)
         for channel, count in observed_channels.items():
             channel_totals[channel] += count
+        del relations
+        if index % _REPLAY_RELEASE_INTERVAL == 0:
+            gc.collect()
+            release_process_memory()
+            assert_memory_budget(
+                hard_budget_gib=_MAXIMUM_REPLAY_MEMORY_GIB,
+                headroom_gib=_REPLAY_MEMORY_HEADROOM_GIB,
+                stage=f"event attribution replay chunk {index}",
+            )
 
     if (
         total_rows != _required_int(manifest, "relation_rows")
@@ -411,6 +425,13 @@ def load_event_attribution_history(
         raise DataReadinessError("event attribution root row or channel counts do not verify")
     if expected_manifest_sha256 is not None and file_sha256(manifest_path) != expected_manifest_sha256:
         raise DataReadinessError("event attribution manifest changed while loading")
+    gc.collect()
+    release_process_memory()
+    assert_memory_budget(
+        hard_budget_gib=_MAXIMUM_REPLAY_MEMORY_GIB,
+        headroom_gib=_REPLAY_MEMORY_HEADROOM_GIB,
+        stage="event attribution replay completion",
+    )
     return EventAttributionHistory(
         directory=root,
         request=request_payload,
