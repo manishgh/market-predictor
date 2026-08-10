@@ -14,7 +14,10 @@ hash-verified promoted bundle.
 ## Verified State
 
 - Active development branch: `er-intraday-refactoring`.
-- **Current ticker catalyst estimator source:** Alpaca news only.
+- **Swing baseline:** estimator inputs are `technical_market` only. Alpaca ticker
+  news is a confirmation/explanation overlay and does not alter baseline probability.
+- **Swing event-driven:** Alpaca direct ticker news is the only currently permitted
+  ticker catalyst source, subject to complete causal authority and specialist ablation.
 - **SEC filings:** the current estimator does not consume SEC features. The SEC
   authority distinguishes verified no-filing observations from unknown coverage.
   After causal collection and exact issuer attachment, SEC will be evaluated as a
@@ -51,11 +54,15 @@ hash-verified promoted bundle.
 - Swing V11 is published and strictly replayed: 853,417 rows per ablation
   profile, 604 modeled securities, 1,759 sessions from `2019-07-09` through
   `2026-07-08`, and 640,107 rank-eligible rows.
-- Swing candidate v2 trained six governed logistic/HGB ablations and returned
+- Swing candidate v2 trained six governed legacy logistic/HGB ablations and returned
   `no_candidate`. AUC reached about 0.55-0.57, but no candidate had a positive
   lower confidence bound for calendar, portfolio-daily, doubled-cost, and
   holding-aligned benchmark economics in both validation scopes. The locked
   test was not read.
+- A2 replaces that experiment contract with four nested technical ablations
+  (momentum/volatility, trend confirmation, pullback timing, volume/liquidity), followed
+  by one full-feature XGBoost ranker and regressor. The implementation is verified, but
+  no new real candidate has been trained and no performance result is claimed.
 - Intraday V2 is published and replayable but economically rejected after costs.
   It is not serveable. The later V3 cross-sectional z-score lineage is invalid and
   prohibited because its declared inputs lacked a valid contemporaneous cohort
@@ -78,7 +85,8 @@ Read these documents in order:
 
 ## Data Boundaries
 
-- **Alpaca premium:** SIP market bars and direct ticker news used by estimators.
+- **Alpaca premium:** SIP market bars are estimator data. Direct ticker news is an
+  estimator input only for a separately governed event-driven model family.
 - **SEC EDGAR:** current issuer authority and causal audit source; planned as a
   separately ablated issuer-specific estimator profile after causal collection and
   attachment are verified.
@@ -113,8 +121,8 @@ market-predictor-prod --help
 
 ### Research Workbench
 
-The local research workbench inventories four configured experiments: swing and
-intraday, each with and without catalyst features. It reports the real training
+The local research workbench inventories four configured experiments: baseline and
+event-driven variants for swing and intraday. It reports the real training
 state of every experiment. A `no_candidate` result remains unavailable rather than
 being replaced by a fallback model.
 
@@ -137,7 +145,7 @@ Run one heavy process at a time. Swing candidate training has a 5 GiB hard
 process limit; intraday and serving workloads retain their 4 GiB limits.
 
 ```powershell
-.\.venv\Scripts\python.exe -m pytest -q
+.\.venv\Scripts\python.exe -m pytest tests -q
 .\.venv\Scripts\ruff.exe check --no-cache .
 .\.venv\Scripts\mypy.exe --strict --python-version 3.14 src\market_predictor
 .\.venv\Scripts\python.exe -m compileall -q src tests

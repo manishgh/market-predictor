@@ -91,8 +91,8 @@ learned candidate.
   unseen-security generalization are independent validation scopes and must both pass.
 - Commit `7b61873` removes the invalid training-time catalyst cohort rewrite. The
   trainer no longer attaches SEC files from a local path, fills unknown SEC coverage
-  with zero, recomputes rank labels, or bypasses sector constraints. Both ablation
-  profiles must replay the identical published decision and label identities.
+  with zero, recomputes rank labels, or bypasses sector constraints. Commit `cb2aba5`
+  then separates the A2 technical baseline from the future A3 event-driven family.
 - Swing and intraday evaluations now publish explicit binary diagnostics for the
   estimator target, positive after-cost stock return, and positive SPY/QQQ/sector
   excess return. A deterministic 64-repeat shuffled-label AUC control must remain at
@@ -116,14 +116,22 @@ learned candidate.
   training loads only requested months and projected columns; locked outcomes remain
   unopened unless all validation gates pass. Replay verifies profile, decision and
   security identities, session bounds/counts, canonical paths, and hashes.
-- Paired ablation joins the full common session calendar and gives no-position sessions
-  zero P&L. This prevents comparison on only the sessions where both policies traded.
 - Candidate v2 trained six governed logistic and histogram-gradient-boosting models.
   Diagnostic AUC reached approximately 0.55-0.57, but every candidate failed at
   least one calendar, portfolio-daily, doubled-cost, or holding-aligned benchmark
   confidence gate across temporal and unseen-security validation. The result is an
   immutable `no_candidate`; the locked test was not read.
 - The swing training process remained below its 5 GiB hard memory limit.
+- The A2 replacement baseline uses four nested technical groups: momentum/volatility,
+  trend confirmation, pullback timing, and volume/liquidity. One regularized logistic
+  candidate is evaluated per group; the full group also receives one XGBoost ranker
+  and regressor. Selection remains economic and validation-only; AUC is diagnostic.
+- Current Finviz snapshots do not establish point-in-time quality, profitability,
+  investment, valuation, or estimate-revision history. Those feature groups are
+  blocked rather than copied backward or represented as zero.
+- Every fitted estimator persists its exact ordered feature subset. Serving and the
+  research API slice to that subset and reject missing, duplicate, out-of-order, or
+  out-of-bundle columns. No real A2 candidate has been trained yet.
 
 ## Vertical acceptance matrix
 
@@ -135,14 +143,15 @@ immutable artifact exists. `Blocked` means training or serving is prohibited.
 | Intraday technical estimator | SIP/all bar and V2 authorities verify | Verified | Verified; parity and staleness rejection | Exact 44-feature schema verified; incomplete V3 z-scores removed | V2 economically rejected; later z-score artifact invalidated | Blocked until promotion | Rejected |
 | Intraday ticker-catalyst overlay | Alpaca archives exist; scored/attributed catalyst authority not yet published | Not an estimator input | Snapshot contract verified; runtime authority pending | Separate overlay hash, coverage, count, sentiment, and unknown state verified | Cannot alter entry probability; ranking use blocked until authority exists | Blocked until promoted bundle and orchestrator exist | Authority pending |
 | Intraday global overlay | GDELT collector and global authority verified in code; no production collection published | Not an estimator input | Observed-time collection, immutable query policy, and unknown/zero behavior verified | Separate global overlay contract verified | Ranking use blocked until runtime authority exists | Blocked until promoted bundle and orchestrator exist | Runtime artifact pending |
-| Swing technical estimator | Daily SIP/all, point-in-time membership, and V11 panel verify | Verified | Verified; latest closed session required | Technical profile schema verified | Candidate v2 rejected by economic gates | Blocked until promotion | Rejected |
-| Swing ticker-catalyst estimator | Alpaca catalyst V5 and V11 profile replay | Verified | Verified against exact authority | Required source set is exactly Alpaca | Catalyst increment unstable across validation scopes | Blocked until promotion | Rejected |
+| Swing technical estimator | Daily SIP/all, point-in-time membership, and V11 panel verify | Verified | Verified; latest closed session required | A2 nested technical schema and per-model subsets verified | Replacement trainer complete; new candidate not run | Blocked until promotion | Implementation ready |
+| Swing ticker-catalyst estimator | Alpaca catalyst V5 and V11 profile replay | Verified | Verified against exact authority | Separate A3 event-driven family; source set exactly Alpaca until a new authority is approved | Prior broad catalyst candidates rejected; specialists not trained | Blocked until promotion | A3 pending |
 | Swing global overlay | Global collector and decision authority verified in code | Separate overlay; never attached as ticker news | Verified code | Separate global authority hash and source policy | Cannot rescue or alter a rejected estimator; ranking use requires complete authority | Blocked until promoted bundle and orchestrator exist | Runtime artifact pending |
 
 ## Training decision
 
-Data readiness no longer blocks swing training. Candidate v2 was trained correctly
-and rejected because its out-of-sample economic edge was not stable, not because data
-was missing or unsanitized. Any next experiment must be preregistered and use
-validation-only failure attribution; the locked test stays unopened. Global context
-remains a separate overlay unless a causal ablation is preregistered.
+Technical data readiness does not block the A2 baseline. Candidate v2 was trained
+correctly and rejected because its out-of-sample economic edge was not stable, not
+because data was missing. The replacement trainer is verified but has not produced a
+new statistical result. A3 event families remain blocked until their complete causal
+authorities and identical-decision ablations are preregistered. The locked test stays
+unopened during selection; global context remains a separate overlay.

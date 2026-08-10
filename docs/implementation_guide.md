@@ -2,7 +2,7 @@
 
 Status: current edge-rebuild path
 
-Last updated: 2026-08-02
+Last updated: 2026-08-10
 
 Read `AGENTS.md`, `docs/active_edge_rebuild_plan.md`, and
 `docs/reviews/active_edge_rebuild_handoff.md` first. Command `--help` output and code
@@ -22,7 +22,8 @@ promoted atomic bundle exists.
 ## Source Roles
 
 - Alpaca SIP/all bars: estimator market data.
-- Alpaca direct ticker news: the sole ticker catalyst source in the current estimator.
+- Alpaca direct ticker news: the sole permitted ticker catalyst estimator source for
+  the separate event-driven family. The swing baseline is technical-only.
 - SEC filings: current issuer authority and causal audit. Known zero filings remain
   distinct from unknown coverage. A separately ablated issuer-specific estimator
   profile is planned after causal collection and exact attachment are verified.
@@ -64,6 +65,9 @@ estimator without the same governance.
 - `catalyst_authority.py`: ticker catalyst decision and source-coverage authority.
 - `catalyst_identity_rebind.py`: immutable V5 canonical identity rebind.
 - `swing_materialization.py`: identical-population profile publication and replay.
+- `swing_training.py`: four nested technical baseline ablations, bounded tree
+  candidates, validation-only selection, exact feature-subset persistence, and
+  immutable candidate/no-candidate publication.
 - `swing_live.py`: latest closed-session features using shared semantics.
 
 Swing decisions begin on `2019-07-09`. Earlier bars initialize indicators only. V9 is
@@ -85,6 +89,13 @@ V11 is published and replayed with 853,417 rows per profile, 604 securities, and
 1,759 sessions. Candidate v2 trained six governed models and published an immutable
 `no_candidate` result because no model passed economic gates in both temporal and
 unseen-security validation; the locked test remained unopened.
+
+A2 now defines the replacement baseline contract: nested momentum/volatility, trend,
+pullback, and volume/liquidity groups are evaluated with regularized logistic models;
+the full group also receives one XGBoost ranker and regressor. Each fitted estimator
+persists its own ordered feature subset. Quality, profitability, investment,
+valuation, and estimate-revision groups are blocked because no complete historical
+point-in-time authority exists. No new real A2 candidate has been trained.
 
 ### Intraday path
 
@@ -111,17 +122,20 @@ shuffled-label control must remain at chance.
   ablated estimator input after causal collection and attachment.
 - `edge_rebuild/global_event_collection.py`,
   `edge_rebuild/global_event_authority.py`: separate global context overlay.
-- `edge_rebuild/serving.py`: promoted-bundle verification and strict prediction or
-  abstention response.
+- `edge_rebuild/serving.py`: promoted-bundle verification, model-family/profile
+  binding, estimator-specific feature slicing, and strict prediction or abstention.
+- `prediction_service.py`: selects `technical_market` for a signed swing baseline and
+  `catalyst_full` for a signed swing event-driven model; no implicit fallback exists.
 
 ## Current Workflow
 
-1. Preserve the replayed V11 and candidate-v2 rejection authorities.
-2. Attribute candidate-v2 failure using validation evidence only; do not open the
-   locked test or weaken gates.
-3. Preregister the next feature or estimator hypothesis before rerunning validation.
+1. Preserve the replayed V11, prior rejection authorities, and A2 implementation
+   checkpoint `cb2aba5`.
+2. Build A3 event-family authorities only from exact point-in-time issuer evidence.
+3. Preregister technical-only, event-only, and combined specialist comparisons before
+   training; keep the locked test unopened during selection.
 4. Keep API scoring disabled unless a promoted bundle verifies at load time.
-5. Collect and freeze the future intraday holdout before any V3 holdout evaluation.
+5. Build the replacement A4 intraday cohort authority before any new holdout run.
 
 ## Data And Training Rules
 
@@ -144,7 +158,7 @@ peak RSS below the workload limit: 5 GiB for swing candidate training and
 
 ```powershell
 Set-Location C:\project\market-predictor
-.\.venv\Scripts\python.exe -m pytest -q
+.\.venv\Scripts\python.exe -m pytest tests -q
 .\.venv\Scripts\ruff.exe check --no-cache .
 .\.venv\Scripts\mypy.exe --strict --python-version 3.14 src\market_predictor
 .\.venv\Scripts\python.exe -m compileall -q src tests

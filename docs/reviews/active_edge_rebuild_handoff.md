@@ -8,14 +8,15 @@ Repository: `C:\project\market-predictor`
 
 Branch: `er-intraday-refactoring`
 
-Last completed implementation commit: `7b61873` (`Freeze causal outcome diagnostics`)
+Last completed implementation commit: `cb2aba5` (`Build governed swing baseline ablations`)
 
 ## Purpose
 
 Continue the four-model prediction rebuild: swing baseline, swing event-driven,
-intraday baseline, and intraday event-driven. A0 and A1 are closed. A2 swing-baseline
-research is the only active checkpoint. Do not train a candidate or open a locked test
-until the A2 feature authority and preregistered validation contract are complete.
+intraday baseline, and intraday event-driven. A0 through A2 implementation are closed.
+A3 issuer-event specialist authority is the active checkpoint. Do not open a locked
+test or claim model quality until a preregistered candidate passes both validation
+scopes.
 
 This repository produces prediction intelligence and abstention. Alerts, orders,
 positions, portfolio risk, and execution remain in `trading_flow`.
@@ -27,8 +28,9 @@ positions, portfolio risk, and execution remain in `trading_flow`.
 - Swing decisions begin on `2019-07-09`; earlier bars are warm-up only.
 - Intraday estimator input remains the 44-feature causal technical contract. The V3
   z-score lineage is invalid and prohibited.
-- Swing technical and Alpaca ablation profiles must contain identical immutable
-  decision and label identities. Training cannot rewrite groups or labels.
+- The swing baseline consumes only `technical_market`. Catalyst is a confirmation and
+  explanation overlay for this family; `catalyst_full` belongs to the separate A3
+  event-driven family.
 - The swing trainer no longer attaches a hard-coded SEC authority, fills unknown SEC
   coverage with zero, or bypasses sector-constrained selection.
 - Intraday label schema V2 requires exact stock, SPY, QQQ, and point-in-time sector ETF
@@ -39,6 +41,25 @@ positions, portfolio risk, and execution remain in `trading_flow`.
   abnormal discrimination fails evaluation. Single-class scopes are explicit
   `not_applicable_single_class`, never fabricated metrics.
 - Intraday remains capped at 4 GiB and swing candidate training at 5 GiB.
+
+## A2 Verification
+
+- Commit `cb2aba5` freezes four nested baseline groups: momentum/volatility, trend
+  confirmation, pullback timing, and volume/liquidity.
+- Six sequential candidates are permitted: four regularized logistic ablations and
+  full-feature XGBoost ranker/regressor candidates.
+- Each fitted model persists its exact ordered feature subset. Batch serving and the
+  research API slice to that subset; missing or reordered inputs fail closed.
+- Bundle IDs are deterministic and lineage-bound. Candidate payload, model card,
+  evaluation, authority replay, and promoted bundle must agree.
+- Serving selects the frame from the signed model family: baseline uses
+  `technical_market`; event-driven uses `catalyst_full`.
+- Current Finviz snapshots are not historical point-in-time authority. Quality,
+  profitability, investment, valuation, and estimate-revision groups remain blocked.
+- No real candidate was trained or promoted in A2, so AUC and economics are unchanged.
+- Focused A2 suite: 59 passed, 1 skipped. Canonical suite: 1,110 passed, 2 skipped.
+  Tracked Ruff, strict mypy on five changed production modules, compileall, governance
+  hash replay, and diff checks passed.
 
 ## A1 Verification
 
@@ -62,8 +83,8 @@ positions, portfolio risk, and execution remain in `trading_flow`.
 
 | Model family | Current state | Next valid work |
 | --- | --- | --- |
-| Swing baseline | Prior candidates rejected; no promotion | A2 compact point-in-time feature authority and ablation |
-| Swing event-driven | Prior broad catalyst candidates rejected | A3 event-family specialists after A2 |
+| Swing baseline | A2 trainer complete; prior candidates rejected; no new run or promotion | Preserve the frozen technical contract until a governed training run is approved |
+| Swing event-driven | Prior broad catalyst candidates rejected | A3 event-family authorities and specialists |
 | Intraday baseline | V2 rejected; V3 z-score lineage invalid | A4 cohort-correct market/microstructure rebuild |
 | Intraday event-driven | No eligible candidate | A5 verified event cohorts |
 
@@ -72,18 +93,16 @@ for repeated locked-test tuning. Promotion also requires ranking, calibration,
 after-cost benchmark-relative economics, drawdown, turnover, capacity, stability, and
 coverage.
 
-## Exact Next Step: A2
+## Exact Next Step: A3
 
-1. Inventory which compact swing baseline groups already have point-in-time authority
-   from `2019-07-09` through the frozen end date: market/sector residual momentum,
-   volatility, liquidity/turnover, quality, profitability, investment, valuation, and
-   estimate revisions.
-2. Update the vertical acceptance matrix. Reject any group lacking full-horizon source,
-   availability, batch/live, schema, and poison evidence; do not partially backfill.
-3. Preregister sequential ablations and their validation-only acceptance rules. Keep
-   the locked test unopened.
-4. Build or replay only accepted authorities, then train the regularized linear
-   baseline before bounded tree ranker/regressor candidates.
+1. Inventory issuer-event histories for earnings/guidance, SEC material events,
+   analyst revisions, offerings, M&A, regulatory decisions, and product events.
+2. Admit a family only when publication/acceptance time, first availability, issuer
+   identity, relevance, source coverage, and exact decision assignment replay.
+3. Publish event-family cohort counts by calendar period, sector, security, and event
+   type. Unknown coverage remains null and causes exclusion or abstention.
+4. Preregister technical-only, event-only, and technical-plus-event comparisons on
+   identical decisions. Train no specialist until its complete causal horizon verifies.
 
 ## Source Boundary
 

@@ -56,6 +56,7 @@ versioned prediction API.
 | Swing V11 | published and replayed | 853,417 rows/profile; 604 securities; 1,759 sessions; 640,107 rank-eligible rows |
 | Swing candidate v2 | published `no_candidate` | six governed candidates trained; none passed both temporal and unseen-security economic gates; locked test unopened |
 | Swing candidate v3 | published `no_candidate` | overlay constraints yielded too few sessions and failed economic gates; locked test unopened |
+| A2 swing baseline trainer | implementation complete; no new candidate artifact | four nested technical ablations plus bounded full-feature ranker/regressor; a later governed run must publish separate statistical evidence |
 | Intraday V2 | published and rejected | economically failed after costs; not serveable |
 | Intraday V3 z-score lineage | invalid; prohibited | five declared cross-sectional inputs lacked a valid contemporaneous decision-cohort transformation |
 | Promoted serving bundle | absent | API must fail closed |
@@ -67,9 +68,10 @@ versioned prediction API.
 The active hypothesis is ten-session sector-residual momentum after a controlled
 pullback and trend reclaim. Required technical evidence includes 20/60-session
 relative strength, SMA50/SMA200 state and slope, pullback/reclaim state, volatility,
-liquidity, capacity, SPY/QQQ context, and the point-in-time sector benchmark. Direct
-Alpaca ticker catalyst may be evaluated in the catalyst profile. The current estimator
-is Alpaca-only. SEC is planned as a separate issuer-specific profile after causal
+liquidity, capacity, SPY/QQQ context, and the point-in-time sector benchmark. The A2
+baseline estimator is strictly `technical_market`; catalyst remains a confirmation
+overlay. The separate A3 event-driven family may evaluate direct Alpaca ticker events.
+SEC is planned as a separate issuer-specific event profile after causal
 collection and attachment, preserving known zero versus unknown coverage. Finviz and
 global context remain separate overlays.
 
@@ -159,7 +161,7 @@ poison tests cannot alter validation selection. The canonical suite passed 1,110
 with two skipped; tracked Ruff, changed-module strict mypy, compileall, and diff checks
 passed.
 
-### A2 - Swing baseline rebuild (`in_progress`)
+### A2 - Swing baseline rebuild (`completed`)
 
 - Evaluate compact, evidence-backed groups sequentially: benchmark/sector residual
   momentum, volatility, liquidity, turnover, quality, profitability, investment,
@@ -169,7 +171,21 @@ passed.
   the frozen end date before any model consumes it. Partial-period feature additions
   require an explicit specialist cohort or are rejected.
 
-### A3 - Swing event specialists
+Completed evidence: implementation commit `cb2aba5` freezes four nested technical
+groups: momentum/volatility, trend confirmation, pullback timing, and volume/liquidity.
+It evaluates one regularized logistic candidate per group, then one full-feature
+XGBoost ranker and regressor, all sequentially within the six-candidate budget. The
+bundle records each estimator's exact ordered feature subset and a deterministic,
+lineage-bound candidate ID. Training and serving schemas were versioned; promoted
+serving selects `technical_market` for the baseline and `catalyst_full` only for the
+separate event-driven family. Current Finviz snapshots cannot supply historical
+point-in-time quality, profitability, investment, valuation, or estimate-revision
+features, so those groups remain blocked rather than backfilled from present values.
+No new real model was trained or promoted in A2. The canonical suite passed 1,110
+tests with two skipped; tracked Ruff, changed-module strict mypy, compileall, and
+governance hash replay passed.
+
+### A3 - Swing event specialists (`in_progress`)
 
 - Build separate earnings/guidance, SEC material-event, analyst-revision, offering,
   M&A, regulatory, and product-event cohorts only when exact availability and issuer
@@ -246,6 +262,10 @@ are audit evidence, never fallbacks.
   invalid V3 feature contract was repaired.
 - [x] Complete A0 research-integrity recovery and push implementation commit
   `e168482` plus its documentation closure.
+- [x] Complete A2 governed swing-baseline ablation and serving contracts in
+  implementation commit `cb2aba5`; no performance or promotion claim was made.
+- [ ] Build A3 issuer-event cohort authorities and train only specialists with complete
+  point-in-time event history and exact issuer relevance.
 - [ ] Build and backfill the replacement A4 intraday feature authority before
   collecting a new locked holdout; the invalid V3 contract cannot be reused.
 - [ ] Promote only a model that passes every gate.

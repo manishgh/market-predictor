@@ -37,8 +37,10 @@ There is no fallback from the active path to legacy models or schemas.
 - Decision clock: completed daily session.
 - Entry: next exact exchange-session open.
 - Horizon: ten exchange sessions with target/stop/timeout outcomes.
-- Estimator profiles: technical/market and the same decisions plus direct-issuer
-  Alpaca catalyst features. No profile is serveable until it passes promotion.
+- Model families are explicit. `swing_baseline` consumes only `technical_market` and
+  uses catalyst as confirmation/explanation. `swing_event_driven` consumes
+  `catalyst_full` only after its event authority and ablation pass. No family is
+  serveable until it passes promotion.
 - Issuer filing catalyst: SEC events aligned by acceptance time and resolved to the
   filing issuer; they enter an estimator only after causal authority and ablation pass.
 - Context overlays: verified global and sector events through separate authorities.
@@ -145,6 +147,13 @@ reached approximately 0.55-0.57, but no candidate passed calendar, portfolio-dai
 doubled-cost, and holding-aligned benchmark confidence gates in both validation
 scopes. The locked test remained unopened. Intraday V2 is also economically rejected;
 there is currently no promoted model for either view.
+
+A2 replaces the broad profile comparison with a six-candidate technical baseline:
+four nested regularized-logistic feature ablations plus full-feature XGBoost ranking
+and regression candidates. Fitted estimators carry their exact ordered feature subset.
+The signed serving bundle binds `model_family`, `feature_profile`, and catalyst policy;
+the prediction service selects the corresponding live frame without fallback. No new
+real A2 candidate or performance result exists yet.
 
 ## Serving
 
