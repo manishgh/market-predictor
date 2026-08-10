@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Final
 from uuid import uuid4
 
+import numpy as np
 import pandas as pd
 
 from market_predictor.canonical.audits import CanonicalAuditCheck, CanonicalAuditReport
@@ -882,16 +883,24 @@ def _build_cohort_audit(
     decisions["calendar_month"] = decisions["decision_time_utc"].dt.strftime("%Y-%m")
     decisions["sector"] = decisions.get("sector", "unknown")
     max_window = max(policy.windows.values())
+    coverage_sources = sorted(set(coverage["source_family"].astype(str)))
+    reference_family = policy.event_families[0]
+    known_by_source = {
+        source_family: _known_coverage_decision_ids(
+            coverage,
+            decisions,
+            family=reference_family,
+            max_window=max_window,
+            source_family=source_family,
+        )
+        for source_family in coverage_sources
+    }
+    known_all = set().union(*known_by_source.values()) if known_by_source else set()
     records: list[dict[str, object]] = []
     for family in policy.event_families:
         part = eligible.loc[eligible["event_family"].eq(family)]
         assigned_part = assigned.loc[assigned.get("event_family", pd.Series(dtype=str)).eq(family)]
-        known_ids = _known_coverage_decision_ids(
-            coverage,
-            decisions,
-            family=family,
-            max_window=max_window,
-        )
+        known_ids = known_all
         records.append(
             _cohort_record(
                 family,
@@ -968,13 +977,7 @@ def _build_cohort_audit(
             source_events = part.loc[
                 part["source_family"].astype(str).eq(source_family)
             ]
-            source_ids = _known_coverage_decision_ids(
-                coverage,
-                decisions,
-                family=family,
-                max_window=max_window,
-                source_family=str(source_family),
-            )
+            source_ids = known_by_source.get(str(source_family), set())
             source_assignments = assigned_part.loc[
                 assigned_part["original_source_family"].astype(str).eq(str(source_family))
             ]
@@ -1015,22 +1018,35 @@ def _known_coverage_decision_ids(
     eligible["requested_end_utc"] = _utc(
         eligible["requested_end_utc"], "coverage end"
     )
-    by_security = {
+    decisions_by_security = {
         str(security_id): part
-        for security_id, part in eligible.groupby("security_id", sort=False)
+        for security_id, part in decisions.groupby("security_id", sort=False)
     }
     known: set[str] = set()
-    for decision in decisions.to_dict(orient="records"):
-        part = by_security.get(str(decision["security_id"]))
-        if part is None:
+    window_ns = int(max_window.value)
+    for security_id, intervals in eligible.groupby("security_id", sort=False):
+        decision_part = decisions_by_security.get(str(security_id))
+        if decision_part is None or decision_part.empty:
             continue
-        decision_time = pd.Timestamp(decision["decision_time_utc"])
-        required_start = decision_time - max_window
-        covers = part["requested_start_utc"].le(required_start) & part[
-            "requested_end_utc"
-        ].ge(decision_time)
-        if bool(covers.any()):
-            known.add(str(decision["decision_id"]))
+        ordered_intervals = intervals.sort_values(
+            ["requested_start_utc", "requested_end_utc"], kind="stable"
+        )
+        starts = ordered_intervals["requested_start_utc"].astype("int64").to_numpy()
+        ends = ordered_intervals["requested_end_utc"].astype("int64").to_numpy()
+        decision_ns = (
+            decision_part["decision_time_utc"].astype("int64").to_numpy()
+        )
+        positions = np.searchsorted(
+            starts,
+            decision_ns - window_ns,
+            side="right",
+        ) - 1
+        valid_position = positions >= 0
+        safe_positions = positions.clip(min=0)
+        covered = valid_position & (ends[safe_positions] >= decision_ns)
+        known.update(
+            decision_part.loc[covered, "decision_id"].astype(str)
+        )
     return known
 
 
