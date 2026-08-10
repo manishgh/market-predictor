@@ -1,6 +1,6 @@
 # Current Feature Engineering Audit
 
-Last updated: 2026-08-02
+Last updated: 2026-08-10
 
 ## Scope
 
@@ -48,13 +48,18 @@ learned candidate.
   minutes since activation, and session progress.
 - The same shared feature builder serves historical batch and live decisions.
   Tests reject future evidence, missing exact benchmark context, stale decisions,
-  and any mismatch in the exact 39 estimator features.
+  and any mismatch in the exact 44 estimator features.
 - News/catalyst remains outside the intraday entry estimator. It is a separately
   hash-bound confirmation, explanation, and ranking overlay because the earlier
   direct-feature ablation reduced validation quality.
 - Intraday V2 is published and replayable but economically rejected after costs.
-  It is not serveable. V3 development code is reserved for a genuinely future
-  holdout and has not been evaluated on that holdout.
+  It is not serveable. The later V3 branch declared five cross-sectional z-score
+  columns without a valid contemporaneous decision-cohort implementation; the
+  columns were undefined for asynchronous or single-member timestamps. Commit
+  `e168482` removes that invalid contract. Any artifact requiring those columns is
+  rejected lineage and cannot train, replay, promote, or serve. A future
+  cross-sectional feature group must use one verified batch/live decision cohort
+  and be backfilled for the complete intraday model horizon before acceptance.
 
 ## Swing
 
@@ -116,7 +121,7 @@ immutable artifact exists. `Blocked` means training or serving is prohibited.
 
 | Capability | Source and immutable authority | Batch path | Live path | Model contract | Training / promotion / serving | API | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| Intraday technical estimator | SIP/all bar and V2 authorities verify | Verified | Verified; parity and staleness rejection | Exact 39-feature schema verified | V2 economically rejected; V3 future holdout unopened | Blocked until promotion | Rejected |
+| Intraday technical estimator | SIP/all bar and V2 authorities verify | Verified | Verified; parity and staleness rejection | Exact 44-feature schema verified; incomplete V3 z-scores removed | V2 economically rejected; later z-score artifact invalidated | Blocked until promotion | Rejected |
 | Intraday ticker-catalyst overlay | Alpaca archives exist; scored/attributed catalyst authority not yet published | Not an estimator input | Snapshot contract verified; runtime authority pending | Separate overlay hash, coverage, count, sentiment, and unknown state verified | Cannot alter entry probability; ranking use blocked until authority exists | Blocked until promoted bundle and orchestrator exist | Authority pending |
 | Intraday global overlay | GDELT collector and global authority verified in code; no production collection published | Not an estimator input | Observed-time collection, immutable query policy, and unknown/zero behavior verified | Separate global overlay contract verified | Ranking use blocked until runtime authority exists | Blocked until promoted bundle and orchestrator exist | Runtime artifact pending |
 | Swing technical estimator | Daily SIP/all, point-in-time membership, and V11 panel verify | Verified | Verified; latest closed session required | Technical profile schema verified | Candidate v2 rejected by economic gates | Blocked until promotion | Rejected |

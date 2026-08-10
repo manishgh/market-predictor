@@ -2,11 +2,11 @@
 
 Status: active
 
-Last updated: 2026-08-02
+Last updated: 2026-08-10
 
 Repository: `C:\project\market-predictor`
 
-Branch: `r3-lineage`
+Branch: `er-intraday-refactoring`
 
 This is the only active execution plan. Exact artifact state is recorded in
 `docs/reviews/active_edge_rebuild_handoff.md`; statistical rules are defined in
@@ -27,12 +27,13 @@ versioned prediction API.
 
 ## Frozen Data Policy
 
-1. Alpaca is the sole ticker catalyst source in the current estimator.
-2. The SEC authority distinguishes known zero filings from unknown coverage. SEC is
-   planned as a separately ablated issuer-specific estimator profile only after
-   causal collection and exact decision-time attachment are verified. Finviz and
-   verified global or sector sources remain overlay/audit inputs and cannot silently
-   enter an estimator feature vector.
+1. Existing estimator artifacts retain their frozen source sets. A new model may use
+   Alpaca direct ticker news, issuer-specific SEC events, or Finviz Elite ticker news
+   only after that exact source set is causally backfilled across the model's complete
+   decision horizon and independently ablated.
+2. The SEC authority distinguishes known zero filings from unknown coverage. Finviz
+   screening, global news, and sector news remain overlay/audit inputs unless a
+   separately preregistered model contract proves causal estimator value.
 3. Reddit and Seeking Alpha are removed and prohibited.
 4. Swing decisions begin on `2019-07-09`. Earlier bars are warm-up only.
 5. Features and source coverage must be available by the decision time. Unknown
@@ -56,7 +57,7 @@ versioned prediction API.
 | Swing candidate v2 | published `no_candidate` | six governed candidates trained; none passed both temporal and unseen-security economic gates; locked test unopened |
 | Swing candidate v3 | published `no_candidate` | overlay constraints yielded too few sessions and failed economic gates; locked test unopened |
 | Intraday V2 | published and rejected | economically failed after costs; not serveable |
-| Intraday V3 | future work only | development implementation reserved for a genuinely future holdout; no holdout run |
+| Intraday V3 z-score lineage | invalid; prohibited | five declared cross-sectional inputs lacked a valid contemporaneous decision-cohort transformation |
 | Promoted serving bundle | absent | API must fail closed |
 
 ## Model Semantics
@@ -91,21 +92,107 @@ labels, stock/market/sector context, and explicit abstention. Catalyst is a
 confirmation or ranking overlay unless a preregistered causal ablation proves
 estimator value.
 
-Intraday V2 remains a valid rejected artifact. V3 cannot be evaluated until a new
-holdout beginning on or after `2026-07-09` is collected and frozen without development
-feedback.
+Intraday V2 remains a valid rejected artifact. The later V3 z-score lineage is
+invalidated and cannot be evaluated, trained, or served. A replacement intraday
+cross-sectional feature contract must define one causal decision cohort, share the
+same batch/live transformation, and be fully backfilled before candidate training.
 
-## Current Sequence
+## Active Four-Model Improvement Program
 
-1. Preserve V11 and candidate-v2 rejection evidence without opening the locked test.
-2. Complete validation-only failure attribution for temporal versus unseen-security
-   behavior and the unstable catalyst increment.
-3. Preregister any next feature or estimator hypothesis before another validation
-   run; do not tune gates to rescue candidate v2.
-4. Run full tests, Ruff, strict mypy, compileall, replay, diff, and the 5 GiB
-   swing-training memory gate before checkpointing.
-5. Collect the future intraday holdout and evaluate V3 only after its observation
-   window is complete.
+The four governed model families are swing baseline, swing event-driven, intraday
+baseline, and intraday event-driven. `ROC-AUC >= 0.60` is a locked-test diagnostic for
+their comparable binary outcome view; it is not permission to optimize repeatedly on
+the locked test. Ranking quality, calibration, benchmark-relative net economics,
+drawdown, turnover, capacity, and coverage remain co-equal promotion gates.
+
+### A0 - Research-integrity recovery (`completed`)
+
+Problem: the current working tree contains unfinished experimental edits that bypass
+economic validation, partition verification, source missingness, and governed sector
+limits. Those edits invalidate any resulting metric.
+
+In scope: restore fail-closed validation and immutable replay, preserve the 4 GiB
+intraday/5 GiB swing limits, remove false zero catalyst inputs, verify the current
+cross-sectional feature implementation, and checkpoint only supported code.
+
+Out of scope: new provider collection, feature backfill, model training, locked-test
+access, promotion, serving success, and trading alerts or execution.
+
+Exit gates:
+
+- no validation, partition, lineage, or economic-gate bypass remains;
+- missing catalyst authority cannot become a numeric zero feature vector;
+- training does not mutate loaded immutable dataset frames;
+- focused poison tests, full tests, Ruff, strict mypy, compileall, and diff checks pass;
+- active plan, feature audit, and handoff describe only verified behavior;
+- implementation and documentation closure commits are pushed separately.
+
+Rollback/failure behavior: training and serving remain blocked; no existing rejected
+artifact is promoted or used as a fallback.
+
+Completed evidence: implementation commit `e168482` restores monthly partition replay,
+requires every validation scope to pass economic gates, preserves immutable input
+frames during bounded sequential training, and removes five cross-sectional z-score
+columns that had no valid decision-cohort implementation. Focused verification passed
+145 tests with one skipped. The full suite passed 1,102 tests with two skipped; three
+repository-lock permission failures passed independently with normal repository access.
+Ruff, strict mypy, compileall, and staged diff checks passed.
+
+### A1 - Labels, metrics, and negative controls (`in_progress`)
+
+- Freeze one comparable binary diagnostic for each model plus the economic training
+  target: 5/10-session benchmark-relative swing return and 30-minute/session-managed
+  intraday return after costs.
+- Reproduce labels from immutable bars using the shared evaluator and identical stock,
+  SPY, QQQ, and sector executable intervals.
+- Add label shuffle, feature-time shift, future-poison, duplicate-event, overlapping
+  label, and survivorship controls. Any abnormal control score blocks training.
+
+### A2 - Swing baseline rebuild
+
+- Evaluate compact, evidence-backed groups sequentially: benchmark/sector residual
+  momentum, volatility, liquidity, turnover, quality, profitability, investment,
+  valuation, and estimate-revision data where a point-in-time authority exists.
+- Use a regularized linear baseline followed by bounded tree ranker/regressor models.
+- Backfill every accepted feature for every eligible decision from `2019-07-09` through
+  the frozen end date before any model consumes it. Partial-period feature additions
+  require an explicit specialist cohort or are rejected.
+
+### A3 - Swing event specialists
+
+- Build separate earnings/guidance, SEC material-event, analyst-revision, offering,
+  M&A, regulatory, and product-event cohorts only when exact availability and issuer
+  relevance verify.
+- Model event reaction and excess-return magnitude, not generic sentiment. Report
+  event count, security count, calendar/sector coverage, abstention, and confidence
+  intervals for every specialist.
+
+### A4 - Intraday baseline rebuild
+
+- Backfill Alpaca SIP one-minute bars, trades, and NBBO quotes across the complete
+  intraday training horizon before adding spread or microstructure features.
+- Separate continuation and reversion hypotheses. Add spread, quote imbalance, trade
+  intensity, volume clock, VWAP displacement, opening-range, volatility, and exact
+  market/sector residual features through the shared batch/live transformation.
+
+### A5 - Intraday event specialists
+
+- Restrict training to verified event cohorts. Use publication regime, time since
+  event, premarket gap, abnormal volume, initial 5/15-minute reaction, spread,
+  liquidity, and sector concurrence.
+- Catalyst remains outside the broad intraday estimator unless causal ablation passes.
+  Unknown coverage causes abstention, never neutral sentiment or zero event counts.
+
+### A6 - Locked evaluation and promotion
+
+- Use purged, embargoed walk-forward validation plus independent unseen-security
+  validation. Swing uses the frozen approximately 5/1/1-year sequence; intraday uses
+  the maximum causally complete 2-3-year history with frozen calendar boundaries.
+- Open each locked test once for a preregistered candidate. Report ROC-AUC, PR-AUC,
+  Brier/ECE, rank IC, top-quantile lift, net SPY/QQQ/sector excess return, costs,
+  turnover, drawdown, capacity, regime stability, and coverage.
+- A specialist passing on a narrow cohort remains a specialist. The API abstains
+  outside its verified coverage.
 
 ## Promotion Gates
 
@@ -142,11 +229,12 @@ are audit evidence, never fallbacks.
 - [x] Extract components from `swing_training.py` into cohesive modules without changing behavior.
 - [x] Materialize Swing V12 dataset with advanced technical indicators and appropriate cross-sectional scaling.
 - [x] Train and evaluate swing candidate v5 using V12 features (Failed economic gates / `no_candidate`).
-- [x] Materialize Intraday V3 dataset with MACD, EMA distance, and SMA distance features.
-- [x] Evaluate Intraday V3 Technical Features for target-hit predictive efficacy (AUC ~0.50-0.51).
-- [x] Train and evaluate intraday candidate v3 using V3 features (Failed economic gates).
-- [x] Fix Intraday 0.66 AUC issue by shifting from Binary Classification to Learning-to-Rank (XGB Ranker) prioritizing Rank IC.
-- [x] Add Cross-Sectional Z-Scoring for Intraday advanced technical indicators.
-- [x] Update final handoff, commit, and push the checkpoint.
-- [ ] [environment-pending] Collect and freeze a genuinely future intraday V3 holdout. (Blocked: requires canonical membership and raw market data for 2026-07-09 onwards, which is unavailable in the current environment.)
+- [x] Record the historical Intraday V3 experiment as invalid because five declared
+  cross-sectional z-score inputs lacked a causal decision-cohort implementation.
+- [x] Preserve learning-to-rank as a future estimator family, not as evidence that the
+  invalid V3 feature contract was repaired.
+- [x] Complete A0 research-integrity recovery and push implementation commit
+  `e168482` plus its documentation closure.
+- [ ] Build and backfill the replacement A4 intraday feature authority before
+  collecting a new locked holdout; the invalid V3 contract cannot be reused.
 - [ ] Promote only a model that passes every gate.
