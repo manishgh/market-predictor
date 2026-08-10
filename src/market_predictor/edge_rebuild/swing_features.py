@@ -158,6 +158,17 @@ TECHNICAL_RANKING_FEATURES: Final = tuple(
         )
     )
 )
+SWING_BASELINE_ABLATION_INPUTS: Final = {
+    "momentum_volatility": MOMENTUM_FEATURES,
+    "trend_confirmation": tuple(
+        dict.fromkeys((*MOMENTUM_FEATURES, *TREND_FEATURES))
+    ),
+    "pullback_timing": tuple(
+        dict.fromkeys((*MOMENTUM_FEATURES, *TREND_FEATURES, *PULLBACK_FEATURES))
+    ),
+    "volume_liquidity": TECHNICAL_RANKING_FEATURES,
+}
+SWING_BASELINE_ABLATION_ORDER: Final = tuple(SWING_BASELINE_ABLATION_INPUTS)
 
 _BARRIER_RENAMES: Final = {
     "exit_session": "barrier_exit_session_date_et",
@@ -758,6 +769,26 @@ def swing_model_feature_columns(
                 f"raw news counts entered the estimator schema: {leaked}"
             )
     return columns
+
+
+def swing_baseline_feature_columns(
+    feature_group: str,
+    *,
+    contract: StrategyContract,
+) -> tuple[str, ...]:
+    """Return one preregistered nested swing-baseline feature contract."""
+
+    inputs = SWING_BASELINE_ABLATION_INPUTS.get(feature_group)
+    if inputs is None:
+        raise DataReadinessError(
+            f"unsupported swing baseline feature group: {feature_group}"
+        )
+    return tuple(
+        cross_sectional_feature_names(
+            inputs,
+            spec=_cross_section_spec(contract),
+        )
+    )
 
 
 def _add_barrier_outcomes(

@@ -370,8 +370,13 @@ class PredictionService:
                 memory_headroom_gib=self.memory_headroom_gib,
             )
             engine = SwingInferenceEngine(generation)
+            model_features = (
+                live.technical_market
+                if generation.bundle.feature_profile == "technical_market"
+                else live.catalyst_full
+            )
             raw_scores = engine.predict(
-                feature_frame=live.catalyst_full,
+                feature_frame=model_features,
                 requested_models=request.requested_models,
             )
             assert_memory_budget(

@@ -207,8 +207,9 @@ class PromotedSwingBundle(_PromotedBundleBase):
     mode: Literal["swing"]
     strategy_id: Literal["swing"]
     horizon_sessions: Literal[10]
-    feature_profile: Literal["catalyst_full"]
-    catalyst_policy: Literal["required_model_feature"]
+    model_family: Literal["swing_baseline", "swing_event_driven"]
+    feature_profile: Literal["technical_market", "catalyst_full"]
+    catalyst_policy: Literal["confirmation_overlay", "required_model_feature"]
 
     @model_validator(mode="after")
     def validate_swing_schema(self) -> PromotedSwingBundle:
@@ -216,9 +217,20 @@ class PromotedSwingBundle(_PromotedBundleBase):
             raise ValueError(
                 f"swing bundle requires feature schema {SWING_FEATURE_PANEL_SCHEMA}"
             )
-        if self.model_source_families != REQUIRED_MODEL_SOURCE_FAMILIES:
+        if self.model_family == "swing_baseline":
+            if self.feature_profile != "technical_market":
+                raise ValueError("swing baseline requires technical_market features")
+            if self.catalyst_policy != "confirmation_overlay":
+                raise ValueError("swing baseline requires catalyst confirmation overlay")
+            if self.model_source_families:
+                raise ValueError("swing baseline estimator cannot consume catalyst sources")
+        elif self.feature_profile != "catalyst_full":
+            raise ValueError("swing event-driven model requires catalyst_full features")
+        elif self.catalyst_policy != "required_model_feature":
+            raise ValueError("swing event-driven model requires catalyst model features")
+        elif self.model_source_families != REQUIRED_MODEL_SOURCE_FAMILIES:
             raise ValueError(
-                "swing estimator source contract must be exactly the historical Alpaca family"
+                "swing event-driven estimator source contract must be exactly Alpaca"
             )
         return self
 
@@ -825,7 +837,10 @@ def validate_promoted_bundle(
     if bundle.strategy_id != expected_strategy_id:
         raise ArtifactIntegrityError("bundle strategy identity is stale")
     expected_features = (
-        swing_model_feature_columns(contract=strategy_contract, catalyst=True)
+        swing_model_feature_columns(
+            contract=strategy_contract,
+            catalyst=bundle.feature_profile == "catalyst_full",
+        )
         if bundle.mode == "swing"
         else CAUSAL_INTRADAY_MODEL_FEATURE_COLUMNS
     )
@@ -1188,6 +1203,8 @@ def _validate_swing_model_payload(
         )
     if payload.get("candidate_id") != bundle.model_id:
         raise ArtifactIntegrityError("promoted model candidate identity differs")
+    if payload.get("model_family") != bundle.model_family:
+        raise ArtifactIntegrityError("promoted model family differs from its bundle")
     if payload.get("strategy_contract_sha256") != bundle.strategy_contract_sha256:
         raise ArtifactIntegrityError("promoted model strategy contract binding differs")
     features = tuple(str(value) for value in _required_sequence(payload, "feature_columns"))
@@ -1198,9 +1215,32 @@ def _validate_swing_model_payload(
     fitted_models = payload.get("fitted_models")
     if not isinstance(fitted_models, dict) or not fitted_models:
         raise SchemaMismatchError("promoted swing model is missing fitted models")
-    fitted = fitted_models.get("classifier")
-    if getattr(fitted, "estimator", None) is None or getattr(fitted, "calibrator", None) is None:
-        raise SchemaMismatchError("promoted swing model is missing estimator or calibrator")
+    if "classifier" not in fitted_models:
+        raise SchemaMismatchError("promoted swing model is missing its classifier")
+    expected_positions = {column: index for index, column in enumerate(features)}
+    for name, model in fitted_models.items():
+        if (
+            getattr(model, "estimator", None) is None
+            or getattr(model, "calibrator", None) is None
+        ):
+            raise SchemaMismatchError(
+                f"promoted swing model {name} is missing estimator or calibrator"
+            )
+        model_columns = tuple(
+            str(column) for column in getattr(model, "feature_columns", ())
+        )
+        if not model_columns or len(model_columns) != len(set(model_columns)):
+            raise SchemaMismatchError(
+                f"promoted swing model {name} has an invalid feature subset"
+            )
+        if any(column not in expected_positions for column in model_columns):
+            raise SchemaMismatchError(
+                f"promoted swing model {name} feature subset is outside its bundle"
+            )
+        if tuple(sorted(model_columns, key=expected_positions.__getitem__)) != model_columns:
+            raise SchemaMismatchError(
+                f"promoted swing model {name} feature subset order is invalid"
+            )
 
 
 def _strict_utc_datetime(value: object, label: str) -> datetime:
@@ -1316,7 +1356,11 @@ class SwingInferenceEngine:
             self.bundle.ordered_feature_columns,
             frame_name="promoted swing",
         ).astype("float32", copy=False)
-        
+        feature_positions = {
+            column: index
+            for index, column in enumerate(self.bundle.ordered_feature_columns)
+        }
+
         def _score_model(fitted: object) -> tuple[float, ...] | None:
             if fitted is None:
                 return None
@@ -1324,18 +1368,41 @@ class SwingInferenceEngine:
             calibrator = getattr(fitted, "calibrator", None)
             if estimator is None or calibrator is None:
                 return None
+            model_columns = tuple(
+                str(column) for column in getattr(fitted, "feature_columns", ())
+            )
+            if not model_columns:
+                raise DataReadinessError(
+                    "promoted swing model is missing its ordered feature subset"
+                )
             try:
-                raw = np.asarray(estimator.predict_proba(matrix), dtype="float64")
-                if raw.ndim != 2 or raw.shape != (len(matrix), 2):
+                model_matrix = matrix[
+                    :, [feature_positions[column] for column in model_columns]
+                ]
+            except KeyError as exc:
+                raise DataReadinessError(
+                    "promoted swing model feature subset is outside its bundle"
+                ) from exc
+            try:
+                raw = np.asarray(
+                    estimator.predict_proba(model_matrix), dtype="float64"
+                )
+                if raw.ndim != 2 or raw.shape != (len(model_matrix), 2):
                     raise ValueError("estimator probability shape is invalid")
                 calibrated = np.asarray(
                     calibrator.predict_proba(raw[:, 1].reshape(-1, 1))[:, 1],
                     dtype="float64",
                 )
             except (AttributeError, TypeError, ValueError) as exc:
-                raise DataReadinessError("promoted swing model could not score live features") from exc
-            if calibrated.shape != (len(matrix),) or not np.isfinite(calibrated).all():
-                raise DataReadinessError("promoted swing model produced invalid probabilities")
+                raise DataReadinessError(
+                    "promoted swing model could not score live features"
+                ) from exc
+            if calibrated.shape != (len(model_matrix),) or not np.isfinite(
+                calibrated
+            ).all():
+                raise DataReadinessError(
+                    "promoted swing model produced invalid probabilities"
+                )
             if bool(((calibrated < 0.0) | (calibrated > 1.0)).any()):
                 raise DataReadinessError("promoted swing probabilities are outside [0, 1]")
             return tuple(float(value) for value in calibrated)
@@ -1361,7 +1428,7 @@ def score_promoted_swing_model(
     feature_frame: pd.DataFrame,
 ) -> SwingModelScores:
     """Score with the already verified, immutable in-memory model generation."""
-    
+
     engine = SwingInferenceEngine(generation)
     scores = engine.predict(feature_frame, requested_models=["all"])
     

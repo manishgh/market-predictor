@@ -42,7 +42,11 @@ TEST_GATE_POLICY_SHA256 = canonical_payload_sha256({"test_fixture": True})
 
 
 class _Estimator:
+    def __init__(self, expected_width: int) -> None:
+        self.expected_width = expected_width
+
     def predict_proba(self, values: np.ndarray) -> np.ndarray:
+        assert values.shape[1] == self.expected_width
         probability = np.full(len(values), 0.72)
         return np.column_stack((1.0 - probability, probability))
 
@@ -54,8 +58,11 @@ class _Calibrator:
 
 
 class _Fitted:
-    estimator = _Estimator()
     calibrator = _Calibrator()
+
+    def __init__(self, feature_columns: tuple[str, ...]) -> None:
+        self.feature_columns = feature_columns
+        self.estimator = _Estimator(len(feature_columns))
 
 
 class _Inputs:
@@ -113,7 +120,7 @@ def test_promoted_ten_session_swing_api_returns_human_contract(
     contract_path.parent.mkdir(parents=True)
     contract_path.write_bytes((ROOT / "configs" / contract_path.name).read_bytes())
     contract = load_strategy_contract(contract_path)
-    features = swing_model_feature_columns(contract=contract, catalyst=True)
+    features = swing_model_feature_columns(contract=contract, catalyst=False)
     bundle_root = tmp_path / "models" / "swing"
     model_path = bundle_root / "model" / "model.joblib"
     evidence_path = model_path.with_suffix(
@@ -125,11 +132,12 @@ def test_promoted_ten_session_swing_api_returns_human_contract(
         "status": "candidate",
         "promotion_permitted": False,
         "candidate_id": "swing-promoted-test",
+        "model_family": "swing_baseline",
         "strategy_contract_sha256": contract.sha256(),
         "feature_columns": features,
-        "ablation_profile": "catalyst_full",
+        "ablation_profile": "technical_market",
         "probability_threshold": 0.60,
-        "fitted_models": {"classifier": _Fitted()},
+        "fitted_models": {"classifier": _Fitted(features[:1])},
     }
     joblib.dump(model_payload, model_path)
     attestation_id = "f" * 64
@@ -140,8 +148,9 @@ def test_promoted_ten_session_swing_api_returns_human_contract(
         "mode": "swing",
         "strategy_id": "swing",
         "horizon_sessions": 10,
-        "feature_profile": "catalyst_full",
-        "catalyst_policy": "required_model_feature",
+        "model_family": "swing_baseline",
+        "feature_profile": "technical_market",
+        "catalyst_policy": "confirmation_overlay",
         "model_id": "swing-promoted-test",
         "model_status": "promoted",
         "promotion_permitted": True,
@@ -161,8 +170,8 @@ def test_promoted_ten_session_swing_api_returns_human_contract(
         "market_data_provider": "alpaca",
         "market_data_feed": "sip",
         "market_data_adjustment": "all",
-        "model_source_families": ["alpaca"],
-        "model_source_families_sha256": ordered_values_sha256(("alpaca",)),
+        "model_source_families": [],
+        "model_source_families_sha256": ordered_values_sha256(()),
         "catalyst_overlay_source_families": ["alpaca"],
         "catalyst_overlay_source_families_sha256": ordered_values_sha256(("alpaca",)),
         "catalyst_policy_sha256": "e" * 64,
@@ -185,7 +194,13 @@ def test_promoted_ten_session_swing_api_returns_human_contract(
         bundle=promoted_bundle,
         model_payload=model_payload,
     )
-    live = _live_frames(features)
+    live = _live_frames(
+        technical_features=features,
+        catalyst_features=swing_model_feature_columns(
+            contract=contract,
+            catalyst=True,
+        ),
+    )
     monkeypatch.setattr(service_module, "build_live_swing_features", lambda *_args, **_kwargs: live)
     monkeypatch.setattr(
         "market_predictor.edge_rebuild.serving.verify_promotion_attestation",
@@ -270,7 +285,11 @@ def test_promoted_ten_session_swing_api_returns_human_contract(
     assert unavailable.json()["error"]["code"] == "prediction_not_ready"
 
 
-def _live_frames(features: tuple[str, ...]) -> SwingLiveFeatureFrames:
+def _live_frames(
+    *,
+    technical_features: tuple[str, ...],
+    catalyst_features: tuple[str, ...],
+) -> SwingLiveFeatureFrames:
     identities: list[dict[str, object]] = []
     context_rows: list[dict[str, object]] = []
     for index in range(60):
@@ -316,8 +335,8 @@ def _live_frames(features: tuple[str, ...]) -> SwingLiveFeatureFrames:
         pd.DataFrame(identities).loc[:, SWING_LIVE_IDENTITY_COLUMNS],
         names=SWING_LIVE_IDENTITY_COLUMNS,
     )
-    catalyst = pd.DataFrame(0.1, index=index, columns=features)
-    technical = catalyst.iloc[:, :1].copy()
+    technical = pd.DataFrame(0.1, index=index, columns=technical_features)
+    catalyst = pd.DataFrame(0.1, index=index, columns=catalyst_features)
     context = pd.DataFrame(context_rows, index=index)
     return SwingLiveFeatureFrames(
         technical_market=technical,

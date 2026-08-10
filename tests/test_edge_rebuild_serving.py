@@ -69,15 +69,18 @@ class _VerifiedFittedCandidate:
     estimator = object()
     calibrator = object()
 
+    def __init__(self, feature_columns: tuple[str, ...]) -> None:
+        self.feature_columns = feature_columns
+
 
 def _base_bundle(*, mode: str) -> dict[str, object]:
     features = (
-        swing_model_feature_columns(contract=CONTRACT, catalyst=True)
+        swing_model_feature_columns(contract=CONTRACT, catalyst=False)
         if mode == "swing"
         else CAUSAL_INTRADAY_MODEL_FEATURE_COLUMNS
     )
     overlays = ("alpaca", "sec", "finviz")
-    model_sources = ("alpaca",) if mode == "swing" else ()
+    model_sources: tuple[str, ...] = ()
     global_sources = ("alpaca", "gdelt")
     payload: dict[str, object] = {
         "schema_version": "edge_rebuild.promoted_bundle.v2",
@@ -115,9 +118,10 @@ def _base_bundle(*, mode: str) -> dict[str, object]:
             {
                 "strategy_id": CONTRACT.swing.strategy_id,
                 "horizon_sessions": 10,
+                "model_family": "swing_baseline",
                 "feature_schema_version": SWING_FEATURE_PANEL_SCHEMA,
-                "feature_profile": "catalyst_full",
-                "catalyst_policy": "required_model_feature",
+                "feature_profile": "technical_market",
+                "catalyst_policy": "confirmation_overlay",
             }
         )
     else:
@@ -158,17 +162,18 @@ def _publish_signed_swing_generation(
     source = repository.parent / f"candidate-{candidate_id}"
     model_path = source / "model.joblib"
     model_path.parent.mkdir(parents=True)
-    features = swing_model_feature_columns(contract=CONTRACT, catalyst=True)
+    features = swing_model_feature_columns(contract=CONTRACT, catalyst=False)
     payload = {
         "schema": MODEL_SCHEMA,
         "status": "candidate",
         "promotion_permitted": False,
         "candidate_id": candidate_id,
+        "model_family": "swing_baseline",
         "strategy_contract_sha256": CONTRACT.sha256(),
         "feature_columns": features,
-        "ablation_profile": "catalyst_full",
+        "ablation_profile": "technical_market",
         "probability_thresholds": {"classifier": 0.60},
-        "fitted_models": {"classifier": _VerifiedFittedCandidate()},
+        "fitted_models": {"classifier": _VerifiedFittedCandidate(features)},
         "marker": marker,
     }
     joblib.dump(payload, model_path)
@@ -265,7 +270,8 @@ def test_validates_strict_swing_and_intraday_promoted_bundles() -> None:
     )
 
     assert swing.horizon_sessions == 10
-    assert swing.catalyst_policy == "required_model_feature"
+    assert swing.model_family == "swing_baseline"
+    assert swing.catalyst_policy == "confirmation_overlay"
     assert intraday.horizon_minutes == 30
     assert intraday.catalyst_policy == "confirmation_overlay"
     assert len(swing.sha256()) == 64
@@ -305,7 +311,7 @@ def test_rejects_candidate_or_unbound_bundle() -> None:
     (
         ("feature_schema_version", "swing.features.v1"),
         ("ordered_feature_sha256", "d" * 64),
-        ("catalyst_policy", "confirmation_overlay"),
+        ("catalyst_policy", "required_model_feature"),
         ("model_source_families", ("sec",)),
     ),
 )

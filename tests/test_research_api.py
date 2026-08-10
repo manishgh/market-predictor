@@ -24,6 +24,21 @@ class _LinearEstimator:
         return frame["feature_a"].to_numpy(dtype="float64") * 2.0
 
 
+class _FeatureBoundModel:
+    def __init__(self, feature_columns: tuple[str, ...]) -> None:
+        self.feature_columns = feature_columns
+        self.estimator = _SubsetEstimator(feature_columns)
+
+
+class _SubsetEstimator:
+    def __init__(self, expected_columns: tuple[str, ...]) -> None:
+        self.expected_columns = expected_columns
+
+    def predict(self, frame: pd.DataFrame) -> np.ndarray:
+        assert tuple(frame.columns) == self.expected_columns
+        return frame.iloc[:, 0].to_numpy(dtype="float64")
+
+
 class _FeatureSource:
     def __init__(self, frame: pd.DataFrame) -> None:
         self.frame = frame
@@ -131,6 +146,45 @@ def test_scoring_rejects_missing_features_instead_of_zero_filling(tmp_path: Path
         )
 
 
+def test_scoring_uses_fitted_model_feature_subset_in_declared_order(
+    tmp_path: Path,
+) -> None:
+    catalog = _write_catalog(tmp_path)
+    _write_candidate(
+        tmp_path / "data/models/swing_baseline",
+        feature_columns=("feature_a", "feature_b"),
+        fitted_candidate=_FeatureBoundModel(("feature_b",)),
+    )
+    for relative in (
+        "data/models/swing_event",
+        "data/models/intraday_event",
+        "data/models/intraday_baseline",
+    ):
+        _write_no_candidate(tmp_path / relative)
+    service = ResearchModelService(
+        tmp_path,
+        catalog_path=catalog,
+        feature_source=_FeatureSource(
+            pd.DataFrame(
+                {
+                    "ticker": ["MSFT"],
+                    "feature_available_at_utc": ["2026-08-10T20:00:00Z"],
+                    "feature_a": [1.25],
+                    "feature_b": [3.5],
+                }
+            )
+        ),
+    )
+
+    result = service.predict(
+        model_id="swing_baseline",
+        tickers=["MSFT"],
+        as_of=datetime(2026, 8, 10, 21, tzinfo=UTC),
+    )
+
+    assert result["predictions"][0]["score"] == pytest.approx(3.5)
+
+
 def test_http_catalog_and_unavailable_model_are_explicit(tmp_path: Path) -> None:
     catalog = _write_catalog(tmp_path)
     _write_candidate(tmp_path / "data/models/swing_baseline")
@@ -215,13 +269,18 @@ artifact_directory = "data/models/intraday_baseline"
     return path
 
 
-def _write_candidate(directory: Path) -> None:
+def _write_candidate(
+    directory: Path,
+    *,
+    feature_columns: tuple[str, ...] = ("feature_a",),
+    fitted_candidate: object | None = None,
+) -> None:
     directory.mkdir(parents=True)
     candidate = directory / "candidate.joblib"
     joblib.dump(
         {
-            "feature_columns": ["feature_a"],
-            "fitted_candidate": _LinearEstimator(),
+            "feature_columns": list(feature_columns),
+            "fitted_candidate": fitted_candidate or _LinearEstimator(),
         },
         candidate,
     )

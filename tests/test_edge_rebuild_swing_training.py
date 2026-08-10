@@ -21,9 +21,11 @@ from market_predictor.edge_rebuild.swing_features import (
     MANAGED_EXCESS_RETURN_COLUMNS,
     MANAGED_PATH_NET_RETURN_COLUMNS,
     MANAGED_PATH_SESSION_ORDINAL_COLUMNS,
+    SWING_BASELINE_ABLATION_ORDER,
     SWING_CATALYST_FEATURE_PROFILE,
     SWING_FEATURE_PANEL_SCHEMA,
     SWING_FEATURE_PROFILE,
+    swing_baseline_feature_columns,
     swing_model_feature_columns,
 )
 from market_predictor.edge_rebuild.swing_training import (
@@ -57,8 +59,12 @@ def test_repository_policy_is_frozen_for_ten_session_candidate_training() -> Non
     assert config.probability_thresholds == (0.10, 0.15, 0.20, 0.25, 0.30, 0.35)
     # The grid must fit the contract's six-candidate experiment budget, and the
     # constructor's arithmetic must agree with what the builder actually emits.
-    assert len(swing_training._candidate_specs(config)) == 6
-    assert len(swing_training._candidate_specs(config)) <= config.maximum_learned_candidates
+    specs = swing_training._candidate_specs(config, contract)
+    assert len(specs) == 6
+    assert len(specs) <= config.maximum_learned_candidates
+    assert [spec.feature_group for spec in specs[:4]] == list(
+        SWING_BASELINE_ABLATION_ORDER
+    )
     temporal = load_temporal_manifest_config(
         Path("configs/edge_rebuild_temporal_manifest.toml")
     )
@@ -104,27 +110,25 @@ def test_walk_forward_uses_exact_governed_session_counts_and_dates() -> None:
     assert schedule.final_refit_sessions[-1] == date(2025, 6, 13)
 
 
-def test_ablation_feature_contract_excludes_unapproved_sources() -> None:
+def test_baseline_ablation_contract_is_nested_and_excludes_catalysts() -> None:
     contract = _contract()
     technical = swing_model_feature_columns(contract=contract, catalyst=False)
-    catalyst = swing_model_feature_columns(contract=contract, catalyst=True)
+    groups = [
+        swing_baseline_feature_columns(group, contract=contract)
+        for group in SWING_BASELINE_ABLATION_ORDER
+    ]
 
-    assert set(technical).issubset(catalyst)
-    assert len(catalyst) > len(technical)
-    assert any("alpaca" in column for column in catalyst)
-    assert not any("low_relevance_event_fraction" in column for column in catalyst)
-    assert not any(
-        swing_training._is_unapproved_source_feature(column) for column in catalyst
+    assert all(
+        set(left).issubset(right)
+        for left, right in zip(groups[:-1], groups[1:], strict=True)
     )
-
-
-def test_swing_ablation_profiles_require_identical_published_decisions() -> None:
-    identity = "a" * 64
-
-    assert swing_training._matched_ablation_identity(None, identity) == identity
-    assert swing_training._matched_ablation_identity(identity, identity) == identity
-    with pytest.raises(DataReadinessError, match="identical decisions"):
-        swing_training._matched_ablation_identity(identity, "b" * 64)
+    assert groups[-1] == technical
+    assert all("alpaca" not in column for group in groups for column in group)
+    assert not any(
+        swing_training._is_unapproved_source_feature(column)
+        for group in groups
+        for column in group
+    )
 
 
 def test_input_authority_rejects_pre_cutoff_decisions(
@@ -256,10 +260,17 @@ def test_trains_sequential_ablations_and_publishes_candidate_only(
     assert result.evaluation["split"]["embargo_sessions"] == 10
     assert result.evaluation["overlap_audit"]["row_identity_overlap_total"] == 0
     assert result.evaluation["overlap_audit"]["all_temporal_partitions_disjoint"]
-    assert {record["ablation_profile"] for record in result.evaluation["validation_candidates"]} == {
-        SWING_FEATURE_PROFILE,
-        SWING_CATALYST_FEATURE_PROFILE,
-    }
+    assert {
+        record["ablation_profile"]
+        for record in result.evaluation["validation_candidates"]
+    } == {SWING_FEATURE_PROFILE}
+    assert {
+        record["feature_group"]
+        for record in result.evaluation["validation_candidates"]
+    } == set(SWING_BASELINE_ABLATION_ORDER)
+    assert result.evaluation["feature_ablation_order"] == list(
+        SWING_BASELINE_ABLATION_ORDER
+    )
     for record in result.evaluation["validation_candidates"]:
         assert set(record["selected_validation_metrics"]) == {
             "temporal_generalization_full_pit_cross_section",
@@ -306,15 +317,8 @@ def test_trains_sequential_ablations_and_publishes_candidate_only(
         "ten_session_sector_excess_positive",
     }
     assert metrics["negative_controls"]["label_permutation"]["passed"] is True
-    assert result.evaluation["paired_ablation"]
-    assert all(
-        record["paired_sessions"] >= config.bootstrap_block_sessions
-        for record in result.evaluation["paired_ablation"]
-    )
-    assert all(
-        record["calendar_join"] == "full_outer_zero_for_no_position"
-        for record in result.evaluation["paired_ablation"]
-        if record["eligible"]
+    assert result.evaluation["selected_bundle_id"].startswith(
+        "swing_baseline_bundle."
     )
 
     replay = load_swing_candidate_authority(tmp_path / "candidate")
@@ -554,7 +558,7 @@ def test_moving_block_bootstrap_is_deterministic_and_uses_frozen_block() -> None
     assert first["bootstrap_samples"] == 2_000
 
 
-def test_paired_ablation_calendar_includes_zero_return_no_position_sessions() -> None:
+def test_session_economic_calendar_includes_zero_return_no_position_sessions() -> None:
     selected = pd.DataFrame(
         {
             "session_date_et": ["2024-01-03"],
@@ -703,10 +707,8 @@ def _config() -> SwingTrainingConfig:
         maximum_trades_per_decision=25,
         probability_thresholds=(0.10, 0.20),
         logistic_c_values=(1.0,),
-        hgb_learning_rates=(0.05,),
-        hgb_max_leaf_nodes=(7,),
-        hgb_max_iter=20,
-        hgb_max_bins=31,
+        xgb_learning_rates=(0.05,),
+        xgb_n_estimators=20,
         maximum_learned_candidates=6,
         bootstrap_samples=2_000,
         bootstrap_block_sessions=20,
@@ -786,6 +788,9 @@ def _profiles(contract: StrategyContract) -> tuple[SwingProfileData, SwingProfil
                     "swing_feature_panel_schema": SWING_FEATURE_PANEL_SCHEMA,
                     "strategy_contract_sha256": contract.sha256(),
                     "feature_signal": signal + rng.normal(0.0, 0.3),
+                    "feature_trend": signal + rng.normal(0.0, 0.5),
+                    "feature_pullback": signal + rng.normal(0.0, 0.7),
+                    "feature_volume": signal + rng.normal(0.0, 0.9),
                     "feature_noise": rng.normal(),
                 }
             )
@@ -818,7 +823,13 @@ def _profiles(contract: StrategyContract) -> tuple[SwingProfileData, SwingProfil
     technical = SwingProfileData(
         frame=frame.copy(),
         profile=SWING_FEATURE_PROFILE,
-        feature_columns=("feature_signal", "feature_noise"),
+        feature_columns=(
+            "feature_signal",
+            "feature_trend",
+            "feature_pullback",
+            "feature_volume",
+            "feature_noise",
+        ),
         decision_ids_sha256=digest,
         panel=binding,
     )
@@ -829,7 +840,14 @@ def _profiles(contract: StrategyContract) -> tuple[SwingProfileData, SwingProfil
     catalyst = SwingProfileData(
         frame=catalyst_frame,
         profile=SWING_CATALYST_FEATURE_PROFILE,
-        feature_columns=("feature_signal", "feature_noise", "alpaca_sentiment"),
+        feature_columns=(
+            "feature_signal",
+            "feature_trend",
+            "feature_pullback",
+            "feature_volume",
+            "feature_noise",
+            "alpaca_sentiment",
+        ),
         decision_ids_sha256=digest,
         panel=binding,
     )
@@ -904,7 +922,63 @@ def _patch_inputs(
         "load_swing_profile",
         load_profile,
     )
+    monkeypatch.setattr(
+        swing_training,
+        "_candidate_specs",
+        _test_candidate_specs,
+    )
     return accesses
+
+
+def _test_candidate_specs(
+    config: SwingTrainingConfig,
+    strategy_contract: StrategyContract,
+) -> tuple[swing_training.CandidateSpec, ...]:
+    del strategy_contract
+    nested = {
+        "momentum_volatility": ("feature_signal",),
+        "trend_confirmation": ("feature_signal", "feature_trend"),
+        "pullback_timing": (
+            "feature_signal",
+            "feature_trend",
+            "feature_pullback",
+        ),
+        "volume_liquidity": (
+            "feature_signal",
+            "feature_trend",
+            "feature_pullback",
+            "feature_volume",
+            "feature_noise",
+        ),
+    }
+    specs = [
+        swing_training.CandidateSpec(
+            candidate_id=f"test.{group}.logistic",
+            profile=SWING_FEATURE_PROFILE,
+            feature_group=group,
+            feature_columns=columns,
+            estimator_family="logistic",
+            hyperparameters={"C": config.logistic_c_values[0], "solver": "lbfgs"},
+        )
+        for group, columns in nested.items()
+    ]
+    for family in ("xgboost_ranker", "xgboost_regressor"):
+        specs.append(
+            swing_training.CandidateSpec(
+                candidate_id=f"test.volume_liquidity.{family}",
+                profile=SWING_FEATURE_PROFILE,
+                feature_group="volume_liquidity",
+                feature_columns=nested["volume_liquidity"],
+                estimator_family=family,
+                hyperparameters={
+                    "learning_rate": config.xgb_learning_rates[0],
+                    "max_depth": config.xgb_max_depths[0],
+                    "n_estimators": config.xgb_n_estimators,
+                    "threads": 1,
+                },
+            )
+        )
+    return tuple(specs)
 
 
 def _poison_final_test(frame: pd.DataFrame, config: SwingTrainingConfig) -> pd.DataFrame:

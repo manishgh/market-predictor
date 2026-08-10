@@ -41,9 +41,11 @@ from market_predictor.edge_rebuild.swing_features import (
     MANAGED_PATH_COST_POLICY,
     MANAGED_PATH_NET_RETURN_COLUMNS,
     MANAGED_PATH_SESSION_ORDINAL_COLUMNS,
+    SWING_BASELINE_ABLATION_ORDER,
     SWING_CATALYST_FEATURE_PROFILE,
     SWING_FEATURE_PANEL_SCHEMA,
     SWING_FEATURE_PROFILE,
+    swing_baseline_feature_columns,
     swing_model_feature_columns,
 )
 from market_predictor.edge_rebuild.swing_selection import (
@@ -89,11 +91,12 @@ from market_predictor.resources import (
 )
 from market_predictor.v3.errors import DataReadinessError
 
-TRAINING_SCHEMA: Final = "edge_rebuild.swing_training.v4"
-MODEL_SCHEMA: Final = "edge_rebuild.swing_candidate.v4"
-EVALUATION_SCHEMA: Final = "edge_rebuild.swing_evaluation.v6"
-MODEL_CARD_SCHEMA: Final = "edge_rebuild.swing_model_card.v6"
-OUTPUT_AUTHORITY_SCHEMA: Final = "edge_rebuild.swing_candidate_authority.v4"
+TRAINING_SCHEMA: Final = "edge_rebuild.swing_training.v5"
+MODEL_SCHEMA: Final = "edge_rebuild.swing_candidate.v5"
+EVALUATION_SCHEMA: Final = "edge_rebuild.swing_evaluation.v7"
+MODEL_CARD_SCHEMA: Final = "edge_rebuild.swing_model_card.v7"
+OUTPUT_AUTHORITY_SCHEMA: Final = "edge_rebuild.swing_candidate_authority.v5"
+SWING_BASELINE_BUNDLE_PREFIX: Final = "swing_baseline_bundle."
 DECISION_START_DATE: Final = date(2019, 7, 9)
 HORIZON_SESSIONS: Final = 10
 ALLOWED_PROFILES: Final = (
@@ -145,10 +148,8 @@ class SwingTrainingConfig:
         0.35,
     )
     logistic_c_values: tuple[float, ...] = (1.0,)
-    hgb_learning_rates: tuple[float, ...] = (0.05,)
-    hgb_max_leaf_nodes: tuple[int, ...] = (15, 31)
-    hgb_max_iter: int = 150
-    hgb_max_bins: int = 127
+    xgb_learning_rates: tuple[float, ...] = (0.05,)
+    xgb_n_estimators: int = 150
     # Tree depth is a policy field rather than a literal in the grid builder. It
     # was hard-coded to (3, 5), which put half the candidate count outside the
     # budget arithmetic below and let the real grid grow to fourteen while the
@@ -159,7 +160,7 @@ class SwingTrainingConfig:
     bootstrap_block_sessions: int = 20
     random_seed: int = 42
     expected_round_trip_cost_bps: float = 20.0
-    maximum_process_memory_gib: float = 4.0
+    maximum_process_memory_gib: float = 5.0
     memory_guard_headroom_gib: float = 0.75
 
     def __post_init__(self) -> None:
@@ -183,21 +184,21 @@ class SwingTrainingConfig:
             raise ValueError("probability thresholds must be unique and ascending")
         if not self.logistic_c_values or any(value <= 0 for value in self.logistic_c_values):
             raise ValueError("logistic C values must be positive")
-        if not self.hgb_learning_rates or any(value <= 0 for value in self.hgb_learning_rates):
-            raise ValueError("hgb learning rates must be positive")
-        if not self.hgb_max_leaf_nodes or any(value < 2 for value in self.hgb_max_leaf_nodes):
-            raise ValueError("hgb max leaf nodes must be at least 2")
-        if self.hgb_max_iter < 1:
-            raise ValueError("hgb max iter must be at least 1")
+        if not self.xgb_learning_rates or any(
+            value <= 0 for value in self.xgb_learning_rates
+        ):
+            raise ValueError("xgboost learning rates must be positive")
+        if self.xgb_n_estimators < 1:
+            raise ValueError("xgboost estimator count must be positive")
         if not self.xgb_max_depths or any(value < 1 for value in self.xgb_max_depths):
             raise ValueError("xgb max depths must be at least 1")
-        # This must equal len(_candidate_specs(self)). The previous formula
-        # counted an HGB grid the builder no longer emits, so it undercounted the
-        # real grid by more than half and the multiple-testing control it exists
-        # to provide was not being applied.
-        candidate_count = len(ALLOWED_PROFILES) * (
-            len(self.logistic_c_values)
-            + len(self.hgb_learning_rates) * len(self.xgb_max_depths) * _XGB_FAMILIES
+        # Four nested logistic feature ablations plus two full-feature tree
+        # families are the preregistered swing-baseline experiment budget.
+        candidate_count = (
+            len(SWING_BASELINE_ABLATION_ORDER) * len(self.logistic_c_values)
+            + len(self.xgb_learning_rates)
+            * len(self.xgb_max_depths)
+            * _XGB_FAMILIES
         )
         if candidate_count > self.maximum_learned_candidates:
             raise ValueError("candidate grid exceeds the frozen sequential budget")
@@ -234,8 +235,7 @@ def load_swing_training_config(path: Path) -> SwingTrainingConfig:
     for name in (
         "probability_thresholds",
         "logistic_c_values",
-        "hgb_learning_rates",
-        "hgb_max_leaf_nodes",
+        "xgb_learning_rates",
     ):
         value = values[name]
         if not isinstance(value, list):
@@ -270,6 +270,8 @@ class SwingProfileData:
 class CandidateSpec:
     candidate_id: str
     profile: str
+    feature_group: str
+    feature_columns: tuple[str, ...]
     estimator_family: str
     hyperparameters: Mapping[str, float | int | str]
 
@@ -278,6 +280,7 @@ class CandidateSpec:
 class FittedCandidate:
     estimator: Any
     calibrator: LogisticRegression
+    feature_columns: tuple[str, ...]
     fit_sessions: int
     calibration_sessions: int
     calibration_cutoff_utc: str
@@ -834,12 +837,11 @@ def train_swing_edge_candidate(
     )
     config_record = asdict(config)
     config_sha256 = _json_sha256(config_record)
-    specs = _candidate_specs(config)
+    specs = _candidate_specs(config, strategy_contract)
     if len(specs) > config.maximum_learned_candidates:
         raise DataReadinessError("candidate count exceeds the frozen sequential budget")
 
     validation_records: list[dict[str, Any]] = []
-    profile_identity: str | None = None
     split_record = _split_record(
         folds=folds,
         schedule=schedule,
@@ -847,36 +849,29 @@ def train_swing_edge_candidate(
         temporal_policy_sha256=temporal_policy_sha256,
         strategy_contract=strategy_contract,
     )
-    for profile in ALLOWED_PROFILES:
-        profile_data = load_swing_profile(
-            binding,
-            profile,
-            strategy_contract=strategy_contract,
-            config=config,
-            sessions=model_sessions,
-        )
-        profile_identity = _matched_ablation_identity(
-            profile_identity,
-            profile_data.decision_ids_sha256,
-        )
-        for spec in (item for item in specs if item.profile == profile):
-            validation_records.append(
-                _evaluate_validation_candidate(
-                    spec,
-                    profile_data,
-                    folds,
-                    config,
-                    strategy_contract,
-                )
+    profile_data = load_swing_profile(
+        binding,
+        SWING_FEATURE_PROFILE,
+        strategy_contract=strategy_contract,
+        config=config,
+        sessions=model_sessions,
+    )
+    profile_identity = profile_data.decision_ids_sha256
+    for spec in specs:
+        validation_records.append(
+            _evaluate_validation_candidate(
+                spec,
+                profile_data,
+                folds,
+                config,
+                strategy_contract,
             )
-            release_process_memory()
-            _guard(config, f"{spec.candidate_id} validation", peak=True)
-        del profile_data
+        )
         release_process_memory()
+        _guard(config, f"{spec.candidate_id} validation", peak=True)
+    del profile_data
+    release_process_memory()
 
-    if profile_identity is None:
-        raise DataReadinessError("no swing ablation profiles were evaluated")
-    paired_ablation = _paired_ablation_records(validation_records, config)
     eligible_candidates = [
         record for record in validation_records if record.get("candidate_eligible") is True
     ]
@@ -884,6 +879,7 @@ def train_swing_edge_candidate(
         no_candidate_evaluation = {
             "schema": EVALUATION_SCHEMA,
             "status": "no_candidate",
+            "model_family": "swing_baseline",
             "promotion_permitted": False,
             "selection_basis": "validation_only",
             "test_access_count": 0,
@@ -895,13 +891,14 @@ def train_swing_edge_candidate(
             "temporal_manifest_policy_sha256": temporal_policy_sha256,
             "split": split_record,
             "validation_candidates": validation_records,
-            "paired_ablation": paired_ablation,
+            "feature_ablation_order": list(SWING_BASELINE_ABLATION_ORDER),
             "reason": "no candidate passed the frozen validation economic gates",
         }
         no_candidate_model_card = {
             "schema": MODEL_CARD_SCHEMA,
             "model_schema": MODEL_SCHEMA,
             "status": "no_candidate",
+            "model_family": "swing_baseline",
             "promotion_permitted": False,
             "candidate_id": None,
             "outcome_contract": _swing_outcome_contract(config, strategy_contract),
@@ -925,7 +922,11 @@ def train_swing_edge_candidate(
     family_groups: dict[str, list[dict[str, Any]]] = {}
     for record in eligible_candidates:
         spec = next(s for s in specs if s.candidate_id == record["candidate_id"])
-        fam = "classifier" if spec.estimator_family in ("logistic", "xgboost_ranker") else spec.estimator_family
+        fam = (
+            "classifier"
+            if spec.estimator_family in ("logistic", "xgboost_ranker")
+            else spec.estimator_family
+        )
         family_groups.setdefault(fam, []).append(record)
 
     selected_records = {
@@ -940,9 +941,15 @@ def train_swing_edge_candidate(
         fam: float(r["selected_probability_threshold"])
         for fam, r in selected_records.items()
     }
+    bundle_candidate_id = _bundle_candidate_id(
+        selected_records=selected_records,
+        panel_request_sha256=binding.request_sha256,
+        training_config_sha256=config_sha256,
+        temporal_policy_sha256=temporal_policy_sha256,
+    )
 
     reference_spec = next(iter(selected_specs.values()))
-    
+
     # The selected profile is reloaded only after validation has frozen both
     # candidate and threshold. This is the single controlled final-test access.
     selected_data = load_swing_profile(
@@ -1001,8 +1008,8 @@ def train_swing_edge_candidate(
 
     for fam, spec in selected_specs.items():
         threshold = selected_thresholds[fam]
-        fitted = _fit_candidate(spec, development, selected_data, config)
-        probability = _predict_probability(fitted, final_test, selected_data.feature_columns)
+        fitted = _fit_candidate(spec, development, config)
+        probability = _predict_probability(fitted, final_test, spec.feature_columns)
         temporal_final_metrics[fam] = _evaluation_metrics(
             final_test,
             probability,
@@ -1015,13 +1022,12 @@ def train_swing_edge_candidate(
         unseen_fitted = _fit_candidate(
             spec,
             unseen_development,
-            selected_data,
             config,
         )
         unseen_probability = _predict_probability(
             unseen_fitted,
             unseen_final_test,
-            selected_data.feature_columns,
+            spec.feature_columns,
         )
         unseen_final_metrics[fam] = _evaluation_metrics(
             unseen_final_test,
@@ -1040,6 +1046,7 @@ def train_swing_edge_candidate(
     evaluation: dict[str, Any] = {
         "schema": EVALUATION_SCHEMA,
         "status": "candidate_only",
+        "model_family": "swing_baseline",
         "promotion_permitted": False,
         "selection_basis": "validation_only",
         "selection_policy": {
@@ -1054,7 +1061,7 @@ def train_swing_edge_candidate(
                 "negative_turnover",
                 "lower_probability_threshold_tie_break",
                 "simpler_estimator_tie_break",
-                "technical_only_tie_break",
+                "fewer_features_tie_break",
             ],
         },
         "test_access_count": 1,
@@ -1085,7 +1092,8 @@ def train_swing_edge_candidate(
             ),
         ),
         "validation_candidates": validation_records,
-        "paired_ablation": paired_ablation,
+        "feature_ablation_order": list(SWING_BASELINE_ABLATION_ORDER),
+        "selected_bundle_id": bundle_candidate_id,
         "selected_candidate_ids": {fam: r["candidate_id"] for fam, r in selected_records.items()},
         "selected_profile": reference_spec.profile,
         "selected_probability_thresholds": selected_thresholds,
@@ -1109,14 +1117,17 @@ def train_swing_edge_candidate(
         "schema": MODEL_CARD_SCHEMA,
         "model_schema": MODEL_SCHEMA,
         "status": "candidate",
+        "model_family": "swing_baseline",
         "promotion_permitted": False,
-        "candidate_id": selected_records.get("classifier", next(iter(selected_records.values())))["candidate_id"],
+        "candidate_id": bundle_candidate_id,
         "candidate_ids": {fam: r["candidate_id"] for fam, r in selected_records.items()},
         "ablation_profile": reference_spec.profile,
         "outcome_contract": _swing_outcome_contract(config, strategy_contract),
         "models": {
             fam: {
                 "estimator_family": selected_specs[fam].estimator_family,
+                "feature_group": selected_specs[fam].feature_group,
+                "feature_columns": list(selected_specs[fam].feature_columns),
                 "hyperparameters": dict(selected_specs[fam].hyperparameters),
                 "probability_threshold": selected_thresholds[fam],
             } for fam in selected_specs
@@ -1144,8 +1155,9 @@ def train_swing_edge_candidate(
     payload: dict[str, Any] = {
         "schema": MODEL_SCHEMA,
         "status": "candidate",
+        "model_family": "swing_baseline",
         "promotion_permitted": False,
-        "candidate_id": selected_records.get("classifier", next(iter(selected_records.values())))["candidate_id"],
+        "candidate_id": bundle_candidate_id,
         "ablation_profile": reference_spec.profile,
         "feature_columns": list(selected_data.feature_columns),
         "feature_set_sha256": _sequence_sha256(selected_data.feature_columns),
@@ -1164,55 +1176,94 @@ def train_swing_edge_candidate(
     )
     return SwingTrainingResult(
         output_directory=output_directory,
-        selected_candidate_id="multi_model_bundle",
+        selected_candidate_id=bundle_candidate_id,
         evaluation=evaluation,
         model_card=model_card,
     )
 
 
-def _candidate_specs(config: SwingTrainingConfig) -> tuple[CandidateSpec, ...]:
+def _candidate_specs(
+    config: SwingTrainingConfig,
+    strategy_contract: StrategyContract,
+) -> tuple[CandidateSpec, ...]:
     specs: list[CandidateSpec] = []
-    for profile in ALLOWED_PROFILES:
-        family_name = "technical_only" if profile == SWING_FEATURE_PROFILE else "technical_plus_alpaca"
+    for feature_group in SWING_BASELINE_ABLATION_ORDER:
+        columns = swing_baseline_feature_columns(
+            feature_group,
+            contract=strategy_contract,
+        )
         for value in config.logistic_c_values:
             specs.append(
                 CandidateSpec(
-                    candidate_id=f"{family_name}.logistic.c_{value:g}",
-                    profile=profile,
+                    candidate_id=(
+                        f"swing_baseline.{feature_group}.logistic.c_{value:g}"
+                    ),
+                    profile=SWING_FEATURE_PROFILE,
+                    feature_group=feature_group,
+                    feature_columns=columns,
                     estimator_family="logistic",
                     hyperparameters={"C": value, "solver": "lbfgs", "threads": 1},
                 )
             )
-        for rate in config.hgb_learning_rates:
-            for depth in config.xgb_max_depths:
-                for label, family in _XGB_GRID:
-                    specs.append(
-                        CandidateSpec(
-                            candidate_id=f"{family_name}.{label}.lr_{rate:g}.depth_{depth}",
-                            profile=profile,
-                            estimator_family=family,
-                            hyperparameters={
-                                "learning_rate": rate,
-                                "max_depth": depth,
-                                "n_estimators": config.hgb_max_iter,
-                                "threads": 1,
-                            },
-                        )
+    full_group = SWING_BASELINE_ABLATION_ORDER[-1]
+    full_columns = swing_baseline_feature_columns(
+        full_group,
+        contract=strategy_contract,
+    )
+    for rate in config.xgb_learning_rates:
+        for depth in config.xgb_max_depths:
+            for label, family in _XGB_GRID:
+                specs.append(
+                    CandidateSpec(
+                        candidate_id=(
+                            f"swing_baseline.{full_group}.{label}."
+                            f"lr_{rate:g}.depth_{depth}"
+                        ),
+                        profile=SWING_FEATURE_PROFILE,
+                        feature_group=full_group,
+                        feature_columns=full_columns,
+                        estimator_family=family,
+                        hyperparameters={
+                            "learning_rate": rate,
+                            "max_depth": depth,
+                            "n_estimators": config.xgb_n_estimators,
+                            "threads": 1,
+                        },
                     )
+                )
     return tuple(specs)
 
 
-def _matched_ablation_identity(
-    current: str | None,
-    observed: str,
+def _bundle_candidate_id(
+    *,
+    selected_records: Mapping[str, Mapping[str, Any]],
+    panel_request_sha256: str,
+    training_config_sha256: str,
+    temporal_policy_sha256: str,
 ) -> str:
-    if len(observed) != 64:
-        raise DataReadinessError("swing ablation decision identity hash is invalid")
-    if current is not None and current != observed:
-        raise DataReadinessError(
-            "technical and catalyst ablations do not contain identical decisions"
-        )
-    return observed
+    identity = {
+        "selected_candidates": {
+            family: {
+                "candidate_id": record.get("candidate_id"),
+                "probability_threshold": record.get("selected_probability_threshold"),
+            }
+            for family, record in sorted(selected_records.items())
+        },
+        "panel_request_sha256": panel_request_sha256,
+        "training_config_sha256": training_config_sha256,
+        "temporal_policy_sha256": temporal_policy_sha256,
+    }
+    return f"{SWING_BASELINE_BUNDLE_PREFIX}{_json_sha256(identity)[:16]}"
+
+
+def _is_swing_baseline_bundle_id(value: object) -> bool:
+    text = str(value)
+    suffix = text.removeprefix(SWING_BASELINE_BUNDLE_PREFIX)
+    return (
+        text.startswith(SWING_BASELINE_BUNDLE_PREFIX)
+        and len(suffix) == 16
+        and all(character in "0123456789abcdef" for character in suffix)
+    )
 
 
 def _swing_outcome_contract(
@@ -1332,11 +1383,11 @@ def _evaluate_validation_candidate(
             "barrier_net_return",
             "relevance_score",
             "ranking_reliability_weight",
-            *profile_data.feature_columns,
+            *spec.feature_columns,
         )))
         validation_columns = list(dict.fromkeys((
             *_evaluation_columns(),
-            *profile_data.feature_columns,
+            *spec.feature_columns,
         )))
         scope_records: dict[str, Any] = {}
         for scope, train_mask, validation_mask in (
@@ -1364,11 +1415,11 @@ def _evaluate_validation_candidate(
                 validation,
                 f"{scope} validation fold {fold.fold}",
             )
-            fitted = _fit_candidate(spec, train, profile_data, config)
+            fitted = _fit_candidate(spec, train, config)
             probability = _predict_probability(
                 fitted,
                 validation,
-                profile_data.feature_columns,
+                spec.feature_columns,
             )
             scored = validation.loc[:, list(_evaluation_columns())].copy()
             scored["__probability"] = probability
@@ -1449,6 +1500,8 @@ def _evaluate_validation_candidate(
         return {
             "candidate_id": spec.candidate_id,
             "ablation_profile": spec.profile,
+            "feature_group": spec.feature_group,
+            "feature_columns": list(spec.feature_columns),
             "estimator_family": spec.estimator_family,
             "hyperparameters": dict(spec.hyperparameters),
             "folds": fold_records,
@@ -1469,6 +1522,8 @@ def _evaluate_validation_candidate(
     record: dict[str, Any] = {
         "candidate_id": spec.candidate_id,
         "ablation_profile": spec.profile,
+        "feature_group": spec.feature_group,
+        "feature_columns": list(spec.feature_columns),
         "estimator_family": spec.estimator_family,
         "hyperparameters": dict(spec.hyperparameters),
         "folds": fold_records,
@@ -1512,7 +1567,6 @@ def _probability_distribution(probability: np.ndarray) -> dict[str, float]:
 def _fit_candidate(
     spec: CandidateSpec,
     train: pd.DataFrame,
-    profile_data: SwingProfileData,
     config: SwingTrainingConfig,
 ) -> FittedCandidate:
     fit_sessions, calibration_sessions = _split_fit_calibration(train, config)
@@ -1523,7 +1577,7 @@ def _fit_candidate(
         or train.loc[calibration_mask, "target"].nunique() != 2
     ):
         raise DataReadinessError("fit and calibration partitions must contain both classes")
-    columns = list(profile_data.feature_columns)
+    columns = list(spec.feature_columns)
 
     if spec.estimator_family == "xgboost_ranker":
         train_fit = train.loc[fit_mask].sort_values("decision_group_id")
@@ -1555,8 +1609,7 @@ def _fit_candidate(
                 (
                     "impute",
                     SimpleImputer(
-                        strategy="constant",
-                        fill_value=0.0,
+                        strategy="median",
                         add_indicator=True,
                         keep_empty_features=True,
                     ),
@@ -1575,10 +1628,6 @@ def _fit_candidate(
         )
     elif spec.estimator_family == "xgboost_ranker":
         import xgboost as xgb
-        constraints = tuple(
-            1 if col in ("dollar_volume_log", "volume_ratio_20", "volume_z20") else 0
-            for col in columns
-        )
         estimator = xgb.XGBRanker(
             objective="rank:pairwise",
             learning_rate=float(spec.hyperparameters["learning_rate"]),
@@ -1586,7 +1635,6 @@ def _fit_candidate(
             n_estimators=int(spec.hyperparameters["n_estimators"]),
             random_state=config.random_seed,
             tree_method="hist",
-            monotone_constraints=constraints,
         )
     elif spec.estimator_family == "xgboost_regressor":
         import xgboost as xgb
@@ -1629,6 +1677,7 @@ def _fit_candidate(
     return FittedCandidate(
         estimator=estimator,
         calibrator=calibrator,
+        feature_columns=spec.feature_columns,
         fit_sessions=len(fit_sessions),
         calibration_sessions=len(calibration_sessions),
         calibration_cutoff_utc=_iso(
@@ -1945,122 +1994,9 @@ def _selection_key(record: Mapping[str, Any]) -> tuple[float, ...]:
     # Prefer the simpler logistic candidate only after all economic and risk
     # criteria tie. AUC remains diagnostic and cannot drive candidate choice.
     simplicity = 1.0 if record.get("estimator_family") == "logistic" else 0.0
-    profile_simplicity = 1.0 if record.get("ablation_profile") == SWING_FEATURE_PROFILE else 0.0
-    return (*economic, simplicity, profile_simplicity)
-
-
-def _paired_ablation_records(
-    records: Sequence[Mapping[str, Any]],
-    config: SwingTrainingConfig,
-) -> list[dict[str, Any]]:
-    indexed: dict[tuple[str, str, str], Mapping[str, Any]] = {}
-    for record in records:
-        if "selected_validation_metrics" not in record:
-            continue
-        key = (
-            str(record.get("estimator_family")),
-            json.dumps(record.get("hyperparameters"), sort_keys=True),
-        )
-        indexed[(str(record.get("ablation_profile")), *key)] = record
-    output: list[dict[str, Any]] = []
-    families = {
-        (key[1], key[2]) for key in indexed if key[0] == SWING_FEATURE_PROFILE
-    }
-    for family, hyperparameters in sorted(families):
-        technical = indexed.get((SWING_FEATURE_PROFILE, family, hyperparameters))
-        catalyst = indexed.get((SWING_CATALYST_FEATURE_PROFILE, family, hyperparameters))
-        if technical is None or catalyst is None:
-            continue
-        technical_scopes = _mapping(
-            technical.get("selected_validation_metrics"),
-            "technical ablation scopes",
-        )
-        catalyst_scopes = _mapping(
-            catalyst.get("selected_validation_metrics"),
-            "catalyst ablation scopes",
-        )
-        for scope in sorted(set(technical_scopes).intersection(catalyst_scopes)):
-            technical_metrics = _mapping(
-                technical_scopes[scope],
-                f"technical {scope} metrics",
-            )
-            catalyst_metrics = _mapping(
-                catalyst_scopes[scope],
-                f"catalyst {scope} metrics",
-            )
-            left = pd.DataFrame(technical_metrics.get("paired_session_blocks", []))
-            right = pd.DataFrame(catalyst_metrics.get("paired_session_blocks", []))
-            if left.empty or right.empty:
-                continue
-            paired = left.merge(
-                right,
-                on="session_date_et",
-                how="outer",
-                suffixes=("_technical", "_catalyst"),
-                validate="one_to_one",
-                indicator=True,
-            ).sort_values("session_date_et", kind="stable")
-            economic_columns = (
-                "barrier_net_return",
-                "approx_managed_exit_session_close_excess_vs_spy",
-                "approx_managed_exit_session_close_excess_vs_qqq",
-                "approx_managed_exit_session_close_excess_vs_sector",
-            )
-            for column in economic_columns:
-                paired[f"{column}_technical"] = pd.to_numeric(
-                    paired[f"{column}_technical"], errors="coerce"
-                ).fillna(0.0)
-                paired[f"{column}_catalyst"] = pd.to_numeric(
-                    paired[f"{column}_catalyst"], errors="coerce"
-                ).fillna(0.0)
-            if len(paired) < config.bootstrap_block_sessions:
-                output.append({
-                    "estimator_family": family,
-                    "hyperparameters": json.loads(hyperparameters),
-                    "scope": scope,
-                    "difference": "catalyst_full_minus_technical_market",
-                    "paired_sessions": len(paired),
-                    "eligible": False,
-                    "reason": "paired ablation has fewer sessions than one bootstrap block",
-                })
-                continue
-            intervals: dict[str, Any] = {}
-            for column in economic_columns:
-                differences = (
-                    paired[f"{column}_catalyst"]
-                    - paired[f"{column}_technical"]
-                ).to_numpy(dtype="float64")
-                seed = config.random_seed + int(
-                    hashlib.sha256(
-                        f"paired:{family}:{hyperparameters}:{scope}:{column}".encode()
-                    ).hexdigest()[:8],
-                    16,
-                )
-                intervals[column] = _moving_block_bootstrap_mean_interval(
-                    differences,
-                    config.bootstrap_samples,
-                    config.bootstrap_block_sessions,
-                    seed,
-                )
-            output.append({
-                "estimator_family": family,
-                "hyperparameters": json.loads(hyperparameters),
-                "scope": scope,
-                "difference": "catalyst_full_minus_technical_market",
-                "technical_threshold": technical.get("selected_probability_threshold"),
-                "catalyst_threshold": catalyst.get("selected_probability_threshold"),
-                "paired_sessions": len(paired),
-                "calendar_join": "full_outer_zero_for_no_position",
-                "technical_only_sessions": int(
-                    paired["_merge"].eq("left_only").sum()
-                ),
-                "catalyst_only_sessions": int(
-                    paired["_merge"].eq("right_only").sum()
-                ),
-                "eligible": True,
-                "moving_block_bootstrap_95_ci": intervals,
-            })
-    return output
+    raw_columns = record.get("feature_columns")
+    feature_count = len(raw_columns) if isinstance(raw_columns, list) else 10**9
+    return (*economic, simplicity, -float(feature_count))
 
 
 def _publish_immutable(
@@ -2180,7 +2116,11 @@ def load_swing_candidate_authority(directory: Path) -> dict[str, Any]:
     payload = joblib.load(root / _CANDIDATE_NAME)
     if not isinstance(payload, Mapping):
         raise DataReadinessError("swing candidate payload is not an object")
-    identities = {"multi_model_bundle"}
+    identities = {
+        evaluation.get("selected_bundle_id"),
+        model_card.get("candidate_id"),
+        payload.get("candidate_id"),
+    }
     if (
         evaluation.get("schema") != EVALUATION_SCHEMA
         or evaluation.get("status") != "candidate_only"
@@ -2192,7 +2132,11 @@ def load_swing_candidate_authority(directory: Path) -> dict[str, Any]:
         or payload.get("schema") != MODEL_SCHEMA
         or payload.get("status") != "candidate"
         or payload.get("promotion_permitted") is not False
+        or evaluation.get("model_family") != "swing_baseline"
+        or model_card.get("model_family") != "swing_baseline"
+        or payload.get("model_family") != "swing_baseline"
         or len(identities) != 1
+        or not _is_swing_baseline_bundle_id(next(iter(identities)))
         or evaluation.get("dataset") != model_card.get("dataset")
         or evaluation.get("dataset") != payload.get("dataset")
         or evaluation.get("training_config_sha256")
@@ -2223,7 +2167,7 @@ def _binding_record(binding: SwingPanelBinding, decision_ids_sha256: str) -> dic
         "panel_authority_sha256": binding.authority_sha256,
         "panel_request_sha256": binding.request_sha256,
         "strategy_contract_sha256": binding.strategy_contract_sha256,
-        "matched_ablation_decision_ids_sha256": decision_ids_sha256,
+        "decision_ids_sha256": decision_ids_sha256,
     }
 
 

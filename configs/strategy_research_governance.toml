@@ -42,7 +42,7 @@ sha256 = "250a4faa7977a3d82bfacff425d56fa9193bb144be286a1c45bc2c0a65d48246"
 
 [contract_bindings.edge_rebuild_swing_training]
 path = "configs/edge_rebuild_swing_training.toml"
-sha256 = "3f35149cd0e1ca7fe2fc5b1457bf1f58c3126eb8252545754ca510de4cafa97f"
+sha256 = "b0cd00c2dd6f2cf665f2dd0cabc9682839497a6377d07bb662cb09bc7d710e84"
 
 [contract_bindings.intraday_dataset]
 path = "configs/intraday_dataset.toml"

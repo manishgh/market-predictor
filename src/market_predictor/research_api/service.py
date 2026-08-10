@@ -246,9 +246,21 @@ def _score_payload(
 
 def _score_estimator(model: Any, matrix: pd.DataFrame) -> np.ndarray:
     estimator = getattr(model, "estimator", model)
+    model_columns = tuple(
+        str(column) for column in getattr(model, "feature_columns", ())
+    )
+    if model_columns:
+        missing = sorted(set(model_columns).difference(matrix.columns))
+        if missing:
+            raise ResearchModelUnavailableError(
+                f"candidate feature subset is unavailable: {missing}"
+            )
+        model_matrix = matrix.loc[:, model_columns]
+    else:
+        model_matrix = matrix
     predict_proba = getattr(estimator, "predict_proba", None)
     if callable(predict_proba):
-        probabilities = np.asarray(predict_proba(matrix), dtype="float64")
+        probabilities = np.asarray(predict_proba(model_matrix), dtype="float64")
         if probabilities.ndim != 2 or probabilities.shape[1] != 2:
             raise ResearchModelUnavailableError(
                 "classifier returned an invalid probability matrix"
@@ -260,7 +272,7 @@ def _score_estimator(model: Any, matrix: pd.DataFrame) -> np.ndarray:
             raise ResearchModelUnavailableError(
                 "candidate estimator does not expose a prediction method"
             )
-        result = np.asarray(predict(matrix), dtype="float64").reshape(-1)
+        result = np.asarray(predict(model_matrix), dtype="float64").reshape(-1)
     if len(result) != len(matrix) or not bool(np.isfinite(result).all()):
         raise ResearchModelUnavailableError(
             "candidate estimator returned invalid scores"
