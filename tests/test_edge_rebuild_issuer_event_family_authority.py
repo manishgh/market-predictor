@@ -85,7 +85,7 @@ def test_unclassified_event_is_retained_but_ineligible(tmp_path: Path) -> None:
     assert authority.assignments.empty
 
 
-def test_indirect_relation_is_retained_but_ineligible(tmp_path: Path) -> None:
+def test_indirect_relation_is_audited_but_not_materialized(tmp_path: Path) -> None:
     events = _events(
         _event(
             security_id="security:source",
@@ -98,10 +98,12 @@ def test_indirect_relation_is_retained_but_ineligible(tmp_path: Path) -> None:
 
     authority = _publish(_write_inputs(tmp_path, events=events))
 
-    assert set(authority.events["event_family"]) == {"earnings", "guidance"}
-    assert not authority.events["research_eligible"].astype(bool).any()
-    assert authority.events["exclusion_reason"].eq("not_direct_issuer").all()
+    assert authority.events.empty
     assert authority.assignments.empty
+    assert authority.manifest["excluded_relation_channel_counts"] == {
+        "business_exposure": 1,
+        "sector_context": 0,
+    }
 
 
 def test_future_availability_poison_is_rejected(tmp_path: Path) -> None:

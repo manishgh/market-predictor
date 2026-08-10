@@ -260,6 +260,11 @@ def publish_issuer_event_family_authority(
     staging.mkdir()
     try:
         event_parts: list[pd.DataFrame] = []
+        relation_channel_counts = {
+            "direct_issuer": 0,
+            "business_exposure": 0,
+            "sector_context": 0,
+        }
         for chunk_id in sorted(relation_records):
             source_record = source_records[chunk_id]
             relation_record = relation_records[chunk_id]
@@ -280,10 +285,24 @@ def publish_issuer_event_family_authority(
                 != source_manifest.get("artifact_sha256")
             ):
                 raise DataReadinessError(f"event-family child lineage mismatch: {chunk_id}")
+            observed_channels = relations["relation_channel"].astype(str).value_counts()
+            unsupported_channels = sorted(
+                set(observed_channels.index).difference(relation_channel_counts)
+            )
+            if unsupported_channels:
+                raise DataReadinessError(
+                    "event-family authority found unsupported relation channels: "
+                    + ", ".join(unsupported_channels)
+                )
+            for channel, count in observed_channels.items():
+                relation_channel_counts[str(channel)] += int(count)
+            direct_relations = relations.loc[
+                relations["relation_channel"].astype(str).eq("direct_issuer")
+            ].copy()
             event_parts.append(
                 _build_family_events(
                     source_events,
-                    relations,
+                    direct_relations,
                     policy=policy,
                     coverage_known=True,
                 )
@@ -396,6 +415,12 @@ def publish_issuer_event_family_authority(
                 name: int(window.total_seconds()) for name, window in policy.windows.items()
             },
             "event_rows": len(family_events),
+            "source_relation_channel_counts": relation_channel_counts,
+            "excluded_relation_channel_counts": {
+                channel: count
+                for channel, count in relation_channel_counts.items()
+                if channel != "direct_issuer"
+            },
             "classified_event_rows": int(family_events["classification_state"].eq("classified").sum()),
             "research_eligible_event_rows": int(family_events["research_eligible"].astype(bool).sum()),
             "production_eligible_event_rows": 0,
