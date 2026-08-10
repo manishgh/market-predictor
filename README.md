@@ -13,7 +13,7 @@ hash-verified promoted bundle.
 
 ## Verified State
 
-- Branch: `r3-lineage`.
+- Active development branch: `er-intraday-refactoring`.
 - **Current ticker catalyst estimator source:** Alpaca news only.
 - **SEC filings:** the current estimator does not consume SEC features. The SEC
   authority distinguishes verified no-filing observations from unknown coverage.
@@ -57,8 +57,13 @@ hash-verified promoted bundle.
   holding-aligned benchmark economics in both validation scopes. The locked
   test was not read.
 - Intraday V2 is published and replayable but economically rejected after costs.
-  It is not serveable. V3 is development code reserved for a genuinely future
-  holdout and has not been run on that holdout.
+  It is not serveable. The later V3 cross-sectional z-score lineage is invalid and
+  prohibited because its declared inputs lacked a valid contemporaneous cohort
+  transformation.
+- Intraday label schema V2 requires exact stock, SPY, QQQ, and point-in-time sector
+  returns over one executable entry-to-managed-exit interval. Missing benchmark
+  evidence abstains. Swing and intraday evaluations report named after-cost binary
+  outcomes and a shuffled-label AUC control; AUC remains diagnostic only.
 - No swing or intraday model is promoted. The prediction API therefore returns no
   model prediction and must fail closed.
 

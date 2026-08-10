@@ -8,14 +8,14 @@ Repository: `C:\project\market-predictor`
 
 Branch: `er-intraday-refactoring`
 
-Last completed implementation commit: `e168482` (`Restore fail-closed model research invariants`)
+Last completed implementation commit: `7b61873` (`Freeze causal outcome diagnostics`)
 
 ## Purpose
 
 Continue the four-model prediction rebuild: swing baseline, swing event-driven,
-intraday baseline, and intraday event-driven. The next objective is A1 label,
-metric, and negative-control governance. Do not train another candidate or open a
-locked test until A1 closes.
+intraday baseline, and intraday event-driven. A0 and A1 are closed. A2 swing-baseline
+research is the only active checkpoint. Do not train a candidate or open a locked test
+until the A2 feature authority and preregistered validation contract are complete.
 
 This repository produces prediction intelligence and abstention. Alerts, orders,
 positions, portfolio risk, and execution remain in `trading_flow`.
@@ -24,90 +24,86 @@ positions, portfolio risk, and execution remain in `trading_flow`.
 
 - No promoted serving bundle exists. Production prediction paths must fail closed.
 - Reddit and Seeking Alpha remain retired and prohibited.
-- Swing model decisions begin on `2019-07-09`; earlier bars are warm-up only.
-- Existing rejected swing and intraday artifacts remain rejection evidence, not
-  serving fallbacks.
-- A0 restored monthly intraday partition metadata verification.
-- A0 added an explicit invariant that every temporal and unseen-security scope must
-  pass its economic gate before a swing validation threshold is eligible.
-- A0 removed five intraday cross-sectional z-score columns that were declared in the
-  model schema but lacked a valid contemporaneous decision-cohort transformation.
-  Artifacts requiring those columns are invalid and cannot be replayed or served.
-- The active intraday technical contract contains 44 causal normalized features.
-- Missing catalyst authority is not converted to zero-valued model inputs. Catalyst
-  remains outside the broad intraday estimator until a preregistered causal ablation
-  and complete historical/live authority pass.
-- Sequential intraday development training retains only the current selected and
-  auditable ledgers in memory and does not mutate the loaded immutable dataset frame.
-- Intraday memory remains capped at 4 GiB; swing candidate training remains capped
-  at 5 GiB.
+- Swing decisions begin on `2019-07-09`; earlier bars are warm-up only.
+- Intraday estimator input remains the 44-feature causal technical contract. The V3
+  z-score lineage is invalid and prohibited.
+- Swing technical and Alpaca ablation profiles must contain identical immutable
+  decision and label identities. Training cannot rewrite groups or labels.
+- The swing trainer no longer attaches a hard-coded SEC authority, fills unknown SEC
+  coverage with zero, or bypasses sector-constrained selection.
+- Intraday label schema V2 requires exact stock, SPY, QQQ, and point-in-time sector ETF
+  returns over the same entry-to-managed-exit interval. Missing QQQ evidence abstains.
+- Both trainers publish named binary diagnostics for estimator target, positive
+  after-cost stock return, and positive SPY/QQQ/sector excess return.
+- A deterministic 64-repeat global label-permutation AUC control must remain at chance;
+  abnormal discrimination fails evaluation. Single-class scopes are explicit
+  `not_applicable_single_class`, never fabricated metrics.
+- Intraday remains capped at 4 GiB and swing candidate training at 5 GiB.
 
-## A0 Verification
+## A1 Verification
 
-- Focused dataset/features: 41 passed.
-- Focused training/contracts/authority: 104 passed, 1 skipped.
-- Combined focused evidence: 145 passed, 1 skipped.
-- Full suite: 1,102 passed, 2 skipped. Three failures were caused solely by denied
-  creation of `data/runtime/heavy-job.lock`; all three passed when rerun with normal
-  repository write access.
-- Ruff check passed on all changed Python and test files.
-- Strict mypy passed on five changed production modules.
-- Compileall passed with a writable external bytecode cache.
-- `git diff --cached --check` passed before commit.
-- Two pre-existing uvicorn research-workbench processes remained running at about
-  67 MiB combined; no test or training worker was left running.
+- Consolidated A1 label, dataset, outcome, and trainer tests: 87 passed, 1 skipped;
+  the final corrected swing feature-time poison test also passed.
+- Canonical full suite: 1,110 passed, 2 skipped.
+- Ruff passed for every tracked Python file.
+- Strict mypy passed for all five changed production modules.
+- Compileall passed using an external bytecode cache; `git diff --check` passed.
+- Repository-wide tracked strict mypy still has six pre-existing errors in
+  `scripts/build_intraday_v3.py`, `scripts/build_swing_v12.py`, and
+  `scripts/train_intraday_v3.py`. They are not part of A1 and require the later bounded
+  legacy-script cleanup decision.
+- A root ignored `scratch_test.py` contains NUL bytes, so bare `pytest -q` cannot
+  collect. The authoritative `pytest tests -q` run passed. Do not delete the scratch
+  file without the planned reference/retention cleanup.
+- Two pre-existing uvicorn research-workbench Python processes remain at about 60 MiB
+  combined. No test or training worker remains.
 
 ## Model State
 
 | Model family | Current state | Next valid work |
 | --- | --- | --- |
-| Swing baseline | Prior candidates rejected; no promotion | A1 target/metric controls, then A2 compact feature ablation |
-| Swing event-driven | Prior broad catalyst candidates rejected | A1 event-label controls, then A3 event-family specialists |
-| Intraday baseline | V2 rejected; incomplete z-score lineage invalidated | A1 exact target controls, then A4 cohort-correct microstructure rebuild |
-| Intraday event-driven | No eligible candidate | A1 event availability controls, then A5 verified event cohorts |
+| Swing baseline | Prior candidates rejected; no promotion | A2 compact point-in-time feature authority and ablation |
+| Swing event-driven | Prior broad catalyst candidates rejected | A3 event-family specialists after A2 |
+| Intraday baseline | V2 rejected; V3 z-score lineage invalid | A4 cohort-correct market/microstructure rebuild |
+| Intraday event-driven | No eligible candidate | A5 verified event cohorts |
 
-`ROC-AUC >= 0.60` is a locked-test binary diagnostic, not the sole objective and
-not permission for repeated test tuning. Promotion still requires calibration,
-ranking value, benchmark-relative economics after costs, drawdown, turnover,
-capacity, stability, and explicit coverage.
+`ROC-AUC >= 0.60` is a locked-test diagnostic, not a training objective or permission
+for repeated locked-test tuning. Promotion also requires ranking, calibration,
+after-cost benchmark-relative economics, drawdown, turnover, capacity, stability, and
+coverage.
 
-## Exact Next Step: A1
+## Exact Next Step: A2
 
-1. Inventory the current swing and intraday label/evaluator implementations and
-   identify the single canonical evaluator for each executable horizon.
-2. Freeze comparable binary diagnostics alongside economic targets:
-   5/10-session benchmark-relative swing return and 30-minute/session-managed
-   intraday return after costs.
-3. Add poison tests for label shuffle, one-period feature shift, future timestamp,
-   duplicate events, overlapping labels, and survivorship/membership leakage.
-4. Prove stock, SPY, QQQ, and sector returns use identical executable intervals and
-   that costs are applied once.
-5. Update the feature audit, run the full verification battery, then checkpoint A1.
+1. Inventory which compact swing baseline groups already have point-in-time authority
+   from `2019-07-09` through the frozen end date: market/sector residual momentum,
+   volatility, liquidity/turnover, quality, profitability, investment, valuation, and
+   estimate revisions.
+2. Update the vertical acceptance matrix. Reject any group lacking full-horizon source,
+   availability, batch/live, schema, and poison evidence; do not partially backfill.
+3. Preregister sequential ablations and their validation-only acceptance rules. Keep
+   the locked test unopened.
+4. Build or replay only accepted authorities, then train the regularized linear
+   baseline before bounded tree ranker/regressor candidates.
 
 ## Source Boundary
 
 | Source | Permitted role |
 | --- | --- |
-| Alpaca SIP/all bars, trades, quotes | estimator market and microstructure data after complete causal backfill |
+| Alpaca SIP/all bars, trades, quotes | estimator market/microstructure data after complete causal backfill |
 | Alpaca direct ticker news | ticker event data after exact attribution and availability verification |
-| SEC issuer filings | separately ablated issuer event family after causal backfill |
-| Finviz Elite | screening/current metadata; ticker news requires its own historical causal authority before estimator use |
-| Verified global/sector sources | separate context overlay unless independently preregistered and ablated |
+| SEC issuer filings | separate A3 event family after causal backfill; not an A2 baseline shortcut |
+| Finviz Elite | screening/current metadata; historical news needs its own causal authority |
+| Verified global/sector sources | separate context overlay unless preregistered and ablated |
 | Reddit | prohibited |
 | Seeking Alpha | prohibited |
 
-Every new model feature must complete source authority, full-horizon historical
-backfill, shared batch/live transformation, ordered schema/hash, training,
-validation, serving representation, and parity/poison/tamper tests before use.
-
 ## Working Tree Warning
 
-The worktree still contains pre-existing untracked diagnostics, scratch Parquet
-files, ad hoc scripts, and unfinished experimental modules from the interrupted
-external agent. They were not committed in A0. Several scripts directly patch or
-copy Parquet authorities and are prohibited by `AGENTS.md`. Do not execute, stage,
-or treat them as evidence. Cleanup requires a reference scan and a separate bounded
-checkpoint; do not delete raw or governance-bound data by assumption.
+Pre-existing untracked diagnostics, scratch Parquet files, ad hoc scripts, and
+unfinished experimental modules remain. Several scripts directly patch Parquet
+authorities or lineage hashes and are prohibited by `AGENTS.md`. Do not execute,
+stage, or treat them as evidence. Cleanup requires a separate bounded reference scan;
+do not delete raw or governance-bound data by assumption.
 
 ## Files To Read
 
@@ -120,12 +116,10 @@ checkpoint; do not delete raw or governance-bound data by assumption.
 
 ## Do Not Do
 
-- Do not train or promote from the invalidated intraday z-score lineage.
-- Do not open locked tests to guide feature or hyperparameter selection.
+- Do not train or promote from invalidated intraday z-score or old label-schema lineage.
+- Do not open locked tests for feature or hyperparameter selection.
 - Do not weaken economic, sector, causality, memory, or integrity gates.
-- Do not fill missing news, catalyst, quote, or source coverage with zero.
+- Do not fill missing news, catalyst, quote, filing, or source coverage with zero.
 - Do not add a feature without complete historical backfill for its model horizon.
-- Do not use an LLM sentiment score as a direct return predictor without causal
-  return-conditioned ablation.
 - Do not expose rejected candidates through the production prediction API.
 - Do not execute scratch scripts that mutate Parquet or patch lineage hashes.

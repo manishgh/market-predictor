@@ -138,17 +138,28 @@ columns that had no valid decision-cohort implementation. Focused verification p
 repository-lock permission failures passed independently with normal repository access.
 Ruff, strict mypy, compileall, and staged diff checks passed.
 
-### A1 - Labels, metrics, and negative controls (`in_progress`)
+### A1 - Labels, metrics, and negative controls (`completed`)
 
 - Freeze one comparable binary diagnostic for each model plus the economic training
-  target: 5/10-session benchmark-relative swing return and 30-minute/session-managed
-  intraday return after costs.
+  target: managed and exact-ten-session benchmark-relative swing return and
+  30-minute managed intraday return after costs.
 - Reproduce labels from immutable bars using the shared evaluator and identical stock,
   SPY, QQQ, and sector executable intervals.
 - Add label shuffle, feature-time shift, future-poison, duplicate-event, overlapping
   label, and survivorship controls. Any abnormal control score blocks training.
 
-### A2 - Swing baseline rebuild
+Completed evidence: implementation commit `7b61873` removes training-time swing label
+rewrites, hard-coded SEC attachment, missing-as-zero filing counts, and the event-only
+sector-selection bypass. Technical and Alpaca ablations must now contain identical
+published decisions and labels. Intraday label schema V2 adds QQQ on the exact stock
+entry-to-managed-exit interval; missing QQQ evidence abstains. Both trainers publish
+named estimator-target and after-cost stock/SPY/QQQ/sector binary diagnostics plus a
+deterministic shuffled-label AUC control. Future-only label, return, and feature-time
+poison tests cannot alter validation selection. The canonical suite passed 1,110 tests
+with two skipped; tracked Ruff, changed-module strict mypy, compileall, and diff checks
+passed.
+
+### A2 - Swing baseline rebuild (`in_progress`)
 
 - Evaluate compact, evidence-backed groups sequentially: benchmark/sector residual
   momentum, volatility, liquidity, turnover, quality, profitability, investment,

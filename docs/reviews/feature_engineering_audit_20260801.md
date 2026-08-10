@@ -19,8 +19,9 @@ control.
   enter RSI, ATR, EMA, realized-volatility, OBV, or efficiency windows.
 - A row is rejected when exact decision-time context is absent. No previous or
   future minute is substituted.
-- Entry is the exact next one-minute open. Target, stop, timeout, SPY, and sector
-  returns use the same executable interval.
+- Entry is the exact next one-minute open. Target, stop, timeout, SPY, QQQ, and sector
+  returns use the same executable interval. Intraday label schema V2 abstains when any
+  exact benchmark interval is unavailable.
 - Feature availability is at or before decision time; label availability is
   strictly after decision time and after the completed outcome path.
 - Training partitions are ordered by exchange session, use an overnight
@@ -30,7 +31,8 @@ control.
   selection. A deterministic security holdout supplies separate unseen-symbol
   evidence.
 - The immutable dataset contains 4,173,230 rows, including 1,410,447 eligible
-  rows. Its authority and partition hashes verify.
+  rows. Its prior authority and partition hashes verify; it predates label schema V2
+  and cannot be consumed by the V2-label trainer without causal rematerialization.
 
 ### Corrected finding
 
@@ -87,6 +89,15 @@ learned candidate.
   is authoritative.
 - Temporal generalization on the full future point-in-time cross-section and stable 20%
   unseen-security generalization are independent validation scopes and must both pass.
+- Commit `7b61873` removes the invalid training-time catalyst cohort rewrite. The
+  trainer no longer attaches SEC files from a local path, fills unknown SEC coverage
+  with zero, recomputes rank labels, or bypasses sector constraints. Both ablation
+  profiles must replay the identical published decision and label identities.
+- Swing and intraday evaluations now publish explicit binary diagnostics for the
+  estimator target, positive after-cost stock return, and positive SPY/QQQ/sector
+  excess return. A deterministic 64-repeat shuffled-label AUC control must remain at
+  chance; abnormal discrimination fails evaluation. Single-class scopes are recorded
+  as unavailable rather than misreported as an AUC.
 
 ### Current implementation and result
 

@@ -91,15 +91,18 @@ unseen-security validation; the locked test remained unopened.
 - `intraday_selection.py`: point-in-time in-play selection.
 - `volume_bars.py`, `intraday_features.py`: causal completed volume bars and the shared
   V2 feature builder.
-- `intraday_labels.py`, `one_minute_coverage.py`: exact next-minute entry and
-  thirty-minute outcome path.
+- `intraday_labels.py`, `one_minute_coverage.py`: exact next-minute entry,
+  thirty-minute outcome path, and holding-aligned SPY, QQQ, and point-in-time sector
+  returns. Missing exact benchmark evidence abstains.
 - `intraday_dataset.py`, `intraday_live.py`: immutable publication and live parity.
 - `intraday_development.py`: V3 expected-net-return development and future-holdout
   controls.
 - `intraday_rejection.py`: immutable V2 rejection evidence.
 
-Intraday V2 is published but economically rejected. V3 is reserved for a new future
-holdout beginning on or after `2026-07-09`; it has not been evaluated on such data.
+Intraday V2 is published but economically rejected. The later V3 z-score lineage is
+invalid and cannot train or serve. New candidate evidence uses explicit outcome
+contracts and named after-cost stock/SPY/QQQ/sector binary diagnostics; the shared
+shuffled-label control must remain at chance.
 
 ### Overlay and serving paths
 
