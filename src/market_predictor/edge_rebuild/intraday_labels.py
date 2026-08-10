@@ -24,7 +24,7 @@ from market_predictor.edge_rebuild.strategy_contract import StrategyContract
 from market_predictor.execution_policy import executable_fill_price
 from market_predictor.v3.errors import DataReadinessError
 
-LABEL_SCHEMA_VERSION: Final = "edge_rebuild.intraday_labels.v1"
+LABEL_SCHEMA_VERSION: Final = "edge_rebuild.intraday_labels.v2"
 EXCHANGE_TIMEZONE: Final = ZoneInfo("America/New_York")
 _REGULAR_OPEN: Final = time(9, 30)
 _REGULAR_CLOSE: Final = time(16, 0)
@@ -95,8 +95,10 @@ _MATERIAL_LABEL_COLUMNS: Final = (
     "cost",
     "net_return",
     "spy_return",
+    "qqq_return",
     "sector_return",
     "spy_excess_return",
+    "qqq_excess_return",
     "sector_excess_return",
     "rank_label",
     "rank_percentile",
@@ -227,6 +229,12 @@ def build_exact_causal_intraday_labels(
             entry_time=entry_time,
             exit_time=exit_time,
         )
+        qqq_return = _benchmark_return(
+            benchmark_lookup,
+            ticker="QQQ",
+            entry_time=entry_time,
+            exit_time=exit_time,
+        )
         sector_return = _benchmark_return(
             benchmark_lookup,
             ticker=str(row.primary_benchmark),
@@ -238,6 +246,14 @@ def build_exact_causal_intraday_labels(
                 {
                     "row_index": row_index,
                     "label_ineligible_reason": "missing_exact_spy_interval",
+                }
+            )
+            continue
+        if qqq_return is None:
+            updates.append(
+                {
+                    "row_index": row_index,
+                    "label_ineligible_reason": "missing_exact_qqq_interval",
                 }
             )
             continue
@@ -275,8 +291,10 @@ def build_exact_causal_intraday_labels(
                 "cost": path_result["cost"],
                 "net_return": path_result["net_return"],
                 "spy_return": spy_return,
+                "qqq_return": qqq_return,
                 "sector_return": sector_return,
                 "spy_excess_return": path_result["net_return"] - spy_return,
+                "qqq_excess_return": path_result["net_return"] - qqq_return,
                 "sector_excess_return": path_result["net_return"] - sector_return,
             }
         )
@@ -435,8 +453,10 @@ def _empty_label_columns(frame: pd.DataFrame) -> pd.DataFrame:
         "cost",
         "net_return",
         "spy_return",
+        "qqq_return",
         "sector_return",
         "spy_excess_return",
+        "qqq_excess_return",
         "sector_excess_return",
         "rank_percentile",
     ):

@@ -37,6 +37,10 @@ from market_predictor.edge_rebuild.intraday_features import (
     FEATURE_SCHEMA_VERSION,
 )
 from market_predictor.edge_rebuild.intraday_labels import LABEL_SCHEMA_VERSION
+from market_predictor.edge_rebuild.outcome_diagnostics import (
+    binary_outcome_diagnostic,
+    label_permutation_control,
+)
 from market_predictor.resources import (
     assert_memory_budget,
     assert_peak_memory_budget,
@@ -46,10 +50,10 @@ from market_predictor.resources import (
 from market_predictor.v3.errors import DataReadinessError
 
 DATASET_SCHEMA_VERSION: Final = INTRADAY_DATASET_SCHEMA
-MODEL_SCHEMA_VERSION: Final = "edge_rebuild.intraday_candidate.v2"
-EVALUATION_SCHEMA_VERSION: Final = "edge_rebuild.intraday_evaluation.v1"
-MODEL_CARD_SCHEMA_VERSION: Final = "edge_rebuild.intraday_model_card.v1"
-OUTPUT_AUTHORITY_SCHEMA_VERSION: Final = "edge_rebuild.intraday_candidate_authority.v1"
+MODEL_SCHEMA_VERSION: Final = "edge_rebuild.intraday_candidate.v3"
+EVALUATION_SCHEMA_VERSION: Final = "edge_rebuild.intraday_evaluation.v2"
+MODEL_CARD_SCHEMA_VERSION: Final = "edge_rebuild.intraday_model_card.v2"
+OUTPUT_AUTHORITY_SCHEMA_VERSION: Final = "edge_rebuild.intraday_candidate_authority.v2"
 _MANIFEST_NAME: Final = "_manifest.json"
 _AUTHORITY_NAME: Final = "_authority.json"
 _CANDIDATE_NAME: Final = "candidate.joblib"
@@ -208,6 +212,7 @@ class PublishedIntradayDataset:
     gross_return_column: str
     net_return_column: str
     spy_excess_return_column: str
+    qqq_excess_return_column: str
     sector_excess_return_column: str
     frozen_round_trip_cost_bps: float
     dataset_sha256: str
@@ -363,6 +368,7 @@ def train_intraday_edge_candidate(
             "scope_rule": "minimum of temporal validation and deterministic unseen-security validation",
         },
         "test_access_count": 1,
+        "outcome_contract": _intraday_outcome_contract(published),
         "dataset": _dataset_identity_record(published),
         "training_config": training_config,
         "training_config_sha256": training_config_sha256,
@@ -403,6 +409,7 @@ def train_intraday_edge_candidate(
         "deterministic_score_column": published.deterministic_score_column,
         "deterministic_score_definition": "within-decision-group percentile of causal return_1_bar; descending selection",
         "target_column": published.target_column,
+        "outcome_contract": _intraday_outcome_contract(published),
         "frozen_round_trip_cost_bps": published.frozen_round_trip_cost_bps,
         "training_rows": int(len(development)),
         "training_sessions": int(development["session_date_et"].nunique()),
@@ -469,7 +476,15 @@ def load_published_intraday_dataset(directory: Path) -> PublishedIntradayDataset
     if training_contract.get("eligibility_column") != "dataset_eligible":
         raise DataReadinessError("intraday dataset eligibility contract is not recognized")
     excluded = set(_string_tuple(training_contract.get("feature_columns_exclude"), "feature_columns_exclude"))
-    leaked_labels = {"target_hit", "gross_return", "net_return", "spy_excess_return", "sector_excess_return", "rank_label"}
+    leaked_labels = {
+        "target_hit",
+        "gross_return",
+        "net_return",
+        "spy_excess_return",
+        "qqq_excess_return",
+        "sector_excess_return",
+        "rank_label",
+    }
     if not leaked_labels.issubset(excluded):
         raise DataReadinessError("dataset training contract does not exclude outcome columns from features")
 
@@ -483,6 +498,7 @@ def load_published_intraday_dataset(directory: Path) -> PublishedIntradayDataset
                 "cost",
                 "net_return",
                 "spy_excess_return",
+                "qqq_excess_return",
                 "sector_excess_return",
             )
         )
@@ -498,7 +514,7 @@ def load_published_intraday_dataset(directory: Path) -> PublishedIntradayDataset
     text_columns = 6
     timestamp_columns = 5
     boolean_columns = 2
-    economic_columns = 6
+    economic_columns = 7
     bytes_per_row = (
         len(MODEL_FEATURE_COLUMNS) * 4
         + economic_columns * 8
@@ -573,12 +589,41 @@ def load_published_intraday_dataset(directory: Path) -> PublishedIntradayDataset
         gross_return_column="gross_return",
         net_return_column="net_return",
         spy_excess_return_column="spy_excess_return",
+        qqq_excess_return_column="qqq_excess_return",
         sector_excess_return_column="sector_excess_return",
         frozen_round_trip_cost_bps=frozen_cost_bps,
         dataset_sha256=manifest_sha256,
         manifest_sha256=manifest_sha256,
         authority_sha256=file_sha256(authority_path),
     )
+
+
+def _intraday_outcome_contract(
+    published: PublishedIntradayDataset,
+) -> dict[str, Any]:
+    return {
+        "schema": "edge_rebuild.intraday_outcome_contract.v1",
+        "horizon": "managed target/stop/timeout path capped at 30 minutes",
+        "entry": "next exact executable one-minute open after feature availability",
+        "estimator_target": {
+            "column": published.target_column,
+            "definition": "upper ATR barrier reached before lower barrier",
+        },
+        "economic_target": {
+            "column": published.net_return_column,
+            "definition": "managed stock return less frozen round-trip cost exactly once",
+        },
+        "comparable_binary_diagnostic": (
+            "managed net return after costs is positive"
+        ),
+        "benchmark_excess_columns": {
+            "SPY": published.spy_excess_return_column,
+            "QQQ": published.qqq_excess_return_column,
+            "sector": published.sector_excess_return_column,
+        },
+        "benchmark_interval": "identical stock entry-to-managed-exit interval",
+        "round_trip_cost_bps": published.frozen_round_trip_cost_bps,
+    }
 
 
 def _validate_training_frame(published: PublishedIntradayDataset, config: IntradayTrainingConfig) -> pd.DataFrame:
@@ -591,6 +636,7 @@ def _validate_training_frame(published: PublishedIntradayDataset, config: Intrad
         published.gross_return_column,
         published.net_return_column,
         published.spy_excess_return_column,
+        published.qqq_excess_return_column,
         published.sector_excess_return_column,
     }
     missing = sorted(required.difference(data.columns))
@@ -653,6 +699,7 @@ def _validate_training_frame(published: PublishedIntradayDataset, config: Intrad
         published.gross_return_column,
         published.net_return_column,
         published.spy_excess_return_column,
+        published.qqq_excess_return_column,
         published.sector_excess_return_column,
     ]
     feature_columns = set(published.feature_columns)
@@ -1145,11 +1192,20 @@ def _validation_selection_key(record: Mapping[str, Any]) -> tuple[float, float, 
     ]
     rank_ic = min(_required_finite(scope, "decision_group_rank_ic_mean") for scope in scopes)
     benchmark_ci = min(
-        min(_ci_low(scope, "top_k_average_spy_excess_return"), _ci_low(scope, "top_k_average_sector_excess_return")) for scope in scopes
+        min(
+            _ci_low(scope, "top_k_average_spy_excess_return"),
+            _ci_low(scope, "top_k_average_qqq_excess_return"),
+            _ci_low(scope, "top_k_average_sector_excess_return"),
+        )
+        for scope in scopes
     )
     net_ci = min(_ci_low(scope, "top_k_average_net_return") for scope in scopes)
     benchmark_mean = min(
-        min(_required_finite(scope, "top_k_average_spy_excess_return"), _required_finite(scope, "top_k_average_sector_excess_return"))
+        min(
+            _required_finite(scope, "top_k_average_spy_excess_return"),
+            _required_finite(scope, "top_k_average_qqq_excess_return"),
+            _required_finite(scope, "top_k_average_sector_excess_return"),
+        )
         for scope in scopes
     )
     net_mean = min(_required_finite(scope, "top_k_average_net_return") for scope in scopes)
@@ -1230,6 +1286,46 @@ def _evaluation_metrics(
         "roc_auc": float(roc_auc_score(target, probability)) if has_two_classes else None,
         "pr_auc": float(average_precision_score(target, probability)) if has_two_classes else None,
         "auc_is_diagnostic_only": True,
+        "binary_outcome_diagnostics": {
+            "estimator_target_hit": binary_outcome_diagnostic(
+                target,
+                ordering,
+                definition=(
+                    "the frozen upper ATR barrier is reached before the lower barrier "
+                    "within thirty minutes"
+                ),
+            ),
+            "managed_net_return_positive_after_costs": binary_outcome_diagnostic(
+                scored[published.net_return_column].gt(0.0),
+                ordering,
+                definition="managed thirty-minute net return after costs is positive",
+            ),
+            "managed_spy_excess_positive": binary_outcome_diagnostic(
+                scored[published.spy_excess_return_column].gt(0.0),
+                ordering,
+                definition="managed net return exceeds SPY over the same entry-to-exit interval",
+            ),
+            "managed_qqq_excess_positive": binary_outcome_diagnostic(
+                scored[published.qqq_excess_return_column].gt(0.0),
+                ordering,
+                definition="managed net return exceeds QQQ over the same entry-to-exit interval",
+            ),
+            "managed_sector_excess_positive": binary_outcome_diagnostic(
+                scored[published.sector_excess_return_column].gt(0.0),
+                ordering,
+                definition=(
+                    "managed net return exceeds the point-in-time sector ETF over the "
+                    "same entry-to-exit interval"
+                ),
+            ),
+        },
+        "negative_controls": {
+            "label_permutation": label_permutation_control(
+                target,
+                ordering,
+                random_seed=config.random_seed + 31_337,
+            )
+        },
         "brier_score": float(brier_score_loss(target, probability)),
         "calibration_bias": float(probability.mean() - target.mean()),
         "expected_calibration_error": _expected_calibration_error(calibration_bins, len(frame)),
@@ -1238,6 +1334,7 @@ def _evaluation_metrics(
         "top_k_average_gross_return": float(selected[published.gross_return_column].mean()),
         "top_k_average_net_return": float(selected[published.net_return_column].mean()),
         "top_k_average_spy_excess_return": float(selected[published.spy_excess_return_column].mean()),
+        "top_k_average_qqq_excess_return": float(selected[published.qqq_excess_return_column].mean()),
         "top_k_average_sector_excess_return": float(selected[published.sector_excess_return_column].mean()),
         "top_k_win_rate_after_costs": float(selected[published.net_return_column].gt(0.0).mean()),
         "profit_factor_after_costs": profit_factor,
@@ -1315,6 +1412,7 @@ def _session_block_bootstrap(
                 published.gross_return_column,
                 published.net_return_column,
                 published.spy_excess_return_column,
+                published.qqq_excess_return_column,
                 published.sector_excess_return_column,
             ]
         ]
@@ -1324,6 +1422,7 @@ def _session_block_bootstrap(
                 published.gross_return_column: "top_k_average_gross_return",
                 published.net_return_column: "top_k_average_net_return",
                 published.spy_excess_return_column: "top_k_average_spy_excess_return",
+                published.qqq_excess_return_column: "top_k_average_qqq_excess_return",
                 published.sector_excess_return_column: "top_k_average_sector_excess_return",
             }
         )
@@ -1374,6 +1473,7 @@ def _economics_breakdown(selected: pd.DataFrame, column: str, published: Publish
                 "trades": int(len(group)),
                 "average_net_return": float(group[published.net_return_column].mean()),
                 "average_spy_excess_return": float(group[published.spy_excess_return_column].mean()),
+                "average_qqq_excess_return": float(group[published.qqq_excess_return_column].mean()),
                 "average_sector_excess_return": float(group[published.sector_excess_return_column].mean()),
                 "win_rate_after_costs": float(group[published.net_return_column].gt(0.0).mean()),
             }

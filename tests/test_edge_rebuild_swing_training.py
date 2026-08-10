@@ -118,6 +118,15 @@ def test_ablation_feature_contract_excludes_unapproved_sources() -> None:
     )
 
 
+def test_swing_ablation_profiles_require_identical_published_decisions() -> None:
+    identity = "a" * 64
+
+    assert swing_training._matched_ablation_identity(None, identity) == identity
+    assert swing_training._matched_ablation_identity(identity, identity) == identity
+    with pytest.raises(DataReadinessError, match="identical decisions"):
+        swing_training._matched_ablation_identity(identity, "b" * 64)
+
+
 def test_input_authority_rejects_pre_cutoff_decisions(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -235,6 +244,11 @@ def test_trains_sequential_ablations_and_publishes_candidate_only(
     assert result.evaluation["status"] == "candidate_only"
     assert result.evaluation["promotion_permitted"] is False
     assert result.evaluation["selection_basis"] == "validation_only"
+    assert result.evaluation["outcome_contract"]["benchmark_excess_columns"] == {
+        "SPY": "future_excess_return_10d_vs_spy",
+        "QQQ": "future_excess_return_10d_vs_qqq",
+        "sector": "future_excess_return_10d_vs_sector",
+    }
     assert result.evaluation["selection_policy"]["auc_used_for_selection"] is False
     assert result.evaluation["test_access_count"] == 1
     assert result.evaluation["split"]["random_or_row_split_used"] is False
@@ -283,6 +297,15 @@ def test_trains_sequential_ablations_and_publishes_candidate_only(
     }.issubset(metrics)
     assert metrics["cost_deduction_count"] == 1
     assert metrics["drawdown_has_daily_mark_to_market"] is True
+    assert set(metrics["binary_outcome_diagnostics"]) == {
+        "estimator_target_top_sector_quantile",
+        "managed_net_return_positive_after_costs",
+        "ten_session_net_return_positive_after_costs",
+        "ten_session_spy_excess_positive",
+        "ten_session_qqq_excess_positive",
+        "ten_session_sector_excess_positive",
+    }
+    assert metrics["negative_controls"]["label_permutation"]["passed"] is True
     assert result.evaluation["paired_ablation"]
     assert all(
         record["paired_sessions"] >= config.bootstrap_block_sessions
@@ -899,6 +922,12 @@ def _poison_final_test(frame: pd.DataFrame, config: SwingTrainingConfig) -> pd.D
         "future_excess_return_10d_vs_sector",
     ):
         poisoned.loc[selected, column] *= -1
+    shifted_noise = poisoned.loc[selected].groupby(
+        "security_id", sort=False, observed=True
+    )["feature_noise"].shift(1)
+    poisoned.loc[selected, "feature_noise"] = shifted_noise.fillna(
+        poisoned.loc[selected, "feature_noise"]
+    )
     return poisoned
 
 

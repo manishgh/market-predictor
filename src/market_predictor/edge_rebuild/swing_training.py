@@ -26,6 +26,10 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 
 from market_predictor.canonical.store import file_sha256
+from market_predictor.edge_rebuild.outcome_diagnostics import (
+    binary_outcome_diagnostic,
+    label_permutation_control,
+)
 from market_predictor.edge_rebuild.strategy_contract import StrategyContract
 from market_predictor.edge_rebuild.swing_artifact_contracts import (
     SWING_MATERIALIZATION_AUTHORITY_SCHEMA,
@@ -87,8 +91,8 @@ from market_predictor.v3.errors import DataReadinessError
 
 TRAINING_SCHEMA: Final = "edge_rebuild.swing_training.v4"
 MODEL_SCHEMA: Final = "edge_rebuild.swing_candidate.v4"
-EVALUATION_SCHEMA: Final = "edge_rebuild.swing_evaluation.v5"
-MODEL_CARD_SCHEMA: Final = "edge_rebuild.swing_model_card.v5"
+EVALUATION_SCHEMA: Final = "edge_rebuild.swing_evaluation.v6"
+MODEL_CARD_SCHEMA: Final = "edge_rebuild.swing_model_card.v6"
 OUTPUT_AUTHORITY_SCHEMA: Final = "edge_rebuild.swing_candidate_authority.v4"
 DECISION_START_DATE: Final = date(2019, 7, 9)
 HORIZON_SESSIONS: Final = 10
@@ -422,8 +426,6 @@ def load_swing_profile(
             )
         )
     )
-    if profile == "catalyst_full":
-        required = tuple(dict.fromkeys((*required, "source_count_alpaca_3d")))
     raw_files = _mapping(binding.manifest.get("files_by_profile"), "files_by_profile").get(profile)
     if not isinstance(raw_files, list) or not raw_files:
         raise DataReadinessError(f"swing panel has no files for {profile}")
@@ -467,8 +469,11 @@ def load_swing_profile(
         & (pds.field("label_eligible") == True)  # type: ignore[attr-defined,no-untyped-call]  # noqa: E712
         & pds.field("session_date_et").isin(filter_sessions)  # type: ignore[attr-defined,no-untyped-call]
     )
-    if profile != "catalyst_full":
-        row_filter = row_filter & (pds.field("cross_section_eligible") == True) & pds.field("rank_label").is_valid()  # type: ignore[attr-defined,no-untyped-call]  # noqa: E712
+    row_filter = (
+        row_filter
+        & (pds.field("cross_section_eligible") == True)  # type: ignore[attr-defined,no-untyped-call]  # noqa: E712
+        & pds.field("rank_label").is_valid()  # type: ignore[attr-defined,no-untyped-call]
+    )
 
     table = dataset.to_table(
         columns=list(required),
@@ -480,42 +485,6 @@ def load_swing_profile(
     frame = table.to_pandas(split_blocks=True, self_destruct=True)
     del table, dataset, paths
     frame = frame.copy()
-
-    if profile == "catalyst_full":
-        import pyarrow.dataset as ds
-        sec_dir = r"c:\project\market-predictor\data\canonical\sec_filing_authority_20190709_20260708_v1\partitions"
-        sec_dataset = ds.dataset(sec_dir, format="parquet")  # type: ignore[no-untyped-call]
-        sec_df = sec_dataset.to_table(
-            columns=["decision_id", "sec_filing_count_3d"]
-        ).to_pandas()
-        frame = frame.drop(columns=["source_count_sec_3d"], errors="ignore")
-        frame = frame.merge(sec_df, on="decision_id", how="left")
-        frame["source_count_sec_3d"] = frame["sec_filing_count_3d"].fillna(0)
-        frame = frame.drop(columns=["sec_filing_count_3d"])
-
-        # Event-Driven Specialist Logic
-        has_catalyst = (frame["source_count_sec_3d"].fillna(0) > 0) | (frame["source_count_alpaca_3d"].fillna(0) > 0)
-        frame = frame.loc[has_catalyst].copy()
-
-        # Redefine decision_group_id to be session_date_et (global rank across all sectors for that day)
-        frame["decision_group_id"] = frame["session_date_et"].astype("string[pyarrow]")
-
-        minimum_group = strategy_contract.labels.minimum_cross_section_for_ranking
-        target_group = strategy_contract.labels.swing_target_cross_section_for_ranking
-
-        frame["sector_peer_count"] = frame.groupby("session_date_et")["security_id"].transform("count")
-        frame = frame.loc[frame["sector_peer_count"] >= minimum_group].copy()
-
-        # Redefine rank_label globally per session (top 25% of catalysts get 1.0)
-        def _global_rank_label(g: pd.Series) -> pd.Series:
-            return (g.rank(pct=True) >= 0.75).astype(float)
-        frame["rank_label"] = frame.groupby("session_date_et")["future_excess_return_10d_vs_sector"].transform(_global_rank_label)
-        frame["ranking_group_size"] = frame["sector_peer_count"]
-        frame["ranking_reliability_weight"] = np.minimum(frame["sector_peer_count"] / float(target_group), 1.0)
-
-        frame["cross_section_eligible"] = True
-        frame["sector_rank_eligible"] = True
-        frame["sector_rank_target_met"] = frame["sector_peer_count"] >= target_group
 
     frame = _validate_profile_frame(
         frame,
@@ -610,12 +579,13 @@ def _validate_profile_frame(
     config: SwingTrainingConfig,
 ) -> pd.DataFrame:
     data = frame
-    if profile == "catalyst_full":
-        if len(data) < 1000 or data["security_id"].nunique() < 50:
-            raise DataReadinessError(f"eligible {profile} population is below training minimums")
-    else:
-        if len(data) < config.minimum_rows or data["security_id"].nunique() < config.minimum_securities:
-            raise DataReadinessError(f"eligible {profile} population is below training minimums")
+    if (
+        len(data) < config.minimum_rows
+        or data["security_id"].nunique() < config.minimum_securities
+    ):
+        raise DataReadinessError(
+            f"eligible {profile} population is below training minimums"
+        )
     session = pd.to_datetime(data["session_date_et"], errors="coerce")
     if session.isna().any() or bool(session.dt.date.lt(DECISION_START_DATE).any()):
         raise DataReadinessError("eligible swing decisions precede 2019-07-09")
@@ -885,10 +855,10 @@ def train_swing_edge_candidate(
             config=config,
             sessions=model_sessions,
         )
-        if profile_identity is None:
-            profile_identity = profile_data.decision_ids_sha256
-        elif profile_identity != profile_data.decision_ids_sha256 and profile != "catalyst_full":
-            raise DataReadinessError("technical and catalyst ablations do not contain identical decisions")
+        profile_identity = _matched_ablation_identity(
+            profile_identity,
+            profile_data.decision_ids_sha256,
+        )
         for spec in (item for item in specs if item.profile == profile):
             validation_records.append(
                 _evaluate_validation_candidate(
@@ -918,6 +888,7 @@ def train_swing_edge_candidate(
             "selection_basis": "validation_only",
             "test_access_count": 0,
             "locked_test_outcomes_read": False,
+            "outcome_contract": _swing_outcome_contract(config, strategy_contract),
             "dataset": _binding_record(binding, profile_identity),
             "training_config": config_record,
             "training_config_sha256": config_sha256,
@@ -933,6 +904,7 @@ def train_swing_edge_candidate(
             "status": "no_candidate",
             "promotion_permitted": False,
             "candidate_id": None,
+            "outcome_contract": _swing_outcome_contract(config, strategy_contract),
             "dataset": _binding_record(binding, profile_identity),
             "strategy_contract_sha256": strategy_contract.sha256(),
             "training_config_sha256": config_sha256,
@@ -1090,6 +1062,7 @@ def train_swing_edge_candidate(
         "locked_test_access_policy": (
             "outcome columns loaded once only after both validation scopes passed"
         ),
+        "outcome_contract": _swing_outcome_contract(config, strategy_contract),
         "strategy": {
             "horizon_trading_sessions": HORIZON_SESSIONS,
             "entry_reference": strategy_contract.swing.entry_reference,
@@ -1140,6 +1113,7 @@ def train_swing_edge_candidate(
         "candidate_id": selected_records.get("classifier", next(iter(selected_records.values())))["candidate_id"],
         "candidate_ids": {fam: r["candidate_id"] for fam, r in selected_records.items()},
         "ablation_profile": reference_spec.profile,
+        "outcome_contract": _swing_outcome_contract(config, strategy_contract),
         "models": {
             fam: {
                 "estimator_family": selected_specs[fam].estimator_family,
@@ -1228,6 +1202,54 @@ def _candidate_specs(config: SwingTrainingConfig) -> tuple[CandidateSpec, ...]:
     return tuple(specs)
 
 
+def _matched_ablation_identity(
+    current: str | None,
+    observed: str,
+) -> str:
+    if len(observed) != 64:
+        raise DataReadinessError("swing ablation decision identity hash is invalid")
+    if current is not None and current != observed:
+        raise DataReadinessError(
+            "technical and catalyst ablations do not contain identical decisions"
+        )
+    return observed
+
+
+def _swing_outcome_contract(
+    config: SwingTrainingConfig,
+    strategy_contract: StrategyContract,
+) -> dict[str, Any]:
+    return {
+        "schema": "edge_rebuild.swing_outcome_contract.v1",
+        "horizon": "ten exact exchange sessions",
+        "entry": strategy_contract.swing.entry_reference,
+        "managed_exit": strategy_contract.swing.exit_rule,
+        "estimator_target": {
+            "column": "target",
+            "definition": (
+                "published top rank_label within the point-in-time sector decision cohort"
+            ),
+        },
+        "economic_target": {
+            "column": "future_excess_return_10d_vs_sector",
+            "definition": (
+                "exact ten-session stock net return after costs less the point-in-time "
+                "sector ETF return over the identical interval"
+            ),
+        },
+        "comparable_binary_diagnostic": (
+            "exact ten-session sector excess return after costs is positive"
+        ),
+        "benchmark_excess_columns": {
+            "SPY": "future_excess_return_10d_vs_spy",
+            "QQQ": "future_excess_return_10d_vs_qqq",
+            "sector": "future_excess_return_10d_vs_sector",
+        },
+        "benchmark_interval": "identical next-open through exact ten-session close interval",
+        "round_trip_cost_bps": config.expected_round_trip_cost_bps,
+    }
+
+
 def _ordered_sessions(data: pd.DataFrame) -> tuple[str, ...]:
     sessions = (
         data.groupby("session_date_et", as_index=False, observed=True)["decision_time_utc"]
@@ -1274,6 +1296,7 @@ def _evaluation_columns() -> tuple[str, ...]:
                 "barrier_gross_return",
                 "barrier_cost",
                 "barrier_net_return",
+                "future_net_return_10d",
                 "future_excess_return_10d_vs_spy",
                 "future_excess_return_10d_vs_qqq",
                 "future_excess_return_10d_vs_sector",
@@ -1686,19 +1709,13 @@ def _evaluation_metrics(
     scored = frame.copy()
     scored["__probability"] = probability
     candidates = scored.loc[scored["__probability"].ge(threshold)].copy()
-    if "source_count_sec_3d" in candidates.columns:
-        # Event-Driven Specialist: bypass strict sector limits
-        selected = candidates.groupby("session_date_et", group_keys=False).apply(
-            lambda g: g.nlargest(config.maximum_trades_per_decision, "__probability")
-        )
-    else:
-        selected = select_constrained_swing_portfolio(
-            candidates,
-            maximum_trades=config.maximum_trades_per_decision,
-            target_maximum_sector_weight=strategy_contract.swing.target_maximum_sector_weight,
-            hard_maximum_sector_weight=strategy_contract.swing.hard_maximum_sector_weight,
-            minimum_distinct_sectors=strategy_contract.swing.minimum_distinct_sectors_for_selection,
-        )
+    selected = select_constrained_swing_portfolio(
+        candidates,
+        maximum_trades=config.maximum_trades_per_decision,
+        target_maximum_sector_weight=strategy_contract.swing.target_maximum_sector_weight,
+        hard_maximum_sector_weight=strategy_contract.swing.hard_maximum_sector_weight,
+        minimum_distinct_sectors=strategy_contract.swing.minimum_distinct_sectors_for_selection,
+    )
     if selected.empty or selected["session_date_et"].nunique() < 2:
         raise DataReadinessError("threshold selects fewer than two independent sessions")
     selected = selected.sort_values(
@@ -1753,6 +1770,51 @@ def _evaluation_metrics(
         "roc_auc": float(roc_auc_score(target, probability)) if has_two_classes else None,
         "pr_auc": float(average_precision_score(target, probability)) if has_two_classes else None,
         "auc_is_diagnostic_only": True,
+        "binary_outcome_diagnostics": {
+            "estimator_target_top_sector_quantile": binary_outcome_diagnostic(
+                target,
+                probability,
+                definition=(
+                    "published rank_label is top within the point-in-time sector "
+                    "decision cohort"
+                ),
+            ),
+            "managed_net_return_positive_after_costs": binary_outcome_diagnostic(
+                scored["barrier_net_return"].gt(0.0),
+                probability,
+                definition="managed target/stop/timeout net return after costs is positive",
+            ),
+            "ten_session_net_return_positive_after_costs": binary_outcome_diagnostic(
+                scored["future_net_return_10d"].gt(0.0),
+                probability,
+                definition="exact ten-session net return after costs is positive",
+            ),
+            "ten_session_spy_excess_positive": binary_outcome_diagnostic(
+                scored["future_excess_return_10d_vs_spy"].gt(0.0),
+                probability,
+                definition="exact ten-session net return exceeds SPY over the same interval",
+            ),
+            "ten_session_qqq_excess_positive": binary_outcome_diagnostic(
+                scored["future_excess_return_10d_vs_qqq"].gt(0.0),
+                probability,
+                definition="exact ten-session net return exceeds QQQ over the same interval",
+            ),
+            "ten_session_sector_excess_positive": binary_outcome_diagnostic(
+                scored["future_excess_return_10d_vs_sector"].gt(0.0),
+                probability,
+                definition=(
+                    "exact ten-session net return exceeds the point-in-time sector ETF "
+                    "over the same interval"
+                ),
+            ),
+        },
+        "negative_controls": {
+            "label_permutation": label_permutation_control(
+                target,
+                probability,
+                random_seed=config.random_seed + 31_337,
+            )
+        },
         "brier_score": float(brier_score_loss(target, probability)),
         "expected_calibration_error": _expected_calibration_error(calibration_bins, len(scored)),
         "calibration_bins": calibration_bins,

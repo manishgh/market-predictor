@@ -100,7 +100,11 @@ def _inputs() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     features = _feature()
     stocks = _bars("AAA")
     benchmarks = pd.concat(
-        [_bars("SPY", final_delta=0.1), _bars("XLK", final_delta=0.2)],
+        [
+            _bars("SPY", final_delta=0.1),
+            _bars("QQQ", final_delta=0.15),
+            _bars("XLK", final_delta=0.2),
+        ],
         ignore_index=True,
     )
     return features, stocks, benchmarks
@@ -140,6 +144,7 @@ def test_uses_strictly_next_exact_minute_and_frozen_cost() -> None:
     assert result["cost"] == pytest.approx(0.001)
     assert result["net_return"] == pytest.approx(0.019)
     assert result["spy_excess_return"] == pytest.approx(result["net_return"] - result["spy_return"])
+    assert result["qqq_excess_return"] == pytest.approx(result["net_return"] - result["qqq_return"])
 
 
 def test_same_minute_collision_is_conservatively_stop_first() -> None:
@@ -180,6 +185,16 @@ def test_missing_minute_inside_horizon_abstains() -> None:
 
     assert not bool(result["label_eligible"])
     assert result["label_ineligible_reason"] == "missing_exact_one_minute_path"
+
+
+def test_missing_qqq_interval_abstains_instead_of_omitting_comparison() -> None:
+    features, stocks, benchmarks = _inputs()
+    benchmarks = benchmarks.loc[~benchmarks["ticker"].eq("QQQ")].copy()
+
+    result = _build(features, stocks, benchmarks).iloc[0]
+
+    assert not bool(result["label_eligible"])
+    assert result["label_ineligible_reason"] == "missing_exact_qqq_interval"
 
 
 def test_prior_and_post_horizon_poison_cannot_change_label() -> None:
@@ -226,6 +241,7 @@ def test_early_close_horizon_abstains_and_never_uses_next_session() -> None:
     benchmarks = pd.concat(
         [
             _bars("SPY", day="2025-11-28", start="2025-11-28T14:30:00Z", periods=210),
+            _bars("QQQ", day="2025-11-28", start="2025-11-28T14:30:00Z", periods=210),
             _bars("XLK", day="2025-11-28", start="2025-11-28T14:30:00Z", periods=210),
         ],
         ignore_index=True,
@@ -259,7 +275,9 @@ def test_contemporaneous_rank_uses_only_same_decision_group() -> None:
         frame.loc[horizon, "high"] = np.maximum(frame.loc[horizon, "open"], frame.loc[horizon, "close"]) + 0.05
         frame.loc[horizon, "low"] = np.minimum(frame.loc[horizon, "open"], frame.loc[horizon, "close"]) - 0.05
         stocks.append(frame)
-    benchmarks = pd.concat([_bars("SPY"), _bars("XLK")], ignore_index=True)
+    benchmarks = pd.concat(
+        [_bars("SPY"), _bars("QQQ"), _bars("XLK")], ignore_index=True
+    )
 
     result = _build(features, pd.concat(stocks, ignore_index=True), benchmarks)
 

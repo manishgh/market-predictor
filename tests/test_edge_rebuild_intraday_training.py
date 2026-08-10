@@ -47,6 +47,11 @@ def test_trains_sequential_candidates_and_publishes_immutable_evidence(tmp_path:
     assert evaluation["selection_basis"] == "validation_only"
     assert evaluation["selection_policy"]["name"] == "ER5_CONSERVATIVE_ECONOMICS_V1"
     assert evaluation["selection_policy"]["auc_used_for_selection"] is False
+    assert evaluation["outcome_contract"]["benchmark_excess_columns"] == {
+        "SPY": "spy_excess_return",
+        "QQQ": "qqq_excess_return",
+        "sector": "sector_excess_return",
+    }
     assert evaluation["test_access_count"] == 1
     assert evaluation["training_config_sha256"]
     assert evaluation["training_config"]["top_k"] == 3
@@ -70,6 +75,7 @@ def test_trains_sequential_candidates_and_publishes_immutable_evidence(tmp_path:
         "top_k_average_gross_return",
         "top_k_average_net_return",
         "top_k_average_spy_excess_return",
+        "top_k_average_qqq_excess_return",
         "top_k_average_sector_excess_return",
         "top_k_win_rate_after_costs",
         "turnover",
@@ -87,6 +93,14 @@ def test_trains_sequential_candidates_and_publishes_immutable_evidence(tmp_path:
         metrics["top_k_average_gross_return"] - 0.001,
         abs=1e-12,
     )
+    assert set(metrics["binary_outcome_diagnostics"]) == {
+        "estimator_target_hit",
+        "managed_net_return_positive_after_costs",
+        "managed_spy_excess_positive",
+        "managed_qqq_excess_positive",
+        "managed_sector_excess_positive",
+    }
+    assert metrics["negative_controls"]["label_permutation"]["passed"] is True
     assert all(
         pd.Timestamp(fold["max_train_label_available_at_utc"]) < pd.Timestamp(fold["min_validation_decision_time_utc"])
         for candidate in evaluation["validation_candidates"]
@@ -176,7 +190,11 @@ def test_temporal_test_poison_cannot_change_validation_selection(tmp_path: Path)
     poisoned.loc[future, "gross_return"] *= -1.0
     poisoned.loc[future, "net_return"] = poisoned.loc[future, "gross_return"] - 0.001
     poisoned.loc[future, "spy_excess_return"] = poisoned.loc[future, "net_return"] - 0.0002
+    poisoned.loc[future, "qqq_excess_return"] = poisoned.loc[future, "net_return"] - 0.0003
     poisoned.loc[future, "sector_excess_return"] = poisoned.loc[future, "net_return"] - 0.0001
+    poisoned.loc[future, MODEL_FEATURE_COLUMNS[0]] = (
+        -100.0 * poisoned.loc[future, MODEL_FEATURE_COLUMNS[0]]
+    )
 
     first = train_intraday_edge_candidate(
         _publish_dataset(tmp_path / "baseline", baseline),
@@ -391,6 +409,7 @@ def test_negative_deterministic_economics_do_not_veto_model_fitting(
     frame["gross_return"] = -0.002
     frame["net_return"] = -0.003
     frame["spy_excess_return"] = -0.0032
+    frame["qqq_excess_return"] = -0.0033
     frame["sector_excess_return"] = -0.0031
     authority = _publish_dataset(tmp_path / "dataset", frame)
     fitted_families: list[str] = []
@@ -485,6 +504,7 @@ def _training_frame() -> pd.DataFrame:
                         "cost": 0.001,
                         "net_return": net,
                         "spy_excess_return": net - 0.0002,
+                        "qqq_excess_return": net - 0.0003,
                         "sector_excess_return": net - 0.0001,
                         **model_features,
                     }
@@ -639,6 +659,7 @@ def _publish_dataset(directory: Path, frame: pd.DataFrame) -> Path:
                 "gross_return",
                 "net_return",
                 "spy_excess_return",
+                "qqq_excess_return",
                 "sector_excess_return",
                 "rank_label",
             ],
@@ -686,6 +707,7 @@ def _selection_record(
         "pr_auc": roc_auc,
         "top_k_average_net_return": net_ci_low + 0.001,
         "top_k_average_spy_excess_return": benchmark_ci_low + 0.001,
+        "top_k_average_qqq_excess_return": benchmark_ci_low + 0.001,
         "top_k_average_sector_excess_return": benchmark_ci_low + 0.001,
         "max_drawdown_after_costs": 0.02,
         "expected_calibration_error": 0.05,
@@ -694,6 +716,7 @@ def _selection_record(
         "session_block_bootstrap_95_ci": {
             "top_k_average_net_return": {"low": net_ci_low},
             "top_k_average_spy_excess_return": {"low": benchmark_ci_low},
+            "top_k_average_qqq_excess_return": {"low": benchmark_ci_low},
             "top_k_average_sector_excess_return": {"low": benchmark_ci_low},
         },
     }
