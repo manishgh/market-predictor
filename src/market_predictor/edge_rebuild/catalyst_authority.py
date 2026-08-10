@@ -36,8 +36,8 @@ from market_predictor.swing.contracts import MINIMUM_SWING_DECISION_DATE
 from market_predictor.v3.errors import DataReadinessError
 
 LINEAGE_MANIFEST_SCHEMA: Final = "swing.catalyst_lineage_manifest.v2"
-DECISION_AUTHORITY_SCHEMA: Final = "edge_rebuild.catalyst_decision_authority.v4"
-DECISION_MANIFEST_SCHEMA: Final = "edge_rebuild.catalyst_decision_manifest.v4"
+DECISION_AUTHORITY_SCHEMA: Final = "edge_rebuild.catalyst_decision_authority.v5"
+DECISION_MANIFEST_SCHEMA: Final = "edge_rebuild.catalyst_decision_manifest.v5"
 DECISION_ARTIFACT_TYPE: Final = "edge_rebuild_catalyst_decisions"
 COVERAGE_ARTIFACT_TYPE: Final = "edge_rebuild_catalyst_coverage"
 WINDOWS: Final[Mapping[str, pd.Timedelta]] = {
@@ -58,6 +58,13 @@ MEMORY_GUARD_HEADROOM_GIB: Final = 0.5
 
 _EVENT_PROJECTION: Final = (
     "event_id",
+    "source_event_id",
+    "source_security_id",
+    "security_id",
+    "ticker",
+    "source_family",
+    "feature_available_at_utc",
+    "sentiment_input_sha256",
     "relation_channel",
     "training_eligible",
     "sentiment_model",
@@ -656,6 +663,7 @@ def _merge_artifact(
         & assignments["source_family"].fillna("").astype(str).str.lower().str.strip().isin(REQUIRED_MODEL_SOURCE_FAMILIES)
     ].copy()
     if not retained.empty:
+        retained = _attach_verified_event_identity(retained, direct, chunk_id=chunk_id)
         _insert_assignments(database, retained, lineage.lineage_sha256)
     families = set(retained["source_family"].fillna("").astype(str).str.lower().str.strip())
     families.discard("")
@@ -687,6 +695,9 @@ def _initialize_database(database: sqlite3.Connection) -> None:
             status TEXT NOT NULL,
             sentiment_numeric REAL,
             relevance REAL,
+            source_event_id TEXT NOT NULL,
+            source_security_id TEXT NOT NULL,
+            content_identity_sha256 TEXT NOT NULL,
             source_lineages TEXT NOT NULL
         )
         """
@@ -720,7 +731,7 @@ def _insert_assignments(database: sqlite3.Connection, frame: pd.DataFrame, linea
             continue
         database.execute(
             """
-            INSERT INTO assignments VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO assignments VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 evidence_id,
@@ -737,6 +748,9 @@ def _insert_assignments(database: sqlite3.Connection, frame: pd.DataFrame, linea
                 normalized["status"],
                 normalized["sentiment_numeric"],
                 normalized["relevance"],
+                normalized["source_event_id"],
+                normalized["source_security_id"],
+                normalized["content_identity_sha256"],
                 _compact_json([lineage_sha256]),
             ),
         )
@@ -756,6 +770,9 @@ def _aggregate_database(database: sqlite3.Connection, *, source_families: tuple[
         "status",
         "sentiment_numeric",
         "relevance",
+        "source_event_id",
+        "source_security_id",
+        "content_identity_sha256",
         "source_lineages",
     )
     cursor = database.execute(f"SELECT {', '.join(columns)} FROM assignments ORDER BY decision_id, event_id, window_name")
@@ -802,7 +819,7 @@ def _aggregate_rows(
     )
     if bool(identities[["ticker_count", "security_count", "decision_time_count"]].ne(1).any(axis=None)):
         raise DataReadinessError("decision identity conflicts across catalyst lineage generations")
-    deduped_frame = _temporal_deduplicate(frame)
+    deduped_frame = _deduplicate_verified_events(frame)
     aggregates = aggregate_event_assignments(
         deduped_frame,
         windows=WINDOWS,
@@ -816,41 +833,87 @@ def _aggregate_rows(
     return output.reset_index()
 
 
-def _temporal_deduplicate(frame: pd.DataFrame) -> pd.DataFrame:
-    events = frame[["event_id", "source_family", "feature_available_at_utc"]].drop_duplicates()
-    if events.empty:
+def _deduplicate_verified_events(frame: pd.DataFrame) -> pd.DataFrame:
+    """Deduplicate only lineage-bound event or issuer/content identities."""
+
+    if frame.empty:
         return frame
-    events = events.sort_values("feature_available_at_utc")
-    
+    durable_values = (
+        "security_id",
+        "ticker",
+        "source_family",
+        "feature_available_at_utc",
+        "source_event_id",
+        "source_security_id",
+        "content_identity_sha256",
+        "sentiment_numeric",
+        "relevance",
+    )
+    _reject_identity_conflicts(
+        frame,
+        keys=("event_id",),
+        values=durable_values,
+        description="durable catalyst event identity",
+    )
+    _reject_identity_conflicts(
+        frame,
+        keys=("source_family", "source_event_id", "security_id"),
+        values=(
+            "ticker",
+            "feature_available_at_utc",
+            "source_security_id",
+            "content_identity_sha256",
+            "sentiment_numeric",
+            "relevance",
+        ),
+        description="durable catalyst source-event identity",
+    )
+    _reject_identity_conflicts(
+        frame,
+        keys=("security_id", "content_identity_sha256"),
+        values=("ticker", "source_security_id", "sentiment_numeric", "relevance"),
+        description="catalyst issuer/content identity",
+    )
+
     priority = {"sec": 0, "alpaca": 1, "finviz": 2}
-    events["_priority"] = events["source_family"].map(priority).fillna(99)
-    
-    dropped_event_ids = set()
-    records = events.to_dict(orient="records")
-    for i in range(len(records)):
-        event = records[i]
-        event_id = event["event_id"]
-        if event_id in dropped_event_ids:
-            continue
-            
-        for j in range(i + 1, len(records)):
-            next_event = records[j]
-            if next_event["event_id"] in dropped_event_ids:
-                continue
-                
-            time_diff = next_event["feature_available_at_utc"] - event["feature_available_at_utc"]
-            if time_diff > pd.Timedelta(minutes=30):
-                break
-                
-            if next_event["_priority"] > event["_priority"]:
-                dropped_event_ids.add(next_event["event_id"])
-            elif next_event["_priority"] < event["_priority"]:
-                dropped_event_ids.add(event_id)
-                break
-                
-    if dropped_event_ids:
-        return frame[~frame["event_id"].isin(dropped_event_ids)].copy()
-    return frame
+    output = frame.assign(
+        _source_priority=frame["source_family"].map(priority).fillna(99),
+    ).sort_values(
+        [
+            "decision_id",
+            "window_name",
+            "feature_available_at_utc",
+            "_source_priority",
+            "event_id",
+        ],
+        kind="stable",
+    )
+    output = output.drop_duplicates(
+        ["decision_id", "window_name", "event_id"],
+        keep="first",
+    )
+    output = output.drop_duplicates(
+        ["decision_id", "window_name", "security_id", "source_family", "source_event_id"],
+        keep="first",
+    )
+    output = output.drop_duplicates(
+        ["decision_id", "window_name", "security_id", "content_identity_sha256"],
+        keep="first",
+    )
+    return output.drop(columns="_source_priority").reset_index(drop=True)
+
+
+def _reject_identity_conflicts(
+    frame: pd.DataFrame,
+    *,
+    keys: tuple[str, ...],
+    values: tuple[str, ...],
+    description: str,
+) -> None:
+    grouped = frame.groupby(list(keys), sort=False, dropna=False)
+    for value in values:
+        if bool(grouped[value].nunique(dropna=False).gt(1).any()):
+            raise DataReadinessError(f"conflicting {description}")
 
 
 def _merge_coverage(frames: list[pd.DataFrame]) -> pd.DataFrame:
@@ -1201,7 +1264,74 @@ def _normalized_assignment(record: Mapping[str, object]) -> dict[str, object]:
         "status": "assigned",
         "sentiment_numeric": _nullable_float(record.get("sentiment_numeric")),
         "relevance": _nullable_float(record.get("relevance")),
+        "source_event_id": _value_text(record.get("source_event_id"), "source_event_id"),
+        "source_security_id": _value_text(record.get("source_security_id"), "source_security_id"),
+        "content_identity_sha256": _sha256_text(
+            record.get("content_identity_sha256"),
+            "content_identity_sha256",
+        ),
     }
+
+
+def _attach_verified_event_identity(
+    assignments: pd.DataFrame,
+    direct_events: pd.DataFrame,
+    *,
+    chunk_id: str,
+) -> pd.DataFrame:
+    identity_columns = (
+        "event_id",
+        "source_event_id",
+        "source_security_id",
+        "security_id",
+        "ticker",
+        "source_family",
+        "feature_available_at_utc",
+        "sentiment_input_sha256",
+    )
+    identities = direct_events.loc[:, identity_columns].rename(
+        columns={
+            "security_id": "event_security_id",
+            "ticker": "event_ticker",
+            "source_family": "event_source_family",
+            "feature_available_at_utc": "event_feature_available_at_utc",
+            "sentiment_input_sha256": "content_identity_sha256",
+        }
+    )
+    output = assignments.merge(
+        identities,
+        on="event_id",
+        how="left",
+        validate="many_to_one",
+    )
+    required_identity = (
+        "source_event_id",
+        "source_security_id",
+        "event_security_id",
+        "event_ticker",
+        "event_source_family",
+        "event_feature_available_at_utc",
+        "content_identity_sha256",
+    )
+    if bool(output.loc[:, required_identity].isna().any(axis=None)):
+        raise DataReadinessError(f"catalyst event identity is missing: {chunk_id}")
+    event_available = pd.to_datetime(output["event_feature_available_at_utc"], utc=True)
+    assignment_available = pd.to_datetime(output["feature_available_at_utc"], utc=True)
+    if bool(
+        output["security_id"].astype(str).ne(output["event_security_id"].astype(str)).any()
+        or output["ticker"].astype(str).str.upper().ne(output["event_ticker"].astype(str).str.upper()).any()
+        or output["source_family"].astype(str).str.lower().ne(output["event_source_family"].astype(str).str.lower()).any()
+        or assignment_available.ne(event_available).any()
+    ):
+        raise DataReadinessError(f"catalyst assignment conflicts with event identity: {chunk_id}")
+    return output.drop(
+        columns=[
+            "event_security_id",
+            "event_ticker",
+            "event_source_family",
+            "event_feature_available_at_utc",
+        ]
+    )
 
 
 def _normalized_coverage(record: Mapping[str, object]) -> dict[str, object]:
@@ -1305,6 +1435,13 @@ def _value_text(value: object, name: str) -> str:
     text = str(value).strip()
     if not text or text.lower() == "nan":
         raise DataReadinessError(f"catalyst assignment has empty {name}")
+    return text
+
+
+def _sha256_text(value: object, name: str) -> str:
+    text = _value_text(value, name).lower()
+    if len(text) != 64 or any(character not in "0123456789abcdef" for character in text):
+        raise DataReadinessError(f"catalyst assignment has invalid {name}")
     return text
 
 

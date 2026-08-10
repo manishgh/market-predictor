@@ -3,7 +3,8 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from uuid import uuid4
@@ -23,12 +24,33 @@ from market_predictor.canonical.store import (
 from market_predictor.swing.event_attribution import (
     ATTRIBUTION_POLICY_SHA256,
     ATTRIBUTION_POLICY_VERSION,
+    RELATION_COLUMNS,
     build_event_security_relations,
 )
+from market_predictor.swing.news_history import NEWS_HISTORY_MANIFEST_SCHEMA
 from market_predictor.v3.errors import DataReadinessError
 
 ATTRIBUTION_REQUEST_SCHEMA = "swing.event_attribution_request.v1"
 ATTRIBUTION_MANIFEST_SCHEMA = "swing.event_attribution_manifest.v1"
+_RELATION_CHANNELS = (
+    "direct_issuer",
+    "business_exposure",
+    "sector_context",
+)
+_ROOT_INVENTORY = {
+    "_manifest.json",
+    "_request.json",
+    "_status.json",
+    "relations",
+}
+
+
+@dataclass(frozen=True, slots=True)
+class EventAttributionHistory:
+    directory: Path
+    request: Mapping[str, object]
+    manifest: Mapping[str, object]
+    artifact_records: tuple[Mapping[str, object], ...]
 
 
 def attribute_alpaca_news_history(
@@ -127,6 +149,7 @@ def attribute_alpaca_news_history(
         )
         if existing is not None:
             observed[chunk_id] = existing
+            _lock_path_for(target).unlink(missing_ok=True)
             skipped += 1
             _progress(
                 progress,
@@ -174,6 +197,7 @@ def attribute_alpaca_news_history(
                 relations=relations,
                 manifest=relation_manifest,
             )
+            _lock_path_for(target).unlink(missing_ok=True)
             observed[chunk_id] = record
             _progress(
                 progress,
@@ -225,7 +249,174 @@ def attribute_alpaca_news_history(
     _atomic_json(out_dir / "_status.json", result)
     if status == "complete":
         _atomic_json(final_path, result)
+        load_event_attribution_history(out_dir)
     return result
+
+
+def load_event_attribution_history(
+    directory: Path,
+    *,
+    require_production_ready: bool = False,
+    expected_manifest_sha256: str | None = None,
+) -> EventAttributionHistory:
+    """Strictly replay a completed, research-only event-attribution authority."""
+
+    root = directory.resolve()
+    if not root.is_dir() or {path.name for path in root.iterdir()} != _ROOT_INVENTORY:
+        raise DataReadinessError("event attribution root inventory does not verify")
+    manifest_path = root / "_manifest.json"
+    if expected_manifest_sha256 is not None and (
+        not _is_sha256(expected_manifest_sha256)
+        or file_sha256(manifest_path) != expected_manifest_sha256
+    ):
+        raise DataReadinessError("event attribution manifest identity does not verify")
+
+    manifest = _json_object(manifest_path)
+    status = _json_object(root / "_status.json")
+    production_ready = manifest.get("production_ready")
+    if (
+        manifest.get("schema") != ATTRIBUTION_MANIFEST_SCHEMA
+        or manifest.get("status") != "complete"
+        or manifest.get("failed_chunks") != {}
+        or production_ready is not False
+    ):
+        raise DataReadinessError("event attribution manifest is not a completed research-only authority")
+    if require_production_ready:
+        raise DataReadinessError("event attribution history is research-only and not production ready")
+    if status != manifest:
+        raise DataReadinessError("event attribution status does not match the completed manifest")
+
+    request_payload = _json_object(root / "_request.json")
+    request_sha256 = request_payload.pop("request_sha256", None)
+    if (
+        not isinstance(request_sha256, str)
+        or not _is_sha256(request_sha256)
+        or _json_sha256(request_payload) != request_sha256
+        or manifest.get("request_sha256") != request_sha256
+        or request_payload.get("schema") != ATTRIBUTION_REQUEST_SCHEMA
+        or request_payload.get("production_ready") is not False
+        or request_payload.get("attribution_policy_version") != ATTRIBUTION_POLICY_VERSION
+        or request_payload.get("attribution_policy_sha256") != ATTRIBUTION_POLICY_SHA256
+    ):
+        raise DataReadinessError("event attribution request hash or policy does not verify")
+
+    source_records = _verify_source_lineage(request_payload)
+    excluded = _string_list(
+        request_payload.get("excluded_security_ids"),
+        "request excluded_security_ids",
+    )
+    if excluded != sorted(excluded) or len(excluded) != len(set(excluded)):
+        raise DataReadinessError("event attribution excluded security identities do not verify")
+    if manifest.get("excluded_security_ids") != excluded:
+        raise DataReadinessError("event attribution exclusion lineage does not verify")
+    eligible_sources = {
+        chunk_id: record
+        for chunk_id, record in source_records.items()
+        if str(record.get("security_id", "")) not in set(excluded)
+    }
+
+    artifact_records = _artifact_records(manifest)
+    records_by_chunk = {
+        _required_chunk_id(record): record for record in artifact_records
+    }
+    if len(records_by_chunk) != len(artifact_records):
+        raise DataReadinessError("event attribution contains duplicate relation chunks")
+    if set(records_by_chunk) != set(eligible_sources):
+        raise DataReadinessError("event attribution relation inventory is incomplete")
+    requested_chunks = _required_int(manifest, "requested_chunks")
+    observed_chunks = _required_int(manifest, "observed_chunks")
+    skipped_chunks = _required_int(manifest, "skipped_chunks")
+    if (
+        requested_chunks != len(eligible_sources)
+        or observed_chunks != len(artifact_records)
+        or requested_chunks != observed_chunks
+        or skipped_chunks > observed_chunks
+    ):
+        raise DataReadinessError("event attribution root chunk counts do not verify")
+
+    relations_directory = root / "relations"
+    if not relations_directory.is_dir():
+        raise DataReadinessError("event attribution relations directory is missing")
+    expected_relation_files = {
+        name
+        for chunk_id in records_by_chunk
+        for name in (
+            f"{chunk_id}.parquet",
+            f"{chunk_id}.parquet.manifest.json",
+        )
+    }
+    if (
+        {path.name for path in relations_directory.iterdir()} != expected_relation_files
+        or any(path.is_dir() for path in relations_directory.iterdir())
+    ):
+        raise DataReadinessError("event attribution child inventory does not verify")
+
+    total_rows = 0
+    channel_totals = {channel: 0 for channel in _RELATION_CHANNELS}
+    for chunk_id in sorted(records_by_chunk):
+        record = records_by_chunk[chunk_id]
+        source_record = eligible_sources[chunk_id]
+        expected_path = (relations_directory / f"{chunk_id}.parquet").resolve()
+        declared_path = _resolved_path(record.get("path"), "relation artifact path")
+        if declared_path != expected_path or not _is_inside(root, declared_path):
+            raise DataReadinessError("event attribution relation path escapes its authority")
+        relations, child_manifest = load_canonical_artifact(
+            expected_path,
+            expected_type="event_security_relations",
+            allow_research=True,
+        )
+        source_sha256 = _required_sha256(
+            source_record,
+            "sha256",
+            "source event artifact",
+        )
+        if list(relations.columns) != list(RELATION_COLUMNS):
+            raise DataReadinessError("event attribution relation schema does not verify")
+        if child_manifest.get("production_ready") is not False:
+            raise DataReadinessError("event attribution child must remain research-only")
+        child_inputs = child_manifest.get("inputs")
+        if not isinstance(child_inputs, dict) or child_inputs != {
+            "event_attribution_request_sha256": request_sha256,
+            "source_event_artifact_sha256": source_sha256,
+            "business_labels_sha256": _required_sha256(
+                request_payload, "business_labels_sha256", "request"
+            ),
+            "security_identities_sha256": _required_sha256(
+                request_payload, "security_identities_sha256", "request"
+            ),
+            "attribution_policy_sha256": ATTRIBUTION_POLICY_SHA256,
+            "chunk_id": chunk_id,
+        }:
+            raise DataReadinessError("event attribution child lineage does not verify")
+        if (
+            _required_sha256(record, "source_event_sha256", "relation artifact")
+            != source_sha256
+            or child_manifest.get("artifact_sha256")
+            != _required_sha256(record, "sha256", "relation artifact")
+            or len(relations) != _required_int(record, "rows")
+        ):
+            raise DataReadinessError("event attribution child hash or row count does not verify")
+        observed_channels = _channel_counts(relations)
+        declared_channels = _declared_channel_counts(record.get("channel_counts"))
+        if observed_channels != declared_channels:
+            raise DataReadinessError("event attribution child channel counts do not verify")
+        total_rows += len(relations)
+        for channel, count in observed_channels.items():
+            channel_totals[channel] += count
+
+    if (
+        total_rows != _required_int(manifest, "relation_rows")
+        or channel_totals != _declared_channel_counts(manifest.get("channel_counts"))
+    ):
+        raise DataReadinessError("event attribution root row or channel counts do not verify")
+    if expected_manifest_sha256 is not None and file_sha256(manifest_path) != expected_manifest_sha256:
+        raise DataReadinessError("event attribution manifest changed while loading")
+    return EventAttributionHistory(
+        directory=root,
+        request=request_payload,
+        manifest=manifest,
+        artifact_records=tuple(artifact_records),
+    )
 
 
 def _load_existing_relation(
@@ -290,6 +481,226 @@ def _relation_record(
             "sector_context": counts.get("sector_context", 0),
         },
     }
+
+
+def _verify_source_lineage(
+    request: Mapping[str, object],
+) -> dict[str, dict[str, object]]:
+    collection_manifest_path = _resolved_path(
+        request.get("collection_manifest_path"),
+        "collection manifest path",
+    )
+    if file_sha256(collection_manifest_path) != _required_sha256(
+        request,
+        "collection_manifest_sha256",
+        "request",
+    ):
+        raise DataReadinessError("event attribution collection manifest hash does not verify")
+    collection = _json_object(collection_manifest_path)
+    collection_request_sha256 = _required_sha256(
+        request,
+        "collection_request_sha256",
+        "request",
+    )
+    if (
+        collection.get("schema") != NEWS_HISTORY_MANIFEST_SCHEMA
+        or collection.get("status") != "complete"
+        or collection.get("production_ready") is not False
+        or collection.get("request_sha256") != collection_request_sha256
+        or collection.get("failed_chunks") != {}
+    ):
+        raise DataReadinessError("event attribution source collection does not verify")
+
+    audit_path = _resolved_path(
+        request.get("collection_audit_path"),
+        "collection audit path",
+    )
+    if file_sha256(audit_path) != _required_sha256(
+        request,
+        "collection_audit_sha256",
+        "request",
+    ):
+        raise DataReadinessError("event attribution collection audit hash does not verify")
+    audit = _json_object(audit_path)
+    excluded = _string_list(
+        audit.get("coverage_blindspot_security_ids"),
+        "collection audit coverage_blindspot_security_ids",
+    )
+    if (
+        audit.get("passed") is not True
+        or audit.get("request_sha256") != collection_request_sha256
+        or excluded != request.get("excluded_security_ids")
+    ):
+        raise DataReadinessError("event attribution collection audit lineage does not verify")
+
+    labels_path = _resolved_path(
+        request.get("business_labels_path"),
+        "business labels path",
+    )
+    _, labels_manifest = load_canonical_artifact(
+        labels_path,
+        expected_type="security_business_labels",
+        allow_research=True,
+    )
+    if labels_manifest.get("artifact_sha256") != _required_sha256(
+        request,
+        "business_labels_sha256",
+        "request",
+    ):
+        raise DataReadinessError("event attribution business-label hash does not verify")
+
+    identities_path = _resolved_path(
+        request.get("security_identities_path"),
+        "security identities path",
+    )
+    _, identities_manifest = load_canonical_artifact(
+        identities_path,
+        expected_type="security_business_label_coverage",
+        allow_research=True,
+    )
+    if identities_manifest.get("artifact_sha256") != _required_sha256(
+        request,
+        "security_identities_sha256",
+        "request",
+    ):
+        raise DataReadinessError("event attribution security-identity hash does not verify")
+
+    raw_records = collection.get("artifacts")
+    if not isinstance(raw_records, list):
+        raise DataReadinessError("event attribution source artifact inventory is malformed")
+    records: dict[str, dict[str, object]] = {}
+    total_rows = 0
+    collection_root = collection_manifest_path.parent.resolve()
+    for raw in raw_records:
+        if not isinstance(raw, dict):
+            raise DataReadinessError("event attribution source artifact record is malformed")
+        record = {str(key): value for key, value in raw.items()}
+        chunk_id = _required_chunk_id(record)
+        if chunk_id in records:
+            raise DataReadinessError("event attribution source chunks are duplicated")
+        source_path = _resolved_path(record.get("path"), "source event path")
+        if not _is_inside(collection_root, source_path):
+            raise DataReadinessError("event attribution source event path escapes its collection")
+        declared_manifest_path = _resolved_path(
+            record.get("manifest_path"),
+            "source event manifest path",
+        )
+        if declared_manifest_path != manifest_path_for(source_path).resolve():
+            raise DataReadinessError("event attribution source event manifest path does not verify")
+        events, source_manifest = load_canonical_artifact(
+            source_path,
+            expected_type="events",
+            allow_research=True,
+        )
+        inputs = source_manifest.get("inputs")
+        if (
+            source_manifest.get("production_ready") is not False
+            or source_manifest.get("artifact_sha256")
+            != _required_sha256(record, "sha256", "source event artifact")
+            or not isinstance(inputs, dict)
+            or inputs.get("collection_request_sha256") != collection_request_sha256
+            or inputs.get("chunk_id") != chunk_id
+            or len(events) != _required_int(record, "rows")
+        ):
+            raise DataReadinessError("event attribution source event lineage does not verify")
+        total_rows += len(events)
+        records[chunk_id] = record
+    if (
+        len(records) != _required_int(collection, "artifact_count")
+        or total_rows != _required_int(collection, "total_rows")
+        or len(records) != _required_int(collection, "observed_chunks")
+        or _required_int(collection, "requested_chunks")
+        != len(records) + _required_int(collection, "empty_chunks")
+    ):
+        raise DataReadinessError("event attribution source inventory counts do not verify")
+    return records
+
+
+def _artifact_records(manifest: Mapping[str, object]) -> list[dict[str, object]]:
+    raw_records = manifest.get("artifacts")
+    if not isinstance(raw_records, list):
+        raise DataReadinessError("event attribution relation inventory is malformed")
+    records: list[dict[str, object]] = []
+    for raw in raw_records:
+        if not isinstance(raw, dict):
+            raise DataReadinessError("event attribution relation record is malformed")
+        records.append({str(key): value for key, value in raw.items()})
+    return records
+
+
+def _required_chunk_id(record: Mapping[str, object]) -> str:
+    value = record.get("chunk_id")
+    if not isinstance(value, str) or not value or Path(value).name != value or value in {".", ".."}:
+        raise DataReadinessError("event attribution chunk identity is invalid")
+    return value
+
+
+def _required_sha256(
+    record: Mapping[str, object],
+    key: str,
+    label: str,
+) -> str:
+    value = record.get(key)
+    if not isinstance(value, str) or not _is_sha256(value):
+        raise DataReadinessError(f"{label} has invalid {key}")
+    return value
+
+
+def _required_int(record: Mapping[str, object], key: str) -> int:
+    value = record.get(key)
+    if not isinstance(value, int) or isinstance(value, bool) or value < 0:
+        raise DataReadinessError(f"event attribution record has invalid {key}")
+    return value
+
+
+def _declared_channel_counts(value: object) -> dict[str, int]:
+    if not isinstance(value, dict) or set(value) != set(_RELATION_CHANNELS):
+        raise DataReadinessError("event attribution channel-count schema does not verify")
+    output: dict[str, int] = {}
+    for channel in _RELATION_CHANNELS:
+        count = value.get(channel)
+        if not isinstance(count, int) or isinstance(count, bool) or count < 0:
+            raise DataReadinessError("event attribution channel count is invalid")
+        output[channel] = count
+    return output
+
+
+def _channel_counts(relations: pd.DataFrame) -> dict[str, int]:
+    if "relation_channel" not in relations.columns:
+        raise DataReadinessError("event attribution relation channel is missing")
+    observed = {
+        str(channel): int(count)
+        for channel, count in relations["relation_channel"].value_counts().items()
+    }
+    if not set(observed).issubset(_RELATION_CHANNELS):
+        raise DataReadinessError("event attribution relation channel is unsupported")
+    return {channel: observed.get(channel, 0) for channel in _RELATION_CHANNELS}
+
+
+def _string_list(value: object, label: str) -> list[str]:
+    if not isinstance(value, list) or any(not isinstance(item, str) or not item for item in value):
+        raise DataReadinessError(f"{label} is invalid")
+    return list(value)
+
+
+def _resolved_path(value: object, label: str) -> Path:
+    if not isinstance(value, str) or not value.strip():
+        raise DataReadinessError(f"{label} is invalid")
+    return Path(value).resolve()
+
+
+def _is_inside(root: Path, path: Path) -> bool:
+    resolved_root = root.resolve()
+    resolved_path = path.resolve()
+    return resolved_path == resolved_root or resolved_root in resolved_path.parents
+
+
+def _is_sha256(value: str) -> bool:
+    return len(value) == 64 and all(character in "0123456789abcdef" for character in value.lower())
+
+
+def _lock_path_for(path: Path) -> Path:
+    return path.with_name(f"{path.name}.lock")
 
 
 def _passing_audit(rows: int) -> CanonicalAuditReport:

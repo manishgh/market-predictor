@@ -66,6 +66,9 @@ from market_predictor.edge_rebuild.intraday_selection import (
     build_intraday_selection,
     publish_intraday_selection,
 )
+from market_predictor.edge_rebuild.issuer_event_family_authority import (
+    publish_issuer_event_family_authority,
+)
 from market_predictor.edge_rebuild.one_minute_coverage import (
     publish_selected_session_one_minute_coverage,
 )
@@ -287,6 +290,58 @@ def register_edge_rebuild_commands(app: typer.Typer, console: Any) -> None:
                 "decisions": len(result.decisions),
                 "coverage_rows": len(result.coverage),
                 "production_ready": result.manifest["production_ready"],
+                "directory": str(result.directory),
+            }
+        )
+
+    @app.command("publish-edge-issuer-event-family-authority")
+    @serialized_heavy_job("publish-edge-issuer-event-family-authority")
+    def publish_edge_issuer_event_family_authority(
+        collection_dir: Path = typer.Option(
+            ...,
+            help="Completed immutable canonical ticker-event collection.",
+        ),
+        collection_audit: Path = typer.Option(
+            ...,
+            help="Passed source collection audit summary JSON.",
+        ),
+        attribution_dir: Path = typer.Option(
+            ...,
+            help="Completed direct-issuer event-attribution authority.",
+        ),
+        decisions: Path = typer.Option(
+            ...,
+            help="Hash-verified canonical swing decision artifact.",
+        ),
+        policy: Path = typer.Option(
+            Path("configs/swing_event_family_policy.toml"),
+            help="Frozen swing event-family authority policy.",
+        ),
+        out_dir: Path = typer.Option(
+            ...,
+            help="New immutable research authority directory.",
+        ),
+    ) -> None:
+        """Publish normalized issuer-event specialist cohorts and coverage."""
+
+        result = publish_issuer_event_family_authority(
+            collection_dir=collection_dir,
+            collection_audit_path=collection_audit,
+            attribution_dir=attribution_dir,
+            decisions_path=decisions,
+            policy_path=policy,
+            output_directory=out_dir,
+        )
+        console.print(
+            {
+                "status": "complete",
+                "event_rows": len(result.events),
+                "research_eligible_event_rows": int(
+                    result.events["research_eligible"].astype(bool).sum()
+                ),
+                "assignment_rows": len(result.assignments),
+                "coverage_rows": len(result.coverage),
+                "production_ready": False,
                 "directory": str(result.directory),
             }
         )

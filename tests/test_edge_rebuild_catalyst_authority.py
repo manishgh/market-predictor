@@ -13,6 +13,7 @@ from market_predictor.canonical.reconciliation import ASSIGNMENT_COLUMNS, reconc
 from market_predictor.canonical.store import file_sha256, write_canonical_artifact
 from market_predictor.edge_rebuild.catalyst_authority import (
     RANKING_SOURCE_FAMILIES,
+    _deduplicate_verified_events,
     attach_catalyst_decision_features,
     load_catalyst_decision_authority,
     publish_catalyst_decision_authority,
@@ -20,6 +21,82 @@ from market_predictor.edge_rebuild.catalyst_authority import (
 from market_predictor.v3.errors import DataReadinessError
 
 DECISION_TIME = pd.Timestamp("2025-01-10T21:00:00Z")
+
+
+def test_unrelated_issuer_events_within_thirty_minutes_are_both_retained() -> None:
+    first = _deduplication_row(
+        event_id="event-a",
+        source_event_id="source-event-a",
+        decision_id="decision-a",
+        security_id="security-a",
+        ticker="AAA",
+        source_family="sec",
+        available_at=DECISION_TIME - pd.Timedelta(minutes=25),
+        content="issuer-a-content",
+    )
+    second = _deduplication_row(
+        event_id="event-b",
+        source_event_id="source-event-b",
+        decision_id="decision-b",
+        security_id="security-b",
+        ticker="BBB",
+        source_family="finviz",
+        available_at=DECISION_TIME - pd.Timedelta(minutes=5),
+        content="issuer-b-content",
+    )
+
+    retained = _deduplicate_verified_events(pd.DataFrame.from_records([first, second]))
+
+    assert set(retained["event_id"]) == {"event-a", "event-b"}
+
+
+def test_same_issuer_and_content_identity_is_deduplicated() -> None:
+    first = _deduplication_row(
+        event_id="event-a",
+        source_event_id="source-event-a",
+        decision_id="decision-a",
+        security_id="security-a",
+        ticker="AAA",
+        source_family="alpaca",
+        available_at=DECISION_TIME - pd.Timedelta(minutes=25),
+        content="same-content",
+    )
+    second = _deduplication_row(
+        event_id="event-b",
+        source_event_id="source-event-b",
+        decision_id="decision-a",
+        security_id="security-a",
+        ticker="AAA",
+        source_family="finviz",
+        available_at=DECISION_TIME - pd.Timedelta(minutes=5),
+        content="same-content",
+    )
+
+    retained = _deduplicate_verified_events(pd.DataFrame.from_records([first, second]))
+
+    assert retained["event_id"].tolist() == ["event-a"]
+
+
+def test_conflicting_durable_event_identity_fails_closed() -> None:
+    first = _deduplication_row(
+        event_id="event-a",
+        source_event_id="source-event-a",
+        decision_id="decision-a",
+        security_id="security-a",
+        ticker="AAA",
+        source_family="alpaca",
+        available_at=DECISION_TIME - pd.Timedelta(minutes=25),
+        content="same-content",
+    )
+    conflicting = {
+        **first,
+        "decision_id": "decision-b",
+        "security_id": "security-b",
+        "ticker": "BBB",
+    }
+
+    with pytest.raises(DataReadinessError, match="conflicting durable catalyst event identity"):
+        _deduplicate_verified_events(pd.DataFrame.from_records([first, conflicting]))
 
 
 def test_publishes_deduplicated_direct_decision_authority_and_attaches_known_zeros(
@@ -301,6 +378,13 @@ def _lineage(
     event_records = [
         {
             "event_id": "event-direct",
+            "source_event_id": _content_sha256("source-event-direct"),
+            "source_security_id": "security-1",
+            "security_id": "security-1",
+            "ticker": "ABC",
+            "source_family": "alpaca",
+            "feature_available_at_utc": DECISION_TIME - pd.Timedelta(hours=2),
+            "sentiment_input_sha256": _content_sha256("event-direct-content"),
             "relation_channel": "direct_issuer",
             "training_eligible": True,
             "sentiment_model": scorer_model,
@@ -308,6 +392,13 @@ def _lineage(
         },
         {
             "event_id": "event-sector",
+            "source_event_id": _content_sha256("source-event-sector"),
+            "source_security_id": "security-1",
+            "security_id": "security-1",
+            "ticker": "ABC",
+            "source_family": "finviz",
+            "feature_available_at_utc": DECISION_TIME - pd.Timedelta(hours=2),
+            "sentiment_input_sha256": _content_sha256("event-sector-content"),
             "relation_channel": "sector_context",
             "training_eligible": False,
             "sentiment_model": scorer_model,
@@ -318,6 +409,13 @@ def _lineage(
         event_records.append(
             {
                 "event_id": "event-optional-direct",
+                "source_event_id": _content_sha256("source-event-optional-direct"),
+                "source_security_id": "security-1",
+                "security_id": "security-1",
+                "ticker": "ABC",
+                "source_family": optional_direct_source,
+                "feature_available_at_utc": DECISION_TIME - pd.Timedelta(hours=2),
+                "sentiment_input_sha256": _content_sha256("event-optional-direct-content"),
                 "relation_channel": "direct_issuer",
                 "training_eligible": True,
                 "sentiment_model": scorer_model,
@@ -433,6 +531,41 @@ def _assignments(*, optional_direct_source: str | None = None) -> pd.DataFrame:
                 }
             )
     return pd.DataFrame.from_records(records, columns=ASSIGNMENT_COLUMNS)
+
+
+def _deduplication_row(
+    *,
+    event_id: str,
+    source_event_id: str,
+    decision_id: str,
+    security_id: str,
+    ticker: str,
+    source_family: str,
+    available_at: pd.Timestamp,
+    content: str,
+) -> dict[str, object]:
+    return {
+        "event_id": event_id,
+        "ticker": ticker,
+        "security_id": security_id,
+        "source_family": source_family,
+        "feature_available_at_utc": available_at,
+        "decision_id": decision_id,
+        "decision_time_utc": DECISION_TIME,
+        "window_name": "1d",
+        "window_seconds": 86_400,
+        "status": "assigned",
+        "sentiment_numeric": 0.5,
+        "relevance": 0.8,
+        "source_event_id": source_event_id,
+        "source_security_id": security_id,
+        "content_identity_sha256": _content_sha256(content),
+        "source_lineages": json.dumps(["lineage"]),
+    }
+
+
+def _content_sha256(value: str) -> str:
+    return hashlib.sha256(value.encode()).hexdigest()
 
 
 def _coverage(
