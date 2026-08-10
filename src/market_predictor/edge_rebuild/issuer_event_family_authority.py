@@ -1031,11 +1031,17 @@ def _known_coverage_decision_ids(
         ordered_intervals = intervals.sort_values(
             ["requested_start_utc", "requested_end_utc"], kind="stable"
         )
-        starts = ordered_intervals["requested_start_utc"].astype("int64").to_numpy()
-        ends = ordered_intervals["requested_end_utc"].astype("int64").to_numpy()
-        decision_ns = (
-            decision_part["decision_time_utc"].astype("int64").to_numpy()
-        )
+        # Pandas may store parsed UTC timestamps at microsecond resolution. Convert
+        # explicitly because Timedelta.value is always expressed in nanoseconds.
+        starts = ordered_intervals["requested_start_utc"].to_numpy(
+            dtype="datetime64[ns]"
+        ).astype(np.int64)
+        ends = ordered_intervals["requested_end_utc"].to_numpy(
+            dtype="datetime64[ns]"
+        ).astype(np.int64)
+        decision_ns = decision_part["decision_time_utc"].to_numpy(
+            dtype="datetime64[ns]"
+        ).astype(np.int64)
         positions = np.searchsorted(
             starts,
             decision_ns - window_ns,

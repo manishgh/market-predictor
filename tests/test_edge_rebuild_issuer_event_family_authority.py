@@ -178,6 +178,43 @@ def test_known_zero_and_unknown_coverage_remain_distinct(tmp_path: Path) -> None
     assert by_ticker.loc["FAILED", "zero_event_semantics"] == "unknown_failed"
 
 
+def test_known_coverage_uses_consistent_timestamp_units() -> None:
+    coverage = pd.DataFrame(
+        {
+            "security_id": ["security:acme"],
+            "source_family": ["alpaca"],
+            "event_family": ["earnings"],
+            "requested_start_utc": pd.Series(
+                ["2025-01-01T00:00:00Z"], dtype="datetime64[us, UTC]"
+            ),
+            "requested_end_utc": pd.Series(
+                ["2025-01-10T00:00:00Z"], dtype="datetime64[us, UTC]"
+            ),
+            "missingness_known": [True],
+        }
+    )
+    decisions = pd.DataFrame(
+        {
+            "security_id": ["security:acme", "security:acme"],
+            "decision_id": ["under-warmed", "covered"],
+            "decision_time_utc": pd.Series(
+                ["2025-01-02T00:00:00Z", "2025-01-04T00:00:00Z"],
+                dtype="datetime64[us, UTC]",
+            ),
+        }
+    )
+
+    known = authority_module._known_coverage_decision_ids(
+        coverage,
+        decisions,
+        family="earnings",
+        max_window=pd.Timedelta(days=3),
+        source_family="alpaca",
+    )
+
+    assert known == {"covered"}
+
+
 @pytest.mark.parametrize("target", ["child", "authority"])
 def test_tampered_child_or_authority_is_rejected(
     tmp_path: Path,
