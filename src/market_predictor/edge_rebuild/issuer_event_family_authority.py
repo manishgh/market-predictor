@@ -1277,6 +1277,23 @@ def _build_cohort_audit(
     decisions["calendar_month"] = decisions["decision_time_utc"].dt.strftime("%Y-%m")
     decisions["sector"] = decisions.get("sector", "unknown")
     max_window = max(policy.windows.values())
+    _validate_replicated_family_coverage(coverage)
+    coverage_sources = sorted(set(coverage["source_family"].astype(str)))
+    known_source_cache: dict[str, set[str]] = {}
+    for source_family in coverage_sources:
+        source_rows = coverage.loc[
+            coverage["source_family"].astype(str).eq(source_family)
+        ]
+        source_families = sorted(set(source_rows["event_family"].astype(str)))
+        if not source_families:
+            continue
+        known_source_cache[source_family] = _known_coverage_decision_ids(
+            coverage,
+            decisions,
+            family=source_families[0],
+            max_window=max_window,
+            source_family=source_family,
+        )
     records: list[dict[str, object]] = []
     for family in policy.event_families:
         part = eligible.loc[eligible["event_family"].eq(family)]
@@ -1290,14 +1307,9 @@ def _build_cohort_audit(
             )
         )
         known_by_source = {
-            source_family: _known_coverage_decision_ids(
-                coverage,
-                decisions,
-                family=family,
-                max_window=max_window,
-                source_family=source_family,
-            )
+            source_family: known_source_cache[source_family]
             for source_family in coverage_sources
+            if source_family in known_source_cache
         }
         known_ids = (
             set().union(*known_by_source.values()) if known_by_source else set()
@@ -1410,6 +1422,51 @@ def _build_cohort_audit(
                 )
             )
     return pd.DataFrame.from_records(records, columns=COHORT_AUDIT_COLUMNS)
+
+
+def _validate_replicated_family_coverage(coverage: pd.DataFrame) -> None:
+    comparison_columns = [
+        column for column in FAMILY_COVERAGE_COLUMNS if column != "event_family"
+    ]
+    for source_family, source_rows in coverage.groupby("source_family", sort=True):
+        families = sorted(set(source_rows["event_family"].astype(str)))
+        if not families:
+            continue
+        reference = (
+            source_rows.loc[
+                source_rows["event_family"].astype(str).eq(families[0]),
+                comparison_columns,
+            ]
+            .sort_values(
+                ["security_id", "chunk_id", "requested_start_utc"],
+                kind="stable",
+            )
+            .reset_index(drop=True)
+        )
+        for family in families[1:]:
+            candidate = (
+                source_rows.loc[
+                    source_rows["event_family"].astype(str).eq(family),
+                    comparison_columns,
+                ]
+                .sort_values(
+                    ["security_id", "chunk_id", "requested_start_utc"],
+                    kind="stable",
+                )
+                .reset_index(drop=True)
+            )
+            try:
+                pd.testing.assert_frame_equal(
+                    candidate,
+                    reference,
+                    check_exact=True,
+                    check_dtype=False,
+                )
+            except AssertionError as exc:
+                raise DataReadinessError(
+                    "event-family coverage differs across replicated families for "
+                    f"source {source_family}"
+                ) from exc
 
 
 def _known_coverage_decision_ids(

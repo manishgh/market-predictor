@@ -261,6 +261,31 @@ def test_alpaca_coverage_does_not_cover_sec_material_events() -> None:
     assert "sec_material_event" not in set(coverage["event_family"])
 
 
+def test_replicated_family_coverage_must_remain_identical() -> None:
+    policy = authority_module.load_swing_event_family_policy(_POLICY_PATH)
+    coverage = authority_module._build_family_coverage(
+        _coverage(
+            _coverage_row(
+                chunk_id="chunk-1",
+                security_id="security:acme",
+                ticker="ACME",
+                status="observed",
+            )
+        ),
+        relation_chunk_ids={"chunk-1"},
+        blind_security_ids=set(),
+        policy=policy,
+        collection_completed_at=pd.Timestamp("2025-01-04T00:00:00Z"),
+    )
+    target = coverage.index[coverage["event_family"].eq("guidance")][0]
+    coverage.loc[target, "requested_end_utc"] = pd.Timestamp(
+        "2025-01-03T00:00:00Z"
+    )
+
+    with pytest.raises(DataReadinessError, match="differs across replicated"):
+        authority_module._validate_replicated_family_coverage(coverage)
+
+
 @pytest.mark.parametrize("target", ["events", "coverage"])
 def test_source_family_outside_policy_is_rejected(target: str) -> None:
     policy = authority_module.load_swing_event_family_policy(_POLICY_PATH)
