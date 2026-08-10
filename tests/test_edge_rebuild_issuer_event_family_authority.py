@@ -76,8 +76,16 @@ def test_unclassified_event_is_retained_but_ineligible(tmp_path: Path) -> None:
 
     authority = _publish(_write_inputs(tmp_path, events=events))
 
-    assert len(authority.events) == 1
-    row = authority.events.iloc[0]
+    assert authority.events.empty
+    assert authority.manifest["unclassified_event_rows"] == 1
+    assert len(authority.unclassified_artifact_records) == 1
+    record = authority.unclassified_artifact_records[0]
+    unclassified, _ = load_canonical_artifact(
+        authority.directory / str(record["path"]),
+        expected_type="issuer_event_family_unclassified_events",
+        allow_research=True,
+    )
+    row = unclassified.iloc[0]
     assert row["classification_state"] == "unclassified"
     assert row["event_family"] == ""
     assert not bool(row["research_eligible"])

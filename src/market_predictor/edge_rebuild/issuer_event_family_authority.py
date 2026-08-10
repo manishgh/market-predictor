@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import gc
 import hashlib
 import json
 import os
@@ -28,7 +29,11 @@ from market_predictor.canonical.store import (
     load_canonical_artifact,
     write_canonical_artifact,
 )
-from market_predictor.resources import assert_memory_budget, memory_audit
+from market_predictor.resources import (
+    assert_memory_budget,
+    memory_audit,
+    release_process_memory,
+)
 from market_predictor.swing.event_attribution_history import (
     load_event_attribution_history,
 )
@@ -47,6 +52,7 @@ FAMILY_EVENTS_ARTIFACT_TYPE: Final = "issuer_event_family_events"
 FAMILY_ASSIGNMENTS_ARTIFACT_TYPE: Final = "issuer_event_family_assignments"
 FAMILY_COVERAGE_ARTIFACT_TYPE: Final = "issuer_event_family_coverage"
 COHORT_AUDIT_ARTIFACT_TYPE: Final = "issuer_event_family_cohort_audit"
+UNCLASSIFIED_EVENTS_ARTIFACT_TYPE: Final = "issuer_event_family_unclassified_events"
 
 FAMILY_EVENT_COLUMNS: Final = (
     "family_event_id",
@@ -134,6 +140,7 @@ class IssuerEventFamilyAuthority:
     assignments: pd.DataFrame
     coverage: pd.DataFrame
     cohort_audit: pd.DataFrame
+    unclassified_artifact_records: tuple[Mapping[str, object], ...]
     manifest: Mapping[str, object]
     authority: Mapping[str, object]
 
@@ -259,13 +266,18 @@ def publish_issuer_event_family_authority(
     output_directory.parent.mkdir(parents=True, exist_ok=True)
     staging.mkdir()
     try:
+        unclassified_directory = staging / "unclassified"
+        unclassified_directory.mkdir()
         event_parts: list[pd.DataFrame] = []
+        unclassified_records: list[dict[str, object]] = []
         relation_channel_counts = {
             "direct_issuer": 0,
             "business_exposure": 0,
             "sector_context": 0,
         }
-        for chunk_id in sorted(relation_records):
+        for chunk_index, chunk_id in enumerate(
+            sorted(relation_records), start=1
+        ):
             source_record = source_records[chunk_id]
             relation_record = relation_records[chunk_id]
             source_events, source_manifest = load_canonical_artifact(
@@ -299,14 +311,65 @@ def publish_issuer_event_family_authority(
             direct_relations = relations.loc[
                 relations["relation_channel"].astype(str).eq("direct_issuer")
             ].copy()
-            event_parts.append(
-                _build_family_events(
-                    source_events,
-                    direct_relations,
-                    policy=policy,
-                    coverage_known=True,
-                )
+            family_chunk = _build_family_events(
+                source_events,
+                direct_relations,
+                policy=policy,
+                coverage_known=True,
             )
+            classified = family_chunk.loc[
+                family_chunk["classification_state"].astype(str).eq("classified")
+            ].copy()
+            unclassified = family_chunk.loc[
+                family_chunk["classification_state"].astype(str).eq("unclassified")
+            ].copy()
+            if not classified.empty:
+                event_parts.append(classified)
+            if not unclassified.empty:
+                unclassified_path = unclassified_directory / f"{chunk_id}.parquet"
+                unclassified_manifest = write_canonical_artifact(
+                    unclassified,
+                    unclassified_path,
+                    artifact_type=UNCLASSIFIED_EVENTS_ARTIFACT_TYPE,
+                    audit=_unclassified_event_audit(unclassified),
+                    inputs={
+                        "request_sha256": request_sha256,
+                        "source_event_sha256": str(
+                            source_manifest["artifact_sha256"]
+                        ),
+                        "relation_sha256": str(
+                            relation_manifest["artifact_sha256"]
+                        ),
+                    },
+                    production_ready=False,
+                )
+                unclassified_path.with_name(
+                    f"{unclassified_path.name}.lock"
+                ).unlink(missing_ok=True)
+                _rewrite_artifact_path(
+                    unclassified_path,
+                    output_directory / "unclassified" / unclassified_path.name,
+                )
+                unclassified_records.append(
+                    {
+                        "chunk_id": chunk_id,
+                        "path": f"unclassified/{unclassified_path.name}",
+                        "sha256": str(
+                            unclassified_manifest["artifact_sha256"]
+                        ),
+                        "rows": len(unclassified),
+                        "source_event_sha256": str(
+                            source_manifest["artifact_sha256"]
+                        ),
+                        "relation_sha256": str(
+                            relation_manifest["artifact_sha256"]
+                        ),
+                    }
+                )
+            del source_events, relations, direct_relations, family_chunk, unclassified
+            if chunk_index % 32 == 0:
+                gc.collect()
+                release_process_memory()
             assert_memory_budget(
                 hard_budget_gib=policy.maximum_process_memory_gib,
                 headroom_gib=policy.memory_guard_headroom_gib,
@@ -415,6 +478,10 @@ def publish_issuer_event_family_authority(
                 name: int(window.total_seconds()) for name, window in policy.windows.items()
             },
             "event_rows": len(family_events),
+            "unclassified_event_rows": sum(
+                _record_rows(record) for record in unclassified_records
+            ),
+            "unclassified_artifacts": unclassified_records,
             "source_relation_channel_counts": relation_channel_counts,
             "excluded_relation_channel_counts": {
                 channel: count
@@ -503,6 +570,13 @@ def load_issuer_event_family_authority(
     observed_files = {path.name for path in directory.iterdir() if path.is_file()}
     if observed_files != expected_files:
         raise DataReadinessError("issuer event-family authority file inventory differs")
+    unclassified_records = _unclassified_records(manifest)
+    _verify_unclassified_artifacts(
+        directory,
+        unclassified_records,
+        request_sha256=str(manifest["request_sha256"]),
+        expected_rows=manifest.get("unclassified_event_rows"),
+    )
     frames: dict[str, pd.DataFrame] = {}
     artifact_types = {
         "events": FAMILY_EVENTS_ARTIFACT_TYPE,
@@ -564,6 +638,7 @@ def load_issuer_event_family_authority(
         assignments=frames["assignments"],
         coverage=frames["coverage"],
         cohort_audit=frames["cohort_audit"],
+        unclassified_artifact_records=tuple(unclassified_records),
         manifest=manifest,
         authority=authority,
     )
@@ -1002,6 +1077,22 @@ def _event_audit(frame: pd.DataFrame) -> CanonicalAuditReport:
     return _audit("issuer_event_family_events", failures, len(frame), "family, issuer, relation, and availability verify")
 
 
+def _unclassified_event_audit(frame: pd.DataFrame) -> CanonicalAuditReport:
+    failures = len(set(FAMILY_EVENT_COLUMNS).difference(frame.columns))
+    if not failures and not frame.empty:
+        failures += int(frame["family_event_id"].astype(str).duplicated().sum())
+        failures += int(frame["classification_state"].astype(str).ne("unclassified").sum())
+        failures += int(frame["event_family"].astype(str).ne("").sum())
+        failures += int(frame["research_eligible"].astype(bool).sum())
+        failures += int(frame["production_eligible"].astype(bool).sum())
+    return _audit(
+        "issuer_event_family_unclassified_events",
+        failures,
+        len(frame),
+        "unclassified issuer events remain explicit audit evidence",
+    )
+
+
 def _assignment_audit(frame: pd.DataFrame) -> CanonicalAuditReport:
     failures = len(set(FAMILY_ASSIGNMENT_EXTRA_COLUMNS).difference(frame.columns))
     if not failures and not frame.empty:
@@ -1069,6 +1160,104 @@ def _records_by_chunk(manifest: Mapping[str, object], name: str) -> dict[str, Ma
     return result
 
 
+def _unclassified_records(
+    manifest: Mapping[str, object],
+) -> list[Mapping[str, object]]:
+    raw = manifest.get("unclassified_artifacts")
+    if not isinstance(raw, list):
+        raise DataReadinessError(
+            "issuer event-family unclassified inventory is malformed"
+        )
+    records: list[Mapping[str, object]] = []
+    chunk_ids: set[str] = set()
+    for value in raw:
+        if not isinstance(value, dict):
+            raise DataReadinessError(
+                "issuer event-family unclassified record is malformed"
+            )
+        chunk_id = _required_text(value, "chunk_id")
+        if chunk_id in chunk_ids:
+            raise DataReadinessError(
+                "issuer event-family unclassified chunks are duplicated"
+            )
+        chunk_ids.add(chunk_id)
+        records.append(value)
+    return records
+
+
+def _verify_unclassified_artifacts(
+    directory: Path,
+    records: list[Mapping[str, object]],
+    *,
+    request_sha256: str,
+    expected_rows: object,
+) -> None:
+    root = directory.resolve()
+    child_directory = root / "unclassified"
+    if not child_directory.is_dir():
+        raise DataReadinessError(
+            "issuer event-family unclassified directory is missing"
+        )
+    expected_files = {
+        name
+        for record in records
+        for name in (
+            f"{_required_text(record, 'chunk_id')}.parquet",
+            f"{_required_text(record, 'chunk_id')}.parquet.manifest.json",
+        )
+    }
+    if (
+        {path.name for path in child_directory.iterdir()} != expected_files
+        or any(path.is_dir() for path in child_directory.iterdir())
+    ):
+        raise DataReadinessError(
+            "issuer event-family unclassified child inventory differs"
+        )
+    total_rows = 0
+    for record in records:
+        chunk_id = _required_text(record, "chunk_id")
+        expected_relative = f"unclassified/{chunk_id}.parquet"
+        if record.get("path") != expected_relative:
+            raise DataReadinessError(
+                "issuer event-family unclassified path does not verify"
+            )
+        path = child_directory / f"{chunk_id}.parquet"
+        frame, child = load_canonical_artifact(
+            path,
+            expected_type=UNCLASSIFIED_EVENTS_ARTIFACT_TYPE,
+            allow_research=True,
+        )
+        child_inputs = child.get("inputs")
+        rows = record.get("rows")
+        if (
+            not isinstance(rows, int)
+            or isinstance(rows, bool)
+            or rows <= 0
+            or len(frame) != rows
+            or child.get("artifact_sha256") != record.get("sha256")
+            or not isinstance(child_inputs, dict)
+            or child_inputs.get("request_sha256") != request_sha256
+            or child_inputs.get("source_event_sha256")
+            != record.get("source_event_sha256")
+            or child_inputs.get("relation_sha256")
+            != record.get("relation_sha256")
+        ):
+            raise DataReadinessError(
+                "issuer event-family unclassified lineage does not verify"
+            )
+        _unclassified_event_audit(frame).raise_for_failure()
+        total_rows += len(frame)
+    if (
+        not isinstance(expected_rows, int)
+        or isinstance(expected_rows, bool)
+        or expected_rows < 0
+        or total_rows != expected_rows
+    ):
+        raise DataReadinessError(
+            "issuer event-family unclassified row total does not verify"
+        )
+
+
 def _artifact_filename(key: str) -> str:
     return {
         "events": "family_events.parquet",
@@ -1076,6 +1265,13 @@ def _artifact_filename(key: str) -> str:
         "coverage": "family_coverage.parquet",
         "cohort_audit": "cohort_audit.parquet",
     }[key]
+
+
+def _record_rows(record: Mapping[str, object]) -> int:
+    value = record.get("rows")
+    if not isinstance(value, int) or isinstance(value, bool) or value < 0:
+        raise DataReadinessError("event-family artifact has invalid row count")
+    return value
 
 
 def _artifact_record(path: Path, manifest: Mapping[str, object]) -> dict[str, object]:
