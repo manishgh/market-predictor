@@ -2,13 +2,13 @@
 
 Status: active
 
-Last updated: 2026-08-10
+Last updated: 2026-08-11
 
 Repository: `C:\project\market-predictor`
 
 Branch: `er-intraday-refactoring`
 
-Last completed implementation commit: `527e20f` (`Optimize A3 cohort semantic replay`)
+Last completed implementation commit: `9c8aa5b` (`Fail fast on malformed precision reviews`)
 
 ## Purpose
 
@@ -84,8 +84,26 @@ specialists; A6 performs locked evaluation and promotion.
   `blocked_missing_source`; missing SEC authority is not represented by Alpaca
   coverage or a numeric zero.
 - Both authorities are retrospective, research-only evidence. A3.3 precision review
-  is still required. No A3 training dataset, model, locked-test metric, or promotion
+  is now complete. No A3 training dataset, model, locked-test metric, or promotion
   exists.
+
+## A3.3: Event Precision Audit Verification
+
+- Commit `6ef0579` adds deterministic uniform sampling of unique
+  family/headline/publication-day clusters, a separate paired issuer diagnostic,
+  disk-backed population indexing, strict immutable replay, and per-family admission.
+- Commit `9c8aa5b` makes malformed reviewer ledgers fail before costly authority replay.
+- `2019-07-09` through `2021-07-08`: 1,788 inferential clusters and eight diagnostics
+  were reviewed; only `analyst_revision` passed.
+- `2021-07-09` through `2026-07-08`: 1,830 inferential clusters and 29 diagnostics
+  were reviewed; only `analyst_revision` passed.
+- Each sample used two independent Codex reviewers and a distinct adjudicator. This is
+  model-assisted research review, not human audit evidence and not production authority.
+- Earnings, guidance, offering, merger/acquisition, regulatory decision, and product
+  event remain blocked by reviewed false positives, wrong-issuer observations,
+  confidence bounds, agreement, or rule-variant gates. SEC remains source-missing.
+- Both final audit artifacts strictly replay and remain `production_ready=false`,
+  `training_eligible=false`, and `alerts_eligible=false`.
 
 ## A1: Label and Leakage-Control Verification
 
@@ -119,15 +137,12 @@ for repeated locked-test tuning. Promotion also requires ranking, calibration,
 after-cost benchmark-relative economics, drawdown, turnover, capacity, stability, and
 coverage.
 
-## Exact Next Step: A3.3 - Audit Event Precision and Coverage
+## Exact Next Step: A3.4 - Build Identical-Decision Ablations
 
-1. **A3.3 - Audit event precision and coverage:** publish deterministic,
-   proportionally sampled event clusters for both authority generations. Use two blind
-   reviewers, explicit adjudication, one-sided confidence bounds, issuer-error gates,
-   agreement diagnostics, and bounded-memory immutable replay.
-2. **A3.4 - Build identical-decision ablations:** technical-only, event-only, and
-   technical-plus-event must share decisions and labels.
-3. **A3.5 - Train and evaluate specialists:** train only after the complete causal
+1. **A3.4 - Build identical-decision ablations:** technical-only, analyst-revision-only,
+   and technical-plus-analyst-revision must share the exact decisions and labels.
+   Every blocked event family must be absent, not encoded as zero.
+2. **A3.5 - Train and evaluate specialists:** train only after the complete causal
    horizon and precision gates verify; remain abstaining outside verified cohorts.
 
 ## Source Boundary

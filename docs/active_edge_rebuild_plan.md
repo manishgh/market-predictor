@@ -197,17 +197,18 @@ governance hash replay passed.
 
 ### A3 - Build Catalyst-Driven Swing Specialists (`in_progress`)
 
-1. **A3.1 - Verify the issuer-targeted event taxonomy.** Build separate
+1. **A3.1 - Verify the issuer-targeted event taxonomy (`completed`).** Build separate
    earnings/guidance, SEC material-event, analyst-revision, offering, M&A, regulatory,
    and product-event cohorts only when exact availability and issuer relevance verify.
-2. **A3.2 - Backfill and replay historical event authorities.** Publish immutable
+2. **A3.2 - Backfill and replay historical event authorities (`completed`).** Publish immutable
    direct-issuer event, source-coverage, assignment, and cohort authorities for the
    complete development horizon. A source cannot imply coverage for a family it does
    not provide.
-3. **A3.3 - Audit event precision and coverage.** Use deterministic stratified review
-   samples and a preregistered lower confidence-bound precision gate. Report event,
-   security, calendar, sector, source, abstention, and unknown-coverage counts.
-4. **A3.4 - Build identical-decision ablation datasets.** Compare technical-only,
+3. **A3.3 - Audit event precision and coverage (`completed`).** Use deterministic
+   uniform samples of independent event clusters and preregistered one-sided lower
+   confidence-bound gates. Report event, security, calendar, sector, source,
+   abstention, unknown-coverage, issuer-error, and reviewer-agreement counts.
+4. **A3.4 - Build identical-decision ablation datasets (`in_progress`).** Compare technical-only,
    event-only, and technical-plus-event profiles on the same decisions and labels.
 5. **A3.5 - Train and evaluate swing event specialists.** Model event reaction and
    benchmark-relative excess-return magnitude, not generic sentiment. A specialist
@@ -230,8 +231,22 @@ Earnings, guidance, analyst revision, offering, merger/acquisition, regulatory
 decision, and product event are admitted as Alpaca source families. SEC material
 events remain `blocked_missing_source`; Alpaca coverage cannot imply SEC coverage.
 Both authorities are research-only retrospective evidence and cannot authorize
-production. A3.3 precision review remains open; therefore no A3 dataset, estimator,
-locked-test result, or promotion exists.
+production.
+
+Completed A3.3 evidence: implementation commits `6ef0579` and `9c8aa5b` publish a
+disk-backed, memory-guarded audit with uniform cryptographic cluster sampling, two
+independent blind reviewers, separate adjudication, per-field agreement/kappa,
+one-sided Wilson bounds, issuer-error vetoes, immutable ledger copies, strict replay,
+and fail-fast ledger preflight. The older sample reviewed 1,788 inferential clusters
+plus eight paired issuer diagnostics; the newer sample reviewed 1,830 inferential
+clusters plus 29 diagnostics. Reviews were performed by independent Codex agents, not
+human reviewers, and remain research evidence.
+
+Both eras admit only `analyst_revision`. Earnings, guidance, offering,
+merger/acquisition, regulatory decision, and product event fail at least one frozen
+precision, wrong-issuer, reviewer-agreement, or rule-variant gate. SEC material event
+has no source-authorized population. Blocked families cannot enter A3.4 or training.
+No A3 dataset, estimator, locked-test result, or promotion exists yet.
 
 ### A4 - Build the Technical Intraday Baseline
 
