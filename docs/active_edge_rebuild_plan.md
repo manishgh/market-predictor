@@ -50,12 +50,9 @@ versioned prediction API.
 
 | Artifact | State | Evidence |
 | --- | --- | --- |
-| Catalyst V5 identity rebind | published and replayed | 377,778 exact decision matches; 6,359 coverage rows; 604/604 target securities |
-| Swing V9 | invalid; lineage only | managed-label index alignment corrupted labels; retained only because V5 binds it as target lineage |
-| Swing V10 | published; candidate v1 structurally rejected | `no_candidate` occurred before economic gates because the 50-stock hard sector floor often yielded four sectors while the 20% cap required five |
-| Swing V11 | published and replayed | 853,417 rows/profile; 604 securities; 1,759 sessions; 640,107 rank-eligible rows |
-| Swing candidate v2 | published `no_candidate` | six governed candidates trained; none passed both temporal and unseen-security economic gates; locked test unopened |
-| Swing candidate v3 | published `no_candidate` | overlay constraints yielded too few sessions and failed economic gates; locked test unopened |
+| Swing V12 technical panel | published and replayed | 853,417 `technical_market` rows; 604 securities; 1,759 sessions |
+| A3.4 analyst-revision ablation | published and replayed | 113 decisions; 50 episodes; three exact matched profiles; research-only |
+| Prior swing candidates | rejected evidence only | no candidate passed both temporal and unseen-security economic gates; locked test unopened |
 | A2 swing baseline trainer | implementation complete; no new candidate artifact | four nested technical ablations plus bounded full-feature ranker/regressor; a later governed run must publish separate statistical evidence |
 | Intraday V2 | published and rejected | economically failed after costs; not serveable |
 | Intraday V3 z-score lineage | invalid; prohibited | five declared cross-sectional inputs lacked a valid contemporaneous decision-cohort transformation |
@@ -186,9 +183,9 @@ groups: momentum/volatility, trend confirmation, pullback timing, and volume/liq
 It evaluates one regularized logistic candidate per group, then one full-feature
 XGBoost ranker and regressor, all sequentially within the six-candidate budget. The
 bundle records each estimator's exact ordered feature subset and a deterministic,
-lineage-bound candidate ID. Training and serving schemas were versioned; promoted
-serving selects `technical_market` for the baseline and `catalyst_full` only for the
-separate event-driven family. Current Finviz snapshots cannot supply historical
+lineage-bound candidate ID. A promoted baseline selects `technical_market`; an event
+specialist requires its own A3 feature contract and promotion and cannot reuse a broad
+catalyst frame. Current Finviz snapshots cannot supply historical
 point-in-time quality, profitability, investment, valuation, or estimate-revision
 features, so those groups remain blocked rather than backfilled from present values.
 No new real model was trained or promoted in A2. The canonical suite passed 1,110
@@ -208,7 +205,7 @@ governance hash replay passed.
    uniform samples of independent event clusters and preregistered one-sided lower
    confidence-bound gates. Report event, security, calendar, sector, source,
    abstention, unknown-coverage, issuer-error, and reviewer-agreement counts.
-4. **A3.4 - Build identical-decision ablation datasets (`in_progress`).** Compare technical-only,
+4. **A3.4 - Build identical-decision ablation datasets (`completed`).** Compare technical-only,
    event-only, and technical-plus-event profiles on the same decisions and labels.
 5. **A3.5 - Train and evaluate swing event specialists.** Model event reaction and
    benchmark-relative excess-return magnitude, not generic sentiment. A specialist
@@ -246,7 +243,17 @@ Both eras admit only `analyst_revision`. Earnings, guidance, offering,
 merger/acquisition, regulatory decision, and product event fail at least one frozen
 precision, wrong-issuer, reviewer-agreement, or rule-variant gate. SEC material event
 has no source-authorized population. Blocked families cannot enter A3.4 or training.
-No A3 dataset, estimator, locked-test result, or promotion exists yet.
+
+The catalyst-independent V12 base authority contains 853,417 `technical_market`
+rows, 604 securities, and 1,759 sessions. A3.4 publishes a separate immutable
+analyst-revision cohort with 113 decisions across 50 episodes in each of three exact
+profiles: technical-only, event-only, and technical-plus-event. Every profile has the
+same decision IDs, labels, execution/economic fields, and episode-normalized weights.
+Unknown three-day Alpaca coverage and decisions without an admitted direct-issuer
+analyst revision abstain; blocked event families are absent, not zero. The artifact is
+research-only and cannot serve or authorize production. No A3 estimator, locked-test
+result, or promotion exists yet. A3.5 must first decide whether 50 independent episodes
+provide enough development capacity for any governed specialist.
 
 ### A4 - Build the Technical Intraday Baseline
 
@@ -297,19 +304,10 @@ are audit evidence, never fallbacks.
 - [x] Remove Reddit and Seeking Alpha from the active system.
 - [x] Freeze Alpaca as the only ticker catalyst estimator source.
 - [x] Enforce `2019-07-09` as the first swing model decision date.
-- [x] Publish and replay catalyst V5 identity rebind.
 - [x] Publish and economically reject intraday V2.
-- [x] Publish and replay corrected swing V10.
-- [x] Record the V10 candidate v1 structural `no_candidate` result before economics.
-- [x] Complete and replay swing V11 under the approved flexible ranking policy.
-- [x] Train and evaluate swing candidate v2 with corrected holding-aligned benchmark,
-  full-calendar portfolio-bootstrap, doubled-cost path, and active-sector gates.
 - [x] Complete repository-wide verification and memory audit.
-- [x] Train and evaluate swing candidate v3 with Catalyst (SEC + Alpaca) confirmation overlay. (Failed economic gates).
-- [x] Train and evaluate swing candidate v4 (Event-Driven Specialist) with global catalyst peer group. (Failed economic gates).
-- [x] Extract components from `swing_training.py` into cohesive modules without changing behavior.
-- [x] Materialize Swing V12 dataset with advanced technical indicators and appropriate cross-sectional scaling.
-- [x] Train and evaluate swing candidate v5 using V12 features (Failed economic gates / `no_candidate`).
+- [x] Publish and strictly replay the single-profile V12 technical swing authority.
+- [x] Preserve prior failed candidates as rejection evidence, never serving fallbacks.
 - [x] Record the historical Intraday V3 experiment as invalid because five declared
   cross-sectional z-score inputs lacked a causal decision-cohort implementation.
 - [x] Preserve learning-to-rank as a future estimator family, not as evidence that the
@@ -318,8 +316,9 @@ are audit evidence, never fallbacks.
   `e168482` plus its documentation closure.
 - [x] Complete A2 governed swing-baseline ablation and serving contracts in
   implementation commit `cb2aba5`; no performance or promotion claim was made.
-- [ ] Build A3 issuer-event cohort authorities and train only specialists with complete
-  point-in-time event history and exact issuer relevance.
+- [x] Complete A3.1-A3.4 issuer-event authority, precision, and matched-ablation work.
+- [ ] Run A3.5 independent-episode capacity audit; train only if frozen splits remain
+  viable with 50 episodes.
 - [ ] Build and backfill the replacement A4 intraday feature authority before
   collecting a new locked holdout; the invalid V3 contract cannot be reused.
 - [ ] Promote only a model that passes every gate.

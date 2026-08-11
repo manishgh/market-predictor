@@ -227,7 +227,7 @@ unseen_ticker_assignment = "deterministic_hash"
 # Trying many variants until one passes is how a random result becomes a
 # "discovery". The budget is the multiple-testing control.
 maximum_learned_candidates = 6
-maximum_feature_profiles = 2
+maximum_feature_profiles = 3
 maximum_selection_policies = 2
 shadow_retries = 0
 
@@ -235,8 +235,8 @@ shadow_retries = 0
 # Four groups, kept apart. Extended-hours bars never reach a regular-session
 # VWAP, moving average, ATR, or relative-volume denominator, because thin
 # pre-market prints are real trades but do not represent broad agreement.
-profiles = ["technical_market", "catalyst_full"]
-promotion_eligible_profile = "catalyst_full"
+profiles = ["technical_market"]
+promotion_eligible_profile = "technical_market"
 extended_context_enabled = true
 # Raw event counts trend upward across the sample because provider news
 # coverage grew, not because issuers made more news. Counts must be compared

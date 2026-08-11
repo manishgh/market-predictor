@@ -38,7 +38,7 @@ sha256 = "b534f23719762637885647fff21bf658c21658b281e48c71a2be69fbf3a58168"
 
 [contract_bindings.edge_rebuild_strategy_contract]
 path = "configs/edge_rebuild_strategy_contract.toml"
-sha256 = "250a4faa7977a3d82bfacff425d56fa9193bb144be286a1c45bc2c0a65d48246"
+sha256 = "02a087be6b9eff4971770026ca75dce3978f8f9e2028c1f21d027daefec9c0e7"
 
 [contract_bindings.edge_rebuild_swing_training]
 path = "configs/edge_rebuild_swing_training.toml"

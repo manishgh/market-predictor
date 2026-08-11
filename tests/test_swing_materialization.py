@@ -8,9 +8,6 @@ import pandas as pd
 import pytest
 
 from market_predictor.canonical.store import file_sha256
-from market_predictor.edge_rebuild.catalyst_authority import (
-    CatalystDecisionAuthority,
-)
 from market_predictor.edge_rebuild.strategy_contract import load_strategy_contract
 from market_predictor.edge_rebuild.swing_daily_combination import (
     CombinedDailyStore,
@@ -21,6 +18,7 @@ from market_predictor.edge_rebuild.swing_materialization import (
     SWING_MATERIALIZATION_AUTHORITY_SCHEMA,
     SWING_MATERIALIZATION_MANIFEST_SCHEMA,
     SWING_MATERIALIZATION_REQUEST_SCHEMA,
+    _json_sha256,
     load_complete_swing_feature_panel,
     materialize_swing_feature_panel,
 )
@@ -76,7 +74,6 @@ def _source_arguments(root: Path) -> dict[str, Path]:
         "transition_directory": root / "transitions",
         "reviewed_transitions_path": root / "review.csv",
         "anchor_path": root / "anchor.csv",
-        "catalyst_authority_directory": root / "catalyst",
     }
 
 
@@ -116,29 +113,6 @@ def materialization_inputs(
         "verify_combined_swing_inputs",
         lambda **_kwargs: verified,
     )
-    catalyst_directory = tmp_path / "catalyst"
-    catalyst_directory.mkdir()
-    (catalyst_directory / "_manifest.json").write_text("{}", encoding="utf-8")
-    (catalyst_directory / "_authority.json").write_text("{}", encoding="utf-8")
-    catalyst = CatalystDecisionAuthority(
-        directory=catalyst_directory,
-        decisions=pd.DataFrame(),
-        coverage=pd.DataFrame(),
-        manifest={
-            "request_sha256": "1" * 64,
-            "source_lineage_set_sha256": "2" * 64,
-        },
-        authority={
-            "decision_artifact_sha256": "3" * 64,
-            "coverage_artifact_sha256": "4" * 64,
-        },
-    )
-    monkeypatch.setattr(
-        module,
-        "load_catalyst_decision_authority",
-        lambda _directory: catalyst,
-    )
-
     def prepare(**kwargs: Any) -> CombinedDailyStore:
         output = Path(kwargs["output_directory"])
         output.mkdir(parents=True, exist_ok=True)
@@ -180,21 +154,6 @@ def materialization_inputs(
         return rows.assign(rank_label=1, cross_section_eligible=True)
 
     monkeypatch.setattr(module, "build_swing_feature_rows", build)
-    monkeypatch.setattr(
-        module,
-        "build_swing_ablation_rows",
-        lambda rows, _authority: {
-            "technical_market": rows.assign(
-                catalyst_required_source_complete=True,
-                ablation_population_eligible=True,
-            ),
-            "catalyst_full": rows.assign(
-                feature_profile="catalyst_full",
-                catalyst_required_source_complete=True,
-                ablation_population_eligible=True,
-            ),
-        },
-    )
     monkeypatch.setattr(module, "finalize_swing_feature_panel", finalize)
     return tmp_path, tmp_path, calls
 
@@ -232,9 +191,7 @@ def test_materialization_resumes_then_publishes_immutable_panel(
     assert complete["securities"] == 4
     assert complete["stage_one_shards"] == 2
     assert complete["rows"] == 8
-    assert complete["total_ablation_rows"] == 16
-    assert complete["rows_per_ablation_panel"] == 8
-    assert complete["feature_profiles"] == ["technical_market", "catalyst_full"]
+    assert complete["feature_profiles"] == ["technical_market"]
     assert complete["schema"] == SWING_MATERIALIZATION_MANIFEST_SCHEMA
     assert complete["swing_feature_panel_schema"] == SWING_FEATURE_PANEL_SCHEMA
     assert complete["decision_start_date"] == MINIMUM_SWING_DECISION_DATE.isoformat()
@@ -252,11 +209,8 @@ def test_materialization_resumes_then_publishes_immutable_panel(
     assert {
         record["feature_profile"] for record in complete["files"]
     } == {"technical_market"}
-    assert set(complete["files_by_profile"]) == {
-        "technical_market",
-        "catalyst_full",
-    }
-    assert calls == {"build": 2, "finalize": 2}
+    assert set(complete["files_by_profile"]) == {"technical_market"}
+    assert calls == {"build": 2, "finalize": 1}
 
     replay = materialize_swing_feature_panel(
         **_source_arguments(source_root),
@@ -265,7 +219,7 @@ def test_materialization_resumes_then_publishes_immutable_panel(
         securities_per_shard=2,
     )
     assert replay == load_complete_swing_feature_panel(output)
-    assert calls == {"build": 2, "finalize": 2}
+    assert calls == {"build": 2, "finalize": 1}
 
     with pytest.raises(DataReadinessError, match="resume request differs"):
         materialize_swing_feature_panel(
@@ -337,7 +291,7 @@ def test_materialization_refuses_pre_cutoff_stage_one_rows(
         )
 
 
-def test_complete_panel_refuses_changed_catalyst_authority(
+def test_complete_panel_refuses_changed_request_lineage(
     tmp_path: Path,
     materialization_inputs: tuple[Path, Path, dict[str, int]],
 ) -> None:
@@ -354,10 +308,10 @@ def test_complete_panel_refuses_changed_catalyst_authority(
         output_dir=output,
         securities_per_shard=2,
     )
-    (source_root / "catalyst" / "_manifest.json").write_text(
-        '{"changed": true}',
-        encoding="utf-8",
-    )
+    request_path = output / "_request.json"
+    request = json.loads(request_path.read_text(encoding="utf-8"))
+    request["profile_policy"] = "tampered"
+    request_path.write_text(json.dumps(request), encoding="utf-8")
 
     with pytest.raises(DataReadinessError, match="authority does not verify"):
         load_complete_swing_feature_panel(output)
@@ -412,6 +366,126 @@ def test_replay_rejects_changed_authority_population_fields(
     authority_path.write_text(json.dumps(authority), encoding="utf-8")
 
     with pytest.raises(DataReadinessError, match="authority does not verify"):
+        load_complete_swing_feature_panel(output)
+
+
+def test_replay_rejects_rebound_manifest_summary_not_supported_by_partitions(
+    tmp_path: Path,
+    materialization_inputs: tuple[Path, Path, dict[str, int]],
+) -> None:
+    source_root, _memberships, _calls = materialization_inputs
+    output = tmp_path / "panel"
+    contract = load_strategy_contract(
+        Path(__file__).resolve().parents[1]
+        / "configs"
+        / "edge_rebuild_strategy_contract.toml"
+    )
+    materialize_swing_feature_panel(
+        **_source_arguments(source_root),
+        contract=contract,
+        output_dir=output,
+        securities_per_shard=2,
+    )
+    final_dir = output / "final"
+    manifest_path = final_dir / "_manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["rows"] = int(manifest["rows"]) + 1
+    manifest["stage_one_rows"] = int(manifest["stage_one_rows"]) + 1
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    authority_path = final_dir / "_authority.json"
+    authority = json.loads(authority_path.read_text(encoding="utf-8"))
+    authority["artifact_sha256"] = file_sha256(manifest_path)
+    authority_path.write_text(json.dumps(authority), encoding="utf-8")
+
+    with pytest.raises(DataReadinessError, match="rows or modeled security population"):
+        load_complete_swing_feature_panel(output)
+
+
+def test_replay_rejects_rebound_nontechnical_profile_contract(
+    tmp_path: Path,
+    materialization_inputs: tuple[Path, Path, dict[str, int]],
+) -> None:
+    source_root, _memberships, _calls = materialization_inputs
+    output = tmp_path / "panel"
+    contract = load_strategy_contract(
+        Path(__file__).resolve().parents[1]
+        / "configs"
+        / "edge_rebuild_strategy_contract.toml"
+    )
+    materialize_swing_feature_panel(
+        **_source_arguments(source_root),
+        contract=contract,
+        output_dir=output,
+        securities_per_shard=2,
+    )
+    final_dir = output / "final"
+    manifest_path = final_dir / "_manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["feature_profiles"] = ["catalyst_full"]
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    authority_path = final_dir / "_authority.json"
+    authority = json.loads(authority_path.read_text(encoding="utf-8"))
+    authority["artifact_sha256"] = file_sha256(manifest_path)
+    authority_path.write_text(json.dumps(authority), encoding="utf-8")
+
+    with pytest.raises(DataReadinessError, match="authority does not verify"):
+        load_complete_swing_feature_panel(output)
+
+
+def test_replay_rejects_duplicate_decisions_across_rebound_partitions(
+    tmp_path: Path,
+    materialization_inputs: tuple[Path, Path, dict[str, int]],
+) -> None:
+    source_root, _memberships, _calls = materialization_inputs
+    output = tmp_path / "panel"
+    contract = load_strategy_contract(
+        Path(__file__).resolve().parents[1]
+        / "configs"
+        / "edge_rebuild_strategy_contract.toml"
+    )
+    materialize_swing_feature_panel(
+        **_source_arguments(source_root),
+        contract=contract,
+        output_dir=output,
+        securities_per_shard=2,
+    )
+    final_dir = output / "final"
+    manifest_path = final_dir / "_manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    source_record = manifest["files"][0]
+    source_frame = pd.read_parquet(final_dir / source_record["path"])
+    source_frame["session_date_et"] = pd.Timestamp("2019-08-01").date()
+    relative_path = "panel/feature_profile=technical_market/month=2019-08/part.parquet"
+    duplicate_path = final_dir / relative_path
+    duplicate_path.parent.mkdir(parents=True)
+    source_frame.to_parquet(duplicate_path, index=False)
+    duplicate_record = {
+        **source_record,
+        "path": relative_path,
+        "sha256": file_sha256(duplicate_path),
+        "partition_month": "2019-08",
+        "sessions": 1,
+        "first_session": "2019-08-01",
+        "last_session": "2019-08-01",
+        "decision_ids_sha256": _json_sha256(
+            sorted(source_frame["decision_id"].astype(str))
+        ),
+    }
+    manifest["files"].append(duplicate_record)
+    manifest["files_by_profile"]["technical_market"].append(
+        dict(duplicate_record)
+    )
+    manifest["rows"] += len(source_frame)
+    manifest["stage_one_rows"] += len(source_frame)
+    manifest["sessions"] += 1
+    manifest["last_session"] = "2019-08-01"
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    authority_path = final_dir / "_authority.json"
+    authority = json.loads(authority_path.read_text(encoding="utf-8"))
+    authority["artifact_sha256"] = file_sha256(manifest_path)
+    authority_path.write_text(json.dumps(authority), encoding="utf-8")
+
+    with pytest.raises(DataReadinessError, match="duplicated across partitions"):
         load_complete_swing_feature_panel(output)
 
 
@@ -528,7 +602,7 @@ def test_replay_rejects_wrong_physical_profile_after_hash_rebinding(
     relative_path = manifest["files"][0]["path"]
     partition_path = final_dir / relative_path
     frame = pd.read_parquet(partition_path)
-    frame["feature_profile"] = "catalyst_full"
+    frame["feature_profile"] = "unexpected_profile"
     frame.to_parquet(partition_path, index=False)
     _rebind_partition_and_authority(final_dir, manifest, relative_path)
 

@@ -29,7 +29,7 @@ from market_predictor.edge_rebuild.strategy_contract import (
     load_strategy_contract,
 )
 from market_predictor.edge_rebuild.swing_features import (
-    SWING_CATALYST_FEATURE_PROFILE,
+    SWING_FEATURE_PROFILE,
 )
 from market_predictor.edge_rebuild.swing_training import (
     SwingPanelBinding,
@@ -83,10 +83,7 @@ _SWING_PANEL_READINESS_COLUMNS = tuple(
             "barrier_cost",
             "barrier_gross_return",
             "barrier_net_return",
-            "catalyst_source_complete_3d",
             "entry_time_utc",
-            "event_count_3d",
-            "latest_event_feature_available_at_utc",
             "future_excess_return_10d_vs_sector",
             "future_excess_return_10d_vs_spy",
             "future_sector_return_10d",
@@ -267,7 +264,7 @@ def _verify_swing_sources(
     )
     panel = _read_current_swing_panel(binding)
     technical_frame = panel.loc[:, _SWING_TECHNICAL_READINESS_COLUMNS].copy()
-    proxy_frame = _current_swing_proxy(panel)
+    proxy_frame = _current_swing_outcome_proxy(panel)
     del panel
     return VerifiedSwingSources(
         technical=technical_frame,
@@ -357,10 +354,10 @@ def _load_optional_promoted_swing_bundle(
 
 def _read_current_swing_panel(binding: SwingPanelBinding) -> pd.DataFrame:
     files_by_profile = _mapping(binding.manifest.get("files_by_profile"))
-    records = files_by_profile.get(SWING_CATALYST_FEATURE_PROFILE)
+    records = files_by_profile.get(SWING_FEATURE_PROFILE)
     if not isinstance(records, list) or not records:
         raise DataReadinessError(
-            "swing panel has no catalyst ablation profile for readiness"
+            "swing panel has no technical profile for readiness"
         )
     parts: list[pd.DataFrame] = []
     for raw in records:
@@ -379,29 +376,22 @@ def _read_current_swing_panel(binding: SwingPanelBinding) -> pd.DataFrame:
             )
         parts.append(part)
     frame = pd.concat(parts, ignore_index=True)
-    expected_rows = int(binding.manifest.get("rows_per_ablation_panel", -1))
+    expected_rows = int(binding.manifest.get("rows", -1))
     if len(frame) != expected_rows:
         raise DataReadinessError("swing panel readiness row count differs")
     return frame
 
 
-def _current_swing_proxy(panel: pd.DataFrame) -> pd.DataFrame:
+def _current_swing_outcome_proxy(panel: pd.DataFrame) -> pd.DataFrame:
     feature_eligible = _bool_series(panel["feature_eligible"])
     cross_section_eligible = _bool_series(panel["cross_section_eligible"])
     label_eligible = _bool_series(panel["label_eligible"])
     return pd.DataFrame(
         {
             "adjustment": panel["adjustment"],
-            "catalyst_source_complete": panel[
-                "catalyst_source_complete_3d"
-            ],
             "decision_time_utc": panel["decision_time_utc"],
-            "event_count_3d": panel["event_count_3d"],
             "entry_time_utc": panel["entry_time_utc"],
             "exit_time_utc": panel["label_available_at_utc"],
-            "latest_event_feature_available_at_utc": panel[
-                "latest_event_feature_available_at_utc"
-            ],
             "price_feed": panel["price_feed"],
             "setup_eligible": feature_eligible & cross_section_eligible,
             "strategy_decision_group_id": panel["decision_group_id"],
@@ -675,7 +665,6 @@ def _build_evidence(
         config=config,
     )
     catalyst_readiness = _catalyst_readiness(
-        swing=swing,
         catalyst=catalyst,
         config=config,
     )
@@ -1110,7 +1099,6 @@ def _benchmark_status(
 
 def _catalyst_readiness(
     *,
-    swing: VerifiedSwingSources,
     catalyst: VerifiedCatalystSources,
     config: EdgeRebuildReadinessConfig,
 ) -> pd.DataFrame:
@@ -1120,17 +1108,6 @@ def _catalyst_readiness(
     availability = str(
         catalyst.news_manifest.get("availability_policy", "")
     ).strip().lower()
-    swing_event_time = pd.to_datetime(
-        swing.proxy["latest_event_feature_available_at_utc"],
-        utc=True,
-        errors="coerce",
-    )
-    swing_decision = pd.to_datetime(
-        swing.proxy["decision_time_utc"], utc=True, errors="coerce"
-    )
-    swing_join_violations = int(
-        (swing_event_time.notna() & swing_event_time.gt(swing_decision)).sum()
-    )
     records: list[dict[str, object]] = []
     for source in config.catalyst.required_source_families:
         observed = int(
@@ -1196,21 +1173,13 @@ def _catalyst_readiness(
             _catalyst_record(
                 evidence_type="decision_join",
                 evidence_value=config.swing.strategy_id,
-                observed_count=int(
-                    pd.to_numeric(
-                        swing.proxy["event_count_3d"], errors="coerce"
-                    )
-                    .fillna(0)
-                    .gt(0)
-                    .sum()
+                observed_count=0,
+                research_ready=False,
+                promotion_ready=False,
+                detail=(
+                    "technical swing panel intentionally has no event attachment; "
+                    "a verified event-specialist authority is required"
                 ),
-                research_ready=swing_join_violations == 0,
-                promotion_ready=(
-                    swing_join_violations == 0
-                    and availability
-                    in config.catalyst.promotion_availability_policies
-                ),
-                detail=f"event-time causality violations={swing_join_violations}",
             ),
             _catalyst_record(
                 evidence_type="decision_join",

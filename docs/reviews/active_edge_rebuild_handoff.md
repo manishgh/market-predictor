@@ -33,9 +33,8 @@ specialists; A6 performs locked evaluation and promotion.
 - Swing decisions begin on `2019-07-09`; earlier bars are warm-up only.
 - Intraday estimator input remains the 44-feature causal technical contract. The V3
   z-score lineage is invalid and prohibited.
-- The swing baseline consumes only `technical_market`. Catalyst is a confirmation and
-  explanation overlay for this family; `catalyst_full` belongs to the separate A3
-  event-driven family.
+- The swing base authority contains only `technical_market`. A3 event evidence is
+  published separately and cannot alter baseline probability.
 - The swing trainer no longer attaches a hard-coded SEC authority, fills unknown SEC
   coverage with zero, or bypasses sector-constrained selection.
 - Intraday label schema V2 requires exact stock, SPY, QQQ, and point-in-time sector ETF
@@ -57,14 +56,11 @@ specialists; A6 performs locked evaluation and promotion.
   research API slice to that subset; missing or reordered inputs fail closed.
 - Bundle IDs are deterministic and lineage-bound. Candidate payload, model card,
   evaluation, authority replay, and promoted bundle must agree.
-- Serving selects the frame from the signed model family: baseline uses
-  `technical_market`; event-driven uses `catalyst_full`.
+- Serving selects only the signed model-family frame: baseline uses
+  `technical_market`; an event specialist requires a separately promoted A3 contract.
 - Current Finviz snapshots are not historical point-in-time authority. Quality,
   profitability, investment, valuation, and estimate-revision groups remain blocked.
 - No real candidate was trained or promoted in A2, so AUC and economics are unchanged.
-- Focused A2 suite: 59 passed, 1 skipped. Canonical suite: 1,110 passed, 2 skipped.
-  Tracked Ruff, strict mypy on five changed production modules, compileall, governance
-  hash replay, and diff checks passed.
 
 ## A3.1/A3.2: Issuer Event Authority Verification
 
@@ -84,8 +80,8 @@ specialists; A6 performs locked evaluation and promotion.
   `blocked_missing_source`; missing SEC authority is not represented by Alpaca
   coverage or a numeric zero.
 - Both authorities are retrospective, research-only evidence. A3.3 precision review
-  is now complete. No A3 training dataset, model, locked-test metric, or promotion
-  exists.
+  and A3.4 matched-dataset publication are complete. No A3 model, locked-test metric,
+  or promotion exists.
 
 ## A3.3: Event Precision Audit Verification
 
@@ -105,23 +101,15 @@ specialists; A6 performs locked evaluation and promotion.
 - Both final audit artifacts strictly replay and remain `production_ready=false`,
   `training_eligible=false`, and `alerts_eligible=false`.
 
-## A1: Label and Leakage-Control Verification
+## Current Verification
 
-- Consolidated A1 label, dataset, outcome, and trainer tests: 87 passed, 1 skipped;
-  the final corrected swing feature-time poison test also passed.
-- Canonical full suite: 1,110 passed, 2 skipped.
-- Ruff passed for every tracked Python file.
-- Strict mypy passed for all five changed production modules.
-- Compileall passed using an external bytecode cache; `git diff --check` passed.
-- Repository-wide tracked strict mypy still has six pre-existing errors in
-  `scripts/build_intraday_v3.py`, `scripts/build_swing_v12.py`, and
-  `scripts/train_intraday_v3.py`. They are not part of A1 and require the later bounded
-  legacy-script cleanup decision.
-- A root ignored `scratch_test.py` contains NUL bytes, so bare `pytest -q` cannot
-  collect. The authoritative `pytest tests -q` run passed. Do not delete the scratch
-  file without the planned reference/retention cleanup.
-- Two pre-existing uvicorn research-workbench Python processes remain at about 60 MiB
-  combined. No test or training worker remains.
+- Independent strict A3.4 reload: 113 rows per profile, 339 physical rows, 50
+  independent episodes, and all production/training/serving prohibitions verified.
+- Repository suite: 1,205 passed and 2 skipped.
+- Coordinated request, feature, all-profile label, dtype, partition, global identity,
+  source-coverage, causal-window, and governance-hash poison tests pass.
+- The real materialization and event publication remained below the 5 GiB limit;
+  observed working memory was below 2 GiB during A3.4.
 
 ## Model State
 
@@ -137,13 +125,26 @@ for repeated locked-test tuning. Promotion also requires ranking, calibration,
 after-cost benchmark-relative economics, drawdown, turnover, capacity, stability, and
 coverage.
 
-## Exact Next Step: A3.4 - Build Identical-Decision Ablations
+## A3.4: Matched Analyst-Revision Ablation Verification
 
-1. **A3.4 - Build identical-decision ablations:** technical-only, analyst-revision-only,
-   and technical-plus-analyst-revision must share the exact decisions and labels.
-   Every blocked event family must be absent, not encoded as zero.
-2. **A3.5 - Train and evaluate specialists:** train only after the complete causal
-   horizon and precision gates verify; remain abstaining outside verified cohorts.
+- The V12 catalyst-independent base panel strictly replays 853,417 technical rows,
+  604 securities, and 1,759 sessions from `2019-07-09` through `2026-07-08`.
+- The separate A3.4 authority publishes 113 matched decisions from 50 independent
+  analyst-revision episodes in each of three profiles: technical-only, event-only,
+  and technical-plus-event.
+- Profiles share exact decision IDs, labels, execution/economic lineage, and
+  episode-normalized weights. Coordinated request, feature, label, dtype, partition,
+  and global-identity tampering is rejected by replay tests.
+- The artifact is `production_ready=false`, `training_eligible=false`,
+  `research_training_eligible=true`, and `serving_eligible=false`.
+
+## Exact Next Step: A3.5 - Evaluate Specialist Capacity
+
+1. Measure independent episode, class, year, sector, and validation-fold capacity.
+2. If 50 episodes cannot support the frozen development and validation scopes, publish
+   an explicit insufficient-capacity result; do not fit a model or weaken the split.
+3. Only if capacity passes, train the three matched profiles sequentially and keep the
+   locked test unopened until one candidate passes all validation and economic gates.
 
 ## Source Boundary
 

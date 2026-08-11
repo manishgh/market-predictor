@@ -346,7 +346,7 @@ class ValidationContract(FrozenModel):
 
 class ExperimentBudget(FrozenModel):
     maximum_learned_candidates: int = Field(ge=1, le=6)
-    maximum_feature_profiles: int = Field(ge=1, le=2)
+    maximum_feature_profiles: int = Field(ge=1, le=3)
     maximum_selection_policies: int = Field(ge=1, le=2)
     shadow_retries: int = Field(ge=0, le=0)
 

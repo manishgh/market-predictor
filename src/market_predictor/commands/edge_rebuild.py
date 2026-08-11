@@ -17,9 +17,6 @@ from market_predictor.edge_rebuild.broad_intraday_history import (
 from market_predictor.edge_rebuild.catalyst_authority import (
     publish_catalyst_decision_authority,
 )
-from market_predictor.edge_rebuild.catalyst_identity_rebind import (
-    publish_catalyst_identity_rebind,
-)
 from market_predictor.edge_rebuild.contracts import (
     load_edge_rebuild_readiness_config,
 )
@@ -101,6 +98,9 @@ from market_predictor.edge_rebuild.sp500_transitions import (
     publish_sp500_transition_authority,
 )
 from market_predictor.edge_rebuild.strategy_contract import load_strategy_contract
+from market_predictor.edge_rebuild.swing_event_ablation import (
+    publish_swing_analyst_revision_ablation,
+)
 from market_predictor.edge_rebuild.swing_history_acquisition import (
     publish_swing_history_acquisition_plan,
 )
@@ -425,32 +425,48 @@ def register_edge_rebuild_commands(app: typer.Typer, console: Any) -> None:
             }
         )
 
-    @app.command("publish-edge-catalyst-identity-rebind")
-    @serialized_heavy_job("publish-edge-catalyst-identity-rebind")
-    def publish_edge_catalyst_identity_rebind(
-        parent_dir: Path = typer.Option(
+    @app.command("publish-edge-swing-analyst-revision-ablation")
+    @serialized_heavy_job("publish-edge-swing-analyst-revision-ablation")
+    def publish_edge_swing_analyst_revision_ablation(
+        technical_panel_dir: Path = typer.Option(
             ...,
-            help="Verified legacy catalyst decision authority to rebind.",
+            help="Current catalyst-independent technical swing panel.",
         ),
-        target_panel_dir: Path = typer.Option(
+        event_authority_dir: list[Path] = typer.Option(
             ...,
-            help="Verified technical swing panel defining canonical decisions.",
+            "--event-authority-dir",
+            help="Issuer event-family authority; pass the two historical eras.",
         ),
-        out_dir: Path = typer.Option(..., help="New immutable rebind authority directory."),
+        precision_audit_dir: list[Path] = typer.Option(
+            ...,
+            "--precision-audit-dir",
+            help="Final precision audit; pass the same two historical eras.",
+        ),
+        out_dir: Path = typer.Option(..., help="New immutable A3.4 directory."),
+        policy: Path = typer.Option(
+            Path("configs/swing_analyst_revision_ablation.toml"),
+        ),
+        contract: Path = typer.Option(
+            Path("configs/edge_rebuild_strategy_contract.toml"),
+        ),
     ) -> None:
-        """Rebind catalyst evidence to canonical point-in-time security identity."""
+        """Publish matched technical, analyst-event, and combined datasets."""
 
-        result = publish_catalyst_identity_rebind(
-            parent_directory=parent_dir,
-            target_panel_directory=target_panel_dir,
+        result = publish_swing_analyst_revision_ablation(
+            technical_panel_directory=technical_panel_dir,
+            event_authority_directories=event_authority_dir,
+            precision_audit_directories=precision_audit_dir,
+            policy_path=policy,
+            strategy_contract=load_strategy_contract(contract),
             output_directory=out_dir,
         )
         console.print(
             {
-                "status": "complete",
-                "decisions": len(result.decisions),
-                "coverage_rows": len(result.coverage),
-                "directory": str(result.directory),
+                "status": result["status"],
+                "rows_per_profile": result["rows_per_profile"],
+                "episodes": result["episode_count"],
+                "profiles": result["profiles"],
+                "production_ready": result["production_ready"],
             }
         )
 
@@ -827,10 +843,6 @@ def register_edge_rebuild_commands(app: typer.Typer, console: Any) -> None:
             ...,
             help="Cutoff constituent anchor bound by the authority.",
         ),
-        catalyst_authority_dir: Path = typer.Option(
-            ...,
-            help=("Verified decision-level catalyst authority; Alpaca history is required and optional source gaps remain explicit."),
-        ),
         out_dir: Path = typer.Option(
             ...,
             help="New or matching resumable materialization directory.",
@@ -861,7 +873,6 @@ def register_edge_rebuild_commands(app: typer.Typer, console: Any) -> None:
             transition_directory=transition_authority_dir,
             reviewed_transitions_path=reviewed_transitions,
             anchor_path=anchor,
-            catalyst_authority_directory=catalyst_authority_dir,
             contract=load_strategy_contract(contract),
             output_dir=out_dir,
             security_exclusions_path=security_exclusions,

@@ -16,14 +16,6 @@ import pandas as pd
 from market_predictor.canonical.store import (
     file_sha256,
 )
-from market_predictor.edge_rebuild.catalyst_authority import (
-    REQUIRED_MODEL_SOURCE_FAMILIES,
-    TRACKED_SOURCE_FAMILIES,
-    CatalystDecisionAuthority,
-)
-from market_predictor.edge_rebuild.catalyst_identity_rebind import (
-    load_catalyst_identity_rebind as load_catalyst_decision_authority,
-)
 from market_predictor.edge_rebuild.strategy_contract import StrategyContract
 from market_predictor.edge_rebuild.swing_artifact_contracts import (
     SWING_MATERIALIZATION_AUTHORITY_SCHEMA,
@@ -36,13 +28,9 @@ from market_predictor.edge_rebuild.swing_daily_combination import (
     verify_combined_swing_inputs,
 )
 from market_predictor.edge_rebuild.swing_features import (
-    CATALYST_RANKING_FEATURES,
     MANAGED_PATH_COST_POLICY,
-    SWING_ABLATION_PROFILES,
-    SWING_CATALYST_FEATURE_PROFILE,
     SWING_FEATURE_PANEL_SCHEMA,
     SWING_FEATURE_PROFILE,
-    build_swing_ablation_rows,
     build_swing_feature_rows,
     finalize_swing_feature_panel,
 )
@@ -62,9 +50,10 @@ from market_predictor.swing.contracts import MINIMUM_SWING_DECISION_DATE
 from market_predictor.v3.errors import DataReadinessError
 
 SWING_MATERIALIZATION_REQUEST_SCHEMA: Final = (
-    "edge_rebuild.swing_panel_materialization_request.v10"
+    "edge_rebuild.swing_panel_materialization_request.v11"
 )
-SWING_STAGE_ONE_SHARD_SCHEMA: Final = "edge_rebuild.swing_panel_stage_one_shard.v7"
+SWING_STAGE_ONE_SHARD_SCHEMA: Final = "edge_rebuild.swing_panel_stage_one_shard.v8"
+SWING_MATERIALIZATION_PROFILES: Final = (SWING_FEATURE_PROFILE,)
 
 
 def materialize_swing_feature_panel(
@@ -78,7 +67,6 @@ def materialize_swing_feature_panel(
     transition_directory: Path,
     reviewed_transitions_path: Path,
     anchor_path: Path,
-    catalyst_authority_directory: Path,
     contract: StrategyContract,
     output_dir: Path,
     security_exclusions_path: Path | None = None,
@@ -117,14 +105,10 @@ def materialize_swing_feature_panel(
         memberships = verified.memberships
         security_ids = sorted(memberships["security_id"].astype(str).unique())
         warmup_only_security_ids = list(verified.warmup_only_security_ids)
-        catalyst_authority = load_catalyst_decision_authority(
-            catalyst_authority_directory
-        )
         if not security_ids:
             raise DataReadinessError("swing materialization has no securities")
         request = _build_request(
             verified=verified,
-            catalyst_authority=catalyst_authority,
             contract=contract,
             security_ids=security_ids,
             warmup_only_security_ids=warmup_only_security_ids,
@@ -202,10 +186,6 @@ def materialize_swing_feature_panel(
                 contract=contract,
                 sparse_missing_sessions_by_ticker=sparse_missing_sessions,
             )
-            rows = build_swing_ablation_rows(
-                rows,
-                catalyst_authority,
-            )[SWING_FEATURE_PROFILE]
             record = _publish_stage_one_shard(
                 rows,
                 shard_path=shard_path,
@@ -248,12 +228,6 @@ def load_complete_swing_feature_panel(output_dir: Path) -> dict[str, Any]:
         key: value for key, value in request.items() if key != "request_sha256"
     }
     request_sha256 = _json_sha256(request_payload)
-    catalyst_binding = request.get("catalyst_authority")
-    if not isinstance(catalyst_binding, Mapping):
-        raise DataReadinessError("swing panel request has no catalyst authority binding")
-    catalyst_directory = Path(str(catalyst_binding.get("directory", "")))
-    catalyst_authority = load_catalyst_decision_authority(catalyst_directory)
-    observed_catalyst_binding = _catalyst_authority_binding(catalyst_authority)
     source = manifest.get("source")
     combined_authority = output_dir / "combined_daily" / "_authority.json"
     if (
@@ -262,6 +236,10 @@ def load_complete_swing_feature_panel(output_dir: Path) -> dict[str, Any]:
         != MINIMUM_SWING_DECISION_DATE.isoformat()
         or request.get("swing_feature_panel_schema")
         != SWING_FEATURE_PANEL_SCHEMA
+        or request.get("feature_profiles")
+        != list(SWING_MATERIALIZATION_PROFILES)
+        or request.get("profile_policy")
+        != "technical_features_and_full_population_labels_only"
         or request.get("request_sha256") != request_sha256
         or not _population_audit_verifies(request)
         or manifest.get("schema") != SWING_MATERIALIZATION_MANIFEST_SCHEMA
@@ -269,6 +247,10 @@ def load_complete_swing_feature_panel(output_dir: Path) -> dict[str, Any]:
         != MINIMUM_SWING_DECISION_DATE.isoformat()
         or manifest.get("swing_feature_panel_schema")
         != SWING_FEATURE_PANEL_SCHEMA
+        or manifest.get("feature_profiles")
+        != list(SWING_MATERIALIZATION_PROFILES)
+        or manifest.get("strategy_contract_sha256")
+        != request.get("strategy_contract_sha256")
         or manifest.get("request_sha256") != request_sha256
         or manifest.get("modeled_security_count")
         != request.get("modeled_security_count")
@@ -280,21 +262,19 @@ def load_complete_swing_feature_panel(output_dir: Path) -> dict[str, Any]:
         != request.get("warmup_only_security_ids_sha256")
         or manifest.get("warmup_only_security_ids")
         != request.get("warmup_only_security_ids")
-        or manifest.get("catalyst_model_feature_inputs")
-        != request.get("catalyst_model_feature_inputs")
         or request.get("managed_path_cost_policy") != MANAGED_PATH_COST_POLICY
         or manifest.get("managed_path_cost_policy") != MANAGED_PATH_COST_POLICY
         or request.get("physical_partitioning")
         != ["feature_profile", "calendar_month"]
         or manifest.get("physical_partitioning")
         != ["feature_profile", "calendar_month"]
-        or manifest.get("required_historical_model_sources")
-        != request.get("required_historical_model_sources")
         or authority.get("schema") != SWING_MATERIALIZATION_AUTHORITY_SCHEMA
         or authority.get("decision_start_date")
         != MINIMUM_SWING_DECISION_DATE.isoformat()
         or authority.get("swing_feature_panel_schema")
         != SWING_FEATURE_PANEL_SCHEMA
+        or authority.get("strategy_contract_sha256")
+        != request.get("strategy_contract_sha256")
         or authority.get("managed_path_cost_policy") != MANAGED_PATH_COST_POLICY
         or authority.get("modeled_security_count")
         != request.get("modeled_security_count")
@@ -309,8 +289,6 @@ def load_complete_swing_feature_panel(output_dir: Path) -> dict[str, Any]:
         or authority.get("artifact") != "_manifest.json"
         or authority.get("artifact_sha256") != file_sha256(manifest_path)
         or not isinstance(source, dict)
-        or dict(catalyst_binding) != observed_catalyst_binding
-        or source.get("catalyst_authority") != observed_catalyst_binding
         or not combined_authority.is_file()
         or source.get("combined_daily_authority_sha256")
         != file_sha256(combined_authority)
@@ -324,34 +302,50 @@ def load_complete_swing_feature_panel(output_dir: Path) -> dict[str, Any]:
         not isinstance(files, list)
         or not files
         or not isinstance(files_by_profile, Mapping)
-        or set(files_by_profile) != set(SWING_ABLATION_PROFILES)
+        or set(files_by_profile) != set(SWING_MATERIALIZATION_PROFILES)
         or files_by_profile.get(SWING_FEATURE_PROFILE) != files
     ):
         raise DataReadinessError("swing panel manifest has invalid profile partitions")
     rows_by_profile: dict[str, int] = {}
     security_ids_by_profile: dict[str, set[str]] = {}
-    for profile in SWING_ABLATION_PROFILES:
+    sessions_by_profile: dict[str, set[date]] = {}
+    decision_ids_by_profile: dict[str, set[str]] = {}
+    for profile in SWING_MATERIALIZATION_PROFILES:
         profile_files = files_by_profile.get(profile)
         if not isinstance(profile_files, list) or not profile_files:
             raise DataReadinessError(
                 f"swing panel manifest has no {profile} partitions"
             )
-        rows_by_profile[profile], security_ids_by_profile[profile] = (
+        (
+            rows_by_profile[profile],
+            security_ids_by_profile[profile],
+            sessions_by_profile[profile],
+            decision_ids_by_profile[profile],
+        ) = (
             _verify_final_partition_records(
-            final_dir,
-            profile_files,
-            expected_profile=profile,
+                final_dir,
+                profile_files,
+                expected_profile=profile,
             )
         )
     modeled_population_hashes = {
         _json_sha256(sorted(values)) for values in security_ids_by_profile.values()
     }
     warmup_only = set(str(value) for value in request["warmup_only_security_ids"])
+    observed_security_count = len(security_ids_by_profile[SWING_FEATURE_PROFILE])
+    technical_rows = rows_by_profile[SWING_FEATURE_PROFILE]
+    observed_sessions = sessions_by_profile[SWING_FEATURE_PROFILE]
+    observed_decision_ids = decision_ids_by_profile[SWING_FEATURE_PROFILE]
     if (
-        rows_by_profile[SWING_FEATURE_PROFILE] != int(manifest.get("rows", -1))
-        or len(set(rows_by_profile.values())) != 1
-        or sum(rows_by_profile.values())
-        != int(manifest.get("total_ablation_rows", -1))
+        technical_rows != int(manifest.get("rows", -1))
+        or technical_rows != int(manifest.get("stage_one_rows", -1))
+        or len(observed_decision_ids) != technical_rows
+        or len(observed_sessions) != int(manifest.get("sessions", -1))
+        or str(manifest.get("first_session")) != min(observed_sessions).isoformat()
+        or str(manifest.get("last_session")) != max(observed_sessions).isoformat()
+        or observed_security_count != int(manifest.get("securities", -1))
+        or observed_security_count != int(manifest.get("modeled_security_count", -1))
+        or observed_security_count != int(request.get("modeled_security_count", -1))
         or modeled_population_hashes
         != {str(request.get("modeled_security_ids_sha256"))}
         or any(
@@ -368,7 +362,6 @@ def load_complete_swing_feature_panel(output_dir: Path) -> dict[str, Any]:
 def _build_request(
     *,
     verified: VerifiedCombinedInputs,
-    catalyst_authority: CatalystDecisionAuthority,
     contract: StrategyContract,
     security_ids: list[str],
     warmup_only_security_ids: list[str],
@@ -384,22 +377,8 @@ def _build_request(
         "managed_path_cost_policy": MANAGED_PATH_COST_POLICY,
         "physical_partitioning": ["feature_profile", "calendar_month"],
         "decision_start_date": MINIMUM_SWING_DECISION_DATE.isoformat(),
-        "feature_profiles": list(SWING_ABLATION_PROFILES),
-        "ablation_population_policy": (
-            "identical_rows_labels_and_required_source_eligibility"
-        ),
-        "catalyst_authority": _catalyst_authority_binding(
-            catalyst_authority
-        ),
-        "required_historical_model_sources": list(
-            REQUIRED_MODEL_SOURCE_FAMILIES
-        ),
-        "catalyst_model_feature_inputs": list(CATALYST_RANKING_FEATURES),
-        "optional_historical_sources": sorted(
-            set(TRACKED_SOURCE_FAMILIES).difference(
-                REQUIRED_MODEL_SOURCE_FAMILIES
-            )
-        ),
+        "feature_profiles": list(SWING_MATERIALIZATION_PROFILES),
+        "profile_policy": "technical_features_and_full_population_labels_only",
         "global_authority": None,
         "global_authority_policy": (
             "not_integrated_until_a_separate_verified_authority_is_bound"
@@ -614,7 +593,7 @@ def _finalize_and_publish_stage_one(
                 "rank_eligible_rows": 0,
                 "cross_section_eligible_rows": 0,
             }
-            for profile in SWING_ABLATION_PROFILES
+            for profile in SWING_MATERIALIZATION_PROFILES
         }
         first_session: str | None = None
         last_session: str | None = None
@@ -631,20 +610,12 @@ def _finalize_and_publish_stage_one(
             rows = pd.concat(parts, ignore_index=True)
             del parts
             _guard(budget, f"swing panel stage-two input year {year}")
-            technical_label_reference: pd.DataFrame | None = None
-            for profile in SWING_ABLATION_PROFILES:
+            for profile in SWING_MATERIALIZATION_PROFILES:
                 rows["feature_profile"] = profile
                 finalized = finalize_swing_feature_panel(
                     rows,
                     contract=contract,
                 )
-                if technical_label_reference is None:
-                    technical_label_reference = _ablation_label_reference(finalized)
-                else:
-                    _assert_ablation_identity_and_labels(
-                        technical_label_reference,
-                        finalized,
-                    )
                 _validate_final_panel(finalized, expected_profile=profile)
                 session_values = pd.to_datetime(finalized["session_date_et"])
                 if not bool(session_values.dt.year.eq(year).all()):
@@ -726,11 +697,11 @@ def _finalize_and_publish_stage_one(
                 del finalized
                 release_process_memory()
                 _guard(budget, f"swing panel publish {profile} year {year}")
-            del rows, technical_label_reference
+            del rows
             release_process_memory()
             _guard(budget, f"swing panel publish year {year}")
         expected_stage_one_rows = sum(int(item["rows"]) for item in shard_records)
-        expected_rows = expected_stage_one_rows * len(SWING_ABLATION_PROFILES)
+        expected_rows = expected_stage_one_rows
         observed_rows = sum(
             int(values["rows"]) for values in totals_by_profile.values()
         )
@@ -742,16 +713,8 @@ def _finalize_and_publish_stage_one(
         technical_eligible = int(
             totals_by_profile[SWING_FEATURE_PROFILE]["feature_eligible_rows"]
         )
-        catalyst_eligible = int(
-            totals_by_profile[SWING_CATALYST_FEATURE_PROFILE][
-                "feature_eligible_rows"
-            ]
-        )
-        if technical_eligible == 0 or technical_eligible != catalyst_eligible:
-            raise DataReadinessError(
-                "swing ablation panels have no shared required-source population "
-                "or their eligible row counts differ"
-            )
+        if technical_eligible == 0:
+            raise DataReadinessError("swing technical panel has no eligible rows")
         for profile, totals in totals_by_profile.items():
             if (
                 int(totals["label_eligible_rows"]) < 1
@@ -767,7 +730,7 @@ def _finalize_and_publish_stage_one(
                 "swing panel final security population differs from its request"
             )
         if (
-            set(columns_by_profile) != set(SWING_ABLATION_PROFILES)
+            set(columns_by_profile) != set(SWING_MATERIALIZATION_PROFILES)
             or first_session is None
             or last_session is None
         ):
@@ -781,16 +744,8 @@ def _finalize_and_publish_stage_one(
             "managed_path_cost_policy": MANAGED_PATH_COST_POLICY,
             "physical_partitioning": ["feature_profile", "calendar_month"],
             "decision_start_date": MINIMUM_SWING_DECISION_DATE.isoformat(),
-            "feature_profiles": list(SWING_ABLATION_PROFILES),
-            "catalyst_model_feature_inputs": request[
-                "catalyst_model_feature_inputs"
-            ],
-            "required_historical_model_sources": request[
-                "required_historical_model_sources"
-            ],
+            "feature_profiles": list(SWING_MATERIALIZATION_PROFILES),
             "rows": expected_stage_one_rows,
-            "total_ablation_rows": observed_rows,
-            "rows_per_ablation_panel": expected_stage_one_rows,
             "columns_by_profile": columns_by_profile,
             "securities": len(observed_security_ids),
             "modeled_security_count": request["modeled_security_count"],
@@ -819,7 +774,6 @@ def _finalize_and_publish_stage_one(
                 "combined_daily_authority_sha256": file_sha256(
                     output_dir / "combined_daily" / "_authority.json"
                 ),
-                "catalyst_authority": request["catalyst_authority"],
                 "pre_collection": request["combined_daily_inputs"][
                     "pre_collection"
                 ],
@@ -857,7 +811,7 @@ def _finalize_and_publish_stage_one(
                     for item in files
                     if item["feature_profile"] == profile
                 ]
-                for profile in SWING_ABLATION_PROFILES
+                for profile in SWING_MATERIALIZATION_PROFILES
             },
         }
         _write_json_atomic(staging / "_manifest.json", manifest)
@@ -867,6 +821,9 @@ def _finalize_and_publish_stage_one(
                 "schema": SWING_MATERIALIZATION_AUTHORITY_SCHEMA,
                 "state": "complete",
                 "request_sha256": request_sha256,
+                "strategy_contract_sha256": request[
+                    "strategy_contract_sha256"
+                ],
                 "artifact": "_manifest.json",
                 "artifact_sha256": file_sha256(staging / "_manifest.json"),
                 "swing_feature_panel_schema": SWING_FEATURE_PANEL_SCHEMA,
@@ -936,9 +893,11 @@ def _verify_final_partition_records(
     records: list[object],
     *,
     expected_profile: str,
-) -> tuple[int, set[str]]:
+) -> tuple[int, set[str], set[date], set[str]]:
     rows = 0
     observed_security_ids: set[str] = set()
+    observed_sessions: set[date] = set()
+    observed_decision_ids: set[str] = set()
     observed_paths: set[str] = set()
     observed_months: set[str] = set()
     for record in records:
@@ -1021,117 +980,16 @@ def _verify_final_partition_records(
             raise DataReadinessError(
                 f"swing panel partition identity or bounds do not verify: {path}"
             )
+        current_decision_ids = set(decision_ids.astype(str))
+        if not observed_decision_ids.isdisjoint(current_decision_ids):
+            raise DataReadinessError(
+                "swing panel decision identity is duplicated across partitions"
+            )
         rows += partition_rows
         observed_security_ids.update(security_ids.astype(str))
-    return rows, observed_security_ids
-
-
-def _ablation_label_reference(panel: pd.DataFrame) -> pd.DataFrame:
-    identity = ["security_id", "session_date_et", "decision_id"]
-    label_columns = sorted(
-        {
-            column
-            for column in panel.columns
-            if column.startswith("future_")
-            or column.startswith("target_net_positive_")
-            or column.startswith("barrier_")
-            or column
-            in {
-                "forward_return",
-                "target_excess_rank",
-                "rank_label",
-                "rank_percentile",
-                "ranking_group_size",
-                "ranking_reliability_weight",
-                "sector_peer_count",
-                "sector_rank_eligible",
-                "sector_rank_target_met",
-                "feature_eligible",
-                "label_eligible",
-                "cross_section_eligible",
-            }
-        }
-    )
-    missing = sorted(set(identity).difference(panel.columns))
-    if missing:
-        raise DataReadinessError(
-            f"swing ablation identity columns are missing: {missing}"
-        )
-    return panel.loc[:, [*identity, *label_columns]].copy()
-
-
-def _assert_ablation_identity_and_labels(
-    technical: pd.DataFrame,
-    catalyst: pd.DataFrame,
-) -> None:
-    identity = ["security_id", "session_date_et", "decision_id"]
-    missing = sorted(
-        set(identity).difference(technical.columns).union(
-            set(identity).difference(catalyst.columns)
-        )
-    )
-    if missing:
-        raise DataReadinessError(
-            f"swing ablation identity columns are missing: {missing}"
-        )
-    label_columns = sorted(
-        {
-            column
-            for column in technical.columns.intersection(catalyst.columns)
-            if column.startswith("future_")
-            or column.startswith("target_net_positive_")
-            or column.startswith("barrier_")
-            or column
-            in {
-                "forward_return",
-                "target_excess_rank",
-                "rank_label",
-                "rank_percentile",
-                "ranking_group_size",
-                "ranking_reliability_weight",
-                "sector_peer_count",
-                "sector_rank_eligible",
-                "sector_rank_target_met",
-                "feature_eligible",
-                "label_eligible",
-                "cross_section_eligible",
-            }
-        }
-    )
-    columns = [*identity, *label_columns]
-    left = technical.loc[:, columns].sort_values(identity, kind="stable").reset_index(drop=True)
-    right = catalyst.loc[:, columns].sort_values(identity, kind="stable").reset_index(drop=True)
-    try:
-        pd.testing.assert_frame_equal(left, right, check_exact=True)
-    except AssertionError as exc:
-        raise DataReadinessError(
-            "technical_market and catalyst_full row or label identities differ"
-        ) from exc
-
-
-def _catalyst_authority_binding(
-    authority: CatalystDecisionAuthority,
-) -> dict[str, Any]:
-    directory = authority.directory.resolve()
-    manifest_path = directory / "_manifest.json"
-    authority_path = directory / "_authority.json"
-    if not manifest_path.is_file() or not authority_path.is_file():
-        raise DataReadinessError("catalyst authority publication is incomplete")
-    return {
-        "directory": str(directory),
-        "manifest_sha256": file_sha256(manifest_path),
-        "authority_sha256": file_sha256(authority_path),
-        "request_sha256": str(authority.manifest["request_sha256"]),
-        "source_lineage_set_sha256": str(
-            authority.manifest["source_lineage_set_sha256"]
-        ),
-        "decision_artifact_sha256": str(
-            authority.authority["decision_artifact_sha256"]
-        ),
-        "coverage_artifact_sha256": str(
-            authority.authority["coverage_artifact_sha256"]
-        ),
-    }
+        observed_sessions.update(sessions)
+        observed_decision_ids.update(current_decision_ids)
+    return rows, observed_security_ids, observed_sessions, observed_decision_ids
 
 
 def _sparse_missing_sessions_by_ticker(

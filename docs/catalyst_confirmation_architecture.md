@@ -38,9 +38,10 @@ There is no fallback from the active path to legacy models or schemas.
 - Entry: next exact exchange-session open.
 - Horizon: ten exchange sessions with target/stop/timeout outcomes.
 - Model families are explicit. `swing_baseline` consumes only `technical_market` and
-  uses catalyst as confirmation/explanation. `swing_event_driven` consumes
-  `catalyst_full` only after its event authority and ablation pass. No family is
-  serveable until it passes promotion.
+  uses catalyst as confirmation/explanation. `swing_event_driven` may consume only a
+  separately promoted event-specialist contract. The current A3 contract admits only
+  direct-issuer analyst revisions; it does not reuse a broad catalyst profile. No
+  family is serveable until it passes promotion.
 - Issuer filing catalyst: SEC events aligned by acceptance time and resolved to the
   filing issuer; they enter an estimator only after causal authority and ablation pass.
 - Context overlays: verified global and sector events through separate authorities.
@@ -140,13 +141,13 @@ Model selection considers calibration and ranking quality but promotion requires
 cost-adjusted return, SPY/QQQ/sector excess, drawdown, turnover, capacity, and regime
 stability. ROC AUC alone cannot promote a trading model.
 
-The current swing V11 authority contains 853,417 rows per matched profile across 604
-securities and 1,759 sessions. Candidate v2 trained six governed logistic and
-histogram-gradient-boosting ablations and published `no_candidate`: diagnostic AUC
-reached approximately 0.55-0.57, but no candidate passed calendar, portfolio-daily,
-doubled-cost, and holding-aligned benchmark confidence gates in both validation
-scopes. The locked test remained unopened. Intraday V2 is also economically rejected;
-there is currently no promoted model for either view.
+The current swing V12 base authority contains 853,417 technical rows across 604
+securities and 1,759 sessions. A3.4 separately contains 113 matched decisions across
+50 analyst-revision episodes in each of three profiles: technical-only, event-only,
+and combined. The A3.4 authority is research-only; A3.5 must pass independent-episode
+capacity, validation, and economic gates before any specialist can train or serve.
+Prior swing candidates and Intraday V2 are rejection evidence only. There is currently
+no promoted model for either view.
 
 A2 replaces the broad profile comparison with a six-candidate technical baseline:
 four nested regularized-logistic feature ablations plus full-feature XGBoost ranking

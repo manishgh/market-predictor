@@ -61,20 +61,22 @@ estimator without the same governance.
 - `labeling.py`: next-open ten-session managed and rank outcomes.
 - `technical_relationships.py`, `cross_sectional.py`: causal technical and
   cross-sectional relationships.
-- `swing_features.py`: ordered technical and Alpaca-catalyst profiles.
-- `catalyst_authority.py`: ticker catalyst decision and source-coverage authority.
-- `catalyst_identity_rebind.py`: immutable V5 canonical identity rebind.
-- `swing_materialization.py`: identical-population profile publication and replay.
+- `swing_features.py`: causal technical transformations and label finalization.
+- `swing_materialization.py`: the single catalyst-independent `technical_market`
+  population and strict physical replay.
+- `issuer_event_family_authority.py`, `issuer_event_precision_audit.py`: direct-issuer
+  event, assignment, coverage, and reviewed precision authorities.
+- `swing_event_ablation.py`: matched analyst-revision technical-only, event-only, and
+  combined research datasets. Blocked families are absent and unknown coverage
+  abstains.
 - `swing_training.py`: four nested technical baseline ablations, bounded tree
   candidates, validation-only selection, exact feature-subset persistence, and
   immutable candidate/no-candidate publication.
 - `swing_live.py`: latest closed-session features using shared semantics.
 
-Swing decisions begin on `2019-07-09`. Earlier bars initialize indicators only. V9 is
-invalid because managed labels were index-aligned incorrectly and is retained only as
-V5 lineage. V10 is published and replayed; candidate v1 produced `no_candidate`
-before economic evaluation because its 50-stock hard sector floor and 20% sector cap
-were structurally incompatible on sessions with only four eligible sectors.
+Swing decisions begin on `2019-07-09`. Earlier bars initialize indicators only.
+Obsolete materializations and rejected estimators are not supported compatibility
+paths; only current strict authorities may enter a new run.
 
 The implemented policy uses a within-sector target of 50 and a hard floor of 30.
 Materialized rows persist sector peer count, sector rank eligibility, sector target
@@ -85,10 +87,10 @@ skips sessions with fewer than three. Promotion gates use managed holding-aligne
 benchmarks, full-calendar portfolio returns including cash days and overlapping
 positions, doubled-cost portfolio stress, and the 33.3% active-sector ceiling. Live
 processing excludes individual unavailable securities through the governed 5% limit.
-V11 is published and replayed with 853,417 rows per profile, 604 securities, and
-1,759 sessions. Candidate v2 trained six governed models and published an immutable
-`no_candidate` result because no model passed economic gates in both temporal and
-unseen-security validation; the locked test remained unopened.
+V12 is published and replayed with 853,417 technical rows, 604 securities, and
+1,759 sessions. Prior candidate results remain rejection evidence because no model
+passed economic gates in both temporal and unseen-security validation; the locked test
+remained unopened.
 
 A2 now defines the replacement baseline contract: nested momentum/volatility, trend,
 pullback, and volume/liquidity groups are evaluated with regularized logistic models;
@@ -124,16 +126,18 @@ shuffled-label control must remain at chance.
   `edge_rebuild/global_event_authority.py`: separate global context overlay.
 - `edge_rebuild/serving.py`: promoted-bundle verification, model-family/profile
   binding, estimator-specific feature slicing, and strict prediction or abstention.
-- `prediction_service.py`: selects `technical_market` for a signed swing baseline and
-  `catalyst_full` for a signed swing event-driven model; no implicit fallback exists.
+- `prediction_service.py`: serves only a hash-verified promoted model family; the new
+  analyst-revision specialist remains unavailable until A3.5 training and promotion.
 
 ## Current Workflow
 
-1. Preserve the replayed V11, prior rejection authorities, and A2 implementation
-   checkpoint `cb2aba5`.
-2. Build A3 event-family authorities only from exact point-in-time issuer evidence.
-3. Preregister technical-only, event-only, and combined specialist comparisons before
-   training; keep the locked test unopened during selection.
+1. Preserve the replayed V12 technical authority and prior rejection evidence.
+2. Use only the separately replayed analyst-revision authority admitted by both
+   historical precision audits.
+3. Audit A3.5 development capacity on A3.4's 113 decisions and 50 independent
+   analyst-revision episodes. Train the exact technical-only, event-only, and combined
+   profiles only if the frozen split remains statistically viable; keep the locked test
+   unopened during selection.
 4. Keep API scoring disabled unless a promoted bundle verifies at load time.
 5. Build the replacement A4 intraday cohort authority before any new holdout run.
 

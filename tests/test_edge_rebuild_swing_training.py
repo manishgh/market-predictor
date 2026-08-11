@@ -22,7 +22,6 @@ from market_predictor.edge_rebuild.swing_features import (
     MANAGED_PATH_NET_RETURN_COLUMNS,
     MANAGED_PATH_SESSION_ORDINAL_COLUMNS,
     SWING_BASELINE_ABLATION_ORDER,
-    SWING_CATALYST_FEATURE_PROFILE,
     SWING_FEATURE_PANEL_SCHEMA,
     SWING_FEATURE_PROFILE,
     swing_baseline_feature_columns,
@@ -151,12 +150,8 @@ def test_input_authority_rejects_pre_cutoff_decisions(
         "schema": swing_training.SWING_MATERIALIZATION_MANIFEST_SCHEMA,
         "strategy_contract_sha256": contract.sha256(),
         "feature_profiles": list(swing_training.ALLOWED_PROFILES),
-        "required_historical_model_sources": ["alpaca"],
-        "catalyst_model_feature_inputs": ["source_count_alpaca_1d"],
         "first_session": "2018-05-29",
-        "rows_per_ablation_panel": 1_000,
         "rows": 1_000,
-        "total_ablation_rows": 2_000,
         "securities": 30,
         "request_sha256": "a" * 64,
     }
@@ -195,7 +190,7 @@ def test_development_partition_selection_physically_excludes_locked_test_months(
     assert [record["partition_month"] for record in selected] == ["2025-06"]
 
 
-def test_profile_session_coverage_allows_only_three_day_initial_warmup() -> None:
+def test_profile_session_coverage_requires_every_governed_session() -> None:
     governed = (
         "2019-07-09",
         "2019-07-10",
@@ -204,16 +199,11 @@ def test_profile_session_coverage_allows_only_three_day_initial_warmup() -> None
         "2019-07-15",
     )
 
-    swing_training._validate_profile_session_coverage(
-        {"2019-07-12", "2019-07-15"}, governed
-    )
-    with pytest.raises(DataReadinessError, match="outside its initial"):
+    swing_training._validate_profile_session_coverage(set(governed), governed)
+    with pytest.raises(DataReadinessError, match="missing governed sessions"):
         swing_training._validate_profile_session_coverage(
-            {"2019-07-12"}, governed
-        )
-    with pytest.raises(DataReadinessError, match="exceeds the 3-day"):
-        swing_training._validate_profile_session_coverage(
-            {"2019-07-15"}, governed
+            {"2019-07-10", "2019-07-11", "2019-07-12", "2019-07-15"},
+            governed,
         )
 
 
@@ -233,9 +223,9 @@ def test_trains_sequential_ablations_and_publishes_candidate_only(
 ) -> None:
     contract = _contract()
     config = _config()
-    technical, catalyst = _profiles(contract)
+    technical = _profile(contract)
     binding = _binding(tmp_path)
-    accesses = _patch_inputs(monkeypatch, binding, technical, catalyst)
+    accesses = _patch_inputs(monkeypatch, binding, technical)
 
     result = train_swing_edge_candidate(
         tmp_path / "panel",
@@ -338,9 +328,9 @@ def test_candidate_authority_rejects_tampering(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     contract = _contract()
-    technical, catalyst = _profiles(contract)
+    technical = _profile(contract)
     binding = _binding(tmp_path)
-    _patch_inputs(monkeypatch, binding, technical, catalyst)
+    _patch_inputs(monkeypatch, binding, technical)
     output = tmp_path / "candidate"
     train_swing_edge_candidate(
         tmp_path / "panel",
@@ -361,9 +351,9 @@ def test_validation_selection_is_unchanged_when_only_final_test_is_poisoned(
 ) -> None:
     contract = _contract()
     config = _config()
-    technical, catalyst = _profiles(contract)
+    technical = _profile(contract)
     binding = _binding(tmp_path)
-    _patch_inputs(monkeypatch, binding, technical, catalyst)
+    _patch_inputs(monkeypatch, binding, technical)
     baseline = train_swing_edge_candidate(
         tmp_path / "panel",
         tmp_path / "baseline",
@@ -373,8 +363,7 @@ def test_validation_selection_is_unchanged_when_only_final_test_is_poisoned(
     )
 
     poisoned_technical = replace(technical, frame=_poison_final_test(technical.frame, config))
-    poisoned_catalyst = replace(catalyst, frame=_poison_final_test(catalyst.frame, config))
-    _patch_inputs(monkeypatch, binding, poisoned_technical, poisoned_catalyst)
+    _patch_inputs(monkeypatch, binding, poisoned_technical)
     poisoned = train_swing_edge_candidate(
         tmp_path / "panel",
         tmp_path / "poisoned",
@@ -391,7 +380,7 @@ def test_validation_selection_is_unchanged_when_only_final_test_is_poisoned(
 def test_profile_validation_rejects_double_cost_and_late_membership() -> None:
     contract = _contract()
     config = _config()
-    profile = _profiles(contract)[0]
+    profile = _profile(contract)
     invalid_cost = profile.frame.copy()
     invalid_cost["barrier_net_return"] -= 0.002
     with pytest.raises(DataReadinessError, match="cost exactly once"):
@@ -417,7 +406,7 @@ def test_profile_validation_rejects_double_cost_and_late_membership() -> None:
 def test_profile_validation_preserves_bounded_feature_missingness() -> None:
     contract = _contract()
     config = _config()
-    profile = _profiles(contract)[0]
+    profile = _profile(contract)
     feature = profile.feature_columns[0]
     partially_missing = profile.frame.copy()
     partially_missing.loc[partially_missing.index[0], feature] = np.nan
@@ -620,23 +609,20 @@ def test_no_candidate_evidence_is_immutable_and_does_not_open_test(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     contract = _contract()
-    technical, catalyst = _profiles(contract)
-    failed_profiles = []
-    for profile in (technical, catalyst):
-        frame = profile.frame.copy()
-        frame["barrier_gross_return"] = -0.01
-        frame["barrier_net_return"] = -0.012
-        for column in MANAGED_EXCESS_RETURN_COLUMNS:
-            frame[column] = -0.013
-        for column in MANAGED_PATH_NET_RETURN_COLUMNS:
-            frame[column] = -0.012
-        failed_profiles.append(replace(profile, frame=frame))
+    technical = _profile(contract)
+    frame = technical.frame.copy()
+    frame["barrier_gross_return"] = -0.01
+    frame["barrier_net_return"] = -0.012
+    for column in MANAGED_EXCESS_RETURN_COLUMNS:
+        frame[column] = -0.013
+    for column in MANAGED_PATH_NET_RETURN_COLUMNS:
+        frame[column] = -0.012
+    failed_profile = replace(technical, frame=frame)
     binding = _binding(tmp_path)
     accesses = _patch_inputs(
         monkeypatch,
         binding,
-        failed_profiles[0],
-        failed_profiles[1],
+        failed_profile,
     )
 
     result = train_swing_edge_candidate(
@@ -653,20 +639,18 @@ def test_no_candidate_evidence_is_immutable_and_does_not_open_test(
     assert result.evaluation["locked_test_outcomes_read"] is False
     locked = {
         value.isoformat()
-        for value in _test_schedule(failed_profiles[0].frame).locked_test_sessions
+        for value in _test_schedule(failed_profile.frame).locked_test_sessions
     }
     assert all(not locked.intersection(access) for access in accesses)
     assert replay["status"] == "no_candidate"
     assert not (tmp_path / "no-candidate" / "candidate.joblib").exists()
 
 
-def test_production_profile_memory_projection_requires_sequential_ablations() -> None:
+def test_production_technical_profile_memory_projection_stays_below_budget() -> None:
     one_profile = swing_training._projected_profile_memory_bytes(853_417, 138)
-    both_profiles = swing_training._projected_profile_memory_bytes(1_706_834, 138)
     safety_threshold = int(3.25 * 1024**3)
 
     assert one_profile < safety_threshold
-    assert both_profiles > safety_threshold
 
 
 @pytest.mark.skipif(
@@ -719,7 +703,7 @@ def _contract() -> StrategyContract:
     return load_strategy_contract(Path("configs/edge_rebuild_strategy_contract.toml"))
 
 
-def _profiles(contract: StrategyContract) -> tuple[SwingProfileData, SwingProfileData]:
+def _profile(contract: StrategyContract) -> SwingProfileData:
     sessions = pd.bdate_range("2019-07-09", periods=430, tz="UTC")
     securities = [f"SEC-{index:03d}" for index in range(30)]
     rows: list[dict[str, object]] = []
@@ -833,25 +817,7 @@ def _profiles(contract: StrategyContract) -> tuple[SwingProfileData, SwingProfil
         decision_ids_sha256=digest,
         panel=binding,
     )
-    catalyst_frame = frame.copy()
-    catalyst_frame["alpaca_sentiment"] = catalyst_frame["feature_signal"] + rng.normal(
-        0.0, 0.1, len(catalyst_frame)
-    )
-    catalyst = SwingProfileData(
-        frame=catalyst_frame,
-        profile=SWING_CATALYST_FEATURE_PROFILE,
-        feature_columns=(
-            "feature_signal",
-            "feature_trend",
-            "feature_pullback",
-            "feature_volume",
-            "feature_noise",
-            "alpaca_sentiment",
-        ),
-        decision_ids_sha256=digest,
-        panel=binding,
-    )
-    return technical, catalyst
+    return technical
 
 
 def _binding(tmp_path: Path) -> SwingPanelBinding:
@@ -869,7 +835,6 @@ def _patch_inputs(
     monkeypatch: pytest.MonkeyPatch,
     binding: SwingPanelBinding,
     technical: SwingProfileData,
-    catalyst: SwingProfileData,
 ) -> list[set[str]]:
     policy = binding.root.parent / "temporal.toml"
     policy.write_text("test temporal policy\n", encoding="utf-8")
@@ -896,7 +861,7 @@ def _patch_inputs(
         lambda config: schedule,
     )
     monkeypatch.setattr(swing_training, "load_swing_panel_binding", lambda *args, **kwargs: binding)
-    profiles = {SWING_FEATURE_PROFILE: technical, SWING_CATALYST_FEATURE_PROFILE: catalyst}
+    profiles = {SWING_FEATURE_PROFILE: technical}
     accesses: list[set[str]] = []
 
     def load_profile(

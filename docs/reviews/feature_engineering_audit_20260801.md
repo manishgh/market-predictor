@@ -101,17 +101,17 @@ learned candidate.
 
 ### Current implementation and result
 
-- The materializer now publishes identical-row `technical_market` and
-  `catalyst_full` ablation profiles from one decision population and one label
-  authority. Catalyst inputs require immutable assignment and coverage lineage.
+- The base materializer now publishes one catalyst-independent `technical_market`
+  population. A separate A3.4 authority publishes exact matched technical-only,
+  analyst-revision-only, and combined event-conditioned profiles.
 - Sparse missing daily sessions now invalidate only affected 250-session warm-up
   windows and 10-session labels. They are never imputed or bridged. The 5%
   whole-security exclusion rule remains unchanged and applies only to genuinely
   unusable full histories.
-- Historical ticker-news scoring, attribution, catalyst V5 identity, combined daily
-  authority, and dual-profile V11 materialization are complete and strictly replayed.
-  V11 contains 853,417 rows per profile, 604 modeled securities, 1,759 sessions,
-  and 640,107 rank-eligible rows.
+- The V12 technical authority contains 853,417 rows, 604 modeled securities, and
+  1,759 sessions. A3.4 contains 113 matched decisions across 50 analyst-revision
+  episodes in each of three exact profiles. Blocked families are absent and unknown
+  source coverage abstains.
 - Monthly profile partitions physically isolate locked-test outcomes. Development
   training loads only requested months and projected columns; locked outcomes remain
   unopened unless all validation gates pass. Replay verifies profile, decision and
@@ -143,8 +143,8 @@ immutable artifact exists. `Blocked` means training or serving is prohibited.
 | Intraday technical estimator | SIP/all bar and V2 authorities verify | Verified | Verified; parity and staleness rejection | Exact 44-feature schema verified; incomplete V3 z-scores removed | V2 economically rejected; later z-score artifact invalidated | Blocked until promotion | Rejected |
 | Intraday ticker-catalyst overlay | Alpaca archives exist; scored/attributed catalyst authority not yet published | Not an estimator input | Snapshot contract verified; runtime authority pending | Separate overlay hash, coverage, count, sentiment, and unknown state verified | Cannot alter entry probability; ranking use blocked until authority exists | Blocked until promoted bundle and orchestrator exist | Authority pending |
 | Intraday global overlay | GDELT collector and global authority verified in code; no production collection published | Not an estimator input | Observed-time collection, immutable query policy, and unknown/zero behavior verified | Separate global overlay contract verified | Ranking use blocked until runtime authority exists | Blocked until promoted bundle and orchestrator exist | Runtime artifact pending |
-| Swing technical estimator | Daily SIP/all, point-in-time membership, and V11 panel verify | Verified | Verified; latest closed session required | A2 nested technical schema and per-model subsets verified | Replacement trainer complete; new candidate not run | Blocked until promotion | Implementation ready |
-| Swing ticker-catalyst estimator | Two immutable V2 Alpaca issuer-event authorities cover `2019-07-09` through `2026-07-08`; strict replay verified | Verified for issuer identity, availability, source-family mapping, assignment, coverage, and reviewed precision | Batch feature dataset not yet published | Separate A3 event-driven family; only `analyst_revision` passes both historical precision audits; all other families abstain | Identical-decision ablation and specialist training remain open | Blocked until promotion | A3.1-A3.3 verified; A3.4 active |
+| Swing technical estimator | Daily SIP/all, point-in-time membership, and V12 panel verify | Verified | Verified; latest closed session required | A2 nested technical schema and per-model subsets verified | Replacement trainer complete; new candidate not run | Blocked until promotion | Implementation ready |
+| Swing ticker-catalyst estimator | Two immutable V2 Alpaca issuer-event authorities cover `2019-07-09` through `2026-07-08`; strict replay verified | A3.4 publishes 113 decisions / 50 episodes in three matched profiles | No event specialist is live | Only `analyst_revision` passes both historical precision audits; all other families abstain | A3.5 capacity audit required before fitting | Blocked until promotion | A3.4 complete; A3.5 pending |
 | Swing global overlay | Global collector and decision authority verified in code | Separate overlay; never attached as ticker news | Verified code | Separate global authority hash and source policy | Cannot rescue or alter a rejected estimator; ranking use requires complete authority | Blocked until promoted bundle and orchestrator exist | Runtime artifact pending |
 
 ## Training decision
@@ -154,6 +154,6 @@ correctly and rejected because its out-of-sample economic edge was not stable, n
 because data was missing. The replacement trainer is verified but has not produced a
 new statistical result. A3 causal event authorities now exist for the complete
 development horizon. Event-family precision review admits only analyst revisions in
-both eras; every other family remains blocked. Identical-decision ablations are not
-complete, so no event specialist may train yet. The locked test stays unopened during
-selection; global context remains a separate overlay.
+both eras; every other family remains blocked. A3.4 is complete, but its 50 independent
+episodes require an explicit capacity audit before any specialist may train. The locked
+test stays unopened during selection; global context remains a separate overlay.

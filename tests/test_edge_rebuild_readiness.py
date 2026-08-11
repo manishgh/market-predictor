@@ -9,15 +9,18 @@ from market_predictor.edge_rebuild.contracts import (
     load_edge_rebuild_readiness_config,
 )
 from market_predictor.edge_rebuild.readiness import (
+    _SWING_PANEL_READINESS_COLUMNS,
     _intraday_fold_capacity,
     _json_sha256,
     _prepare_intraday_rows,
     _publish_audit,
+    _read_current_swing_panel,
     _swing_phase_capacity,
     _verify_candidate_panel_binding,
     _verify_intraday_coverage,
     load_complete_readiness_audit,
 )
+from market_predictor.edge_rebuild.swing_features import SWING_FEATURE_PROFILE
 from market_predictor.edge_rebuild.swing_training import SwingPanelBinding
 from market_predictor.v3.errors import DataReadinessError
 
@@ -46,6 +49,46 @@ def test_candidate_must_bind_current_ten_session_panel(tmp_path: Path) -> None:
     candidate["model_card"]["dataset"]["panel_manifest_sha256"] = "e" * 64
     with pytest.raises(DataReadinessError, match="active panel"):
         _verify_candidate_panel_binding(candidate, binding)
+
+
+def test_readiness_reads_the_single_technical_swing_population(tmp_path: Path) -> None:
+    relative_path = "panel/technical.parquet"
+    partition = tmp_path / "final" / relative_path
+    partition.parent.mkdir(parents=True)
+    row = {column: 0 for column in _SWING_PANEL_READINESS_COLUMNS}
+    row.update(
+        {
+            "decision_time_utc": pd.Timestamp("2025-01-02T21:00:00Z"),
+            "entry_time_utc": pd.Timestamp("2025-01-03T14:30:00Z"),
+            "feature_available_at_utc": pd.Timestamp("2025-01-02T21:00:00Z"),
+            "label_available_at_utc": pd.Timestamp("2025-01-17T21:00:00Z"),
+            "barrier_label_available_at_utc": pd.Timestamp("2025-01-17T21:00:00Z"),
+            "feature_eligible": True,
+            "cross_section_eligible": True,
+            "label_eligible": True,
+            "label_path_exact": True,
+            "ticker": "TEST",
+        }
+    )
+    pd.DataFrame([row]).to_parquet(partition, index=False)
+    binding = SwingPanelBinding(
+        root=tmp_path,
+        manifest={
+            "rows": 1,
+            "files_by_profile": {
+                SWING_FEATURE_PROFILE: [{"path": relative_path, "rows": 1}]
+            },
+        },
+        manifest_sha256="a" * 64,
+        authority_sha256="b" * 64,
+        request_sha256="c" * 64,
+        strategy_contract_sha256="d" * 64,
+    )
+
+    result = _read_current_swing_panel(binding)
+
+    assert len(result) == 1
+    assert result.iloc[0]["ticker"] == "TEST"
 
 
 def test_ten_session_phase_capacity_uses_independent_sessions() -> None:

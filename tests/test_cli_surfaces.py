@@ -52,20 +52,6 @@ class CliSurfaceTests(unittest.TestCase):
         catalyst_options = {option for parameter in catalyst_command.params for option in getattr(parameter, "opts", ())}
         self.assertTrue({"--lineage-dir", "--out-dir", "--production-ready"}.issubset(catalyst_options))
 
-        rebind_command = get_command(research_app).commands[
-            "publish-edge-catalyst-identity-rebind"
-        ]
-        rebind_options = {
-            option
-            for parameter in rebind_command.params
-            for option in getattr(parameter, "opts", ())
-        }
-        self.assertTrue(
-            {"--parent-dir", "--target-panel-dir", "--out-dir"}.issubset(
-                rebind_options
-            )
-        )
-
     def test_global_collection_rejects_invalid_window_before_model_load(self) -> None:
         result = CliRunner().invoke(
             collection_app,

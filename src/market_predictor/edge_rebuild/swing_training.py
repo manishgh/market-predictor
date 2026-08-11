@@ -9,7 +9,7 @@ import tempfile
 import tomllib
 from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass, fields
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any, Final, cast
 
@@ -42,7 +42,6 @@ from market_predictor.edge_rebuild.swing_features import (
     MANAGED_PATH_NET_RETURN_COLUMNS,
     MANAGED_PATH_SESSION_ORDINAL_COLUMNS,
     SWING_BASELINE_ABLATION_ORDER,
-    SWING_CATALYST_FEATURE_PROFILE,
     SWING_FEATURE_PANEL_SCHEMA,
     SWING_FEATURE_PROFILE,
     swing_baseline_feature_columns,
@@ -101,7 +100,6 @@ DECISION_START_DATE: Final = date(2019, 7, 9)
 HORIZON_SESSIONS: Final = 10
 ALLOWED_PROFILES: Final = (
     SWING_FEATURE_PROFILE,
-    SWING_CATALYST_FEATURE_PROFILE,
 )
 # The learned families, per profile and per (rate, depth) point. `dual_hurdle`
 # was dropped: it scored 0.452-0.462 AUC on the v12 run -- below chance -- had no
@@ -329,23 +327,16 @@ def load_swing_panel_binding(
     if manifest.get("strategy_contract_sha256") != strategy_contract.sha256():
         raise DataReadinessError("swing panel strategy contract differs from training")
     if manifest.get("feature_profiles") != list(ALLOWED_PROFILES):
-        raise DataReadinessError("swing panel must contain the two frozen ablation profiles")
-    if manifest.get("required_historical_model_sources") != ["alpaca"]:
-        raise DataReadinessError("Alpaca must be the only ticker catalyst estimator source")
-    model_inputs = {str(value).lower() for value in manifest.get("catalyst_model_feature_inputs", [])}
-    if any(_is_unapproved_source_feature(value) for value in model_inputs):
-        raise DataReadinessError("unapproved source entered the swing estimator contract")
+        raise DataReadinessError("swing panel must contain only the frozen technical profile")
     if str(manifest.get("first_session")) != config.decision_start_date:
         raise DataReadinessError(
             "swing panel decisions must start exactly on 2019-07-09; "
             "pre-cutoff bars may exist only in the upstream warm-up store"
         )
-    if int(manifest.get("rows_per_ablation_panel", -1)) < config.minimum_rows:
+    if int(manifest.get("rows", -1)) < config.minimum_rows:
         raise DataReadinessError("swing panel has too few rows for training")
     if int(manifest.get("securities", -1)) < config.minimum_securities:
         raise DataReadinessError("swing panel has too few securities for training")
-    if int(manifest.get("rows", -1)) * 2 != int(manifest.get("total_ablation_rows", -2)):
-        raise DataReadinessError("swing ablation populations are not row-count matched")
     request_sha256 = str(manifest.get("request_sha256", ""))
     if len(request_sha256) != 64:
         raise DataReadinessError("swing panel request hash is invalid")
@@ -374,10 +365,9 @@ def load_swing_profile(
     if not sessions or len(sessions) != len(set(sessions)):
         raise DataReadinessError("swing profile requires unique governed sessions")
     requested_dates = tuple(date.fromisoformat(value) for value in sessions)
-    catalyst = profile == SWING_CATALYST_FEATURE_PROFILE
     feature_columns = swing_model_feature_columns(
         contract=strategy_contract,
-        catalyst=catalyst,
+        catalyst=False,
     )
     if any(_is_unapproved_source_feature(column) for column in feature_columns):
         raise DataReadinessError("unapproved source-specific estimator feature detected")
@@ -516,28 +506,16 @@ def _validate_profile_session_coverage(
 ) -> None:
     if not observed_sessions or not governed_sessions:
         raise DataReadinessError("swing profile has no governed session coverage")
-    expected = list(governed_sessions)
-    expected_set = set(expected)
+    expected_set = set(governed_sessions)
     extra = sorted(observed_sessions.difference(expected_set))
     if extra:
         raise DataReadinessError(
             f"swing profile contains sessions outside governance: {extra[:10]}"
         )
-    first_observed_index = next(
-        (index for index, value in enumerate(expected) if value in observed_sessions),
-        len(expected),
-    )
-    allowed_prefix = set(expected[:first_observed_index])
     missing = expected_set.difference(observed_sessions)
-    if missing != allowed_prefix:
+    if missing:
         raise DataReadinessError(
-            "swing profile has missing governed sessions outside its initial "
-            f"catalyst warm-up: {sorted(missing.difference(allowed_prefix))[:10]}"
-        )
-    warmup_end = date.fromisoformat(expected[0]) + timedelta(days=3)
-    if any(date.fromisoformat(value) >= warmup_end for value in allowed_prefix):
-        raise DataReadinessError(
-            "swing profile initial eligibility gap exceeds the 3-day catalyst lookback"
+            f"swing technical profile is missing governed sessions: {sorted(missing)[:10]}"
         )
 
 
@@ -567,9 +545,7 @@ def _projected_profile_memory_bytes(rows: int, feature_count: int) -> int:
     if rows < 0 or feature_count < 1:
         raise ValueError("profile memory projection inputs are invalid")
     # Includes compact float32 features, required labels/path columns, Arrow
-    # strings, one bounded split projection, and estimator workspace. Profiles
-    # are processed sequentially; the two ablation populations are never resident
-    # together.
+    # strings, one bounded split projection, and estimator workspace.
     return rows * (feature_count * 4 + 720) * 3
 
 

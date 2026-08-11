@@ -1,0 +1,23 @@
+schema_version = "market_predictor.swing_analyst_revision_ablation.v1"
+event_family = "analyst_revision"
+source_family = "alpaca"
+cohort_window = "3d"
+near_window = "1d"
+unknown_coverage_policy = "abstain"
+no_event_policy = "abstain"
+maximum_process_memory_gib = 5.0
+memory_guard_headroom_gib = 0.75
+
+profiles = [
+  "analyst_revision_technical_only",
+  "analyst_revision_event_only",
+  "analyst_revision_technical_plus_event",
+]
+
+admitted_subtypes = ["bare_upgrade", "bare_downgrade", "coverage"]
+directional_subtypes = ["bare_upgrade", "bare_downgrade"]
+diagnostic_only_subtypes = [
+  "price_target_up",
+  "price_target_down",
+  "analyst_rating_or_target_revision",
+]

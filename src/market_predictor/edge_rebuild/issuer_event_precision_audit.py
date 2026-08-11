@@ -277,6 +277,7 @@ class IssuerEventPrecisionSample:
     sample: pd.DataFrame
     manifest: Mapping[str, object]
     authority: Mapping[str, object]
+    source_authority: IssuerEventFamilyAuthority | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -287,6 +288,7 @@ class IssuerEventPrecisionAudit:
     rule_variant_metrics: pd.DataFrame
     manifest: Mapping[str, object]
     authority: Mapping[str, object]
+    source_authority: IssuerEventFamilyAuthority | None
 
 
 def load_issuer_event_precision_policy(path: Path) -> IssuerEventPrecisionPolicy:
@@ -460,6 +462,7 @@ def load_issuer_event_precision_sample(
     directory: Path,
     *,
     expected_authority_sha256: str | None = None,
+    retain_source_authority: bool = False,
 ) -> IssuerEventPrecisionSample:
     """Strictly load and causally replay an immutable precision sample."""
 
@@ -560,6 +563,7 @@ def load_issuer_event_precision_sample(
         sample=sample,
         manifest=manifest,
         authority=authority,
+        source_authority=source if retain_source_authority else None,
     )
 
 
@@ -721,6 +725,7 @@ def load_issuer_event_precision_audit(
     directory: Path,
     *,
     expected_authority_sha256: str | None = None,
+    retain_source_authority: bool = False,
 ) -> IssuerEventPrecisionAudit:
     """Strictly load and semantically replay a finalized precision audit."""
 
@@ -763,7 +768,11 @@ def load_issuer_event_precision_audit(
     sample_hash = _required_hash(request, "sample_authority_sha256")
     if sample_authority_path != (sample_directory / "_authority.json").resolve():
         raise DataReadinessError("precision audit sample authority path differs")
-    sample_root = load_issuer_event_precision_sample(sample_directory, expected_authority_sha256=sample_hash)
+    sample_root = load_issuer_event_precision_sample(
+        sample_directory,
+        expected_authority_sha256=sample_hash,
+        retain_source_authority=retain_source_authority,
+    )
     policy_path = _required_path(_manifest_request(sample_root.manifest), "policy_path")
     if file_sha256(policy_path) != _required_hash(request, "policy_sha256"):
         raise DataReadinessError("precision audit policy lineage changed")
@@ -868,6 +877,7 @@ def load_issuer_event_precision_audit(
         rule_variant_metrics=rule_variant_metrics,
         manifest=manifest,
         authority=authority,
+        source_authority=sample_root.source_authority,
     )
 
 
@@ -1220,7 +1230,7 @@ def _candidate_index_row(
     row_hash = _sha256(f"{policy_sha256}|row|{family_event_id}")
     feature_time = _timestamp(family["feature_available_at_utc"], "feature time")
     quarter = f"{feature_time.year}Q{feature_time.quarter}"
-    variant = _rule_variant(family)
+    variant = issuer_event_rule_variant(family)
     stratum = "|".join(
         (
             str(family["source_family"]),
@@ -1738,7 +1748,9 @@ def _identity_records_by_security(
     return output
 
 
-def _rule_variant(row: Mapping[str, object]) -> str:
+def issuer_event_rule_variant(row: Mapping[str, object]) -> str:
+    """Return the exact subtype used by the governed precision audit."""
+
     family = str(row.get("event_family", row.get("proposed_event_family", "")))
     text = f"{row['classification_rule_id']} {row['matched_text']}".lower()
     if family == "analyst_revision":

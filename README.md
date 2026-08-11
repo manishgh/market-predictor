@@ -30,14 +30,6 @@ hash-verified promoted bundle.
 - Swing model decisions begin on `2019-07-09`. Earlier market bars are indicator
   warm-up only and cannot produce model features, labels, train rows, validation
   rows, or test rows.
-- Catalyst V5 identity rebind is published and replayed: 377,778 exact decision
-  matches and 6,359 source-coverage rows across all 604 target securities.
-- Swing V9 is invalid because managed labels were corrupted by Pandas index
-  alignment. It is retained only because V5 binds it as target-lineage evidence.
-- Swing V10 materialization replayed, but candidate v1 returned `no_candidate`
-  before economic evaluation. The cause was structural: the 50-stock hard sector
-  floor frequently left only four eligible sectors while the 20% sector cap required
-  at least five. This result does not establish that the model failed economic gates.
 - The implemented replacement policy keeps a within-sector ranking target of 50 and
   uses a hard floor of 30. It persists sector peer count, rank eligibility, target
   status, and ranking reliability weight. Groups with 30-49 peers remain eligible
@@ -48,21 +40,25 @@ hash-verified promoted bundle.
 - Economic acceptance uses managed holding-aligned benchmarks, includes cash days
   and overlapping positions in the portfolio bootstrap, applies doubled costs to
   the full daily path, and rejects active sector exposure above 33.3%.
-- Live inference excludes individual missing, cold, or catalyst-incomplete securities
-  through the governed 5% ceiling. Cached models are bound to the active contract,
-  trust store, promotion policy, and model-size limit.
-- Swing V11 is published and strictly replayed: 853,417 rows per ablation
-  profile, 604 modeled securities, 1,759 sessions from `2019-07-09` through
-  `2026-07-08`, and 640,107 rank-eligible rows.
-- Swing candidate v2 trained six governed legacy logistic/HGB ablations and returned
-  `no_candidate`. AUC reached about 0.55-0.57, but no candidate had a positive
-  lower confidence bound for calendar, portfolio-daily, doubled-cost, and
-  holding-aligned benchmark economics in both validation scopes. The locked
-  test was not read.
+- Live inference excludes individual missing or cold securities through the governed
+  5% ceiling. Cached models are bound to the active contract, trust store, promotion
+  policy, and model-size limit.
+- Swing V12 is published and strictly replayed as one catalyst-independent authority:
+  853,417 `technical_market` rows, 604 modeled securities, and 1,759 sessions from
+  `2019-07-09` through `2026-07-08`.
+- Prior swing candidates are rejection evidence only; no rejected or obsolete model
+  is retained as a supported compatibility path.
 - A2 replaces that experiment contract with four nested technical ablations
   (momentum/volatility, trend confirmation, pullback timing, volume/liquidity), followed
   by one full-feature XGBoost ranker and regressor. The implementation is verified, but
   no new real candidate has been trained and no performance result is claimed.
+- A3 historical issuer-event and precision authorities admit only direct-issuer
+  `analyst_revision`. Earnings, guidance, offerings, M&A, regulatory, product, and
+  SEC families abstain because they failed reviewed precision or lack source-complete
+  causal evidence. A3.4 publishes 113 decisions across 50 analyst-revision episodes
+  in each of three exact matched profiles: technical-only, event-only, and combined.
+  This is research-only evidence; A3.5 must pass an independent-episode capacity audit
+  before fitting any specialist.
 - Intraday V2 is published and replayable but economically rejected after costs.
   It is not serveable. The later V3 cross-sectional z-score lineage is invalid and
   prohibited because its declared inputs lacked a valid contemporaneous cohort
