@@ -575,6 +575,11 @@ def finalize_issuer_event_precision_audit(
 
     if output_directory.exists():
         raise DataReadinessError(f"issuer-event precision audit is immutable: {output_directory}")
+    _preflight_review_ledgers(
+        reviewer_one_path=reviewer_one_path,
+        reviewer_two_path=reviewer_two_path,
+        adjudication_path=adjudication_path,
+    )
     sample_root = load_issuer_event_precision_sample(sample_directory)
     policy_path = _required_path(_manifest_request(sample_root.manifest), "policy_path")
     policy = load_issuer_event_precision_policy(policy_path)
@@ -863,6 +868,56 @@ def load_issuer_event_precision_audit(
         rule_variant_metrics=rule_variant_metrics,
         manifest=manifest,
         authority=authority,
+    )
+
+
+def _preflight_review_ledgers(
+    *,
+    reviewer_one_path: Path,
+    reviewer_two_path: Path,
+    adjudication_path: Path,
+) -> None:
+    """Reject malformed review logic before the expensive authority replay."""
+
+    reviewer_one = _read_csv(reviewer_one_path, REVIEW_TEMPLATE_COLUMNS)
+    reviewer_two = _read_csv(reviewer_two_path, REVIEW_TEMPLATE_COLUMNS)
+    adjudication = _read_csv(adjudication_path, ADJUDICATION_TEMPLATE_COLUMNS)
+    identity_columns = ("sample_id", "family_event_id", "event_family")
+    _assert_frame_equal(
+        reviewer_one.loc[:, identity_columns],
+        reviewer_two.loc[:, identity_columns],
+        "reviewer preflight identity",
+    )
+    _assert_frame_equal(
+        reviewer_one.loc[:, identity_columns],
+        adjudication.loc[:, identity_columns],
+        "adjudication preflight identity",
+    )
+    sample = pd.DataFrame(
+        {
+            "sample_id": reviewer_one["sample_id"].astype(str),
+            "family_event_id": reviewer_one["family_event_id"].astype(str),
+            "proposed_event_family": reviewer_one["event_family"].astype(str),
+            "sample_role": "preflight",
+            "inference_cluster_id": reviewer_one["sample_id"].astype(str),
+        }
+    )
+    normalized_one = _load_review_ledger(
+        reviewer_one_path,
+        sample,
+        reviewer_slot=1,
+    )
+    normalized_two = _load_review_ledger(
+        reviewer_two_path,
+        sample,
+        reviewer_slot=2,
+    )
+    normalized_adjudication = _load_adjudication_ledger(adjudication_path, sample)
+    _resolve_reviews(
+        sample,
+        normalized_one,
+        normalized_two,
+        normalized_adjudication,
     )
 
 

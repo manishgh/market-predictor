@@ -378,6 +378,39 @@ def test_correction_field_disagreement_requires_adjudication(tmp_path: Path) -> 
     assert review["resolution_state"] == "adjudicated"
 
 
+def test_malformed_review_fails_before_authority_replay(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    sample = _publish_sample(tmp_path)
+    one, two, adjudication = _review_ledgers(tmp_path, sample.directory)
+    reviewer_one = pd.read_csv(one, dtype=str, keep_default_na=False)
+    reviewer_one.loc[0, "false_positive_reason"] = "invalid annotation"
+    reviewer_one.to_csv(one, index=False, lineterminator="\n")
+
+    replay_started = False
+
+    def fail_if_replay_starts(_directory: Path) -> IssuerEventPrecisionSample:
+        nonlocal replay_started
+        replay_started = True
+        raise AssertionError("authority replay started before ledger preflight")
+
+    monkeypatch.setattr(
+        audit_module,
+        "load_issuer_event_precision_sample",
+        fail_if_replay_starts,
+    )
+    with pytest.raises(DataReadinessError, match="false-positive reason"):
+        finalize_issuer_event_precision_audit(
+            sample_directory=sample.directory,
+            reviewer_one_path=one,
+            reviewer_two_path=two,
+            adjudication_path=adjudication,
+            output_directory=tmp_path / "final",
+        )
+    assert replay_started is False
+
+
 def test_reviewer_agreement_and_kappa_are_per_field_diagnostics() -> None:
     reviews = pd.DataFrame(
         {
