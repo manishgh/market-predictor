@@ -76,6 +76,113 @@ class AlpacaSourceTests(unittest.TestCase):
                 timeframe="1Min",
             )
 
+    def test_trade_page_preserves_raw_market_identity_and_request_bounds(self) -> None:
+        source = AlpacaSource(
+            Settings(ALPACA_API_KEY_ID="key", ALPACA_API_SECRET_KEY="secret")
+        )
+        client = Mock()
+        payload = {
+            "trades": {
+                "AAPL": [
+                    {
+                        "t": "2026-07-01T13:30:00.123456789Z",
+                        "x": "V",
+                        "p": 100.25,
+                        "s": 25,
+                        "c": ["@"],
+                        "i": 42,
+                        "z": "C",
+                    }
+                ]
+            },
+            "next_page_token": "trade-next",
+        }
+        client.get_json_with_headers.return_value = (
+            payload,
+            {"X-RateLimit-Remaining": "198"},
+        )
+        source.client = client
+        start = datetime(2026, 7, 1, 13, 30, tzinfo=UTC)
+        end = datetime(2026, 7, 1, 13, 31, tzinfo=UTC)
+
+        page = source.fetch_trades_page(
+            ("AAPL",),
+            start,
+            end,
+            asof=date(2026, 7, 1),
+        )
+
+        self.assertEqual(page.trades["AAPL"][0]["i"], 42)
+        self.assertEqual(page.next_page_token, "trade-next")
+        self.assertEqual(page.raw_payload, payload)
+        params = client.get_json_with_headers.call_args.kwargs["params"]
+        self.assertEqual(params["start"], start.isoformat())
+        self.assertEqual(params["end"], end.isoformat())
+        self.assertEqual(params["feed"], "sip")
+        self.assertEqual(params["sort"], "asc")
+        self.assertNotIn("adjustment", params)
+
+    def test_quote_page_preserves_nbbo_fields_and_pagination(self) -> None:
+        source = AlpacaSource(
+            Settings(ALPACA_API_KEY_ID="key", ALPACA_API_SECRET_KEY="secret")
+        )
+        client = Mock()
+        payload = {
+            "quotes": {
+                "MSFT": [
+                    {
+                        "t": "2026-07-01T13:30:00.100000000Z",
+                        "ax": "Q",
+                        "ap": 500.02,
+                        "as": 4,
+                        "bx": "P",
+                        "bp": 500.00,
+                        "bs": 7,
+                        "c": ["R"],
+                        "z": "C",
+                    }
+                ]
+            },
+            "next_page_token": None,
+        }
+        client.get_json_with_headers.return_value = (payload, {})
+        source.client = client
+
+        page = source.fetch_quotes_page(
+            ("MSFT",),
+            datetime(2026, 7, 1, 13, 30, tzinfo=UTC),
+            datetime(2026, 7, 1, 13, 31, tzinfo=UTC),
+            page_token="quote-page",
+        )
+
+        self.assertEqual(page.request_page_token, "quote-page")
+        self.assertIsNone(page.next_page_token)
+        self.assertEqual(page.quotes["MSFT"][0]["bp"], 500.00)
+        params = client.get_json_with_headers.call_args.kwargs["params"]
+        self.assertEqual(params["page_token"], "quote-page")
+
+    def test_market_event_page_rejects_unexpected_symbol_and_naive_time(self) -> None:
+        source = AlpacaSource(
+            Settings(ALPACA_API_KEY_ID="key", ALPACA_API_SECRET_KEY="secret")
+        )
+        client = Mock()
+        client.get_json_with_headers.return_value = (
+            {"quotes": {"TSLA": []}, "next_page_token": None},
+            {},
+        )
+        source.client = client
+        start = datetime(2026, 7, 1, 13, 30, tzinfo=UTC)
+        end = datetime(2026, 7, 1, 13, 31, tzinfo=UTC)
+
+        with self.assertRaisesRegex(RuntimeError, "unexpected"):
+            source.fetch_quotes_page(("AAPL",), start, end)
+        with self.assertRaisesRegex(ValueError, "timezone-aware"):
+            source.fetch_trades_page(
+                ("AAPL",),
+                datetime(2026, 7, 1, 13, 30),
+                end,
+            )
+
     def test_news_pages_preserve_provider_timestamps_and_page_tokens(self) -> None:
         source = AlpacaSource(
             Settings(ALPACA_API_KEY_ID="key", ALPACA_API_SECRET_KEY="secret")

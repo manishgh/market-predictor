@@ -27,9 +27,29 @@ class AlpacaBarsPage:
     raw_payload: dict[str, Any] | None = None
 
 
+@dataclass(frozen=True, slots=True)
+class AlpacaTradesPage:
+    request_page_token: str | None
+    next_page_token: str | None
+    trades: dict[str, tuple[dict[str, Any], ...]]
+    response_headers: dict[str, str]
+    raw_payload: dict[str, Any]
+
+
+@dataclass(frozen=True, slots=True)
+class AlpacaQuotesPage:
+    request_page_token: str | None
+    next_page_token: str | None
+    quotes: dict[str, tuple[dict[str, Any], ...]]
+    response_headers: dict[str, str]
+    raw_payload: dict[str, Any]
+
+
 class AlpacaSource:
     news_url = "https://data.alpaca.markets/v1beta1/news"
     bars_url = "https://data.alpaca.markets/v2/stocks/bars"
+    trades_url = "https://data.alpaca.markets/v2/stocks/trades"
+    quotes_url = "https://data.alpaca.markets/v2/stocks/quotes"
     corporate_actions_url = "https://data.alpaca.markets/v1/corporate-actions"
 
     def __init__(self, settings: Settings) -> None:
@@ -411,6 +431,156 @@ class AlpacaSource:
             raw_payload={
                 str(key): value for key, value in payload.items()
             },
+        )
+
+    def fetch_trades_page(
+        self,
+        symbols: tuple[str, ...],
+        start: datetime,
+        end: datetime,
+        *,
+        page_token: str | None = None,
+        asof: date | None = None,
+        limit: int = 10_000,
+        retries: int = 5,
+    ) -> AlpacaTradesPage:
+        """Fetch one auditable page of historical SIP trades."""
+
+        rows, headers, raw, next_token = self._fetch_market_event_page(
+            url=self.trades_url,
+            response_key="trades",
+            symbols=symbols,
+            start=start,
+            end=end,
+            page_token=page_token,
+            asof=asof,
+            limit=limit,
+            retries=retries,
+        )
+        return AlpacaTradesPage(
+            request_page_token=page_token,
+            next_page_token=next_token,
+            trades=rows,
+            response_headers=headers,
+            raw_payload=raw,
+        )
+
+    def fetch_quotes_page(
+        self,
+        symbols: tuple[str, ...],
+        start: datetime,
+        end: datetime,
+        *,
+        page_token: str | None = None,
+        asof: date | None = None,
+        limit: int = 10_000,
+        retries: int = 5,
+    ) -> AlpacaQuotesPage:
+        """Fetch one auditable page of historical SIP NBBO quotes."""
+
+        rows, headers, raw, next_token = self._fetch_market_event_page(
+            url=self.quotes_url,
+            response_key="quotes",
+            symbols=symbols,
+            start=start,
+            end=end,
+            page_token=page_token,
+            asof=asof,
+            limit=limit,
+            retries=retries,
+        )
+        return AlpacaQuotesPage(
+            request_page_token=page_token,
+            next_page_token=next_token,
+            quotes=rows,
+            response_headers=headers,
+            raw_payload=raw,
+        )
+
+    def _fetch_market_event_page(
+        self,
+        *,
+        url: str,
+        response_key: str,
+        symbols: tuple[str, ...],
+        start: datetime,
+        end: datetime,
+        page_token: str | None,
+        asof: date | None,
+        limit: int,
+        retries: int,
+    ) -> tuple[
+        dict[str, tuple[dict[str, Any], ...]],
+        dict[str, str],
+        dict[str, Any],
+        str | None,
+    ]:
+        normalized = tuple(
+            dict.fromkeys(symbol.upper().strip() for symbol in symbols if symbol.strip())
+        )
+        if not normalized:
+            raise ValueError(f"Alpaca {response_key} page requires at least one symbol")
+        if len(normalized) > 50:
+            raise ValueError(f"Alpaca {response_key} page supports at most 50 symbols")
+        if start.tzinfo is None or end.tzinfo is None:
+            raise ValueError(f"Alpaca {response_key} page bounds must be timezone-aware")
+        if start >= end:
+            raise ValueError(f"Alpaca {response_key} page start must precede end")
+        if limit < 1 or limit > 10_000:
+            raise ValueError(f"Alpaca {response_key} page limit must be 1..10000")
+        params: dict[str, Any] = {
+            "symbols": ",".join(normalized),
+            "start": start.isoformat(),
+            "end": end.isoformat(),
+            "feed": self.settings.alpaca_stock_feed,
+            "limit": limit,
+            "sort": "asc",
+        }
+        if page_token:
+            params["page_token"] = page_token
+        if asof is not None:
+            params["asof"] = asof.isoformat()
+        payload, response_headers = self.client.get_json_with_headers(
+            url,
+            params=params,
+            headers=self.headers,
+            retries=retries,
+        )
+        if not isinstance(payload, dict):
+            raise RuntimeError(f"Alpaca {response_key} page response must be an object")
+        raw_rows = payload.get(response_key, {})
+        if not isinstance(raw_rows, dict):
+            raise RuntimeError(f"Alpaca {response_key} page has invalid {response_key}")
+        unexpected = sorted(
+            set(str(symbol).upper() for symbol in raw_rows).difference(normalized)
+        )
+        if unexpected:
+            raise RuntimeError(
+                f"Alpaca {response_key} page returned unexpected symbols: "
+                + ", ".join(unexpected)
+            )
+        records: dict[str, tuple[dict[str, Any], ...]] = {}
+        for symbol, values in raw_rows.items():
+            if not isinstance(values, list) or any(
+                not isinstance(value, dict) for value in values
+            ):
+                raise RuntimeError(
+                    f"Alpaca {response_key} page has invalid rows for {symbol}"
+                )
+            records[str(symbol).upper()] = tuple(
+                {str(key): value for key, value in value.items()} for value in values
+            )
+        next_value = payload.get("next_page_token")
+        next_token = (
+            str(next_value).strip()
+            if next_value is not None and str(next_value).strip()
+            else None
+        )
+        return (
+            records,
+            {str(key): str(value) for key, value in response_headers.items()},
+            {str(key): value for key, value in payload.items()},
+            next_token,
         )
 
     def _fetch_bar_rows(self, ticker: str, params: dict[str, Any]) -> list[dict[str, Any]]:

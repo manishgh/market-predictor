@@ -1,0 +1,10 @@
+schema_version = "edge_rebuild.intraday_microstructure_collection.v1"
+
+[collection]
+workers = 1
+retries = 5
+request_timeout_seconds = 60.0
+page_size = 10000
+maximum_pages_per_job = 2000
+maximum_process_memory_gib = 4.0
+memory_guard_headroom_gib = 0.75

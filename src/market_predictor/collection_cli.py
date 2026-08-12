@@ -9,6 +9,7 @@ COLLECTION_COMMANDS = frozenset(
         "azure-upload-artifacts",
         "collect",
         "collect-alpaca-news-history",
+        "collect-edge-intraday-microstructure-history",
         "collect-edge-rebuild-intraday-history",
         "collect-edge-rebuild-swing-history",
         "collect-edge-live-global-context",

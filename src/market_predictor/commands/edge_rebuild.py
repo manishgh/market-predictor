@@ -56,6 +56,11 @@ from market_predictor.edge_rebuild.intraday_development import (
 from market_predictor.edge_rebuild.intraday_history import (
     build_intraday_history_plan,
 )
+from market_predictor.edge_rebuild.intraday_microstructure_history import (
+    build_intraday_microstructure_plan,
+    collect_intraday_microstructure_history,
+    load_microstructure_collection_config,
+)
 from market_predictor.edge_rebuild.intraday_rejection import (
     publish_intraday_candidate_rejection,
 )
@@ -549,6 +554,7 @@ def register_edge_rebuild_commands(app: typer.Typer, console: Any) -> None:
             torch_num_threads=settings.torch_num_threads,
             max_length=128,
         )
+
         result = collect_live_gdelt_global_events(
             request,
             out_dir,
@@ -562,6 +568,78 @@ def register_edge_rebuild_commands(app: typer.Typer, console: Any) -> None:
                 "events": len(result.events),
                 "coverage": result.source_collections.iloc[0]["status"],
                 "directory": str(result.directory),
+            }
+        )
+
+    @app.command("plan-edge-intraday-microstructure-history")
+    @serialized_heavy_job("plan-edge-intraday-microstructure-history")
+    def plan_edge_intraday_microstructure_history(
+        coverage_dir: Path = typer.Option(
+            ...,
+            help="Verified selected-session one-minute coverage authority.",
+        ),
+        out_dir: Path = typer.Option(
+            ...,
+            help="New immutable trade/quote collection plan directory.",
+        ),
+    ) -> None:
+        """Plan one SIP trade and quote job per complete stock-session."""
+
+        result = build_intraday_microstructure_plan(
+            one_minute_coverage_directory=coverage_dir,
+            output_directory=out_dir,
+        )
+        console.print(
+            {
+                "status": result["status"],
+                "stock_sessions": result["units"],
+                "jobs": result["jobs"],
+                "included_stock_sessions_by_status": result[
+                    "included_stock_sessions_by_status"
+                ],
+            }
+        )
+
+    @app.command("collect-edge-intraday-microstructure-history")
+    @serialized_heavy_job("collect-edge-intraday-microstructure-history")
+    def collect_edge_intraday_microstructure_history(
+        plan_dir: Path = typer.Option(
+            ...,
+            help="Verified immutable microstructure plan directory.",
+        ),
+        out_dir: Path = typer.Option(
+            ...,
+            help="Resumable raw SIP trade/quote collection directory.",
+        ),
+        policy: Path = typer.Option(
+            Path("configs/edge_rebuild_intraday_microstructure_history.toml"),
+        ),
+        maximum_jobs: int = typer.Option(
+            ...,
+            min=1,
+            help="Required finite maximum pending jobs for this invocation.",
+        ),
+    ) -> None:
+        """Resume bounded raw SIP trade/quote collection."""
+
+        settings = get_settings()
+        config = load_microstructure_collection_config(policy)
+        result = collect_intraday_microstructure_history(
+            plan_directory=plan_dir,
+            output_directory=out_dir,
+            source_factory=lambda: AlpacaSource(settings),
+            config=config,
+            maximum_jobs_this_run=maximum_jobs,
+        )
+        console.print(
+            {
+                "status": result["status"],
+                "completed_jobs": result["completed_jobs"],
+                "requested_jobs": result["requested_jobs"],
+                "failed_jobs": len(result["failed_jobs"]),
+                "ready_for_materialization": result[
+                    "ready_for_materialization"
+                ],
             }
         )
 

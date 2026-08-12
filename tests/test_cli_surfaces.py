@@ -69,6 +69,21 @@ class CliSurfaceTests(unittest.TestCase):
         self.assertNotEqual(result.exit_code, 0)
         self.assertIn("reversed", result.output)
 
+    def test_microstructure_collection_requires_a_finite_job_bound(self) -> None:
+        result = CliRunner().invoke(
+            collection_app,
+            [
+                "collect-edge-intraday-microstructure-history",
+                "--plan-dir",
+                "unused-plan",
+                "--out-dir",
+                "unused-output",
+            ],
+        )
+
+        self.assertNotEqual(result.exit_code, 0)
+        self.assertIn("--maximum-jobs", result.output)
+
     def test_sec_commands_are_split_between_collection_and_research(self) -> None:
         runner = CliRunner()
         collection_help = runner.invoke(
