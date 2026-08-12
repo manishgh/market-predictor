@@ -52,13 +52,18 @@ hash-verified promoted bundle.
   (momentum/volatility, trend confirmation, pullback timing, volume/liquidity), followed
   by one full-feature XGBoost ranker and regressor. The implementation is verified, but
   no new real candidate has been trained and no performance result is claimed.
-- A3 historical issuer-event and precision authorities admit only direct-issuer
-  `analyst_revision`. Earnings, guidance, offerings, M&A, regulatory, product, and
-  SEC families abstain because they failed reviewed precision or lack source-complete
-  causal evidence. A3.4 publishes 113 decisions across 50 analyst-revision episodes
-  in each of three exact matched profiles: technical-only, event-only, and combined.
-  This is research-only evidence; A3.5 must pass an independent-episode capacity audit
-  before fitting any specialist.
+- A3 historical issuer-event and precision authorities currently admit only direct-
+  issuer broker rating actions. The internal source code calls this family
+  `analyst_revision`, but the records are predominantly rating upgrades, rating
+  downgrades, and new/resumed coverage; they are not EPS-estimate revisions. Earnings,
+  guidance, offerings, M&A, regulatory, product, and SEC families remain unavailable
+  because their reviewed precision or source completeness did not pass.
+- An identity bug in the first A3.4 comparison joined old and rebuilt security hashes
+  directly, reducing 17,401 broker announcements to 50. The corrected immutable
+  comparison aligns exact ticker and prediction timestamp, rejects conflicting CIKs,
+  and publishes 27,087 prediction rows from 11,720 unique latest broker announcements
+  in each of three datasets: technical-only, broker-action-only, and combined. It is
+  research-only evidence; no specialist has been trained or promoted.
 - Intraday V2 is published and replayable but economically rejected after costs.
   It is not serveable. The later V3 cross-sectional z-score lineage is invalid and
   prohibited because its declared inputs lacked a valid contemporaneous cohort

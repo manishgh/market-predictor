@@ -1,6 +1,6 @@
 # Current Feature Engineering Audit
 
-Last updated: 2026-08-10
+Last updated: 2026-08-12
 
 ## Scope
 
@@ -109,8 +109,10 @@ learned candidate.
   whole-security exclusion rule remains unchanged and applies only to genuinely
   unusable full histories.
 - The V12 technical authority contains 853,417 rows, 604 modeled securities, and
-  1,759 sessions. A3.4 contains 113 matched decisions across 50 analyst-revision
-  episodes in each of three exact profiles. Blocked families are absent and unknown
+  1,759 sessions. The first A3.4 join was defective because old event decision hashes
+  were compared directly with rebuilt technical-panel hashes. Corrected A3.4 contains
+  27,087 matched prediction rows from 11,720 unique latest broker announcements in
+  each of three exact comparison datasets. Blocked families are absent and unknown
   source coverage abstains.
 - Monthly profile partitions physically isolate locked-test outcomes. Development
   training loads only requested months and projected columns; locked outcomes remain
@@ -144,7 +146,7 @@ immutable artifact exists. `Blocked` means training or serving is prohibited.
 | Intraday ticker-catalyst overlay | Alpaca archives exist; scored/attributed catalyst authority not yet published | Not an estimator input | Snapshot contract verified; runtime authority pending | Separate overlay hash, coverage, count, sentiment, and unknown state verified | Cannot alter entry probability; ranking use blocked until authority exists | Blocked until promoted bundle and orchestrator exist | Authority pending |
 | Intraday global overlay | GDELT collector and global authority verified in code; no production collection published | Not an estimator input | Observed-time collection, immutable query policy, and unknown/zero behavior verified | Separate global overlay contract verified | Ranking use blocked until runtime authority exists | Blocked until promoted bundle and orchestrator exist | Runtime artifact pending |
 | Swing technical estimator | Daily SIP/all, point-in-time membership, and V12 panel verify | Verified | Verified; latest closed session required | A2 nested technical schema and per-model subsets verified | Replacement trainer complete; new candidate not run | Blocked until promotion | Implementation ready |
-| Swing ticker-catalyst estimator | Two immutable V2 Alpaca issuer-event authorities cover `2019-07-09` through `2026-07-08`; strict replay verified | A3.4 publishes 113 decisions / 50 episodes in three matched profiles | No event specialist is live | Only `analyst_revision` passes both historical precision audits; all other families abstain | A3.5 capacity audit required before fitting | Blocked until promotion | A3.4 complete; A3.5 pending |
+| Swing ticker-catalyst estimator | Two immutable V2 Alpaca issuer-event authorities cover `2019-07-09` through `2026-07-08`; strict replay verified | Corrected A3.4 publishes 27,087 prediction rows / 11,720 unique latest broker announcements per comparison dataset | No event specialist is live | Only broker rating actions, internally coded `analyst_revision`, pass both historical precision audits; all other families abstain | User must decide whether broker-action subtypes are modeled together or separately before training | Blocked until promotion | Corrected A3.4 complete; model definition pending |
 | Swing global overlay | Global collector and decision authority verified in code | Separate overlay; never attached as ticker news | Verified code | Separate global authority hash and source policy | Cannot rescue or alter a rejected estimator; ranking use requires complete authority | Blocked until promoted bundle and orchestrator exist | Runtime artifact pending |
 
 ## Training decision
@@ -153,7 +155,9 @@ Technical data readiness does not block the A2 baseline. Candidate v2 was traine
 correctly and rejected because its out-of-sample economic edge was not stable, not
 because data was missing. The replacement trainer is verified but has not produced a
 new statistical result. A3 causal event authorities now exist for the complete
-development horizon. Event-family precision review admits only analyst revisions in
-both eras; every other family remains blocked. A3.4 is complete, but its 50 independent
-episodes require an explicit capacity audit before any specialist may train. The locked
-test stays unopened during selection; global context remains a separate overlay.
+development horizon. Event-family precision review currently admits only broker rating
+actions in both eras; every other family remains blocked. Corrected A3.4 provides
+27,087 eligible prediction rows from 11,720 unique latest announcements per comparison
+dataset. Training waits for the explicit product decision on whether upgrades,
+downgrades, new coverage, and price-target changes form one or several specialists.
+The locked test stays unopened; global context remains a separate overlay.

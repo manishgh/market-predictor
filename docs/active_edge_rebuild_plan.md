@@ -51,7 +51,7 @@ versioned prediction API.
 | Artifact | State | Evidence |
 | --- | --- | --- |
 | Swing V12 technical panel | published and replayed | 853,417 `technical_market` rows; 604 securities; 1,759 sessions |
-| A3.4 analyst-revision ablation | published and replayed | 113 decisions; 50 episodes; three exact matched profiles; research-only |
+| A3.4 broker-action comparison | corrected, published, and independently replayed | 27,087 prediction rows from 11,720 unique latest broker announcements per comparison dataset; research-only |
 | Prior swing candidates | rejected evidence only | no candidate passed both temporal and unseen-security economic gates; locked test unopened |
 | A2 swing baseline trainer | implementation complete; no new candidate artifact | four nested technical ablations plus bounded full-feature ranker/regressor; a later governed run must publish separate statistical evidence |
 | Intraday V2 | published and rejected | economically failed after costs; not serveable |
@@ -205,11 +205,15 @@ governance hash replay passed.
    uniform samples of independent event clusters and preregistered one-sided lower
    confidence-bound gates. Report event, security, calendar, sector, source,
    abstention, unknown-coverage, issuer-error, and reviewer-agreement counts.
-4. **A3.4 - Build identical-decision ablation datasets (`completed`).** Compare technical-only,
-   event-only, and technical-plus-event profiles on the same decisions and labels.
-5. **A3.5 - Train and evaluate swing event specialists.** Model event reaction and
-   benchmark-relative excess-return magnitude, not generic sentiment. A specialist
-   abstains outside its verified family and source coverage.
+4. **A3.4 - Build identical-decision comparison datasets (`corrected and completed`).**
+   Compare technical-only, broker-action-only, and combined inputs on the same
+   predictions and outcomes. Exact ticker/time alignment replaces invalid direct hash
+   matching; every excluded row carries a concrete reason.
+5. **A3.5 - Define, train, and evaluate swing broker-action specialists.** First obtain
+   the user's decision on whether upgrades, downgrades, new coverage, and price-target
+   changes are one model family or separate families. Then model benchmark-relative
+   event reaction, not generic sentiment. A specialist abstains outside its verified
+   family and source coverage.
 
 Completed A3.1/A3.2 evidence: commits `6ae703c`, `58ccc3d`, and `527e20f` publish the
 V2 issuer-targeted classifier and immutable authority replay. Title-derived events
@@ -239,21 +243,25 @@ plus eight paired issuer diagnostics; the newer sample reviewed 1,830 inferentia
 clusters plus 29 diagnostics. Reviews were performed by independent Codex agents, not
 human reviewers, and remain research evidence.
 
-Both eras admit only `analyst_revision`. Earnings, guidance, offering,
+Both eras currently admit only broker rating actions (stored under the internal event
+family code `analyst_revision`). Earnings, guidance, offering,
 merger/acquisition, regulatory decision, and product event fail at least one frozen
 precision, wrong-issuer, reviewer-agreement, or rule-variant gate. SEC material event
 has no source-authorized population. Blocked families cannot enter A3.4 or training.
 
 The catalyst-independent V12 base authority contains 853,417 `technical_market`
-rows, 604 securities, and 1,759 sessions. A3.4 publishes a separate immutable
-analyst-revision cohort with 113 decisions across 50 episodes in each of three exact
-profiles: technical-only, event-only, and technical-plus-event. Every profile has the
-same decision IDs, labels, execution/economic fields, and episode-normalized weights.
-Unknown three-day Alpaca coverage and decisions without an admitted direct-issuer
-analyst revision abstain; blocked event families are absent, not zero. The artifact is
+rows, 604 securities, and 1,759 sessions. The first A3.4 artifact was invalid: it joined
+old event decision hashes directly to the rebuilt technical panel, so only 113 rows
+from 50 announcements survived. The source data actually contains 17,401 broker
+announcements and 37,372 causally covered prediction timestamps. The corrected A3.4
+artifact aligns exact ticker and exact prediction timestamp, rejects conflicting CIKs,
+and records every inclusion and exclusion. It publishes 27,087 prediction rows from
+11,720 unique latest broker announcements in each of three exact datasets:
+technical-only, broker-action-only, and technical-plus-broker-action. The internal
+profile names retain `analyst_revision` for source lineage. Unknown three-day Alpaca
+coverage abstains; blocked event families are absent, not zero. The artifact is
 research-only and cannot serve or authorize production. No A3 estimator, locked-test
-result, or promotion exists yet. A3.5 must first decide whether 50 independent episodes
-provide enough development capacity for any governed specialist.
+result, or promotion exists yet.
 
 ### A4 - Build the Technical Intraday Baseline
 
@@ -317,8 +325,9 @@ are audit evidence, never fallbacks.
 - [x] Complete A2 governed swing-baseline ablation and serving contracts in
   implementation commit `cb2aba5`; no performance or promotion claim was made.
 - [x] Complete A3.1-A3.4 issuer-event authority, precision, and matched-ablation work.
-- [ ] Run A3.5 independent-episode capacity audit; train only if frozen splits remain
-  viable with 50 episodes.
+- [ ] Obtain the user's decision on whether rating upgrades, rating downgrades,
+  new/resumed coverage, and price-target changes are modeled together or as separate
+  broker-action specialists; then run the chronological capacity audit.
 - [ ] Build and backfill the replacement A4 intraday feature authority before
   collecting a new locked holdout; the invalid V3 contract cannot be reused.
 - [ ] Promote only a model that passes every gate.

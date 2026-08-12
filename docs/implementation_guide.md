@@ -127,17 +127,19 @@ shuffled-label control must remain at chance.
 - `edge_rebuild/serving.py`: promoted-bundle verification, model-family/profile
   binding, estimator-specific feature slicing, and strict prediction or abstention.
 - `prediction_service.py`: serves only a hash-verified promoted model family; the new
-  analyst-revision specialist remains unavailable until A3.5 training and promotion.
+  broker-action specialist remains unavailable until governed training and promotion.
 
 ## Current Workflow
 
 1. Preserve the replayed V12 technical authority and prior rejection evidence.
-2. Use only the separately replayed analyst-revision authority admitted by both
-   historical precision audits.
-3. Audit A3.5 development capacity on A3.4's 113 decisions and 50 independent
-   analyst-revision episodes. Train the exact technical-only, event-only, and combined
-   profiles only if the frozen split remains statistically viable; keep the locked test
-   unopened during selection.
+2. Use only the separately replayed broker-action authority admitted by both historical
+   precision audits. Its internal family code is `analyst_revision`, but its records
+   are broker upgrades, downgrades, coverage actions, and a small number of price-target
+   changes rather than EPS-estimate revisions.
+3. Use corrected A3.4's 27,087 prediction rows and 11,720 unique latest broker
+   announcements per comparison dataset. Before training, record the user's decision
+   on whether the broker-action types remain together or become separate specialists;
+   keep the locked test unopened during selection.
 4. Keep API scoring disabled unless a promoted bundle verifies at load time.
 5. Build the replacement A4 intraday cohort authority before any new holdout run.
 

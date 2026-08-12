@@ -40,8 +40,8 @@ There is no fallback from the active path to legacy models or schemas.
 - Model families are explicit. `swing_baseline` consumes only `technical_market` and
   uses catalyst as confirmation/explanation. `swing_event_driven` may consume only a
   separately promoted event-specialist contract. The current A3 contract admits only
-  direct-issuer analyst revisions; it does not reuse a broad catalyst profile. No
-  family is serveable until it passes promotion.
+  direct-issuer broker rating actions (internally coded `analyst_revision`); it does
+  not reuse a broad catalyst profile. No family is serveable until it passes promotion.
 - Issuer filing catalyst: SEC events aligned by acceptance time and resolved to the
   filing issuer; they enter an estimator only after causal authority and ablation pass.
 - Context overlays: verified global and sector events through separate authorities.
@@ -142,10 +142,12 @@ cost-adjusted return, SPY/QQQ/sector excess, drawdown, turnover, capacity, and r
 stability. ROC AUC alone cannot promote a trading model.
 
 The current swing V12 base authority contains 853,417 technical rows across 604
-securities and 1,759 sessions. A3.4 separately contains 113 matched decisions across
-50 analyst-revision episodes in each of three profiles: technical-only, event-only,
-and combined. The A3.4 authority is research-only; A3.5 must pass independent-episode
-capacity, validation, and economic gates before any specialist can train or serve.
+securities and 1,759 sessions. Corrected A3.4 separately contains 27,087 matched
+prediction rows from 11,720 unique latest broker announcements in each of three
+datasets: technical-only, broker-action-only, and combined. Exact ticker and exact
+prediction timestamp map the older event authority to the rebuilt technical panel;
+conflicting CIKs fail closed. The authority is research-only; no specialist is trained
+or serveable.
 Prior swing candidates and Intraday V2 are rejection evidence only. There is currently
 no promoted model for either view.
 

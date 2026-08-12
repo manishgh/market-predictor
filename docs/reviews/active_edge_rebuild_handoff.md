@@ -2,13 +2,13 @@
 
 Status: active
 
-Last updated: 2026-08-11
+Last updated: 2026-08-12
 
 Repository: `C:\project\market-predictor`
 
 Branch: `er-intraday-refactoring`
 
-Last completed implementation commit: `9c8aa5b` (`Fail fast on malformed precision reviews`)
+Last completed implementation commit: `e5de6a4` (`Fix broker action identity alignment`)
 
 ## Purpose
 
@@ -103,9 +103,15 @@ specialists; A6 performs locked evaluation and promotion.
 
 ## Current Verification
 
-- Independent strict A3.4 reload: 113 rows per profile, 339 physical rows, 50
-  independent episodes, and all production/training/serving prohibitions verified.
-- Repository suite: 1,205 passed and 2 skipped.
+- The original A3.4 result is invalid because old event decision/security hashes were
+  compared directly with rebuilt technical-panel hashes. Only 210 rows joined before
+  quality gates, which falsely reduced the data to 113 rows from 50 announcements.
+- Corrected A3.4 independently replays 27,087 prediction rows from 11,720 unique latest
+  broker announcements per comparison dataset, 81,261 physical rows total, with a
+  1.954 GiB recorded peak. Exact ticker and exact prediction timestamp are required;
+  conflicting CIKs fail closed. Every exclusion is persisted in
+  `identity_alignment_audit.parquet`.
+- Repository suite: 1,207 passed and 2 skipped.
 - Coordinated request, feature, all-profile label, dtype, partition, global identity,
   source-coverage, causal-window, and governance-hash poison tests pass.
 - The real materialization and event publication remained below the 5 GiB limit;
@@ -116,7 +122,7 @@ specialists; A6 performs locked evaluation and promotion.
 | Model family | Current state | Next valid work |
 | --- | --- | --- |
 | Swing baseline | A2 trainer complete; prior candidates rejected; no new run or promotion | Preserve the frozen technical contract until a governed training run is approved |
-| Swing event-driven | Prior broad catalyst candidates rejected | A3 event-family authorities and specialists |
+| Swing event-driven | Corrected broker-action comparison dataset exists; no specialist trained | Obtain user decision on combined versus separate broker-action types, then audit and train |
 | Intraday baseline | V2 rejected; V3 z-score lineage invalid | A4 cohort-correct market/microstructure rebuild |
 | Intraday event-driven | No eligible candidate | A5 verified event cohorts |
 
@@ -125,26 +131,31 @@ for repeated locked-test tuning. Promotion also requires ranking, calibration,
 after-cost benchmark-relative economics, drawdown, turnover, capacity, stability, and
 coverage.
 
-## A3.4: Matched Analyst-Revision Ablation Verification
+## A3.4: Matched Broker-Action Comparison Verification
 
 - The V12 catalyst-independent base panel strictly replays 853,417 technical rows,
   604 securities, and 1,759 sessions from `2019-07-09` through `2026-07-08`.
-- The separate A3.4 authority publishes 113 matched decisions from 50 independent
-  analyst-revision episodes in each of three profiles: technical-only, event-only,
-  and technical-plus-event.
+- The source authorities contain 17,401 direct-issuer broker announcements. Causal
+  coverage produces 37,372 prediction timestamps from 16,149 unique latest
+  announcements before technical-panel alignment.
+- The corrected A3.4 authority publishes 27,087 matched prediction rows from 11,720
+  unique latest announcements in each of three comparison datasets: technical-only,
+  broker-action-only, and technical-plus-broker-action. Internal profile names retain
+  `analyst_revision` for source lineage.
 - Profiles share exact decision IDs, labels, execution/economic lineage, and
   episode-normalized weights. Coordinated request, feature, label, dtype, partition,
   and global-identity tampering is rejected by replay tests.
 - The artifact is `production_ready=false`, `training_eligible=false`,
   `research_training_eligible=true`, and `serving_eligible=false`.
 
-## Exact Next Step: A3.5 - Evaluate Specialist Capacity
+## Exact Next Step: Define Broker-Action Specialists
 
-1. Measure independent episode, class, year, sector, and validation-fold capacity.
-2. If 50 episodes cannot support the frozen development and validation scopes, publish
-   an explicit insufficient-capacity result; do not fit a model or weaken the split.
-3. Only if capacity passes, train the three matched profiles sequentially and keep the
-   locked test unopened until one candidate passes all validation and economic gates.
+1. Ask the user whether rating upgrades, rating downgrades, new/resumed coverage, and
+   price-target changes should be modeled together or as separate specialists.
+2. Record that product decision in the active plan and model contract.
+3. Measure announcement, class, year, sector, and chronological-fold capacity for the
+   approved definition. Only then train the three matched comparisons sequentially;
+   keep the locked test unopened until validation and economic gates pass.
 
 ## Source Boundary
 
