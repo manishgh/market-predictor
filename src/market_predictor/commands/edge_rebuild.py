@@ -98,6 +98,9 @@ from market_predictor.edge_rebuild.sp500_transitions import (
     publish_sp500_transition_authority,
 )
 from market_predictor.edge_rebuild.strategy_contract import load_strategy_contract
+from market_predictor.edge_rebuild.swing_broker_specialists import (
+    train_swing_broker_specialists,
+)
 from market_predictor.edge_rebuild.swing_event_ablation import (
     publish_swing_analyst_revision_ablation,
 )
@@ -469,6 +472,48 @@ def register_edge_rebuild_commands(app: typer.Typer, console: Any) -> None:
                 ],
                 "profiles": result["profiles"],
                 "production_ready": result["production_ready"],
+            }
+        )
+
+    @app.command("train-edge-swing-broker-specialists")
+    @serialized_heavy_job("train-edge-swing-broker-specialists")
+    def train_edge_swing_broker_specialists(
+        source_dir: Path = typer.Option(
+            ...,
+            help="Verified A3.4 broker-action comparison directory.",
+        ),
+        out_dir: Path = typer.Option(
+            ...,
+            help="New immutable development experiment directory.",
+        ),
+        policy: Path = typer.Option(
+            Path("configs/swing_broker_action_specialists.toml"),
+        ),
+        contract: Path = typer.Option(
+            Path("configs/edge_rebuild_strategy_contract.toml"),
+        ),
+        swing_training_policy: Path = typer.Option(
+            Path("configs/edge_rebuild_swing_training.toml"),
+        ),
+    ) -> None:
+        """Train rating-change and coverage-initiation swing specialists."""
+
+        result = train_swing_broker_specialists(
+            source_directory=source_dir,
+            output_directory=out_dir,
+            policy_path=policy,
+            strategy_contract_path=contract,
+            swing_training_policy_path=swing_training_policy,
+        )
+        console.print(
+            {
+                "status": result["status"],
+                "specialists": {
+                    item["specialist"]: item["status"]
+                    for item in result["specialists"]
+                },
+                "locked_test_outcomes_read": result["locked_test_outcomes_read"],
+                "promotion_permitted": result["promotion_permitted"],
             }
         )
 

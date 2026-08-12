@@ -104,6 +104,7 @@
     "screen-edge-rebuild-intraday-universe",
     "train-edge-rebuild-intraday-development",
     "train-edge-rebuild-swing-candidate",
+    "train-edge-swing-broker-specialists",
     "train-intraday-model",
     "train-intraday-specialists",
     "train-v3-models",
