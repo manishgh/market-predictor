@@ -66,9 +66,13 @@ estimator without the same governance.
   population and strict physical replay.
 - `issuer_event_family_authority.py`, `issuer_event_precision_audit.py`: direct-issuer
   event, assignment, coverage, and reviewed precision authorities.
-- `swing_event_ablation.py`: matched analyst-revision technical-only, event-only, and
+- `swing_event_ablation.py`: matched broker-action technical-only, event-only, and
   combined research datasets. Blocked families are absent and unknown coverage
   abstains.
+- `swing_broker_specialists.py`: development-only rating-change and coverage-initiation
+  capacity audits, six-experiment matrices, nested chronological selection, canonical
+  portfolio economics, strict deterministic replay, and immutable rejection evidence
+  without locked-test access.
 - `swing_training.py`: four nested technical baseline ablations, bounded tree
   candidates, validation-only selection, exact feature-subset persistence, and
   immutable candidate/no-candidate publication.
@@ -127,7 +131,7 @@ shuffled-label control must remain at chance.
 - `edge_rebuild/serving.py`: promoted-bundle verification, model-family/profile
   binding, estimator-specific feature slicing, and strict prediction or abstention.
 - `prediction_service.py`: serves only a hash-verified promoted model family; the new
-  broker-action specialist remains unavailable until governed training and promotion.
+  broker-action specialists remain unavailable because A3.5 produced no candidate.
 
 ## Current Workflow
 
@@ -136,10 +140,10 @@ shuffled-label control must remain at chance.
    precision audits. Its internal family code is `analyst_revision`, but its records
    are broker upgrades, downgrades, coverage actions, and a small number of price-target
    changes rather than EPS-estimate revisions.
-3. Use corrected A3.4's 27,087 prediction rows and 11,720 unique latest broker
-   announcements per comparison dataset. Before training, record the user's decision
-   on whether the broker-action types remain together or become separate specialists;
-   keep the locked test unopened during selection.
+3. A3.5 combines upgrades and downgrades in a directional rating-change specialist,
+   models coverage initiation separately, and keeps price-target/generic actions
+   report-only. Its 12 development experiments produced no candidate, so the locked
+   test remains unopened and serving remains disabled.
 4. Keep API scoring disabled unless a promoted bundle verifies at load time.
 5. Build the replacement A4 intraday cohort authority before any new holdout run.
 

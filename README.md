@@ -62,8 +62,13 @@ hash-verified promoted bundle.
   directly, reducing 17,401 broker announcements to 50. The corrected immutable
   comparison aligns exact ticker and prediction timestamp, rejects conflicting CIKs,
   and publishes 27,087 prediction rows from 11,720 unique latest broker announcements
-  in each of three datasets: technical-only, broker-action-only, and combined. It is
-  research-only evidence; no specialist has been trained or promoted.
+  in each of three datasets: technical-only, broker-action-only, and combined.
+- A3.5 trained separate rating-change and coverage-initiation specialists. Each used
+  technical-only, broker-action-only, and combined profiles with logistic and
+  histogram-gradient-boosting estimators. Capacity passed, but all 12 development
+  experiments failed the frozen 0.60 AUC/generalization and benchmark-relative
+  economic gates in a separate inner selection window. No experiment qualified to
+  open outer validation; the locked test also remained unopened and no model was emitted.
 - Intraday V2 is published and replayable but economically rejected after costs.
   It is not serveable. The later V3 cross-sectional z-score lineage is invalid and
   prohibited because its declared inputs lacked a valid contemporaneous cohort

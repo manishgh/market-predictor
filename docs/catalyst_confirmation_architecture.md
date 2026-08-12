@@ -146,8 +146,10 @@ securities and 1,759 sessions. Corrected A3.4 separately contains 27,087 matched
 prediction rows from 11,720 unique latest broker announcements in each of three
 datasets: technical-only, broker-action-only, and combined. Exact ticker and exact
 prediction timestamp map the older event authority to the rebuilt technical panel;
-conflicting CIKs fail closed. The authority is research-only; no specialist is trained
-or serveable.
+conflicting CIKs fail closed. A3.5 separately evaluated rating changes and coverage
+initiation across technical-only, broker-action-only, and combined profiles. All 12
+development experiments failed the inner selection gates, so outer validation and the
+locked test remained unopened. No specialist is serveable.
 Prior swing candidates and Intraday V2 are rejection evidence only. There is currently
 no promoted model for either view.
 

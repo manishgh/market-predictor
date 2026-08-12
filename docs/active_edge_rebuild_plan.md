@@ -99,9 +99,9 @@ same batch/live transformation, and be fully backfilled before candidate trainin
 ## Active Four-Model Improvement Program
 
 The four governed model families are swing baseline, swing event-driven, intraday
-baseline, and intraday event-driven. `ROC-AUC >= 0.60` is a locked-test diagnostic for
-their comparable binary outcome view; it is not permission to optimize repeatedly on
-the locked test. Ranking quality, calibration, benchmark-relative net economics,
+baseline, and intraday event-driven. `ROC-AUC >= 0.60` is frozen as a validation and
+later locked-test gate for their comparable binary outcome view; it is not permission
+to optimize repeatedly on either split. Ranking quality, calibration, benchmark-relative net economics,
 drawdown, turnover, capacity, and coverage remain co-equal promotion gates.
 
 | Code | Descriptive checkpoint | State |
@@ -109,7 +109,7 @@ drawdown, turnover, capacity, and coverage remain co-equal promotion gates.
 | A0 | Restore research integrity | Completed |
 | A1 | Verify labels and leakage controls | Completed |
 | A2 | Build the technical swing baseline | Completed |
-| A3 | Build catalyst-driven swing specialists | In progress |
+| A3 | Build catalyst-driven swing specialists | Completed; no candidate passed |
 | A4 | Build the technical intraday baseline | Not started |
 | A5 | Build catalyst-driven intraday specialists | Not started |
 | A6 | Run locked evaluation and promote qualified models | Not started |
@@ -192,7 +192,7 @@ No new real model was trained or promoted in A2. The canonical suite passed 1,11
 tests with two skipped; tracked Ruff, changed-module strict mypy, compileall, and
 governance hash replay passed.
 
-### A3 - Build Catalyst-Driven Swing Specialists (`in_progress`)
+### A3 - Build Catalyst-Driven Swing Specialists (`completed; rejected`)
 
 1. **A3.1 - Verify the issuer-targeted event taxonomy (`completed`).** Build separate
    earnings/guidance, SEC material-event, analyst-revision, offering, M&A, regulatory,
@@ -209,11 +209,12 @@ governance hash replay passed.
    Compare technical-only, broker-action-only, and combined inputs on the same
    predictions and outcomes. Exact ticker/time alignment replaces invalid direct hash
    matching; every excluded row carries a concrete reason.
-5. **A3.5 - Define, train, and evaluate swing broker-action specialists.** First obtain
-   the user's decision on whether upgrades, downgrades, new coverage, and price-target
-   changes are one model family or separate families. Then model benchmark-relative
-   event reaction, not generic sentiment. A specialist abstains outside its verified
-   family and source coverage.
+5. **A3.5 - Define, train, and evaluate swing broker-action specialists (`completed`).**
+   One rating-change specialist combines upgrades and downgrades with explicit action
+   direction; a separate specialist handles new/resumed coverage. Price-target and
+   generic actions remain report-only because only 55 independently aligned latest
+   announcements exist. Each specialist compares technical-only, broker-action-only,
+   and combined features with logistic and histogram-gradient-boosting estimators.
 
 Completed A3.1/A3.2 evidence: commits `6ae703c`, `58ccc3d`, and `527e20f` publish the
 V2 issuer-targeted classifier and immutable authority replay. Title-derived events
@@ -260,8 +261,20 @@ and records every inclusion and exclusion. It publishes 27,087 prediction rows f
 technical-only, broker-action-only, and technical-plus-broker-action. The internal
 profile names retain `analyst_revision` for source lineage. Unknown three-day Alpaca
 coverage abstains; blocked event families are absent, not zero. The artifact is
-research-only and cannot serve or authorize production. No A3 estimator, locked-test
-result, or promotion exists yet.
+research-only and cannot serve or authorize production.
+
+A3.5 development artifact
+`data/models/swing_broker_action_specialists_dev_20260812_v4` records 12 sequential
+experiments and a 0.414 GiB peak working set. Capacity passed: rating changes contain
+5,841 development and 1,138 validation announcements; coverage initiations contain
+2,344 and 502. Model/threshold selection uses a separate 2023-06-13 through
+2024-05-28 inner window after a ten-session embargo. No experiment passed that inner
+gate, so outer 2024-2025 validation and the locked test both remained unopened. Best
+worst-scope inner AUC was 0.546 for rating changes and 0.506 for coverage. Broker-only
+inputs were near or below chance; every candidate also failed the canonical portfolio
+economic gate. No model artifact was emitted or promoted. The prior v2 report is
+superseded because it selected and evaluated on one validation window and used a
+simplified economic calculation.
 
 ### A4 - Build the Technical Intraday Baseline
 
@@ -281,8 +294,10 @@ result, or promotion exists yet.
 
 ### A6 - Run Locked Evaluation and Promote Qualified Models
 
-- Use purged, embargoed walk-forward validation plus independent unseen-security
-  validation. Swing uses the frozen approximately 5/1/1-year sequence; intraday uses
+- Use purged, embargoed walk-forward validation plus a stable held-out-security stress
+  test within each validation period. The security test measures transfer to unseen
+  symbols; it is not an additional independent time period. Swing uses the frozen
+  approximately 5/1/1-year sequence; intraday uses
   the maximum causally complete 2-3-year history with frozen calendar boundaries.
 - Open each locked test once for a preregistered candidate. Report ROC-AUC, PR-AUC,
   Brier/ECE, rank IC, top-quantile lift, net SPY/QQQ/sector excess return, costs,
@@ -325,9 +340,9 @@ are audit evidence, never fallbacks.
 - [x] Complete A2 governed swing-baseline ablation and serving contracts in
   implementation commit `cb2aba5`; no performance or promotion claim was made.
 - [x] Complete A3.1-A3.4 issuer-event authority, precision, and matched-ablation work.
-- [ ] Obtain the user's decision on whether rating upgrades, rating downgrades,
-  new/resumed coverage, and price-target changes are modeled together or as separate
-  broker-action specialists; then run the chronological capacity audit.
+- [x] Separate rating changes from coverage initiation, keep price-target changes
+  report-only, run the chronological capacity audit, and complete all 12 frozen A3.5
+  development experiments without opening the locked test. No candidate passed.
 - [ ] Build and backfill the replacement A4 intraday feature authority before
   collecting a new locked holdout; the invalid V3 contract cannot be reused.
 - [ ] Promote only a model that passes every gate.

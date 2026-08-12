@@ -8,15 +8,15 @@ Repository: `C:\project\market-predictor`
 
 Branch: `er-intraday-refactoring`
 
-Last completed implementation commit: `e5de6a4` (`Fix broker action identity alignment`)
+Last completed implementation commit: `58eed6c` (`Build governed swing broker specialists`)
 
 ## Purpose
 
 Continue the four-model prediction rebuild: swing baseline, swing event-driven,
 intraday baseline, and intraday event-driven. A0 through A2 implementation are closed.
-A3 issuer-event specialist authority is the active checkpoint. Do not open a locked
-test or claim model quality until a preregistered candidate passes both validation
-scopes.
+A3 issuer-event specialist development is complete with no candidate. A4 technical
+intraday rebuilding is the next checkpoint. Do not open a locked test or claim model
+quality until a preregistered candidate passes both validation scopes.
 
 This repository produces prediction intelligence and abstention. Alerts, orders,
 positions, portfolio risk, and execution remain in `trading_flow`.
@@ -122,7 +122,7 @@ specialists; A6 performs locked evaluation and promotion.
 | Model family | Current state | Next valid work |
 | --- | --- | --- |
 | Swing baseline | A2 trainer complete; prior candidates rejected; no new run or promotion | Preserve the frozen technical contract until a governed training run is approved |
-| Swing event-driven | Corrected broker-action comparison dataset exists; no specialist trained | Obtain user decision on combined versus separate broker-action types, then audit and train |
+| Swing event-driven | Rating-change and coverage specialists trained in development; all rejected | Preserve rejection evidence; do not open locked test or serve |
 | Intraday baseline | V2 rejected; V3 z-score lineage invalid | A4 cohort-correct market/microstructure rebuild |
 | Intraday event-driven | No eligible candidate | A5 verified event cohorts |
 
@@ -148,14 +148,34 @@ coverage.
 - The artifact is `production_ready=false`, `training_eligible=false`,
   `research_training_eligible=true`, and `serving_eligible=false`.
 
-## Exact Next Step: Define Broker-Action Specialists
+## A3.5: Broker-Action Specialist Result
 
-1. Ask the user whether rating upgrades, rating downgrades, new/resumed coverage, and
-   price-target changes should be modeled together or as separate specialists.
-2. Record that product decision in the active plan and model contract.
-3. Measure announcement, class, year, sector, and chronological-fold capacity for the
-   approved definition. Only then train the three matched comparisons sequentially;
-   keep the locked test unopened until validation and economic gates pass.
+- Rating upgrades and downgrades form one directional rating-change specialist.
+  New/resumed coverage is separate. Price-target/generic actions are report-only.
+- Rating-change capacity: 5,841 development, 1,138 chronological-validation, and 213
+  unseen-security-validation announcements across eight sectors.
+- Coverage capacity: 2,344 development, 502 chronological-validation, and 94
+  unseen-security-validation announcements across eight sectors.
+- Six experiments per specialist compare technical-only, broker-action-only, and
+  combined features using logistic and histogram gradient boosting.
+- Selection uses an inner 2023-06-13 through 2024-05-28 window after a ten-session
+  embargo. Best worst-scope AUC was 0.546 for rating changes and 0.506 for coverage;
+  every candidate also failed canonical portfolio economics. Broker-only inputs were
+  near or below chance. No inner candidate passed, so outer validation was not opened.
+- Artifact: `data/models/swing_broker_action_specialists_dev_20260812_v4`. Peak
+  working memory: 0.414 GiB. Locked-test outcomes read: false. Models emitted: zero.
+- Strict deterministic V4 replay passed. Repository verification: 1,219 tests passed,
+  2 skipped; tracked Ruff, strict mypy across 221 source files, and compileall passed.
+- The unseen-security scope is a stable held-out-symbol stress test fitted and scored
+  inside the same inner time window. It tests transfer to new symbols; it is not a
+  second independent chronological validation period.
+- V2 is superseded: it reused one validation window for selection/evaluation and used
+  simplified event-weighted returns instead of canonical portfolio economics.
+
+## Exact Next Step: Build A4 Technical Intraday Authority
+
+Build the cohort-correct intraday market and microstructure authority defined in A4.
+Do not tune A3 against its validation result and do not open the A3 locked test.
 
 ## Source Boundary
 

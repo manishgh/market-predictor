@@ -87,8 +87,10 @@ learned candidate.
   locked test from `2025-07-01` through `2026-06-30`. This is approximately 4.9 years
   initial fit plus one validation year plus one locked-test year; the causal-news cutoff
   is authoritative.
-- Temporal generalization on the full future point-in-time cross-section and stable 20%
-  unseen-security generalization are independent validation scopes and must both pass.
+- Temporal generalization uses the full future point-in-time cross-section. Stable 20%
+  unseen-security generalization is a held-out-symbol stress test in the same time
+  window, fitted separately; both scopes must pass, but they are not independent time
+  samples.
 - Commit `7b61873` removes the invalid training-time catalyst cohort rewrite. The
   trainer no longer attaches SEC files from a local path, fills unknown SEC coverage
   with zero, recomputes rank labels, or bypasses sector constraints. Commit `cb2aba5`
@@ -146,7 +148,7 @@ immutable artifact exists. `Blocked` means training or serving is prohibited.
 | Intraday ticker-catalyst overlay | Alpaca archives exist; scored/attributed catalyst authority not yet published | Not an estimator input | Snapshot contract verified; runtime authority pending | Separate overlay hash, coverage, count, sentiment, and unknown state verified | Cannot alter entry probability; ranking use blocked until authority exists | Blocked until promoted bundle and orchestrator exist | Authority pending |
 | Intraday global overlay | GDELT collector and global authority verified in code; no production collection published | Not an estimator input | Observed-time collection, immutable query policy, and unknown/zero behavior verified | Separate global overlay contract verified | Ranking use blocked until runtime authority exists | Blocked until promoted bundle and orchestrator exist | Runtime artifact pending |
 | Swing technical estimator | Daily SIP/all, point-in-time membership, and V12 panel verify | Verified | Verified; latest closed session required | A2 nested technical schema and per-model subsets verified | Replacement trainer complete; new candidate not run | Blocked until promotion | Implementation ready |
-| Swing ticker-catalyst estimator | Two immutable V2 Alpaca issuer-event authorities cover `2019-07-09` through `2026-07-08`; strict replay verified | Corrected A3.4 publishes 27,087 prediction rows / 11,720 unique latest broker announcements per comparison dataset | No event specialist is live | Only broker rating actions, internally coded `analyst_revision`, pass both historical precision audits; all other families abstain | User must decide whether broker-action subtypes are modeled together or separately before training | Blocked until promotion | Corrected A3.4 complete; model definition pending |
+| Swing ticker-catalyst estimator | Two immutable V2 Alpaca issuer-event authorities cover `2019-07-09` through `2026-07-08`; strict replay verified | Corrected A3.4 publishes 27,087 prediction rows / 11,720 unique latest broker announcements per comparison dataset | No event specialist is live | Rating-change and coverage cohorts passed capacity; price-target/generic remains report-only | Twelve A3.5 experiments failed inner AUC and canonical portfolio gates; outer validation and locked test unopened | Blocked until a new preregistered strategy version passes | Development rejected |
 | Swing global overlay | Global collector and decision authority verified in code | Separate overlay; never attached as ticker news | Verified code | Separate global authority hash and source policy | Cannot rescue or alter a rejected estimator; ranking use requires complete authority | Blocked until promoted bundle and orchestrator exist | Runtime artifact pending |
 
 ## Training decision
@@ -158,6 +160,8 @@ new statistical result. A3 causal event authorities now exist for the complete
 development horizon. Event-family precision review currently admits only broker rating
 actions in both eras; every other family remains blocked. Corrected A3.4 provides
 27,087 eligible prediction rows from 11,720 unique latest announcements per comparison
-dataset. Training waits for the explicit product decision on whether upgrades,
-downgrades, new coverage, and price-target changes form one or several specialists.
-The locked test stays unopened; global context remains a separate overlay.
+dataset. A3.5 separated directional rating changes from coverage initiation and kept
+price-target/generic actions report-only. Both specialists had sufficient chronological
+capacity, but all 12 development experiments failed the frozen inner-selection and
+canonical economic gates. Outer validation and the locked test stayed unopened;
+global context remains a separate overlay.
