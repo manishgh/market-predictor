@@ -207,6 +207,91 @@ def test_profile_feature_projections_are_exact_and_column_disjoint() -> None:
         ablation._profile_features("catalyst_full", technical_features=technical)
 
 
+def test_event_alignment_uses_exact_ticker_and_time_and_retains_source_identity(
+    tmp_path: Path,
+) -> None:
+    policy = ablation.load_analyst_revision_ablation_policy(_POLICY_PATH)
+    sources = _event_sources(
+        matched_text="upgrades acme",
+        event_time=_DECISION_TIME - pd.Timedelta(hours=2),
+        decision_time=_DECISION_TIME,
+    )
+    event_features = ablation._build_event_features(sources, policy=policy)
+    panel = tmp_path / "panel"
+    part = panel / "final" / "part.parquet"
+    part.parent.mkdir(parents=True)
+    pd.DataFrame(
+        {
+            "decision_id": ["target-decision"],
+            "security_id": ["cik:0000000001"],
+            "ticker": ["ACME"],
+            "decision_time_utc": [_DECISION_TIME],
+            "feature_eligible": [True],
+            "label_eligible": [True],
+            "cross_section_eligible": [True],
+            "managed_path_eligible": [True],
+            "rank_label": [1.0],
+        }
+    ).to_parquet(part, index=False)
+
+    selected, audit, metrics = ablation._align_event_features_to_panel(
+        panel,
+        [{"path": "part.parquet"}],
+        event_features,
+        policy=policy,
+    )
+
+    assert selected["decision_id"].tolist() == ["target-decision"]
+    assert selected["security_id"].tolist() == ["cik:0000000001"]
+    assert selected["analyst_revision_source_decision_id"].tolist() == [
+        "decision-1"
+    ]
+    assert selected["analyst_revision_source_security_id"].tolist() == [
+        _SECURITY_ID
+    ]
+    assert audit["inclusion_status"].tolist() == ["included"]
+    assert metrics["direct_old_decision_id_matches"] == 0
+    assert metrics["included_prediction_rows"] == 1
+
+
+def test_event_alignment_rejects_conflicting_company_identifiers(
+    tmp_path: Path,
+) -> None:
+    policy = ablation.load_analyst_revision_ablation_policy(_POLICY_PATH)
+    event_features = ablation._build_event_features(
+        _event_sources(
+            matched_text="downgrades acme",
+            event_time=_DECISION_TIME - pd.Timedelta(hours=2),
+            decision_time=_DECISION_TIME,
+        ),
+        policy=policy,
+    )
+    panel = tmp_path / "panel"
+    part = panel / "final" / "part.parquet"
+    part.parent.mkdir(parents=True)
+    pd.DataFrame(
+        {
+            "decision_id": ["target-decision"],
+            "security_id": ["cik:0000000002"],
+            "ticker": ["ACME"],
+            "decision_time_utc": [_DECISION_TIME],
+            "feature_eligible": [True],
+            "label_eligible": [True],
+            "cross_section_eligible": [True],
+            "managed_path_eligible": [True],
+            "rank_label": [1.0],
+        }
+    ).to_parquet(part, index=False)
+
+    with pytest.raises(DataReadinessError, match="conflicting company identifiers"):
+        ablation._align_event_features_to_panel(
+            panel,
+            [{"path": "part.parquet"}],
+            event_features,
+            policy=policy,
+        )
+
+
 def test_profile_identity_and_shared_content_hashes_detect_inequality_or_tampering() -> None:
     shared_columns = ("decision_id", "rank_label", "future_net_return_10d")
     reference = pd.DataFrame(
@@ -386,6 +471,7 @@ def _event_sources(
             "feature_available_at_utc": [event_time] * len(windows),
             "event_id": [event_id] * len(windows),
             "security_id": [_SECURITY_ID] * len(windows),
+            "ticker": ["ACME"] * len(windows),
             "decision_id": ["decision-1"] * len(windows),
         }
     )

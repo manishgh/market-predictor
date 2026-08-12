@@ -45,9 +45,9 @@ from market_predictor.swing.event_families import EVENT_FAMILIES
 from market_predictor.v3.errors import DataReadinessError
 
 POLICY_SCHEMA: Final = "market_predictor.swing_analyst_revision_ablation.v1"
-REQUEST_SCHEMA: Final = "edge_rebuild.swing_analyst_revision_ablation_request.v1"
-MANIFEST_SCHEMA: Final = "edge_rebuild.swing_analyst_revision_ablation_manifest.v1"
-AUTHORITY_SCHEMA: Final = "edge_rebuild.swing_analyst_revision_ablation_authority.v1"
+REQUEST_SCHEMA: Final = "edge_rebuild.swing_analyst_revision_ablation_request.v2"
+MANIFEST_SCHEMA: Final = "edge_rebuild.swing_analyst_revision_ablation_manifest.v2"
+AUTHORITY_SCHEMA: Final = "edge_rebuild.swing_analyst_revision_ablation_authority.v2"
 TECHNICAL_PROFILE: Final = "analyst_revision_technical_only"
 EVENT_PROFILE: Final = "analyst_revision_event_only"
 COMBINED_PROFILE: Final = "analyst_revision_technical_plus_event"
@@ -148,8 +148,28 @@ _OUTCOME_PREFIXES: Final = (
 _EVENT_AUDIT_COLUMNS: Final = (
     "analyst_revision_episode_id",
     "analyst_revision_episode_sample_weight",
+    "analyst_revision_source_decision_id",
+    "analyst_revision_source_security_id",
+    "analyst_revision_identity_alignment",
     "analyst_revision_source_coverage_known_3d",
     "analyst_revision_latest_feature_available_at_utc",
+)
+_ALIGNMENT_COLUMNS: Final = (
+    "analyst_revision_source_decision_id",
+    "analyst_revision_source_security_id",
+    "ticker",
+    "decision_time_utc",
+    "target_decision_id",
+    "target_security_id",
+    "direct_decision_id_match",
+    "identity_alignment",
+    "inclusion_status",
+    "exclusion_reason",
+    "feature_eligible",
+    "label_eligible",
+    "cross_section_eligible",
+    "managed_path_eligible",
+    "rank_label_available",
 )
 _XNYS: Final = xcals.get_calendar("XNYS")
 
@@ -255,6 +275,17 @@ def publish_swing_analyst_revision_ablation(
     event_features = _build_event_features(sources, policy=policy)
     if event_features.empty:
         raise DataReadinessError("verified analyst-revision cohort is empty")
+    base_records = _base_records(panel)
+    selected_features, alignment_audit, alignment_metrics = (
+        _align_event_features_to_panel(
+            technical_panel_directory,
+            base_records,
+            event_features,
+            policy=policy,
+        )
+    )
+    if selected_features.empty:
+        raise DataReadinessError("analyst-revision cohort has no eligible panel rows")
     technical_features = swing_model_feature_columns(
         contract=strategy_contract,
         catalyst=False,
@@ -275,16 +306,15 @@ def publish_swing_analyst_revision_ablation(
     try:
         staging.mkdir(parents=True, exist_ok=False)
         _atomic_json(staging / "_request.json", {**request, "request_sha256": request_sha256})
-        base_records = _base_records(panel)
-        eligible_ids = _eligible_decision_ids(
-            technical_panel_directory,
-            base_records,
-            event_features,
-            policy=policy,
-        )
-        if not eligible_ids:
-            raise DataReadinessError("analyst-revision cohort has no eligible panel rows")
-        selected_features = _selected_event_features(event_features, eligible_ids)
+        alignment_path = staging / "identity_alignment_audit.parquet"
+        alignment_audit.to_parquet(alignment_path, index=False)
+        alignment_record = {
+            "path": alignment_path.name,
+            "sha256": file_sha256(alignment_path),
+            "rows": len(alignment_audit),
+            "columns": list(_ALIGNMENT_COLUMNS),
+        }
+        eligible_ids = set(selected_features["decision_id"].astype(str))
         files: list[dict[str, Any]] = []
         shared_columns: tuple[str, ...] | None = None
         for record in base_records:
@@ -362,6 +392,11 @@ def publish_swing_analyst_revision_ablation(
             "rows_per_profile": rows_per_profile,
             "total_rows": rows_per_profile * len(PROFILES),
             "episode_count": int(selected_features["analyst_revision_episode_id"].nunique()),
+            "unique_latest_announcement_count": int(
+                selected_features["analyst_revision_episode_id"].nunique()
+            ),
+            "alignment_metrics": alignment_metrics,
+            "alignment_audit": alignment_record,
             "files": files,
             "memory": memory_audit(
                 hard_budget_gib=policy.maximum_process_memory_gib,
@@ -600,10 +635,12 @@ def _build_event_features(
     rows: list[dict[str, Any]] = []
     for decision_id, part in cohort.groupby("decision_id", sort=False):
         security_ids = set(part["security_id"].astype(str))
+        tickers = set(part["ticker"].astype(str).str.upper().str.strip())
         decision_times = set(part["decision_time_utc"])
-        if len(security_ids) != 1 or len(decision_times) != 1:
+        if len(security_ids) != 1 or len(tickers) != 1 or len(decision_times) != 1:
             raise DataReadinessError("analyst event decision identity is ambiguous")
         security_id = next(iter(security_ids))
+        ticker = next(iter(tickers))
         decision_time = pd.Timestamp(next(iter(decision_times)))
         if not _window_is_covered(
             intervals.get(security_id, ()),
@@ -630,6 +667,8 @@ def _build_event_features(
             {
                 "decision_id": str(decision_id),
                 "security_id": security_id,
+                "ticker": ticker,
+                "decision_time_utc": decision_time,
                 "analyst_revision_episode_id": _json_sha256([security_id, event_id]),
                 "analyst_revision_source_coverage_known_3d": True,
                 "analyst_revision_latest_feature_available_at_utc": latest_time,
@@ -770,56 +809,172 @@ def _build_request(
         "blocked_family_policy": "absent_not_zero",
         "unknown_coverage_policy": "abstain",
         "no_event_policy": "abstain",
+        "identity_alignment_policy": (
+            "exact_ticker_and_decision_time_with_no_conflicting_cik"
+        ),
         "label_policy": "copy_full_population_labels_before_event_filtering",
         "production_ready": False,
     }
 
 
-def _eligible_decision_ids(
+def _target_decision_spine(
+    panel_directory: Path,
+    records: Sequence[Mapping[str, Any]],
+    *,
+    policy: AnalystRevisionAblationPolicy,
+) -> pd.DataFrame:
+    columns = [
+        "decision_id",
+        "security_id",
+        "ticker",
+        "decision_time_utc",
+        "feature_eligible",
+        "label_eligible",
+        "cross_section_eligible",
+        "managed_path_eligible",
+        "rank_label",
+    ]
+    frames: list[pd.DataFrame] = []
+    for record in records:
+        path = panel_directory / "final" / str(record["path"])
+        frames.append(pd.read_parquet(path, columns=columns))
+        release_process_memory()
+        _guard(policy, "analyst ablation cohort scan")
+    spine = pd.concat(frames, ignore_index=True)
+    spine["ticker"] = spine["ticker"].astype(str).str.upper().str.strip()
+    spine["security_id"] = spine["security_id"].astype(str).str.strip()
+    spine["decision_id"] = spine["decision_id"].astype(str)
+    spine["decision_time_utc"] = pd.to_datetime(
+        spine["decision_time_utc"], utc=True, errors="raise"
+    )
+    if bool(
+        spine["decision_id"].duplicated().any()
+        or spine.duplicated(["ticker", "decision_time_utc"]).any()
+        or spine["ticker"].eq("").any()
+        or spine["security_id"].eq("").any()
+    ):
+        raise DataReadinessError(
+            "technical panel identity spine is ambiguous for event alignment"
+        )
+    return spine
+
+
+def _align_event_features_to_panel(
     panel_directory: Path,
     records: Sequence[Mapping[str, Any]],
     event_features: pd.DataFrame,
     *,
     policy: AnalystRevisionAblationPolicy,
-) -> set[str]:
-    candidate_ids = set(event_features["decision_id"].astype(str))
-    eligible: set[str] = set()
-    for record in records:
-        path = panel_directory / "final" / str(record["path"])
-        frame = pd.read_parquet(
-            path,
-            columns=[
-                "decision_id",
-                "feature_eligible",
-                "label_eligible",
-                "cross_section_eligible",
-                "managed_path_eligible",
-                "rank_label",
-            ],
+) -> tuple[pd.DataFrame, pd.DataFrame, dict[str, int]]:
+    source = event_features.copy()
+    required = {"decision_id", "security_id", "ticker", "decision_time_utc"}
+    missing = sorted(required.difference(source.columns))
+    if missing:
+        raise DataReadinessError(
+            f"analyst event alignment fields are missing: {missing}"
         )
-        selected = (
-            frame["decision_id"].astype(str).isin(candidate_ids)
-            & frame["feature_eligible"].astype(bool)
-            & frame["label_eligible"].astype(bool)
-            & frame["cross_section_eligible"].astype(bool)
-            & frame["managed_path_eligible"].astype(bool)
-            & frame["rank_label"].notna()
+    source["ticker"] = source["ticker"].astype(str).str.upper().str.strip()
+    source["security_id"] = source["security_id"].astype(str).str.strip()
+    source["decision_id"] = source["decision_id"].astype(str)
+    source["decision_time_utc"] = pd.to_datetime(
+        source["decision_time_utc"], utc=True, errors="raise"
+    )
+    if bool(
+        source["decision_id"].duplicated().any()
+        or source.duplicated(["ticker", "decision_time_utc"]).any()
+    ):
+        raise DataReadinessError(
+            "analyst event decisions are ambiguous by ticker and decision time"
         )
-        eligible.update(frame.loc[selected, "decision_id"].astype(str))
-        release_process_memory()
-        _guard(policy, "analyst ablation cohort scan")
-    return eligible
-
-
-def _selected_event_features(
-    event_features: pd.DataFrame,
-    eligible_ids: set[str],
-) -> pd.DataFrame:
-    selected = event_features.loc[
-        event_features["decision_id"].astype(str).isin(eligible_ids)
-    ].copy()
-    if set(selected["decision_id"].astype(str)) != eligible_ids:
-        raise DataReadinessError("eligible analyst decision has no event feature row")
+    spine = _target_decision_spine(panel_directory, records, policy=policy)
+    target = spine.rename(
+        columns={
+            "decision_id": "target_decision_id",
+            "security_id": "target_security_id",
+        }
+    )
+    source = source.rename(
+        columns={
+            "decision_id": "analyst_revision_source_decision_id",
+            "security_id": "analyst_revision_source_security_id",
+        }
+    )
+    merged = source.merge(
+        target,
+        on=["ticker", "decision_time_utc"],
+        how="left",
+        validate="one_to_one",
+        sort=False,
+    )
+    matched = merged["target_decision_id"].notna()
+    source_cik = merged["analyst_revision_source_security_id"].map(_embedded_cik)
+    target_cik = merged["target_security_id"].map(_embedded_cik)
+    conflicting_cik = matched & source_cik.notna() & target_cik.notna() & source_cik.ne(target_cik)
+    if bool(conflicting_cik.any()):
+        raise DataReadinessError(
+            "exact ticker/time event alignment found conflicting company identifiers"
+        )
+    merged["direct_decision_id_match"] = (
+        matched
+        & merged["analyst_revision_source_decision_id"]
+        .astype(str)
+        .eq(merged["target_decision_id"].astype(str))
+    )
+    merged["identity_alignment"] = "unmatched"
+    merged.loc[matched, "identity_alignment"] = "exact_ticker_and_decision_time"
+    rank_available = merged["rank_label"].notna()
+    eligible = (
+        matched
+        & merged["feature_eligible"].fillna(False).astype(bool)
+        & merged["label_eligible"].fillna(False).astype(bool)
+        & merged["cross_section_eligible"].fillna(False).astype(bool)
+        & merged["managed_path_eligible"].fillna(False).astype(bool)
+        & rank_available
+    )
+    merged["inclusion_status"] = "excluded"
+    merged.loc[eligible, "inclusion_status"] = "included"
+    merged["exclusion_reason"] = ""
+    reason_masks = (
+        ("no_exact_ticker_and_decision_time_in_technical_panel", ~matched),
+        ("technical_features_not_eligible", matched & ~merged["feature_eligible"].fillna(False).astype(bool)),
+        ("outcome_label_not_eligible", matched & ~merged["label_eligible"].fillna(False).astype(bool)),
+        ("cross_section_not_eligible", matched & ~merged["cross_section_eligible"].fillna(False).astype(bool)),
+        ("managed_price_path_not_eligible", matched & ~merged["managed_path_eligible"].fillna(False).astype(bool)),
+        ("rank_label_missing", matched & ~rank_available),
+    )
+    for reason, mask in reason_masks:
+        empty = merged["exclusion_reason"].eq("")
+        merged.loc[mask & empty, "exclusion_reason"] = reason
+    merged.loc[eligible, "exclusion_reason"] = ""
+    selected = merged.loc[eligible].copy()
+    selected["analyst_revision_identity_alignment"] = selected[
+        "identity_alignment"
+    ].astype(str)
+    selected["decision_id"] = selected["target_decision_id"].astype(str)
+    selected["security_id"] = selected["target_security_id"].astype(str)
+    selected["analyst_revision_source_decision_id"] = selected[
+        "analyst_revision_source_decision_id"
+    ].astype(str)
+    selected["analyst_revision_source_security_id"] = selected[
+        "analyst_revision_source_security_id"
+    ].astype(str)
+    selected = selected.drop(
+        columns=[
+            "target_decision_id",
+            "target_security_id",
+            "direct_decision_id_match",
+            "identity_alignment",
+            "inclusion_status",
+            "exclusion_reason",
+            "feature_eligible",
+            "label_eligible",
+            "cross_section_eligible",
+            "managed_path_eligible",
+            "rank_label",
+            "ticker",
+            "decision_time_utc",
+        ]
+    )
     episode_sizes = selected.groupby(
         "analyst_revision_episode_id", sort=False
     )["decision_id"].transform("size")
@@ -828,7 +983,38 @@ def _selected_event_features(
     )
     if selected["decision_id"].astype(str).duplicated().any():
         raise DataReadinessError("selected analyst decision identity is duplicated")
-    return selected
+    audit = merged.copy()
+    audit["rank_label_available"] = rank_available
+    for column in ("feature_eligible", "label_eligible", "cross_section_eligible", "managed_path_eligible"):
+        audit[column] = audit[column].fillna(False).astype(bool)
+    audit["target_decision_id"] = audit["target_decision_id"].astype("string")
+    audit["target_security_id"] = audit["target_security_id"].astype("string")
+    audit = audit.loc[:, list(_ALIGNMENT_COLUMNS)].sort_values(
+        ["decision_time_utc", "ticker", "analyst_revision_source_decision_id"],
+        kind="stable",
+    ).reset_index(drop=True)
+    reason_counts = audit.loc[audit["inclusion_status"].eq("excluded"), "exclusion_reason"].value_counts()
+    metrics = {
+        "valid_news_linked_prediction_timestamps": len(source),
+        "unique_latest_announcements_before_panel_alignment": int(
+            source["analyst_revision_episode_id"].nunique()
+        ),
+        "exact_ticker_and_decision_time_matches": int(matched.sum()),
+        "direct_old_decision_id_matches": int(merged["direct_decision_id_match"].sum()),
+        "included_prediction_rows": len(selected),
+        "included_unique_latest_announcements": int(
+            selected["analyst_revision_episode_id"].nunique()
+        ),
+        **{f"excluded_{reason}": int(count) for reason, count in reason_counts.items()},
+    }
+    return selected.reset_index(drop=True), audit, metrics
+
+
+def _embedded_cik(value: object) -> str | None:
+    text = str(value).strip()
+    if not text.startswith("cik:"):
+        return None
+    return text.split(":ticker:", maxsplit=1)[0]
 
 
 def _attach_event_features(
@@ -977,13 +1163,42 @@ def _verify_published_ablation(
         else _build_event_features(sources, policy=policy)
     )
     base_records = _base_records(panel)
-    eligible_ids = _eligible_decision_ids(
-        panel_directory,
-        base_records,
-        event_features,
-        policy=policy,
+    selected_features, expected_alignment_audit, expected_alignment_metrics = (
+        _align_event_features_to_panel(
+            panel_directory,
+            base_records,
+            event_features,
+            policy=policy,
+        )
     )
-    selected_features = _selected_event_features(event_features, eligible_ids)
+    eligible_ids = set(selected_features["decision_id"].astype(str))
+    if not eligible_ids:
+        raise DataReadinessError("analyst ablation replay cohort is empty")
+    raw_alignment = manifest.get("alignment_audit")
+    if not isinstance(raw_alignment, Mapping):
+        raise DataReadinessError("analyst identity-alignment audit record is missing")
+    alignment_relative = str(raw_alignment.get("path", ""))
+    alignment_path = directory / alignment_relative
+    if (
+        alignment_relative != "identity_alignment_audit.parquet"
+        or not alignment_path.is_file()
+        or file_sha256(alignment_path) != raw_alignment.get("sha256")
+        or int(raw_alignment.get("rows", -1)) != len(expected_alignment_audit)
+        or tuple(raw_alignment.get("columns", ())) != _ALIGNMENT_COLUMNS
+        or manifest.get("alignment_metrics") != expected_alignment_metrics
+    ):
+        raise DataReadinessError("analyst identity-alignment audit binding differs")
+    observed_alignment_audit = pd.read_parquet(alignment_path)
+    try:
+        pd.testing.assert_frame_equal(
+            observed_alignment_audit,
+            expected_alignment_audit,
+            check_exact=True,
+        )
+    except AssertionError as exc:
+        raise DataReadinessError(
+            "analyst identity-alignment audit content differs"
+        ) from exc
     expected_by_month: dict[str, pd.DataFrame] = {}
     for base_record in base_records:
         month = str(base_record["partition_month"])
@@ -1022,7 +1237,12 @@ def _verify_published_ablation(
     expected_shared_columns = _shared_columns(next(iter(expected_by_month.values())))
     if not shared_columns or shared_columns != expected_shared_columns:
         raise DataReadinessError("analyst ablation shared-column contract differs")
-    expected_files = {"_request.json", "_manifest.json", "_authority.json"}
+    expected_files = {
+        "_request.json",
+        "_manifest.json",
+        "_authority.json",
+        "identity_alignment_audit.parquet",
+    }
     by_month: dict[str, list[Mapping[str, Any]]] = {}
     total_by_profile = {profile: 0 for profile in PROFILES}
     observed_profile_months: set[tuple[str, str]] = set()
@@ -1117,6 +1337,8 @@ def _verify_published_ablation(
         or rows != {int(manifest.get("rows_per_profile", -1))}
         or sum(total_by_profile.values()) != int(manifest.get("total_rows", -1))
         or int(manifest.get("episode_count", -1))
+        != int(selected_features["analyst_revision_episode_id"].nunique())
+        or int(manifest.get("unique_latest_announcement_count", -1))
         != int(selected_features["analyst_revision_episode_id"].nunique())
     ):
         raise DataReadinessError("analyst ablation profile row totals differ")

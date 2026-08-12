@@ -450,7 +450,7 @@ def register_edge_rebuild_commands(app: typer.Typer, console: Any) -> None:
             Path("configs/edge_rebuild_strategy_contract.toml"),
         ),
     ) -> None:
-        """Publish matched technical, analyst-event, and combined datasets."""
+        """Publish matched technical, broker-action, and combined datasets."""
 
         result = publish_swing_analyst_revision_ablation(
             technical_panel_directory=technical_panel_dir,
@@ -463,8 +463,10 @@ def register_edge_rebuild_commands(app: typer.Typer, console: Any) -> None:
         console.print(
             {
                 "status": result["status"],
-                "rows_per_profile": result["rows_per_profile"],
-                "episodes": result["episode_count"],
+                "prediction_rows_per_comparison_dataset": result["rows_per_profile"],
+                "unique_latest_broker_announcements": result[
+                    "unique_latest_announcement_count"
+                ],
                 "profiles": result["profiles"],
                 "production_ready": result["production_ready"],
             }
