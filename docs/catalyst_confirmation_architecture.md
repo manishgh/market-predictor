@@ -1,7 +1,7 @@
 # Catalyst-Confirmation Prediction Architecture
 
 Status: design authority
-Last updated: 2026-08-02
+Last updated: 2026-08-13
 
 This document defines stable component boundaries. Current progress and blockers are
 in `active_edge_rebuild_plan.md` and `reviews/active_edge_rebuild_handoff.md`.
@@ -68,6 +68,11 @@ There is no fallback from the active path to legacy models or schemas.
 - Swing uses daily bars with at least 250 valid sessions of warm-up.
 - Intraday uses five-minute discovery/technical history and selective exact one-minute
   execution paths.
+- Intraday has two non-interchangeable model profiles. The bar-only profile uses
+  verified SIP/all one- and five-minute bars plus benchmark/membership authorities.
+  The microstructure-enhanced profile additionally requires a complete immutable SIP
+  trade/quote authority and one-minute materialization. Partial raw transport cannot
+  silently alter the bar-only profile.
 - SPY, QQQ, and the point-in-time sector ETF use the identical decision and outcome
   interval as the stock.
 
@@ -129,6 +134,8 @@ Required tests include:
 - exact batch/live numerical parity;
 - stale-decision rejection;
 - row/label identity across ablations;
+- identical decision IDs, folds, costs, labels, and benchmark intervals for bar-only
+  versus microstructure matched ablation;
 - artifact, path-traversal, and hash tampering.
 
 ## Training And Evaluation

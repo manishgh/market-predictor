@@ -1,6 +1,6 @@
 # Current Feature Engineering Audit
 
-Last updated: 2026-08-12
+Last updated: 2026-08-13
 
 ## Scope
 
@@ -62,6 +62,16 @@ learned candidate.
   rejected lineage and cannot train, replay, promote, or serve. A future
   cross-sectional feature group must use one verified batch/live decision cohort
   and be backfilled for the complete intraday model horizon before acceptance.
+- A4.1 collection now keeps every selected stock-session and records full-session bar
+  coverage only as source metadata. Historical feature eligibility uses data through
+  the decision cutoff; label eligibility uses only the managed outcome horizon. A
+  later missing bar cannot remove an earlier live-equivalent decision.
+- Bar-only and microstructure-enhanced profiles require an immutable matched ablation
+  cohort with identical decisions, labels, folds, costs, and benchmark intervals.
+  Missing microstructure makes only the enhanced row unavailable.
+- Raw quote transport preserves finite nonnegative zero-sided quote states. A4.2, not
+  transport, must classify valid two-sided duration, observed-zero states, and
+  unavailable quote coverage.
 
 ## Swing
 

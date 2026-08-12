@@ -2,20 +2,21 @@
 
 Status: active
 
-Last updated: 2026-08-12
+Last updated: 2026-08-13
 
 Repository: `C:\project\market-predictor`
 
 Branch: `er-intraday-refactoring`
 
-Last completed implementation commit: `58eed6c` (`Build governed swing broker specialists`)
+Last completed implementation commit: `b03f4f1` (`Build resumable SIP microstructure authority`)
 
 ## Purpose
 
 Continue the four-model prediction rebuild: swing baseline, swing event-driven,
 intraday baseline, and intraday event-driven. A0 through A2 implementation are closed.
-A3 issuer-event specialist development is complete with no candidate. A4 technical
-intraday rebuilding is the next checkpoint. Do not open a locked test or claim model
+A3 issuer-event specialist development is complete with no candidate. A4.1 collector
+implementation is complete; A4.3 bar-only causal dataset construction is next. Do not
+open a locked test or claim model
 quality until a preregistered candidate passes both validation scopes.
 
 This repository produces prediction intelligence and abstention. Alerts, orders,
@@ -45,6 +46,12 @@ specialists; A6 performs locked evaluation and promotion.
   abnormal discrimination fails evaluation. Single-class scopes are explicit
   `not_applicable_single_class`, never fabricated metrics.
 - Intraday remains capped at 4 GiB and swing candidate training at 5 GiB.
+- A4.1 retains all selected stock-sessions for collection. End-of-session bar coverage
+  is metadata; feature eligibility is evaluated only through a decision cutoff and
+  label eligibility only through its managed outcome horizon.
+- A4.1 raw collection is bounded by a required finite job count, resumes failed jobs
+  from verified page tokens, hashes every job/attempt/raw page, preserves zero-sided
+  quote states, and cannot publish authority until every planned job replays.
 
 ## A2: Technical Swing Baseline Verification
 
@@ -111,7 +118,7 @@ specialists; A6 performs locked evaluation and promotion.
   1.954 GiB recorded peak. Exact ticker and exact prediction timestamp are required;
   conflicting CIKs fail closed. Every exclusion is persisted in
   `identity_alignment_audit.parquet`.
-- Repository suite: 1,207 passed and 2 skipped.
+- Repository suite: 1,238 passed and 2 skipped.
 - Coordinated request, feature, all-profile label, dtype, partition, global identity,
   source-coverage, causal-window, and governance-hash poison tests pass.
 - The real materialization and event publication remained below the 5 GiB limit;
@@ -123,7 +130,7 @@ specialists; A6 performs locked evaluation and promotion.
 | --- | --- | --- |
 | Swing baseline | A2 trainer complete; prior candidates rejected; no new run or promotion | Preserve the frozen technical contract until a governed training run is approved |
 | Swing event-driven | Rating-change and coverage specialists trained in development; all rejected | Preserve rejection evidence; do not open locked test or serve |
-| Intraday baseline | V2 rejected; V3 z-score lineage invalid | A4 cohort-correct market/microstructure rebuild |
+| Intraday baseline | V2 rejected; V3 z-score lineage invalid; A4.1 collector verified | A4.3 separately governed bar-only causal dataset |
 | Intraday event-driven | No eligible candidate | A5 verified event cohorts |
 
 `ROC-AUC >= 0.60` is a locked-test diagnostic, not a training objective or permission
@@ -172,10 +179,24 @@ coverage.
 - V2 is superseded: it reused one validation window for selection/evaluation and used
   simplified event-weighted returns instead of canonical portfolio economics.
 
-## Exact Next Step: Build A4 Technical Intraday Authority
+## A4.1: SIP Trade/Quote Collector Verification
 
-Build the cohort-correct intraday market and microstructure authority defined in A4.
-Do not tune A3 against its validation result and do not open the A3 locked test.
+- Corrected v2 plan: 43,226 selected stock-sessions, 86,452 trade/quote jobs, 559
+  observed symbols; 13 incomplete source-bar sessions are retained as metadata.
+- Live bounded probe: two jobs completed across two invocations, zero failures,
+  4.41 MiB written, 0.350 GiB peak RSS, and no authority published.
+- Full replayable trade/quote backfill is storage-blocked on the current local drive.
+  Partial raw transport cannot become a feature, zero, or training input.
+- Two independent reviewers found no remaining high or critical findings after fixes
+  for immutable failed-attempt inventory, path overlap, page-level resume, causal
+  population selection, matched ablation, and zero-sided quotes.
+
+## Exact Next Step: Build A4.3 Bar-Only Technical Intraday Authority
+
+Build the cohort-correct bar-only authority from existing verified SIP/all one-minute
+and causal five-minute bars, point-in-time membership, SPY, QQQ, and sector ETFs. Use
+explicit clock-time cross-sectional cohorts and five-minute ATR. Do not include any
+trade/quote/microstructure field, tune A3, or open a locked test.
 
 ## Source Boundary
 

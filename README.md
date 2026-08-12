@@ -73,6 +73,17 @@ hash-verified promoted bundle.
   It is not serveable. The later V3 cross-sectional z-score lineage is invalid and
   prohibited because its declared inputs lacked a valid contemporaneous cohort
   transformation.
+- A4.1 now provides bounded, page-resumable Alpaca SIP trade and quote collection with
+  immutable request/job/attempt/raw-page lineage, exact session bounds, failed-attempt
+  hashing, path isolation, and a 4 GiB hard memory limit. The corrected collection
+  plan contains 43,226 selected stock-sessions and 86,452 jobs; end-of-session bar
+  coverage is metadata, not an earlier-decision selector. A two-job live Alpaca probe
+  completed with zero failures at 0.35 GiB peak RSS. It is intentionally incomplete
+  and cannot authorize microstructure features or training.
+- The next executable intraday work is a separately identified bar-only A4.3 dataset
+  using verified SIP/all one- and five-minute bars, SPY, QQQ, sector ETFs, and
+  point-in-time membership. Trade/quote features remain prohibited until a complete
+  A4.1/A4.2 authority exists.
 - Intraday label schema V2 requires exact stock, SPY, QQQ, and point-in-time sector
   returns over one executable entry-to-managed-exit interval. Missing benchmark
   evidence abstains. Swing and intraday evaluations report named after-cost binary

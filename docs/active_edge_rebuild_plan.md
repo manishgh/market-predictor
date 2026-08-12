@@ -2,7 +2,7 @@
 
 Status: active
 
-Last updated: 2026-08-10
+Last updated: 2026-08-13
 
 Repository: `C:\project\market-predictor`
 
@@ -110,7 +110,7 @@ drawdown, turnover, capacity, and coverage remain co-equal promotion gates.
 | A1 | Verify labels and leakage controls | Completed |
 | A2 | Build the technical swing baseline | Completed |
 | A3 | Build catalyst-driven swing specialists | Completed; no candidate passed |
-| A4 | Build the technical intraday baseline | Not started |
+| A4 | Build the technical intraday baseline | A4.1 collector complete; A4.3 bar-only authority next |
 | A5 | Build catalyst-driven intraday specialists | Not started |
 | A6 | Run locked evaluation and promote qualified models | Not started |
 
@@ -278,11 +278,75 @@ simplified economic calculation.
 
 ### A4 - Build the Technical Intraday Baseline
 
-- Backfill Alpaca SIP one-minute bars, trades, and NBBO quotes across the complete
-  intraday training horizon before adding spread or microstructure features.
-- Separate continuation and reversion hypotheses. Add spread, quote imbalance, trade
-  intensity, volume clock, VWAP displacement, opening-range, volatility, and exact
-  market/sector residual features through the shared batch/live transformation.
+1. **A4.1 - Build the SIP trade/quote source authority (`collector_complete`, full
+   authority `environment_blocked`).** Add bounded,
+   paginated Alpaca SIP trade and NBBO-quote clients plus resumable raw collection.
+   Preserve provider timestamps, exchange/tape/condition identity, request bounds,
+   page tokens, response rate-limit headers, and per-unit failures. Raw transport
+   completion is not model readiness.
+2. **A4.2 - Publish the one-minute microstructure authority.** Aggregate only completed
+   regular-session minutes using the shared batch/live transformation. Publish
+   time-weighted relative spread, time-weighted quote-size imbalance, quote-update
+   count, trade count, share volume, dollar volume, and mean trade size with explicit
+   availability and source coverage. Missing quotes or trades remain unavailable.
+3. **A4.3 - Publish the bar-only causal technical dataset.** This is a distinct
+   governed model profile, not a degraded microstructure model. Its source set is
+   limited to verified SIP/all one-minute bars, causal five-minute bars,
+   point-in-time membership, SPY, QQQ, and sector ETFs. It may use volume clock,
+   VWAP displacement, opening range, volatility, and exact market/sector residuals,
+   but it must not contain trade-count, quote, spread, or imbalance fields. Prove
+   batch/live parity, future-poison rejection, and ordered-feature hash identity.
+   Cross-security ranks use explicit contemporaneous clock-time cohorts, never each
+   stock's asynchronous volume-bar completion timestamp. ATR used by features,
+   targets, and stops comes from the causal five-minute authority required by the
+   strategy contract, not from volume bars.
+4. **A4.4 - Train separate bar-only continuation and reversion baselines.** Use purged,
+   embargoed chronological selection and the canonical intraday portfolio evaluator.
+   Do not open the future holdout unless a preregistered development candidate passes
+   calibration, predictive, coverage, cost, drawdown, and benchmark-relative gates.
+   Selecting the least-bad failed candidate does not authorize future-holdout access.
+5. **A4.5 - Add the microstructure-enhanced profile only after A4.1 and A4.2 are
+   complete.** Join the independently verified one-minute microstructure authority at
+   the exact completed-minute cutoff, add trade intensity, relative spread, quote-size
+   imbalance, quote updates, trade count, and mean trade size, and repeat ablation and
+   promotion gates under a new dataset and model identity. A partial trade/quote
+   collection cannot be used by either the bar-only or enhanced profile.
+6. **A4.6 - Compare profiles only on an immutable matched-ablation cohort.** The
+   bar-only and microstructure-enhanced comparison must use identical decision IDs,
+   labels, fold assignments, execution costs, and benchmark intervals. Report the
+   broader bar-only coverage separately. Missing microstructure makes only the
+   enhanced row unavailable; it cannot remove or relabel the corresponding bar-only
+   decision.
+
+Historical collection covers every selected stock-session in the source coverage
+authority. End-of-session bar completeness is retained only as metadata and must not
+decide whether an earlier historical decision exists. Feature eligibility is measured
+only through each decision cutoff; label eligibility is measured only through its
+managed outcome horizon. Later missing bars may make a label unavailable, but cannot
+rewrite the live-equivalent decision cohort.
+
+Existing evidence at A4 start: the selected-session SIP/all one-minute bar collection
+contains 81,349,171 rows across 559 observed symbols, and the prior V3 dataset contains
+4,173,230 rows. Neither artifact contains historical trades or NBBO quotes, so neither
+can authorize microstructure features or A4 training. The invalid V3 cross-sectional
+z-score lineage remains prohibited.
+
+The A4.1 live capacity probe on 2026-07-08 found 2,425 AAPL trades and 4,172
+AAPL quotes in one ordinary minute; SPY exceeded the 10,000-row quote page limit in
+one minute. The local C: drive had approximately 52 GiB free. Therefore a replayable
+43,226-stock-session raw tick backfill is storage-blocked locally. No quote/trade
+feature may enter A4.5 until a complete immutable source authority exists. A4.3 and
+A4.4 remain executable because their separately identified bar-only contract has no
+trade/quote inputs and cannot silently acquire them.
+
+A4.1 implementation commit `b03f4f1` publishes the bounded collector. The corrected
+immutable v2 plan contains 43,226 selected stock-sessions and 86,452 jobs: 43,213 have
+complete source-bar session status and 13 retain incomplete status as metadata. A real
+two-invocation Alpaca SIP probe completed the first trade and quote jobs with zero
+failures, 4.41 MiB on disk, and 0.350 GiB peak RSS. The probe remains
+`transport_incomplete` and is not an authority. Completing all replayable raw tick jobs
+still exceeds current local storage, so A4.2 and A4.5 remain blocked. The exact next
+implementation is A4.3's distinct bar-only causal dataset.
 
 ### A5 - Build Catalyst-Driven Intraday Specialists
 

@@ -2,7 +2,7 @@
 
 Status: current edge-rebuild path
 
-Last updated: 2026-08-10
+Last updated: 2026-08-13
 
 Read `AGENTS.md`, `docs/active_edge_rebuild_plan.md`, and
 `docs/reviews/active_edge_rebuild_handoff.md` first. Command `--help` output and code
@@ -112,6 +112,9 @@ point-in-time authority exists. No new real A2 candidate has been trained.
   thirty-minute outcome path, and holding-aligned SPY, QQQ, and point-in-time sector
   returns. Missing exact benchmark evidence abstains.
 - `intraday_dataset.py`, `intraday_live.py`: immutable publication and live parity.
+- `intraday_microstructure_history.py`: immutable A4.1 planning plus bounded,
+  page-resumable Alpaca SIP trade/quote transport. Completion authorizes only later
+  materialization; a partial collection cannot train or serve.
 - `intraday_development.py`: V3 expected-net-return development and future-holdout
   controls.
 - `intraday_rejection.py`: immutable V2 rejection evidence.
@@ -145,7 +148,9 @@ shuffled-label control must remain at chance.
    report-only. Its 12 development experiments produced no candidate, so the locked
    test remains unopened and serving remains disabled.
 4. Keep API scoring disabled unless a promoted bundle verifies at load time.
-5. Build the replacement A4 intraday cohort authority before any new holdout run.
+5. Build A4.3's separately identified bar-only causal dataset from existing verified
+   one-minute/five-minute bars and benchmark authorities. Keep A4.2/A4.5 trade/quote
+   features blocked until the complete A4.1 raw authority can be stored and replayed.
 
 ## Data And Training Rules
 
