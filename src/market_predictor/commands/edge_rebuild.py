@@ -47,7 +47,15 @@ from market_predictor.edge_rebuild.history_contracts import (
 from market_predictor.edge_rebuild.history_materialization import (
     reorganize_intraday_history,
 )
-from market_predictor.edge_rebuild.intraday_dataset import publish_intraday_dataset
+from market_predictor.edge_rebuild.intraday_bar_audit import (
+    publish_intraday_bar_dataset_audit,
+)
+from market_predictor.edge_rebuild.intraday_bar_dataset import (
+    publish_intraday_bar_dataset,
+)
+from market_predictor.edge_rebuild.intraday_bar_only_five_minute import (
+    publish_selected_session_five_minute_projection,
+)
 from market_predictor.edge_rebuild.intraday_development import (
     evaluate_future_intraday_holdout,
     load_intraday_development_config,
@@ -1282,32 +1290,105 @@ def register_edge_rebuild_commands(app: typer.Typer, console: Any) -> None:
             }
         )
 
-    @app.command("publish-edge-rebuild-intraday-dataset")
-    @serialized_heavy_job("publish-edge-rebuild-intraday-dataset")
-    def publish_edge_rebuild_intraday_dataset(
+    @app.command("publish-edge-rebuild-selected-session-five-minute")
+    @serialized_heavy_job("publish-edge-rebuild-selected-session-five-minute")
+    def publish_edge_rebuild_selected_session_five_minute(
+        selection_dir: Path = typer.Option(
+            ...,
+            help="Published causal screen supplying selected stock-sessions.",
+        ),
+        five_minute_canonical_dir: Path = typer.Option(
+            ...,
+            help="Verified canonical Alpaca SIP/all regular-session five-minute store.",
+        ),
+        out_dir: Path = typer.Option(...),
+        contract: Path = typer.Option(
+            Path("configs/edge_rebuild_strategy_contract.toml")
+        ),
+        intraday_contract_lineage: Path = typer.Option(
+            Path("configs/edge_rebuild_intraday_contract_lineage.toml")
+        ),
+    ) -> None:
+        """Project selected five-minute bars locally without provider access."""
+
+        result = publish_selected_session_five_minute_projection(
+            selection_directory=selection_dir,
+            five_minute_canonical_directory=five_minute_canonical_dir,
+            strategy_contract_path=contract,
+            output_directory=out_dir,
+            intraday_contract_lineage_path=intraday_contract_lineage,
+        )
+        console.print(
+            {
+                "state": result["state"],
+                "selected_stock_sessions": result["selected_stock_sessions"],
+                "projected_rows": result["projected_rows"],
+                "coverage_status_counts": result["coverage_status_counts"],
+                "provider_download_performed": result[
+                    "provider_download_performed"
+                ],
+            }
+        )
+
+    @app.command("publish-edge-rebuild-intraday-bar-dataset")
+    @serialized_heavy_job("publish-edge-rebuild-intraday-bar-dataset")
+    def publish_edge_rebuild_intraday_bar_dataset(
         selection_dir: Path = typer.Option(...),
         stock_collection_dir: Path = typer.Option(...),
         stock_coverage_dir: Path = typer.Option(...),
         benchmark_collection_dir: Path = typer.Option(...),
         membership_authority_dir: Path = typer.Option(...),
+        five_minute_projection_dir: Path = typer.Option(...),
         out_dir: Path = typer.Option(...),
         contract: Path = typer.Option(Path("configs/edge_rebuild_strategy_contract.toml")),
-        session_workers: int = typer.Option(4, min=1, max=4),
+        intraday_contract_lineage: Path = typer.Option(
+            Path("configs/edge_rebuild_intraday_contract_lineage.toml")
+        ),
+        max_sessions: int | None = typer.Option(None, min=1),
+        session_workers: int = typer.Option(1, min=1, max=2),
     ) -> None:
-        """Publish the immutable causal intraday feature and label dataset."""
+        """Publish the resumable fixed-cohort bar-only dataset."""
 
-        result = publish_intraday_dataset(
+        result = publish_intraday_bar_dataset(
             selection_directory=selection_dir,
             stock_collection_directory=stock_collection_dir,
             stock_coverage_directory=stock_coverage_dir,
             benchmark_collection_directory=benchmark_collection_dir,
             membership_authority_directory=membership_authority_dir,
+            five_minute_projection_directory=five_minute_projection_dir,
             strategy_contract=load_strategy_contract(contract),
             strategy_contract_path=contract,
             output_directory=out_dir,
+            intraday_contract_lineage_path=intraday_contract_lineage,
+            max_sessions_per_invocation=max_sessions,
             session_workers=session_workers,
         )
         console.print(result["summary"])
+
+    @app.command("audit-edge-rebuild-intraday-bar-dataset")
+    @serialized_heavy_job("audit-edge-rebuild-intraday-bar-dataset")
+    def audit_edge_rebuild_intraday_bar_dataset(
+        dataset_dir: Path = typer.Option(...),
+        five_minute_projection_dir: Path = typer.Option(...),
+        out: Path = typer.Option(...),
+    ) -> None:
+        """Publish a hash-bound row-level audit of the A4.3 authority."""
+
+        result = publish_intraday_bar_dataset_audit(
+            dataset_directory=dataset_dir,
+            five_minute_projection_directory=five_minute_projection_dir,
+            output_path=out,
+        )
+        console.print(
+            {
+                "status": result["status"],
+                "sessions": result["sessions"],
+                "tickers": result["tickers"],
+                "rows": result["rows"],
+                "dataset_eligible_rows": result["dataset_eligible_rows"],
+                "out": str(out),
+            }
+        )
 
     @app.command("train-edge-rebuild-intraday-development")
     @serialized_heavy_job("train-edge-rebuild-intraday-development")

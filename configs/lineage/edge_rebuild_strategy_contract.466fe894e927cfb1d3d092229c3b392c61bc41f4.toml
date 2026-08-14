@@ -1,0 +1,306 @@
+schema_version = "edge_rebuild.strategy_contract.v2"
+
+# Frozen once, before any validation outcome is seen. Every number here is
+# chosen from trading rationale and the design window only. Changing one after
+# looking at validation results is the failure that produced the V2 rejection.
+
+[swing]
+# One name, no version suffix. Nothing is in production, so there is no promoted
+# artifact a rename could invalidate, and version proliferation costs more in
+# confusion than it buys in safety. What the strategy does is described by the
+# fields below and its change history lives in the plan document.
+strategy_id = "swing"
+# Decide after the completed bar, enter at the next session open, exit at
+# whichever barrier is touched first: profit target, stop, or the tenth session
+# close.
+#
+# V1 was timeout-only on the argument that daily bars cannot show when an
+# intraday stop was touched. That was too conservative. A daily bar's high and
+# low do reveal whether a barrier was breached; only the intra-bar sequence is
+# unknown. Standard practice resolves that by assuming the stop filled first
+# whenever both barriers fall inside one bar, which is the conservative
+# direction. Timeout-only systematically overstates results by holding through
+# drawdowns a real stop would have closed.
+horizon_sessions = 10
+entry_reference = "next_session_open"
+exit_rule = "target_stop_timeout"
+decision_cutoff = "bar_close"
+same_bar_barrier_resolution = "stop_first"
+target_atr_multiple = 3.0
+stop_atr_multiple = 1.5
+atr_timeframe = "1Day"
+atr_lookback_bars = 14
+# Ten sessions rather than five. One round trip costs roughly 20 bps, so a
+# five-session hold must clear that in a week; doubling the hold halves the cost
+# burden per unit of expected move without assuming longer is better.
+round_trip_cost_bps = 20.0
+minimum_warmup_sessions = 250
+maximum_trades_per_decision = 25
+minimum_expected_net_edge_bps = 5.0
+# Bar structure. Hourly is the finer entry clock; daily supplies the trend and
+# barrier context. Both are required.
+feature_timeframe = "1Hour"
+context_timeframe = "1Day"
+# Diversification has a preferred limit and a bounded fallback. The fallback
+# prevents a valid four- or three-sector opportunity set from becoming
+# impossible while still refusing a portfolio drawn from fewer than three
+# sectors.
+target_maximum_sector_weight = 0.20
+hard_maximum_sector_weight = 0.3333333333333333
+minimum_distinct_sectors_for_selection = 3
+sector_neutral_scoring = true
+
+[intraday]
+strategy_id = "intraday"
+# Decide on a completed five-minute bar, finalize after 60 seconds, enter at the
+# next one-minute open, exit at target, stop, or the thirtieth regular-session
+# minute, whichever comes first.
+horizon_minutes = 30
+entry_reference = "next_one_minute_open"
+exit_rule = "target_stop_timeout"
+decision_finalization_seconds = 60
+round_trip_cost_bps = 10.0
+# Standard day-trade sizing is a 1.5 ATR stop with a 2.0 ATR target, a 1.33:1
+# reward-to-risk. A stop tighter than one average range is hit by ordinary noise
+# rather than by the thesis failing, which bleeds the account on randomness.
+# ATR is measured on the trading timeframe: the published multiples assume that,
+# and a daily ATR applied to a thirty-minute hold would make the stop
+# unreachable and silently turn this into a timeout-only strategy.
+target_atr_multiple = 2.0
+stop_atr_multiple = 1.5
+atr_timeframe = "5Min"
+atr_lookback_bars = 14
+# Rolling state restarts each session. The longest active relationship feature
+# is the 20-bar OBV / Efficiency Ratio window, so 20 bars are both necessary
+# and sufficient. The former 130-bar MACD stabilization rule belonged to the
+# retired clock-bar feature set and made a 78-volume-bar session impossible.
+minimum_warmup_bars = 20
+maximum_trades_per_session = 5
+minimum_expected_net_edge_bps = 3.0
+# Opening, midday, and late sessions behave differently. A single unconditional
+# VWAP-distance rule ignoring this is what V2 did, and it produced negative
+# gross return before costs.
+session_segments = ["opening", "midday", "late"]
+opening_end_et = "11:00"
+midday_end_et = "14:00"
+# Bar structure. Clock bars sample market activity unevenly: the 09:30 bar
+# routinely carries thirty to fifty times the volume of the 12:30 bar, so
+# returns sampled on the clock have variance driven by time of day rather than
+# by information. Volume bars close on a fixed quantity traded instead, so each
+# observation represents the same amount of activity and the return series is
+# closer to independent and identically distributed.
+#
+# Faithful volume bars require one-minute or tick input. Built from five-minute
+# aggregates the boundaries quantise to five-minute edges, which defeats the
+# purpose near the open where one bar can exceed the whole threshold. One-minute
+# bars are therefore collected for the selected sessions before volume bars are
+# constructed, and time bars remain in use until then.
+decision_bar_structure = "volume"
+volume_bar_source_timeframe = "1Min"
+volume_bar_threshold_basis = "trailing_median_session_volume"
+volume_bars_per_session_target = 78
+# Rolling features must not span an overnight gap. Positions close before the
+# end of the session, so a window that reaches back across the close mixes two
+# regimes and prices a move that could not have been held.
+reset_rolling_features_overnight = true
+
+[intraday_universe]
+# Standard day-trading practice selects stocks in two layers, not one. Layer one
+# is which stocks could be traded at all; layer two is which are actually moving
+# today. Measured on our own corpus, only 3.8% of eligible stock-days clear
+# relative volume 2.0, so an unconditional population is 96% stocks that were
+# not moving. Training on those teaches nothing and is the likely reason the V2
+# intraday setup showed negative gross return before costs.
+#
+# This is event-based sampling: sample when something happens, not on a fixed
+# clock. See docs/active_edge_rebuild_plan.md for sources.
+scope = "sp500_point_in_time"
+# Both strategies run on the point-in-time S&P 500. A broader universe was
+# considered on the argument that high-beta mid caps and recent listings are the
+# most intraday-tradable names, but it was not adopted: the identity, sector and
+# benchmark authorities are all built and verified against index membership, and
+# a second universe would need its own point-in-time survivorship controls
+# before it could be trusted. Index membership is the liquidity screen; the two
+# layers below are the screens membership does not supply.
+index_restricted = true
+
+# Layer one: could this be traded intraday at all.
+minimum_average_volume_shares = 1_000_000
+average_volume_lookback_sessions = 20
+minimum_price = 8.0
+maximum_price = 500.0
+minimum_bar_continuity = 0.95
+# Operating companies only. The setup is a single-name reversal that conditions
+# on an issuer catalyst, and a fund has no issuer: measured article density is a
+# median of 8 for exchange-traded products against 204 for operating companies.
+# Leveraged single-stock products would also double-count exposure to an
+# underlying already in the universe, and bond funds are not equities at all.
+exclude_exchange_traded_products = true
+
+# Layer two: is it in play at this completed five-minute bar. Current cumulative
+# observed volume is divided by the median cumulative volume at the exact same
+# regular-session slot over the prior twenty sessions. The current session is
+# the numerator, never part of either historical denominator.
+minimum_relative_volume = 2.0
+relative_volume_lookback_sessions = 20
+relative_volume_excludes_current_session = true
+selection_timing = "cumulative_to_decision"
+activity_timeframe = "5Min"
+activity_numerator = "cumulative_observed_volume"
+activity_baseline = "median_cumulative_same_slot_prior_sessions"
+exact_slot_matching = true
+activity_resets_each_session = true
+imputation_allowed = false
+# The completed bar is treated as available one minute after its end. This
+# equals the frozen intraday decision-finalization delay above.
+activation_delay_seconds = 60
+maximum_candidates_per_decision = 30
+
+[methodology]
+# Established methods, not invented ones. Each is named so a reviewer can check
+# the implementation against the published definition.
+labeling = "triple_barrier_and_cross_sectional_rank"
+cross_validation = "purged_k_fold_with_embargo"
+sampling = "event_based"
+# Meta-labeling separates trade direction from trade sizing. It is a documented
+# improvement but is deferred until one learned strategy passes frozen
+# out-of-sample economic acceptance on its own, because it adds a second model
+# to validate.
+meta_labeling_enabled = false
+
+[labels]
+# Benchmark excess is measured over the identical executable interval as the
+# stock return, and is already net of cost. It is never re-deducted.
+retained = [
+  "gross_return",
+  "cost",
+  "net_return",
+  "spy_excess_return",
+  "sector_excess_return",
+]
+benchmark_market = "SPY"
+benchmark_sector_source = "point_in_time_membership"
+
+# Two labels, both computed on every row. They answer different questions and
+# neither replaces the other.
+#
+# The barrier label asks: for THIS stock, did the trade work? Target hit is +1,
+# stop hit is -1, neither before expiry is 0. It encodes the exit rule, so it
+# accounts for the fact that a position is closed early rather than held to a
+# fixed horizon.
+#
+# The rank label asks: among ALL stocks on this date, was this one of the best?
+# Forward return is computed for the whole cross-section, then the top fifth is
+# +1, the bottom fifth is -1, and the middle three fifths are 0.
+#
+# The barrier label alone produced the failure already on record: it says which
+# trades were good but gives no way to choose among the many that qualify on the
+# same day, so selection fell back to something unrelated to expected return.
+# The rank label alone ignores that a real position is stopped out. Together the
+# model learns which stocks to prefer and what happens when the trade is
+# actually managed.
+barrier_labels_enabled = true
+rank_labels_enabled = true
+rank_top_quantile = 0.20
+rank_bottom_quantile = 0.20
+# Swing compares a stock with sector peers. Intraday compares all stocks whose
+# activations are available at the same decision time; sector slices would be
+# too small and would answer a different question.
+swing_rank_within_sector = true
+# Fifty peers is preferred. Thirty is the approved hard floor; smaller sector
+# groups receive no rank label. The actual peer count and target status are
+# persisted with every row and used as a training reliability weight.
+swing_target_cross_section_for_ranking = 50
+swing_minimum_cross_section_for_ranking = 30
+intraday_rank_within_sector = false
+intraday_minimum_cross_section_for_ranking = 10
+
+[validation]
+swing_walk_forward_folds = 1
+intraday_purged_folds = 4
+minimum_test_sessions_per_fold = 60
+embargo_sessions = 10
+unseen_ticker_holdout_fraction = 0.2
+unseen_ticker_assignment = "deterministic_hash"
+
+[experiment_budget]
+# Trying many variants until one passes is how a random result becomes a
+# "discovery". The budget is the multiple-testing control.
+maximum_learned_candidates = 6
+maximum_feature_profiles = 2
+maximum_selection_policies = 2
+shadow_retries = 0
+
+[features]
+# Four groups, kept apart. Extended-hours bars never reach a regular-session
+# VWAP, moving average, ATR, or relative-volume denominator, because thin
+# pre-market prints are real trades but do not represent broad agreement.
+profiles = ["technical_market", "catalyst_full"]
+promotion_eligible_profile = "catalyst_full"
+extended_context_enabled = true
+# Raw event counts trend upward across the sample because provider news
+# coverage grew, not because issuers made more news. Counts must be compared
+# within a decision cross-section or against the ticker's own recent history.
+news_count_normalization = "cross_sectional_rank"
+raw_news_counts_prohibited = true
+# Cross-sectional values are computed only from feature-eligible securities in
+# the same decision session. Tails are clipped before z-scoring so one extreme
+# move cannot flatten the rest of the day's distribution.
+cross_sectional_winsorize_quantile = 0.01
+cross_sectional_emit_zscore = true
+cross_sectional_emit_rank = true
+cross_sectional_emit_sector_relative = true
+# Sentiment decays from an impulse rather than switching off at a window edge.
+# Frozen here and never tuned on validation results.
+#
+# Intraday: published work finds the news-sentiment effect is concentrated in
+# the opening minutes and retains some predictive value to roughly six hours.
+# A ninety-minute half-life leaves about 6% of the impulse at six hours, which
+# matches that shape. Because the effect is front-loaded rather than uniform,
+# decay alone is insufficient: the feature set must also carry time-since-news
+# and which session segment the decision falls in.
+sentiment_decay_half_life_minutes_intraday = 90.0
+# Swing: PROVISIONAL, and weaker evidence than every other number here. The
+# sentiment-decay literature describes an intraday effect that fades after the
+# first session, which does not support a multi-day half-life. The mechanism
+# that actually persists over a ten-session horizon is post-announcement drift,
+# which is a different effect and is not a decayed sentiment score. This value
+# exists so the feature can be built; whether decayed sentiment belongs in a
+# ten-day strategy at all is an ER4 question, and catalyst remains an overlay
+# until a preregistered ablation says otherwise.
+sentiment_decay_half_life_hours_swing = 36.0
+swing_sentiment_decay_evidence = "provisional_pending_er4_ablation"
+
+# Continuous technical relationships. These are published indicator semantics,
+# not buy/sell thresholds. A five-bar Williams pivot is known only after the two
+# following bars complete; OBV and Kaufman's efficiency ratio use one standard
+# 20-bar context. Intraday callers must include the session in their grouping so
+# none of these windows crosses the overnight gap.
+technical_relationship_methods = [
+  "williams_five_bar_rsi_divergence",
+  "granville_obv_confirmation",
+  "kaufman_efficiency_ratio_regime",
+]
+rsi_pivot_span_bars = 2
+obv_confirmation_lookback_bars = 20
+efficiency_ratio_lookback_bars = 20
+
+[data_quality]
+# Missing or unverifiable data for a few stocks must not stall the whole
+# cross-section. Exclude the complete security, preserve its reason and affected
+# dates in the audit, and continue while no more than 5% of the filtered
+# point-in-time universe is lost. Market-wide sessions and benchmarks cannot be
+# waived because their absence changes every stock's comparison state.
+maximum_security_exclusion_fraction = 0.05
+exclusion_unit = "entire_security"
+benchmark_exclusions_allowed = false
+market_session_exclusions_allowed = false
+
+[stress]
+# Costs are widened, not the signal, to test whether the edge survives worse
+# fills than the base policy assumes.
+cost_multiplier = 2.0
+
+[retirement]
+# One rule, declared before any result is seen.
+rule = "a learned strategy version failing frozen out-of-sample economic acceptance is retired; deterministic baseline failure alone does not block fitting, and thresholds or cohorts are never re-searched on the locked test"

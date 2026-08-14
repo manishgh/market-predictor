@@ -30,6 +30,10 @@ from market_predictor.edge_rebuild.history_contracts import (
     SELECTED_SESSION_BENCHMARK_PLAN_SCHEMA,
     SELECTED_SESSION_ONE_MINUTE_PLAN_SCHEMA,
 )
+from market_predictor.edge_rebuild.intraday_contract_lineage import (
+    DEFAULT_INTRADAY_CONTRACT_LINEAGE_PATH,
+    require_intraday_contract_lineage,
+)
 from market_predictor.edge_rebuild.intraday_features import (
     FEATURE_SCHEMA_VERSION,
     build_causal_intraday_features,
@@ -233,6 +237,7 @@ class _Artifact:
     path: Path
     session_date_et: str
     symbol_rows: dict[str, int]
+    sha256: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -1145,6 +1150,7 @@ def _verify_inputs(
     membership_authority_directory: Path,
     strategy_contract: StrategyContract,
     strategy_contract_path: Path,
+    intraday_contract_lineage_path: Path = DEFAULT_INTRADAY_CONTRACT_LINEAGE_PATH,
 ) -> _VerifiedInputs:
     contract_from_disk = load_strategy_contract(strategy_contract_path)
     if (
@@ -1157,11 +1163,15 @@ def _verify_inputs(
     if selection_manifest.get("schema") != INTRADAY_SELECTION_SCHEMA:
         raise DataReadinessError("legacy or leaked intraday selection schema is prohibited")
     selection, selection_identity = verify_selected_stock_sessions(selection_directory)
-    if (
-        selection_identity["strategy_id"] != strategy_contract.intraday.strategy_id
-        or selection_identity["strategy_contract_sha256"] != contract_sha256
-    ):
+    if selection_identity["strategy_id"] != strategy_contract.intraday.strategy_id:
         raise DataReadinessError("selection does not use the frozen intraday contract")
+    selection_contract_identity = require_intraday_contract_lineage(
+        observed_contract_sha256=selection_identity["strategy_contract_sha256"],
+        observed_contract_file_sha256=None,
+        current_contract=strategy_contract,
+        current_contract_path=strategy_contract_path,
+        lineage_path=intraday_contract_lineage_path,
+    )
     selection = _normalize_selection(selection)
 
     stock_manifest = load_complete_intraday_history_collection(stock_collection_directory)
@@ -1170,10 +1180,19 @@ def _verify_inputs(
     coverage_manifest = load_complete_one_minute_coverage(stock_coverage_directory)
     if not bool(coverage_manifest.get("ready_for_feature_build")):
         raise DataReadinessError("stock one-minute coverage is not ready for feature build")
+    coverage_contract_identity = require_intraday_contract_lineage(
+        observed_contract_sha256=coverage_manifest.get(
+            "strategy_contract_sha256"
+        ),
+        observed_contract_file_sha256=coverage_manifest.get(
+            "strategy_contract_file_sha256"
+        ),
+        current_contract=strategy_contract,
+        current_contract_path=strategy_contract_path,
+        lineage_path=intraday_contract_lineage_path,
+    )
     if (
-        coverage_manifest.get("strategy_contract_sha256") != contract_sha256
-        or coverage_manifest.get("strategy_contract_file_sha256") != file_sha256(strategy_contract_path)
-        or coverage_manifest.get("collection_manifest_sha256") != file_sha256(stock_collection_directory / "_manifest.json")
+        coverage_manifest.get("collection_manifest_sha256") != file_sha256(stock_collection_directory / "_manifest.json")
         or not _same_path(coverage_manifest.get("collection_path"), stock_collection_directory)
     ):
         raise DataReadinessError("stock collection and coverage lineage differ")
@@ -1191,6 +1210,18 @@ def _verify_inputs(
         raise DataReadinessError("coverage canonical five-minute parent lineage differs")
     stock_plan_directory = _existing_directory(coverage_manifest.get("plan_path"), "stock plan")
     stock_plan = load_complete_intraday_history_plan(stock_plan_directory)
+    stock_plan_request = _load_json(stock_plan_directory / "_request.json")
+    stock_plan_contract_identity = require_intraday_contract_lineage(
+        observed_contract_sha256=stock_plan_request.get(
+            "strategy_contract_sha256"
+        ),
+        observed_contract_file_sha256=stock_plan_request.get(
+            "strategy_contract_file_sha256"
+        ),
+        current_contract=strategy_contract,
+        current_contract_path=strategy_contract_path,
+        lineage_path=intraday_contract_lineage_path,
+    )
     if (
         stock_plan.get("schema") != SELECTED_SESSION_ONE_MINUTE_PLAN_SCHEMA
         or stock_manifest.get("plan_fingerprint") != stock_plan.get("plan_fingerprint")
@@ -1206,11 +1237,21 @@ def _verify_inputs(
     benchmark_plan_directory = _existing_directory(benchmark_request.get("plan_path"), "benchmark plan")
     benchmark_plan = load_complete_intraday_history_plan(benchmark_plan_directory)
     benchmark_plan_request = _load_json(benchmark_plan_directory / "_request.json")
+    benchmark_contract_identity = require_intraday_contract_lineage(
+        observed_contract_sha256=benchmark_plan_request.get(
+            "strategy_contract_sha256"
+        ),
+        observed_contract_file_sha256=benchmark_plan_request.get(
+            "strategy_contract_file_sha256"
+        ),
+        current_contract=strategy_contract,
+        current_contract_path=strategy_contract_path,
+        lineage_path=intraday_contract_lineage_path,
+    )
     if (
         benchmark_plan.get("schema") != SELECTED_SESSION_BENCHMARK_PLAN_SCHEMA
         or benchmark_manifest.get("plan_fingerprint") != benchmark_plan.get("plan_fingerprint")
         or benchmark_request.get("plan_manifest_sha256") != file_sha256(benchmark_plan_directory / "_manifest.json")
-        or benchmark_plan_request.get("strategy_contract_sha256") != contract_sha256
     ):
         raise DataReadinessError("benchmark collection lineage is invalid")
     _require_selection_lineage(benchmark_plan.get("selection"), selection_identity, "benchmark plan")
@@ -1282,7 +1323,25 @@ def _verify_inputs(
         "membership_table_sha256": membership_identity.membership_table_sha256,
         "strategy_contract_file_sha256": file_sha256(strategy_contract_path),
         "strategy_contract_sha256": contract_sha256,
+        "intraday_data_contract_sha256": (
+            selection_contract_identity.intraday_data_contract_sha256
+        ),
+        "intraday_parent_contract_sha256": (
+            selection_contract_identity.observed_contract_sha256
+        ),
+        "intraday_contract_lineage_file_sha256": str(
+            selection_contract_identity.lineage_file_sha256 or ""
+        ),
     }
+    if (
+        coverage_contract_identity.intraday_data_contract_sha256
+        != selection_contract_identity.intraday_data_contract_sha256
+        or stock_plan_contract_identity.intraday_data_contract_sha256
+        != selection_contract_identity.intraday_data_contract_sha256
+        or benchmark_contract_identity.intraday_data_contract_sha256
+        != selection_contract_identity.intraday_data_contract_sha256
+    ):
+        raise DataReadinessError("intraday parent authorities use different scoped contracts")
     return _VerifiedInputs(
         selection=selection,
         coverage=coverage,
@@ -1350,8 +1409,11 @@ def _collection_artifacts(root: Path, manifest: Mapping[str, Any]) -> tuple[_Art
                 path=_resolve_inside(root, str(raw.get("path", ""))),
                 session_date_et=str(raw.get("asof_date", "")),
                 symbol_rows=symbol_rows,
+                sha256=str(raw.get("sha256", "")),
             )
         )
+        if len(output[-1].sha256) != 64:
+            raise DataReadinessError("collection artifact lacks a valid SHA-256")
     return tuple(output)
 
 
@@ -1420,6 +1482,10 @@ def _load_stock_session_batch(
     for path, (artifact, path_tickers) in sorted(
         by_path.items(), key=lambda item: str(item[0])
     ):
+        if file_sha256(path) != artifact.sha256:
+            raise DataReadinessError(
+                f"stock one-minute artifact hash differs for {session_date}: {path}"
+            )
         frame = pd.read_parquet(path)
         normalized = frame["ticker"].astype(str).str.upper().str.strip()
         selected = frame.loc[normalized.isin(path_tickers)].copy()
@@ -1459,7 +1525,14 @@ def _load_benchmark_session(
     missing_paths = [artifact.path for artifact in paths if not artifact.path.is_file()]
     if missing_paths:
         raise DataReadinessError(f"benchmark one-minute path is missing: {missing_paths[0]}")
-    frames = [pd.read_parquet(artifact.path) for artifact in paths]
+    frames = []
+    for artifact in paths:
+        if file_sha256(artifact.path) != artifact.sha256:
+            raise DataReadinessError(
+                f"benchmark one-minute artifact hash differs for {session_date}: "
+                f"{artifact.path}"
+            )
+        frames.append(pd.read_parquet(artifact.path))
     frame = pd.concat(frames, ignore_index=True)
     expected_rows: dict[str, int] = {}
     for artifact in paths:

@@ -9,6 +9,7 @@ import pandas as pd
 import pytest
 
 import market_predictor.edge_rebuild.intraday_dataset as dataset_module
+from market_predictor.canonical.store import file_sha256
 from market_predictor.edge_rebuild.intraday_dataset import (
     INTRADAY_DATASET_SCHEMA,
     _Artifact,
@@ -117,7 +118,14 @@ def _verified_inputs(tmp_path: Path, *, tickers: tuple[str, ...] = ("AAA",)) -> 
         path = tmp_path / "stock" / f"{ticker}.parquet"
         path.parent.mkdir(parents=True, exist_ok=True)
         stock.to_parquet(path, index=False)
-        stock_artifacts.append(_Artifact(path=path, session_date_et=DAY, symbol_rows={ticker: len(stock)}))
+        stock_artifacts.append(
+            _Artifact(
+                path=path,
+                session_date_et=DAY,
+                symbol_rows={ticker: len(stock)},
+                sha256=file_sha256(path),
+            )
+        )
         coverage_rows.append(
             {
                 "ticker": ticker,
@@ -138,6 +146,7 @@ def _verified_inputs(tmp_path: Path, *, tickers: tuple[str, ...] = ("AAA",)) -> 
         path=benchmark_path,
         session_date_et=DAY,
         symbol_rows={ticker: 390 for ticker in BENCHMARKS},
+        sha256=file_sha256(benchmark_path),
     )
     lineage = {
         "selection_authority_sha256": "1" * 64,
@@ -545,13 +554,33 @@ def test_sparse_observed_benchmark_minutes_are_not_imputed_or_rejected(
     symbol_rows["XLB"] -= 1
     verified = replace(
         verified,
-        benchmark_artifacts=(replace(artifact, symbol_rows=symbol_rows),),
+        benchmark_artifacts=(
+            replace(
+                artifact,
+                symbol_rows=symbol_rows,
+                sha256=file_sha256(artifact.path),
+            ),
+        ),
     )
 
     manifest = _publish(tmp_path, monkeypatch, verified)
 
     assert manifest["status"] == "complete"
     assert manifest["summary"]["published_stock_sessions"] == 1
+
+
+def test_stock_artifact_same_row_count_tamper_is_rejected(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    verified = _verified_inputs(tmp_path)
+    artifact = verified.stock_artifacts[0]
+    frame = pd.read_parquet(artifact.path)
+    frame.loc[0, "close"] = float(frame.loc[0, "close"]) + 1.0
+    frame.to_parquet(artifact.path, index=False)
+
+    with pytest.raises(DataReadinessError, match="artifact hash differs"):
+        _publish(tmp_path, monkeypatch, verified)
 
 
 def test_final_minute_label_may_finalize_after_session_close() -> None:

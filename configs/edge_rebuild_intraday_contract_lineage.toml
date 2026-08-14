@@ -1,0 +1,11 @@
+schema_version = "edge_rebuild.intraday_contract_lineage.v1"
+current_intraday_data_contract_sha256 = "c88f1a2c1eb3cc3065f5a7bc38d97662da546260c760b45be321aa1718a50b39"
+
+[[parents]]
+full_contract_sha256 = "8ab982460ec77c391047c4dd32c5ee3e2fea758ea448cd758cc785e3c86ce4e8"
+contract_file_sha256 = "250a4faa7977a3d82bfacff425d56fa9193bb144be286a1c45bc2c0a65d48246"
+intraday_data_contract_sha256 = "c88f1a2c1eb3cc3065f5a7bc38d97662da546260c760b45be321aa1718a50b39"
+source_commit = "466fe894e927cfb1d3d092229c3b392c61bc41f4"
+source_path = "configs/edge_rebuild_strategy_contract.toml"
+snapshot_path = "lineage/edge_rebuild_strategy_contract.466fe894e927cfb1d3d092229c3b392c61bc41f4.toml"
+reason = "Later changes affected only swing feature-profile governance and the global experiment-profile count; every intraday data, feature-state, label, and quality field is identical."
