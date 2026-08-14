@@ -2,22 +2,22 @@
 
 Status: active
 
-Last updated: 2026-08-13
+Last updated: 2026-08-14
 
 Repository: `C:\project\market-predictor`
 
 Branch: `er-intraday-refactoring`
 
-Last completed implementation commit: `b03f4f1` (`Build resumable SIP microstructure authority`)
+Last completed implementation commit: `8a76ec1` (`build causal intraday bar dataset authority`)
 
 ## Purpose
 
 Continue the four-model prediction rebuild: swing baseline, swing event-driven,
 intraday baseline, and intraday event-driven. A0 through A2 implementation are closed.
 A3 issuer-event specialist development is complete with no candidate. A4.1 collector
-implementation is complete; A4.3 bar-only causal dataset construction is next. Do not
-open a locked test or claim model
-quality until a preregistered candidate passes both validation scopes.
+implementation and A4.3 bar-only causal dataset publication are complete. A4.4
+continuation/reversion baseline training is next. Do not open a locked test or claim
+model quality until a preregistered candidate passes both validation scopes.
 
 This repository produces prediction intelligence and abstention. Alerts, orders,
 positions, portfolio risk, and execution remain in `trading_flow`.
@@ -32,8 +32,9 @@ specialists; A6 performs locked evaluation and promotion.
 - No promoted serving bundle exists. Production prediction paths must fail closed.
 - Reddit and Seeking Alpha remain retired and prohibited.
 - Swing decisions begin on `2019-07-09`; earlier bars are warm-up only.
-- Intraday estimator input remains the 44-feature causal technical contract. The V3
-  z-score lineage is invalid and prohibited.
+- Intraday estimator input is the ordered A4.3 bar-only technical contract, sampled on
+  fixed five-minute cohorts from causal completed evidence. The V3 z-score lineage is
+  invalid and prohibited.
 - The swing base authority contains only `technical_market`. A3 event evidence is
   published separately and cannot alter baseline probability.
 - The swing trainer no longer attaches a hard-coded SEC authority, fills unknown SEC
@@ -118,7 +119,8 @@ specialists; A6 performs locked evaluation and promotion.
   1.954 GiB recorded peak. Exact ticker and exact prediction timestamp are required;
   conflicting CIKs fail closed. Every exclusion is persisted in
   `identity_alignment_audit.parquet`.
-- Repository suite: 1,238 passed and 2 skipped.
+- Repository suite: 1,293 passed and 2 skipped.
+- Tracked Ruff, strict mypy across 226 source files, and compileall pass.
 - Coordinated request, feature, all-profile label, dtype, partition, global identity,
   source-coverage, causal-window, and governance-hash poison tests pass.
 - The real materialization and event publication remained below the 5 GiB limit;
@@ -130,7 +132,7 @@ specialists; A6 performs locked evaluation and promotion.
 | --- | --- | --- |
 | Swing baseline | A2 trainer complete; prior candidates rejected; no new run or promotion | Preserve the frozen technical contract until a governed training run is approved |
 | Swing event-driven | Rating-change and coverage specialists trained in development; all rejected | Preserve rejection evidence; do not open locked test or serve |
-| Intraday baseline | V2 rejected; V3 z-score lineage invalid; A4.1 collector verified | A4.3 separately governed bar-only causal dataset |
+| Intraday baseline | V2 rejected; V3 z-score lineage invalid; A4.3 bar-only authority complete; no new model | A4.4 continuation/reversion training |
 | Intraday event-driven | No eligible candidate | A5 verified event cohorts |
 
 `ROC-AUC >= 0.60` is a locked-test diagnostic, not a training objective or permission
@@ -191,12 +193,35 @@ coverage.
   for immutable failed-attempt inventory, path overlap, page-level resume, causal
   population selection, matched ablation, and zero-sided quotes.
 
-## Exact Next Step: Build A4.3 Bar-Only Technical Intraday Authority
+## A4.3: Bar-Only Technical Intraday Authority
 
-Build the cohort-correct bar-only authority from existing verified SIP/all one-minute
-and causal five-minute bars, point-in-time membership, SPY, QQQ, and sector ETFs. Use
-explicit clock-time cross-sectional cohorts and five-minute ATR. Do not include any
-trade/quote/microstructure field, tune A3, or open a locked test.
+- Commit `8a76ec1` publishes the fixed-cohort bar-only dataset authority without a
+  provider download or any trade/quote/microstructure input.
+- The immutable five-minute projection contains 43,226 selected stock-sessions and
+  3,364,335 rows: 43,132 stock-session pairs are complete and 94 incomplete pairs are
+  retained as explicit coverage metadata.
+- The immutable dataset contains 794 sessions, 501 tickers, 3,095,688 rows, and
+  1,365,015 eligible rows. Aggregate publication peak upper bound was 2.218 GiB.
+- Dataset request SHA-256:
+  `83820269d80019a46754aa451c1f1e13773995a889a51e605595511315af4bb2`.
+  Transformation SHA-256:
+  `0da898cc6fd3c1e933406ce07f24de197fc1fa34c4a909c4b9c4a28e2e96f3f6`.
+- The bound audit is
+  `data/reports/edge_rebuild_intraday_bar_only_causal_20260814_v1_audit.json`. It
+  replays the exact dataset/projection manifest, authority, and inventory hashes and
+  reports zero duplicate-decision, causal-cutoff, label-availability, eligible-ATR,
+  ordered-feature-hash, schema-identity, and prohibited-feature violations.
+- Two independent re-reviewers reported no remaining medium-or-higher findings.
+- No model was trained, no locked test was opened, and no serving bundle was promoted.
+
+## Exact Next Step: Train A4.4 Continuation/Reversion Baselines
+
+Train separate continuation and reversion baselines from the completed A4.3 authority
+using purged, embargoed chronological development and validation. Apply predictive,
+calibration, coverage, after-cost benchmark-relative, drawdown, turnover, capacity,
+and stability gates. Keep the future holdout closed unless a preregistered development
+candidate passes every required gate. Do not include any trade/quote/microstructure
+field or tune against the locked test.
 
 ## Source Boundary
 

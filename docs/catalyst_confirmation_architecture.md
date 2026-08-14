@@ -51,7 +51,9 @@ There is no fallback from the active path to legacy models or schemas.
 ### Intraday
 
 - Strategy identity: `intraday`; hypothesis: VWAP Exhaustion Reversal.
-- Decision clock: completed causal volume bar.
+- Decision clock: fixed exchange-calendar five-minute cohort after activation. The
+  feature state uses the latest completed causal volume bar available by that cutoff;
+  asynchronous volume-bar completion never defines the cross-sectional cohort.
 - Entry: next exact observed one-minute open.
 - Horizon: thirty regular-session minutes with target/stop/timeout outcomes.
 - Estimator inputs: exact technical, market, QQQ, and point-in-time sector features.
@@ -73,6 +75,9 @@ There is no fallback from the active path to legacy models or schemas.
   The microstructure-enhanced profile additionally requires a complete immutable SIP
   trade/quote authority and one-minute materialization. Partial raw transport cannot
   silently alter the bar-only profile.
+- The completed bar-only authority binds every session unit to the exact feature/label
+  transformation hashes, replays source hashes at read time and before final publish,
+  and preserves missing five-minute observations as row-level abstentions.
 - SPY, QQQ, and the point-in-time sector ETF use the identical decision and outcome
   interval as the stock.
 

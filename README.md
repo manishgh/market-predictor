@@ -80,10 +80,13 @@ hash-verified promoted bundle.
   coverage is metadata, not an earlier-decision selector. A two-job live Alpaca probe
   completed with zero failures at 0.35 GiB peak RSS. It is intentionally incomplete
   and cannot authorize microstructure features or training.
-- The next executable intraday work is a separately identified bar-only A4.3 dataset
-  using verified SIP/all one- and five-minute bars, SPY, QQQ, sector ETFs, and
-  point-in-time membership. Trade/quote features remain prohibited until a complete
-  A4.1/A4.2 authority exists.
+- A4.3's separately identified bar-only intraday authority is complete: 794 sessions,
+  501 tickers, 3,095,688 rows, and 1,365,015 eligible rows from verified SIP/all one-
+  and five-minute bars, SPY, QQQ, sector ETFs, and point-in-time membership. Its
+  hash-bound row audit passes with zero causal, schema, duplicate, ATR, or prohibited-
+  feature violations. Trade/quote features remain prohibited until a complete A4.1/A4.2
+  authority exists. The next executable work is A4.4 continuation/reversion training;
+  no locked test may open unless development gates pass.
 - Intraday label schema V2 requires exact stock, SPY, QQQ, and point-in-time sector
   returns over one executable entry-to-managed-exit interval. Missing benchmark
   evidence abstains. Swing and intraday evaluations report named after-cost binary

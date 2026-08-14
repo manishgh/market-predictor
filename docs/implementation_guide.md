@@ -106,12 +106,19 @@ point-in-time authority exists. No new real A2 candidate has been trained.
 ### Intraday path
 
 - `intraday_selection.py`: point-in-time in-play selection.
-- `volume_bars.py`, `intraday_features.py`: causal completed volume bars and the shared
-  V2 feature builder.
-- `intraday_labels.py`, `one_minute_coverage.py`: exact next-minute entry,
-  thirty-minute outcome path, and holding-aligned SPY, QQQ, and point-in-time sector
-  returns. Missing exact benchmark evidence abstains.
-- `intraday_dataset.py`, `intraday_live.py`: immutable publication and live parity.
+- `volume_bars.py`, `intraday_bar_features.py`: causal completed volume-bar state sampled
+  on fixed five-minute cohorts, canonical five-minute ATR, exact market/sector context,
+  and the ordered bar-only feature contract.
+- `intraday_bar_labels.py`, `one_minute_coverage.py`: exact next-minute entry,
+  thirty-minute target/stop/timeout path, and holding-aligned SPY, QQQ, and point-in-time
+  sector returns. Missing exact stock or benchmark evidence abstains only that row.
+- `intraday_bar_only_five_minute.py`: local immutable selected-session projection from
+  the verified SIP/all five-minute authority; it never downloads provider data.
+- `intraday_bar_dataset.py`, `intraday_bar_live.py`: transformation-hash-bound resumable
+  publication, fixed-cohort batch/live parity, bounded two-process execution, source
+  hash replay, interruption recovery, and per-ticker live abstention.
+- `intraday_bar_audit.py`: reproducible row-level causality audit bound to exact dataset
+  and projection manifest, authority, and inventory hashes.
 - `intraday_microstructure_history.py`: immutable A4.1 planning plus bounded,
   page-resumable Alpaca SIP trade/quote transport. Completion authorizes only later
   materialization; a partial collection cannot train or serve.
@@ -148,9 +155,13 @@ shuffled-label control must remain at chance.
    report-only. Its 12 development experiments produced no candidate, so the locked
    test remains unopened and serving remains disabled.
 4. Keep API scoring disabled unless a promoted bundle verifies at load time.
-5. Build A4.3's separately identified bar-only causal dataset from existing verified
-   one-minute/five-minute bars and benchmark authorities. Keep A4.2/A4.5 trade/quote
-   features blocked until the complete A4.1 raw authority can be stored and replayed.
+5. Preserve A4.3's completed bar-only causal dataset and its hash-bound audit. Keep
+   A4.2/A4.5 trade/quote features blocked until the complete A4.1 raw authority can be
+   stored and replayed.
+6. Execute A4.4 by training separate continuation and reversion baselines with purged,
+   embargoed chronological selection. Do not open the future holdout unless a
+   preregistered development candidate passes predictive, calibration, coverage,
+   after-cost benchmark-relative, drawdown, turnover, and stability gates.
 
 ## Data And Training Rules
 

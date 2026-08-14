@@ -110,7 +110,7 @@ drawdown, turnover, capacity, and coverage remain co-equal promotion gates.
 | A1 | Verify labels and leakage controls | Completed |
 | A2 | Build the technical swing baseline | Completed |
 | A3 | Build catalyst-driven swing specialists | Completed; no candidate passed |
-| A4 | Build the technical intraday baseline | A4.1 collector complete; A4.3 bar-only authority next |
+| A4 | Build the technical intraday baseline | A4.3 bar-only authority complete; A4.4 training next |
 | A5 | Build catalyst-driven intraday specialists | Not started |
 | A6 | Run locked evaluation and promote qualified models | Not started |
 
@@ -289,7 +289,7 @@ simplified economic calculation.
    time-weighted relative spread, time-weighted quote-size imbalance, quote-update
    count, trade count, share volume, dollar volume, and mean trade size with explicit
    availability and source coverage. Missing quotes or trades remain unavailable.
-3. **A4.3 - Publish the bar-only causal technical dataset.** This is a distinct
+3. **A4.3 - Publish the bar-only causal technical dataset (`complete`).** This is a distinct
    governed model profile, not a degraded microstructure model. Its source set is
    limited to verified SIP/all one-minute bars, causal five-minute bars,
    point-in-time membership, SPY, QQQ, and sector ETFs. It may use volume clock,
@@ -300,6 +300,60 @@ simplified economic calculation.
    stock's asynchronous volume-bar completion timestamp. ATR used by features,
    targets, and stops comes from the causal five-minute authority required by the
    strategy contract, not from volume bars.
+
+   Frozen A4.3 contract:
+
+   - Project the already verified canonical SIP/all regular-session five-minute store
+     into one immutable selected-stock-session authority. This is a local projection,
+     not a provider download. Retain incomplete sessions as explicit coverage metadata.
+   - Continue to derive event-based volume bars from the verified selected-session
+     one-minute stock collection, but decisions exist only on a pre-scheduled
+     five-minute cohort clock after activation. At each fixed cohort, use the latest
+     completed volume bar whose evidence was already available by the cutoff. Late
+     evidence cannot move the cohort; it remains unavailable until a later scheduled
+     decision. Cohorts follow exchange-session open plus the frozen 60-second
+     finalization delay.
+   - Set `source_feature_available_at_utc` to the latest source availability and
+     `feature_available_at_utc` to the cohort cutoff. All one-minute stock, SPY, QQQ,
+     and sector context is the latest exact completed minute available by that cutoff.
+   - Compute `atr_14_5m` only from completed canonical five-minute bars in the same
+     session. The model ATR fraction and the 2.0/1.5 ATR target/stop labels must use
+     this value. Volume-bar ATR is prohibited.
+   - The bar-only ordered estimator contract contains technical momentum/trend,
+     volume/liquidity, session VWAP, 15-minute opening-range distance, exact
+     stock/SPY/QQQ/sector returns and residuals, and timing fields. It contains no
+     trade count, quote, spread, imbalance, catalyst, SEC, Finviz, or global-event
+     input.
+   - A later session gap cannot remove an earlier decision. Feature eligibility uses
+     only evidence through the cohort cutoff; label eligibility uses only the exact
+     next-minute entry and 30-minute managed outcome interval. Missing evidence
+     abstains only the affected row.
+
+   Exit gates: immutable selected five-minute projection and dataset replay; exact
+   clock-cohort identity; no duplicate ticker/cohort; five-minute ATR lineage proof;
+   identical batch/live ordered features; future-poison, missing-versus-zero,
+   incomplete-later-session, benchmark-interval, artifact-tamper, and path-traversal
+   tests; complete dataset publication under 4 GiB; no locked-test access and no model
+   training in this checkpoint.
+
+   Completion evidence: implementation commit `8a76ec1`; immutable five-minute
+   projection `data/canonical/edge_rebuild_selected_session_5m_bar_only_causal_20260814_v2`
+   with 43,226 selected stock-sessions, 3,364,335 rows, 43,132 complete pairs, 94
+   incomplete pairs retained as coverage, and no provider download; immutable dataset
+   `data/features/edge_rebuild_intraday_bar_only_causal_20260814_v1` with 794 sessions,
+   501 tickers, 3,095,688 rows, and 1,365,015 eligible rows. Dataset request SHA-256 is
+   `83820269d80019a46754aa451c1f1e13773995a889a51e605595511315af4bb2` and
+   transformation SHA-256 is
+   `0da898cc6fd3c1e933406ce07f24de197fc1fa34c4a909c4b9c4a28e2e96f3f6`.
+   The reproducible audit report at
+   `data/reports/edge_rebuild_intraday_bar_only_causal_20260814_v1_audit.json` is
+   bound to the dataset manifest, authority, session inventory, projection manifest,
+   projection authority, and projection inventory. It reports zero duplicate decisions,
+   causal-cutoff violations, label-availability violations, eligible ATR violations,
+   feature-hash violations, and prohibited features. Aggregate publication peak upper
+   bound was 2.218 GiB. Verification closed with 1,293 tests passed, 2 skipped, tracked
+   Ruff clean, strict mypy clean across 226 source files, compileall clean, and two
+   independent re-reviewers reporting no remaining medium-or-higher findings.
 4. **A4.4 - Train separate bar-only continuation and reversion baselines.** Use purged,
    embargoed chronological selection and the canonical intraday portfolio evaluator.
    Do not open the future holdout unless a preregistered development candidate passes
@@ -346,7 +400,8 @@ two-invocation Alpaca SIP probe completed the first trade and quote jobs with ze
 failures, 4.41 MiB on disk, and 0.350 GiB peak RSS. The probe remains
 `transport_incomplete` and is not an authority. Completing all replayable raw tick jobs
 still exceeds current local storage, so A4.2 and A4.5 remain blocked. The exact next
-implementation is A4.3's distinct bar-only causal dataset.
+implementation is A4.4's purged chronological continuation/reversion training run over
+the completed A4.3 authority.
 
 ### A5 - Build Catalyst-Driven Intraday Specialists
 
