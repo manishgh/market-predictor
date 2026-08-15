@@ -2,7 +2,7 @@
 
 Status: active
 
-Last updated: 2026-08-13
+Last updated: 2026-08-15
 
 Repository: `C:\project\market-predictor`
 
@@ -111,7 +111,7 @@ drawdown, turnover, capacity, and coverage remain co-equal promotion gates.
 | A2 | Build the technical swing baseline | Completed |
 | A3 | Build catalyst-driven swing specialists | Completed; no candidate passed |
 | A4 | Build the technical intraday baseline | Completed; both A4.4 hypotheses rejected |
-| A5 | Build catalyst-driven intraday specialists | A5.1 complete and blocked; prospective broker-action authority in progress |
+| A5 | Build catalyst-driven intraday specialists | A5.1 blocked; prospective collector verified, live poll environment-pending |
 | A6 | Run locked evaluation and promote qualified models | Not started |
 
 ### A0 - Restore Research Integrity (`completed`)
@@ -509,7 +509,8 @@ authority passes attachment, timing, coverage, and replay checks.
      skipped, tracked Ruff, strict mypy over 226 source files, compileall, strict
      real-authority replay, and consolidated independent review.
 
-2. **Prospective broker-action observation authority (`in_progress`).** Establish the
+2. **Prospective broker-action observation authority (`implementation complete;
+   live validation environment-pending`).** Establish the
    only permitted path for future Alpaca broker-action evidence. Each polling run must
    archive the exact provider response and observation time, retain every distinct
    provider revision, and bind symbols to the same point-in-time S&P security identity
@@ -522,7 +523,9 @@ authority passes attachment, timing, coverage, and replay checks.
      retrospective timestamp repair, model training, A5.2, serving, alerts, and order
      behavior are out of scope.
    - Every poll has one UTC observation timestamp, an immutable raw-page inventory,
-     explicit successful/empty/failed coverage, and a hash-bound membership parent.
+     explicit successful/empty/failed coverage, and a hash-bound current membership
+     parent. The current authority must reproduce A4.3's identity history through its
+     cutoff and may then extend that namespace to the poll date.
    - Identity joins require one effective membership interval and one observed Alpaca
      asset identity for the symbol. Missing, ambiguous, changed, or authority-stale
      identity remains excluded with a persisted reason; ticker-only fallback is
@@ -544,6 +547,31 @@ authority passes attachment, timing, coverage, and replay checks.
    review; implementation commit and documentation closure commit. Rollback is removal
    of the new command/module and its new prospective authority only; A5.1 remains
    blocked and no prior immutable authority is changed.
+
+   Implementation result:
+
+   - Commit `5530246` adds one poll collector and one generation publisher. Polls bind
+     the strict A4.3 dataset, an extending current membership authority, exact Alpaca
+     asset/news URLs and query parameters, response timing, raw bodies, every provider
+     revision, immutable failed attempts, and an append-only cutoff claim/commit
+     registry. Parent chains replay iteratively and must use the same authority and
+     registry.
+   - Wrong symbols/windows, redirects, responses before the scheduled cutoff, stale or
+     changed identity, partial publication, duplicate cutoffs, lineage changes, and
+     registry/raw/artifact tampering fail closed. Compaction is bounded by process
+     memory and verified Parquet input size. No model or feature row is emitted.
+   - Verification passed 1,373 tests with two skipped, 41 focused authority/source/CLI
+     tests, tracked Ruff, strict mypy across 226 source files, compileall, and one
+     consolidated two-reviewer correction pass.
+   - No live authority exists. A direct poll reached Alpaca `/v2/assets` but returned
+     HTTP 401 because Market Predictor credentials were not configured. Reusing the
+     separate Trading Flow secret store was not authorized for this process, so no
+     credential was copied and no provider evidence was accepted.
+   - The current membership authority ends on `2026-07-08`; a later poll correctly
+     abstains every identity as stale. Production-eligible observation requires a
+     strictly verified membership extension through the poll date and configured
+     Market Predictor Alpaca credentials. A5.2 remains prohibited until a new
+     prospective horizon also passes A5.1 capacity.
 
 ### A6 - Run Locked Evaluation and Promote Qualified Models
 

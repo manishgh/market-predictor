@@ -8,7 +8,7 @@ Repository: `C:\project\market-predictor`
 
 Branch: `er-intraday-refactoring`
 
-Last completed implementation commit: `98f7a48` (`Implement causal intraday event preflight`)
+Last completed implementation commit: `5530246` (`build prospective Alpaca broker action authority`)
 
 ## Purpose
 
@@ -18,7 +18,8 @@ A3 issuer-event specialist development is complete with no candidate. A4.1 colle
 A4.3 bar-only causal dataset publication, and A4.4 continuation/reversion development
 are complete. Both A4.4 hypotheses were rejected. A5.1 is also complete and blocked:
 the available event history is retrospective and exact security identity overlap is
-too small. Do not train A5.2, open a locked test, or claim model quality.
+too small. The prospective Alpaca authority implementation is verified, but no live
+poll authority exists. Do not train A5.2, open a locked test, or claim model quality.
 
 This repository produces prediction intelligence and abstention. Alerts, orders,
 positions, portfolio risk, and execution remain in `trading_flow`.
@@ -120,7 +121,7 @@ specialists; A6 performs locked evaluation and promotion.
   1.954 GiB recorded peak. Exact ticker and exact prediction timestamp are required;
   conflicting CIKs fail closed. Every exclusion is persisted in
   `identity_alignment_audit.parquet`.
-- Repository suite: 1,348 passed and 2 skipped after A5.1 closure.
+- Repository suite: 1,373 passed and 2 skipped after the prospective authority review.
 - Tracked Ruff, strict mypy across 226 source files, compileall, and final A5.1
   real-authority strict replay pass.
 - Coordinated request, feature, all-profile label, dtype, partition, global identity,
@@ -135,7 +136,7 @@ specialists; A6 performs locked evaluation and promotion.
 | Swing baseline | A2 trainer complete; prior candidates rejected; no new run or promotion | Preserve the frozen technical contract until a governed training run is approved |
 | Swing event-driven | Rating-change and coverage specialists trained in development; all rejected | Preserve rejection evidence; do not open locked test or serve |
 | Intraday baseline | V2 rejected; V3 invalid; A4.4 continuation and reversion both rejected | Preserve evidence; no serving or future-holdout access |
-| Intraday event-driven | A5.1 preflight blocked; no estimator or eligible candidate | Acquire observed first-seen/revision history and correct PIT identity before a new preregistered A5 preflight |
+| Intraday event-driven | A5.1 blocked; prospective collector verified but no live authority/horizon exists | Extend membership through the poll date, configure Market Predictor Alpaca credentials, then begin observed polling |
 
 `ROC-AUC >= 0.60` is a locked-test diagnostic, not a training objective or permission
 for repeated locked-test tuning. Promotion also requires ranking, calibration,
@@ -246,6 +247,42 @@ genuinely observed first-seen and revision timestamps plus point-in-time securit
 identity for future broker actions, then reruns A5.1 under a new preregistered data
 horizon. Historical observation time must not be inferred from publication time.
 A4.2/A4.5 trade/quote work remains storage-blocked and must not be replaced with zero.
+
+## Prospective Broker-Action Authority
+
+- Implementation commit `5530246` adds
+  `collect-edge-prospective-broker-actions` and
+  `publish-edge-prospective-broker-action-generation`.
+- Every poll strictly binds the complete A4.3 dataset and a current membership
+  authority whose history must reproduce A4.3's identity namespace through the A4.3
+  cutoff. A later membership cutoff is allowed only as a verified extension.
+- Raw Alpaca asset/news bodies, exact endpoint/query/final URL, no-redirect state,
+  request/response times, provider revisions, source coverage, identity abstentions,
+  immutable failed attempts, and a stable cutoff claim/commit registry all replay.
+- Parent polls must precede the child and use the same namespace, membership authority,
+  and registry. Replay is iterative, not recursive. Identity changes remain quarantined
+  until a governed transition authority resolves them.
+- Polls and generations are bounded below 4 GiB; generation input is additionally
+  limited by verified Parquet uncompressed size. Generations preserve earliest
+  observed first-seen time and every distinct provider revision. They remain
+  `training_eligible=false` and `serving_eligible=false`.
+- Final evidence: 41 focused tests passed; full suite 1,373 passed and 2 skipped;
+  tracked Ruff, strict mypy across 226 source files, compileall, and consolidated
+  independent review passed.
+- Live status is `environment_pending`. One direct attempt returned HTTP 401 at Alpaca
+  `/v2/assets` because `ALPACA_API_KEY_ID` and `ALPACA_API_SECRET_KEY` were absent.
+  Trading Flow has a separate ignored secret store, but cross-project credential reuse
+  was not authorized, so no credential was copied and no live evidence was published.
+- The available membership authority ends `2026-07-08`. Using it for a later poll
+  correctly yields `membership_authority_stale` for every symbol. Before starting the
+  production evidence horizon, publish a strict current membership extension through
+  the poll date and configure Alpaca credentials directly for Market Predictor.
+
+Exact next action: after explicit credential authorization/configuration, run one new
+poll directory with the A4.3 dataset, current membership extension, and one stable
+registry. Strictly reload it, inspect observed/empty/failed coverage and peak memory,
+then schedule polls no more than 120 seconds apart. Do not run A5.2 until a newly frozen
+prospective horizon meets the existing A5.1 episode/security/session capacity floors.
 
 ## Source Boundary
 
