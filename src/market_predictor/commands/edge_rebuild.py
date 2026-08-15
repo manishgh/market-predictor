@@ -87,6 +87,10 @@ from market_predictor.edge_rebuild.issuer_event_precision_audit import (
 from market_predictor.edge_rebuild.one_minute_coverage import (
     publish_selected_session_one_minute_coverage,
 )
+from market_predictor.edge_rebuild.prospective_broker_actions import (
+    collect_prospective_broker_action_poll,
+    publish_prospective_broker_action_generation,
+)
 from market_predictor.edge_rebuild.readiness import (
     run_edge_rebuild_readiness_audit,
 )
@@ -577,6 +581,113 @@ def register_edge_rebuild_commands(app: typer.Typer, console: Any) -> None:
                 "events": len(result.events),
                 "coverage": result.source_collections.iloc[0]["status"],
                 "directory": str(result.directory),
+            }
+        )
+
+    @app.command("collect-edge-prospective-broker-actions")
+    def collect_edge_prospective_broker_actions(
+        membership_dir: Path = typer.Option(
+            ...,
+            help="Current S&P membership authority extending the A4.3 identity namespace.",
+        ),
+        intraday_bar_dataset_dir: Path = typer.Option(
+            ...,
+            help="Completed A4.3 intraday bar dataset that fixes the security namespace.",
+        ),
+        registry_dir: Path = typer.Option(
+            ...,
+            help="Stable append-only cutoff claim and commit registry.",
+        ),
+        out_dir: Path = typer.Option(
+            ...,
+            help="One new or matching resumable scheduled-poll directory.",
+        ),
+        observed_at: str | None = typer.Option(
+            None,
+            help="Scheduled UTC poll cutoff. Existing polls recover this from _request.json.",
+        ),
+        previous_poll: Path | None = typer.Option(
+            None,
+            help="Previous completed poll for continuous-coverage lineage.",
+        ),
+        lookback_hours: int = typer.Option(25, min=24, max=48),
+        batch_size: int = typer.Option(50, min=1, max=50),
+    ) -> None:
+        """Archive one prospective Alpaca broker-action observation poll."""
+
+        settings = get_settings()
+        if not settings.has_alpaca:
+            raise typer.BadParameter(
+                "ALPACA_API_KEY_ID and ALPACA_API_SECRET_KEY are required"
+            )
+        source = AlpacaSource(settings)
+        scheduled = (
+            _iso_datetime(observed_at, option="--observed-at")
+            if observed_at is not None
+            else None
+        )
+        result = collect_prospective_broker_action_poll(
+            membership_authority_directory=membership_dir,
+            intraday_bar_dataset_directory=intraday_bar_dataset_dir,
+            registry_directory=registry_dir,
+            output_directory=out_dir,
+            fetch_assets=source.fetch_assets_snapshot,
+            fetch_page=lambda symbols, start, end, token: source.fetch_news_page_observed(
+                symbols,
+                start,
+                end,
+                page_token=token,
+                include_content=True,
+                limit=50,
+            ),
+            observed_at_utc=scheduled,
+            previous_poll_directory=previous_poll,
+            lookback_hours=lookback_hours,
+            batch_size=batch_size,
+        )
+        console.print(
+            {
+                "status": result["status"],
+                "observed_at_utc": result.get("observed_at_utc"),
+                "event_observations": result.get("event_observation_count", 0),
+                "production_identity_events": result.get(
+                    "production_identity_event_count", 0
+                ),
+                "directory": str(out_dir),
+            }
+        )
+        if result["status"] != "complete":
+            raise typer.Exit(code=2)
+
+    @app.command("publish-edge-prospective-broker-action-generation")
+    @serialized_heavy_job("publish-edge-prospective-broker-action-generation")
+    def publish_edge_prospective_broker_action_generation(
+        polls: list[Path] = typer.Option(
+            ...,
+            "--poll",
+            help="Completed prospective poll directory; repeat in chronological scope.",
+        ),
+        out_dir: Path = typer.Option(
+            ...,
+            help="New immutable compacted generation directory.",
+        ),
+    ) -> None:
+        """Compact prospective polls while preserving every provider revision."""
+
+        result = publish_prospective_broker_action_generation(
+            poll_directories=polls,
+            output_directory=out_dir,
+        )
+        console.print(
+            {
+                "status": result["status"],
+                "polls": result["poll_count"],
+                "revisions": result["revision_count"],
+                "production_identity_revisions": result[
+                    "production_identity_revision_count"
+                ],
+                "training_eligible": result["training_eligible"],
+                "directory": str(out_dir),
             }
         )
 

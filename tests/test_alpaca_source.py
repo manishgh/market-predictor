@@ -1,14 +1,98 @@
 from __future__ import annotations
 
+import json
 import unittest
 from datetime import UTC, date, datetime
 from unittest.mock import Mock
 
 from market_predictor.config import Settings
 from market_predictor.sources.alpaca import AlpacaSource
+from market_predictor.sources.http import HttpByteResponse
 
 
 class AlpacaSourceTests(unittest.TestCase):
+    def test_prospective_news_page_preserves_exact_http_body(self) -> None:
+        source = AlpacaSource(
+            Settings(ALPACA_API_KEY_ID="key", ALPACA_API_SECRET_KEY="secret")
+        )
+        payload = {
+            "news": [
+                {
+                    "id": 1,
+                    "created_at": "2026-08-15T10:00:00Z",
+                    "updated_at": "2026-08-15T10:05:00Z",
+                    "headline": "Broker action",
+                    "source": "benzinga",
+                    "symbols": ["AAPL"],
+                }
+            ],
+            "next_page_token": "next",
+        }
+        body = json.dumps(payload, sort_keys=True).encode()
+        final_url = "https://data.alpaca.markets/v1beta1/news?symbols=AAPL"
+        redirect_chain = (
+            "https://data.alpaca.markets/news-redirect",
+            final_url,
+        )
+        client = Mock()
+        client.get_bytes_with_metadata.return_value = _byte_response(
+            body,
+            "https://data.alpaca.markets/v1beta1/news",
+            final_url=final_url,
+            redirect_chain=redirect_chain,
+        )
+        source.client = client
+
+        page = source.fetch_news_page_observed(
+            "AAPL",
+            datetime(2026, 8, 15, 9, tzinfo=UTC),
+            datetime(2026, 8, 15, 11, tzinfo=UTC),
+        )
+
+        self.assertEqual(page.raw_body, body)
+        self.assertEqual(page.status_code, 200)
+        self.assertEqual(page.next_page_token, "next")
+        self.assertEqual(page.news[0]["id"], 1)
+        self.assertEqual(page.final_url, final_url)
+        self.assertEqual(page.redirect_chain, redirect_chain)
+
+    def test_prospective_asset_snapshot_preserves_asset_id_and_http_body(self) -> None:
+        source = AlpacaSource(
+            Settings(ALPACA_API_KEY_ID="key", ALPACA_API_SECRET_KEY="secret")
+        )
+        payload = [
+            {
+                "id": "asset-aapl",
+                "symbol": "AAPL",
+                "status": "active",
+                "exchange": "NASDAQ",
+                "tradable": True,
+                "marginable": True,
+            }
+        ]
+        body = json.dumps(payload, sort_keys=True).encode()
+        final_url = "https://api.alpaca.markets/v2/assets?status=active"
+        redirect_chain = (
+            "https://api.alpaca.markets/assets-redirect",
+            final_url,
+        )
+        client = Mock()
+        client.get_bytes_with_metadata.return_value = _byte_response(
+            body,
+            "https://api.alpaca.markets/v2/assets",
+            final_url=final_url,
+            redirect_chain=redirect_chain,
+        )
+        source.client = client
+
+        snapshot = source.fetch_assets_snapshot()
+
+        self.assertEqual(snapshot.raw_body, body)
+        self.assertEqual(snapshot.assets.loc[0, "id"], "asset-aapl")
+        self.assertNotIn("marginable", snapshot.assets.columns)
+        self.assertEqual(snapshot.final_url, final_url)
+        self.assertEqual(snapshot.redirect_chain, redirect_chain)
+
     def test_multi_symbol_bar_page_preserves_tokens_and_rate_headers(
         self,
     ) -> None:
@@ -295,6 +379,31 @@ class AlpacaSourceTests(unittest.TestCase):
         self.assertEqual(list(frame["new_symbol"]), ["PARA", "PSKY"])
         self.assertEqual(list(frame["identity_continuity"]), [True, False])
         self.assertEqual(list(frame["membership_continuity"]), [True, False])
+
+
+def _byte_response(
+    body: bytes,
+    url: str,
+    *,
+    final_url: str | None = None,
+    redirect_chain: tuple[str, ...] = (),
+) -> HttpByteResponse:
+    return HttpByteResponse(
+        body=body,
+        requested_url=url,
+        final_url=final_url or url,
+        redirect_chain=redirect_chain,
+        status_code=200,
+        retrieved_at_utc=datetime(2026, 8, 15, 12, 0, 1, tzinfo=UTC),
+        content_type="application/json",
+        content_encoding=None,
+        etag=None,
+        last_modified=None,
+        body_length=len(body),
+        sha256="0" * 64,
+        body_representation="http_entity_encoded",
+        safe_headers=(("content-type", "application/json"),),
+    )
 
 
 if __name__ == "__main__":

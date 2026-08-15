@@ -111,7 +111,7 @@ drawdown, turnover, capacity, and coverage remain co-equal promotion gates.
 | A2 | Build the technical swing baseline | Completed |
 | A3 | Build catalyst-driven swing specialists | Completed; no candidate passed |
 | A4 | Build the technical intraday baseline | Completed; both A4.4 hypotheses rejected |
-| A5 | Build catalyst-driven intraday specialists | A5.1 complete; training blocked by non-causal history and identity coverage |
+| A5 | Build catalyst-driven intraday specialists | A5.1 complete and blocked; prospective broker-action authority in progress |
 | A6 | Run locked evaluation and promote qualified models | Not started |
 
 ### A0 - Restore Research Integrity (`completed`)
@@ -508,6 +508,42 @@ authority passes attachment, timing, coverage, and replay checks.
    - Peak working set was 2.299 GiB. Final verification passed 1,348 tests with two
      skipped, tracked Ruff, strict mypy over 226 source files, compileall, strict
      real-authority replay, and consolidated independent review.
+
+2. **Prospective broker-action observation authority (`in_progress`).** Establish the
+   only permitted path for future Alpaca broker-action evidence. Each polling run must
+   archive the exact provider response and observation time, retain every distinct
+   provider revision, and bind symbols to the same point-in-time S&P security identity
+   namespace consumed by A4.3. Historical publication or provider-update timestamps may
+   never be substituted for observation time.
+
+   Frozen scope and invariants:
+
+   - Source is Alpaca direct ticker news only. Reddit, Seeking Alpha, Finviz news,
+     retrospective timestamp repair, model training, A5.2, serving, alerts, and order
+     behavior are out of scope.
+   - Every poll has one UTC observation timestamp, an immutable raw-page inventory,
+     explicit successful/empty/failed coverage, and a hash-bound membership parent.
+   - Identity joins require one effective membership interval and one observed Alpaca
+     asset identity for the symbol. Missing, ambiguous, changed, or authority-stale
+     identity remains excluded with a persisted reason; ticker-only fallback is
+     prohibited.
+   - A provider item is versioned by provider event identity, provider update time, and
+     raw-content hash. `first_seen_at_utc` is the first archived observation of that
+     exact version. Repeated polls cannot rewrite it, and later revisions cannot alter
+     earlier versions.
+   - Canonical production eligibility requires `availability_policy=observed`, complete
+     collection coverage, exact identity, and strict replay. Passing this checkpoint
+     starts a prospective evidence horizon; it does not satisfy A5.1 capacity floors.
+   - Collection is resumable, single-process, bounded below 4 GiB, and fail-closed on
+     request, parent, raw-page, revision-chain, coverage, or identity tampering.
+
+   Exit gates: deterministic strict replay; observed-time, revision-preservation,
+   identity-change, known-zero-versus-unknown, resume, duplicate, future-poison,
+   extra-file, path-traversal, and artifact-tamper tests; one real Alpaca poll when
+   credentials and network are available; focused and full verification; consolidated
+   review; implementation commit and documentation closure commit. Rollback is removal
+   of the new command/module and its new prospective authority only; A5.1 remains
+   blocked and no prior immutable authority is changed.
 
 ### A6 - Run Locked Evaluation and Promote Qualified Models
 

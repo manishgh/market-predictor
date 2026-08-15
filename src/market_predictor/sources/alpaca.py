@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+import json
+from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
 from typing import Any
 
@@ -16,6 +17,26 @@ class AlpacaNewsPage:
     request_page_token: str | None
     next_page_token: str | None
     news: tuple[dict[str, Any], ...]
+    response_headers: dict[str, str] = field(default_factory=dict)
+    raw_payload: dict[str, Any] | None = None
+    raw_body: bytes | None = None
+    requested_url: str | None = None
+    status_code: int | None = None
+    retrieved_at_utc: datetime | None = None
+    final_url: str | None = None
+    redirect_chain: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class AlpacaAssetSnapshot:
+    assets: pd.DataFrame
+    raw_body: bytes
+    response_headers: dict[str, str]
+    requested_url: str
+    status_code: int
+    retrieved_at_utc: datetime
+    final_url: str | None = None
+    redirect_chain: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -82,6 +103,7 @@ class AlpacaSource:
         if frame.empty:
             return pd.DataFrame(
                 columns=[
+                    "id",
                     "symbol",
                     "name",
                     "exchange",
@@ -96,6 +118,7 @@ class AlpacaSource:
         keep_cols = [
             col
             for col in [
+                "id",
                 "symbol",
                 "name",
                 "exchange",
@@ -109,6 +132,41 @@ class AlpacaSource:
             if col in frame.columns
         ]
         return frame[keep_cols].sort_values("symbol").reset_index(drop=True)
+
+    def fetch_assets_snapshot(self) -> AlpacaAssetSnapshot:
+        response = self.client.get_bytes_with_metadata(
+            self.assets_url,
+            params={
+                "status": self.settings.universe_status,
+                "asset_class": self.settings.universe_asset_class,
+            },
+            headers=self.headers,
+        )
+        try:
+            payload = json.loads(response.body.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise RuntimeError("Alpaca asset response is not valid UTF-8 JSON") from exc
+        if not isinstance(payload, list) or any(
+            not isinstance(item, dict) for item in payload
+        ):
+            raise RuntimeError("Alpaca asset response must be an array of objects")
+        frame = pd.DataFrame(payload)
+        keep_cols = [
+            column
+            for column in ("id", "symbol", "status", "exchange", "tradable")
+            if column in frame.columns
+        ]
+        assets = frame.loc[:, keep_cols].copy()
+        return AlpacaAssetSnapshot(
+            assets=assets,
+            raw_body=response.body,
+            response_headers=dict(response.safe_headers),
+            requested_url=response.requested_url,
+            status_code=response.status_code,
+            retrieved_at_utc=response.retrieved_at_utc,
+            final_url=response.final_url,
+            redirect_chain=response.redirect_chain,
+        )
 
     def fetch_ticker_universe(self) -> pd.DataFrame:
         assets = self.fetch_assets()
@@ -290,6 +348,73 @@ class AlpacaSource:
             request_page_token=page_token,
             next_page_token=next_token,
             news=tuple({str(key): value for key, value in item.items()} for item in raw_news),
+            response_headers={},
+            raw_payload={str(key): value for key, value in payload.items()},
+        )
+
+    def fetch_news_page_observed(
+        self,
+        ticker: str,
+        start: datetime,
+        end: datetime,
+        *,
+        page_token: str | None = None,
+        include_content: bool = True,
+        limit: int = 50,
+    ) -> AlpacaNewsPage:
+        if start.tzinfo is None or end.tzinfo is None:
+            raise ValueError("Alpaca news bounds must be timezone-aware")
+        if start >= end:
+            raise ValueError("Alpaca news start must precede end")
+        if limit < 1 or limit > 50:
+            raise ValueError("Alpaca news page limit must be between 1 and 50")
+        params: dict[str, Any] = {
+            "symbols": ticker.upper(),
+            "start": start.isoformat(),
+            "end": end.isoformat(),
+            "sort": "asc",
+            "limit": limit,
+            "include_content": str(include_content).lower(),
+        }
+        if page_token:
+            params["page_token"] = page_token
+        response = self.client.get_bytes_with_metadata(
+            self.news_url,
+            params=params,
+            headers=self.headers,
+        )
+        try:
+            payload = json.loads(response.body.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise RuntimeError("Alpaca news response is not valid UTF-8 JSON") from exc
+        if not isinstance(payload, dict):
+            raise RuntimeError("Alpaca news response must be an object")
+        raw_news = payload.get("news", [])
+        if not isinstance(raw_news, list) or any(
+            not isinstance(item, dict) for item in raw_news
+        ):
+            raise RuntimeError("Alpaca news response has invalid news rows")
+        next_token_value = payload.get("next_page_token")
+        next_token = (
+            str(next_token_value).strip()
+            if next_token_value is not None and str(next_token_value).strip()
+            else None
+        )
+        return AlpacaNewsPage(
+            request_page_token=page_token,
+            next_page_token=next_token,
+            news=tuple(
+                {str(key): value for key, value in item.items()}
+                for item in raw_news
+            ),
+            response_headers=dict(response.safe_headers),
+            raw_payload={str(key): value for key, value in payload.items()},
+            raw_body=response.body,
+            requested_url=response.requested_url,
+            status_code=response.status_code,
+            retrieved_at_utc=response.retrieved_at_utc,
+            final_url=response.final_url,
+            redirect_chain=response.redirect_chain,
         )
 
     def fetch_daily_bars(self, ticker: str, start: datetime, end: datetime | None = None) -> pd.DataFrame:

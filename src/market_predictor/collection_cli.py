@@ -13,6 +13,7 @@ COLLECTION_COMMANDS = frozenset(
         "collect-edge-rebuild-intraday-history",
         "collect-edge-rebuild-swing-history",
         "collect-edge-live-global-context",
+        "collect-edge-prospective-broker-actions",
         "collect-edge-sec-filings",
         "collect-intraday-specialist-one-minute",
         "collect-market-context",
