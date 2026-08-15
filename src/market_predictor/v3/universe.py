@@ -42,8 +42,15 @@ _EXCHANGE_TICKERS = (
     r"\((?:NYSE|NASD|NASDAQ|NYSE\s+American|OTC(?:QX|QB)?)\s*:\s*"
     r"(?P<exchange_tickers>[A-Z0-9.-]+(?:\s*[,;/]\s*[A-Z0-9.-]+)*)\)"
 )
-_TWITTER_2018_SOURCE_SHA256 = (
-    "7d43cdaaf5d8735a87ad28a3fb0ff0feb236e221574384507ca060c1a1273f18"
+_TWITTER_2018_SOURCE_URL = (
+    "https://press.spglobal.com/2018-06-04-Netflix-Set-to-Join-S-P-100-"
+    "Twitter-to-Join-S-P-500-REGENXBIO-to-Join-S-P-SmallCap-600"
+)
+_TWITTER_2018_SOURCE_SHA256S = frozenset(
+    {
+        "46964cc0739c5d8fd2067bc9c27adfb1e4863c2c9e73e7b2804fc71ae6db2fe3",
+        "7d43cdaaf5d8735a87ad28a3fb0ff0feb236e221574384507ca060c1a1273f18",
+    }
 )
 
 
@@ -457,7 +464,8 @@ def _parse_legacy_sp500_tables(
                 )
                 if (
                     invalid_title_match is not None
-                    and source_sha256 == _TWITTER_2018_SOURCE_SHA256
+                    and source_url == _TWITTER_2018_SOURCE_URL
+                    and source_sha256 in _TWITTER_2018_SOURCE_SHA256S
                     and _invalid_midcap_500_table_is_sp500(rows, body_text)
                 ):
                     title_match = invalid_title_match

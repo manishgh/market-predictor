@@ -64,6 +64,7 @@ def publish_sp500_membership_authority(
     start_date: date,
     cutoff_date: date,
     output_directory: Path,
+    base_membership_directory: Path | None = None,
     security_exclusions_path: Path | None = None,
     maximum_security_exclusion_fraction: float = MAXIMUM_SECURITY_EXCLUSION_FRACTION,
 ) -> dict[str, Any]:
@@ -79,6 +80,11 @@ def publish_sp500_membership_authority(
         archive_directory.resolve(),
         event_directory.resolve(),
         transition_directory.resolve(),
+        *(
+            ()
+            if base_membership_directory is None
+            else (base_membership_directory.resolve(),)
+        ),
     ):
         if output == parent or output in parent.parents or parent in output.parents:
             raise DataReadinessError("membership output and parent directories must be disjoint")
@@ -94,6 +100,7 @@ def publish_sp500_membership_authority(
                 start_date=start_date,
                 cutoff_date=cutoff_date,
                 output_directory=output_directory,
+                base_membership_directory=base_membership_directory,
                 security_exclusions_path=security_exclusions_path,
                 maximum_security_exclusion_fraction=maximum_security_exclusion_fraction,
             )
@@ -111,6 +118,7 @@ def require_sp500_membership_authority(
     anchor_path: Path,
     start_date: date,
     cutoff_date: date,
+    base_membership_directory: Path | None = None,
     security_exclusions_path: Path | None = None,
     maximum_security_exclusion_fraction: float = MAXIMUM_SECURITY_EXCLUSION_FRACTION,
 ) -> pd.DataFrame:
@@ -120,6 +128,11 @@ def require_sp500_membership_authority(
         start_date=start_date,
         cutoff_date=cutoff_date,
         maximum_security_exclusion_fraction=maximum_security_exclusion_fraction,
+    )
+    base_memberships, extension_parent = _load_extension_parent(
+        base_membership_directory,
+        start_date=start_date,
+        cutoff_date=cutoff_date,
     )
     transitions = require_sp500_transition_authority(
         transition_directory,
@@ -147,6 +160,7 @@ def require_sp500_membership_authority(
         cutoff_date=cutoff_date,
         security_exclusions_path=security_exclusions_path,
         maximum_security_exclusion_fraction=maximum_security_exclusion_fraction,
+        extension_parent=extension_parent,
     )
     request = _load_object(membership_directory / "_request.json")
     request_sha256 = _json_sha256(request_payload)
@@ -198,6 +212,12 @@ def require_sp500_membership_authority(
         security_exclusions_path=security_exclusions_path,
         maximum_security_exclusion_fraction=maximum_security_exclusion_fraction,
         snapshot_id=str(manifest.get("universe_snapshot_id", "")),
+        base_memberships=base_memberships,
+        base_cutoff_date=(
+            None
+            if extension_parent is None
+            else date.fromisoformat(str(extension_parent["cutoff_date"]))
+        ),
     )
     persisted_exclusions = _load_array(exclusion_path)
     if persisted_exclusions != exclusions:
@@ -211,6 +231,8 @@ def require_sp500_membership_authority(
         or int(manifest.get("membership_intervals", -1)) != len(actual)
         or int(manifest.get("security_count", -1)) != actual["security_id"].nunique()
         or manifest.get("reconstruction") != reconstruction
+        or manifest.get("extension_parent") != extension_parent
+        or authority.get("extension_parent") != extension_parent
     ):
         raise DataReadinessError("S&P membership counts or semantic identity are invalid")
     return actual
@@ -226,6 +248,7 @@ def _publish_locked(
     start_date: date,
     cutoff_date: date,
     output_directory: Path,
+    base_membership_directory: Path | None,
     security_exclusions_path: Path | None,
     maximum_security_exclusion_fraction: float,
 ) -> dict[str, Any]:
@@ -236,6 +259,11 @@ def _publish_locked(
     )
     if (output_directory / "_authority.json").exists():
         raise DataReadinessError("completed S&P membership authority is immutable")
+    base_memberships, extension_parent = _load_extension_parent(
+        base_membership_directory,
+        start_date=start_date,
+        cutoff_date=cutoff_date,
+    )
     transitions = require_sp500_transition_authority(
         transition_directory,
         archive_directory=archive_directory,
@@ -262,6 +290,7 @@ def _publish_locked(
         cutoff_date=cutoff_date,
         security_exclusions_path=security_exclusions_path,
         maximum_security_exclusion_fraction=maximum_security_exclusion_fraction,
+        extension_parent=extension_parent,
     )
     request_sha256 = _json_sha256(request_payload)
     _write_json_atomic(
@@ -278,6 +307,12 @@ def _publish_locked(
         security_exclusions_path=security_exclusions_path,
         maximum_security_exclusion_fraction=maximum_security_exclusion_fraction,
         snapshot_id=snapshot_id,
+        base_memberships=base_memberships,
+        base_cutoff_date=(
+            None
+            if extension_parent is None
+            else date.fromisoformat(str(extension_parent["cutoff_date"]))
+        ),
     )
     membership_path = output_directory / MEMBERSHIP_FILE
     checks = audit_universe_memberships(memberships, require_observed=False)
@@ -285,16 +320,18 @@ def _publish_locked(
     if not audit.passed:
         failures = [check.name for check in checks if check.status != "pass"]
         raise DataReadinessError(f"canonical S&P membership audit failed: {failures}")
+    artifact_inputs: dict[str, Any] = {
+        **parent,
+        "request_sha256": request_sha256,
+        "reconstruction_schema": MEMBERSHIP_RECONSTRUCTION_SCHEMA,
+        "extension_parent": extension_parent,
+    }
     write_canonical_artifact(
         memberships,
         membership_path,
         artifact_type="memberships",
         audit=audit,
-        inputs={
-            **parent,
-            "request_sha256": request_sha256,
-            "reconstruction_schema": MEMBERSHIP_RECONSTRUCTION_SCHEMA,
-        },
+        inputs=artifact_inputs,
         production_ready=False,
     )
     exclusion_path = output_directory / EXCLUSION_FILE
@@ -305,6 +342,7 @@ def _publish_locked(
         "status": "complete",
         "request_sha256": request_sha256,
         "parent_lineage": parent,
+        "extension_parent": extension_parent,
         "start_date": start_date.isoformat(),
         "cutoff_date": cutoff_date.isoformat(),
         "universe_snapshot_id": snapshot_id,
@@ -332,6 +370,7 @@ def _publish_locked(
         "artifact_sha256": file_sha256(manifest_path),
         "request_sha256": request_sha256,
         "parent_lineage": parent,
+        "extension_parent": extension_parent,
         "universe_sha256": universe_sha256,
         "membership_intervals": len(memberships),
         "security_count": int(memberships["security_id"].nunique()),
@@ -351,6 +390,7 @@ def _publish_locked(
         anchor_path=anchor_path,
         start_date=start_date,
         cutoff_date=cutoff_date,
+        base_membership_directory=base_membership_directory,
         security_exclusions_path=security_exclusions_path,
         maximum_security_exclusion_fraction=maximum_security_exclusion_fraction,
     )
@@ -367,10 +407,20 @@ def _build_memberships(
     security_exclusions_path: Path | None,
     maximum_security_exclusion_fraction: float,
     snapshot_id: str,
+    base_memberships: pd.DataFrame | None = None,
+    base_cutoff_date: date | None = None,
 ) -> tuple[pd.DataFrame, list[dict[str, str]], dict[str, Any]]:
+    if (base_memberships is None) != (base_cutoff_date is None):
+        raise DataReadinessError(
+            "membership extension requires both base memberships and cutoff"
+        )
     relevant_changes = [change for change in changes if start_date <= _ny_date(change.effective_at_utc) <= cutoff_date]
     resolved = [_resolved_change(change, transitions) for change in relevant_changes]
-    states = _anchor_states(anchor)
+    states = _anchor_states(
+        anchor,
+        base_memberships=base_memberships,
+        base_cutoff_date=base_cutoff_date,
+    )
     intervals: list[dict[str, Any]] = []
     events_by_time: dict[datetime, list[IndexChange]] = {}
     for change in resolved:
@@ -394,6 +444,7 @@ def _build_memberships(
             effective_at=effective_at,
             snapshot_id=snapshot_id,
             automatic_exclusions=automatic_exclusions,
+            base_memberships=base_memberships,
         )
         transition_group = transitions_by_time.get(effective_at)
         if transition_group is not None:
@@ -422,12 +473,26 @@ def _build_memberships(
         source="spglobal_official_point_in_time",
         availability_policy="provider_publication_proxy",
     )
+    if base_memberships is not None and base_cutoff_date is not None:
+        canonical = _combine_base_prefix_with_extension(
+            base_memberships,
+            canonical,
+            base_cutoff_date=base_cutoff_date,
+            snapshot_id=snapshot_id,
+        )
     canonical, exclusions = _apply_security_exclusions(
         canonical,
         automatic_exclusions=automatic_exclusions,
         security_exclusions_path=security_exclusions_path,
         maximum_security_exclusion_fraction=maximum_security_exclusion_fraction,
     )
+    if base_memberships is not None and base_cutoff_date is not None:
+        verify_membership_namespace_extension(
+            base_memberships,
+            canonical,
+            base_cutoff_date=base_cutoff_date.isoformat(),
+            current_cutoff_date=cutoff_date.isoformat(),
+        )
     if int(min(boundary_counts)) < 450 or int(max(boundary_counts)) > 550:
         raise DataReadinessError(
             f"S&P reconstruction boundary counts fall outside 450..550: {min(boundary_counts)}..{max(boundary_counts)}"
@@ -455,6 +520,44 @@ def _build_memberships(
     return canonical.reset_index(drop=True), exclusions, reconstruction
 
 
+def _combine_base_prefix_with_extension(
+    base: pd.DataFrame,
+    current: pd.DataFrame,
+    *,
+    base_cutoff_date: date,
+    snapshot_id: str,
+) -> pd.DataFrame:
+    if set(base.columns) != set(current.columns):
+        raise DataReadinessError(
+            "S&P membership extension contract differs from its base authority"
+        )
+    boundary = pd.Timestamp(base_cutoff_date, tz="UTC") + pd.Timedelta(days=1)
+    prefix = base[base["effective_from_utc"].lt(boundary)].copy()
+    crossing = prefix["effective_to_utc"].isna() | prefix["effective_to_utc"].gt(
+        boundary
+    )
+    prefix.loc[crossing, "effective_to_utc"] = boundary
+
+    suffix = current[
+        current["effective_to_utc"].isna()
+        | current["effective_to_utc"].gt(boundary)
+    ].copy()
+    starts_before_boundary = suffix["effective_from_utc"].lt(boundary)
+    suffix.loc[starts_before_boundary, "effective_from_utc"] = boundary
+    suffix.loc[starts_before_boundary, "available_at_utc"] = boundary
+    suffix = suffix[
+        suffix["effective_to_utc"].isna()
+        | suffix["effective_to_utc"].gt(suffix["effective_from_utc"])
+    ]
+
+    combined = pd.concat([prefix, suffix], ignore_index=True)
+    combined["universe_snapshot_id"] = snapshot_id
+    return combined.sort_values(
+        ["ticker", "effective_from_utc", "security_id"],
+        kind="stable",
+    ).reset_index(drop=True)
+
+
 def _reverse_events(
     *,
     states: dict[str, _State],
@@ -463,6 +566,7 @@ def _reverse_events(
     effective_at: datetime,
     snapshot_id: str,
     automatic_exclusions: list[dict[str, str]],
+    base_memberships: pd.DataFrame | None,
 ) -> None:
     additions = [change for change in changes if change.action == "addition"]
     deletions = [change for change in changes if change.action == "deletion"]
@@ -503,7 +607,14 @@ def _reverse_events(
             )
             continue
         states[change.ticker] = _State(
-            security_id=_historical_security_id(change),
+            security_id=(
+                _base_security_id_at(
+                    base_memberships,
+                    ticker=change.ticker,
+                    effective_at=effective_at,
+                )
+                or _historical_security_id(change)
+            ),
             company=change.company.strip() or change.ticker,
             sector=change.sector.strip() or "Unknown",
             industry="Unknown",
@@ -637,13 +748,43 @@ def _resolved_change(change: IndexChange, transitions: pd.DataFrame) -> IndexCha
     )
 
 
-def _anchor_states(anchor: pd.DataFrame) -> dict[str, _State]:
+def _anchor_states(
+    anchor: pd.DataFrame,
+    *,
+    base_memberships: pd.DataFrame | None,
+    base_cutoff_date: date | None,
+) -> dict[str, _State]:
     cik_counts = anchor["cik"].value_counts()
+    base_by_ticker, base_by_cik = _base_active_identity_maps(
+        base_memberships,
+        base_cutoff_date=base_cutoff_date,
+    )
     states: dict[str, _State] = {}
     for record in anchor.to_dict(orient="records"):
         ticker = str(record["ticker"])
         cik = str(record["cik"])
-        security_id = f"cik:{cik}" if int(cik_counts[cik]) == 1 else f"cik:{cik}:ticker:{ticker}"
+        ticker_identity = base_by_ticker.get(ticker)
+        if ticker_identity is not None and _security_cik(ticker_identity[1]) != cik:
+            raise DataReadinessError(
+                "S&P cutoff anchor CIK conflicts with the base identity for "
+                f"{ticker}"
+            )
+        inherited = ticker_identity or base_by_cik.get(cik)
+        if inherited is None:
+            security_id = (
+                f"cik:{cik}"
+                if int(cik_counts[cik]) == 1
+                else f"cik:{cik}:ticker:{ticker}"
+            )
+        else:
+            inherited_ticker, security_id = inherited
+            if _punctuation_alias(ticker, inherited_ticker):
+                ticker = inherited_ticker
+        if ticker in states:
+            raise DataReadinessError(
+                "S&P cutoff anchor aliases collide after base identity inheritance: "
+                f"{ticker}"
+            )
         states[ticker] = _State(
             security_id=security_id,
             company=str(record["company"]),
@@ -653,6 +794,79 @@ def _anchor_states(anchor: pd.DataFrame) -> dict[str, _State]:
             evidence_urls=(),
         )
     return states
+
+
+def _base_active_identity_maps(
+    memberships: pd.DataFrame | None,
+    *,
+    base_cutoff_date: date | None,
+) -> tuple[dict[str, tuple[str, str]], dict[str, tuple[str, str]]]:
+    if memberships is None or base_cutoff_date is None:
+        return {}, {}
+    boundary = pd.Timestamp(base_cutoff_date, tz="UTC") + pd.Timedelta(days=1)
+    active = memberships[
+        memberships["effective_from_utc"].lt(boundary)
+        & (
+            memberships["effective_to_utc"].isna()
+            | memberships["effective_to_utc"].ge(boundary)
+        )
+    ]
+    if bool(active["ticker"].duplicated().any()):
+        raise DataReadinessError("base membership has ambiguous active tickers")
+    by_ticker = {
+        str(row.ticker): (str(row.ticker), str(row.security_id))
+        for row in active.itertuples(index=False)
+    }
+    by_cik: dict[str, tuple[str, str]] = {}
+    ambiguous_ciks: set[str] = set()
+    for ticker, identity in by_ticker.values():
+        security_id = identity.split(":ticker:", maxsplit=1)[0]
+        if not security_id.startswith("cik:"):
+            continue
+        cik = security_id.removeprefix("cik:")
+        if cik in by_cik and by_cik[cik] != (ticker, identity):
+            ambiguous_ciks.add(cik)
+            continue
+        by_cik[cik] = (ticker, identity)
+    for cik in ambiguous_ciks:
+        by_cik.pop(cik, None)
+    return by_ticker, by_cik
+
+
+def _security_cik(security_id: str) -> str | None:
+    cik_identity = security_id.split(":ticker:", maxsplit=1)[0]
+    if not cik_identity.startswith("cik:"):
+        return None
+    return cik_identity.removeprefix("cik:")
+
+
+def _punctuation_alias(left: str, right: str) -> bool:
+    return left.replace(".", "-") == right.replace(".", "-")
+
+
+def _base_security_id_at(
+    memberships: pd.DataFrame | None,
+    *,
+    ticker: str,
+    effective_at: datetime,
+) -> str | None:
+    if memberships is None:
+        return None
+    moment = pd.Timestamp(effective_at)
+    matches = memberships[
+        memberships["ticker"].eq(ticker)
+        & memberships["effective_from_utc"].le(moment)
+        & (
+            memberships["effective_to_utc"].isna()
+            | memberships["effective_to_utc"].ge(moment)
+        )
+    ]
+    identities = sorted(set(matches["security_id"].astype(str)))
+    if len(identities) > 1:
+        raise DataReadinessError(
+            f"base membership has ambiguous security identity for {ticker}"
+        )
+    return identities[0] if identities else None
 
 
 def _load_anchor(path: Path) -> tuple[pd.DataFrame, str]:
@@ -772,6 +986,109 @@ def _parent_lineage(
     }
 
 
+def _load_extension_parent(
+    membership_directory: Path | None,
+    *,
+    start_date: date,
+    cutoff_date: date,
+) -> tuple[pd.DataFrame | None, dict[str, Any] | None]:
+    if membership_directory is None:
+        return None, None
+    root = membership_directory.resolve()
+    request_path = root / "_request.json"
+    manifest_path = root / "_manifest.json"
+    authority_path = root / "_authority.json"
+    request = _load_object(request_path)
+    manifest = _load_object(manifest_path)
+    authority = _load_object(authority_path)
+    request_payload = {
+        str(key): value
+        for key, value in request.items()
+        if key != "request_sha256"
+    }
+    request_sha256 = _json_sha256(request_payload)
+    request_parent = request.get("parent_lineage")
+    request_extension_parent = request.get("extension_parent")
+    if (
+        request.get("schema") != MEMBERSHIP_REQUEST_SCHEMA
+        or request.get("request_sha256") != request_sha256
+        or authority.get("schema") != MEMBERSHIP_AUTHORITY_SCHEMA
+        or authority.get("state") != "membership_complete"
+        or authority.get("artifact") != "_manifest.json"
+        or authority.get("artifact_sha256") != file_sha256(manifest_path)
+        or authority.get("request_sha256") != request_sha256
+        or manifest.get("schema") != MEMBERSHIP_MANIFEST_SCHEMA
+        or manifest.get("status") != "complete"
+        or manifest.get("request_sha256") != request_sha256
+        or manifest.get("parent_lineage") != request_parent
+        or authority.get("parent_lineage") != request_parent
+        or manifest.get("extension_parent") != request_extension_parent
+        or authority.get("extension_parent") != request_extension_parent
+        or manifest.get("start_date") != request.get("start_date")
+        or manifest.get("cutoff_date") != request.get("cutoff_date")
+    ):
+        raise DataReadinessError("base S&P membership authority is invalid")
+    if str(request.get("start_date")) != start_date.isoformat():
+        raise DataReadinessError(
+            "base S&P membership start date differs from extension"
+        )
+    try:
+        base_cutoff = date.fromisoformat(str(request.get("cutoff_date", "")))
+    except ValueError as exc:
+        raise DataReadinessError("base S&P membership cutoff is invalid") from exc
+    if base_cutoff >= cutoff_date:
+        raise DataReadinessError(
+            "base S&P membership cutoff must precede extension cutoff"
+        )
+    record = manifest.get("membership_artifact")
+    exclusion_record = manifest.get("exclusion_artifact")
+    if not isinstance(record, dict) or not isinstance(exclusion_record, dict):
+        raise DataReadinessError(
+            "base S&P membership artifact inventory is invalid"
+        )
+    membership_path = _verified_artifact(root, record)
+    exclusion_path = _verified_artifact(root, exclusion_record)
+    sidecar = manifest_path_for(membership_path)
+    if (
+        not sidecar.is_file()
+        or manifest.get("membership_manifest_sha256") != file_sha256(sidecar)
+    ):
+        raise DataReadinessError(
+            "base canonical S&P membership manifest is invalid"
+        )
+    memberships, _ = load_canonical_artifact(
+        membership_path,
+        expected_type="memberships",
+        allow_research=True,
+    )
+    exclusions = _load_array(exclusion_path)
+    universe_sha256 = _membership_sha256(memberships)
+    if (
+        manifest.get("universe_sha256") != universe_sha256
+        or authority.get("universe_sha256") != universe_sha256
+        or int(manifest.get("membership_intervals", -1)) != len(memberships)
+        or int(authority.get("membership_intervals", -1)) != len(memberships)
+        or int(manifest.get("security_count", -1))
+        != memberships["security_id"].nunique()
+        or int(authority.get("security_count", -1))
+        != memberships["security_id"].nunique()
+        or int(manifest.get("ticker_count", -1)) != memberships["ticker"].nunique()
+        or int(manifest.get("excluded_security_count", -1)) != len(exclusions)
+    ):
+        raise DataReadinessError(
+            "base S&P membership semantic identity is invalid"
+        )
+    return memberships, {
+        "schema": "edge_rebuild.sp500_membership_extension_parent.v1",
+        "start_date": start_date.isoformat(),
+        "cutoff_date": base_cutoff.isoformat(),
+        "authority_sha256": file_sha256(authority_path),
+        "manifest_sha256": file_sha256(manifest_path),
+        "membership_table_sha256": file_sha256(membership_path),
+        "universe_sha256": universe_sha256,
+    }
+
+
 def _request_payload(
     *,
     parent: dict[str, str],
@@ -779,8 +1096,9 @@ def _request_payload(
     cutoff_date: date,
     security_exclusions_path: Path | None,
     maximum_security_exclusion_fraction: float,
+    extension_parent: dict[str, Any] | None,
 ) -> dict[str, Any]:
-    return {
+    payload: dict[str, Any] = {
         "schema": MEMBERSHIP_REQUEST_SCHEMA,
         "reconstruction_schema": MEMBERSHIP_RECONSTRUCTION_SCHEMA,
         "start_date": start_date.isoformat(),
@@ -789,6 +1107,75 @@ def _request_payload(
         "security_exclusions_sha256": (None if security_exclusions_path is None else file_sha256(security_exclusions_path)),
         "parent_lineage": parent,
     }
+    if extension_parent is not None:
+        payload["extension_parent"] = extension_parent
+    return payload
+
+
+def verify_membership_namespace_extension(
+    base: pd.DataFrame,
+    current: pd.DataFrame,
+    *,
+    base_cutoff_date: str,
+    current_cutoff_date: str,
+) -> None:
+    """Require an extension to preserve every pre-cutoff identity interval."""
+
+    base_cutoff = pd.Timestamp(base_cutoff_date).date()
+    current_cutoff = pd.Timestamp(current_cutoff_date).date()
+    if current_cutoff < base_cutoff:
+        raise DataReadinessError(
+            "S&P membership extension predates its base A4.3 namespace authority"
+        )
+    boundary = pd.Timestamp(base_cutoff, tz="UTC") + pd.Timedelta(days=1)
+    excluded_columns = {"universe_snapshot_id"}
+    base_columns = set(base.columns).difference(excluded_columns)
+    current_columns = set(current.columns).difference(excluded_columns)
+    if base_columns != current_columns:
+        raise DataReadinessError(
+            "S&P membership extension contract differs from its base authority"
+        )
+    columns = sorted(base_columns)
+    timestamp_columns = (
+        "effective_from_utc",
+        "effective_to_utc",
+        "available_at_utc",
+    )
+    if not set(timestamp_columns).issubset(base_columns):
+        raise DataReadinessError(
+            "S&P membership extension is missing causal timestamp columns"
+        )
+
+    def prefix(frame: pd.DataFrame) -> list[dict[str, Any]]:
+        data = frame.loc[:, columns].copy()
+        for column in timestamp_columns:
+            data[column] = pd.to_datetime(data[column], utc=True, errors="coerce")
+        data = data[data["effective_from_utc"].lt(boundary)].copy()
+        data.loc[
+            data["effective_to_utc"].isna()
+            | data["effective_to_utc"].ge(boundary),
+            "effective_to_utc",
+        ] = pd.NaT
+        data = data.sort_values(
+            ["security_id", "effective_from_utc", "ticker"],
+            kind="stable",
+        ).reset_index(drop=True)
+        records: list[dict[str, Any]] = []
+        for record in data.to_dict(orient="records"):
+            for column in timestamp_columns:
+                value = record[column]
+                record[column] = (
+                    None
+                    if pd.isna(value)
+                    else pd.Timestamp(value).tz_convert("UTC").isoformat()
+                )
+            records.append({str(key): value for key, value in record.items()})
+        return records
+
+    if prefix(base) != prefix(current):
+        raise DataReadinessError(
+            "S&P membership authority does not preserve its base identity namespace"
+        )
 
 
 def _historical_security_id(change: IndexChange) -> str:

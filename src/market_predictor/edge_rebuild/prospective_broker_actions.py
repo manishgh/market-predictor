@@ -37,6 +37,9 @@ from market_predictor.edge_rebuild.intraday_bar_dataset import (
     load_complete_intraday_bar_dataset,
 )
 from market_predictor.edge_rebuild.intraday_history import json_sha256
+from market_predictor.edge_rebuild.sp500_memberships import (
+    verify_membership_namespace_extension,
+)
 from market_predictor.locking import LockTimeout, file_lock
 from market_predictor.resources import (
     assert_memory_budget,
@@ -1519,6 +1522,7 @@ def _load_membership_authority(root: Path) -> tuple[pd.DataFrame, dict[str, obje
     authority = _json_object(authority_path)
     request_payload = {str(key): value for key, value in request.items() if key != "request_sha256"}
     parent = request_payload.get("parent_lineage")
+    extension_parent = request_payload.get("extension_parent")
     if (
         request.get("schema") != "edge_rebuild.sp500_membership_request.v1"
         or request.get("request_sha256") != json_sha256(request_payload)
@@ -1536,6 +1540,8 @@ def _load_membership_authority(root: Path) -> tuple[pd.DataFrame, dict[str, obje
         or manifest.get("request_sha256") != request.get("request_sha256")
         or manifest.get("parent_lineage") != parent
         or authority.get("parent_lineage") != parent
+        or manifest.get("extension_parent") != extension_parent
+        or authority.get("extension_parent") != extension_parent
     ):
         raise DataReadinessError("prospective poll membership authority is invalid")
     record = manifest.get("membership_artifact")
@@ -1623,7 +1629,7 @@ def _load_a43_security_namespace(
             "prospective poll membership authority is not the A4.3 identity namespace"
         )
     current_memberships, _ = _load_membership_authority(membership_root)
-    _verify_membership_namespace_extension(
+    verify_membership_namespace_extension(
         base_memberships,
         current_memberships,
         base_cutoff_date=str(base_parent["cutoff_date"]),
@@ -1641,52 +1647,6 @@ def _load_a43_security_namespace(
         "intraday_bar_parent_lineage_sha256": json_sha256(parent_lineage),
         "security_identity_namespace_sha256": json_sha256(namespace_payload),
     }
-
-
-def _verify_membership_namespace_extension(
-    base: pd.DataFrame,
-    current: pd.DataFrame,
-    *,
-    base_cutoff_date: str,
-    current_cutoff_date: str,
-) -> None:
-    base_cutoff = pd.Timestamp(base_cutoff_date).date()
-    current_cutoff = pd.Timestamp(current_cutoff_date).date()
-    if current_cutoff < base_cutoff:
-        raise DataReadinessError(
-            "prospective membership authority predates the A4.3 namespace"
-        )
-    boundary = pd.Timestamp(base_cutoff, tz="UTC") + pd.Timedelta(days=1)
-    columns = [
-        "ticker",
-        "security_id",
-        "effective_from_utc",
-        "effective_to_utc",
-        "available_at_utc",
-    ]
-
-    def prefix(frame: pd.DataFrame) -> pd.DataFrame:
-        data = frame.loc[:, columns].copy()
-        for column in (
-            "effective_from_utc",
-            "effective_to_utc",
-            "available_at_utc",
-        ):
-            data[column] = pd.to_datetime(data[column], utc=True, errors="coerce")
-        data = data[data["effective_from_utc"].lt(boundary)].copy()
-        data.loc[
-            data["effective_to_utc"].isna()
-            | data["effective_to_utc"].ge(boundary),
-            "effective_to_utc",
-        ] = pd.NaT
-        return data.sort_values(
-            ["security_id", "effective_from_utc", "ticker"], kind="stable"
-        ).reset_index(drop=True)
-
-    if not _frames_equal(prefix(base), prefix(current)):
-        raise DataReadinessError(
-            "prospective membership authority does not extend the A4.3 namespace"
-        )
 
 
 def _normalize_assets(frame: pd.DataFrame) -> pd.DataFrame:

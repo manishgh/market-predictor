@@ -573,6 +573,34 @@ authority passes attachment, timing, coverage, and replay checks.
      Market Predictor Alpaca credentials. A5.2 remains prohibited until a new
      prospective horizon also passes A5.1 capacity.
 
+3. **Current S&P membership extension (`in_progress`).** Extend the verified
+   point-in-time S&P 500 membership authority from `2026-07-08` through
+   `2026-08-15` so prospective Alpaca observations can resolve security identity.
+
+   Frozen scope and invariants:
+
+   - Parameterize the official S&P archive collection cutoff as an immutable request
+     input; retain the frozen 83-release seed authority and the `2018-04-14` lower
+     boundary.
+   - Collect and archive exact official S&P release bytes through `2026-08-15`, then
+     rebuild event, transition, and membership authorities through that cutoff.
+   - The extension must reproduce every membership interval through `2026-07-08` from
+     the existing authority. Only official events effective after that date may alter
+     later membership. Announced but not-yet-effective changes remain future events.
+   - The cutoff anchor must be independently observed and hash-bound. It may not be
+     manufactured from the same change events it is intended to verify.
+   - Model training, feature changes, serving, alerts, orders, and prospective Alpaca
+     collection are out of scope. Missing or contradictory official evidence fails
+     closed and leaves the existing stale-membership abstention unchanged.
+
+   Exit gates: cutoff/resume/replay/tamper and historical-prefix tests; complete raw,
+   event, transition, and membership authorities through `2026-08-15`; exact semantic
+   equality with the existing authority through `2026-07-08`; focused tests, full
+   suite, tracked Ruff, strict mypy, compileall, memory/process check, consolidated
+   review, implementation commit/push, and documentation closure commit/push.
+   Rollback removes only the new parameterization and extension artifacts; the
+   `2026-07-08` authority remains immutable.
+
 ### A6 - Run Locked Evaluation and Promote Qualified Models
 
 - Use purged, embargoed walk-forward validation plus a stable held-out-security stress

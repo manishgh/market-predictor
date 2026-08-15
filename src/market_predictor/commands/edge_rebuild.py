@@ -871,6 +871,13 @@ def register_edge_rebuild_commands(app: typer.Typer, console: Any) -> None:
         start_date: str = typer.Option(..., help="Inclusive YYYY-MM-DD start date."),
         cutoff_date: str = typer.Option(..., help="Inclusive YYYY-MM-DD cutoff date."),
         out_dir: Path = typer.Option(..., help="New immutable membership authority directory."),
+        base_membership_dir: Path | None = typer.Option(
+            None,
+            help=(
+                "Verified earlier membership authority whose identity namespace "
+                "must be preserved."
+            ),
+        ),
         security_exclusions: Path | None = typer.Option(
             None,
             help="Optional whole-security exclusion ledger.",
@@ -892,6 +899,7 @@ def register_edge_rebuild_commands(app: typer.Typer, console: Any) -> None:
             start_date=_iso_date(start_date, option="--start-date"),
             cutoff_date=_iso_date(cutoff_date, option="--cutoff-date"),
             output_directory=out_dir,
+            base_membership_directory=base_membership_dir,
             security_exclusions_path=security_exclusions,
             maximum_security_exclusion_fraction=maximum_security_exclusion_fraction,
         )

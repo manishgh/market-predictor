@@ -21,6 +21,7 @@ from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any, Protocol, cast
 from urllib.parse import parse_qsl, urlencode, urljoin, urlparse
+from zoneinfo import ZoneInfo
 
 from bs4 import BeautifulSoup
 
@@ -33,6 +34,8 @@ from market_predictor.resources import (
 from market_predictor.sources.http import HttpClient
 from market_predictor.v3.errors import DataReadinessError
 from market_predictor.v3.universe import ARCHIVE_QUERY, SP_GLOBAL_ARCHIVE_URL
+
+_SOURCE_TIMEZONE = ZoneInfo("America/New_York")
 
 ARCHIVE_REQUEST_SCHEMA = "ml_v3.spglobal_official_archive_request.v1"
 ARCHIVE_STATUS_SCHEMA = "ml_v3.spglobal_official_archive_status.v1"
@@ -95,6 +98,7 @@ ClientFactory = Callable[[], BytesHttpClient]
 
 @dataclass(frozen=True)
 class ArchiveCollectionConfig:
+    discovery_end: date = DISCOVERY_END
     maximum_pages: int = 20
     workers: int = 1
     retries: int = 3
@@ -102,6 +106,10 @@ class ArchiveCollectionConfig:
     maximum_units_this_run: int | None = None
 
     def validate(self) -> None:
+        if self.discovery_end < DISCOVERY_START:
+            raise ValueError(
+                f"discovery_end must be on or after {DISCOVERY_START.isoformat()}"
+            )
         if self.maximum_pages < 1:
             raise ValueError("maximum_pages must be positive")
         if not 1 <= self.workers <= MAXIMUM_WORKERS:
@@ -186,6 +194,10 @@ def _collect_spglobal_archive_locked(
     if audit_sha256 != expected_source_audit_sha256:
         raise DataReadinessError("source audit SHA-256 does not match the frozen request")
     seeds = _load_seed_announcements(source_audit_path)
+    if any(seed.published_date > policy.discovery_end for seed in seeds):
+        raise DataReadinessError(
+            "source audit contains a frozen seed published after discovery_end"
+        )
     request_payload: dict[str, Any] = {
         "schema": ARCHIVE_REQUEST_SCHEMA,
         "source_audit_path": str(source_audit_path),
@@ -193,7 +205,7 @@ def _collect_spglobal_archive_locked(
         "seed_url_count": len(seeds),
         "seed_urls": [item.url for item in seeds],
         "discovery_start": DISCOVERY_START.isoformat(),
-        "discovery_end": DISCOVERY_END.isoformat(),
+        "discovery_end": policy.discovery_end.isoformat(),
         "archive_url": SP_GLOBAL_ARCHIVE_URL,
         "archive_query": dict(sorted(ARCHIVE_QUERY.items())),
     }
@@ -210,6 +222,7 @@ def _collect_spglobal_archive_locked(
         request_sha256=request_sha256,
         client_factory=factory,
         config=policy,
+        discovery_end=policy.discovery_end,
         network_budget=budget,
     )
     used_network_units = discovery_network_units
@@ -259,6 +272,7 @@ def _collect_spglobal_archive_locked(
         output_directory,
         seeds=seeds,
         request_sha256=request_sha256,
+        discovery_end=policy.discovery_end,
     )
     assert_peak_memory_budget(
         hard_budget_gib=MAXIMUM_MEMORY_GIB,
@@ -361,6 +375,17 @@ def require_spglobal_raw_archive_complete(
         raise DataReadinessError(
             "S&P raw archive request identity is invalid"
         )
+    try:
+        discovery_start = date.fromisoformat(str(request.get("discovery_start", "")))
+        discovery_end = date.fromisoformat(str(request.get("discovery_end", "")))
+    except ValueError as exc:
+        raise DataReadinessError(
+            "S&P raw archive request discovery boundary is invalid"
+        ) from exc
+    if discovery_start != DISCOVERY_START or discovery_end < discovery_start:
+        raise DataReadinessError(
+            "S&P raw archive request discovery boundary is invalid"
+        )
     discovery = _load_json(archive_directory / "_discovery.json")
     request_seed_urls = request.get("seed_urls")
     if not isinstance(request_seed_urls, list) or not all(
@@ -383,6 +408,7 @@ def require_spglobal_raw_archive_complete(
         archive_directory,
         seeds=seeds,
         request_sha256=str(authority["request_sha256"]),
+        discovery_end=discovery_end,
     )
     if (
         replayed_discovery != discovery
@@ -430,6 +456,7 @@ def _replay_complete_archive(
     *,
     seeds: list[_Announcement],
     request_sha256: str,
+    discovery_end: date,
 ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     """Reload every retained unit before publishing final authority."""
 
@@ -439,6 +466,7 @@ def _replay_complete_archive(
         root=root,
         seeds=seeds,
         request_sha256=request_sha256,
+        discovery_end=discovery_end,
     )
     announcements = [
         _announcement_from_record(item)
@@ -482,6 +510,7 @@ def _discover_or_resume(
     request_sha256: str,
     client_factory: ClientFactory,
     config: ArchiveCollectionConfig,
+    discovery_end: date,
     network_budget: int | None,
 ) -> tuple[dict[str, Any] | None, int, str | None]:
     discovery_path = output_directory / "_discovery.json"
@@ -492,6 +521,7 @@ def _discover_or_resume(
             root=output_directory,
             seeds=seeds,
             request_sha256=request_sha256,
+            discovery_end=discovery_end,
         )
         return discovery, 0, None
 
@@ -555,9 +585,11 @@ def _discover_or_resume(
             previous_last_url=previous_last_url,
             seen_urls=seen_search_urls,
             upper_boundary_crossed=upper_boundary_crossed,
+            discovery_end=discovery_end,
+            retrieved_at_utc=str(record["retrieved_at_utc"]),
         )
         for announcement in page_announcements:
-            if DISCOVERY_START <= announcement.published_date <= DISCOVERY_END:
+            if DISCOVERY_START <= announcement.published_date <= discovery_end:
                 discovered[announcement.url] = announcement
         if max(published for published, _ in dated_urls) < DISCOVERY_START:
             boundary_reached = True
@@ -593,7 +625,7 @@ def _discover_or_resume(
         "schema": DISCOVERY_SCHEMA,
         "request_sha256": request_sha256,
         "lower_boundary": DISCOVERY_START.isoformat(),
-        "upper_boundary": DISCOVERY_END.isoformat(),
+        "upper_boundary": discovery_end.isoformat(),
         "lower_boundary_reached": True,
         "seed_url_count": len(seeds),
         "discovered_url_count": len(discovered),
@@ -607,6 +639,7 @@ def _discover_or_resume(
         root=output_directory,
         seeds=seeds,
         request_sha256=request_sha256,
+        discovery_end=discovery_end,
     )
     return discovery, network_units, None
 
@@ -835,6 +868,8 @@ def _validate_search_page_coverage(
     previous_last_url: str | None,
     seen_urls: set[str],
     upper_boundary_crossed: bool,
+    discovery_end: date,
+    retrieved_at_utc: str,
 ) -> tuple[str, bool]:
     if len(dated_urls) != SEARCH_PAGE_SIZE:
         raise DataReadinessError(
@@ -863,14 +898,32 @@ def _validate_search_page_coverage(
         )
     newest = max(dates)
     oldest = min(dates)
-    if page_number == 0 and newest < DISCOVERY_END:
+    try:
+        observed_at = datetime.fromisoformat(retrieved_at_utc)
+    except ValueError as exc:
         raise DataReadinessError(
-            "official archive first page does not cover the frozen upper boundary"
+            "official archive search retrieval timestamp is invalid"
+        ) from exc
+    if observed_at.tzinfo is None:
+        raise DataReadinessError(
+            "official archive search retrieval timestamp is not timezone-aware"
+        )
+    observed_through_cutoff = (
+        observed_at.astimezone(_SOURCE_TIMEZONE).date() > discovery_end
+    )
+    if page_number == 0 and newest < discovery_end and not observed_through_cutoff:
+        raise DataReadinessError(
+            "official archive first page was observed before the frozen upper boundary"
         )
     seen_urls.update(urls)
     return dated_urls[-1][1], (
         upper_boundary_crossed
-        or newest >= DISCOVERY_END >= oldest
+        or newest >= discovery_end >= oldest
+        or (
+            page_number == 0
+            and newest < discovery_end
+            and observed_through_cutoff
+        )
     )
 
 
@@ -1088,12 +1141,13 @@ def _validate_discovery(
     root: Path,
     seeds: list[_Announcement],
     request_sha256: str,
+    discovery_end: date,
 ) -> None:
     if (
         discovery.get("schema") != DISCOVERY_SCHEMA
         or discovery.get("request_sha256") != request_sha256
         or discovery.get("lower_boundary") != DISCOVERY_START.isoformat()
-        or discovery.get("upper_boundary") != DISCOVERY_END.isoformat()
+        or discovery.get("upper_boundary") != discovery_end.isoformat()
         or discovery.get("lower_boundary_reached") is not True
         or int(discovery.get("seed_url_count", -1)) != EXPECTED_SEED_URLS
     ):
@@ -1153,9 +1207,11 @@ def _validate_discovery(
             previous_last_url=previous_last_url,
             seen_urls=seen_search_urls,
             upper_boundary_crossed=upper_boundary_crossed,
+            discovery_end=discovery_end,
+            retrieved_at_utc=str(loaded["retrieved_at_utc"]),
         )
         for announcement in page_announcements:
-            if DISCOVERY_START <= announcement.published_date <= DISCOVERY_END:
+            if DISCOVERY_START <= announcement.published_date <= discovery_end:
                 discovered[announcement.url] = announcement
         if max(published for published, _ in dated_urls) < DISCOVERY_START:
             if page_number != len(page_records) - 1:

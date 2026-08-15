@@ -50,10 +50,14 @@ class _Transport:
         *,
         final_urls: dict[str, str] | None = None,
         redirect_chains: dict[str, Sequence[str]] | None = None,
+        retrieved_at_utc: datetime | None = None,
     ) -> None:
         self.bodies = bodies
         self.final_urls = final_urls or {}
         self.redirect_chains = redirect_chains or {}
+        self.retrieved_at_utc = retrieved_at_utc or datetime(
+            2026, 7, 31, 12, tzinfo=UTC
+        )
         self.calls: list[str] = []
         self.lock = threading.Lock()
 
@@ -93,7 +97,7 @@ class _Client:
             final_url=final_url,
             redirect_chain=self.transport.redirect_chains.get(key, ()),
             status_code=200,
-            retrieved_at_utc=datetime(2026, 7, 31, 12, tzinfo=UTC),
+            retrieved_at_utc=self.transport.retrieved_at_utc,
             content_type="text/html; charset=utf-8",
             content_encoding=None,
             etag='"fixture"',
@@ -772,10 +776,137 @@ def test_collection_cli_returns_nonzero_for_every_partial_result(
             "0" * 64,
             "--out-dir",
             str(tmp_path / "out"),
+            "--cutoff-date",
+            "2026-08-15",
         ],
     )
 
     assert result.exit_code == 2
+
+
+def test_collection_cutoff_is_hash_bound_and_excludes_later_releases(
+    tmp_path: Path,
+) -> None:
+    audit_path, audit_hash, seeds = _write_source_audit(tmp_path)
+    included = "https://press.spglobal.com/2026-08-13-Reddit-Set-to-Join-S-P-500"
+    excluded = "https://press.spglobal.com/2026-08-16-Future-Company-Set-to-Join-S-P-500"
+    overlap = "https://press.spglobal.com/2018-04-13-cutoff-overlap"
+    transport = _Transport(
+        {
+            "search:0": _search_page(
+                [
+                    ("2026-08-16", "Future Company Set to Join S&P 500", excluded),
+                    ("2026-08-13", "Reddit Set to Join S&P 500", included),
+                    ("2019-01-02", "Seed Company Set to Join S&P 500", seeds[0]),
+                    (
+                        "2018-05-01",
+                        "Netflix and Twitter to Join S&P 500",
+                        "https://press.spglobal.com/2018-05-01-Netflix-and-Twitter-to-Join-S-P-500",
+                    ),
+                ],
+                overlap_out=("2018-04-13", overlap),
+                page_tag="cutoff-zero",
+            ),
+            "search:99": _search_page(
+                [
+                    ("2018-04-13", "Pagination overlap", overlap),
+                    (
+                        "2018-04-13",
+                        "Archive boundary",
+                        "https://press.spglobal.com/2018-04-13-cutoff-boundary",
+                    ),
+                ],
+                page_tag="cutoff-one",
+            ),
+            **{url: _release_body() for url in seeds},
+            included: _release_body(),
+            "https://press.spglobal.com/2018-05-01-Netflix-and-Twitter-to-Join-S-P-500": _release_body(),
+        },
+        retrieved_at_utc=datetime(2026, 8, 16, 4, 1, tzinfo=UTC),
+    )
+    output = tmp_path / "out"
+
+    manifest = collect_spglobal_archive(
+        source_audit_path=audit_path,
+        expected_source_audit_sha256=audit_hash,
+        output_directory=output,
+        client_factory=transport.factory,
+        config=ArchiveCollectionConfig(discovery_end=date(2026, 8, 15)),
+    )
+
+    request = _read_json(output / "_request.json")
+    discovery = _read_json(output / "_discovery.json")
+    urls = {str(item["url"]) for item in discovery["announcements"]}
+    assert request["discovery_end"] == "2026-08-15"
+    assert discovery["upper_boundary"] == "2026-08-15"
+    assert included in urls
+    assert excluded not in urls
+    assert excluded not in transport.calls
+    assert manifest["status"] == "complete"
+    archive_module.require_spglobal_raw_archive_complete(output)
+
+
+def test_first_page_observation_after_cutoff_day_proves_quiet_boundary() -> None:
+    dated_urls = [
+        (
+            date(2026, 8, 13),
+            f"https://press.spglobal.com/2026-08-13-quiet-{number:03d}",
+        )
+        for number in range(100)
+    ]
+
+    _, crossed = archive_module._validate_search_page_coverage(
+        page_number=0,
+        dated_urls=dated_urls,
+        previous_last_url=None,
+        seen_urls=set(),
+        upper_boundary_crossed=False,
+        discovery_end=date(2026, 8, 15),
+        retrieved_at_utc="2026-08-16T04:00:00+00:00",
+    )
+
+    assert crossed is True
+
+
+def test_first_page_observed_during_cutoff_day_is_rejected() -> None:
+    dated_urls = [
+        (
+            date(2026, 8, 13),
+            f"https://press.spglobal.com/2026-08-13-stale-{number:03d}",
+        )
+        for number in range(100)
+    ]
+
+    with pytest.raises(DataReadinessError, match="observed before"):
+        archive_module._validate_search_page_coverage(
+            page_number=0,
+            dated_urls=dated_urls,
+            previous_last_url=None,
+            seen_urls=set(),
+            upper_boundary_crossed=False,
+            discovery_end=date(2026, 8, 15),
+            retrieved_at_utc="2026-08-15T23:59:59+00:00",
+        )
+
+
+def test_resume_rejects_a_different_collection_cutoff(tmp_path: Path) -> None:
+    audit_path, audit_hash, seeds = _write_source_audit(tmp_path)
+    output = tmp_path / "out"
+    collect_spglobal_archive(
+        source_audit_path=audit_path,
+        expected_source_audit_sha256=audit_hash,
+        output_directory=output,
+        client_factory=_complete_transport(seeds).factory,
+    )
+
+    with pytest.raises(DataReadinessError, match="immutable"):
+        collect_spglobal_archive(
+            source_audit_path=audit_path,
+            expected_source_audit_sha256=audit_hash,
+            output_directory=output,
+            client_factory=_complete_transport(seeds).factory,
+            config=ArchiveCollectionConfig(discovery_end=date(2026, 8, 15)),
+        )
 
 
 def test_generic_landing_page_is_failed_and_blocks_authority(tmp_path: Path) -> None:

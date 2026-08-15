@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from datetime import date
 from pathlib import Path
 
 import typer
@@ -31,6 +32,10 @@ def register_v3_readiness_commands(app: typer.Typer, console: Console) -> None:
             ...,
             help="New or resumable immutable official-source archive directory.",
         ),
+        cutoff_date: str = typer.Option(
+            ...,
+            help="Inclusive official-release discovery cutoff (YYYY-MM-DD).",
+        ),
         maximum_pages: int = typer.Option(20, min=1, max=100),
         workers: int = typer.Option(1, min=1, max=2),
         retries: int = typer.Option(3, min=1, max=10),
@@ -39,11 +44,20 @@ def register_v3_readiness_commands(app: typer.Typer, console: Console) -> None:
     ) -> None:
         """Collect exact official S&P release bytes with verified resume."""
 
+        try:
+            parsed_cutoff_date = date.fromisoformat(cutoff_date)
+        except ValueError as exc:
+            raise typer.BadParameter(
+                "must use YYYY-MM-DD",
+                param_hint="--cutoff-date",
+            ) from exc
+
         result = collect_spglobal_archive(
             source_audit_path=source_audit,
             expected_source_audit_sha256=source_audit_sha256,
             output_directory=out_dir,
             config=ArchiveCollectionConfig(
+                discovery_end=parsed_cutoff_date,
                 maximum_pages=maximum_pages,
                 workers=workers,
                 retries=retries,

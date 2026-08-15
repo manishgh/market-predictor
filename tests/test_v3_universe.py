@@ -429,18 +429,35 @@ class V3PointInTimeUniverseTests(unittest.TestCase):
         </div></body></html>
         """
 
-        changes = parse_sp500_changes(
-            corroborated,
-            source_url="https://press.spglobal.com/2018-06-04-twitter",
-            published_date=date(2018, 6, 4),
-            source_sha256=(
-                "7d43cdaaf5d8735a87ad28a3fb0ff0feb236e221574384507ca060c1a1273f18"
-            ),
+        source_url = (
+            "https://press.spglobal.com/2018-06-04-Netflix-Set-to-Join-S-P-100-"
+            "Twitter-to-Join-S-P-500-REGENXBIO-to-Join-S-P-SmallCap-600"
         )
-        self.assertEqual(
-            [(item.action, item.ticker) for item in changes],
-            [("addition", "TWTR"), ("deletion", "MON")],
-        )
+        for source_sha256 in (
+            "46964cc0739c5d8fd2067bc9c27adfb1e4863c2c9e73e7b2804fc71ae6db2fe3",
+            "7d43cdaaf5d8735a87ad28a3fb0ff0feb236e221574384507ca060c1a1273f18",
+        ):
+            with self.subTest(source_sha256=source_sha256):
+                changes = parse_sp500_changes(
+                    corroborated,
+                    source_url=source_url,
+                    published_date=date(2018, 6, 4),
+                    source_sha256=source_sha256,
+                )
+                self.assertEqual(
+                    [(item.action, item.ticker) for item in changes],
+                    [("addition", "TWTR"), ("deletion", "MON")],
+                )
+
+        with self.assertRaisesRegex(DataReadinessError, "no structured S&P 500"):
+            parse_sp500_changes(
+                corroborated,
+                source_url="https://press.spglobal.com/2018-06-04-wrong-release",
+                published_date=date(2018, 6, 4),
+                source_sha256=(
+                    "46964cc0739c5d8fd2067bc9c27adfb1e4863c2c9e73e7b2804fc71ae6db2fe3"
+                ),
+            )
 
         uncorroborated = f"<html><body><div class='wd_news_body'>{table}</div></body></html>"
         with self.assertRaisesRegex(DataReadinessError, "no structured S&P 500"):

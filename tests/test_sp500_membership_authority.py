@@ -65,6 +65,162 @@ def test_anchor_event_mismatch_excludes_complete_security_below_cap() -> None:
     assert audit["benchmark_session_exclusions"] == 0
 
 
+def test_extension_preserves_base_prefix_and_allows_later_metadata() -> None:
+    base_anchor = _anchor(500)
+    base, _, _ = membership_module._build_memberships(
+        anchor=base_anchor,
+        changes=[],
+        transitions=_transitions([]),
+        start_date=date(2024, 1, 2),
+        cutoff_date=date(2026, 7, 8),
+        security_exclusions_path=None,
+        maximum_security_exclusion_fraction=0.05,
+        snapshot_id="base",
+    )
+    current_anchor = base_anchor.iloc[1:].copy()
+    current_anchor.loc[current_anchor["ticker"].eq("T001"), "sector"] = "Health Care"
+    current_anchor.loc[current_anchor["ticker"].eq("T001"), "industry"] = "Biotechnology"
+    current_anchor = pd.concat(
+        [
+            current_anchor,
+            pd.DataFrame(
+                {
+                    "ticker": ["NEW"],
+                    "company": ["New Company"],
+                    "sector": ["Industrials"],
+                    "industry": ["Machinery"],
+                    "cik": ["9999999999"],
+                }
+            ),
+        ],
+        ignore_index=True,
+    )
+    effective_at = datetime(2026, 8, 5, 4, tzinfo=UTC)
+
+    current, _, _ = membership_module._build_memberships(
+        anchor=current_anchor,
+        changes=[
+            _change(
+                action="addition",
+                ticker="NEW",
+                effective_at=effective_at,
+                published=date(2026, 7, 31),
+            ),
+            _change(
+                action="deletion",
+                ticker="T000",
+                effective_at=effective_at,
+                published=date(2026, 7, 31),
+            ),
+        ],
+        transitions=_transitions([]),
+        start_date=date(2024, 1, 2),
+        cutoff_date=date(2026, 8, 15),
+        security_exclusions_path=None,
+        maximum_security_exclusion_fraction=0.05,
+        snapshot_id="extension",
+        base_memberships=base,
+        base_cutoff_date=date(2026, 7, 8),
+    )
+
+    membership_module.verify_membership_namespace_extension(
+        base,
+        current,
+        base_cutoff_date="2026-07-08",
+        current_cutoff_date="2026-08-15",
+    )
+    assert set(current.loc[current["ticker"].eq("T000"), "security_id"]) == {"cik:0000000001"}
+    assert set(current.loc[current["ticker"].eq("T001"), "security_id"]) == {"cik:0000000002"}
+    t001 = current.loc[current["ticker"].eq("T001")].sort_values(
+        "effective_from_utc"
+    )
+    assert list(t001["sector"]) == ["Industrials", "Health Care"]
+    poisoned = current.copy()
+    historical = poisoned["effective_from_utc"].lt(
+        pd.Timestamp("2026-07-09T00:00:00Z")
+    )
+    poisoned.loc[historical & poisoned["ticker"].eq("T001"), "sector"] = "Energy"
+    with pytest.raises(DataReadinessError, match="base identity namespace"):
+        membership_module.verify_membership_namespace_extension(
+            base,
+            poisoned,
+            base_cutoff_date="2026-07-08",
+            current_cutoff_date="2026-08-15",
+        )
+
+
+def test_extension_rejects_same_ticker_with_conflicting_cik() -> None:
+    base_anchor = _anchor(500)
+    base, _, _ = membership_module._build_memberships(
+        anchor=base_anchor,
+        changes=[],
+        transitions=_transitions([]),
+        start_date=date(2024, 1, 2),
+        cutoff_date=date(2026, 7, 8),
+        security_exclusions_path=None,
+        maximum_security_exclusion_fraction=0.05,
+        snapshot_id="base",
+    )
+    current_anchor = base_anchor.copy()
+    current_anchor.loc[current_anchor["ticker"].eq("T001"), "cik"] = "9999999998"
+
+    with pytest.raises(DataReadinessError, match="CIK conflicts"):
+        membership_module._build_memberships(
+            anchor=current_anchor,
+            changes=[],
+            transitions=_transitions([]),
+            start_date=date(2024, 1, 2),
+            cutoff_date=date(2026, 8, 15),
+            security_exclusions_path=None,
+            maximum_security_exclusion_fraction=0.05,
+            snapshot_id="extension",
+            base_memberships=base,
+            base_cutoff_date=date(2026, 7, 8),
+        )
+
+
+def test_extension_keeps_current_ticker_for_cik_continuous_transition() -> None:
+    base_anchor = _anchor(500)
+    base, _, _ = membership_module._build_memberships(
+        anchor=base_anchor,
+        changes=[],
+        transitions=_transitions([]),
+        start_date=date(2024, 1, 2),
+        cutoff_date=date(2026, 7, 8),
+        security_exclusions_path=None,
+        maximum_security_exclusion_fraction=0.05,
+        snapshot_id="base",
+    )
+    current_anchor = base_anchor.copy()
+    current_anchor.loc[current_anchor["ticker"].eq("T001"), "ticker"] = "NEW"
+    transition_at = pd.Timestamp("2026-08-05T04:00:00Z")
+
+    current, _, _ = membership_module._build_memberships(
+        anchor=current_anchor,
+        changes=[],
+        transitions=_transitions([("T001", "NEW")], moment=transition_at),
+        start_date=date(2024, 1, 2),
+        cutoff_date=date(2026, 8, 15),
+        security_exclusions_path=None,
+        maximum_security_exclusion_fraction=0.05,
+        snapshot_id="extension",
+        base_memberships=base,
+        base_cutoff_date=date(2026, 7, 8),
+    )
+
+    active = current[
+        current["effective_to_utc"].isna()
+        & current["ticker"].eq("NEW")
+    ]
+    assert set(active["security_id"]) == {"cik:0000000002"}
+    membership_module.verify_membership_namespace_extension(
+        base,
+        current,
+        base_cutoff_date="2026-07-08",
+        current_cutoff_date="2026-08-15",
+    )
+
+
 def test_more_than_five_percent_security_exclusions_fail() -> None:
     memberships = pd.DataFrame({"security_id": [f"sec:{number}" for number in range(100)]})
     automatic = [
@@ -147,6 +303,41 @@ def test_anchor_poison_invalidates_published_membership_authority(
         start_date=date(2018, 5, 29),
         cutoff_date=date(2026, 7, 8),
         output_directory=output,
+    )
+    original_manifest = membership_module._load_object(output / "_manifest.json")
+    original_authority = membership_module._load_object(output / "_authority.json")
+    for field, value in (
+        ("parent_lineage", {"tampered": "lineage"}),
+        ("cutoff_date", "2026-07-07"),
+    ):
+        poisoned_manifest = {**original_manifest, field: value}
+        membership_module._write_json_atomic(
+            output / "_manifest.json",
+            poisoned_manifest,
+        )
+        poisoned_authority = {
+            **original_authority,
+            "artifact_sha256": membership_module.file_sha256(
+                output / "_manifest.json"
+            ),
+        }
+        membership_module._write_json_atomic(
+            output / "_authority.json",
+            poisoned_authority,
+        )
+        with pytest.raises(DataReadinessError, match="base S&P membership authority"):
+            membership_module._load_extension_parent(
+                output,
+                start_date=date(2018, 5, 29),
+                cutoff_date=date(2026, 8, 15),
+            )
+    membership_module._write_json_atomic(
+        output / "_manifest.json",
+        original_manifest,
+    )
+    membership_module._write_json_atomic(
+        output / "_authority.json",
+        original_authority,
     )
     poisoned = pd.read_csv(anchor_path)
     poisoned.loc[0, "company"] = "POISONED"
