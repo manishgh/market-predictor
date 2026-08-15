@@ -563,17 +563,17 @@ authority passes attachment, timing, coverage, and replay checks.
    - Verification passed 1,373 tests with two skipped, 41 focused authority/source/CLI
      tests, tracked Ruff, strict mypy across 226 source files, compileall, and one
      consolidated two-reviewer correction pass.
-   - No live authority exists. A direct poll reached Alpaca `/v2/assets` but returned
-     HTTP 401 because Market Predictor credentials were not configured. Reusing the
-     separate Trading Flow secret store was not authorized for this process, so no
-     credential was copied and no provider evidence was accepted.
+   - No live authority exists. The earlier HTTP 401 did not prove missing credentials;
+     Market Predictor's `.env` now verifies both Alpaca values through `Settings` and
+     the configured stock feed is `sip`. No provider evidence was accepted from the
+     failed attempt.
    - The current membership authority ends on `2026-07-08`; a later poll correctly
      abstains every identity as stale. Production-eligible observation requires a
      strictly verified membership extension through the poll date and configured
      Market Predictor Alpaca credentials. A5.2 remains prohibited until a new
      prospective horizon also passes A5.1 capacity.
 
-3. **Current S&P membership extension (`in_progress`).** Extend the verified
+3. **Current S&P membership extension (`environment_pending`).** Extend the verified
    point-in-time S&P 500 membership authority from `2026-07-08` through
    `2026-08-15` so prospective Alpaca observations can resolve security identity.
 
@@ -600,6 +600,21 @@ authority passes attachment, timing, coverage, and replay checks.
    review, implementation commit/push, and documentation closure commit/push.
    Rollback removes only the new parameterization and extension artifacts; the
    `2026-07-08` authority remains immutable.
+
+   Implementation commit `42ebe5f` is pushed. It hash-binds the configurable cutoff,
+   requires the inclusive cutoff day to have closed in `America/New_York`, preserves
+   the complete base membership contract before the extension boundary, rejects CIK
+   conflicts and inconsistent base authorities, and shares namespace verification
+   with prospective collection. Verification passed 111 focused tests, tracked Ruff,
+   strict mypy across 227 source files, compileall, and the full tracked suite with
+   1,374 passed and 2 skipped. Peak test-process memory stayed below 0.2 GiB.
+
+   The same-day `2026-08-15` data artifacts were collected before the New York cutoff
+   day ended and are therefore invalid under the corrected verifier. The code
+   checkpoint is complete, but data-authority publication must wait until after
+   `2026-08-16T04:00:00Z`. Recollect into new immutable directories, use the
+   SEC-reviewed anchor `data/universe/sp500_current_20260815_sec_reviewed_v1.csv`,
+   then rebuild and replay events, transitions, and memberships before polling Alpaca.
 
 ### A6 - Run Locked Evaluation and Promote Qualified Models
 

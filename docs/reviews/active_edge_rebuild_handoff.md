@@ -8,7 +8,7 @@ Repository: `C:\project\market-predictor`
 
 Branch: `er-intraday-refactoring`
 
-Last completed implementation commit: `5530246` (`build prospective Alpaca broker action authority`)
+Last completed implementation commit: `42ebe5f` (`Extend point-in-time S&P membership lineage`)
 
 ## Purpose
 
@@ -18,8 +18,10 @@ A3 issuer-event specialist development is complete with no candidate. A4.1 colle
 A4.3 bar-only causal dataset publication, and A4.4 continuation/reversion development
 are complete. Both A4.4 hypotheses were rejected. A5.1 is also complete and blocked:
 the available event history is retrospective and exact security identity overlap is
-too small. The prospective Alpaca authority implementation is verified, but no live
-poll authority exists. Do not train A5.2, open a locked test, or claim model quality.
+too small. The prospective Alpaca authority and current-membership extension code are
+verified, but no live poll authority exists. The August 15 membership data checkpoint
+is `environment_pending` until that New York publication day has closed. Do not train
+A5.2, open a locked test, or claim model quality.
 
 This repository produces prediction intelligence and abstention. Alerts, orders,
 positions, portfolio risk, and execution remain in `trading_flow`.
@@ -121,8 +123,8 @@ specialists; A6 performs locked evaluation and promotion.
   1.954 GiB recorded peak. Exact ticker and exact prediction timestamp are required;
   conflicting CIKs fail closed. Every exclusion is persisted in
   `identity_alignment_audit.parquet`.
-- Repository suite: 1,373 passed and 2 skipped after the prospective authority review.
-- Tracked Ruff, strict mypy across 226 source files, compileall, and final A5.1
+- Repository suite: 1,374 passed and 2 skipped after the membership-extension review.
+- Tracked Ruff, strict mypy across 227 source files, compileall, and final A5.1
   real-authority strict replay pass.
 - Coordinated request, feature, all-profile label, dtype, partition, global identity,
   source-coverage, causal-window, and governance-hash poison tests pass.
@@ -136,7 +138,7 @@ specialists; A6 performs locked evaluation and promotion.
 | Swing baseline | A2 trainer complete; prior candidates rejected; no new run or promotion | Preserve the frozen technical contract until a governed training run is approved |
 | Swing event-driven | Rating-change and coverage specialists trained in development; all rejected | Preserve rejection evidence; do not open locked test or serve |
 | Intraday baseline | V2 rejected; V3 invalid; A4.4 continuation and reversion both rejected | Preserve evidence; no serving or future-holdout access |
-| Intraday event-driven | A5.1 blocked; prospective collector verified but no live authority/horizon exists | Extend membership through the poll date, configure Market Predictor Alpaca credentials, then begin observed polling |
+| Intraday event-driven | A5.1 blocked; prospective collector verified but no live authority/horizon exists | After the August 15 New York day closes, publish the strict membership extension and begin observed polling |
 
 `ROC-AUC >= 0.60` is a locked-test diagnostic, not a training objective or permission
 for repeated locked-test tuning. Promotion also requires ranking, calibration,
@@ -266,23 +268,33 @@ A4.2/A4.5 trade/quote work remains storage-blocked and must not be replaced with
   limited by verified Parquet uncompressed size. Generations preserve earliest
   observed first-seen time and every distinct provider revision. They remain
   `training_eligible=false` and `serving_eligible=false`.
-- Final evidence: 41 focused tests passed; full suite 1,373 passed and 2 skipped;
-  tracked Ruff, strict mypy across 226 source files, compileall, and consolidated
-  independent review passed.
-- Live status is `environment_pending`. One direct attempt returned HTTP 401 at Alpaca
-  `/v2/assets` because `ALPACA_API_KEY_ID` and `ALPACA_API_SECRET_KEY` were absent.
-  Trading Flow has a separate ignored secret store, but cross-project credential reuse
-  was not authorized, so no credential was copied and no live evidence was published.
+- Membership-extension implementation commit `42ebe5f` adds a hash-bound archive
+  cutoff, complete base-prefix preservation, CIK conflict rejection, strict parent
+  envelope verification, and the shared prospective namespace verifier.
+- Final evidence: 111 focused tests passed; full suite 1,374 passed and 2 skipped;
+  tracked Ruff, strict mypy across 227 source files, compileall, memory below 0.2 GiB,
+  and one consolidated two-reviewer correction pass.
+- Live status is `environment_pending`. The earlier HTTP 401 did not prove absent
+  credentials. Market Predictor's `.env` currently loads both Alpaca values through
+  `Settings.has_alpaca=true`, and `ALPACA_STOCK_FEED=sip`. No live evidence has yet
+  been published.
 - The available membership authority ends `2026-07-08`. Using it for a later poll
-  correctly yields `membership_authority_stale` for every symbol. Before starting the
-  production evidence horizon, publish a strict current membership extension through
-  the poll date and configure Alpaca credentials directly for Market Predictor.
+  correctly yields `membership_authority_stale` for every symbol. The first August 15
+  extension artifacts were collected at `2026-08-15T18:29Z`, before that New York
+  publication day ended, and are invalid under `42ebe5f`; do not use them.
 
-Exact next action: after explicit credential authorization/configuration, run one new
-poll directory with the A4.3 dataset, current membership extension, and one stable
-registry. Strictly reload it, inspect observed/empty/failed coverage and peak memory,
-then schedule polls no more than 120 seconds apart. Do not run A5.2 until a newly frozen
-prospective horizon meets the existing A5.1 episode/security/session capacity floors.
+- SEC evidence `data/raw/index_membership/sec_xom_identity_20260815_v1` verifies XOM
+  as CIK `0000034088`. The reviewed anchor is
+  `data/universe/sp500_current_20260815_sec_reviewed_v1.csv`, SHA-256
+  `d1171b3aef900ddf856d1c22d1522d1e42483232a32640922bcf99b97898acba`.
+
+Exact next action: after `2026-08-16T04:00:00Z`, recollect the August 15 official S&P
+archive into a new immutable directory, rebuild events and transitions, and publish a
+new membership extension using the reviewed anchor and the July 8 base authority.
+Strictly replay the complete authority and exact base prefix. Then run one Alpaca poll
+with the A4.3 dataset and stable registry, strictly reload it, and inspect coverage and
+memory before scheduling polls no more than 120 seconds apart. Do not run A5.2 until a
+newly frozen prospective horizon meets the existing capacity floors.
 
 ## Source Boundary
 
