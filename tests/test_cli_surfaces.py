@@ -84,6 +84,34 @@ class CliSurfaceTests(unittest.TestCase):
         self.assertNotEqual(result.exit_code, 0)
         self.assertIn("--maximum-jobs", result.output)
 
+    def test_a44_training_command_requires_hypothesis_and_binds_policy_option(self) -> None:
+        result = CliRunner().invoke(
+            research_app,
+            ["train-edge-rebuild-intraday-development", "--help"],
+            terminal_width=240,
+        )
+
+        self.assertEqual(result.exit_code, 0, result.output)
+        command = get_command(research_app).commands[
+            "train-edge-rebuild-intraday-development"
+        ]
+        options = {
+            option
+            for parameter in command.params
+            for option in getattr(parameter, "opts", ())
+        }
+        self.assertTrue(
+            {"--dataset-dir", "--hypothesis", "--out-dir", "--policy"}.issubset(
+                options
+            )
+        )
+        hypothesis = next(
+            parameter
+            for parameter in command.params
+            if "--hypothesis" in getattr(parameter, "opts", ())
+        )
+        self.assertTrue(hypothesis.required)
+
     def test_sec_commands_are_split_between_collection_and_research(self) -> None:
         runner = CliRunner()
         collection_help = runner.invoke(

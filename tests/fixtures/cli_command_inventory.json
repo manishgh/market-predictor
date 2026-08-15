@@ -95,7 +95,6 @@
     "publish-edge-issuer-event-family-authority",
     "publish-edge-issuer-event-precision-sample",
     "publish-edge-rebuild-intraday-bar-dataset",
-    "publish-edge-rebuild-intraday-rejection",
     "publish-edge-rebuild-selected-session-five-minute",
     "publish-edge-rebuild-sp500-memberships",
     "publish-edge-rebuild-sp500-transitions",

@@ -110,7 +110,7 @@ drawdown, turnover, capacity, and coverage remain co-equal promotion gates.
 | A1 | Verify labels and leakage controls | Completed |
 | A2 | Build the technical swing baseline | Completed |
 | A3 | Build catalyst-driven swing specialists | Completed; no candidate passed |
-| A4 | Build the technical intraday baseline | A4.3 bar-only authority complete; A4.4 training next |
+| A4 | Build the technical intraday baseline | A4.4 continuation/reversion training in progress |
 | A5 | Build catalyst-driven intraday specialists | Not started |
 | A6 | Run locked evaluation and promote qualified models | Not started |
 
@@ -354,11 +354,41 @@ simplified economic calculation.
    bound was 2.218 GiB. Verification closed with 1,293 tests passed, 2 skipped, tracked
    Ruff clean, strict mypy clean across 226 source files, compileall clean, and two
    independent re-reviewers reporting no remaining medium-or-higher findings.
-4. **A4.4 - Train separate bar-only continuation and reversion baselines.** Use purged,
+4. **A4.4 - Train separate bar-only continuation and reversion baselines (`in_progress`).** Use purged,
    embargoed chronological selection and the canonical intraday portfolio evaluator.
    Do not open the future holdout unless a preregistered development candidate passes
    calibration, predictive, coverage, cost, drawdown, and benchmark-relative gates.
    Selecting the least-bad failed candidate does not authorize future-holdout access.
+
+   Frozen A4.4 contract:
+
+   - Train continuation and long reversion as independent hypotheses and immutable
+     outputs. Continuation requires positive one-volume-bar return, positive
+     twenty-minute stock return, and price at or above session VWAP. Reversion requires
+     negative twenty-minute stock return, price at least 0.5 five-minute ATR below
+     session VWAP, and volume-bar RSI at or below 45. These causal cohort rules are
+     configuration identity, not fitted parameters.
+   - Each hypothesis fits an expected-net-return opportunity estimator and a separate
+     stop-hit downside estimator. Downside calibration uses only an earlier fit slice
+     and a later purged calibration slice; validation outcomes cannot calibrate scores.
+   - Fit excludes a stable 20% security holdout. Every candidate is evaluated on both
+     chronological seen-security and contemporaneous unseen-security validation. The
+     worse scope controls selection.
+   - Candidate and policy grids are preregistered and bounded. Estimators run
+     sequentially under the 4 GiB process limit; no GPU or parallel model fit is used.
+   - Gates cover positive-net-return ROC-AUC, stop-risk ROC-AUC and calibration,
+     prediction coverage, trade/session capacity, after-cost return, SPY/QQQ/sector
+     excess return, rank gain, stress costs, drawdown, turnover, and fold stability.
+     A failed run publishes reproducible rejection evidence but no model artifact.
+   - The post-2026-07-08 future authority remains unopened unless one frozen
+     development policy passes every gate. A4.4 itself cannot promote or serve.
+
+   Exit gates: exact A4.3 authority/hash replay; separate hypothesis identities;
+   feature-order and source-contract binding; purged fit/calibration/validation and
+   unseen-security overlap audits; deterministic rerun; future-poison and
+   artifact-tamper tests; sequential real-data runs below 4 GiB; consolidated ML/code
+   review; full tests, Ruff, strict mypy, compileall, implementation commit, and
+   documentation closure commit.
 5. **A4.5 - Add the microstructure-enhanced profile only after A4.1 and A4.2 are
    complete.** Join the independently verified one-minute microstructure authority at
    the exact completed-minute cutoff, add trade intensity, relative spread, quote-size

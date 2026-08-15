@@ -69,9 +69,6 @@ from market_predictor.edge_rebuild.intraday_microstructure_history import (
     collect_intraday_microstructure_history,
     load_microstructure_collection_config,
 )
-from market_predictor.edge_rebuild.intraday_rejection import (
-    publish_intraday_candidate_rejection,
-)
 from market_predictor.edge_rebuild.intraday_selection import (
     build_intraday_selection,
     publish_intraday_selection,
@@ -1394,20 +1391,26 @@ def register_edge_rebuild_commands(app: typer.Typer, console: Any) -> None:
     @serialized_heavy_job("train-edge-rebuild-intraday-development")
     def train_edge_rebuild_intraday_development(
         dataset_dir: Path = typer.Option(...),
+        hypothesis: str = typer.Option(..., help="continuation or long-reversion"),
         out_dir: Path = typer.Option(...),
-        policy: Path = typer.Option(Path("configs/edge_rebuild_intraday_development.toml")),
+        config_path: Path = typer.Option(
+            Path("configs/edge_rebuild_intraday_development.toml"),
+            "--policy",
+        ),
     ) -> None:
-        """Train only on data through 2026-07-08 and fail closed on economics."""
+        """Train one A4.4 bar-only hypothesis and keep the future holdout closed."""
 
         result = train_intraday_development_candidate(
             dataset_authority_directory=dataset_dir,
             output_directory=out_dir,
-            config=load_intraday_development_config(policy),
+            hypothesis=hypothesis,
+            config=load_intraday_development_config(config_path),
         )
         console.print(
             {
                 "status": result.status,
                 "selected_candidate_id": result.selected_candidate_id,
+                "hypothesis": hypothesis,
                 "future_holdout_opened": False,
                 "out_dir": str(result.output_directory),
             }
@@ -1423,17 +1426,6 @@ def register_edge_rebuild_commands(app: typer.Typer, console: Any) -> None:
         """Open a post-2026-07-08 holdout only after development gates pass."""
 
         result = evaluate_future_intraday_holdout(candidate_dir, future_dataset_dir, out_dir)
-        console.print({"status": result["status"], "out_dir": str(out_dir)})
-
-    @app.command("publish-edge-rebuild-intraday-rejection")
-    def publish_edge_rebuild_intraday_rejection(
-        candidate_dir: Path = typer.Option(...),
-        out_dir: Path = typer.Option(...),
-        policy: Path = typer.Option(...),
-    ) -> None:
-        """Publish hash-bound rejection evidence without mutating the candidate."""
-
-        result = publish_intraday_candidate_rejection(candidate_dir, policy, out_dir)
         console.print({"status": result["status"], "out_dir": str(out_dir)})
 
     @app.command("train-edge-rebuild-swing-candidate")
