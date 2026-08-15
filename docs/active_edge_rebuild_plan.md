@@ -110,7 +110,7 @@ drawdown, turnover, capacity, and coverage remain co-equal promotion gates.
 | A1 | Verify labels and leakage controls | Completed |
 | A2 | Build the technical swing baseline | Completed |
 | A3 | Build catalyst-driven swing specialists | Completed; no candidate passed |
-| A4 | Build the technical intraday baseline | A4.4 continuation/reversion training in progress |
+| A4 | Build the technical intraday baseline | Completed; both A4.4 hypotheses rejected |
 | A5 | Build catalyst-driven intraday specialists | Not started |
 | A6 | Run locked evaluation and promote qualified models | Not started |
 
@@ -354,7 +354,7 @@ simplified economic calculation.
    bound was 2.218 GiB. Verification closed with 1,293 tests passed, 2 skipped, tracked
    Ruff clean, strict mypy clean across 226 source files, compileall clean, and two
    independent re-reviewers reporting no remaining medium-or-higher findings.
-4. **A4.4 - Train separate bar-only continuation and reversion baselines (`in_progress`).** Use purged,
+4. **A4.4 - Train separate bar-only continuation and reversion baselines (`complete; no candidate`).** Use purged,
    embargoed chronological selection and the canonical intraday portfolio evaluator.
    Do not open the future holdout unless a preregistered development candidate passes
    calibration, predictive, coverage, cost, drawdown, and benchmark-relative gates.
@@ -382,6 +382,14 @@ simplified economic calculation.
      A failed run publishes reproducible rejection evidence but no model artifact.
    - The post-2026-07-08 future authority remains unopened unless one frozen
      development policy passes every gate. A4.4 itself cannot promote or serve.
+
+   Result: both real-data runs completed sequentially and published strict immutable
+   `no_candidate` evidence. Continuation's best audited seen/unseen positive-return
+   ROC-AUC was 0.510/0.516; long reversion's was 0.513/0.508. Stop-risk ROC-AUC was
+   about 0.60 but calibration failed. Controlling scopes also failed after-cost return,
+   benchmark excess, confidence-bound, trade-count, and fold-stability gates. Peak RSS
+   was below 2.1 GiB. No candidate artifact was written and the future holdout remained
+   unopened.
 
    Exit gates: exact A4.3 authority/hash replay; separate hypothesis identities;
    feature-order and source-contract binding; purged fit/calibration/validation and
@@ -420,7 +428,7 @@ AAPL quotes in one ordinary minute; SPY exceeded the 10,000-row quote page limit
 one minute. The local C: drive had approximately 52 GiB free. Therefore a replayable
 43,226-stock-session raw tick backfill is storage-blocked locally. No quote/trade
 feature may enter A4.5 until a complete immutable source authority exists. A4.3 and
-A4.4 remain executable because their separately identified bar-only contract has no
+A4.4 completed because its separately identified bar-only contract has no
 trade/quote inputs and cannot silently acquire them.
 
 A4.1 implementation commit `b03f4f1` publishes the bounded collector. The corrected
@@ -429,9 +437,9 @@ complete source-bar session status and 13 retain incomplete status as metadata. 
 two-invocation Alpaca SIP probe completed the first trade and quote jobs with zero
 failures, 4.41 MiB on disk, and 0.350 GiB peak RSS. The probe remains
 `transport_incomplete` and is not an authority. Completing all replayable raw tick jobs
-still exceeds current local storage, so A4.2 and A4.5 remain blocked. The exact next
-implementation is A4.4's purged chronological continuation/reversion training run over
-the completed A4.3 authority.
+still exceeds current local storage, so A4.2 and A4.5 remain blocked. The next phase is
+A5 causal intraday event-cohort preflight; training remains blocked until that separate
+authority passes attachment, timing, coverage, and replay checks.
 
 ### A5 - Build Catalyst-Driven Intraday Specialists
 

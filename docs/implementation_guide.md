@@ -2,7 +2,7 @@
 
 Status: current edge-rebuild path
 
-Last updated: 2026-08-13
+Last updated: 2026-08-15
 
 Read `AGENTS.md`, `docs/active_edge_rebuild_plan.md`, and
 `docs/reviews/active_edge_rebuild_handoff.md` first. Command `--help` output and code
@@ -124,7 +124,8 @@ point-in-time authority exists. No new real A2 candidate has been trained.
   materialization; a partial collection cannot train or serve.
 - `intraday_development.py`: V3 expected-net-return development and future-holdout
   controls.
-- `intraday_rejection.py`: immutable V2 rejection evidence.
+- `intraday_development.py`: A4.4 paired opportunity/downside training, purged
+  walk-forward evaluation, strict immutable evidence replay, and locked future access.
 
 Intraday V2 is published but economically rejected. The later V3 z-score lineage is
 invalid and cannot train or serve. New candidate evidence uses explicit outcome
@@ -158,10 +159,12 @@ shuffled-label control must remain at chance.
 5. Preserve A4.3's completed bar-only causal dataset and its hash-bound audit. Keep
    A4.2/A4.5 trade/quote features blocked until the complete A4.1 raw authority can be
    stored and replayed.
-6. Execute A4.4 by training separate continuation and reversion baselines with purged,
-   embargoed chronological selection. Do not open the future holdout unless a
-   preregistered development candidate passes predictive, calibration, coverage,
-   after-cost benchmark-relative, drawdown, turnover, and stability gates.
+6. Preserve A4.4 continuation and long-reversion outputs as rejection evidence. Both
+   are `no_candidate`; neither may serve or open the future holdout. The best audited
+   positive-return ROC-AUC values are near 0.51 and controlling after-cost scopes fail.
+7. Proceed to A5 only with a separately verified causal intraday event cohort. Do not
+   add catalyst columns to the rejected bar-only baseline or tune against the unopened
+   future authority.
 
 ## Data And Training Rules
 

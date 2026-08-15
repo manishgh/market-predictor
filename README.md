@@ -84,9 +84,13 @@ hash-verified promoted bundle.
   501 tickers, 3,095,688 rows, and 1,365,015 eligible rows from verified SIP/all one-
   and five-minute bars, SPY, QQQ, sector ETFs, and point-in-time membership. Its
   hash-bound row audit passes with zero causal, schema, duplicate, ATR, or prohibited-
-  feature violations. Trade/quote features remain prohibited until a complete A4.1/A4.2
-  authority exists. The next executable work is A4.4 continuation/reversion training;
-  no locked test may open unless development gates pass.
+  feature violations. A4.4 trained separate continuation and long-reversion bar-only
+  baselines on this authority. Both published immutable `no_candidate` evidence: the
+  best audited positive-return ROC-AUC was 0.510/0.516 for continuation and 0.513/0.508
+  for reversion across seen/unseen securities, with negative after-cost economics in
+  the controlling scopes. No candidate model was written and the future holdout stayed
+  closed. Trade/quote features remain prohibited until a complete A4.1/A4.2 authority
+  exists.
 - Intraday label schema V2 requires exact stock, SPY, QQQ, and point-in-time sector
   returns over one executable entry-to-managed-exit interval. Missing benchmark
   evidence abstains. Swing and intraday evaluations report named after-cost binary

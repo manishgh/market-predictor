@@ -162,8 +162,12 @@ conflicting CIKs fail closed. A3.5 separately evaluated rating changes and cover
 initiation across technical-only, broker-action-only, and combined profiles. All 12
 development experiments failed the inner selection gates, so outer validation and the
 locked test remained unopened. No specialist is serveable.
-Prior swing candidates and Intraday V2 are rejection evidence only. There is currently
-no promoted model for either view.
+Prior swing candidates, Intraday V2, and both A4.4 bar-only hypotheses are rejection
+evidence only. A4.4 used paired expected-net-return and calibrated stop-risk estimators,
+stable unseen-security holdout, four purged chronological folds, exact portfolio costs,
+and SPY/QQQ/sector comparisons. Continuation and long reversion both produced
+`no_candidate`; the future holdout was not opened. There is currently no promoted model
+for either view.
 
 A2 replaces the broad profile comparison with a six-candidate technical baseline:
 four nested regularized-logistic feature ablations plus full-feature XGBoost ranking

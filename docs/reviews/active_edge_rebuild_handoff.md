@@ -14,10 +14,10 @@ Last completed implementation commit: `8a76ec1` (`build causal intraday bar data
 
 Continue the four-model prediction rebuild: swing baseline, swing event-driven,
 intraday baseline, and intraday event-driven. A0 through A2 implementation are closed.
-A3 issuer-event specialist development is complete with no candidate. A4.1 collector
-implementation and A4.3 bar-only causal dataset publication are complete. A4.4
-continuation/reversion baseline training is next. Do not open a locked test or claim
-model quality until a preregistered candidate passes both validation scopes.
+A3 issuer-event specialist development is complete with no candidate. A4.1 collector,
+A4.3 bar-only causal dataset publication, and A4.4 continuation/reversion development
+are complete. Both A4.4 hypotheses were rejected. Do not open a locked test or claim
+model quality; no preregistered candidate passed both validation scopes.
 
 This repository produces prediction intelligence and abstention. Alerts, orders,
 positions, portfolio risk, and execution remain in `trading_flow`.
@@ -132,7 +132,7 @@ specialists; A6 performs locked evaluation and promotion.
 | --- | --- | --- |
 | Swing baseline | A2 trainer complete; prior candidates rejected; no new run or promotion | Preserve the frozen technical contract until a governed training run is approved |
 | Swing event-driven | Rating-change and coverage specialists trained in development; all rejected | Preserve rejection evidence; do not open locked test or serve |
-| Intraday baseline | V2 rejected; V3 z-score lineage invalid; A4.3 bar-only authority complete; no new model | A4.4 continuation/reversion training |
+| Intraday baseline | V2 rejected; V3 invalid; A4.4 continuation and reversion both rejected | Preserve evidence; no serving or future-holdout access |
 | Intraday event-driven | No eligible candidate | A5 verified event cohorts |
 
 `ROC-AUC >= 0.60` is a locked-test diagnostic, not a training objective or permission
@@ -214,14 +214,23 @@ coverage.
 - Two independent re-reviewers reported no remaining medium-or-higher findings.
 - No model was trained, no locked test was opened, and no serving bundle was promoted.
 
-## Exact Next Step: Train A4.4 Continuation/Reversion Baselines
+## A4.4 Result And Exact Next Step
 
-Train separate continuation and reversion baselines from the completed A4.3 authority
-using purged, embargoed chronological development and validation. Apply predictive,
-calibration, coverage, after-cost benchmark-relative, drawdown, turnover, capacity,
-and stability gates. Keep the future holdout closed unless a preregistered development
-candidate passes every required gate. Do not include any trade/quote/microstructure
-field or tune against the locked test.
+Implementation commit `a062653` trained both hypotheses from the completed A4.3
+authority. Continuation's best audited seen/unseen positive-return ROC-AUC was
+0.510/0.516; long reversion's was 0.513/0.508. Both controlling scopes failed
+after-cost return, benchmark-excess confidence bounds, and fold stability. Stop-risk
+ROC-AUC was about 0.60 but Brier score and calibration gates failed. Outputs are
+`data/models/edge_rebuild_intraday_bar_continuation_dev_20260814_v1` and
+`data/models/edge_rebuild_intraday_bar_long_reversion_dev_20260814_v1`. Both are
+strict `no_candidate` authorities with no `candidate.joblib`; the future holdout stayed
+closed. Peak RSS was below 2.1 GiB. Verification passed 1,320 tests with 2 skipped,
+tracked Ruff, strict mypy over 225 source files, compileall, and independent review.
+
+Next, execute A5 preflight for a separately verified causal intraday event cohort.
+Require exact issuer attachment, event availability before each decision, sufficient
+seen/unseen coverage, and immutable replay before specialist training. A4.2/A4.5
+trade/quote work remains storage-blocked and must not be approximated with zeros.
 
 ## Source Boundary
 
