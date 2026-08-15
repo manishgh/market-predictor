@@ -61,6 +61,10 @@ from market_predictor.edge_rebuild.intraday_development import (
     load_intraday_development_config,
     train_intraday_development_candidate,
 )
+from market_predictor.edge_rebuild.intraday_event_preflight import (
+    load_intraday_event_preflight_config,
+    publish_intraday_event_preflight,
+)
 from market_predictor.edge_rebuild.intraday_history import (
     build_intraday_history_plan,
 )
@@ -1413,6 +1417,39 @@ def register_edge_rebuild_commands(app: typer.Typer, console: Any) -> None:
                 "hypothesis": hypothesis,
                 "future_holdout_opened": False,
                 "out_dir": str(result.output_directory),
+            }
+        )
+
+    @app.command("publish-edge-rebuild-intraday-event-preflight")
+    @serialized_heavy_job("publish-edge-rebuild-intraday-event-preflight")
+    def publish_edge_rebuild_intraday_event_preflight(
+        dataset_dir: Path = typer.Option(..., help="Strict A4.3 intraday dataset authority."),
+        event_authority_dir: list[Path] = typer.Option(
+            ...,
+            "--event-authority-dir",
+            help="Strict Alpaca issuer event-family authority; repeat per period.",
+        ),
+        out_dir: Path = typer.Option(..., help="New immutable A5.1 preflight authority."),
+        policy: Path = typer.Option(
+            Path("configs/edge_rebuild_intraday_event_preflight.toml")
+        ),
+    ) -> None:
+        """Publish causal eligibility evidence before any A5 estimator can train."""
+
+        result = publish_intraday_event_preflight(
+            dataset_authority_directory=dataset_dir,
+            event_authority_directories=event_authority_dir,
+            output_directory=out_dir,
+            config=load_intraday_event_preflight_config(policy),
+            policy_path=policy,
+        )
+        console.print(
+            {
+                "status": result.manifest["status"],
+                "training_eligible": result.manifest["training_eligible"],
+                "blockers": result.manifest["blockers"],
+                "summary": result.manifest["summary"],
+                "out_dir": str(result.directory),
             }
         )
 

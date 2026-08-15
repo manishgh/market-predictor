@@ -1,0 +1,16 @@
+schema_version = "edge_rebuild.intraday_event_preflight_policy.v1"
+source_family = "alpaca"
+relation_channel = "direct_issuer"
+event_family = "analyst_revision"
+lookback_hours = 24
+security_holdout_fraction = 0.20
+validation_folds = 4
+minimum_unique_event_episodes = 1000
+minimum_securities = 200
+minimum_fit_sessions = 120
+minimum_scope_rows = 1000
+minimum_scope_securities = 20
+maximum_process_memory_gib = 4.0
+memory_guard_headroom_gib = 0.75
+unknown_coverage_policy = "abstain"
+historical_proxy_policy = "research_only"

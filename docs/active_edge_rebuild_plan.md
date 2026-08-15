@@ -111,7 +111,7 @@ drawdown, turnover, capacity, and coverage remain co-equal promotion gates.
 | A2 | Build the technical swing baseline | Completed |
 | A3 | Build catalyst-driven swing specialists | Completed; no candidate passed |
 | A4 | Build the technical intraday baseline | Completed; both A4.4 hypotheses rejected |
-| A5 | Build catalyst-driven intraday specialists | Not started |
+| A5 | Build catalyst-driven intraday specialists | A5.1 causal event-cohort preflight in progress |
 | A6 | Run locked evaluation and promote qualified models | Not started |
 
 ### A0 - Restore Research Integrity (`completed`)
@@ -448,6 +448,43 @@ authority passes attachment, timing, coverage, and replay checks.
   liquidity, and sector concurrence.
 - Catalyst remains outside the broad intraday estimator unless causal ablation passes.
   Unknown coverage causes abstention, never neutral sentiment or zero event counts.
+
+1. **A5.1 - Publish the causal intraday event-cohort preflight (`in_progress`).** Bind
+   the strict A4.3 decision authority to the two strict Alpaca direct-issuer event-family
+   authorities. Do not use `intraday_catalysts.py`, ticker filenames, Finviz snapshots,
+   prohibited sources, or publication time as a substitute for observed availability.
+
+   Frozen A5.1 contract:
+
+   - Source family is exactly Alpaca; relation channel is exactly `direct_issuer`; the
+     only currently precision-approved event family is `analyst_revision`. Each parent
+     authority and its exact hash must replay before attachment.
+   - Preserve A4.3 `decision_id`, `security_id`, strategy, transformation, feature-order,
+     and cost identities. Attach only events for the same `security_id` with
+     `feature_available_at_utc <= decision_time_utc` in a half-open 24-hour lookback.
+   - Retain known-zero coverage and unknown coverage as distinct states. Unknown,
+     ambiguous, proxy-only, or post-decision evidence abstains and is never encoded as
+     neutral sentiment or a zero count.
+   - Reuse A4.4's stable 20% security holdout and four chronological development folds.
+     Report unique event episodes separately from repeated attached decision rows.
+   - Publish an immutable `eligible` or `blocked` authority containing decision
+     eligibility, event attachments, coverage/split audit, request, manifest, and
+     authority. Strict reload must reject changed, missing, extra, nested, overlapping,
+     or non-deterministically rebuilt evidence.
+   - Preflight eligibility requires observed first-seen/revision availability rather
+     than `provider_publication_proxy`, zero issuer/time/hash violations, both seen and
+     unseen event coverage, at least 1,000 unique episodes overall, 200 securities, 120
+     fit sessions, and 1,000 rows/20 securities in each validation scope. These are
+     authorization floors, not performance claims.
+   - A blocked output sets `training_eligible=false`, `serving_eligible=false`, and
+     `future_holdout_opened=false`, and contains no estimator. A passing preflight only
+     authorizes A5.2 matched ablation; it does not authorize serving or locked-test use.
+
+   Exit gates: deterministic strict replay; future-poison, issuer-mismatch,
+   proxy-availability, unknown-coverage, duplicate, tamper, extra-file, and path-overlap
+   tests; real-data preflight below 4 GiB; one consolidated ML/code review; full tests,
+   tracked Ruff, strict mypy, compileall, implementation commit, and documentation
+   closure commit.
 
 ### A6 - Run Locked Evaluation and Promote Qualified Models
 
