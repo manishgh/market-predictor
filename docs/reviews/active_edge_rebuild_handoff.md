@@ -2,13 +2,13 @@
 
 Status: active
 
-Last updated: 2026-08-14
+Last updated: 2026-08-15
 
 Repository: `C:\project\market-predictor`
 
 Branch: `er-intraday-refactoring`
 
-Last completed implementation commit: `8a76ec1` (`build causal intraday bar dataset authority`)
+Last completed implementation commit: `98f7a48` (`Implement causal intraday event preflight`)
 
 ## Purpose
 
@@ -16,8 +16,9 @@ Continue the four-model prediction rebuild: swing baseline, swing event-driven,
 intraday baseline, and intraday event-driven. A0 through A2 implementation are closed.
 A3 issuer-event specialist development is complete with no candidate. A4.1 collector,
 A4.3 bar-only causal dataset publication, and A4.4 continuation/reversion development
-are complete. Both A4.4 hypotheses were rejected. Do not open a locked test or claim
-model quality; no preregistered candidate passed both validation scopes.
+are complete. Both A4.4 hypotheses were rejected. A5.1 is also complete and blocked:
+the available event history is retrospective and exact security identity overlap is
+too small. Do not train A5.2, open a locked test, or claim model quality.
 
 This repository produces prediction intelligence and abstention. Alerts, orders,
 positions, portfolio risk, and execution remain in `trading_flow`.
@@ -119,8 +120,9 @@ specialists; A6 performs locked evaluation and promotion.
   1.954 GiB recorded peak. Exact ticker and exact prediction timestamp are required;
   conflicting CIKs fail closed. Every exclusion is persisted in
   `identity_alignment_audit.parquet`.
-- Repository suite: 1,293 passed and 2 skipped.
-- Tracked Ruff, strict mypy across 226 source files, and compileall pass.
+- Repository suite: 1,348 passed and 2 skipped after A5.1 closure.
+- Tracked Ruff, strict mypy across 226 source files, compileall, and final A5.1
+  real-authority strict replay pass.
 - Coordinated request, feature, all-profile label, dtype, partition, global identity,
   source-coverage, causal-window, and governance-hash poison tests pass.
 - The real materialization and event publication remained below the 5 GiB limit;
@@ -133,7 +135,7 @@ specialists; A6 performs locked evaluation and promotion.
 | Swing baseline | A2 trainer complete; prior candidates rejected; no new run or promotion | Preserve the frozen technical contract until a governed training run is approved |
 | Swing event-driven | Rating-change and coverage specialists trained in development; all rejected | Preserve rejection evidence; do not open locked test or serve |
 | Intraday baseline | V2 rejected; V3 invalid; A4.4 continuation and reversion both rejected | Preserve evidence; no serving or future-holdout access |
-| Intraday event-driven | No eligible candidate | A5 verified event cohorts |
+| Intraday event-driven | A5.1 preflight blocked; no estimator or eligible candidate | Acquire observed first-seen/revision history and correct PIT identity before a new preregistered A5 preflight |
 
 `ROC-AUC >= 0.60` is a locked-test diagnostic, not a training objective or permission
 for repeated locked-test tuning. Promotion also requires ranking, calibration,
@@ -214,7 +216,7 @@ coverage.
 - Two independent re-reviewers reported no remaining medium-or-higher findings.
 - No model was trained, no locked test was opened, and no serving bundle was promoted.
 
-## A4.4 Result And Exact Next Step
+## A4.4 Result
 
 Implementation commit `a062653` trained both hypotheses from the completed A4.3
 authority. Continuation's best audited seen/unseen positive-return ROC-AUC was
@@ -227,10 +229,23 @@ strict `no_candidate` authorities with no `candidate.joblib`; the future holdout
 closed. Peak RSS was below 2.1 GiB. Verification passed 1,320 tests with 2 skipped,
 tracked Ruff, strict mypy over 225 source files, compileall, and independent review.
 
-Next, execute A5 preflight for a separately verified causal intraday event cohort.
-Require exact issuer attachment, event availability before each decision, sufficient
-seen/unseen coverage, and immutable replay before specialist training. A4.2/A4.5
-trade/quote work remains storage-blocked and must not be approximated with zeros.
+## A5.1 Result And Exact Next Step
+
+Implementation commit `98f7a48` publishes the causal intraday event preflight.
+Authority `data/research/edge_rebuild_intraday_event_preflight_20260815_v1` strictly
+replays as `blocked`: 17,401 research broker-action episodes reduce to 19 unique
+episodes and 862 event-decision pairs under exact `security_id` attachment. All 17,401
+events use retrospective `provider_publication_proxy`; production-eligible events and
+decisions are both zero. Retrospective collection completion cannot create historical
+known-zero coverage. Peak working set was 2.299 GiB.
+
+The artifact is `training_eligible=false`, `serving_eligible=false`, and
+`future_holdout_opened=false`; it contains no model. A5.2 and A6 are not legal next
+steps. The next valid work is a new bounded data-authority checkpoint that obtains
+genuinely observed first-seen and revision timestamps plus point-in-time security
+identity for future broker actions, then reruns A5.1 under a new preregistered data
+horizon. Historical observation time must not be inferred from publication time.
+A4.2/A4.5 trade/quote work remains storage-blocked and must not be replaced with zero.
 
 ## Source Boundary
 

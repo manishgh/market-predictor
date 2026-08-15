@@ -1,6 +1,6 @@
 # Current Feature Engineering Audit
 
-Last updated: 2026-08-13
+Last updated: 2026-08-15
 
 ## Scope
 
@@ -72,6 +72,12 @@ learned candidate.
 - Raw quote transport preserves finite nonnegative zero-sided quote states. A4.2, not
   transport, must classify valid two-sided duration, observed-zero states, and
   unavailable quote coverage.
+- A5.1 now publishes a strict causal event-cohort preflight. The two Alpaca parent
+  authorities contain 17,401 broker-action episodes, but exact `security_id` matching
+  produces only 19 unique attached episodes / 862 event-decision pairs and all source
+  timing is retrospective `provider_publication_proxy`. Production events, eligible
+  decisions, estimators, and locked-test reads are zero. Retrospective collection
+  completion remains unknown coverage at historical decisions.
 
 ## Swing
 
@@ -155,7 +161,7 @@ immutable artifact exists. `Blocked` means training or serving is prohibited.
 | Capability | Source and immutable authority | Batch path | Live path | Model contract | Training / promotion / serving | API | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | Intraday technical estimator | SIP/all bar and V2 authorities verify | Verified | Verified; parity and staleness rejection | Exact 44-feature schema verified; incomplete V3 z-scores removed | V2 economically rejected; later z-score artifact invalidated | Blocked until promotion | Rejected |
-| Intraday ticker-catalyst overlay | Alpaca archives exist; scored/attributed catalyst authority not yet published | Not an estimator input | Snapshot contract verified; runtime authority pending | Separate overlay hash, coverage, count, sentiment, and unknown state verified | Cannot alter entry probability; ranking use blocked until authority exists | Blocked until promoted bundle and orchestrator exist | Authority pending |
+| Intraday ticker-catalyst specialist | A5.1 immutable preflight binds A4.3 and both Alpaca issuer-event authorities; all historical timing is retrospective proxy | 19 unique exact-identity episodes / 862 event-decision pairs; no production-eligible rows | No observed first-seen/revision history exists | Frozen 24-hour direct-issuer broker-action cohort; unknown coverage abstains | A5.2 training and A6 locked evaluation prohibited | Not serveable | Data authority blocked |
 | Intraday global overlay | GDELT collector and global authority verified in code; no production collection published | Not an estimator input | Observed-time collection, immutable query policy, and unknown/zero behavior verified | Separate global overlay contract verified | Ranking use blocked until runtime authority exists | Blocked until promoted bundle and orchestrator exist | Runtime artifact pending |
 | Swing technical estimator | Daily SIP/all, point-in-time membership, and V12 panel verify | Verified | Verified; latest closed session required | A2 nested technical schema and per-model subsets verified | Replacement trainer complete; new candidate not run | Blocked until promotion | Implementation ready |
 | Swing ticker-catalyst estimator | Two immutable V2 Alpaca issuer-event authorities cover `2019-07-09` through `2026-07-08`; strict replay verified | Corrected A3.4 publishes 27,087 prediction rows / 11,720 unique latest broker announcements per comparison dataset | No event specialist is live | Rating-change and coverage cohorts passed capacity; price-target/generic remains report-only | Twelve A3.5 experiments failed inner AUC and canonical portfolio gates; outer validation and locked test unopened | Blocked until a new preregistered strategy version passes | Development rejected |
@@ -175,3 +181,9 @@ price-target/generic actions report-only. Both specialists had sufficient chrono
 capacity, but all 12 development experiments failed the frozen inner-selection and
 canonical economic gates. Outer validation and the locked test stayed unopened;
 global context remains a separate overlay.
+
+A5.1 then tested the intraday broker-action data contract without fitting a model.
+Although 17,401 research episodes exist, exact security identity and observed-time
+requirements leave zero production-eligible events and decisions. A5.2 cannot train
+until a newly preregistered horizon has real observed first-seen/revision history and
+point-in-time identity coverage; publication timestamps cannot backfill that evidence.

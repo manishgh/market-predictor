@@ -111,7 +111,7 @@ drawdown, turnover, capacity, and coverage remain co-equal promotion gates.
 | A2 | Build the technical swing baseline | Completed |
 | A3 | Build catalyst-driven swing specialists | Completed; no candidate passed |
 | A4 | Build the technical intraday baseline | Completed; both A4.4 hypotheses rejected |
-| A5 | Build catalyst-driven intraday specialists | A5.1 causal event-cohort preflight in progress |
+| A5 | Build catalyst-driven intraday specialists | A5.1 complete; training blocked by non-causal history and identity coverage |
 | A6 | Run locked evaluation and promote qualified models | Not started |
 
 ### A0 - Restore Research Integrity (`completed`)
@@ -449,7 +449,7 @@ authority passes attachment, timing, coverage, and replay checks.
 - Catalyst remains outside the broad intraday estimator unless causal ablation passes.
   Unknown coverage causes abstention, never neutral sentiment or zero event counts.
 
-1. **A5.1 - Publish the causal intraday event-cohort preflight (`in_progress`).** Bind
+1. **A5.1 - Publish the causal intraday event-cohort preflight (`complete; blocked`).** Bind
    the strict A4.3 decision authority to the two strict Alpaca direct-issuer event-family
    authorities. Do not use `intraday_catalysts.py`, ticker filenames, Finviz snapshots,
    prohibited sources, or publication time as a substitute for observed availability.
@@ -485,6 +485,29 @@ authority passes attachment, timing, coverage, and replay checks.
    tests; real-data preflight below 4 GiB; one consolidated ML/code review; full tests,
    tracked Ruff, strict mypy, compileall, implementation commit, and documentation
    closure commit.
+
+   Result and evidence:
+
+   - Implementation commit `98f7a48` publishes one canonical A5.1 path and removes
+     any need to consume the retired ticker-file catalyst modules.
+   - Authority:
+     `data/research/edge_rebuild_intraday_event_preflight_20260815_v1`.
+     Strict replay binds the exact A4.3 authority, both parent event authorities,
+     every consumed artifact and child manifest, and the recursive parent inventory.
+   - The parents contain 17,401 research broker-action episodes. Exact point-in-time
+     `security_id` matching yields 19 unique attached episodes and 862 repeated
+     event-decision pairs. No ticker-only fallback is permitted.
+   - All 17,401 episodes use retrospective `provider_publication_proxy` timing and
+     zero episodes have observed first-seen/revision-safe production availability.
+     Retrospectively completed collection intervals remain unknown at historical
+     decisions; they do not become known-zero coverage.
+   - The authority is `blocked`, `training_eligible=false`,
+     `serving_eligible=false`, and `future_holdout_opened=false`. It contains zero
+     estimators and zero production-eligible decisions. A5.2 training and A6 locked
+     evaluation are therefore prohibited.
+   - Peak working set was 2.299 GiB. Final verification passed 1,348 tests with two
+     skipped, tracked Ruff, strict mypy over 226 source files, compileall, strict
+     real-authority replay, and consolidated independent review.
 
 ### A6 - Run Locked Evaluation and Promote Qualified Models
 
