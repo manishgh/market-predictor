@@ -111,7 +111,7 @@ drawdown, turnover, capacity, and coverage remain co-equal promotion gates.
 | A2 | Build the technical swing baseline | Completed |
 | A3 | Build catalyst-driven swing specialists | Completed; no candidate passed |
 | A4 | Build the technical intraday baseline | Completed; both A4.4 hypotheses rejected |
-| A5 | Build catalyst-driven intraday specialists | A5.1 blocked; prospective collector verified, live poll environment-pending |
+| A5 | Build catalyst-driven intraday specialists | A5.1 blocked; weekday-safe S&P observation authority in progress |
 | A6 | Run locked evaluation and promote qualified models | Not started |
 
 ### A0 - Restore Research Integrity (`completed`)
@@ -627,6 +627,49 @@ authority passes attachment, timing, coverage, and replay checks.
    `sp500_memberships_20180529_20260815_v2` published 1,170 intervals across 659
    securities with five governed whole-security exclusions. Strict replay verifies the
    complete authority and exact July 8 base prefix.
+
+4. **Weekday-safe observed S&P membership authority (`in_progress`).** Publish a
+   causal identity authority for a prospective poll without describing an unfinished
+   New York publication day as a complete historical archive.
+
+   Frozen scope and invariants:
+
+   - The latest fully closed official S&P archive, event authority, and membership
+     authority remain immutable parents. Their historical completeness contract is not
+     weakened or reused for an intraday cutoff.
+   - A new observation archives exact HTTP response bytes and response times for a
+     contiguous newest-to-closed-cutoff prefix of the official S&P release index and
+     every newly discovered membership release. Redirects, malformed pagination,
+     missing release bodies, parser failures, and responses outside the approved source
+     hosts fail closed.
+   - Membership state at the observation cutoff applies both already-announced
+     future-effective changes from the closed event authority and newly observed
+     official changes whose effective time is no later than the observation cutoff.
+     Provider publication dates never replace first-observed response time for a new
+     release.
+   - The same run archives exact bytes for an independently observed current S&P 500
+     constituent anchor. The reconstructed active ticker set and every inherited CIK
+     identity must agree exactly with that anchor. This equality is also the quiet-day
+     completeness gate: no new release plus an unequal anchor is an abstention, not an
+     inferred no-change day.
+   - The resulting membership table must preserve the complete closed-authority prefix
+     and the A4.3 security namespace. It records separate closed archive, observation,
+     and effective horizons; these timestamps may not be collapsed into one cutoff.
+   - Prospective Alpaca polling may consume only a strictly replayed observed authority
+     whose observation precedes the poll cutoff and whose effective horizon covers the
+     poll. Model training, A5.2, serving, scheduling, alerts, and orders remain out of
+     scope.
+
+   Exit gates: offline strict replay from exact retained bytes; closed-prefix and A4.3
+   namespace equality; already-announced future-effective, same-day observed change,
+   quiet-day, stale anchor, race-window, parser failure, redirect, pagination,
+   future-poison, extra-file, path-traversal, and tamper tests; prospective poll
+   acceptance/rejection tests; focused and full verification; tracked Ruff, strict
+   mypy, compileall, memory below 4 GiB, consolidated independent review,
+   implementation commit/push, and documentation closure commit/push. A real weekday
+   observation remains environment evidence and cannot be replaced by a weekend test.
+   Rollback removes only the new authority and poll adapter; all closed authorities and
+   the Sunday poll remain immutable.
 
 ### A6 - Run Locked Evaluation and Promote Qualified Models
 

@@ -152,6 +152,7 @@ class HttpClient:
         retries: int = 3,
         pause: float = 1.0,
         maximum_body_bytes: int = _DEFAULT_MAXIMUM_BODY_BYTES,
+        allow_redirects: bool = True,
     ) -> HttpByteResponse:
         if maximum_body_bytes < 1:
             raise ValueError("maximum_body_bytes must be positive")
@@ -167,6 +168,7 @@ class HttpClient:
                     headers=request_headers,
                     timeout=self.timeout,
                     stream=True,
+                    allow_redirects=allow_redirects,
                 )
                 self._after_response(response)
                 if self._is_retriable(response.status_code) and attempt < retries - 1:

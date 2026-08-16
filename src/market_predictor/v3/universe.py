@@ -323,6 +323,8 @@ def parse_sp500_changes(
     source_url: str,
     published_date: date,
     source_sha256: str | None = None,
+    allow_verified_no_membership_event: bool = False,
+    source_title: str = "",
 ) -> list[IndexChange]:
     """Parse exact S&P 500 addition/deletion rows from one official release."""
     digest = source_sha256 or hashlib.sha256(html.encode("utf-8")).hexdigest()
@@ -420,6 +422,14 @@ def parse_sp500_changes(
         not parsed
         and no_event_trigger
         and _all_sp500_prose_assertions_are_deferred(prose_blocks)
+    ):
+        return []
+    if (
+        not parsed
+        and allow_verified_no_membership_event
+        and not _has_sp500_membership_assertion(
+            [source_title, body_text, *prose_blocks]
+        )
     ):
         return []
     if not parsed:
@@ -765,6 +775,18 @@ def _all_sp500_prose_assertions_are_deferred(
             )
         )
         for block, clause in assertions
+    )
+
+
+def _has_sp500_membership_assertion(prose_blocks: list[str]) -> bool:
+    action = re.compile(
+        r"\b(?:add|added|addition|change|changes|delete|deleted|deletion|join|joins|"
+        r"leave|leaves|move|moves|remove|removed|removal|replace|replaced|replaces|"
+        r"replacing)\b"
+    )
+    return any(
+        "s&p 500" in normalized and action.search(normalized) is not None
+        for normalized in (" ".join(block.split()).casefold() for block in prose_blocks)
     )
 
 

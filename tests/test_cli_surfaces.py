@@ -134,6 +134,34 @@ class CliSurfaceTests(unittest.TestCase):
             command_names(collection_app),
         )
 
+    def test_observed_sp500_membership_is_collection_only(self) -> None:
+        result = CliRunner().invoke(
+            collection_app,
+            ["collect-edge-observed-sp500-memberships", "--help"],
+            terminal_width=240,
+        )
+
+        self.assertEqual(result.exit_code, 0, result.output)
+        command = get_command(collection_app).commands[
+            "collect-edge-observed-sp500-memberships"
+        ]
+        options = {
+            option
+            for parameter in command.params
+            for option in getattr(parameter, "opts", ())
+        }
+        self.assertTrue(
+            {
+                "--base-membership-dir",
+                "--closed-archive-dir",
+                "--closed-event-dir",
+            }.issubset(options)
+        )
+        self.assertNotIn(
+            "collect-edge-observed-sp500-memberships",
+            command_names(research_app),
+        )
+
     def test_command_surfaces_match_reviewed_inventory(self) -> None:
         inventory_path = Path(__file__).parent / "fixtures" / "cli_command_inventory.json"
         expected = json.loads(inventory_path.read_text(encoding="utf-8"))

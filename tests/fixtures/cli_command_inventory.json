@@ -6,6 +6,7 @@
     "collect-alpaca-news-history",
     "collect-edge-intraday-microstructure-history",
     "collect-edge-live-global-context",
+    "collect-edge-observed-sp500-memberships",
     "collect-edge-prospective-broker-actions",
     "collect-edge-rebuild-intraday-history",
     "collect-edge-rebuild-swing-history",

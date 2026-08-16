@@ -112,6 +112,10 @@ from market_predictor.edge_rebuild.selected_session_history import (
 from market_predictor.edge_rebuild.sp500_memberships import (
     publish_sp500_membership_authority,
 )
+from market_predictor.edge_rebuild.sp500_observed_memberships import (
+    ObservedMembershipConfig,
+    collect_observed_sp500_membership_authority,
+)
 from market_predictor.edge_rebuild.sp500_transitions import (
     publish_sp500_transition_authority,
 )
@@ -485,9 +489,7 @@ def register_edge_rebuild_commands(app: typer.Typer, console: Any) -> None:
             {
                 "status": result["status"],
                 "prediction_rows_per_comparison_dataset": result["rows_per_profile"],
-                "unique_latest_broker_announcements": result[
-                    "unique_latest_announcement_count"
-                ],
+                "unique_latest_broker_announcements": result["unique_latest_announcement_count"],
                 "profiles": result["profiles"],
                 "production_ready": result["production_ready"],
             }
@@ -526,10 +528,7 @@ def register_edge_rebuild_commands(app: typer.Typer, console: Any) -> None:
         console.print(
             {
                 "status": result["status"],
-                "specialists": {
-                    item["specialist"]: item["status"]
-                    for item in result["specialists"]
-                },
+                "specialists": {item["specialist"]: item["status"] for item in result["specialists"]},
                 "locked_test_outcomes_read": result["locked_test_outcomes_read"],
                 "promotion_permitted": result["promotion_permitted"],
             }
@@ -617,15 +616,9 @@ def register_edge_rebuild_commands(app: typer.Typer, console: Any) -> None:
 
         settings = get_settings()
         if not settings.has_alpaca:
-            raise typer.BadParameter(
-                "ALPACA_API_KEY_ID and ALPACA_API_SECRET_KEY are required"
-            )
+            raise typer.BadParameter("ALPACA_API_KEY_ID and ALPACA_API_SECRET_KEY are required")
         source = AlpacaSource(settings)
-        scheduled = (
-            _iso_datetime(observed_at, option="--observed-at")
-            if observed_at is not None
-            else None
-        )
+        scheduled = _iso_datetime(observed_at, option="--observed-at") if observed_at is not None else None
         result = collect_prospective_broker_action_poll(
             membership_authority_directory=membership_dir,
             intraday_bar_dataset_directory=intraday_bar_dataset_dir,
@@ -650,14 +643,63 @@ def register_edge_rebuild_commands(app: typer.Typer, console: Any) -> None:
                 "status": result["status"],
                 "observed_at_utc": result.get("observed_at_utc"),
                 "event_observations": result.get("event_observation_count", 0),
-                "production_identity_events": result.get(
-                    "production_identity_event_count", 0
-                ),
+                "production_identity_events": result.get("production_identity_event_count", 0),
                 "directory": str(out_dir),
             }
         )
         if result["status"] != "complete":
             raise typer.Exit(code=2)
+
+    @app.command("collect-edge-observed-sp500-memberships")
+    @serialized_heavy_job("collect-edge-observed-sp500-memberships")
+    def collect_edge_observed_sp500_memberships(
+        base_membership_dir: Path = typer.Option(
+            ...,
+            help="Latest fully closed S&P membership authority.",
+        ),
+        closed_archive_dir: Path = typer.Option(
+            ...,
+            help="Fully closed official S&P raw archive bound by the base membership.",
+        ),
+        closed_event_dir: Path = typer.Option(
+            ...,
+            help="Verified S&P event authority bound by the closed archive.",
+        ),
+        out_dir: Path = typer.Option(
+            ...,
+            help="New immutable observed-time membership authority directory.",
+        ),
+        maximum_pages: int = typer.Option(5, min=1, max=20),
+        retries: int = typer.Option(3, min=1, max=10),
+        retry_pause_seconds: float = typer.Option(1.0, min=0.0, max=120.0),
+    ) -> None:
+        """Observe official changes and an independent current S&P anchor."""
+
+        settings = get_settings()
+        client = SecSource(settings).client
+        result = collect_observed_sp500_membership_authority(
+            base_membership_directory=base_membership_dir,
+            closed_archive_directory=closed_archive_dir,
+            closed_event_directory=closed_event_dir,
+            output_directory=out_dir,
+            client_factory=lambda: client,
+            config=ObservedMembershipConfig(
+                maximum_pages=maximum_pages,
+                retries=retries,
+                retry_pause_seconds=retry_pause_seconds,
+            ),
+        )
+        console.print(
+            {
+                "status": result["status"],
+                "observed_at_utc": result["observed_at_utc"],
+                "effective_horizon_date": result["effective_horizon_date"],
+                "new_releases": result["new_release_count"],
+                "observed_events": result["observed_event_count"],
+                "constituents": result["anchor_constituent_count"],
+                "directory": str(out_dir),
+            }
+        )
 
     @app.command("publish-edge-prospective-broker-action-generation")
     @serialized_heavy_job("publish-edge-prospective-broker-action-generation")
@@ -683,9 +725,7 @@ def register_edge_rebuild_commands(app: typer.Typer, console: Any) -> None:
                 "status": result["status"],
                 "polls": result["poll_count"],
                 "revisions": result["revision_count"],
-                "production_identity_revisions": result[
-                    "production_identity_revision_count"
-                ],
+                "production_identity_revisions": result["production_identity_revision_count"],
                 "training_eligible": result["training_eligible"],
                 "directory": str(out_dir),
             }
@@ -714,9 +754,7 @@ def register_edge_rebuild_commands(app: typer.Typer, console: Any) -> None:
                 "status": result["status"],
                 "stock_sessions": result["units"],
                 "jobs": result["jobs"],
-                "included_stock_sessions_by_status": result[
-                    "included_stock_sessions_by_status"
-                ],
+                "included_stock_sessions_by_status": result["included_stock_sessions_by_status"],
             }
         )
 
@@ -757,9 +795,7 @@ def register_edge_rebuild_commands(app: typer.Typer, console: Any) -> None:
                 "completed_jobs": result["completed_jobs"],
                 "requested_jobs": result["requested_jobs"],
                 "failed_jobs": len(result["failed_jobs"]),
-                "ready_for_materialization": result[
-                    "ready_for_materialization"
-                ],
+                "ready_for_materialization": result["ready_for_materialization"],
             }
         )
 
@@ -873,10 +909,7 @@ def register_edge_rebuild_commands(app: typer.Typer, console: Any) -> None:
         out_dir: Path = typer.Option(..., help="New immutable membership authority directory."),
         base_membership_dir: Path | None = typer.Option(
             None,
-            help=(
-                "Verified earlier membership authority whose identity namespace "
-                "must be preserved."
-            ),
+            help=("Verified earlier membership authority whose identity namespace must be preserved."),
         ),
         security_exclusions: Path | None = typer.Option(
             None,
@@ -1422,12 +1455,8 @@ def register_edge_rebuild_commands(app: typer.Typer, console: Any) -> None:
             help="Verified canonical Alpaca SIP/all regular-session five-minute store.",
         ),
         out_dir: Path = typer.Option(...),
-        contract: Path = typer.Option(
-            Path("configs/edge_rebuild_strategy_contract.toml")
-        ),
-        intraday_contract_lineage: Path = typer.Option(
-            Path("configs/edge_rebuild_intraday_contract_lineage.toml")
-        ),
+        contract: Path = typer.Option(Path("configs/edge_rebuild_strategy_contract.toml")),
+        intraday_contract_lineage: Path = typer.Option(Path("configs/edge_rebuild_intraday_contract_lineage.toml")),
     ) -> None:
         """Project selected five-minute bars locally without provider access."""
 
@@ -1444,9 +1473,7 @@ def register_edge_rebuild_commands(app: typer.Typer, console: Any) -> None:
                 "selected_stock_sessions": result["selected_stock_sessions"],
                 "projected_rows": result["projected_rows"],
                 "coverage_status_counts": result["coverage_status_counts"],
-                "provider_download_performed": result[
-                    "provider_download_performed"
-                ],
+                "provider_download_performed": result["provider_download_performed"],
             }
         )
 
@@ -1461,9 +1488,7 @@ def register_edge_rebuild_commands(app: typer.Typer, console: Any) -> None:
         five_minute_projection_dir: Path = typer.Option(...),
         out_dir: Path = typer.Option(...),
         contract: Path = typer.Option(Path("configs/edge_rebuild_strategy_contract.toml")),
-        intraday_contract_lineage: Path = typer.Option(
-            Path("configs/edge_rebuild_intraday_contract_lineage.toml")
-        ),
+        intraday_contract_lineage: Path = typer.Option(Path("configs/edge_rebuild_intraday_contract_lineage.toml")),
         max_sessions: int | None = typer.Option(None, min=1),
         session_workers: int = typer.Option(1, min=1, max=2),
     ) -> None:
@@ -1549,9 +1574,7 @@ def register_edge_rebuild_commands(app: typer.Typer, console: Any) -> None:
             help="Strict Alpaca issuer event-family authority; repeat per period.",
         ),
         out_dir: Path = typer.Option(..., help="New immutable A5.1 preflight authority."),
-        policy: Path = typer.Option(
-            Path("configs/edge_rebuild_intraday_event_preflight.toml")
-        ),
+        policy: Path = typer.Option(Path("configs/edge_rebuild_intraday_event_preflight.toml")),
     ) -> None:
         """Publish causal eligibility evidence before any A5 estimator can train."""
 

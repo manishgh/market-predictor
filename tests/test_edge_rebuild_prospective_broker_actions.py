@@ -17,12 +17,16 @@ from market_predictor.canonical.audits import (
     CanonicalAuditReport,
 )
 from market_predictor.canonical.store import file_sha256, write_canonical_artifact
+from market_predictor.edge_rebuild import prospective_broker_actions as prospective
 from market_predictor.edge_rebuild.intraday_bar_dataset import (
     _arrow_schema_record,
     _transformation_identity,
 )
 from market_predictor.edge_rebuild.intraday_history import json_sha256
 from market_predictor.edge_rebuild.prospective_broker_actions import (
+    _build_source_collections,
+    _require_membership_authority_progression,
+    _require_membership_observed_before_poll,
     _verify_asset_request_url,
     load_prospective_broker_action_generation,
     load_prospective_broker_action_poll,
@@ -31,10 +35,32 @@ from market_predictor.edge_rebuild.prospective_broker_actions import (
 from market_predictor.edge_rebuild.prospective_broker_actions import (
     collect_prospective_broker_action_poll as _collect_prospective_poll,
 )
+from market_predictor.edge_rebuild.sp500_memberships import (
+    _membership_sha256 as membership_sha256,
+)
 from market_predictor.sources.alpaca import AlpacaAssetSnapshot, AlpacaNewsPage
 from market_predictor.v3.errors import DataReadinessError
 
 OBSERVED_AT = datetime(2026, 8, 15, 12, 0, tzinfo=UTC)
+
+
+def _observed_membership_parent(
+    observed_at: datetime,
+    *,
+    outcomes: list[dict[str, object]] | None = None,
+    events: list[dict[str, object]] | None = None,
+    next_effective_at: datetime | None = None,
+) -> dict[str, object]:
+    return {
+        "authority_type": "observed_time",
+        "observed_at_utc": observed_at.isoformat(),
+        "base_membership_authority_sha256": "a" * 64,
+        "observed_release_outcomes": outcomes or [],
+        "observed_events": events or [],
+        "next_pending_effective_at_utc": (
+            next_effective_at.isoformat() if next_effective_at else None
+        ),
+    }
 
 
 def test_asset_request_accepts_exact_paper_trading_host() -> None:
@@ -54,6 +80,54 @@ def test_asset_request_rejects_unapproved_host() -> None:
 
     with pytest.raises(DataReadinessError, match="approved Alpaca asset host"):
         _verify_asset_request_url(url, final_url=url, redirect_chain=())
+
+
+def test_observed_membership_cannot_cross_known_effective_change() -> None:
+    effective_at = OBSERVED_AT + timedelta(minutes=1)
+    parent = _observed_membership_parent(
+        OBSERVED_AT,
+        next_effective_at=effective_at,
+    )
+
+    _require_membership_observed_before_poll(
+        parent,
+        poll_cutoff=effective_at - timedelta(seconds=1),
+        maximum_age_seconds=120,
+    )
+    with pytest.raises(DataReadinessError, match="known change"):
+        _require_membership_observed_before_poll(
+            parent,
+            poll_cutoff=effective_at,
+            maximum_age_seconds=120,
+        )
+
+
+def test_observed_membership_progression_is_monotonic() -> None:
+    first_outcome = {"source_url": "https://press.spglobal.com/first"}
+    first_event = {"ticker": "AAA", "action": "addition"}
+    previous = _observed_membership_parent(
+        OBSERVED_AT,
+        outcomes=[first_outcome],
+        events=[first_event],
+    )
+    current = _observed_membership_parent(
+        OBSERVED_AT + timedelta(minutes=1),
+        outcomes=[first_outcome, {"source_url": "https://press.spglobal.com/second"}],
+        events=[first_event, {"ticker": "BBB", "action": "addition"}],
+    )
+
+    _require_membership_authority_progression(previous, current)
+
+    with pytest.raises(DataReadinessError, match="moved backward in time"):
+        _require_membership_authority_progression(current, previous)
+    with pytest.raises(DataReadinessError, match="lost previously observed events"):
+        _require_membership_authority_progression(
+            previous,
+            _observed_membership_parent(
+                OBSERVED_AT + timedelta(minutes=1),
+                outcomes=[first_outcome],
+            ),
+        )
 
 
 class _Clock:
@@ -219,6 +293,52 @@ def test_terminal_empty_page_publishes_known_zero_coverage(tmp_path: Path) -> No
     assert loaded.source_collections["ticker"].tolist() == ["AAA"]
 
 
+def test_new_constituent_does_not_inherit_previous_ticker_coverage(
+    tmp_path: Path,
+) -> None:
+    membership = _membership_authority(tmp_path)
+    first_root = tmp_path / "poll-first"
+    collect_prospective_broker_action_poll(
+        membership_authority_directory=membership,
+        output_directory=first_root,
+        fetch_assets=_assets,
+        fetch_page=lambda *_: _page(None, None, ()),
+        observed_at_utc=OBSERVED_AT,
+        clock=_Clock(),
+    )
+    previous = load_prospective_broker_action_poll(first_root)
+    identity = previous.identity_audit.copy()
+    added = identity.iloc[0].copy()
+    added["ticker"] = "BBB"
+    added["candidate_security_id"] = "security:bbb"
+    added["alpaca_asset_id"] = "alpaca-asset-bbb"
+    identity = pd.concat([identity, added.to_frame().T], ignore_index=True)
+    current_at = OBSERVED_AT + timedelta(minutes=1)
+    collections = _build_source_collections(
+        batches=(("AAA", "BBB"),),
+        batch_times={
+            "batch-0000": (
+                current_at + timedelta(seconds=1),
+                current_at + timedelta(seconds=2),
+            )
+        },
+        observations=pd.DataFrame(),
+        identity=identity,
+        observed_at=current_at,
+        previous=previous,
+        maximum_gap_seconds=120,
+    ).set_index("ticker")
+
+    assert bool(collections.loc["AAA", "continuous_from_previous_poll"])
+    assert not bool(collections.loc["BBB", "continuous_from_previous_poll"])
+    assert collections.loc["AAA", "requested_start_utc"] == pd.Timestamp(
+        OBSERVED_AT
+    )
+    assert collections.loc["BBB", "requested_start_utc"] == pd.Timestamp(
+        current_at
+    )
+
+
 def test_stale_membership_identity_abstains_without_dropping_observation(
     tmp_path: Path,
 ) -> None:
@@ -269,26 +389,37 @@ def test_previous_closed_new_york_membership_date_is_current_on_weekend(
     assert identity["identity_ineligible_reason"] == ""
 
 
-def test_previous_new_york_date_is_stale_on_weekday(tmp_path: Path) -> None:
+def test_previous_new_york_date_closed_authority_is_rejected_on_weekday(
+    tmp_path: Path,
+) -> None:
     weekday_observed_at = datetime(2026, 8, 17, 12, 0, tzinfo=UTC)
     membership = _membership_authority(tmp_path, cutoff_date="2026-08-16")
-    output = tmp_path / "poll"
 
-    collect_prospective_broker_action_poll(
-        membership_authority_directory=membership,
-        output_directory=output,
-        fetch_assets=_assets,
-        fetch_page=lambda *_: replace(
-            _page(None, None, ()),
-            retrieved_at_utc=weekday_observed_at + timedelta(seconds=2),
-        ),
-        observed_at_utc=weekday_observed_at,
-        clock=_Clock(weekday_observed_at),
-    )
+    with pytest.raises(DataReadinessError, match="cannot authorize a weekday poll"):
+        collect_prospective_broker_action_poll(
+            membership_authority_directory=membership,
+            output_directory=tmp_path / "poll",
+            fetch_assets=lambda: pytest.fail("weekday gate must precede fetch"),
+            fetch_page=lambda *_: pytest.fail("weekday gate must precede fetch"),
+            observed_at_utc=weekday_observed_at,
+            clock=_Clock(weekday_observed_at),
+        )
 
-    identity = load_prospective_broker_action_poll(output).identity_audit.iloc[0]
-    assert not bool(identity["identity_eligible"])
-    assert identity["identity_ineligible_reason"] == "membership_authority_stale"
+
+def test_closed_same_date_authority_cannot_authorize_weekday_poll(
+    tmp_path: Path,
+) -> None:
+    membership = _membership_authority(tmp_path, cutoff_date="2026-08-17")
+
+    with pytest.raises(DataReadinessError, match="cannot authorize a weekday poll"):
+        collect_prospective_broker_action_poll(
+            membership_authority_directory=membership,
+            output_directory=tmp_path / "weekday-poll",
+            fetch_assets=lambda: pytest.fail("weekday gate must precede fetch"),
+            fetch_page=lambda *_: pytest.fail("weekday gate must precede fetch"),
+            observed_at_utc=datetime(2026, 8, 17, 12, tzinfo=UTC),
+            clock=_Clock(datetime(2026, 8, 17, 12, tzinfo=UTC)),
+        )
 
 
 def test_resume_uses_archived_page_without_refetch(tmp_path: Path) -> None:
@@ -886,6 +1017,43 @@ def test_registry_commit_tamper_fails_strict_replay(tmp_path: Path) -> None:
         load_prospective_broker_action_poll(output)
 
 
+def test_strict_replay_rechecks_membership_authority_progression(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    membership = _membership_authority(tmp_path)
+    first = tmp_path / "first"
+    second = tmp_path / "second"
+    collect_prospective_broker_action_poll(
+        membership_authority_directory=membership,
+        output_directory=first,
+        fetch_assets=_assets,
+        fetch_page=lambda *_: _page(None, None, ()),
+        observed_at_utc=OBSERVED_AT,
+        clock=_Clock(),
+    )
+    collect_prospective_broker_action_poll(
+        membership_authority_directory=membership,
+        output_directory=second,
+        fetch_assets=_assets,
+        fetch_page=lambda *_: _page(None, None, (), received_seconds=62),
+        observed_at_utc=OBSERVED_AT + timedelta(minutes=1),
+        previous_poll_directory=first,
+        clock=_Clock(OBSERVED_AT + timedelta(minutes=1)),
+    )
+
+    def reject_regressive_chain(*_args: object, **_kwargs: object) -> None:
+        raise DataReadinessError("regressive child authority")
+
+    monkeypatch.setattr(
+        prospective,
+        "_require_membership_authority_chain",
+        reject_regressive_chain,
+    )
+    with pytest.raises(DataReadinessError, match="regressive child authority"):
+        load_prospective_broker_action_poll(second)
+
+
 def _membership_authority(
     tmp_path: Path,
     *,
@@ -939,13 +1107,19 @@ def _membership_authority(
         inputs={"request_sha256": request_sha256, **parent_lineage},
         production_ready=False,
     )
+    universe_sha256 = membership_sha256(memberships)
     manifest = {
         "schema": "edge_rebuild.sp500_membership_manifest.v1",
         "status": "complete",
         "request_sha256": request_sha256,
+        "start_date": "2020-01-01",
         "cutoff_date": cutoff_date,
-        "universe_sha256": json_sha256(["security:aaa", "AAA"]),
+        "universe_sha256": universe_sha256,
         "parent_lineage": parent_lineage,
+        "extension_parent": None,
+        "membership_intervals": len(memberships),
+        "security_count": memberships["security_id"].nunique(),
+        "ticker_count": memberships["ticker"].nunique(),
         "membership_manifest_sha256": file_sha256(
             membership_path.with_suffix(".parquet.manifest.json")
         ),
@@ -966,6 +1140,10 @@ def _membership_authority(
             "artifact_sha256": file_sha256(manifest_path),
             "request_sha256": request_sha256,
             "parent_lineage": parent_lineage,
+            "extension_parent": None,
+            "universe_sha256": universe_sha256,
+            "membership_intervals": len(memberships),
+            "security_count": memberships["security_id"].nunique(),
         },
     )
     return root
