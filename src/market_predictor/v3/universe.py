@@ -46,11 +46,10 @@ _TWITTER_2018_SOURCE_URL = (
     "https://press.spglobal.com/2018-06-04-Netflix-Set-to-Join-S-P-100-"
     "Twitter-to-Join-S-P-500-REGENXBIO-to-Join-S-P-SmallCap-600"
 )
-_TWITTER_2018_SOURCE_SHA256S = frozenset(
-    {
-        "46964cc0739c5d8fd2067bc9c27adfb1e4863c2c9e73e7b2804fc71ae6db2fe3",
-        "7d43cdaaf5d8735a87ad28a3fb0ff0feb236e221574384507ca060c1a1273f18",
-    }
+_TWITTER_2018_EFFECTIVE_DATE = "JUNE 7 2018"
+_TWITTER_2018_TABLE_ROWS = (
+    ("ADDED", "TWITTER", "INFORMATION TECHNOLOGY"),
+    ("DELETED", "MONSANTO", "MATERIALS"),
 )
 
 
@@ -464,9 +463,12 @@ def _parse_legacy_sp500_tables(
                 )
                 if (
                     invalid_title_match is not None
-                    and source_url == _TWITTER_2018_SOURCE_URL
-                    and source_sha256 in _TWITTER_2018_SOURCE_SHA256S
-                    and _invalid_midcap_500_table_is_sp500(rows, body_text)
+                    and _is_verified_twitter_2018_malformed_table(
+                        rows,
+                        body_text=body_text,
+                        source_url=source_url,
+                        effective_text=invalid_title_match.group(1),
+                    )
                 ):
                     title_match = invalid_title_match
             if title_match is not None:
@@ -660,6 +662,56 @@ def _invalid_midcap_500_table_is_sp500(
         ):
             return True
     return False
+
+
+def _is_verified_twitter_2018_malformed_table(
+    rows: list[list[str]],
+    *,
+    body_text: str,
+    source_url: str,
+    effective_text: str,
+) -> bool:
+    if source_url != _TWITTER_2018_SOURCE_URL:
+        return False
+    substantive_rows = [
+        row for row in rows if any(_normalized_words(value) for value in row)
+    ]
+    if len(substantive_rows) != 4 or not substantive_rows[0]:
+        return False
+    title_match = _LEGACY_INVALID_MIDCAP_500_TITLE.match(
+        substantive_rows[0][0].strip()
+    )
+    if (
+        title_match is None
+        or _normalized_words(title_match.group(1)) != _TWITTER_2018_EFFECTIVE_DATE
+        or _normalized_words(effective_text) != _TWITTER_2018_EFFECTIVE_DATE
+    ):
+        return False
+    header = [_normalized_words(value) for value in substantive_rows[1]]
+    if header.count("COMPANY") != 1 or header.count("GICS ECONOMIC SECTOR") != 1:
+        return False
+    company_position = header.index("COMPANY")
+    sector_position = header.index("GICS ECONOMIC SECTOR")
+    observed_rows: list[tuple[str, str, str]] = []
+    for row in substantive_rows[2:]:
+        if (
+            not row
+            or _normalized_words(row[0]) not in _LEGACY_ACTIONS
+            or company_position >= len(row)
+            or sector_position >= len(row)
+        ):
+            return False
+        observed_rows.append(
+            (
+                _normalized_words(row[0]),
+                _normalized_words(row[company_position]),
+                _normalized_words(row[sector_position]),
+            )
+        )
+    return tuple(observed_rows) == _TWITTER_2018_TABLE_ROWS and _invalid_midcap_500_table_is_sp500(
+        rows,
+        body_text,
+    )
 
 
 def _normalized_words(value: str) -> str:

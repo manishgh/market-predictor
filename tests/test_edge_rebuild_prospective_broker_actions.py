@@ -23,17 +23,37 @@ from market_predictor.edge_rebuild.intraday_bar_dataset import (
 )
 from market_predictor.edge_rebuild.intraday_history import json_sha256
 from market_predictor.edge_rebuild.prospective_broker_actions import (
-    collect_prospective_broker_action_poll as _collect_prospective_poll,
-)
-from market_predictor.edge_rebuild.prospective_broker_actions import (
+    _verify_asset_request_url,
     load_prospective_broker_action_generation,
     load_prospective_broker_action_poll,
     publish_prospective_broker_action_generation,
+)
+from market_predictor.edge_rebuild.prospective_broker_actions import (
+    collect_prospective_broker_action_poll as _collect_prospective_poll,
 )
 from market_predictor.sources.alpaca import AlpacaAssetSnapshot, AlpacaNewsPage
 from market_predictor.v3.errors import DataReadinessError
 
 OBSERVED_AT = datetime(2026, 8, 15, 12, 0, tzinfo=UTC)
+
+
+def test_asset_request_accepts_exact_paper_trading_host() -> None:
+    url = (
+        "https://paper-api.alpaca.markets/v2/assets?"
+        + urlencode({"status": "active", "asset_class": "us_equity"})
+    )
+
+    _verify_asset_request_url(url, final_url=url, redirect_chain=())
+
+
+def test_asset_request_rejects_unapproved_host() -> None:
+    url = (
+        "https://example.com/v2/assets?"
+        + urlencode({"status": "active", "asset_class": "us_equity"})
+    )
+
+    with pytest.raises(DataReadinessError, match="approved Alpaca asset host"):
+        _verify_asset_request_url(url, final_url=url, redirect_chain=())
 
 
 class _Clock:
@@ -202,7 +222,7 @@ def test_terminal_empty_page_publishes_known_zero_coverage(tmp_path: Path) -> No
 def test_stale_membership_identity_abstains_without_dropping_observation(
     tmp_path: Path,
 ) -> None:
-    membership = _membership_authority(tmp_path, cutoff_date="2026-08-14")
+    membership = _membership_authority(tmp_path, cutoff_date="2026-08-13")
     output = tmp_path / "poll"
 
     manifest = collect_prospective_broker_action_poll(
@@ -223,6 +243,52 @@ def test_stale_membership_identity_abstains_without_dropping_observation(
     assert observation["identity_ineligible_reason"] == "membership_authority_stale"
     assert manifest["event_observation_count"] == 1
     assert manifest["production_identity_event_count"] == 0
+
+
+def test_previous_closed_new_york_membership_date_is_current_on_weekend(
+    tmp_path: Path,
+) -> None:
+    weekend_observed_at = datetime(2026, 8, 16, 7, 0, tzinfo=UTC)
+    membership = _membership_authority(tmp_path, cutoff_date="2026-08-15")
+    output = tmp_path / "poll"
+
+    collect_prospective_broker_action_poll(
+        membership_authority_directory=membership,
+        output_directory=output,
+        fetch_assets=_assets,
+        fetch_page=lambda *_: replace(
+            _page(None, None, ()),
+            retrieved_at_utc=weekend_observed_at + timedelta(seconds=2),
+        ),
+        observed_at_utc=weekend_observed_at,
+        clock=_Clock(weekend_observed_at),
+    )
+
+    identity = load_prospective_broker_action_poll(output).identity_audit.iloc[0]
+    assert bool(identity["identity_eligible"])
+    assert identity["identity_ineligible_reason"] == ""
+
+
+def test_previous_new_york_date_is_stale_on_weekday(tmp_path: Path) -> None:
+    weekday_observed_at = datetime(2026, 8, 17, 12, 0, tzinfo=UTC)
+    membership = _membership_authority(tmp_path, cutoff_date="2026-08-16")
+    output = tmp_path / "poll"
+
+    collect_prospective_broker_action_poll(
+        membership_authority_directory=membership,
+        output_directory=output,
+        fetch_assets=_assets,
+        fetch_page=lambda *_: replace(
+            _page(None, None, ()),
+            retrieved_at_utc=weekday_observed_at + timedelta(seconds=2),
+        ),
+        observed_at_utc=weekday_observed_at,
+        clock=_Clock(weekday_observed_at),
+    )
+
+    identity = load_prospective_broker_action_poll(output).identity_audit.iloc[0]
+    assert not bool(identity["identity_eligible"])
+    assert identity["identity_ineligible_reason"] == "membership_authority_stale"
 
 
 def test_resume_uses_archived_page_without_refetch(tmp_path: Path) -> None:

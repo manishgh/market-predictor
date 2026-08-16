@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Any, Final, cast
 from urllib.parse import parse_qsl, urlsplit
 from uuid import uuid4
+from zoneinfo import ZoneInfo
 
 import pandas as pd
 import pyarrow.parquet as pq
@@ -71,6 +72,10 @@ MAX_PAGES_PER_BATCH: Final = 200
 MAX_BYTES_PER_BATCH: Final = 32 * 1024 * 1024
 MAX_BYTES_PER_POLL: Final = 64 * 1024 * 1024
 MAX_GENERATION_INPUT_BYTES: Final = 64 * 1024 * 1024
+ALPACA_ASSET_HOSTNAMES: Final = frozenset(
+    {"api.alpaca.markets", "paper-api.alpaca.markets"}
+)
+NEW_YORK: Final = ZoneInfo("America/New_York")
 _ROOT_FILES: Final = frozenset(
     {
         "_request.json",
@@ -1708,7 +1713,13 @@ def _build_identity_audit(
         raise DataReadinessError("membership authority has no intervals active at poll time")
     asset_index = assets.set_index("symbol", drop=False).to_dict("index")
     cutoff = pd.Timestamp(membership_cutoff_date).date()
-    stale = observed_at.date() > cutoff
+    new_york_date = _utc(observed_at).astimezone(NEW_YORK).date()
+    required_cutoff = (
+        new_york_date - timedelta(days=1)
+        if new_york_date.weekday() >= 5
+        else new_york_date
+    )
+    stale = cutoff < required_cutoff
     previous_index = (
         previous_identity.set_index("ticker", drop=False).to_dict("index")
         if previous_identity is not None
@@ -2568,11 +2579,16 @@ def _verify_asset_request_url(
     final_url: str,
     redirect_chain: object,
 ) -> None:
+    hostname = (urlsplit(requested_url).hostname or "").lower()
+    if hostname not in ALPACA_ASSET_HOSTNAMES:
+        raise DataReadinessError(
+            "prospective raw response is not bound to an approved Alpaca asset host"
+        )
     _verify_exact_alpaca_request(
         requested_url,
         final_url=final_url,
         redirect_chain=redirect_chain,
-        hostname="api.alpaca.markets",
+        hostname=hostname,
         path="/v2/assets",
         expected_query={"status": "active", "asset_class": "us_equity"},
     )

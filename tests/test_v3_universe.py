@@ -436,6 +436,7 @@ class V3PointInTimeUniverseTests(unittest.TestCase):
         for source_sha256 in (
             "46964cc0739c5d8fd2067bc9c27adfb1e4863c2c9e73e7b2804fc71ae6db2fe3",
             "7d43cdaaf5d8735a87ad28a3fb0ff0feb236e221574384507ca060c1a1273f18",
+            "dc6cded775e47ae634b0eda12173401aaabb002d5714012bdabb54e162ceddc5",
         ):
             with self.subTest(source_sha256=source_sha256):
                 changes = parse_sp500_changes(
@@ -465,6 +466,37 @@ class V3PointInTimeUniverseTests(unittest.TestCase):
                 uncorroborated,
                 source_url="https://press.spglobal.com/2018-06-04-uncorroborated",
                 published_date=date(2018, 6, 4),
+            )
+
+        poisoned = corroborated.replace(
+            "</table>",
+            "<tr><td>NOTE</td><td>Poison Corp.</td><td>Utilities</td></tr></table>",
+        ).replace(
+            "</p>",
+            " Poison Corp. (NYSE: EVIL) will join the index.</p>",
+            1,
+        )
+        with self.assertRaisesRegex(DataReadinessError, "no structured S&P 500"):
+            parse_sp500_changes(
+                poisoned,
+                source_url=source_url,
+                published_date=date(2018, 6, 4),
+                source_sha256="dc6cded775e47ae634b0eda12173401aaabb002d5714012bdabb54e162ceddc5",
+            )
+
+        pre_header_poisoned = corroborated.replace(
+            "<tr><td></td><td>COMPANY</td>",
+            (
+                "<tr><td>ADDED</td><td>Poison Corp.</td><td>Utilities</td></tr>"
+                "<tr><td></td><td>COMPANY</td>"
+            ),
+        )
+        with self.assertRaisesRegex(DataReadinessError, "no structured S&P 500"):
+            parse_sp500_changes(
+                pre_header_poisoned,
+                source_url=source_url,
+                published_date=date(2018, 6, 4),
+                source_sha256="dc6cded775e47ae634b0eda12173401aaabb002d5714012bdabb54e162ceddc5",
             )
 
     def test_deferred_membership_continuity_emits_no_event(self) -> None:
