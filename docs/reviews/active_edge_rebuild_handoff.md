@@ -261,8 +261,10 @@ A4.2/A4.5 trade/quote work remains storage-blocked and must not be replaced with
 - Raw Alpaca asset/news bodies, exact endpoint/query/final URL, no-redirect state,
   request/response times, provider revisions, source coverage, identity abstentions,
   immutable failed attempts, and a stable cutoff claim/commit registry all replay.
-- Parent polls must precede the child and use the same namespace, membership authority,
-  and registry. Replay is iterative, not recursive. Identity changes remain quarantined
+- Parent polls must precede the child and use the same namespace and registry. A
+  membership authority may advance only through a strictly replayed monotonic
+  observed-time chain; observation time, release outcomes, and events cannot move
+  backward. Replay is iterative, not recursive. Identity changes remain quarantined
   until a governed transition authority resolves them.
 - Polls and generations are bounded below 4 GiB; generation input is additionally
   limited by verified Parquet uncompressed size. Generations preserve earliest
@@ -297,18 +299,42 @@ A4.2/A4.5 trade/quote work remains storage-blocked and must not be replaced with
   compilation, strict real-authority replay, and no remaining medium-or-higher review
   finding.
 
+## Weekday-Safe Observed S&P Membership Authority
+
+- Implementation commit `a5aae9b` is pushed. It adds the collection-only
+  `collect-edge-observed-sp500-memberships` command and preserves the fully closed S&P
+  archive/event/membership authorities as immutable parents.
+- The observed authority archives exact no-redirect official search and release
+  responses, confirms the complete fetched page range after collecting independent
+  constituent and SEC ticker/CIK anchors, records every release outcome and pending
+  effective change, and strictly replays its complete file inventory and canonical
+  membership table.
+- A weekday poll accepts only an observed authority captured before the poll and no
+  more than the configured 60-300 seconds earlier. It must not cross a known pending
+  effective change. Authority rotation must retain prior observed releases/events and
+  move observation time forward; collection and strict replay use the same chain gate.
+  Closed archive authorities remain weekend-only.
+- Final evidence: 152 focused tests and 1,404 tracked tests passed with 2 skipped;
+  tracked Ruff, strict mypy across 228 source files, compileall, memory below 0.3 GiB,
+  and consolidated independent review passed with no remaining medium-or-higher
+  finding.
+- Public offline collect/load verification used a deterministic 500-member anchor and
+  5,000 SEC identities, including multi-page race and tamper failures. It is test
+  evidence only. No real weekday authority has been published because the local
+  environment does not define `SEC_USER_AGENT`; collection stopped before network
+  access. Keep live readiness `environment_pending` until that value is configured
+  outside Git and a real authority strictly replays.
+
 - SEC evidence `data/raw/index_membership/sec_xom_identity_20260815_v1` verifies XOM
   as CIK `0000034088`. The reviewed anchor is
   `data/universe/sp500_current_20260815_sec_reviewed_v1.csv`, SHA-256
   `d1171b3aef900ddf856d1c22d1522d1e42483232a32640922bcf99b97898acba`.
 
-Exact next action: design a causal intraday S&P observation authority that separates
-the latest fully closed official-release archive from the membership effective horizon
-at a weekday poll cutoff. It must bind observed official bytes and a current independent
-anchor, handle already-announced effective changes, and fail closed on quiet-day
-completeness. Do not schedule weekday polling, infer prior-day weekday eligibility, or
-run A5.2 until that design is independently reviewed and a newly frozen prospective
-horizon meets the existing capacity floors.
+Exact next action: configure a non-secret SEC-compliant `SEC_USER_AGENT` outside Git,
+run `collect-edge-observed-sp500-memberships` during a weekday, strictly replay the
+published authority, and use that exact authority for the next prospective Alpaca poll.
+Do not infer prior-day weekday eligibility or run A5.2 until the newly observed
+prospective horizon meets the existing capacity floors.
 
 ## Source Boundary
 

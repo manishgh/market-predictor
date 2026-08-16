@@ -628,7 +628,8 @@ authority passes attachment, timing, coverage, and replay checks.
    securities with five governed whole-security exclusions. Strict replay verifies the
    complete authority and exact July 8 base prefix.
 
-4. **Weekday-safe observed S&P membership authority (`in_progress`).** Publish a
+4. **Weekday-safe observed S&P membership authority
+   (`implementation_complete_environment_pending`).** Publish a
    causal identity authority for a prospective poll without describing an unfinished
    New York publication day as a complete historical archive.
 
@@ -670,6 +671,38 @@ authority passes attachment, timing, coverage, and replay checks.
    observation remains environment evidence and cannot be replaced by a weekend test.
    Rollback removes only the new authority and poll adapter; all closed authorities and
    the Sunday poll remain immutable.
+
+   Implementation result:
+
+   - Commit `a5aae9b` adds the collection-only
+     `collect-edge-observed-sp500-memberships` command and a strict observed-time
+     authority. It retains exact no-redirect S&P search/release bytes, a complete
+     second search sweep, the current constituent anchor, SEC ticker/CIK identities,
+     every release outcome, observed events, pending effective changes, and canonical
+     membership intervals without altering the fully closed parent authorities.
+   - Poll eligibility requires the authority observation to precede the poll, remain
+     within the configured 60-300 second continuity bound, and precede the next known
+     pending membership change. Authority rotation must move forward in observation
+     time and retain every previously observed release outcome and event. The same
+     chain rules replay during strict load. Closed authorities cannot authorize a
+     weekday poll; the existing weekend replay remains valid.
+   - Retained-byte publication/load tests verify exact anchor identity, future-change
+     timing, quiet-day equality, full multi-page race confirmation, malformed-release
+     rejection, URL/redirect policy, inventory/path/symlink rejection, tamper failure,
+     per-ticker poll continuity, and strict authority-chain replay. The offline fixture
+     used 500 members and 5,000 SEC identities; it is test evidence, not live market
+     evidence.
+   - Final verification passed 152 focused tests and the complete tracked suite with
+     1,404 passed and 2 skipped. Tracked Ruff, strict mypy across 228 source files,
+     compileall, and consolidated independent review passed. Observed Python working
+     memory remained below 0.3 GiB.
+   - A real weekday observation is still `environment_pending`: the local environment
+     does not define the SEC-compliant `SEC_USER_AGENT`, so the live command stopped
+     before making a network request. No synthetic identity response is accepted as
+     production evidence. Configure that value outside Git, collect and strictly
+     replay one real weekday authority, then use it for the next prospective Alpaca
+     poll. A5.2 remains prohibited until the prospective horizon satisfies its frozen
+     capacity floors.
 
 ### A6 - Run Locked Evaluation and Promote Qualified Models
 
