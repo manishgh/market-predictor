@@ -509,8 +509,8 @@ authority passes attachment, timing, coverage, and replay checks.
      skipped, tracked Ruff, strict mypy over 226 source files, compileall, strict
      real-authority replay, and consolidated independent review.
 
-2. **Prospective broker-action observation authority (`implementation complete;
-   live validation environment-pending`).** Establish the
+2. **Prospective broker-action observation authority (`implementation and one
+   weekend live validation complete; weekday continuation fail-closed`).** Establish the
    only permitted path for future Alpaca broker-action evidence. Each polling run must
    archive the exact provider response and observation time, retain every distinct
    provider revision, and bind symbols to the same point-in-time S&P security identity
@@ -563,17 +563,27 @@ authority passes attachment, timing, coverage, and replay checks.
    - Verification passed 1,373 tests with two skipped, 41 focused authority/source/CLI
      tests, tracked Ruff, strict mypy across 226 source files, compileall, and one
      consolidated two-reviewer correction pass.
-   - No live authority exists. The earlier HTTP 401 did not prove missing credentials;
-     Market Predictor's `.env` now verifies both Alpaca values through `Settings` and
-     the configured stock feed is `sip`. No provider evidence was accepted from the
-     failed attempt.
-   - The current membership authority ends on `2026-07-08`; a later poll correctly
-     abstains every identity as stale. Production-eligible observation requires a
-     strictly verified membership extension through the poll date and configured
-     Market Predictor Alpaca credentials. A5.2 remains prohibited until a new
-     prospective horizon also passes A5.1 capacity.
+   - Commit `27ab9b7` accepts only the exact live or paper Alpaca asset hosts, keeps
+     news on the exact data host, and verifies the malformed 2018 Twitter/Monsanto
+     source by complete semantic table grammar instead of transient page-shell hashes.
+   - Poll `data/raw/prospective_broker_actions/poll_20260816T071230Z`, using stable
+     registry `registry_v2`, strictly replays 503 eligible security identities, 76
+     observed events, 46 observed-symbol collections, and 457 known-empty collections.
+     Peak working memory was 0.328 GiB. The authority remains
+     `production_ready=false`, `training_eligible=false`, and
+     `serving_eligible=false`; one poll starts evidence collection but cannot train A5.2.
+   - The poll occurred on Sunday and used the latest fully closed New York publication
+     date, Saturday `2026-08-15`. Weekday polls require same-date membership and
+     therefore abstain under the closed-day archive contract. Do not schedule weekday
+     polling until a separately reviewed intraday S&P observation authority binds
+     observation time, release completeness, and the effective membership horizon.
+     Retrospective repair or prior-day weekday eligibility is prohibited.
+   - Final verification passed 74 focused tests and the exact tracked suite with 1,382
+     passed and 2 skipped; tracked Ruff, strict mypy across 227 source files, bytecode
+     compilation, strict real-authority replay, and consolidated independent review
+     also passed.
 
-3. **Current S&P membership extension (`environment_pending`).** Extend the verified
+3. **Current S&P membership extension (`complete`).** Extend the verified
    point-in-time S&P 500 membership authority from `2026-07-08` through
    `2026-08-15` so prospective Alpaca observations can resolve security identity.
 
@@ -609,12 +619,14 @@ authority passes attachment, timing, coverage, and replay checks.
    strict mypy across 227 source files, compileall, and the full tracked suite with
    1,374 passed and 2 skipped. Peak test-process memory stayed below 0.2 GiB.
 
-   The same-day `2026-08-15` data artifacts were collected before the New York cutoff
-   day ended and are therefore invalid under the corrected verifier. The code
-   checkpoint is complete, but data-authority publication must wait until after
-   `2026-08-16T04:00:00Z`. Recollect into new immutable directories, use the
-   SEC-reviewed anchor `data/universe/sp500_current_20260815_sec_reviewed_v1.csv`,
-   then rebuild and replay events, transitions, and memberships before polling Alpaca.
+   The early same-day `v1` artifacts remain invalid and must not be used. After the New
+   York day closed, the immutable `v2` raw archive collected 109 releases; event
+   authority `spglobal_events_20180414_20260815_v3` published 307 events with zero
+   unresolved releases; transition authority `sp500_transitions_20180529_20260815_v2`
+   published 13 transitions; and membership authority
+   `sp500_memberships_20180529_20260815_v2` published 1,170 intervals across 659
+   securities with five governed whole-security exclusions. Strict replay verifies the
+   complete authority and exact July 8 base prefix.
 
 ### A6 - Run Locked Evaluation and Promote Qualified Models
 
