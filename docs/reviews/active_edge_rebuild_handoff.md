@@ -8,7 +8,7 @@ Repository: `C:\project\market-predictor`
 
 Branch: `er-intraday-refactoring`
 
-Last completed implementation commit: `fe2b4c9` (`Add prospective analyst event horizon`)
+Last completed implementation commit: `c56843e` (`Capture exact Alpaca SIP bar transport`)
 
 ## Purpose
 
@@ -22,8 +22,9 @@ too small. The August 15 membership extension, Sunday poll, real August 17 obser
 membership authority, and following weekday Alpaca poll are complete and strictly
 replay. The classified prospective analyst-event horizon is also complete: only three
 of 248 raw provider events qualify as exact causal analyst episodes. The next bounded
-checkpoint is prospective SIP session, feature, and outcome collection. Do not train
-A5.2, open a locked test, or claim model quality.
+checkpoint is the immutable closed-session SIP source authority; its exact HTTP
+transport prerequisite is complete. Do not train A5.2, open a locked test, or claim
+model quality.
 
 This repository produces prediction intelligence and abstention. Alerts, orders,
 positions, portfolio risk, and execution remain in `trading_flow`.
@@ -125,7 +126,7 @@ specialists; A6 performs locked evaluation and promotion.
   1.954 GiB recorded peak. Exact ticker and exact prediction timestamp are required;
   conflicting CIKs fail closed. Every exclusion is persisted in
   `identity_alignment_audit.parquet`.
-- Repository suite: 1,431 passed and 2 skipped after the A5.1b horizon review.
+- Repository suite: 1,433 passed and 2 skipped after the exact SIP transport review.
 - Tracked Ruff, strict mypy across 229 source files, compileall, and final observed
   membership, prospective poll, and classified horizon strict replay pass.
 - Coordinated request, feature, all-profile label, dtype, partition, global identity,
@@ -322,6 +323,23 @@ A4.2/A4.5 trade/quote work remains storage-blocked and must not be replaced with
   mypy across 229 source files, and compileall all pass.
 - `data/research/prospective_analyst_revision_horizon_20260817_v1` predates the dtype
   normalization and is superseded. Do not use it as current evidence.
+
+## Exact Alpaca SIP Bar Transport
+
+- Implementation commit `c56843e` changes the shared Alpaca bar-page client from
+  parsed JSON plus headers to bounded exact HTTP bytes plus parsed output. The page
+  contract retains raw bytes, requested/final URL, direct-response status, retrieval
+  time, safe headers, and redirect evidence.
+- Requests require SIP, explicit point-in-time `asof`, `adjustment=all`, ascending
+  order, bounded symbols/pages, and an exact `https://data.alpaca.markets/v2/stocks/bars`
+  query. Redirects, non-200 status, content-type changes, naive retrieval time, and
+  body hash/length/representation mismatches fail closed.
+- Existing swing and intraday collectors remain compatible and now receive exact
+  transport evidence, but they do not yet constitute the new prospective session
+  authority. No provider request or data download occurred in this checkpoint.
+- Focused verification passed 44 tests; the full suite passed 1,433 tests with two
+  skipped. Tracked Ruff, strict mypy across 229 source files, compileall, and one
+  independent consolidated review passed with no medium-or-higher finding.
 
 ## Weekday-Safe Observed S&P Membership Authority
 

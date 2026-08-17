@@ -820,7 +820,7 @@ authority passes attachment, timing, coverage, and replay checks.
 
    Ordered implementation checkpoints:
 
-   1. **Exact SIP bar transport (`in_progress`).** Extend the canonical Alpaca bar-page
+   1. **Exact SIP bar transport (`completed`).** Extend the canonical Alpaca bar-page
       response with exact bounded HTTP bytes, requested/final URL, status, retrieval
       time, safe headers, and redirect evidence. Requests must use SIP, `adjustment=all`,
       ascending order, explicit `asof`, bounded pages, and no redirects. Preserve
@@ -842,6 +842,22 @@ authority passes attachment, timing, coverage, and replay checks.
    tests, redirect/status/body-integrity failures, existing collector compatibility,
    tracked tests, Ruff, strict mypy, and compileall. Rollback removes only the new bar
    transport fields and byte-fetch path.
+
+   Exact transport result:
+
+   - Commit `c56843e` replaces parsed-only bar fetches with a bounded exact-byte HTTP
+     response. `AlpacaBarsPage` now carries raw bytes, safe headers, requested/final
+     URL, status, retrieval time, and redirect evidence while retaining parsed bars for
+     existing collectors.
+   - Production bar requests require consolidated SIP, an explicit point-in-time
+     `asof`, `adjustment=all`, ascending order, at most 50 symbols, and at most 10,000
+     rows. Strict semantic URL/query validation rejects host/path/query changes,
+     redirects, non-200 status, non-JSON content, naive retrieval times, and body
+     hash/length/representation mismatches.
+   - Focused source and collector compatibility verification passed 44 tests. The full
+     repository suite passed 1,433 tests with two skipped; tracked Ruff, strict mypy
+     across 229 source files, compileall, and one consolidated independent review also
+     passed. No market data was downloaded and no model or authority changed.
 
 ### A6 - Run Locked Evaluation and Promote Qualified Models
 
