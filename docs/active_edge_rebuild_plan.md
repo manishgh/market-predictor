@@ -509,8 +509,8 @@ authority passes attachment, timing, coverage, and replay checks.
      skipped, tracked Ruff, strict mypy over 226 source files, compileall, strict
      real-authority replay, and consolidated independent review.
 
-2. **Prospective broker-action observation authority (`implementation and one
-   weekend live validation complete; weekday continuation fail-closed`).** Establish the
+2. **Prospective broker-action observation authority (`implementation and weekday
+   live validation complete; capacity collection active`).** Establish the
    only permitted path for future Alpaca broker-action evidence. Each polling run must
    archive the exact provider response and observation time, retain every distinct
    provider revision, and bind symbols to the same point-in-time S&P security identity
@@ -572,12 +572,14 @@ authority passes attachment, timing, coverage, and replay checks.
      Peak working memory was 0.328 GiB. The authority remains
      `production_ready=false`, `training_eligible=false`, and
      `serving_eligible=false`; one poll starts evidence collection but cannot train A5.2.
-   - The poll occurred on Sunday and used the latest fully closed New York publication
-     date, Saturday `2026-08-15`. Weekday polls require same-date membership and
-     therefore abstain under the closed-day archive contract. Do not schedule weekday
-     polling until a separately reviewed intraday S&P observation authority binds
-     observation time, release completeness, and the effective membership horizon.
-     Retrospective repair or prior-day weekday eligibility is prohibited.
+   - The first poll occurred on Sunday and used the latest fully closed New York
+     publication date, Saturday `2026-08-15`. The weekday-safe observed membership
+     authority is now complete under Step 4 below. Poll
+     `data/raw/prospective_broker_actions/poll_20260817T202950Z` strictly replays 11 of
+     11 batches, 503 constituents, 460 observations, and 454 exact production-identity
+     events at cutoff `2026-08-17T20:30:00Z`; peak working memory was 0.379 GiB.
+     This expands the prospective horizon but does not satisfy the frozen A5.1 capacity
+     floors or authorize A5.2 training.
    - Final verification passed 74 focused tests and the exact tracked suite with 1,382
      passed and 2 skipped; tracked Ruff, strict mypy across 227 source files, bytecode
      compilation, strict real-authority replay, and consolidated independent review
@@ -628,8 +630,7 @@ authority passes attachment, timing, coverage, and replay checks.
    securities with five governed whole-security exclusions. Strict replay verifies the
    complete authority and exact July 8 base prefix.
 
-4. **Weekday-safe observed S&P membership authority
-   (`implementation_complete_environment_pending`).** Publish a
+4. **Weekday-safe observed S&P membership authority (`complete`).** Publish a
    causal identity authority for a prospective poll without describing an unfinished
    New York publication day as a complete historical archive.
 
@@ -692,17 +693,59 @@ authority passes attachment, timing, coverage, and replay checks.
      per-ticker poll continuity, and strict authority-chain replay. The offline fixture
      used 500 members and 5,000 SEC identities; it is test evidence, not live market
      evidence.
-   - Final verification passed 152 focused tests and the complete tracked suite with
-     1,404 passed and 2 skipped. Tracked Ruff, strict mypy across 228 source files,
-     compileall, and consolidated independent review passed. Observed Python working
-     memory remained below 0.3 GiB.
-   - A real weekday observation is still `environment_pending`: the local `.env`
-     defines `SEC_USER_AGENT`, but its value fails the required real-organization and
-     monitored-email validation, so the live command stopped before making a network
-     request. No synthetic identity response is accepted as production evidence.
-     Correct that untracked local value, collect and strictly replay one real weekday
-     authority, then use it for the next prospective Alpaca poll. A5.2 remains
-     prohibited until the prospective horizon satisfies its frozen capacity floors.
+   - Initial verification for commit `a5aae9b` passed 152 focused tests and the complete
+     tracked suite with 1,404 passed and 2 skipped. Tracked Ruff, strict mypy across 228
+     source files, compileall, and consolidated independent review passed.
+
+   Reopened evidence on `2026-08-17`:
+
+   - The first compliant live observation reached all configured sources but failed
+     closed because SEC's 10,396-record `company_tickers.json` response omitted AEP.
+     The exact SEC submissions endpoint for inherited CIK `0000004904` independently
+     identifies American Electric Power and lists ticker AEP. No authority was
+     published.
+   - Scope is limited to a causal identity fallback for tickers absent from the SEC
+     bulk map. The collector must retain the exact CIK-specific SEC submissions
+     response, derive the candidate CIK from the closed membership identity when
+     available, verify that the SEC response lists the expected ticker and CIK, and
+     replay the fallback inventory exactly. Conflicts, missing ticker claims, extra
+     fallback units, redirects, or response tampering fail closed.
+   - S&P release parsing, membership transitions, Alpaca polling, features, training,
+     serving, scheduling, alerts, and orders are outside this correction. Exit gates
+     are focused fallback/replay/tamper tests, the existing focused authority suite,
+     tracked Ruff, strict mypy, compileall, a real weekday collect/load replay, and a
+     new implementation plus documentation checkpoint pushed before polling Alpaca.
+   - The next compliant live attempt passed the AEP fallback and then failed closed on
+     XOM: the closed authority inherited CIK `0000034088`, while both the current S&P
+     constituent anchor and SEC bulk identity map identify ticker XOM with successor
+     registrant CIK `0002115436`. SEC's July 1, 2026 Form 8-K confirms a one-for-one
+     holding-company reorganization with the same ticker, so this is an issuer identity
+     transition rather than an index addition or deletion.
+   - Scope therefore also admits a same-ticker identity transition only when the
+     retained current S&P anchor and retained SEC identity evidence agree on a new CIK.
+     The old interval closes and the successor interval opens at the observation time,
+     never at a retrospective inferred date. The complete closed-authority prefix and
+     old security identity remain immutable. Duplicate active identities, ticker-set
+     changes, ambiguous CIKs, or replay differences fail closed.
+   - Implementation commit `a7fe60e` is pushed. It retains and strictly replays the
+     exact SEC CIK-specific fallback, rejects inherited-versus-anchor CIK disagreement,
+     records a causally observed same-ticker successor identity, validates every raw
+     unit envelope and content-addressed body path, and binds the canonical membership
+     manifest to the exact request, base authority, and observation-unit inventory.
+   - Real authority
+     `data/raw/index_membership/sp500_observed_20260817T203000Z_v3` strictly replays 503
+     current constituents, 10,397 SEC identities including the AEP fallback, zero new
+     membership releases/events, and the XOM successor CIK from observation time
+     `2026-08-17T20:29:05.344531Z`. It remains a collection authority, not training or
+     serving authorization.
+   - The immediately following Alpaca poll
+     `data/raw/prospective_broker_actions/poll_20260817T202950Z` strictly replays 11 of
+     11 batches, 460 observations, and 454 exact production-identity events. Final
+     verification passed 152 focused tests and the complete tracked suite with 1,417
+     passed and 2 skipped; tracked Ruff, strict mypy across 228 source files,
+     compileall, two-reviewer remediation, and final artifact replay passed. Peak poll
+     working memory was 0.379 GiB. A5.2 remains prohibited until the prospective
+     horizon satisfies the frozen capacity floors.
 
 ### A6 - Run Locked Evaluation and Promote Qualified Models
 

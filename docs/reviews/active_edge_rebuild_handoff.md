@@ -2,13 +2,13 @@
 
 Status: active
 
-Last updated: 2026-08-15
+Last updated: 2026-08-17
 
 Repository: `C:\project\market-predictor`
 
 Branch: `er-intraday-refactoring`
 
-Last completed implementation commit: `27ab9b7` (`Publish verified prospective Alpaca poll path`)
+Last completed implementation commit: `a7fe60e` (`Harden observed S&P identity replay`)
 
 ## Purpose
 
@@ -18,10 +18,10 @@ A3 issuer-event specialist development is complete with no candidate. A4.1 colle
 A4.3 bar-only causal dataset publication, and A4.4 continuation/reversion development
 are complete. Both A4.4 hypotheses were rejected. A5.1 is also complete and blocked:
 the available event history is retrospective and exact security identity overlap is
-too small. The August 15 membership extension and one Sunday prospective Alpaca poll
-are complete and strictly replay. Weekday continuation remains fail-closed because the
-closed-day S&P authority cannot prove a same-day weekday membership horizon. Do not
-train A5.2, open a locked test, or claim model quality.
+too small. The August 15 membership extension, Sunday poll, real August 17 observed
+membership authority, and following weekday Alpaca poll are complete and strictly
+replay. The prospective horizon still does not satisfy the frozen A5.1 capacity floors.
+Do not train A5.2, open a locked test, or claim model quality.
 
 This repository produces prediction intelligence and abstention. Alerts, orders,
 positions, portfolio risk, and execution remain in `trading_flow`.
@@ -123,9 +123,9 @@ specialists; A6 performs locked evaluation and promotion.
   1.954 GiB recorded peak. Exact ticker and exact prediction timestamp are required;
   conflicting CIKs fail closed. Every exclusion is persisted in
   `identity_alignment_audit.parquet`.
-- Repository suite: 1,374 passed and 2 skipped after the membership-extension review.
-- Tracked Ruff, strict mypy across 227 source files, compileall, and final A5.1
-  real-authority strict replay pass.
+- Repository suite: 1,417 passed and 2 skipped after the observed-authority review.
+- Tracked Ruff, strict mypy across 228 source files, compileall, and final observed
+  membership plus prospective-poll strict replay pass.
 - Coordinated request, feature, all-profile label, dtype, partition, global identity,
   source-coverage, causal-window, and governance-hash poison tests pass.
 - The real materialization and event publication remained below the 5 GiB limit;
@@ -138,7 +138,7 @@ specialists; A6 performs locked evaluation and promotion.
 | Swing baseline | A2 trainer complete; prior candidates rejected; no new run or promotion | Preserve the frozen technical contract until a governed training run is approved |
 | Swing event-driven | Rating-change and coverage specialists trained in development; all rejected | Preserve rejection evidence; do not open locked test or serve |
 | Intraday baseline | V2 rejected; V3 invalid; A4.4 continuation and reversion both rejected | Preserve evidence; no serving or future-holdout access |
-| Intraday event-driven | A5.1 blocked; one 76-event prospective Sunday poll exists but does not meet capacity | Design and review a causal intraday S&P observation authority before weekday polling; then collect a preregistered horizon |
+| Intraday event-driven | A5.1 blocked; Sunday and weekday prospective polls strictly replay but do not meet capacity | Continue the preregistered prospective horizon; rerun the capacity audit before any A5.2 training |
 
 `ROC-AUC >= 0.60` is a locked-test diagnostic, not a training objective or permission
 for repeated locked-test tuning. Promotion also requires ranking, calibration,
@@ -314,28 +314,29 @@ A4.2/A4.5 trade/quote work remains storage-blocked and must not be replaced with
   effective change. Authority rotation must retain prior observed releases/events and
   move observation time forward; collection and strict replay use the same chain gate.
   Closed archive authorities remain weekend-only.
-- Final evidence: 152 focused tests and 1,404 tracked tests passed with 2 skipped;
-  tracked Ruff, strict mypy across 228 source files, compileall, memory below 0.3 GiB,
-  and consolidated independent review passed with no remaining medium-or-higher
-  finding.
-- Public offline collect/load verification used a deterministic 500-member anchor and
-  5,000 SEC identities, including multi-page race and tamper failures. It is test
-  evidence only. No real weekday authority has been published because the untracked
-  local `SEC_USER_AGENT` value fails the required real-organization and monitored-email
-  validation; collection stopped before network access. Keep live readiness
-  `environment_pending` until that local value is corrected and a real authority
-  strictly replays.
+- Commit `a7fe60e` retains exact SEC CIK-specific fallback evidence for bulk-map
+  omissions, rejects anchor/inherited CIK disagreement, and records same-ticker CIK
+  successors only at first observation. Raw-unit envelopes, content-addressed body
+  paths, fallback inventory, and canonical input lineage all replay exactly.
+- Real authority
+  `data/raw/index_membership/sp500_observed_20260817T203000Z_v3` strictly replays 503
+  constituents and 10,397 SEC identities, including the AEP fallback and the XOM
+  successor identity observed at `2026-08-17T20:29:05.344531Z`. Zero new membership
+  releases or events were found.
+- Poll `data/raw/prospective_broker_actions/poll_20260817T202950Z` immediately follows
+  that authority and strictly replays 11 of 11 batches, 460 observations, and 454 exact
+  production-identity events at cutoff `2026-08-17T20:30:00Z`. Peak working memory was
+  0.379 GiB. Both artifacts remain non-serving and non-training authorities.
+- Final evidence: 152 focused tests and 1,417 tracked tests passed with 2 skipped;
+  tracked Ruff, strict mypy across 228 source files, compileall, two-reviewer
+  remediation, and final strict artifact replay passed.
 
-- SEC evidence `data/raw/index_membership/sec_xom_identity_20260815_v1` verifies XOM
-  as CIK `0000034088`. The reviewed anchor is
-  `data/universe/sp500_current_20260815_sec_reviewed_v1.csv`, SHA-256
-  `d1171b3aef900ddf856d1c22d1522d1e42483232a32640922bcf99b97898acba`.
-
-Exact next action: configure a non-secret SEC-compliant `SEC_USER_AGENT` outside Git,
-run `collect-edge-observed-sp500-memberships` during a weekday, strictly replay the
-published authority, and use that exact authority for the next prospective Alpaca poll.
-Do not infer prior-day weekday eligibility or run A5.2 until the newly observed
-prospective horizon meets the existing capacity floors.
+Exact next action: continue the preregistered prospective collection horizon. Each
+weekday poll requires a freshly collected and strictly replayed observed membership
+authority within the configured freshness window. Consolidate polls through the
+existing generation publisher and rerun the A5.1 capacity audit only after the horizon
+can meet 1,000 unique episodes, 200 securities, 120 fit sessions, and the frozen
+validation-scope floors. Do not run A5.2 or open A6 before that audit passes.
 
 ## Source Boundary
 
