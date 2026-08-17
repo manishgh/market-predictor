@@ -111,7 +111,7 @@ drawdown, turnover, capacity, and coverage remain co-equal promotion gates.
 | A2 | Build the technical swing baseline | Completed |
 | A3 | Build catalyst-driven swing specialists | Completed; no candidate passed |
 | A4 | Build the technical intraday baseline | Completed; both A4.4 hypotheses rejected |
-| A5 | Build catalyst-driven intraday specialists | A5.1 blocked; prospective analyst-event horizon in progress |
+| A5 | Build catalyst-driven intraday specialists | A5.1 blocked; prospective analyst-event horizon complete; SIP sessions next |
 | A6 | Run locked evaluation and promote qualified models | Not started |
 
 ### A0 - Restore Research Integrity (`completed`)
@@ -747,7 +747,7 @@ authority passes attachment, timing, coverage, and replay checks.
      working memory was 0.379 GiB. A5.2 remains prohibited until the prospective
      horizon satisfies the frozen capacity floors.
 
-5. **A5.1b - Publish the prospective analyst-event horizon (`in_progress`).**
+5. **A5.1b - Publish the prospective analyst-event horizon (`completed`).**
    Aggregate one or more strictly replayed prospective broker-action generations into
    one immutable, append-only source-capacity authority. Classify each observed
    revision with the existing frozen issuer-event policy, admit only exact-identity
@@ -788,6 +788,27 @@ authority passes attachment, timing, coverage, and replay checks.
    tracked tests, Ruff, strict mypy, compileall, and strict replay of the real horizon.
    Rollback is deletion of only the new command/module/tests and newly published
    horizon; all parent polls and generations remain immutable.
+
+   Implementation result:
+
+   - Commit `fe2b4c9` adds one research-only publisher and strict loader for multiple
+     chronological prospective generations. It binds every parent generation, poll,
+     membership authority, security namespace, registry, preflight policy, and event
+     classifier; preserves revisions; counts provider-event/security episodes; and
+     keeps training, serving, and future-holdout access false.
+   - Corrected real authority
+     `data/research/prospective_analyst_revision_horizon_20260817_v2` strictly replays
+     536 revisions from 248 provider events and two polls. Only three events qualify as
+     causal exact-identity analyst episodes: AMCR, HBAN, and WDAY. Eligible-security
+     count is three and source capacity remains `blocked`.
+   - Every coverage row is bound to that poll's exact security identity. All persisted
+     timestamps use one deterministic UTC dtype. The consolidated reviewer reproduced
+     and closed a Parquet round-trip defect in mixed null/non-null previous-poll times;
+     the chained-poll regression and real v2 replay now pass.
+   - Peak publication memory was 0.478 GiB. Final verification passed 1,431 tests with
+     two skipped, tracked Ruff, strict mypy across 229 source files, compileall, focused
+     causal/tamper tests, and independent reviewer verification. No model was trained
+     and A5.2 remains prohibited.
 
 6. **A5.1c - Build prospective SIP sessions and mature outcomes (`not_started`).**
    After A5.1b closes, freeze a separate append-only authority for future SIP bars,

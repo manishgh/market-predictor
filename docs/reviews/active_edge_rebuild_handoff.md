@@ -2,13 +2,13 @@
 
 Status: active
 
-Last updated: 2026-08-17
+Last updated: 2026-08-18
 
 Repository: `C:\project\market-predictor`
 
 Branch: `er-intraday-refactoring`
 
-Last completed implementation commit: `a7fe60e` (`Harden observed S&P identity replay`)
+Last completed implementation commit: `fe2b4c9` (`Add prospective analyst event horizon`)
 
 ## Purpose
 
@@ -20,8 +20,10 @@ are complete. Both A4.4 hypotheses were rejected. A5.1 is also complete and bloc
 the available event history is retrospective and exact security identity overlap is
 too small. The August 15 membership extension, Sunday poll, real August 17 observed
 membership authority, and following weekday Alpaca poll are complete and strictly
-replay. The prospective horizon still does not satisfy the frozen A5.1 capacity floors.
-Do not train A5.2, open a locked test, or claim model quality.
+replay. The classified prospective analyst-event horizon is also complete: only three
+of 248 raw provider events qualify as exact causal analyst episodes. The next bounded
+checkpoint is prospective SIP session, feature, and outcome collection. Do not train
+A5.2, open a locked test, or claim model quality.
 
 This repository produces prediction intelligence and abstention. Alerts, orders,
 positions, portfolio risk, and execution remain in `trading_flow`.
@@ -123,9 +125,9 @@ specialists; A6 performs locked evaluation and promotion.
   1.954 GiB recorded peak. Exact ticker and exact prediction timestamp are required;
   conflicting CIKs fail closed. Every exclusion is persisted in
   `identity_alignment_audit.parquet`.
-- Repository suite: 1,417 passed and 2 skipped after the observed-authority review.
-- Tracked Ruff, strict mypy across 228 source files, compileall, and final observed
-  membership plus prospective-poll strict replay pass.
+- Repository suite: 1,431 passed and 2 skipped after the A5.1b horizon review.
+- Tracked Ruff, strict mypy across 229 source files, compileall, and final observed
+  membership, prospective poll, and classified horizon strict replay pass.
 - Coordinated request, feature, all-profile label, dtype, partition, global identity,
   source-coverage, causal-window, and governance-hash poison tests pass.
 - The real materialization and event publication remained below the 5 GiB limit;
@@ -138,7 +140,7 @@ specialists; A6 performs locked evaluation and promotion.
 | Swing baseline | A2 trainer complete; prior candidates rejected; no new run or promotion | Preserve the frozen technical contract until a governed training run is approved |
 | Swing event-driven | Rating-change and coverage specialists trained in development; all rejected | Preserve rejection evidence; do not open locked test or serve |
 | Intraday baseline | V2 rejected; V3 invalid; A4.4 continuation and reversion both rejected | Preserve evidence; no serving or future-holdout access |
-| Intraday event-driven | A5.1 blocked; Sunday and weekday prospective polls strictly replay but do not meet capacity | Continue the preregistered prospective horizon; rerun the capacity audit before any A5.2 training |
+| Intraday event-driven | A5.1 blocked; A5.1b classifies three causal analyst episodes from the first two polls | Build append-only prospective SIP sessions and mature exact outcomes before any A5.2 training |
 
 `ROC-AUC >= 0.60` is a locked-test diagnostic, not a training objective or permission
 for repeated locked-test tuning. Promotion also requires ranking, calibration,
@@ -299,6 +301,28 @@ A4.2/A4.5 trade/quote work remains storage-blocked and must not be replaced with
   compilation, strict real-authority replay, and no remaining medium-or-higher review
   finding.
 
+## Prospective Analyst-Event Horizon
+
+- Implementation commit `fe2b4c9` adds
+  `publish-edge-prospective-analyst-revision-horizon`. It strictly replays and combines
+  chronological, non-overlapping prospective generations while preserving every
+  provider revision and earliest observed response time.
+- One episode is one Alpaca provider event plus exact security identity. Revisions do
+  not increase episode capacity. Provider timestamp anomalies, cross-generation
+  identity conflicts, non-analyst headlines, and events without a causal issuer anchor
+  remain retained but ineligible.
+- Authority `data/research/prospective_analyst_revision_horizon_20260817_v2` strictly
+  replays 536 revisions, 248 provider events, two polls, and three qualifying analyst
+  episodes across AMCR, HBAN, and WDAY. Source capacity is `blocked`; training,
+  serving, and future-holdout access are false.
+- Coverage rows carry the exact poll security identity. Publication/provider-update
+  times cannot replace first-observed availability. Peak publication memory was 0.478
+  GiB. A consolidated reviewer reproduced one timestamp dtype replay defect; the fix,
+  mixed-null chained-poll regression, real v2 replay, 1,431-test suite, Ruff, strict
+  mypy across 229 source files, and compileall all pass.
+- `data/research/prospective_analyst_revision_horizon_20260817_v1` predates the dtype
+  normalization and is superseded. Do not use it as current evidence.
+
 ## Weekday-Safe Observed S&P Membership Authority
 
 - Implementation commit `a5aae9b` is pushed. It adds the collection-only
@@ -331,12 +355,17 @@ A4.2/A4.5 trade/quote work remains storage-blocked and must not be replaced with
   tracked Ruff, strict mypy across 228 source files, compileall, two-reviewer
   remediation, and final strict artifact replay passed.
 
-Exact next action: continue the preregistered prospective collection horizon. Each
-weekday poll requires a freshly collected and strictly replayed observed membership
-authority within the configured freshness window. Consolidate polls through the
-existing generation publisher and rerun the A5.1 capacity audit only after the horizon
-can meet 1,000 unique episodes, 200 securities, 120 fit sessions, and the frozen
-validation-scope floors. Do not run A5.2 or open A6 before that audit passes.
+Exact next action: freeze and implement A5.1c, an append-only prospective SIP session
+authority. For each closed XNYS session, collect SIP five-minute bars for the complete
+point-in-time S&P cohort, reproduce the twenty-session activation screen, then retain
+SIP one-minute paths for selected stocks plus SPY, QQQ, and the sector ETFs. Reuse the
+exact A4.3 feature builders and publish labels separately only after each 30-minute
+path matures. Attach an analyst episode only when its observed availability is at or
+before the decision time; never attach backward. Keep each session immutable, below
+4 GiB, and outside training/serving until a new matched preflight meets 1,000 episodes,
+200 securities, 120 causally covered fit sessions, and all validation-scope floors.
+Continue fresh weekday membership observation and news polling in parallel. Do not
+run A5.2 or open A6 before the matched preflight passes.
 
 ## Source Boundary
 
