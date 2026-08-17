@@ -696,13 +696,13 @@ authority passes attachment, timing, coverage, and replay checks.
      1,404 passed and 2 skipped. Tracked Ruff, strict mypy across 228 source files,
      compileall, and consolidated independent review passed. Observed Python working
      memory remained below 0.3 GiB.
-   - A real weekday observation is still `environment_pending`: the local environment
-     does not define the SEC-compliant `SEC_USER_AGENT`, so the live command stopped
-     before making a network request. No synthetic identity response is accepted as
-     production evidence. Configure that value outside Git, collect and strictly
-     replay one real weekday authority, then use it for the next prospective Alpaca
-     poll. A5.2 remains prohibited until the prospective horizon satisfies its frozen
-     capacity floors.
+   - A real weekday observation is still `environment_pending`: the local `.env`
+     defines `SEC_USER_AGENT`, but its value fails the required real-organization and
+     monitored-email validation, so the live command stopped before making a network
+     request. No synthetic identity response is accepted as production evidence.
+     Correct that untracked local value, collect and strictly replay one real weekday
+     authority, then use it for the next prospective Alpaca poll. A5.2 remains
+     prohibited until the prospective horizon satisfies its frozen capacity floors.
 
 ### A6 - Run Locked Evaluation and Promote Qualified Models
 

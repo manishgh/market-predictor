@@ -320,10 +320,11 @@ A4.2/A4.5 trade/quote work remains storage-blocked and must not be replaced with
   finding.
 - Public offline collect/load verification used a deterministic 500-member anchor and
   5,000 SEC identities, including multi-page race and tamper failures. It is test
-  evidence only. No real weekday authority has been published because the local
-  environment does not define `SEC_USER_AGENT`; collection stopped before network
-  access. Keep live readiness `environment_pending` until that value is configured
-  outside Git and a real authority strictly replays.
+  evidence only. No real weekday authority has been published because the untracked
+  local `SEC_USER_AGENT` value fails the required real-organization and monitored-email
+  validation; collection stopped before network access. Keep live readiness
+  `environment_pending` until that local value is corrected and a real authority
+  strictly replays.
 
 - SEC evidence `data/raw/index_membership/sec_xom_identity_20260815_v1` verifies XOM
   as CIK `0000034088`. The reviewed anchor is
