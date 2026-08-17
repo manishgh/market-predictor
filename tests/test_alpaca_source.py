@@ -2,12 +2,37 @@ from __future__ import annotations
 
 import json
 import unittest
+from dataclasses import replace
 from datetime import UTC, date, datetime
+from hashlib import sha256
 from unittest.mock import Mock
+from urllib.parse import urlencode
 
 from market_predictor.config import Settings
 from market_predictor.sources.alpaca import AlpacaSource
 from market_predictor.sources.http import HttpByteResponse
+
+
+def _bars_url(
+    symbols: str,
+    *,
+    start: datetime,
+    end: datetime,
+    asof: date | None,
+) -> str:
+    params: dict[str, object] = {
+        "symbols": symbols,
+        "timeframe": "1Min",
+        "start": start.isoformat(),
+        "end": end.isoformat(),
+        "feed": "sip",
+        "limit": 10_000,
+        "adjustment": "all",
+        "sort": "asc",
+    }
+    if asof is not None:
+        params["asof"] = asof.isoformat()
+    return f"https://data.alpaca.markets/v2/stocks/bars?{urlencode(params)}"
 
 
 class AlpacaSourceTests(unittest.TestCase):
@@ -100,30 +125,53 @@ class AlpacaSourceTests(unittest.TestCase):
             Settings(ALPACA_API_KEY_ID="key", ALPACA_API_SECRET_KEY="secret")
         )
         client = Mock()
-        client.get_json_with_headers.return_value = (
-            {
-                "bars": {
-                    "AAPL": [
-                        {
-                            "t": "2026-07-01T13:30:00Z",
-                            "o": 100.0,
-                            "h": 101.0,
-                            "l": 99.0,
-                            "c": 100.5,
-                            "v": 1000,
-                        }
-                    ]
-                },
-                "next_page_token": "next",
+        payload = {
+            "bars": {
+                "AAPL": [
+                    {
+                        "t": "2026-07-01T13:30:00Z",
+                        "o": 100.0,
+                        "h": 101.0,
+                        "l": 99.0,
+                        "c": 100.5,
+                        "v": 1000,
+                    }
+                ]
             },
-            {"X-RateLimit-Remaining": "199"},
+            "next_page_token": "next",
+        }
+        body = json.dumps(payload, sort_keys=True).encode()
+        start = datetime(2026, 7, 1, 13, 30, tzinfo=UTC)
+        end = datetime(2026, 7, 1, 14, 30, tzinfo=UTC)
+        requested_url = _bars_url(
+            "AAPL,MSFT",
+            start=start,
+            end=end,
+            asof=date(2026, 7, 1),
+        )
+        retrieved_at = datetime(2026, 7, 1, 14, 31, tzinfo=UTC)
+        client.get_bytes_with_metadata.return_value = HttpByteResponse(
+            body=body,
+            requested_url=requested_url,
+            final_url=requested_url,
+            redirect_chain=(),
+            status_code=200,
+            retrieved_at_utc=retrieved_at,
+            content_type="application/json",
+            content_encoding=None,
+            etag=None,
+            last_modified=None,
+            body_length=len(body),
+            sha256=sha256(body).hexdigest(),
+            body_representation="http_entity_encoded",
+            safe_headers=(("x-ratelimit-remaining", "199"),),
         )
         source.client = client
 
         page = source.fetch_bars_page(
             ("AAPL", "MSFT"),
-            datetime(2026, 7, 1, 13, 30, tzinfo=UTC),
-            datetime(2026, 7, 1, 14, 30, tzinfo=UTC),
+            start,
+            end,
             timeframe="1Min",
             asof=date(2026, 7, 1),
         )
@@ -131,33 +179,145 @@ class AlpacaSourceTests(unittest.TestCase):
         self.assertEqual(page.next_page_token, "next")
         self.assertEqual(len(page.bars["AAPL"]), 1)
         self.assertEqual(
-            page.response_headers["X-RateLimit-Remaining"],
+            page.response_headers["x-ratelimit-remaining"],
             "199",
         )
-        params = client.get_json_with_headers.call_args.kwargs["params"]
+        self.assertEqual(page.raw_body, body)
+        self.assertEqual(page.requested_url, requested_url)
+        self.assertEqual(page.final_url, requested_url)
+        self.assertEqual(page.status_code, 200)
+        self.assertEqual(page.retrieved_at_utc, retrieved_at)
+        self.assertEqual(page.redirect_chain, ())
+        params = client.get_bytes_with_metadata.call_args.kwargs["params"]
         self.assertEqual(params["symbols"], "AAPL,MSFT")
         self.assertEqual(params["feed"], "sip")
         self.assertEqual(params["adjustment"], "all")
         self.assertEqual(params["sort"], "asc")
         self.assertEqual(params["asof"], "2026-07-01")
+        self.assertFalse(
+            client.get_bytes_with_metadata.call_args.kwargs["allow_redirects"]
+        )
 
     def test_multi_symbol_bar_page_rejects_unexpected_symbol(self) -> None:
         source = AlpacaSource(
             Settings(ALPACA_API_KEY_ID="key", ALPACA_API_SECRET_KEY="secret")
         )
         client = Mock()
-        client.get_json_with_headers.return_value = (
-            {"bars": {"TSLA": []}, "next_page_token": None},
-            {},
+        body = json.dumps(
+            {"bars": {"TSLA": []}, "next_page_token": None}
+        ).encode()
+        start = datetime(2026, 7, 1, 13, 30, tzinfo=UTC)
+        end = datetime(2026, 7, 1, 14, 30, tzinfo=UTC)
+        requested_url = _bars_url(
+            "AAPL", start=start, end=end, asof=date(2026, 7, 1)
+        )
+        client.get_bytes_with_metadata.return_value = HttpByteResponse(
+            body=body,
+            requested_url=requested_url,
+            final_url=requested_url,
+            redirect_chain=(),
+            status_code=200,
+            retrieved_at_utc=datetime(2026, 7, 1, 14, 31, tzinfo=UTC),
+            content_type="application/json",
+            content_encoding=None,
+            etag=None,
+            last_modified=None,
+            body_length=len(body),
+            sha256=sha256(body).hexdigest(),
+            body_representation="http_entity_encoded",
+            safe_headers=(),
         )
         source.client = client
 
         with self.assertRaisesRegex(RuntimeError, "unexpected"):
             source.fetch_bars_page(
                 ("AAPL",),
-                datetime(2026, 7, 1, 13, 30, tzinfo=UTC),
-                datetime(2026, 7, 1, 14, 30, tzinfo=UTC),
+                start,
+                end,
                 timeframe="1Min",
+                asof=date(2026, 7, 1),
+            )
+
+    def test_multi_symbol_bar_page_rejects_unverifiable_transport(self) -> None:
+        source = AlpacaSource(
+            Settings(ALPACA_API_KEY_ID="key", ALPACA_API_SECRET_KEY="secret")
+        )
+        body = json.dumps({"bars": {"AAPL": []}, "next_page_token": None}).encode()
+        start = datetime(2026, 7, 1, 13, 30, tzinfo=UTC)
+        end = datetime(2026, 7, 1, 14, 30, tzinfo=UTC)
+        url = _bars_url(
+            "AAPL",
+            start=start,
+            end=end,
+            asof=date(2026, 7, 1),
+        )
+        base = HttpByteResponse(
+            body=body,
+            requested_url=url,
+            final_url=url,
+            redirect_chain=(),
+            status_code=200,
+            retrieved_at_utc=datetime(2026, 7, 1, 14, 31, tzinfo=UTC),
+            content_type="application/json",
+            content_encoding=None,
+            etag=None,
+            last_modified=None,
+            body_length=len(body),
+            sha256=sha256(body).hexdigest(),
+            body_representation="http_entity_encoded",
+            safe_headers=(),
+        )
+        mutations = {
+            "status": replace(base, status_code=302),
+            "redirect": replace(
+                base,
+                final_url=f"{url}&redirected=true",
+                redirect_chain=(url, f"{url}&redirected=true"),
+            ),
+            "body_hash": replace(base, sha256="0" * 64),
+            "query": replace(
+                base,
+                requested_url=f"{url}&feed=iex",
+                final_url=f"{url}&feed=iex",
+            ),
+        }
+        for name, response in mutations.items():
+            with self.subTest(name=name):
+                client = Mock()
+                client.get_bytes_with_metadata.return_value = response
+                source.client = client
+                with self.assertRaisesRegex(RuntimeError, "transport|metadata|query"):
+                    source.fetch_bars_page(
+                        ("AAPL",),
+                        start,
+                        end,
+                        timeframe="1Min",
+                        asof=date(2026, 7, 1),
+                    )
+
+    def test_multi_symbol_bar_page_requires_asof_and_sip(self) -> None:
+        start = datetime(2026, 7, 1, 13, 30, tzinfo=UTC)
+        end = datetime(2026, 7, 1, 14, 30, tzinfo=UTC)
+        source = AlpacaSource(
+            Settings(ALPACA_API_KEY_ID="key", ALPACA_API_SECRET_KEY="secret")
+        )
+        with self.assertRaisesRegex(ValueError, "asof"):
+            source.fetch_bars_page(("AAPL",), start, end, timeframe="1Min")
+
+        iex_source = AlpacaSource(
+            Settings(
+                ALPACA_API_KEY_ID="key",
+                ALPACA_API_SECRET_KEY="secret",
+                ALPACA_STOCK_FEED="iex",
+            )
+        )
+        with self.assertRaisesRegex(ValueError, "SIP"):
+            iex_source.fetch_bars_page(
+                ("AAPL",),
+                start,
+                end,
+                timeframe="1Min",
+                asof=date(2026, 7, 1),
             )
 
     def test_trade_page_preserves_raw_market_identity_and_request_bounds(self) -> None:

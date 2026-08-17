@@ -3,7 +3,9 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
+from hashlib import sha256
 from typing import Any
+from urllib.parse import parse_qsl, urlsplit
 
 import pandas as pd
 
@@ -46,6 +48,12 @@ class AlpacaBarsPage:
     bars: dict[str, tuple[dict[str, Any], ...]]
     response_headers: dict[str, str]
     raw_payload: dict[str, Any] | None = None
+    raw_body: bytes | None = None
+    requested_url: str | None = None
+    status_code: int | None = None
+    retrieved_at_utc: datetime | None = None
+    final_url: str | None = None
+    redirect_chain: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -64,6 +72,28 @@ class AlpacaQuotesPage:
     quotes: dict[str, tuple[dict[str, Any], ...]]
     response_headers: dict[str, str]
     raw_payload: dict[str, Any]
+
+
+def _verify_bars_page_request_url(
+    requested_url: str,
+    *,
+    params: dict[str, Any],
+) -> None:
+    parsed = urlsplit(requested_url)
+    pairs = parse_qsl(parsed.query, keep_blank_values=True)
+    expected = {str(key): str(value) for key, value in params.items()}
+    if (
+        parsed.scheme.lower() != "https"
+        or parsed.hostname != "data.alpaca.markets"
+        or parsed.port not in (None, 443)
+        or parsed.username is not None
+        or parsed.password is not None
+        or parsed.path != "/v2/stocks/bars"
+        or parsed.fragment
+        or len(pairs) != len(expected)
+        or {key: value for key, value in pairs} != expected
+    ):
+        raise RuntimeError("Alpaca bars page request URL does not match the frozen query")
 
 
 class AlpacaSource:
@@ -492,6 +522,10 @@ class AlpacaSource:
             raise ValueError("Alpaca bars page start must precede end")
         if limit < 1 or limit > 10_000:
             raise ValueError("Alpaca bars page limit must be 1..10000")
+        if asof is None:
+            raise ValueError("Alpaca bars page requires an explicit point-in-time asof date")
+        if self.settings.alpaca_stock_feed.lower().strip() != "sip":
+            raise ValueError("Alpaca bars page requires the consolidated SIP feed")
         params: dict[str, Any] = {
             "symbols": ",".join(normalized),
             "timeframe": timeframe,
@@ -504,14 +538,39 @@ class AlpacaSource:
         }
         if page_token:
             params["page_token"] = page_token
-        if asof is not None:
-            params["asof"] = asof.isoformat()
-        payload, response_headers = self.client.get_json_with_headers(
+        params["asof"] = asof.isoformat()
+        response = self.client.get_bytes_with_metadata(
             self.bars_url,
             params=params,
             headers=self.headers,
             retries=retries,
+            maximum_body_bytes=32 * 1024 * 1024,
+            allow_redirects=False,
         )
+        if (
+            response.status_code != 200
+            or response.redirect_chain
+            or response.final_url != response.requested_url
+        ):
+            raise RuntimeError("Alpaca bars page transport must be a direct HTTP 200 response")
+        if (
+            response.retrieved_at_utc.tzinfo is None
+            or response.retrieved_at_utc.utcoffset() is None
+        ):
+            raise RuntimeError("Alpaca bars page retrieval time must be timezone-aware")
+        _verify_bars_page_request_url(response.requested_url, params=params)
+        if (response.content_type or "").split(";", maxsplit=1)[0].strip().lower() != "application/json":
+            raise RuntimeError("Alpaca bars page response must use application/json")
+        if (
+            response.body_length != len(response.body)
+            or response.sha256 != sha256(response.body).hexdigest()
+            or response.body_representation != "http_entity_encoded"
+        ):
+            raise RuntimeError("Alpaca bars page response body metadata is inconsistent")
+        try:
+            payload = json.loads(response.body.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise RuntimeError("Alpaca bars page response is not valid UTF-8 JSON") from exc
         if not isinstance(payload, dict):
             raise RuntimeError("Alpaca bars page response must be an object")
         raw_bars = payload.get("bars", {})
@@ -551,11 +610,17 @@ class AlpacaSource:
             bars=bars,
             response_headers={
                 str(key): str(value)
-                for key, value in response_headers.items()
+                for key, value in response.safe_headers
             },
             raw_payload={
                 str(key): value for key, value in payload.items()
             },
+            raw_body=response.body,
+            requested_url=response.requested_url,
+            status_code=response.status_code,
+            retrieved_at_utc=response.retrieved_at_utc,
+            final_url=response.final_url,
+            redirect_chain=response.redirect_chain,
         )
 
     def fetch_trades_page(

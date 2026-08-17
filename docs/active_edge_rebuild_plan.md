@@ -810,13 +810,38 @@ authority passes attachment, timing, coverage, and replay checks.
      causal/tamper tests, and independent reviewer verification. No model was trained
      and A5.2 remains prohibited.
 
-6. **A5.1c - Build prospective SIP sessions and mature outcomes (`not_started`).**
+6. **A5.1c - Build prospective SIP sessions and mature outcomes (`in_progress`).**
    After A5.1b closes, freeze a separate append-only authority for future SIP bars,
    A4.3-identical features, and exact 30-minute labels. It must collect the complete
    contemporaneous selection cohort plus SPY, QQQ, and sector ETFs, preserve the A4.3
    namespace, attach events only at or after observed availability, and define folds
    over the causally covered prospective cohort. A5.2 training remains prohibited
    until this authority and a rerun capacity audit pass all frozen floors.
+
+   Ordered implementation checkpoints:
+
+   1. **Exact SIP bar transport (`in_progress`).** Extend the canonical Alpaca bar-page
+      response with exact bounded HTTP bytes, requested/final URL, status, retrieval
+      time, safe headers, and redirect evidence. Requests must use SIP, `adjustment=all`,
+      ascending order, explicit `asof`, bounded pages, and no redirects. Preserve
+      backward compatibility only for test doubles; production collection must reject
+      pages without transport evidence.
+   2. **Immutable closed-session source authority (`not_started`).** Archive each raw
+      page and sidecar, replay canonical five-minute and selected one-minute bars, bind
+      the point-in-time membership authority, and support crash-safe resume.
+   3. **Causal feature authority (`not_started`).** Reproduce the twenty-session
+      activation cohort and reuse the exact A4.3 volume-bar and feature transformation.
+   4. **Mature outcome authority (`not_started`).** Publish exact stock/SPY/QQQ/sector
+      30-minute paths only after availability; keep labels separate from features.
+   5. **Matched prospective preflight (`not_started`).** Attach only observed analyst
+      episodes available by decision time and evaluate the frozen capacity floors.
+
+   The exact transport checkpoint changes only the Alpaca source contract and focused
+   tests. It does not collect data, alter historical authorities, build features or
+   labels, train models, or authorize serving. Exit gates are exact-byte and URL/query
+   tests, redirect/status/body-integrity failures, existing collector compatibility,
+   tracked tests, Ruff, strict mypy, and compileall. Rollback removes only the new bar
+   transport fields and byte-fetch path.
 
 ### A6 - Run Locked Evaluation and Promote Qualified Models
 
