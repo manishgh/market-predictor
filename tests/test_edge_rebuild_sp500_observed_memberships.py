@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import shutil
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from pathlib import Path
@@ -513,11 +514,19 @@ def test_extra_root_file_fails_raw_inventory(tmp_path: Path) -> None:
     }
     for name in expected_files:
         (tmp_path / name).write_bytes(b"")
-    observed._verify_unit_inventory(tmp_path, [])
+    observed._verify_unit_inventory(
+        tmp_path,
+        [],
+        request_sha256="r" * 64,
+    )
 
     (tmp_path / "unexpected.txt").write_text("poison", encoding="utf-8")
     with pytest.raises(DataReadinessError, match="root files differ"):
-        observed._verify_unit_inventory(tmp_path, [])
+        observed._verify_unit_inventory(
+            tmp_path,
+            [],
+            request_sha256="r" * 64,
+        )
 
 
 @dataclass(frozen=True)
@@ -560,7 +569,12 @@ class _ObservedMembershipHttpClient:
             redirect_chain=(),
             status_code=200,
             retrieved_at_utc=self.observed_at,
-            content_type="application/json" if url == observed.SEC_IDENTITY_URL else "text/html; charset=utf-8",
+            content_type=(
+                "application/json"
+                if url == observed.SEC_IDENTITY_URL
+                or url.startswith("https://data.sec.gov/submissions/")
+                else "text/html; charset=utf-8"
+            ),
             content_encoding=None,
             etag='"fixture"',
             last_modified=None,
@@ -795,6 +809,516 @@ def test_public_collect_load_round_trip_and_inventory_poison(
     nested_poison.write_bytes(b"poison")
     with pytest.raises(DataReadinessError, match="raw files differ from inventory"):
         observed.load_observed_sp500_membership_authority(output_root)
+
+
+def _sec_bulk_without(sec_body: bytes, ticker: str) -> bytes:
+    records = json.loads(sec_body)
+    matching = [
+        key
+        for key, record in records.items()
+        if str(record.get("ticker", "")).upper() == ticker
+    ]
+    assert len(matching) == 1
+    del records[matching[0]]
+    records["fallback-size-replacement"] = {
+        "ticker": "X9999",
+        "cik_str": 9_999_999,
+    }
+    assert len(records) == 5_000
+    return json.dumps(records).encode()
+
+
+def _collect_missing_bulk_identity_authority(
+    root: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    anchor_cik: int = 100_007,
+) -> tuple[Path, _ObservedMembershipHttpClient, dict[str, object], bytes]:
+    base, anchor_body, sec_body = _large_observed_membership_fixture()
+    base_root = root / "base"
+    archive_root = root / "archive"
+    event_root = root / "events"
+    output_root = root / "observed"
+    for parent in (base_root, archive_root, event_root):
+        parent.mkdir(parents=True)
+    closed_events = _ClosedEvents(
+        authority_sha256="a" * 64,
+        event_set_sha256="e" * 64,
+        changes=(),
+    )
+    (base_root / "_request.json").write_text(
+        json.dumps(
+            {
+                "parent_lineage": {
+                    "event_authority_sha256": closed_events.authority_sha256,
+                    "event_set_sha256": closed_events.event_set_sha256,
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    base_parent: dict[str, object] = {
+        "authority_sha256": "b" * 64,
+        "manifest_sha256": "m" * 64,
+        "membership_table_sha256": "t" * 64,
+        "universe_sha256": "u" * 64,
+        "cutoff_date": "2026-08-15",
+    }
+    monkeypatch.setattr(
+        observed,
+        "load_sp500_membership_authority_envelope",
+        lambda _: (base.copy(), dict(base_parent)),
+    )
+    monkeypatch.setattr(
+        observed,
+        "require_spglobal_event_reconstruction_ready",
+        lambda *_args, **_kwargs: closed_events,
+    )
+    fallback_cik = "0000100007"
+    fallback_url = observed.SEC_SUBMISSIONS_URL.format(cik=fallback_cik)
+    fallback_body = json.dumps(
+        {
+            "cik": fallback_cik,
+            "tickers": ["t007"],
+        }
+    ).encode()
+    client = _ObservedMembershipHttpClient(
+        {
+            observed.SP_GLOBAL_ARCHIVE_URL: _quiet_official_search_page(),
+            observed.ANCHOR_URL: _anchor_with_changed_cik(
+                anchor_body,
+                100_007,
+                anchor_cik,
+            ),
+            observed.SEC_IDENTITY_URL: _sec_bulk_without(sec_body, "T007"),
+            fallback_url: fallback_body,
+        },
+        datetime(2026, 8, 17, 15, tzinfo=UTC),
+    )
+    manifest = observed.collect_observed_sp500_membership_authority(
+        base_membership_directory=base_root,
+        closed_archive_directory=archive_root,
+        closed_event_directory=event_root,
+        output_directory=output_root,
+        client_factory=lambda: client,
+        config=observed.ObservedMembershipConfig(maximum_pages=1),
+    )
+    return output_root, client, manifest, fallback_body
+
+
+def _fallback_unit(manifest: dict[str, object]) -> dict[str, object]:
+    raw_units = manifest["raw_units"]
+    assert isinstance(raw_units, list)
+    fallbacks = [unit for unit in raw_units if unit.get("role") == "identity_fallback"]
+    assert len(fallbacks) == 1
+    return dict(fallbacks[0])
+
+
+def _rewrite_manifest_envelope(root: Path, manifest: dict[str, object]) -> None:
+    observed._atomic_json(root / "_manifest.json", manifest)
+    observed._atomic_json(root / "_status.json", manifest)
+    authority = json.loads((root / "_authority.json").read_text(encoding="utf-8"))
+    authority["artifact_sha256"] = hashlib.sha256(
+        (root / "_manifest.json").read_bytes()
+    ).hexdigest()
+    observed._atomic_json(root / "_authority.json", authority)
+
+
+def _replace_retained_unit_body(
+    root: Path,
+    manifest: dict[str, object],
+    unit: dict[str, object],
+    body: bytes,
+) -> dict[str, object]:
+    old_path = root / str(unit["body_path"])
+    body_sha256 = hashlib.sha256(body).hexdigest()
+    new_relative_path = f"objects/{body_sha256}.bin"
+    new_path = root / new_relative_path
+    new_path.write_bytes(body)
+
+    updated = dict(unit)
+    updated["body_path"] = new_relative_path
+    updated["body_length"] = len(body)
+    updated["body_sha256"] = body_sha256
+    observed._atomic_json(
+        root / "units" / f"{updated['unit_id']}.json",
+        updated,
+    )
+    raw_units = manifest["raw_units"]
+    assert isinstance(raw_units, list)
+    manifest["raw_units"] = [
+        updated if value.get("unit_id") == updated["unit_id"] else value
+        for value in raw_units
+    ]
+    retained_paths = {
+        str(value["body_path"])
+        for value in manifest["raw_units"]
+        if isinstance(value, dict)
+    }
+    if old_path != new_path and old_path.relative_to(root).as_posix() not in retained_paths:
+        old_path.unlink()
+    manifest["raw_unit_set_sha256"] = observed._json_sha256(manifest["raw_units"])
+    _rewrite_manifest_envelope(root, manifest)
+    return updated
+
+
+def _replace_fallback_body(
+    root: Path,
+    manifest: dict[str, object],
+    payload: dict[str, object],
+) -> None:
+    unit = _fallback_unit(manifest)
+    body = json.dumps(payload).encode()
+    _replace_retained_unit_body(root, manifest, unit, body)
+
+
+def test_public_collect_and_load_retains_missing_bulk_identity_fallback(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    output_root, client, manifest, fallback_body = (
+        _collect_missing_bulk_identity_authority(tmp_path, monkeypatch)
+    )
+
+    authority = observed.load_observed_sp500_membership_authority(output_root)
+    fallback = _fallback_unit(manifest)
+    fallback_url = observed.SEC_SUBMISSIONS_URL.format(cik="0000100007")
+
+    assert manifest["sec_identity_count"] == 5_001
+    assert fallback["ticker"] == "T007"
+    assert fallback["cik"] == "0000100007"
+    assert fallback["requested_url"] == fallback_url
+    assert fallback["final_url"] == fallback_url
+    assert (output_root / str(fallback["body_path"])).read_bytes() == fallback_body
+    assert authority.memberships.loc[
+        authority.memberships["ticker"].eq("T007"),
+        "security_id",
+    ].item() == "cik:0000100007"
+    assert fallback_url in client.calls
+    assert client.allow_redirects_values == [False] * 5
+
+
+def test_public_collection_rejects_old_cik_fallback_for_changed_anchor_cik(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    with pytest.raises(
+        DataReadinessError,
+        match="SEC identity fallback anchor CIK conflicts for T007",
+    ):
+        _collect_missing_bulk_identity_authority(
+            tmp_path,
+            monkeypatch,
+            anchor_cik=700_007,
+        )
+
+
+def test_strict_replay_rejects_invalid_sec_fallback_inventory_and_identity(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    valid_root, _, valid_manifest, _ = _collect_missing_bulk_identity_authority(
+        tmp_path / "valid",
+        monkeypatch,
+    )
+
+    missing_root = tmp_path / "missing"
+    shutil.copytree(valid_root, missing_root)
+    missing_manifest = json.loads(
+        (missing_root / "_manifest.json").read_text(encoding="utf-8")
+    )
+    missing_unit = _fallback_unit(missing_manifest)
+    missing_manifest["raw_units"] = [
+        unit
+        for unit in missing_manifest["raw_units"]
+        if unit.get("role") != "identity_fallback"
+    ]
+    missing_manifest["raw_unit_set_sha256"] = observed._json_sha256(
+        missing_manifest["raw_units"]
+    )
+    (missing_root / "units" / f"{missing_unit['unit_id']}.json").unlink()
+    (missing_root / str(missing_unit["body_path"])).unlink()
+    _rewrite_manifest_envelope(missing_root, missing_manifest)
+    with pytest.raises(DataReadinessError, match="fallback inventory changed"):
+        observed.load_observed_sp500_membership_authority(missing_root)
+
+    extra_root = tmp_path / "extra"
+    shutil.copytree(valid_root, extra_root)
+    extra_manifest = json.loads(
+        (extra_root / "_manifest.json").read_text(encoding="utf-8")
+    )
+    extra_unit = _fallback_unit(extra_manifest)
+    duplicate = dict(extra_unit)
+    duplicate["unit_id"] = f"{extra_unit['unit_id']}-extra"
+    duplicate["ticker"] = "T008"
+    observed._atomic_json(
+        extra_root / "units" / f"{duplicate['unit_id']}.json",
+        duplicate,
+    )
+    extra_manifest["raw_units"].append(duplicate)
+    extra_manifest["raw_unit_set_sha256"] = observed._json_sha256(
+        extra_manifest["raw_units"]
+    )
+    _rewrite_manifest_envelope(extra_root, extra_manifest)
+    with pytest.raises(DataReadinessError, match="fallback inventory changed"):
+        observed.load_observed_sp500_membership_authority(extra_root)
+
+    tampered_root = tmp_path / "tampered"
+    shutil.copytree(valid_root, tampered_root)
+    tampered_unit = _fallback_unit(valid_manifest)
+    (tampered_root / str(tampered_unit["body_path"])).write_bytes(b"tampered")
+    with pytest.raises(DataReadinessError, match="response body changed"):
+        observed.load_observed_sp500_membership_authority(tampered_root)
+
+    conflicting_payloads = (
+        {"cik": "0000100008", "tickers": ["t007"]},
+        {"cik": "0000100007", "tickers": ["WRONG"]},
+    )
+    for number, payload in enumerate(conflicting_payloads):
+        conflict_root = tmp_path / f"conflict-{number}"
+        shutil.copytree(valid_root, conflict_root)
+        conflict_manifest = json.loads(
+            (conflict_root / "_manifest.json").read_text(encoding="utf-8")
+        )
+        _replace_fallback_body(conflict_root, conflict_manifest, payload)
+        with pytest.raises(
+            DataReadinessError,
+            match="does not verify ticker and CIK",
+        ):
+            observed.load_observed_sp500_membership_authority(conflict_root)
+
+
+@pytest.mark.parametrize(
+    ("field", "forged_value"),
+    (
+        ("schema", "edge_rebuild.sp500_observed_http_unit.forged"),
+        ("request_sha256", "0" * 64),
+        ("body_representation", "decoded_entity"),
+    ),
+)
+def test_strict_replay_rejects_forged_fallback_raw_envelope(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    field: str,
+    forged_value: str,
+) -> None:
+    output_root, _, manifest, _ = _collect_missing_bulk_identity_authority(
+        tmp_path,
+        monkeypatch,
+    )
+    fallback = _fallback_unit(manifest)
+    fallback[field] = forged_value
+    observed._atomic_json(
+        output_root / "units" / f"{fallback['unit_id']}.json",
+        fallback,
+    )
+    raw_units = manifest["raw_units"]
+    assert isinstance(raw_units, list)
+    manifest["raw_units"] = [
+        fallback if unit.get("role") == "identity_fallback" else unit
+        for unit in raw_units
+    ]
+    manifest["raw_unit_set_sha256"] = observed._json_sha256(manifest["raw_units"])
+    _rewrite_manifest_envelope(output_root, manifest)
+
+    with pytest.raises(DataReadinessError, match="raw envelope changed"):
+        observed.load_observed_sp500_membership_authority(output_root)
+
+
+def test_strict_replay_rejects_changed_canonical_membership_lineage(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    output_root, _, manifest, _ = _collect_missing_bulk_identity_authority(
+        tmp_path,
+        monkeypatch,
+    )
+    membership_path = output_root / observed.MEMBERSHIP_FILE
+    canonical_manifest_path = membership_path.with_suffix(
+        membership_path.suffix + ".manifest.json"
+    )
+    canonical_manifest = json.loads(
+        canonical_manifest_path.read_text(encoding="utf-8")
+    )
+    canonical_manifest["inputs"] = {
+        **canonical_manifest["inputs"],
+        "request_sha256": "0" * 64,
+    }
+    observed._atomic_json(canonical_manifest_path, canonical_manifest)
+    manifest["membership_manifest_sha256"] = hashlib.sha256(
+        canonical_manifest_path.read_bytes()
+    ).hexdigest()
+    _rewrite_manifest_envelope(output_root, manifest)
+
+    with pytest.raises(DataReadinessError, match="canonical lineage changed"):
+        observed.load_observed_sp500_membership_authority(output_root)
+
+
+def test_strict_replay_rejects_retained_old_cik_fallback_for_changed_anchor(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    output_root, _, manifest, fallback_body = (
+        _collect_missing_bulk_identity_authority(tmp_path, monkeypatch)
+    )
+    fallback = _fallback_unit(manifest)
+    assert fallback["cik"] == "0000100007"
+    assert json.loads(fallback_body)["tickers"] == ["t007"]
+
+    raw_units = manifest["raw_units"]
+    assert isinstance(raw_units, list)
+    anchors = [unit for unit in raw_units if unit.get("role") == "anchor"]
+    assert len(anchors) == 1
+    anchor = dict(anchors[0])
+    anchor_path = output_root / str(anchor["body_path"])
+    changed_body = _anchor_with_changed_cik(
+        anchor_path.read_bytes(),
+        100_007,
+        700_007,
+    )
+    _replace_retained_unit_body(output_root, manifest, anchor, changed_body)
+
+    with pytest.raises(
+        DataReadinessError,
+        match="SEC identity fallback anchor CIK conflicts for T007",
+    ):
+        observed.load_observed_sp500_membership_authority(output_root)
+
+
+def _sec_bulk_with_changed_cik(sec_body: bytes, ticker: str, cik: int) -> bytes:
+    records = json.loads(sec_body)
+    matching = [
+        record
+        for record in records.values()
+        if str(record.get("ticker", "")).upper() == ticker
+    ]
+    assert len(matching) == 1
+    matching[0]["cik_str"] = cik
+    return json.dumps(records).encode()
+
+
+def _anchor_with_changed_cik(anchor_body: bytes, old_cik: int, new_cik: int) -> bytes:
+    old_cell = f"<td>{old_cik:010d}</td>".encode()
+    new_cell = f"<td>{new_cik:010d}</td>".encode()
+    assert anchor_body.count(old_cell) == 1
+    return anchor_body.replace(old_cell, new_cell)
+
+
+def _collect_changed_bulk_identity_authority(
+    root: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    new_cik: int,
+) -> tuple[Path, pd.DataFrame, _ObservedMembershipHttpClient, dict[str, object]]:
+    base, anchor_body, sec_body = _large_observed_membership_fixture()
+    base_root = root / "base"
+    archive_root = root / "archive"
+    event_root = root / "events"
+    output_root = root / "observed"
+    for parent in (base_root, archive_root, event_root):
+        parent.mkdir(parents=True)
+    closed_events = _ClosedEvents(
+        authority_sha256="a" * 64,
+        event_set_sha256="e" * 64,
+        changes=(),
+    )
+    (base_root / "_request.json").write_text(
+        json.dumps(
+            {
+                "parent_lineage": {
+                    "event_authority_sha256": closed_events.authority_sha256,
+                    "event_set_sha256": closed_events.event_set_sha256,
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    base_parent: dict[str, object] = {
+        "authority_sha256": "b" * 64,
+        "manifest_sha256": "m" * 64,
+        "membership_table_sha256": "t" * 64,
+        "universe_sha256": "u" * 64,
+        "cutoff_date": "2026-08-15",
+    }
+    monkeypatch.setattr(
+        observed,
+        "load_sp500_membership_authority_envelope",
+        lambda _: (base.copy(), dict(base_parent)),
+    )
+    monkeypatch.setattr(
+        observed,
+        "require_spglobal_event_reconstruction_ready",
+        lambda *_args, **_kwargs: closed_events,
+    )
+    client = _ObservedMembershipHttpClient(
+        {
+            observed.SP_GLOBAL_ARCHIVE_URL: _quiet_official_search_page(),
+            observed.ANCHOR_URL: _anchor_with_changed_cik(
+                anchor_body,
+                100_007,
+                new_cik,
+            ),
+            observed.SEC_IDENTITY_URL: _sec_bulk_with_changed_cik(
+                sec_body,
+                "T007",
+                new_cik,
+            ),
+        },
+        datetime(2026, 8, 17, 15, tzinfo=UTC),
+    )
+    manifest = observed.collect_observed_sp500_membership_authority(
+        base_membership_directory=base_root,
+        closed_archive_directory=archive_root,
+        closed_event_directory=event_root,
+        output_directory=output_root,
+        client_factory=lambda: client,
+        config=observed.ObservedMembershipConfig(maximum_pages=1),
+    )
+    return output_root, base, client, manifest
+
+
+def test_public_collect_and_strict_replay_split_inherited_ticker_on_new_sec_cik(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    observed_at = pd.Timestamp("2026-08-17T15:00:00Z")
+    output_root, base, client, manifest = _collect_changed_bulk_identity_authority(
+        tmp_path,
+        monkeypatch,
+        new_cik=700_007,
+    )
+
+    authority = observed.load_observed_sp500_membership_authority(output_root)
+    histories = authority.memberships.loc[
+        authority.memberships["ticker"].eq("T007")
+    ].sort_values("effective_from_utc", kind="stable")
+    assert len(histories) == 2
+    old, new = list(histories.itertuples(index=False))
+    base_old = base.loc[base["ticker"].eq("T007")].iloc[0]
+
+    assert old.security_id == "cik:0000100007"
+    assert old.effective_from_utc == base_old["effective_from_utc"]
+    assert old.available_at_utc == base_old["available_at_utc"]
+    assert old.effective_to_utc == observed_at
+    assert new.security_id == "cik:0000700007"
+    assert new.effective_from_utc == observed_at
+    assert new.available_at_utc == observed_at
+    assert pd.isna(new.effective_to_utc)
+    assert old.effective_to_utc == new.effective_from_utc
+    assert manifest["effective_horizon_date"] == "2026-08-17"
+    assert client.allow_redirects_values == [False] * 4
+
+
+def test_public_collection_rejects_new_cik_already_owned_by_active_ticker(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    with pytest.raises(DataReadinessError, match="CIK|identity"):
+        _collect_changed_bulk_identity_authority(
+            tmp_path,
+            monkeypatch,
+            new_cik=100_008,
+        )
 
 
 def test_public_collection_rejects_change_on_second_confirmation_page(

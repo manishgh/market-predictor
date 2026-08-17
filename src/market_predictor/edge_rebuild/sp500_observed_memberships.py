@@ -51,12 +51,13 @@ from market_predictor.v3.universe import (
     parse_sp500_changes,
 )
 
-REQUEST_SCHEMA: Final = "edge_rebuild.sp500_observed_membership_request.v1"
-MANIFEST_SCHEMA: Final = "edge_rebuild.sp500_observed_membership_manifest.v1"
-AUTHORITY_SCHEMA: Final = "edge_rebuild.sp500_observed_membership_authority.v1"
+REQUEST_SCHEMA: Final = "edge_rebuild.sp500_observed_membership_request.v2"
+MANIFEST_SCHEMA: Final = "edge_rebuild.sp500_observed_membership_manifest.v2"
+AUTHORITY_SCHEMA: Final = "edge_rebuild.sp500_observed_membership_authority.v2"
 RAW_UNIT_SCHEMA: Final = "edge_rebuild.sp500_observed_http_unit.v1"
 ANCHOR_URL: Final = "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies"
 SEC_IDENTITY_URL: Final = "https://www.sec.gov/files/company_tickers.json"
+SEC_SUBMISSIONS_URL: Final = "https://data.sec.gov/submissions/CIK{cik}.json"
 MEMBERSHIP_FILE: Final = "memberships.parquet"
 ANCHOR_FILE: Final = "current_anchor.csv"
 EVENT_FILE: Final = "observed_events.json"
@@ -64,6 +65,10 @@ OUTCOME_FILE: Final = "release_outcomes.json"
 PENDING_FILE: Final = "pending_changes.json"
 NEW_YORK: Final = ZoneInfo("America/New_York")
 MAXIMUM_RESPONSE_BYTES: Final = 16 * 1024 * 1024
+MEMBERSHIP_SCHEMA_VERSION: Final = "market_data.v1"
+OBSERVED_AVAILABILITY_POLICY: Final = "observed"
+OFFICIAL_MEMBERSHIP_SOURCE: Final = "spglobal_official_point_in_time"
+OBSERVED_IDENTITY_SOURCE: Final = "spglobal_current_anchor_sec_identity"
 
 
 class BytesHttpClient(Protocol):
@@ -235,6 +240,20 @@ def _collect_locked(
         expected_host="www.sec.gov",
         exact_path="/files/company_tickers.json",
     )
+    anchor_source = _parse_anchor_source(output_directory, anchor_unit)
+    sec_identities = _parse_sec_identities(output_directory, identity_unit)
+    identity_fallback_units = _collect_identity_fallbacks(
+        client,
+        output_directory=output_directory,
+        requests=_required_identity_fallbacks(
+            base,
+            base_cutoff=base_cutoff,
+            anchor=anchor_source,
+            sec_identities=sec_identities,
+        ),
+        config=config,
+        request_sha256=request_sha256,
+    )
     release_confirmation_units = _collect_releases(
         client,
         output_directory=output_directory,
@@ -284,13 +303,19 @@ def _collect_locked(
         *release_units,
         anchor_unit,
         identity_unit,
+        *identity_fallback_units,
         *release_confirmation_units,
         *confirmation_pages,
     ]
     observed_at = max(_unit_time(unit) for unit in units)
     if any(_unit_time(unit) > observed_at for unit in units):
         raise DataReadinessError("observed membership response time is inconsistent")
-    anchor = _parse_anchor(output_directory, anchor_unit, identity_unit)
+    anchor = _parse_anchor(
+        output_directory,
+        anchor_unit,
+        identity_unit,
+        identity_fallback_units,
+    )
     observed_changes, release_outcomes = _parse_observed_changes(
         output_directory,
         release_units,
@@ -363,7 +388,7 @@ def _collect_locked(
         "pending_change_count": len(pending_changes),
         "next_pending_effective_at_utc": next_pending_effective_at,
         "anchor_constituent_count": len(anchor),
-        "sec_identity_count": len(_parse_sec_identities(output_directory, identity_unit)),
+        "sec_identity_count": len(sec_identities) + len(identity_fallback_units),
         "membership_intervals": len(memberships),
         "security_count": int(memberships["security_id"].nunique()),
         "ticker_count": int(memberships["ticker"].nunique()),
@@ -464,7 +489,11 @@ def load_observed_sp500_membership_authority(
     units = cast(list[dict[str, object]], units_value)
     if manifest.get("raw_unit_set_sha256") != _json_sha256(units):
         raise DataReadinessError("observed membership raw inventory hash changed")
-    _verify_unit_inventory(root, units)
+    _verify_unit_inventory(
+        root,
+        units,
+        request_sha256=request_sha256,
+    )
     search_units = [unit for unit in units if unit.get("role") == "search_page"]
     release_units = [unit for unit in units if unit.get("role") == "release"]
     release_confirmation_units = [
@@ -472,12 +501,25 @@ def load_observed_sp500_membership_authority(
     ]
     anchor_units = [unit for unit in units if unit.get("role") == "anchor"]
     identity_units = [unit for unit in units if unit.get("role") == "identity_anchor"]
+    identity_fallback_units = [
+        unit for unit in units if unit.get("role") == "identity_fallback"
+    ]
     confirmation_units = [unit for unit in units if unit.get("role") == "search_confirmation"]
+    recognized_units = (
+        len(search_units)
+        + len(release_units)
+        + len(release_confirmation_units)
+        + len(anchor_units)
+        + len(identity_units)
+        + len(identity_fallback_units)
+        + len(confirmation_units)
+    )
     if (
         len(anchor_units) != 1
         or len(identity_units) != 1
         or len(confirmation_units) != len(search_units)
         or not search_units
+        or recognized_units != len(units)
     ):
         raise DataReadinessError("observed membership raw roles are incomplete")
     announcements: list[SpGlobalAnnouncement] = []
@@ -539,7 +581,26 @@ def load_observed_sp500_membership_authority(
         }
     ):
         raise DataReadinessError("observed release confirmation does not replay")
-    anchor = _parse_anchor(root, anchor_units[0], identity_units[0])
+    anchor_source = _parse_anchor_source(root, anchor_units[0])
+    sec_identities = _parse_sec_identities(root, identity_units[0])
+    expected_fallbacks = _required_identity_fallbacks(
+        base,
+        base_cutoff=date.fromisoformat(str(request["closed_cutoff_date"])),
+        anchor=anchor_source,
+        sec_identities=sec_identities,
+    )
+    observed_fallbacks = sorted(
+        (str(unit.get("ticker", "")), str(unit.get("cik", "")))
+        for unit in identity_fallback_units
+    )
+    if observed_fallbacks != expected_fallbacks:
+        raise DataReadinessError("observed SEC identity fallback inventory changed")
+    anchor = _parse_anchor(
+        root,
+        anchor_units[0],
+        identity_units[0],
+        identity_fallback_units,
+    )
     observed_changes, release_outcomes = _parse_observed_changes(root, release_units)
     observed_at = max(_unit_time(unit) for unit in units)
     if manifest.get("observed_at_utc") != observed_at.isoformat():
@@ -577,11 +638,21 @@ def load_observed_sp500_membership_authority(
         manifest_path_for(membership_path)
     ):
         raise DataReadinessError("observed membership canonical manifest changed")
-    actual, _ = load_canonical_artifact(
+    actual, canonical_manifest = load_canonical_artifact(
         membership_path,
         expected_type="memberships",
         allow_research=True,
     )
+    expected_canonical_inputs = {
+        "request_sha256": request_sha256,
+        "base_membership_authority_sha256": str(base_parent["authority_sha256"]),
+        "observation_unit_set_sha256": _json_sha256(units),
+    }
+    if (
+        canonical_manifest.get("inputs") != expected_canonical_inputs
+        or canonical_manifest.get("production_ready") is not False
+    ):
+        raise DataReadinessError("observed membership canonical lineage changed")
     if _membership_records(actual) != _membership_records(expected):
         raise DataReadinessError("observed membership table does not replay")
     universe_sha256 = _membership_sha256(actual)
@@ -612,6 +683,9 @@ def load_observed_sp500_membership_authority(
         or int(manifest.get("security_count", -1)) != actual["security_id"].nunique()
         or int(manifest.get("ticker_count", -1)) != actual["ticker"].nunique()
         or int(manifest.get("pending_change_count", -1)) != len(pending_changes)
+        or int(manifest.get("anchor_constituent_count", -1)) != len(anchor)
+        or int(manifest.get("sec_identity_count", -1))
+        != len(sec_identities) + len(identity_fallback_units)
     ):
         raise DataReadinessError("observed membership semantic counts are invalid")
     verify_membership_namespace_extension(
@@ -738,6 +812,36 @@ def _collect_releases(
         unit["source_url"] = item.url
         unit["published_date"] = item.published_date.isoformat()
         unit["title"] = item.title
+        _rewrite_unit(output_directory, unit)
+        units.append(unit)
+    return units
+
+
+def _collect_identity_fallbacks(
+    client: BytesHttpClient,
+    *,
+    output_directory: Path,
+    requests: Sequence[tuple[str, str]],
+    config: ObservedMembershipConfig,
+    request_sha256: str,
+) -> list[dict[str, object]]:
+    units: list[dict[str, object]] = []
+    for ticker, cik in requests:
+        url = SEC_SUBMISSIONS_URL.format(cik=cik)
+        unit = _fetch_and_store(
+            client,
+            url=url,
+            params=None,
+            role="identity_fallback",
+            unit_id=f"sec-submission-{ticker}-{cik}",
+            output_directory=output_directory,
+            request_sha256=request_sha256,
+            config=config,
+            expected_host="data.sec.gov",
+            exact_path=f"/submissions/CIK{cik}.json",
+        )
+        unit["ticker"] = ticker
+        unit["cik"] = cik
         _rewrite_unit(output_directory, unit)
         units.append(unit)
     return units
@@ -885,6 +989,32 @@ def _parse_anchor(
     root: Path,
     unit: Mapping[str, object],
     identity_unit: Mapping[str, object],
+    identity_fallback_units: Sequence[Mapping[str, object]] = (),
+) -> pd.DataFrame:
+    anchor = _parse_anchor_source(root, unit)
+    sec_identities = _parse_sec_identities(root, identity_unit)
+    fallback_identities = _parse_identity_fallbacks(
+        root,
+        identity_fallback_units,
+    )
+    overlap = sorted(set(sec_identities).intersection(fallback_identities))
+    if overlap:
+        raise DataReadinessError(
+            f"SEC identity fallback duplicates bulk-map tickers: {overlap[:20]}"
+        )
+    sec_identities.update(fallback_identities)
+    missing_identities = sorted(set(anchor["ticker"]).difference(sec_identities))
+    if missing_identities:
+        raise DataReadinessError(
+            f"SEC identity anchor is missing S&P tickers: {missing_identities[:20]}"
+        )
+    anchor["cik"] = anchor["ticker"].map(sec_identities)
+    return anchor.sort_values("ticker", kind="stable").reset_index(drop=True)
+
+
+def _parse_anchor_source(
+    root: Path,
+    unit: Mapping[str, object],
 ) -> pd.DataFrame:
     body = _unit_body(root, unit)
     html = decode_spglobal_http_entity(body, str(unit.get("content_encoding") or ""))
@@ -925,13 +1055,6 @@ def _parse_anchor(
         raise DataReadinessError("independent S&P anchor has duplicate or empty identity")
     if bool((~anchor["cik"].str.fullmatch(r"\d{10}")).any()):
         raise DataReadinessError("independent S&P anchor CIK is invalid")
-    sec_identities = _parse_sec_identities(root, identity_unit)
-    missing_identities = sorted(set(anchor["ticker"]).difference(sec_identities))
-    if missing_identities:
-        raise DataReadinessError(
-            f"SEC identity anchor is missing S&P tickers: {missing_identities[:20]}"
-        )
-    anchor["cik"] = anchor["ticker"].map(sec_identities)
     return anchor.sort_values("ticker", kind="stable").reset_index(drop=True)
 
 
@@ -965,6 +1088,127 @@ def _parse_sec_identities(
         identities[ticker] = cik
     if len(identities) < 5_000:
         raise DataReadinessError("SEC company-ticker identity response is truncated")
+    return identities
+
+
+def _required_identity_fallbacks(
+    base: pd.DataFrame,
+    *,
+    base_cutoff: date,
+    anchor: pd.DataFrame,
+    sec_identities: Mapping[str, str],
+) -> list[tuple[str, str]]:
+    missing = sorted(set(anchor["ticker"].astype(str)).difference(sec_identities))
+    if not missing:
+        return []
+    required = {
+        "ticker",
+        "security_id",
+        "effective_from_utc",
+        "effective_to_utc",
+    }
+    if not required.issubset(base.columns):
+        raise DataReadinessError("base membership identity columns are incomplete")
+    data = base.copy()
+    data["effective_from_utc"] = pd.to_datetime(
+        data["effective_from_utc"],
+        utc=True,
+        errors="coerce",
+    )
+    data["effective_to_utc"] = pd.to_datetime(
+        data["effective_to_utc"],
+        utc=True,
+        errors="coerce",
+    )
+    if bool(data["effective_from_utc"].isna().any()):
+        raise DataReadinessError("base membership identity timestamps are invalid")
+    boundary = pd.Timestamp(base_cutoff, tz="UTC") + pd.Timedelta(days=1)
+    active = data[
+        data["effective_from_utc"].lt(boundary)
+        & (data["effective_to_utc"].isna() | data["effective_to_utc"].ge(boundary))
+    ]
+    anchor_index = anchor.set_index("ticker", drop=False).to_dict("index")
+    requests: list[tuple[str, str]] = []
+    for ticker in missing:
+        inherited = active[active["ticker"].astype(str).eq(ticker)]
+        inherited_ciks = {
+            cik
+            for cik in (
+                _security_cik(str(value)) for value in inherited["security_id"]
+            )
+            if cik is not None
+        }
+        if len(inherited_ciks) > 1:
+            raise DataReadinessError(
+                f"SEC identity fallback has ambiguous inherited CIK: {ticker}"
+            )
+        anchor_cik = str(anchor_index[ticker]["cik"])
+        if inherited_ciks:
+            candidate = next(iter(inherited_ciks))
+            if candidate != anchor_cik:
+                raise DataReadinessError(
+                    f"SEC identity fallback anchor CIK conflicts for {ticker}"
+                )
+        else:
+            candidate = anchor_cik
+        if not candidate.isdigit() or len(candidate) != 10:
+            raise DataReadinessError(
+                f"SEC identity fallback CIK is invalid: {ticker}"
+            )
+        requests.append((ticker, candidate))
+    return requests
+
+
+def _parse_identity_fallbacks(
+    root: Path,
+    units: Sequence[Mapping[str, object]],
+) -> dict[str, str]:
+    identities: dict[str, str] = {}
+    for unit in units:
+        ticker = normalized_ticker(str(unit.get("ticker", "")).replace("-", "."))
+        cik = str(unit.get("cik", ""))
+        expected_url = SEC_SUBMISSIONS_URL.format(cik=cik)
+        if (
+            unit.get("role") != "identity_fallback"
+            or unit.get("unit_id") != f"sec-submission-{ticker}-{cik}"
+            or unit.get("requested_url") != expected_url
+            or unit.get("final_url") != expected_url
+            or unit.get("redirect_chain") != []
+            or int(str(unit.get("status_code", -1))) != 200
+            or not cik.isdigit()
+            or len(cik) != 10
+        ):
+            raise DataReadinessError("SEC identity fallback response identity changed")
+        body = decode_spglobal_http_entity(
+            _unit_body(root, unit),
+            str(unit.get("content_encoding") or ""),
+            maximum_decoded_bytes=MAXIMUM_RESPONSE_BYTES,
+        )
+        try:
+            payload = json.loads(body.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise DataReadinessError("SEC identity fallback response is invalid") from exc
+        if not isinstance(payload, dict):
+            raise DataReadinessError("SEC identity fallback response is not an object")
+        response_cik = str(payload.get("cik", "")).strip().zfill(10)
+        response_tickers = payload.get("tickers")
+        if not isinstance(response_tickers, list) or not all(
+            isinstance(value, str) for value in response_tickers
+        ):
+            raise DataReadinessError("SEC identity fallback ticker inventory is invalid")
+        normalized_response_tickers = {
+            normalized_ticker(value.replace("-", ".")) for value in response_tickers
+        }
+        if response_cik != cik or ticker not in normalized_response_tickers:
+            raise DataReadinessError(
+                f"SEC identity fallback does not verify ticker and CIK: {ticker}"
+            )
+        existing = identities.get(ticker)
+        if existing is not None and existing != cik:
+            raise DataReadinessError(
+                f"SEC identity fallback is ambiguous: {ticker}"
+            )
+        identities[ticker] = cik
     return identities
 
 
@@ -1151,6 +1395,9 @@ def _extend_memberships(
                 "liquidity_bucket": "sp500_constituent",
                 "primary_benchmark": SECTOR_BENCHMARKS.get(sector, "SPY"),
                 "universe_snapshot_id": snapshot_id,
+                "source": OFFICIAL_MEMBERSHIP_SOURCE,
+                "availability_policy": OBSERVED_AVAILABILITY_POLICY,
+                "schema_version": MEMBERSHIP_SCHEMA_VERSION,
             }
             data = pd.concat([data, pd.DataFrame([row])], ignore_index=True)
             active_index[item.ticker] = len(data) - 1
@@ -1161,11 +1408,59 @@ def _extend_memberships(
         missing = sorted(anchor_tickers.difference(active_tickers))
         extra = sorted(active_tickers.difference(anchor_tickers))
         raise DataReadinessError(f"observed S&P state differs from independent anchor: missing={missing[:20]} extra={extra[:20]}")
+    active_cik_owners: dict[str, set[str]] = {}
     for ticker, row_index in active_index.items():
+        cik = _security_cik(str(data.loc[row_index, "security_id"]))
+        if cik is not None:
+            active_cik_owners.setdefault(cik, set()).add(ticker)
+    for ticker, row_index in list(active_index.items()):
         expected_cik = str(anchor_index[ticker]["cik"])
         actual_cik = _security_cik(str(data.loc[row_index, "security_id"]))
-        if actual_cik != expected_cik:
-            raise DataReadinessError(f"observed S&P anchor CIK conflicts for {ticker}")
+        if actual_cik == expected_cik:
+            continue
+        if actual_cik is None:
+            raise DataReadinessError(
+                f"observed S&P inherited identity has no CIK for {ticker}"
+            )
+        conflicting_owners = active_cik_owners.get(expected_cik, set()).difference(
+            {ticker}
+        )
+        if conflicting_owners:
+            raise DataReadinessError(
+                f"observed S&P successor CIK is already active for {ticker}"
+            )
+        identities = cik_identities.get(expected_cik, set())
+        if len(identities) > 1:
+            raise DataReadinessError(
+                f"observed S&P successor CIK identity is ambiguous for {ticker}"
+            )
+        anchor_row = anchor_index[ticker]
+        security_id = next(iter(identities), f"cik:{expected_cik}")
+        data.loc[row_index, "effective_to_utc"] = pd.Timestamp(observed_at)
+        successor = {
+            "ticker": ticker,
+            "security_id": security_id,
+            "effective_from_utc": pd.Timestamp(observed_at),
+            "effective_to_utc": pd.NaT,
+            "available_at_utc": pd.Timestamp(observed_at),
+            "sector": str(anchor_row["sector"]),
+            "industry": str(anchor_row["industry"]),
+            "market_cap_bucket": "large_cap_sp500",
+            "liquidity_bucket": "sp500_constituent",
+            "primary_benchmark": SECTOR_BENCHMARKS.get(
+                str(anchor_row["sector"]),
+                "SPY",
+            ),
+            "universe_snapshot_id": snapshot_id,
+            "source": OBSERVED_IDENTITY_SOURCE,
+            "availability_policy": OBSERVED_AVAILABILITY_POLICY,
+            "schema_version": MEMBERSHIP_SCHEMA_VERSION,
+        }
+        data = pd.concat([data, pd.DataFrame([successor])], ignore_index=True)
+        active_index[ticker] = len(data) - 1
+        active_cik_owners.get(actual_cik, set()).discard(ticker)
+        active_cik_owners.setdefault(expected_cik, set()).add(ticker)
+        cik_identities.setdefault(expected_cik, set()).add(security_id)
     data["universe_snapshot_id"] = snapshot_id
     return data.sort_values(
         ["ticker", "effective_from_utc", "security_id"],
@@ -1176,6 +1471,8 @@ def _extend_memberships(
 def _verify_unit_inventory(
     root: Path,
     units: Sequence[Mapping[str, object]],
+    *,
+    request_sha256: str,
 ) -> None:
     allowed_root = {
         "_request.json",
@@ -1221,6 +1518,16 @@ def _verify_unit_inventory(
     ):
         raise DataReadinessError("observed membership raw files differ from inventory")
     for expected in units:
+        body_sha256 = str(expected.get("body_sha256", ""))
+        if (
+            expected.get("schema") != RAW_UNIT_SCHEMA
+            or expected.get("request_sha256") != request_sha256
+            or expected.get("body_representation") != "http_entity_encoded"
+            or len(body_sha256) != 64
+            or any(character not in "0123456789abcdef" for character in body_sha256)
+            or expected.get("body_path") != f"objects/{body_sha256}.bin"
+        ):
+            raise DataReadinessError("observed membership raw envelope changed")
         actual = _json_object(root / "units" / f"{expected['unit_id']}.json")
         if actual != expected:
             raise DataReadinessError("observed membership raw sidecar changed")
