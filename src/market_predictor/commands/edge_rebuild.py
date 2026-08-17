@@ -87,6 +87,9 @@ from market_predictor.edge_rebuild.issuer_event_precision_audit import (
 from market_predictor.edge_rebuild.one_minute_coverage import (
     publish_selected_session_one_minute_coverage,
 )
+from market_predictor.edge_rebuild.prospective_analyst_revision_horizon import (
+    publish_prospective_analyst_revision_horizon,
+)
 from market_predictor.edge_rebuild.prospective_broker_actions import (
     collect_prospective_broker_action_poll,
     publish_prospective_broker_action_generation,
@@ -728,6 +731,41 @@ def register_edge_rebuild_commands(app: typer.Typer, console: Any) -> None:
                 "production_identity_revisions": result["production_identity_revision_count"],
                 "training_eligible": result["training_eligible"],
                 "directory": str(out_dir),
+            }
+        )
+
+    @app.command("publish-edge-prospective-analyst-revision-horizon")
+    @serialized_heavy_job("publish-edge-prospective-analyst-revision-horizon")
+    def publish_edge_prospective_analyst_revision_horizon(
+        generations: list[Path] = typer.Option(
+            ...,
+            "--generation",
+            help="Completed prospective generation directory; repeat chronologically.",
+        ),
+        out_dir: Path = typer.Option(
+            ...,
+            help="New immutable classified analyst-event horizon directory.",
+        ),
+        policy: Path = typer.Option(
+            Path("configs/edge_rebuild_intraday_event_preflight.toml"),
+        ),
+    ) -> None:
+        """Publish source-side analyst-event capacity without training a model."""
+
+        result = publish_prospective_analyst_revision_horizon(
+            generation_directories=generations,
+            output_directory=out_dir,
+            preflight_policy_path=policy,
+        )
+        console.print(
+            {
+                "status": result.manifest["status"],
+                "polls": result.manifest["poll_count"],
+                "classified_revisions": result.manifest["classified_revision_count"],
+                "analyst_episodes": result.manifest["analyst_episode_count"],
+                "source_capacity_status": result.manifest["source_capacity_status"],
+                "training_eligible": False,
+                "directory": str(result.directory),
             }
         )
 

@@ -96,6 +96,7 @@
     "publish-edge-global-event-authority",
     "publish-edge-issuer-event-family-authority",
     "publish-edge-issuer-event-precision-sample",
+    "publish-edge-prospective-analyst-revision-horizon",
     "publish-edge-prospective-broker-action-generation",
     "publish-edge-rebuild-intraday-bar-dataset",
     "publish-edge-rebuild-intraday-event-preflight",

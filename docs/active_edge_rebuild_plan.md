@@ -111,7 +111,7 @@ drawdown, turnover, capacity, and coverage remain co-equal promotion gates.
 | A2 | Build the technical swing baseline | Completed |
 | A3 | Build catalyst-driven swing specialists | Completed; no candidate passed |
 | A4 | Build the technical intraday baseline | Completed; both A4.4 hypotheses rejected |
-| A5 | Build catalyst-driven intraday specialists | A5.1 blocked; weekday-safe S&P observation authority in progress |
+| A5 | Build catalyst-driven intraday specialists | A5.1 blocked; prospective analyst-event horizon in progress |
 | A6 | Run locked evaluation and promote qualified models | Not started |
 
 ### A0 - Restore Research Integrity (`completed`)
@@ -746,6 +746,56 @@ authority passes attachment, timing, coverage, and replay checks.
      compileall, two-reviewer remediation, and final artifact replay passed. Peak poll
      working memory was 0.379 GiB. A5.2 remains prohibited until the prospective
      horizon satisfies the frozen capacity floors.
+
+5. **A5.1b - Publish the prospective analyst-event horizon (`in_progress`).**
+   Aggregate one or more strictly replayed prospective broker-action generations into
+   one immutable, append-only source-capacity authority. Classify each observed
+   revision with the existing frozen issuer-event policy, admit only exact-identity
+   Alpaca `analyst_revision` events, preserve every revision, and count one episode per
+   provider event and security. Revisions must never inflate episode capacity.
+
+   Frozen scope and invariants:
+
+   - Each parent generation, poll, membership authority, A4.3 namespace, and registry
+     identity must strictly replay. Duplicate or overlapping polls, reversed cutoffs,
+     broken parent chains, namespace changes, and cross-generation security-identity
+     conflicts fail closed.
+   - First-seen availability is the earliest retained provider-response observation.
+     Publication or provider-update timestamps cannot replace or backdate it.
+     Production availability is the later of first-seen and first exact-identity
+     eligibility.
+   - Issuer-company classification anchors come only from the strictly replayed
+     membership authority observed before the corresponding poll. A revision without a
+     causal issuer-company or explicit ticker anchor may remain retained but cannot be
+     admitted as an analyst episode.
+   - Publish classified revisions, admitted episodes, collection coverage, and a
+     source-capacity audit with exact content hashes and strict replay. Processing must
+     remain below 4 GiB and accept multiple non-overlapping generations so the existing
+     60-poll per-generation bound remains intact.
+   - The two-poll generation
+     `data/research/prospective_broker_actions_generation_20260817_v1` is valid initial
+     evidence: 536 revisions, 248 provider events, 530 exact-identity revisions, and
+     184 exact-identity securities. These are raw observations, not yet classified
+     analyst episodes and not training rows.
+   - Training, serving, model fitting, historical timestamp repair, prospective bar
+     collection, feature construction, label maturation, alerts, and orders are out of
+     scope. The authority always records `training_eligible=false`,
+     `serving_eligible=false`, and `future_holdout_opened=false`.
+
+   Exit gates: deterministic strict replay; duplicate/overlap, parent-chain, identity,
+   revision, timestamp-poison, issuer-attribution, artifact-tamper, extra-file,
+   path-overlap, deterministic-order, and memory tests; one consolidated review; full
+   tracked tests, Ruff, strict mypy, compileall, and strict replay of the real horizon.
+   Rollback is deletion of only the new command/module/tests and newly published
+   horizon; all parent polls and generations remain immutable.
+
+6. **A5.1c - Build prospective SIP sessions and mature outcomes (`not_started`).**
+   After A5.1b closes, freeze a separate append-only authority for future SIP bars,
+   A4.3-identical features, and exact 30-minute labels. It must collect the complete
+   contemporaneous selection cohort plus SPY, QQQ, and sector ETFs, preserve the A4.3
+   namespace, attach events only at or after observed availability, and define folds
+   over the causally covered prospective cohort. A5.2 training remains prohibited
+   until this authority and a rerun capacity audit pass all frozen floors.
 
 ### A6 - Run Locked Evaluation and Promote Qualified Models
 
