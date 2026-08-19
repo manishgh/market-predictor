@@ -8,7 +8,7 @@ Repository: `C:\project\market-predictor`
 
 Branch: `er-intraday-refactoring`
 
-Last completed implementation commit: `bf35a11` (`Build prospective closed-session SIP authority`)
+Last completed implementation commit: `6386cb4` (`Reconcile causal S&P ticker successors`)
 
 ## Purpose
 
@@ -23,10 +23,9 @@ membership authority, and following weekday Alpaca poll are complete and strictl
 replay. The classified prospective analyst-event horizon is also complete: only three
 of 248 raw provider events qualify as exact causal analyst episodes. The next bounded
 checkpoint is the first real immutable closed-session SIP source authority. Its exact
-HTTP transport and production collector are complete, but no real session parent has
-been published because collection must occur in a valid post-close window using a
-fresh pre-open membership observation. Do not train A5.2, open a locked test, or claim
-model quality.
+HTTP transport, production collector, and fresh pre-open membership parent are
+complete, but no real session parent has been published because the `2026-08-20`
+session is not closed. Do not train A5.2, open a locked test, or claim model quality.
 
 This repository produces prediction intelligence and abstention. Alerts, orders,
 positions, portfolio risk, and execution remain in `trading_flow`.
@@ -375,17 +374,23 @@ A4.2/A4.5 trade/quote work remains storage-blocked and must not be replaced with
   tracked Ruff, strict mypy across 228 source files, compileall, two-reviewer
   remediation, and final strict artifact replay passed.
 
-Implementation checkpoint `bf35a11` completes the production collector and strict
-replay contract for A5.1c source sessions. Final verification passed 1,453 tests with
-two skipped, tracked Ruff, strict mypy across 230 source files, compileall, and an
-independent review with no remaining high- or medium-severity finding.
+Implementation checkpoint `6386cb4` closes the real `EQR` to `VMRK` ticker-successor
+gap without weakening identity or timing rules. Failed immutable attempt
+`data/raw/index_membership/sp500_observed_20260819T200115Z_v4` remains non-authoritative.
+Complete authority `data/raw/index_membership/sp500_observed_20260819T201500Z_v5`
+strictly replays 503 constituents at `2026-08-19T20:06:40.779393Z`; its manifest hash
+is `4a7b58f35aec5077ac7b82ce3c1a0a7675df1faedddf4390499b981d773635a6` and universe
+hash is `5b6e68d4844f9b0baa00e517bf0b515ddc1648a730776bf9dba201cf9082b1b3`.
+Final verification passed 1,457 tests with two skipped, tracked Ruff, strict mypy across
+230 source files, tracked compilation, and independent re-review with no remaining
+high- or medium-severity finding.
 
-Exact next action: after a session closes, publish a fresh observed S&P membership
-authority before the next target session opens. Then run
-`collect-edge-prospective-sip-session` after that target session closes plus 60 seconds
-and before the following session opens. The command must publish exact cohort
-five-minute SIP bars and exact SPY, QQQ, and 11 sector-ETF one-minute SIP bars with
-acceptable verified coverage. Repeat until twenty contiguous prior five-minute
+Exact next action: after the `2026-08-20` XNYS session closes plus 60 seconds, and
+before the `2026-08-21` open, run `collect-edge-prospective-sip-session` for session
+`2026-08-20` using membership parent
+`data/raw/index_membership/sp500_observed_20260819T201500Z_v5`. It must publish exact
+cohort five-minute SIP bars and exact SPY, QQQ, and 11 sector-ETF one-minute SIP bars
+with acceptable verified coverage. Repeat until twenty contiguous prior five-minute
 sessions exist under the same causal namespace. Only then build the causal feature
 authority, followed by the separate mature outcome authority and matched prospective
 preflight. Three implementation checkpoints remain after the first real source

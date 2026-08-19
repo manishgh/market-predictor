@@ -826,7 +826,8 @@ authority passes attachment, timing, coverage, and replay checks.
       ascending order, explicit `asof`, bounded pages, and no redirects. Preserve
       backward compatibility only for test doubles; production collection must reject
       pages without transport evidence.
-   2. **Immutable closed-session source authority (`in_progress`).** Publish one
+   2. **Immutable closed-session source authority
+      (`implementation_complete_data_pending`).** Publish one
       append-only child authority per fully closed XNYS session. The first phase archives
       exact Alpaca HTTP response bytes and sidecars for SIP five-minute bars covering the
       complete membership cohort observed before that session, plus SIP one-minute bars
@@ -900,6 +901,22 @@ authority passes attachment, timing, coverage, and replay checks.
      observation time only when their CIK is identical and uniquely matched. Different
      or ambiguous identities remain fatal. Exit evidence is a regression test, strict
      replay of the real observation, and the existing focused verification suite.
+   - Commit `6386cb4` implements the bounded reconciliation. It activates a ticker
+     successor only at observation time when one anchor-only ticker and one active-only
+     ticker share one unique CIK; a pending future event, ambiguous match, or different
+     CIK remains fatal. Public collection and strict replay regressions cover the path.
+   - Failed immutable attempt
+     `data/raw/index_membership/sp500_observed_20260819T200115Z_v4` remains failure
+     evidence. Complete authority
+     `data/raw/index_membership/sp500_observed_20260819T201500Z_v5` strictly replays 503
+     constituents at `2026-08-19T20:06:40.779393Z`, closes `EQR`, opens `VMRK` on the
+     same `cik:0000906107`, and publishes universe hash
+     `5b6e68d4844f9b0baa00e517bf0b515ddc1648a730776bf9dba201cf9082b1b3`.
+   - Final verification passed 1,457 tests with two skipped, tracked Ruff, strict mypy
+     across 230 source files, tracked compilation, and independent re-review with no
+     remaining high- or medium-severity finding. The first SIP session parent remains
+     pending the `2026-08-20` close; features, outcomes, preflight, training, and serving
+     remain prohibited.
 
 ### A6 - Run Locked Evaluation and Promote Qualified Models
 
