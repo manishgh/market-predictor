@@ -826,7 +826,8 @@ authority passes attachment, timing, coverage, and replay checks.
       ascending order, explicit `asof`, bounded pages, and no redirects. Preserve
       backward compatibility only for test doubles; production collection must reject
       pages without transport evidence.
-   2. **Immutable closed-session source authority (`in_progress`).** Publish one
+   2. **Immutable closed-session source authority
+      (`implementation_complete_data_pending`).** Publish one
       append-only child authority per fully closed XNYS session. The first phase archives
       exact Alpaca HTTP response bytes and sidecars for SIP five-minute bars covering the
       complete membership cohort observed before that session, plus SIP one-minute bars
@@ -872,6 +873,26 @@ authority passes attachment, timing, coverage, and replay checks.
      repository suite passed 1,433 tests with two skipped; tracked Ruff, strict mypy
      across 229 source files, compileall, and one consolidated independent review also
      passed. No market data was downloaded and no model or authority changed.
+
+   Closed-session source implementation result:
+
+   - Commit `bf35a11` adds the immutable prospective session parent and the
+     `collect-edge-prospective-sip-session` command. It collects exact point-in-time
+     cohort five-minute SIP bars and exact SPY, QQQ, and sector-ETF one-minute SIP bars
+     only after an XNYS session closes and before the next session opens.
+   - Strict replay binds exact provider bytes, transport sidecars, request identity,
+     membership lineage, exchange-calendar bounds, coverage, and child-authority
+     fingerprints. Benchmark gaps fail the source gate; stock gaps remain explicit and
+     may not exceed the frozen 5% whole-security exclusion ceiling. Resource policy is
+     capped at 4 GiB and two workers.
+   - Final verification passed 1,453 tests with two skipped, tracked Ruff, strict mypy
+     across 230 source files, compileall, and independent review with no remaining high-
+     or medium-severity finding.
+   - No real source parent has been published. Collection requires a fresh observed
+     membership authority after the preceding session close and before the target
+     session open, followed by collection after target close plus 60 seconds. A5.1c
+     remains open, and feature, outcome, preflight, training, and serving work remain
+     prohibited until their preceding authorities pass.
 
 ### A6 - Run Locked Evaluation and Promote Qualified Models
 

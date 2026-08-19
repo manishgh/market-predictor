@@ -2,13 +2,13 @@
 
 Status: active
 
-Last updated: 2026-08-18
+Last updated: 2026-08-19
 
 Repository: `C:\project\market-predictor`
 
 Branch: `er-intraday-refactoring`
 
-Last completed implementation commit: `c56843e` (`Capture exact Alpaca SIP bar transport`)
+Last completed implementation commit: `bf35a11` (`Build prospective closed-session SIP authority`)
 
 ## Purpose
 
@@ -22,8 +22,10 @@ too small. The August 15 membership extension, Sunday poll, real August 17 obser
 membership authority, and following weekday Alpaca poll are complete and strictly
 replay. The classified prospective analyst-event horizon is also complete: only three
 of 248 raw provider events qualify as exact causal analyst episodes. The next bounded
-checkpoint is the immutable closed-session SIP source authority; its exact HTTP
-transport prerequisite is complete. Do not train A5.2, open a locked test, or claim
+checkpoint is the first real immutable closed-session SIP source authority. Its exact
+HTTP transport and production collector are complete, but no real session parent has
+been published because collection must occur in a valid post-close window using a
+fresh pre-open membership observation. Do not train A5.2, open a locked test, or claim
 model quality.
 
 This repository produces prediction intelligence and abstention. Alerts, orders,
@@ -373,17 +375,22 @@ A4.2/A4.5 trade/quote work remains storage-blocked and must not be replaced with
   tracked Ruff, strict mypy across 228 source files, compileall, two-reviewer
   remediation, and final strict artifact replay passed.
 
-Exact next action: freeze and implement A5.1c, an append-only prospective SIP session
-authority. For each closed XNYS session, collect SIP five-minute bars for the complete
-point-in-time S&P cohort, reproduce the twenty-session activation screen, then retain
-SIP one-minute paths for selected stocks plus SPY, QQQ, and the sector ETFs. Reuse the
-exact A4.3 feature builders and publish labels separately only after each 30-minute
-path matures. Attach an analyst episode only when its observed availability is at or
-before the decision time; never attach backward. Keep each session immutable, below
-4 GiB, and outside training/serving until a new matched preflight meets 1,000 episodes,
-200 securities, 120 causally covered fit sessions, and all validation-scope floors.
-Continue fresh weekday membership observation and news polling in parallel. Do not
-run A5.2 or open A6 before the matched preflight passes.
+Implementation checkpoint `bf35a11` completes the production collector and strict
+replay contract for A5.1c source sessions. Final verification passed 1,453 tests with
+two skipped, tracked Ruff, strict mypy across 230 source files, compileall, and an
+independent review with no remaining high- or medium-severity finding.
+
+Exact next action: after a session closes, publish a fresh observed S&P membership
+authority before the next target session opens. Then run
+`collect-edge-prospective-sip-session` after that target session closes plus 60 seconds
+and before the following session opens. The command must publish exact cohort
+five-minute SIP bars and exact SPY, QQQ, and 11 sector-ETF one-minute SIP bars with
+acceptable verified coverage. Repeat until twenty contiguous prior five-minute
+sessions exist under the same causal namespace. Only then build the causal feature
+authority, followed by the separate mature outcome authority and matched prospective
+preflight. Three implementation checkpoints remain after the first real source
+authority: causal features, mature outcomes, and matched preflight. Do not run A5.2 or
+open A6 before the matched preflight passes.
 
 ## Source Boundary
 
