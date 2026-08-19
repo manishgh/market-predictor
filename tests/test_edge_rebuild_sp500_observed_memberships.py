@@ -57,6 +57,7 @@ def _anchor(*tickers: str) -> pd.DataFrame:
         "OLD": "0000000001",
         "KEEP": "0000000002",
         "NEW": "0000000003",
+        "RENAMED": "0000000001",
     }
     return pd.DataFrame(
         [
@@ -175,6 +176,60 @@ def test_closed_future_effective_event_applies_when_observation_reaches_it() -> 
     assert new["effective_from_utc"] == pd.Timestamp(effective_at)
     assert new["available_at_utc"] == pd.Timestamp(effective_at)
     assert new["security_id"] == "cik:0000000003"
+
+
+def test_anchor_reconciles_unique_same_cik_ticker_successor_at_observation() -> None:
+    observed_at = datetime(2026, 8, 19, 20, 1, 15, tzinfo=UTC)
+
+    result = observed._extend_memberships(
+        _base_memberships(),
+        base_cutoff=date(2026, 8, 15),
+        observed_at=observed_at,
+        closed_changes=(),
+        observed_changes=(),
+        anchor=_anchor("RENAMED", "KEEP"),
+    )
+
+    predecessor = result.loc[result["ticker"].eq("OLD")].iloc[-1]
+    successor = result.loc[result["ticker"].eq("RENAMED")].iloc[-1]
+    assert predecessor["effective_to_utc"] == pd.Timestamp(observed_at)
+    assert successor["security_id"] == predecessor["security_id"]
+    assert successor["effective_from_utc"] == pd.Timestamp(observed_at)
+    assert successor["available_at_utc"] == pd.Timestamp(observed_at)
+    assert pd.isna(successor["effective_to_utc"])
+    assert successor["source"] == observed.OBSERVED_IDENTITY_SOURCE
+
+
+def test_anchor_rejects_ticker_successor_with_different_cik() -> None:
+    renamed = _anchor("NEW", "KEEP")
+
+    with pytest.raises(DataReadinessError, match="state differs"):
+        observed._extend_memberships(
+            _base_memberships(),
+            base_cutoff=date(2026, 8, 15),
+            observed_at=datetime(2026, 8, 19, 20, 1, 15, tzinfo=UTC),
+            closed_changes=(),
+            observed_changes=(),
+            anchor=renamed,
+        )
+
+
+def test_anchor_does_not_activate_same_cik_successor_before_pending_event() -> None:
+    observed_at = datetime(2026, 8, 19, 20, 1, 15, tzinfo=UTC)
+    effective_at = datetime(2026, 8, 20, 13, 30, tzinfo=UTC)
+
+    with pytest.raises(DataReadinessError, match="state differs"):
+        observed._extend_memberships(
+            _base_memberships(),
+            base_cutoff=date(2026, 8, 15),
+            observed_at=observed_at,
+            closed_changes=(
+                _change("deletion", "OLD", effective_at),
+                _change("addition", "RENAMED", effective_at),
+            ),
+            observed_changes=(),
+            anchor=_anchor("RENAMED", "KEEP"),
+        )
 
 
 def test_future_effective_changes_remain_in_pending_inventory() -> None:
@@ -1204,13 +1259,54 @@ def _anchor_with_changed_cik(anchor_body: bytes, old_cik: int, new_cik: int) -> 
     return anchor_body.replace(old_cell, new_cell)
 
 
+def _sec_bulk_with_renamed_ticker(
+    sec_body: bytes,
+    old_ticker: str,
+    new_ticker: str,
+) -> bytes:
+    records = json.loads(sec_body)
+    matching = [
+        record
+        for record in records.values()
+        if str(record.get("ticker", "")).upper() == old_ticker
+    ]
+    assert len(matching) == 1
+    matching[0]["ticker"] = new_ticker
+    return json.dumps(records).encode()
+
+
+def _anchor_with_renamed_ticker(
+    anchor_body: bytes,
+    old_ticker: str,
+    new_ticker: str,
+) -> bytes:
+    old_cell = f"<td>{old_ticker}</td>".encode()
+    new_cell = f"<td>{new_ticker}</td>".encode()
+    assert anchor_body.count(old_cell) == 1
+    return anchor_body.replace(old_cell, new_cell)
+
+
 def _collect_changed_bulk_identity_authority(
     root: Path,
     monkeypatch: pytest.MonkeyPatch,
     *,
     new_cik: int,
+    renamed_ticker: str | None = None,
 ) -> tuple[Path, pd.DataFrame, _ObservedMembershipHttpClient, dict[str, object]]:
     base, anchor_body, sec_body = _large_observed_membership_fixture()
+    anchor_body = _anchor_with_changed_cik(anchor_body, 100_007, new_cik)
+    sec_body = _sec_bulk_with_changed_cik(sec_body, "T007", new_cik)
+    if renamed_ticker is not None:
+        anchor_body = _anchor_with_renamed_ticker(
+            anchor_body,
+            "T007",
+            renamed_ticker,
+        )
+        sec_body = _sec_bulk_with_renamed_ticker(
+            sec_body,
+            "T007",
+            renamed_ticker,
+        )
     base_root = root / "base"
     archive_root = root / "archive"
     event_root = root / "events"
@@ -1253,16 +1349,8 @@ def _collect_changed_bulk_identity_authority(
     client = _ObservedMembershipHttpClient(
         {
             observed.SP_GLOBAL_ARCHIVE_URL: _quiet_official_search_page(),
-            observed.ANCHOR_URL: _anchor_with_changed_cik(
-                anchor_body,
-                100_007,
-                new_cik,
-            ),
-            observed.SEC_IDENTITY_URL: _sec_bulk_with_changed_cik(
-                sec_body,
-                "T007",
-                new_cik,
-            ),
+            observed.ANCHOR_URL: anchor_body,
+            observed.SEC_IDENTITY_URL: sec_body,
         },
         datetime(2026, 8, 17, 15, tzinfo=UTC),
     )
@@ -1306,6 +1394,37 @@ def test_public_collect_and_strict_replay_split_inherited_ticker_on_new_sec_cik(
     assert pd.isna(new.effective_to_utc)
     assert old.effective_to_utc == new.effective_from_utc
     assert manifest["effective_horizon_date"] == "2026-08-17"
+    assert client.allow_redirects_values == [False] * 4
+
+
+def test_public_collect_and_strict_replay_same_cik_ticker_successor(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    observed_at = pd.Timestamp("2026-08-17T15:00:00Z")
+    output_root, base, client, manifest = _collect_changed_bulk_identity_authority(
+        tmp_path,
+        monkeypatch,
+        new_cik=100_007,
+        renamed_ticker="T007N",
+    )
+
+    authority = observed.load_observed_sp500_membership_authority(output_root)
+    predecessor = authority.memberships.loc[
+        authority.memberships["ticker"].eq("T007")
+    ].sort_values("effective_from_utc", kind="stable").iloc[-1]
+    successor = authority.memberships.loc[
+        authority.memberships["ticker"].eq("T007N")
+    ].iloc[-1]
+    base_predecessor = base.loc[base["ticker"].eq("T007")].iloc[0]
+
+    assert predecessor["security_id"] == base_predecessor["security_id"]
+    assert predecessor["effective_to_utc"] == observed_at
+    assert successor["security_id"] == predecessor["security_id"]
+    assert successor["effective_from_utc"] == observed_at
+    assert successor["available_at_utc"] == observed_at
+    assert successor["source"] == observed.OBSERVED_IDENTITY_SOURCE
+    assert manifest["anchor_constituent_count"] == 500
     assert client.allow_redirects_values == [False] * 4
 
 

@@ -826,8 +826,7 @@ authority passes attachment, timing, coverage, and replay checks.
       ascending order, explicit `asof`, bounded pages, and no redirects. Preserve
       backward compatibility only for test doubles; production collection must reject
       pages without transport evidence.
-   2. **Immutable closed-session source authority
-      (`implementation_complete_data_pending`).** Publish one
+   2. **Immutable closed-session source authority (`in_progress`).** Publish one
       append-only child authority per fully closed XNYS session. The first phase archives
       exact Alpaca HTTP response bytes and sidecars for SIP five-minute bars covering the
       complete membership cohort observed before that session, plus SIP one-minute bars
@@ -893,6 +892,14 @@ authority passes attachment, timing, coverage, and replay checks.
      session open, followed by collection after target close plus 60 seconds. A5.1c
      remains open, and feature, outcome, preflight, training, and serving work remain
      prohibited until their preceding authorities pass.
+   - The first post-close observation on `2026-08-19` failed closed because the
+     independent anchor contained `VMRK` while the active lineage contained `EQR`.
+     Retained official and SEC evidence identifies this as a ticker successor on the
+     same CIK, not an addition/deletion. This reopens only observed-membership anchor
+     reconciliation: one anchor-only ticker may replace one active-only ticker at the
+     observation time only when their CIK is identical and uniquely matched. Different
+     or ambiguous identities remain fatal. Exit evidence is a regression test, strict
+     replay of the real observation, and the existing focused verification suite.
 
 ### A6 - Run Locked Evaluation and Promote Qualified Models
 

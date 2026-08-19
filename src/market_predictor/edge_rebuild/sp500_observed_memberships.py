@@ -1404,6 +1404,58 @@ def _extend_memberships(
             cik_identities.setdefault(cik, set()).add(security_id)
     active_tickers = set(active_index)
     anchor_tickers = set(anchor_index)
+    missing_tickers = anchor_tickers.difference(active_tickers)
+    extra_tickers = active_tickers.difference(anchor_tickers)
+    pending_event_tickers = {
+        item.ticker
+        for item in (*closed_changes, *observed_changes)
+        if item.effective_at_utc > observed_at
+    }
+    missing_by_cik: dict[str, list[str]] = {}
+    extra_by_cik: dict[str, list[str]] = {}
+    for ticker in missing_tickers:
+        missing_by_cik.setdefault(str(anchor_index[ticker]["cik"]), []).append(ticker)
+    for ticker in extra_tickers:
+        cik = _security_cik(str(data.loc[active_index[ticker], "security_id"]))
+        if cik is not None:
+            extra_by_cik.setdefault(cik, []).append(ticker)
+    for cik in sorted(set(missing_by_cik).intersection(extra_by_cik)):
+        successors = missing_by_cik[cik]
+        predecessors = extra_by_cik[cik]
+        if len(successors) != 1 or len(predecessors) != 1:
+            continue
+        successor_ticker = successors[0]
+        predecessor_ticker = predecessors[0]
+        if {successor_ticker, predecessor_ticker}.intersection(
+            pending_event_tickers
+        ):
+            continue
+        predecessor_index = active_index.pop(predecessor_ticker)
+        security_id = str(data.loc[predecessor_index, "security_id"])
+        data.loc[predecessor_index, "effective_to_utc"] = pd.Timestamp(observed_at)
+        anchor_row = anchor_index[successor_ticker]
+        successor = {
+            "ticker": successor_ticker,
+            "security_id": security_id,
+            "effective_from_utc": pd.Timestamp(observed_at),
+            "effective_to_utc": pd.NaT,
+            "available_at_utc": pd.Timestamp(observed_at),
+            "sector": str(anchor_row["sector"]),
+            "industry": str(anchor_row["industry"]),
+            "market_cap_bucket": "large_cap_sp500",
+            "liquidity_bucket": "sp500_constituent",
+            "primary_benchmark": SECTOR_BENCHMARKS.get(
+                str(anchor_row["sector"]),
+                "SPY",
+            ),
+            "universe_snapshot_id": snapshot_id,
+            "source": OBSERVED_IDENTITY_SOURCE,
+            "availability_policy": OBSERVED_AVAILABILITY_POLICY,
+            "schema_version": MEMBERSHIP_SCHEMA_VERSION,
+        }
+        data = pd.concat([data, pd.DataFrame([successor])], ignore_index=True)
+        active_index[successor_ticker] = len(data) - 1
+    active_tickers = set(active_index)
     if active_tickers != anchor_tickers:
         missing = sorted(anchor_tickers.difference(active_tickers))
         extra = sorted(active_tickers.difference(anchor_tickers))
