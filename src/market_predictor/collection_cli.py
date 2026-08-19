@@ -15,6 +15,7 @@ COLLECTION_COMMANDS = frozenset(
         "collect-edge-live-global-context",
         "collect-edge-observed-sp500-memberships",
         "collect-edge-prospective-broker-actions",
+        "collect-edge-prospective-sip-session",
         "collect-edge-sec-filings",
         "collect-intraday-specialist-one-minute",
         "collect-market-context",

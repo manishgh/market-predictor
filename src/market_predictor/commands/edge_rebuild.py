@@ -94,6 +94,9 @@ from market_predictor.edge_rebuild.prospective_broker_actions import (
     collect_prospective_broker_action_poll,
     publish_prospective_broker_action_generation,
 )
+from market_predictor.edge_rebuild.prospective_sip_session import (
+    collect_prospective_sip_session,
+)
 from market_predictor.edge_rebuild.readiness import (
     run_edge_rebuild_readiness_audit,
 )
@@ -1379,6 +1382,59 @@ def register_edge_rebuild_commands(app: typer.Typer, console: Any) -> None:
                 "status": result["status"],
                 "completed_units": result["completed_units"],
                 "requested_units": result["requested_units"],
+            }
+        )
+
+    @app.command("collect-edge-prospective-sip-session")
+    @serialized_heavy_job("collect-edge-prospective-sip-session")
+    def collect_edge_prospective_sip_session(
+        session_date: str = typer.Option(
+            ...,
+            help="Fully closed XNYS session (YYYY-MM-DD).",
+        ),
+        membership_authority_dir: Path = typer.Option(
+            ...,
+            help="Observed S&P membership authority available before the session.",
+        ),
+        out_dir: Path = typer.Option(
+            ...,
+            help="New immutable prospective session authority directory.",
+        ),
+        five_minute_policy: Path = typer.Option(
+            Path("configs/edge_rebuild_intraday_history.toml"),
+        ),
+        benchmark_policy: Path = typer.Option(
+            Path("configs/edge_rebuild_selected_session_benchmarks.toml"),
+        ),
+        max_units: int | None = typer.Option(
+            None,
+            min=1,
+            help="Optional resumable unit limit for this invocation.",
+        ),
+    ) -> None:
+        """Archive one post-close SIP session without features or labels."""
+
+        settings = get_settings()
+        result = collect_prospective_sip_session(
+            session_date=_iso_date(session_date, option="--session-date"),
+            membership_authority_directory=membership_authority_dir,
+            five_minute_policy_path=five_minute_policy,
+            benchmark_policy_path=benchmark_policy,
+            output_directory=out_dir,
+            five_minute_config=load_intraday_history_config(
+                five_minute_policy
+            ),
+            benchmark_config=load_selected_session_benchmark_config(
+                benchmark_policy
+            ),
+            source_factory=lambda: AlpacaSource(settings),
+            maximum_units_this_run=max_units,
+        )
+        console.print(
+            {
+                "status": result["status"],
+                "selection_status": result["selection_status"],
+                "training_eligible": result["training_eligible"],
             }
         )
 

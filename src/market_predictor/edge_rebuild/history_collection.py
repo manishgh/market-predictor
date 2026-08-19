@@ -2,17 +2,17 @@
 
 from __future__ import annotations
 
-import gzip
 import hashlib
 import json
 import shutil
 import threading
 import uuid
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, cast
+from urllib.parse import parse_qs, urlsplit
 
 import pandas as pd
 
@@ -36,6 +36,9 @@ from market_predictor.v3.errors import DataReadinessError, SchemaMismatchError
 HISTORY_COLLECTION_SCHEMA = "edge_rebuild.intraday_history_collection.v1"
 HISTORY_UNIT_SCHEMA = "edge_rebuild.intraday_history_unit.v1"
 HISTORY_AUTHORITY_SCHEMA = "edge_rebuild.intraday_history_authority.v1"
+EXACT_HISTORY_COLLECTION_SCHEMA = "edge_rebuild.intraday_history_collection.v2"
+EXACT_HISTORY_UNIT_SCHEMA = "edge_rebuild.intraday_history_unit.v2"
+EXACT_HISTORY_AUTHORITY_SCHEMA = "edge_rebuild.intraday_history_authority.v2"
 _SAFE_RATE_HEADERS = {
     "retry-after",
     "x-ratelimit-limit",
@@ -82,7 +85,7 @@ def collect_intraday_history(
         raise DataReadinessError("ER1A plan contains duplicate units")
     plan_fingerprint = str(plan["plan_fingerprint"])
     request_payload: dict[str, Any] = {
-        "schema": HISTORY_COLLECTION_SCHEMA,
+        "schema": EXACT_HISTORY_COLLECTION_SCHEMA,
         "plan_schema": str(plan.get("schema", "")),
         "plan_path": str(plan_directory),
         "plan_fingerprint": plan_fingerprint,
@@ -177,7 +180,7 @@ def collect_intraday_history(
     unattempted = len(units) - len(completed) - len(failures)
     transport_complete = not failures and unattempted == 0
     status: dict[str, Any] = {
-        "schema": HISTORY_COLLECTION_SCHEMA,
+        "schema": EXACT_HISTORY_COLLECTION_SCHEMA,
         "updated_at_utc": datetime.now(UTC).isoformat(),
         "request_sha256": request_sha256,
         "plan_fingerprint": plan_fingerprint,
@@ -215,9 +218,14 @@ def collect_intraday_history(
             "ER1A collection lacks a terminal result for every unit"
         )
     records = [completed[unit_id] for unit_id in sorted(completed)]
+    _archive_unreferenced_raw_pages(output_directory, records)
     manifest = {
         **status,
         "artifacts": records,
+        "raw_page_inventory": _referenced_raw_page_inventory(
+            output_directory,
+            records,
+        ),
         "total_rows": sum(int(record["rows"]) for record in records),
         "observed_symbols": sorted(
             {
@@ -235,7 +243,7 @@ def collect_intraday_history(
     _atomic_json(
         output_directory / "_authority.json",
         {
-            "schema": HISTORY_AUTHORITY_SCHEMA,
+            "schema": EXACT_HISTORY_AUTHORITY_SCHEMA,
             "state": "complete",
             "artifact": "_manifest.json",
             "artifact_sha256": file_sha256(
@@ -314,12 +322,26 @@ def load_complete_intraday_history_collection(
         for key, value in request.items()
         if key != "request_sha256"
     }
+    expected_authority_schema = (
+        EXACT_HISTORY_AUTHORITY_SCHEMA
+        if manifest.get("schema") == EXACT_HISTORY_COLLECTION_SCHEMA
+        else HISTORY_AUTHORITY_SCHEMA
+    )
+    expected_request_schema = (
+        EXACT_HISTORY_COLLECTION_SCHEMA
+        if manifest.get("schema") == EXACT_HISTORY_COLLECTION_SCHEMA
+        else HISTORY_COLLECTION_SCHEMA
+    )
     if (
-        _json_sha256(payload) != request_sha256
-        or manifest.get("schema") != HISTORY_COLLECTION_SCHEMA
+        request.get("schema") != expected_request_schema
+        or _json_sha256(payload) != request_sha256
+        or manifest.get("schema") not in {
+            EXACT_HISTORY_COLLECTION_SCHEMA,
+            HISTORY_COLLECTION_SCHEMA,
+        }
         or manifest.get("status") != "transport_complete"
         or manifest.get("request_sha256") != request_sha256
-        or authority.get("schema") != HISTORY_AUTHORITY_SCHEMA
+        or authority.get("schema") != expected_authority_schema
         or authority.get("state") != "complete"
         or authority.get("artifact") != "_manifest.json"
         or authority.get("artifact_sha256")
@@ -339,6 +361,15 @@ def load_complete_intraday_history_collection(
             raise DataReadinessError(
                 "ER1A history unit record is malformed"
             )
+        expected_unit_schema = (
+            EXACT_HISTORY_UNIT_SCHEMA
+            if manifest.get("schema") == EXACT_HISTORY_COLLECTION_SCHEMA
+            else HISTORY_UNIT_SCHEMA
+        )
+        if raw.get("schema") != expected_unit_schema:
+            raise DataReadinessError(
+                "history collection mixes authority schema generations"
+            )
         path = _resolve_inside(directory, str(raw.get("path", "")))
         sidecar = path.with_suffix(".manifest.json")
         if (
@@ -351,6 +382,22 @@ def load_complete_intraday_history_collection(
                 f"ER1A history unit does not verify: {path}"
             )
         _verify_raw_pages(directory, raw)
+        if raw.get("schema") == EXACT_HISTORY_UNIT_SCHEMA:
+            _verify_exact_unit_replay(directory, raw, path)
+    if manifest.get("schema") == EXACT_HISTORY_COLLECTION_SCHEMA:
+        expected_inventory = manifest.get("raw_page_inventory")
+        referenced_inventory = _referenced_raw_page_inventory(
+            directory,
+            cast(list[Mapping[str, Any]], raw_artifacts),
+        )
+        if (
+            not isinstance(expected_inventory, list)
+            or expected_inventory != referenced_inventory
+            or referenced_inventory != _raw_page_inventory(directory)
+        ):
+            raise DataReadinessError(
+                "exact raw provider page inventory changed"
+            )
     return manifest
 
 
@@ -405,16 +452,19 @@ def _collect_unit(
                 raw_pages_directory
                 / unit_id
                 / attempt_id
-                / f"page-{page_number:05d}.json.gz"
+                / f"page-{page_number:05d}.body"
             )
-            raw_page = page.raw_payload or {
-                "bars": {
-                    symbol: list(values)
-                    for symbol, values in page.bars.items()
-                },
-                "next_page_token": page.next_page_token,
-            }
-            _atomic_gzip_json(raw_page_path, raw_page)
+            raw_body = _require_exact_page(page)
+            _atomic_bytes(raw_page_path, raw_body)
+            raw_sidecar_path = raw_page_path.with_suffix(".json")
+            page_record = _page_record(
+                page,
+                page_number=page_number,
+                raw_page_path=raw_page_path,
+                raw_sidecar_path=raw_sidecar_path,
+                root=root,
+            )
+            _atomic_json(raw_sidecar_path, page_record)
             page_rows = 0
             for provider, values in page.bars.items():
                 canonical = mapping.get(provider)
@@ -435,25 +485,7 @@ def _collect_unit(
                         }
                     )
                     page_rows += 1
-            pages.append(
-                {
-                    "page_number": page_number,
-                    "request_page_token": page.request_page_token,
-                    "next_page_token": page.next_page_token,
-                    "rows": page_rows,
-                    "response_sha256": _page_response_sha256(page),
-                    "raw_page_path": str(
-                        raw_page_path.relative_to(root)
-                    ),
-                    "raw_page_sha256": file_sha256(raw_page_path),
-                    "raw_page_bytes": raw_page_path.stat().st_size,
-                    "rate_headers": {
-                        key.lower(): value
-                        for key, value in page.response_headers.items()
-                        if key.lower() in _SAFE_RATE_HEADERS
-                    },
-                }
-            )
+            pages.append({**page_record, "rows": page_rows})
             if len(raw_rows) > int(row["maximum_expected_rows"]):
                 raise DataReadinessError(
                     f"Alpaca unit exceeded its row budget: {unit_id}"
@@ -471,10 +503,13 @@ def _collect_unit(
                 )
             seen_tokens.add(next_token)
             page_token = next_token
+        canonical_ingested_at = datetime.now(UTC)
         bars = _canonical_bars(
             raw_rows,
-            config=config,
-            ingested_at=datetime.now(UTC),
+            finalization_delay_seconds=(
+                config.intraday_finalization_delay_seconds
+            ),
+            ingested_at=canonical_ingested_at,
             timeframe=_canonical_timeframe(timeframe),
         )
         if not bars.empty:
@@ -503,12 +538,27 @@ def _collect_unit(
             )
             for symbol in canonical_symbols
         }
+        expected_rows = int(row["expected_bars_per_symbol"])
+        symbol_coverage = {
+            symbol: {
+                "expected_rows": expected_rows,
+                "observed_rows": count,
+                "status": (
+                    "complete"
+                    if count == expected_rows
+                    else "unavailable"
+                    if count == 0
+                    else "sparse"
+                ),
+            }
+            for symbol, count in symbol_rows.items()
+        }
         month = asof.strftime("%Y-%m")
         path = bars_directory / month / f"{unit_id}.parquet"
         path.parent.mkdir(parents=True, exist_ok=True)
         _atomic_parquet(bars, path)
         record: dict[str, Any] = {
-            "schema": HISTORY_UNIT_SCHEMA,
+            "schema": EXACT_HISTORY_UNIT_SCHEMA,
             "unit_id": unit_id,
             "plan_fingerprint": plan_fingerprint,
             "request_sha256": request_sha256,
@@ -516,6 +566,8 @@ def _collect_unit(
             "sha256": file_sha256(path),
             "rows": len(bars),
             "symbol_rows": symbol_rows,
+            "symbol_coverage": symbol_coverage,
+            "provider_to_canonical": mapping,
             "requested_start_utc": start.isoformat(),
             "requested_end_utc": end.isoformat(),
             "provider_end_inclusive_utc": (
@@ -525,6 +577,10 @@ def _collect_unit(
             "timeframe": _canonical_timeframe(timeframe),
             "price_feed": "sip",
             "adjustment": "all",
+            "intraday_finalization_delay_seconds": (
+                config.intraday_finalization_delay_seconds
+            ),
+            "canonical_ingested_at_utc": canonical_ingested_at.isoformat(),
             "started_at_utc": started_at.isoformat(),
             "completed_at_utc": datetime.now(UTC).isoformat(),
             "pages": pages,
@@ -562,7 +618,7 @@ def _collect_unit(
 def _canonical_bars(
     rows: list[dict[str, Any]],
     *,
-    config: IntradayTransportConfig,
+    finalization_delay_seconds: int,
     ingested_at: datetime,
     timeframe: str,
 ) -> pd.DataFrame:
@@ -576,7 +632,7 @@ def _canonical_bars(
             ingested_at_utc=ingested_at,
             availability_policy="market_interval_close",
             intraday_finalization_delay=pd.Timedelta(
-                seconds=config.intraday_finalization_delay_seconds
+                seconds=finalization_delay_seconds
             ),
         )
     return canonicalize_bars(
@@ -619,7 +675,10 @@ def _load_existing_unit(
     start = _aware_datetime(expected_unit["requested_start_utc"])
     end = _aware_datetime(expected_unit["requested_end_utc"])
     if (
-        manifest.get("schema") != HISTORY_UNIT_SCHEMA
+        manifest.get("schema") not in {
+            EXACT_HISTORY_UNIT_SCHEMA,
+            HISTORY_UNIT_SCHEMA,
+        }
         or manifest.get("unit_id") != expected_unit["unit_id"]
         or manifest.get("plan_fingerprint") != plan_fingerprint
         or manifest.get("request_sha256") != request_sha256
@@ -638,6 +697,8 @@ def _load_existing_unit(
             f"ER1A collected unit integrity failed: {path}"
         )
     _verify_raw_pages(root, manifest)
+    if manifest.get("schema") == EXACT_HISTORY_UNIT_SCHEMA:
+        _verify_exact_unit_replay(root, manifest, path)
     frame = pd.read_parquet(
         path,
         columns=[
@@ -692,6 +753,25 @@ def _verify_raw_pages(root: Path, unit: Mapping[str, Any]) -> None:
             raise DataReadinessError(
                 f"collected raw provider page failed integrity: {path}"
             )
+        if unit.get("schema") == EXACT_HISTORY_UNIT_SCHEMA:
+            sidecar = _resolve_inside(
+                root,
+                str(raw.get("raw_sidecar_path", "")),
+            )
+            if not sidecar.is_file():
+                raise DataReadinessError(
+                    f"collected raw provider sidecar is missing: {sidecar}"
+                )
+            expected_sidecar = {
+                str(key): value
+                for key, value in raw.items()
+                if key != "rows"
+            }
+            if _load_json(sidecar) != expected_sidecar:
+                raise DataReadinessError(
+                    f"collected raw provider sidecar changed: {sidecar}"
+                )
+            _verify_exact_page_body(path, raw)
 
 
 def _transport_timeframe(config: IntradayTransportConfig) -> str:
@@ -768,14 +848,342 @@ def _aware_datetime(value: object) -> datetime:
     return cast(datetime, timestamp.tz_convert("UTC").to_pydatetime())
 
 
-def _page_response_sha256(page: AlpacaBarsPage) -> str:
-    return _json_sha256(
+def _require_exact_page(page: AlpacaBarsPage) -> bytes:
+    if (
+        page.raw_body is None
+        or page.requested_url is None
+        or page.status_code != 200
+        or page.retrieved_at_utc is None
+        or page.retrieved_at_utc.tzinfo is None
+        or page.final_url != page.requested_url
+        or page.redirect_chain
+        or _media_type(_response_header(page, "content-type"))
+        != "application/json"
+    ):
+        raise DataReadinessError(
+            "Alpaca page lacks exact direct-HTTP transport evidence"
+        )
+    try:
+        payload = json.loads(page.raw_body.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise DataReadinessError(
+            "Alpaca exact page body is not UTF-8 JSON"
+        ) from exc
+    if not isinstance(payload, dict):
+        raise DataReadinessError("Alpaca exact page body is not an object")
+    expected_bars = {
+        symbol: list(values) for symbol, values in page.bars.items()
+    }
+    if (
+        payload.get("bars", {}) != expected_bars
+        or payload.get("next_page_token") != page.next_page_token
+    ):
+        raise DataReadinessError(
+            "Alpaca parsed page differs from its exact HTTP body"
+        )
+    return page.raw_body
+
+
+def _page_record(
+    page: AlpacaBarsPage,
+    *,
+    page_number: int,
+    raw_page_path: Path,
+    raw_sidecar_path: Path,
+    root: Path,
+) -> dict[str, Any]:
+    raw_body = _require_exact_page(page)
+    return {
+        "page_number": page_number,
+        "request_page_token": page.request_page_token,
+        "next_page_token": page.next_page_token,
+        "requested_url": page.requested_url,
+        "final_url": page.final_url,
+        "status_code": page.status_code,
+        "retrieved_at_utc": page.retrieved_at_utc.isoformat()
+        if page.retrieved_at_utc is not None
+        else None,
+        "redirect_chain": list(page.redirect_chain),
+        "body_representation": "http_entity_encoded",
+        "content_type": _response_header(page, "content-type"),
+        "content_encoding": _response_header(page, "content-encoding"),
+        "raw_page_path": raw_page_path.relative_to(root).as_posix(),
+        "raw_sidecar_path": raw_sidecar_path.relative_to(root).as_posix(),
+        "raw_page_sha256": hashlib.sha256(raw_body).hexdigest(),
+        "raw_page_bytes": len(raw_body),
+        "rate_headers": {
+            key.lower(): value
+            for key, value in page.response_headers.items()
+            if key.lower() in _SAFE_RATE_HEADERS
+        },
+    }
+
+
+def _response_header(page: AlpacaBarsPage, name: str) -> str | None:
+    return next(
+        (
+            str(value)
+            for key, value in page.response_headers.items()
+            if key.lower() == name
+        ),
+        None,
+    )
+
+
+def _verify_exact_page_body(path: Path, record: Mapping[str, Any]) -> None:
+    if (
+        record.get("status_code") != 200
+        or record.get("final_url") != record.get("requested_url")
+        or record.get("redirect_chain") != []
+        or record.get("body_representation") != "http_entity_encoded"
+        or _media_type(cast(str | None, record.get("content_type")))
+        != "application/json"
+        or record.get("content_encoding") not in (None, "", "identity")
+    ):
+        raise DataReadinessError("exact provider transport metadata is invalid")
+    retrieved = pd.Timestamp(record.get("retrieved_at_utc"))
+    if retrieved.tzinfo is None:
+        raise DataReadinessError("exact provider retrieval time is naive")
+    try:
+        payload = json.loads(path.read_bytes().decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise DataReadinessError("exact provider body is not UTF-8 JSON") from exc
+    if (
+        not isinstance(payload, dict)
+        or payload.get("next_page_token") != record.get("next_page_token")
+        or not isinstance(payload.get("bars", {}), dict)
+    ):
+        raise DataReadinessError("exact provider body and sidecar differ")
+
+
+def _verify_exact_unit_replay(
+    root: Path,
+    unit: Mapping[str, Any],
+    canonical_path: Path,
+) -> None:
+    pages = cast(list[Mapping[str, Any]], unit["pages"])
+    mapping_value = unit.get("provider_to_canonical")
+    coverage_value = unit.get("symbol_coverage")
+    if (
+        not isinstance(mapping_value, Mapping)
+        or not isinstance(coverage_value, Mapping)
+    ):
+        raise DataReadinessError("exact unit lacks mapping or coverage evidence")
+    mapping = {str(key): str(value) for key, value in mapping_value.items()}
+    if int(unit.get("intraday_finalization_delay_seconds", -1)) != 60:
+        raise DataReadinessError(
+            "exact unit finalization delay differs from the frozen policy"
+        )
+    raw_rows: list[dict[str, Any]] = []
+    expected_request_token: str | None = None
+    terminal_seen = False
+    for expected_number, page in enumerate(pages, start=1):
+        if (
+            int(page.get("page_number", -1)) != expected_number
+            or page.get("request_page_token") != expected_request_token
+            or terminal_seen
+        ):
+            raise DataReadinessError("exact provider page chain is invalid")
+        _verify_unit_request_url(str(page.get("requested_url", "")), unit, page)
+        path = _resolve_inside(root, str(page["raw_page_path"]))
+        payload = json.loads(path.read_bytes().decode("utf-8"))
+        raw_bars = cast(Mapping[str, object], payload.get("bars", {}))
+        unexpected = set(raw_bars).difference(mapping)
+        if unexpected:
+            raise DataReadinessError("exact provider body has unexpected symbols")
+        page_rows = 0
+        for provider, values in raw_bars.items():
+            if not isinstance(values, list):
+                raise DataReadinessError("exact provider bars are malformed")
+            for value in values:
+                if not isinstance(value, Mapping):
+                    raise DataReadinessError("exact provider bar is malformed")
+                raw_rows.append(
+                    {
+                        "ticker": mapping[provider],
+                        "timestamp": value.get("t"),
+                        "open": value.get("o"),
+                        "high": value.get("h"),
+                        "low": value.get("l"),
+                        "close": value.get("c"),
+                        "volume": value.get("v"),
+                    }
+                )
+                page_rows += 1
+        if page_rows != int(page.get("rows", -1)):
+            raise DataReadinessError("exact provider page row count changed")
+        expected_request_token = cast(str | None, page.get("next_page_token"))
+        terminal_seen = expected_request_token is None
+    if not terminal_seen:
+        raise DataReadinessError("exact provider page chain is not terminal")
+    ingested_at = _aware_datetime(unit.get("canonical_ingested_at_utc"))
+    expected = _canonical_bars(
+        raw_rows,
+        finalization_delay_seconds=int(
+            unit.get("intraday_finalization_delay_seconds", -1)
+        ),
+        ingested_at=ingested_at,
+        timeframe=str(unit["timeframe"]),
+    )
+    actual = pd.read_parquet(canonical_path)
+    if list(actual.columns) != list(expected.columns):
+        raise DataReadinessError("canonical bar schema does not replay")
+    for field in (
+        "bar_start_utc",
+        "bar_end_utc",
+        "available_at_utc",
+        "ingested_at_utc",
+    ):
+        expected[field] = pd.to_datetime(expected[field], utc=True, errors="raise")
+        actual[field] = pd.to_datetime(actual[field], utc=True, errors="raise")
+    order = ["ticker", "bar_start_utc"]
+    expected = expected.sort_values(order, kind="stable").reset_index(drop=True)
+    actual = actual.sort_values(order, kind="stable").reset_index(drop=True)
+    try:
+        pd.testing.assert_frame_equal(
+            actual,
+            expected,
+            check_dtype=False,
+            check_exact=True,
+        )
+    except AssertionError as exc:
+        raise DataReadinessError(
+            "canonical bars do not replay from exact provider bytes"
+        ) from exc
+    observed_counts = expected.groupby("ticker", observed=True).size().to_dict()
+    for ticker, value in coverage_value.items():
+        observed_rows = int(observed_counts.get(str(ticker), 0))
+        expected_rows = int(value.get("expected_rows", -1)) if isinstance(value, Mapping) else -1
+        expected_status = (
+            "complete"
+            if observed_rows == expected_rows
+            else "unavailable"
+            if observed_rows == 0
+            else "sparse"
+        )
+        if (
+            not isinstance(value, Mapping)
+            or int(value.get("observed_rows", -1))
+            != observed_rows
+            or value.get("status") != expected_status
+        ):
+            raise DataReadinessError("exact symbol coverage changed")
+
+
+def _verify_unit_request_url(
+    requested_url: str,
+    unit: Mapping[str, Any],
+    page: Mapping[str, Any],
+) -> None:
+    parsed = urlsplit(requested_url)
+    try:
+        port = parsed.port
+    except ValueError as exc:
+        raise DataReadinessError("exact provider request port is invalid") from exc
+    if (
+        parsed.scheme != "https"
+        or parsed.hostname != "data.alpaca.markets"
+        or port not in (None, 443)
+        or parsed.username is not None
+        or parsed.password is not None
+        or parsed.path != "/v2/stocks/bars"
+        or parsed.fragment
+    ):
+        raise DataReadinessError("exact provider request endpoint changed")
+    query = parse_qs(parsed.query, keep_blank_values=True)
+    mapping = cast(Mapping[str, str], unit["provider_to_canonical"])
+    expected_timeframe = "1Min" if unit.get("timeframe") == "1m" else "5Min"
+    expected = {
+        "symbols": ",".join(mapping),
+        "timeframe": expected_timeframe,
+        "start": str(unit["requested_start_utc"]),
+        "end": str(unit["provider_end_inclusive_utc"]),
+        "feed": "sip",
+        "limit": "10000",
+        "adjustment": "all",
+        "sort": "asc",
+        "asof": str(unit["asof_date"]),
+    }
+    request_token = page.get("request_page_token")
+    if request_token is not None:
+        expected["page_token"] = str(request_token)
+    if any(len(values) != 1 for values in query.values()):
+        raise DataReadinessError("exact provider request query is ambiguous")
+    actual = {key: values[0] for key, values in query.items()}
+    if actual != expected:
+        raise DataReadinessError("exact provider request URL changed")
+
+
+def _raw_page_inventory(root: Path) -> list[dict[str, object]]:
+    raw_root = root / "raw_pages"
+    if not raw_root.exists():
+        return []
+    return [
         {
-            "request_page_token": page.request_page_token,
-            "next_page_token": page.next_page_token,
-            "bars": page.bars,
+            "path": path.relative_to(root).as_posix(),
+            "bytes": path.stat().st_size,
+            "sha256": file_sha256(path),
+        }
+        for path in sorted(raw_root.rglob("*"))
+        if path.is_file()
+    ]
+
+
+def _referenced_raw_page_inventory(
+    root: Path,
+    records: Sequence[Mapping[str, Any]],
+) -> list[dict[str, object]]:
+    relative_paths = sorted(
+        {
+            str(page[field]).replace("\\", "/")
+            for record in records
+            for page in cast(list[Mapping[str, Any]], record["pages"])
+            for field in ("raw_page_path", "raw_sidecar_path")
         }
     )
+    inventory: list[dict[str, object]] = []
+    for relative in relative_paths:
+        path = _resolve_inside(root, relative)
+        if not path.is_file():
+            raise DataReadinessError(
+                f"referenced raw provider page is missing: {path}"
+            )
+        inventory.append(
+            {
+                "path": relative,
+                "bytes": path.stat().st_size,
+                "sha256": file_sha256(path),
+            }
+        )
+    return inventory
+
+
+def _media_type(value: str | None) -> str:
+    return (value or "").split(";", maxsplit=1)[0].strip().lower()
+
+
+def _archive_unreferenced_raw_pages(
+    root: Path,
+    records: Sequence[Mapping[str, Any]],
+) -> None:
+    referenced = {
+        str(page[field]).replace("\\", "/")
+        for record in records
+        for page in cast(list[Mapping[str, Any]], record["pages"])
+        for field in ("raw_page_path", "raw_sidecar_path")
+    }
+    raw_root = root / "raw_pages"
+    if not raw_root.exists():
+        return
+    for path in sorted(raw_root.rglob("*")):
+        if not path.is_file():
+            continue
+        relative = path.relative_to(root).as_posix()
+        if relative in referenced:
+            continue
+        destination = root / "failed_attempt_pages" / path.relative_to(raw_root)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        path.replace(destination)
 
 
 def _resolve_inside(root: Path, relative: str) -> Path:
@@ -819,18 +1227,11 @@ def _atomic_json(path: Path, payload: Mapping[str, Any]) -> None:
         temporary.unlink(missing_ok=True)
 
 
-def _atomic_gzip_json(path: Path, payload: Mapping[str, Any]) -> None:
+def _atomic_bytes(path: Path, payload: bytes) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_name(f".{path.name}.{uuid.uuid4().hex}.tmp")
     try:
-        serialized = json.dumps(
-            payload,
-            sort_keys=True,
-            separators=(",", ":"),
-        ).encode()
-        temporary.write_bytes(
-            gzip.compress(serialized, compresslevel=6, mtime=0)
-        )
+        temporary.write_bytes(payload)
         temporary.replace(path)
     finally:
         temporary.unlink(missing_ok=True)

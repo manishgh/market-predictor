@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import json
+from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
+from urllib.parse import urlencode
 
 import pandas as pd
 import pytest
@@ -340,7 +342,6 @@ class _FakeAlpacaSource:
     ) -> object:
         from market_predictor.sources.alpaca import AlpacaBarsPage
 
-        del end
         assert kwargs["timeframe"] == self.expected_timeframe
         self.timeframes.append(str(kwargs["timeframe"]))
         timestamps = [
@@ -350,22 +351,45 @@ class _FakeAlpacaSource:
             + pd.Timedelta(seconds=self.timestamp_offset_seconds)
             + pd.Timedelta(minutes=1 if self.expected_timeframe == "1Min" else 5),
         ]
+        bars = {
+            symbol: tuple(
+                {
+                    "t": timestamp.isoformat(),
+                    "o": 100.0,
+                    "h": 101.0,
+                    "l": 99.0,
+                    "c": 100.5,
+                    "v": 1000,
+                }
+                for timestamp in timestamps
+            )
+            for symbol in symbols
+        }
+        payload = {
+            "bars": {symbol: list(values) for symbol, values in bars.items()},
+            "next_page_token": None,
+        }
+        query = {
+            "symbols": ",".join(symbols),
+            "timeframe": str(kwargs["timeframe"]),
+            "start": pd.Timestamp(start).isoformat(),
+            "end": pd.Timestamp(end).isoformat(),
+            "feed": "sip",
+            "limit": str(kwargs["limit"]),
+            "adjustment": "all",
+            "sort": "asc",
+            "asof": kwargs["asof"].isoformat(),
+        }
+        requested_url = "https://data.alpaca.markets/v2/stocks/bars?" + urlencode(query)
         return AlpacaBarsPage(
             request_page_token=None,
             next_page_token=None,
-            bars={
-                symbol: tuple(
-                    {
-                        "t": timestamp.isoformat(),
-                        "o": 100.0,
-                        "h": 101.0,
-                        "l": 99.0,
-                        "c": 100.5,
-                        "v": 1000,
-                    }
-                    for timestamp in timestamps
-                )
-                for symbol in symbols
-            },
-            response_headers={},
+            bars=bars,
+            response_headers={"Content-Type": "application/json"},
+            raw_payload=payload,
+            raw_body=json.dumps(payload, separators=(",", ":")).encode(),
+            requested_url=requested_url,
+            status_code=200,
+            retrieved_at_utc=datetime.now(UTC),
+            final_url=requested_url,
         )

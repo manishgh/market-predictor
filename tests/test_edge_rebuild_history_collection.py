@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-import gzip
 import json
-from datetime import datetime
+from dataclasses import replace
+from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
+from urllib.parse import urlencode
 
 import pandas as pd
 import pytest
@@ -56,8 +57,12 @@ def test_collector_publishes_raw_lineage_and_complete_authority(
     assert bars["bar_start_utc"].dt.minute.tolist() == [30, 30, 35, 35]
     raw_page = output / artifact["pages"][0]["raw_page_path"]
     assert artifact["pages"][0]["raw_page_sha256"] == file_sha256(raw_page)
-    payload = json.loads(gzip.decompress(raw_page.read_bytes()))
+    payload = json.loads(raw_page.read_bytes())
     assert set(payload["bars"]) == {"AAA", "BBB"}
+    assert artifact["pages"][0]["body_representation"] == "http_entity_encoded"
+    assert artifact["pages"][0]["status_code"] == 200
+    assert artifact["pages"][0]["final_url"] == artifact["pages"][0]["requested_url"]
+    assert set(artifact["symbol_coverage"]) == {"AAA", "BBB"}
     assert source.timeframes == ["5Min"]
 
 
@@ -208,6 +213,172 @@ def test_complete_authority_rejects_missing_raw_provider_page(
         load_complete_intraday_history_collection(output)
 
 
+def test_complete_authority_rejects_changed_exact_body(
+    tmp_path: Path,
+) -> None:
+    output = tmp_path / "collection"
+    result = collect_intraday_history(
+        plan_directory=_write_plan(tmp_path / "plan"),
+        policy_path=POLICY_PATH,
+        output_directory=output,
+        config=load_intraday_history_config(POLICY_PATH),
+        source_factory=_FakeAlpacaSource,
+    )
+    raw_page = output / result["artifacts"][0]["pages"][0]["raw_page_path"]
+    raw_page.write_bytes(raw_page.read_bytes() + b" ")
+
+    with pytest.raises(DataReadinessError, match="raw provider page"):
+        load_complete_intraday_history_collection(output)
+
+
+def test_complete_authority_rejects_changed_transport_sidecar(
+    tmp_path: Path,
+) -> None:
+    output = tmp_path / "collection"
+    result = collect_intraday_history(
+        plan_directory=_write_plan(tmp_path / "plan"),
+        policy_path=POLICY_PATH,
+        output_directory=output,
+        config=load_intraday_history_config(POLICY_PATH),
+        source_factory=_FakeAlpacaSource,
+    )
+    sidecar = output / result["artifacts"][0]["pages"][0]["raw_sidecar_path"]
+    payload = json.loads(sidecar.read_text(encoding="utf-8"))
+    payload["status_code"] = 206
+    sidecar.write_text(json.dumps(payload), encoding="utf-8")
+
+    with pytest.raises(DataReadinessError, match="sidecar changed"):
+        load_complete_intraday_history_collection(output)
+
+
+def test_complete_authority_rejects_extra_raw_inventory_file(
+    tmp_path: Path,
+) -> None:
+    output = tmp_path / "collection"
+    collect_intraday_history(
+        plan_directory=_write_plan(tmp_path / "plan"),
+        policy_path=POLICY_PATH,
+        output_directory=output,
+        config=load_intraday_history_config(POLICY_PATH),
+        source_factory=_FakeAlpacaSource,
+    )
+    extra = output / "raw_pages" / "unexpected.body"
+    extra.write_bytes(b"{}")
+
+    with pytest.raises(DataReadinessError, match="inventory changed"):
+        load_complete_intraday_history_collection(output)
+
+
+def test_complete_authority_rejects_canonical_bar_mutation(
+    tmp_path: Path,
+) -> None:
+    output = tmp_path / "collection"
+    result = collect_intraday_history(
+        plan_directory=_write_plan(tmp_path / "plan"),
+        policy_path=POLICY_PATH,
+        output_directory=output,
+        config=load_intraday_history_config(POLICY_PATH),
+        source_factory=_FakeAlpacaSource,
+    )
+    artifact = result["artifacts"][0]
+    bars_path = output / artifact["path"]
+    bars = pd.read_parquet(bars_path)
+    bars.loc[0, "close"] = 999.0
+    bars.to_parquet(bars_path, index=False)
+    artifact["sha256"] = file_sha256(bars_path)
+    bars_path.with_suffix(".manifest.json").write_text(
+        json.dumps(artifact), encoding="utf-8"
+    )
+    manifest_path = output / "_manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["artifacts"][0] = artifact
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    authority_path = output / "_authority.json"
+    authority = json.loads(authority_path.read_text(encoding="utf-8"))
+    authority["artifact_sha256"] = file_sha256(manifest_path)
+    authority_path.write_text(json.dumps(authority), encoding="utf-8")
+
+    with pytest.raises(DataReadinessError, match="do not replay"):
+        load_complete_intraday_history_collection(output)
+
+
+def test_complete_authority_rejects_canonical_availability_mutation(
+    tmp_path: Path,
+) -> None:
+    output = tmp_path / "collection"
+    result = collect_intraday_history(
+        plan_directory=_write_plan(tmp_path / "plan"),
+        policy_path=POLICY_PATH,
+        output_directory=output,
+        config=load_intraday_history_config(POLICY_PATH),
+        source_factory=_FakeAlpacaSource,
+    )
+    artifact = result["artifacts"][0]
+    bars_path = output / artifact["path"]
+    bars = pd.read_parquet(bars_path)
+    bars.loc[0, "available_at_utc"] += pd.Timedelta(minutes=1)
+    bars.to_parquet(bars_path, index=False)
+    _resign_collection_artifact(output, artifact, bars_path)
+
+    with pytest.raises(DataReadinessError, match="do not replay"):
+        load_complete_intraday_history_collection(output)
+
+
+def test_complete_authority_rejects_mixed_schema_generations(
+    tmp_path: Path,
+) -> None:
+    output = tmp_path / "collection"
+    result = collect_intraday_history(
+        plan_directory=_write_plan(tmp_path / "plan"),
+        policy_path=POLICY_PATH,
+        output_directory=output,
+        config=load_intraday_history_config(POLICY_PATH),
+        source_factory=_FakeAlpacaSource,
+    )
+    artifact = result["artifacts"][0]
+    artifact["schema"] = "edge_rebuild.intraday_history_unit.v1"
+    bars_path = output / artifact["path"]
+    _resign_collection_artifact(output, artifact, bars_path)
+
+    with pytest.raises(DataReadinessError, match="mixes authority schema"):
+        load_complete_intraday_history_collection(output)
+
+
+def test_complete_authority_rejects_non_alpaca_request_endpoint(
+    tmp_path: Path,
+) -> None:
+    output = tmp_path / "collection"
+    collect_intraday_history(
+        plan_directory=_write_plan(tmp_path / "plan"),
+        policy_path=POLICY_PATH,
+        output_directory=output,
+        config=load_intraday_history_config(POLICY_PATH),
+        source_factory=_WrongEndpointSource,
+    )
+
+    with pytest.raises(DataReadinessError, match="endpoint changed"):
+        load_complete_intraday_history_collection(output)
+
+
+def _resign_collection_artifact(
+    output: Path,
+    artifact: dict[str, object],
+    bars_path: Path,
+) -> None:
+    artifact["sha256"] = file_sha256(bars_path)
+    bars_path.with_suffix(".manifest.json").write_text(
+        json.dumps(artifact), encoding="utf-8"
+    )
+    manifest_path = output / "_manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["artifacts"][0] = artifact
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    authority_path = output / "_authority.json"
+    authority = json.loads(authority_path.read_text(encoding="utf-8"))
+    authority["artifact_sha256"] = file_sha256(manifest_path)
+    authority_path.write_text(json.dumps(authority), encoding="utf-8")
+
+
 class _FakeAlpacaSource:
     def __init__(self) -> None:
         self.settings = SimpleNamespace(alpaca_stock_feed="sip")
@@ -221,30 +392,58 @@ class _FakeAlpacaSource:
         end: datetime,
         **kwargs: object,
     ) -> AlpacaBarsPage:
-        del end
         self.timeframes.append(str(kwargs["timeframe"]))
         timestamps = [
             pd.Timestamp(start),
             pd.Timestamp(start) + pd.Timedelta(minutes=5),
         ]
+        bars = {
+            symbol: tuple(
+                {
+                    "t": timestamp.isoformat(),
+                    "o": 100.0,
+                    "h": 101.0,
+                    "l": 99.0,
+                    "c": 100.5,
+                    "v": 1000,
+                }
+                for timestamp in timestamps
+            )
+            for symbol in symbols
+        }
+        next_page_token = None
+        payload = {
+            "bars": {symbol: list(values) for symbol, values in bars.items()},
+            "next_page_token": next_page_token,
+        }
+        query = {
+            "symbols": ",".join(symbols),
+            "timeframe": str(kwargs["timeframe"]),
+            "start": start.isoformat(),
+            "end": end.isoformat(),
+            "feed": "sip",
+            "limit": str(kwargs["limit"]),
+            "adjustment": "all",
+            "sort": "asc",
+            "asof": kwargs["asof"].isoformat(),
+        }
+        if kwargs.get("page_token") is not None:
+            query["page_token"] = str(kwargs["page_token"])
+        requested_url = "https://data.alpaca.markets/v2/stocks/bars?" + urlencode(query)
         return AlpacaBarsPage(
             request_page_token=kwargs.get("page_token"),
-            next_page_token=None,
-            bars={
-                symbol: tuple(
-                    {
-                        "t": timestamp.isoformat(),
-                        "o": 100.0,
-                        "h": 101.0,
-                        "l": 99.0,
-                        "c": 100.5,
-                        "v": 1000,
-                    }
-                    for timestamp in timestamps
-                )
-                for symbol in symbols
+            next_page_token=next_page_token,
+            bars=bars,
+            response_headers={
+                "Content-Type": "application/json",
+                "X-RateLimit-Remaining": "100",
             },
-            response_headers={"X-RateLimit-Remaining": "100"},
+            raw_payload=payload,
+            raw_body=json.dumps(payload, separators=(",", ":")).encode(),
+            requested_url=requested_url,
+            status_code=200,
+            retrieved_at_utc=datetime.now(UTC),
+            final_url=requested_url,
         )
 
 
@@ -256,25 +455,45 @@ class _RepeatingTokenSource(_FakeAlpacaSource):
         end: datetime,
         **kwargs: object,
     ) -> AlpacaBarsPage:
-        if kwargs.get("page_token") is not None:
-            return AlpacaBarsPage(
-                request_page_token=kwargs.get("page_token"),
-                next_page_token="repeat",
-                bars={symbol: () for symbol in symbols},
-                response_headers={},
-            )
         page = super().fetch_bars_page(
             symbols,
             start,
             end,
             **kwargs,
         )
-        return AlpacaBarsPage(
-            request_page_token=kwargs.get("page_token"),
-            next_page_token="repeat",
-            bars=page.bars,
-            response_headers=page.response_headers,
+        bars = (
+            {symbol: () for symbol in symbols}
+            if kwargs.get("page_token") is not None
+            else page.bars
         )
+        payload = {
+            "bars": {symbol: list(values) for symbol, values in bars.items()},
+            "next_page_token": "repeat",
+        }
+        return replace(
+            page,
+            next_page_token="repeat",
+            bars=bars,
+            raw_payload=payload,
+            raw_body=json.dumps(payload, separators=(",", ":")).encode(),
+        )
+
+
+class _WrongEndpointSource(_FakeAlpacaSource):
+    def fetch_bars_page(
+        self,
+        symbols: tuple[str, ...],
+        start: datetime,
+        end: datetime,
+        **kwargs: object,
+    ) -> AlpacaBarsPage:
+        page = super().fetch_bars_page(symbols, start, end, **kwargs)
+        assert page.requested_url is not None
+        wrong = page.requested_url.replace(
+            "https://data.alpaca.markets",
+            "https://example.invalid",
+        )
+        return replace(page, requested_url=wrong, final_url=wrong)
 
 
 class _AlwaysFailingSource(_FakeAlpacaSource):

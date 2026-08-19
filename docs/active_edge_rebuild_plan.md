@@ -826,9 +826,23 @@ authority passes attachment, timing, coverage, and replay checks.
       ascending order, explicit `asof`, bounded pages, and no redirects. Preserve
       backward compatibility only for test doubles; production collection must reject
       pages without transport evidence.
-   2. **Immutable closed-session source authority (`not_started`).** Archive each raw
-      page and sidecar, replay canonical five-minute and selected one-minute bars, bind
-      the point-in-time membership authority, and support crash-safe resume.
+   2. **Immutable closed-session source authority (`in_progress`).** Publish one
+      append-only child authority per fully closed XNYS session. The first phase archives
+      exact Alpaca HTTP response bytes and sidecars for SIP five-minute bars covering the
+      complete membership cohort observed before that session, plus SIP one-minute bars
+      for SPY, QQQ, and the sector ETFs. Strict replay must reconstruct canonical bars
+      from those retained bytes, bind the exact membership parent and request identity,
+      reject redirects, gaps, duplicate pages, and post-session mutation, and support
+      hash-verified crash-safe resume below 4 GiB. The second phase may collect selected
+      stock one-minute paths only when the target session has twenty contiguous prior
+      five-minute sessions under the same causal namespace. A source-complete session is
+      explicitly selection-ineligible while that warm-up is absent; stale July bars may
+      not activate an August cohort. This checkpoint builds no features or labels and
+      authorizes neither training nor serving.
+      Benchmark one-minute grids must be complete. Full-cohort stock gaps are retained
+      as explicit coverage evidence and may authorize the session only within the frozen
+      whole-security exclusion ceiling of 5%; no bars are imputed, and coverage above
+      that ceiling publishes status only without a parent source authority.
    3. **Causal feature authority (`not_started`).** Reproduce the twenty-session
       activation cohort and reuse the exact A4.3 volume-bar and feature transformation.
    4. **Mature outcome authority (`not_started`).** Publish exact stock/SPY/QQQ/sector

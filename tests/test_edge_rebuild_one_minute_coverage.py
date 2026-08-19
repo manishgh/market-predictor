@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, cast
+from urllib.parse import urlencode
 
 import exchange_calendars as xcals
 import pandas as pd
@@ -366,26 +367,51 @@ class _FakeSource:
         minutes = 1 if timeframe == "1Min" else 5
         bars = int((pd.Timestamp(end) - pd.Timestamp(start)) / pd.Timedelta(minutes=minutes)) + 1
         timestamps = [pd.Timestamp(start) + pd.Timedelta(minutes=minutes * offset) for offset in range(bars)]
+        raw_bars = {
+            symbol: (
+                ()
+                if symbol in self.empty_symbols
+                else tuple(
+                    {
+                        "t": timestamp.isoformat(),
+                        "o": 100.0,
+                        "h": 101.0,
+                        "l": 99.0,
+                        "c": 100.5,
+                        "v": 1000,
+                    }
+                    for timestamp in timestamps
+                )
+            )
+            for symbol in symbols
+        }
+        payload = {
+            "bars": {
+                symbol: list(values) for symbol, values in raw_bars.items()
+            },
+            "next_page_token": None,
+        }
+        query = {
+            "symbols": ",".join(symbols),
+            "timeframe": timeframe,
+            "start": start.isoformat(),
+            "end": end.isoformat(),
+            "feed": "sip",
+            "limit": str(kwargs["limit"]),
+            "adjustment": "all",
+            "sort": "asc",
+            "asof": kwargs["asof"].isoformat(),
+        }
+        requested_url = "https://data.alpaca.markets/v2/stocks/bars?" + urlencode(query)
         return AlpacaBarsPage(
             request_page_token=None,
             next_page_token=None,
-            bars={
-                symbol: (
-                    ()
-                    if symbol in self.empty_symbols
-                    else tuple(
-                        {
-                            "t": timestamp.isoformat(),
-                            "o": 100.0,
-                            "h": 101.0,
-                            "l": 99.0,
-                            "c": 100.5,
-                            "v": 1000,
-                        }
-                        for timestamp in timestamps
-                    )
-                )
-                for symbol in symbols
-            },
-            response_headers={},
+            bars=raw_bars,
+            response_headers={"Content-Type": "application/json"},
+            raw_payload=payload,
+            raw_body=json.dumps(payload, separators=(",", ":")).encode(),
+            requested_url=requested_url,
+            status_code=200,
+            retrieved_at_utc=datetime.now(UTC),
+            final_url=requested_url,
         )
