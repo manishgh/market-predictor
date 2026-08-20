@@ -142,7 +142,7 @@ specialists; A6 performs locked evaluation and promotion.
 | Swing baseline | A2 trainer complete; prior candidates rejected; no new run or promotion | Preserve the frozen technical contract until a governed training run is approved |
 | Swing event-driven | Rating-change and coverage specialists trained in development; all rejected | Preserve rejection evidence; do not open locked test or serve |
 | Intraday baseline | V2 rejected; V3 invalid; A4.4 continuation and reversion both rejected | Preserve evidence; no serving or future-holdout access |
-| Intraday event-driven | A5.1 blocked; A5.1b classifies three causal analyst episodes from the first two polls | Build append-only prospective SIP sessions and mature exact outcomes before any A5.2 training |
+| Intraday event-driven | Historical identity correction yields 1,912 attached events and two research-only no-candidate results; prospective production path remains blocked | Continue append-only prospective SIP sessions; do not serve proxy-time research outputs |
 
 `ROC-AUC >= 0.60` is a locked-test diagnostic, not a training objective or permission
 for repeated locked-test tuning. Promotion also requires ranking, calibration,
@@ -253,6 +253,27 @@ genuinely observed first-seen and revision timestamps plus point-in-time securit
 identity for future broker actions, then reruns A5.1 under a new preregistered data
 horizon. Historical observation time must not be inferred from publication time.
 A4.2/A4.5 trade/quote work remains storage-blocked and must not be replaced with zero.
+
+## A5.1d Historical Identity Correction And Training Result
+
+- Literal historical event `security_id` matching was defective: 17,401 direct-issuer
+  events produced only 19 attached episodes because event authorities commonly use
+  `cik:<value>:ticker:<symbol>` while A4.3 uses `cik:<value>`.
+- Exact ticker plus CIK-compatible reconciliation publishes corrected authority
+  `data/research/edge_rebuild_intraday_event_preflight_20260820_v2`: 1,912 unique
+  episodes, 83,636 event/decision pairs, 487 securities, and 771 sessions. Source IDs
+  remain retained; conflicting CIKs fail and ambiguity abstains.
+- The research-only catalyst role remains confirmation/filtering, not a direct feature.
+  Continuation trained on 14,451 rows and returned 0.513 seen / 0.509 unseen
+  positive-return ROC-AUC. Long reversion trained on 12,951 rows and returned 0.535 /
+  0.519. Both have negative after-cost return and benchmark excess, profit factor below
+  one, unstable folds, and failed stop calibration, so both are `no_candidate`.
+- The technical-only reference remains continuation 0.510 / 0.516 and long reversion
+  0.513 / 0.508. Catalyst therefore slightly improves long-reversion discrimination but
+  does not create a tradable edge. No future holdout was opened.
+- Verification passed 1,456 tests with two skipped, tracked Ruff, strict mypy across
+  231 source files, and compilation. Peak training RSS was about 3.16 GiB under the
+  unchanged 4 GiB hard cap and 3.25 GiB safety threshold.
 
 ## Prospective Broker-Action Authority
 

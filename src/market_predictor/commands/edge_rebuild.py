@@ -1635,18 +1635,26 @@ def register_edge_rebuild_commands(app: typer.Typer, console: Any) -> None:
         dataset_dir: Path = typer.Option(...),
         hypothesis: str = typer.Option(..., help="continuation or long-reversion"),
         out_dir: Path = typer.Option(...),
+        event_preflight_dir: Path | None = typer.Option(
+            None,
+            help=(
+                "Corrected historical event preflight. When supplied, train the "
+                "research-only event-confirmed cohort."
+            ),
+        ),
         config_path: Path = typer.Option(
             Path("configs/edge_rebuild_intraday_development.toml"),
             "--policy",
         ),
     ) -> None:
-        """Train one A4.4 bar-only hypothesis and keep the future holdout closed."""
+        """Train one technical or event-confirmed hypothesis with future data closed."""
 
         result = train_intraday_development_candidate(
             dataset_authority_directory=dataset_dir,
             output_directory=out_dir,
             hypothesis=hypothesis,
             config=load_intraday_development_config(config_path),
+            research_event_preflight_directory=event_preflight_dir,
         )
         console.print(
             {

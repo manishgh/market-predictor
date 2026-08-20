@@ -544,6 +544,38 @@ def test_peak_memory_failure_prevents_publication(
     assert not output.exists()
 
 
+def test_strict_loader_reuses_only_the_exact_verified_dataset(
+    harness: _Harness,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    output = tmp_path / "verified-dataset-reuse"
+    harness.publish(output)
+    monkeypatch.setattr(
+        preflight,
+        "load_published_intraday_dataset",
+        lambda _directory: (_ for _ in ()).throw(
+            AssertionError("verified parent must not be loaded twice")
+        ),
+    )
+
+    preflight.load_intraday_event_preflight(
+        output,
+        verified_dataset=harness.dataset,
+    )
+    wrong_dataset = SimpleNamespace(
+        **{
+            **vars(harness.dataset),
+            "root": tmp_path / "wrong-dataset",
+        }
+    )
+    with pytest.raises(DataReadinessError, match="strict A4.3 parent replay"):
+        preflight.load_intraday_event_preflight(
+            output,
+            verified_dataset=wrong_dataset,
+        )
+
+
 def _decision_frame() -> pd.DataFrame:
     securities = _fixture_securities()
     sessions = pd.bdate_range("2025-01-06", periods=124)

@@ -444,6 +444,57 @@ def test_no_candidate_publishes_evidence_without_model_or_future_access(
     assert not (tmp_path / ".no-candidate.future-holdout-access.json").exists()
 
 
+def test_event_confirmed_training_binds_research_cohort_and_remains_non_promotable(
+    a43_dataset: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = _rejecting_config()
+    _limit_to_one_candidate(monkeypatch, config)
+    _patch_fast_pair(monkeypatch)
+    decision_ids = frozenset(
+        intraday_development.load_published_intraday_dataset(a43_dataset)
+        .frame["decision_id"]
+        .astype(str)
+    )
+    event_directory = tmp_path / "event-preflight"
+    event_directory.mkdir()
+    cohort_identity = {
+        "schema": "edge_rebuild.intraday_research_event_cohort.v1",
+        "production_eligible": False,
+        "serving_eligible": False,
+        "future_holdout_opened": False,
+        "catalyst_role": "confirmation_and_population_filter_not_model_feature",
+    }
+    monkeypatch.setattr(
+        intraday_development,
+        "load_intraday_research_event_cohort",
+        lambda _directory, **_kwargs: SimpleNamespace(
+            decision_ids=decision_ids,
+            identity=cohort_identity,
+        ),
+    )
+    output = tmp_path / "event-confirmed"
+
+    result = train_intraday_development_candidate(
+        a43_dataset,
+        output,
+        hypothesis="continuation",
+        config=config,
+        research_event_preflight_directory=event_directory,
+    )
+
+    assert result.status == "no_candidate"
+    evaluation = _json(output / "evaluation.json")
+    model_card = _json(output / "model_card.json")
+    assert evaluation["model_family"] == "intraday_event_confirmed_research"
+    assert model_card["model_family"] == "intraday_event_confirmed_research"
+    assert evaluation["dataset"]["research_event_cohort"] == cohort_identity
+    assert evaluation["future_holdout_opened"] is False
+    assert evaluation["promotion_permitted"] is False
+    intraday_development.load_complete_intraday_development_output(output)
+
+
 def test_passing_development_candidate_still_keeps_future_closed(
     a43_dataset: Path,
     tmp_path: Path,
@@ -1019,6 +1070,7 @@ def _future_candidate(
         }
     )
     return {
+        "model_family": "intraday_technical",
         "future_data_contract": future_contract,
         "training_config": asdict(config),
         "dataset": {

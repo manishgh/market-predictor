@@ -920,7 +920,7 @@ authority passes attachment, timing, coverage, and replay checks.
      remain prohibited.
 
 7. **A5.1d - Correct historical intraday event identity and run matched development
-   training (`in_progress`).** The A5.1 preflight attached events by literal
+   training (`completed`).** The A5.1 preflight attached events by literal
    `security_id`. Historical event authorities encode most SEC identities as
    `cik:<value>:ticker:<symbol>`, while A4.3 uses `cik:<value>`. A reproduced audit
    found 17,401 direct-issuer analyst episodes, 15,603 episodes whose ticker occurs in
@@ -953,6 +953,40 @@ authority passes attachment, timing, coverage, and replay checks.
      matched technical-versus-catalyst evaluation, focused poison tests, repository
      tests, tracked Ruff, strict mypy, and compile verification. Rejected families must
      publish `no_candidate`; blocked families must publish the exact blocker.
+
+   Implementation result:
+
+   - Exact ticker plus CIK-compatible reconciliation corrects the namespace defect while
+     preserving source identities. Conflicting CIKs fail publication and ambiguous
+     ticker mappings abstain. Focused identity, future-evidence, immutable replay, and
+     verified-parent reuse tests pass.
+   - Corrected authority
+     `data/research/edge_rebuild_intraday_event_preflight_20260820_v2` strictly replays
+     17,401 research episodes. It attaches 1,912 unique episodes to 83,636 A4.3
+     event/decision pairs, compared with 19 episodes and 862 pairs before correction.
+     Production remains blocked because all historical availability is a retrospective
+     provider-publication proxy.
+   - Catalyst remains a confirmation/population filter, not a direct intraday model
+     feature. The event-confirmed continuation population has 14,451 development rows;
+     long reversion has 12,951. Both use the unchanged technical feature contract,
+     four chronological folds, one-session embargo, stable 20% security holdout, and
+     frozen cost/economic gates.
+   - Continuation positive-return ROC-AUC is 0.513 seen / 0.509 unseen. Long-reversion
+     ROC-AUC is 0.535 / 0.519, versus technical-only 0.513 / 0.508. Neither family
+     passes: selected policies have negative average trade and daily returns after
+     costs, profit factor below one, negative benchmark excess, weak fold stability,
+     and failed stop-risk calibration. Both publish strict `no_candidate` authorities.
+   - Outputs are
+     `data/models/edge_rebuild_intraday_event_confirmed_continuation_dev_20260820_v1`
+     and
+     `data/models/edge_rebuild_intraday_event_confirmed_long_reversion_dev_20260820_v1`.
+     Peak working set remained about 3.16 GiB after eliminating duplicate dataset loads;
+     the 4 GiB hard cap and 3.25 GiB safety threshold were not weakened. The future
+     holdout stayed closed and serving/promotion remain prohibited.
+   - Final verification passed 1,456 tests with two skipped, tracked Ruff, strict mypy
+     across 231 source files, and tracked compilation. One unrelated microstructure
+     retry test failed on the first full-suite run and then passed in isolation, as a
+     complete file, and in the clean full-suite rerun.
 
 ### A6 - Run Locked Evaluation and Promote Qualified Models
 

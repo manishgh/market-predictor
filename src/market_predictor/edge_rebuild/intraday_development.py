@@ -25,6 +25,10 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 
 from market_predictor.canonical.store import file_sha256
+from market_predictor.edge_rebuild.intraday_event_training import (
+    filter_to_research_event_cohort,
+    load_intraday_research_event_cohort,
+)
 from market_predictor.edge_rebuild.intraday_training import (
     MODEL_FEATURE_COLUMNS,
     PublishedIntradayDataset,
@@ -34,6 +38,7 @@ from market_predictor.resources import (
     assert_memory_budget,
     assert_peak_memory_budget,
     memory_audit,
+    release_process_memory,
 )
 from market_predictor.v3.errors import DataReadinessError
 
@@ -337,15 +342,27 @@ def train_intraday_development_candidate(
     *,
     hypothesis: str,
     config: IntradayDevelopmentConfig | None = None,
+    research_event_preflight_directory: Path | None = None,
 ) -> DevelopmentTrainingResult:
-    """Train one bar-only hypothesis without reading the future holdout."""
+    """Train one technical or event-confirmed hypothesis without future data."""
 
     policy = config or IntradayDevelopmentConfig()
     profile = baseline_profile(hypothesis, policy)
     _guard_memory(policy, "intraday development start", peak=False)
-    _require_output_isolated(output_directory, dataset_authority_directory)
+    immutable_inputs = [dataset_authority_directory]
+    if research_event_preflight_directory is not None:
+        immutable_inputs.append(research_event_preflight_directory)
+    _require_output_isolated(output_directory, *immutable_inputs)
+    event_cohort = None
+    if research_event_preflight_directory is not None:
+        event_cohort = load_intraday_research_event_cohort(
+            research_event_preflight_directory,
+        )
+        release_process_memory()
     published = load_published_intraday_dataset(dataset_authority_directory)
     data = _validate_development_frame(published, policy)
+    if event_cohort is not None:
+        data = filter_to_research_event_cohort(data, event_cohort)
     data = data.loc[_profile_mask(data, profile)].reset_index(drop=True)
     if len(data) < policy.minimum_rows or data["security_id"].nunique() < policy.minimum_securities:
         raise DataReadinessError(
@@ -362,6 +379,13 @@ def train_intraday_development_candidate(
 
     frozen_cost_bps = published.frozen_round_trip_cost_bps
     dataset_identity_val = _dataset_identity(published)
+    model_family = (
+        "intraday_event_confirmed_research"
+        if event_cohort is not None
+        else "intraday_technical"
+    )
+    if event_cohort is not None:
+        dataset_identity_val["research_event_cohort"] = event_cohort.identity
     gc.collect()
 
     validation_records: list[dict[str, Any]] = []
@@ -429,6 +453,7 @@ def train_intraday_development_candidate(
     evaluation: dict[str, Any] = {
         "schema_version": EVALUATION_SCHEMA_VERSION,
         "status": status,
+        "model_family": model_family,
         "promotion_permitted": False,
         "selection_basis": "development_walk_forward_validation_only",
         "objective": "expected_net_return_with_calibrated_stop_risk_after_frozen_cost",
@@ -485,6 +510,7 @@ def train_intraday_development_candidate(
     model_card: dict[str, Any] = {
         "schema_version": "edge_rebuild.intraday_bar_baseline_model_card.v1",
         "status": status,
+        "model_family": model_family,
         "promotion_permitted": False,
         "candidate_id": selected_id,
         "horizon_minutes": 30,
@@ -503,7 +529,11 @@ def train_intraday_development_candidate(
         "limitations": [
             "candidate is development-only and cannot be promoted without a separately collected future holdout",
             "event-time equity marks open positions at their frozen stop until exact recorded exit",
-            "catalyst and trade/quote microstructure are outside this bar-only estimator contract",
+            (
+                "historical catalyst timestamps are provider-publication proxies; catalyst is a research-only confirmation filter"
+                if event_cohort is not None
+                else "catalyst and trade/quote microstructure are outside this technical estimator contract"
+            ),
         ],
     }
     candidate: dict[str, Any] | None = None
@@ -522,6 +552,7 @@ def train_intraday_development_candidate(
         candidate = {
             "schema_version": MODEL_SCHEMA_VERSION,
             "status": "candidate",
+            "model_family": model_family,
             "promotion_permitted": False,
             "validation_passed": True,
             "candidate_id": selected_id,
@@ -569,6 +600,10 @@ def evaluate_future_intraday_holdout(
     """
 
     candidate, manifest = _load_validation_passed_candidate(candidate_authority_directory)
+    if candidate.get("model_family") != "intraday_technical":
+        raise DataReadinessError(
+            "research-only event-confirmed candidates cannot open the future holdout"
+        )
     contract = _object(candidate.get("future_data_contract"), "future_data_contract")
     future_start = _parse_date(str(contract.get("minimum_session_date")), "minimum_session_date")
     development_end = _parse_date(str(contract.get("development_end_date")), "development_end_date")
@@ -2116,6 +2151,7 @@ def _publish_development(
         manifest = {
             "schema_version": MODEL_SCHEMA_VERSION,
             "state": state,
+            "model_family": evaluation["model_family"],
             "promotion_permitted": False,
             "created_at_utc": datetime.now(UTC).isoformat(),
             "baseline_profile_sha256": evaluation["baseline_profile_sha256"],
@@ -2132,6 +2168,7 @@ def _publish_development(
             {
                 "schema_version": AUTHORITY_SCHEMA_VERSION,
                 "state": state,
+                "model_family": evaluation["model_family"],
                 "promotion_permitted": False,
                 "manifest_path": _MANIFEST_NAME,
                 "manifest_sha256": file_sha256(temporary / _MANIFEST_NAME),
@@ -2216,9 +2253,27 @@ def load_complete_intraday_development_output(directory: Path) -> dict[str, Any]
     )
     profile_sha256 = profile_identity.sha256()
     dataset = _object(evaluation.get("dataset"), "evaluation dataset")
+    model_family = str(evaluation.get("model_family", ""))
+    event_cohort = dataset.get("research_event_cohort")
     config_payload = _object(evaluation.get("training_config"), "training config")
     if (
-        evaluation.get("baseline_profile_sha256") != profile_sha256
+        model_family not in {"intraday_technical", "intraday_event_confirmed_research"}
+        or model_card.get("model_family") != model_family
+        or manifest.get("model_family") != model_family
+        or authority.get("model_family") != model_family
+        or (
+            model_family == "intraday_event_confirmed_research"
+            and (
+                not isinstance(event_cohort, dict)
+                or event_cohort.get("production_eligible") is not False
+                or event_cohort.get("serving_eligible") is not False
+                or event_cohort.get("future_holdout_opened") is not False
+                or event_cohort.get("catalyst_role")
+                != "confirmation_and_population_filter_not_model_feature"
+            )
+        )
+        or (model_family == "intraday_technical" and event_cohort is not None)
+        or evaluation.get("baseline_profile_sha256") != profile_sha256
         or model_card.get("baseline_profile_sha256") != profile_sha256
         or manifest.get("baseline_profile_sha256") != profile_sha256
         or authority.get("baseline_profile_sha256") != profile_sha256
@@ -2316,6 +2371,7 @@ def load_complete_intraday_development_output(directory: Path) -> dict[str, Any]
         if (
             not isinstance(loaded, dict)
             or loaded.get("validation_passed") is not True
+            or loaded.get("model_family") != model_family
             or loaded.get("baseline_profile_sha256") != profile_sha256
             or loaded.get("dataset") != dataset
             or loaded.get("feature_columns") != list(MODEL_FEATURE_COLUMNS)

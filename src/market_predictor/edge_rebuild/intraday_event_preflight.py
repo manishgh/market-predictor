@@ -43,6 +43,7 @@ from market_predictor.resources import (
     assert_memory_budget,
     assert_peak_memory_budget,
     memory_audit,
+    release_process_memory,
 )
 from market_predictor.swing.event_families import EVENT_FAMILY_POLICY_SHA256
 from market_predictor.v3.errors import DataReadinessError
@@ -461,16 +462,25 @@ def publish_intraday_event_preflight(
         raise
 
 
-def load_intraday_event_preflight(directory: Path) -> IntradayEventPreflightAuthority:
+def load_intraday_event_preflight(
+    directory: Path,
+    *,
+    verified_dataset: PublishedIntradayDataset | None = None,
+) -> IntradayEventPreflightAuthority:
     """Strictly replay the A5.1 authority and reject inventory or lineage drift."""
 
-    return _load_intraday_event_preflight(directory, verify_parents=True)
+    return _load_intraday_event_preflight(
+        directory,
+        verify_parents=True,
+        verified_dataset=verified_dataset,
+    )
 
 
 def _load_intraday_event_preflight(
     directory: Path,
     *,
     verify_parents: bool,
+    verified_dataset: PublishedIntradayDataset | None = None,
 ) -> IntradayEventPreflightAuthority:
     """Load one authority; publishers may reuse parents verified in the same process."""
 
@@ -524,9 +534,18 @@ def _load_intraday_event_preflight(
     if file_sha256(dataset_directory / "_authority.json") != request.get("dataset_authority_sha256"):
         raise DataReadinessError("A5.1 A4.3 parent authority differs")
     if verify_parents:
-        parent_dataset = load_published_intraday_dataset(dataset_directory)
-        if parent_dataset.authority_sha256 != request.get("dataset_authority_sha256"):
+        parent_dataset = verified_dataset or load_published_intraday_dataset(
+            dataset_directory
+        )
+        if (
+            parent_dataset.root.resolve() != dataset_directory.resolve()
+            or parent_dataset.authority_sha256
+            != request.get("dataset_authority_sha256")
+        ):
             raise DataReadinessError("A5.1 strict A4.3 parent replay differs")
+        if verified_dataset is None:
+            del parent_dataset
+            release_process_memory()
     raw_event_identities = request.get("event_authorities")
     if not isinstance(raw_event_identities, list) or not raw_event_identities:
         raise DataReadinessError("A5.1 event authority inventory is malformed")
