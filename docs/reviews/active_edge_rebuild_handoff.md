@@ -256,6 +256,8 @@ A4.2/A4.5 trade/quote work remains storage-blocked and must not be replaced with
 
 ## A5.1d Historical Identity Correction And Training Result
 
+- Implementation commits: `4cc5d4e` (identity reconciliation) and `cda4c1f`
+  (event-confirmed training and verification).
 - Literal historical event `security_id` matching was defective: 17,401 direct-issuer
   events produced only 19 attached episodes because event authorities commonly use
   `cik:<value>:ticker:<symbol>` while A4.3 uses `cik:<value>`.

@@ -956,7 +956,9 @@ authority passes attachment, timing, coverage, and replay checks.
 
    Implementation result:
 
-   - Exact ticker plus CIK-compatible reconciliation corrects the namespace defect while
+   - Implementation commits `4cc5d4e` and `cda4c1f` correct identity attachment and add
+     the research-only event-confirmed training path. Exact ticker plus CIK-compatible
+     reconciliation corrects the namespace defect while
      preserving source identities. Conflicting CIKs fail publication and ambiguous
      ticker mappings abstain. Focused identity, future-evidence, immutable replay, and
      verified-parent reuse tests pass.
