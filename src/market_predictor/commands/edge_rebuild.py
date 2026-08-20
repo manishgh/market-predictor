@@ -522,7 +522,7 @@ def register_edge_rebuild_commands(app: typer.Typer, console: Any) -> None:
             Path("configs/edge_rebuild_swing_training.toml"),
         ),
     ) -> None:
-        """Train rating-change and coverage-initiation swing specialists."""
+        """Train the swing broker-action specialists frozen by the supplied policy."""
 
         result = train_swing_broker_specialists(
             source_directory=source_dir,

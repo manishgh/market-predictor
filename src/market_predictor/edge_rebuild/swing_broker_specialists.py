@@ -75,6 +75,10 @@ MODEL_SCHEMA: Final = "edge_rebuild.swing_broker_specialist_model.v1"
 RATING_SPECIALIST: Final = "rating_change"
 COVERAGE_SPECIALIST: Final = "coverage_initiation"
 SPECIALISTS: Final = (RATING_SPECIALIST, COVERAGE_SPECIALIST)
+UPGRADE_SPECIALIST: Final = "rating_upgrade"
+DOWNGRADE_SPECIALIST: Final = "rating_downgrade"
+DIRECTIONAL_SPECIALISTS: Final = (UPGRADE_SPECIALIST, DOWNGRADE_SPECIALIST)
+SUPPORTED_SPECIALIST_SETS: Final = frozenset({SPECIALISTS, DIRECTIONAL_SPECIALISTS})
 PROFILE_MAP: Final = {
     "technical_only": TECHNICAL_PROFILE,
     "broker_action_only": EVENT_PROFILE,
@@ -158,7 +162,7 @@ class BrokerSpecialistPolicy:
             raise ValueError("broker specialist source schema differs")
         if self.source_event_family != "analyst_revision":
             raise ValueError("broker specialist source family differs")
-        if self.specialists != SPECIALISTS:
+        if self.specialists not in SUPPORTED_SPECIALIST_SETS:
             raise ValueError("broker specialist definitions differ")
         if self.profiles != tuple(PROFILE_MAP):
             raise ValueError("broker specialist profiles differ")
@@ -328,7 +332,7 @@ def train_swing_broker_specialists(
         }
         evaluations: list[dict[str, Any]] = []
         selected_models: dict[str, dict[str, Any]] = {}
-        for specialist in SPECIALISTS:
+        for specialist in policy.specialists:
             specialist_ids = _specialist_decision_ids(subtype_rows, specialist)
             specialist_capacity = capacity.loc[capacity["specialist"].eq(specialist)]
             capacity_passed = bool(specialist_capacity["capacity_passed"].all())
@@ -610,6 +614,10 @@ def _specialist_decision_ids(frame: pd.DataFrame, specialist: str) -> set[str]:
         mask = frame["subtype"].isin(["rating_upgrade", "rating_downgrade"])
     elif specialist == COVERAGE_SPECIALIST:
         mask = frame["subtype"].eq("coverage_initiation")
+    elif specialist == UPGRADE_SPECIALIST:
+        mask = frame["subtype"].eq("rating_upgrade")
+    elif specialist == DOWNGRADE_SPECIALIST:
+        mask = frame["subtype"].eq("rating_downgrade")
     else:
         raise DataReadinessError(f"unknown broker specialist: {specialist}")
     return set(frame.loc[mask, "decision_id"].astype(str))
@@ -621,7 +629,7 @@ def _capacity_audit(
 ) -> pd.DataFrame:
     holdout = _unseen_security_mask(frame["security_id"].astype(str), policy)
     records: list[dict[str, Any]] = []
-    for specialist in SPECIALISTS:
+    for specialist in policy.specialists:
         ids = _specialist_decision_ids(frame, specialist)
         subset = frame.loc[frame["decision_id"].astype(str).isin(ids)].copy()
         for split, start, end, unseen_only in (
@@ -1471,11 +1479,11 @@ def _verify_output(
         str(item.get("specialist"))
         for item in raw_specialists
         if isinstance(item, Mapping)
-    } != set(SPECIALISTS):
+    } != set(policy.specialists):
         raise DataReadinessError("broker specialist result inventory differs")
     replayed_specialists: list[dict[str, Any]] = []
     replayed_models: dict[str, dict[str, Any]] = {}
-    for specialist in SPECIALISTS:
+    for specialist in policy.specialists:
         specialist_capacity = expected_capacity.loc[
             expected_capacity["specialist"].eq(specialist)
         ]

@@ -12,6 +12,9 @@ from market_predictor.v3.errors import DataReadinessError
 
 _ROOT = Path(__file__).parents[1]
 _POLICY = _ROOT / "configs" / "swing_broker_action_specialists.toml"
+_DIRECTIONAL_POLICY = (
+    _ROOT / "configs" / "swing_directional_broker_action_specialists.toml"
+)
 
 
 def test_policy_freezes_two_specialists_and_six_experiments_each() -> None:
@@ -28,12 +31,39 @@ def test_policy_freezes_two_specialists_and_six_experiments_each() -> None:
     assert policy.minimum_validation_roc_auc == 0.60
 
 
+def test_directional_policy_freezes_upgrade_and_downgrade_specialists() -> None:
+    policy = specialists.load_broker_specialist_policy(_DIRECTIONAL_POLICY)
+
+    assert policy.specialists == ("rating_upgrade", "rating_downgrade")
+    assert policy.profiles == (
+        "technical_only",
+        "broker_action_only",
+        "technical_plus_broker_action",
+    )
+    assert policy.estimators == ("logistic", "hist_gradient_boosting")
+    assert policy.minimum_validation_roc_auc == 0.60
+
+
 def test_partial_policy_or_locked_test_date_drift_fails_closed(tmp_path: Path) -> None:
     changed = tmp_path / "changed.toml"
     changed.write_text(
         _POLICY.read_text(encoding="utf-8").replace(
             "locked_test_start = 2025-07-01",
             "locked_test_start = 2025-06-30",
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(DataReadinessError, match="policy is invalid"):
+        specialists.load_broker_specialist_policy(changed)
+
+
+def test_mixed_directional_and_legacy_specialists_fail_closed(tmp_path: Path) -> None:
+    changed = tmp_path / "mixed.toml"
+    changed.write_text(
+        _DIRECTIONAL_POLICY.read_text(encoding="utf-8").replace(
+            'specialists = ["rating_upgrade", "rating_downgrade"]',
+            'specialists = ["rating_upgrade", "coverage_initiation"]',
         ),
         encoding="utf-8",
     )
@@ -194,6 +224,48 @@ def test_capacity_audit_keeps_rating_and_coverage_populations_separate() -> None
     assert rating_development["rating_down_announcements"] == 1
     assert coverage_development["announcements"] == 1
     assert coverage_development["coverage_announcements"] == 1
+
+
+def test_directional_capacity_audit_keeps_upgrades_and_downgrades_separate() -> None:
+    policy = replace(
+        specialists.load_broker_specialist_policy(_DIRECTIONAL_POLICY),
+        minimum_development_announcements=1,
+        minimum_validation_announcements=1,
+        minimum_validation_securities=1,
+        minimum_validation_sectors=1,
+        minimum_unseen_validation_announcements=1,
+    )
+    frame = pd.DataFrame(
+        {
+            "decision_id": ["up-dev", "down-dev", "up-val", "down-val"],
+            "security_id": ["A", "B", "C", "D"],
+            "sector": ["Tech", "Finance", "Tech", "Finance"],
+            "session_date_et": pd.to_datetime(
+                ["2024-01-02", "2024-01-03", "2024-07-02", "2024-07-03"]
+            ),
+            "analyst_revision_episode_id": ["u1", "d1", "u2", "d2"],
+            "subtype": [
+                "rating_upgrade",
+                "rating_downgrade",
+                "rating_upgrade",
+                "rating_downgrade",
+            ],
+        }
+    )
+
+    audit = specialists._capacity_audit(frame, policy)
+
+    for subtype in ("rating_upgrade", "rating_downgrade"):
+        development = audit.loc[
+            audit["specialist"].eq(subtype) & audit["split"].eq("development")
+        ].iloc[0]
+        assert development["announcements"] == 1
+        assert development["rating_up_announcements"] == int(
+            subtype == "rating_upgrade"
+        )
+        assert development["rating_down_announcements"] == int(
+            subtype == "rating_downgrade"
+        )
 
 
 def test_coverage_is_an_action_even_when_direction_is_unavailable() -> None:

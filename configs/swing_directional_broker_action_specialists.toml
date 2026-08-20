@@ -1,0 +1,39 @@
+schema_version = "market_predictor.swing_broker_action_specialists.v1"
+source_artifact_schema = "edge_rebuild.swing_analyst_revision_ablation_manifest.v2"
+source_event_family = "analyst_revision"
+
+development_start = 2019-07-09
+development_end = 2024-05-28
+model_selection_training_end = 2023-05-26
+model_selection_embargo_start = 2023-05-30
+model_selection_embargo_end = 2023-06-12
+model_selection_validation_start = 2023-06-13
+validation_start = 2024-06-12
+validation_end = 2025-06-13
+locked_test_start = 2025-07-01
+
+specialists = ["rating_upgrade", "rating_downgrade"]
+profiles = ["technical_only", "broker_action_only", "technical_plus_broker_action"]
+estimators = ["logistic", "hist_gradient_boosting"]
+report_only_subtypes = ["coverage_initiation", "price_target_up", "price_target_down", "analyst_rating_or_target_revision"]
+
+minimum_development_announcements = 1000
+minimum_validation_announcements = 250
+minimum_validation_securities = 100
+minimum_validation_sectors = 5
+minimum_unseen_validation_announcements = 50
+minimum_validation_roc_auc = 0.60
+minimum_brier_skill = 0.0
+maximum_expected_calibration_error = 0.10
+minimum_selected_announcements = 100
+minimum_unseen_selected_announcements = 25
+probability_thresholds = [0.20, 0.30, 0.40, 0.50, 0.60]
+calibration_fraction = 0.20
+minimum_calibration_sessions = 63
+bootstrap_samples = 2000
+bootstrap_block_sessions = 20
+unseen_security_holdout_fraction = 0.20
+unseen_security_hash_seed = 42
+random_seed = 42
+maximum_process_memory_gib = 5.0
+memory_guard_headroom_gib = 0.75
