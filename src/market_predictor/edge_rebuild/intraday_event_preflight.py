@@ -74,6 +74,7 @@ _FROZEN_POLICY: Final = {
     "maximum_process_memory_gib": 4.0,
     "memory_guard_headroom_gib": 0.75,
 }
+_IDENTITY_ALIGNMENT_POLICY: Final = "exact_uppercase_ticker_with_cik_conflict_rejection_v1"
 
 
 @dataclass(frozen=True, slots=True)
@@ -330,6 +331,7 @@ def publish_intraday_event_preflight(
     ]
     request_payload = {
         "schema": MANIFEST_SCHEMA,
+        "identity_alignment_policy": _IDENTITY_ALIGNMENT_POLICY,
         "dataset_authority_directory": str(dataset_authority_directory.resolve()),
         "dataset_authority_sha256": dataset_authority_sha256,
         "event_authorities": event_identities,
@@ -348,6 +350,7 @@ def publish_intraday_event_preflight(
     if dataset.authority_sha256 != dataset_authority_sha256:
         raise DataReadinessError("A4.3 authority changed while A5.1 was loading")
     events, coverage = _combine_event_authorities(event_authorities, config=config)
+    events, coverage = _reconcile_event_namespace(dataset.frame, events, coverage)
     decisions = _build_decision_eligibility(dataset, events, coverage, config=config)
     attachments = _build_event_attachments(decisions, events, config=config)
     coverage_audit, blockers = _build_coverage_audit(
@@ -480,6 +483,7 @@ def _load_intraday_event_preflight(
     training_eligible = status == "eligible"
     if (
         request.get("schema") != MANIFEST_SCHEMA
+        or request.get("identity_alignment_policy") != _IDENTITY_ALIGNMENT_POLICY
         or request.get("request_sha256") != request_sha256
         or manifest.get("schema") != MANIFEST_SCHEMA
         or manifest.get("state") != "complete"
@@ -645,6 +649,90 @@ def _combine_event_authorities(
     return events, coverage
 
 
+def _reconcile_event_namespace(
+    decisions: pd.DataFrame,
+    events: pd.DataFrame,
+    coverage: pd.DataFrame,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Map historical event identities onto A4.3 without weakening issuer checks."""
+
+    required_decision_columns = {"ticker", "security_id"}
+    if not required_decision_columns.issubset(decisions.columns):
+        raise DataReadinessError("A5.1 decision identity spine is incomplete")
+    target = decisions.loc[:, ["ticker", "security_id"]].drop_duplicates().copy()
+    target["ticker"] = _normalized_ticker(target["ticker"])
+    target["security_id"] = target["security_id"].astype(str).str.strip()
+    if target["ticker"].eq("").any() or target["security_id"].eq("").any():
+        raise DataReadinessError("A5.1 decision identity spine contains blanks")
+    target_counts = target.groupby("ticker", sort=False)["security_id"].nunique()
+    ambiguous_tickers = set(target_counts.loc[target_counts.ne(1)].index.astype(str))
+    unique_target = (
+        target.loc[~target["ticker"].isin(ambiguous_tickers)]
+        .drop_duplicates("ticker", keep="first")
+        .set_index("ticker")["security_id"]
+    )
+
+    aligned_events = _align_identity_frame(
+        events,
+        unique_target=unique_target,
+        ambiguous_tickers=ambiguous_tickers,
+        label="event",
+    )
+    aligned_coverage = _align_identity_frame(
+        coverage,
+        unique_target=unique_target,
+        ambiguous_tickers=ambiguous_tickers,
+        label="coverage",
+    )
+    return aligned_events, aligned_coverage
+
+
+def _align_identity_frame(
+    frame: pd.DataFrame,
+    *,
+    unique_target: pd.Series,
+    ambiguous_tickers: set[str],
+    label: str,
+) -> pd.DataFrame:
+    required = {"ticker", "security_id"}
+    if not required.issubset(frame.columns):
+        raise DataReadinessError(f"A5.1 {label} identity fields are incomplete")
+    output = frame.copy()
+    output["ticker"] = _normalized_ticker(output["ticker"])
+    output["source_namespace_security_id"] = output["security_id"].astype(str).str.strip()
+    output["target_security_id"] = output["ticker"].map(unique_target)
+    output["identity_alignment"] = "no_exact_ticker_in_intraday_dataset"
+    ambiguous = output["ticker"].isin(ambiguous_tickers)
+    output.loc[ambiguous, "identity_alignment"] = "ambiguous_intraday_ticker_identity"
+    matched = output["target_security_id"].notna() & ~ambiguous
+    source_cik = output["source_namespace_security_id"].map(_embedded_cik)
+    target_cik = output["target_security_id"].map(_embedded_cik)
+    conflicting_cik = matched & source_cik.notna() & target_cik.notna() & source_cik.ne(target_cik)
+    if bool(conflicting_cik.any()):
+        conflicts = output.loc[
+            conflicting_cik,
+            ["ticker", "source_namespace_security_id", "target_security_id"],
+        ].drop_duplicates()
+        raise DataReadinessError(
+            "A5.1 exact-ticker identity alignment found conflicting CIKs: "
+            f"{conflicts.head(5).to_dict(orient='records')}"
+        )
+    output.loc[matched, "security_id"] = output.loc[matched, "target_security_id"].astype(str)
+    output.loc[matched, "identity_alignment"] = "exact_ticker_cik_compatible"
+    return output.drop(columns="target_security_id")
+
+
+def _normalized_ticker(values: pd.Series) -> pd.Series:
+    return values.astype(str).str.upper().str.strip()
+
+
+def _embedded_cik(value: object) -> str | None:
+    text = str(value).strip()
+    if not text.startswith("cik:"):
+        return None
+    return text.split(":ticker:", maxsplit=1)[0]
+
+
 def _build_decision_eligibility(
     dataset: PublishedIntradayDataset,
     events: pd.DataFrame,
@@ -744,7 +832,9 @@ def _build_event_attachments(
     columns = [
         "family_event_id",
         "security_id",
+        "source_namespace_security_id",
         "ticker",
+        "identity_alignment",
         "feature_available_at_utc",
         "decision_id",
         "decision_time_utc",
@@ -974,12 +1064,21 @@ def _publication_audit(
         if not attached.empty
         else 0
     )
+    identity_mismatch = int(
+        attached["identity_alignment"].astype(str).ne("exact_ticker_cik_compatible").sum()
+    )
     return CanonicalAuditReport(
         checks=(
             _check("decision_identity", duplicate_decisions, len(decisions), "decision_id is unique"),
             _check("event_identity", duplicate_events, len(events), "family_event_id is unique"),
             _check("causal_attachment", future, len(attached), "event availability is not after decision"),
             _check("issuer_attachment", issuer_mismatch, len(attached), "event and decision security_id match"),
+            _check(
+                "identity_alignment",
+                identity_mismatch,
+                len(attached),
+                "attached events use exact ticker and CIK-compatible identity",
+            ),
         )
     )
 
@@ -994,6 +1093,10 @@ def _validate_published_frames(decisions: pd.DataFrame, attachments: pd.DataFram
         raise DataReadinessError("A5.1 production coverage state is invalid")
     attached = attachments.loc[attachments["decision_id"].astype(str).ne("")]
     if not attached.empty:
+        if not attached["identity_alignment"].astype(str).eq(
+            "exact_ticker_cik_compatible"
+        ).all():
+            raise DataReadinessError("A5.1 published attachment identity alignment differs")
         if pd.to_datetime(attached["feature_available_at_utc"], utc=True).gt(
             pd.to_datetime(attached["decision_time_utc"], utc=True)
         ).any():
@@ -1142,7 +1245,9 @@ def _attachment_record(
     return {
         "family_event_id": str(event.family_event_id),
         "security_id": str(event.security_id),
+        "source_namespace_security_id": str(event.source_namespace_security_id),
         "ticker": str(event.ticker),
+        "identity_alignment": str(event.identity_alignment),
         "feature_available_at_utc": available,
         "decision_id": decision_id,
         "decision_time_utc": decision_time,

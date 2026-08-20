@@ -314,6 +314,59 @@ def test_issuer_identity_poison_is_rejected(
         harness.publish(tmp_path / "issuer-poison")
 
 
+def test_ticker_and_compatible_cik_reconcile_historical_event_namespace(
+    harness: _Harness,
+    tmp_path: Path,
+) -> None:
+    ticker = "T00"
+    target_security_id = "cik:0000000001"
+    source_security_id = f"{target_security_id}:ticker:{ticker}"
+    decision_mask = harness.dataset.frame["ticker"].astype(str).eq(ticker)
+    harness.dataset.frame.loc[decision_mask, "security_id"] = target_security_id
+    for authority in harness.event_authorities.values():
+        event_mask = authority.events["ticker"].astype(str).eq(ticker)
+        authority.events.loc[event_mask, "security_id"] = source_security_id
+        authority.events.loc[event_mask, "source_security_id"] = source_security_id
+        coverage_mask = authority.coverage["ticker"].astype(str).eq(ticker)
+        authority.coverage.loc[coverage_mask, "security_id"] = source_security_id
+        assignment_mask = authority.assignments["ticker"].astype(str).eq(ticker)
+        authority.assignments.loc[assignment_mask, "security_id"] = source_security_id
+
+    result = harness.publish(tmp_path / "reconciled-namespace")
+    attachments = _frame(result, "attachments")
+    attached = attachments.loc[
+        attachments["ticker"].astype(str).eq(ticker)
+        & attachments["decision_id"].astype(str).ne("")
+    ]
+
+    assert not attached.empty
+    assert attached["security_id"].astype(str).eq(target_security_id).all()
+    assert attached["source_namespace_security_id"].astype(str).eq(
+        source_security_id
+    ).all()
+    assert attached["identity_alignment"].astype(str).eq(
+        "exact_ticker_cik_compatible"
+    ).all()
+
+
+def test_exact_ticker_with_conflicting_cik_is_rejected(
+    harness: _Harness,
+    tmp_path: Path,
+) -> None:
+    ticker = "T00"
+    decision_mask = harness.dataset.frame["ticker"].astype(str).eq(ticker)
+    harness.dataset.frame.loc[decision_mask, "security_id"] = "cik:0000000001"
+    authority = next(iter(harness.event_authorities.values()))
+    event_mask = authority.events["ticker"].astype(str).eq(ticker)
+    authority.events.loc[event_mask, "security_id"] = "cik:0000000002:ticker:T00"
+    authority.events.loc[event_mask, "source_security_id"] = (
+        "cik:0000000002:ticker:T00"
+    )
+
+    with pytest.raises(DataReadinessError, match="conflicting CIK"):
+        harness.publish(tmp_path / "conflicting-cik")
+
+
 def test_future_evidence_poison_is_rejected(
     harness: _Harness,
     tmp_path: Path,

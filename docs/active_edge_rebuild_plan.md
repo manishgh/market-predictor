@@ -810,7 +810,8 @@ authority passes attachment, timing, coverage, and replay checks.
      causal/tamper tests, and independent reviewer verification. No model was trained
      and A5.2 remains prohibited.
 
-6. **A5.1c - Build prospective SIP sessions and mature outcomes (`in_progress`).**
+6. **A5.1c - Build prospective SIP sessions and mature outcomes
+   (`implementation_complete_data_pending`).**
    After A5.1b closes, freeze a separate append-only authority for future SIP bars,
    A4.3-identical features, and exact 30-minute labels. It must collect the complete
    contemporaneous selection cohort plus SPY, QQQ, and sector ETFs, preserve the A4.3
@@ -917,6 +918,41 @@ authority passes attachment, timing, coverage, and replay checks.
      remaining high- or medium-severity finding. The first SIP session parent remains
      pending the `2026-08-20` close; features, outcomes, preflight, training, and serving
      remain prohibited.
+
+7. **A5.1d - Correct historical intraday event identity and run matched development
+   training (`in_progress`).** The A5.1 preflight attached events by literal
+   `security_id`. Historical event authorities encode most SEC identities as
+   `cik:<value>:ticker:<symbol>`, while A4.3 uses `cik:<value>`. A reproduced audit
+   found 17,401 direct-issuer analyst episodes, 15,603 episodes whose ticker occurs in
+   A4.3, but only 97 episodes with a literal security-ID overlap and 19 attached
+   episodes. This is an identity-normalization defect, not an event-capacity result.
+
+   Frozen correction and training contract:
+
+   - Reconcile events and source-coverage rows to the A4.3 namespace by exact uppercase
+     ticker. When both source and target identities contain CIKs, unequal CIKs fail the
+     publication. Ambiguous ticker/security mappings abstain and are audited; they are
+     never guessed.
+   - Preserve the original event and coverage security IDs as lineage. Do not rewrite
+     either parent authority. Publish one new immutable preflight authority and require
+     strict replay, identity-tamper, ambiguity, future-evidence, and coverage tests.
+   - Historical `provider_publication_proxy` timestamps may support research-only
+     development experiments. They may not set production eligibility, open the future
+     holdout, authorize serving, or satisfy prospective promotion floors.
+   - Compare four explicit research families: swing technical, swing technical plus
+     broker catalyst, intraday technical, and intraday technical plus broker catalyst.
+     Catalyst comparisons use the same decision rows, labels, temporal folds, security
+     holdout, costs, and estimator budget as their technical controls. Missing catalyst
+     coverage causes abstention and is never encoded as zero.
+   - Existing verified historical authorities are inputs; no provider download occurs.
+     Swing and intraday jobs run sequentially under their 5 GiB and 4 GiB caps.
+   - Selection uses development/validation data only. ROC-AUC is diagnostic and remains
+     co-gated by calibration, after-cost benchmark-relative economics, drawdown, trade
+     count, and fold stability. The post-2026-07-08 intraday holdout remains closed.
+   - Exit evidence is the corrected attached-episode count, strict authority replay,
+     matched technical-versus-catalyst evaluation, focused poison tests, repository
+     tests, tracked Ruff, strict mypy, and compile verification. Rejected families must
+     publish `no_candidate`; blocked families must publish the exact blocker.
 
 ### A6 - Run Locked Evaluation and Promote Qualified Models
 
