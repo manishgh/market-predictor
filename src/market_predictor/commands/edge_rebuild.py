@@ -1642,6 +1642,13 @@ def register_edge_rebuild_commands(app: typer.Typer, console: Any) -> None:
                 "research-only event-confirmed cohort."
             ),
         ),
+        event_subtype: str | None = typer.Option(
+            None,
+            help=(
+                "Optional governed analyst subtype: bare_upgrade, bare_downgrade, "
+                "or coverage. Requires --event-preflight-dir."
+            ),
+        ),
         config_path: Path = typer.Option(
             Path("configs/edge_rebuild_intraday_development.toml"),
             "--policy",
@@ -1655,6 +1662,7 @@ def register_edge_rebuild_commands(app: typer.Typer, console: Any) -> None:
             hypothesis=hypothesis,
             config=load_intraday_development_config(config_path),
             research_event_preflight_directory=event_preflight_dir,
+            research_event_subtype=event_subtype,
         )
         console.print(
             {

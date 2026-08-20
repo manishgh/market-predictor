@@ -444,10 +444,19 @@ def test_no_candidate_publishes_evidence_without_model_or_future_access(
     assert not (tmp_path / ".no-candidate.future-holdout-access.json").exists()
 
 
+@pytest.mark.parametrize(
+    ("event_subtype", "expected_family"),
+    [
+        (None, "intraday_event_confirmed_research"),
+        ("bare_upgrade", "intraday_bare_upgrade_confirmed_research"),
+    ],
+)
 def test_event_confirmed_training_binds_research_cohort_and_remains_non_promotable(
     a43_dataset: Path,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    event_subtype: str | None,
+    expected_family: str,
 ) -> None:
     config = _rejecting_config()
     _limit_to_one_candidate(monkeypatch, config)
@@ -465,6 +474,7 @@ def test_event_confirmed_training_binds_research_cohort_and_remains_non_promotab
         "serving_eligible": False,
         "future_holdout_opened": False,
         "catalyst_role": "confirmation_and_population_filter_not_model_feature",
+        "event_subtype": event_subtype,
     }
     monkeypatch.setattr(
         intraday_development,
@@ -474,7 +484,7 @@ def test_event_confirmed_training_binds_research_cohort_and_remains_non_promotab
             identity=cohort_identity,
         ),
     )
-    output = tmp_path / "event-confirmed"
+    output = tmp_path / f"event-confirmed-{event_subtype or 'all'}"
 
     result = train_intraday_development_candidate(
         a43_dataset,
@@ -482,17 +492,32 @@ def test_event_confirmed_training_binds_research_cohort_and_remains_non_promotab
         hypothesis="continuation",
         config=config,
         research_event_preflight_directory=event_directory,
+        research_event_subtype=event_subtype,
     )
 
     assert result.status == "no_candidate"
     evaluation = _json(output / "evaluation.json")
     model_card = _json(output / "model_card.json")
-    assert evaluation["model_family"] == "intraday_event_confirmed_research"
-    assert model_card["model_family"] == "intraday_event_confirmed_research"
+    assert evaluation["model_family"] == expected_family
+    assert model_card["model_family"] == expected_family
     assert evaluation["dataset"]["research_event_cohort"] == cohort_identity
     assert evaluation["future_holdout_opened"] is False
     assert evaluation["promotion_permitted"] is False
     intraday_development.load_complete_intraday_development_output(output)
+
+
+def test_event_subtype_requires_preflight_directory(
+    a43_dataset: Path,
+    tmp_path: Path,
+) -> None:
+    with pytest.raises(DataReadinessError, match="requires a historical event preflight"):
+        train_intraday_development_candidate(
+            a43_dataset,
+            tmp_path / "invalid-directional-event",
+            hypothesis="continuation",
+            config=_rejecting_config(),
+            research_event_subtype="bare_upgrade",
+        )
 
 
 def test_passing_development_candidate_still_keeps_future_closed(

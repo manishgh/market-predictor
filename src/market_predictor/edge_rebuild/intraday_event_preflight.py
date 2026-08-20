@@ -103,6 +103,7 @@ class IntradayEventPreflightAuthority:
     coverage_audit: pd.DataFrame
     manifest: Mapping[str, Any]
     authority: Mapping[str, Any]
+    verified_parent_events: pd.DataFrame | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -466,6 +467,7 @@ def load_intraday_event_preflight(
     directory: Path,
     *,
     verified_dataset: PublishedIntradayDataset | None = None,
+    retain_verified_parent_events: bool = False,
 ) -> IntradayEventPreflightAuthority:
     """Strictly replay the A5.1 authority and reject inventory or lineage drift."""
 
@@ -473,6 +475,7 @@ def load_intraday_event_preflight(
         directory,
         verify_parents=True,
         verified_dataset=verified_dataset,
+        retain_verified_parent_events=retain_verified_parent_events,
     )
 
 
@@ -481,6 +484,7 @@ def _load_intraday_event_preflight(
     *,
     verify_parents: bool,
     verified_dataset: PublishedIntradayDataset | None = None,
+    retain_verified_parent_events: bool = False,
 ) -> IntradayEventPreflightAuthority:
     """Load one authority; publishers may reuse parents verified in the same process."""
 
@@ -549,6 +553,7 @@ def _load_intraday_event_preflight(
     raw_event_identities = request.get("event_authorities")
     if not isinstance(raw_event_identities, list) or not raw_event_identities:
         raise DataReadinessError("A5.1 event authority inventory is malformed")
+    parent_event_parts: list[pd.DataFrame] = []
     for raw in raw_event_identities:
         if not isinstance(raw, dict):
             raise DataReadinessError("A5.1 event authority identity is malformed")
@@ -566,6 +571,22 @@ def _load_intraday_event_preflight(
                 raise DataReadinessError(
                     "A5.1 parent event projected inventory differs"
                 )
+            if retain_verified_parent_events:
+                parent_event_parts.append(
+                    projected.events.loc[
+                        projected.events["event_family"].astype(str).eq(
+                            config.event_family
+                        ),
+                        [
+                            "family_event_id",
+                            "event_family",
+                            "classification_rule_id",
+                            "matched_text",
+                        ],
+                    ].copy()
+                )
+            del projected
+            release_process_memory()
     frames: dict[str, pd.DataFrame] = {}
     records = manifest.get("artifacts")
     if not isinstance(records, dict):
@@ -612,6 +633,11 @@ def _load_intraday_event_preflight(
         coverage_audit=frames["coverage_audit"],
         manifest=manifest,
         authority=authority,
+        verified_parent_events=(
+            pd.concat(parent_event_parts, ignore_index=True)
+            if parent_event_parts
+            else None
+        ),
     )
 
 

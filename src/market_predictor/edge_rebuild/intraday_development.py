@@ -26,6 +26,7 @@ from sklearn.preprocessing import StandardScaler
 
 from market_predictor.canonical.store import file_sha256
 from market_predictor.edge_rebuild.intraday_event_training import (
+    DIRECTIONAL_EVENT_SUBTYPES,
     filter_to_research_event_cohort,
     load_intraday_research_event_cohort,
 )
@@ -343,6 +344,7 @@ def train_intraday_development_candidate(
     hypothesis: str,
     config: IntradayDevelopmentConfig | None = None,
     research_event_preflight_directory: Path | None = None,
+    research_event_subtype: str | None = None,
 ) -> DevelopmentTrainingResult:
     """Train one technical or event-confirmed hypothesis without future data."""
 
@@ -350,6 +352,17 @@ def train_intraday_development_candidate(
     profile = baseline_profile(hypothesis, policy)
     _guard_memory(policy, "intraday development start", peak=False)
     immutable_inputs = [dataset_authority_directory]
+    if research_event_subtype is not None and research_event_preflight_directory is None:
+        raise DataReadinessError(
+            "intraday event subtype requires a historical event preflight"
+        )
+    if (
+        research_event_subtype is not None
+        and research_event_subtype not in DIRECTIONAL_EVENT_SUBTYPES
+    ):
+        raise DataReadinessError(
+            f"unsupported intraday analyst-event subtype: {research_event_subtype}"
+        )
     if research_event_preflight_directory is not None:
         immutable_inputs.append(research_event_preflight_directory)
     _require_output_isolated(output_directory, *immutable_inputs)
@@ -357,6 +370,7 @@ def train_intraday_development_candidate(
     if research_event_preflight_directory is not None:
         event_cohort = load_intraday_research_event_cohort(
             research_event_preflight_directory,
+            event_subtype=research_event_subtype,
         )
         release_process_memory()
     published = load_published_intraday_dataset(dataset_authority_directory)
@@ -379,11 +393,12 @@ def train_intraday_development_candidate(
 
     frozen_cost_bps = published.frozen_round_trip_cost_bps
     dataset_identity_val = _dataset_identity(published)
-    model_family = (
-        "intraday_event_confirmed_research"
-        if event_cohort is not None
-        else "intraday_technical"
-    )
+    if event_cohort is None:
+        model_family = "intraday_technical"
+    elif research_event_subtype is None:
+        model_family = "intraday_event_confirmed_research"
+    else:
+        model_family = f"intraday_{research_event_subtype}_confirmed_research"
     if event_cohort is not None:
         dataset_identity_val["research_event_cohort"] = event_cohort.identity
     gc.collect()
@@ -2255,14 +2270,25 @@ def load_complete_intraday_development_output(directory: Path) -> dict[str, Any]
     dataset = _object(evaluation.get("dataset"), "evaluation dataset")
     model_family = str(evaluation.get("model_family", ""))
     event_cohort = dataset.get("research_event_cohort")
+    directional_event_families = {
+        f"intraday_{subtype}_confirmed_research": subtype
+        for subtype in DIRECTIONAL_EVENT_SUBTYPES
+    }
+    event_model = model_family == "intraday_event_confirmed_research"
+    directional_subtype = directional_event_families.get(model_family)
     config_payload = _object(evaluation.get("training_config"), "training config")
     if (
-        model_family not in {"intraday_technical", "intraday_event_confirmed_research"}
+        model_family
+        not in {
+            "intraday_technical",
+            "intraday_event_confirmed_research",
+            *directional_event_families,
+        }
         or model_card.get("model_family") != model_family
         or manifest.get("model_family") != model_family
         or authority.get("model_family") != model_family
         or (
-            model_family == "intraday_event_confirmed_research"
+            (event_model or directional_subtype is not None)
             and (
                 not isinstance(event_cohort, dict)
                 or event_cohort.get("production_eligible") is not False
@@ -2270,6 +2296,10 @@ def load_complete_intraday_development_output(directory: Path) -> dict[str, Any]
                 or event_cohort.get("future_holdout_opened") is not False
                 or event_cohort.get("catalyst_role")
                 != "confirmation_and_population_filter_not_model_feature"
+                or (
+                    directional_subtype is not None
+                    and event_cohort.get("event_subtype") != directional_subtype
+                )
             )
         )
         or (model_family == "intraday_technical" and event_cohort is not None)
