@@ -109,7 +109,7 @@ drawdown, turnover, capacity, and coverage remain co-equal promotion gates.
 | A0 | Restore research integrity | Completed |
 | A1 | Verify labels and leakage controls | Completed |
 | A2 | Build the technical swing baseline | Completed |
-| A3 | Build catalyst-driven swing specialists | A3.5 completed with no candidate; A3.6 directional split pending |
+| A3 | Build catalyst-driven swing specialists | Completed; combined and directional specialists produced no candidate |
 | A4 | Build the technical intraday baseline | Completed; both A4.4 hypotheses rejected |
 | A5 | Build catalyst-driven intraday specialists | A5.1e completed with no candidate; prospective SIP evidence remains pending |
 | A6 | Run locked evaluation and promote qualified models | Not started |
@@ -277,13 +277,39 @@ superseded because it selected and evaluated on one validation window and used a
 simplified economic calculation.
 
 6. **A3.6 - Evaluate upgrades and downgrades as separate swing specialists
-   (`pending`).** Reuse the corrected A3.4 identical-decision authority and existing
+   (`completed; no candidate`).** Reuse the corrected A3.4 identical-decision authority and existing
    governed analyst subtype classifier. Split the prior combined rating-change
    specialist into upgrade-only and downgrade-only cohorts, then compare technical-
    only, broker-action-only, and combined profiles on identical rows, folds, labels,
    costs, and security scopes. Capacity must be audited before training; no threshold,
    estimator, gate, or locked-test boundary may be changed based on A3.5 or A5.1e
    results. Coverage initiation and price-target/generic actions are out of scope.
+
+   Implementation result:
+
+   - Commit `82b4959` generalizes the single governed swing-specialist path to accept
+     either the historical rating/coverage pair or the frozen upgrade/downgrade pair.
+     The new policy changes only cohort membership; profiles, estimators, labels,
+     chronological split, embargo, unseen-security assignment, costs, and gates are
+     unchanged. Mixed specialist sets fail closed.
+   - Upgrade capacity passes with 3,008 development, 561 chronological-validation,
+     and 102 unseen-security announcements. Downgrade capacity passes with 2,833,
+     577, and 111 respectively. Both include 359 development securities and all eight
+     represented sectors.
+   - Twelve experiments compare technical-only, broker-action-only, and combined
+     profiles using logistic and histogram-gradient-boosting estimators. Upgrade best
+     worst-scope inner ROC-AUC is 0.524 for combined logistic (0.533 chronological /
+     0.524 unseen). Downgrade best is 0.552 for combined gradient boosting
+     (0.552/0.560), only 0.002 above its technical-only control in the weaker scope.
+   - No threshold passes canonical economics in both scopes and no experiment reaches
+     the 0.60 AUC gate. The artifact is strict `no_development_candidate`; outer
+     validation and the locked test remain unopened, no model file exists, and
+     promotion remains prohibited.
+   - Output
+     `data/models/swing_directional_broker_action_specialists_dev_20260820_v1`
+     strictly replays. Peak working set was 0.376 GiB under the 5 GiB limit. Final
+     verification passed 1,463 tests with two skipped, tracked Ruff, strict mypy over
+     231 source files, and tracked compilation.
 
 ### A4 - Build the Technical Intraday Baseline
 

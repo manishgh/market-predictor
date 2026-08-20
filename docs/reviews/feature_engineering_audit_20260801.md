@@ -142,6 +142,12 @@ learned candidate.
   least one calendar, portfolio-daily, doubled-cost, or holding-aligned benchmark
   confidence gate across temporal and unseen-security validation. The result is an
   immutable `no_candidate`; the locked test was not read.
+- A3.6 then evaluated upgrades and downgrades separately on the same governed
+  decision rows and unchanged validation contract. Both directional cohorts passed
+  capacity. Upgrade best worst-scope inner AUC was 0.524 (0.533 chronological / 0.524
+  unseen); downgrade best was 0.552 (0.552 / 0.560). Neither cohort passed the 0.60
+  AUC gate or after-cost economics in both scopes. The result is
+  `no_development_candidate`; outer validation and locked test remain unopened.
 - The swing training process remained below its 5 GiB hard memory limit.
 - The A2 replacement baseline uses four nested technical groups: momentum/volatility,
   trend confirmation, pullback timing, and volume/liquidity. One regularized logistic
@@ -165,7 +171,7 @@ immutable artifact exists. `Blocked` means training or serving is prohibited.
 | Intraday ticker-catalyst specialist | Corrected A5.1 historical preflight binds 1,912 proxy-time episodes / 83,636 event-decision pairs; prospective authorities remain the production source | Upgrade and downgrade directional cohorts trained as technical confirmation filters; coverage failed capacity | Observed-time raw/revision/coverage path verified; causal SIP outcome horizon remains incomplete | Frozen 24-hour direct-issuer broker-action cohort; unknown/stale coverage abstains; catalyst is not a direct estimator feature | Four directional experiments are `no_candidate`; A6 remains prohibited | Not serveable | Historical research rejected; prospective evidence pending |
 | Intraday global overlay | GDELT collector and global authority verified in code; no production collection published | Not an estimator input | Observed-time collection, immutable query policy, and unknown/zero behavior verified | Separate global overlay contract verified | Ranking use blocked until runtime authority exists | Blocked until promoted bundle and orchestrator exist | Runtime artifact pending |
 | Swing technical estimator | Daily SIP/all, point-in-time membership, and V12 panel verify | Verified | Verified; latest closed session required | A2 nested technical schema and per-model subsets verified | Replacement trainer complete; new candidate not run | Blocked until promotion | Implementation ready |
-| Swing ticker-catalyst estimator | Two immutable V2 Alpaca issuer-event authorities cover `2019-07-09` through `2026-07-08`; strict replay verified | Corrected A3.4 publishes 27,087 prediction rows / 11,720 unique latest broker announcements per comparison dataset | No event specialist is live | Rating-change and coverage cohorts passed capacity; price-target/generic remains report-only | Twelve A3.5 experiments failed inner AUC and canonical portfolio gates; outer validation and locked test unopened | Blocked until a new preregistered strategy version passes | Development rejected |
+| Swing ticker-catalyst estimator | Two immutable V2 Alpaca issuer-event authorities cover `2019-07-09` through `2026-07-08`; strict replay verified | Corrected A3.4 publishes 27,087 prediction rows / 11,720 unique latest broker announcements per comparison dataset | No event specialist is live | Combined rating/coverage and separate upgrade/downgrade cohorts passed capacity; price-target/generic remains report-only | A3.5 and A3.6 experiments failed inner AUC and canonical portfolio gates; outer validation and locked test unopened | Blocked until a new preregistered strategy version passes | Development rejected |
 | Swing global overlay | Global collector and decision authority verified in code | Separate overlay; never attached as ticker news | Verified code | Separate global authority hash and source policy | Cannot rescue or alter a rejected estimator; ranking use requires complete authority | Blocked until promoted bundle and orchestrator exist | Runtime artifact pending |
 
 ## Training decision
@@ -182,6 +188,12 @@ price-target/generic actions report-only. Both specialists had sufficient chrono
 capacity, but all 12 development experiments failed the frozen inner-selection and
 canonical economic gates. Outer validation and the locked test stayed unopened;
 global context remains a separate overlay.
+
+A3.6 separated upgrades from downgrades without changing rows, folds, costs,
+estimators, or gates. Capacity passed, but upgrade best worst-scope inner AUC was
+0.524 and downgrade best was 0.552; neither produced stable after-cost economics in
+both validation scopes. This closes retrospective directional broker-action slicing
+with no candidate and no locked-test access.
 
 A5.1 first found an identity defect and then corrected it without weakening CIK checks.
 The corrected historical authority attaches 1,912 episodes. Research-only directional

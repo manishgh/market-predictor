@@ -140,7 +140,7 @@ specialists; A6 performs locked evaluation and promotion.
 | Model family | Current state | Next valid work |
 | --- | --- | --- |
 | Swing baseline | A2 trainer complete; prior candidates rejected; no new run or promotion | Preserve the frozen technical contract until a governed training run is approved |
-| Swing event-driven | Rating-change and coverage specialists trained in development; all rejected | Preserve rejection evidence; do not open locked test or serve |
+| Swing event-driven | Combined rating/coverage and separate upgrade/downgrade specialists trained in development; all rejected | Preserve rejection evidence; do not open locked test or serve |
 | Intraday baseline | V2 rejected; V3 invalid; A4.4 continuation and reversion both rejected | Preserve evidence; no serving or future-holdout access |
 | Intraday event-driven | Historical identity correction yields 1,912 attached events and two research-only no-candidate results; prospective production path remains blocked | Continue append-only prospective SIP sessions; do not serve proxy-time research outputs |
 
@@ -189,6 +189,31 @@ coverage.
   second independent chronological validation period.
 - V2 is superseded: it reused one validation window for selection/evaluation and used
   simplified event-weighted returns instead of canonical portfolio economics.
+
+## A3.6: Directional Swing Broker-Action Result
+
+- Commit `82b4959` uses the existing governed swing-specialist trainer and changes
+  only cohort membership: rating upgrades and rating downgrades are evaluated as
+  separate specialists. Profiles, labels, folds, costs, estimators, gates, and the
+  locked-test boundary are unchanged.
+- Upgrade capacity passes with 3,008 development, 561 chronological-validation, and
+  102 unseen-security announcements. Downgrade capacity passes with 2,833, 577, and
+  111 announcements respectively. Each development cohort contains 359 securities
+  across eight represented sectors.
+- Twelve experiments compare technical-only, broker-action-only, and combined inputs.
+  Upgrade best worst-scope inner ROC-AUC is 0.524 for combined logistic regression
+  (0.533 chronological / 0.524 unseen). Downgrade best is 0.552 for combined
+  histogram gradient boosting (0.552 / 0.560), only 0.002 above its technical-only
+  control in the weaker scope.
+- No threshold passes canonical after-cost economics in both scopes, and no experiment
+  reaches the 0.60 AUC gate. The result is `no_development_candidate`; outer
+  validation and the locked test remain unopened, no model was emitted, and promotion
+  is prohibited.
+- Artifact:
+  `data/models/swing_directional_broker_action_specialists_dev_20260820_v1`. Strict
+  replay passed. Peak working memory was 0.376 GiB. Final verification passed 1,463
+  tests with two skipped, tracked Ruff, strict mypy across 231 source files, and
+  tracked compilation.
 
 ## A4.1: SIP Trade/Quote Collector Verification
 
@@ -429,17 +454,12 @@ Final verification passed 1,457 tests with two skipped, tracked Ruff, strict myp
 230 source files, tracked compilation, and independent re-review with no remaining
 high- or medium-severity finding.
 
-Exact next research checkpoint: A3.6 splits the corrected swing rating-change cohort
-into upgrade-only and downgrade-only specialists. First audit chronological and
-unseen-security capacity on the existing A3.4 identical-decision authority. Train only
-eligible cohorts with the unchanged A3.5 profiles, estimators, labels, folds, costs,
-and gates. Do not open outer validation or the locked test unless an inner candidate
-passes.
-
-Operational A5.1c work remains independent: collect each eligible prospective SIP
-session with a valid pre-open membership parent until twenty contiguous sessions exist,
-then build features, mature outcomes, and rerun the prospective preflight. Historical
-directional experiments cannot substitute for observed-time production evidence.
+Exact next checkpoint: continue A5.1c append-only prospective collection. Collect each
+eligible SIP session with a valid pre-open membership parent until twenty contiguous
+sessions exist, then build causal features, mature outcomes, and rerun the prospective
+preflight. The completed historical directional experiments cannot substitute for
+observed-time production evidence. Further retrospective broker-action slicing is not
+authorized without a genuinely new preregistered hypothesis.
 
 ## Source Boundary
 
