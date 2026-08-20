@@ -73,11 +73,12 @@ learned candidate.
   transport, must classify valid two-sided duration, observed-zero states, and
   unavailable quote coverage.
 - A5.1 now publishes a strict causal event-cohort preflight. The two Alpaca parent
-  authorities contain 17,401 broker-action episodes, but exact `security_id` matching
-  produces only 19 unique attached episodes / 862 event-decision pairs and all source
-  timing is retrospective `provider_publication_proxy`. Production events, eligible
-  decisions, estimators, and locked-test reads are zero. Retrospective collection
-  completion remains unknown coverage at historical decisions.
+  authorities contain 17,401 broker-action episodes. Correct exact-ticker and
+  CIK-compatible namespace reconciliation produces 1,912 unique attached episodes /
+  83,636 event-decision pairs; the earlier 19/862 result was an identity-matching
+  defect. All historical source timing remains retrospective
+  `provider_publication_proxy`, so production eligibility and locked-test reads remain
+  zero.
 
 ## Swing
 
@@ -161,7 +162,7 @@ immutable artifact exists. `Blocked` means training or serving is prohibited.
 | Capability | Source and immutable authority | Batch path | Live path | Model contract | Training / promotion / serving | API | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | Intraday technical estimator | SIP/all bar and V2 authorities verify | Verified | Verified; parity and staleness rejection | Exact 44-feature schema verified; incomplete V3 z-scores removed | V2 economically rejected; later z-score artifact invalidated | Blocked until promotion | Rejected |
-| Intraday ticker-catalyst specialist | A5.1 historical preflight is blocked; prospective Alpaca poll/generation authority is verified in code but has no live artifact | 19 historical exact-identity episodes / 862 event-decision pairs; zero prospective episodes | Observed-time raw/revision/coverage path verified; live poll environment-pending | Frozen 24-hour direct-issuer broker-action cohort; current membership must extend A4.3 identity history; unknown/stale coverage abstains | A5.2 training and A6 locked evaluation prohibited | Not serveable | Prospective horizon not started |
+| Intraday ticker-catalyst specialist | Corrected A5.1 historical preflight binds 1,912 proxy-time episodes / 83,636 event-decision pairs; prospective authorities remain the production source | Upgrade and downgrade directional cohorts trained as technical confirmation filters; coverage failed capacity | Observed-time raw/revision/coverage path verified; causal SIP outcome horizon remains incomplete | Frozen 24-hour direct-issuer broker-action cohort; unknown/stale coverage abstains; catalyst is not a direct estimator feature | Four directional experiments are `no_candidate`; A6 remains prohibited | Not serveable | Historical research rejected; prospective evidence pending |
 | Intraday global overlay | GDELT collector and global authority verified in code; no production collection published | Not an estimator input | Observed-time collection, immutable query policy, and unknown/zero behavior verified | Separate global overlay contract verified | Ranking use blocked until runtime authority exists | Blocked until promoted bundle and orchestrator exist | Runtime artifact pending |
 | Swing technical estimator | Daily SIP/all, point-in-time membership, and V12 panel verify | Verified | Verified; latest closed session required | A2 nested technical schema and per-model subsets verified | Replacement trainer complete; new candidate not run | Blocked until promotion | Implementation ready |
 | Swing ticker-catalyst estimator | Two immutable V2 Alpaca issuer-event authorities cover `2019-07-09` through `2026-07-08`; strict replay verified | Corrected A3.4 publishes 27,087 prediction rows / 11,720 unique latest broker announcements per comparison dataset | No event specialist is live | Rating-change and coverage cohorts passed capacity; price-target/generic remains report-only | Twelve A3.5 experiments failed inner AUC and canonical portfolio gates; outer validation and locked test unopened | Blocked until a new preregistered strategy version passes | Development rejected |
@@ -182,11 +183,14 @@ capacity, but all 12 development experiments failed the frozen inner-selection a
 canonical economic gates. Outer validation and the locked test stayed unopened;
 global context remains a separate overlay.
 
-A5.1 then tested the intraday broker-action data contract without fitting a model.
-Although 17,401 research episodes exist, exact security identity and observed-time
-requirements leave zero production-eligible events and decisions. A5.2 cannot train
-until a newly preregistered horizon has real observed first-seen/revision history and
-point-in-time identity coverage; publication timestamps cannot backfill that evidence.
+A5.1 first found an identity defect and then corrected it without weakening CIK checks.
+The corrected historical authority attaches 1,912 episodes. Research-only directional
+development admitted 805 upgrades and 860 downgrades; 245 coverage initiations failed
+the frozen capacity floors. All four eligible subtype/hypothesis experiments failed
+discrimination and economic gates and emitted `no_candidate`. Historical publication
+timestamps still cannot provide production first-observed evidence. A5 production
+evaluation therefore remains blocked until the prospective event and SIP outcome
+horizon is causally complete.
 Commit `5530246` supplies the prospective observed-time authority needed to start that
 horizon, including strict A4.3 namespace binding, current-membership extension checks,
 exact HTTP request/response evidence, revision preservation, cutoff uniqueness, and

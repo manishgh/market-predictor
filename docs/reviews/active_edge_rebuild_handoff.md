@@ -277,6 +277,27 @@ A4.2/A4.5 trade/quote work remains storage-blocked and must not be replaced with
   231 source files, and compilation. Peak training RSS was about 3.16 GiB under the
   unchanged 4 GiB hard cap and 3.25 GiB safety threshold.
 
+## A5.1e Directional Intraday Broker-Action Result
+
+- Implementation commit `4821780` adds strict upgrade, downgrade, and coverage cohort
+  selection to the existing 30-minute research trainer. Parent authorities replay
+  once; subtype classification uses only retained, hash-verified parent event fields.
+- Upgrades pass capacity with 805 announcements, 32,970 decisions, 285 securities,
+  and 461 sessions. Downgrades pass with 860 announcements, 31,243 decisions, 273
+  securities, and 439 sessions. Coverage fails before training with 245 announcements,
+  169 securities, 168 sessions, only 38-55 announcements per validation fold, and 41
+  unseen-security announcements.
+- Upgrade continuation: 6,709 rows, seen/unseen ROC-AUC 0.492/0.531. Upgrade long
+  reversion: 5,341 rows, 0.495/0.494. Downgrade continuation: 5,991 rows, 0.510/0.485.
+  Downgrade long reversion: 6,041 rows, 0.506/0.529.
+- All four outputs are `no_candidate`. Isolated positive scopes have only 14-35 unseen
+  trades and fail in the paired seen scope; other scopes fail after-cost return,
+  profit factor, benchmark, calibration, confidence-bound, or fold-stability gates.
+  Future holdout and serving remain closed.
+- All four immutable output directories strictly replay. Peak working set was 3.193
+  GiB. Final verification passed 1,460 tests with two skipped, tracked Ruff, strict
+  mypy across 231 source files, and tracked compilation.
+
 ## Prospective Broker-Action Authority
 
 - Implementation commit `5530246` adds
@@ -408,17 +429,17 @@ Final verification passed 1,457 tests with two skipped, tracked Ruff, strict myp
 230 source files, tracked compilation, and independent re-review with no remaining
 high- or medium-severity finding.
 
-Exact next action: after the `2026-08-20` XNYS session closes plus 60 seconds, and
-before the `2026-08-21` open, run `collect-edge-prospective-sip-session` for session
-`2026-08-20` using membership parent
-`data/raw/index_membership/sp500_observed_20260819T201500Z_v5`. It must publish exact
-cohort five-minute SIP bars and exact SPY, QQQ, and 11 sector-ETF one-minute SIP bars
-with acceptable verified coverage. Repeat until twenty contiguous prior five-minute
-sessions exist under the same causal namespace. Only then build the causal feature
-authority, followed by the separate mature outcome authority and matched prospective
-preflight. Three implementation checkpoints remain after the first real source
-authority: causal features, mature outcomes, and matched preflight. Do not run A5.2 or
-open A6 before the matched preflight passes.
+Exact next research checkpoint: A3.6 splits the corrected swing rating-change cohort
+into upgrade-only and downgrade-only specialists. First audit chronological and
+unseen-security capacity on the existing A3.4 identical-decision authority. Train only
+eligible cohorts with the unchanged A3.5 profiles, estimators, labels, folds, costs,
+and gates. Do not open outer validation or the locked test unless an inner candidate
+passes.
+
+Operational A5.1c work remains independent: collect each eligible prospective SIP
+session with a valid pre-open membership parent until twenty contiguous sessions exist,
+then build features, mature outcomes, and rerun the prospective preflight. Historical
+directional experiments cannot substitute for observed-time production evidence.
 
 ## Source Boundary
 

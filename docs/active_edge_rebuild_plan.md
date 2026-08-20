@@ -109,9 +109,9 @@ drawdown, turnover, capacity, and coverage remain co-equal promotion gates.
 | A0 | Restore research integrity | Completed |
 | A1 | Verify labels and leakage controls | Completed |
 | A2 | Build the technical swing baseline | Completed |
-| A3 | Build catalyst-driven swing specialists | Completed; no candidate passed |
+| A3 | Build catalyst-driven swing specialists | A3.5 completed with no candidate; A3.6 directional split pending |
 | A4 | Build the technical intraday baseline | Completed; both A4.4 hypotheses rejected |
-| A5 | Build catalyst-driven intraday specialists | A5.1 blocked; prospective analyst-event horizon complete; SIP sessions next |
+| A5 | Build catalyst-driven intraday specialists | A5.1e completed with no candidate; prospective SIP evidence remains pending |
 | A6 | Run locked evaluation and promote qualified models | Not started |
 
 ### A0 - Restore Research Integrity (`completed`)
@@ -275,6 +275,15 @@ inputs were near or below chance; every candidate also failed the canonical port
 economic gate. No model artifact was emitted or promoted. The prior v2 report is
 superseded because it selected and evaluated on one validation window and used a
 simplified economic calculation.
+
+6. **A3.6 - Evaluate upgrades and downgrades as separate swing specialists
+   (`pending`).** Reuse the corrected A3.4 identical-decision authority and existing
+   governed analyst subtype classifier. Split the prior combined rating-change
+   specialist into upgrade-only and downgrade-only cohorts, then compare technical-
+   only, broker-action-only, and combined profiles on identical rows, folds, labels,
+   costs, and security scopes. Capacity must be audited before training; no threshold,
+   estimator, gate, or locked-test boundary may be changed based on A3.5 or A5.1e
+   results. Coverage initiation and price-target/generic actions are out of scope.
 
 ### A4 - Build the Technical Intraday Baseline
 
@@ -989,6 +998,68 @@ authority passes attachment, timing, coverage, and replay checks.
      across 231 source files, and tracked compilation. One unrelated microstructure
      retry test failed on the first full-suite run and then passed in isolation, as a
      complete file, and in the clean full-suite rerun.
+
+8. **A5.1e - Evaluate directional intraday broker-action cohorts (`completed; no candidate`).**
+   Split the corrected A5.1d research cohort with the existing governed analyst-rule
+   classifier. Test upgrades and downgrades as separate 30-minute research
+   specialists; audit coverage initiations independently and block them when capacity
+   is insufficient. Catalyst remains a cohort filter around the unchanged technical
+   estimator and is not added to the model feature vector.
+
+   Frozen contract and exit gates:
+
+   - Reuse the immutable A4.3 dataset, corrected A5.1d preflight, exact event identity,
+     four chronological folds, one-session embargo, stable unseen-security holdout,
+     feature order, costs, estimators, and economic gates. No provider download occurs.
+   - Admit a directional subtype only with at least 500 independent announcements,
+     200 securities, 200 sessions, 100 announcements in every validation fold, and 100
+     announcements represented in the unseen-security scope. These floors prevent one
+     issuer, time period, or seen-security population from dominating the result.
+   - Only `bare_upgrade`, `bare_downgrade`, and `coverage` are eligible subtype names.
+     Price-target and generic actions remain excluded because their direction is not
+     governed by this hypothesis.
+   - Train eligible subtype/hypothesis combinations sequentially under the unchanged
+     4 GiB process cap. Publish `no_candidate` when validation fails and an explicit
+     capacity blocker when a subtype fails the frozen floors.
+   - The historical publication-time proxy remains research-only. Future holdout,
+     serving, promotion, and A6 stay closed regardless of development performance.
+   - Exit evidence is deterministic subtype classification, capacity and future-poison
+     tests, immutable parent binding, strict output replay, focused tests, full tests,
+     Ruff, strict mypy, compilation, memory evidence, implementation commit, and
+     documentation closure.
+
+   Implementation result:
+
+   - Commit `4821780` adds one strict directional-cohort path to the existing research
+     trainer. Parent authorities are verified once; only classification fields are
+     retained before large parent tables are released. Subtype, capacity, and parent
+     hashes remain in model lineage. Unsupported or under-capacity subtypes fail before
+     the A4.3 training matrix is loaded.
+   - Upgrade capacity passed with 805 announcements, 32,970 attached decisions, 285
+     securities, 461 sessions, 149-202 announcements per validation fold, and 180
+     unseen-security announcements. Downgrade capacity passed with 860 announcements,
+     31,243 decisions, 273 securities, 439 sessions, 124-200 per fold, and 173 unseen.
+   - Coverage initiation was blocked without training: 245 announcements, 169
+     securities, 168 sessions, 38-55 per fold, and 41 unseen-security announcements.
+     Price-target and generic actions remained excluded.
+   - Upgrade continuation trained on 6,709 rows and produced seen/unseen positive-net-
+     return ROC-AUC of 0.492/0.531. Upgrade long reversion trained on 5,341 rows and
+     produced 0.495/0.494. Downgrade continuation trained on 5,991 rows and produced
+     0.510/0.485. Downgrade long reversion trained on 6,041 rows and produced
+     0.506/0.529.
+   - All four are strict `no_candidate` outputs. No family reached the 0.60 AUC gate.
+     Positive economics in isolated scopes were based on only 14-35 unseen-security
+     trades and failed in the paired seen-security scope. Other scopes had negative
+     after-cost trade returns, profit factor at or below one, or failed benchmark,
+     calibration, confidence-bound, and fold-stability gates.
+   - Immutable outputs are the four
+     `data/models/edge_rebuild_intraday_{upgrade|downgrade}_confirmed_{continuation|long_reversion}_dev_20260820_v1`
+     directories. All strictly replay as `no_candidate`; future holdout and serving
+     remain closed. Peak working set was 3.193 GiB under the unchanged 4 GiB hard cap
+     and 3.25 GiB safety threshold.
+   - Final verification passed 1,460 tests with two skipped, tracked Ruff, strict mypy
+     across 231 source files, tracked compilation, real capacity replay, and strict
+     replay of all four outputs.
 
 ### A6 - Run Locked Evaluation and Promote Qualified Models
 
