@@ -9,8 +9,8 @@ import pandas as pd
 import pytest
 
 from market_predictor.canonical.normalize import canonicalize_bars
-from market_predictor.edge_rebuild import swing_features as swing_feature_module
 from market_predictor.edge_rebuild import swing_catalyst_features as swing_catalyst_module
+from market_predictor.edge_rebuild import swing_features as swing_feature_module
 from market_predictor.edge_rebuild.catalyst_authority import (
     COVERAGE_FLAG_COLUMNS,
     CatalystDecisionAuthority,

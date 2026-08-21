@@ -10,7 +10,6 @@ from market_predictor.edge_rebuild.catalyst_authority import (
     CatalystDecisionAuthority,
     attach_catalyst_decision_features,
 )
-
 from market_predictor.v3.errors import DataReadinessError
 
 
@@ -20,10 +19,10 @@ def build_swing_ablation_rows(
 ) -> dict[str, pd.DataFrame]:
     """Create matched technical and catalyst populations from one row authority."""
     from market_predictor.edge_rebuild.swing_features import (
-        SWING_CATALYST_FEATURE_PROFILE,
-        SWING_FEATURE_PROFILE,
         CATALYST_AUDIT_FEATURES,
         CATALYST_RANKING_FEATURES,
+        SWING_CATALYST_FEATURE_PROFILE,
+        SWING_FEATURE_PROFILE,
     )
 
     attached = attach_catalyst_decision_features(

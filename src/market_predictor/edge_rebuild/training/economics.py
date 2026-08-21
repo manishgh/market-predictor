@@ -16,7 +16,7 @@ from market_predictor.edge_rebuild.swing_features import (
 )
 
 if TYPE_CHECKING:
-    from market_predictor.edge_rebuild.swing_training import SwingTrainingConfig
+    from market_predictor.edge_rebuild.training.swing_types import SwingTrainingConfig
 from market_predictor.edge_rebuild.training.utils import _finite, _mapping
 from market_predictor.v3.errors import DataReadinessError
 

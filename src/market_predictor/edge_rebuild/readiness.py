@@ -32,11 +32,11 @@ from market_predictor.edge_rebuild.swing_features import (
     SWING_FEATURE_PROFILE,
 )
 from market_predictor.edge_rebuild.swing_training import (
-    SwingPanelBinding,
     load_swing_candidate_authority,
-    load_swing_panel_binding,
     load_swing_training_config,
 )
+from market_predictor.edge_rebuild.training.data_io import load_swing_panel_binding
+from market_predictor.edge_rebuild.training.swing_types import SwingPanelBinding
 from market_predictor.intraday.specialist_contracts import (
     IntradaySpecialistResearchConfig,
 )

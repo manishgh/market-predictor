@@ -1,4 +1,5 @@
 from __future__ import annotations
+import market_predictor.edge_rebuild.swing_artifact_contracts as swing_artifact_contracts
 
 import json
 import os
@@ -139,7 +140,7 @@ def test_input_authority_rejects_pre_cutoff_decisions(
     manifest_path = final / "_manifest.json"
     manifest_path.write_text("{}\n", encoding="utf-8")
     authority = {
-        "schema": swing_training.SWING_MATERIALIZATION_AUTHORITY_SCHEMA,
+        "schema": swing_artifact_contracts.SWING_MATERIALIZATION_AUTHORITY_SCHEMA,
         "state": "complete",
         "artifact_sha256": file_sha256(manifest_path),
     }
@@ -156,7 +157,7 @@ def test_input_authority_rejects_pre_cutoff_decisions(
         "request_sha256": "a" * 64,
     }
     monkeypatch.setattr(
-        swing_training, "load_complete_swing_feature_panel", lambda root: manifest
+        "market_predictor.edge_rebuild.training.data_io.load_complete_swing_feature_panel", lambda root: manifest
     )
 
     with pytest.raises(DataReadinessError, match="start exactly on 2019-07-09"):

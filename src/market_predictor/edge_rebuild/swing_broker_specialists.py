@@ -52,11 +52,10 @@ from market_predictor.edge_rebuild.swing_selection import (
     select_constrained_swing_portfolio,
 )
 from market_predictor.edge_rebuild.swing_training import (
-    SwingTrainingConfig,
-    _evaluation_columns,
-    _evaluation_metrics,
     load_swing_training_config,
 )
+from market_predictor.edge_rebuild.training.swing_evaluation import _evaluation_columns, _evaluation_metrics
+from market_predictor.edge_rebuild.training.swing_types import SwingTrainingConfig
 from market_predictor.resources import (
     assert_memory_budget,
     assert_peak_memory_budget,

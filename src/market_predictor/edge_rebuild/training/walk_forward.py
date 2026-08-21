@@ -14,7 +14,7 @@ from market_predictor.edge_rebuild.temporal_manifest import (
 from market_predictor.v3.errors import DataReadinessError
 
 if TYPE_CHECKING:
-    from market_predictor.edge_rebuild.swing_training import SwingTrainingConfig
+    from market_predictor.edge_rebuild.training.swing_types import SwingTrainingConfig
 
 
 @dataclass(frozen=True, slots=True)

@@ -1,3 +1,6 @@
+from collections.abc import Sequence
+
+import numpy as np
 import pandas as pd
 
 from market_predictor.edge_rebuild.strategy_contract import StrategyContract
@@ -44,9 +47,7 @@ class TechnicalRelationshipsStep:
         from market_predictor.edge_rebuild.technical_relationships import add_technical_relationship_features
         return add_technical_relationship_features(df, spec=self.spec)
 
-from collections.abc import Sequence
 
-import numpy as np
 
 
 class CrossSectionalValidationStep:
