@@ -31,7 +31,7 @@ from market_predictor.intraday.promotion import (
 )
 from market_predictor.prediction_policy import parse_prediction_policy
 from market_predictor.registry import verify_model_artifact
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 from tests.r4_fixtures import trust_context_for_candidate
 
 

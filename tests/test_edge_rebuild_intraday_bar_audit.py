@@ -11,7 +11,7 @@ from market_predictor.edge_rebuild import intraday_bar_audit as module
 from market_predictor.edge_rebuild.intraday_bar_audit import (
     publish_intraday_bar_dataset_audit,
 )
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 
 def test_audit_is_reproducible_and_bound_to_both_authorities(

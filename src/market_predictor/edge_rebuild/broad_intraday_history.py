@@ -1,6 +1,7 @@
 """Plan missing broad-universe regular-session five-minute history."""
-
 from __future__ import annotations
+
+
 
 import json
 import shutil
@@ -39,7 +40,7 @@ from market_predictor.resources import (
     assert_peak_memory_budget,
     memory_audit,
 )
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 _MEMBERSHIP_COLUMNS = {
     "ticker",

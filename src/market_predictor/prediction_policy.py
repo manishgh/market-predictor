@@ -14,8 +14,9 @@ The policy is immutable and content-addressed: :data:`PREDICTION_POLICY_SHA256`
 changes if and only if the declarative semantics below change, and that hash is
 bound into promotion evidence and prediction snapshots as identity.
 """
-
 from __future__ import annotations
+
+
 
 import hashlib
 import json

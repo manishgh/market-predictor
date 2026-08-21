@@ -1,6 +1,7 @@
 """Live GDELT collection with observed availability and immutable lineage."""
-
 from __future__ import annotations
+
+
 
 import hashlib
 import json
@@ -32,7 +33,7 @@ from market_predictor.canonical.store import (
     write_canonical_artifact,
 )
 from market_predictor.resources import assert_memory_budget, memory_audit
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 GDELT_COLLECTION_SCHEMA: Final = "edge_rebuild.gdelt_global_collection.v2"
 GDELT_COLLECTION_MANIFEST_SCHEMA: Final = "edge_rebuild.gdelt_global_collection_manifest.v2"

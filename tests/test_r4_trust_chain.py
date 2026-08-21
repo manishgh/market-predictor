@@ -25,7 +25,7 @@ from market_predictor.shadow_ledger import (
     load_shadow_ledger,
     shadow_gate_failures,
 )
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 from tests.r4_fixtures import (
     load_test_shadow_bundle,
     write_test_shadow_bundle,

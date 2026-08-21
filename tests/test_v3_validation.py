@@ -6,7 +6,7 @@ from datetime import UTC, date, datetime, timedelta
 import numpy as np
 import pandas as pd
 
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 from market_predictor.v3.validation import (
     V3PurgedWalkForwardSplit,
     causal_fold_training_indices,

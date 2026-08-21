@@ -17,7 +17,7 @@ from market_predictor.promotion_identity import (
     PromotionIdentityAuthenticator,
     PromotionTokens,
 )
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 from tests.r4_fixtures import test_promotion_identity_material
 
 

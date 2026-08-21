@@ -1,6 +1,7 @@
 """Deterministic synthetic promotion material for tests and CI smoke releases."""
 
 from __future__ import annotations
+from market_predictor.intraday.contracts import IntradayDatasetConfig
 
 import json
 import os
@@ -20,7 +21,6 @@ from pydantic import SecretStr
 from market_predictor.causal_shadow import write_causal_shadow_bundle
 from market_predictor.execution_policy import EXECUTION_POLICY_SHA256
 from market_predictor.hypothesis_registry import declare_hypothesis
-from market_predictor.intraday.contracts import IntradayDatasetConfig
 from market_predictor.outcome_contracts import (
     MaturedOutcomeV1,
     PredictionMaturationIntentV2,

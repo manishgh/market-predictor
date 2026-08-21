@@ -33,7 +33,7 @@ from market_predictor.resources import (
 )
 from market_predictor.sources.alpaca import AlpacaNewsPage
 from market_predictor.symbols import canonical_symbol
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 NEWS_HISTORY_REQUEST_SCHEMA = "swing.alpaca_news_history_request.v1"
 NEWS_HISTORY_MANIFEST_SCHEMA = "swing.alpaca_news_history_manifest.v1"

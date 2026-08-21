@@ -4,8 +4,9 @@ This module is deliberately independent of the legacy prediction service.  It
 defines the only artifacts and outputs that a future edge-rebuild API may
 serve, plus a fail-closed batch/live feature parity check.
 """
-
 from __future__ import annotations
+
+
 
 import hashlib
 import json
@@ -62,7 +63,7 @@ from market_predictor.promotion_attestation import (
     verify_promotion_attestation,
 )
 from market_predictor.resources import assert_memory_budget, process_memory_snapshot
-from market_predictor.v3.errors import (
+from market_predictor.core.errors import (
     ArtifactIntegrityError,
     DataReadinessError,
     PromotionGateError,

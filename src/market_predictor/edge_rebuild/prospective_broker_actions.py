@@ -4,8 +4,9 @@ This module deliberately does not repair retrospective news.  One invocation
 publishes one immutable poll.  Repeated polls are compacted separately so every
 provider revision and every source-coverage interval remains auditable.
 """
-
 from __future__ import annotations
+
+
 
 import hashlib
 import json
@@ -54,7 +55,7 @@ from market_predictor.resources import (
 )
 from market_predictor.sources.alpaca import AlpacaAssetSnapshot, AlpacaNewsPage
 from market_predictor.symbols import canonical_symbol
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 POLL_REQUEST_SCHEMA: Final = "edge_rebuild.prospective_broker_action_poll_request.v1"
 POLL_MANIFEST_SCHEMA: Final = "edge_rebuild.prospective_broker_action_poll_manifest.v1"

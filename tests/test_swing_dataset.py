@@ -25,7 +25,7 @@ from market_predictor.swing.labels import (
     _benchmark_label_return,
     add_exact_swing_labels,
 )
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 
 class SwingDatasetTests(unittest.TestCase):

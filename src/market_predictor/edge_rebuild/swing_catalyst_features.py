@@ -10,7 +10,7 @@ from market_predictor.edge_rebuild.catalyst_authority import (
     CatalystDecisionAuthority,
     attach_catalyst_decision_features,
 )
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 
 def build_swing_ablation_rows(

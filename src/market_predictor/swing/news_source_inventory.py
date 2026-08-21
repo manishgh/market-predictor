@@ -1,6 +1,7 @@
 """Verified source-news shard inventory shared by sentiment and lineage."""
-
 from __future__ import annotations
+
+
 
 import hashlib
 import json
@@ -8,7 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from market_predictor.canonical.store import load_canonical_artifact
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 
 def build_source_news_shard_inventory(

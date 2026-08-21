@@ -1,6 +1,7 @@
 """Bounded, hash-bound decision-time SEC filing overlay for swing research."""
-
 from __future__ import annotations
+
+
 
 import hashlib
 import json
@@ -35,7 +36,7 @@ from market_predictor.edge_rebuild.sec_filing_collection import (
     normalize_sec_identity_relations,
 )
 from market_predictor.resources import assert_memory_budget, assert_peak_memory_budget
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 SEC_AUTHORITY_SCHEMA: Final = "edge_rebuild.sec_filing_decision_authority.v2"
 SEC_AUTHORITY_MANIFEST_SCHEMA: Final = "edge_rebuild.sec_filing_decision_manifest.v2"

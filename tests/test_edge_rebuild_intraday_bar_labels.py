@@ -11,7 +11,7 @@ from market_predictor.edge_rebuild.intraday_bar_labels import (
     build_exact_intraday_bar_labels,
 )
 from market_predictor.edge_rebuild.strategy_contract import load_strategy_contract
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 CONTRACT_PATH = Path("configs/edge_rebuild_strategy_contract.toml")
 DECISION = pd.Timestamp("2026-07-08T14:00:00Z")

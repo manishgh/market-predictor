@@ -26,7 +26,7 @@ from market_predictor.swing.news_history import (
     NEWS_HISTORY_REQUEST_SCHEMA,
     NEWS_PAGE_SCHEMA,
 )
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 
 def audit_alpaca_news_history(

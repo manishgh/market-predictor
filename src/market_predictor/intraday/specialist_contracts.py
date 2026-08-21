@@ -1,6 +1,7 @@
 """Frozen research contracts for KS4 intraday specialists."""
-
 from __future__ import annotations
+
+
 
 import hashlib
 import json
@@ -11,7 +12,7 @@ from typing import Literal, Self
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from market_predictor.canonical.store import file_sha256
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 INTRADAY_SPECIALIST_RESEARCH_SCHEMA = "intraday.specialist_research.v1"
 

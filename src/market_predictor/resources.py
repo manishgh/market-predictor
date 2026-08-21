@@ -8,7 +8,7 @@ from market_predictor.process_memory import (
 from market_predictor.process_memory import (
     release_process_memory as release_process_memory,
 )
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 
 @dataclass(frozen=True, slots=True)

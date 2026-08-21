@@ -15,7 +15,7 @@ from market_predictor.edge_rebuild.volume_bars import (
     VolumeBarBuildResult,
     build_causal_volume_bars,
 )
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 ROOT = Path(__file__).resolve().parents[1]
 

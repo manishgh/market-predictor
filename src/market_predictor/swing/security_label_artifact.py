@@ -28,7 +28,7 @@ from market_predictor.security_labels import (
     load_security_label_policy,
     profile_terms_from_text,
 )
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 SECURITY_LABEL_ARTIFACT_SCHEMA = "security.business_label_artifact.v1"
 RelationUse = Literal["exposure", "context"]

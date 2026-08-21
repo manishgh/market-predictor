@@ -1,6 +1,7 @@
 """Frozen contracts for the ER1 edge-rebuild readiness audit."""
-
 from __future__ import annotations
+
+
 
 import hashlib
 import json
@@ -10,7 +11,7 @@ from typing import Self
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 READINESS_SCHEMA = "edge_rebuild.readiness.v2"
 SWING_STRATEGY_ID = "SWING.SECTOR_RESIDUAL_MOMENTUM.10D.V1"

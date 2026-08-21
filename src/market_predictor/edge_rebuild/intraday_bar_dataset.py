@@ -1,6 +1,7 @@
 """Resumable authority publisher for the fixed-cohort intraday bar dataset."""
-
 from __future__ import annotations
+
+
 
 import json
 import os
@@ -36,7 +37,7 @@ from market_predictor.edge_rebuild.intraday_bar_only_five_minute import (
 from market_predictor.edge_rebuild.intraday_contract_lineage import (
     DEFAULT_INTRADAY_CONTRACT_LINEAGE_PATH,
 )
-from market_predictor.edge_rebuild.intraday_dataset import (
+from market_predictor.intraday.datasets.publisher import (
     _activation_abstention_reason,
     _Artifact,
     _benchmark_artifact_index,
@@ -56,7 +57,7 @@ from market_predictor.resources import (
     memory_audit,
     release_process_memory,
 )
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 INTRADAY_BAR_DATASET_SCHEMA: Final = "edge_rebuild.intraday_bar_dataset.v1"
 INTRADAY_BAR_DATASET_AUTHORITY_SCHEMA: Final = (

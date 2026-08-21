@@ -7,7 +7,7 @@ from typing import Any
 
 import pandas as pd
 
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 
 def canonical_policy_json(policy: Mapping[str, object]) -> str:

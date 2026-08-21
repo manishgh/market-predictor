@@ -5,7 +5,7 @@ from time import perf_counter
 
 import pandas as pd
 
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 from market_predictor.v3.features import (
     V3_MICROSTRUCTURE_FEATURES,
     build_v3_features,

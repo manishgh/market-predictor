@@ -10,7 +10,7 @@ from rich.console import Console
 
 from market_predictor.heavy_jobs import serialized_heavy_job
 from market_predictor.v3.development import load_verified_development_dataset
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 from market_predictor.v3.models import (
     MODEL_FAMILIES,
     ModelFamily,

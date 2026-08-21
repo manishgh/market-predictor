@@ -29,8 +29,9 @@ supplied, from the in-play stock-sessions that screen selected. Both strategies
 run on the point-in-time S&P 500, so membership is the outer bound and the screen
 narrows it to the names actually moving that session.
 """
-
 from __future__ import annotations
+
+
 
 import hashlib
 import json
@@ -60,7 +61,7 @@ from market_predictor.resources import (
     memory_audit,
     release_process_memory,
 )
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 MATERIALIZATION_SCHEMA = "edge_rebuild.intraday_materialization.v1"
 MATERIALIZATION_AUTHORITY_SCHEMA = (

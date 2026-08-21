@@ -1,6 +1,7 @@
 """Frozen, outcome-blind temporal assignments for the edge-rebuild program."""
-
 from __future__ import annotations
+
+
 
 import hashlib
 import json
@@ -23,7 +24,7 @@ from market_predictor.resources import (
     assert_peak_memory_budget,
     memory_audit,
 )
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 TEMPORAL_MANIFEST_SCHEMA = "edge_rebuild.temporal_manifest.v2"
 TEMPORAL_AUTHORITY_SCHEMA = "edge_rebuild.temporal_manifest_authority.v2"

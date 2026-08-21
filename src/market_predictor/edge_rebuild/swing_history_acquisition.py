@@ -1,6 +1,7 @@
 """Outcome-blind, authority-bound acquisition planning for swing history."""
-
 from __future__ import annotations
+
+
 
 import hashlib
 import json
@@ -23,7 +24,7 @@ from market_predictor.resources import (
     assert_peak_memory_budget,
     memory_audit,
 )
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 PLAN_SCHEMA = "edge_rebuild.swing_history_acquisition_plan.v2"
 AUTHORITY_SCHEMA = "edge_rebuild.swing_history_acquisition_plan_authority.v2"

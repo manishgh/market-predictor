@@ -10,7 +10,7 @@ from typer.testing import CliRunner
 import market_predictor.commands.v3_readiness as command_module
 import market_predictor.v3.spglobal_events as event_module
 from market_predictor.research_cli import app as research_app
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 from market_predictor.v3.spglobal_archive import VerifiedSpGlobalRawArchive
 
 

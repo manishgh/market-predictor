@@ -519,5 +519,11 @@ do not delete raw or governance-bound data by assumption.
 - Original `swing_features.py` decoupled into `swing_pipeline_steps.py`, `swing_filters.py`, and `swing_catalyst_features.py`.
 - Maintained frozen contracts, mathematically exact baseline logic, strict memory budgets, and passing tests.
 - Implementation commit `8e9cff6` ensures 100% strict `mypy` and `ruff` compliance with fully updated lineage tests.
+- Shared utilities (`io.py`, `hashing.py`, `memory.py`, `validation.py`) consolidated to `src/market_predictor/edge_rebuild/utils/`.
+- `intraday_training.py` modularized into `intraday_dataset_io.py` and `intraday_types.py`.
+- `swing_types.py` and `data_io.py` refactored to import from the central `utils/` package.
+- `intraday_development.py` has been successfully refactored and modularized into `src/market_predictor/intraday/training/io.py`, `src/market_predictor/intraday/training/config.py`, `src/market_predictor/intraday/training/coordinator.py`, `src/market_predictor/intraday/training/models.py`, `src/market_predictor/intraday/training/validation.py`, `src/market_predictor/intraday/evaluation/gates.py`, and `src/market_predictor/intraday/evaluation/metrics.py`.
+- All `_json_sha256` logic updated for exact separator and sorting reproduction, fixing `A4.4 validation metrics do not replay` failures. Test monkeypatches for `_evaluate_spec` and `_fit_pair` were re-pointed to correctly mask imported module references. `src/market_predictor/edge_rebuild/intraday_development.py` has been permanently deleted.
+- All tests pass (39/39 for `test_edge_rebuild_intraday_development.py` and across the broader `pytest` suite).
 
-Exact next checkpoint: evaluate if `intraday_training.py` or shared utilities require similar consolidation, then proceed to Intraday Feature Rebuilding.
+Exact next checkpoint: proceed to Intraday Feature Rebuilding.

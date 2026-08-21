@@ -37,7 +37,7 @@ from market_predictor.canonical.normalize import (
     canonicalize_universe_memberships,
 )
 from market_predictor.canonical.store import load_canonical_artifact, write_canonical_artifact
-from market_predictor.v3.errors import DataReadinessError, SchemaMismatchError
+from market_predictor.core.errors import DataReadinessError, SchemaMismatchError
 
 
 class CanonicalContractTests(unittest.TestCase):

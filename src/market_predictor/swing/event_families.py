@@ -4,8 +4,9 @@ The classifier is intentionally high precision.  It leaves unsupported or
 ambiguous headlines unclassified instead of forcing every news item into a
 specialist cohort.
 """
-
 from __future__ import annotations
+
+
 
 import hashlib
 import json
@@ -16,7 +17,7 @@ from typing import Final
 
 import pandas as pd
 
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 EVENT_FAMILY_POLICY_VERSION: Final = "swing.issuer_event_family.v2"
 EVENT_FAMILIES: Final = (

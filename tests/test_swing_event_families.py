@@ -14,7 +14,7 @@ from market_predictor.swing.event_families import (
     EVENT_FAMILY_POLICY_VERSION,
     classify_event_families,
 )
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 _AVAILABLE_AT = "2026-07-20T14:00:00Z"
 _POLICY_PATH = Path(__file__).parents[1] / "configs" / "swing_event_family_policy.toml"

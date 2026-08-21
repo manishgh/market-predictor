@@ -10,7 +10,7 @@ from typing import cast
 import numpy as np
 import pandas as pd
 
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 
 @dataclass(frozen=True, slots=True)

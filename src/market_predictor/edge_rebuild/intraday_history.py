@@ -1,6 +1,7 @@
 """Hash-bound ER1A historical intraday acquisition planning."""
-
 from __future__ import annotations
+
+
 
 import hashlib
 import json
@@ -35,7 +36,7 @@ from market_predictor.resources import (
     memory_audit,
 )
 from market_predictor.symbols import provider_symbol
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 PLAN_AUTHORITY_SCHEMA = "edge_rebuild.intraday_history_plan_authority.v1"
 EXTENDED_CONTEXT_PLAN_AUTHORITY_SCHEMA = (

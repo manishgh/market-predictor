@@ -4,8 +4,9 @@ The assignment artifact is the evidence behind every canonical event feature.
 Assigned rows identify the exact decision and lookback window that consumed an
 event. Events that are not assigned receive one deterministic exclusion status.
 """
-
 from __future__ import annotations
+
+
 
 import hashlib
 import json
@@ -15,7 +16,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from market_predictor.v3.errors import DataReadinessError, SchemaMismatchError
+from market_predictor.core.errors import DataReadinessError, SchemaMismatchError
 
 DEFAULT_EVENT_WINDOWS: Mapping[str, pd.Timedelta] = {
     "2h": pd.Timedelta(hours=2),

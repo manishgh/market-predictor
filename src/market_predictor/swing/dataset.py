@@ -25,7 +25,7 @@ from market_predictor.swing.contracts import (
     SwingDatasetConfig,
 )
 from market_predictor.swing.labels import add_exact_swing_labels
-from market_predictor.v3.errors import DataReadinessError, SchemaMismatchError
+from market_predictor.core.errors import DataReadinessError, SchemaMismatchError
 
 DECISION_REQUIRED_COLUMNS = {
     "ticker",

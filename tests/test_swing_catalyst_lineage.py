@@ -23,7 +23,7 @@ from market_predictor.swing.event_attribution import (
     ATTRIBUTION_POLICY_SHA256,
     ATTRIBUTION_POLICY_VERSION,
 )
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 
 class SwingCatalystLineageTests(unittest.TestCase):

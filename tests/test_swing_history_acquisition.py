@@ -18,7 +18,7 @@ from market_predictor.edge_rebuild.swing_history_acquisition import (
     PLAN_SCHEMA,
     publish_swing_history_acquisition_plan,
 )
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 from market_predictor.v3.universe import VerifiedIndexChanges
 
 

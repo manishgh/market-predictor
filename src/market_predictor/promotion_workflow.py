@@ -25,7 +25,7 @@ from market_predictor.shadow_ledger import (
     consume_shadow_fingerprint,
     shadow_gate_failures,
 )
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 
 @dataclass(frozen=True)

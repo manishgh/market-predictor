@@ -1,6 +1,7 @@
 """Immutable analyst-revision swing ablations on one matched event cohort."""
-
 from __future__ import annotations
+
+
 
 import hashlib
 import json
@@ -42,7 +43,7 @@ from market_predictor.resources import (
     release_process_memory,
 )
 from market_predictor.swing.event_families import EVENT_FAMILIES
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 POLICY_SCHEMA: Final = "market_predictor.swing_analyst_revision_ablation.v1"
 REQUEST_SCHEMA: Final = "edge_rebuild.swing_analyst_revision_ablation_request.v2"

@@ -1,6 +1,7 @@
 """Exact, resumable Alpaca daily collection for swing acquisition-plan v2."""
-
 from __future__ import annotations
+
+
 
 import gzip
 import hashlib
@@ -33,7 +34,7 @@ from market_predictor.resources import (
     release_process_memory,
 )
 from market_predictor.sources.alpaca import AlpacaSource
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 COLLECTION_SCHEMA: Final = "edge_rebuild.swing_history_collection.v1"
 COLLECTION_AUTHORITY_SCHEMA: Final = "edge_rebuild.swing_history_collection_authority.v1"

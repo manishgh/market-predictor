@@ -19,7 +19,7 @@ from market_predictor.edge_rebuild.sp500_observed_memberships import (
     ObservedMembershipAuthority,
 )
 from market_predictor.sources.alpaca import AlpacaBarsPage
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 ROOT = Path(__file__).resolve().parents[1]
 FIVE_MINUTE_POLICY = ROOT / "configs" / "edge_rebuild_intraday_history.toml"

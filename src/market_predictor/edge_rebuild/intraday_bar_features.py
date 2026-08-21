@@ -1,6 +1,7 @@
 """Causal hybrid intraday features on fixed five-minute decision cohorts."""
-
 from __future__ import annotations
+
+
 
 import hashlib
 import json
@@ -14,7 +15,7 @@ import numpy as np
 import pandas as pd
 
 from market_predictor.edge_rebuild.strategy_contract import StrategyContract
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 INTRADAY_BAR_FEATURE_SCHEMA_VERSION: Final = "edge_rebuild.intraday_bar_features.v1"
 EXCHANGE_TIMEZONE: Final = ZoneInfo("America/New_York")

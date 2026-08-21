@@ -16,7 +16,7 @@ from market_predictor.edge_rebuild.intraday_bar_dataset import (
     publish_intraday_bar_dataset,
 )
 from market_predictor.edge_rebuild.strategy_contract import load_strategy_contract
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 CONTRACT_PATH = Path("configs/edge_rebuild_strategy_contract.toml")
 

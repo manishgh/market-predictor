@@ -9,7 +9,7 @@ from unittest.mock import patch
 import pandas as pd
 
 import market_predictor.v3.universe as universe_module
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 from market_predictor.v3.universe import (
     build_point_in_time_sp500_universe,
     load_reviewed_security_transitions,

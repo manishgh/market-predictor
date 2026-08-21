@@ -419,7 +419,14 @@ simplified economic calculation.
      development policy passes every gate. A4.4 itself cannot promote or serve.
 
    Result: both real-data runs completed sequentially and published strict immutable
-   `no_candidate` evidence. Continuation's best audited seen/unseen positive-return
+   `no_candidate` evidence.
+   - [x] Create `src/market_predictor/edge_rebuild/utils/` (`io.py`, `hashing.py`, `memory.py`, `validation.py`).
+   - [x] Consolidate duplicated logic from `intraday_training.py` and `swing_training.py`.
+   - [x] Restructure `intraday_training.py` into `intraday_dataset_io.py` and `intraday_types.py`.
+   - [x] Refactor `swing_types.py` and `data_io.py` to import from `utils/` instead of local clones.
+   - [x] Fix strict mypy and ruff linting errors.
+
+   Continuation's best audited seen/unseen positive-return
    ROC-AUC was 0.510/0.516; long reversion's was 0.513/0.508. Stop-risk ROC-AUC was
    about 0.60 but calibration failed. Controlling scopes also failed after-cost return,
    benchmark excess, confidence-bound, trade-count, and fold-stability gates. Peak RSS

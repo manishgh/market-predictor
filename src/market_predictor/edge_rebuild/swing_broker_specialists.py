@@ -3,8 +3,9 @@
 The module deliberately stops before the locked test. It compares technical,
 broker-action, and combined features on identical event-conditioned decisions.
 """
-
 from __future__ import annotations
+
+
 
 import hashlib
 import json
@@ -62,7 +63,7 @@ from market_predictor.resources import (
     memory_audit,
     release_process_memory,
 )
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 POLICY_SCHEMA: Final = "market_predictor.swing_broker_action_specialists.v1"
 REQUEST_SCHEMA: Final = "edge_rebuild.swing_broker_specialist_request.v1"

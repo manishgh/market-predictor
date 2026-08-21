@@ -26,7 +26,7 @@ from market_predictor.swing.event_attribution_history import (
     load_event_attribution_history,
 )
 from market_predictor.swing.news_history import NEWS_HISTORY_MANIFEST_SCHEMA
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 _POLICY_PATH = Path(__file__).parents[1] / "configs" / "swing_event_family_policy.toml"
 _EVENT_AVAILABLE = pd.Timestamp("2025-01-02T14:00:00Z")

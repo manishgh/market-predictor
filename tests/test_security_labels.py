@@ -16,7 +16,7 @@ from market_predictor.security_labels import (
     profile_terms_from_text,
     validate_business_label_ids,
 )
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 ROOT = Path(__file__).resolve().parents[1]
 POLICY_PATH = ROOT / "configs" / "security_business_labels.toml"

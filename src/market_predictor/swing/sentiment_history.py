@@ -36,7 +36,7 @@ from market_predictor.swing.event_relevance import (
 from market_predictor.swing.news_source_inventory import (
     build_source_news_shard_inventory,
 )
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 SENTIMENT_REQUEST_SCHEMA = "swing.event_sentiment_request.v1"
 SENTIMENT_MANIFEST_SCHEMA = "swing.event_sentiment_manifest.v1"

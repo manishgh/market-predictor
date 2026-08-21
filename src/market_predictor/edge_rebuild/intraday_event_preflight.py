@@ -1,6 +1,7 @@
 """Causal eligibility authority for A5 intraday event specialists."""
-
 from __future__ import annotations
+
+
 
 import hashlib
 import json
@@ -46,7 +47,7 @@ from market_predictor.resources import (
     release_process_memory,
 )
 from market_predictor.swing.event_families import EVENT_FAMILY_POLICY_SHA256
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 POLICY_SCHEMA: Final = "edge_rebuild.intraday_event_preflight_policy.v1"
 MANIFEST_SCHEMA: Final = "edge_rebuild.intraday_event_preflight_manifest.v1"

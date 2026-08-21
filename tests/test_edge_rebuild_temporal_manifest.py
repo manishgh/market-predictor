@@ -19,7 +19,7 @@ from market_predictor.edge_rebuild.temporal_manifest import (
     load_temporal_manifest_config,
     publish_temporal_manifest,
 )
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 ROOT = Path(__file__).resolve().parents[1]
 POLICY = ROOT / "configs" / "edge_rebuild_temporal_manifest.toml"

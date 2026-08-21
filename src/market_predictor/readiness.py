@@ -5,8 +5,9 @@ This module implements the near-term readiness contract described in
 pure (no pandas / IO) so the gate logic can be unit-tested in isolation and
 reused by any command that scores a model.
 """
-
 from __future__ import annotations
+
+
 
 from dataclasses import dataclass, field
 

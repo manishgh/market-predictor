@@ -13,7 +13,7 @@ from market_predictor.intraday.specialist_contracts import (
     intraday_specialist_policy_identity,
     load_intraday_specialist_research_config,
 )
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 ROOT = Path(__file__).resolve().parents[1]
 POLICY = ROOT / "configs" / "intraday_specialist_research.toml"

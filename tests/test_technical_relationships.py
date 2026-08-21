@@ -13,7 +13,7 @@ from market_predictor.edge_rebuild.technical_relationships import (
     relationship_spec_from_contract,
     technical_relationship_feature_names,
 )
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 
 def _spec(

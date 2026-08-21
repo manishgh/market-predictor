@@ -30,7 +30,7 @@ from market_predictor.edge_rebuild.intraday_training import (
     MODEL_FEATURE_COLUMNS,
     load_published_intraday_dataset,
 )
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 
 def test_loads_real_shape_a43_units_with_exact_projected_contract(tmp_path: Path) -> None:

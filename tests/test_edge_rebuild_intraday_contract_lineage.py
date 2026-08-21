@@ -11,7 +11,7 @@ from market_predictor.edge_rebuild.intraday_contract_lineage import (
     require_intraday_contract_lineage,
 )
 from market_predictor.edge_rebuild.strategy_contract import load_strategy_contract
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 CONTRACT_PATH = Path("configs/edge_rebuild_strategy_contract.toml")
 LINEAGE_PATH = Path("configs/edge_rebuild_intraday_contract_lineage.toml")

@@ -1,6 +1,7 @@
 """Exact, causal intraday labels from executable one-minute paths."""
-
 from __future__ import annotations
+
+
 
 from collections.abc import Iterable
 from datetime import time
@@ -22,7 +23,7 @@ from market_predictor.edge_rebuild.labeling import (
 )
 from market_predictor.edge_rebuild.strategy_contract import StrategyContract
 from market_predictor.execution_policy import executable_fill_price
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 LABEL_SCHEMA_VERSION: Final = "edge_rebuild.intraday_labels.v2"
 EXCHANGE_TIMEZONE: Final = ZoneInfo("America/New_York")

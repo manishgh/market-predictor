@@ -18,7 +18,7 @@ from market_predictor.edge_rebuild.catalyst_authority import (
     load_catalyst_decision_authority,
     publish_catalyst_decision_authority,
 )
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 DECISION_TIME = pd.Timestamp("2025-01-10T21:00:00Z")
 

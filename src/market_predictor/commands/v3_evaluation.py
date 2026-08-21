@@ -21,7 +21,7 @@ from market_predictor.v3.diagnostics import (
     FailureAttributionConfig,
     build_failure_attribution,
 )
-from market_predictor.v3.errors import DataReadinessError, MarketPredictorError
+from market_predictor.core.errors import DataReadinessError, MarketPredictorError
 from market_predictor.v3.evaluation import (
     RankingAuditConfig,
     build_multi_output_evidence,

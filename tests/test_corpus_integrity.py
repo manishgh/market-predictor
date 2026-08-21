@@ -7,7 +7,7 @@ from market_predictor.edge_rebuild.corpus_integrity import (
     IntegrityThresholds,
     verify_corpus_integrity,
 )
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 
 def _row(

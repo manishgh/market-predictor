@@ -6,8 +6,9 @@ observed volume is at least twice the median cumulative volume at the same
 five-minute slot over the prior twenty sessions.  Current-session bars never
 enter either historical denominator.
 """
-
 from __future__ import annotations
+
+
 
 from collections import deque
 from collections.abc import Collection, Iterable, Mapping
@@ -41,7 +42,7 @@ from market_predictor.resources import (
     memory_audit,
     release_process_memory,
 )
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 INTRADAY_SELECTION_SCHEMA = "edge_rebuild.intraday_universe_selection.v3"
 INTRADAY_SELECTION_AUTHORITY_SCHEMA = "edge_rebuild.intraday_universe_selection_authority.v3"

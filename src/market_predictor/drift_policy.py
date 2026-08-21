@@ -22,7 +22,7 @@ from market_predictor.locking import file_lock
 from market_predictor.outcome_contracts import content_sha256
 from market_predictor.performance_monitoring import validate_performance_report
 from market_predictor.prediction_contracts import PredictionConflictError
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 DRIFT_ASSESSMENT_VERSION = "market_predictor.drift_assessment.v2"
 SHA256_PATTERN = r"^[0-9a-f]{64}$"

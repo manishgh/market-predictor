@@ -22,7 +22,7 @@ from market_predictor.edge_rebuild.setup_economics import (
     SetupEconomicsReport,
     evaluate_setup_economics,
 )
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 PHASES = 2
 SESSIONS_PER_PHASE = 60

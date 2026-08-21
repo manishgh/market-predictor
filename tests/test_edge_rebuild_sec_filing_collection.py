@@ -23,7 +23,7 @@ from market_predictor.sources.sec import (
     SecRawResponse,
     SecSourceResponseError,
 )
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 
 def _raw_response(cik: str, retrieved: datetime, *, malformed: bool = False) -> SecRawResponse:

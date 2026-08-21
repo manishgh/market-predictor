@@ -14,7 +14,7 @@ from market_predictor.edge_rebuild.history_materialization import (
     expected_bars_per_session_segment,
     session_bounds_for,
 )
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 
 def _bars(times_utc: list[str]) -> pd.DataFrame:

@@ -32,7 +32,7 @@ from market_predictor.swing.event_attribution_history import (
 )
 from market_predictor.swing.event_families import EVENT_FAMILIES
 from market_predictor.swing.news_history import NEWS_HISTORY_MANIFEST_SCHEMA
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 _ROOT = Path(__file__).parents[1]
 _FAMILY_POLICY = _ROOT / "configs" / "swing_event_family_policy.toml"

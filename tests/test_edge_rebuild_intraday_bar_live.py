@@ -19,7 +19,7 @@ from market_predictor.edge_rebuild.intraday_bar_live import (
     build_live_intraday_bar_features,
 )
 from market_predictor.edge_rebuild.strategy_contract import load_strategy_contract
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 CONTRACT_PATH = Path("configs/edge_rebuild_strategy_contract.toml")
 CUTOFF = pd.Timestamp("2026-07-08T14:01:00Z")

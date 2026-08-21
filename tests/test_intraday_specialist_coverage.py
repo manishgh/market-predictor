@@ -10,7 +10,7 @@ from market_predictor.intraday.specialist_coverage import (
     aggregate_setup_coverage,
     audit_requirement_coverage,
 )
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 
 class IntradaySpecialistCoverageTests(unittest.TestCase):

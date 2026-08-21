@@ -7,7 +7,7 @@ from zoneinfo import ZoneInfo
 import exchange_calendars as xcals
 import pandas as pd
 
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 NEW_YORK = ZoneInfo("America/New_York")
 

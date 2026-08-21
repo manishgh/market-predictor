@@ -14,7 +14,7 @@ from market_predictor.edge_rebuild.intraday_history import (
     build_intraday_history_plan,
     load_complete_intraday_history_plan,
 )
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 POLICY_PATH = Path("configs/edge_rebuild_intraday_history.toml")
 

@@ -1,6 +1,7 @@
 """Fail-closed live construction for the frozen causal intraday feature vector."""
-
 from __future__ import annotations
+
+
 
 import hashlib
 from dataclasses import dataclass
@@ -14,7 +15,7 @@ from market_predictor.edge_rebuild.intraday_features import (
     build_causal_intraday_features,
 )
 from market_predictor.edge_rebuild.strategy_contract import StrategyContract
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 INTRADAY_LIVE_SCHEMA_VERSION: Final = "edge_rebuild.intraday_live.v1"
 INTRADAY_LIVE_AUDIT_COLUMNS: Final = (

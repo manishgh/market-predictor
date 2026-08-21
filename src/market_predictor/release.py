@@ -20,7 +20,7 @@ from market_predictor.registry import (
     manifest_path_for,
     verify_model_artifact,
 )
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 LOCAL_RELEASE_SCHEMA = "market_predictor.local_release.v1"
 ACTIVE_LOCAL_RELEASE_SCHEMA = "market_predictor.active_local_release.v1"

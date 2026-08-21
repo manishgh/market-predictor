@@ -12,7 +12,7 @@ import numpy as np
 import pandas as pd
 
 from market_predictor.registry import manifest_path_for
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 from market_predictor.v3.features import V3_FEATURE_SCHEMA_VERSION
 from market_predictor.v3.models import (
     V3TrainingConfig,

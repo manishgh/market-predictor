@@ -1,6 +1,7 @@
 """Verified, resumable combination of the two swing daily-history generations."""
-
 from __future__ import annotations
+
+
 
 import hashlib
 import json
@@ -38,7 +39,7 @@ from market_predictor.resources import (
     memory_audit,
     release_process_memory,
 )
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 COMBINED_REQUEST_SCHEMA: Final = "edge_rebuild.swing_combined_daily_request.v5"
 COMBINED_MANIFEST_SCHEMA: Final = "edge_rebuild.swing_combined_daily_manifest.v5"

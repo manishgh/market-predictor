@@ -23,7 +23,7 @@ from market_predictor.edge_rebuild.swing_materialization import (
     materialize_swing_feature_panel,
 )
 from market_predictor.swing.contracts import MINIMUM_SWING_DECISION_DATE
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 
 def _memberships() -> pd.DataFrame:

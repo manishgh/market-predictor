@@ -18,7 +18,7 @@ from market_predictor.intraday.specialist_dataset import (
     restrict_to_complete_benchmark_grid,
     specialist_source_projection,
 )
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 ROOT = Path(__file__).resolve().parents[1]
 

@@ -15,7 +15,7 @@ from market_predictor.edge_rebuild.swing_features import (
     SWING_FEATURE_PROFILE,
     swing_model_feature_columns,
 )
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 _ROOT = Path(__file__).parents[1]
 _POLICY_PATH = _ROOT / "configs" / "swing_analyst_revision_ablation.toml"

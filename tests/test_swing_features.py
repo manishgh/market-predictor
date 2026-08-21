@@ -30,7 +30,7 @@ from market_predictor.edge_rebuild.swing_features import (
     finalize_swing_feature_panel,
     swing_model_feature_columns,
 )
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 
 @pytest.fixture(scope="module")

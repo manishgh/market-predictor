@@ -12,7 +12,7 @@ from market_predictor.edge_rebuild.cross_sectional import (
     add_cross_sectional_features,
     cross_sectional_feature_names,
 )
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 SPEC = CrossSectionSpec(minimum_cross_section=50, winsorize_quantile=0.0)
 

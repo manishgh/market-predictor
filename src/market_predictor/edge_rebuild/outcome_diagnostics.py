@@ -1,6 +1,7 @@
 """Shared binary-outcome and negative-control diagnostics."""
-
 from __future__ import annotations
+
+
 
 from collections.abc import Sequence
 from typing import Any, Final
@@ -9,7 +10,7 @@ import numpy as np
 import pandas as pd
 from sklearn.metrics import average_precision_score, roc_auc_score
 
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 OUTCOME_DIAGNOSTIC_SCHEMA: Final = "edge_rebuild.outcome_diagnostics.v1"
 

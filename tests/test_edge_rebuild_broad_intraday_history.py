@@ -16,7 +16,7 @@ from market_predictor.edge_rebuild.history_contracts import (
     load_broad_intraday_history_config,
     load_collection_transport_config,
 )
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 POLICY = Path("configs/edge_rebuild_broad_intraday_history.toml")
 EARLY_CLOSE = "2024-07-03"

@@ -1,6 +1,7 @@
 """Decision-time-causal intraday features built from completed volume bars."""
-
 from __future__ import annotations
+
+
 
 from collections.abc import Iterable
 from datetime import time
@@ -12,7 +13,7 @@ import pandas as pd
 from pandas.api.types import is_bool_dtype
 
 from market_predictor.edge_rebuild.strategy_contract import StrategyContract
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 FEATURE_SCHEMA_VERSION: Final = "edge_rebuild.intraday_features.v2"
 EXCHANGE_TIMEZONE: Final = ZoneInfo("America/New_York")

@@ -5,7 +5,7 @@ import unittest
 from pydantic import ValidationError
 
 from market_predictor.v3 import ML_V3_SCHEMA_VERSION, FrozenContract, SchemaIdentity
-from market_predictor.v3.errors import DataReadinessError, MarketPredictorError
+from market_predictor.core.errors import DataReadinessError, MarketPredictorError
 
 
 class V3FoundationTests(unittest.TestCase):

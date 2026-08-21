@@ -10,7 +10,7 @@ from typing import Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from market_predictor.v3.errors import ArtifactIntegrityError, DataReadinessError
+from market_predictor.core.errors import ArtifactIntegrityError, DataReadinessError
 
 CHECKPOINT_IDS = tuple(f"KS{index}" for index in range(10))
 SHA256_PATTERN = r"^[0-9a-f]{64}$"

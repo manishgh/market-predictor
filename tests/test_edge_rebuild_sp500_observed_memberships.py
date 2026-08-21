@@ -13,7 +13,7 @@ import pandas as pd
 import pytest
 
 from market_predictor.edge_rebuild import sp500_observed_memberships as observed
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 from market_predictor.v3.spglobal_archive import SEARCH_PAGE_SIZE, SpGlobalAnnouncement
 from market_predictor.v3.universe import IndexChange, parse_sp500_changes
 

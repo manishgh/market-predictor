@@ -10,7 +10,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Literal, cast
 
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 LabelDimension = Literal["offering", "end_market", "driver"]
 KnowledgeScope = Literal["historical_research_proxy", "current_inference_only"]

@@ -16,7 +16,7 @@ from market_predictor.outcome_contracts import (
     PredictionMaturationIntentV2,
     content_sha256,
 )
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 MaturationResult: TypeAlias = MaturationAttemptV1 | MaturedOutcomeV1
 _BAR_COLUMNS = {

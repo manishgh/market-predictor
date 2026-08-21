@@ -46,8 +46,9 @@ Fail-closed behavior:
 - Every gate is always evaluated and reported. Nothing short-circuits, because a
   reproducible negative baseline has to remain informative.
 """
-
 from __future__ import annotations
+
+
 
 import hashlib
 import json
@@ -71,7 +72,7 @@ from market_predictor.regime_evidence import (
     net_profit_factor,
     session_block_mean_interval,
 )
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 SETUP_ECONOMICS_SCHEMA = "edge_rebuild.setup_economics.v2"
 

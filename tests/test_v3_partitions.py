@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from market_predictor.v3.errors import ArtifactIntegrityError, LeakageAuditError
+from market_predictor.core.errors import ArtifactIntegrityError, LeakageAuditError
 from market_predictor.v3.partitions import assert_development_only, partition_development_shadow, write_shadow_partition
 
 

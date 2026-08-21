@@ -15,7 +15,7 @@ import pyarrow.parquet as pq
 from pydantic import Field, field_validator, model_validator
 
 from market_predictor.registry import file_sha256
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 from market_predictor.v3.features import build_v3_ticker_features, finalize_v3_cross_sectional_features
 from market_predictor.v3.labels import V3LabelConfig, build_v3_labels
 from market_predictor.v3.schema import FrozenContract

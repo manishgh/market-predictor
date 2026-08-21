@@ -19,7 +19,7 @@ from market_predictor.outcome_contracts import (
     PredictionMaturationIntentV2,
 )
 from market_predictor.outcome_repository import OutcomeRepository
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 from market_predictor.v3.evaluation import session_block_interval
 
 CAUSAL_SHADOW_SCHEMA = "market_predictor.causal_shadow_evidence.v2"

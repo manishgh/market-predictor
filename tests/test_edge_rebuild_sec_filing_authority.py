@@ -20,7 +20,7 @@ from market_predictor.edge_rebuild.sec_filing_collection import (
     load_sec_filing_collection,
 )
 from market_predictor.sources.sec import SecFilingHistory, SecFilingRecord, SecRawResponse
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 
 def _relations() -> pd.DataFrame:

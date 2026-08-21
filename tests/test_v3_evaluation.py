@@ -5,7 +5,7 @@ from datetime import UTC, date, datetime, time, timedelta
 
 import pandas as pd
 
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 from market_predictor.v3.evaluation import (
     RankingAuditConfig,
     V3PromotionGateConfig,

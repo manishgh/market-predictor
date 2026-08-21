@@ -33,7 +33,7 @@ from market_predictor.swing.contracts import (
     SWING_MODEL_SCHEMA_VERSION,
     SWING_MODEL_TYPE,
 )
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 
 @dataclass(frozen=True, slots=True)

@@ -46,7 +46,7 @@ from market_predictor.edge_rebuild.swing_live import (
     build_live_swing_features,
 )
 from market_predictor.resources import process_memory_snapshot
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 ROOT = Path(__file__).resolve().parents[1]
 DECISION_TIME = pd.Timestamp("2026-07-08T22:00:00Z")

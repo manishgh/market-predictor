@@ -5,7 +5,7 @@ from dataclasses import dataclass
 
 import pandas as pd
 
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 RELEVANCE_POLICY_VERSION = "swing.event_relevance.v1"
 _TOKEN = re.compile(r"[a-z0-9]+")

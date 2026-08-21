@@ -1,6 +1,7 @@
 """Clock-grid feature and executable label construction for KS4."""
-
 from __future__ import annotations
+
+
 
 import hashlib
 import json
@@ -33,7 +34,7 @@ from market_predictor.resources import (
     memory_audit,
     release_process_memory,
 )
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 SPECIALIST_TRAINING_DATASET_SCHEMA = "intraday.specialist_training_dataset.v1"
 SPECIALIST_TRAINING_ROW_SCHEMA = "intraday.specialist_training_row.v1"

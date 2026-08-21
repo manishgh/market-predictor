@@ -33,7 +33,7 @@ from market_predictor.edge_rebuild.swing_live import (
 from market_predictor.edge_rebuild.swing_training import MODEL_SCHEMA
 from market_predictor.prediction_contracts import PredictionRequest
 from market_predictor.prediction_service import PredictionService, ServingRoute
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 ROOT = Path(__file__).resolve().parents[1]
 NOW = datetime(2026, 7, 8, 22, 5, tzinfo=UTC)

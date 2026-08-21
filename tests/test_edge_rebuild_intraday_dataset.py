@@ -27,7 +27,7 @@ from market_predictor.edge_rebuild.strategy_contract import (
     StrategyContract,
     load_strategy_contract,
 )
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 ROOT = Path(__file__).resolve().parents[1]
 CONTRACT_PATH = ROOT / "configs" / "edge_rebuild_strategy_contract.toml"

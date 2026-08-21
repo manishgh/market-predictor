@@ -18,7 +18,7 @@ from market_predictor.live_features import LIVE_ARTIFACT_TYPES, LIVE_SCHEMA_VERS
 from market_predictor.locking import file_lock
 from market_predictor.registry import file_sha256
 from market_predictor.release import verify_local_release
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 SERVING_BUNDLE_SCHEMA = "market_predictor.serving_bundle.v1"
 ACTIVE_SERVING_BUNDLE_SCHEMA = "market_predictor.active_serving_bundle.v1"

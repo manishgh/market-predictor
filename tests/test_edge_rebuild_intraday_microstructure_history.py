@@ -26,7 +26,7 @@ from market_predictor.edge_rebuild.one_minute_coverage import (
     COVERAGE_SCHEMA,
 )
 from market_predictor.sources.alpaca import AlpacaQuotesPage, AlpacaTradesPage
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 
 def _write_json(path: Path, value: Mapping[str, Any]) -> None:

@@ -25,7 +25,7 @@ from market_predictor.swing.event_attribution_history import (
     load_event_attribution_history,
 )
 from market_predictor.swing.news_history import NEWS_HISTORY_MANIFEST_SCHEMA
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 
 class SwingEventAttributionHistoryTests(unittest.TestCase):

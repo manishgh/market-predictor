@@ -20,7 +20,7 @@ from market_predictor.canonical.store import (
 from market_predictor.sources.alpaca import AlpacaNewsPage
 from market_predictor.swing.news_history import collect_alpaca_news_history
 from market_predictor.swing.news_history_audit import audit_alpaca_news_history
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 
 class SwingNewsHistoryTests(unittest.TestCase):

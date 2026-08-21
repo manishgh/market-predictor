@@ -1,6 +1,7 @@
 """Production-grade candidate training for the ten-session edge-rebuild swing strategy."""
-
 from __future__ import annotations
+
+
 
 from collections.abc import Mapping
 from datetime import date
@@ -55,7 +56,7 @@ from market_predictor.edge_rebuild.training.walk_forward import (
 from market_predictor.resources import (
     release_process_memory,
 )
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 TRAINING_SCHEMA: Final = "edge_rebuild.swing_training.v5"
 MODEL_SCHEMA: Final = "edge_rebuild.swing_candidate.v5"

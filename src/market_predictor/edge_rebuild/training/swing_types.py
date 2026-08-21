@@ -1,6 +1,7 @@
 """Production-grade candidate training for the ten-session edge-rebuild swing strategy."""
-
 from __future__ import annotations
+
+
 
 import hashlib
 import json
@@ -22,7 +23,7 @@ from market_predictor.resources import (
     assert_memory_budget,
     assert_peak_memory_budget,
 )
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 TRAINING_SCHEMA: Final = "edge_rebuild.swing_training.v5"
 MODEL_SCHEMA: Final = "edge_rebuild.swing_candidate.v5"

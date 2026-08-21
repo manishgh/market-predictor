@@ -1,6 +1,7 @@
 """Immutable, causal precision audit for issuer event-family authorities."""
-
 from __future__ import annotations
+
+
 
 import gc
 import hashlib
@@ -47,7 +48,7 @@ from market_predictor.swing.event_families import (
     ALLOWED_SOURCE_FAMILIES_BY_FAMILY,
     EVENT_FAMILIES,
 )
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 POLICY_SCHEMA: Final = "market_predictor.issuer_event_precision_audit.v2"
 SAMPLE_AUTHORITY_SCHEMA: Final = "edge_rebuild.issuer_event_precision_sample_authority.v2"

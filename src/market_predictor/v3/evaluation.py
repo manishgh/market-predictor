@@ -10,7 +10,7 @@ from sklearn.isotonic import IsotonicRegression
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import brier_score_loss, log_loss, ndcg_score
 
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 from market_predictor.v3.schema import ML_V3_SCHEMA_VERSION, FrozenContract
 
 CalibrationMethod = Literal["sigmoid", "isotonic"]

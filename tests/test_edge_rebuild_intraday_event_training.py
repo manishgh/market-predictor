@@ -7,7 +7,7 @@ import pandas as pd
 import pytest
 
 from market_predictor.edge_rebuild import intraday_event_training as training
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 
 def test_proxy_event_cohort_is_deduplicated_and_bound(

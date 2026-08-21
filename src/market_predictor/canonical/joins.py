@@ -12,7 +12,7 @@ from market_predictor.canonical.reconciliation import (
     build_event_assignments,
     reproduce_event_features,
 )
-from market_predictor.v3.errors import DataReadinessError, SchemaMismatchError
+from market_predictor.core.errors import DataReadinessError, SchemaMismatchError
 
 MEMBERSHIP_VALUE_COLUMNS = (
     "security_id",

@@ -14,7 +14,7 @@ import pytest
 
 from market_predictor.canonical.store import file_sha256
 from market_predictor.edge_rebuild import intraday_event_preflight as preflight
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 
 @dataclass

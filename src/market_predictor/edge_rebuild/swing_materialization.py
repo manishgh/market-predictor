@@ -1,6 +1,7 @@
 """Resumable, immutable materialization of the ER1A swing ranking panel."""
-
 from __future__ import annotations
+
+
 
 import hashlib
 import json
@@ -47,7 +48,7 @@ from market_predictor.resources import (
     release_process_memory,
 )
 from market_predictor.swing.contracts import MINIMUM_SWING_DECISION_DATE
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 SWING_MATERIALIZATION_REQUEST_SCHEMA: Final = (
     "edge_rebuild.swing_panel_materialization_request.v11"

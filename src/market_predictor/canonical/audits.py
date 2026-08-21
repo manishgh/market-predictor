@@ -15,7 +15,7 @@ from market_predictor.canonical.contracts import (
     CanonicalUniverseMembership,
     SourceCollection,
 )
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 
 class CanonicalAuditCheck(CanonicalContract):

@@ -20,8 +20,9 @@ is sensitive to outliers. The rank keeps only the ordering, is unaffected by
 outliers, and is what ranking models consume. Both are computed within a single
 timestamp, never across time, so no value can be informed by a later session.
 """
-
 from __future__ import annotations
+
+
 
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -30,7 +31,7 @@ from typing import Final
 import numpy as np
 import pandas as pd
 
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 Z_SUFFIX: Final = "_xs_z"
 RANK_SUFFIX: Final = "_xs_rank"

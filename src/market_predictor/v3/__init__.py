@@ -1,5 +1,5 @@
 from market_predictor.v3.contracts import DecisionRowIdentity, SourceAvailability, UniverseMembership
-from market_predictor.v3.errors import (
+from market_predictor.core.errors import (
     ArtifactIntegrityError,
     DataReadinessError,
     LeakageAuditError,

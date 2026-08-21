@@ -25,7 +25,7 @@ from market_predictor.strategy_governance import (
     validate_strategy_execution_ledger,
 )
 from market_predictor.swing.contracts import SwingDatasetConfig
-from market_predictor.v3.errors import ArtifactIntegrityError, DataReadinessError
+from market_predictor.core.errors import ArtifactIntegrityError, DataReadinessError
 
 SHA256_PATTERN = r"^[0-9a-f]{64}$"
 REQUIRED_CONTRACT_BINDINGS = frozenset(

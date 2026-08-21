@@ -23,7 +23,7 @@ from market_predictor.promotion_identity import (
     BUILD_ROLE,
     validate_promotion_principal,
 )
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 PROMOTION_ATTESTATION_SCHEMA = "market_predictor.promotion_attestation.v2"
 ATTESTATION_TRUST_STORE_SCHEMA = "market_predictor.attestation_trust_store.v1"

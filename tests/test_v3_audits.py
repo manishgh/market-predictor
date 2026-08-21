@@ -6,7 +6,7 @@ from datetime import timedelta
 import pandas as pd
 
 from market_predictor.v3.audits import audit_bars, build_data_audit
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 
 class V3AuditTests(unittest.TestCase):

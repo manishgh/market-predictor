@@ -39,7 +39,7 @@ from market_predictor.edge_rebuild.sp500_memberships import (
     _membership_sha256 as membership_sha256,
 )
 from market_predictor.sources.alpaca import AlpacaAssetSnapshot, AlpacaNewsPage
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 OBSERVED_AT = datetime(2026, 8, 15, 12, 0, tzinfo=UTC)
 

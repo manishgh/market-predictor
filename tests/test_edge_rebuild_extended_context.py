@@ -28,7 +28,7 @@ from market_predictor.edge_rebuild.intraday_history import (
     PLAN_AUTHORITY_SCHEMA,
     json_sha256,
 )
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 CONTEXT_POLICY = Path("configs/edge_rebuild_extended_session_context.toml")
 HISTORY_POLICY = Path("configs/edge_rebuild_intraday_history.toml")

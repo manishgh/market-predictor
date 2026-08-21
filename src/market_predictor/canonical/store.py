@@ -12,7 +12,7 @@ import pandas as pd
 from market_predictor.canonical.audits import CanonicalAuditReport
 from market_predictor.canonical.contracts import CANONICAL_SCHEMA_VERSION
 from market_predictor.locking import file_lock
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 CANONICAL_MANIFEST_SCHEMA = "market_data.artifact_manifest.v1"
 

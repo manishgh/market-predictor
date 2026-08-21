@@ -3,8 +3,9 @@
 This authority is intentionally offline.  It consumes an explicitly supplied
 SEC ``company_tickers.json`` snapshot and never downloads or guesses identity.
 """
-
 from __future__ import annotations
+
+
 
 import hashlib
 import json
@@ -31,7 +32,7 @@ from market_predictor.edge_rebuild.sp500_transitions import (
     require_sp500_transition_authority,
 )
 from market_predictor.v3.contracts import normalized_ticker
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 SEC_IDENTITY_REQUEST_SCHEMA: Final = "edge_rebuild.sec_identity_request.v2"
 SEC_IDENTITY_MANIFEST_SCHEMA: Final = "edge_rebuild.sec_identity_manifest.v2"

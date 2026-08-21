@@ -14,8 +14,9 @@ Splitting the second stage by security would produce different z-scores and
 ranks for the same row depending on batch membership. That is refused rather
 than approximated.
 """
-
 from __future__ import annotations
+
+
 
 from collections.abc import Mapping, Sequence
 from datetime import date
@@ -76,7 +77,7 @@ from market_predictor.edge_rebuild.swing_filters import (
 from market_predictor.swing.contracts import SwingDatasetConfig
 from market_predictor.swing.dataset import build_swing_feature_history
 from market_predictor.swing.labels import add_exact_swing_labels
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 SWING_FEATURE_PANEL_SCHEMA: Final = "edge_rebuild.swing_feature_panel.v9"
 SWING_FEATURE_PROFILE: Final = "technical_market"

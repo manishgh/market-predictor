@@ -22,7 +22,7 @@ from market_predictor.edge_rebuild.readiness import (
 )
 from market_predictor.edge_rebuild.swing_features import SWING_FEATURE_PROFILE
 from market_predictor.edge_rebuild.swing_training import SwingPanelBinding
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 
 def test_candidate_must_bind_current_ten_session_panel(tmp_path: Path) -> None:

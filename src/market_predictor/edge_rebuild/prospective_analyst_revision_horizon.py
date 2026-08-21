@@ -1,6 +1,7 @@
 """Immutable source-side horizon for prospectively observed analyst revisions."""
-
 from __future__ import annotations
+
+
 
 import hashlib
 import json
@@ -47,7 +48,7 @@ from market_predictor.swing.event_families import (
     EVENT_FAMILY_POLICY_VERSION,
     classify_event_families,
 )
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 REQUEST_SCHEMA: Final = "edge_rebuild.prospective_analyst_revision_horizon_request.v1"
 MANIFEST_SCHEMA: Final = "edge_rebuild.prospective_analyst_revision_horizon_manifest.v1"

@@ -7,7 +7,7 @@ import pandas as pd
 import pytest
 
 import market_predictor.edge_rebuild.sec_identity_authority as identity
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 
 def _config() -> identity.SecIdentityConfig:

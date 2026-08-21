@@ -7,7 +7,7 @@ import pandas as pd
 import pytest
 
 import market_predictor.edge_rebuild.sp500_memberships as membership_module
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 from market_predictor.v3.universe import (
     IndexChange,
     IndexChangeSource,

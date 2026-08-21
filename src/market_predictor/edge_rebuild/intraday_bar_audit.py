@@ -1,6 +1,7 @@
 """Reproducible row-level audit for the immutable A4.3 intraday dataset."""
-
 from __future__ import annotations
+
+
 
 import json
 import math
@@ -21,7 +22,7 @@ from market_predictor.edge_rebuild.intraday_bar_only_five_minute import (
     load_complete_selected_session_five_minute_projection,
 )
 from market_predictor.resources import assert_memory_budget
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 INTRADAY_BAR_DATASET_AUDIT_SCHEMA: Final = (
     "edge_rebuild.intraday_bar_dataset_audit.v1"

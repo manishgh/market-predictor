@@ -1,6 +1,7 @@
 """Immutable research authority for catalyst-driven swing event cohorts."""
-
 from __future__ import annotations
+
+
 
 import gc
 import hashlib
@@ -45,7 +46,7 @@ from market_predictor.swing.event_families import (
     EVENT_FAMILY_POLICY_VERSION,
     classify_event_families,
 )
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 AUTHORITY_SCHEMA: Final = "edge_rebuild.issuer_event_family_authority.v2"
 MANIFEST_SCHEMA: Final = "edge_rebuild.issuer_event_family_manifest.v2"

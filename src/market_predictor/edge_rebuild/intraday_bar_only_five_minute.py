@@ -1,6 +1,7 @@
 """Immutable selected-session projection of canonical SIP five-minute bars."""
-
 from __future__ import annotations
+
+
 
 import json
 import shutil
@@ -41,7 +42,7 @@ from market_predictor.resources import (
     memory_audit,
     release_process_memory,
 )
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 PROJECTION_SCHEMA: Final = "edge_rebuild.intraday_bar_only_five_minute_projection.v1"
 PROJECTION_AUTHORITY_SCHEMA: Final = (

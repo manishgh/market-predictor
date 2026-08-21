@@ -20,8 +20,9 @@ five minutes of the regular session is rare and suspicious; a security that does
 not trade at 04:15 is ordinary. The gates are therefore segment-aware, and
 extended-hours absence is never treated as missing data.
 """
-
 from __future__ import annotations
+
+
 
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
@@ -29,7 +30,7 @@ from typing import Any
 
 import pandas as pd
 
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 CORPUS_INTEGRITY_SCHEMA = "edge_rebuild.corpus_integrity.v1"
 MAXIMUM_SECURITY_EXCLUSION_FRACTION = 0.05

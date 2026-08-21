@@ -10,8 +10,9 @@ and relative-volume denominators never see them, because thin extended-hours
 volume varies by two orders of magnitude across the cross-section and would
 silently reweight it.
 """
-
 from __future__ import annotations
+
+
 
 import shutil
 import uuid
@@ -53,7 +54,7 @@ from market_predictor.resources import (
     assert_peak_memory_budget,
     memory_audit,
 )
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 EXCHANGE_TIMEZONE = "America/New_York"
 SESSION_WINDOW_COLUMNS = (

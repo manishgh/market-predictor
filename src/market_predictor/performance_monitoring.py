@@ -18,7 +18,7 @@ from market_predictor.outcome_contracts import (
     content_sha256,
 )
 from market_predictor.outcome_repository import OutcomeRepository
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 PERFORMANCE_REPORT_VERSION = "market_predictor.selected_policy_performance.v2"
 SHA256_PATTERN = r"^[0-9a-f]{64}$"

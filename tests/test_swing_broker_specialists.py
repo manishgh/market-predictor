@@ -8,7 +8,7 @@ import pytest
 
 from market_predictor.edge_rebuild import swing_broker_specialists as specialists
 from market_predictor.edge_rebuild.strategy_contract import load_strategy_contract
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 _ROOT = Path(__file__).parents[1]
 _POLICY = _ROOT / "configs" / "swing_broker_action_specialists.toml"

@@ -15,7 +15,7 @@ from market_predictor.edge_rebuild.labeling import (
     apply_cross_sectional_rank,
     apply_triple_barrier,
 )
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 SPEC = BarrierSpec(target_atr_multiple=3.0, stop_atr_multiple=1.5, horizon_sessions=5)
 

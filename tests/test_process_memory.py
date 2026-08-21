@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 from market_predictor.process_memory import process_memory_snapshot
 from market_predictor.resources import assert_peak_memory_budget
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 
 class ProcessMemoryTests(unittest.TestCase):

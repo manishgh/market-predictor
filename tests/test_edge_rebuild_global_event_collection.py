@@ -20,7 +20,7 @@ from market_predictor.edge_rebuild.global_event_collection import (
     load_gdelt_global_event_collection,
     validate_gdelt_collection_request,
 )
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 START = datetime(2025, 1, 7, 19, 0, tzinfo=UTC)
 END = datetime(2025, 1, 10, 20, 0, tzinfo=UTC)

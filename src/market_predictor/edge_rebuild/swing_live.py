@@ -1,6 +1,7 @@
 """Fail-closed live construction for edge-rebuild swing model features."""
-
 from __future__ import annotations
+
+
 
 import hashlib
 import json
@@ -40,7 +41,7 @@ from market_predictor.edge_rebuild.swing_features import (
     swing_model_feature_columns,
 )
 from market_predictor.resources import assert_memory_budget
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 SWING_LIVE_SCHEMA_VERSION: Final = "edge_rebuild.swing_live.v1"
 SWING_LIVE_INPUT_SCHEMA_VERSION: Final = "edge_rebuild.swing_live_inputs.v2"

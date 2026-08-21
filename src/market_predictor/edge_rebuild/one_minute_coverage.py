@@ -1,6 +1,7 @@
 """Replay selected-session one-minute coverage and publish exclusions."""
-
 from __future__ import annotations
+
+
 
 import json
 import shutil
@@ -29,7 +30,7 @@ from market_predictor.edge_rebuild.intraday_selection import (
     load_complete_intraday_selection,
 )
 from market_predictor.edge_rebuild.strategy_contract import StrategyContract
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 COVERAGE_SCHEMA = "edge_rebuild.selected_session_one_minute_coverage.v2"
 COVERAGE_AUTHORITY_SCHEMA = "edge_rebuild.selected_session_one_minute_coverage_authority.v2"

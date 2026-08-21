@@ -4,7 +4,7 @@ import math
 from collections.abc import Mapping
 from typing import Any
 
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 
 def _mapping(value: object, label: str) -> dict[str, Any]:

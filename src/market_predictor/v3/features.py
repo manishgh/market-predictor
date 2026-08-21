@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 
 from market_predictor.v3.contracts import SourceAvailability
-from market_predictor.v3.errors import DataReadinessError, SchemaMismatchError
+from market_predictor.core.errors import DataReadinessError, SchemaMismatchError
 
 V3_FEATURE_SCHEMA_VERSION = "ml_v3.features.v2"
 RETURN_WINDOWS = (1, 3, 6, 12)

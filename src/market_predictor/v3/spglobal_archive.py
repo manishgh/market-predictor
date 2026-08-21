@@ -5,8 +5,9 @@ signatures and do not defend against an operator deliberately rewriting the raw
 object, sidecar, and checksum together. The final authority anchors the fully
 replayed unit set for downstream lineage checks.
 """
-
 from __future__ import annotations
+
+
 
 import hashlib
 import json
@@ -32,7 +33,7 @@ from market_predictor.resources import (
     memory_audit,
 )
 from market_predictor.sources.http import HttpClient
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 from market_predictor.v3.universe import ARCHIVE_QUERY, SP_GLOBAL_ARCHIVE_URL
 
 _SOURCE_TIMEZONE = ZoneInfo("America/New_York")

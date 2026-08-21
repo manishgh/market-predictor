@@ -1,6 +1,7 @@
 """Frozen ER1A/ER1B historical intraday acquisition contracts."""
-
 from __future__ import annotations
+
+
 
 import hashlib
 import json
@@ -12,7 +13,7 @@ from typing import Self, TypeVar
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 INTRADAY_HISTORY_SCHEMA = "edge_rebuild.intraday_history.v1"
 INTRADAY_HISTORY_PLAN_SCHEMA = "edge_rebuild.intraday_history_plan.v1"

@@ -10,7 +10,7 @@ from market_predictor.swing.event_attribution import (
     ATTRIBUTION_POLICY_VERSION,
     build_event_security_relations,
 )
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 _EVENT_TIME = pd.Timestamp("2026-01-20T15:00:00Z")
 

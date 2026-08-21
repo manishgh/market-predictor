@@ -25,7 +25,7 @@ from market_predictor.edge_rebuild.prospective_broker_actions import (
 from market_predictor.edge_rebuild.sp500_memberships import (
     _membership_sha256 as membership_sha256,
 )
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 from tests.test_edge_rebuild_prospective_broker_actions import (
     OBSERVED_AT,
     _a43_dataset,

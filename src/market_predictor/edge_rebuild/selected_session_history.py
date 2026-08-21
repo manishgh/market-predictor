@@ -21,8 +21,9 @@ research window in the regular-session corpus, so requesting them again would
 spend units re-fetching bars that exist and would collide with them when the
 stores are materialized.
 """
-
 from __future__ import annotations
+
+
 
 import shutil
 import uuid
@@ -64,7 +65,7 @@ from market_predictor.resources import (
     assert_peak_memory_budget,
     memory_audit,
 )
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 SELECTED_SESSION_COLUMNS = (
     "session_date_et",

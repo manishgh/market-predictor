@@ -1,6 +1,7 @@
 """Hash-bound one-minute benchmark planning for selected intraday sessions."""
-
 from __future__ import annotations
+
+
 
 import shutil
 import uuid
@@ -36,7 +37,7 @@ from market_predictor.resources import (
     assert_peak_memory_budget,
     memory_audit,
 )
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 
 def build_selected_session_benchmark_plan(

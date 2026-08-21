@@ -14,7 +14,7 @@ from market_predictor.edge_rebuild.global_event_authority import (
     load_global_event_authority,
     publish_global_event_authority,
 )
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 DECISION_TIME = pd.Timestamp("2025-01-10T21:00:00Z")
 LATER_DECISION_TIME = DECISION_TIME + pd.Timedelta(hours=2)

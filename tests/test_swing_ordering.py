@@ -9,7 +9,7 @@ from market_predictor.edge_rebuild.swing_ordering import (
     audit_swing_ordering,
     load_complete_swing_ordering_audit,
 )
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 
 def _policy(path: Path) -> None:

@@ -28,7 +28,7 @@ from market_predictor.swing.sentiment_history import (
     SENTIMENT_AVAILABILITY_POLICY,
     score_alpaca_news_history,
 )
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 
 class _DeterministicScorer:

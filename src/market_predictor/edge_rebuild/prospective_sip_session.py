@@ -1,6 +1,7 @@
 """Immutable post-close SIP source authority for one prospective XNYS session."""
-
 from __future__ import annotations
+
+
 
 import hashlib
 import json
@@ -48,7 +49,7 @@ from market_predictor.resources import (
     release_process_memory,
 )
 from market_predictor.sources.alpaca import AlpacaSource
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 REQUEST_SCHEMA: Final = "edge_rebuild.prospective_sip_session_request.v1"
 MANIFEST_SCHEMA: Final = "edge_rebuild.prospective_sip_session_manifest.v1"

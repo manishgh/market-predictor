@@ -10,8 +10,9 @@ The contract also caps how many variants may be tried. Testing enough ideas
 guarantees one looks good by luck, so the budget is the control for that, not a
 matter of convenience.
 """
-
 from __future__ import annotations
+
+
 
 import hashlib
 import json
@@ -21,7 +22,7 @@ from typing import Self
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 STRATEGY_CONTRACT_SCHEMA = "edge_rebuild.strategy_contract.v2"
 

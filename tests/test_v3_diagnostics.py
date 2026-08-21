@@ -5,7 +5,7 @@ import unittest
 import pandas as pd
 
 from market_predictor.v3.diagnostics import FailureAttributionConfig, build_failure_attribution
-from market_predictor.v3.errors import DataReadinessError, LeakageAuditError
+from market_predictor.core.errors import DataReadinessError, LeakageAuditError
 
 
 class V3FailureAttributionTests(unittest.TestCase):

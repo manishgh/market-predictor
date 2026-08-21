@@ -47,7 +47,7 @@ from market_predictor.edge_rebuild.temporal_manifest import (
 )
 from market_predictor.edge_rebuild.training import evaluation, walk_forward
 from market_predictor.process_memory import process_memory_snapshot, release_process_memory
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 
 def test_repository_policy_is_frozen_for_ten_session_candidate_training() -> None:

@@ -1,6 +1,7 @@
 """Verified loader boundary for the immutable A4.3 intraday bar dataset."""
-
 from __future__ import annotations
+
+
 
 import json
 from collections.abc import Mapping
@@ -32,7 +33,7 @@ from market_predictor.resources import (
     assert_peak_memory_budget,
     release_process_memory,
 )
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 MODEL_FEATURE_COLUMNS: Final = INTRADAY_BAR_MODEL_FEATURE_COLUMNS
 MEMORY_HARD_BUDGET_GIB: Final = 4.0

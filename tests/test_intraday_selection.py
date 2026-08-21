@@ -26,7 +26,7 @@ from market_predictor.edge_rebuild.strategy_contract import (
     IntradayUniverseContract,
     load_strategy_contract,
 )
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 LOOKBACK = 20
 SLOTS = 78

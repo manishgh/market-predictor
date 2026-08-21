@@ -1,6 +1,7 @@
 """Causal evaluation engine for KS4 intraday specialist candidates."""
-
 from __future__ import annotations
+
+
 
 import hashlib
 import importlib
@@ -47,7 +48,7 @@ from market_predictor.v3.calibration import (
     fit_final_isotonic,
     fit_prior_isotonic,
 )
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 from market_predictor.v3.validation import (
     V3Fold,
     causal_fold_training_indices,

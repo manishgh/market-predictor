@@ -31,7 +31,7 @@ from market_predictor.edge_rebuild.selected_session_history import (
 )
 from market_predictor.edge_rebuild.strategy_contract import load_strategy_contract
 from market_predictor.sources.alpaca import AlpacaBarsPage
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 POLICY = Path("configs/edge_rebuild_selected_session_one_minute.toml")
 CONTRACT_PATH = Path("configs/edge_rebuild_strategy_contract.toml")

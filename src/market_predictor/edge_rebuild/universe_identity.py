@@ -18,8 +18,9 @@ hands produces a gap, a level break, or both. An interval whose claim cannot be
 supported is excluded rather than corrected, because correcting it would mean
 substituting an inferred rename date for evidence.
 """
-
 from __future__ import annotations
+
+
 
 import json
 from collections.abc import Mapping
@@ -40,7 +41,7 @@ from market_predictor.canonical.store import (
     write_canonical_artifact,
 )
 from market_predictor.edge_rebuild.corpus_integrity import IntegrityThresholds
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 MEMBERSHIP_IDENTITY_SCHEMA = "edge_rebuild.membership_identity.v1"
 REQUIRED_MEMBERSHIP_COLUMNS = (

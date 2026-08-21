@@ -10,7 +10,7 @@ from market_predictor.edge_rebuild.contracts import (
     EdgeRebuildReadinessConfig,
     load_edge_rebuild_readiness_config,
 )
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 POLICY_PATH = Path("configs/edge_rebuild_readiness.toml")
 

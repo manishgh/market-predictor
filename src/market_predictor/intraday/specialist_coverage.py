@@ -1,6 +1,7 @@
 """Exact requirement-level coverage audit for KS4 one-minute paths."""
-
 from __future__ import annotations
+
+
 
 import hashlib
 import json
@@ -32,7 +33,7 @@ from market_predictor.resources import (
     memory_audit,
     release_process_memory,
 )
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 SPECIALIST_COVERAGE_AUDIT_SCHEMA = "intraday.specialist_coverage_audit.v1"
 SPECIALIST_REQUIREMENT_COVERAGE_SCHEMA = (

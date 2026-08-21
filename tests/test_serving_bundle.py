@@ -20,7 +20,7 @@ from market_predictor.serving_bundle import (
     rollback_serving_bundle,
     verify_serving_bundle,
 )
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 from tests.r4_fixtures import test_signing_material as signing_material_for_test
 from tests.test_serving_context import _promoted_intraday_model, _publish_intraday
 

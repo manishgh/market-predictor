@@ -18,7 +18,7 @@ import market_predictor.commands.v3_readiness as command_module
 import market_predictor.v3.spglobal_archive as archive_module
 from market_predictor.collection_cli import app as collection_app
 from market_predictor.locking import file_lock
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 from market_predictor.v3.spglobal_archive import (
     ARCHIVE_AUTHORITY_SCHEMA,
     ArchiveCollectionConfig,

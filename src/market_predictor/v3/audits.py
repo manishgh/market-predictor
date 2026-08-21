@@ -7,7 +7,7 @@ import pandas as pd
 from pydantic import Field
 
 from market_predictor.v3.contracts import UniverseMembership
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 from market_predictor.v3.schema import ML_V3_SCHEMA_VERSION, FrozenContract
 
 

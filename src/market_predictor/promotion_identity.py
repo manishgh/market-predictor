@@ -15,7 +15,7 @@ from market_predictor.jwt_verification import (
     JwtVerificationError,
     LocalJwksVerifier,
 )
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 BUILD_ROLE = "promotion.build"
 APPROVER_ROLE = "promotion.approve"

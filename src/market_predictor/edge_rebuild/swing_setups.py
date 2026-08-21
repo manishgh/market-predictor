@@ -103,8 +103,9 @@ The rule, evaluated after the completed daily bar of session ``t`` at the frozen
     is still emitted, and its single value is honest evidence rather than a
     fabricated split.
 """
-
 from __future__ import annotations
+
+
 
 import json
 from collections.abc import Iterator, Sequence
@@ -131,7 +132,7 @@ from market_predictor.edge_rebuild.swing_pipeline_steps import SetupComponentsSt
 from market_predictor.resources import assert_memory_budget
 from market_predictor.swing.dataset import build_swing_feature_history
 from market_predictor.swing.labels import add_exact_swing_labels
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 from market_predictor.v3.validation import deterministic_ticker_holdout
 
 SWING_SETUP_SCHEMA = "edge_rebuild.swing_setups.v1"

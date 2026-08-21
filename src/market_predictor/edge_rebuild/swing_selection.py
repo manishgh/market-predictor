@@ -1,12 +1,13 @@
 """Deterministic, auditable portfolio selection for swing candidates."""
-
 from __future__ import annotations
+
+
 
 import math
 
 import pandas as pd
 
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 EFFECTIVE_SECTOR_WEIGHT_COLUMN = "__effective_sector_weight_limit"
 AVAILABLE_SECTOR_COUNT_COLUMN = "__available_sector_count"

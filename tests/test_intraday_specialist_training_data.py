@@ -16,7 +16,7 @@ from market_predictor.intraday.specialist_training_data import (
     build_strategy_training_rows,
     load_clock_grid_for_requirements,
 )
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 ROOT = Path(__file__).resolve().parents[1]
 POLICY = ROOT / "configs" / "intraday_specialist_research.toml"

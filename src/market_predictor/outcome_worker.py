@@ -10,7 +10,7 @@ from market_predictor.outcome_maturation import (
     mature_prediction,
 )
 from market_predictor.outcome_repository import OutcomeRepository
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 
 def mature_pending_intents(

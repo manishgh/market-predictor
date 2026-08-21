@@ -15,7 +15,7 @@ from sklearn.metrics import ndcg_score
 from market_predictor.data_quality import sanitize_events_frame
 from market_predictor.features import add_event_taxonomy
 from market_predictor.source_taxonomy import source_family_for_source
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 from market_predictor.v3.schema import FrozenContract
 
 AvailabilityPolicy = Literal["strict_ingestion", "provider_publication_backfill"]

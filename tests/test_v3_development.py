@@ -14,7 +14,7 @@ from market_predictor.v3.development import (
     build_monthly_development_dataset,
     load_verified_development_dataset,
 )
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 
 class V3DevelopmentDatasetTests(unittest.TestCase):

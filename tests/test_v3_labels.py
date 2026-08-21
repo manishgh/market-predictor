@@ -4,7 +4,7 @@ import unittest
 
 import pandas as pd
 
-from market_predictor.v3.errors import DataReadinessError, LeakageAuditError
+from market_predictor.core.errors import DataReadinessError, LeakageAuditError
 from market_predictor.v3.labels import V3LabelConfig, build_v3_labels
 
 

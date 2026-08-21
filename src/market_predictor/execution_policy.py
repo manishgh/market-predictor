@@ -17,8 +17,9 @@ Units are unambiguous by construction: ``price`` is USD, ``atr_pct`` is a return
 fraction (0.02 == 2%), ``participation`` is order-notional / bar-dollar-volume,
 and ``dollar_volume`` is USD.
 """
-
 from __future__ import annotations
+
+
 
 import hashlib
 import json

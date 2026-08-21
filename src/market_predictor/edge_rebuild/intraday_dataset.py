@@ -1,6 +1,7 @@
 """Atomic, lineage-bound publisher for the causal intraday training dataset."""
-
 from __future__ import annotations
+
+
 
 import json
 import re
@@ -72,7 +73,7 @@ from market_predictor.resources import (
     memory_audit,
     release_process_memory,
 )
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 INTRADAY_DATASET_SCHEMA: Final = "edge_rebuild.intraday_dataset.v2"
 INTRADAY_DATASET_AUTHORITY_SCHEMA: Final = "edge_rebuild.intraday_dataset_authority.v2"

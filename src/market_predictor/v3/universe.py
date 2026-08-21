@@ -13,7 +13,7 @@ import pandas as pd
 from bs4 import BeautifulSoup
 
 from market_predictor.v3.contracts import normalized_ticker
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 SP_GLOBAL_ARCHIVE_URL = "https://press.spglobal.com/index.php"
 ARCHIVE_QUERY = {"keywords": "s & p 500 index", "l": "100", "s": "2429"}

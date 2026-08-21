@@ -1,6 +1,7 @@
 """Immutable, decision-time global-event features with explicit source coverage."""
-
 from __future__ import annotations
+
+
 
 import gc
 import hashlib
@@ -36,7 +37,7 @@ from market_predictor.resources import (
     memory_audit,
     release_process_memory,
 )
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 GLOBAL_EVENT_AUTHORITY_SCHEMA: Final = "edge_rebuild.global_event_authority.v2"
 GLOBAL_EVENT_MANIFEST_SCHEMA: Final = "edge_rebuild.global_event_manifest.v2"

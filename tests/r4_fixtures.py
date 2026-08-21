@@ -6,7 +6,7 @@ from typing import Any, cast
 
 import pandas as pd
 
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 from market_predictor.v3.evaluation import session_block_interval
 from scripts.promotion_fixture import (
     authorize_candidate_for_test as authorize_candidate_for_test,

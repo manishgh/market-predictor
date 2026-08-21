@@ -156,7 +156,7 @@ from market_predictor.intraday.specialist_contracts import (
 )
 from market_predictor.sources.alpaca import AlpacaSource
 from market_predictor.sources.sec import SecRequestGovernor, SecSource
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 
 def _iso_date(value: str, *, option: str) -> date:

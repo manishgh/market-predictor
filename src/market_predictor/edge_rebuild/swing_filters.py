@@ -8,7 +8,7 @@ import numpy as np
 import pandas as pd
 
 from market_predictor.edge_rebuild.strategy_contract import StrategyContract
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 MANAGED_PATH_SESSION_ORDINAL_COLUMNS: Final = tuple(
     f"managed_path_session_ordinal_d{offset}" for offset in range(1, 11)

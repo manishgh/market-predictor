@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any, Literal, cast
 
 from market_predictor.locking import file_lock
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 SHADOW_LEDGER_ENTRY_SCHEMA = "market_predictor.shadow_ledger_entry.v2"
 ShadowResult = Literal["passed", "failed"]

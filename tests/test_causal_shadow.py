@@ -13,7 +13,7 @@ from market_predictor.outcome_contracts import content_sha256
 from market_predictor.outcome_repository import OutcomeRepository
 from market_predictor.promotion_attestation import file_sha256
 from market_predictor.shadow_ledger import shadow_gate_failures
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 from scripts.promotion_fixture import (
     synthetic_identity_metrics,
     trust_context_for_candidate,

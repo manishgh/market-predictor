@@ -10,7 +10,7 @@ from market_predictor.swing.contracts import (
     swing_net_return_column,
     swing_target_column,
 )
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 
 def add_exact_swing_labels(

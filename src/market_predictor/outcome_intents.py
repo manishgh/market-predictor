@@ -16,7 +16,7 @@ from market_predictor.prediction_contracts import (
     SwingPrediction,
 )
 from market_predictor.prediction_snapshot import PredictionSnapshotStore
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 _EASTERN = ZoneInfo("America/New_York")
 

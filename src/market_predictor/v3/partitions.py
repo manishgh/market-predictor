@@ -10,7 +10,7 @@ import pandas as pd
 from pydantic import field_validator
 
 from market_predictor.v3.contracts import utc_datetime
-from market_predictor.v3.errors import ArtifactIntegrityError, LeakageAuditError
+from market_predictor.core.errors import ArtifactIntegrityError, LeakageAuditError
 from market_predictor.v3.schema import ML_V3_SCHEMA_VERSION, FrozenContract
 
 DEFAULT_DEVELOPMENT_CUTOFF_UTC = datetime(2026, 7, 8, 23, 59, 59, tzinfo=UTC)

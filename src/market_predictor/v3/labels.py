@@ -8,7 +8,7 @@ import numpy as np
 import pandas as pd
 from pydantic import Field, field_validator, model_validator
 
-from market_predictor.v3.errors import DataReadinessError, SchemaMismatchError
+from market_predictor.core.errors import DataReadinessError, SchemaMismatchError
 from market_predictor.v3.partitions import DevelopmentShadowPolicy, assert_development_only
 from market_predictor.v3.schema import ML_V3_SCHEMA_VERSION, FrozenContract
 

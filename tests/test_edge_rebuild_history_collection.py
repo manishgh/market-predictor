@@ -23,7 +23,7 @@ from market_predictor.edge_rebuild.intraday_history import (
     PLAN_AUTHORITY_SCHEMA,
 )
 from market_predictor.sources.alpaca import AlpacaBarsPage
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 POLICY_PATH = Path("configs/edge_rebuild_intraday_history.toml")
 

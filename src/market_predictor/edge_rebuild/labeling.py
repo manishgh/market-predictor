@@ -18,8 +18,9 @@ to trading volume, which has no relationship to expected return. Using only the
 rank label produces a stock picker that assumes every position is held to expiry
 regardless of how far it moved against you.
 """
-
 from __future__ import annotations
+
+
 
 from dataclasses import dataclass
 from typing import Final
@@ -28,7 +29,7 @@ import numpy as np
 import pandas as pd
 
 from market_predictor.execution_policy import executable_fill_price
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 TARGET_HIT: Final = 1
 STOP_HIT: Final = -1

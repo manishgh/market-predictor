@@ -32,7 +32,7 @@ from market_predictor.edge_rebuild.swing_setups import (
     swing_dataset_config,
     swing_setup_mask,
 )
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 CALENDAR = xcals.get_calendar("XNYS")
 SESSION_COUNT = 620

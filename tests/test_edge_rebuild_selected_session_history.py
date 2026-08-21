@@ -36,7 +36,7 @@ from market_predictor.edge_rebuild.selected_session_history import (
     verify_selected_stock_sessions,
 )
 from market_predictor.edge_rebuild.strategy_contract import load_strategy_contract
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 POLICY = Path("configs/edge_rebuild_selected_session_history.toml")
 ONE_MINUTE_POLICY = Path(

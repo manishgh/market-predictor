@@ -30,7 +30,7 @@ from market_predictor.serving_context import (
     ActiveModelContextCache,
     ActiveReleaseRoute,
 )
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 from tests.r4_fixtures import (
     authorize_candidate_for_test,
     synthetic_identity_metrics,

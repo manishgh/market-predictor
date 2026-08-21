@@ -22,7 +22,7 @@ from sklearn.preprocessing import StandardScaler
 
 from market_predictor.process_memory import process_memory_snapshot, release_process_memory
 from market_predictor.registry import feature_schema_hash, manifest_path_for, write_model_manifest
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 from market_predictor.v3.features import V3_FEATURE_SCHEMA_VERSION, core_feature_columns
 from market_predictor.v3.partitions import DevelopmentShadowPolicy, assert_development_only
 from market_predictor.v3.schema import ML_V3_SCHEMA_VERSION, FrozenContract

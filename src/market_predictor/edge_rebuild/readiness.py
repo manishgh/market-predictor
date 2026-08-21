@@ -1,6 +1,7 @@
 """Read-only, hash-bound ER1 data-readiness audit."""
-
 from __future__ import annotations
+
+
 
 import hashlib
 import json
@@ -49,7 +50,7 @@ from market_predictor.resources import (
     memory_audit,
     release_process_memory,
 )
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 READINESS_RUN_SCHEMA = "edge_rebuild.readiness.run.v3"
 READINESS_AUTHORITY_SCHEMA = "edge_rebuild.readiness.authority.v3"

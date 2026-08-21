@@ -83,7 +83,7 @@ from market_predictor.serving_context import (
     ActiveReleaseRoute,
     ModelContextProvider,
 )
-from market_predictor.v3.errors import DataReadinessError, MarketPredictorError
+from market_predictor.core.errors import DataReadinessError, MarketPredictorError
 
 DEFAULT_MODE_HORIZONS = {"swing": "10b", "intraday": "60m"}
 SERVING_POLICY_ID = "market_predictor.serving_policy_bundle.v2"

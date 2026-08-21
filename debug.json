@@ -1,0 +1,1197 @@
+{
+  "replayed": {
+    "candidate_id": "ridge_opportunity_alpha_1_logistic_downside_c_1",
+    "family": "ridge_logistic_pair",
+    "hyperparameters": {
+      "alpha": 1.0,
+      "downside_c": 1.0
+    },
+    "opportunity_training_target": "net_return",
+    "downside_training_target": "stop_hit",
+    "target_hit_used_as_training_target": false,
+    "folds": [
+      {
+        "downside_calibration_sessions": 6,
+        "downside_fit_sessions": 22,
+        "embargo_sessions": [
+          "2024-02-12"
+        ],
+        "first_downside_calibration_session": "2024-02-02",
+        "fold": 0,
+        "last_downside_fit_session": "2024-01-31",
+        "max_train_label_available_at_utc": "2024-02-09T18:31:00+00:00",
+        "min_validation_decision_time_utc": "2024-02-13T16:00:00+00:00",
+        "role": "selection",
+        "train_sessions": 29,
+        "validation_sessions": 5
+      },
+      {
+        "downside_calibration_sessions": 7,
+        "downside_fit_sessions": 26,
+        "embargo_sessions": [
+          "2024-02-19"
+        ],
+        "first_downside_calibration_session": "2024-02-08",
+        "fold": 1,
+        "last_downside_fit_session": "2024-02-06",
+        "max_train_label_available_at_utc": "2024-02-16T18:31:00+00:00",
+        "min_validation_decision_time_utc": "2024-02-20T16:00:00+00:00",
+        "role": "selection",
+        "train_sessions": 34,
+        "validation_sessions": 5
+      },
+      {
+        "downside_calibration_sessions": 8,
+        "downside_fit_sessions": 30,
+        "embargo_sessions": [
+          "2024-02-26"
+        ],
+        "first_downside_calibration_session": "2024-02-14",
+        "fold": 2,
+        "last_downside_fit_session": "2024-02-12",
+        "max_train_label_available_at_utc": "2024-02-23T18:31:00+00:00",
+        "min_validation_decision_time_utc": "2024-02-27T16:00:00+00:00",
+        "role": "selection",
+        "train_sessions": 39,
+        "validation_sessions": 5
+      },
+      {
+        "downside_calibration_sessions": 9,
+        "downside_fit_sessions": 34,
+        "embargo_sessions": [
+          "2024-03-04"
+        ],
+        "first_downside_calibration_session": "2024-02-20",
+        "fold": 3,
+        "last_downside_fit_session": "2024-02-16",
+        "max_train_label_available_at_utc": "2024-03-01T18:31:00+00:00",
+        "min_validation_decision_time_utc": "2024-03-05T16:00:00+00:00",
+        "role": "development_confirmation",
+        "train_sessions": 44,
+        "validation_sessions": 5
+      }
+    ],
+    "selection_policies": [
+      {
+        "threshold_bps": 0.0,
+        "maximum_stop_probability": 0.35,
+        "selection_passed": true,
+        "failed_gate_reasons": [],
+        "selection_scopes": {
+          "seen_security": {
+            "passed": true,
+            "failed_gate_reasons": [],
+            "metrics": {
+              "rows": 200,
+              "securities": 10,
+              "positive_net_return_roc_auc": 0.9,
+              "top_decile_positive_net_return_lift": 2.0,
+              "stop_hit_roc_auc": 0.9,
+              "stop_hit_brier": 0.1,
+              "stop_hit_ece": 0.02,
+              "stop_hit_brier_skill": 0.5,
+              "trade_count": 100,
+              "sessions_with_trades": 10,
+              "average_trade_net_return": 0.002,
+              "average_daily_net_return": 0.002,
+              "moving_block_bootstrap_95_ci": {
+                "average_daily_net_return": {
+                  "estimate": 0.002,
+                  "low": 0.001,
+                  "high": 0.003
+                }
+              },
+              "profit_factor": 2.0,
+              "maximum_drawdown": 0.05,
+              "economic_rank_gain_over_exact_random_baseline": 0.002,
+              "economic_rank_gain_bootstrap_95_ci": {
+                "estimate": 0.002,
+                "low": 0.001,
+                "high": 0.003
+              },
+              "benchmark_excess_bootstrap_95_ci": {
+                "spy": {
+                  "estimate": 0.002,
+                  "low": 0.001,
+                  "high": 0.003
+                },
+                "qqq": {
+                  "estimate": 0.002,
+                  "low": 0.001,
+                  "high": 0.003
+                },
+                "sector": {
+                  "estimate": 0.002,
+                  "low": 0.001,
+                  "high": 0.003
+                }
+              },
+              "average_daily_round_trip_turnover": 0.25,
+              "profitable_fold_fraction": 1.0,
+              "negative_session_rate": 0.25,
+              "return_to_drawdown": 1.0,
+              "maximum_entries_per_session_observed": 3,
+              "maximum_entries_per_decision_observed": 3,
+              "maximum_concurrent_positions_observed": 3,
+              "cost_curve": [
+                {
+                  "round_trip_cost_bps": 20.0,
+                  "daily_return_bootstrap_95_ci": {
+                    "average_daily_net_return": {
+                      "estimate": 0.002,
+                      "low": 0.001,
+                      "high": 0.003
+                    }
+                  }
+                }
+              ]
+            }
+          },
+          "unseen_security": {
+            "passed": true,
+            "failed_gate_reasons": [],
+            "metrics": {
+              "rows": 200,
+              "securities": 10,
+              "positive_net_return_roc_auc": 0.9,
+              "top_decile_positive_net_return_lift": 2.0,
+              "stop_hit_roc_auc": 0.9,
+              "stop_hit_brier": 0.1,
+              "stop_hit_ece": 0.02,
+              "stop_hit_brier_skill": 0.5,
+              "trade_count": 100,
+              "sessions_with_trades": 10,
+              "average_trade_net_return": 0.002,
+              "average_daily_net_return": 0.002,
+              "moving_block_bootstrap_95_ci": {
+                "average_daily_net_return": {
+                  "estimate": 0.002,
+                  "low": 0.001,
+                  "high": 0.003
+                }
+              },
+              "profit_factor": 2.0,
+              "maximum_drawdown": 0.05,
+              "economic_rank_gain_over_exact_random_baseline": 0.002,
+              "economic_rank_gain_bootstrap_95_ci": {
+                "estimate": 0.002,
+                "low": 0.001,
+                "high": 0.003
+              },
+              "benchmark_excess_bootstrap_95_ci": {
+                "spy": {
+                  "estimate": 0.002,
+                  "low": 0.001,
+                  "high": 0.003
+                },
+                "qqq": {
+                  "estimate": 0.002,
+                  "low": 0.001,
+                  "high": 0.003
+                },
+                "sector": {
+                  "estimate": 0.002,
+                  "low": 0.001,
+                  "high": 0.003
+                }
+              },
+              "average_daily_round_trip_turnover": 0.25,
+              "profitable_fold_fraction": 1.0,
+              "negative_session_rate": 0.25,
+              "return_to_drawdown": 1.0,
+              "maximum_entries_per_session_observed": 3,
+              "maximum_entries_per_decision_observed": 3,
+              "maximum_concurrent_positions_observed": 3,
+              "cost_curve": [
+                {
+                  "round_trip_cost_bps": 20.0,
+                  "daily_return_bootstrap_95_ci": {
+                    "average_daily_net_return": {
+                      "estimate": 0.002,
+                      "low": 0.001,
+                      "high": 0.003
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        }
+      }
+    ],
+    "selection_passed": true,
+    "validation_passed": true,
+    "selected_threshold_bps": 0.0,
+    "selected_maximum_stop_probability": 0.35,
+    "selected_selection_scopes": {
+      "seen_security": {
+        "passed": true,
+        "failed_gate_reasons": [],
+        "metrics": {
+          "rows": 200,
+          "securities": 10,
+          "positive_net_return_roc_auc": 0.9,
+          "top_decile_positive_net_return_lift": 2.0,
+          "stop_hit_roc_auc": 0.9,
+          "stop_hit_brier": 0.1,
+          "stop_hit_ece": 0.02,
+          "stop_hit_brier_skill": 0.5,
+          "trade_count": 100,
+          "sessions_with_trades": 10,
+          "average_trade_net_return": 0.002,
+          "average_daily_net_return": 0.002,
+          "moving_block_bootstrap_95_ci": {
+            "average_daily_net_return": {
+              "estimate": 0.002,
+              "low": 0.001,
+              "high": 0.003
+            }
+          },
+          "profit_factor": 2.0,
+          "maximum_drawdown": 0.05,
+          "economic_rank_gain_over_exact_random_baseline": 0.002,
+          "economic_rank_gain_bootstrap_95_ci": {
+            "estimate": 0.002,
+            "low": 0.001,
+            "high": 0.003
+          },
+          "benchmark_excess_bootstrap_95_ci": {
+            "spy": {
+              "estimate": 0.002,
+              "low": 0.001,
+              "high": 0.003
+            },
+            "qqq": {
+              "estimate": 0.002,
+              "low": 0.001,
+              "high": 0.003
+            },
+            "sector": {
+              "estimate": 0.002,
+              "low": 0.001,
+              "high": 0.003
+            }
+          },
+          "average_daily_round_trip_turnover": 0.25,
+          "profitable_fold_fraction": 1.0,
+          "negative_session_rate": 0.25,
+          "return_to_drawdown": 1.0,
+          "maximum_entries_per_session_observed": 3,
+          "maximum_entries_per_decision_observed": 3,
+          "maximum_concurrent_positions_observed": 3,
+          "cost_curve": [
+            {
+              "round_trip_cost_bps": 20.0,
+              "daily_return_bootstrap_95_ci": {
+                "average_daily_net_return": {
+                  "estimate": 0.002,
+                  "low": 0.001,
+                  "high": 0.003
+                }
+              }
+            }
+          ]
+        }
+      },
+      "unseen_security": {
+        "passed": true,
+        "failed_gate_reasons": [],
+        "metrics": {
+          "rows": 200,
+          "securities": 10,
+          "positive_net_return_roc_auc": 0.9,
+          "top_decile_positive_net_return_lift": 2.0,
+          "stop_hit_roc_auc": 0.9,
+          "stop_hit_brier": 0.1,
+          "stop_hit_ece": 0.02,
+          "stop_hit_brier_skill": 0.5,
+          "trade_count": 100,
+          "sessions_with_trades": 10,
+          "average_trade_net_return": 0.002,
+          "average_daily_net_return": 0.002,
+          "moving_block_bootstrap_95_ci": {
+            "average_daily_net_return": {
+              "estimate": 0.002,
+              "low": 0.001,
+              "high": 0.003
+            }
+          },
+          "profit_factor": 2.0,
+          "maximum_drawdown": 0.05,
+          "economic_rank_gain_over_exact_random_baseline": 0.002,
+          "economic_rank_gain_bootstrap_95_ci": {
+            "estimate": 0.002,
+            "low": 0.001,
+            "high": 0.003
+          },
+          "benchmark_excess_bootstrap_95_ci": {
+            "spy": {
+              "estimate": 0.002,
+              "low": 0.001,
+              "high": 0.003
+            },
+            "qqq": {
+              "estimate": 0.002,
+              "low": 0.001,
+              "high": 0.003
+            },
+            "sector": {
+              "estimate": 0.002,
+              "low": 0.001,
+              "high": 0.003
+            }
+          },
+          "average_daily_round_trip_turnover": 0.25,
+          "profitable_fold_fraction": 1.0,
+          "negative_session_rate": 0.25,
+          "return_to_drawdown": 1.0,
+          "maximum_entries_per_session_observed": 3,
+          "maximum_entries_per_decision_observed": 3,
+          "maximum_concurrent_positions_observed": 3,
+          "cost_curve": [
+            {
+              "round_trip_cost_bps": 20.0,
+              "daily_return_bootstrap_95_ci": {
+                "average_daily_net_return": {
+                  "estimate": 0.002,
+                  "low": 0.001,
+                  "high": 0.003
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "confirmation_scopes": {
+      "seen_security": {
+        "passed": true,
+        "failed_gate_reasons": [],
+        "metrics": {
+          "rows": 200,
+          "securities": 10,
+          "positive_net_return_roc_auc": 0.9,
+          "top_decile_positive_net_return_lift": 2.0,
+          "stop_hit_roc_auc": 0.9,
+          "stop_hit_brier": 0.1,
+          "stop_hit_ece": 0.02,
+          "stop_hit_brier_skill": 0.5,
+          "trade_count": 100,
+          "sessions_with_trades": 10,
+          "average_trade_net_return": 0.002,
+          "average_daily_net_return": 0.002,
+          "moving_block_bootstrap_95_ci": {
+            "average_daily_net_return": {
+              "estimate": 0.002,
+              "low": 0.001,
+              "high": 0.003
+            }
+          },
+          "profit_factor": 2.0,
+          "maximum_drawdown": 0.05,
+          "economic_rank_gain_over_exact_random_baseline": 0.002,
+          "economic_rank_gain_bootstrap_95_ci": {
+            "estimate": 0.002,
+            "low": 0.001,
+            "high": 0.003
+          },
+          "benchmark_excess_bootstrap_95_ci": {
+            "spy": {
+              "estimate": 0.002,
+              "low": 0.001,
+              "high": 0.003
+            },
+            "qqq": {
+              "estimate": 0.002,
+              "low": 0.001,
+              "high": 0.003
+            },
+            "sector": {
+              "estimate": 0.002,
+              "low": 0.001,
+              "high": 0.003
+            }
+          },
+          "average_daily_round_trip_turnover": 0.25,
+          "profitable_fold_fraction": 1.0,
+          "negative_session_rate": 0.25,
+          "return_to_drawdown": 1.0,
+          "maximum_entries_per_session_observed": 3,
+          "maximum_entries_per_decision_observed": 3,
+          "maximum_concurrent_positions_observed": 3,
+          "cost_curve": [
+            {
+              "round_trip_cost_bps": 20.0,
+              "daily_return_bootstrap_95_ci": {
+                "average_daily_net_return": {
+                  "estimate": 0.002,
+                  "low": 0.001,
+                  "high": 0.003
+                }
+              }
+            }
+          ]
+        }
+      },
+      "unseen_security": {
+        "passed": true,
+        "failed_gate_reasons": [],
+        "metrics": {
+          "rows": 200,
+          "securities": 10,
+          "positive_net_return_roc_auc": 0.9,
+          "top_decile_positive_net_return_lift": 2.0,
+          "stop_hit_roc_auc": 0.9,
+          "stop_hit_brier": 0.1,
+          "stop_hit_ece": 0.02,
+          "stop_hit_brier_skill": 0.5,
+          "trade_count": 100,
+          "sessions_with_trades": 10,
+          "average_trade_net_return": 0.002,
+          "average_daily_net_return": 0.002,
+          "moving_block_bootstrap_95_ci": {
+            "average_daily_net_return": {
+              "estimate": 0.002,
+              "low": 0.001,
+              "high": 0.003
+            }
+          },
+          "profit_factor": 2.0,
+          "maximum_drawdown": 0.05,
+          "economic_rank_gain_over_exact_random_baseline": 0.002,
+          "economic_rank_gain_bootstrap_95_ci": {
+            "estimate": 0.002,
+            "low": 0.001,
+            "high": 0.003
+          },
+          "benchmark_excess_bootstrap_95_ci": {
+            "spy": {
+              "estimate": 0.002,
+              "low": 0.001,
+              "high": 0.003
+            },
+            "qqq": {
+              "estimate": 0.002,
+              "low": 0.001,
+              "high": 0.003
+            },
+            "sector": {
+              "estimate": 0.002,
+              "low": 0.001,
+              "high": 0.003
+            }
+          },
+          "average_daily_round_trip_turnover": 0.25,
+          "profitable_fold_fraction": 1.0,
+          "negative_session_rate": 0.25,
+          "return_to_drawdown": 1.0,
+          "maximum_entries_per_session_observed": 3,
+          "maximum_entries_per_decision_observed": 3,
+          "maximum_concurrent_positions_observed": 3,
+          "cost_curve": [
+            {
+              "round_trip_cost_bps": 20.0,
+              "daily_return_bootstrap_95_ci": {
+                "average_daily_net_return": {
+                  "estimate": 0.002,
+                  "low": 0.001,
+                  "high": 0.003
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "confirmation_policy_frozen_before_scoring": true,
+    "failed_gate_reasons": []
+  },
+  "source": {
+    "candidate_id": "ridge_opportunity_alpha_1_logistic_downside_c_1",
+    "confirmation_policy_frozen_before_scoring": false,
+    "confirmation_scopes": null,
+    "downside_training_target": "stop_hit",
+    "failed_gate_reasons": [
+      "seen_security:average_trade_net_return_below_gate",
+      "seen_security:stop_hit_brier_skill_not_positive",
+      "seen_security:stop_hit_roc_auc_below_gate",
+      "seen_security:stress_cost_average_daily_return_below_gate",
+      "seen_security:turnover_above_gate",
+      "unseen_security:average_trade_net_return_below_gate",
+      "unseen_security:economic_rank_gain_confidence_bound_below_random",
+      "unseen_security:insufficient_scope_rows",
+      "unseen_security:spy_excess_confidence_bound_below_gate",
+      "unseen_security:stop_hit_ece_above_gate",
+      "unseen_security:stress_cost_average_daily_return_below_gate"
+    ],
+    "family": "ridge_logistic_pair",
+    "folds": [
+      {
+        "downside_calibration_sessions": 6,
+        "downside_fit_sessions": 22,
+        "embargo_sessions": [
+          "2024-02-12"
+        ],
+        "first_downside_calibration_session": "2024-02-02",
+        "fold": 0,
+        "last_downside_fit_session": "2024-01-31",
+        "max_train_label_available_at_utc": "2024-02-09T18:31:00+00:00",
+        "min_validation_decision_time_utc": "2024-02-13T16:00:00+00:00",
+        "role": "selection",
+        "train_sessions": 29,
+        "validation_sessions": 5
+      },
+      {
+        "downside_calibration_sessions": 7,
+        "downside_fit_sessions": 26,
+        "embargo_sessions": [
+          "2024-02-19"
+        ],
+        "first_downside_calibration_session": "2024-02-08",
+        "fold": 1,
+        "last_downside_fit_session": "2024-02-06",
+        "max_train_label_available_at_utc": "2024-02-16T18:31:00+00:00",
+        "min_validation_decision_time_utc": "2024-02-20T16:00:00+00:00",
+        "role": "selection",
+        "train_sessions": 34,
+        "validation_sessions": 5
+      },
+      {
+        "downside_calibration_sessions": 8,
+        "downside_fit_sessions": 30,
+        "embargo_sessions": [
+          "2024-02-26"
+        ],
+        "first_downside_calibration_session": "2024-02-14",
+        "fold": 2,
+        "last_downside_fit_session": "2024-02-12",
+        "max_train_label_available_at_utc": "2024-02-23T18:31:00+00:00",
+        "min_validation_decision_time_utc": "2024-02-27T16:00:00+00:00",
+        "role": "selection",
+        "train_sessions": 39,
+        "validation_sessions": 5
+      },
+      {
+        "downside_calibration_sessions": 9,
+        "downside_fit_sessions": 34,
+        "embargo_sessions": [
+          "2024-03-04"
+        ],
+        "first_downside_calibration_session": "2024-02-20",
+        "fold": 3,
+        "last_downside_fit_session": "2024-02-16",
+        "max_train_label_available_at_utc": "2024-03-01T18:31:00+00:00",
+        "min_validation_decision_time_utc": "2024-03-05T16:00:00+00:00",
+        "role": "development_confirmation",
+        "train_sessions": 44,
+        "validation_sessions": 5
+      }
+    ],
+    "hyperparameters": {
+      "alpha": 1.0,
+      "downside_c": 1.0
+    },
+    "opportunity_training_target": "net_return",
+    "selected_maximum_stop_probability": null,
+    "selected_selection_scopes": null,
+    "selected_threshold_bps": null,
+    "selection_passed": false,
+    "selection_policies": [
+      {
+        "failed_gate_reasons": [
+          "seen_security:stop_hit_roc_auc_below_gate",
+          "seen_security:stop_hit_brier_skill_not_positive",
+          "seen_security:average_trade_net_return_below_gate",
+          "seen_security:turnover_above_gate",
+          "seen_security:stress_cost_average_daily_return_below_gate",
+          "unseen_security:insufficient_scope_rows",
+          "unseen_security:stop_hit_ece_above_gate",
+          "unseen_security:average_trade_net_return_below_gate",
+          "unseen_security:economic_rank_gain_confidence_bound_below_random",
+          "unseen_security:spy_excess_confidence_bound_below_gate",
+          "unseen_security:stress_cost_average_daily_return_below_gate"
+        ],
+        "maximum_stop_probability": 0.35,
+        "selection_passed": false,
+        "selection_scopes": {
+          "seen_security": {
+            "failed_gate_reasons": [
+              "stop_hit_roc_auc_below_gate",
+              "stop_hit_brier_skill_not_positive",
+              "average_trade_net_return_below_gate",
+              "turnover_above_gate",
+              "stress_cost_average_daily_return_below_gate"
+            ],
+            "metrics": {
+              "average_daily_net_return": 0.0018347208358153362,
+              "average_daily_round_trip_turnover": 3.3826616861976544,
+              "average_qqq_excess_return": 0.0007870991967539909,
+              "average_sector_excess_return": 0.0009870991967539909,
+              "average_spy_excess_return": 0.0008870991967539908,
+              "average_trade_net_return": 0.001087099196753991,
+              "benchmark_excess_bootstrap_95_ci": {
+                "qqq": {
+                  "estimate": 0.0013278068566149603,
+                  "high": 0.0021857978704412865,
+                  "low": 0.0007134703463173443,
+                  "sessions": 15
+                },
+                "sector": {
+                  "estimate": 0.0016657495094151609,
+                  "high": 0.002465497874823655,
+                  "low": 0.0010265079256225795,
+                  "sessions": 15
+                },
+                "spy": {
+                  "estimate": 0.0014967781830150602,
+                  "high": 0.002024636822283688,
+                  "low": 0.0006966176402866658,
+                  "sessions": 15
+                }
+              },
+              "capital_weights_enforced": true,
+              "compounded_net_return": 0.027865537873792645,
+              "cost_curve": [
+                {
+                  "average_daily_net_return": 0.003525909561606211,
+                  "average_daily_round_trip_turnover": 3.386791298886431,
+                  "average_qqq_excess_return": 0.0017886092294289984,
+                  "average_sector_excess_return": 0.0019886092294289985,
+                  "average_spy_excess_return": 0.001888609229428998,
+                  "average_trade_net_return": 0.002088609229428998,
+                  "capital_weights_enforced": true,
+                  "compounded_net_return": 0.05419817044681885,
+                  "daily_return_bootstrap_95_ci": {
+                    "average_daily_net_return": {
+                      "estimate": 0.003525909561606211,
+                      "high": 0.004329243726359135,
+                      "low": 0.0027333527660884133
+                    },
+                    "block_sessions": 2,
+                    "bootstrap_samples": 100,
+                    "compounded_net_return": {
+                      "estimate": 0.05419817044681885,
+                      "high": 0.06692960473613649,
+                      "low": 0.041775628703118975
+                    },
+                    "estimand": "daily_capital_weighted_portfolio_return",
+                    "sessions": 15
+                  },
+                  "maximum_concurrent_positions_enforced": true,
+                  "maximum_concurrent_positions_observed": 3,
+                  "maximum_drawdown": 0.01547743358047371,
+                  "maximum_entries_per_decision_observed": 3,
+                  "maximum_entries_per_session_observed": 6,
+                  "maximum_entry_weight_observed": 0.3333333333333333,
+                  "negative_session_rate": 0.0,
+                  "one_way_turnover": 25.400934741648232,
+                  "profit_factor": 8.00667288853633,
+                  "profitable_fold_fraction": 1.0,
+                  "return_to_drawdown": 3.50175435514032,
+                  "round_trip_cost_bps": 0.0,
+                  "round_trip_turnover": 50.801869483296464,
+                  "security_cooldown_enforced": true,
+                  "sessions": 15,
+                  "sessions_with_trades": 15,
+                  "trade_count": 76,
+                  "win_rate": 0.8026315789473685
+                },
+                {
+                  "average_daily_net_return": 0.002680142976488531,
+                  "average_daily_round_trip_turnover": 3.3847261195444736,
+                  "average_qqq_excess_return": 0.0012878559599412045,
+                  "average_sector_excess_return": 0.0014878559599412048,
+                  "average_spy_excess_return": 0.0013878559599412041,
+                  "average_trade_net_return": 0.0015878559599412042,
+                  "capital_weights_enforced": true,
+                  "compounded_net_return": 0.04095167583169168,
+                  "daily_return_bootstrap_95_ci": {
+                    "average_daily_net_return": {
+                      "estimate": 0.002680142976488531,
+                      "high": 0.0034124194631328254,
+                      "low": 0.002130182963545702
+                    },
+                    "block_sessions": 2,
+                    "bootstrap_samples": 100,
+                    "compounded_net_return": {
+                      "estimate": 0.04095167583169168,
+                      "high": 0.05241155827505057,
+                      "low": 0.03242460841026375
+                    },
+                    "estimand": "daily_capital_weighted_portfolio_return",
+                    "sessions": 15
+                  },
+                  "maximum_concurrent_positions_enforced": true,
+                  "maximum_concurrent_positions_observed": 3,
+                  "maximum_drawdown": 0.016141274561735752,
+                  "maximum_entries_per_decision_observed": 3,
+                  "maximum_entries_per_session_observed": 6,
+                  "maximum_entry_weight_observed": 0.3333333333333333,
+                  "negative_session_rate": 0.0,
+                  "one_way_turnover": 25.38544589658355,
+                  "profit_factor": 5.00189303914526,
+                  "profitable_fold_fraction": 1.0,
+                  "return_to_drawdown": 2.537078201294653,
+                  "round_trip_cost_bps": 5.0,
+                  "round_trip_turnover": 50.7708917931671,
+                  "security_cooldown_enforced": true,
+                  "sessions": 15,
+                  "sessions_with_trades": 15,
+                  "trade_count": 76,
+                  "win_rate": 0.8026315789473685
+                },
+                {
+                  "average_daily_net_return": 0.0018347208358153362,
+                  "average_daily_round_trip_turnover": 3.3826616861976544,
+                  "average_qqq_excess_return": 0.0007870991967539909,
+                  "average_sector_excess_return": 0.0009870991967539909,
+                  "average_spy_excess_return": 0.0008870991967539908,
+                  "average_trade_net_return": 0.001087099196753991,
+                  "capital_weights_enforced": true,
+                  "compounded_net_return": 0.027865537873792645,
+                  "daily_return_bootstrap_95_ci": {
+                    "average_daily_net_return": {
+                      "estimate": 0.0018347208358153362,
+                      "high": 0.0024901924283326233,
+                      "low": 0.0011140595542601455
+                    },
+                    "block_sessions": 2,
+                    "bootstrap_samples": 100,
+                    "compounded_net_return": {
+                      "estimate": 0.027865537873792645,
+                      "high": 0.03800124830501626,
+                      "low": 0.016833374910127163
+                    },
+                    "estimand": "daily_capital_weighted_portfolio_return",
+                    "sessions": 15
+                  },
+                  "maximum_concurrent_positions_enforced": true,
+                  "maximum_concurrent_positions_observed": 3,
+                  "maximum_drawdown": 0.017075266013092727,
+                  "maximum_entries_per_decision_observed": 3,
+                  "maximum_entries_per_session_observed": 6,
+                  "maximum_entry_weight_observed": 0.3333333333333333,
+                  "negative_session_rate": 0.06666666666666667,
+                  "one_way_turnover": 25.369962646482406,
+                  "profit_factor": 3.193352544152279,
+                  "profitable_fold_fraction": 1.0,
+                  "return_to_drawdown": 1.6319240855414088,
+                  "round_trip_cost_bps": 10.0,
+                  "round_trip_turnover": 50.73992529296481,
+                  "security_cooldown_enforced": true,
+                  "sessions": 15,
+                  "sessions_with_trades": 15,
+                  "trade_count": 76,
+                  "win_rate": 0.8026315789473685
+                },
+                {
+                  "average_daily_net_return": 0.0001449098878022026,
+                  "average_daily_round_trip_turnover": 3.378535174164063,
+                  "average_qqq_excess_return": -0.00021442476489013382,
+                  "average_sector_excess_return": -1.4424764890133925e-05,
+                  "average_spy_excess_return": -0.00011442476489013391,
+                  "average_trade_net_return": 8.557523510986617e-05,
+                  "capital_weights_enforced": true,
+                  "compounded_net_return": 0.0021668824999221403,
+                  "daily_return_bootstrap_95_ci": {
+                    "average_daily_net_return": {
+                      "estimate": 0.0001449098878022026,
+                      "high": 0.000681565034752209,
+                      "low": -0.0004309130188519037
+                    },
+                    "block_sessions": 2,
+                    "bootstrap_samples": 100,
+                    "compounded_net_return": {
+                      "estimate": 0.0021668824999221403,
+                      "high": 0.010260356211064489,
+                      "low": -0.006449849256349357
+                    },
+                    "estimand": "daily_capital_weighted_portfolio_return",
+                    "sessions": 15
+                  },
+                  "maximum_concurrent_positions_enforced": true,
+                  "maximum_concurrent_positions_observed": 3,
+                  "maximum_drawdown": 0.020633892115426433,
+                  "maximum_entries_per_decision_observed": 3,
+                  "maximum_entries_per_session_observed": 6,
+                  "maximum_entry_weight_observed": 0.3333333333333333,
+                  "negative_session_rate": 0.4666666666666667,
+                  "one_way_turnover": 25.339013806230472,
+                  "profit_factor": 1.1233316769359558,
+                  "profitable_fold_fraction": 0.6666666666666666,
+                  "return_to_drawdown": 0.10501569397574405,
+                  "round_trip_cost_bps": 20.0,
+                  "round_trip_turnover": 50.678027612460944,
+                  "security_cooldown_enforced": true,
+                  "sessions": 15,
+                  "sessions_with_trades": 15,
+                  "trade_count": 76,
+                  "win_rate": 0.8026315789473685
+                }
+              ],
+              "daily_ledger_rows": 15,
+              "decision_groups": 30,
+              "decision_groups_with_entries": 29,
+              "drawdown_basis": "event_time_realized_equity_with_open_positions_marked_at_frozen_stop",
+              "economic_rank_capture_ratio": 0.22617504831281918,
+              "economic_rank_gain_bootstrap_95_ci": {
+                "estimate": 0.0005089779465259368,
+                "high": 0.0007585851918370329,
+                "low": 0.00021576982875695538,
+                "sessions": 15
+              },
+              "economic_rank_gain_over_exact_random_baseline": 0.0005089779465259368,
+              "frozen_round_trip_cost_bps": 10.0,
+              "maximum_concurrent_positions_enforced": true,
+              "maximum_concurrent_positions_observed": 3,
+              "maximum_drawdown": 0.017075266013092727,
+              "maximum_entries_per_decision_observed": 3,
+              "maximum_entries_per_session_observed": 6,
+              "maximum_entry_weight_observed": 0.3333333333333333,
+              "maximum_stop_probability": 0.35,
+              "moving_block_bootstrap_95_ci": {
+                "average_daily_net_return": {
+                  "estimate": 0.0018347208358153362,
+                  "high": 0.002478969789344005,
+                  "low": 0.0012419729278875455
+                },
+                "block_sessions": 2,
+                "bootstrap_samples": 100,
+                "compounded_net_return": {
+                  "estimate": 0.027865537873792645,
+                  "high": 0.03782418009618592,
+                  "low": 0.018782752944357724
+                },
+                "estimand": "daily_capital_weighted_portfolio_return",
+                "sessions": 15
+              },
+              "negative_session_rate": 0.06666666666666667,
+              "no_trade_decision_rate": 0.033333333333333326,
+              "one_way_turnover": 25.369962646482406,
+              "position_ledger_rows": 76,
+              "positive_net_return_pr_auc": 0.7866773162465442,
+              "positive_net_return_prevalence": 0.6130434782608696,
+              "positive_net_return_roc_auc": 0.6900151406486573,
+              "profit_factor": 3.193352544152279,
+              "profitable_fold_fraction": 1.0,
+              "random_baseline_method": "exact_cross_sectional_mean_return",
+              "ranking_groups": 30,
+              "raw_ndcg_reported": false,
+              "return_to_drawdown": 1.6319240855414088,
+              "round_trip_turnover": 50.73992529296481,
+              "rows": 230,
+              "securities": 34,
+              "security_cooldown_enforced": true,
+              "sessions": 15,
+              "sessions_with_trades": 15,
+              "stop_hit_baseline_brier": 0.1101890359168242,
+              "stop_hit_brier": 0.12109977699844135,
+              "stop_hit_brier_skill": -0.09901839135658719,
+              "stop_hit_ece": 0.08623917320206677,
+              "stop_hit_pr_auc": 0.15376088736018972,
+              "stop_hit_prevalence": 0.12608695652173912,
+              "stop_hit_roc_auc": 0.45977011494252873,
+              "threshold_bps": 0.0,
+              "top_decile_positive_net_return_lift": 1.4893617021276595,
+              "top_decile_positive_net_return_rate": 0.9130434782608695,
+              "trade_count": 76,
+              "turnover_basis": "actual_entry_and_exit_notional_divided_by_average_daily_starting_equity",
+              "win_rate": 0.8026315789473685
+            },
+            "passed": false
+          },
+          "unseen_security": {
+            "failed_gate_reasons": [
+              "insufficient_scope_rows",
+              "stop_hit_ece_above_gate",
+              "average_trade_net_return_below_gate",
+              "economic_rank_gain_confidence_bound_below_random",
+              "spy_excess_confidence_bound_below_gate",
+              "stress_cost_average_daily_return_below_gate"
+            ],
+            "metrics": {
+              "average_daily_net_return": 0.0005712200751936918,
+              "average_daily_round_trip_turnover": 0.9050995623224602,
+              "average_qqq_excess_return": 0.0009601189599183857,
+              "average_sector_excess_return": 0.0011601189599183856,
+              "average_spy_excess_return": 0.0010601189599183855,
+              "average_trade_net_return": 0.0012601189599183856,
+              "benchmark_excess_bootstrap_95_ci": {
+                "qqq": {
+                  "estimate": 0.00043546306528383295,
+                  "high": 0.0009180764615416921,
+                  "low": 3.598768734789102e-05,
+                  "sessions": 14
+                },
+                "sector": {
+                  "estimate": 0.0005259677385570433,
+                  "high": 0.0009819636677312013,
+                  "low": 6.182522447429184e-05,
+                  "sessions": 14
+                },
+                "spy": {
+                  "estimate": 0.00048071540192043806,
+                  "high": 0.0010148588398998808,
+                  "low": -1.7747225325620763e-05,
+                  "sessions": 14
+                }
+              },
+              "capital_weights_enforced": true,
+              "compounded_net_return": 0.008018439789217569,
+              "cost_curve": [
+                {
+                  "average_daily_net_return": 0.001023962104385672,
+                  "average_daily_round_trip_turnover": 0.9051841721724116,
+                  "average_qqq_excess_return": 0.0019590081325917942,
+                  "average_sector_excess_return": 0.0021590081325917943,
+                  "average_spy_excess_return": 0.002059008132591794,
+                  "average_trade_net_return": 0.002259008132591794,
+                  "capital_weights_enforced": true,
+                  "compounded_net_return": 0.01441683163515739,
+                  "daily_return_bootstrap_95_ci": {
+                    "average_daily_net_return": {
+                      "estimate": 0.001023962104385672,
+                      "high": 0.0016423867062324298,
+                      "low": 0.00032046683687523837
+                    },
+                    "block_sessions": 2,
+                    "bootstrap_samples": 100,
+                    "compounded_net_return": {
+                      "estimate": 0.01441683163515739,
+                      "high": 0.02322389703924868,
+                      "low": 0.004491155241253641
+                    },
+                    "estimand": "daily_capital_weighted_portfolio_return",
+                    "sessions": 14
+                  },
+                  "maximum_concurrent_positions_enforced": true,
+                  "maximum_concurrent_positions_observed": 2,
+                  "maximum_drawdown": 0.010483482483599316,
+                  "maximum_entries_per_decision_observed": 2,
+                  "maximum_entries_per_session_observed": 4,
+                  "maximum_entry_weight_observed": 0.3333333333333333,
+                  "negative_session_rate": 0.21428571428571427,
+                  "one_way_turnover": 6.3362892052068815,
+                  "profit_factor": 9.373026491738344,
+                  "profitable_fold_fraction": 1.0,
+                  "return_to_drawdown": 1.37519489899578,
+                  "round_trip_cost_bps": 0.0,
+                  "round_trip_turnover": 12.672578410413763,
+                  "security_cooldown_enforced": true,
+                  "sessions": 14,
+                  "sessions_with_trades": 11,
+                  "trade_count": 19,
+                  "win_rate": 0.8421052631578947
+                },
+                {
+                  "average_daily_net_return": 0.0007975732326467866,
+                  "average_daily_round_trip_turnover": 0.9051420328599331,
+                  "average_qqq_excess_return": 0.0014595634936221075,
+                  "average_sector_excess_return": 0.0016595634936221073,
+                  "average_spy_excess_return": 0.0015595634936221073,
+                  "average_trade_net_return": 0.0017595634936221072,
+                  "capital_weights_enforced": true,
+                  "compounded_net_return": 0.011212953380974833,
+                  "daily_return_bootstrap_95_ci": {
+                    "average_daily_net_return": {
+                      "estimate": 0.0007975732326467866,
+                      "high": 0.0013748156489820748,
+                      "low": 0.00012965886623132948
+                    },
+                    "block_sessions": 2,
+                    "bootstrap_samples": 100,
+                    "compounded_net_return": {
+                      "estimate": 0.011212953380974833,
+                      "high": 0.019409882768492502,
+                      "low": 0.0018110754349155878
+                    },
+                    "estimand": "daily_capital_weighted_portfolio_return",
+                    "sessions": 14
+                  },
+                  "maximum_concurrent_positions_enforced": true,
+                  "maximum_concurrent_positions_observed": 2,
+                  "maximum_drawdown": 0.01098159747266203,
+                  "maximum_entries_per_decision_observed": 2,
+                  "maximum_entries_per_session_observed": 4,
+                  "maximum_entry_weight_observed": 0.3333333333333333,
+                  "negative_session_rate": 0.21428571428571427,
+                  "one_way_turnover": 6.335994230019532,
+                  "profit_factor": 6.044698047635973,
+                  "profitable_fold_fraction": 1.0,
+                  "return_to_drawdown": 1.0210676004915267,
+                  "round_trip_cost_bps": 5.0,
+                  "round_trip_turnover": 12.671988460039064,
+                  "security_cooldown_enforced": true,
+                  "sessions": 14,
+                  "sessions_with_trades": 11,
+                  "trade_count": 19,
+                  "win_rate": 0.8421052631578947
+                },
+                {
+                  "average_daily_net_return": 0.0005712200751936918,
+                  "average_daily_round_trip_turnover": 0.9050995623224602,
+                  "average_qqq_excess_return": 0.0009601189599183857,
+                  "average_sector_excess_return": 0.0011601189599183856,
+                  "average_spy_excess_return": 0.0010601189599183855,
+                  "average_trade_net_return": 0.0012601189599183856,
+                  "capital_weights_enforced": true,
+                  "compounded_net_return": 0.008018439789217569,
+                  "daily_return_bootstrap_95_ci": {
+                    "average_daily_net_return": {
+                      "estimate": 0.0005712200751936918,
+                      "high": 0.0011923761255621115,
+                      "low": 3.52638271054929e-05
+                    },
+                    "block_sessions": 2,
+                    "bootstrap_samples": 100,
+                    "compounded_net_return": {
+                      "estimate": 0.008018439789217569,
+                      "high": 0.016813073090695185,
+                      "low": 0.0004903072138872564
+                    },
+                    "estimand": "daily_capital_weighted_portfolio_return",
+                    "sessions": 14
+                  },
+                  "maximum_concurrent_positions_enforced": true,
+                  "maximum_concurrent_positions_observed": 2,
+                  "maximum_drawdown": 0.011479601350613766,
+                  "maximum_entries_per_decision_observed": 2,
+                  "maximum_entries_per_session_observed": 4,
+                  "maximum_entry_weight_observed": 0.3333333333333333,
+                  "negative_session_rate": 0.21428571428571427,
+                  "one_way_turnover": 6.3356969362572215,
+                  "profit_factor": 3.9464487624688966,
+                  "profitable_fold_fraction": 1.0,
+                  "return_to_drawdown": 0.6984946205286873,
+                  "round_trip_cost_bps": 10.0,
+                  "round_trip_turnover": 12.671393872514443,
+                  "security_cooldown_enforced": true,
+                  "sessions": 14,
+                  "sessions_with_trades": 11,
+                  "trade_count": 19,
+                  "win_rate": 0.8421052631578947
+                },
+                {
+                  "average_daily_net_return": 0.00011862090314457285,
+                  "average_daily_round_trip_turnover": 0.905013626498886,
+                  "average_qqq_excess_return": -3.8769794201918275e-05,
+                  "average_sector_excess_return": 0.0001612302057980818,
+                  "average_spy_excess_return": 6.123020579808179e-05,
+                  "average_trade_net_return": 0.0002612302057980818,
+                  "capital_weights_enforced": true,
+                  "compounded_net_return": 0.0016574058183815854,
+                  "daily_return_bootstrap_95_ci": {
+                    "average_daily_net_return": {
+                      "estimate": 0.00011862090314457285,
+                      "high": 0.0005700577603172553,
+                      "low": -0.00032918223731304234
+                    },
+                    "block_sessions": 2,
+                    "bootstrap_samples": 100,
+                    "compounded_net_return": {
+                      "estimate": 0.0016574058183815854,
+                      "high": 0.008007638646336178,
+                      "low": -0.004603668087745494
+                    },
+                    "estimand": "daily_capital_weighted_portfolio_return",
+                    "sessions": 14
+                  },
+                  "maximum_concurrent_positions_enforced": true,
+                  "maximum_concurrent_positions_observed": 2,
+                  "maximum_drawdown": 0.012475275773183747,
+                  "maximum_entries_per_decision_observed": 2,
+                  "maximum_entries_per_session_observed": 4,
+                  "maximum_entry_weight_observed": 0.3333333333333333,
+                  "negative_session_rate": 0.21428571428571427,
+                  "one_way_turnover": 6.335095385492202,
+                  "profit_factor": 1.4464912904722753,
+                  "profitable_fold_fraction": 0.3333333333333333,
+                  "return_to_drawdown": 0.1328552449272717,
+                  "round_trip_cost_bps": 20.0,
+                  "round_trip_turnover": 12.670190770984403,
+                  "security_cooldown_enforced": true,
+                  "sessions": 14,
+                  "sessions_with_trades": 11,
+                  "trade_count": 19,
+                  "win_rate": 0.8421052631578947
+                }
+              ],
+              "daily_ledger_rows": 14,
+              "decision_groups": 22,
+              "decision_groups_with_entries": 15,
+              "drawdown_basis": "event_time_realized_equity_with_open_positions_marked_at_frozen_stop",
+              "economic_rank_capture_ratio": 0.0,
+              "economic_rank_gain_bootstrap_95_ci": {
+                "estimate": 0.0,
+                "high": 0.0,
+                "low": 0.0,
+                "sessions": 8
+              },
+              "economic_rank_gain_over_exact_random_baseline": 0.0,
+              "frozen_round_trip_cost_bps": 10.0,
+              "maximum_concurrent_positions_enforced": true,
+              "maximum_concurrent_positions_observed": 2,
+              "maximum_drawdown": 0.011479601350613766,
+              "maximum_entries_per_decision_observed": 2,
+              "maximum_entries_per_session_observed": 4,
+              "maximum_entry_weight_observed": 0.3333333333333333,
+              "maximum_stop_probability": 0.35,
+              "moving_block_bootstrap_95_ci": {
+                "average_daily_net_return": {
+                  "estimate": 0.0005712200751936918,
+                  "high": 0.001120573139414275,
+                  "low": 9.299212097755998e-05
+                },
+                "block_sessions": 2,
+                "bootstrap_samples": 100,
+                "compounded_net_return": {
+                  "estimate": 0.008018439789217569,
+                  "high": 0.01579287837649231,
+                  "low": 0.0012959970992701298
+                },
+                "estimand": "daily_capital_weighted_portfolio_return",
+                "sessions": 14
+              },
+              "negative_session_rate": 0.21428571428571427,
+              "no_trade_decision_rate": 0.31818181818181823,
+              "one_way_turnover": 6.3356969362572215,
+              "position_ledger_rows": 19,
+              "positive_net_return_pr_auc": 0.8433910864110674,
+              "positive_net_return_prevalence": 0.5789473684210527,
+              "positive_net_return_roc_auc": 0.8039772727272727,
+              "profit_factor": 3.9464487624688966,
+              "profitable_fold_fraction": 1.0,
+              "random_baseline_method": "exact_cross_sectional_mean_return",
+              "ranking_groups": 11,
+              "raw_ndcg_reported": false,
+              "return_to_drawdown": 0.6984946205286873,
+              "round_trip_turnover": 12.671393872514443,
+              "rows": 38,
+              "securities": 6,
+              "security_cooldown_enforced": true,
+              "sessions": 14,
+              "sessions_with_trades": 11,
+              "stop_hit_baseline_brier": 0.13296398891966757,
+              "stop_hit_brier": 0.1325068739848957,
+              "stop_hit_brier_skill": 0.003437885238596894,
+              "stop_hit_ece": 0.11267809550683654,
+              "stop_hit_pr_auc": 0.31982905982905985,
+              "stop_hit_prevalence": 0.15789473684210525,
+              "stop_hit_roc_auc": 0.5416666666666666,
+              "threshold_bps": 0.0,
+              "top_decile_positive_net_return_lift": 1.2954545454545454,
+              "top_decile_positive_net_return_rate": 0.75,
+              "trade_count": 19,
+              "turnover_basis": "actual_entry_and_exit_notional_divided_by_average_daily_starting_equity",
+              "win_rate": 0.8421052631578947
+            },
+            "passed": false
+          }
+        },
+        "threshold_bps": 0.0
+      }
+    ],
+    "target_hit_used_as_training_target": false,
+    "validation_passed": false
+  }
+}

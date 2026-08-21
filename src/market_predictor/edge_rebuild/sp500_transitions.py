@@ -6,8 +6,9 @@ module publishes the independent transition layer used by point-in-time
 membership reconstruction.  It consumes only verified local evidence and never
 performs network I/O.
 """
-
 from __future__ import annotations
+
+
 
 import hashlib
 import json
@@ -25,7 +26,7 @@ from market_predictor.canonical.store import file_sha256
 from market_predictor.locking import LockTimeout, file_lock
 from market_predictor.resources import assert_memory_budget, assert_peak_memory_budget
 from market_predictor.v3.contracts import normalized_ticker
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 from market_predictor.v3.spglobal_archive import (
     MAXIMUM_MEMORY_GIB,
     MEMORY_HEADROOM_GIB,

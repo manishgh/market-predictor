@@ -20,7 +20,7 @@ from market_predictor.edge_rebuild.intraday_selection import (
     publish_intraday_selection,
 )
 from market_predictor.edge_rebuild.strategy_contract import load_strategy_contract
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 CONTRACT = Path("configs/edge_rebuild_strategy_contract.toml")
 SESSIONS = ("2024-01-03", "2024-02-01", "2024-02-02")

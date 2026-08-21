@@ -7,7 +7,7 @@ from market_predictor.edge_rebuild.universe_identity import (
     validate_security_exclusion_share,
     verify_membership_identity,
 )
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 
 def _membership(

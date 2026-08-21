@@ -5,8 +5,9 @@ ticker reuse, and delistings, so historical rows bind to the security that
 actually held a symbol at a point in time rather than to today's survivor. The
 master is content-addressed so its identity can be bound to datasets and models.
 """
-
 from __future__ import annotations
+
+
 
 import hashlib
 import json

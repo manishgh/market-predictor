@@ -13,7 +13,7 @@ import pytest
 from market_predictor.canonical.audits import CanonicalAuditReport, audit_canonical_bars
 from market_predictor.canonical.store import file_sha256, write_canonical_artifact
 from market_predictor.edge_rebuild import swing_daily_combination as module
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 
 
 def test_modeled_population_uses_exact_cutoffs_and_retains_warmup_intervals() -> None:

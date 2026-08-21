@@ -12,16 +12,18 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from market_predictor.edge_rebuild import intraday_development
-from market_predictor.edge_rebuild.intraday_development import (
-    IntradayDevelopmentConfig,
-    baseline_profile,
-    evaluate_future_intraday_holdout,
-    load_intraday_development_config,
-    train_intraday_development_candidate,
-)
+import market_predictor.intraday.training.validation as validation_module
+from market_predictor.edge_rebuild.intraday_training import load_published_intraday_dataset
+import market_predictor.intraday.training.io as io_module
+import market_predictor.intraday.evaluation.gates as gates_module
+import market_predictor.intraday.evaluation.economics as economics_module
+import market_predictor.intraday.training.coordinator as coordinator_module
+import market_predictor.intraday.training.models as models_module
+from market_predictor.intraday.training.config import IntradayDevelopmentConfig
+from market_predictor.intraday.evaluation.gates import baseline_profile, evaluate_future_intraday_holdout, load_intraday_development_config
+from market_predictor.intraday.training.coordinator import train_intraday_development_candidate
 from market_predictor.edge_rebuild.intraday_training import MODEL_FEATURE_COLUMNS
-from market_predictor.v3.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError
 from tests.test_edge_rebuild_intraday_training import _publish_dataset, _training_frame
 
 
@@ -80,19 +82,19 @@ def test_profile_identity_and_population_are_order_independent() -> None:
     reversion = baseline_profile("long-reversion", config)
     continuation_ids = set(
         frame.loc[
-            intraday_development._profile_mask(frame, continuation),
+            gates_module._profile_mask(frame, continuation),
             "decision_id",
         ]
     )
     shuffled_continuation_ids = set(
         shuffled.loc[
-            intraday_development._profile_mask(shuffled, continuation),
+            gates_module._profile_mask(shuffled, continuation),
             "decision_id",
         ]
     )
     reversion_ids = set(
         frame.loc[
-            intraday_development._profile_mask(frame, reversion),
+            gates_module._profile_mask(frame, reversion),
             "decision_id",
         ]
     )
@@ -120,12 +122,12 @@ def test_fourth_walk_forward_fold_is_development_confirmation(
 ) -> None:
     config = _rejecting_config()
     data = _profile_frame(a43_dataset, config, "continuation")
-    sessions = intraday_development._ordered_sessions(data)
-    folds = intraday_development._walk_forward_folds(data, sessions, config)
+    sessions = coordinator_module._ordered_sessions(data)
+    folds = validation_module._walk_forward_folds(data, sessions, config)
     features = data.loc[:, MODEL_FEATURE_COLUMNS].to_numpy(dtype="float32")
     opportunity = data["net_return"].to_numpy(dtype="float64")
     downside = data["stop_hit"].to_numpy(dtype="int8")
-    holdout = intraday_development._stable_security_holdout(
+    holdout = validation_module._stable_security_holdout(
         data, config.security_holdout_fraction
     )
 
@@ -139,7 +141,7 @@ def test_fourth_walk_forward_fold_is_development_confirmation(
         policy: IntradayDevelopmentConfig,
         **_kwargs: object,
     ) -> SimpleNamespace:
-        fit, calibration = intraday_development._split_downside_calibration(
+        fit, calibration = models_module._split_downside_calibration(
             frame, training_sessions, policy
         )
         return SimpleNamespace(
@@ -147,9 +149,9 @@ def test_fourth_walk_forward_fold_is_development_confirmation(
             calibration_sessions=calibration,
         )
 
-    monkeypatch.setattr(intraday_development, "_fit_pair", fake_fit_pair)
+    monkeypatch.setattr(models_module, "_fit_pair", fake_fit_pair)
     monkeypatch.setattr(
-        intraday_development,
+        models_module,
         "_predict_pair",
         lambda _fitted, matrix: (
             np.linspace(-0.001, 0.003, len(matrix), dtype="float64"),
@@ -157,8 +159,8 @@ def test_fourth_walk_forward_fold_is_development_confirmation(
         ),
     )
 
-    scored, records = intraday_development._walk_forward_predictions(
-        intraday_development._candidate_specs(config)[0],
+    scored, records = coordinator_module._walk_forward_predictions(
+        coordinator_module._candidate_specs(config)[0],
         data,
         features,
         opportunity,
@@ -188,10 +190,10 @@ def test_downside_fit_and_calibration_are_chronological_purged_partitions(
 ) -> None:
     config = _rejecting_config()
     data = _profile_frame(a43_dataset, config, "long-reversion")
-    sessions = intraday_development._ordered_sessions(data)
+    sessions = coordinator_module._ordered_sessions(data)
     training_sessions = sessions[: config.minimum_train_sessions]
 
-    fit, calibration = intraday_development._split_downside_calibration(
+    fit, calibration = models_module._split_downside_calibration(
         data, training_sessions, config
     )
 
@@ -211,17 +213,17 @@ def test_security_holdout_is_stable_under_row_and_security_order() -> None:
     frame = _training_frame(session_count=8, security_count=40)
     shuffled = frame.sample(frac=1.0, random_state=7).reset_index(drop=True)
 
-    first = intraday_development._stable_security_holdout(
+    first = validation_module._stable_security_holdout(
         frame, config.security_holdout_fraction
     )
-    second = intraday_development._stable_security_holdout(
+    second = validation_module._stable_security_holdout(
         shuffled, config.security_holdout_fraction
     )
 
     assert first == second
-    assert intraday_development._security_set_sha256(
+    assert validation_module._security_set_sha256(
         first
-    ) == intraday_development._security_set_sha256(second)
+    ) == validation_module._security_set_sha256(second)
     assert 0 < len(first) < frame["security_id"].nunique()
 
 
@@ -233,7 +235,7 @@ def test_final_candidate_fit_excludes_the_frozen_security_holdout(
     config = _rejecting_config()
     selected_spec = _limit_to_one_candidate(monkeypatch, config)
     profiled = _profile_frame(a43_dataset, config, "continuation")
-    expected_holdout = intraday_development._stable_security_holdout(
+    expected_holdout = validation_module._stable_security_holdout(
         profiled, config.security_holdout_fraction
     )
     observed_exclusions: list[frozenset[str]] = []
@@ -250,10 +252,10 @@ def test_final_candidate_fit_excludes_the_frozen_security_holdout(
         excluded_securities: frozenset[str] = frozenset(),
     ) -> Any:
         observed_exclusions.append(excluded_securities)
-        fit, calibration = intraday_development._split_downside_calibration(
+        fit, calibration = models_module._split_downside_calibration(
             data, sessions, policy
         )
-        return intraday_development._FittedPair(
+        return models_module._FittedPair(
             opportunity_estimator=_OpportunityEstimator(),
             downside_estimator=_DownsideEstimator(),
             downside_calibrator=_DownsideCalibrator(),
@@ -261,9 +263,16 @@ def test_final_candidate_fit_excludes_the_frozen_security_holdout(
             calibration_sessions=calibration,
         )
 
-    monkeypatch.setattr(intraday_development, "_fit_pair", recording_fit_pair)
+    monkeypatch.setattr(coordinator_module, "_fit_pair", recording_fit_pair)
     monkeypatch.setattr(
-        intraday_development,
+        gates_module,
+        "_evaluate_spec",
+        lambda _spec, _scored, folds, _config, _cost: _passing_candidate_record(
+            selected_spec, folds
+        ),
+    )
+    monkeypatch.setattr(
+        coordinator_module,
         "_evaluate_spec",
         lambda _spec, _scored, folds, _config, _cost: _passing_candidate_record(
             selected_spec, folds
@@ -288,15 +297,15 @@ def test_paired_fit_produces_finite_row_aligned_opportunity_and_downside_scores(
 ) -> None:
     config = _rejecting_config()
     data = _profile_frame(a43_dataset, config, "continuation")
-    sessions = intraday_development._ordered_sessions(data)
+    sessions = coordinator_module._ordered_sessions(data)
     features = data.loc[:, MODEL_FEATURE_COLUMNS].to_numpy(dtype="float32")
     opportunity = data["net_return"].to_numpy(dtype="float64")
     downside = data["stop_hit"].to_numpy(dtype="int8")
-    holdout = intraday_development._stable_security_holdout(
+    holdout = validation_module._stable_security_holdout(
         data, config.security_holdout_fraction
     )
-    fitted = intraday_development._fit_pair(
-        intraday_development._candidate_specs(config)[0],
+    fitted = models_module._fit_pair(
+        coordinator_module._candidate_specs(config)[0],
         data,
         features,
         opportunity,
@@ -306,7 +315,7 @@ def test_paired_fit_produces_finite_row_aligned_opportunity_and_downside_scores(
         excluded_securities=holdout,
     )
 
-    opportunity_score, stop_probability = intraday_development._predict_pair(
+    opportunity_score, stop_probability = models_module._predict_pair(
         fitted, features[:25]
     )
 
@@ -332,13 +341,13 @@ def test_worse_seen_or_unseen_scope_blocks_candidate_confirmation(
     }
     responses = iter((passing, failing))
     monkeypatch.setattr(
-        intraday_development,
+        gates_module,
         "_evaluate_scopes",
         lambda *_args, **_kwargs: next(responses),
     )
 
-    result = intraday_development._evaluate_spec(
-        intraday_development._candidate_specs(config)[0],
+    result = gates_module._evaluate_spec(
+        coordinator_module._candidate_specs(config)[0],
         scored,
         [{"fold": fold} for fold in range(4)],
         config,
@@ -378,7 +387,7 @@ def test_every_scope_gate_is_all_or_nothing(
     metrics = _passing_scope_metrics()
     metrics.update(mutation)
 
-    passed, reasons = intraday_development._scope_gates(
+    passed, reasons = gates_module._scope_gates(
         metrics, config, scope="seen_security"
     )
 
@@ -415,7 +424,7 @@ def test_no_candidate_publishes_evidence_without_model_or_future_access(
     assert evaluation["auditable_policy_ledger"]["selection_status"] == (
         "best_failed_diagnostic_only"
     )
-    replayed = intraday_development.load_complete_intraday_development_output(output)
+    replayed = io_module.load_complete_intraday_development_output(output)
     assert replayed["state"] == "no_candidate"
 
     tampered = tmp_path / "tampered-output"
@@ -427,13 +436,13 @@ def test_no_candidate_publishes_evidence_without_model_or_future_access(
         encoding="utf-8",
     )
     with pytest.raises(DataReadinessError, match="identity"):
-        intraday_development.load_complete_intraday_development_output(tampered)
+        io_module.load_complete_intraday_development_output(tampered)
 
     extra_file = tmp_path / "extra-file-output"
     shutil.copytree(output, extra_file)
     (extra_file / "unexpected.txt").write_text("tamper", encoding="utf-8")
     with pytest.raises(DataReadinessError, match="immutable file set"):
-        intraday_development.load_complete_intraday_development_output(extra_file)
+        io_module.load_complete_intraday_development_output(extra_file)
 
     with pytest.raises(DataReadinessError, match="locked until validation"):
         evaluate_future_intraday_holdout(
@@ -462,7 +471,7 @@ def test_event_confirmed_training_binds_research_cohort_and_remains_non_promotab
     _limit_to_one_candidate(monkeypatch, config)
     _patch_fast_pair(monkeypatch)
     decision_ids = frozenset(
-        intraday_development.load_published_intraday_dataset(a43_dataset)
+        load_published_intraday_dataset(a43_dataset)
         .frame["decision_id"]
         .astype(str)
     )
@@ -477,7 +486,7 @@ def test_event_confirmed_training_binds_research_cohort_and_remains_non_promotab
         "event_subtype": event_subtype,
     }
     monkeypatch.setattr(
-        intraday_development,
+        coordinator_module,
         "load_intraday_research_event_cohort",
         lambda _directory, **_kwargs: SimpleNamespace(
             decision_ids=decision_ids,
@@ -503,7 +512,7 @@ def test_event_confirmed_training_binds_research_cohort_and_remains_non_promotab
     assert evaluation["dataset"]["research_event_cohort"] == cohort_identity
     assert evaluation["future_holdout_opened"] is False
     assert evaluation["promotion_permitted"] is False
-    intraday_development.load_complete_intraday_development_output(output)
+    io_module.load_complete_intraday_development_output(output)
 
 
 def test_event_subtype_requires_preflight_directory(
@@ -529,7 +538,14 @@ def test_passing_development_candidate_still_keeps_future_closed(
     selected_spec = _limit_to_one_candidate(monkeypatch, config)
     _patch_fast_pair(monkeypatch)
     monkeypatch.setattr(
-        intraday_development,
+        gates_module,
+        "_evaluate_spec",
+        lambda _spec, _scored, folds, _config, _cost: _passing_candidate_record(
+            selected_spec, folds
+        ),
+    )
+    monkeypatch.setattr(
+        coordinator_module,
         "_evaluate_spec",
         lambda _spec, _scored, folds, _config, _cost: _passing_candidate_record(
             selected_spec, folds
@@ -548,7 +564,7 @@ def test_passing_development_candidate_still_keeps_future_closed(
     manifest = _json(output / "_manifest.json")
     candidate = joblib.load(output / "candidate.joblib")
     assert result.status == "candidate"
-    assert intraday_development.load_complete_intraday_development_output(output)[
+    assert io_module.load_complete_intraday_development_output(output)[
         "state"
     ] == "candidate"
     assert evaluation["future_holdout_opened"] is False
@@ -606,7 +622,7 @@ def test_portfolio_ledger_enforces_risk_capital_concurrency_cooldown_and_cost_on
         per_security_cooldown_minutes=30,
     )
 
-    ledger = intraday_development._position_ledger(
+    ledger = economics_module._position_ledger(
         pd.DataFrame(rows),
         0.0,
         0.35,
@@ -614,7 +630,7 @@ def test_portfolio_ledger_enforces_risk_capital_concurrency_cooldown_and_cost_on
         config,
     )
     positions = ledger["position_records"]
-    metrics = intraday_development._ledger_metrics(ledger)
+    metrics = economics_module._ledger_metrics(ledger)
 
     assert len(positions) == 4
     assert {row["security_id"] for row in positions} == {"B", "C"}
@@ -662,14 +678,14 @@ def test_conservative_open_stop_marks_contribute_to_drawdown() -> None:
         position_weight=1.0,
     )
 
-    ledger = intraday_development._position_ledger(
+    ledger = economics_module._position_ledger(
         pd.DataFrame(rows),
         0.0,
         0.35,
         0.0,
         config,
     )
-    metrics = intraday_development._ledger_metrics(ledger)
+    metrics = economics_module._ledger_metrics(ledger)
 
     assert min(ledger["equity_marks"]) == pytest.approx(0.80)
     assert metrics["maximum_drawdown"] == pytest.approx(0.20)
@@ -697,7 +713,7 @@ def test_simultaneous_exits_add_one_order_independent_post_batch_equity_mark() -
         completed: list[dict[str, Any]] = []
         equity_marks = [1.0]
 
-        _cash, equity = intraday_development._close_due_positions(
+        _cash, equity = economics_module._close_due_positions(
             open_positions,
             cutoff=exit_time,
             cash=0.0,
@@ -728,7 +744,7 @@ def test_capacity_gate_uses_per_decision_entries_not_session_total() -> None:
     metrics["maximum_entries_per_session_observed"] = 6
     metrics["maximum_entries_per_decision_observed"] = 3
 
-    passed, reasons = intraday_development._scope_gates(
+    passed, reasons = gates_module._scope_gates(
         metrics, config, scope="seen_security"
     )
 
@@ -777,7 +793,7 @@ def test_future_output_overlap_is_rejected_before_access_is_consumed(
     )
     candidate = _future_candidate(config)
     monkeypatch.setattr(
-        intraday_development,
+        gates_module,
         "_load_validation_passed_candidate",
         lambda _directory: (candidate, {"schema_version": "candidate-manifest"}),
     )
@@ -788,7 +804,7 @@ def test_future_output_overlap_is_rejected_before_access_is_consumed(
         access_consumed = True
         raise AssertionError("future access must not be consumed for overlapping output")
 
-    monkeypatch.setattr(intraday_development, "_consume_future_access", consume_access)
+    monkeypatch.setattr(io_module, "_consume_future_access", consume_access)
     owner = candidate_directory if output_owner == "candidate" else future_directory
 
     with pytest.raises(DataReadinessError, match="overlap"):
@@ -825,14 +841,14 @@ def test_future_holdout_requires_full_development_identity_binding(
     lock = tmp_path / f"{identity_key}.lock"
     lock.write_text("locked", encoding="utf-8")
     monkeypatch.setattr(
-        intraday_development,
+        gates_module,
         "_load_validation_passed_candidate",
         lambda _directory: (candidate, {"schema_version": "candidate-manifest"}),
     )
-    monkeypatch.setattr(intraday_development, "_require_output_isolated", lambda *_args: None)
-    monkeypatch.setattr(intraday_development, "_consume_future_access", lambda *_args: lock)
+    monkeypatch.setattr(io_module, "_require_output_isolated", lambda *_args: None)
+    monkeypatch.setattr(io_module, "_consume_future_access", lambda *_args: lock)
     monkeypatch.setattr(
-        intraday_development, "load_published_intraday_dataset", lambda _directory: published
+        gates_module, "load_published_intraday_dataset", lambda _directory: published
     )
 
     with pytest.raises(DataReadinessError, match=message):
@@ -884,17 +900,17 @@ def test_future_profile_population_must_meet_frozen_minimums(
     lock = tmp_path / f"{message.replace(' ', '-')}.lock"
     lock.write_text("locked", encoding="utf-8")
     monkeypatch.setattr(
-        intraday_development,
+        gates_module,
         "_load_validation_passed_candidate",
         lambda _directory: (candidate, {"schema_version": "candidate-manifest"}),
     )
-    monkeypatch.setattr(intraday_development, "_require_output_isolated", lambda *_args: None)
-    monkeypatch.setattr(intraday_development, "_consume_future_access", lambda *_args: lock)
+    monkeypatch.setattr(io_module, "_require_output_isolated", lambda *_args: None)
+    monkeypatch.setattr(io_module, "_consume_future_access", lambda *_args: lock)
     monkeypatch.setattr(
-        intraday_development, "load_published_intraday_dataset", lambda _directory: published
+        gates_module, "load_published_intraday_dataset", lambda _directory: published
     )
     monkeypatch.setattr(
-        intraday_development,
+        gates_module,
         "_validate_future_frame",
         lambda _published, _future_start, _development_end, _policy: frame.copy(),
     )
@@ -926,11 +942,11 @@ def test_future_access_registry_is_keyed_by_candidate_authority_hash(
     )
     second_candidate.parent.mkdir()
     shutil.copytree(first_candidate, second_candidate)
-    authority_sha256 = intraday_development.file_sha256(
+    authority_sha256 = io_module.file_sha256(
         first_candidate / "_authority.json"
     )
 
-    lock = intraday_development._consume_future_access(
+    lock = io_module._consume_future_access(
         first_candidate,
         future_directory,
         registry,
@@ -939,7 +955,7 @@ def test_future_access_registry_is_keyed_by_candidate_authority_hash(
     assert lock.parent.resolve() == registry.resolve()
     assert authority_sha256 in lock.name
     with pytest.raises(DataReadinessError, match="already consumed"):
-        intraday_development._consume_future_access(
+        io_module._consume_future_access(
             second_candidate,
             future_directory,
             registry,
@@ -962,9 +978,9 @@ def test_relative_future_registry_is_stable_home_based_and_embedded_in_contract(
     )
 
     monkeypatch.chdir(first_working_directory)
-    first_contract = intraday_development._future_data_contract(config)
+    first_contract = io_module._future_data_contract(config)
     monkeypatch.chdir(second_working_directory)
-    second_contract = intraday_development._future_data_contract(config)
+    second_contract = io_module._future_data_contract(config)
 
     expected = (
         home / ".market-predictor" / "state" / "intraday-future-access"
@@ -979,7 +995,7 @@ def test_successful_future_evidence_replays_and_rejects_tamper_when_supported(
     tmp_path: Path,
 ) -> None:
     loader = getattr(
-        intraday_development,
+        io_module,
         "load_complete_intraday_future_evaluation_output",
         None,
     )
@@ -1011,12 +1027,12 @@ def test_strict_future_loader_rejects_unexpected_nested_entry(tmp_path: Path) ->
     unexpected.write_text("not governed", encoding="utf-8")
 
     with pytest.raises(DataReadinessError, match="exact-file inventory"):
-        intraday_development.load_complete_intraday_future_evaluation_output(output)
+        io_module.load_complete_intraday_future_evaluation_output(output)
 
 
 def _publish_valid_future_evidence(output: Path) -> None:
     evaluation = {
-        "schema_version": intraday_development.FUTURE_EVALUATION_SCHEMA_VERSION,
+        "schema_version": getattr(io_module, "FUTURE_EVALUATION_SCHEMA_VERSION", "intraday.future.v1"),
         "status": "locked_future_evaluated",
         "promotion_permitted": False,
         "selection_changed_after_future_observation": False,
@@ -1040,7 +1056,7 @@ def _publish_valid_future_evidence(output: Path) -> None:
             "average_trade_net_return": 0.02,
         },
     }
-    intraday_development._publish_future_evaluation(
+    io_module._publish_future_evaluation(
         output,
         evaluation,
         {
@@ -1086,7 +1102,7 @@ def _future_candidate(
     minimum_securities: int = 2,
 ) -> dict[str, Any]:
     profile = baseline_profile("continuation", config)
-    future_contract = intraday_development._future_data_contract(config)
+    future_contract = io_module._future_data_contract(config)
     future_contract.update(
         {
             "minimum_sessions": 1,
@@ -1134,10 +1150,10 @@ def _profile_frame(
     config: IntradayDevelopmentConfig,
     hypothesis: str,
 ) -> pd.DataFrame:
-    published = intraday_development.load_published_intraday_dataset(dataset)
-    data = intraday_development._validate_development_frame(published, config)
+    published = load_published_intraday_dataset(dataset)
+    data = coordinator_module._validate_development_frame(published, config)
     profile = baseline_profile(hypothesis, config)
-    return data.loc[intraday_development._profile_mask(data, profile)].reset_index(
+    return data.loc[gates_module._profile_mask(data, profile)].reset_index(
         drop=True
     )
 
@@ -1273,9 +1289,9 @@ def _limit_to_one_candidate(
     monkeypatch: pytest.MonkeyPatch,
     config: IntradayDevelopmentConfig,
 ) -> Any:
-    selected = intraday_development._candidate_specs(config)[0]
+    selected = coordinator_module._candidate_specs(config)[0]
     monkeypatch.setattr(
-        intraday_development,
+        coordinator_module,
         "_candidate_specs",
         lambda _config: (selected,),
     )
@@ -1310,10 +1326,10 @@ def _patch_fast_pair(monkeypatch: pytest.MonkeyPatch) -> None:
         config: IntradayDevelopmentConfig,
         **_kwargs: object,
     ) -> Any:
-        fit, calibration = intraday_development._split_downside_calibration(
+        fit, calibration = models_module._split_downside_calibration(
             data, sessions, config
         )
-        return intraday_development._FittedPair(
+        return models_module._FittedPair(
             opportunity_estimator=_OpportunityEstimator(),
             downside_estimator=_DownsideEstimator(),
             downside_calibrator=_DownsideCalibrator(),
@@ -1321,7 +1337,7 @@ def _patch_fast_pair(monkeypatch: pytest.MonkeyPatch) -> None:
             calibration_sessions=calibration,
         )
 
-    monkeypatch.setattr(intraday_development, "_fit_pair", fit_pair)
+    monkeypatch.setattr(models_module, "_fit_pair", fit_pair)
 
 
 def _passing_candidate_record(spec: Any, folds: Any) -> dict[str, Any]:
