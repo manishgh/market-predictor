@@ -8,7 +8,7 @@ Repository: `C:\project\market-predictor`
 
 Branch: `er-intraday-refactoring`
 
-Last completed implementation commit: `82b4959` (`Evaluate directional swing broker actions`)
+Last completed implementation commit: `0a95729` (`Refactor swing_features and fix tests`)
 
 ## Purpose
 
@@ -40,6 +40,7 @@ specialists; A6 performs locked evaluation and promotion.
 - Intraday estimator input is the ordered A4.3 bar-only technical contract, sampled on
   fixed five-minute cohorts from causal completed evidence. The V3 z-score lineage is
   invalid and prohibited.
+- `swing_features.py` has been refactored into a `FeaturePipeline` orchestrator, with logic decoupled into `swing_pipeline_steps.py`, `swing_filters.py`, and `swing_catalyst_features.py`. Shared cross-cutting utilities reside in `edge_rebuild/utils/`.
 - The swing base authority contains only `technical_market`. A3 event evidence is
   published separately and cannot alter baseline probability.
 - The swing trainer no longer attaches a hard-coded SEC authority, fills unknown SEC
