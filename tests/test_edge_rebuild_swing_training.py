@@ -1,4 +1,7 @@
 from __future__ import annotations
+import market_predictor.edge_rebuild.training.economics
+from market_predictor.edge_rebuild.training.swing_evaluation import select_constrained_swing_portfolio
+
 import market_predictor.edge_rebuild.swing_artifact_contracts as swing_artifact_contracts
 
 import json
@@ -470,7 +473,7 @@ def test_constrained_selection_enforces_trade_and_sector_caps() -> None:
             "__probability": 1.0 - index / 100.0,
         })
 
-    selected = swing_training.select_constrained_swing_portfolio(
+    selected = select_constrained_swing_portfolio(
         pd.DataFrame(rows),
         maximum_trades=5,
         target_maximum_sector_weight=0.20,
@@ -501,7 +504,7 @@ def test_constrained_selection_uses_bounded_sector_fallback(
         for index, sector in enumerate(sectors)
     ]
 
-    selected = swing_training.select_constrained_swing_portfolio(
+    selected = select_constrained_swing_portfolio(
         pd.DataFrame(rows),
         maximum_trades=25,
         target_maximum_sector_weight=0.20,
@@ -526,7 +529,7 @@ def test_constrained_selection_rejects_fewer_than_three_sectors() -> None:
         }
     )
 
-    selected = swing_training.select_constrained_swing_portfolio(
+    selected = select_constrained_swing_portfolio(
         frame,
         maximum_trades=25,
         target_maximum_sector_weight=0.20,
@@ -540,8 +543,8 @@ def test_constrained_selection_rejects_fewer_than_three_sectors() -> None:
 def test_moving_block_bootstrap_is_deterministic_and_uses_frozen_block() -> None:
     values = np.sin(np.arange(200, dtype="float64") / 10.0) / 100.0
 
-    first = swing_training._moving_block_bootstrap_mean_interval(values, 2_000, 20, 42)
-    second = swing_training._moving_block_bootstrap_mean_interval(values, 2_000, 20, 42)
+    first = market_predictor.edge_rebuild.training.economics._moving_block_bootstrap_mean_interval(values, 2_000, 20, 42)
+    second = market_predictor.edge_rebuild.training.economics._moving_block_bootstrap_mean_interval(values, 2_000, 20, 42)
 
     assert first == second
     assert first["block_sessions"] == 20
@@ -559,7 +562,7 @@ def test_session_economic_calendar_includes_zero_return_no_position_sessions() -
         }
     )
 
-    blocks = swing_training._session_economic_blocks(
+    blocks = market_predictor.edge_rebuild.training.economics._session_economic_blocks(
         selected,
         session_calendar=("2024-01-02", "2024-01-03", "2024-01-04"),
     )
@@ -583,7 +586,7 @@ def test_economic_gate_uses_holding_aligned_benchmarks_and_portfolio_path() -> N
         },
     }
 
-    gate = swing_training._economic_gate(metrics, _contract())
+    gate = market_predictor.edge_rebuild.training.economics._economic_gate(metrics, _contract())
 
     assert gate["passed"] is True
     assert "worst_holding_aligned_benchmark_ci_low_positive" in gate["checks"]
