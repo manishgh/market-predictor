@@ -10,6 +10,7 @@ import pytest
 
 from market_predictor.canonical.normalize import canonicalize_bars
 from market_predictor.edge_rebuild import swing_features as swing_feature_module
+from market_predictor.edge_rebuild import swing_catalyst_features as swing_catalyst_module
 from market_predictor.edge_rebuild.catalyst_authority import (
     COVERAGE_FLAG_COLUMNS,
     CatalystDecisionAuthority,
@@ -226,7 +227,7 @@ def test_optional_sources_cannot_change_ablation_model_columns(
     source["catalyst_source_complete_1d"] = True
     source["catalyst_source_complete_3d"] = True
     monkeypatch.setattr(
-        swing_feature_module,
+        swing_catalyst_module,
         "attach_catalyst_decision_features",
         lambda _rows, _authority: source.copy(),
     )
@@ -333,7 +334,7 @@ def test_ablation_rows_share_population_and_preserve_optional_missingness(
         return attached
 
     monkeypatch.setattr(
-        swing_feature_module,
+        swing_catalyst_module,
         "attach_catalyst_decision_features",
         attach,
     )
