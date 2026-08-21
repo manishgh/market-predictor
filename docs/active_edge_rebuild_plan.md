@@ -111,7 +111,7 @@ drawdown, turnover, capacity, and coverage remain co-equal promotion gates.
 | A2 | Build the technical swing baseline | Completed |
 | A3 | Build catalyst-driven swing specialists | Completed; combined and directional specialists produced no candidate |
 | A4 | Build the technical intraday baseline | Completed; both A4.4 hypotheses rejected |
-| A5 | Build catalyst-driven intraday specialists | A5.1e completed with no candidate; prospective SIP evidence remains pending |
+| A5 | Build catalyst-driven intraday specialists | A5.1e completed with no candidate; prospective SIP horizon is 1/20 sessions |
 | A6 | Run locked evaluation and promote qualified models | Not started |
 
 ### A0 - Restore Research Integrity (`completed`)
@@ -846,7 +846,7 @@ authority passes attachment, timing, coverage, and replay checks.
      and A5.2 remains prohibited.
 
 6. **A5.1c - Build prospective SIP sessions and mature outcomes
-   (`implementation_complete_data_pending`).**
+   (`implementation_complete_data_pending; 1/20 source sessions`).**
    After A5.1b closes, freeze a separate append-only authority for future SIP bars,
    A4.3-identical features, and exact 30-minute labels. It must collect the complete
    contemporaneous selection cohort plus SPY, QQQ, and sector ETFs, preserve the A4.3
@@ -950,9 +950,24 @@ authority passes attachment, timing, coverage, and replay checks.
      `5b6e68d4844f9b0baa00e517bf0b515ddc1648a730776bf9dba201cf9082b1b3`.
    - Final verification passed 1,457 tests with two skipped, tracked Ruff, strict mypy
      across 230 source files, tracked compilation, and independent re-review with no
-     remaining high- or medium-severity finding. The first SIP session parent remains
-     pending the `2026-08-20` close; features, outcomes, preflight, training, and serving
-     remain prohibited.
+     remaining high- or medium-severity finding.
+   - Real authority
+     `data/raw/prospective_sip_sessions/session_20260820_v1` now strictly replays the
+     first eligible source session: 503 stocks, 39,181 five-minute stock rows, and
+     5,070 one-minute benchmark rows. Twenty-two stocks are incomplete, or 4.374%,
+     below the unchanged 5% ceiling; no benchmark is incomplete. Peak working memory
+     was 0.289 GiB. Status is `source_complete_warmup_ineligible` because only one of
+     twenty required prior five-minute sessions exists. Features, outcomes, preflight,
+     training, and serving remain prohibited.
+   - Pre-open authority
+     `data/raw/index_membership/sp500_observed_20260821T071500Z_v7`, poll
+     `data/raw/prospective_broker_actions/poll_20260821T071000Z`, generation
+     `data/research/prospective_broker_actions_generation_20260821_v1`, and separate
+     horizon `data/research/prospective_analyst_revision_horizon_20260821_v4` all
+     strictly replay. The poll contains 451 identity-bound observations and the new
+     causal chain contains 12 qualifying analyst episodes. It remains capacity-blocked.
+     The August 17 and August 21 chains cannot be combined because polling was not
+     contiguous; the publisher failed closed rather than manufacturing continuity.
 
 7. **A5.1d - Correct historical intraday event identity and run matched development
    training (`completed`).** The A5.1 preflight attached events by literal

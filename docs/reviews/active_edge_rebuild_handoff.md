@@ -2,13 +2,13 @@
 
 Status: active
 
-Last updated: 2026-08-19
+Last updated: 2026-08-21
 
 Repository: `C:\project\market-predictor`
 
 Branch: `er-intraday-refactoring`
 
-Last completed implementation commit: `6386cb4` (`Reconcile causal S&P ticker successors`)
+Last completed implementation commit: `82b4959` (`Evaluate directional swing broker actions`)
 
 ## Purpose
 
@@ -18,14 +18,11 @@ A3 issuer-event specialist development is complete with no candidate. A4.1 colle
 A4.3 bar-only causal dataset publication, and A4.4 continuation/reversion development
 are complete. Both A4.4 hypotheses were rejected. A5.1 is also complete and blocked:
 the available event history is retrospective and exact security identity overlap is
-too small. The August 15 membership extension, Sunday poll, real August 17 observed
-membership authority, and following weekday Alpaca poll are complete and strictly
-replay. The classified prospective analyst-event horizon is also complete: only three
-of 248 raw provider events qualify as exact causal analyst episodes. The next bounded
-checkpoint is the first real immutable closed-session SIP source authority. Its exact
-HTTP transport, production collector, and fresh pre-open membership parent are
-complete, but no real session parent has been published because the `2026-08-20`
-session is not closed. Do not train A5.2, open a locked test, or claim model quality.
+too small. The first real closed-session SIP authority now strictly replays for
+`2026-08-20`, but it is only session 1 of the required 20-session warm-up. A separate
+August 21 observed-time event chain also strictly replays with 451 identity-bound
+observations and 12 qualifying analyst episodes. It is not joined to the interrupted
+August 17 chain. Do not train A5.2, open a locked test, or claim model quality.
 
 This repository produces prediction intelligence and abstention. Alerts, orders,
 positions, portfolio risk, and execution remain in `trading_flow`.
@@ -142,7 +139,7 @@ specialists; A6 performs locked evaluation and promotion.
 | Swing baseline | A2 trainer complete; prior candidates rejected; no new run or promotion | Preserve the frozen technical contract until a governed training run is approved |
 | Swing event-driven | Combined rating/coverage and separate upgrade/downgrade specialists trained in development; all rejected | Preserve rejection evidence; do not open locked test or serve |
 | Intraday baseline | V2 rejected; V3 invalid; A4.4 continuation and reversion both rejected | Preserve evidence; no serving or future-holdout access |
-| Intraday event-driven | Historical identity correction yields 1,912 attached events and two research-only no-candidate results; prospective production path remains blocked | Continue append-only prospective SIP sessions; do not serve proxy-time research outputs |
+| Intraday event-driven | Historical identity correction yields 1,912 attached events and two research-only no-candidate results; prospective source horizon is 1/20 SIP sessions and 12 analyst episodes in the new chain | Continue append-only prospective SIP sessions and polls; do not serve proxy-time research outputs |
 
 `ROC-AUC >= 0.60` is a locked-test diagnostic, not a training objective or permission
 for repeated locked-test tuning. Promotion also requires ranking, calibration,
@@ -371,6 +368,11 @@ A4.2/A4.5 trade/quote work remains storage-blocked and must not be replaced with
   passed and 2 skipped, tracked Ruff, strict mypy over 227 source files, bytecode
   compilation, strict real-authority replay, and no remaining medium-or-higher review
   finding.
+- August 21 authority
+  `data/raw/index_membership/sp500_observed_20260821T071500Z_v7` and poll
+  `data/raw/prospective_broker_actions/poll_20260821T071000Z` strictly replay 503
+  constituents and 451 identity-bound observations. This starts a new causal chain;
+  it does not conceal the missing polls after August 17.
 
 ## Prospective Analyst-Event Horizon
 
@@ -393,6 +395,11 @@ A4.2/A4.5 trade/quote work remains storage-blocked and must not be replaced with
   mypy across 229 source files, and compileall all pass.
 - `data/research/prospective_analyst_revision_horizon_20260817_v1` predates the dtype
   normalization and is superseded. Do not use it as current evidence.
+- Generation `data/research/prospective_broker_actions_generation_20260821_v1` and
+  horizon `data/research/prospective_analyst_revision_horizon_20260821_v4` strictly
+  replay one poll, 451 revisions, and 12 qualifying analyst episodes. Capacity remains
+  blocked and training eligibility is false. Combining the August 17 and August 21
+  generations failed closed because their poll chain is not contiguous.
 
 ## Exact Alpaca SIP Bar Transport
 
@@ -460,6 +467,11 @@ sessions exist, then build causal features, mature outcomes, and rerun the prosp
 preflight. The completed historical directional experiments cannot substitute for
 observed-time production evidence. Further retrospective broker-action slicing is not
 authorized without a genuinely new preregistered hypothesis.
+
+Current horizon: `2026-08-20` is source session 1/20. The next collection window is
+after the `2026-08-21` XNYS close plus the frozen finalization delay and before the
+`2026-08-24` open, using the August 21 pre-open membership parent. Continue scheduled
+event polls as a new contiguous chain; any missed cutoff starts another separate chain.
 
 ## Source Boundary
 
