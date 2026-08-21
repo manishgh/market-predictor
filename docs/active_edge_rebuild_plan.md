@@ -1156,3 +1156,11 @@ are audit evidence, never fallbacks.
 - [ ] Build and backfill the replacement A4 intraday feature authority before
   collecting a new locked holdout; the invalid V3 contract cannot be reused.
 - [ ] Promote only a model that passes every gate.
+
+
+### A5.2 - Modularize edge_rebuild core components (`completed`)
+
+- Original `swing_features.py` decoupled into `swing_pipeline_steps.py`, `swing_filters.py`, and `swing_catalyst_features.py`.
+- Original `swing_training.py` orchestrated and pruned into `training/data_io.py`, `training/lgbm_models.py`, `training/swing_evaluation.py`, and `training/swing_types.py`.
+- Maintained frozen contracts, mathematically exact baseline logic, strict memory budgets, and passing tests.
+- Implementation commit `8e9cff6` ensures 100% strict `mypy` and `ruff` compliance with fully updated lineage tests.

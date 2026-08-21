@@ -512,3 +512,12 @@ do not delete raw or governance-bound data by assumption.
 - Do not add a feature without complete historical backfill for its model horizon.
 - Do not expose rejected candidates through the production prediction API.
 - Do not execute scratch scripts that mutate Parquet or patch lineage hashes.
+
+## Codebase Modularization (A5.2)
+
+- Original `swing_training.py` orchestrated and pruned into `training/data_io.py`, `training/lgbm_models.py`, `training/swing_evaluation.py`, and `training/swing_types.py`.
+- Original `swing_features.py` decoupled into `swing_pipeline_steps.py`, `swing_filters.py`, and `swing_catalyst_features.py`.
+- Maintained frozen contracts, mathematically exact baseline logic, strict memory budgets, and passing tests.
+- Implementation commit `8e9cff6` ensures 100% strict `mypy` and `ruff` compliance with fully updated lineage tests.
+
+Exact next checkpoint: evaluate if `intraday_training.py` or shared utilities require similar consolidation, then proceed to Intraday Feature Rebuilding.
