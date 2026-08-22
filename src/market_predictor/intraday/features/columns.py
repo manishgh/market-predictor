@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Final
 
-from market_predictor.edge_rebuild.intraday_bar_features import (
+from market_predictor.intraday.features.bar_features import (
     INTRADAY_BAR_MODEL_FEATURE_COLUMNS,
 )
 

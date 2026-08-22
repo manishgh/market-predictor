@@ -28,7 +28,7 @@ from market_predictor.edge_rebuild.history_contracts import (
     IntradayTransportConfig,
     SelectedSessionBenchmarkConfig,
 )
-from market_predictor.edge_rebuild.intraday_history import (
+from market_predictor.intraday.datasets.history import (
     PLAN_AUTHORITY_SCHEMA,
     SELECTED_SESSION_BENCHMARK_PLAN_AUTHORITY_SCHEMA,
     chunk_request_symbols,

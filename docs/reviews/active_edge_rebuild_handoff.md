@@ -526,4 +526,11 @@ do not delete raw or governance-bound data by assumption.
 - All `_json_sha256` logic updated for exact separator and sorting reproduction, fixing `A4.4 validation metrics do not replay` failures. Test monkeypatches for `_evaluate_spec` and `_fit_pair` were re-pointed to correctly mask imported module references. `src/market_predictor/edge_rebuild/intraday_development.py` has been permanently deleted.
 - All tests pass (39/39 for `test_edge_rebuild_intraday_development.py` and across the broader `pytest` suite).
 
-Exact next checkpoint: proceed to Intraday Feature Rebuilding.
+## Intraday Feature Rebuilding (Completed)
+
+- Extracted all 19 intraday_*.py files from edge_rebuild/ into their designated structural submodules (intraday/datasets/, intraday/features/, intraday/contracts/, and intraday/training/).
+- Safely patched hundreds of cross-imports, 3.errors references, and monkeypatched test paths across the repository without modifying schema identities or frozen contracts.
+- Fixed _transformation_identity pathing within ar_dataset.py to maintain exact content-addressed reproducible bytes.
+- Validated absolute parity: 1465/1465 tests pass cleanly in pytest tests/.
+
+Exact next checkpoint: proceed to Swing History and Materialization decomposition.

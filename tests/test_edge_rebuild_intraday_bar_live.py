@@ -7,13 +7,13 @@ import pandas as pd
 import pandas.testing as pdt
 import pytest
 
-import market_predictor.edge_rebuild.intraday_bar_live as module
-from market_predictor.edge_rebuild.intraday_bar_features import (
+import market_predictor.intraday.datasets.bar_live as module
+from market_predictor.intraday.features.bar_features import (
     INTRADAY_BAR_FEATURE_SCHEMA_VERSION,
     INTRADAY_BAR_MODEL_FEATURE_COLUMNS,
     INTRADAY_BAR_MODEL_FEATURES_SHA256,
 )
-from market_predictor.edge_rebuild.intraday_bar_live import (
+from market_predictor.intraday.datasets.bar_live import (
     INTRADAY_BAR_LIVE_ABSTENTION_COLUMNS,
     INTRADAY_BAR_LIVE_SCHEMA_VERSION,
     build_live_intraday_bar_features,

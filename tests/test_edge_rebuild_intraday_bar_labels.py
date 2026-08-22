@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from market_predictor.edge_rebuild.intraday_bar_labels import (
+from market_predictor.intraday.features.bar_labels import (
     INTRADAY_BAR_LABEL_SCHEMA_VERSION,
     build_exact_intraday_bar_labels,
 )

@@ -23,7 +23,7 @@ from market_predictor.edge_rebuild.history_contracts import (
     load_extended_session_context_config,
     load_intraday_history_config,
 )
-from market_predictor.edge_rebuild.intraday_history import (
+from market_predictor.intraday.datasets.history import (
     EXTENDED_CONTEXT_PLAN_AUTHORITY_SCHEMA,
     PLAN_AUTHORITY_SCHEMA,
     json_sha256,

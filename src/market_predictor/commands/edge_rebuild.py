@@ -47,33 +47,35 @@ from market_predictor.edge_rebuild.history_contracts import (
 from market_predictor.edge_rebuild.history_materialization import (
     reorganize_intraday_history,
 )
-from market_predictor.edge_rebuild.intraday_bar_audit import (
+from market_predictor.intraday.datasets.bar_audit import (
     publish_intraday_bar_dataset_audit,
 )
-from market_predictor.edge_rebuild.intraday_bar_dataset import (
+from market_predictor.intraday.datasets.bar_dataset import (
     publish_intraday_bar_dataset,
 )
-from market_predictor.edge_rebuild.intraday_bar_only_five_minute import (
+from market_predictor.intraday.features.bar_only_five_minute import (
     publish_selected_session_five_minute_projection,
 )
-from market_predictor.edge_rebuild.intraday_development import (
+from market_predictor.intraday.evaluation.gates import (
     evaluate_future_intraday_holdout,
     load_intraday_development_config,
+)
+from market_predictor.intraday.training.coordinator import (
     train_intraday_development_candidate,
 )
-from market_predictor.edge_rebuild.intraday_event_preflight import (
+from market_predictor.intraday.datasets.event_preflight import (
     load_intraday_event_preflight_config,
     publish_intraday_event_preflight,
 )
-from market_predictor.edge_rebuild.intraday_history import (
+from market_predictor.intraday.datasets.history import (
     build_intraday_history_plan,
 )
-from market_predictor.edge_rebuild.intraday_microstructure_history import (
+from market_predictor.intraday.datasets.microstructure_history import (
     build_intraday_microstructure_plan,
     collect_intraday_microstructure_history,
     load_microstructure_collection_config,
 )
-from market_predictor.edge_rebuild.intraday_selection import (
+from market_predictor.intraday.datasets.selection import (
     build_intraday_selection,
     publish_intraday_selection,
 )

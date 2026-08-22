@@ -10,10 +10,10 @@ from typing import Any, Final
 import pandas as pd
 
 from market_predictor.canonical.store import file_sha256
-from market_predictor.edge_rebuild.intraday_event_preflight import (
+from market_predictor.intraday.datasets.event_preflight import (
     load_intraday_event_preflight,
 )
-from market_predictor.edge_rebuild.intraday_training import PublishedIntradayDataset
+from market_predictor.intraday.training.training import PublishedIntradayDataset
 from market_predictor.edge_rebuild.issuer_event_precision_audit import (
     issuer_event_rule_variant,
 )

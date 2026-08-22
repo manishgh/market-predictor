@@ -8,19 +8,19 @@ import numpy as np
 import pandas as pd
 import pytest
 
-import market_predictor.edge_rebuild.intraday_dataset as dataset_module
+import market_predictor.intraday.datasets.dataset_v2 as dataset_module
 from market_predictor.canonical.store import file_sha256
-from market_predictor.edge_rebuild.intraday_dataset import (
+from market_predictor.intraday.datasets.dataset_v2 import (
     INTRADAY_DATASET_SCHEMA,
     _Artifact,
     _VerifiedInputs,
     load_complete_intraday_dataset,
     publish_intraday_dataset,
 )
-from market_predictor.edge_rebuild.intraday_labels import (
+from market_predictor.intraday.features.labels import (
     build_exact_causal_intraday_labels,
 )
-from market_predictor.edge_rebuild.intraday_selection import (
+from market_predictor.intraday.datasets.selection import (
     INTRADAY_SELECTION_SCHEMA,
 )
 from market_predictor.edge_rebuild.strategy_contract import (

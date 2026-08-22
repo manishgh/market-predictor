@@ -16,7 +16,7 @@ from market_predictor.canonical.store import (
     file_sha256,
 )
 from market_predictor.core.errors import DataReadinessError
-from market_predictor.edge_rebuild.intraday_history import (
+from market_predictor.intraday.datasets.history import (
     json_sha256,
 )
 from market_predictor.intraday.contracts.dataset_schemas import (

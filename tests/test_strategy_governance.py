@@ -11,7 +11,7 @@ from market_predictor.strategy_governance import (
     StrategyExecutionLedger,
     validate_strategy_execution_ledger,
 )
-from market_predictor.v3.errors import (
+from market_predictor.core.errors import (
     ArtifactIntegrityError,
     DataReadinessError,
 )

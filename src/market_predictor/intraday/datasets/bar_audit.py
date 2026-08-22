@@ -13,12 +13,12 @@ from typing import Any, Final, cast
 import pandas as pd
 
 from market_predictor.canonical.store import file_sha256
-from market_predictor.edge_rebuild.intraday_bar_dataset import (
+from market_predictor.intraday.datasets.bar_dataset import (
     MEMORY_HARD_BUDGET_GIB,
     MEMORY_HEADROOM_GIB,
     load_complete_intraday_bar_dataset,
 )
-from market_predictor.edge_rebuild.intraday_bar_only_five_minute import (
+from market_predictor.intraday.features.bar_only_five_minute import (
     load_complete_selected_session_five_minute_projection,
 )
 from market_predictor.resources import assert_memory_budget

@@ -6,7 +6,7 @@ from types import SimpleNamespace
 import pandas as pd
 import pytest
 
-from market_predictor.edge_rebuild import intraday_event_training as training
+import market_predictor.intraday.training.event_training as training
 from market_predictor.core.errors import DataReadinessError
 
 

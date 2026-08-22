@@ -8,12 +8,12 @@ import pandas as pd
 import pandas.testing as pdt
 import pytest
 
-import market_predictor.edge_rebuild.intraday_live as live_module
-from market_predictor.edge_rebuild.intraday_features import (
+import market_predictor.intraday.datasets.live as live_module
+from market_predictor.intraday.features.features import (
     CAUSAL_INTRADAY_MODEL_FEATURE_COLUMNS,
     build_causal_intraday_features,
 )
-from market_predictor.edge_rebuild.intraday_live import (
+from market_predictor.intraday.datasets.live import (
     INTRADAY_LIVE_AUDIT_COLUMNS,
     INTRADAY_LIVE_SCHEMA_VERSION,
     build_live_intraday_features,

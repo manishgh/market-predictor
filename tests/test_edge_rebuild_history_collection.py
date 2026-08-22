@@ -19,7 +19,7 @@ from market_predictor.edge_rebuild.history_contracts import (
     INTRADAY_HISTORY_PLAN_SCHEMA,
     load_intraday_history_config,
 )
-from market_predictor.edge_rebuild.intraday_history import (
+from market_predictor.intraday.datasets.history import (
     PLAN_AUTHORITY_SCHEMA,
 )
 from market_predictor.sources.alpaca import AlpacaBarsPage

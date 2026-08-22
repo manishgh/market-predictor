@@ -35,7 +35,7 @@ from market_predictor.edge_rebuild.history_contracts import (
     PREMARKET_SEGMENT,
     ExtendedSessionContextConfig,
 )
-from market_predictor.edge_rebuild.intraday_history import (
+from market_predictor.intraday.datasets.history import (
     EXTENDED_CONTEXT_PLAN_AUTHORITY_SCHEMA,
     chunk_request_symbols,
     expected_five_minute_bars,

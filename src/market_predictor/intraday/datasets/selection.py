@@ -28,7 +28,7 @@ from market_predictor.canonical.store import (
     load_canonical_artifact,
     manifest_path_for,
 )
-from market_predictor.edge_rebuild.intraday_history import (
+from market_predictor.intraday.datasets.history import (
     json_sha256,
     load_plan_json,
     write_plan_json,

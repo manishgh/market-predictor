@@ -1,10 +1,10 @@
 from __future__ import annotations
-from market_predictor.edge_rebuild.intraday_features import FEATURE_SCHEMA_VERSION
-from market_predictor.edge_rebuild.intraday_labels import LABEL_SCHEMA_VERSION
+from market_predictor.intraday.features.features import FEATURE_SCHEMA_VERSION
+from market_predictor.intraday.features.labels import LABEL_SCHEMA_VERSION
 import pyarrow.parquet as pq
 from market_predictor.intraday.datasets.audits import _pair_abstention, _pair_audit
 from market_predictor.intraday.datasets.io import _file_record
-from market_predictor.edge_rebuild.intraday_selection import load_complete_intraday_selection
+from market_predictor.intraday.datasets.selection import load_complete_intraday_selection
 from market_predictor.intraday.datasets.validation import _membership_sector_exclusions, _validate_monthly_partition_records, _validate_no_leakage, _verify_inputs, _verify_monthly_partition_files
 """Atomic, lineage-bound publisher for the causal intraday training dataset."""
 
@@ -25,14 +25,14 @@ from market_predictor.canonical.store import (
     file_sha256,
 )
 from market_predictor.core.errors import DataReadinessError
-from market_predictor.edge_rebuild.intraday_features import (
+from market_predictor.intraday.features.features import (
     FEATURE_SCHEMA_VERSION,
     build_causal_intraday_features,
 )
-from market_predictor.edge_rebuild.intraday_history import (
+from market_predictor.intraday.datasets.history import (
     json_sha256,
 )
-from market_predictor.edge_rebuild.intraday_labels import (
+from market_predictor.intraday.features.labels import (
     LABEL_SCHEMA_VERSION,
     _add_contemporaneous_rank,
     _empty_label_columns,

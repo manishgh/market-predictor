@@ -12,7 +12,7 @@ import pandas as pd
 import pytest
 
 from market_predictor.canonical.store import file_sha256
-from market_predictor.edge_rebuild.intraday_microstructure_history import (
+from market_predictor.intraday.datasets.microstructure_history import (
     COLLECTION_AUTHORITY_SCHEMA,
     MicrostructureCollectionConfig,
     build_intraday_microstructure_plan,
@@ -354,7 +354,7 @@ def test_authority_is_not_published_when_prepublication_replay_fails(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from market_predictor.edge_rebuild import intraday_microstructure_history
+    import market_predictor.intraday.datasets.microstructure_history as intraday_microstructure_history
 
     plan = _plan(tmp_path)
     output = tmp_path / "collection"
@@ -517,7 +517,7 @@ def test_raw_page_content_must_match_recorded_response_hash(tmp_path: Path) -> N
     changed_page["raw_page_bytes"] = raw_path.stat().st_size
 
     with pytest.raises(DataReadinessError, match="raw page content differs"):
-        from market_predictor.edge_rebuild import intraday_microstructure_history
+        import market_predictor.intraday.datasets.microstructure_history as intraday_microstructure_history
 
         intraday_microstructure_history._verify_raw_page(
             output,

@@ -9,7 +9,7 @@ from typing import Final
 import numpy as np
 import pandas as pd
 
-from market_predictor.edge_rebuild.intraday_bar_features import (
+from market_predictor.intraday.features.bar_features import (
     INTRADAY_BAR_MODEL_FEATURE_COLUMNS,
     INTRADAY_BAR_MODEL_FEATURES_SHA256,
     build_causal_intraday_bar_features,

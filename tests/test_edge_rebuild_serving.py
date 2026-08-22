@@ -13,7 +13,7 @@ from pydantic import ValidationError
 
 from market_predictor.canonical.store import file_sha256
 from market_predictor.edge_rebuild.global_event_authority import GlobalEventAuthority
-from market_predictor.edge_rebuild.intraday_features import (
+from market_predictor.intraday.features.features import (
     CAUSAL_INTRADAY_MODEL_FEATURE_COLUMNS,
     FEATURE_SCHEMA_VERSION,
 )
@@ -44,7 +44,7 @@ from market_predictor.promotion_attestation import (
     promotion_attestation_path_for,
 )
 from market_predictor.registry import write_model_manifest
-from market_predictor.v3.errors import (
+from market_predictor.core.errors import (
     ArtifactIntegrityError,
     DataReadinessError,
     PromotionGateError,

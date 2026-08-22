@@ -9,8 +9,8 @@ import pandas as pd
 import pytest
 
 from market_predictor.canonical.store import file_sha256
-from market_predictor.edge_rebuild import intraday_bar_dataset as module
-from market_predictor.edge_rebuild.intraday_bar_dataset import (
+import market_predictor.intraday.datasets.bar_dataset as module
+from market_predictor.intraday.datasets.bar_dataset import (
     INTRADAY_BAR_DATASET_AUTHORITY_SCHEMA,
     load_complete_intraday_bar_dataset,
     publish_intraday_bar_dataset,

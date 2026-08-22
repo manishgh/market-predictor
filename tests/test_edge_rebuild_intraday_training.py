@@ -12,21 +12,21 @@ import pyarrow.parquet as pq
 import pytest
 
 from market_predictor.canonical.store import file_sha256
-from market_predictor.edge_rebuild import intraday_bar_dataset
-from market_predictor.edge_rebuild.intraday_bar_dataset import (
+import market_predictor.intraday.datasets.bar_dataset as intraday_bar_dataset
+from market_predictor.intraday.datasets.bar_dataset import (
     INTRADAY_BAR_DATASET_AUTHORITY_SCHEMA,
     INTRADAY_BAR_DATASET_SCHEMA,
 )
-from market_predictor.edge_rebuild.intraday_bar_features import (
+from market_predictor.intraday.features.bar_features import (
     INTRADAY_BAR_FEATURE_SCHEMA_VERSION,
     INTRADAY_BAR_MODEL_FEATURE_COLUMNS,
     INTRADAY_BAR_MODEL_FEATURES_SHA256,
 )
-from market_predictor.edge_rebuild.intraday_bar_labels import (
+from market_predictor.intraday.features.bar_labels import (
     INTRADAY_BAR_LABEL_SCHEMA_VERSION,
 )
-from market_predictor.edge_rebuild.intraday_history import json_sha256
-from market_predictor.edge_rebuild.intraday_training import (
+from market_predictor.intraday.datasets.history import json_sha256
+from market_predictor.intraday.training.training import (
     MODEL_FEATURE_COLUMNS,
     load_published_intraday_dataset,
 )

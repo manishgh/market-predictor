@@ -12,7 +12,7 @@ import numpy as np
 import pandas as pd
 from pandas.api.types import is_bool_dtype
 
-from market_predictor.edge_rebuild.intraday_features import FEATURE_SCHEMA_VERSION
+from market_predictor.intraday.features.features import FEATURE_SCHEMA_VERSION
 from market_predictor.edge_rebuild.labeling import (
     RANK_BOTTOM,
     RANK_MIDDLE,

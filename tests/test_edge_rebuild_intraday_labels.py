@@ -9,8 +9,8 @@ import pandas as pd
 import pandas.testing as pdt
 import pytest
 
-from market_predictor.edge_rebuild.intraday_features import FEATURE_SCHEMA_VERSION
-from market_predictor.edge_rebuild.intraday_labels import (
+from market_predictor.intraday.features.features import FEATURE_SCHEMA_VERSION
+from market_predictor.intraday.features.labels import (
     LABEL_SCHEMA_VERSION,
     build_exact_causal_intraday_labels,
 )

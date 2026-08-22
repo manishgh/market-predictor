@@ -36,12 +36,12 @@ import numpy as np
 import pandas as pd
 
 from market_predictor.core.errors import DataReadinessError
-from market_predictor.edge_rebuild.intraday_event_training import (
+from market_predictor.intraday.training.event_training import (
     DIRECTIONAL_EVENT_SUBTYPES,
     filter_to_research_event_cohort,
     load_intraday_research_event_cohort,
 )
-from market_predictor.edge_rebuild.intraday_training import (
+from market_predictor.intraday.training.training import (
     MODEL_FEATURE_COLUMNS,
     PublishedIntradayDataset,
     load_published_intraday_dataset,

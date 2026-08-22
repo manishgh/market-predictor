@@ -10,7 +10,7 @@ from market_predictor.edge_rebuild.history_contracts import (
     IntradayHistoryConfig,
     load_intraday_history_config,
 )
-from market_predictor.edge_rebuild.intraday_history import (
+from market_predictor.intraday.datasets.history import (
     build_intraday_history_plan,
     load_complete_intraday_history_plan,
 )
@@ -86,7 +86,7 @@ def test_plan_is_hash_bound_point_in_time_and_selective(
     )
     (audit_dir / "_manifest.json").write_text("{}", encoding="utf-8")
     monkeypatch.setattr(
-        "market_predictor.edge_rebuild.intraday_history."
+        "market_predictor.intraday.datasets.history."
         "load_complete_readiness_audit",
         lambda *_args, **_kwargs: {},
     )
@@ -175,7 +175,7 @@ def test_plan_rejects_static_membership(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        "market_predictor.edge_rebuild.intraday_history."
+        "market_predictor.intraday.datasets.history."
         "load_complete_readiness_audit",
         lambda *_args, **_kwargs: {},
     )
@@ -200,7 +200,7 @@ def test_plan_rejects_static_membership(
     audit.write_text("{}", encoding="utf-8")
 
     with pytest.raises(DataReadinessError, match="point-in-time"):
-        from market_predictor.edge_rebuild.intraday_history import (
+        from market_predictor.intraday.datasets.history import (
             verify_point_in_time_memberships,
         )
 

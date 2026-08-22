@@ -7,8 +7,8 @@ import pandas as pd
 import pytest
 
 from market_predictor.canonical.store import file_sha256
-from market_predictor.edge_rebuild import intraday_bar_audit as module
-from market_predictor.edge_rebuild.intraday_bar_audit import (
+import market_predictor.intraday.datasets.bar_audit as module
+from market_predictor.intraday.datasets.bar_audit import (
     publish_intraday_bar_dataset_audit,
 )
 from market_predictor.core.errors import DataReadinessError

@@ -42,10 +42,10 @@ from market_predictor.edge_rebuild.global_event_authority import (
     GlobalEventAuthority,
     load_global_event_authority,
 )
-from market_predictor.edge_rebuild.intraday_features import (
+from market_predictor.intraday.features.features import (
     CAUSAL_INTRADAY_MODEL_FEATURE_COLUMNS,
 )
-from market_predictor.edge_rebuild.intraday_features import (
+from market_predictor.intraday.features.features import (
     FEATURE_SCHEMA_VERSION as INTRADAY_FEATURE_SCHEMA_VERSION,
 )
 from market_predictor.edge_rebuild.strategy_contract import (

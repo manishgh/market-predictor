@@ -14,7 +14,7 @@ from market_predictor.edge_rebuild.history_contracts import (
     SelectedSessionBenchmarkConfig,
     load_selected_session_benchmark_config,
 )
-from market_predictor.edge_rebuild.intraday_history import (
+from market_predictor.intraday.datasets.history import (
     load_complete_intraday_history_plan,
 )
 from market_predictor.edge_rebuild.strategy_contract import load_strategy_contract

@@ -24,7 +24,7 @@ from market_predictor.edge_rebuild.history_contracts import (
     BROAD_INTRADAY_HISTORY_PLAN_SCHEMA,
     BroadIntradayHistoryConfig,
 )
-from market_predictor.edge_rebuild.intraday_history import (
+from market_predictor.intraday.datasets.history import (
     BROAD_INTRADAY_HISTORY_PLAN_AUTHORITY_SCHEMA,
     chunk_request_symbols,
     expected_five_minute_bars,

@@ -10,7 +10,7 @@ from typing import Final
 import numpy as np
 import pandas as pd
 
-from market_predictor.edge_rebuild.intraday_features import (
+from market_predictor.intraday.features.features import (
     CAUSAL_INTRADAY_MODEL_FEATURE_COLUMNS,
     build_causal_intraday_features,
 )

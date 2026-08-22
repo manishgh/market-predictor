@@ -52,7 +52,7 @@ from market_predictor.edge_rebuild.corpus_integrity import (
     IntegrityThresholds,
     verify_corpus_integrity,
 )
-from market_predictor.edge_rebuild.intraday_selection import (
+from market_predictor.intraday.datasets.selection import (
     load_complete_intraday_selection,
 )
 from market_predictor.resources import (

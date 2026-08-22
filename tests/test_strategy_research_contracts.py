@@ -23,7 +23,7 @@ from market_predictor.swing.contracts import (
     SwingDatasetConfig,
     swing_features_for_profile,
 )
-from market_predictor.v3.errors import (
+from market_predictor.core.errors import (
     ArtifactIntegrityError,
     DataReadinessError,
 )

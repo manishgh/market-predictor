@@ -21,20 +21,20 @@ import pandas as pd
 import pyarrow.parquet as pq
 
 from market_predictor.canonical.store import file_sha256
-from market_predictor.edge_rebuild.intraday_bar_features import (
+from market_predictor.intraday.features.bar_features import (
     INTRADAY_BAR_FEATURE_SCHEMA_VERSION,
     INTRADAY_BAR_MODEL_FEATURE_COLUMNS,
     INTRADAY_BAR_MODEL_FEATURES_SHA256,
     build_causal_intraday_bar_features,
 )
-from market_predictor.edge_rebuild.intraday_bar_labels import (
+from market_predictor.intraday.features.bar_labels import (
     INTRADAY_BAR_LABEL_SCHEMA_VERSION,
     build_exact_intraday_bar_labels,
 )
-from market_predictor.edge_rebuild.intraday_bar_only_five_minute import (
+from market_predictor.intraday.features.bar_only_five_minute import (
     load_complete_selected_session_five_minute_projection,
 )
-from market_predictor.edge_rebuild.intraday_contract_lineage import (
+from market_predictor.intraday.contracts.lineage import (
     DEFAULT_INTRADAY_CONTRACT_LINEAGE_PATH,
 )
 from market_predictor.intraday.datasets.publisher import (
@@ -48,7 +48,7 @@ from market_predictor.intraday.datasets.publisher import (
     _VerifiedInputs,
     _verify_inputs,
 )
-from market_predictor.edge_rebuild.intraday_history import json_sha256
+from market_predictor.intraday.datasets.history import json_sha256
 from market_predictor.edge_rebuild.strategy_contract import StrategyContract
 from market_predictor.edge_rebuild.volume_bars import build_causal_volume_bars
 from market_predictor.resources import (
@@ -1148,17 +1148,17 @@ def _resolve_inside(root: Path, relative: str) -> Path:
 
 
 def _transformation_identity() -> dict[str, Any]:
-    root = Path(__file__).resolve().parent
+    import sys
     files = [
         {
-            "path": name,
-            "sha256": file_sha256(root / name),
+            "path": Path(sys.modules[mod].__file__).name,
+            "sha256": file_sha256(Path(sys.modules[mod].__file__)),
         }
-        for name in (
-            "intraday_bar_dataset.py",
-            "intraday_bar_features.py",
-            "intraday_bar_labels.py",
-            "volume_bars.py",
+        for mod in (
+            "market_predictor.intraday.datasets.bar_dataset",
+            "market_predictor.intraday.features.bar_features",
+            "market_predictor.intraday.features.bar_labels",
+            "market_predictor.edge_rebuild.volume_bars",
         )
     ]
     payload = {

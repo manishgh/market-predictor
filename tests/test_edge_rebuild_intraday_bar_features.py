@@ -8,14 +8,14 @@ import pandas as pd
 import pandas.testing as pdt
 import pytest
 
-from market_predictor.edge_rebuild.intraday_bar_features import (
+from market_predictor.intraday.features.bar_features import (
     INTRADAY_BAR_FEATURE_SCHEMA_VERSION,
     INTRADAY_BAR_MODEL_FEATURE_COLUMNS,
     INTRADAY_BAR_MODEL_FEATURES_JSON,
     INTRADAY_BAR_MODEL_FEATURES_SHA256,
     build_causal_intraday_bar_features,
 )
-from market_predictor.edge_rebuild.intraday_bar_live import (
+from market_predictor.intraday.datasets.bar_live import (
     build_live_intraday_bar_features,
 )
 from market_predictor.edge_rebuild.strategy_contract import (

@@ -9,12 +9,12 @@ import pandas as pd
 import pytest
 
 from market_predictor.canonical.store import file_sha256
-from market_predictor.edge_rebuild.intraday_bar_only_five_minute import (
+from market_predictor.intraday.features.bar_only_five_minute import (
     PROJECTION_AUTHORITY_SCHEMA,
     load_complete_selected_session_five_minute_projection,
     publish_selected_session_five_minute_projection,
 )
-from market_predictor.edge_rebuild.intraday_selection import (
+from market_predictor.intraday.datasets.selection import (
     INTRADAY_SELECTION_SCHEMA,
     IntradaySelectionResult,
     publish_intraday_selection,

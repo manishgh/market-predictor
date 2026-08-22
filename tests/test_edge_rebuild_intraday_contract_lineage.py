@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from market_predictor.canonical.store import file_sha256
-from market_predictor.edge_rebuild.intraday_contract_lineage import (
+from market_predictor.intraday.contracts.lineage import (
     intraday_data_contract_sha256,
     require_intraday_contract_lineage,
 )

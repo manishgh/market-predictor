@@ -181,7 +181,7 @@ def build_causal_intraday_features(
     )
     _validate_stock_context_identity(data)
 
-    from market_predictor.edge_rebuild.intraday_pipeline_steps import (
+    from market_predictor.intraday.features.pipeline_steps import (
         IntradayAdvancedIndicatorsStep,
         IntradaySessionContextStep,
     )

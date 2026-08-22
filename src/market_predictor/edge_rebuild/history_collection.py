@@ -22,7 +22,7 @@ from market_predictor.canonical.store import file_sha256
 from market_predictor.edge_rebuild.history_contracts import (
     IntradayTransportConfig,
 )
-from market_predictor.edge_rebuild.intraday_history import (
+from market_predictor.intraday.datasets.history import (
     load_complete_intraday_history_plan,
 )
 from market_predictor.resources import (

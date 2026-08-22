@@ -13,7 +13,7 @@ import pandas as pd
 import pytest
 
 import market_predictor.intraday.training.validation as validation_module
-from market_predictor.edge_rebuild.intraday_training import load_published_intraday_dataset
+from market_predictor.intraday.training.training import load_published_intraday_dataset
 import market_predictor.intraday.training.io as io_module
 import market_predictor.intraday.evaluation.gates as gates_module
 import market_predictor.intraday.evaluation.economics as economics_module
@@ -22,7 +22,7 @@ import market_predictor.intraday.training.models as models_module
 from market_predictor.intraday.training.config import IntradayDevelopmentConfig
 from market_predictor.intraday.evaluation.gates import baseline_profile, evaluate_future_intraday_holdout, load_intraday_development_config
 from market_predictor.intraday.training.coordinator import train_intraday_development_candidate
-from market_predictor.edge_rebuild.intraday_training import MODEL_FEATURE_COLUMNS
+from market_predictor.intraday.training.training import MODEL_FEATURE_COLUMNS
 from market_predictor.core.errors import DataReadinessError
 from tests.test_edge_rebuild_intraday_training import _publish_dataset, _training_frame
 
