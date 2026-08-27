@@ -1233,17 +1233,25 @@ test, and task names.
      tests passed after review remediation. Ruff, strict mypy on 15 source files,
      import smoke, diff checks, and process checks passed. The assigned senior reviewer
      accepted the final diff with no P0, P1, or P2 finding.
-   - **Prospective observed-membership source and authority split (current subtask).**
-     Split provider URLs, HTTP collection, response validation, and raw replay from
-     `edge_rebuild/sp500_observed_memberships.py` into `sources/spglobal`; move verified
-     observed membership construction and loading into `universe/sp500`. Preserve the
-     immutable raw/authority schemas and exact replay behavior, update direct consumers
-     and behavior-named tests, and remove the old combined module only after guarded
-     zero-reference verification.
-   - **Issuer and global catalyst authority migration (`pending`).** Move the remaining
-     source-independent issuer-event, SEC-filing, global-event, and market-context
-     authorities out of `edge_rebuild` into `catalysts`, `sources`, and `evidence`
-     without changing source coverage, availability, or causal semantics.
+   - **Prospective observed-membership source and authority split (`completed`).**
+     Implementation commit `5259bdb` moves provider URLs, HTTP collection, response
+     validation, retained raw units, source parsing, and raw replay to
+     `sources/spglobal/observed_membership_collection.py`. Observed membership lineage,
+     identity reconciliation, effective-state construction, publication, and strict
+     authority replay now belong to
+     `universe/sp500/observed_membership_authority.py`. The universe orchestrator keeps
+     the single operation lock and generates the unchanged request hash passed into
+     every raw unit. Authority-root inventory and raw `objects`/`units` inventory are
+     verified separately. The old combined module is absent; all consumers use the
+     semantic authority package. Architecture tests prevent source-to-universe imports
+     and all import forms of the removed path. Exact raw-envelope and lock-contention
+     tests pass. Final checkpoint verification passed 113 affected tests, Ruff, strict
+     mypy on six source files, compileall, import smoke, and diff checks. The assigned
+     senior reviewer accepted the diff with no P0, P1, or P2 finding.
+   - **Issuer and global catalyst authority migration (current subtask).** Move the
+     remaining source-independent issuer-event, SEC-filing, global-event, and
+     market-context authorities out of `edge_rebuild` into `catalysts`, `sources`, and
+     `evidence` without changing source coverage, availability, or causal semantics.
 4. **Swing and intraday package migration (`pending`).**
    Consolidate each horizon under descriptive `contracts`, `datasets`, `features`,
    `labels`, `training`, `evaluation`, and `live` packages and remove the intraday
