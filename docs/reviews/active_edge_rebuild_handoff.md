@@ -8,7 +8,7 @@ Repository: `C:\project\market-predictor`
 
 Branch: `er-intraday-refactoring`
 
-Last completed implementation commit: `9244893` (`Move SEC filing authorities into catalysts`)
+Last completed implementation commit: `5e1f65f` (`Separate GDELT transport and global event authorities`)
 
 ## Purpose
 
@@ -633,15 +633,31 @@ Ruff, strict mypy on three source files, compileall, semantic import smoke,
 zero-reference/file-absence checks, and diff checks. The assigned senior reviewer
 accepted the move with no P0, P1, or P2 finding.
 
-Exact next checkpoint: complete **GDELT collection and global-event authority
-separation**. Inspect `edge_rebuild/global_event_collection.py` before editing because
-it currently combines provider fetching with causal collection publication. Keep GDELT
-request construction, HTTP response validation, retry policy, and raw provider
-evidence in `sources`; move normalized causal global-event collection, coverage,
-availability, and decision-authority behavior into `catalysts/global_events`. Preserve
-every persisted schema, scorer identity, source-coverage state, timestamp, hash, lock,
-memory gate, and fail-closed replay contract. Update direct consumers and
-behavior-named tests, then remove old modules only after guarded zero-reference and
-file-absence verification. Do not add compatibility aliases. Issuer-event family and
-precision-authority migration follows. Do not delete `market_predictor.edge_rebuild`
-until later horizon, governance, serving, and command consumers have migrated.
+Implementation commit `5e1f65f` completes **GDELT transport, canonical global-event
+collection, and decision-authority separation**. `sources/gdelt.py` is the only GDELT
+HTTP transport and owns validated requests, bounded retries, no-redirect behavior,
+provider URL identity, raw response hashes, and tagged provider records. Immutable
+normalization, deduplication, scoring, observed availability, coverage, publication,
+and replay belong to `catalysts/global_events/collection.py`. Decision-time global
+coverage and features belong to `catalysts/global_events/decision_authority.py`.
+`commands/market_context.py` alone converts raw documents to the older `NewsEvent`
+command output; production catalyst code does not depend on that schema.
+
+The two old `edge_rebuild` modules and the duplicate `GdeltSource` transport are
+absent. Direct consumers use semantic imports without aliases. A fixed
+characterization test preserves exact request parameters, raw-response identity,
+request/query/source-policy hashes, canonical event raw hash, availability, coverage,
+and persisted schema values. Host, path, redirect, partial-response, and retry poison
+tests fail closed. Verification passed 98 focused tests, Ruff, strict mypy on six
+source files, compileall, removed-module/API guards, and diff checks. No Python worker
+remained. The assigned senior reviewer accepted the final diff with no P0, P1, or P2
+finding.
+
+Exact next checkpoint: complete **issuer-event family and precision-authority
+migration**. Move causal issuer attribution and family classification into semantic
+`catalysts` packages. Move precision-governance evidence to its correct governance or
+research boundary after inspecting consumers. Preserve active classifier logic,
+coverage, reviewer evidence, artifact schemas, hashes, timestamps, memory limits, and
+strict replay. Use behavior-named modules, tests, commands, and task descriptions; do
+not add compatibility aliases. Do not delete `market_predictor.edge_rebuild` until
+later horizon, governance, serving, and command consumers have migrated.

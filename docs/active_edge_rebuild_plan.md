@@ -2,7 +2,7 @@
 
 Status: active
 
-Last updated: 2026-08-15
+Last updated: 2026-08-27
 
 Repository: `C:\project\market-predictor`
 
@@ -1263,13 +1263,22 @@ test, and task names.
        three source files, compileall, import smoke, zero-reference and diff checks.
        The assigned senior reviewer accepted the AST-equivalent move with no P0, P1,
        or P2 finding.
-     - **GDELT collection and global-event authority (current task).** Separate
-       provider request/response behavior from causal global-event collection and
-       decision authority, then move each responsibility into `sources` or
-       `catalysts` with exact replay parity.
-     - **Issuer event family and precision authorities (`pending`).** Move causal
+     - **GDELT collection and global-event authority (`completed`).** Implementation
+       commit `5e1f65f` makes `sources/gdelt.py` the single strict provider transport,
+       moves immutable canonical evidence into `catalysts/global_events/collection.py`,
+       and moves the decision-time overlay into
+       `catalysts/global_events/decision_authority.py`. Active APIs, commands, and
+       tests use behavior names; the old modules and duplicate transport are absent.
+       Provider URL identity, no-redirect behavior, request parameters, raw-response
+       hashes, query/scorer policy hashes, canonical event hashes, availability,
+       coverage, and persisted schema strings remain fail-closed and replay-compatible.
+       Ninety-eight focused tests passed with Ruff, strict mypy on six source files,
+       compileall, architecture guards, and diff checks. The assigned senior reviewer
+       accepted the final diff with no P0, P1, or P2 finding.
+     - **Issuer event family and precision authorities (`current task`).** Move causal
        issuer attribution, family classification, and precision-governance evidence
-       only after the global-event boundary is closed.
+       into semantic catalyst and governance packages without changing any active
+       classifier, coverage, audit, or artifact contract.
 4. **Swing and intraday package migration (`pending`).**
    Consolidate each horizon under descriptive `contracts`, `datasets`, `features`,
    `labels`, `training`, `evaluation`, and `live` packages and remove the intraday
