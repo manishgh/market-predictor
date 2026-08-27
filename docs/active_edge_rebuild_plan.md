@@ -1188,11 +1188,21 @@ test, and task names.
    shared config, and calibration construction are covered by 57 passing focused tests.
    The assigned senior reviewer accepted the bounded diff after all P1 findings were
    fixed; focused Ruff and strict mypy pass.
-2. **Serialized artifact and namespace inventory (`in progress`).**
+2. **Serialized artifact and namespace inventory (`completed`).**
    Inventory every command, manifest, model artifact, and import that depends on a
    chronology-named namespace. Retrain retained models under canonical modules or
    explicitly retire rejected artifacts before deleting their code dependencies.
-3. **Market evidence and research package migration (`pending`).**
+   Implementation commit `3026450` is pushed. The machine-readable retention inventory
+   classifies every artifact group needed by the research catalog, tracked hash-bound
+   evidence, active replay claims, old serialized namespaces, and ungoverned outputs.
+   The four research catalog models now use behavior-based IDs and local paths. Their
+   authority, manifest, and candidate hashes are unchanged; only swing technical has a
+   non-actionable research candidate, and all four remain promotion-ineligible. No
+   model output was deleted because tracked evidence or incomplete regeneration
+   provenance still blocks broader cleanup. Ten focused tests, touched Ruff, strict
+   mypy, default-service smoke, retained-bundle hash checks, and specialist evidence
+   replay checks passed. The assigned senior reviewer accepted the bounded diff.
+3. **Market evidence and research package migration (`in progress`).**
    Consolidate base contracts under `core`, immutable lineage under `evidence`, source
    transports under `sources`, membership and identity under `universe`, issuer and
    global events under `catalysts`, reusable estimators and validation under

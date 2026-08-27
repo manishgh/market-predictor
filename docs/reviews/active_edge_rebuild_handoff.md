@@ -8,7 +8,7 @@ Repository: `C:\project\market-predictor`
 
 Branch: `er-intraday-refactoring`
 
-Last completed implementation commit: `99f635c` (`Make future holdout access auditable`)
+Last completed implementation commit: `3026450` (`Name retained model artifacts by behavior`)
 
 ## Purpose
 
@@ -534,9 +534,31 @@ Verification: 57 focused tests passed; touched source files passed Ruff and stri
 mypy; the assigned senior reviewer accepted the bounded diff after two remediation
 rounds. Repository-wide Ruff and mypy remain open by design for later repair tasks.
 
-Exact next checkpoint: complete **Serialized artifact and namespace inventory**.
-Inventory imports, CLI commands, manifests, and serialized models that reference `v3`,
-`edge_rebuild`, or chronology-named modules. Classify each retained model as promoted,
-candidate, rejected, or ungoverned; retrain only genuinely retained models under a
-canonical package, and explicitly retire rejected or ungoverned artifacts before any
-namespace deletion. Do not add compatibility aliases.
+The **Serialized artifact and namespace inventory** is complete in implementation
+commit `3026450`. `docs/model_artifact_retention_inventory.json` is the authority for
+retention decisions. It records 53 source/test files importing `market_predictor.v3`,
+126 importing `market_predictor.edge_rebuild`, 171 chronology-named tracked paths, and
+two rejected serialized files that import `market_predictor.v3`. No serialized file in
+`data` imports either old namespace.
+
+The default research catalog remains active and now exposes four explicit model IDs:
+`swing_technical`, `swing_technical_with_catalyst`, `intraday_technical`, and
+`intraday_technical_with_catalyst`. Their local directories use matching behavioral
+paths. All authority, manifest, and candidate hashes replay after the move. Only
+`swing_technical` has a research-scoring candidate; every model remains
+promotion-ineligible and non-actionable. Hash-bound specialist and rejection evidence,
+active-plan development evidence, raw data, canonical data, features, and research
+inputs were retained. No model output was deleted.
+
+Verification for `3026450`: 10 focused tests passed; touched Ruff and strict mypy
+passed; the default research service reported the four expected states; all four
+catalog bundle hashes and all six tracked specialist authority/manifest/request hashes
+matched. The assigned senior reviewer accepted the bounded diff with no P0/P1 finding.
+
+Exact next checkpoint: complete **Market evidence and research package migration**.
+Move shared contracts, lineage, source-independent market evidence, S&P membership,
+issuer/global catalyst authorities, reusable modeling utilities, and non-production
+intraday research into the semantic package layout. Update imports and behavior-named
+tests in the same bounded move. Do not add compatibility aliases and do not delete
+`market_predictor.v3` or `market_predictor.edge_rebuild` until all later horizon,
+governance, serving, and command consumers have migrated.
