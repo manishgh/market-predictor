@@ -1316,17 +1316,24 @@ test, and task names.
           compileall, removed-path scans, diff checks, and memory/process checks passed.
           The assigned senior reviewer accepted the final diff with no P0, P1, or P2
           finding.
-       4. **Issuer-family evidence and horizon assignment split (`current task`).**
-          Do not move the current combined `issuer_event_family_authority.py` directly
-          into `swing`: it publishes horizon-neutral classified events, source
-          coverage, and unclassified evidence that intraday also consumes, together
-          with swing-specific assignments and cohort audit. First separate the neutral
-          evidence authority under `catalysts/issuer_events`; then publish swing cohort
-          assignments/audit from `swing/datasets`, and let intraday consume only the
-          neutral catalyst authority for its own attachments. Preserve every persisted
-          schema, artifact type, hash, eligibility decision, availability value,
-          coverage state, and strict replay result.
-       5. Move precision sampling, review, and admission evidence to `governance`.
+       4. **Issuer-family evidence and horizon assignment split (`completed`).**
+          Implementation commit `03f8233` preserves the two retained combined v2
+          envelopes byte-for-byte while separating their runtime ownership. Strict
+          structural verification and a swing-independent neutral projection identity
+          belong to `evidence/issuer_family_combined_envelope.py`; neutral classified
+          events, coverage, and unclassified semantic replay belong to
+          `catalysts/issuer_events/family_evidence.py`; swing assignments and cohort
+          replay belong to `swing/datasets/issuer_event_family_cohort.py`. Intraday now
+          consumes only neutral evidence and cannot access swing assignments. A true
+          persisted-authority split would change schemas and hashes, so it remains a
+          separately approved data migration rather than part of this byte-preserving
+          checkpoint. Verification passed 178 focused tests and the complete suite with
+          1,584 passed and 2 skipped. Both retained v2 eras passed strict real-data
+          replay below 2 GiB, affected-file Ruff and strict mypy passed, and the assigned
+          reviewer accepted the final diff with no P0, P1, or P2 finding.
+       5. **Issuer-event precision governance (`current task`).** Move precision
+          sampling, review, and admission evidence to `governance` without changing
+          stored schemas, hashes, eligibility, or admission semantics.
        The required dependency direction is `sources -> catalysts -> swing ->
        governance`; commands remain outer adapters.
 4. **Swing and intraday package migration (`pending`).**

@@ -8,7 +8,7 @@ Repository: `C:\project\market-predictor`
 
 Branch: `er-intraday-refactoring`
 
-Last completed implementation commit: `9408515` (`Move swing catalyst decision authority into features`)
+Last completed implementation commit: `03f8233` (`Separate issuer family evidence from swing cohorts`)
 
 ## Purpose
 
@@ -707,14 +707,50 @@ the final diff with no P0, P1, or P2 finding. An earlier full-suite attempt prod
 setup-only errors after its repository-local pytest parent was removed; the clean rerun
 used an isolated external pytest directory and had no failures.
 
-Exact next checkpoint: split **horizon-neutral issuer-family evidence from
-horizon-specific assignments**. Do not move the current combined
-`edge_rebuild/issuer_event_family_authority.py` directly into `swing`. It publishes
-classified family events, source coverage, and unclassified evidence used by both
-horizons, while also publishing swing-specific assignments and cohort audit. Put the
-neutral evidence authority under `catalysts/issuer_events`; derive swing assignments
-and cohort audit under `swing/datasets`; make intraday consume only the neutral
-catalyst authority and build its own attachments. Preserve exact artifact schemas,
-types, hashes, source authorization, eligibility, availability, coverage, and strict
-replay. Obtain design review before editing and final diff acceptance before the next
-checkpoint.
+Implementation commit `03f8233` completes the **issuer-family evidence and horizon
+assignment split** as a byte-preserving projection over the retained combined v2
+envelopes. `evidence/issuer_family_combined_envelope.py` strictly verifies frozen root,
+child, inventory, path, schema, policy, and hash contracts and computes a neutral
+identity that excludes swing decisions. `catalysts/issuer_events/family_evidence.py`
+owns the single neutral semantic replay for classified events, source coverage, and
+unclassified evidence. `swing/datasets/issuer_event_family_cohort.py` owns swing
+assignments and cohort replay. Intraday consumes only `IssuerFamilyEvidence`; it no
+longer reads or validates swing assignments. The old mixed module, test, CLI command,
+and imports are absent and guarded.
+
+No persisted data was rewritten. The retained v2 envelope schema and authority hashes
+remain unchanged, so this is not a claim that neutral and swing tables are stored as
+separate authorities. Such a storage migration would require new schemas, regenerated
+artifacts, and downstream lineage changes and needs explicit approval. The superseded
+`data/research/issuer_event_family_20190709_20210708_v1` directory is not accepted by
+the v2 loaders and is retained pending a separate reference-proven deletion decision.
+
+Strict real-data replay evidence:
+
+- `issuer_event_family_20190709_20210708_v2`: authority
+  `f6ad6fff560177e5ec3cc9f40018d2ef3bf9038e0a9d57e41ce4127e6ddf7c08`, full
+  inventory `f4cc4e919b6c839e6e22c33b7fbd0f925c49ed01acd5ee52115553b516f53bb8`,
+  neutral projection `f2272439b492a0fcde8ded41ab82ae2ad11756a0e540c4185e466fc27359f458`,
+  9,018 events, 28,462 coverage rows, 30,875 assignments, 267 cohort rows, and
+  3,982 unclassified artifacts.
+- `issuer_event_family_20210709_20260708_v2`: authority
+  `aa8d208f41a902bdb9f9432334dab19c6b78affaa928ac3b6794ada377b8f927`, full
+  inventory `b3e292ac472c176f5cc28178dff64234234eb53587d95e116c5161518c4e7344`,
+  neutral projection `8dcaac805c77515b154ed2bef681e1537f2c02dfa1c54b0a431507bc06d23fab`,
+  26,370 events, 18,333 coverage rows, 90,136 assignments, 519 cohort rows, and
+  2,604 unclassified artifacts.
+
+Verification for `03f8233`: 178 focused tests passed; the isolated complete suite
+passed 1,584 tests with two skipped in 12 minutes 47 seconds; affected-file Ruff and
+strict mypy on six source files, compileall, removed-path scans, diff checks, and
+process checks passed. Peak observed Python memory during retained-data replay stayed
+below 2 GiB. The assigned senior reviewer accepted the final diff with no P0, P1, or
+P2 finding. Repository-wide static cleanup remains plan task 6: current whole-tree
+Ruff reports 278 pre-existing findings and strict mypy reports 16 errors in three
+intraday dataset files; they were not expanded into this bounded checkpoint.
+
+Exact next checkpoint: move **issuer-event precision sampling, review, and admission
+evidence** from `edge_rebuild/issuer_event_precision_audit.py` to descriptive
+`governance` modules. Preserve persisted schemas, hashes, deterministic sampling,
+review lineage, precision gates, and admission decisions. Obtain design review before
+editing and final diff acceptance before closure.
