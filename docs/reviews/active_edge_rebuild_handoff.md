@@ -8,7 +8,7 @@ Repository: `C:\project\market-predictor`
 
 Branch: `er-intraday-refactoring`
 
-Last completed implementation commit: `4f271ca` (`Move Alpaca issuer news evidence into catalysts`)
+Last completed implementation commit: `2b9e195` (`Move issuer event foundations into catalysts`)
 
 ## Purpose
 
@@ -672,10 +672,29 @@ on 14 source files, compileall, dependency/file-absence guards, diff checks, and
 process/memory check passed. The assigned senior reviewer accepted the final diff with
 no P0, P1, or P2 finding.
 
-Exact next checkpoint: complete **issuer-event classification and attribution
-foundations migration**. Move reusable classification, relevance, attribution, and
-attribution-history behavior into `catalysts/issuer_events`, including the rule-variant
-classifier helper. Preserve every classification rule, timestamp boundary, issuer
-anchor, coverage state, hash, schema string, and replay result. Remove old modules and
-imports without aliases, add removed-module and dependency guards, run focused parity
-verification, and obtain the assigned reviewer's diff acceptance before checkpointing.
+Implementation commit `2b9e195` completes **issuer-event classification and attribution
+foundations migration**. Reusable event-family classification, relevance, attribution,
+and attribution-history behavior now belongs to `catalysts/issuer_events`. The
+rule-variant helper belongs only to `classification.py`; the precision audit calls it
+through that module and cannot re-export it. An AST guard rejects old-owner definitions,
+direct or aliased imports, plain or annotated assignment aliases, and other stale
+consumer imports.
+
+Exact event-family and attribution policy hashes, all persisted schema/version strings,
+every rule-variant branch and fallback, representative classification/relevance/
+attribution outputs, and attribution-history replay remain fixed. Old swing foundation
+modules and imports are absent; direct tests use issuer-event behavior names.
+Verification passed 247 focused parity tests, 88 tests after reviewer fixes, 54 final
+ownership/dependency tests, and the complete suite with 1,551 passed and 2 skipped.
+Affected-file Ruff, strict mypy on 12 source files, compileall, removed-module scans,
+diff checks, and process checks passed. The assigned senior reviewer accepted the final
+diff with no P0, P1, or P2 finding.
+
+Exact next checkpoint: complete **swing issuer-event family cohort and decision
+authority migration**. Move the swing-specific cohort dataset authority from
+`edge_rebuild` to `swing/datasets` and its decision-time feature authority to
+`swing/features`. Keep reusable issuer classification and attribution in `catalysts`.
+Preserve cohort eligibility, source authorization, causal availability, coverage,
+artifact schemas, hashes, replay, and all decision-time values. Remove old modules and
+imports without aliases, add dependency/removal guards, run focused parity verification,
+and obtain the assigned reviewer's diff acceptance before checkpointing.

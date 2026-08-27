@@ -1290,10 +1290,22 @@ test, and task names.
           2 skipped, plus affected-file Ruff, strict mypy on 14 source files,
           compileall, dependency/file-absence guards, and diff checks. The assigned
           senior reviewer found no P0, P1, or P2 issue.
-       2. **Classification and attribution foundations (`current task`).** Move
-          reusable classification, attribution, and attribution-history logic to
-          `catalysts/issuer_events`, including the rule-variant classifier helper.
-       3. Move the swing-specific family cohort authority to `swing/datasets` and the
+       2. **Classification and attribution foundations (`completed`).**
+          Implementation commit `2b9e195` moves reusable event-family classification,
+          relevance, attribution, and attribution-history behavior to
+          `catalysts/issuer_events`. The rule-variant helper has one semantic owner in
+          `classification.py`; an AST guard rejects definitions, imports, or assignment
+          aliases in its old precision-audit owner. Exact policy hashes, schema/version
+          strings, every rule-variant branch, representative outputs, and strict replay
+          remain fixed. Old modules, imports, and swing-prefixed foundation tests are
+          absent and guarded. Verification passed 247 focused parity tests, 88 tests
+          after reviewer fixes, 54 ownership/dependency tests, and the final complete
+          suite with 1,551 passed and 2 skipped. Affected-file Ruff, strict mypy on 12
+          source files, compileall, removed-module scans, diff checks, and process checks
+          passed. The assigned senior reviewer accepted the final diff with no P0, P1,
+          or P2 finding.
+       3. **Swing family and decision authorities (`current task`).** Move the
+          swing-specific family cohort authority to `swing/datasets` and the
           swing-specific decision authority to `swing/features`.
        4. Move precision sampling, review, and admission evidence to `governance`.
        The required dependency direction is `sources -> catalysts -> swing ->
