@@ -1,0 +1,183 @@
+{
+  "active_serving_pointer_found": false,
+  "artifact_groups": [
+    {
+      "action": "retain_and_use_for_non_actionable_research",
+      "artifacts": [
+        {
+          "authority_sha256": "6f35f9000ec5eeb2cb1440a87c95a74b79fa082edbe8f21e5fa162eb4c539dff",
+          "bytes": 3814087,
+          "candidate_sha256": null,
+          "direct_references": [
+            "configs/research_model_catalog.toml"
+          ],
+          "legacy_path": "data/models/swing_v13_with_catalyst",
+          "manifest_sha256": "b7e7bb98107a3fa5bce44bdf7b8279c56e5e29489fec767a608f52e4ec5c4225",
+          "model_id": "swing_technical_with_catalyst",
+          "path": "data/models/swing/technical_with_catalyst",
+          "promotion_permitted": false,
+          "status": "no_candidate"
+        },
+        {
+          "authority_sha256": "cb986e6feb73cf3eaafff0b8a4f4e5ee94b2481ad5b64fb9d3d566b432e08373",
+          "bytes": 4358991,
+          "candidate_sha256": "8ccf20cffdf7de2383504e86326c4f6755d429ea70d659839a930ef04bf06244",
+          "direct_references": [
+            "configs/research_model_catalog.toml"
+          ],
+          "legacy_path": "data/models/swing_v13_event_driven",
+          "manifest_sha256": "ddd83f6a736e6da8cc08d01e48df9d8d571d285fdf8afe3fd64885b2459301a1",
+          "model_id": "swing_technical",
+          "path": "data/models/swing/technical",
+          "promotion_permitted": false,
+          "status": "candidate"
+        },
+        {
+          "authority_sha256": "15146756ffc0c0e4e529456290ff7f117410fb8ae1a0fa73dee90b481ef18d44",
+          "bytes": 216368,
+          "candidate_sha256": null,
+          "direct_references": [
+            "configs/research_model_catalog.toml"
+          ],
+          "legacy_path": "data/models/intraday_v5_with_catalyst",
+          "manifest_sha256": "fdf0b317e00ec1704b4141125786fa8451de0c06f1df057b22f5bd2c14f5166d",
+          "model_id": "intraday_technical_with_catalyst",
+          "path": "data/models/intraday/technical_with_catalyst",
+          "promotion_permitted": false,
+          "status": "no_candidate"
+        },
+        {
+          "authority_sha256": "15e87d739d7b30ef2eb1596df78c8df21e52adf83cc954331708d5ea06a065ab",
+          "bytes": 216342,
+          "candidate_sha256": null,
+          "direct_references": [
+            "configs/research_model_catalog.toml"
+          ],
+          "legacy_path": "data/models/intraday_v5_no_catalyst",
+          "manifest_sha256": "db54dc22ecdf7dd5bb9c443ab88a56900562b3022f8fffbec63ba28004ea59a5",
+          "model_id": "intraday_technical",
+          "path": "data/models/intraday/technical",
+          "promotion_permitted": false,
+          "status": "no_candidate"
+        }
+      ],
+      "regeneration": "Retained byte-for-byte; no regeneration was performed during the path migration."
+    },
+    {
+      "action": "retain_until_tracked_hash_evidence_is_consolidated_or_retired",
+      "direct_references": [
+        "configs/rejections/edge_rebuild_intraday_candidate_20260802_v1.toml",
+        "docs/evidence/edge_rebuild_intraday_candidate_20260802_v1_rejection/rejection.json",
+        "docs/evidence/ks3_swing_specialist_replay_20260727.json",
+        "docs/evidence/ks4_intraday_specialist_replay_20260728.json",
+        "docs/ks4_intraday_specialist_contract.md"
+      ],
+      "paths": [
+        "models/edge_rebuild_intraday_candidate_20260802_v1",
+        "models/edge_rebuild_swing_candidate_20260802_v2",
+        "models/ks4_intraday_specialists_causal_v4_20260728",
+        "models/swing/ks3_specialists_20210709_20260708_v4"
+      ],
+      "promotion_permitted": false,
+      "status": "historical_hash_bound_evidence"
+    },
+    {
+      "action": "retain_until_active_plan_replay_claims_are_consolidated",
+      "direct_references": [
+        "docs/active_edge_rebuild_plan.md",
+        "docs/reviews/active_edge_rebuild_handoff.md"
+      ],
+      "paths": [
+        "data/models/edge_rebuild_intraday_bar_continuation_dev_20260814_v1",
+        "data/models/edge_rebuild_intraday_bar_long_reversion_dev_20260814_v1",
+        "data/models/edge_rebuild_intraday_event_confirmed_continuation_dev_20260820_v1",
+        "data/models/edge_rebuild_intraday_event_confirmed_long_reversion_dev_20260820_v1",
+        "data/models/edge_rebuild_intraday_upgrade_confirmed_continuation_dev_20260820_v1",
+        "data/models/edge_rebuild_intraday_upgrade_confirmed_long_reversion_dev_20260820_v1",
+        "data/models/edge_rebuild_intraday_downgrade_confirmed_continuation_dev_20260820_v1",
+        "data/models/edge_rebuild_intraday_downgrade_confirmed_long_reversion_dev_20260820_v1",
+        "data/models/swing_broker_action_specialists_dev_20260812_v4",
+        "data/models/swing_directional_broker_action_specialists_dev_20260820_v1"
+      ],
+      "promotion_permitted": false,
+      "status": "development_rejection_evidence"
+    },
+    {
+      "action": "retire_before_old_namespace_removal",
+      "direct_references": [],
+      "paths": [
+        "models/v3/c8_b0_20260711/b0_candidate.joblib",
+        "models/v3/v4_h1_b0_20260721/b0_candidate.joblib"
+      ],
+      "promotion_permitted": false,
+      "reason": "The serialized payloads import market_predictor.v3, have no configured consumer or active pointer, and correspond to rejected historical experiments.",
+      "status": "reference_rejected"
+    },
+    {
+      "action": "retire_after_reference_and_regeneration_audit",
+      "direct_references": [],
+      "paths": [
+        "models/*.joblib",
+        "models/edge_rebuild_swing_candidate_20260802_v1",
+        "models/edge_rebuild_swing_candidate_20260802_v3",
+        "models/ks4_intraday_specialists_causal_v3_20260728",
+        "models/ks4_intraday_specialists_causal_v3_20260728.failures",
+        "models/rejections",
+        "data/models/candidate_v3",
+        "data/models/candidate_v3_fixed",
+        "data/models/candidate_v4",
+        "data/models/edge_rebuild_intraday_candidate_v3",
+        "data/models/swing_broker_action_specialists_dev_20260812_v1",
+        "data/models/swing_broker_action_specialists_dev_20260812_v2",
+        "data/models/swing_broker_action_specialists_dev_20260812_v3",
+        "data/models/swing_candidate_v12"
+      ],
+      "promotion_permitted": false,
+      "regeneration": "Not yet proven; deletion remains blocked.",
+      "status": "ungoverned_or_superseded"
+    },
+    {
+      "action": "retain",
+      "paths": [
+        "data/artifacts",
+        "data/raw",
+        "data/canonical",
+        "data/features",
+        "data/research"
+      ],
+      "reason": "Protected source, canonical, feature, and research authorities are outside routine model-output cleanup.",
+      "status": "protected_input_or_evidence"
+    }
+  ],
+  "generated_at_utc": "2026-08-27T09:19:27Z",
+  "generated_from_commit": "a57648e4d3ba8c874ddd2ad963ed0c1f2b2e79d4",
+  "inventory_scope": [
+    "models",
+    "data/models",
+    "data/artifacts",
+    "tracked references"
+  ],
+  "namespace_dependencies": {
+    "market_predictor.edge_rebuild": [],
+    "market_predictor.v3": [
+      "models/v3/c8_b0_20260711/b0_candidate.joblib",
+      "models/v3/v4_h1_b0_20260721/b0_candidate.joblib"
+    ]
+  },
+  "observed_counts": {
+    "serialized_files_importing_market_predictor_edge_rebuild": 0,
+    "serialized_files_importing_market_predictor_v3": 2,
+    "source_or_test_files_importing_market_predictor_edge_rebuild": 126,
+    "source_or_test_files_importing_market_predictor_v3": 53,
+    "tracked_chronology_named_paths": 171
+  },
+  "retired_legacy_promotion": {
+    "active_pointer_found": false,
+    "configured_consumer_found": false,
+    "governed_release_found": false,
+    "manifest": "models/sp500_6m_next_week_big_up_v2_20260708_candidate.joblib.manifest.json",
+    "reason": "Its legacy manifest says promoted, but it has no current attestation, serving bundle, active pointer, catalog entry, or reference-inventory entry.",
+    "status": "ungoverned_retired"
+  },
+  "schema_version": "market_predictor.model_artifact_retention_inventory.v1"
+}

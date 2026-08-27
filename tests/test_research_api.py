@@ -4,6 +4,7 @@ import hashlib
 import json
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import cast
 
 import joblib
 import numpy as np
@@ -21,7 +22,10 @@ from market_predictor.research_api.service import (
 
 class _LinearEstimator:
     def predict(self, frame: pd.DataFrame) -> np.ndarray:
-        return frame["feature_a"].to_numpy(dtype="float64") * 2.0
+        return cast(
+            np.ndarray,
+            frame["feature_a"].to_numpy(dtype="float64") * 2.0,
+        )
 
 
 class _FeatureBoundModel:
@@ -36,7 +40,7 @@ class _SubsetEstimator:
 
     def predict(self, frame: pd.DataFrame) -> np.ndarray:
         assert tuple(frame.columns) == self.expected_columns
-        return frame.iloc[:, 0].to_numpy(dtype="float64")
+        return cast(np.ndarray, frame.iloc[:, 0].to_numpy(dtype="float64"))
 
 
 class _FeatureSource:
@@ -55,11 +59,11 @@ def test_canonical_api_module_is_not_shadowed() -> None:
 
 def test_catalog_reports_all_four_models_and_real_artifact_states(tmp_path: Path) -> None:
     catalog = _write_catalog(tmp_path)
-    _write_candidate(tmp_path / "data/models/swing_baseline")
+    _write_candidate(tmp_path / "data/models/swing/technical")
     for relative in (
-        "data/models/swing_event",
-        "data/models/intraday_event",
-        "data/models/intraday_baseline",
+        "data/models/swing/technical_with_catalyst",
+        "data/models/intraday/technical_with_catalyst",
+        "data/models/intraday/technical",
     ):
         _write_no_candidate(tmp_path / relative)
 
@@ -71,26 +75,26 @@ def test_catalog_reports_all_four_models_and_real_artifact_states(tmp_path: Path
 
     states = {state.spec.model_id: state for state in service.model_states()}
     assert set(states) == {
-        "swing_event_driven",
-        "swing_baseline",
-        "intraday_event_driven",
-        "intraday_baseline",
+        "swing_technical_with_catalyst",
+        "swing_technical",
+        "intraday_technical_with_catalyst",
+        "intraday_technical",
     }
-    assert states["swing_baseline"].research_scoring_available is True
-    assert states["swing_baseline"].promotion_permitted is False
-    assert states["intraday_baseline"].training_status == "no_candidate"
-    assert states["intraday_baseline"].research_scoring_available is False
+    assert states["swing_technical"].research_scoring_available is True
+    assert states["swing_technical"].promotion_permitted is False
+    assert states["intraday_technical"].training_status == "no_candidate"
+    assert states["intraday_technical"].research_scoring_available is False
 
 
 def test_scoring_preserves_real_feature_values_and_remains_non_actionable(
     tmp_path: Path,
 ) -> None:
     catalog = _write_catalog(tmp_path)
-    _write_candidate(tmp_path / "data/models/swing_baseline")
+    _write_candidate(tmp_path / "data/models/swing/technical")
     for relative in (
-        "data/models/swing_event",
-        "data/models/intraday_event",
-        "data/models/intraday_baseline",
+        "data/models/swing/technical_with_catalyst",
+        "data/models/intraday/technical_with_catalyst",
+        "data/models/intraday/technical",
     ):
         _write_no_candidate(tmp_path / relative)
     features = pd.DataFrame(
@@ -107,7 +111,7 @@ def test_scoring_preserves_real_feature_values_and_remains_non_actionable(
     )
 
     result = service.predict(
-        model_id="swing_baseline",
+        model_id="swing_technical",
         tickers=["MSFT", "NVDA"],
         as_of=datetime(2026, 8, 10, 21, tzinfo=UTC),
     )
@@ -125,11 +129,11 @@ def test_scoring_preserves_real_feature_values_and_remains_non_actionable(
 
 def test_scoring_rejects_missing_features_instead_of_zero_filling(tmp_path: Path) -> None:
     catalog = _write_catalog(tmp_path)
-    _write_candidate(tmp_path / "data/models/swing_baseline")
+    _write_candidate(tmp_path / "data/models/swing/technical")
     for relative in (
-        "data/models/swing_event",
-        "data/models/intraday_event",
-        "data/models/intraday_baseline",
+        "data/models/swing/technical_with_catalyst",
+        "data/models/intraday/technical_with_catalyst",
+        "data/models/intraday/technical",
     ):
         _write_no_candidate(tmp_path / relative)
     service = ResearchModelService(
@@ -140,7 +144,7 @@ def test_scoring_rejects_missing_features_instead_of_zero_filling(tmp_path: Path
 
     with pytest.raises(ResearchFeatureUnavailableError, match="missing columns"):
         service.predict(
-            model_id="swing_baseline",
+            model_id="swing_technical",
             tickers=["MSFT"],
             as_of=datetime(2026, 8, 10, 21, tzinfo=UTC),
         )
@@ -151,14 +155,14 @@ def test_scoring_uses_fitted_model_feature_subset_in_declared_order(
 ) -> None:
     catalog = _write_catalog(tmp_path)
     _write_candidate(
-        tmp_path / "data/models/swing_baseline",
+        tmp_path / "data/models/swing/technical",
         feature_columns=("feature_a", "feature_b"),
         fitted_candidate=_FeatureBoundModel(("feature_b",)),
     )
     for relative in (
-        "data/models/swing_event",
-        "data/models/intraday_event",
-        "data/models/intraday_baseline",
+        "data/models/swing/technical_with_catalyst",
+        "data/models/intraday/technical_with_catalyst",
+        "data/models/intraday/technical",
     ):
         _write_no_candidate(tmp_path / relative)
     service = ResearchModelService(
@@ -177,7 +181,7 @@ def test_scoring_uses_fitted_model_feature_subset_in_declared_order(
     )
 
     result = service.predict(
-        model_id="swing_baseline",
+        model_id="swing_technical",
         tickers=["MSFT"],
         as_of=datetime(2026, 8, 10, 21, tzinfo=UTC),
     )
@@ -187,11 +191,11 @@ def test_scoring_uses_fitted_model_feature_subset_in_declared_order(
 
 def test_http_catalog_and_unavailable_model_are_explicit(tmp_path: Path) -> None:
     catalog = _write_catalog(tmp_path)
-    _write_candidate(tmp_path / "data/models/swing_baseline")
+    _write_candidate(tmp_path / "data/models/swing/technical")
     for relative in (
-        "data/models/swing_event",
-        "data/models/intraday_event",
-        "data/models/intraday_baseline",
+        "data/models/swing/technical_with_catalyst",
+        "data/models/intraday/technical_with_catalyst",
+        "data/models/intraday/technical",
     ):
         _write_no_candidate(tmp_path / relative)
     app = create_research_app(
@@ -208,7 +212,7 @@ def test_http_catalog_and_unavailable_model_are_explicit(tmp_path: Path) -> None
 
     prediction_response = client.post(
         "/v1/research/predict",
-        json={"model_id": "intraday_baseline", "tickers": ["MSFT"]},
+        json={"model_id": "intraday_technical", "tickers": ["MSFT"]},
     )
     assert prediction_response.status_code == 409
     assert "no candidate passed" in prediction_response.json()["detail"]
@@ -236,32 +240,32 @@ def _write_catalog(root: Path) -> Path:
 schema = "market_predictor.research_model_catalog.v1"
 
 [[models]]
-id = "swing_event_driven"
-label = "Swing - Event Driven"
+id = "swing_technical_with_catalyst"
+label = "Swing - Technical and Catalyst"
 mode = "swing"
 uses_catalyst = true
-artifact_directory = "data/models/swing_event"
+artifact_directory = "data/models/swing/technical_with_catalyst"
 
 [[models]]
-id = "swing_baseline"
-label = "Swing - Technical Baseline"
+id = "swing_technical"
+label = "Swing - Technical"
 mode = "swing"
 uses_catalyst = false
-artifact_directory = "data/models/swing_baseline"
+artifact_directory = "data/models/swing/technical"
 
 [[models]]
-id = "intraday_event_driven"
-label = "Intraday - Event Driven"
+id = "intraday_technical_with_catalyst"
+label = "Intraday - Technical and Catalyst"
 mode = "intraday"
 uses_catalyst = true
-artifact_directory = "data/models/intraday_event"
+artifact_directory = "data/models/intraday/technical_with_catalyst"
 
 [[models]]
-id = "intraday_baseline"
-label = "Intraday - Technical Baseline"
+id = "intraday_technical"
+label = "Intraday - Technical"
 mode = "intraday"
 uses_catalyst = false
-artifact_directory = "data/models/intraday_baseline"
+artifact_directory = "data/models/intraday/technical"
 """.strip()
         + "\n",
         encoding="utf-8",

@@ -10,10 +10,10 @@ from typing import Any, Literal, cast
 CATALOG_SCHEMA = "market_predictor.research_model_catalog.v1"
 EXPECTED_MODEL_IDS = frozenset(
     {
-        "swing_event_driven",
-        "swing_baseline",
-        "intraday_event_driven",
-        "intraday_baseline",
+        "swing_technical_with_catalyst",
+        "swing_technical",
+        "intraday_technical_with_catalyst",
+        "intraday_technical",
     }
 )
 

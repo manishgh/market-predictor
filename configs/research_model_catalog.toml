@@ -1,29 +1,29 @@
 schema = "market_predictor.research_model_catalog.v1"
 
 [[models]]
-id = "swing_event_driven"
-label = "Swing - Event Driven"
+id = "swing_technical_with_catalyst"
+label = "Swing - Technical and Catalyst"
 mode = "swing"
 uses_catalyst = true
-artifact_directory = "data/models/swing_v13_with_catalyst"
+artifact_directory = "data/models/swing/technical_with_catalyst"
 
 [[models]]
-id = "swing_baseline"
-label = "Swing - Technical Baseline"
+id = "swing_technical"
+label = "Swing - Technical"
 mode = "swing"
 uses_catalyst = false
-artifact_directory = "data/models/swing_v13_event_driven"
+artifact_directory = "data/models/swing/technical"
 
 [[models]]
-id = "intraday_event_driven"
-label = "Intraday - Event Driven"
+id = "intraday_technical_with_catalyst"
+label = "Intraday - Technical and Catalyst"
 mode = "intraday"
 uses_catalyst = true
-artifact_directory = "data/models/intraday_v5_with_catalyst"
+artifact_directory = "data/models/intraday/technical_with_catalyst"
 
 [[models]]
-id = "intraday_baseline"
-label = "Intraday - Technical Baseline"
+id = "intraday_technical"
+label = "Intraday - Technical"
 mode = "intraday"
 uses_catalyst = false
-artifact_directory = "data/models/intraday_v5_no_catalyst"
+artifact_directory = "data/models/intraday/technical"
