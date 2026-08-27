@@ -1207,6 +1207,26 @@ test, and task names.
    transports under `sources`, membership and identity under `universe`, issuer and
    global events under `catalysts`, reusable estimators and validation under
    `modeling`, and non-production experiments under `research`.
+   - **Cross-sectional research consolidation (`completed`).** Implementation commit
+     `ade847c` removes the `market_predictor.v3` source package and replaces active
+     chronology-named APIs and tests with behavior-based names. Generic contracts are
+     split among `core`, `evidence`, `modeling`, and `universe`; raw S&P Global archive
+     transport is under `sources/spglobal`; verified index changes and point-in-time
+     membership are under `universe/sp500`; reusable validation, calibration, and
+     ranking economics are under `modeling`; and candidate evaluation and development
+     experiments remain under `research`. An AST guard prevents production imports of
+     `research` or `commands`. The two audited rejected joblibs serialized against the
+     removed namespace were deleted while their manifests were retained; no other
+     model artifact was removed. Across the migrated modules and direct consumers, 330
+     focused test cases passed. Ruff, strict mypy on 44 source files, CLI import smoke,
+     diff checks, and post-review consumer reruns passed. The assigned senior reviewer
+     accepted the final diff with no P0, P1, or P2 finding.
+   - **Universe and catalyst authority migration (current subtask).** Move the remaining
+     source-independent security identity, issuer-event, SEC-filing, global-event, and
+     market-context authorities out of `edge_rebuild` into `universe`, `catalysts`,
+     `sources`, and `evidence`. Preserve immutable schemas and hash behavior, update
+     direct consumers and behavior-named tests, and add dependency guards before
+     deleting any duplicate implementation.
 4. **Swing and intraday package migration (`pending`).**
    Consolidate each horizon under descriptive `contracts`, `datasets`, `features`,
    `labels`, `training`, `evaluation`, and `live` packages and remove the intraday

@@ -536,10 +536,12 @@ rounds. Repository-wide Ruff and mypy remain open by design for later repair tas
 
 The **Serialized artifact and namespace inventory** is complete in implementation
 commit `3026450`. `docs/model_artifact_retention_inventory.json` is the authority for
-retention decisions. It records 53 source/test files importing `market_predictor.v3`,
-126 importing `market_predictor.edge_rebuild`, 171 chronology-named tracked paths, and
-two rejected serialized files that import `market_predictor.v3`. No serialized file in
-`data` imports either old namespace.
+retention decisions. Its original baseline recorded 53 source/test files importing
+`market_predictor.v3`, 126 importing `market_predictor.edge_rebuild`, 171
+chronology-named tracked paths, and two rejected serialized files importing
+`market_predictor.v3`. The later semantic package migration removed every source/test
+import of `market_predictor.v3` and retired those two namespace-bound joblibs while
+retaining their manifests. No serialized file in `data` imports either old namespace.
 
 The default research catalog remains active and now exposes four explicit model IDs:
 `swing_technical`, `swing_technical_with_catalyst`, `intraday_technical`, and
@@ -548,17 +550,39 @@ paths. All authority, manifest, and candidate hashes replay after the move. Only
 `swing_technical` has a research-scoring candidate; every model remains
 promotion-ineligible and non-actionable. Hash-bound specialist and rejection evidence,
 active-plan development evidence, raw data, canonical data, features, and research
-inputs were retained. No model output was deleted.
+inputs were retained. Only the two explicitly audited, rejected, unreferenced joblibs
+that depended on the removed Python namespace were deleted.
 
 Verification for `3026450`: 10 focused tests passed; touched Ruff and strict mypy
 passed; the default research service reported the four expected states; all four
 catalog bundle hashes and all six tracked specialist authority/manifest/request hashes
 matched. The assigned senior reviewer accepted the bounded diff with no P0/P1 finding.
 
-Exact next checkpoint: complete **Market evidence and research package migration**.
-Move shared contracts, lineage, source-independent market evidence, S&P membership,
-issuer/global catalyst authorities, reusable modeling utilities, and non-production
-intraday research into the semantic package layout. Update imports and behavior-named
-tests in the same bounded move. Do not add compatibility aliases and do not delete
-`market_predictor.v3` or `market_predictor.edge_rebuild` until all later horizon,
-governance, serving, and command consumers have migrated.
+Implementation commit `ade847c` completes **Cross-sectional research consolidation**.
+The `market_predictor.v3` source package is gone. Contracts now belong to `core`,
+`evidence`, `modeling`, or `universe`; S&P Global raw archive transport belongs to
+`sources/spglobal`; verified index changes and point-in-time membership belong to
+`universe/sp500`; production cross-sectional transforms belong to `intraday/features`;
+reusable validation and ranking economics belong to `modeling`; and development-only
+training, ablation, diagnostics, readiness, and candidate acceptance remain under
+`research/intraday_cross_sectional`. Production packages cannot import `research` or
+`commands`, enforced by an AST test. Active Python APIs and test files use behavior
+names; frozen persisted schema string values remain unchanged.
+
+Verification for `ade847c`: 330 focused test cases passed across migrated research,
+features, labels, model training, S&P archive/event reconstruction, membership, and
+direct consumers. Ruff passed; strict mypy passed on 44 source files; collection and
+research CLI imports succeeded; diff checks passed. Post-review cleanup restored
+formatter-only consumer churn, reran 20 consumer tests and five architecture/artifact
+tests, and retained only the manifests for the two retired namespace-bound joblibs.
+The assigned senior reviewer accepted the final staged diff with no P0, P1, or P2
+finding.
+
+Exact next checkpoint: complete **Universe and catalyst authority migration**. Move
+remaining source-independent security identity, issuer-event, SEC-filing,
+global-event, and market-context authorities out of `edge_rebuild` into `universe`,
+`catalysts`, `sources`, and `evidence`. Preserve immutable schemas and hash behavior,
+update direct consumers and behavior-named tests, and add dependency guards before
+deleting duplicate implementations. Do not add compatibility aliases. Do not delete
+`market_predictor.edge_rebuild` until all later horizon, governance, serving, and
+command consumers have migrated.
