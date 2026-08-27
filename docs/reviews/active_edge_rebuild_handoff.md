@@ -2,13 +2,13 @@
 
 Status: active
 
-Last updated: 2026-08-27
+Last updated: 2026-08-28
 
 Repository: `C:\project\market-predictor`
 
 Branch: `er-intraday-refactoring`
 
-Last completed implementation commit: `2b9e195` (`Move issuer event foundations into catalysts`)
+Last completed implementation commit: `9408515` (`Move swing catalyst decision authority into features`)
 
 ## Purpose
 
@@ -489,9 +489,9 @@ event polls as a new contiguous chain; any missed cutoff starts another separate
 
 ## Working Tree State
 
-Implementation commit `9244893` is pushed. The working tree was clean before this
-documentation closure. No scratch script, provider data, model artifact, or evidence
-authority was created, rewritten, or deleted by the SEC filing package move.
+Implementation commit `9408515` is pushed. The working tree was clean before this
+documentation closure. No provider data, model artifact, or evidence authority was
+created, rewritten, or deleted by the swing catalyst decision-authority move.
 
 ## Files To Read
 
@@ -690,11 +690,31 @@ Affected-file Ruff, strict mypy on 12 source files, compileall, removed-module s
 diff checks, and process checks passed. The assigned senior reviewer accepted the final
 diff with no P0, P1, or P2 finding.
 
-Exact next checkpoint: complete **swing issuer-event family cohort and decision
-authority migration**. Move the swing-specific cohort dataset authority from
-`edge_rebuild` to `swing/datasets` and its decision-time feature authority to
-`swing/features`. Keep reusable issuer classification and attribution in `catalysts`.
-Preserve cohort eligibility, source authorization, causal availability, coverage,
-artifact schemas, hashes, replay, and all decision-time values. Remove old modules and
-imports without aliases, add dependency/removal guards, run focused parity verification,
-and obtain the assigned reviewer's diff acceptance before checkpointing.
+Implementation commit `9408515` completes **swing catalyst decision authority
+migration**. The decision-time feature authority now belongs to
+`swing/features/catalyst_decision_authority.py`. Commands, serving, swing feature
+construction, live feature binding, and tests import that path directly; no alias or
+compatibility module remains. Persisted request, authority, manifest, lineage,
+decision-artifact, and coverage-artifact identity strings are frozen by tests. The old
+module/file and every import form are guarded against reintroduction. A separate AST
+guard rejects both `swing -> intraday` and `intraday -> swing` imports.
+
+Verification for `9408515`: 171 focused tests passed with one skipped; affected Ruff
+and strict mypy on six source files passed; compileall, old-reference scans, staged
+diff checks, and process/memory checks passed. The complete isolated suite passed 1,569
+tests with two skipped in 13 minutes 16 seconds. The assigned senior reviewer accepted
+the final diff with no P0, P1, or P2 finding. An earlier full-suite attempt produced
+setup-only errors after its repository-local pytest parent was removed; the clean rerun
+used an isolated external pytest directory and had no failures.
+
+Exact next checkpoint: split **horizon-neutral issuer-family evidence from
+horizon-specific assignments**. Do not move the current combined
+`edge_rebuild/issuer_event_family_authority.py` directly into `swing`. It publishes
+classified family events, source coverage, and unclassified evidence used by both
+horizons, while also publishing swing-specific assignments and cohort audit. Put the
+neutral evidence authority under `catalysts/issuer_events`; derive swing assignments
+and cohort audit under `swing/datasets`; make intraday consume only the neutral
+catalyst authority and build its own attachments. Preserve exact artifact schemas,
+types, hashes, source authorization, eligibility, availability, coverage, and strict
+replay. Obtain design review before editing and final diff acceptance before the next
+checkpoint.

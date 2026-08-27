@@ -1304,10 +1304,29 @@ test, and task names.
           source files, compileall, removed-module scans, diff checks, and process checks
           passed. The assigned senior reviewer accepted the final diff with no P0, P1,
           or P2 finding.
-       3. **Swing family and decision authorities (`current task`).** Move the
-          swing-specific family cohort authority to `swing/datasets` and the
-          swing-specific decision authority to `swing/features`.
-       4. Move precision sampling, review, and admission evidence to `governance`.
+       3. **Swing catalyst decision authority (`completed`).** Implementation commit
+          `9408515` moves the decision-time swing feature authority to
+          `swing/features/catalyst_decision_authority.py`. All consumers use the new
+          semantic path directly; the old module and test are absent and guarded.
+          Persisted request, authority, manifest, lineage, decision-artifact, and
+          coverage-artifact identities remain unchanged. A bidirectional architecture
+          guard now prohibits imports between `swing` and `intraday`. Verification
+          passed 171 focused tests with one skipped and the complete suite with 1,569
+          passed and 2 skipped. Affected Ruff, strict mypy on six source files,
+          compileall, removed-path scans, diff checks, and memory/process checks passed.
+          The assigned senior reviewer accepted the final diff with no P0, P1, or P2
+          finding.
+       4. **Issuer-family evidence and horizon assignment split (`current task`).**
+          Do not move the current combined `issuer_event_family_authority.py` directly
+          into `swing`: it publishes horizon-neutral classified events, source
+          coverage, and unclassified evidence that intraday also consumes, together
+          with swing-specific assignments and cohort audit. First separate the neutral
+          evidence authority under `catalysts/issuer_events`; then publish swing cohort
+          assignments/audit from `swing/datasets`, and let intraday consume only the
+          neutral catalyst authority for its own attachments. Preserve every persisted
+          schema, artifact type, hash, eligibility decision, availability value,
+          coverage state, and strict replay result.
+       5. Move precision sampling, review, and admission evidence to `governance`.
        The required dependency direction is `sources -> catalysts -> swing ->
        governance`; commands remain outer adapters.
 4. **Swing and intraday package migration (`pending`).**
