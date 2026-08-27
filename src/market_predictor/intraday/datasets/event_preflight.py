@@ -22,19 +22,11 @@ from market_predictor.canonical.store import (
     load_canonical_artifact,
     write_canonical_artifact,
 )
-from market_predictor.catalysts.issuer_events.classification import EVENT_FAMILY_POLICY_SHA256
+from market_predictor.catalysts.issuer_events.family_evidence import (
+    IssuerFamilyEvidence,
+    load_issuer_family_evidence,
+)
 from market_predictor.core.errors import DataReadinessError
-from market_predictor.edge_rebuild.issuer_event_family_authority import (
-    AUTHORITY_SCHEMA as EVENT_AUTHORITY_SCHEMA,
-)
-from market_predictor.edge_rebuild.issuer_event_family_authority import (
-    FAMILY_ASSIGNMENTS_ARTIFACT_TYPE,
-    FAMILY_COVERAGE_ARTIFACT_TYPE,
-    FAMILY_EVENTS_ARTIFACT_TYPE,
-)
-from market_predictor.edge_rebuild.issuer_event_family_authority import (
-    MANIFEST_SCHEMA as EVENT_MANIFEST_SCHEMA,
-)
 from market_predictor.intraday.datasets.history import json_sha256
 from market_predictor.intraday.training.training import (
     PublishedIntradayDataset,
@@ -105,14 +97,6 @@ class IntradayEventPreflightAuthority:
     verified_parent_events: pd.DataFrame | None = None
 
 
-@dataclass(frozen=True, slots=True)
-class _EventAuthoritySlice:
-    events: pd.DataFrame
-    assignments: pd.DataFrame
-    coverage: pd.DataFrame
-    projected_inventory_sha256: str
-
-
 def load_intraday_event_preflight_config(path: Path) -> IntradayEventPreflightConfig:
     with path.open("rb") as handle:
         raw = tomllib.load(handle)
@@ -141,154 +125,6 @@ def load_intraday_event_preflight_config(path: Path) -> IntradayEventPreflightCo
     return config
 
 
-def load_issuer_event_family_authority(
-    directory: Path,
-    *,
-    expected_authority_sha256: str | None = None,
-) -> _EventAuthoritySlice:
-    """Strictly load only the parent tables consumed by A5.1.
-
-    The parent contains thousands of unclassified research shards and a swing cohort
-    audit. Their identities remain bound by the parent manifest, but A5.1 neither
-    reads nor semantically rebuilds them.
-    """
-
-    manifest_path = directory / "_manifest.json"
-    authority_path = directory / "_authority.json"
-    manifest = _read_json(manifest_path)
-    authority = _read_json(authority_path)
-    authority_sha256 = file_sha256(authority_path)
-    if expected_authority_sha256 is not None and authority_sha256 != expected_authority_sha256:
-        raise DataReadinessError("A5.1 parent event authority identity differs")
-    request = manifest.get("request")
-    if (
-        manifest.get("schema") != EVENT_MANIFEST_SCHEMA
-        or manifest.get("state") != "complete"
-        or manifest.get("production_ready") is not False
-        or authority.get("schema") != EVENT_AUTHORITY_SCHEMA
-        or authority.get("state") != "complete"
-        or authority.get("artifact_sha256") != file_sha256(manifest_path)
-        or authority.get("production_ready") is not False
-        or manifest.get("event_family_policy_sha256") != EVENT_FAMILY_POLICY_SHA256
-        or authority.get("event_family_policy_sha256") != EVENT_FAMILY_POLICY_SHA256
-        or not isinstance(request, dict)
-        or json_sha256(request) != manifest.get("request_sha256")
-        or authority.get("request_sha256") != manifest.get("request_sha256")
-    ):
-        raise DataReadinessError("A5.1 parent event authority does not verify")
-    records = manifest.get("artifacts")
-    if not isinstance(records, dict):
-        raise DataReadinessError("A5.1 parent event artifact inventory is malformed")
-    specifications = {
-        "events": ("family_events.parquet", FAMILY_EVENTS_ARTIFACT_TYPE),
-        "assignments": ("family_assignments.parquet", FAMILY_ASSIGNMENTS_ARTIFACT_TYPE),
-        "coverage": ("family_coverage.parquet", FAMILY_COVERAGE_ARTIFACT_TYPE),
-    }
-    expected_inventory = {
-        "_authority.json",
-        "_manifest.json",
-        "family_events.parquet",
-        "family_events.parquet.manifest.json",
-        "family_assignments.parquet",
-        "family_assignments.parquet.manifest.json",
-        "family_coverage.parquet",
-        "family_coverage.parquet.manifest.json",
-        "cohort_audit.parquet",
-        "cohort_audit.parquet.manifest.json",
-    }
-    _verify_unclassified_parent_inventory(
-        directory,
-        manifest,
-        expected_inventory=expected_inventory,
-    )
-    observed_inventory = {
-        path.relative_to(directory).as_posix()
-        for path in directory.rglob("*")
-        if path.is_file()
-    }
-    if observed_inventory != expected_inventory:
-        raise DataReadinessError("A5.1 parent event recursive inventory differs")
-    projected_inventory_sha256 = json_sha256(
-        [
-            {"path": relative, "sha256": file_sha256(directory / relative)}
-            for relative in sorted(observed_inventory)
-        ]
-    )
-    frames: dict[str, pd.DataFrame] = {}
-    for name, (filename, artifact_type) in specifications.items():
-        frame, child = load_canonical_artifact(
-            directory / filename,
-            expected_type=artifact_type,
-            allow_research=True,
-        )
-        record = records.get(name)
-        child_inputs = child.get("inputs")
-        if (
-            not isinstance(record, dict)
-            or record.get("path") != filename
-            or record.get("rows") != len(frame)
-            or record.get("sha256") != child.get("artifact_sha256")
-            or not isinstance(child_inputs, dict)
-            or child_inputs.get("request_sha256") != manifest.get("request_sha256")
-        ):
-            raise DataReadinessError(f"A5.1 parent event {name} lineage differs")
-        frames[name] = frame
-    cohort, cohort_child = load_canonical_artifact(
-        directory / "cohort_audit.parquet",
-        expected_type="issuer_event_family_cohort_audit",
-        allow_research=True,
-    )
-    cohort_record = records.get("cohort_audit")
-    if (
-        not isinstance(cohort_record, dict)
-        or cohort_record.get("path") != "cohort_audit.parquet"
-        or cohort_record.get("rows") != len(cohort)
-        or cohort_record.get("sha256") != cohort_child.get("artifact_sha256")
-    ):
-        raise DataReadinessError("A5.1 parent event cohort-audit lineage differs")
-    return _EventAuthoritySlice(
-        events=frames["events"],
-        assignments=frames["assignments"],
-        coverage=frames["coverage"],
-        projected_inventory_sha256=projected_inventory_sha256,
-    )
-
-
-def _verify_unclassified_parent_inventory(
-    directory: Path,
-    manifest: Mapping[str, Any],
-    *,
-    expected_inventory: set[str],
-) -> None:
-    raw_records = manifest.get("unclassified_artifacts", [])
-    if not isinstance(raw_records, list):
-        raise DataReadinessError("A5.1 parent unclassified inventory is malformed")
-    request_sha256 = str(manifest.get("request_sha256", ""))
-    for raw in raw_records:
-        if not isinstance(raw, dict):
-            raise DataReadinessError("A5.1 parent unclassified record is malformed")
-        relative = str(raw.get("path", ""))
-        if not relative or Path(relative).is_absolute():
-            raise DataReadinessError("A5.1 parent unclassified path is invalid")
-        artifact = (directory / relative).resolve()
-        if directory.resolve() not in artifact.parents:
-            raise DataReadinessError("A5.1 parent unclassified path escapes authority")
-        child_manifest_path = artifact.with_suffix(artifact.suffix + ".manifest.json")
-        child = _read_json(child_manifest_path)
-        child_inputs = child.get("inputs")
-        if (
-            file_sha256(artifact) != raw.get("sha256")
-            or child.get("artifact_sha256") != raw.get("sha256")
-            or child.get("rows") != raw.get("rows")
-            or child.get("artifact_type") != "issuer_event_family_unclassified_events"
-            or not isinstance(child_inputs, dict)
-            or child_inputs.get("request_sha256") != request_sha256
-        ):
-            raise DataReadinessError("A5.1 parent unclassified artifact lineage differs")
-        expected_inventory.add(artifact.relative_to(directory).as_posix())
-        expected_inventory.add(child_manifest_path.relative_to(directory).as_posix())
-
-
 def publish_intraday_event_preflight(
     *,
     dataset_authority_directory: Path,
@@ -314,7 +150,7 @@ def publish_intraday_event_preflight(
         for path in event_authority_directories
     )
     event_authorities = [
-        load_issuer_event_family_authority(
+        load_issuer_family_evidence(
             path,
             expected_authority_sha256=authority_sha256,
         )
@@ -324,7 +160,7 @@ def publish_intraday_event_preflight(
         {
             "directory": str(path),
             "authority_sha256": authority_sha256,
-            "projected_inventory_sha256": authority.projected_inventory_sha256,
+            "projected_inventory_sha256": authority.full_inventory_sha256,
         }
         for (path, authority_sha256), authority in zip(
             event_parents, event_authorities, strict=True
@@ -561,10 +397,10 @@ def _load_intraday_event_preflight(
         if file_sha256(parent / "_authority.json") != expected:
             raise DataReadinessError("A5.1 parent event authority identity differs")
         if verify_parents:
-            projected = load_issuer_event_family_authority(
+            projected = load_issuer_family_evidence(
                 parent, expected_authority_sha256=expected
             )
-            if projected.projected_inventory_sha256 != _required_text(
+            if projected.full_inventory_sha256 != _required_text(
                 raw, "projected_inventory_sha256"
             ):
                 raise DataReadinessError(
@@ -641,14 +477,13 @@ def _load_intraday_event_preflight(
 
 
 def _combine_event_authorities(
-    authorities: Sequence[_EventAuthoritySlice],
+    authorities: Sequence[IssuerFamilyEvidence],
     *,
     config: IntradayEventPreflightConfig,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     event_parts: list[pd.DataFrame] = []
     coverage_parts: list[pd.DataFrame] = []
     for authority in authorities:
-        _validate_parent_event_authority(authority)
         event_parts.append(
             authority.events.loc[
                 authority.events["source_family"].astype(str).eq(config.source_family)
@@ -1346,26 +1181,6 @@ def _validate_production_availability(events: pd.DataFrame) -> None:
         raise DataReadinessError(
             "A5.1 production event does not have observed first-seen/revision-safe availability"
         )
-
-
-def _validate_parent_event_authority(authority: _EventAuthoritySlice) -> None:
-    assignments = authority.assignments
-    if assignments.empty:
-        return
-    assigned = assignments.loc[assignments["status"].astype(str).eq("assigned")]
-    if assigned.empty:
-        return
-    available = _utc(assigned["feature_available_at_utc"], "parent assignment availability")
-    decisions = _utc(assigned["decision_time_utc"], "parent assignment decision time")
-    if available.gt(decisions).any():
-        raise DataReadinessError("A5.1 parent authority assigns future event evidence")
-    if (
-        "source_security_id" in assigned.columns
-        and assigned["source_security_id"].astype(str)
-        .ne(assigned["security_id"].astype(str))
-        .any()
-    ):
-        raise DataReadinessError("A5.1 parent assignment issuer identity differs")
 
 
 def _timestamp_ns(values: pd.Series) -> np.ndarray[Any, np.dtype[np.int64]]:

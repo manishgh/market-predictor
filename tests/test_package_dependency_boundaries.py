@@ -54,6 +54,7 @@ REMOVED_PRODUCTION_MODULES = (
     "market_predictor.edge_rebuild.corpus_integrity",
     "market_predictor.edge_rebuild.global_event_authority",
     "market_predictor.edge_rebuild.global_event_collection",
+    "market_predictor.edge_rebuild.issuer_event_family_authority",
     "market_predictor.edge_rebuild.sec_filing_authority",
     "market_predictor.edge_rebuild.sec_filing_collection",
     "market_predictor.edge_rebuild.sec_identity_authority",
@@ -74,6 +75,7 @@ REMOVED_EDGE_REBUILD_FILES = (
     "corpus_integrity.py",
     "global_event_authority.py",
     "global_event_collection.py",
+    "issuer_event_family_authority.py",
     "sec_filing_authority.py",
     "sec_filing_collection.py",
     "sec_identity_authority.py",
@@ -281,6 +283,21 @@ def test_removed_issuer_event_foundation_import_guard_recognizes_every_import_fo
     ),
 )
 def test_removed_catalyst_decision_authority_import_guard_recognizes_every_import_form(statement: str) -> None:
+    tree = ast.parse(statement)
+    imported_names = tuple(name for node in ast.walk(tree) for name in _imported_names(node))
+    assert any(_matches_any_dependency(name, REMOVED_PRODUCTION_MODULES) for name in imported_names)
+
+
+@pytest.mark.parametrize(
+    "statement",
+    (
+        "import market_predictor.edge_rebuild.issuer_event_family_authority",
+        "import market_predictor.edge_rebuild.issuer_event_family_authority as authority",
+        "from market_predictor.edge_rebuild import issuer_event_family_authority",
+        "from market_predictor.edge_rebuild.issuer_event_family_authority import IssuerEventFamilyAuthority",
+    ),
+)
+def test_removed_issuer_family_authority_import_guard_recognizes_every_import_form(statement: str) -> None:
     tree = ast.parse(statement)
     imported_names = tuple(name for node in ast.walk(tree) for name in _imported_names(node))
     assert any(_matches_any_dependency(name, REMOVED_PRODUCTION_MODULES) for name in imported_names)

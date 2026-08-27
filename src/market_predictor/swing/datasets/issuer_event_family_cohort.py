@@ -1,4 +1,4 @@
-"""Immutable research authority for catalyst-driven swing event cohorts."""
+"""Immutable swing decision cohorts derived from issuer-family evidence."""
 from __future__ import annotations
 
 import gc
@@ -29,6 +29,7 @@ from market_predictor.canonical.store import (
     load_canonical_artifact,
     write_canonical_artifact,
 )
+from market_predictor.catalysts.issuer_events import family_evidence as issuer_family_evidence
 from market_predictor.catalysts.issuer_events.attribution_history import (
     load_event_attribution_history,
 )
@@ -39,76 +40,33 @@ from market_predictor.catalysts.issuer_events.classification import (
     EVENT_FAMILY_POLICY_VERSION,
     classify_event_families,
 )
+from market_predictor.catalysts.issuer_events.family_evidence import (
+    FAMILY_COVERAGE_COLUMNS,
+    FAMILY_EVENT_COLUMNS,
+)
 from market_predictor.core.errors import DataReadinessError
+from market_predictor.evidence.issuer_family_combined_envelope import (
+    AUTHORITY_SCHEMA,
+    COHORT_AUDIT_ARTIFACT_TYPE,
+    FAMILY_ASSIGNMENTS_ARTIFACT_TYPE,
+    FAMILY_COVERAGE_ARTIFACT_TYPE,
+    FAMILY_EVENTS_ARTIFACT_TYPE,
+    MANIFEST_SCHEMA,
+    UNCLASSIFIED_EVENTS_ARTIFACT_TYPE,
+)
 from market_predictor.resources import (
     assert_memory_budget,
     memory_audit,
     release_process_memory,
 )
 
-AUTHORITY_SCHEMA: Final = "edge_rebuild.issuer_event_family_authority.v2"
-MANIFEST_SCHEMA: Final = "edge_rebuild.issuer_event_family_manifest.v2"
 POLICY_SCHEMA: Final = "market_predictor.swing_event_family_authority.v2"
-FAMILY_EVENTS_ARTIFACT_TYPE: Final = "issuer_event_family_events"
-FAMILY_ASSIGNMENTS_ARTIFACT_TYPE: Final = "issuer_event_family_assignments"
-FAMILY_COVERAGE_ARTIFACT_TYPE: Final = "issuer_event_family_coverage"
-COHORT_AUDIT_ARTIFACT_TYPE: Final = "issuer_event_family_cohort_audit"
-UNCLASSIFIED_EVENTS_ARTIFACT_TYPE: Final = "issuer_event_family_unclassified_events"
-FAMILY_STATUSES: Final = frozenset(
-    {"admitted", "blocked_missing_source", "absent"}
-)
-
-FAMILY_EVENT_COLUMNS: Final = (
-    "family_event_id",
-    "source_event_id",
-    "relation_id",
-    "source_security_id",
-    "source_ticker",
-    "security_id",
-    "ticker",
-    "source_family",
-    "event_family",
-    "classification_state",
-    "classification_rule_id",
-    "classification_basis",
-    "matched_text",
-    "published_at_utc",
-    "event_available_at_utc",
-    "relation_available_at_utc",
-    "feature_available_at_utc",
-    "availability_policy",
-    "relation_channel",
-    "relation_score",
-    "research_eligible",
-    "production_eligible",
-    "exclusion_reason",
-    "event_family_policy_version",
-    "event_family_policy_sha256",
-    "schema_version",
-)
 FAMILY_ASSIGNMENT_EXTRA_COLUMNS: Final = (
     "event_family",
     "original_source_family",
     "source_event_id",
     "relation_id",
     "event_family_policy_sha256",
-)
-FAMILY_COVERAGE_COLUMNS: Final = (
-    "collection_id",
-    "chunk_id",
-    "security_id",
-    "ticker",
-    "source_family",
-    "event_family",
-    "requested_start_utc",
-    "requested_end_utc",
-    "completed_at_utc",
-    "coverage_state",
-    "missingness_known",
-    "zero_event_semantics",
-    "research_eligible",
-    "production_eligible",
-    "schema_version",
 )
 COHORT_AUDIT_COLUMNS: Final = (
     "event_family",
@@ -127,7 +85,7 @@ COHORT_AUDIT_COLUMNS: Final = (
 
 
 @dataclass(frozen=True, slots=True)
-class SwingEventFamilyPolicy:
+class SwingIssuerFamilyCohortPolicy:
     minimum_decision_date: date
     eligible_channels: tuple[str, ...]
     source_families: tuple[str, ...]
@@ -138,7 +96,7 @@ class SwingEventFamilyPolicy:
 
 
 @dataclass(frozen=True, slots=True)
-class IssuerEventFamilyAuthority:
+class SwingIssuerFamilyCohort:
     directory: Path
     events: pd.DataFrame
     assignments: pd.DataFrame
@@ -149,7 +107,7 @@ class IssuerEventFamilyAuthority:
     authority: Mapping[str, object]
 
 
-def load_swing_event_family_policy(path: Path) -> SwingEventFamilyPolicy:
+def load_swing_issuer_family_cohort_policy(path: Path) -> SwingIssuerFamilyCohortPolicy:
     with path.open("rb") as handle:
         raw = tomllib.load(handle)
     if raw.get("schema_version") != POLICY_SCHEMA:
@@ -202,7 +160,7 @@ def load_swing_event_family_policy(path: Path) -> SwingEventFamilyPolicy:
         raise DataReadinessError(
             "event-family policy source mapping differs from classifier policy"
         )
-    return SwingEventFamilyPolicy(
+    return SwingIssuerFamilyCohortPolicy(
         minimum_decision_date=date.fromisoformat(str(raw["minimum_decision_date"])),
         eligible_channels=channels,
         source_families=source_families,
@@ -216,105 +174,27 @@ def load_swing_event_family_policy(path: Path) -> SwingEventFamilyPolicy:
 def _validate_source_family_allowlist(
     frame: pd.DataFrame,
     *,
-    policy: SwingEventFamilyPolicy,
+    policy: SwingIssuerFamilyCohortPolicy,
     context: str,
 ) -> None:
-    _validate_observed_source_families(
+    issuer_family_evidence.validate_observed_source_families(
         frame,
         allowed_sources=policy.source_families,
         context=context,
     )
 
 
-def _validate_observed_source_families(
-    frame: pd.DataFrame,
-    *,
-    allowed_sources: tuple[str, ...],
-    context: str,
-    source_column: str = "source_family",
-) -> None:
-    if source_column not in frame.columns:
-        raise DataReadinessError(f"{context} is missing {source_column}")
-    raw_sources = frame[source_column]
-    normalized = raw_sources.fillna("").astype(str).str.lower().str.strip()
-    observed = set(normalized.tolist())
-    unsupported = sorted(observed.difference(allowed_sources))
-    noncanonical = raw_sources.fillna("").astype(str).ne(normalized)
-    if "" in observed or unsupported or bool(noncanonical.any()):
-        detail = ", ".join(unsupported or ["<empty-or-noncanonical>"])
-        raise DataReadinessError(
-            f"{context} contains source families outside policy: {detail}"
-        )
-
-
-def _validate_family_source_pairs(
-    frame: pd.DataFrame,
-    *,
-    context: str,
-    source_column: str = "source_family",
-) -> None:
-    required = {"event_family", source_column}
-    missing = sorted(required.difference(frame.columns))
-    if missing:
-        raise DataReadinessError(
-            f"{context} is missing family/source columns: {', '.join(missing)}"
-        )
-    invalid: set[str] = set()
-    for family, source in frame.loc[:, ["event_family", source_column]].itertuples(
-        index=False,
-        name=None,
-    ):
-        family_name = str(family)
-        source_name = str(source).lower().strip()
-        allowed = ALLOWED_SOURCE_FAMILIES_BY_FAMILY.get(family_name)
-        if allowed is None or source_name not in allowed:
-            invalid.add(f"{family_name}:{source_name}")
-    if invalid:
-        raise DataReadinessError(
-            f"{context} contains non-authoritative family/source pairs: "
-            + ", ".join(sorted(invalid))
-        )
-
-
 def _source_supports_family(
     *,
     source_family: str,
     event_family: str,
-    policy: SwingEventFamilyPolicy,
+    policy: SwingIssuerFamilyCohortPolicy,
 ) -> bool:
     source = source_family.lower().strip()
     if source not in policy.source_families:
         return False
     allowed = ALLOWED_SOURCE_FAMILIES_BY_FAMILY.get(event_family)
     return allowed is not None and source in allowed
-
-
-def _family_statuses(
-    families: tuple[str, ...],
-    events: pd.DataFrame,
-    coverage: pd.DataFrame,
-) -> dict[str, str]:
-    statuses: dict[str, str] = {}
-    for family in families:
-        family_coverage = coverage.loc[
-            coverage["event_family"].astype(str).eq(family)
-        ]
-        usable_source = bool(
-            not family_coverage.empty
-            and family_coverage["research_eligible"].astype(bool).any()
-        )
-        family_events = events.loc[
-            events["event_family"].astype(str).eq(family)
-            & events["research_eligible"].astype(bool)
-        ]
-        if not usable_source:
-            status = "blocked_missing_source"
-        elif family_events.empty:
-            status = "absent"
-        else:
-            status = "admitted"
-        statuses[family] = status
-    return statuses
 
 
 def _identity_intervals_by_security(
@@ -411,7 +291,7 @@ def _attach_causal_issuer_companies(
     return output
 
 
-def publish_issuer_event_family_authority(
+def publish_swing_issuer_family_cohort(
     *,
     collection_dir: Path,
     collection_audit_path: Path,
@@ -419,10 +299,11 @@ def publish_issuer_event_family_authority(
     decisions_path: Path,
     policy_path: Path,
     output_directory: Path,
-) -> IssuerEventFamilyAuthority:
+) -> SwingIssuerFamilyCohort:
     """Publish normalized family cohorts from original events and issuer relations."""
 
-    policy = load_swing_event_family_policy(policy_path)
+    policy = load_swing_issuer_family_cohort_policy(policy_path)
+    output_directory = output_directory.resolve()
     if output_directory.exists():
         raise DataReadinessError(f"issuer event-family authority is immutable: {output_directory}")
     collection_manifest_path = collection_dir / "_manifest.json"
@@ -588,7 +469,9 @@ def publish_issuer_event_family_authority(
                     unclassified,
                     unclassified_path,
                     artifact_type=UNCLASSIFIED_EVENTS_ARTIFACT_TYPE,
-                    audit=_unclassified_event_audit(unclassified),
+                    audit=issuer_family_evidence.issuer_family_unclassified_event_audit(
+                        unclassified
+                    ),
                     inputs={
                         "request_sha256": request_sha256,
                         "source_event_sha256": str(
@@ -603,10 +486,6 @@ def publish_issuer_event_family_authority(
                 unclassified_path.with_name(
                     f"{unclassified_path.name}.lock"
                 ).unlink(missing_ok=True)
-                _rewrite_artifact_path(
-                    unclassified_path,
-                    output_directory / "unclassified" / unclassified_path.name,
-                )
                 unclassified_records.append(
                     {
                         "chunk_id": chunk_id,
@@ -673,7 +552,7 @@ def publish_issuer_event_family_authority(
             decisions,
             policy=policy,
         )
-        family_status = _family_statuses(
+        family_status = issuer_family_evidence.family_statuses(
             policy.event_families,
             family_events,
             family_coverage,
@@ -684,7 +563,7 @@ def publish_issuer_event_family_authority(
             family_events,
             staging / "family_events.parquet",
             artifact_type=FAMILY_EVENTS_ARTIFACT_TYPE,
-            audit=_event_audit(family_events),
+            audit=issuer_family_evidence.issuer_family_event_audit(family_events),
             inputs={"request_sha256": request_sha256},
             production_ready=False,
         )
@@ -704,7 +583,7 @@ def publish_issuer_event_family_authority(
             family_coverage,
             staging / "family_coverage.parquet",
             artifact_type=FAMILY_COVERAGE_ARTIFACT_TYPE,
-            audit=_coverage_audit(family_coverage),
+            audit=issuer_family_evidence.issuer_family_coverage_audit(family_coverage),
             inputs={"request_sha256": request_sha256},
             production_ready=False,
         )
@@ -721,11 +600,6 @@ def publish_issuer_event_family_authority(
             },
             production_ready=False,
         )
-        for key in artifacts:
-            _rewrite_artifact_path(
-                staging / _artifact_filename(key),
-                output_directory / _artifact_filename(key),
-            )
         for path in staging.glob("*.lock"):
             path.unlink(missing_ok=True)
         manifest = {
@@ -781,71 +655,47 @@ def publish_issuer_event_family_authority(
             "production_ready": False,
         }
         _atomic_json(staging / "_authority.json", authority)
-        load_issuer_event_family_authority(staging)
+        load_swing_issuer_family_cohort(staging)
+        for key in artifacts:
+            _rewrite_artifact_path(
+                staging / _artifact_filename(key),
+                output_directory / _artifact_filename(key),
+            )
+        for record in unclassified_records:
+            relative = _required_text(record, "path")
+            _rewrite_artifact_path(
+                staging / relative,
+                output_directory / relative,
+            )
         os.replace(staging, output_directory)
-        return load_issuer_event_family_authority(output_directory)
+        return load_swing_issuer_family_cohort(output_directory)
     except Exception:
         shutil.rmtree(staging, ignore_errors=True)
         raise
 
 
-def load_issuer_event_family_authority(
+def load_swing_issuer_family_cohort(
     directory: Path,
     *,
     expected_authority_sha256: str | None = None,
-) -> IssuerEventFamilyAuthority:
-    manifest_path = directory / "_manifest.json"
-    authority_path = directory / "_authority.json"
-    manifest = _json_object(manifest_path)
-    authority = _json_object(authority_path)
-    if expected_authority_sha256 is not None and file_sha256(authority_path) != expected_authority_sha256:
-        raise DataReadinessError("issuer event-family authority identity does not match")
-    if (
-        manifest.get("schema") != MANIFEST_SCHEMA
-        or manifest.get("state") != "complete"
-        or manifest.get("production_ready") is not False
-        or authority.get("schema") != AUTHORITY_SCHEMA
-        or authority.get("state") != "complete"
-        or authority.get("artifact_sha256") != file_sha256(manifest_path)
-        or authority.get("production_ready") is not False
-    ):
-        raise DataReadinessError("issuer event-family authority does not verify")
-    request = manifest.get("request")
-    if (
-        not isinstance(request, dict)
-        or _json_sha256(request) != manifest.get("request_sha256")
-        or authority.get("request_sha256") != manifest.get("request_sha256")
-        or manifest.get("event_family_policy_sha256") != EVENT_FAMILY_POLICY_SHA256
-        or authority.get("event_family_policy_sha256") != EVENT_FAMILY_POLICY_SHA256
-    ):
-        raise DataReadinessError("issuer event-family authority request or policy hash fails")
-    expected_files = {
-        "_authority.json",
-        "_manifest.json",
-        "family_events.parquet",
-        "family_events.parquet.manifest.json",
-        "family_assignments.parquet",
-        "family_assignments.parquet.manifest.json",
-        "family_coverage.parquet",
-        "family_coverage.parquet.manifest.json",
-        "cohort_audit.parquet",
-        "cohort_audit.parquet.manifest.json",
-    }
-    observed_files = {path.name for path in directory.iterdir() if path.is_file()}
-    if observed_files != expected_files:
-        raise DataReadinessError("issuer event-family authority file inventory differs")
-    unclassified_records = _unclassified_records(manifest)
-    _verify_unclassified_artifacts(
+) -> SwingIssuerFamilyCohort:
+    evidence = issuer_family_evidence.load_issuer_family_evidence(
         directory,
-        unclassified_records,
-        request_sha256=str(manifest["request_sha256"]),
-        expected_rows=manifest.get("unclassified_event_rows"),
+        expected_authority_sha256=expected_authority_sha256,
     )
-    frames: dict[str, pd.DataFrame] = {}
+    directory = evidence.directory
+    manifest = evidence.manifest
+    authority = evidence.authority
+    request = manifest.get("request")
+    if not isinstance(request, dict):
+        raise DataReadinessError("issuer event-family authority request is malformed")
+    unclassified_records = list(evidence.unclassified_artifact_records)
+    frames: dict[str, pd.DataFrame] = {
+        "events": evidence.events,
+        "coverage": evidence.coverage,
+    }
     artifact_types = {
-        "events": FAMILY_EVENTS_ARTIFACT_TYPE,
         "assignments": FAMILY_ASSIGNMENTS_ARTIFACT_TYPE,
-        "coverage": FAMILY_COVERAGE_ARTIFACT_TYPE,
         "cohort_audit": COHORT_AUDIT_ARTIFACT_TYPE,
     }
     manifest_artifacts = manifest.get("artifacts")
@@ -883,9 +733,7 @@ def load_issuer_event_family_authority(
         raise DataReadinessError(
             "issuer event-family cross-artifact lineage does not verify"
         )
-    _event_audit(frames["events"]).raise_for_failure()
     _assignment_audit(frames["assignments"]).raise_for_failure()
-    _coverage_audit(frames["coverage"]).raise_for_failure()
     _cohort_audit(frames["cohort_audit"]).raise_for_failure()
     decisions_path = Path(_required_text(request, "decisions_path"))
     decisions, decisions_manifest = load_canonical_artifact(
@@ -903,7 +751,7 @@ def load_issuer_event_family_authority(
     policy_path = Path(_required_text(request, "policy_path"))
     if file_sha256(policy_path) != request.get("policy_sha256"):
         raise DataReadinessError("issuer event-family policy file lineage fails")
-    policy = load_swing_event_family_policy(policy_path)
+    policy = load_swing_issuer_family_cohort_policy(policy_path)
     expected_cohort = _build_cohort_audit(
         frames["events"],
         frames["assignments"],
@@ -930,71 +778,23 @@ def load_issuer_event_family_authority(
         manifest.get("research_source_families"),
         "research_source_families",
     )
-    if (
-        _text_tuple(manifest.get("event_families"), "event_families")
-        != EVENT_FAMILIES
-        or any(source != source.lower() for source in manifest_sources)
-        or not {
-            source
-            for family in EVENT_FAMILIES
-            for source in ALLOWED_SOURCE_FAMILIES_BY_FAMILY[family]
-        }.issubset(manifest_sources)
-    ):
-        raise DataReadinessError("issuer event-family manifest policy inventory fails")
-    _validate_observed_source_families(
-        frames["events"],
-        allowed_sources=manifest_sources,
-        context="authority events",
-    )
-    _validate_observed_source_families(
-        frames["coverage"],
-        allowed_sources=manifest_sources,
-        context="authority coverage",
-    )
-    _validate_observed_source_families(
+    issuer_family_evidence.validate_observed_source_families(
         frames["assignments"],
         allowed_sources=manifest_sources,
         context="authority assignments",
         source_column="original_source_family",
     )
-    _validate_family_source_pairs(
-        frames["events"],
-        context="authority events",
-    )
-    _validate_family_source_pairs(
-        frames["coverage"],
-        context="authority coverage",
-    )
-    _validate_family_source_pairs(
+    issuer_family_evidence.validate_family_source_pairs(
         frames["assignments"],
         context="authority assignments",
         source_column="original_source_family",
     )
-    expected_family_status = _family_statuses(
-        EVENT_FAMILIES,
-        frames["events"],
-        frames["coverage"],
-    )
-    manifest_family_status = manifest.get("family_status")
     if (
-        not isinstance(manifest_family_status, dict)
-        or set(manifest_family_status) != set(EVENT_FAMILIES)
-        or not set(str(value) for value in manifest_family_status.values()).issubset(
-            FAMILY_STATUSES
-        )
-        or manifest_family_status != expected_family_status
-    ):
-        raise DataReadinessError("issuer event-family manifest family status fails")
-    if (
-        len(frames["events"]) != manifest.get("event_rows")
-        or len(frames["assignments"]) != manifest.get("assignment_rows")
-        or len(frames["coverage"]) != manifest.get("coverage_rows")
+        len(frames["assignments"]) != manifest.get("assignment_rows")
         or len(frames["cohort_audit"]) != manifest.get("cohort_audit_rows")
-        or bool(frames["events"]["production_eligible"].astype(bool).any())
-        or bool(frames["coverage"]["production_eligible"].astype(bool).any())
     ):
         raise DataReadinessError("issuer event-family authority row totals or research mode fail")
-    return IssuerEventFamilyAuthority(
+    return SwingIssuerFamilyCohort(
         directory=directory.resolve(),
         events=frames["events"],
         assignments=frames["assignments"],
@@ -1010,7 +810,7 @@ def _build_family_events(
     events: pd.DataFrame,
     relations: pd.DataFrame,
     *,
-    policy: SwingEventFamilyPolicy,
+    policy: SwingIssuerFamilyCohortPolicy,
     coverage_known: bool,
 ) -> pd.DataFrame:
     _validate_source_family_allowlist(
@@ -1180,7 +980,7 @@ def _build_family_coverage(
     *,
     relation_chunk_ids: set[str],
     blind_security_ids: set[str],
-    policy: SwingEventFamilyPolicy,
+    policy: SwingIssuerFamilyCohortPolicy,
     collection_completed_at: object,
 ) -> pd.DataFrame:
     _validate_source_family_allowlist(
@@ -1262,7 +1062,7 @@ def _build_cohort_audit(
     coverage: pd.DataFrame,
     decisions: pd.DataFrame,
     *,
-    policy: SwingEventFamilyPolicy,
+    policy: SwingIssuerFamilyCohortPolicy,
 ) -> pd.DataFrame:
     eligible = events.loc[events["research_eligible"].astype(bool)].copy()
     assigned = assignments.loc[assignments["status"].astype(str).eq("assigned")].copy()
@@ -1276,7 +1076,7 @@ def _build_cohort_audit(
     decisions["calendar_month"] = decisions["decision_time_utc"].dt.strftime("%Y-%m")
     decisions["sector"] = decisions.get("sector", "unknown")
     max_window = max(policy.windows.values())
-    _validate_replicated_family_coverage(coverage)
+    issuer_family_evidence.validate_replicated_family_coverage(coverage)
     coverage_sources = sorted(set(coverage["source_family"].astype(str)))
     known_source_cache: dict[str, set[str]] = {}
     for source_family in coverage_sources:
@@ -1423,51 +1223,6 @@ def _build_cohort_audit(
     return pd.DataFrame.from_records(records, columns=COHORT_AUDIT_COLUMNS)
 
 
-def _validate_replicated_family_coverage(coverage: pd.DataFrame) -> None:
-    comparison_columns = [
-        column for column in FAMILY_COVERAGE_COLUMNS if column != "event_family"
-    ]
-    for source_family, source_rows in coverage.groupby("source_family", sort=True):
-        families = sorted(set(source_rows["event_family"].astype(str)))
-        if not families:
-            continue
-        reference = (
-            source_rows.loc[
-                source_rows["event_family"].astype(str).eq(families[0]),
-                comparison_columns,
-            ]
-            .sort_values(
-                ["security_id", "chunk_id", "requested_start_utc"],
-                kind="stable",
-            )
-            .reset_index(drop=True)
-        )
-        for family in families[1:]:
-            candidate = (
-                source_rows.loc[
-                    source_rows["event_family"].astype(str).eq(family),
-                    comparison_columns,
-                ]
-                .sort_values(
-                    ["security_id", "chunk_id", "requested_start_utc"],
-                    kind="stable",
-                )
-                .reset_index(drop=True)
-            )
-            try:
-                pd.testing.assert_frame_equal(
-                    candidate,
-                    reference,
-                    check_exact=True,
-                    check_dtype=False,
-                )
-            except AssertionError as exc:
-                raise DataReadinessError(
-                    "event-family coverage differs across replicated families for "
-                    f"source {source_family}"
-                ) from exc
-
-
 def _known_coverage_decision_ids(
     coverage: pd.DataFrame,
     decisions: pd.DataFrame,
@@ -1560,39 +1315,6 @@ def _cohort_record(
     }
 
 
-def _event_audit(frame: pd.DataFrame) -> CanonicalAuditReport:
-    failures = len(set(FAMILY_EVENT_COLUMNS).difference(frame.columns))
-    if not failures and not frame.empty:
-        failures += int(frame["family_event_id"].astype(str).duplicated().sum())
-        failures += int(frame["production_eligible"].astype(bool).sum())
-        failures += int(
-            (
-                frame["research_eligible"].astype(bool)
-                & (
-                    frame["classification_state"].astype(str).ne("classified")
-                    | frame["relation_channel"].astype(str).ne("direct_issuer")
-                )
-            ).sum()
-        )
-    return _audit("issuer_event_family_events", failures, len(frame), "family, issuer, relation, and availability verify")
-
-
-def _unclassified_event_audit(frame: pd.DataFrame) -> CanonicalAuditReport:
-    failures = len(set(FAMILY_EVENT_COLUMNS).difference(frame.columns))
-    if not failures and not frame.empty:
-        failures += int(frame["family_event_id"].astype(str).duplicated().sum())
-        failures += int(frame["classification_state"].astype(str).ne("unclassified").sum())
-        failures += int(frame["event_family"].astype(str).ne("").sum())
-        failures += int(frame["research_eligible"].astype(bool).sum())
-        failures += int(frame["production_eligible"].astype(bool).sum())
-    return _audit(
-        "issuer_event_family_unclassified_events",
-        failures,
-        len(frame),
-        "unclassified issuer events remain explicit audit evidence",
-    )
-
-
 def _assignment_audit(frame: pd.DataFrame) -> CanonicalAuditReport:
     failures = len(set(FAMILY_ASSIGNMENT_EXTRA_COLUMNS).difference(frame.columns))
     if not failures and not frame.empty:
@@ -1601,19 +1323,6 @@ def _assignment_audit(frame: pd.DataFrame) -> CanonicalAuditReport:
         assigned = frame["status"].astype(str).eq("assigned")
         failures += int((assigned & (decision.isna() | available.gt(decision))).sum())
     return _audit("issuer_event_family_assignments", failures, len(frame), "exact decision assignment cutoff verifies")
-
-
-def _coverage_audit(frame: pd.DataFrame) -> CanonicalAuditReport:
-    failures = len(set(FAMILY_COVERAGE_COLUMNS).difference(frame.columns))
-    if not failures and not frame.empty:
-        failures += int(frame["production_eligible"].astype(bool).sum())
-        failures += int(
-            (
-                frame["research_eligible"].astype(bool)
-                != frame["missingness_known"].astype(bool)
-            ).sum()
-        )
-    return _audit("issuer_event_family_coverage", failures, len(frame), "known zero and unknown coverage remain distinct")
 
 
 def _cohort_audit(frame: pd.DataFrame) -> CanonicalAuditReport:
@@ -1693,104 +1402,6 @@ def _records_by_chunk(manifest: Mapping[str, object], name: str) -> dict[str, Ma
             raise DataReadinessError(f"{name} contains duplicate chunk IDs")
         result[chunk_id] = value
     return result
-
-
-def _unclassified_records(
-    manifest: Mapping[str, object],
-) -> list[Mapping[str, object]]:
-    raw = manifest.get("unclassified_artifacts")
-    if not isinstance(raw, list):
-        raise DataReadinessError(
-            "issuer event-family unclassified inventory is malformed"
-        )
-    records: list[Mapping[str, object]] = []
-    chunk_ids: set[str] = set()
-    for value in raw:
-        if not isinstance(value, dict):
-            raise DataReadinessError(
-                "issuer event-family unclassified record is malformed"
-            )
-        chunk_id = _required_text(value, "chunk_id")
-        if chunk_id in chunk_ids:
-            raise DataReadinessError(
-                "issuer event-family unclassified chunks are duplicated"
-            )
-        chunk_ids.add(chunk_id)
-        records.append(value)
-    return records
-
-
-def _verify_unclassified_artifacts(
-    directory: Path,
-    records: list[Mapping[str, object]],
-    *,
-    request_sha256: str,
-    expected_rows: object,
-) -> None:
-    root = directory.resolve()
-    child_directory = root / "unclassified"
-    if not child_directory.is_dir():
-        raise DataReadinessError(
-            "issuer event-family unclassified directory is missing"
-        )
-    expected_files = {
-        name
-        for record in records
-        for name in (
-            f"{_required_text(record, 'chunk_id')}.parquet",
-            f"{_required_text(record, 'chunk_id')}.parquet.manifest.json",
-        )
-    }
-    if (
-        {path.name for path in child_directory.iterdir()} != expected_files
-        or any(path.is_dir() for path in child_directory.iterdir())
-    ):
-        raise DataReadinessError(
-            "issuer event-family unclassified child inventory differs"
-        )
-    total_rows = 0
-    for record in records:
-        chunk_id = _required_text(record, "chunk_id")
-        expected_relative = f"unclassified/{chunk_id}.parquet"
-        if record.get("path") != expected_relative:
-            raise DataReadinessError(
-                "issuer event-family unclassified path does not verify"
-            )
-        path = child_directory / f"{chunk_id}.parquet"
-        frame, child = load_canonical_artifact(
-            path,
-            expected_type=UNCLASSIFIED_EVENTS_ARTIFACT_TYPE,
-            allow_research=True,
-        )
-        child_inputs = child.get("inputs")
-        rows = record.get("rows")
-        if (
-            not isinstance(rows, int)
-            or isinstance(rows, bool)
-            or rows <= 0
-            or len(frame) != rows
-            or child.get("artifact_sha256") != record.get("sha256")
-            or not isinstance(child_inputs, dict)
-            or child_inputs.get("request_sha256") != request_sha256
-            or child_inputs.get("source_event_sha256")
-            != record.get("source_event_sha256")
-            or child_inputs.get("relation_sha256")
-            != record.get("relation_sha256")
-        ):
-            raise DataReadinessError(
-                "issuer event-family unclassified lineage does not verify"
-            )
-        _unclassified_event_audit(frame).raise_for_failure()
-        total_rows += len(frame)
-    if (
-        not isinstance(expected_rows, int)
-        or isinstance(expected_rows, bool)
-        or expected_rows < 0
-        or total_rows != expected_rows
-    ):
-        raise DataReadinessError(
-            "issuer event-family unclassified row total does not verify"
-        )
 
 
 def _artifact_filename(key: str) -> str:

@@ -12,8 +12,8 @@ from typing import Any
 import pandas as pd
 import pytest
 
-from market_predictor.canonical.store import file_sha256
 import market_predictor.intraday.datasets.event_preflight as preflight
+from market_predictor.canonical.store import file_sha256
 from market_predictor.core.errors import DataReadinessError
 
 
@@ -103,7 +103,7 @@ def harness(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> _Harness:
         return authority
 
     monkeypatch.setattr(preflight, "load_published_intraday_dataset", load_dataset)
-    monkeypatch.setattr(preflight, "load_issuer_event_family_authority", load_events)
+    monkeypatch.setattr(preflight, "load_issuer_family_evidence", load_events)
     policy_path = tmp_path / "intraday-event-preflight.toml"
     _write_policy(policy_path)
     return _Harness(
@@ -205,9 +205,6 @@ def test_known_zero_and_unknown_coverage_remain_distinct(
     for authority in harness.event_authorities.values():
         authority.events = authority.events.loc[
             ~authority.events["security_id"].astype(str).isin({known_zero, unknown})
-        ].reset_index(drop=True)
-        authority.assignments = authority.assignments.loc[
-            ~authority.assignments["security_id"].astype(str).isin({known_zero, unknown})
         ].reset_index(drop=True)
         known_mask = authority.coverage["security_id"].astype(str).eq(known_zero)
         authority.coverage.loc[known_mask, "coverage_state"] = "observed_empty"
@@ -329,8 +326,6 @@ def test_ticker_and_compatible_cik_reconcile_historical_event_namespace(
         authority.events.loc[event_mask, "source_security_id"] = source_security_id
         coverage_mask = authority.coverage["ticker"].astype(str).eq(ticker)
         authority.coverage.loc[coverage_mask, "security_id"] = source_security_id
-        assignment_mask = authority.assignments["ticker"].astype(str).eq(ticker)
-        authority.assignments.loc[assignment_mask, "security_id"] = source_security_id
 
     result = harness.publish(tmp_path / "reconciled-namespace")
     attachments = _frame(result, "attachments")
@@ -372,18 +367,10 @@ def test_future_evidence_poison_is_rejected(
     tmp_path: Path,
 ) -> None:
     authority = next(iter(harness.event_authorities.values()))
-    event_id = str(authority.events.loc[0, "family_event_id"])
-    decision_id = str(authority.assignments.loc[0, "decision_id"])
-    decision_time = pd.Timestamp(authority.assignments.loc[0, "decision_time_utc"])
-    authority.events.loc[0, "feature_available_at_utc"] = decision_time + pd.Timedelta(
-        minutes=1
-    )
-    authority.assignments.loc[0, "feature_available_at_utc"] = decision_time + pd.Timedelta(
-        minutes=1
-    )
+    publication_time = pd.Timestamp(authority.events.loc[0, "published_at_utc"])
+    authority.events.loc[0, "feature_available_at_utc"] = publication_time - pd.Timedelta(minutes=1)
 
-    assert event_id and decision_id
-    with pytest.raises(DataReadinessError, match="future|decision|availability|point-in-time"):
+    with pytest.raises(DataReadinessError, match="availability|publication|point-in-time"):
         harness.publish(tmp_path / "future-poison")
 
 
@@ -606,7 +593,6 @@ def _decision_frame() -> pd.DataFrame:
 
 def _event_authority(directory: Path, decisions: pd.DataFrame) -> SimpleNamespace:
     event_rows: list[dict[str, object]] = []
-    assignment_rows: list[dict[str, object]] = []
     coverage_rows: list[dict[str, object]] = []
     for row in decisions.itertuples(index=False):
         available = pd.Timestamp(row.decision_time_utc) - pd.Timedelta(hours=1)
@@ -638,22 +624,6 @@ def _event_authority(directory: Path, decisions: pd.DataFrame) -> SimpleNamespac
                 "exclusion_reason": "",
             }
         )
-        assignment_rows.append(
-            {
-                "decision_id": row.decision_id,
-                "security_id": row.security_id,
-                "ticker": row.ticker,
-                "decision_time_utc": row.decision_time_utc,
-                "event_id": event_id,
-                "family_event_id": event_id,
-                "source_event_id": source_event_id,
-                "feature_available_at_utc": available,
-                "window_name": "1d",
-                "status": "assigned",
-                "event_family": "analyst_revision",
-                "original_source_family": "alpaca",
-            }
-        )
         coverage_rows.append(
             {
                 "collection_id": f"collection-{row.decision_id}",
@@ -678,9 +648,7 @@ def _event_authority(directory: Path, decisions: pd.DataFrame) -> SimpleNamespac
     return SimpleNamespace(
         directory=directory,
         events=pd.DataFrame.from_records(event_rows),
-        assignments=pd.DataFrame.from_records(assignment_rows),
         coverage=pd.DataFrame.from_records(coverage_rows),
-        cohort_audit=pd.DataFrame(),
         manifest={
             "state": "complete",
             "production_ready": True,
@@ -689,7 +657,7 @@ def _event_authority(directory: Path, decisions: pd.DataFrame) -> SimpleNamespac
         },
         authority={"state": "complete", "production_ready": True},
         authority_sha256=authority_sha256,
-        projected_inventory_sha256=hashlib.sha256(
+        full_inventory_sha256=hashlib.sha256(
             str(directory.resolve()).encode("utf-8")
         ).hexdigest(),
     )

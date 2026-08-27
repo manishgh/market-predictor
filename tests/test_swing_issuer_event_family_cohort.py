@@ -15,19 +15,31 @@ from market_predictor.canonical.store import (
     manifest_path_for,
     write_canonical_artifact,
 )
+from market_predictor.catalysts.issuer_events import family_evidence
 from market_predictor.catalysts.issuer_events.attribution_history import (
     attribute_alpaca_news_history,
     load_event_attribution_history,
 )
+from market_predictor.catalysts.issuer_events.family_evidence import load_issuer_family_evidence
 from market_predictor.catalysts.issuer_events.news_history_contracts import (
     NEWS_HISTORY_MANIFEST_SCHEMA,
 )
 from market_predictor.core.errors import DataReadinessError
-from market_predictor.edge_rebuild import issuer_event_family_authority as authority_module
-from market_predictor.edge_rebuild.issuer_event_family_authority import (
-    IssuerEventFamilyAuthority,
-    load_issuer_event_family_authority,
-    publish_issuer_event_family_authority,
+from market_predictor.evidence.issuer_family_combined_envelope import (
+    AUTHORITY_SCHEMA,
+    COHORT_AUDIT_ARTIFACT_TYPE,
+    FAMILY_ASSIGNMENTS_ARTIFACT_TYPE,
+    FAMILY_COVERAGE_ARTIFACT_TYPE,
+    FAMILY_EVENTS_ARTIFACT_TYPE,
+    MANIFEST_SCHEMA,
+    NEUTRAL_PROJECTION_SCHEMA,
+    UNCLASSIFIED_EVENTS_ARTIFACT_TYPE,
+)
+from market_predictor.swing.datasets import issuer_event_family_cohort as authority_module
+from market_predictor.swing.datasets.issuer_event_family_cohort import (
+    SwingIssuerFamilyCohort,
+    load_swing_issuer_family_cohort,
+    publish_swing_issuer_family_cohort,
 )
 
 _POLICY_PATH = Path(__file__).parents[1] / "configs" / "swing_event_family_policy.toml"
@@ -42,6 +54,17 @@ class _Inputs:
     attribution_dir: Path
     decisions_path: Path
     output_directory: Path
+
+
+def test_retained_issuer_family_envelope_identities_are_frozen() -> None:
+    assert AUTHORITY_SCHEMA == "edge_rebuild.issuer_event_family_authority.v2"
+    assert MANIFEST_SCHEMA == "edge_rebuild.issuer_event_family_manifest.v2"
+    assert FAMILY_EVENTS_ARTIFACT_TYPE == "issuer_event_family_events"
+    assert FAMILY_ASSIGNMENTS_ARTIFACT_TYPE == "issuer_event_family_assignments"
+    assert FAMILY_COVERAGE_ARTIFACT_TYPE == "issuer_event_family_coverage"
+    assert COHORT_AUDIT_ARTIFACT_TYPE == "issuer_event_family_cohort_audit"
+    assert UNCLASSIFIED_EVENTS_ARTIFACT_TYPE == "issuer_event_family_unclassified_events"
+    assert NEUTRAL_PROJECTION_SCHEMA == "market_predictor.issuer_family_neutral_projection.v1"
 
 
 def test_publishes_immutable_multilabel_authority(tmp_path: Path) -> None:
@@ -69,13 +92,75 @@ def test_publishes_immutable_multilabel_authority(tmp_path: Path) -> None:
     assert set(assigned["window_name"]) == {"1d", "3d"}
 
     expected_identity = file_sha256(inputs.output_directory / "_authority.json")
-    loaded = load_issuer_event_family_authority(
+    loaded = load_swing_issuer_family_cohort(
         inputs.output_directory,
         expected_authority_sha256=expected_identity,
     )
     assert_frame_equal(loaded.events, authority.events)
     with pytest.raises(DataReadinessError, match="immutable"):
         _publish(inputs)
+
+
+def test_neutral_projection_exposes_only_events_and_coverage(tmp_path: Path) -> None:
+    inputs = _write_inputs(tmp_path)
+    cohort = _publish(inputs)
+
+    evidence = load_issuer_family_evidence(
+        inputs.output_directory,
+        expected_authority_sha256=file_sha256(inputs.output_directory / "_authority.json"),
+    )
+
+    assert_frame_equal(evidence.events, cohort.events)
+    assert_frame_equal(evidence.coverage, cohort.coverage)
+    assert not hasattr(evidence, "assignments")
+    assert not hasattr(evidence, "cohort_audit")
+    assert evidence.combined_envelope_sha256 == file_sha256(
+        inputs.output_directory / "_authority.json"
+    )
+    assert len(evidence.full_inventory_sha256) == 64
+    assert len(evidence.neutral_projection_sha256) == 64
+
+
+def test_neutral_projection_identity_excludes_swing_decisions(tmp_path: Path) -> None:
+    inputs = _write_inputs(tmp_path)
+    _publish(inputs)
+    first = load_issuer_family_evidence(inputs.output_directory)
+
+    decisions, decision_manifest = load_canonical_artifact(
+        inputs.decisions_path,
+        expected_type="decisions",
+        allow_research=True,
+    )
+    decisions.loc[:, "sector"] = "Healthcare"
+    rewritten = write_canonical_artifact(
+        decisions,
+        inputs.decisions_path,
+        artifact_type="decisions",
+        audit=_audit(len(decisions)),
+        inputs={
+            str(key): str(value)
+            for key, value in dict(decision_manifest.get("inputs", {})).items()
+        },
+        production_ready=False,
+    )
+    assert rewritten["artifact_sha256"] != decision_manifest["artifact_sha256"]
+    inputs.decisions_path.with_name(
+        f"{inputs.decisions_path.name}.lock"
+    ).unlink(missing_ok=True)
+    second_inputs = _Inputs(
+        collection_dir=inputs.collection_dir,
+        collection_audit_path=inputs.collection_audit_path,
+        attribution_dir=inputs.attribution_dir,
+        decisions_path=inputs.decisions_path,
+        output_directory=tmp_path / "second-authority",
+    )
+    _publish(second_inputs)
+    second = load_issuer_family_evidence(second_inputs.output_directory)
+
+    assert_frame_equal(first.events, second.events)
+    assert_frame_equal(first.coverage, second.coverage)
+    assert first.neutral_projection_sha256 == second.neutral_projection_sha256
+    assert first.full_inventory_sha256 != second.full_inventory_sha256
 
 
 def test_unclassified_event_is_retained_but_ineligible(tmp_path: Path) -> None:
@@ -139,7 +224,7 @@ def test_future_availability_poison_is_rejected(tmp_path: Path) -> None:
         _relation(event_id="future-poison", relation_id="future-poison-relation")
     )
 
-    policy = authority_module.load_swing_event_family_policy(_POLICY_PATH)
+    policy = authority_module.load_swing_issuer_family_cohort_policy(_POLICY_PATH)
     with pytest.raises(
         DataReadinessError,
         match="published|availability|future|backdated",
@@ -244,7 +329,7 @@ def test_causal_issuer_company_is_attached_from_identity_authority() -> None:
 
 
 def test_alpaca_coverage_does_not_cover_sec_material_events() -> None:
-    policy = authority_module.load_swing_event_family_policy(_POLICY_PATH)
+    policy = authority_module.load_swing_issuer_family_cohort_policy(_POLICY_PATH)
     coverage = authority_module._build_family_coverage(
         _coverage(
             _coverage_row(
@@ -264,7 +349,7 @@ def test_alpaca_coverage_does_not_cover_sec_material_events() -> None:
 
 
 def test_replicated_family_coverage_must_remain_identical() -> None:
-    policy = authority_module.load_swing_event_family_policy(_POLICY_PATH)
+    policy = authority_module.load_swing_issuer_family_cohort_policy(_POLICY_PATH)
     coverage = authority_module._build_family_coverage(
         _coverage(
             _coverage_row(
@@ -285,12 +370,12 @@ def test_replicated_family_coverage_must_remain_identical() -> None:
     )
 
     with pytest.raises(DataReadinessError, match="differs across replicated"):
-        authority_module._validate_replicated_family_coverage(coverage)
+        family_evidence.validate_replicated_family_coverage(coverage)
 
 
 @pytest.mark.parametrize("target", ["events", "coverage"])
 def test_source_family_outside_policy_is_rejected(target: str) -> None:
-    policy = authority_module.load_swing_event_family_policy(_POLICY_PATH)
+    policy = authority_module.load_swing_issuer_family_cohort_policy(_POLICY_PATH)
     if target == "events":
         events = _events(_event(source_family="unsupported"))
         with pytest.raises(DataReadinessError, match="outside policy"):
@@ -319,7 +404,7 @@ def test_source_family_outside_policy_is_rejected(target: str) -> None:
 
 
 def test_cohort_assignments_require_corresponding_source_coverage() -> None:
-    policy = authority_module.load_swing_event_family_policy(_POLICY_PATH)
+    policy = authority_module.load_swing_issuer_family_cohort_policy(_POLICY_PATH)
     coverage = authority_module._build_family_coverage(
         _coverage(
             _coverage_row(
@@ -486,7 +571,82 @@ def test_tampered_child_or_authority_is_rejected(
         _write_json(authority_path, payload)
 
     with pytest.raises(DataReadinessError):
-        load_issuer_event_family_authority(inputs.output_directory)
+        load_swing_issuer_family_cohort(inputs.output_directory)
+    with pytest.raises(DataReadinessError):
+        load_issuer_family_evidence(inputs.output_directory)
+
+
+@pytest.mark.parametrize(
+    ("target", "value"),
+    [
+        ("authority_artifact", "wrong.json"),
+        ("request_schema", "wrong.request.v1"),
+        ("classifier_policy", "0" * 64),
+        ("child_artifact_path", "C:\\outside\\family_events.parquet"),
+        ("child_schema", "wrong.canonical.manifest.v1"),
+        ("child_canonical_version", "wrong.canonical.v1"),
+    ],
+)
+def test_malformed_envelope_contract_is_rejected(
+    tmp_path: Path,
+    target: str,
+    value: str,
+) -> None:
+    inputs = _write_inputs(tmp_path)
+    _publish(inputs)
+    manifest_path = inputs.output_directory / "_manifest.json"
+    authority_path = inputs.output_directory / "_authority.json"
+
+    if target == "authority_artifact":
+        authority = _read_json(authority_path)
+        authority["artifact"] = value
+        _write_json(authority_path, authority)
+    elif target in {"request_schema", "classifier_policy"}:
+        manifest = _read_json(manifest_path)
+        request = manifest["request"]
+        assert isinstance(request, dict)
+        request[
+            "schema" if target == "request_schema" else "classifier_policy_sha256"
+        ] = value
+        _write_json(manifest_path, manifest)
+        authority = _read_json(authority_path)
+        authority["artifact_sha256"] = file_sha256(manifest_path)
+        _write_json(authority_path, authority)
+    else:
+        child_path = manifest_path_for(
+            inputs.output_directory / "family_events.parquet"
+        )
+        child = _read_json(child_path)
+        child[
+            {
+                "child_artifact_path": "artifact_path",
+                "child_schema": "schema",
+                "child_canonical_version": "canonical_schema_version",
+            }[target]
+        ] = value
+        _write_json(child_path, child)
+
+    with pytest.raises(DataReadinessError):
+        load_issuer_family_evidence(inputs.output_directory)
+    with pytest.raises(DataReadinessError):
+        load_swing_issuer_family_cohort(inputs.output_directory)
+
+
+def test_symlinked_envelope_artifact_is_rejected(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    inputs = _write_inputs(tmp_path)
+    _publish(inputs)
+    original = Path.is_symlink
+
+    def _is_symlink(path: Path) -> bool:
+        return path.name == "family_events.parquet" or original(path)
+
+    monkeypatch.setattr(Path, "is_symlink", _is_symlink)
+
+    with pytest.raises(DataReadinessError, match="symlink"):
+        load_issuer_family_evidence(inputs.output_directory)
 
 
 def test_manifest_family_status_is_recomputed_by_loader(tmp_path: Path) -> None:
@@ -504,7 +664,7 @@ def test_manifest_family_status_is_recomputed_by_loader(tmp_path: Path) -> None:
     _write_json(authority_path, authority)
 
     with pytest.raises(DataReadinessError, match="family status"):
-        load_issuer_event_family_authority(inputs.output_directory)
+        load_swing_issuer_family_cohort(inputs.output_directory)
 
 
 def test_coherently_resigned_cohort_tamper_fails_semantic_replay(
@@ -512,6 +672,9 @@ def test_coherently_resigned_cohort_tamper_fails_semantic_replay(
 ) -> None:
     inputs = _write_inputs(tmp_path)
     _publish(inputs)
+    original_projection = load_issuer_family_evidence(
+        inputs.output_directory
+    ).neutral_projection_sha256
     cohort_path = inputs.output_directory / "cohort_audit.parquet"
     cohort, child = load_canonical_artifact(
         cohort_path,
@@ -553,8 +716,11 @@ def test_coherently_resigned_cohort_tamper_fails_semantic_replay(
     authority["artifact_sha256"] = file_sha256(manifest_path)
     _write_json(authority_path, authority)
 
+    neutral = load_issuer_family_evidence(inputs.output_directory)
+    assert neutral.neutral_projection_sha256 == original_projection
+
     with pytest.raises(DataReadinessError, match="semantic replay"):
-        load_issuer_event_family_authority(inputs.output_directory)
+        load_swing_issuer_family_cohort(inputs.output_directory)
 
 
 def test_publication_is_deterministic_under_input_order_shuffle(tmp_path: Path) -> None:
@@ -581,6 +747,27 @@ def test_publication_is_deterministic_under_input_order_shuffle(tmp_path: Path) 
     assert_frame_equal(first.cohort_audit, second.cohort_audit)
 
 
+def test_relative_output_directory_publishes_canonical_paths(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    inputs = _write_inputs(tmp_path / "inputs")
+    monkeypatch.chdir(tmp_path)
+    relative_inputs = _Inputs(
+        collection_dir=inputs.collection_dir,
+        collection_audit_path=inputs.collection_audit_path,
+        attribution_dir=inputs.attribution_dir,
+        decisions_path=inputs.decisions_path,
+        output_directory=Path("relative-authority"),
+    )
+
+    published = _publish(relative_inputs)
+    loaded = load_swing_issuer_family_cohort(tmp_path / "relative-authority")
+
+    assert published.directory == (tmp_path / "relative-authority").resolve()
+    assert_frame_equal(loaded.events, published.events)
+
+
 def test_proxy_evidence_is_never_production_eligible(tmp_path: Path) -> None:
     authority = _publish(_write_inputs(tmp_path))
 
@@ -595,8 +782,8 @@ def test_proxy_evidence_is_never_production_eligible(tmp_path: Path) -> None:
     assert "proxy" in str(authority.manifest["promotion_blocker"])
 
 
-def _publish(inputs: _Inputs) -> IssuerEventFamilyAuthority:
-    return publish_issuer_event_family_authority(
+def _publish(inputs: _Inputs) -> SwingIssuerFamilyCohort:
+    return publish_swing_issuer_family_cohort(
         collection_dir=inputs.collection_dir,
         collection_audit_path=inputs.collection_audit_path,
         attribution_dir=inputs.attribution_dir,

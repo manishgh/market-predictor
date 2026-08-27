@@ -23,9 +23,6 @@ from market_predictor.catalysts.issuer_events.classification import (
     issuer_event_rule_variant,
 )
 from market_predictor.core.errors import DataReadinessError
-from market_predictor.edge_rebuild.issuer_event_family_authority import (
-    IssuerEventFamilyAuthority,
-)
 from market_predictor.edge_rebuild.issuer_event_precision_audit import (
     IssuerEventPrecisionAudit,
     load_issuer_event_precision_audit,
@@ -43,6 +40,10 @@ from market_predictor.resources import (
     assert_peak_memory_budget,
     memory_audit,
     release_process_memory,
+)
+from market_predictor.swing.datasets.issuer_event_family_cohort import (
+    SwingIssuerFamilyCohort,
+    load_swing_issuer_family_cohort,
 )
 
 POLICY_SCHEMA: Final = "market_predictor.swing_analyst_revision_ablation.v1"
@@ -455,7 +456,7 @@ def load_swing_analyst_revision_ablation(
 
 @dataclass(frozen=True, slots=True)
 class _EventSources:
-    authorities: tuple[IssuerEventFamilyAuthority, ...]
+    authorities: tuple[SwingIssuerFamilyCohort, ...]
     audits: tuple[IssuerEventPrecisionAudit, ...]
     events: pd.DataFrame
     assignments: pd.DataFrame
@@ -514,23 +515,30 @@ def _load_event_sources(
             raise DataReadinessError("analyst subtype precision gates differ")
     if any(audit.source_authority is None for audit in audits):
         raise DataReadinessError("precision audit did not retain its verified event authority")
-    authorities = tuple(
+    neutral_authorities = tuple(
         audit.source_authority
         for audit in audits
         if audit.source_authority is not None
     )
     expected_directories = tuple(path.resolve() for path in authority_directories)
-    observed_directories = tuple(authority.directory for authority in authorities)
+    observed_directories = tuple(authority.directory for authority in neutral_authorities)
     if observed_directories != expected_directories:
         raise DataReadinessError(
             "precision audits do not bind the supplied event authority directories"
         )
     observed_hashes = {
         file_sha256(authority.directory / "_authority.json")
-        for authority in authorities
+        for authority in neutral_authorities
     }
     if bound_authority_hashes != observed_hashes:
         raise DataReadinessError("precision audits do not bind the supplied event authorities")
+    authorities = tuple(
+        load_swing_issuer_family_cohort(
+            path,
+            expected_authority_sha256=file_sha256(path / "_authority.json"),
+        )
+        for path in authority_directories
+    )
     events = pd.concat([authority.events for authority in authorities], ignore_index=True)
     assignments = pd.concat([authority.assignments for authority in authorities], ignore_index=True)
     coverage = pd.concat([authority.coverage for authority in authorities], ignore_index=True)

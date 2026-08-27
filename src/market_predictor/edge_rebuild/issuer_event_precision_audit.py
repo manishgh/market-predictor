@@ -38,11 +38,11 @@ from market_predictor.catalysts.issuer_events.classification import (
     ALLOWED_SOURCE_FAMILIES_BY_FAMILY,
     EVENT_FAMILIES,
 )
-from market_predictor.core.errors import DataReadinessError
-from market_predictor.edge_rebuild.issuer_event_family_authority import (
-    IssuerEventFamilyAuthority,
-    load_issuer_event_family_authority,
+from market_predictor.catalysts.issuer_events.family_evidence import (
+    IssuerFamilyEvidence,
+    load_issuer_family_evidence,
 )
+from market_predictor.core.errors import DataReadinessError
 from market_predictor.resources import (
     assert_memory_budget,
     memory_audit,
@@ -277,7 +277,7 @@ class IssuerEventPrecisionSample:
     sample: pd.DataFrame
     manifest: Mapping[str, object]
     authority: Mapping[str, object]
-    source_authority: IssuerEventFamilyAuthority | None
+    source_authority: IssuerFamilyEvidence | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -288,7 +288,7 @@ class IssuerEventPrecisionAudit:
     rule_variant_metrics: pd.DataFrame
     manifest: Mapping[str, object]
     authority: Mapping[str, object]
-    source_authority: IssuerEventFamilyAuthority | None
+    source_authority: IssuerFamilyEvidence | None
 
 
 def load_issuer_event_precision_policy(path: Path) -> IssuerEventPrecisionPolicy:
@@ -369,7 +369,7 @@ def publish_issuer_event_precision_sample(
     if output_directory.exists():
         raise DataReadinessError(f"issuer-event precision sample is immutable: {output_directory}")
     policy = load_issuer_event_precision_policy(policy_path)
-    issuer_authority = load_issuer_event_family_authority(authority_directory)
+    issuer_authority = load_issuer_family_evidence(authority_directory)
     _guard_memory(policy, "issuer-event authority publication replay")
     authority_path = authority_directory / "_authority.json"
     authority_sha256 = file_sha256(authority_path)
@@ -506,7 +506,7 @@ def load_issuer_event_precision_sample(
     source_sha256 = _required_hash(request, "issuer_event_authority_sha256")
     if source_authority_path != (source_directory / "_authority.json").resolve():
         raise DataReadinessError("issuer-event precision source authority path differs")
-    source = load_issuer_event_family_authority(
+    source = load_issuer_family_evidence(
         source_directory,
         expected_authority_sha256=source_sha256,
     )
@@ -952,7 +952,7 @@ def wilson_lower_bound(
 
 
 def _build_deterministic_sample(
-    authority: IssuerEventFamilyAuthority,
+    authority: IssuerFamilyEvidence,
     *,
     policy: IssuerEventPrecisionPolicy,
     policy_sha256: str,
@@ -1121,7 +1121,7 @@ def _index_eligible_authority_events(
 
 
 def _strict_attribution_context(
-    authority: IssuerEventFamilyAuthority,
+    authority: IssuerFamilyEvidence,
 ) -> tuple[EventAttributionHistory, Path]:
     authority_request = authority.manifest.get("request")
     if not isinstance(authority_request, dict):

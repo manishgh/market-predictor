@@ -24,9 +24,6 @@ from market_predictor.catalysts.issuer_events.news_history_contracts import (
 )
 from market_predictor.core.errors import DataReadinessError
 from market_predictor.edge_rebuild import issuer_event_precision_audit as audit_module
-from market_predictor.edge_rebuild.issuer_event_family_authority import (
-    publish_issuer_event_family_authority,
-)
 from market_predictor.edge_rebuild.issuer_event_precision_audit import (
     IssuerEventPrecisionSample,
     finalize_issuer_event_precision_audit,
@@ -34,6 +31,9 @@ from market_predictor.edge_rebuild.issuer_event_precision_audit import (
     load_issuer_event_precision_sample,
     publish_issuer_event_precision_sample,
     wilson_lower_bound,
+)
+from market_predictor.swing.datasets.issuer_event_family_cohort import (
+    publish_swing_issuer_family_cohort,
 )
 
 _ROOT = Path(__file__).parents[1]
@@ -777,7 +777,7 @@ def _publish_inputs(root: Path) -> _PublishedInputs:
         out_dir=attribution_dir,
     )
     assert attribution["status"] == "complete", json.dumps(attribution, default=str)
-    publish_issuer_event_family_authority(
+    publish_swing_issuer_family_cohort(
         collection_dir=collection_dir,
         collection_audit_path=collection_audit,
         attribution_dir=attribution_dir,

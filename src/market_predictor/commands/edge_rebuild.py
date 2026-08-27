@@ -51,9 +51,6 @@ from market_predictor.edge_rebuild.history_contracts import (
 from market_predictor.edge_rebuild.history_materialization import (
     reorganize_intraday_history,
 )
-from market_predictor.edge_rebuild.issuer_event_family_authority import (
-    publish_issuer_event_family_authority,
-)
 from market_predictor.edge_rebuild.issuer_event_precision_audit import (
     finalize_issuer_event_precision_audit,
     publish_issuer_event_precision_sample,
@@ -141,6 +138,9 @@ from market_predictor.sources.gdelt import (
     validate_gdelt_document_request,
 )
 from market_predictor.sources.sec import SecRequestGovernor, SecSource
+from market_predictor.swing.datasets.issuer_event_family_cohort import (
+    publish_swing_issuer_family_cohort,
+)
 from market_predictor.swing.features.catalyst_decision_authority import (
     publish_catalyst_decision_authority,
 )
@@ -333,9 +333,9 @@ def register_edge_rebuild_commands(app: typer.Typer, console: Any) -> None:
             }
         )
 
-    @app.command("publish-edge-issuer-event-family-authority")
-    @serialized_heavy_job("publish-edge-issuer-event-family-authority")
-    def publish_edge_issuer_event_family_authority(
+    @app.command("publish-swing-issuer-family-cohort")
+    @serialized_heavy_job("publish-swing-issuer-family-cohort")
+    def publish_swing_issuer_family_cohort_command(
         collection_dir: Path = typer.Option(
             ...,
             help="Completed immutable canonical ticker-event collection.",
@@ -363,7 +363,7 @@ def register_edge_rebuild_commands(app: typer.Typer, console: Any) -> None:
     ) -> None:
         """Publish normalized issuer-event specialist cohorts and coverage."""
 
-        result = publish_issuer_event_family_authority(
+        result = publish_swing_issuer_family_cohort(
             collection_dir=collection_dir,
             collection_audit_path=collection_audit,
             attribution_dir=attribution_dir,
