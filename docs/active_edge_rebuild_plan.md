@@ -1221,12 +1221,29 @@ test, and task names.
      focused test cases passed. Ruff, strict mypy on 44 source files, CLI import smoke,
      diff checks, and post-review consumer reruns passed. The assigned senior reviewer
      accepted the final diff with no P0, P1, or P2 finding.
-   - **Universe and catalyst authority migration (current subtask).** Move the remaining
-     source-independent security identity, issuer-event, SEC-filing, global-event, and
-     market-context authorities out of `edge_rebuild` into `universe`, `catalysts`,
-     `sources`, and `evidence`. Preserve immutable schemas and hash behavior, update
-     direct consumers and behavior-named tests, and add dependency guards before
-     deleting any duplicate implementation.
+   - **Historical membership and security identity authority migration (`completed`).**
+     Implementation commit `60cff69` moves corpus integrity to `evidence`, membership
+     identity validation and SEC identity authority to `universe`, and historical S&P
+     transition and membership authorities to `universe/sp500`. Every direct consumer
+     now imports the semantic package; the five old modules are absent and guarded
+     against reintroduction across source, tests, and scripts. A universe dependency
+     allowlist enforces the current lower-layer boundary. Persisted schemas, hashes,
+     locking, memory gates, and authority behavior are unchanged. Sixty authority tests
+     and 106 consumer tests passed before review; four additional import-form poison
+     tests passed after review remediation. Ruff, strict mypy on 15 source files,
+     import smoke, diff checks, and process checks passed. The assigned senior reviewer
+     accepted the final diff with no P0, P1, or P2 finding.
+   - **Prospective observed-membership source and authority split (current subtask).**
+     Split provider URLs, HTTP collection, response validation, and raw replay from
+     `edge_rebuild/sp500_observed_memberships.py` into `sources/spglobal`; move verified
+     observed membership construction and loading into `universe/sp500`. Preserve the
+     immutable raw/authority schemas and exact replay behavior, update direct consumers
+     and behavior-named tests, and remove the old combined module only after guarded
+     zero-reference verification.
+   - **Issuer and global catalyst authority migration (`pending`).** Move the remaining
+     source-independent issuer-event, SEC-filing, global-event, and market-context
+     authorities out of `edge_rebuild` into `catalysts`, `sources`, and `evidence`
+     without changing source coverage, availability, or causal semantics.
 4. **Swing and intraday package migration (`pending`).**
    Consolidate each horizon under descriptive `contracts`, `datasets`, `features`,
    `labels`, `training`, `evaluation`, and `live` packages and remove the intraday

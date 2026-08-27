@@ -578,11 +578,30 @@ tests, and retained only the manifests for the two retired namespace-bound jobli
 The assigned senior reviewer accepted the final staged diff with no P0, P1, or P2
 finding.
 
-Exact next checkpoint: complete **Universe and catalyst authority migration**. Move
-remaining source-independent security identity, issuer-event, SEC-filing,
-global-event, and market-context authorities out of `edge_rebuild` into `universe`,
-`catalysts`, `sources`, and `evidence`. Preserve immutable schemas and hash behavior,
-update direct consumers and behavior-named tests, and add dependency guards before
-deleting duplicate implementations. Do not add compatibility aliases. Do not delete
+Implementation commit `60cff69` completes **Historical membership and security identity
+authority migration**. Corpus-integrity checks and `IntegrityThresholds` now belong to
+`evidence/corpus_integrity.py`; membership identity validation and SEC identity
+authority belong to `universe`; historical S&P transition and membership authorities
+belong to `universe/sp500`. All direct source, command, and test imports were updated.
+The five old `edge_rebuild` modules are absent. Architecture tests enforce a temporary
+universe dependency allowlist and scan source, tests, and scripts for direct, aliased,
+package-module, and symbol imports of removed paths. Persisted schema strings and
+authority/hash behavior remain unchanged.
+
+Verification for `60cff69`: 60 authority tests and 106 direct-consumer tests passed.
+After review, four additional poison cases brought the architecture guard to eight
+passing cases. Ruff passed; strict mypy passed on 15 source files; semantic authority
+and command imports succeeded; diff checks passed; no Python worker remained. The
+assigned senior reviewer accepted the final staged diff with no P0, P1, or P2 finding.
+
+Exact next checkpoint: complete **Prospective observed-membership source and authority
+split**. The existing combined module contains both provider HTTP acquisition and
+membership-domain authority behavior. Move provider URLs, collection, response
+validation, and raw replay into `sources/spglobal`; move verified observed membership
+construction and loading into `universe/sp500`. Preserve immutable schemas, exact raw
+bytes, hash behavior, strict replay, locking, and fail-closed semantics. Update direct
+consumers and behavior-named tests, add guarded zero-reference/file-absence checks, and
+remove the old combined module only after verification. Do not add compatibility
+aliases. Issuer/global catalyst migration follows this split. Do not delete
 `market_predictor.edge_rebuild` until all later horizon, governance, serving, and
 command consumers have migrated.
