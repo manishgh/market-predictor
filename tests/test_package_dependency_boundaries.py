@@ -40,8 +40,19 @@ SOURCES_ALLOWED_DEPENDENCIES = (
     "market_predictor.schemas",
     "market_predictor.sources",
 )
+CATALYSTS_ALLOWED_DEPENDENCIES = (
+    "market_predictor.canonical",
+    "market_predictor.catalysts",
+    "market_predictor.core",
+    "market_predictor.evidence",
+    "market_predictor.resources",
+    "market_predictor.sources",
+    "market_predictor.universe",
+)
 REMOVED_AUTHORITY_MODULES = (
     "market_predictor.edge_rebuild.corpus_integrity",
+    "market_predictor.edge_rebuild.sec_filing_authority",
+    "market_predictor.edge_rebuild.sec_filing_collection",
     "market_predictor.edge_rebuild.sec_identity_authority",
     "market_predictor.edge_rebuild.sp500_memberships",
     "market_predictor.edge_rebuild.sp500_observed_memberships",
@@ -50,6 +61,8 @@ REMOVED_AUTHORITY_MODULES = (
 )
 REMOVED_AUTHORITY_FILES = (
     "corpus_integrity.py",
+    "sec_filing_authority.py",
+    "sec_filing_collection.py",
     "sec_identity_authority.py",
     "sp500_memberships.py",
     "sp500_observed_memberships.py",
@@ -102,6 +115,20 @@ def test_source_package_uses_only_approved_dependency_layers() -> None:
     assert not violations, "Source dependency violations:\n" + "\n".join(sorted(violations))
 
 
+def test_catalyst_package_uses_only_approved_dependency_layers() -> None:
+    violations: list[str] = []
+    for path in (PACKAGE_ROOT / "catalysts").rglob("*.py"):
+        for node, imported_name in _module_imports(path):
+            if not imported_name.startswith("market_predictor."):
+                continue
+            if _matches_any_dependency(imported_name, CATALYSTS_ALLOWED_DEPENDENCIES):
+                continue
+            relative_path = path.relative_to(PACKAGE_ROOT.parent)
+            violations.append(f"{relative_path}:{node.lineno}: {imported_name}")
+
+    assert not violations, "Catalyst dependency violations:\n" + "\n".join(sorted(violations))
+
+
 def test_removed_authority_modules_have_no_imports_or_files() -> None:
     violations: list[str] = []
     for root in (PACKAGE_ROOT, TEST_ROOT, SCRIPT_ROOT):
@@ -129,6 +156,25 @@ def test_removed_authority_modules_have_no_imports_or_files() -> None:
     ),
 )
 def test_removed_authority_import_guard_recognizes_every_import_form(statement: str) -> None:
+    tree = ast.parse(statement)
+    imported_names = tuple(name for node in ast.walk(tree) for name in _imported_names(node))
+    assert any(_matches_any_dependency(name, REMOVED_AUTHORITY_MODULES) for name in imported_names)
+
+
+@pytest.mark.parametrize(
+    "statement",
+    (
+        "import market_predictor.edge_rebuild.sec_filing_collection",
+        "import market_predictor.edge_rebuild.sec_filing_collection as collection",
+        "from market_predictor.edge_rebuild import sec_filing_collection",
+        "from market_predictor.edge_rebuild.sec_filing_collection import SecFilingCollection",
+        "import market_predictor.edge_rebuild.sec_filing_authority",
+        "import market_predictor.edge_rebuild.sec_filing_authority as authority",
+        "from market_predictor.edge_rebuild import sec_filing_authority",
+        "from market_predictor.edge_rebuild.sec_filing_authority import SecFilingDecisionAuthority",
+    ),
+)
+def test_removed_sec_filing_import_guard_recognizes_every_import_form(statement: str) -> None:
     tree = ast.parse(statement)
     imported_names = tuple(name for node in ast.walk(tree) for name in _imported_names(node))
     assert any(_matches_any_dependency(name, REMOVED_AUTHORITY_MODULES) for name in imported_names)

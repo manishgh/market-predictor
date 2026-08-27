@@ -8,19 +8,19 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from market_predictor.edge_rebuild.sec_filing_authority import (
+from market_predictor.catalysts.sec_filings.collection import (
+    SecFilingCollectionConfig,
+    collect_historical_sec_filings,
+    load_sec_filing_collection,
+)
+from market_predictor.catalysts.sec_filings.decision_authority import (
     _merge_events,
     attach_sec_filing_features,
     load_sec_filing_decision_authority,
     publish_sec_filing_decision_authority,
 )
-from market_predictor.edge_rebuild.sec_filing_collection import (
-    SecFilingCollectionConfig,
-    collect_historical_sec_filings,
-    load_sec_filing_collection,
-)
-from market_predictor.sources.sec import SecFilingHistory, SecFilingRecord, SecRawResponse
 from market_predictor.core.errors import DataReadinessError
+from market_predictor.sources.sec import SecFilingHistory, SecFilingRecord, SecRawResponse
 
 
 def _relations() -> pd.DataFrame:

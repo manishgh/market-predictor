@@ -8,8 +8,8 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from market_predictor.edge_rebuild import sec_filing_collection as sec_collection
-from market_predictor.edge_rebuild.sec_filing_collection import (
+from market_predictor.catalysts.sec_filings import collection as sec_collection
+from market_predictor.catalysts.sec_filings.collection import (
     SecFilingCollectionConfig,
     collect_historical_sec_filings,
     conservative_sec_daily_swing_availability,
@@ -17,13 +17,13 @@ from market_predictor.edge_rebuild.sec_filing_collection import (
     load_sec_filing_collection_config,
     normalize_sec_identity_relations,
 )
+from market_predictor.core.errors import DataReadinessError
 from market_predictor.sources.sec import (
     SecFilingHistory,
     SecFilingRecord,
     SecRawResponse,
     SecSourceResponseError,
 )
-from market_predictor.core.errors import DataReadinessError
 
 
 def _raw_response(cik: str, retrieved: datetime, *, malformed: bool = False) -> SecRawResponse:

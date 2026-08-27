@@ -7,6 +7,14 @@ from typing import Any
 import pandas as pd
 import typer
 
+from market_predictor.catalysts.sec_filings.collection import (
+    collect_historical_sec_filings,
+    load_sec_filing_collection_config,
+    load_sec_identity_relations,
+)
+from market_predictor.catalysts.sec_filings.decision_authority import (
+    publish_sec_filing_decision_authority,
+)
 from market_predictor.config import get_settings
 from market_predictor.core.errors import DataReadinessError
 from market_predictor.edge_rebuild.benchmark_history import (
@@ -70,14 +78,6 @@ from market_predictor.edge_rebuild.prospective_sip_session import (
 )
 from market_predictor.edge_rebuild.readiness import (
     run_edge_rebuild_readiness_audit,
-)
-from market_predictor.edge_rebuild.sec_filing_authority import (
-    publish_sec_filing_decision_authority,
-)
-from market_predictor.edge_rebuild.sec_filing_collection import (
-    collect_historical_sec_filings,
-    load_sec_filing_collection_config,
-    load_sec_identity_relations,
 )
 from market_predictor.edge_rebuild.selected_session_history import (
     build_selected_session_history_plan,

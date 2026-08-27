@@ -1,8 +1,6 @@
 """Immutable issuer-level SEC filing collection with raw-response replay."""
 from __future__ import annotations
 
-
-
 import gzip
 import hashlib
 import json
@@ -38,8 +36,8 @@ from market_predictor.canonical.store import (
     manifest_path_for,
     write_canonical_artifact,
 )
-from market_predictor.sources.sec import SecFilingHistory, SecRawResponse, SecSourceResponseError
 from market_predictor.core.errors import DataReadinessError
+from market_predictor.sources.sec import SecFilingHistory, SecRawResponse, SecSourceResponseError
 
 SEC_COLLECTION_SCHEMA: Final = "edge_rebuild.sec_filing_collection.v2"
 SEC_COLLECTION_MANIFEST_SCHEMA: Final = "edge_rebuild.sec_filing_collection_manifest.v2"
