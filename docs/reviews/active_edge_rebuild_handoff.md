@@ -8,7 +8,7 @@ Repository: `C:\project\market-predictor`
 
 Branch: `er-intraday-refactoring`
 
-Last completed implementation commit: `6119fe1` (`Refactor edge_rebuild intraday features into modular directories`)
+Last completed implementation commit: `99f635c` (`Make future holdout access auditable`)
 
 ## Purpose
 
@@ -524,10 +524,19 @@ calibration result, a direct locked-holdout `NameError`, duplicate old/new names
 and an `intraday.evaluation` module/package collision. Prior claims that the complete
 suite and static checks passed are therefore superseded.
 
-Exact next checkpoint: complete **Holdout access and shared contract repair**.
-Candidate-only checks must happen before future access. Future access must be reserved
-atomically before any future authority is read or hashed; every success or failure
-after reservation must leave an auditable receipt and retries must fail closed. Use one
-`IntradayDevelopmentConfig`, restore `CausalCalibrationFit`, add direct regression and
-poison tests, obtain review from the assigned senior reviewer, then run focused tests
-and focused static checks before committing.
+Implementation commit `99f635c` completes **Holdout access and shared contract repair**.
+Future access now uses one exclusive claim plus a candidate-bound immutable reservation
+receipt. Candidate-only checks and registry isolation precede reservation; every
+post-claim failure leaves failure evidence and retries fail closed. Successful evidence
+copies and verifies the reservation before atomic publication. One
+`IntradayDevelopmentConfig` remains, and `CausalCalibrationFit` is constructible.
+Verification: 57 focused tests passed; touched source files passed Ruff and strict
+mypy; the assigned senior reviewer accepted the bounded diff after two remediation
+rounds. Repository-wide Ruff and mypy remain open by design for later repair tasks.
+
+Exact next checkpoint: complete **Serialized artifact and namespace inventory**.
+Inventory imports, CLI commands, manifests, and serialized models that reference `v3`,
+`edge_rebuild`, or chronology-named modules. Classify each retained model as promoted,
+candidate, rejected, or ungoverned; retrain only genuinely retained models under a
+canonical package, and explicitly retire rejected or ungoverned artifacts before any
+namespace deletion. Do not add compatibility aliases.

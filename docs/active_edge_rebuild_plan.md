@@ -1179,11 +1179,16 @@ The canonical source layout is domain-based: `core`, `sources`, `evidence`,
 Chronology and checkpoint labels are prohibited in active package, module, command,
 test, and task names.
 
-1. **Holdout access and shared contract repair (`in progress`).**
+1. **Holdout access and shared contract repair (`completed`).**
    Use one `IntradayDevelopmentConfig`, restore constructible causal calibration
    results, repair the direct future-holdout validation path, and cover the unmocked
    path with regression tests. Future access must remain fail-closed and auditable.
-2. **Serialized artifact and namespace inventory (`pending`).**
+   Implementation commit `99f635c` is pushed. The direct holdout path, atomic claim,
+   reservation/failure evidence, registry isolation, temporary replay validation,
+   shared config, and calibration construction are covered by 57 passing focused tests.
+   The assigned senior reviewer accepted the bounded diff after all P1 findings were
+   fixed; focused Ruff and strict mypy pass.
+2. **Serialized artifact and namespace inventory (`in progress`).**
    Inventory every command, manifest, model artifact, and import that depends on a
    chronology-named namespace. Retrain retained models under canonical modules or
    explicitly retire rejected artifacts before deleting their code dependencies.
