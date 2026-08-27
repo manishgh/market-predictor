@@ -11,16 +11,31 @@ import pytest
 from market_predictor.canonical.audits import CanonicalAuditCheck, CanonicalAuditReport
 from market_predictor.canonical.reconciliation import ASSIGNMENT_COLUMNS, reconciliation_sha256
 from market_predictor.canonical.store import file_sha256, write_canonical_artifact
-from market_predictor.edge_rebuild.catalyst_authority import (
+from market_predictor.core.errors import DataReadinessError
+from market_predictor.swing.features.catalyst_decision_authority import (
+    COVERAGE_ARTIFACT_TYPE,
+    DECISION_ARTIFACT_TYPE,
+    DECISION_AUTHORITY_SCHEMA,
+    DECISION_MANIFEST_SCHEMA,
+    DECISION_REQUEST_SCHEMA,
+    LINEAGE_MANIFEST_SCHEMA,
     RANKING_SOURCE_FAMILIES,
     _deduplicate_verified_events,
     attach_catalyst_decision_features,
     load_catalyst_decision_authority,
     publish_catalyst_decision_authority,
 )
-from market_predictor.core.errors import DataReadinessError
 
 DECISION_TIME = pd.Timestamp("2025-01-10T21:00:00Z")
+
+
+def test_persisted_catalyst_decision_authority_identities_are_frozen() -> None:
+    assert LINEAGE_MANIFEST_SCHEMA == "swing.catalyst_lineage_manifest.v2"
+    assert DECISION_REQUEST_SCHEMA == "edge_rebuild.catalyst_decision_request.v1"
+    assert DECISION_AUTHORITY_SCHEMA == "edge_rebuild.catalyst_decision_authority.v5"
+    assert DECISION_MANIFEST_SCHEMA == "edge_rebuild.catalyst_decision_manifest.v5"
+    assert DECISION_ARTIFACT_TYPE == "edge_rebuild_catalyst_decisions"
+    assert COVERAGE_ARTIFACT_TYPE == "edge_rebuild_catalyst_coverage"
 
 
 def test_unrelated_issuer_events_within_thirty_minutes_are_both_retained() -> None:

@@ -3,14 +3,14 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-from market_predictor.edge_rebuild.catalyst_authority import (
+from market_predictor.core.errors import DataReadinessError
+from market_predictor.swing.features.catalyst_decision_authority import (
     COVERAGE_FLAG_COLUMNS,
     REQUIRED_MODEL_SOURCE_FAMILIES,
     TRACKED_SOURCE_FAMILIES,
     CatalystDecisionAuthority,
     attach_catalyst_decision_features,
 )
-from market_predictor.core.errors import DataReadinessError
 
 
 def build_swing_ablation_rows(

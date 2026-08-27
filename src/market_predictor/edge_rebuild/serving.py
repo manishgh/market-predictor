@@ -42,10 +42,6 @@ from market_predictor.core.errors import (
     PromotionGateError,
     SchemaMismatchError,
 )
-from market_predictor.edge_rebuild.catalyst_authority import (
-    REQUIRED_MODEL_SOURCE_FAMILIES,
-    TRACKED_SOURCE_FAMILIES,
-)
 from market_predictor.edge_rebuild.strategy_contract import (
     StrategyContract,
 )
@@ -67,6 +63,10 @@ from market_predictor.promotion_attestation import (
     verify_promotion_attestation,
 )
 from market_predictor.resources import assert_memory_budget, process_memory_snapshot
+from market_predictor.swing.features.catalyst_decision_authority import (
+    REQUIRED_MODEL_SOURCE_FAMILIES,
+    TRACKED_SOURCE_FAMILIES,
+)
 
 SERVING_BUNDLE_SCHEMA: Final = "edge_rebuild.promoted_bundle.v2"
 PREDICTION_RESULT_SCHEMA: Final = "edge_rebuild.prediction_result.v2"

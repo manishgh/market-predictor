@@ -16,8 +16,6 @@ than approximated.
 """
 from __future__ import annotations
 
-
-
 from collections.abc import Mapping, Sequence
 from datetime import date
 from typing import Final
@@ -30,10 +28,7 @@ from market_predictor.canonical.joins import (
     join_universe_membership,
 )
 from market_predictor.canonical.reconciliation import stamp_canonical_decision_ids
-from market_predictor.edge_rebuild.catalyst_authority import (
-    REQUIRED_MODEL_SOURCE_FAMILIES,
-    TRACKED_SOURCE_FAMILIES,
-)
+from market_predictor.core.errors import DataReadinessError
 from market_predictor.edge_rebuild.cross_sectional import (
     CrossSectionSpec,
     cross_sectional_feature_names,
@@ -76,8 +71,11 @@ from market_predictor.edge_rebuild.swing_filters import (
 )
 from market_predictor.swing.contracts import SwingDatasetConfig
 from market_predictor.swing.dataset import build_swing_feature_history
+from market_predictor.swing.features.catalyst_decision_authority import (
+    REQUIRED_MODEL_SOURCE_FAMILIES,
+    TRACKED_SOURCE_FAMILIES,
+)
 from market_predictor.swing.labels import add_exact_swing_labels
-from market_predictor.core.errors import DataReadinessError
 
 SWING_FEATURE_PANEL_SCHEMA: Final = "edge_rebuild.swing_feature_panel.v9"
 SWING_FEATURE_PROFILE: Final = "technical_market"

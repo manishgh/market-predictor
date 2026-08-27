@@ -50,6 +50,7 @@ CATALYSTS_ALLOWED_DEPENDENCIES = (
     "market_predictor.universe",
 )
 REMOVED_PRODUCTION_MODULES = (
+    "market_predictor.edge_rebuild.catalyst_authority",
     "market_predictor.edge_rebuild.corpus_integrity",
     "market_predictor.edge_rebuild.global_event_authority",
     "market_predictor.edge_rebuild.global_event_collection",
@@ -69,6 +70,7 @@ REMOVED_PRODUCTION_MODULES = (
     "market_predictor.symbols",
 )
 REMOVED_EDGE_REBUILD_FILES = (
+    "catalyst_authority.py",
     "corpus_integrity.py",
     "global_event_authority.py",
     "global_event_collection.py",
@@ -267,6 +269,57 @@ def test_removed_issuer_event_foundation_import_guard_recognizes_every_import_fo
     tree = ast.parse(statement)
     imported_names = tuple(name for node in ast.walk(tree) for name in _imported_names(node))
     assert any(_matches_any_dependency(name, REMOVED_PRODUCTION_MODULES) for name in imported_names)
+
+
+@pytest.mark.parametrize(
+    "statement",
+    (
+        "import market_predictor.edge_rebuild.catalyst_authority",
+        "import market_predictor.edge_rebuild.catalyst_authority as authority",
+        "from market_predictor.edge_rebuild import catalyst_authority",
+        "from market_predictor.edge_rebuild.catalyst_authority import CatalystDecisionAuthority",
+    ),
+)
+def test_removed_catalyst_decision_authority_import_guard_recognizes_every_import_form(statement: str) -> None:
+    tree = ast.parse(statement)
+    imported_names = tuple(name for node in ast.walk(tree) for name in _imported_names(node))
+    assert any(_matches_any_dependency(name, REMOVED_PRODUCTION_MODULES) for name in imported_names)
+
+
+def test_swing_and_intraday_packages_do_not_import_each_other() -> None:
+    violations: list[str] = []
+    boundaries = (
+        (PACKAGE_ROOT / "swing", ("market_predictor.intraday",)),
+        (PACKAGE_ROOT / "intraday", ("market_predictor.swing",)),
+    )
+    for package, forbidden_dependencies in boundaries:
+        for path in package.rglob("*.py"):
+            for node, imported_name in _module_imports(path):
+                if _matches_any_dependency(imported_name, forbidden_dependencies):
+                    relative_path = path.relative_to(REPOSITORY_ROOT)
+                    violations.append(f"{relative_path}:{node.lineno}: {imported_name}")
+
+    assert not violations, "Cross-horizon dependency violations:\n" + "\n".join(sorted(violations))
+
+
+@pytest.mark.parametrize(
+    ("statement", "forbidden_dependency"),
+    (
+        ("import market_predictor.intraday", "market_predictor.intraday"),
+        ("from market_predictor import intraday", "market_predictor.intraday"),
+        ("from market_predictor.intraday.datasets import event_preflight", "market_predictor.intraday"),
+        ("import market_predictor.swing", "market_predictor.swing"),
+        ("from market_predictor import swing", "market_predictor.swing"),
+        ("from market_predictor.swing.features import catalyst_decision_authority", "market_predictor.swing"),
+    ),
+)
+def test_cross_horizon_dependency_guard_recognizes_import_forms(
+    statement: str,
+    forbidden_dependency: str,
+) -> None:
+    tree = ast.parse(statement)
+    imported_names = tuple(name for node in ast.walk(tree) for name in _imported_names(node))
+    assert any(_matches_any_dependency(name, (forbidden_dependency,)) for name in imported_names)
 
 
 def test_rule_variant_helper_has_one_semantic_owner() -> None:

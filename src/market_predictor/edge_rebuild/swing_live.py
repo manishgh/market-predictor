@@ -1,8 +1,6 @@
 """Fail-closed live construction for edge-rebuild swing model features."""
 from __future__ import annotations
 
-
-
 import hashlib
 import json
 import os
@@ -21,12 +19,7 @@ from market_predictor.canonical.cutoffs import swing_prediction_cutoffs
 from market_predictor.canonical.joins import MEMBERSHIP_VALUE_COLUMNS
 from market_predictor.canonical.reconciliation import stamp_canonical_decision_ids
 from market_predictor.canonical.store import file_sha256
-from market_predictor.edge_rebuild.catalyst_authority import (
-    REQUIRED_MODEL_SOURCE_FAMILIES,
-    TRACKED_SOURCE_FAMILIES,
-    CatalystDecisionAuthority,
-    load_catalyst_decision_authority,
-)
+from market_predictor.core.errors import DataReadinessError
 from market_predictor.edge_rebuild.serving import (
     canonical_payload_sha256,
     validate_ordered_feature_frame,
@@ -41,7 +34,12 @@ from market_predictor.edge_rebuild.swing_features import (
     swing_model_feature_columns,
 )
 from market_predictor.resources import assert_memory_budget
-from market_predictor.core.errors import DataReadinessError
+from market_predictor.swing.features.catalyst_decision_authority import (
+    REQUIRED_MODEL_SOURCE_FAMILIES,
+    TRACKED_SOURCE_FAMILIES,
+    CatalystDecisionAuthority,
+    load_catalyst_decision_authority,
+)
 
 SWING_LIVE_SCHEMA_VERSION: Final = "edge_rebuild.swing_live.v1"
 SWING_LIVE_INPUT_SCHEMA_VERSION: Final = "edge_rebuild.swing_live_inputs.v2"

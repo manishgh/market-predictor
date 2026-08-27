@@ -30,9 +30,6 @@ from market_predictor.edge_rebuild.benchmark_history import (
 from market_predictor.edge_rebuild.broad_intraday_history import (
     build_broad_intraday_history_plan,
 )
-from market_predictor.edge_rebuild.catalyst_authority import (
-    publish_catalyst_decision_authority,
-)
 from market_predictor.edge_rebuild.contracts import (
     load_edge_rebuild_readiness_config,
 )
@@ -144,6 +141,9 @@ from market_predictor.sources.gdelt import (
     validate_gdelt_document_request,
 )
 from market_predictor.sources.sec import SecRequestGovernor, SecSource
+from market_predictor.swing.features.catalyst_decision_authority import (
+    publish_catalyst_decision_authority,
+)
 from market_predictor.universe.membership_identity_validation import (
     publish_verified_universe,
 )

@@ -9,12 +9,9 @@ import pandas as pd
 import pytest
 
 from market_predictor.canonical.normalize import canonicalize_bars
+from market_predictor.core.errors import DataReadinessError
 from market_predictor.edge_rebuild import swing_catalyst_features as swing_catalyst_module
 from market_predictor.edge_rebuild import swing_features as swing_feature_module
-from market_predictor.edge_rebuild.catalyst_authority import (
-    COVERAGE_FLAG_COLUMNS,
-    CatalystDecisionAuthority,
-)
 from market_predictor.edge_rebuild.cross_sectional import RANK_SUFFIX
 from market_predictor.edge_rebuild.strategy_contract import (
     StrategyContract,
@@ -30,7 +27,10 @@ from market_predictor.edge_rebuild.swing_features import (
     finalize_swing_feature_panel,
     swing_model_feature_columns,
 )
-from market_predictor.core.errors import DataReadinessError
+from market_predictor.swing.features.catalyst_decision_authority import (
+    COVERAGE_FLAG_COLUMNS,
+    CatalystDecisionAuthority,
+)
 
 
 @pytest.fixture(scope="module")

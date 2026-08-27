@@ -1,8 +1,6 @@
 """Immutable decision-level catalyst evidence aggregated across lineage generations."""
 from __future__ import annotations
 
-
-
 import gc
 import hashlib
 import json
@@ -32,11 +30,12 @@ from market_predictor.canonical.store import (
     manifest_path_for,
     write_canonical_artifact,
 )
+from market_predictor.core.errors import DataReadinessError
 from market_predictor.resources import assert_memory_budget, memory_audit, release_process_memory
 from market_predictor.swing.contracts import MINIMUM_SWING_DECISION_DATE
-from market_predictor.core.errors import DataReadinessError
 
 LINEAGE_MANIFEST_SCHEMA: Final = "swing.catalyst_lineage_manifest.v2"
+DECISION_REQUEST_SCHEMA: Final = "edge_rebuild.catalyst_decision_request.v1"
 DECISION_AUTHORITY_SCHEMA: Final = "edge_rebuild.catalyst_decision_authority.v5"
 DECISION_MANIFEST_SCHEMA: Final = "edge_rebuild.catalyst_decision_manifest.v5"
 DECISION_ARTIFACT_TYPE: Final = "edge_rebuild_catalyst_decisions"
@@ -1159,7 +1158,7 @@ def _request_payload(
     production_ready: bool,
 ) -> dict[str, object]:
     return {
-        "schema": "edge_rebuild.catalyst_decision_request.v1",
+        "schema": DECISION_REQUEST_SCHEMA,
         "windows": {name: int(value.total_seconds()) for name, value in WINDOWS.items()},
         "eligibility": {
             "training_eligible": True,

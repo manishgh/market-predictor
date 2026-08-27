@@ -14,12 +14,7 @@ from market_predictor.canonical.reconciliation import (
     event_feature_columns,
 )
 from market_predictor.canonical.store import file_sha256
-from market_predictor.edge_rebuild.catalyst_authority import (
-    REQUIRED_MODEL_SOURCE_FAMILIES,
-    TRACKED_SOURCE_FAMILIES,
-    WINDOWS,
-    CatalystDecisionAuthority,
-)
+from market_predictor.core.errors import DataReadinessError
 from market_predictor.edge_rebuild.serving import (
     canonical_payload_sha256,
     validate_batch_live_feature_parity,
@@ -46,7 +41,12 @@ from market_predictor.edge_rebuild.swing_live import (
     build_live_swing_features,
 )
 from market_predictor.resources import process_memory_snapshot
-from market_predictor.core.errors import DataReadinessError
+from market_predictor.swing.features.catalyst_decision_authority import (
+    REQUIRED_MODEL_SOURCE_FAMILIES,
+    TRACKED_SOURCE_FAMILIES,
+    WINDOWS,
+    CatalystDecisionAuthority,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
 DECISION_TIME = pd.Timestamp("2026-07-08T22:00:00Z")
