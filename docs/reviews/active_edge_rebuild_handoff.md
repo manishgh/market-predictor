@@ -2,13 +2,13 @@
 
 Status: active
 
-Last updated: 2026-08-21
+Last updated: 2026-08-27
 
 Repository: `C:\project\market-predictor`
 
 Branch: `er-intraday-refactoring`
 
-Last completed implementation commit: `0a95729` (`Refactor swing_features and fix tests`)
+Last completed implementation commit: `6119fe1` (`Refactor edge_rebuild intraday features into modular directories`)
 
 ## Purpose
 
@@ -462,7 +462,8 @@ Final verification passed 1,457 tests with two skipped, tracked Ruff, strict myp
 230 source files, tracked compilation, and independent re-review with no remaining
 high- or medium-severity finding.
 
-Exact next checkpoint: continue A5.1c append-only prospective collection. Collect each
+Historical A5.1c continuation instruction, now superseded by the structural repair:
+collect each
 eligible SIP session with a valid pre-open membership parent until twenty contiguous
 sessions exist, then build causal features, mature outcomes, and rerun the prospective
 preflight. The completed historical directional experiments cannot substitute for
@@ -513,24 +514,20 @@ do not delete raw or governance-bound data by assumption.
 - Do not expose rejected candidates through the production prediction API.
 - Do not execute scratch scripts that mutate Parquet or patch lineage hashes.
 
-## Codebase Modularization (A5.2)
+## Active Structural Repair
 
-- Original `swing_training.py` orchestrated and pruned into `training/data_io.py`, `training/lgbm_models.py`, `training/swing_evaluation.py`, and `training/swing_types.py`.
-- Original `swing_features.py` decoupled into `swing_pipeline_steps.py`, `swing_filters.py`, and `swing_catalyst_features.py`.
-- Maintained frozen contracts, mathematically exact baseline logic, strict memory budgets, and passing tests.
-- Implementation commit `8e9cff6` ensures 100% strict `mypy` and `ruff` compliance with fully updated lineage tests.
-- Shared utilities (`io.py`, `hashing.py`, `memory.py`, `validation.py`) consolidated to `src/market_predictor/edge_rebuild/utils/`.
-- `intraday_training.py` modularized into `intraday_dataset_io.py` and `intraday_types.py`.
-- `swing_types.py` and `data_io.py` refactored to import from the central `utils/` package.
-- `intraday_development.py` has been successfully refactored and modularized into `src/market_predictor/intraday/training/io.py`, `src/market_predictor/intraday/training/config.py`, `src/market_predictor/intraday/training/coordinator.py`, `src/market_predictor/intraday/training/models.py`, `src/market_predictor/intraday/training/validation.py`, `src/market_predictor/intraday/evaluation/gates.py`, and `src/market_predictor/intraday/evaluation/metrics.py`.
-- All `_json_sha256` logic updated for exact separator and sorting reproduction, fixing `A4.4 validation metrics do not replay` failures. Test monkeypatches for `_evaluate_spec` and `_fit_pair` were re-pointed to correctly mask imported module references. `src/market_predictor/edge_rebuild/intraday_development.py` has been permanently deleted.
-- All tests pass (39/39 for `test_edge_rebuild_intraday_development.py` and across the broader `pytest` suite).
+The August 24 review found that commits through `6119fe1` left the package refactor
+incomplete. Measured baseline on August 27: `ruff check . --statistics --no-cache`
+reports 407 findings and `mypy src` reports 31 errors across nine files,
+duplicate intraday development configuration classes, an unconstructible causal
+calibration result, a direct locked-holdout `NameError`, duplicate old/new namespaces,
+and an `intraday.evaluation` module/package collision. Prior claims that the complete
+suite and static checks passed are therefore superseded.
 
-## Intraday Feature Rebuilding (Completed)
-
-- Extracted all 19 intraday_*.py files from edge_rebuild/ into their designated structural submodules (intraday/datasets/, intraday/features/, intraday/contracts/, and intraday/training/).
-- Safely patched hundreds of cross-imports, 3.errors references, and monkeypatched test paths across the repository without modifying schema identities or frozen contracts.
-- Fixed _transformation_identity pathing within ar_dataset.py to maintain exact content-addressed reproducible bytes.
-- Validated absolute parity: 1465/1465 tests pass cleanly in pytest tests/.
-
-Exact next checkpoint: proceed to Swing History and Materialization decomposition.
+Exact next checkpoint: complete **Holdout access and shared contract repair**.
+Candidate-only checks must happen before future access. Future access must be reserved
+atomically before any future authority is read or hashed; every success or failure
+after reservation must leave an auditable receipt and retries must fail closed. Use one
+`IntradayDevelopmentConfig`, restore `CausalCalibrationFit`, add direct regression and
+poison tests, obtain review from the assigned senior reviewer, then run focused tests
+and focused static checks before committing.

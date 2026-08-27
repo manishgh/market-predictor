@@ -1165,7 +1165,78 @@ are audit evidence, never fallbacks.
 - [ ] Promote only a model that passes every gate.
 
 
-### A5.2 - Modularize edge_rebuild core components (`completed`)
+## Active Structural Repair Checkpoint
+
+The August 24 review reopened the incomplete package refactor with reproducible
+correctness and verification failures. This checkpoint changes code structure only;
+model features, labels, thresholds, data authorities, and promotion state are out of
+scope.
+
+The canonical source layout is domain-based: `core`, `sources`, `evidence`,
+`universe`, `catalysts`, `modeling`, `swing`, `intraday`, `governance`, `serving`,
+`commands`, and `research`. Swing and intraday each own descriptive `contracts`,
+`datasets`, `features`, `labels`, `training`, `evaluation`, and `live` packages.
+Chronology and checkpoint labels are prohibited in active package, module, command,
+test, and task names.
+
+1. **Holdout access and shared contract repair (`in progress`).**
+   Use one `IntradayDevelopmentConfig`, restore constructible causal calibration
+   results, repair the direct future-holdout validation path, and cover the unmocked
+   path with regression tests. Future access must remain fail-closed and auditable.
+2. **Serialized artifact and namespace inventory (`pending`).**
+   Inventory every command, manifest, model artifact, and import that depends on a
+   chronology-named namespace. Retrain retained models under canonical modules or
+   explicitly retire rejected artifacts before deleting their code dependencies.
+3. **Market evidence and research package migration (`pending`).**
+   Consolidate base contracts under `core`, immutable lineage under `evidence`, source
+   transports under `sources`, membership and identity under `universe`, issuer and
+   global events under `catalysts`, reusable estimators and validation under
+   `modeling`, and non-production experiments under `research`.
+4. **Swing and intraday package migration (`pending`).**
+   Consolidate each horizon under descriptive `contracts`, `datasets`, `features`,
+   `labels`, `training`, `evaluation`, and `live` packages and remove the intraday
+   evaluation module/package collision. Compatibility aliases are prohibited because
+   this repository is not deployed.
+5. **Governance, serving, and command package migration (`pending`).**
+   Move readiness, promotion, drift, and outcomes to `governance`; bundle loading,
+   prediction services, and API behavior to `serving`; and retain only thin CLI
+   adapters in `commands`. Active modules, files, commands, and tests must use behavior
+   names rather than chronological labels such as `v3` or checkpoint labels. Delete
+   `v3` and `edge_rebuild` only after every implementation and consumer has migrated
+   and a repository scan finds zero imports of either namespace.
+6. **Repository-wide static quality (`pending`).**
+   Resolve all configured repository-wide Ruff and strict mypy findings, remove only
+   reference-proven scratch or placeholder artifacts, and add architecture guards that
+   prevent duplicate production namespaces from returning.
+7. **Full verification and closure (`pending`).**
+   Run focused tests after each task, then repository-wide Ruff, strict mypy, the full
+   test suite under the configured writable runtime directory, `git diff --check`, and
+   a process/memory check. Update the handoff with measured evidence only.
+
+Rollback is the last pushed task commit. A task is not accepted until the same senior
+reviewer has inspected its bounded diff and all supported P0/P1 findings are fixed.
+
+### Package Dependency Direction
+
+- `core` is domain-neutral and cannot import another project package.
+- `sources` and `evidence` may import `core`; immutable evidence does not import a
+  provider transport.
+- `universe` may import `core`, `evidence`, and `sources`.
+- `catalysts` may import `core`, `evidence`, `sources`, and `universe`.
+- `modeling` may import `core` and `evidence`; it cannot import a trading horizon.
+- `swing` and `intraday` may import the lower layers above but cannot import each other.
+- `governance` may import completed horizon contracts and lower layers.
+- `serving` may import governance and completed horizon contracts; governance cannot
+  import serving.
+- `commands` and `research` are outer adapters. Production packages cannot import
+  either, and production code cannot import tests.
+
+An AST-based architecture test must enforce the allowed top-level production package
+set, required swing/intraday subpackages, the dependency direction above, forbidden
+chronology/checkpoint names, zero imports of removed namespaces, and no unexpected
+top-level production modules. Import and CLI smoke tests must pass after final deletion.
+
+## Historical Structural Refactor Evidence
 
 - Original `swing_features.py` decoupled into `swing_pipeline_steps.py`, `swing_filters.py`, and `swing_catalyst_features.py`.
 - Original `swing_training.py` orchestrated and pruned into `training/data_io.py`, `training/lgbm_models.py`, `training/swing_evaluation.py`, and `training/swing_types.py`.
