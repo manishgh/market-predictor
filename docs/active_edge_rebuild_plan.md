@@ -1248,10 +1248,28 @@ test, and task names.
      tests pass. Final checkpoint verification passed 113 affected tests, Ruff, strict
      mypy on six source files, compileall, import smoke, and diff checks. The assigned
      senior reviewer accepted the diff with no P0, P1, or P2 finding.
-   - **Issuer and global catalyst authority migration (current subtask).** Move the
+   - **Issuer and global catalyst authority migration (in progress).** Move the
      remaining source-independent issuer-event, SEC-filing, global-event, and
      market-context authorities out of `edge_rebuild` into `catalysts`, `sources`, and
      `evidence` without changing source coverage, availability, or causal semantics.
+     - **SEC filing evidence and decision authority (`completed`).** Implementation
+       commit `9244893` creates `catalysts/sec_filings`, moves causal filing collection
+       evidence to `collection.py`, and moves decision-time overlays to
+       `decision_authority.py`. `sources/sec.py` remains the provider transport. The
+       two old modules and edge-rebuild-prefixed tests are absent and guarded against
+       reintroduction. Persisted schemas, availability, coverage missingness, raw
+       replay, artifact hashes, memory limits, and command behavior are unchanged.
+       Forty-four SEC, architecture, and CLI tests passed with Ruff, strict mypy on
+       three source files, compileall, import smoke, zero-reference and diff checks.
+       The assigned senior reviewer accepted the AST-equivalent move with no P0, P1,
+       or P2 finding.
+     - **GDELT collection and global-event authority (current task).** Separate
+       provider request/response behavior from causal global-event collection and
+       decision authority, then move each responsibility into `sources` or
+       `catalysts` with exact replay parity.
+     - **Issuer event family and precision authorities (`pending`).** Move causal
+       issuer attribution, family classification, and precision-governance evidence
+       only after the global-event boundary is closed.
 4. **Swing and intraday package migration (`pending`).**
    Consolidate each horizon under descriptive `contracts`, `datasets`, `features`,
    `labels`, `training`, `evaluation`, and `live` packages and remove the intraday

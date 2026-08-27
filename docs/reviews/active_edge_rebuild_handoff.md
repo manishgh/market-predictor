@@ -8,7 +8,7 @@ Repository: `C:\project\market-predictor`
 
 Branch: `er-intraday-refactoring`
 
-Last completed implementation commit: `5259bdb` (`Separate observed membership source collection`)
+Last completed implementation commit: `9244893` (`Move SEC filing authorities into catalysts`)
 
 ## Purpose
 
@@ -489,9 +489,9 @@ event polls as a new contiguous chain; any missed cutoff starts another separate
 
 ## Working Tree State
 
-Implementation commit `5259bdb` is pushed. The working tree was clean before this
+Implementation commit `9244893` is pushed. The working tree was clean before this
 documentation closure. No scratch script, provider data, model artifact, or evidence
-authority was created, rewritten, or deleted by the observed-membership package split.
+authority was created, rewritten, or deleted by the SEC filing package move.
 
 ## Files To Read
 
@@ -616,14 +616,32 @@ on six affected source files; compileall, command/authority import smoke, zero-r
 scan, staged diff checks, and the process check passed. No Python process remained.
 The assigned senior reviewer accepted the final diff with no P0, P1, or P2 finding.
 
-Exact next checkpoint: complete **Issuer and global catalyst authority migration**.
-Inventory the remaining issuer-event, SEC-filing, global-event, and market-context
-modules first. Keep provider acquisition and response validation in `sources`; move
-causal event classification, availability, attribution, and authority behavior to
-`catalysts`; place only provider-neutral immutable lineage helpers in `evidence`.
-Preserve every persisted schema, source-coverage state, availability timestamp, hash,
-lock, memory gate, and fail-closed replay contract. Update direct consumers and
-behavior-named tests, then remove each old module only after guarded zero-reference and
-file-absence verification. Do not add compatibility aliases. Do not delete
-`market_predictor.edge_rebuild` until later horizon, governance, serving, and command
-consumers have migrated.
+Implementation commit `9244893` completes **SEC filing evidence and decision authority
+migration**. `sources/sec.py` remains the SEC provider transport. Causal issuer filing
+events, collection coverage, conservative availability, retained raw-response replay,
+and immutable collection publication now belong to
+`catalysts/sec_filings/collection.py`. Decision-time filing overlays, explicit unknown
+coverage, monthly partitions, lineage, publication, and strict replay now belong to
+`catalysts/sec_filings/decision_authority.py`.
+
+The two old `edge_rebuild` modules and their edge-rebuild-prefixed tests are absent.
+Commands and tests import the semantic catalyst package. The catalyst dependency
+allowlist prohibits imports from `edge_rebuild` and upper horizon packages, while the
+source allowlist prevents a reverse dependency. Persisted schemas and all behavioral
+contracts remain unchanged. Verification passed 44 SEC, architecture, and CLI tests,
+Ruff, strict mypy on three source files, compileall, semantic import smoke,
+zero-reference/file-absence checks, and diff checks. The assigned senior reviewer
+accepted the move with no P0, P1, or P2 finding.
+
+Exact next checkpoint: complete **GDELT collection and global-event authority
+separation**. Inspect `edge_rebuild/global_event_collection.py` before editing because
+it currently combines provider fetching with causal collection publication. Keep GDELT
+request construction, HTTP response validation, retry policy, and raw provider
+evidence in `sources`; move normalized causal global-event collection, coverage,
+availability, and decision-authority behavior into `catalysts/global_events`. Preserve
+every persisted schema, scorer identity, source-coverage state, timestamp, hash, lock,
+memory gate, and fail-closed replay contract. Update direct consumers and
+behavior-named tests, then remove old modules only after guarded zero-reference and
+file-absence verification. Do not add compatibility aliases. Issuer-event family and
+precision-authority migration follows. Do not delete `market_predictor.edge_rebuild`
+until later horizon, governance, serving, and command consumers have migrated.
