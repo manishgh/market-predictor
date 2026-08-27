@@ -6,8 +6,6 @@ specialist cohort.
 """
 from __future__ import annotations
 
-
-
 import hashlib
 import json
 import re
@@ -347,6 +345,25 @@ def family_records_by_event(
             for row in group.to_dict(orient="records")
         )
     return result
+
+
+def issuer_event_rule_variant(row: Mapping[str, object]) -> str:
+    """Return the exact subtype used by the governed precision audit."""
+
+    family = str(row.get("event_family", row.get("proposed_event_family", "")))
+    text = f"{row['classification_rule_id']} {row['matched_text']}".lower()
+    if family == "analyst_revision":
+        if "price target" in text and any(word in text for word in ("raise", "higher", "up")):
+            return "price_target_up"
+        if "price target" in text and any(word in text for word in ("cut", "lower", "down")):
+            return "price_target_down"
+        if "initiat" in text or "coverage" in text:
+            return "coverage"
+        if "upgrade" in text:
+            return "bare_upgrade"
+        if "downgrade" in text:
+            return "bare_downgrade"
+    return str(row["classification_rule_id"])
 
 
 def _record(

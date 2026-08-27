@@ -1,8 +1,6 @@
 """Causal eligibility authority for A5 intraday event specialists."""
 from __future__ import annotations
 
-
-
 import hashlib
 import json
 import os
@@ -24,11 +22,8 @@ from market_predictor.canonical.store import (
     load_canonical_artifact,
     write_canonical_artifact,
 )
-from market_predictor.intraday.datasets.history import json_sha256
-from market_predictor.intraday.training.training import (
-    PublishedIntradayDataset,
-    load_published_intraday_dataset,
-)
+from market_predictor.catalysts.issuer_events.classification import EVENT_FAMILY_POLICY_SHA256
+from market_predictor.core.errors import DataReadinessError
 from market_predictor.edge_rebuild.issuer_event_family_authority import (
     AUTHORITY_SCHEMA as EVENT_AUTHORITY_SCHEMA,
 )
@@ -40,14 +35,17 @@ from market_predictor.edge_rebuild.issuer_event_family_authority import (
 from market_predictor.edge_rebuild.issuer_event_family_authority import (
     MANIFEST_SCHEMA as EVENT_MANIFEST_SCHEMA,
 )
+from market_predictor.intraday.datasets.history import json_sha256
+from market_predictor.intraday.training.training import (
+    PublishedIntradayDataset,
+    load_published_intraday_dataset,
+)
 from market_predictor.resources import (
     assert_memory_budget,
     assert_peak_memory_budget,
     memory_audit,
     release_process_memory,
 )
-from market_predictor.swing.event_families import EVENT_FAMILY_POLICY_SHA256
-from market_predictor.core.errors import DataReadinessError
 
 POLICY_SCHEMA: Final = "edge_rebuild.intraday_event_preflight_policy.v1"
 MANIFEST_SCHEMA: Final = "edge_rebuild.intraday_event_preflight_manifest.v1"

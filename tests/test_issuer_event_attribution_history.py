@@ -19,18 +19,23 @@ from market_predictor.canonical.store import (
     manifest_path_for,
     write_canonical_artifact,
 )
+from market_predictor.catalysts.issuer_events.attribution_history import (
+    ATTRIBUTION_MANIFEST_SCHEMA,
+    ATTRIBUTION_REQUEST_SCHEMA,
+    attribute_alpaca_news_history,
+    load_event_attribution_history,
+)
 from market_predictor.catalysts.issuer_events.news_history_contracts import (
     NEWS_HISTORY_MANIFEST_SCHEMA,
 )
 from market_predictor.core.errors import DataReadinessError
-from market_predictor.swing.event_attribution_history import (
-    ATTRIBUTION_MANIFEST_SCHEMA,
-    attribute_alpaca_news_history,
-    load_event_attribution_history,
-)
 
 
 class SwingEventAttributionHistoryTests(unittest.TestCase):
+    def test_persisted_schema_identities_are_frozen(self) -> None:
+        self.assertEqual(ATTRIBUTION_REQUEST_SCHEMA, "swing.event_attribution_request.v1")
+        self.assertEqual(ATTRIBUTION_MANIFEST_SCHEMA, "swing.event_attribution_manifest.v1")
+
     def test_publishes_hash_bound_relation_chunks(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

@@ -22,21 +22,21 @@ from market_predictor.canonical.store import (
     manifest_path_for,
     write_canonical_artifact,
 )
+from market_predictor.catalysts.issuer_events.relevance import (
+    RELEVANCE_POLICY_VERSION,
+    SecurityMetadata,
+    add_event_relevance,
+)
+from market_predictor.core.errors import DataReadinessError
 from market_predictor.resources import (
     assert_memory_budget,
     memory_audit,
     release_process_memory,
 )
 from market_predictor.sentiment import build_sentiment_inputs
-from market_predictor.swing.event_relevance import (
-    RELEVANCE_POLICY_VERSION,
-    SecurityMetadata,
-    add_event_relevance,
-)
 from market_predictor.swing.news_source_inventory import (
     build_source_news_shard_inventory,
 )
-from market_predictor.core.errors import DataReadinessError
 
 SENTIMENT_REQUEST_SCHEMA = "swing.event_sentiment_request.v1"
 SENTIMENT_MANIFEST_SCHEMA = "swing.event_sentiment_manifest.v1"

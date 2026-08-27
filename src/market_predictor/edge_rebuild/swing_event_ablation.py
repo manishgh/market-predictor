@@ -1,8 +1,6 @@
 """Immutable analyst-revision swing ablations on one matched event cohort."""
 from __future__ import annotations
 
-
-
 import hashlib
 import json
 import os
@@ -20,12 +18,16 @@ import exchange_calendars as xcals
 import pandas as pd
 
 from market_predictor.canonical.store import file_sha256
+from market_predictor.catalysts.issuer_events.classification import (
+    EVENT_FAMILIES,
+    issuer_event_rule_variant,
+)
+from market_predictor.core.errors import DataReadinessError
 from market_predictor.edge_rebuild.issuer_event_family_authority import (
     IssuerEventFamilyAuthority,
 )
 from market_predictor.edge_rebuild.issuer_event_precision_audit import (
     IssuerEventPrecisionAudit,
-    issuer_event_rule_variant,
     load_issuer_event_precision_audit,
 )
 from market_predictor.edge_rebuild.strategy_contract import StrategyContract
@@ -42,8 +44,6 @@ from market_predictor.resources import (
     memory_audit,
     release_process_memory,
 )
-from market_predictor.swing.event_families import EVENT_FAMILIES
-from market_predictor.core.errors import DataReadinessError
 
 POLICY_SCHEMA: Final = "market_predictor.swing_analyst_revision_ablation.v1"
 REQUEST_SCHEMA: Final = "edge_rebuild.swing_analyst_revision_ablation_request.v2"

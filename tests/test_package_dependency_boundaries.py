@@ -62,6 +62,10 @@ REMOVED_PRODUCTION_MODULES = (
     "market_predictor.edge_rebuild.universe_identity",
     "market_predictor.swing.news_history",
     "market_predictor.swing.news_history_audit",
+    "market_predictor.swing.event_attribution",
+    "market_predictor.swing.event_attribution_history",
+    "market_predictor.swing.event_families",
+    "market_predictor.swing.event_relevance",
     "market_predictor.symbols",
 )
 REMOVED_EDGE_REBUILD_FILES = (
@@ -80,6 +84,10 @@ REMOVED_MIGRATED_FILES = (
     "symbols.py",
     "swing/news_history.py",
     "swing/news_history_audit.py",
+    "swing/event_attribution.py",
+    "swing/event_attribution_history.py",
+    "swing/event_families.py",
+    "swing/event_relevance.py",
 )
 REMOVED_ACTIVE_SYMBOLS = (
     "GLOBAL_EVENT_QUERY_POLICY_V1",
@@ -241,6 +249,73 @@ def test_removed_issuer_news_import_guard_recognizes_every_import_form(statement
     assert any(_matches_any_dependency(name, REMOVED_PRODUCTION_MODULES) for name in imported_names)
 
 
+@pytest.mark.parametrize(
+    "statement",
+    (
+        "import market_predictor.swing.event_families",
+        "from market_predictor.swing import event_families",
+        "from market_predictor.swing.event_families import classify_event_families",
+        "import market_predictor.swing.event_relevance",
+        "from market_predictor.swing.event_relevance import add_event_relevance",
+        "import market_predictor.swing.event_attribution",
+        "from market_predictor.swing.event_attribution import build_event_security_relations",
+        "import market_predictor.swing.event_attribution_history",
+        "from market_predictor.swing.event_attribution_history import load_event_attribution_history",
+    ),
+)
+def test_removed_issuer_event_foundation_import_guard_recognizes_every_import_form(statement: str) -> None:
+    tree = ast.parse(statement)
+    imported_names = tuple(name for node in ast.walk(tree) for name in _imported_names(node))
+    assert any(_matches_any_dependency(name, REMOVED_PRODUCTION_MODULES) for name in imported_names)
+
+
+def test_rule_variant_helper_has_one_semantic_owner() -> None:
+    expected_owner = PACKAGE_ROOT / "catalysts" / "issuer_events" / "classification.py"
+    legacy_owner = PACKAGE_ROOT / "edge_rebuild" / "issuer_event_precision_audit.py"
+    definitions: list[Path] = []
+    forbidden_imports: list[str] = []
+    for root in (PACKAGE_ROOT, TEST_ROOT, SCRIPT_ROOT):
+        if not root.exists():
+            continue
+        for path in root.rglob("*.py"):
+            tree = ast.parse(path.read_text(encoding="utf-8-sig"), filename=str(path))
+            if any(
+                isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+                and node.name == "issuer_event_rule_variant"
+                for node in ast.walk(tree)
+            ):
+                definitions.append(path)
+            for node in ast.walk(tree):
+                if not isinstance(node, ast.ImportFrom):
+                    continue
+                if node.module != "market_predictor.edge_rebuild.issuer_event_precision_audit":
+                    continue
+                if any(alias.name == "issuer_event_rule_variant" for alias in node.names):
+                    forbidden_imports.append(f"{path.relative_to(REPOSITORY_ROOT)}:{node.lineno}")
+
+    assert definitions == [expected_owner]
+    assert not forbidden_imports, "Rule-variant consumers import the old owner:\n" + "\n".join(forbidden_imports)
+
+    legacy_tree = ast.parse(legacy_owner.read_text(encoding="utf-8-sig"), filename=str(legacy_owner))
+    legacy_bindings = _top_level_binding_lines(legacy_tree, "issuer_event_rule_variant")
+    assert not legacy_bindings, f"Old precision-audit module binds rule-variant helper at lines {legacy_bindings}"
+
+
+@pytest.mark.parametrize(
+    "statement",
+    (
+        "issuer_event_rule_variant = classification.issuer_event_rule_variant",
+        "issuer_event_rule_variant: object = classification.issuer_event_rule_variant",
+        "import market_predictor.catalysts.issuer_events.classification as issuer_event_rule_variant",
+        "from market_predictor.catalysts.issuer_events.classification import issuer_event_rule_variant",
+        "from market_predictor.catalysts.issuer_events.classification import classify_event_families as issuer_event_rule_variant",
+        "def issuer_event_rule_variant(row):\n    return row",
+    ),
+)
+def test_rule_variant_owner_guard_detects_module_scope_rebinding(statement: str) -> None:
+    assert _top_level_binding_lines(ast.parse(statement), "issuer_event_rule_variant")
+
+
 def test_removed_global_event_api_names_are_absent_from_python_code() -> None:
     violations: list[str] = []
     for root in (PACKAGE_ROOT, TEST_ROOT, SCRIPT_ROOT):
@@ -283,6 +358,25 @@ def _forbidden_imports(path: Path) -> list[str]:
             relative_path = path.relative_to(PACKAGE_ROOT.parent)
             violations.append(f"{relative_path}:{node.lineno}: {imported_name}")
     return violations
+
+
+def _top_level_binding_lines(tree: ast.Module, name: str) -> list[int]:
+    lines: list[int] = []
+    for node in tree.body:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)) and node.name == name:
+            lines.append(node.lineno)
+        elif isinstance(node, ast.Import):
+            if any((alias.asname or alias.name.split(".", 1)[0]) == name for alias in node.names):
+                lines.append(node.lineno)
+        elif isinstance(node, ast.ImportFrom):
+            if any((alias.asname or alias.name) == name for alias in node.names):
+                lines.append(node.lineno)
+        elif isinstance(node, ast.Assign):
+            if any(isinstance(target, ast.Name) and target.id == name for target in node.targets):
+                lines.append(node.lineno)
+        elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name) and node.target.id == name:
+            lines.append(node.lineno)
+    return lines
 
 
 def _module_imports(path: Path) -> tuple[tuple[ast.AST, str], ...]:

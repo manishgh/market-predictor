@@ -4,13 +4,17 @@ import unittest
 
 import pandas as pd
 
-from market_predictor.swing.event_relevance import (
+from market_predictor.catalysts.issuer_events.relevance import (
+    RELEVANCE_POLICY_VERSION,
     SecurityMetadata,
     add_event_relevance,
 )
 
 
 class SwingEventRelevanceTests(unittest.TestCase):
+    def test_relevance_policy_identity_is_frozen(self) -> None:
+        self.assertEqual(RELEVANCE_POLICY_VERSION, "swing.event_relevance.v1")
+
     def test_lunr_space_theme_outweighs_unrelated_oil_headline(self) -> None:
         events = pd.DataFrame(
             {

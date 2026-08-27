@@ -1,8 +1,6 @@
 """Immutable research authority for catalyst-driven swing event cohorts."""
 from __future__ import annotations
 
-
-
 import gc
 import hashlib
 import json
@@ -31,15 +29,10 @@ from market_predictor.canonical.store import (
     load_canonical_artifact,
     write_canonical_artifact,
 )
-from market_predictor.resources import (
-    assert_memory_budget,
-    memory_audit,
-    release_process_memory,
-)
-from market_predictor.swing.event_attribution_history import (
+from market_predictor.catalysts.issuer_events.attribution_history import (
     load_event_attribution_history,
 )
-from market_predictor.swing.event_families import (
+from market_predictor.catalysts.issuer_events.classification import (
     ALLOWED_SOURCE_FAMILIES_BY_FAMILY,
     EVENT_FAMILIES,
     EVENT_FAMILY_POLICY_SHA256,
@@ -47,6 +40,11 @@ from market_predictor.swing.event_families import (
     classify_event_families,
 )
 from market_predictor.core.errors import DataReadinessError
+from market_predictor.resources import (
+    assert_memory_budget,
+    memory_audit,
+    release_process_memory,
+)
 
 AUTHORITY_SCHEMA: Final = "edge_rebuild.issuer_event_family_authority.v2"
 MANIFEST_SCHEMA: Final = "edge_rebuild.issuer_event_family_manifest.v2"

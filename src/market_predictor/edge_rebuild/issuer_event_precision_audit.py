@@ -1,8 +1,6 @@
 """Immutable, causal precision audit for issuer event-family authorities."""
 from __future__ import annotations
 
-
-
 import gc
 import hashlib
 import json
@@ -31,6 +29,16 @@ from market_predictor.canonical.store import (
     manifest_path_for,
     write_canonical_artifact,
 )
+from market_predictor.catalysts.issuer_events import classification as issuer_event_classification
+from market_predictor.catalysts.issuer_events.attribution_history import (
+    EventAttributionHistory,
+    load_event_attribution_history,
+)
+from market_predictor.catalysts.issuer_events.classification import (
+    ALLOWED_SOURCE_FAMILIES_BY_FAMILY,
+    EVENT_FAMILIES,
+)
+from market_predictor.core.errors import DataReadinessError
 from market_predictor.edge_rebuild.issuer_event_family_authority import (
     IssuerEventFamilyAuthority,
     load_issuer_event_family_authority,
@@ -40,15 +48,6 @@ from market_predictor.resources import (
     memory_audit,
     release_process_memory,
 )
-from market_predictor.swing.event_attribution_history import (
-    EventAttributionHistory,
-    load_event_attribution_history,
-)
-from market_predictor.swing.event_families import (
-    ALLOWED_SOURCE_FAMILIES_BY_FAMILY,
-    EVENT_FAMILIES,
-)
-from market_predictor.core.errors import DataReadinessError
 
 POLICY_SCHEMA: Final = "market_predictor.issuer_event_precision_audit.v2"
 SAMPLE_AUTHORITY_SCHEMA: Final = "edge_rebuild.issuer_event_precision_sample_authority.v2"
@@ -1231,7 +1230,7 @@ def _candidate_index_row(
     row_hash = _sha256(f"{policy_sha256}|row|{family_event_id}")
     feature_time = _timestamp(family["feature_available_at_utc"], "feature time")
     quarter = f"{feature_time.year}Q{feature_time.quarter}"
-    variant = issuer_event_rule_variant(family)
+    variant = issuer_event_classification.issuer_event_rule_variant(family)
     stratum = "|".join(
         (
             str(family["source_family"]),
@@ -1747,25 +1746,6 @@ def _identity_records_by_security(
         row["available_at_utc"] = _optional_timestamp(row.get("available_at_utc"))
         output.setdefault(str(row["security_id"]), []).append(row)
     return output
-
-
-def issuer_event_rule_variant(row: Mapping[str, object]) -> str:
-    """Return the exact subtype used by the governed precision audit."""
-
-    family = str(row.get("event_family", row.get("proposed_event_family", "")))
-    text = f"{row['classification_rule_id']} {row['matched_text']}".lower()
-    if family == "analyst_revision":
-        if "price target" in text and any(word in text for word in ("raise", "higher", "up")):
-            return "price_target_up"
-        if "price target" in text and any(word in text for word in ("cut", "lower", "down")):
-            return "price_target_down"
-        if "initiat" in text or "coverage" in text:
-            return "coverage"
-        if "upgrade" in text:
-            return "bare_upgrade"
-        if "downgrade" in text:
-            return "bare_downgrade"
-    return str(row["classification_rule_id"])
 
 
 def _review_template(sample: pd.DataFrame, *, reviewer_slot: int) -> pd.DataFrame:

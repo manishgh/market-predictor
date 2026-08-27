@@ -4,7 +4,7 @@ import unittest
 
 import pandas as pd
 
-from market_predictor.swing.event_attribution import build_event_security_relations
+from market_predictor.catalysts.issuer_events.attribution import build_event_security_relations
 
 _EVENT_TIME = pd.Timestamp("2026-01-20T15:00:00Z")
 

@@ -11,7 +11,7 @@ from market_predictor.canonical.audits import (
     CanonicalAuditReport,
 )
 from market_predictor.canonical.store import write_canonical_artifact
-from market_predictor.swing.event_attribution import (
+from market_predictor.catalysts.issuer_events.attribution import (
     build_event_security_relations,
 )
 from market_predictor.swing.security_label_artifact import (

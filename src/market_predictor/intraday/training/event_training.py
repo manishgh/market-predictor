@@ -1,8 +1,6 @@
 """Research-only event cohort binding for intraday development training."""
 from __future__ import annotations
 
-
-
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Final
@@ -10,15 +8,15 @@ from typing import Any, Final
 import pandas as pd
 
 from market_predictor.canonical.store import file_sha256
+from market_predictor.catalysts.issuer_events.classification import (
+    issuer_event_rule_variant,
+)
+from market_predictor.core.errors import DataReadinessError
 from market_predictor.intraday.datasets.event_preflight import (
     load_intraday_event_preflight,
 )
 from market_predictor.intraday.training.training import PublishedIntradayDataset
-from market_predictor.edge_rebuild.issuer_event_precision_audit import (
-    issuer_event_rule_variant,
-)
 from market_predictor.resources import release_process_memory
-from market_predictor.core.errors import DataReadinessError
 
 EVENT_COHORT_SCHEMA: Final = "edge_rebuild.intraday_research_event_cohort.v1"
 MINIMUM_EVENT_EPISODES: Final = 1_000

@@ -15,15 +15,15 @@ from market_predictor.canonical.store import (
     load_canonical_artifact,
     write_canonical_artifact,
 )
-from market_predictor.swing.catalyst_lineage import (
-    _reconcile_sentiment_inventory,
-    build_catalyst_lineage,
-)
-from market_predictor.swing.event_attribution import (
+from market_predictor.catalysts.issuer_events.attribution import (
     ATTRIBUTION_POLICY_SHA256,
     ATTRIBUTION_POLICY_VERSION,
 )
 from market_predictor.core.errors import DataReadinessError
+from market_predictor.swing.catalyst_lineage import (
+    _reconcile_sentiment_inventory,
+    build_catalyst_lineage,
+)
 
 
 class SwingCatalystLineageTests(unittest.TestCase):

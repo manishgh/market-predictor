@@ -19,6 +19,11 @@ from market_predictor.canonical.store import (
     manifest_path_for,
     write_canonical_artifact,
 )
+from market_predictor.catalysts.issuer_events.classification import (
+    EVENT_FAMILY_POLICY_SHA256,
+    EVENT_FAMILY_POLICY_VERSION,
+    classify_event_families,
+)
 from market_predictor.core.errors import DataReadinessError
 from market_predictor.edge_rebuild.prospective_broker_actions import (
     ProspectiveGeneration,
@@ -35,11 +40,6 @@ from market_predictor.resources import (
     assert_memory_budget,
     assert_peak_memory_budget,
     memory_audit,
-)
-from market_predictor.swing.event_families import (
-    EVENT_FAMILY_POLICY_SHA256,
-    EVENT_FAMILY_POLICY_VERSION,
-    classify_event_families,
 )
 from market_predictor.universe.sp500.observed_membership_authority import (
     AUTHORITY_SCHEMA as OBSERVED_MEMBERSHIP_AUTHORITY_SCHEMA,

@@ -16,13 +16,13 @@ from market_predictor.canonical.store import (
 from market_predictor.catalysts.issuer_events.alpaca_news_audit import (
     audit_alpaca_news_history,
 )
+from market_predictor.catalysts.issuer_events.attribution_history import (
+    attribute_alpaca_news_history,
+)
 from market_predictor.config import get_settings
 from market_predictor.heavy_jobs import serialized_heavy_job
 from market_predictor.sentiment import FinbertScorer
 from market_predictor.swing.catalyst_lineage import build_catalyst_lineage
-from market_predictor.swing.event_attribution_history import (
-    attribute_alpaca_news_history,
-)
 from market_predictor.swing.security_label_artifact import (
     build_security_label_artifact,
 )

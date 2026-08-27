@@ -15,6 +15,10 @@ from market_predictor.canonical.store import (
     manifest_path_for,
     write_canonical_artifact,
 )
+from market_predictor.catalysts.issuer_events.attribution_history import (
+    attribute_alpaca_news_history,
+    load_event_attribution_history,
+)
 from market_predictor.catalysts.issuer_events.news_history_contracts import (
     NEWS_HISTORY_MANIFEST_SCHEMA,
 )
@@ -24,10 +28,6 @@ from market_predictor.edge_rebuild.issuer_event_family_authority import (
     IssuerEventFamilyAuthority,
     load_issuer_event_family_authority,
     publish_issuer_event_family_authority,
-)
-from market_predictor.swing.event_attribution_history import (
-    attribute_alpaca_news_history,
-    load_event_attribution_history,
 )
 
 _POLICY_PATH = Path(__file__).parents[1] / "configs" / "swing_event_family_policy.toml"

@@ -7,12 +7,14 @@ import pandas as pd
 import pytest
 from pandas.testing import assert_frame_equal
 
-from market_predictor.swing.event_families import (
+from market_predictor.catalysts.issuer_events.classification import (
     ALLOWED_SOURCE_FAMILIES_BY_FAMILY,
     EVENT_FAMILIES,
     EVENT_FAMILY_COLUMNS,
+    EVENT_FAMILY_POLICY_SHA256,
     EVENT_FAMILY_POLICY_VERSION,
     classify_event_families,
+    issuer_event_rule_variant,
 )
 from market_predictor.core.errors import DataReadinessError
 
@@ -37,6 +39,76 @@ def _events(*rows: dict[str, object]) -> pd.DataFrame:
             for index, row in enumerate(rows, start=1)
         ]
     )
+
+
+def test_classifier_policy_identity_is_frozen() -> None:
+    assert EVENT_FAMILY_POLICY_VERSION == "swing.issuer_event_family.v2"
+    assert EVENT_FAMILY_POLICY_SHA256 == "fa43938d4dc7cb07d62b2e1e24a40cbe004d9d76cc8c7bf21b7c3cd8ef366d7d"
+
+
+@pytest.mark.parametrize(
+    ("row", "expected"),
+    (
+        (
+            {
+                "event_family": "analyst_revision",
+                "classification_rule_id": "analyst_rating_or_target_revision",
+                "matched_text": "price target raised",
+            },
+            "price_target_up",
+        ),
+        (
+            {
+                "event_family": "analyst_revision",
+                "classification_rule_id": "analyst_rating_or_target_revision",
+                "matched_text": "price target cut",
+            },
+            "price_target_down",
+        ),
+        (
+            {
+                "proposed_event_family": "analyst_revision",
+                "classification_rule_id": "analyst_rating_or_target_revision",
+                "matched_text": "initiates coverage",
+            },
+            "coverage",
+        ),
+        (
+            {
+                "event_family": "analyst_revision",
+                "classification_rule_id": "analyst_rating_or_target_revision",
+                "matched_text": "upgrades issuer",
+            },
+            "bare_upgrade",
+        ),
+        (
+            {
+                "event_family": "analyst_revision",
+                "classification_rule_id": "analyst_rating_or_target_revision",
+                "matched_text": "downgrades issuer",
+            },
+            "bare_downgrade",
+        ),
+        (
+            {
+                "event_family": "analyst_revision",
+                "classification_rule_id": "analyst_rating_or_target_revision",
+                "matched_text": "analyst maintains rating",
+            },
+            "analyst_rating_or_target_revision",
+        ),
+        (
+            {
+                "event_family": "earnings",
+                "classification_rule_id": "earnings_reported_results",
+                "matched_text": "reports quarterly earnings",
+            },
+            "earnings_reported_results",
+        ),
+    ),
+)
+def test_rule_variant_policy_is_frozen(row: dict[str, object], expected: str) -> None:
+    assert issuer_event_rule_variant(row) == expected
 
 
 @pytest.mark.parametrize(
