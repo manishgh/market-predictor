@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import shutil
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict
 from pathlib import Path
 from types import SimpleNamespace
@@ -12,18 +13,17 @@ import numpy as np
 import pandas as pd
 import pytest
 
-import market_predictor.intraday.training.validation as validation_module
-from market_predictor.intraday.training.training import load_published_intraday_dataset
-import market_predictor.intraday.training.io as io_module
-import market_predictor.intraday.evaluation.gates as gates_module
 import market_predictor.intraday.evaluation.economics as economics_module
+import market_predictor.intraday.evaluation.gates as gates_module
 import market_predictor.intraday.training.coordinator as coordinator_module
+import market_predictor.intraday.training.io as io_module
 import market_predictor.intraday.training.models as models_module
-from market_predictor.intraday.training.config import IntradayDevelopmentConfig
-from market_predictor.intraday.evaluation.gates import baseline_profile, evaluate_future_intraday_holdout, load_intraday_development_config
-from market_predictor.intraday.training.coordinator import train_intraday_development_candidate
-from market_predictor.intraday.training.training import MODEL_FEATURE_COLUMNS
+import market_predictor.intraday.training.validation as validation_module
 from market_predictor.core.errors import DataReadinessError
+from market_predictor.intraday.evaluation.gates import baseline_profile, evaluate_future_intraday_holdout, load_intraday_development_config
+from market_predictor.intraday.training.config import IntradayDevelopmentConfig
+from market_predictor.intraday.training.coordinator import train_intraday_development_candidate
+from market_predictor.intraday.training.training import MODEL_FEATURE_COLUMNS, load_published_intraday_dataset
 from tests.test_edge_rebuild_intraday_training import _publish_dataset, _training_frame
 
 
@@ -534,7 +534,9 @@ def test_passing_development_candidate_still_keeps_future_closed(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    config = _rejecting_config()
+    config = _rejecting_config(
+        future_access_registry_directory=str(tmp_path / "future-access-registry")
+    )
     selected_spec = _limit_to_one_candidate(monkeypatch, config)
     _patch_fast_pair(monkeypatch)
     monkeypatch.setattr(
@@ -804,7 +806,7 @@ def test_future_output_overlap_is_rejected_before_access_is_consumed(
         access_consumed = True
         raise AssertionError("future access must not be consumed for overlapping output")
 
-    monkeypatch.setattr(io_module, "_consume_future_access", consume_access)
+    monkeypatch.setattr(io_module, "_reserve_future_access", consume_access)
     owner = candidate_directory if output_owner == "candidate" else future_directory
 
     with pytest.raises(DataReadinessError, match="overlap"):
@@ -815,6 +817,213 @@ def test_future_output_overlap_is_rejected_before_access_is_consumed(
         )
 
     assert access_consumed is False
+
+
+def test_invalid_candidate_does_not_reserve_future_access(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    registry = tmp_path / "future-access-registry"
+    config = _rejecting_config(future_access_registry_directory=str(registry))
+    candidate = _future_candidate(config)
+    candidate["model_family"] = "intraday_event_confirmed_research"
+    monkeypatch.setattr(
+        gates_module,
+        "_load_validation_passed_candidate",
+        lambda _directory: (candidate, {"schema_version": "candidate-manifest"}),
+    )
+
+    with pytest.raises(DataReadinessError, match="cannot open the future holdout"):
+        evaluate_future_intraday_holdout(
+            tmp_path / "candidate",
+            tmp_path / "future",
+            tmp_path / "evidence",
+        )
+
+    assert not registry.exists()
+
+
+def test_future_failure_is_recorded_and_access_cannot_be_retried(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    candidate_directory = tmp_path / "candidate"
+    future_directory = tmp_path / "future"
+    registry = tmp_path / "future-access-registry"
+    candidate_directory.mkdir()
+    future_directory.mkdir()
+    (candidate_directory / "_authority.json").write_text("{}\n", encoding="utf-8")
+    (candidate_directory / "_manifest.json").write_text("{}\n", encoding="utf-8")
+    config = _rejecting_config(future_access_registry_directory=str(registry))
+    candidate = _future_candidate(config)
+    monkeypatch.setattr(
+        gates_module,
+        "_load_validation_passed_candidate",
+        lambda _directory: (candidate, {"schema_version": "candidate-manifest"}),
+    )
+    monkeypatch.setattr(
+        gates_module,
+        "load_published_intraday_dataset",
+        lambda _directory: (_ for _ in ()).throw(DataReadinessError("corrupt future authority")),
+    )
+
+    with pytest.raises(DataReadinessError, match="corrupt future authority"):
+        evaluate_future_intraday_holdout(
+            candidate_directory,
+            future_directory,
+            tmp_path / "evidence",
+        )
+
+    access_receipts = sorted(registry.glob("*.json"))
+    assert len(access_receipts) == 2
+    failure = _json(next(path for path in access_receipts if path.name.endswith(".failure.json")))
+    assert failure["state"] == "failed_after_reservation"
+    assert failure["error_type"] == "DataReadinessError"
+
+    with pytest.raises(DataReadinessError, match="already consumed"):
+        evaluate_future_intraday_holdout(
+            candidate_directory,
+            future_directory,
+            tmp_path / "retry-evidence",
+        )
+
+
+def test_future_access_reservation_has_one_concurrent_winner(tmp_path: Path) -> None:
+    candidate_directory = tmp_path / "candidate"
+    future_directory = tmp_path / "future"
+    registry = tmp_path / "future-access-registry"
+    candidate_directory.mkdir()
+    future_directory.mkdir()
+    (candidate_directory / "_authority.json").write_text("{}\n", encoding="utf-8")
+
+    def reserve() -> str:
+        try:
+            io_module._reserve_future_access(candidate_directory, future_directory, registry)
+        except DataReadinessError:
+            return "rejected"
+        return "reserved"
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        outcomes = list(executor.map(lambda _index: reserve(), range(2)))
+
+    assert sorted(outcomes) == ["rejected", "reserved"]
+    assert len(list(registry.glob("*.json"))) == 1
+
+
+def test_reservation_metadata_failure_keeps_claim_and_failure_receipt(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    candidate_directory = tmp_path / "candidate"
+    future_directory = tmp_path / "future"
+    registry = tmp_path / "future-access-registry"
+    candidate_directory.mkdir()
+    future_directory.mkdir()
+    (candidate_directory / "_authority.json").write_text("{}\n", encoding="utf-8")
+    monkeypatch.setattr(
+        io_module,
+        "_write_exclusive_json",
+        lambda *_args: (_ for _ in ()).throw(OSError("injected reservation write failure")),
+    )
+
+    with pytest.raises(OSError, match="injected reservation write failure"):
+        io_module._reserve_future_access(candidate_directory, future_directory, registry)
+
+    claims = list(registry.glob("*.claim"))
+    failures = list(registry.glob("*.failure.json"))
+    assert len(claims) == 1
+    assert len(failures) == 1
+    assert _json(failures[0])["access_lock_sha256"] == io_module.file_sha256(claims[0])
+    with pytest.raises(DataReadinessError, match="already consumed"):
+        io_module._reserve_future_access(candidate_directory, future_directory, registry)
+
+
+def test_reservation_payload_failure_keeps_claim_and_failure_receipt(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    candidate_directory = tmp_path / "candidate"
+    future_directory = tmp_path / "future"
+    registry = tmp_path / "future-access-registry"
+    candidate_directory.mkdir()
+    future_directory.mkdir()
+    (candidate_directory / "_authority.json").write_text("{}\n", encoding="utf-8")
+    original_file_sha256 = io_module.file_sha256
+    failure_injected = False
+
+    def fail_first_claim_hash(path: Path) -> str:
+        nonlocal failure_injected
+        if path.suffix == ".claim" and not failure_injected:
+            failure_injected = True
+            raise OSError("injected claim hash failure")
+        return original_file_sha256(path)
+
+    monkeypatch.setattr(io_module, "file_sha256", fail_first_claim_hash)
+
+    with pytest.raises(OSError, match="injected claim hash failure"):
+        io_module._reserve_future_access(candidate_directory, future_directory, registry)
+
+    assert len(list(registry.glob("*.claim"))) == 1
+    assert len(list(registry.glob("*.failure.json"))) == 1
+    with pytest.raises(DataReadinessError, match="already consumed"):
+        io_module._reserve_future_access(candidate_directory, future_directory, registry)
+
+
+def test_reservations_for_distinct_candidates_have_distinct_identities(tmp_path: Path) -> None:
+    future_directory = tmp_path / "future"
+    registry = tmp_path / "future-access-registry"
+    future_directory.mkdir()
+    receipts = []
+    for name, state in (("candidate-a", "first"), ("candidate-b", "second")):
+        candidate_directory = tmp_path / name
+        candidate_directory.mkdir()
+        (candidate_directory / "_authority.json").write_text(f'{{"state":"{state}"}}\n', encoding="utf-8")
+        receipts.append(io_module._reserve_future_access(candidate_directory, future_directory, registry))
+
+    identities = [io_module._future_access_identity(receipt) for receipt in receipts]
+    assert identities[0]["claim_id"] != identities[1]["claim_id"]
+    assert identities[0]["reservation_receipt_sha256"] != identities[1]["reservation_receipt_sha256"]
+
+
+@pytest.mark.parametrize("owner", ["candidate", "future", "output"])
+@pytest.mark.parametrize("relation", ["equal", "inside", "parent"])
+def test_future_access_registry_cannot_overlap_authorities(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    owner: str,
+    relation: str,
+) -> None:
+    candidate_directory = tmp_path / "candidate"
+    future_directory = tmp_path / "future"
+    output_directory = tmp_path / "output"
+    candidate_directory.mkdir()
+    future_directory.mkdir()
+    protected = {
+        "candidate": candidate_directory,
+        "future": future_directory,
+        "output": output_directory,
+    }[owner]
+    registry = {
+        "equal": protected,
+        "inside": protected / "access-registry",
+        "parent": protected.parent,
+    }[relation]
+    config = _rejecting_config(future_access_registry_directory=str(registry))
+    candidate = _future_candidate(config)
+    monkeypatch.setattr(
+        gates_module,
+        "_load_validation_passed_candidate",
+        lambda _directory: (candidate, {"schema_version": "candidate-manifest"}),
+    )
+
+    with pytest.raises(DataReadinessError, match="registry overlaps"):
+        evaluate_future_intraday_holdout(
+            candidate_directory,
+            future_directory,
+            output_directory,
+        )
+
+    assert list(tmp_path.rglob("*.claim")) == []
 
 
 @pytest.mark.parametrize(
@@ -846,7 +1055,7 @@ def test_future_holdout_requires_full_development_identity_binding(
         lambda _directory: (candidate, {"schema_version": "candidate-manifest"}),
     )
     monkeypatch.setattr(io_module, "_require_output_isolated", lambda *_args: None)
-    monkeypatch.setattr(io_module, "_consume_future_access", lambda *_args: lock)
+    monkeypatch.setattr(io_module, "_reserve_future_access", lambda *_args: lock)
     monkeypatch.setattr(
         gates_module, "load_published_intraday_dataset", lambda _directory: published
     )
@@ -905,7 +1114,7 @@ def test_future_profile_population_must_meet_frozen_minimums(
         lambda _directory: (candidate, {"schema_version": "candidate-manifest"}),
     )
     monkeypatch.setattr(io_module, "_require_output_isolated", lambda *_args: None)
-    monkeypatch.setattr(io_module, "_consume_future_access", lambda *_args: lock)
+    monkeypatch.setattr(io_module, "_reserve_future_access", lambda *_args: lock)
     monkeypatch.setattr(
         gates_module, "load_published_intraday_dataset", lambda _directory: published
     )
@@ -946,7 +1155,7 @@ def test_future_access_registry_is_keyed_by_candidate_authority_hash(
         first_candidate / "_authority.json"
     )
 
-    lock = io_module._consume_future_access(
+    lock = io_module._reserve_future_access(
         first_candidate,
         future_directory,
         registry,
@@ -955,7 +1164,7 @@ def test_future_access_registry_is_keyed_by_candidate_authority_hash(
     assert lock.parent.resolve() == registry.resolve()
     assert authority_sha256 in lock.name
     with pytest.raises(DataReadinessError, match="already consumed"):
-        io_module._consume_future_access(
+        io_module._reserve_future_access(
             second_candidate,
             future_directory,
             registry,
@@ -991,6 +1200,97 @@ def test_relative_future_registry_is_stable_home_based_and_embedded_in_contract(
     assert second_contract["future_access_registry_directory"] == str(expected)
 
 
+def test_direct_future_holdout_evaluation_records_one_access(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    candidate_directory = tmp_path / "candidate"
+    future_directory = tmp_path / "future"
+    output_directory = tmp_path / "future-evidence"
+    registry = tmp_path / "future-access-registry"
+    candidate_directory.mkdir()
+    future_directory.mkdir()
+    (candidate_directory / "_authority.json").write_text("{}\n", encoding="utf-8")
+    (candidate_directory / "_manifest.json").write_text("{}\n", encoding="utf-8")
+    config = _rejecting_config(
+        minimum_rows=1,
+        minimum_securities=2,
+        future_access_registry_directory=str(registry),
+    )
+    candidate = _future_candidate(config)
+    published = _future_published(_future_training_frame())
+    monkeypatch.setattr(
+        gates_module,
+        "_load_validation_passed_candidate",
+        lambda _directory: (candidate, {"schema_version": "candidate-manifest"}),
+    )
+    monkeypatch.setattr(
+        gates_module,
+        "load_published_intraday_dataset",
+        lambda _directory: published,
+    )
+
+    evaluation = evaluate_future_intraday_holdout(
+        candidate_directory,
+        future_directory,
+        output_directory,
+    )
+
+    assert evaluation["status"] == "locked_future_evaluated"
+    assert io_module.load_complete_intraday_future_evaluation_output(output_directory)["status"] == "locked_future_evaluated"
+    assert len(list(registry.glob("*.failure.json"))) == 0
+    access_receipts = [path for path in registry.glob("*.json") if not path.name.endswith(".failure.json")]
+    assert len(access_receipts) == 1
+    assert _json(access_receipts[0])["state"] == "reserved"
+
+
+def test_future_replay_failure_does_not_publish_success_authority(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    candidate_directory = tmp_path / "candidate"
+    future_directory = tmp_path / "future"
+    output_directory = tmp_path / "future-evidence"
+    registry = tmp_path / "future-access-registry"
+    candidate_directory.mkdir()
+    future_directory.mkdir()
+    (candidate_directory / "_authority.json").write_text("{}\n", encoding="utf-8")
+    (candidate_directory / "_manifest.json").write_text("{}\n", encoding="utf-8")
+    config = _rejecting_config(
+        minimum_rows=1,
+        minimum_securities=2,
+        future_access_registry_directory=str(registry),
+    )
+    candidate = _future_candidate(config)
+    published = _future_published(_future_training_frame())
+    monkeypatch.setattr(
+        gates_module,
+        "_load_validation_passed_candidate",
+        lambda _directory: (candidate, {"schema_version": "candidate-manifest"}),
+    )
+    monkeypatch.setattr(
+        gates_module,
+        "load_published_intraday_dataset",
+        lambda _directory: published,
+    )
+    monkeypatch.setattr(
+        io_module,
+        "load_complete_intraday_future_evaluation_output",
+        lambda _directory: (_ for _ in ()).throw(DataReadinessError("injected replay failure")),
+    )
+
+    with pytest.raises(DataReadinessError, match="injected replay failure"):
+        evaluate_future_intraday_holdout(
+            candidate_directory,
+            future_directory,
+            output_directory,
+        )
+
+    assert not output_directory.exists()
+    assert len(list(registry.glob("*.claim"))) == 1
+    assert len(list(registry.glob("*.failure.json"))) == 1
+
+
 def test_successful_future_evidence_replays_and_rejects_tamper_when_supported(
     tmp_path: Path,
 ) -> None:
@@ -1018,6 +1318,26 @@ def test_successful_future_evidence_replays_and_rejects_tamper_when_supported(
     with pytest.raises(DataReadinessError):
         loader(tampered)
 
+    reservation_tampered = tmp_path / "tampered-future-reservation"
+    shutil.copytree(output, reservation_tampered)
+    receipt_path = reservation_tampered / "future_access_reservation.json"
+    receipt = _json(receipt_path)
+    receipt["candidate_authority_sha256"] = "f" * 64
+    receipt_path.write_text(json.dumps(receipt, sort_keys=True) + "\n", encoding="utf-8")
+    manifest_path = reservation_tampered / "_manifest.json"
+    manifest = _json(manifest_path)
+    manifest["files"]["future_access_reservation.json"] = {
+        "sha256": io_module.file_sha256(receipt_path),
+        "bytes": receipt_path.stat().st_size,
+    }
+    manifest_path.write_text(json.dumps(manifest, sort_keys=True) + "\n", encoding="utf-8")
+    authority_path = reservation_tampered / "_authority.json"
+    authority = _json(authority_path)
+    authority["manifest_sha256"] = io_module.file_sha256(manifest_path)
+    authority_path.write_text(json.dumps(authority, sort_keys=True) + "\n", encoding="utf-8")
+    with pytest.raises(DataReadinessError, match="reservation identity"):
+        loader(reservation_tampered)
+
 
 def test_strict_future_loader_rejects_unexpected_nested_entry(tmp_path: Path) -> None:
     output = tmp_path / "future-evidence-with-nested-entry"
@@ -1031,12 +1351,32 @@ def test_strict_future_loader_rejects_unexpected_nested_entry(tmp_path: Path) ->
 
 
 def _publish_valid_future_evidence(output: Path) -> None:
+    reservation_receipt = output.parent / f"{output.name}-reservation.json"
+    reservation_receipt.write_text(
+        json.dumps(
+            {
+                "schema_version": "edge_rebuild.intraday_future_access.v1",
+                "state": "reserved",
+                "access_claim_sha256": "a" * 64,
+                "candidate_authority_sha256": "b" * 64,
+                "future_dataset_directory": "future-dataset",
+                "reserved_at_utc": "2026-07-09T00:00:00+00:00",
+            },
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
     evaluation = {
         "schema_version": getattr(io_module, "FUTURE_EVALUATION_SCHEMA_VERSION", "intraday.future.v1"),
         "status": "locked_future_evaluated",
         "promotion_permitted": False,
         "selection_changed_after_future_observation": False,
-        "future_access_lock_sha256": "a" * 64,
+        "future_access": {
+            "claim_id": "b" * 64,
+            "claim_sha256": "a" * 64,
+            "reservation_receipt_sha256": io_module.file_sha256(reservation_receipt),
+        },
         "candidate_authority_sha256": "b" * 64,
         "candidate_manifest_sha256": "c" * 64,
         "candidate_manifest_schema": "candidate-manifest",
@@ -1063,6 +1403,7 @@ def _publish_valid_future_evidence(output: Path) -> None:
             "position_records": [{"notional": 0.5, "pnl": 0.01}],
             "daily_records": [{"daily_return": 0.01, "entries": 1}],
         },
+        reservation_receipt,
     )
 
 
@@ -1143,6 +1484,29 @@ def _future_published(frame: pd.DataFrame) -> SimpleNamespace:
         ordered_feature_sha256="d" * 64,
         strategy_contract_sha256="b" * 64,
     )
+
+
+def _future_training_frame() -> pd.DataFrame:
+    frame = _training_frame(session_count=4, security_count=2)
+    session_dates = pd.to_datetime(frame["session_date_et"], errors="raise")
+    shift = pd.Timestamp("2026-07-09") - session_dates.min()
+    frame["session_date_et"] = (session_dates + shift).dt.date
+    for column in (
+        "decision_time_utc",
+        "feature_available_at_utc",
+        "label_available_at_utc",
+        "entry_time_utc",
+        "entry_bar_end_utc",
+        "exit_time_utc",
+        "exit_bar_end_utc",
+    ):
+        frame[column] = pd.to_datetime(frame[column], utc=True, errors="raise") + shift
+    frame["decision_group_id"] = frame["decision_time_utc"].map(lambda value: value.isoformat())
+    frame["dataset_row_id"] = [f"future-row-{index}" for index in range(len(frame))]
+    frame["volume_return_1_bar"] = 1.0
+    frame["stock_return_20m"] = 1.0
+    frame["session_vwap_distance_five_minute_atr"] = 1.0
+    return frame
 
 
 def _profile_frame(

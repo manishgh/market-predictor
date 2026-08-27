@@ -1,27 +1,11 @@
-from __future__ import annotations
-
-from market_predictor.intraday.evaluation.economics import _economic_ranking_metrics, _ledger_metrics, _position_ledger
-from market_predictor.intraday.evaluation.metrics import _moving_block_bootstrap, _moving_block_mean_interval, _predictive_metrics
-
-from market_predictor.intraday.training.io import (
-    _dataset_identity,
-    _json_sha256,
-    _load_validation_passed_candidate,
-    _object,
-    _parse_date,
-    _publish_future_evaluation,
-    _required_finite_number,
-    _tuple_config_values,
-    load_complete_intraday_future_evaluation_output,
-)
-from market_predictor.intraday.training.models import _raw_stop_logit
-
 """Development-only, cost-aware intraday model training and evaluation."""
+
+from __future__ import annotations
 
 import math
 import tomllib
 from collections.abc import Mapping, Sequence
-from dataclasses import asdict, dataclass, fields
+from dataclasses import asdict, fields
 from datetime import date
 from pathlib import Path
 from typing import Any, Final
@@ -31,6 +15,19 @@ import pandas as pd
 
 from market_predictor.canonical.store import file_sha256
 from market_predictor.core.errors import DataReadinessError
+from market_predictor.intraday.evaluation.economics import _economic_ranking_metrics, _ledger_metrics, _position_ledger
+from market_predictor.intraday.evaluation.metrics import _moving_block_bootstrap, _moving_block_mean_interval, _predictive_metrics
+from market_predictor.intraday.training.config import BaselineProfile, IntradayDevelopmentConfig, _CandidateSpec
+from market_predictor.intraday.training.io import (
+    _dataset_identity,
+    _load_validation_passed_candidate,
+    _object,
+    _parse_date,
+    _publish_future_evaluation,
+    _required_finite_number,
+    _tuple_config_values,
+)
+from market_predictor.intraday.training.models import _raw_stop_logit
 from market_predictor.intraday.training.training import (
     MODEL_FEATURE_COLUMNS,
     PublishedIntradayDataset,
@@ -51,161 +48,6 @@ _FUTURE_EVALUATION_NAME: Final = "future_evaluation.json"
 _POSITION_LEDGER_NAME: Final = "position_ledger.parquet"
 _DAILY_LEDGER_NAME: Final = "daily_ledger.parquet"
 _VALIDATION_PREDICTIONS_NAME: Final = "validation_predictions.parquet"
-
-
-@dataclass(frozen=True, slots=True)
-class IntradayDevelopmentConfig:
-    """Frozen development policy. Future observations are not an input."""
-
-    development_end_date: str = "2026-07-08"
-    future_holdout_start_date: str = "2026-07-09"
-    validation_folds: int = 4
-    minimum_train_sessions: int = 120
-    minimum_validation_sessions: int = 40
-    embargo_sessions: int = 1
-    maximum_label_horizon_minutes: int = 30
-    minimum_rows: int = 1_000
-    minimum_securities: int = 200
-    security_holdout_fraction: float = 0.20
-    calibration_fraction: float = 0.20
-    minimum_calibration_sessions: int = 20
-    maximum_candidates_per_decision: int = 5
-    maximum_concurrent_positions: int = 5
-    position_weight: float = 0.10
-    per_security_cooldown_minutes: int = 30
-    expected_net_return_thresholds_bps: tuple[float, ...] = (0.0, 3.0)
-    maximum_stop_probability_thresholds: tuple[float, ...] = (0.35,)
-    ridge_alphas: tuple[float, ...] = (1.0,)
-    logistic_c_values: tuple[float, ...] = (1.0,)
-    hgb_learning_rates: tuple[float, ...] = (0.05,)
-    hgb_max_leaf_nodes: tuple[int, ...] = (15, 31)
-    hgb_max_iter: int = 150
-    hgb_max_bins: int = 127
-    bootstrap_samples: int = 2_000
-    bootstrap_block_sessions: int = 5
-    random_seed: int = 42
-    minimum_validation_trades: int = 200
-    minimum_validation_sessions_with_trades: int = 40
-    minimum_scope_rows: int = 1_000
-    minimum_scope_securities: int = 20
-    minimum_positive_net_return_roc_auc: float = 0.60
-    minimum_seen_positive_net_lift: float = 1.10
-    minimum_unseen_positive_net_lift: float = 1.03
-    minimum_seen_stop_hit_roc_auc: float = 0.55
-    minimum_unseen_stop_hit_roc_auc: float = 0.52
-    maximum_stop_hit_brier: float = 0.25
-    maximum_stop_hit_ece: float = 0.10
-    minimum_average_trade_net_return_bps: float = 3.0
-    minimum_average_daily_net_return_bps: float = 0.0
-    minimum_daily_return_ci_low_bps: float = 0.0
-    minimum_profit_factor: float = 1.05
-    minimum_economic_rank_gain_bps: float = 0.0
-    minimum_average_spy_excess_bps: float = 0.0
-    minimum_average_qqq_excess_bps: float = 0.0
-    minimum_average_sector_excess_bps: float = 0.0
-    maximum_drawdown: float = 0.15
-    maximum_round_trip_turnover: float = 1.0
-    minimum_profitable_fold_fraction: float = 1.0
-    maximum_negative_session_rate: float = 0.55
-    minimum_return_to_drawdown: float = 0.50
-    stress_cost_bps: float = 20.0
-    minimum_stress_average_daily_return_bps: float = 0.0
-    cost_curve_bps: tuple[float, ...] = (0.0, 5.0, 10.0, 20.0)
-    continuation_min_volume_return_1_bar: float = 0.0
-    continuation_min_stock_return_20m: float = 0.0
-    continuation_min_vwap_distance_atr: float = 0.0
-    reversion_max_stock_return_20m: float = 0.0
-    reversion_max_vwap_distance_atr: float = -0.5
-    reversion_max_volume_rsi_14: float = 45.0
-    maximum_process_memory_gib: float = 4.0
-    memory_guard_headroom_gib: float = 0.75
-    future_access_registry_directory: str = "data/state/intraday_future_access"
-
-    def __post_init__(self) -> None:
-        development_end = _parse_date(self.development_end_date, "development_end_date")
-        future_start = _parse_date(self.future_holdout_start_date, "future_holdout_start_date")
-        if future_start <= development_end:
-            raise ValueError("future holdout must start strictly after development")
-        if self.validation_folds < 2:
-            raise ValueError("validation_folds must be at least two")
-        if self.minimum_train_sessions < 20 or self.minimum_validation_sessions < 5:
-            raise ValueError("walk-forward session minimums are too small")
-        if self.embargo_sessions < 1 or self.maximum_label_horizon_minutes != 30:
-            raise ValueError("one-session embargo and 30-minute labels are required")
-        if self.minimum_rows < 1 or self.minimum_securities < 2:
-            raise ValueError("training population minimums are invalid")
-        if not self.future_access_registry_directory.strip():
-            raise ValueError("future access registry directory is required")
-        if not 0.05 <= self.security_holdout_fraction <= 0.40:
-            raise ValueError("security holdout fraction is invalid")
-        if not 0.10 <= self.calibration_fraction <= 0.35 or self.minimum_calibration_sessions < 5:
-            raise ValueError("downside calibration controls are invalid")
-        if not 1 <= self.maximum_candidates_per_decision <= 30:
-            raise ValueError("maximum candidates per decision must be in [1, 30]")
-        if not 1 <= self.maximum_concurrent_positions <= 30:
-            raise ValueError("maximum concurrent positions must be in [1, 30]")
-        if not 0.0 < self.position_weight <= 1.0 / self.maximum_concurrent_positions + 1e-12:
-            raise ValueError("position_weight can neither be zero nor imply leverage")
-        if self.per_security_cooldown_minutes < self.maximum_label_horizon_minutes:
-            raise ValueError("security cooldown must cover the complete label horizon")
-        if not self.expected_net_return_thresholds_bps or any(value < 0.0 for value in self.expected_net_return_thresholds_bps):
-            raise ValueError("expected-return thresholds must be non-negative")
-        if tuple(sorted(set(self.expected_net_return_thresholds_bps))) != self.expected_net_return_thresholds_bps:
-            raise ValueError("expected-return thresholds must be unique and ordered")
-        if (
-            not self.maximum_stop_probability_thresholds
-            or any(not 0.0 < value < 1.0 for value in self.maximum_stop_probability_thresholds)
-            or tuple(sorted(set(self.maximum_stop_probability_thresholds))) != self.maximum_stop_probability_thresholds
-        ):
-            raise ValueError("stop probability thresholds are invalid")
-        if not self.ridge_alphas or any(value <= 0.0 for value in self.ridge_alphas):
-            raise ValueError("ridge alphas must be positive")
-        if not self.logistic_c_values or any(value <= 0.0 for value in self.logistic_c_values):
-            raise ValueError("logistic C values must be positive")
-        if not self.hgb_learning_rates or any(value <= 0.0 for value in self.hgb_learning_rates):
-            raise ValueError("HGB learning rates must be positive")
-        if not self.hgb_max_leaf_nodes or any(value < 2 for value in self.hgb_max_leaf_nodes):
-            raise ValueError("HGB leaf-node limits are invalid")
-        if self.hgb_max_iter < 10 or not 2 <= self.hgb_max_bins <= 255:
-            raise ValueError("HGB iteration or bin limits are invalid")
-        if not 100 <= self.bootstrap_samples <= 5_000 or self.bootstrap_block_sessions < 2:
-            raise ValueError("moving-block bootstrap controls are invalid")
-        if self.minimum_validation_trades < 1 or self.minimum_validation_sessions_with_trades < 2:
-            raise ValueError("economic sample gates are invalid")
-        if self.minimum_scope_rows < 100 or self.minimum_scope_securities < 5:
-            raise ValueError("validation scope row minimum is invalid")
-        if not 0.5 <= self.minimum_positive_net_return_roc_auc <= 1.0:
-            raise ValueError("positive-return ROC-AUC gate is invalid")
-        if not 1.0 <= self.minimum_seen_positive_net_lift or not 1.0 <= self.minimum_unseen_positive_net_lift:
-            raise ValueError("positive-return lift gates are invalid")
-        if not 0.5 <= self.minimum_seen_stop_hit_roc_auc <= 1.0 or not 0.5 <= self.minimum_unseen_stop_hit_roc_auc <= 1.0:
-            raise ValueError("stop-hit ROC-AUC gates are invalid")
-        if not 0.0 < self.maximum_stop_hit_brier < 1.0 or not 0.0 < self.maximum_stop_hit_ece < 1.0:
-            raise ValueError("stop-risk calibration gates are invalid")
-        if self.minimum_profit_factor < 1.0 or not 0.0 < self.maximum_drawdown < 1.0:
-            raise ValueError("profit-factor or drawdown gate is invalid")
-        if self.maximum_round_trip_turnover <= 0.0 or not 0.0 <= self.minimum_profitable_fold_fraction <= 1.0:
-            raise ValueError("turnover or fold-stability gate is invalid")
-        if not 0.0 <= self.maximum_negative_session_rate <= 1.0 or self.minimum_return_to_drawdown < 0.0:
-            raise ValueError("loss-frequency or return/drawdown gate is invalid")
-        if self.stress_cost_bps not in self.cost_curve_bps or any(value < 0.0 for value in self.cost_curve_bps):
-            raise ValueError("cost curve must contain the configured stress cost")
-        if tuple(sorted(set(self.cost_curve_bps))) != self.cost_curve_bps:
-            raise ValueError("cost curve must be unique and ordered")
-        if not 0.0 < self.maximum_process_memory_gib <= 4.0:
-            raise ValueError("process memory hard limit must be in (0, 4] GiB")
-        if not 0.0 < self.memory_guard_headroom_gib < self.maximum_process_memory_gib:
-            raise ValueError("memory headroom must be below the hard limit")
-
-
-@dataclass(frozen=True, slots=True)
-class BaselineProfile:
-    profile_id: str
-    description: str
-    population_rule: Mapping[str, float]
-
-    def sha256(self) -> str:
-        return _json_sha256(asdict(self))
 
 
 def load_intraday_development_config(path: Path) -> IntradayDevelopmentConfig:
@@ -303,8 +145,13 @@ def evaluate_future_intraday_holdout(
     future dataset is rejected unless every row starts on/after the frozen date.
     """
 
-    from market_predictor.intraday.training.coordinator import _validate_development_frame
-    from market_predictor.intraday.training.io import _consume_future_access, _finish_output, _require_output_isolated, _temporary_output, _write_json
+    from market_predictor.intraday.training.io import (
+        _future_access_identity,
+        _record_future_access_failure,
+        _require_output_isolated,
+        _require_registry_isolated,
+        _reserve_future_access,
+    )
 
     candidate, manifest = _load_validation_passed_candidate(candidate_authority_directory)
     if candidate.get("model_family") != "intraday_technical":
@@ -318,34 +165,11 @@ def evaluate_future_intraday_holdout(
         candidate_authority_directory,
         future_dataset_authority_directory,
     )
-    if not future_dataset_authority_directory.is_dir():
-        raise DataReadinessError(f"future holdout data does not exist; collect sessions from {future_start.isoformat()} onward")
-    access_lock = _consume_future_access(
-        candidate_authority_directory,
-        future_dataset_authority_directory,
-        Path(str(contract.get("future_access_registry_directory", ""))),
-    )
-    published = load_published_intraday_dataset(future_dataset_authority_directory)
     development_dataset = _object(candidate.get("dataset"), "candidate dataset")
-    for identity_key in (
-        "transformation_sha256",
-        "strategy_contract_sha256",
-        "ordered_feature_sha256",
-    ):
-        if getattr(published, identity_key) != development_dataset.get(identity_key):
-            raise DataReadinessError(f"future holdout {identity_key} differs from development")
     expected_cost_bps = _required_finite_number(
         candidate.get("frozen_round_trip_cost_bps"),
         "frozen_round_trip_cost_bps",
     )
-    if not math.isclose(
-        published.frozen_round_trip_cost_bps,
-        expected_cost_bps,
-        rel_tol=0.0,
-        abs_tol=1e-12,
-    ):
-        raise DataReadinessError("future holdout cost contract differs from development")
-    data = _validate_future_frame(published, future_start, development_end, policy)
     profile_raw = _object(candidate.get("baseline_profile"), "baseline_profile")
     profile = BaselineProfile(
         profile_id=str(profile_raw.get("profile_id", "")),
@@ -357,19 +181,6 @@ def evaluate_future_intraday_holdout(
     )
     if candidate.get("baseline_profile_sha256") != profile.sha256():
         raise DataReadinessError("candidate baseline profile identity differs")
-    data = data.loc[_profile_mask(data, profile)].reset_index(drop=True)
-    minimum_sessions = int(contract.get("minimum_sessions", 0))
-    minimum_rows = int(contract.get("minimum_rows", 0))
-    minimum_securities = int(contract.get("minimum_securities", 0))
-    actual_sessions = int(data["session_date_et"].nunique())
-    actual_rows = int(len(data))
-    actual_securities = int(data["security_id"].nunique())
-    if minimum_sessions < 1 or actual_sessions < minimum_sessions:
-        raise DataReadinessError(f"future holdout has {actual_sessions} complete sessions; requires {minimum_sessions}")
-    if minimum_rows < 1 or actual_rows < minimum_rows:
-        raise DataReadinessError(f"future holdout has {actual_rows} profile rows; requires {minimum_rows}")
-    if minimum_securities < 2 or actual_securities < minimum_securities:
-        raise DataReadinessError(f"future holdout has {actual_securities} profile securities; requires {minimum_securities}")
     opportunity = candidate.get("opportunity_estimator")
     downside = candidate.get("downside_estimator")
     calibrator = candidate.get("downside_calibrator")
@@ -382,48 +193,103 @@ def evaluate_future_intraday_holdout(
         or not hasattr(calibrator, "predict_proba")
     ):
         raise DataReadinessError("candidate paired estimators are unavailable")
-    features = data.loc[:, MODEL_FEATURE_COLUMNS].to_numpy(dtype="float32", copy=False)
-    opportunity_score = np.asarray(opportunity.predict(features), dtype="float64")
-    raw_stop = _raw_stop_logit(downside, features)
-    stop_probability = np.asarray(calibrator.predict_proba(raw_stop.reshape(-1, 1))[:, 1], dtype="float64")
-    scored = _scored_frame(data, opportunity_score, stop_probability)
-    scored["fold"] = 0
-    scored["validation_scope"] = "future_holdout"
     threshold = _required_finite_number(
         candidate.get("expected_net_return_threshold_bps"),
         "expected_net_return_threshold_bps",
     )
     stop_threshold = _required_finite_number(candidate.get("maximum_stop_probability"), "maximum_stop_probability")
-    metrics = _evaluate_policy(
-        scored,
-        threshold,
-        stop_threshold,
-        policy,
-        published.frozen_round_trip_cost_bps,
+    try:
+        minimum_sessions = int(contract.get("minimum_sessions", 0))
+        minimum_rows = int(contract.get("minimum_rows", 0))
+        minimum_securities = int(contract.get("minimum_securities", 0))
+    except (TypeError, ValueError) as exc:
+        raise DataReadinessError("future holdout minimums must be integers") from exc
+    if minimum_sessions < 1 or minimum_rows < 1 or minimum_securities < 2:
+        raise DataReadinessError("future holdout minimums are invalid")
+    registry_value = str(contract.get("future_access_registry_directory", "")).strip()
+    if not registry_value:
+        raise DataReadinessError("future access registry directory is missing")
+    registry_directory = Path(registry_value)
+    _require_registry_isolated(
+        registry_directory,
+        candidate_authority_directory,
+        future_dataset_authority_directory,
+        output_directory,
     )
-    ledger = _position_ledger(
-        scored,
-        threshold,
-        stop_threshold,
-        published.frozen_round_trip_cost_bps,
-        policy,
+
+    reservation_receipt = _reserve_future_access(
+        candidate_authority_directory,
+        future_dataset_authority_directory,
+        registry_directory,
     )
-    evaluation = {
-        "schema_version": FUTURE_EVALUATION_SCHEMA_VERSION,
-        "status": "locked_future_evaluated",
-        "promotion_permitted": False,
-        "selection_changed_after_future_observation": False,
-        "future_access_lock_sha256": file_sha256(access_lock),
-        "candidate_authority_sha256": file_sha256(candidate_authority_directory / _AUTHORITY_NAME),
-        "candidate_manifest_sha256": file_sha256(candidate_authority_directory / _MANIFEST_NAME),
-        "candidate_manifest_schema": manifest.get("schema_version"),
-        "future_dataset": _dataset_identity(published),
-        "future_session_first": str(data["session_date_et"].min()),
-        "future_session_last": str(data["session_date_et"].max()),
-        "metrics": metrics,
-    }
-    _publish_future_evaluation(output_directory, evaluation, ledger)
-    load_complete_intraday_future_evaluation_output(output_directory)
+    try:
+        if not future_dataset_authority_directory.is_dir():
+            raise DataReadinessError(f"future holdout data does not exist; collect sessions from {future_start.isoformat()} onward")
+        published = load_published_intraday_dataset(future_dataset_authority_directory)
+        for identity_key in (
+            "transformation_sha256",
+            "strategy_contract_sha256",
+            "ordered_feature_sha256",
+        ):
+            if getattr(published, identity_key) != development_dataset.get(identity_key):
+                raise DataReadinessError(f"future holdout {identity_key} differs from development")
+        if not math.isclose(
+            published.frozen_round_trip_cost_bps,
+            expected_cost_bps,
+            rel_tol=0.0,
+            abs_tol=1e-12,
+        ):
+            raise DataReadinessError("future holdout cost contract differs from development")
+        data = _validate_future_frame(published, future_start, development_end, policy)
+        data = data.loc[_profile_mask(data, profile)].reset_index(drop=True)
+        actual_sessions = int(data["session_date_et"].nunique())
+        actual_rows = int(len(data))
+        actual_securities = int(data["security_id"].nunique())
+        if actual_sessions < minimum_sessions:
+            raise DataReadinessError(f"future holdout has {actual_sessions} complete sessions; requires {minimum_sessions}")
+        if actual_rows < minimum_rows:
+            raise DataReadinessError(f"future holdout has {actual_rows} profile rows; requires {minimum_rows}")
+        if actual_securities < minimum_securities:
+            raise DataReadinessError(f"future holdout has {actual_securities} profile securities; requires {minimum_securities}")
+        features = data.loc[:, MODEL_FEATURE_COLUMNS].to_numpy(dtype="float32", copy=False)
+        opportunity_score = np.asarray(opportunity.predict(features), dtype="float64")
+        raw_stop = _raw_stop_logit(downside, features)
+        stop_probability = np.asarray(calibrator.predict_proba(raw_stop.reshape(-1, 1))[:, 1], dtype="float64")
+        scored = _scored_frame(data, opportunity_score, stop_probability)
+        scored["fold"] = 0
+        scored["validation_scope"] = "future_holdout"
+        metrics = _evaluate_policy(
+            scored,
+            threshold,
+            stop_threshold,
+            policy,
+            published.frozen_round_trip_cost_bps,
+        )
+        ledger = _position_ledger(
+            scored,
+            threshold,
+            stop_threshold,
+            published.frozen_round_trip_cost_bps,
+            policy,
+        )
+        evaluation = {
+            "schema_version": FUTURE_EVALUATION_SCHEMA_VERSION,
+            "status": "locked_future_evaluated",
+            "promotion_permitted": False,
+            "selection_changed_after_future_observation": False,
+            "future_access": _future_access_identity(reservation_receipt),
+            "candidate_authority_sha256": file_sha256(candidate_authority_directory / _AUTHORITY_NAME),
+            "candidate_manifest_sha256": file_sha256(candidate_authority_directory / _MANIFEST_NAME),
+            "candidate_manifest_schema": manifest.get("schema_version"),
+            "future_dataset": _dataset_identity(published),
+            "future_session_first": str(data["session_date_et"].min()),
+            "future_session_last": str(data["session_date_et"].max()),
+            "metrics": metrics,
+        }
+        _publish_future_evaluation(output_directory, evaluation, ledger, reservation_receipt)
+    except BaseException as exc:
+        _record_future_access_failure(reservation_receipt, exc)
+        raise
     return evaluation
 
 
@@ -433,6 +299,8 @@ def _validate_future_frame(
     development_end: date,
     policy: IntradayDevelopmentConfig,
 ) -> pd.DataFrame:
+    from market_predictor.intraday.training.coordinator import _validate_development_frame
+
     values = asdict(policy)
     values["development_end_date"] = "2099-12-30"
     values["future_holdout_start_date"] = "2099-12-31"

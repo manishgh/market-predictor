@@ -1,11 +1,6 @@
-from __future__ import annotations
-
-from market_predictor.intraday.training.config import BaselineProfile, IntradayDevelopmentConfig
-from market_predictor.intraday.training.config import IntradayDevelopmentConfig
-from market_predictor.intraday.training.config import BaselineProfile
-from market_predictor.intraday.training.config import _CandidateSpec
-
 """Development-only, cost-aware intraday model training and evaluation."""
+
+from __future__ import annotations
 
 import hashlib
 import json
@@ -23,6 +18,7 @@ import pandas as pd
 
 from market_predictor.canonical.store import file_sha256
 from market_predictor.core.errors import DataReadinessError
+from market_predictor.intraday.training.config import BaselineProfile, IntradayDevelopmentConfig, _CandidateSpec
 from market_predictor.intraday.training.event_training import (
     DIRECTIONAL_EVENT_SUBTYPES,
 )
@@ -46,6 +42,7 @@ _EVALUATION_NAME: Final = "evaluation.json"
 _MODEL_CARD_NAME: Final = "model_card.json"
 _CANDIDATE_NAME: Final = "candidate.joblib"
 _FUTURE_EVALUATION_NAME: Final = "future_evaluation.json"
+_FUTURE_ACCESS_RESERVATION_NAME: Final = "future_access_reservation.json"
 _POSITION_LEDGER_NAME: Final = "position_ledger.parquet"
 _DAILY_LEDGER_NAME: Final = "daily_ledger.parquet"
 _VALIDATION_PREDICTIONS_NAME: Final = "validation_predictions.parquet"
@@ -234,7 +231,6 @@ def _publish_development(
     ledger: Mapping[str, Any],
     validation_predictions: pd.DataFrame,
 ) -> None:
-    from market_predictor.intraday.evaluation.gates import _audit_policy_choice, _evaluate_spec, _selection_key
     files: dict[str, Any] = {}
     temporary = _temporary_output(output)
     try:
@@ -293,6 +289,7 @@ def load_complete_intraday_future_evaluation_output(directory: Path) -> Mapping[
     expected_files = {
         _AUTHORITY_NAME,
         _MANIFEST_NAME,
+        _FUTURE_ACCESS_RESERVATION_NAME,
         _FUTURE_EVALUATION_NAME,
         _POSITION_LEDGER_NAME,
         _DAILY_LEDGER_NAME,
@@ -313,6 +310,7 @@ def load_complete_intraday_future_evaluation_output(directory: Path) -> Mapping[
         raise DataReadinessError("future authority does not bind its manifest")
     files = _object(manifest.get("files"), "future manifest files")
     expected_evidence = {
+        _FUTURE_ACCESS_RESERVATION_NAME,
         _FUTURE_EVALUATION_NAME,
         _POSITION_LEDGER_NAME,
         _DAILY_LEDGER_NAME,
@@ -352,14 +350,26 @@ def load_complete_intraday_future_evaluation_output(directory: Path) -> Mapping[
         actual = _required_finite_number(metrics.get(name), f"future metric {name}")
         if not math.isclose(actual, expected, rel_tol=0.0, abs_tol=1e-12):
             raise DataReadinessError(f"future metric does not replay: {name}")
-    for identity in (
-        "candidate_authority_sha256",
-        "candidate_manifest_sha256",
-        "future_access_lock_sha256",
-    ):
+    for identity in ("candidate_authority_sha256", "candidate_manifest_sha256"):
         value = evaluation.get(identity)
         if not isinstance(value, str) or len(value) != 64:
             raise DataReadinessError(f"future evaluation {identity} is invalid")
+    reservation = _read_json(root / _FUTURE_ACCESS_RESERVATION_NAME, "future access reservation")
+    future_access = _object(evaluation.get("future_access"), "future access identity")
+    candidate_authority_sha256 = str(evaluation["candidate_authority_sha256"])
+    if (
+        reservation.get("schema_version") != "edge_rebuild.intraday_future_access.v1"
+        or reservation.get("state") != "reserved"
+        or reservation.get("candidate_authority_sha256") != candidate_authority_sha256
+        or future_access.get("claim_id") != candidate_authority_sha256
+        or future_access.get("claim_sha256") != reservation.get("access_claim_sha256")
+        or future_access.get("reservation_receipt_sha256") != file_sha256(root / _FUTURE_ACCESS_RESERVATION_NAME)
+    ):
+        raise DataReadinessError("future access reservation identity differs")
+    for name in ("claim_id", "claim_sha256", "reservation_receipt_sha256"):
+        value = future_access.get(name)
+        if not isinstance(value, str) or len(value) != 64:
+            raise DataReadinessError(f"future access {name} is invalid")
     _object(evaluation.get("future_dataset"), "future dataset identity")
     return evaluation
 
@@ -368,12 +378,19 @@ def _publish_future_evaluation(
     output: Path,
     evaluation: Mapping[str, Any],
     ledger: Mapping[str, Any],
+    reservation_receipt: Path,
 ) -> None:
     temporary = _temporary_output(output)
     try:
+        shutil.copyfile(reservation_receipt, temporary / _FUTURE_ACCESS_RESERVATION_NAME)
         _write_json(temporary / _FUTURE_EVALUATION_NAME, evaluation)
         _write_ledger_files(temporary, ledger)
-        evidence_files = (_FUTURE_EVALUATION_NAME, _POSITION_LEDGER_NAME, _DAILY_LEDGER_NAME)
+        evidence_files = (
+            _FUTURE_ACCESS_RESERVATION_NAME,
+            _FUTURE_EVALUATION_NAME,
+            _POSITION_LEDGER_NAME,
+            _DAILY_LEDGER_NAME,
+        )
         manifest = {
             "schema_version": FUTURE_EVALUATION_SCHEMA_VERSION,
             "state": "locked_future_evaluated",
@@ -397,6 +414,7 @@ def _publish_future_evaluation(
                 "manifest_sha256": file_sha256(temporary / _MANIFEST_NAME),
             },
         )
+        load_complete_intraday_future_evaluation_output(temporary)
         _finish_output(temporary, output)
     finally:
         if temporary.exists():
@@ -444,30 +462,95 @@ def _require_output_isolated(output: Path, *inputs: Path) -> None:
         raise FileExistsError(f"immutable output already exists: {output}")
 
 
-def _consume_future_access(
+def _require_registry_isolated(registry_directory: Path, *protected_paths: Path) -> None:
+    registry = registry_directory.expanduser().resolve()
+    for protected_path in protected_paths:
+        protected = protected_path.resolve()
+        if registry == protected or registry in protected.parents or protected in registry.parents:
+            raise DataReadinessError("future access registry overlaps an immutable input or output")
+
+
+def _reserve_future_access(
     candidate: Path,
     future_dataset: Path,
     registry_directory: Path,
 ) -> Path:
+    """Atomically reserve one candidate's future holdout before future data is read."""
+
     candidate_authority = candidate / _AUTHORITY_NAME
     candidate_authority_sha256 = file_sha256(candidate_authority)
     registry = registry_directory.expanduser().resolve()
     registry.mkdir(parents=True, exist_ok=True)
-    lock = registry / f"{candidate_authority_sha256}.json"
+    claim = registry / f"{candidate_authority_sha256}.claim"
+    reservation_receipt = registry / f"{candidate_authority_sha256}.reservation.json"
+    try:
+        claim.touch(exist_ok=False)
+    except FileExistsError:
+        raise DataReadinessError("future holdout access was already consumed") from None
+    try:
+        payload = {
+            "schema_version": "edge_rebuild.intraday_future_access.v1",
+            "state": "reserved",
+            "access_claim_sha256": file_sha256(claim),
+            "candidate_authority_sha256": candidate_authority_sha256,
+            "future_dataset_directory": str(future_dataset.resolve()),
+            "reserved_at_utc": datetime.now(UTC).isoformat(),
+        }
+        _write_exclusive_json(reservation_receipt, payload)
+    except BaseException as exc:
+        _record_future_access_failure(claim, exc)
+        raise
+    return reservation_receipt
+
+
+def _record_future_access_failure(access_lock: Path, error: BaseException) -> Path:
+    """Publish immutable failure evidence without releasing the one-time reservation."""
+
+    failure_receipt = access_lock.with_name(f"{access_lock.stem}.failure.json")
     payload = {
-        "schema_version": "edge_rebuild.intraday_future_access.v1",
-        "candidate_authority_sha256": candidate_authority_sha256,
-        "future_dataset_directory": str(future_dataset.resolve()),
-        "future_dataset_authority_sha256": file_sha256(future_dataset / _AUTHORITY_NAME),
-        "accessed_at_utc": datetime.now(UTC).isoformat(),
+        "schema_version": "edge_rebuild.intraday_future_access_failure.v1",
+        "state": "failed_after_reservation",
+        "access_lock_sha256": file_sha256(access_lock),
+        "error_type": type(error).__name__,
+        "error_message": str(error),
+        "failed_at_utc": datetime.now(UTC).isoformat(),
     }
     try:
-        with lock.open("x", encoding="utf-8") as stream:
+        with failure_receipt.open("x", encoding="utf-8") as stream:
             json.dump(payload, stream, indent=2, sort_keys=True, allow_nan=False)
             stream.write("\n")
     except FileExistsError:
-        raise DataReadinessError("future holdout access was already consumed") from None
-    return lock
+        raise DataReadinessError("future holdout failure receipt already exists") from error
+    return failure_receipt
+
+
+def _future_access_identity(reservation_receipt: Path) -> dict[str, str]:
+    reservation = _read_json(reservation_receipt, "future access reservation")
+    candidate_authority_sha256 = reservation.get("candidate_authority_sha256")
+    claim_sha256 = reservation.get("access_claim_sha256")
+    if (
+        reservation.get("schema_version") != "edge_rebuild.intraday_future_access.v1"
+        or reservation.get("state") != "reserved"
+        or not isinstance(candidate_authority_sha256, str)
+        or len(candidate_authority_sha256) != 64
+        or not isinstance(claim_sha256, str)
+        or len(claim_sha256) != 64
+    ):
+        raise DataReadinessError("future access reservation is invalid")
+    claim = reservation_receipt.with_name(f"{candidate_authority_sha256}.claim")
+    if not claim.is_file() or file_sha256(claim) != claim_sha256:
+        raise DataReadinessError("future access claim identity differs")
+    return {
+        "claim_id": candidate_authority_sha256,
+        "claim_sha256": claim_sha256,
+        "reservation_receipt_sha256": file_sha256(reservation_receipt),
+    }
+
+
+def _write_exclusive_json(path: Path, payload: Mapping[str, Any]) -> None:
+    encoded = json.dumps(payload, indent=2, sort_keys=True, allow_nan=False) + "\n"
+    with path.open("x", encoding="utf-8") as stream:
+        stream.write(encoded)
 
 
 def _write_ledger_files(directory: Path, ledger: Mapping[str, Any]) -> None:

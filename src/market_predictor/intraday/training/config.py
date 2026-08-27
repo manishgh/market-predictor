@@ -1,14 +1,17 @@
 from __future__ import annotations
 
+import hashlib
+import json
+from collections.abc import Mapping
 from dataclasses import asdict, dataclass
 from datetime import date
-from typing import Any, Mapping
-import json
-import hashlib
+from typing import Any
+
 
 def _json_sha256(value: Any) -> str:
     encoded = json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
+
 
 @dataclass(frozen=True, slots=True)
 class IntradayDevelopmentConfig:
@@ -157,6 +160,7 @@ class IntradayDevelopmentConfig:
         if not 0.0 < self.memory_guard_headroom_gib < self.maximum_process_memory_gib:
             raise ValueError("memory headroom must be below the hard limit")
 
+
 @dataclass(frozen=True, slots=True)
 class BaselineProfile:
     profile_id: str
@@ -165,6 +169,7 @@ class BaselineProfile:
 
     def sha256(self) -> str:
         return _json_sha256(asdict(self))
+
 
 @dataclass(frozen=True, slots=True)
 class _CandidateSpec:

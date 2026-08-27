@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import cast
 
 import numpy as np
@@ -8,11 +9,14 @@ from sklearn.isotonic import IsotonicRegression
 
 CAUSAL_ISOTONIC_METHOD = "isotonic_prior_outer_folds"
 
+
+@dataclass(frozen=True, slots=True)
 class CausalCalibrationFit:
     calibrator: IsotonicRegression
     method: str
     train_cutoff_utc: pd.Timestamp
     training_rows: int
+
 
 def fit_prior_isotonic(
     raw_probability: np.ndarray,
@@ -44,6 +48,7 @@ def fit_prior_isotonic(
         training_rows=int(eligible.sum()),
     )
 
+
 def fit_final_isotonic(
     raw_probability: np.ndarray,
     target: np.ndarray,
@@ -58,6 +63,7 @@ def fit_final_isotonic(
     calibrator = IsotonicRegression(out_of_bounds="clip", y_min=0.0, y_max=1.0)
     calibrator.fit(probability[finite], labels[finite])
     return calibrator
+
 
 def apply_isotonic(calibrator: object, raw_probability: np.ndarray) -> np.ndarray:
     if calibrator is None:
