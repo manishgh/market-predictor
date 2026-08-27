@@ -82,10 +82,6 @@ from market_predictor.edge_rebuild.sec_filing_collection import (
 from market_predictor.edge_rebuild.selected_session_history import (
     build_selected_session_history_plan,
 )
-from market_predictor.edge_rebuild.sp500_observed_memberships import (
-    ObservedMembershipConfig,
-    collect_observed_sp500_membership_authority,
-)
 from market_predictor.edge_rebuild.strategy_contract import load_strategy_contract
 from market_predictor.edge_rebuild.swing_broker_specialists import (
     train_swing_broker_specialists,
@@ -155,6 +151,10 @@ from market_predictor.universe.sec_identity_authority import (
 )
 from market_predictor.universe.sp500.membership_authority import (
     publish_sp500_membership_authority,
+)
+from market_predictor.universe.sp500.observed_membership_authority import (
+    ObservedMembershipConfig,
+    collect_observed_sp500_membership_authority,
 )
 from market_predictor.universe.sp500.transition_authority import (
     publish_sp500_transition_authority,

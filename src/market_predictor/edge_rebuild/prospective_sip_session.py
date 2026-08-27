@@ -1,8 +1,6 @@
 """Immutable post-close SIP source authority for one prospective XNYS session."""
 from __future__ import annotations
 
-
-
 import hashlib
 import json
 import shutil
@@ -17,6 +15,7 @@ import exchange_calendars as xcals
 import pandas as pd
 
 from market_predictor.canonical.store import file_sha256
+from market_predictor.core.errors import DataReadinessError
 from market_predictor.edge_rebuild.history_collection import (
     collect_intraday_history,
     load_complete_intraday_history_collection,
@@ -38,10 +37,6 @@ from market_predictor.intraday.datasets.history import (
     stable_identity_hash,
     write_plan_json,
 )
-from market_predictor.edge_rebuild.sp500_observed_memberships import (
-    ObservedMembershipAuthority,
-    load_observed_sp500_membership_authority,
-)
 from market_predictor.resources import (
     assert_memory_budget,
     assert_peak_memory_budget,
@@ -49,7 +44,10 @@ from market_predictor.resources import (
     release_process_memory,
 )
 from market_predictor.sources.alpaca import AlpacaSource
-from market_predictor.core.errors import DataReadinessError
+from market_predictor.universe.sp500.observed_membership_authority import (
+    ObservedMembershipAuthority,
+    load_observed_sp500_membership_authority,
+)
 
 REQUEST_SCHEMA: Final = "edge_rebuild.prospective_sip_session_request.v1"
 MANIFEST_SCHEMA: Final = "edge_rebuild.prospective_sip_session_manifest.v1"

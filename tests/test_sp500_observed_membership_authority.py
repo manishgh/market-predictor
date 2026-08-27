@@ -13,8 +13,10 @@ import pandas as pd
 import pytest
 
 from market_predictor.core.errors import DataReadinessError
-from market_predictor.edge_rebuild import sp500_observed_memberships as observed
+from market_predictor.locking import file_lock
+from market_predictor.sources.spglobal import observed_membership_collection as source
 from market_predictor.sources.spglobal.archive import SEARCH_PAGE_SIZE, SpGlobalAnnouncement
+from market_predictor.universe.sp500 import observed_membership_authority as observed
 from market_predictor.universe.sp500.membership_history import IndexChange, parse_sp500_changes
 
 
@@ -129,13 +131,13 @@ def test_sec_identity_overrides_erroneous_membership_source_cik(tmp_path: Path) 
         tmp_path,
         "anchor",
         html,
-        final_url=observed.ANCHOR_URL,
+        final_url=source.ANCHOR_URL,
     )
     identity_unit = _raw_unit(
         tmp_path,
         "identities",
         json.dumps(sec_records).encode(),
-        final_url=observed.SEC_IDENTITY_URL,
+        final_url=source.SEC_IDENTITY_URL,
     )
 
     anchor = observed._parse_anchor(tmp_path, anchor_unit, identity_unit)
@@ -390,20 +392,20 @@ def _dated_page(*, prefix: str, published: date) -> list[tuple[date, str]]:
 
 def test_pagination_requires_exact_overlap_and_newest_first() -> None:
     first = _dated_page(prefix="first", published=date(2026, 8, 15))
-    observed._validate_page_overlap(0, first, None)
+    source.validate_search_page_overlap(0, first, None)
     second = [
         first[-1],
         *_dated_page(prefix="second", published=date(2026, 8, 14))[:-1],
     ]
-    observed._validate_page_overlap(1, second, first[-1][1])
+    source.validate_search_page_overlap(1, second, first[-1][1])
 
     with pytest.raises(DataReadinessError, match="pagination overlap"):
-        observed._validate_page_overlap(1, second, "https://press.spglobal.com/wrong")
+        source.validate_search_page_overlap(1, second, "https://press.spglobal.com/wrong")
 
     out_of_order = first.copy()
     out_of_order[1] = (date(2026, 8, 16), out_of_order[1][1])
     with pytest.raises(DataReadinessError, match="newest-to-oldest"):
-        observed._validate_page_overlap(0, out_of_order, None)
+        source.validate_search_page_overlap(0, out_of_order, None)
 
 
 @dataclass(frozen=True)
@@ -449,7 +451,7 @@ def _response(
 
 def test_http_identity_accepts_query_reordering_but_rejects_redirects() -> None:
     requested = "https://press.spglobal.com/index.php?b=2&a=1"
-    observed._verify_response(
+    source.verify_observation_response(
         _response(requested),
         expected_url="https://press.spglobal.com/index.php?a=1&b=2",
         expected_host="press.spglobal.com",
@@ -457,7 +459,7 @@ def test_http_identity_accepts_query_reordering_but_rejects_redirects() -> None:
     )
 
     with pytest.raises(DataReadinessError, match="HTTP response identity"):
-        observed._verify_response(
+        source.verify_observation_response(
             _response(
                 requested,
                 final_url="https://press.spglobal.com/redirected",
@@ -469,7 +471,7 @@ def test_http_identity_accepts_query_reordering_but_rejects_redirects() -> None:
         )
 
     with pytest.raises(DataReadinessError, match="HTTP response identity"):
-        observed._verify_response(
+        source.verify_observation_response(
             _response("https://user@press.spglobal.com:444/index.php?a=1&b=2"),
             expected_url="https://press.spglobal.com/index.php?a=1&b=2",
             expected_host="press.spglobal.com",
@@ -496,7 +498,7 @@ def test_race_identity_changes_when_first_page_semantics_change() -> None:
         )
     ]
 
-    assert observed._page_semantics(first, urls) != observed._page_semantics(
+    assert source.search_page_semantics(first, urls) != source.search_page_semantics(
         confirmation,
         urls,
     )
@@ -504,7 +506,7 @@ def test_race_identity_changes_when_first_page_semantics_change() -> None:
 
 def test_path_and_response_body_tampering_fail_closed(tmp_path: Path) -> None:
     with pytest.raises(DataReadinessError, match="escapes authority root"):
-        observed._resolve_inside(tmp_path, "../outside.bin")
+        source._resolve_inside(tmp_path, "../outside.bin")
 
     unit = _raw_unit(
         tmp_path,
@@ -512,10 +514,10 @@ def test_path_and_response_body_tampering_fail_closed(tmp_path: Path) -> None:
         b"original",
         final_url="https://press.spglobal.com/release",
     )
-    assert observed._unit_body(tmp_path, unit) == b"original"
+    assert source.load_observation_body(tmp_path, unit) == b"original"
     (tmp_path / str(unit["body_path"])).write_bytes(b"modified")
     with pytest.raises(DataReadinessError, match="response body changed"):
-        observed._unit_body(tmp_path, unit)
+        source.load_observation_body(tmp_path, unit)
 
 
 def test_artifact_hash_and_immutable_json_helpers_fail_closed(tmp_path: Path) -> None:
@@ -537,7 +539,7 @@ def test_artifact_hash_and_immutable_json_helpers_fail_closed(tmp_path: Path) ->
         observed._write_new_json(immutable, {"value": 2})
 
 
-def test_extra_root_file_fails_raw_inventory(tmp_path: Path) -> None:
+def test_extra_root_file_fails_authority_inventory(tmp_path: Path) -> None:
     (tmp_path / "objects").mkdir()
     (tmp_path / "units").mkdir()
     expected_files = {
@@ -556,19 +558,14 @@ def test_extra_root_file_fails_raw_inventory(tmp_path: Path) -> None:
     }
     for name in expected_files:
         (tmp_path / name).write_bytes(b"")
-    observed._verify_unit_inventory(
-        tmp_path,
-        [],
-        request_sha256="r" * 64,
+    observed._verify_authority_root_inventory(tmp_path)
+    source.verify_observed_membership_raw_evidence(
+        tmp_path, [], request_sha256="r" * 64
     )
 
     (tmp_path / "unexpected.txt").write_text("poison", encoding="utf-8")
     with pytest.raises(DataReadinessError, match="root files differ"):
-        observed._verify_unit_inventory(
-            tmp_path,
-            [],
-            request_sha256="r" * 64,
-        )
+        observed._verify_authority_root_inventory(tmp_path)
 
 
 @dataclass(frozen=True)
@@ -592,7 +589,7 @@ class _ObservedMembershipHttpClient:
         params: dict[str, Any] | None = None,
         retries: int = 3,
         pause: float = 1.0,
-        maximum_body_bytes: int = observed.MAXIMUM_RESPONSE_BYTES,
+        maximum_body_bytes: int = source.MAXIMUM_RESPONSE_BYTES,
         allow_redirects: bool = False,
     ) -> _Response:
         del retries, pause
@@ -613,7 +610,7 @@ class _ObservedMembershipHttpClient:
             retrieved_at_utc=self.observed_at,
             content_type=(
                 "application/json"
-                if url == observed.SEC_IDENTITY_URL or url.startswith("https://data.sec.gov/submissions/")
+                if url == source.SEC_IDENTITY_URL or url.startswith("https://data.sec.gov/submissions/")
                 else "text/html; charset=utf-8"
             ),
             content_encoding=None,
@@ -625,12 +622,89 @@ class _ObservedMembershipHttpClient:
         )
 
 
+def test_raw_observation_unit_preserves_authority_request_hash_and_exact_envelope(
+    tmp_path: Path,
+) -> None:
+    body = b"retained provider bytes"
+    observed_at = datetime(2026, 8, 17, 15, tzinfo=UTC)
+    client = _ObservedMembershipHttpClient({source.ANCHOR_URL: body}, observed_at)
+    request_sha256 = "r" * 64
+
+    unit = source.fetch_observation_unit(
+        client,
+        url=source.ANCHOR_URL,
+        params=None,
+        role="anchor",
+        unit_id="independent-anchor",
+        output_directory=tmp_path,
+        request_sha256=request_sha256,
+        config=observed.ObservedMembershipConfig(maximum_pages=1),
+        expected_host="en.wikipedia.org",
+        exact_path="/wiki/List_of_S%26P_500_companies",
+    )
+
+    body_sha256 = hashlib.sha256(body).hexdigest()
+    expected = {
+        "schema": source.RAW_UNIT_SCHEMA,
+        "request_sha256": request_sha256,
+        "role": "anchor",
+        "unit_id": "independent-anchor",
+        "requested_url": source.ANCHOR_URL,
+        "final_url": source.ANCHOR_URL,
+        "redirect_chain": [],
+        "status_code": 200,
+        "retrieved_at_utc": observed_at.isoformat(),
+        "content_type": "text/html; charset=utf-8",
+        "content_encoding": None,
+        "etag": '"fixture"',
+        "last_modified": None,
+        "body_length": len(body),
+        "body_sha256": body_sha256,
+        "body_path": f"objects/{body_sha256}.bin",
+        "body_representation": "http_entity_encoded",
+    }
+    assert unit == expected
+    assert json.loads((tmp_path / "units" / "independent-anchor.json").read_text(encoding="utf-8")) == expected
+    assert source.load_observation_body(tmp_path, unit) == body
+
+
+def test_collector_lock_allows_one_writer_and_publishes_no_partial_authority(
+    tmp_path: Path,
+) -> None:
+    base = tmp_path / "base"
+    archive = tmp_path / "archive"
+    events = tmp_path / "events"
+    output = tmp_path / "observed"
+    for directory in (base, archive, events, output):
+        directory.mkdir()
+    client_factory_called = False
+
+    def client_factory() -> source.BytesHttpClient:
+        nonlocal client_factory_called
+        client_factory_called = True
+        raise AssertionError("locked collection must not create an HTTP client")
+
+    with file_lock(output / "_collector", timeout=0.0):
+        with pytest.raises(DataReadinessError, match="another process owns observed membership"):
+            observed.collect_observed_sp500_membership_authority(
+                base_membership_directory=base,
+                closed_archive_directory=archive,
+                closed_event_directory=events,
+                output_directory=output,
+                client_factory=client_factory,
+                config=observed.ObservedMembershipConfig(maximum_pages=1),
+            )
+
+    assert client_factory_called is False
+    assert not (output / "_authority.json").exists()
+
+
 class _SecondPageRaceHttpClient(_ObservedMembershipHttpClient):
     def __init__(self, anchor_body: bytes, sec_body: bytes) -> None:
         super().__init__(
             {
-                observed.ANCHOR_URL: anchor_body,
-                observed.SEC_IDENTITY_URL: sec_body,
+                source.ANCHOR_URL: anchor_body,
+                source.SEC_IDENTITY_URL: sec_body,
             },
             datetime(2026, 8, 17, 15, tzinfo=UTC),
         )
@@ -654,12 +728,12 @@ class _SecondPageRaceHttpClient(_ObservedMembershipHttpClient):
         params: dict[str, Any] | None = None,
         retries: int = 3,
         pause: float = 1.0,
-        maximum_body_bytes: int = observed.MAXIMUM_RESPONSE_BYTES,
+        maximum_body_bytes: int = source.MAXIMUM_RESPONSE_BYTES,
         allow_redirects: bool = False,
     ) -> _Response:
-        if url != observed.SP_GLOBAL_ARCHIVE_URL and url not in self.bodies:
+        if url != source.SP_GLOBAL_ARCHIVE_URL and url not in self.bodies:
             self.bodies[url] = b"<html><body><p>Index commentary.</p></body></html>"
-        if url != observed.SP_GLOBAL_ARCHIVE_URL:
+        if url != source.SP_GLOBAL_ARCHIVE_URL:
             return super().get_bytes_with_metadata(
                 url,
                 params=params,
@@ -668,7 +742,7 @@ class _SecondPageRaceHttpClient(_ObservedMembershipHttpClient):
                 maximum_body_bytes=maximum_body_bytes,
                 allow_redirects=allow_redirects,
             )
-        page_number = int((params or {})["o"]) // observed.SEARCH_PAGE_STRIDE
+        page_number = int((params or {})["o"]) // source.SEARCH_PAGE_STRIDE
         self.archive_calls[page_number] += 1
         body = self.first_page if page_number == 0 else self.second_page
         if page_number == 1 and self.archive_calls[page_number] == 2:
@@ -791,9 +865,9 @@ def test_public_collect_load_round_trip_and_inventory_poison(
     )
     client = _ObservedMembershipHttpClient(
         {
-            observed.SP_GLOBAL_ARCHIVE_URL: _quiet_official_search_page(),
-            observed.ANCHOR_URL: anchor_body,
-            observed.SEC_IDENTITY_URL: sec_body,
+            source.SP_GLOBAL_ARCHIVE_URL: _quiet_official_search_page(),
+            source.ANCHOR_URL: anchor_body,
+            source.SEC_IDENTITY_URL: sec_body,
         },
         datetime(2026, 8, 17, 15, tzinfo=UTC),
     )
@@ -809,6 +883,10 @@ def test_public_collect_load_round_trip_and_inventory_poison(
     authority = observed.load_observed_sp500_membership_authority(output_root)
 
     assert manifest["status"] == "complete"
+    raw_units = manifest["raw_units"]
+    assert isinstance(raw_units, list)
+    assert all(unit["request_sha256"] == manifest["request_sha256"] for unit in raw_units)
+    assert manifest["raw_unit_set_sha256"] == observed._json_sha256(raw_units)
     assert manifest["anchor_constituent_count"] == 500
     assert manifest["sec_identity_count"] == 5_000
     assert manifest["new_release_count"] == 0
@@ -893,7 +971,7 @@ def _collect_missing_bulk_identity_authority(
         lambda *_args, **_kwargs: closed_events,
     )
     fallback_cik = "0000100007"
-    fallback_url = observed.SEC_SUBMISSIONS_URL.format(cik=fallback_cik)
+    fallback_url = source.SEC_SUBMISSIONS_URL.format(cik=fallback_cik)
     fallback_body = json.dumps(
         {
             "cik": fallback_cik,
@@ -902,13 +980,13 @@ def _collect_missing_bulk_identity_authority(
     ).encode()
     client = _ObservedMembershipHttpClient(
         {
-            observed.SP_GLOBAL_ARCHIVE_URL: _quiet_official_search_page(),
-            observed.ANCHOR_URL: _anchor_with_changed_cik(
+            source.SP_GLOBAL_ARCHIVE_URL: _quiet_official_search_page(),
+            source.ANCHOR_URL: _anchor_with_changed_cik(
                 anchor_body,
                 100_007,
                 anchor_cik,
             ),
-            observed.SEC_IDENTITY_URL: _sec_bulk_without(sec_body, "T007"),
+            source.SEC_IDENTITY_URL: _sec_bulk_without(sec_body, "T007"),
             fallback_url: fallback_body,
         },
         datetime(2026, 8, 17, 15, tzinfo=UTC),
@@ -989,7 +1067,7 @@ def test_public_collect_and_load_retains_missing_bulk_identity_fallback(
 
     authority = observed.load_observed_sp500_membership_authority(output_root)
     fallback = _fallback_unit(manifest)
-    fallback_url = observed.SEC_SUBMISSIONS_URL.format(cik="0000100007")
+    fallback_url = source.SEC_SUBMISSIONS_URL.format(cik="0000100007")
 
     assert manifest["sec_identity_count"] == 5_001
     assert fallback["ticker"] == "T007"
@@ -1270,9 +1348,9 @@ def _collect_changed_bulk_identity_authority(
     )
     client = _ObservedMembershipHttpClient(
         {
-            observed.SP_GLOBAL_ARCHIVE_URL: _quiet_official_search_page(),
-            observed.ANCHOR_URL: anchor_body,
-            observed.SEC_IDENTITY_URL: sec_body,
+            source.SP_GLOBAL_ARCHIVE_URL: _quiet_official_search_page(),
+            source.ANCHOR_URL: anchor_body,
+            source.SEC_IDENTITY_URL: sec_body,
         },
         datetime(2026, 8, 17, 15, tzinfo=UTC),
     )

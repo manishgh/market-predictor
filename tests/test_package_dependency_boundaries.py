@@ -31,10 +31,20 @@ UNIVERSE_ALLOWED_DEPENDENCIES = (
     "market_predictor.locking",
     "market_predictor.resources",
 )
+SOURCES_ALLOWED_DEPENDENCIES = (
+    "market_predictor.config",
+    "market_predictor.core",
+    "market_predictor.evidence",
+    "market_predictor.locking",
+    "market_predictor.resources",
+    "market_predictor.schemas",
+    "market_predictor.sources",
+)
 REMOVED_AUTHORITY_MODULES = (
     "market_predictor.edge_rebuild.corpus_integrity",
     "market_predictor.edge_rebuild.sec_identity_authority",
     "market_predictor.edge_rebuild.sp500_memberships",
+    "market_predictor.edge_rebuild.sp500_observed_memberships",
     "market_predictor.edge_rebuild.sp500_transitions",
     "market_predictor.edge_rebuild.universe_identity",
 )
@@ -42,6 +52,7 @@ REMOVED_AUTHORITY_FILES = (
     "corpus_integrity.py",
     "sec_identity_authority.py",
     "sp500_memberships.py",
+    "sp500_observed_memberships.py",
     "sp500_transitions.py",
     "universe_identity.py",
 )
@@ -77,6 +88,20 @@ def test_universe_package_uses_only_approved_dependency_layers() -> None:
     assert not violations, "Universe dependency violations:\n" + "\n".join(sorted(violations))
 
 
+def test_source_package_uses_only_approved_dependency_layers() -> None:
+    violations: list[str] = []
+    for path in (PACKAGE_ROOT / "sources").rglob("*.py"):
+        for node, imported_name in _module_imports(path):
+            if not imported_name.startswith("market_predictor."):
+                continue
+            if _matches_any_dependency(imported_name, SOURCES_ALLOWED_DEPENDENCIES):
+                continue
+            relative_path = path.relative_to(PACKAGE_ROOT.parent)
+            violations.append(f"{relative_path}:{node.lineno}: {imported_name}")
+
+    assert not violations, "Source dependency violations:\n" + "\n".join(sorted(violations))
+
+
 def test_removed_authority_modules_have_no_imports_or_files() -> None:
     violations: list[str] = []
     for root in (PACKAGE_ROOT, TEST_ROOT, SCRIPT_ROOT):
@@ -107,6 +132,23 @@ def test_removed_authority_import_guard_recognizes_every_import_form(statement: 
     tree = ast.parse(statement)
     imported_names = tuple(name for node in ast.walk(tree) for name in _imported_names(node))
     assert any(_matches_any_dependency(name, REMOVED_AUTHORITY_MODULES) for name in imported_names)
+
+
+@pytest.mark.parametrize(
+    "statement",
+    (
+        "import market_predictor.universe",
+        "import market_predictor.universe as universe",
+        "from market_predictor import universe",
+        "from market_predictor.universe.sp500 import membership_authority",
+        "from market_predictor.universe.sp500.membership_authority import publish_sp500_membership_authority",
+    ),
+)
+def test_source_dependency_guard_recognizes_every_universe_import_form(statement: str) -> None:
+    tree = ast.parse(statement)
+    imported_names = tuple(name for node in ast.walk(tree) for name in _imported_names(node))
+    assert any(_matches_any_dependency(name, ("market_predictor.universe",)) for name in imported_names)
+    assert not any(_matches_any_dependency(name, SOURCES_ALLOWED_DEPENDENCIES) for name in imported_names)
 
 
 def _forbidden_imports(path: Path) -> list[str]:

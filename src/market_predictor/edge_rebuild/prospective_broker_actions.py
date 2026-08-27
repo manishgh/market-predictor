@@ -34,10 +34,6 @@ from market_predictor.canonical.store import (
     write_canonical_artifact,
 )
 from market_predictor.core.errors import DataReadinessError
-from market_predictor.edge_rebuild.sp500_observed_memberships import (
-    AUTHORITY_SCHEMA as OBSERVED_MEMBERSHIP_AUTHORITY_SCHEMA,
-)
-from market_predictor.edge_rebuild.sp500_observed_memberships import load_observed_sp500_membership_authority
 from market_predictor.intraday.datasets.bar_dataset import (
     load_complete_intraday_bar_dataset,
 )
@@ -54,6 +50,10 @@ from market_predictor.universe.sp500.membership_authority import (
     load_sp500_membership_authority_envelope,
     verify_membership_namespace_extension,
 )
+from market_predictor.universe.sp500.observed_membership_authority import (
+    AUTHORITY_SCHEMA as OBSERVED_MEMBERSHIP_AUTHORITY_SCHEMA,
+)
+from market_predictor.universe.sp500.observed_membership_authority import load_observed_sp500_membership_authority
 
 POLL_REQUEST_SCHEMA: Final = "edge_rebuild.prospective_broker_action_poll_request.v1"
 POLL_MANIFEST_SCHEMA: Final = "edge_rebuild.prospective_broker_action_poll_manifest.v1"

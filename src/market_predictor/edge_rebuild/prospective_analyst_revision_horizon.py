@@ -1,8 +1,6 @@
 """Immutable source-side horizon for prospectively observed analyst revisions."""
 from __future__ import annotations
 
-
-
 import hashlib
 import json
 import os
@@ -21,22 +19,17 @@ from market_predictor.canonical.store import (
     manifest_path_for,
     write_canonical_artifact,
 )
-from market_predictor.intraday.datasets.event_preflight import (
-    load_intraday_event_preflight_config,
-)
-from market_predictor.intraday.datasets.history import json_sha256
+from market_predictor.core.errors import DataReadinessError
 from market_predictor.edge_rebuild.prospective_broker_actions import (
     ProspectiveGeneration,
     ProspectivePoll,
     load_prospective_broker_action_generation,
     load_prospective_broker_action_poll,
 )
-from market_predictor.edge_rebuild.sp500_observed_memberships import (
-    AUTHORITY_SCHEMA as OBSERVED_MEMBERSHIP_AUTHORITY_SCHEMA,
+from market_predictor.intraday.datasets.event_preflight import (
+    load_intraday_event_preflight_config,
 )
-from market_predictor.edge_rebuild.sp500_observed_memberships import (
-    load_observed_sp500_membership_authority,
-)
+from market_predictor.intraday.datasets.history import json_sha256
 from market_predictor.locking import LockTimeout, file_lock
 from market_predictor.resources import (
     assert_memory_budget,
@@ -48,7 +41,12 @@ from market_predictor.swing.event_families import (
     EVENT_FAMILY_POLICY_VERSION,
     classify_event_families,
 )
-from market_predictor.core.errors import DataReadinessError
+from market_predictor.universe.sp500.observed_membership_authority import (
+    AUTHORITY_SCHEMA as OBSERVED_MEMBERSHIP_AUTHORITY_SCHEMA,
+)
+from market_predictor.universe.sp500.observed_membership_authority import (
+    load_observed_sp500_membership_authority,
+)
 
 REQUEST_SCHEMA: Final = "edge_rebuild.prospective_analyst_revision_horizon_request.v1"
 MANIFEST_SCHEMA: Final = "edge_rebuild.prospective_analyst_revision_horizon_manifest.v1"

@@ -11,15 +11,15 @@ import pandas as pd
 import pytest
 
 import market_predictor.edge_rebuild.prospective_sip_session as module
+from market_predictor.core.errors import DataReadinessError
 from market_predictor.edge_rebuild.history_contracts import (
     load_intraday_history_config,
     load_selected_session_benchmark_config,
 )
-from market_predictor.edge_rebuild.sp500_observed_memberships import (
+from market_predictor.sources.alpaca import AlpacaBarsPage
+from market_predictor.universe.sp500.observed_membership_authority import (
     ObservedMembershipAuthority,
 )
-from market_predictor.sources.alpaca import AlpacaBarsPage
-from market_predictor.core.errors import DataReadinessError
 
 ROOT = Path(__file__).resolve().parents[1]
 FIVE_MINUTE_POLICY = ROOT / "configs" / "edge_rebuild_intraday_history.toml"
