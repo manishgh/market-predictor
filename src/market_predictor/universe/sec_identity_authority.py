@@ -26,10 +26,10 @@ import pandas as pd
 from market_predictor.canonical.store import file_sha256
 from market_predictor.core.errors import DataReadinessError
 from market_predictor.core.symbols import normalized_ticker
-from market_predictor.edge_rebuild.sp500_memberships import (
+from market_predictor.universe.sp500.membership_authority import (
     require_sp500_membership_authority,
 )
-from market_predictor.edge_rebuild.sp500_transitions import (
+from market_predictor.universe.sp500.transition_authority import (
     require_sp500_transition_authority,
 )
 

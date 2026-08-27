@@ -22,21 +22,21 @@ from market_predictor.canonical.store import (
 )
 from market_predictor.core.errors import DataReadinessError
 from market_predictor.core.symbols import normalized_ticker
-from market_predictor.edge_rebuild.sp500_transitions import (
-    require_sp500_transition_authority,
-)
-from market_predictor.edge_rebuild.universe_identity import (
-    validate_security_exclusion_share,
-)
 from market_predictor.locking import LockTimeout, file_lock
 from market_predictor.resources import assert_memory_budget, assert_peak_memory_budget
 from market_predictor.sources.spglobal.archive import MAXIMUM_MEMORY_GIB, MEMORY_HEADROOM_GIB
+from market_predictor.universe.membership_identity_validation import (
+    validate_security_exclusion_share,
+)
 from market_predictor.universe.sp500.index_change_events import (
     require_spglobal_event_reconstruction_ready,
 )
 from market_predictor.universe.sp500.membership_history import (
     SECTOR_BENCHMARKS,
     IndexChange,
+)
+from market_predictor.universe.sp500.transition_authority import (
+    require_sp500_transition_authority,
 )
 
 MEMBERSHIP_REQUEST_SCHEMA: Final = "edge_rebuild.sp500_membership_request.v1"

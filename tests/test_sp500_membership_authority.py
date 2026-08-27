@@ -6,7 +6,7 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-import market_predictor.edge_rebuild.sp500_memberships as membership_module
+import market_predictor.universe.sp500.membership_authority as membership_module
 from market_predictor.core.errors import DataReadinessError
 from market_predictor.universe.sp500.membership_history import (
     IndexChange,

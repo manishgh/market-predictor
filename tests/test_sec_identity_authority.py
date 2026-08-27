@@ -6,7 +6,7 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-import market_predictor.edge_rebuild.sec_identity_authority as identity
+import market_predictor.universe.sec_identity_authority as identity
 from market_predictor.core.errors import DataReadinessError
 
 

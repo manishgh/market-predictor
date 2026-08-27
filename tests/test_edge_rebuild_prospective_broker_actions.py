@@ -17,12 +17,8 @@ from market_predictor.canonical.audits import (
     CanonicalAuditReport,
 )
 from market_predictor.canonical.store import file_sha256, write_canonical_artifact
+from market_predictor.core.errors import DataReadinessError
 from market_predictor.edge_rebuild import prospective_broker_actions as prospective
-from market_predictor.intraday.datasets.bar_dataset import (
-    _arrow_schema_record,
-    _transformation_identity,
-)
-from market_predictor.intraday.datasets.history import json_sha256
 from market_predictor.edge_rebuild.prospective_broker_actions import (
     _build_source_collections,
     _require_membership_authority_progression,
@@ -35,11 +31,15 @@ from market_predictor.edge_rebuild.prospective_broker_actions import (
 from market_predictor.edge_rebuild.prospective_broker_actions import (
     collect_prospective_broker_action_poll as _collect_prospective_poll,
 )
-from market_predictor.edge_rebuild.sp500_memberships import (
+from market_predictor.intraday.datasets.bar_dataset import (
+    _arrow_schema_record,
+    _transformation_identity,
+)
+from market_predictor.intraday.datasets.history import json_sha256
+from market_predictor.sources.alpaca import AlpacaAssetSnapshot, AlpacaNewsPage
+from market_predictor.universe.sp500.membership_authority import (
     _membership_sha256 as membership_sha256,
 )
-from market_predictor.sources.alpaca import AlpacaAssetSnapshot, AlpacaNewsPage
-from market_predictor.core.errors import DataReadinessError
 
 OBSERVED_AT = datetime(2026, 8, 15, 12, 0, tzinfo=UTC)
 

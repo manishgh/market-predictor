@@ -6,6 +6,9 @@ from pathlib import Path
 import pytest
 
 PACKAGE_ROOT = Path(__file__).resolve().parents[1] / "src" / "market_predictor"
+REPOSITORY_ROOT = PACKAGE_ROOT.parents[1]
+TEST_ROOT = REPOSITORY_ROOT / "tests"
+SCRIPT_ROOT = REPOSITORY_ROOT / "scripts"
 PRODUCTION_PACKAGES = (
     "core",
     "sources",
@@ -19,6 +22,29 @@ PRODUCTION_PACKAGES = (
     "serving",
 )
 FORBIDDEN_DEPENDENCIES = ("market_predictor.research", "market_predictor.commands")
+UNIVERSE_ALLOWED_DEPENDENCIES = (
+    "market_predictor.core",
+    "market_predictor.evidence",
+    "market_predictor.sources",
+    "market_predictor.universe",
+    "market_predictor.canonical",
+    "market_predictor.locking",
+    "market_predictor.resources",
+)
+REMOVED_AUTHORITY_MODULES = (
+    "market_predictor.edge_rebuild.corpus_integrity",
+    "market_predictor.edge_rebuild.sec_identity_authority",
+    "market_predictor.edge_rebuild.sp500_memberships",
+    "market_predictor.edge_rebuild.sp500_transitions",
+    "market_predictor.edge_rebuild.universe_identity",
+)
+REMOVED_AUTHORITY_FILES = (
+    "corpus_integrity.py",
+    "sec_identity_authority.py",
+    "sp500_memberships.py",
+    "sp500_transitions.py",
+    "universe_identity.py",
+)
 
 
 def test_production_packages_do_not_depend_on_research_or_command_adapters() -> None:
@@ -37,20 +63,71 @@ def test_chronology_named_v3_package_is_absent() -> None:
     assert not (PACKAGE_ROOT / "v3").exists()
 
 
+def test_universe_package_uses_only_approved_dependency_layers() -> None:
+    violations: list[str] = []
+    for path in (PACKAGE_ROOT / "universe").rglob("*.py"):
+        for node, imported_name in _module_imports(path):
+            if not imported_name.startswith("market_predictor."):
+                continue
+            if _matches_any_dependency(imported_name, UNIVERSE_ALLOWED_DEPENDENCIES):
+                continue
+            relative_path = path.relative_to(PACKAGE_ROOT.parent)
+            violations.append(f"{relative_path}:{node.lineno}: {imported_name}")
+
+    assert not violations, "Universe dependency violations:\n" + "\n".join(sorted(violations))
+
+
+def test_removed_authority_modules_have_no_imports_or_files() -> None:
+    violations: list[str] = []
+    for root in (PACKAGE_ROOT, TEST_ROOT, SCRIPT_ROOT):
+        if not root.exists():
+            continue
+        for path in root.rglob("*.py"):
+            for node, imported_name in _module_imports(path):
+                if _matches_any_dependency(imported_name, REMOVED_AUTHORITY_MODULES):
+                    relative_path = path.relative_to(REPOSITORY_ROOT)
+                    violations.append(f"{relative_path}:{node.lineno}: {imported_name}")
+
+    old_package = PACKAGE_ROOT / "edge_rebuild"
+    remaining_files = [str(old_package / name) for name in REMOVED_AUTHORITY_FILES if (old_package / name).exists()]
+    assert not remaining_files, "Removed authority files still exist:\n" + "\n".join(remaining_files)
+    assert not violations, "Removed authority imports remain:\n" + "\n".join(sorted(violations))
+
+
+@pytest.mark.parametrize(
+    "statement",
+    (
+        "import market_predictor.edge_rebuild.corpus_integrity",
+        "import market_predictor.edge_rebuild.corpus_integrity as integrity",
+        "from market_predictor.edge_rebuild import corpus_integrity",
+        "from market_predictor.edge_rebuild.corpus_integrity import IntegrityThresholds",
+    ),
+)
+def test_removed_authority_import_guard_recognizes_every_import_form(statement: str) -> None:
+    tree = ast.parse(statement)
+    imported_names = tuple(name for node in ast.walk(tree) for name in _imported_names(node))
+    assert any(_matches_any_dependency(name, REMOVED_AUTHORITY_MODULES) for name in imported_names)
+
+
 def _forbidden_imports(path: Path) -> list[str]:
+    violations: list[str] = []
+    for node, imported_name in _module_imports(path):
+        if _matches_any_dependency(imported_name, FORBIDDEN_DEPENDENCIES):
+            relative_path = path.relative_to(PACKAGE_ROOT.parent)
+            violations.append(f"{relative_path}:{node.lineno}: {imported_name}")
+    return violations
+
+
+def _module_imports(path: Path) -> tuple[tuple[ast.AST, str], ...]:
     try:
-        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        tree = ast.parse(path.read_text(encoding="utf-8-sig"), filename=str(path))
     except SyntaxError as exc:
         pytest.fail(f"Cannot inspect invalid Python module {path}: {exc}")
 
-    violations: list[str] = []
+    imports: list[tuple[ast.AST, str]] = []
     for node in ast.walk(tree):
-        imported_names = _imported_names(node)
-        for imported_name in imported_names:
-            if imported_name.startswith(FORBIDDEN_DEPENDENCIES):
-                relative_path = path.relative_to(PACKAGE_ROOT.parent)
-                violations.append(f"{relative_path}:{node.lineno}: {imported_name}")
-    return violations
+        imports.extend((node, imported_name) for imported_name in _imported_names(node))
+    return tuple(imports)
 
 
 def _imported_names(node: ast.AST) -> tuple[str, ...]:
@@ -60,5 +137,9 @@ def _imported_names(node: ast.AST) -> tuple[str, ...]:
         module = node.module or ""
         if module == "market_predictor":
             return tuple(f"{module}.{alias.name}" for alias in node.names)
-        return (module,)
+        return (module, *(f"{module}.{alias.name}" for alias in node.names))
     return ()
+
+
+def _matches_any_dependency(imported_name: str, prefixes: tuple[str, ...]) -> bool:
+    return any(imported_name == prefix or imported_name.startswith(f"{prefix}.") for prefix in prefixes)

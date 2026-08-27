@@ -7,7 +7,7 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-import market_predictor.edge_rebuild.sp500_transitions as transition_module
+import market_predictor.universe.sp500.transition_authority as transition_module
 from market_predictor.canonical.store import file_sha256
 from market_predictor.core.errors import DataReadinessError
 from market_predictor.sources.spglobal.archive import VerifiedSpGlobalRawArchive

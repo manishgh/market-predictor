@@ -8,6 +8,7 @@ import pandas as pd
 import typer
 
 from market_predictor.config import get_settings
+from market_predictor.core.errors import DataReadinessError
 from market_predictor.edge_rebuild.benchmark_history import (
     build_selected_session_benchmark_plan,
 )
@@ -47,38 +48,6 @@ from market_predictor.edge_rebuild.history_contracts import (
 from market_predictor.edge_rebuild.history_materialization import (
     reorganize_intraday_history,
 )
-from market_predictor.intraday.datasets.bar_audit import (
-    publish_intraday_bar_dataset_audit,
-)
-from market_predictor.intraday.datasets.bar_dataset import (
-    publish_intraday_bar_dataset,
-)
-from market_predictor.intraday.features.bar_only_five_minute import (
-    publish_selected_session_five_minute_projection,
-)
-from market_predictor.intraday.evaluation.gates import (
-    evaluate_future_intraday_holdout,
-    load_intraday_development_config,
-)
-from market_predictor.intraday.training.coordinator import (
-    train_intraday_development_candidate,
-)
-from market_predictor.intraday.datasets.event_preflight import (
-    load_intraday_event_preflight_config,
-    publish_intraday_event_preflight,
-)
-from market_predictor.intraday.datasets.history import (
-    build_intraday_history_plan,
-)
-from market_predictor.intraday.datasets.microstructure_history import (
-    build_intraday_microstructure_plan,
-    collect_intraday_microstructure_history,
-    load_microstructure_collection_config,
-)
-from market_predictor.intraday.datasets.selection import (
-    build_intraday_selection,
-    publish_intraday_selection,
-)
 from market_predictor.edge_rebuild.issuer_event_family_authority import (
     publish_issuer_event_family_authority,
 )
@@ -110,22 +79,12 @@ from market_predictor.edge_rebuild.sec_filing_collection import (
     load_sec_filing_collection_config,
     load_sec_identity_relations,
 )
-from market_predictor.edge_rebuild.sec_identity_authority import (
-    load_sec_identity_config,
-    publish_sec_identity_authority,
-)
 from market_predictor.edge_rebuild.selected_session_history import (
     build_selected_session_history_plan,
-)
-from market_predictor.edge_rebuild.sp500_memberships import (
-    publish_sp500_membership_authority,
 )
 from market_predictor.edge_rebuild.sp500_observed_memberships import (
     ObservedMembershipConfig,
     collect_observed_sp500_membership_authority,
-)
-from market_predictor.edge_rebuild.sp500_transitions import (
-    publish_sp500_transition_authority,
 )
 from market_predictor.edge_rebuild.strategy_contract import load_strategy_contract
 from market_predictor.edge_rebuild.swing_broker_specialists import (
@@ -149,16 +108,57 @@ from market_predictor.edge_rebuild.temporal_manifest import (
     load_temporal_manifest_config,
     publish_temporal_manifest,
 )
-from market_predictor.edge_rebuild.universe_identity import (
-    publish_verified_universe,
-)
 from market_predictor.heavy_jobs import serialized_heavy_job
+from market_predictor.intraday.datasets.bar_audit import (
+    publish_intraday_bar_dataset_audit,
+)
+from market_predictor.intraday.datasets.bar_dataset import (
+    publish_intraday_bar_dataset,
+)
+from market_predictor.intraday.datasets.event_preflight import (
+    load_intraday_event_preflight_config,
+    publish_intraday_event_preflight,
+)
+from market_predictor.intraday.datasets.history import (
+    build_intraday_history_plan,
+)
+from market_predictor.intraday.datasets.microstructure_history import (
+    build_intraday_microstructure_plan,
+    collect_intraday_microstructure_history,
+    load_microstructure_collection_config,
+)
+from market_predictor.intraday.datasets.selection import (
+    build_intraday_selection,
+    publish_intraday_selection,
+)
+from market_predictor.intraday.evaluation.gates import (
+    evaluate_future_intraday_holdout,
+    load_intraday_development_config,
+)
+from market_predictor.intraday.features.bar_only_five_minute import (
+    publish_selected_session_five_minute_projection,
+)
 from market_predictor.intraday.specialist_contracts import (
     load_intraday_specialist_research_config,
 )
+from market_predictor.intraday.training.coordinator import (
+    train_intraday_development_candidate,
+)
 from market_predictor.sources.alpaca import AlpacaSource
 from market_predictor.sources.sec import SecRequestGovernor, SecSource
-from market_predictor.core.errors import DataReadinessError
+from market_predictor.universe.membership_identity_validation import (
+    publish_verified_universe,
+)
+from market_predictor.universe.sec_identity_authority import (
+    load_sec_identity_config,
+    publish_sec_identity_authority,
+)
+from market_predictor.universe.sp500.membership_authority import (
+    publish_sp500_membership_authority,
+)
+from market_predictor.universe.sp500.transition_authority import (
+    publish_sp500_transition_authority,
+)
 
 
 def _iso_date(value: str, *, option: str) -> date:

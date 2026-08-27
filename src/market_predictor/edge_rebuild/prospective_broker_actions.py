@@ -6,8 +6,6 @@ provider revision and every source-coverage interval remains auditable.
 """
 from __future__ import annotations
 
-
-
 import hashlib
 import json
 import os
@@ -35,18 +33,15 @@ from market_predictor.canonical.store import (
     manifest_path_for,
     write_canonical_artifact,
 )
-from market_predictor.intraday.datasets.bar_dataset import (
-    load_complete_intraday_bar_dataset,
-)
-from market_predictor.intraday.datasets.history import json_sha256
-from market_predictor.edge_rebuild.sp500_memberships import (
-    load_sp500_membership_authority_envelope,
-    verify_membership_namespace_extension,
-)
+from market_predictor.core.errors import DataReadinessError
 from market_predictor.edge_rebuild.sp500_observed_memberships import (
     AUTHORITY_SCHEMA as OBSERVED_MEMBERSHIP_AUTHORITY_SCHEMA,
 )
 from market_predictor.edge_rebuild.sp500_observed_memberships import load_observed_sp500_membership_authority
+from market_predictor.intraday.datasets.bar_dataset import (
+    load_complete_intraday_bar_dataset,
+)
+from market_predictor.intraday.datasets.history import json_sha256
 from market_predictor.locking import LockTimeout, file_lock
 from market_predictor.resources import (
     assert_memory_budget,
@@ -55,7 +50,10 @@ from market_predictor.resources import (
 )
 from market_predictor.sources.alpaca import AlpacaAssetSnapshot, AlpacaNewsPage
 from market_predictor.symbols import canonical_symbol
-from market_predictor.core.errors import DataReadinessError
+from market_predictor.universe.sp500.membership_authority import (
+    load_sp500_membership_authority_envelope,
+    verify_membership_namespace_extension,
+)
 
 POLL_REQUEST_SCHEMA: Final = "edge_rebuild.prospective_broker_action_poll_request.v1"
 POLL_MANIFEST_SCHEMA: Final = "edge_rebuild.prospective_broker_action_poll_manifest.v1"

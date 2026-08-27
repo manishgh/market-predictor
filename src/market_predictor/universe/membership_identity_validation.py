@@ -20,8 +20,6 @@ substituting an inferred rename date for evidence.
 """
 from __future__ import annotations
 
-
-
 import json
 from collections.abc import Mapping
 from dataclasses import dataclass, field
@@ -40,8 +38,8 @@ from market_predictor.canonical.store import (
     load_canonical_artifact,
     write_canonical_artifact,
 )
-from market_predictor.edge_rebuild.corpus_integrity import IntegrityThresholds
 from market_predictor.core.errors import DataReadinessError
+from market_predictor.evidence.corpus_integrity import IntegrityThresholds
 
 MEMBERSHIP_IDENTITY_SCHEMA = "edge_rebuild.membership_identity.v1"
 REQUIRED_MEMBERSHIP_COLUMNS = (

@@ -1,8 +1,6 @@
 """Verified, resumable combination of the two swing daily-history generations."""
 from __future__ import annotations
 
-
-
 import hashlib
 import json
 import uuid
@@ -26,10 +24,7 @@ from market_predictor.canonical.store import (
     manifest_path_for,
     write_canonical_artifact,
 )
-from market_predictor.edge_rebuild.sp500_memberships import (
-    MEMBERSHIP_REQUEST_SCHEMA,
-    require_sp500_membership_authority,
-)
+from market_predictor.core.errors import DataReadinessError
 from market_predictor.edge_rebuild.swing_history_collection import (
     load_complete_swing_history_collection,
 )
@@ -39,7 +34,10 @@ from market_predictor.resources import (
     memory_audit,
     release_process_memory,
 )
-from market_predictor.core.errors import DataReadinessError
+from market_predictor.universe.sp500.membership_authority import (
+    MEMBERSHIP_REQUEST_SCHEMA,
+    require_sp500_membership_authority,
+)
 
 COMBINED_REQUEST_SCHEMA: Final = "edge_rebuild.swing_combined_daily_request.v5"
 COMBINED_MANIFEST_SCHEMA: Final = "edge_rebuild.swing_combined_daily_manifest.v5"

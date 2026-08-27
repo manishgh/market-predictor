@@ -3,7 +3,7 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
-from market_predictor.edge_rebuild.corpus_integrity import IntegrityThresholds
+from market_predictor.core.errors import DataReadinessError
 from market_predictor.edge_rebuild.history_materialization import (
     POSTMARKET,
     PREMARKET,
@@ -14,7 +14,7 @@ from market_predictor.edge_rebuild.history_materialization import (
     expected_bars_per_session_segment,
     session_bounds_for,
 )
-from market_predictor.core.errors import DataReadinessError
+from market_predictor.evidence.corpus_integrity import IntegrityThresholds
 
 
 def _bars(times_utc: list[str]) -> pd.DataFrame:

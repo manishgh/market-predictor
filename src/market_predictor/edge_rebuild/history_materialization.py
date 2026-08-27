@@ -31,8 +31,6 @@ narrows it to the names actually moving that session.
 """
 from __future__ import annotations
 
-
-
 import hashlib
 import json
 import shutil
@@ -48,7 +46,8 @@ import pandas as pd
 
 from market_predictor.canonical.normalize import canonicalize_bars
 from market_predictor.canonical.store import file_sha256, load_canonical_artifact
-from market_predictor.edge_rebuild.corpus_integrity import (
+from market_predictor.core.errors import DataReadinessError
+from market_predictor.evidence.corpus_integrity import (
     IntegrityThresholds,
     verify_corpus_integrity,
 )
@@ -61,7 +60,6 @@ from market_predictor.resources import (
     memory_audit,
     release_process_memory,
 )
-from market_predictor.core.errors import DataReadinessError
 
 MATERIALIZATION_SCHEMA = "edge_rebuild.intraday_materialization.v1"
 MATERIALIZATION_AUTHORITY_SCHEMA = (

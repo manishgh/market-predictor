@@ -3,11 +3,11 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
-from market_predictor.edge_rebuild.universe_identity import (
+from market_predictor.core.errors import DataReadinessError
+from market_predictor.universe.membership_identity_validation import (
     validate_security_exclusion_share,
     verify_membership_identity,
 )
-from market_predictor.core.errors import DataReadinessError
 
 
 def _membership(
