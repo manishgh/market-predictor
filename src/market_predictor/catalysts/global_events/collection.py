@@ -1,13 +1,10 @@
 """Live GDELT collection with observed availability and immutable lineage."""
 from __future__ import annotations
 
-
-
 import hashlib
 import json
 import os
 import shutil
-import time
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -18,7 +15,6 @@ from uuid import uuid4
 
 import numpy as np
 import pandas as pd
-import requests
 
 from market_predictor.canonical.audits import (
     CanonicalAuditReport,
@@ -32,25 +28,27 @@ from market_predictor.canonical.store import (
     manifest_path_for,
     write_canonical_artifact,
 )
-from market_predictor.resources import assert_memory_budget, memory_audit
 from market_predictor.core.errors import DataReadinessError
+from market_predictor.resources import assert_memory_budget, memory_audit
+from market_predictor.sources.gdelt import (
+    GDELT_DOCUMENT_ENDPOINT,
+    MAX_GDELT_RECORDS,
+    GdeltDocumentFetcher,
+    GdeltDocumentRequest,
+    GdeltDocumentResult,
+    fetch_gdelt_documents,
+    validate_gdelt_document_request,
+)
 
 GDELT_COLLECTION_SCHEMA: Final = "edge_rebuild.gdelt_global_collection.v2"
 GDELT_COLLECTION_MANIFEST_SCHEMA: Final = "edge_rebuild.gdelt_global_collection_manifest.v2"
 GDELT_COLLECTION_REQUEST_SCHEMA: Final = "edge_rebuild.gdelt_global_collection_request.v2"
-GDELT_DOC_ENDPOINT: Final = "https://api.gdeltproject.org/api/v2/doc/doc"
 GLOBAL_TICKER: Final = "MARKET"
 GLOBAL_SECURITY_ID: Final = "market:global"
 SOURCE_FAMILY: Final = "gdelt"
 MAXIMUM_PROCESS_MEMORY_GIB: Final = 4.0
 MEMORY_GUARD_HEADROOM_GIB: Final = 0.5
-MAX_GDELT_RECORDS: Final = 250
-GDELT_MAX_ATTEMPTS: Final = 4
-GDELT_INITIAL_BACKOFF_SECONDS: Final = 0.5
-GDELT_MAX_BACKOFF_SECONDS: Final = 8.0
-GDELT_MAX_RETRY_AFTER_SECONDS: Final = 30.0
-GDELT_RETRYABLE_STATUS_CODES: Final = frozenset({429, 500, 502, 503, 504})
-GLOBAL_EVENT_QUERY_POLICY_V1: Final = (
+GLOBAL_MARKET_EVENT_QUERIES: Final = (
     '("strait of hormuz" OR hormuz OR "red sea" OR "suez canal") '
     '(oil OR tanker OR shipping OR blockade OR attack OR disruption)',
     '("taiwan strait" OR taiwan OR tsmc OR "south china sea") '
@@ -62,24 +60,6 @@ GLOBAL_EVENT_QUERY_POLICY_V1: Final = (
     '(cyberattack OR ransomware OR "critical infrastructure" OR "power grid") '
     '(outage OR shutdown OR breach OR malware)',
 )
-
-
-@dataclass(frozen=True, slots=True)
-class GdeltCollectionRequest:
-    queries: tuple[str, ...]
-    requested_start_utc: datetime
-    requested_end_utc: datetime
-    max_records: int = MAX_GDELT_RECORDS
-    timeout_seconds: float = 30.0
-
-
-@dataclass(frozen=True, slots=True)
-class GdeltFetchResult:
-    records: Sequence[Mapping[str, object]]
-    complete: bool
-    completed_queries: tuple[str, ...]
-    errors: tuple[str, ...] = ()
-    raw_response_sha256: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -99,10 +79,6 @@ class GdeltGlobalEventCollection:
         return self.directory / "source_collections.parquet"
 
 
-class GdeltFetcher(Protocol):
-    def __call__(self, request: GdeltCollectionRequest) -> GdeltFetchResult: ...
-
-
 class EventScorer(Protocol):
     def score_texts(self, texts: list[str], batch_size: int = 16) -> pd.DataFrame: ...
 
@@ -110,71 +86,12 @@ class EventScorer(Protocol):
 Clock = Callable[[], datetime]
 
 
-def fetch_gdelt_doc_api(
-    request: GdeltCollectionRequest,
-    *,
-    max_attempts: int = GDELT_MAX_ATTEMPTS,
-    initial_backoff_seconds: float = GDELT_INITIAL_BACKOFF_SECONDS,
-    sleep: Callable[[float], None] = time.sleep,
-) -> GdeltFetchResult:
-    """Fetch one bounded live window from the GDELT DOC 2.0 article-list API."""
-
-    normalized = validate_gdelt_collection_request(request)
-    if max_attempts <= 0 or max_attempts > 10:
-        raise ValueError("max_attempts must be between 1 and 10")
-    if initial_backoff_seconds < 0 or initial_backoff_seconds > GDELT_MAX_BACKOFF_SECONDS:
-        raise ValueError(
-            f"initial_backoff_seconds must be between 0 and {GDELT_MAX_BACKOFF_SECONDS}"
-        )
-    records: list[dict[str, object]] = []
-    response_hashes: list[str] = []
-    complete = True
-    for query in normalized.queries:
-        parameters: dict[str, str | int] = {
-            "query": query,
-            "mode": "artlist",
-            "format": "json",
-            "maxrecords": normalized.max_records,
-            "startdatetime": normalized.requested_start_utc.strftime("%Y%m%d%H%M%S"),
-            "enddatetime": normalized.requested_end_utc.strftime("%Y%m%d%H%M%S"),
-        }
-        response = _get_gdelt_response(
-            parameters,
-            timeout_seconds=normalized.timeout_seconds,
-            max_attempts=max_attempts,
-            initial_backoff_seconds=initial_backoff_seconds,
-            sleep=sleep,
-        )
-        response_hashes.append(hashlib.sha256(response.content).hexdigest())
-        try:
-            payload = response.json()
-        except (requests.JSONDecodeError, json.JSONDecodeError) as exc:
-            raise DataReadinessError("GDELT returned invalid JSON") from exc
-        if not isinstance(payload, dict) or not isinstance(payload.get("articles"), list):
-            raise DataReadinessError("GDELT response is missing the articles list")
-        query_records = payload["articles"]
-        if any(not isinstance(record, dict) for record in query_records):
-            raise DataReadinessError("GDELT response contains a non-object article")
-        complete &= len(query_records) < normalized.max_records
-        records.extend(
-            {**cast(dict[str, object], record), "collection_query": query}
-            for record in query_records
-        )
-    raw_sha256 = _json_sha256(response_hashes)
-    return GdeltFetchResult(
-        records=records,
-        complete=complete,
-        completed_queries=normalized.queries,
-        raw_response_sha256=raw_sha256,
-    )
-
-
 def collect_live_gdelt_global_events(
-    request: GdeltCollectionRequest,
+    request: GdeltDocumentRequest,
     output_directory: Path,
     *,
     scorer: EventScorer,
-    fetch: GdeltFetcher = fetch_gdelt_doc_api,
+    fetch: GdeltDocumentFetcher = fetch_gdelt_documents,
     clock: Clock | None = None,
     scorer_batch_size: int = 16,
     scorer_identity: str | None = None,
@@ -183,7 +100,7 @@ def collect_live_gdelt_global_events(
 ) -> GdeltGlobalEventCollection:
     """Collect, score, and atomically publish one observed GDELT window."""
 
-    normalized = validate_gdelt_collection_request(request)
+    normalized = validate_gdelt_document_request(request)
     _validate_memory_policy(maximum_process_memory_gib, memory_guard_headroom_gib)
     if scorer_batch_size <= 0 or scorer_batch_size > MAX_GDELT_RECORDS:
         raise ValueError(f"scorer_batch_size must be between 1 and {MAX_GDELT_RECORDS}")
@@ -438,97 +355,8 @@ def load_gdelt_global_event_collection(
     )
 
 
-def validate_gdelt_collection_request(request: GdeltCollectionRequest) -> GdeltCollectionRequest:
-    """Validate and normalize a request before allocating scorer resources."""
-
-    queries = tuple(query.strip() for query in request.queries)
-    if not queries or any(not query for query in queries):
-        raise ValueError("GDELT queries must contain non-empty values")
-    if len(queries) != len(set(queries)):
-        raise ValueError("GDELT queries must be unique")
-    start = _strict_utc(request.requested_start_utc, "requested_start_utc")
-    end = _strict_utc(request.requested_end_utc, "requested_end_utc")
-    if end < start:
-        raise ValueError("GDELT request window is reversed")
-    if request.max_records <= 0 or request.max_records > MAX_GDELT_RECORDS:
-        raise ValueError(f"max_records must be between 1 and {MAX_GDELT_RECORDS}")
-    if request.timeout_seconds <= 0 or request.timeout_seconds > 120:
-        raise ValueError("timeout_seconds must be in (0, 120]")
-    return GdeltCollectionRequest(
-        queries=queries,
-        requested_start_utc=start,
-        requested_end_utc=end,
-        max_records=request.max_records,
-        timeout_seconds=float(request.timeout_seconds),
-    )
-
-
-def _get_gdelt_response(
-    parameters: Mapping[str, str | int],
-    *,
-    timeout_seconds: float,
-    max_attempts: int,
-    initial_backoff_seconds: float,
-    sleep: Callable[[float], None],
-) -> requests.Response:
-    last_transport_error: requests.RequestException | None = None
-    for attempt in range(max_attempts):
-        try:
-            response = requests.get(
-                GDELT_DOC_ENDPOINT,
-                params=dict(parameters),
-                timeout=timeout_seconds,
-            )
-        except (requests.Timeout, requests.ConnectionError) as exc:
-            last_transport_error = exc
-            if attempt + 1 == max_attempts:
-                break
-            sleep(_retry_delay(None, attempt, initial_backoff_seconds))
-            continue
-
-        if response.status_code in GDELT_RETRYABLE_STATUS_CODES:
-            if attempt + 1 == max_attempts:
-                raise DataReadinessError(
-                    f"GDELT request failed after {max_attempts} attempts "
-                    f"with HTTP {response.status_code}"
-                )
-            sleep(_retry_delay(response, attempt, initial_backoff_seconds))
-            continue
-        try:
-            response.raise_for_status()
-        except requests.HTTPError as exc:
-            raise DataReadinessError(
-                f"GDELT request failed permanently with HTTP {response.status_code}"
-            ) from exc
-        return response
-
-    raise DataReadinessError(
-        f"GDELT request failed after {max_attempts} attempts due to a transport error"
-    ) from last_transport_error
-
-
-def _retry_delay(
-    response: requests.Response | None,
-    attempt: int,
-    initial_backoff_seconds: float,
-) -> float:
-    if response is not None:
-        retry_after = response.headers.get("Retry-After")
-        if retry_after is not None:
-            try:
-                parsed = float(retry_after)
-            except ValueError:
-                parsed = -1.0
-            if parsed >= 0:
-                return min(parsed, GDELT_MAX_RETRY_AFTER_SECONDS)
-    return min(
-        initial_backoff_seconds * float(2**attempt),
-        GDELT_MAX_BACKOFF_SECONDS,
-    )
-
-
 def _request_payload(
-    request: GdeltCollectionRequest,
+    request: GdeltDocumentRequest,
     scorer: EventScorer,
     scorer_batch_size: int,
     scorer_identity: str | None,
@@ -553,7 +381,7 @@ def _request_payload(
         "requested_start_utc": request.requested_start_utc.isoformat(),
         "requested_end_utc": request.requested_end_utc.isoformat(),
         "max_records": request.max_records,
-        "endpoint": GDELT_DOC_ENDPOINT,
+        "endpoint": GDELT_DOCUMENT_ENDPOINT,
         "availability_policy": "observed collection and scoring timestamps only",
         "scorer_identity": identity,
         "scorer_batch_size": scorer_batch_size,
@@ -571,7 +399,7 @@ def _default_scorer_identity(scorer: EventScorer) -> str:
 
 def _normalize_raw_records(
     records: Sequence[Mapping[str, object]],
-    request: GdeltCollectionRequest,
+    request: GdeltDocumentRequest,
     observed_at: datetime,
 ) -> list[dict[str, object]]:
     normalized: list[dict[str, object]] = []
@@ -776,7 +604,7 @@ def _validate_loaded_collection(
         raise DataReadinessError("empty GDELT collection cannot claim a scoring time")
 
 
-def _raw_response_sha256(result: GdeltFetchResult) -> str:
+def _raw_response_sha256(result: GdeltDocumentResult) -> str:
     calculated = _json_sha256([dict(record) for record in result.records])
     if result.raw_response_sha256 is None:
         return calculated

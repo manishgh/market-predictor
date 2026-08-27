@@ -9,7 +9,7 @@ import pytest
 from market_predictor.canonical.audits import CanonicalAuditCheck, CanonicalAuditReport
 from market_predictor.canonical.contracts import CanonicalEvent, SourceCollection
 from market_predictor.canonical.store import write_canonical_artifact
-from market_predictor.edge_rebuild.global_event_authority import (
+from market_predictor.catalysts.global_events.decision_authority import (
     attach_global_event_features,
     load_global_event_authority,
     publish_global_event_authority,

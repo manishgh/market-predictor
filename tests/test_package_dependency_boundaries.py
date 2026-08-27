@@ -51,6 +51,8 @@ CATALYSTS_ALLOWED_DEPENDENCIES = (
 )
 REMOVED_AUTHORITY_MODULES = (
     "market_predictor.edge_rebuild.corpus_integrity",
+    "market_predictor.edge_rebuild.global_event_authority",
+    "market_predictor.edge_rebuild.global_event_collection",
     "market_predictor.edge_rebuild.sec_filing_authority",
     "market_predictor.edge_rebuild.sec_filing_collection",
     "market_predictor.edge_rebuild.sec_identity_authority",
@@ -61,6 +63,8 @@ REMOVED_AUTHORITY_MODULES = (
 )
 REMOVED_AUTHORITY_FILES = (
     "corpus_integrity.py",
+    "global_event_authority.py",
+    "global_event_collection.py",
     "sec_filing_authority.py",
     "sec_filing_collection.py",
     "sec_identity_authority.py",
@@ -68,6 +72,14 @@ REMOVED_AUTHORITY_FILES = (
     "sp500_observed_memberships.py",
     "sp500_transitions.py",
     "universe_identity.py",
+)
+REMOVED_ACTIVE_SYMBOLS = (
+    "GLOBAL_EVENT_QUERY_POLICY_V1",
+    "GdeltCollectionRequest",
+    "GdeltFetchResult",
+    "GdeltFetcher",
+    "fetch_gdelt_doc_api",
+    "validate_gdelt_collection_request",
 )
 
 
@@ -178,6 +190,41 @@ def test_removed_sec_filing_import_guard_recognizes_every_import_form(statement:
     tree = ast.parse(statement)
     imported_names = tuple(name for node in ast.walk(tree) for name in _imported_names(node))
     assert any(_matches_any_dependency(name, REMOVED_AUTHORITY_MODULES) for name in imported_names)
+
+
+@pytest.mark.parametrize(
+    "statement",
+    (
+        "import market_predictor.edge_rebuild.global_event_collection",
+        "from market_predictor.edge_rebuild import global_event_collection",
+        "from market_predictor.edge_rebuild.global_event_collection import GdeltGlobalEventCollection",
+        "import market_predictor.edge_rebuild.global_event_authority",
+        "from market_predictor.edge_rebuild import global_event_authority",
+        "from market_predictor.edge_rebuild.global_event_authority import GlobalEventAuthority",
+    ),
+)
+def test_removed_global_event_import_guard_recognizes_every_import_form(statement: str) -> None:
+    tree = ast.parse(statement)
+    imported_names = tuple(name for node in ast.walk(tree) for name in _imported_names(node))
+    assert any(_matches_any_dependency(name, REMOVED_AUTHORITY_MODULES) for name in imported_names)
+
+
+def test_removed_global_event_api_names_are_absent_from_python_code() -> None:
+    violations: list[str] = []
+    for root in (PACKAGE_ROOT, TEST_ROOT, SCRIPT_ROOT):
+        if not root.exists():
+            continue
+        for path in root.rglob("*.py"):
+            tree = ast.parse(path.read_text(encoding="utf-8-sig"))
+            for node in ast.walk(tree):
+                identifier = node.id if isinstance(node, ast.Name) else None
+                attribute = node.attr if isinstance(node, ast.Attribute) else None
+                matched = identifier or attribute
+                if matched in REMOVED_ACTIVE_SYMBOLS:
+                    relative_path = path.relative_to(REPOSITORY_ROOT)
+                    violations.append(f"{relative_path}:{node.lineno}: {matched}")
+
+    assert not violations, "Removed global-event API names remain:\n" + "\n".join(violations)
 
 
 @pytest.mark.parametrize(

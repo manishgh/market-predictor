@@ -10,17 +10,21 @@ import pytest
 import requests
 
 from market_predictor.canonical.store import load_canonical_artifact
-from market_predictor.edge_rebuild import global_event_collection as collection_module
-from market_predictor.edge_rebuild.global_event_authority import publish_global_event_authority
-from market_predictor.edge_rebuild.global_event_collection import (
-    GdeltCollectionRequest,
-    GdeltFetchResult,
+from market_predictor.catalysts.global_events.collection import (
     collect_live_gdelt_global_events,
-    fetch_gdelt_doc_api,
     load_gdelt_global_event_collection,
-    validate_gdelt_collection_request,
+)
+from market_predictor.catalysts.global_events.decision_authority import (
+    publish_global_event_authority,
 )
 from market_predictor.core.errors import DataReadinessError
+from market_predictor.sources.gdelt import (
+    GDELT_DOCUMENT_ENDPOINT,
+    GdeltDocumentRequest,
+    GdeltDocumentResult,
+    fetch_gdelt_documents,
+    validate_gdelt_document_request,
+)
 
 START = datetime(2025, 1, 7, 19, 0, tzinfo=UTC)
 END = datetime(2025, 1, 10, 20, 0, tzinfo=UTC)
@@ -63,12 +67,12 @@ def _fetch_result(
     *,
     complete: bool = True,
     errors: tuple[str, ...] = (),
-) -> GdeltFetchResult:
+) -> GdeltDocumentResult:
     tagged_records = [
         {**dict(record), "collection_query": record.get("collection_query", QUERIES[0])}
         for record in records
     ]
-    return GdeltFetchResult(
+    return GdeltDocumentResult(
         records=tagged_records,
         complete=complete,
         completed_queries=QUERIES if complete else (),
@@ -229,7 +233,7 @@ def test_future_provider_publication_fails_closed_without_artifacts(tmp_path: Pa
         (_fetch_result([], complete=False), "partial|truncated"),
         (_fetch_result([], errors=("timeout on shard 2",)), "reported errors"),
         (
-            GdeltFetchResult(
+            GdeltDocumentResult(
                 records=[],
                 complete=True,
                 completed_queries=QUERIES[:1],
@@ -240,7 +244,7 @@ def test_future_provider_publication_fails_closed_without_artifacts(tmp_path: Pa
 )
 def test_partial_or_error_response_fails_closed(
     tmp_path: Path,
-    fetch_result: GdeltFetchResult,
+    fetch_result: GdeltDocumentResult,
     match: str,
 ) -> None:
     output = tmp_path / match.replace("|", "-")
@@ -287,184 +291,93 @@ def test_loader_rejects_request_replay_and_hash_tamper(tmp_path: Path) -> None:
         load_gdelt_global_event_collection(collection.directory)
 
 
-def test_doc_api_uses_exact_params_and_preserves_query_identity(
+def test_collection_preserves_frozen_transport_and_lineage_identity(
     monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
 ) -> None:
-    calls: list[tuple[str, Mapping[str, object], float]] = []
-    responses = [
-        _http_response(
-            200,
-            {
-                "articles": [
-                    _article(
-                        title=f"Article {index}",
-                        url=f"https://example.com/{index}",
-                        published_at="2025-01-10T19:30:00Z",
-                    )
-                ]
-            },
-        )
-        for index in range(len(QUERIES))
+    response_bodies = [
+        (
+            b'{"articles":[{"title":"Shipping disruption raises energy risk",'
+            b'"url":"https://example.com/story#fragment",'
+            b'"seendate":"2025-01-10T19:30:00Z",'
+            b'"domain":"example.com","summary":"Global macro event"}]}'
+        ),
+        b'{"articles":[]}',
     ]
+    responses = [_http_response(200, raw=body) for body in response_bodies]
+    calls: list[tuple[str, Mapping[str, object], float]] = []
 
     def fake_get(
         url: str,
         *,
         params: Mapping[str, object],
         timeout: float,
+        allow_redirects: bool,
     ) -> requests.Response:
+        assert allow_redirects is False
         calls.append((url, params, timeout))
         return responses.pop(0)
 
     monkeypatch.setattr(requests, "get", fake_get)
-    result = fetch_gdelt_doc_api(_request())
-
-    assert result.complete is True
-    assert result.completed_queries == QUERIES
-    assert [record["collection_query"] for record in result.records] == list(QUERIES)
-    assert len(calls) == len(QUERIES)
-    for index, (url, params, timeout) in enumerate(calls):
-        assert url == collection_module.GDELT_DOC_ENDPOINT
-        assert params == {
-            "query": QUERIES[index],
-            "mode": "artlist",
-            "format": "json",
-            "maxrecords": 100,
-            "startdatetime": "20250107190000",
-            "enddatetime": "20250110200000",
-        }
-        assert timeout == 30.0
-
-
-@pytest.mark.parametrize("transport_error", [requests.Timeout(), requests.ConnectionError()])
-def test_doc_api_retries_transport_errors_and_retryable_statuses(
-    monkeypatch: pytest.MonkeyPatch,
-    transport_error: requests.RequestException,
-) -> None:
-    outcomes: list[requests.Response | requests.RequestException] = [
-        transport_error,
-        _http_response(429, {}, headers={"Retry-After": "1.5"}),
-        _http_response(503, {}),
-        _http_response(200, {"articles": []}),
-    ]
-    sleeps: list[float] = []
-
-    def fake_get(
-        _url: str,
-        *,
-        params: Mapping[str, object],
-        timeout: float,
-    ) -> requests.Response:
-        assert params["query"] == QUERIES[0]
-        assert timeout == 30.0
-        outcome = outcomes.pop(0)
-        if isinstance(outcome, requests.RequestException):
-            raise outcome
-        return outcome
-
-    monkeypatch.setattr(requests, "get", fake_get)
-    result = fetch_gdelt_doc_api(
-        _request(queries=(QUERIES[0],)),
-        max_attempts=4,
-        initial_backoff_seconds=0.25,
-        sleep=sleeps.append,
+    request = _request()
+    normalized = validate_gdelt_document_request(request)
+    fetched = fetch_gdelt_documents(request)
+    collection = collect_live_gdelt_global_events(
+        request,
+        tmp_path / "lineage-characterization",
+        scorer=_Scorer(),
+        fetch=lambda _: fetched,
+        clock=_Clock([END, FETCHED, SCORED, COMPLETED]),
+        scorer_identity="fixture-finbert|revision=fixture-v1",
     )
 
-    assert result.records == []
-    assert sleeps == [0.25, 1.5, 1.0]
-    assert not outcomes
-
-
-def test_doc_api_rejects_invalid_json_without_retry(monkeypatch: pytest.MonkeyPatch) -> None:
-    calls = 0
-
-    def fake_get(
-        _url: str,
-        *,
-        params: Mapping[str, object],
-        timeout: float,
-    ) -> requests.Response:
-        nonlocal calls
-        calls += 1
-        return _http_response(200, raw=b"not-json")
-
-    monkeypatch.setattr(requests, "get", fake_get)
-    with pytest.raises(DataReadinessError, match="invalid JSON"):
-        fetch_gdelt_doc_api(_request(queries=(QUERIES[0],)))
-    assert calls == 1
-
-
-def test_doc_api_marks_maximum_size_response_as_truncated(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    articles = [
-        _article(
-            title=f"Article {index}",
-            url=f"https://example.com/{index}",
-            published_at="2025-01-10T19:30:00Z",
+    assert normalized == GdeltDocumentRequest(
+        queries=QUERIES,
+        requested_start_utc=START,
+        requested_end_utc=END,
+        max_records=100,
+        timeout_seconds=30.0,
+    )
+    assert calls == [
+        (
+            GDELT_DOCUMENT_ENDPOINT,
+            {
+                "query": query,
+                "mode": "artlist",
+                "format": "json",
+                "maxrecords": 100,
+                "startdatetime": "20250107190000",
+                "enddatetime": "20250110200000",
+            },
+            30.0,
         )
-        for index in range(2)
+        for query in QUERIES
     ]
-    monkeypatch.setattr(
-        requests,
-        "get",
-        lambda *_args, **_kwargs: _http_response(200, {"articles": articles}),
+    assert fetched.raw_response_sha256 == (
+        "fffda4358a7061552d96d59b62d5c90684cef4863e3c718dd53527e4d7efb9da"
     )
-
-    result = fetch_gdelt_doc_api(
-        _request(queries=(QUERIES[0],), max_records=2),
+    assert collection.manifest["request"] == {
+        "schema": "edge_rebuild.gdelt_global_collection_request.v2",
+        "source_family": "gdelt",
+        "global_identity": {"ticker": "MARKET", "security_id": "market:global"},
+        "queries": list(QUERIES),
+        "query_policy_sha256": "6d1f4263c3d869e6345dcb244b732181695d575873fced93e3ad11b22e35dc35",
+        "source_policy_sha256": "01988ee89958ce6fc26e71fcf36c379054eade52d920787f8acf37e05766eb2c",
+        "requested_start_utc": "2025-01-07T19:00:00+00:00",
+        "requested_end_utc": "2025-01-10T20:00:00+00:00",
+        "max_records": 100,
+        "endpoint": "https://api.gdeltproject.org/api/v2/doc/doc",
+        "availability_policy": "observed collection and scoring timestamps only",
+        "scorer_identity": "fixture-finbert|revision=fixture-v1",
+        "scorer_batch_size": 16,
+    }
+    assert collection.manifest["collection_request_sha256"] == (
+        "ebcd130dfa29d148357f2e6dcd6980402b7412f753b5f38695ee4f3364e4b674"
     )
-    assert result.complete is False
-    assert len(result.records) == 2
-
-
-def test_doc_api_rejects_permanent_http_failure_without_retry(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    calls = 0
-
-    def fake_get(
-        _url: str,
-        *,
-        params: Mapping[str, object],
-        timeout: float,
-    ) -> requests.Response:
-        nonlocal calls
-        calls += 1
-        return _http_response(400, {"error": "bad request"})
-
-    monkeypatch.setattr(requests, "get", fake_get)
-    with pytest.raises(DataReadinessError, match="permanently.*400"):
-        fetch_gdelt_doc_api(_request(queries=(QUERIES[0],)))
-    assert calls == 1
-
-
-def test_doc_api_stops_after_bounded_retryable_failures(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    calls = 0
-    sleeps: list[float] = []
-
-    def fake_get(
-        _url: str,
-        *,
-        params: Mapping[str, object],
-        timeout: float,
-    ) -> requests.Response:
-        nonlocal calls
-        calls += 1
-        return _http_response(503, {"error": "temporarily unavailable"})
-
-    monkeypatch.setattr(requests, "get", fake_get)
-    with pytest.raises(DataReadinessError, match="after 3 attempts.*503"):
-        fetch_gdelt_doc_api(
-            _request(queries=(QUERIES[0],)),
-            max_attempts=3,
-            initial_backoff_seconds=0.25,
-            sleep=sleeps.append,
-        )
-    assert calls == 3
-    assert sleeps == [0.25, 0.5]
+    assert collection.manifest["raw_response_sha256"] == fetched.raw_response_sha256
+    assert collection.events.loc[0, "raw_sha256"] == (
+        "42c25d6efda36dd8eb8307aa207510c443f1bed1c10f0fa8ef1283089f267411"
+    )
 
 
 def test_query_families_remain_distinguishable_after_canonicalization(tmp_path: Path) -> None:
@@ -518,25 +431,12 @@ def test_scorer_identity_is_bound_into_source_policy(tmp_path: Path) -> None:
     assert first_policy != second_policy
 
 
-def test_public_request_validation_runs_without_a_scorer() -> None:
-    normalized = validate_gdelt_collection_request(_request())
-    assert normalized.queries == QUERIES
-    with pytest.raises(ValueError, match="reversed"):
-        validate_gdelt_collection_request(
-            GdeltCollectionRequest(
-                queries=QUERIES,
-                requested_start_utc=END,
-                requested_end_utc=START,
-            )
-        )
-
-
 def _request(
     *,
     queries: tuple[str, ...] = QUERIES,
     max_records: int = 100,
-) -> GdeltCollectionRequest:
-    return GdeltCollectionRequest(
+) -> GdeltDocumentRequest:
+    return GdeltDocumentRequest(
         queries=queries,
         requested_start_utc=START,
         requested_end_utc=END,
@@ -553,7 +453,7 @@ def _http_response(
 ) -> requests.Response:
     response = requests.Response()
     response.status_code = status_code
-    response.url = collection_module.GDELT_DOC_ENDPOINT
+    response.url = GDELT_DOCUMENT_ENDPOINT
     response.headers.update(headers or {})
     response.headers.setdefault("Content-Type", "application/json")
     response._content = raw if raw is not None else json.dumps(payload).encode("utf-8")

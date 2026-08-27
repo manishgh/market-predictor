@@ -6,8 +6,6 @@ serve, plus a fail-closed batch/live feature parity check.
 """
 from __future__ import annotations
 
-
-
 import hashlib
 import json
 import os
@@ -33,20 +31,20 @@ from pydantic import (
 )
 
 from market_predictor.canonical.store import file_sha256
-from market_predictor.edge_rebuild.catalyst_authority import (
-    REQUIRED_MODEL_SOURCE_FAMILIES,
-    TRACKED_SOURCE_FAMILIES,
-)
-from market_predictor.edge_rebuild.global_event_authority import (
+from market_predictor.catalysts.global_events.decision_authority import (
     GLOBAL_EVENT_SOURCE_FAMILIES,
     GlobalEventAuthority,
     load_global_event_authority,
 )
-from market_predictor.intraday.features.features import (
-    CAUSAL_INTRADAY_MODEL_FEATURE_COLUMNS,
+from market_predictor.core.errors import (
+    ArtifactIntegrityError,
+    DataReadinessError,
+    PromotionGateError,
+    SchemaMismatchError,
 )
-from market_predictor.intraday.features.features import (
-    FEATURE_SCHEMA_VERSION as INTRADAY_FEATURE_SCHEMA_VERSION,
+from market_predictor.edge_rebuild.catalyst_authority import (
+    REQUIRED_MODEL_SOURCE_FAMILIES,
+    TRACKED_SOURCE_FAMILIES,
 )
 from market_predictor.edge_rebuild.strategy_contract import (
     StrategyContract,
@@ -58,17 +56,17 @@ from market_predictor.edge_rebuild.swing_features import (
 from market_predictor.edge_rebuild.swing_training import (
     MODEL_SCHEMA as SWING_CANDIDATE_MODEL_SCHEMA,
 )
+from market_predictor.intraday.features.features import (
+    CAUSAL_INTRADAY_MODEL_FEATURE_COLUMNS,
+)
+from market_predictor.intraday.features.features import (
+    FEATURE_SCHEMA_VERSION as INTRADAY_FEATURE_SCHEMA_VERSION,
+)
 from market_predictor.promotion_attestation import (
     promotion_attestation_path_for,
     verify_promotion_attestation,
 )
 from market_predictor.resources import assert_memory_budget, process_memory_snapshot
-from market_predictor.core.errors import (
-    ArtifactIntegrityError,
-    DataReadinessError,
-    PromotionGateError,
-    SchemaMismatchError,
-)
 
 SERVING_BUNDLE_SCHEMA: Final = "edge_rebuild.promoted_bundle.v2"
 PREDICTION_RESULT_SCHEMA: Final = "edge_rebuild.prediction_result.v2"

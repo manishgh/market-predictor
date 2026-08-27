@@ -7,6 +7,13 @@ from typing import Any
 import pandas as pd
 import typer
 
+from market_predictor.catalysts.global_events.collection import (
+    GLOBAL_MARKET_EVENT_QUERIES,
+    collect_live_gdelt_global_events,
+)
+from market_predictor.catalysts.global_events.decision_authority import (
+    publish_global_event_authority,
+)
 from market_predictor.catalysts.sec_filings.collection import (
     collect_historical_sec_filings,
     load_sec_filing_collection_config,
@@ -31,15 +38,6 @@ from market_predictor.edge_rebuild.contracts import (
 )
 from market_predictor.edge_rebuild.extended_session_context import (
     build_extended_session_context_plan,
-)
-from market_predictor.edge_rebuild.global_event_authority import (
-    publish_global_event_authority,
-)
-from market_predictor.edge_rebuild.global_event_collection import (
-    GLOBAL_EVENT_QUERY_POLICY_V1,
-    GdeltCollectionRequest,
-    collect_live_gdelt_global_events,
-    validate_gdelt_collection_request,
 )
 from market_predictor.edge_rebuild.history_collection import (
     collect_intraday_history,
@@ -141,6 +139,10 @@ from market_predictor.intraday.training.coordinator import (
     train_intraday_development_candidate,
 )
 from market_predictor.sources.alpaca import AlpacaSource
+from market_predictor.sources.gdelt import (
+    GdeltDocumentRequest,
+    validate_gdelt_document_request,
+)
 from market_predictor.sources.sec import SecRequestGovernor, SecSource
 from market_predictor.universe.membership_identity_validation import (
     publish_verified_universe,
@@ -556,9 +558,9 @@ def register_edge_rebuild_commands(app: typer.Typer, console: Any) -> None:
         from market_predictor.sentiment import FinbertScorer
 
         try:
-            request = validate_gdelt_collection_request(
-                GdeltCollectionRequest(
-                    queries=GLOBAL_EVENT_QUERY_POLICY_V1,
+            request = validate_gdelt_document_request(
+                GdeltDocumentRequest(
+                    queries=GLOBAL_MARKET_EVENT_QUERIES,
                     requested_start_utc=_iso_datetime(start, option="--start"),
                     requested_end_utc=_iso_datetime(end, option="--end"),
                     max_records=max_records_per_query,

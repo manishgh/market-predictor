@@ -134,11 +134,12 @@ shuffled-label control must remain at chance.
 
 ### Overlay and serving paths
 
-- `sources/sec.py`, `edge_rebuild/sec_filing_authority.py`: current SEC issuer
-  authority/audit and zero-versus-unknown coverage semantics; future separately
-  ablated estimator input after causal collection and attachment.
-- `edge_rebuild/global_event_collection.py`,
-  `edge_rebuild/global_event_authority.py`: separate global context overlay.
+- `sources/sec.py`, `catalysts/sec_filings/collection.py`, and
+  `catalysts/sec_filings/decision_authority.py`: SEC transport, immutable issuer
+  evidence, and zero-versus-unknown decision-time coverage semantics.
+- `sources/gdelt.py`, `catalysts/global_events/collection.py`, and
+  `catalysts/global_events/decision_authority.py`: GDELT transport, immutable global
+  event evidence, and the separate decision-time global context overlay.
 - `edge_rebuild/serving.py`: promoted-bundle verification, model-family/profile
   binding, estimator-specific feature slicing, and strict prediction or abstention.
 - `prediction_service.py`: serves only a hash-verified promoted model family; the new

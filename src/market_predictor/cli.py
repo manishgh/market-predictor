@@ -23,6 +23,7 @@ from market_predictor.commands.intraday_model import register_intraday_model_com
 from market_predictor.commands.intraday_specialists import (
     register_intraday_specialist_commands,
 )
+from market_predictor.commands.market_context import collect_gdelt_market_context_events
 from market_predictor.commands.strategy_governance import (
     register_strategy_governance_commands,
 )
@@ -51,7 +52,6 @@ from market_predictor.promotion_audit import (
 from market_predictor.schemas import NewsEvent
 from market_predictor.sources.alpaca import AlpacaSource
 from market_predictor.sources.finviz import FinvizSource
-from market_predictor.sources.gdelt import GdeltSource
 from market_predictor.sources.sec import SecSource
 
 app = typer.Typer(help="Build and serve audited swing and intraday market predictions.")
@@ -1020,7 +1020,7 @@ def collect_market_context(
     errors: list[str] = []
     if include_gdelt:
         try:
-            gdelt_events, gdelt_errors = GdeltSource().fetch_context_events_with_errors(
+            gdelt_events, gdelt_errors = collect_gdelt_market_context_events(
                 start,
                 max_records_per_query=gdelt_max_records_per_query,
             )
