@@ -653,11 +653,19 @@ source files, compileall, removed-module/API guards, and diff checks. No Python 
 remained. The assigned senior reviewer accepted the final diff with no P0, P1, or P2
 finding.
 
-Exact next checkpoint: complete **issuer-event family and precision-authority
-migration**. Move causal issuer attribution and family classification into semantic
-`catalysts` packages. Move precision-governance evidence to its correct governance or
-research boundary after inspecting consumers. Preserve active classifier logic,
-coverage, reviewer evidence, artifact schemas, hashes, timestamps, memory limits, and
-strict replay. Use behavior-named modules, tests, commands, and task descriptions; do
-not add compatibility aliases. Do not delete `market_predictor.edge_rebuild` until
-later horizon, governance, serving, and command consumers have migrated.
+The assigned reviewer approved four bounded issuer-event checkpoints. First move
+Alpaca issuer-news evidence collection and its audit from `swing/news_history.py` and
+`swing/news_history_audit.py` to `catalysts/issuer_events`, with unchanged persisted
+schema strings in a semantic contracts module; `sources/alpaca.py` remains the sole
+provider transport. Next move reusable classification and attribution foundations to
+that catalyst package. Then move the swing-specific family authority to
+`swing/datasets` and decision authority to `swing/features`. Finally move precision
+sampling, review, and admission evidence to `governance`. The required direction is
+`sources -> catalysts -> swing -> governance`; commands remain outer adapters.
+
+Exact next checkpoint: complete **Alpaca issuer-news evidence collection migration**.
+Preserve request/work-unit behavior, source coverage, canonical normalization,
+availability, hashes, locks, resume semantics, memory limits, persisted schemas, and
+strict audit replay. Rename active modules and tests by behavior, remove old files and
+imports without aliases, run focused parity verification, and obtain the assigned
+reviewer's diff acceptance before checkpointing.

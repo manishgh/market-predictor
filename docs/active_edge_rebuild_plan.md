@@ -1276,9 +1276,17 @@ test, and task names.
        compileall, architecture guards, and diff checks. The assigned senior reviewer
        accepted the final diff with no P0, P1, or P2 finding.
      - **Issuer event family and precision authorities (`current task`).** Move causal
-       issuer attribution, family classification, and precision-governance evidence
-       into semantic catalyst and governance packages without changing any active
-       classifier, coverage, audit, or artifact contract.
+       issuer evidence in four independently reviewed checkpoints without changing
+       any classifier, coverage, audit, or artifact contract:
+       1. Move Alpaca issuer-news evidence collection and audit from `swing` to
+          `catalysts/issuer_events`; keep provider transport in `sources/alpaca.py`.
+       2. Move reusable classification, attribution, and attribution-history logic to
+          `catalysts/issuer_events`, including the rule-variant classifier helper.
+       3. Move the swing-specific family cohort authority to `swing/datasets` and the
+          swing-specific decision authority to `swing/features`.
+       4. Move precision sampling, review, and admission evidence to `governance`.
+       The required dependency direction is `sources -> catalysts -> swing ->
+       governance`; commands remain outer adapters.
 4. **Swing and intraday package migration (`pending`).**
    Consolidate each horizon under descriptive `contracts`, `datasets`, `features`,
    `labels`, `training`, `evaluation`, and `live` packages and remove the intraday
