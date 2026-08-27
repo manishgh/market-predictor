@@ -12,14 +12,14 @@ import pytest
 
 import market_predictor.edge_rebuild.sp500_memberships as membership_module
 from market_predictor.canonical.store import file_sha256
+from market_predictor.core.errors import DataReadinessError
 from market_predictor.edge_rebuild.swing_history_acquisition import (
     AUTHORITY_SCHEMA,
     DAILY_BAR_UNITS_FILE,
     PLAN_SCHEMA,
     publish_swing_history_acquisition_plan,
 )
-from market_predictor.core.errors import DataReadinessError
-from market_predictor.v3.universe import VerifiedIndexChanges
+from market_predictor.universe.sp500.membership_history import VerifiedIndexChanges
 
 
 def test_verified_membership_authority_publishes_stock_and_benchmark_units(

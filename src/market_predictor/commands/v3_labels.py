@@ -7,7 +7,10 @@ import typer
 from rich.console import Console
 
 from market_predictor.heavy_jobs import serialized_heavy_job
-from market_predictor.v3.labels import V3LabelConfig, build_v3_labels
+from market_predictor.research.intraday_cross_sectional.opportunity_labels import (
+    OpportunityLabelConfig,
+    build_opportunity_labels,
+)
 
 
 def register_v3_label_commands(app: typer.Typer, console: Console) -> None:
@@ -31,14 +34,14 @@ def register_v3_label_commands(app: typer.Typer, console: Console) -> None:
             raise typer.BadParameter("partition must be development or shadow")
         if out.exists() and not overwrite:
             raise typer.BadParameter(f"Output already exists; pass --overwrite to replace it: {out}")
-        config = V3LabelConfig(
+        config = OpportunityLabelConfig(
             horizons_bars=parsed_horizons,
             primary_horizon_bars=primary_horizon,
             bar_minutes=bar_minutes,
             round_trip_cost_bps=round_trip_cost_bps,
             minimum_ranking_group=minimum_ranking_group,
         )
-        labeled = build_v3_labels(
+        labeled = build_opportunity_labels(
             _read_frame(bars),
             _read_frame(benchmarks),
             config=config,

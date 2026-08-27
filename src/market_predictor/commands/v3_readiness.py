@@ -8,12 +8,15 @@ import typer
 from rich.console import Console
 
 from market_predictor.heavy_jobs import serialized_heavy_job
-from market_predictor.v3.readiness import DevelopmentReadinessConfig, audit_development_readiness
-from market_predictor.v3.spglobal_archive import (
+from market_predictor.research.intraday_cross_sectional.data_readiness import (
+    DevelopmentReadinessConfig,
+    audit_development_readiness,
+)
+from market_predictor.sources.spglobal.archive import (
     ArchiveCollectionConfig,
     collect_spglobal_archive,
 )
-from market_predictor.v3.spglobal_events import extract_spglobal_events
+from market_predictor.universe.sp500.index_change_events import extract_spglobal_events
 
 
 def register_v3_readiness_commands(app: typer.Typer, console: Console) -> None:

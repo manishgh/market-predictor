@@ -12,10 +12,10 @@ from urllib.parse import urlencode
 import pandas as pd
 import pytest
 
-from market_predictor.edge_rebuild import sp500_observed_memberships as observed
 from market_predictor.core.errors import DataReadinessError
-from market_predictor.v3.spglobal_archive import SEARCH_PAGE_SIZE, SpGlobalAnnouncement
-from market_predictor.v3.universe import IndexChange, parse_sp500_changes
+from market_predictor.edge_rebuild import sp500_observed_memberships as observed
+from market_predictor.sources.spglobal.archive import SEARCH_PAGE_SIZE, SpGlobalAnnouncement
+from market_predictor.universe.sp500.membership_history import IndexChange, parse_sp500_changes
 
 
 def _base_memberships() -> pd.DataFrame:
@@ -64,9 +64,7 @@ def _anchor(*tickers: str) -> pd.DataFrame:
             {
                 "ticker": ticker,
                 "company": f"{ticker} Company",
-                "sector": (
-                    "Information Technology" if ticker == "KEEP" else "Industrials"
-                ),
+                "sector": ("Information Technology" if ticker == "KEEP" else "Industrials"),
                 "industry": "Software" if ticker == "KEEP" else "Machinery",
                 "cik": identities[ticker],
             }
@@ -115,13 +113,7 @@ def test_sec_identity_overrides_erroneous_membership_source_cik(tmp_path: Path) 
     for number in range(500):
         ticker = f"T{number:03d}"
         wrong_cik = "9999999999" if ticker == "T007" else f"{number + 1:010d}"
-        rows.append(
-            "<tr>"
-            f"<td>{ticker}</td><td>{ticker} Company</td>"
-            "<td>Industrials</td><td>Machinery</td>"
-            f"<td>{wrong_cik}</td>"
-            "</tr>"
-        )
+        rows.append(f"<tr><td>{ticker}</td><td>{ticker} Company</td><td>Industrials</td><td>Machinery</td><td>{wrong_cik}</td></tr>")
         sec_records[str(number)] = {"ticker": ticker, "cik_str": 100_000 + number}
     for number in range(4_500):
         sec_records[str(500 + number)] = {
@@ -131,9 +123,7 @@ def test_sec_identity_overrides_erroneous_membership_source_cik(tmp_path: Path) 
     html = (
         "<html><body><table id='constituents'>"
         "<tr><th>Symbol</th><th>Security</th><th>GICS Sector</th>"
-        "<th>GICS Sub-Industry</th><th>CIK</th></tr>"
-        + "".join(rows)
-        + "</table></body></html>"
+        "<th>GICS Sub-Industry</th><th>CIK</th></tr>" + "".join(rows) + "</table></body></html>"
     ).encode()
     anchor_unit = _raw_unit(
         tmp_path,
@@ -395,10 +385,7 @@ def test_closed_and_observed_versions_of_same_event_must_agree() -> None:
 
 
 def _dated_page(*, prefix: str, published: date) -> list[tuple[date, str]]:
-    return [
-        (published, f"https://press.spglobal.com/{prefix}-{number:03d}")
-        for number in range(SEARCH_PAGE_SIZE)
-    ]
+    return [(published, f"https://press.spglobal.com/{prefix}-{number:03d}") for number in range(SEARCH_PAGE_SIZE)]
 
 
 def test_pagination_requires_exact_overlap_and_newest_first() -> None:
@@ -626,8 +613,7 @@ class _ObservedMembershipHttpClient:
             retrieved_at_utc=self.observed_at,
             content_type=(
                 "application/json"
-                if url == observed.SEC_IDENTITY_URL
-                or url.startswith("https://data.sec.gov/submissions/")
+                if url == observed.SEC_IDENTITY_URL or url.startswith("https://data.sec.gov/submissions/")
                 else "text/html; charset=utf-8"
             ),
             content_encoding=None,
@@ -649,17 +635,11 @@ class _SecondPageRaceHttpClient(_ObservedMembershipHttpClient):
             datetime(2026, 8, 17, 15, tzinfo=UTC),
         )
         self.archive_calls = {0: 0, 1: 0}
-        first_urls = [
-            f"https://press.spglobal.com/2026-08-17-race-{number:03d}"
-            for number in range(SEARCH_PAGE_SIZE)
-        ]
+        first_urls = [f"https://press.spglobal.com/2026-08-17-race-{number:03d}" for number in range(SEARCH_PAGE_SIZE)]
         self.first_page = _search_page_body(first_urls)
         second_urls = [
             first_urls[-1],
-            *[
-                f"https://press.spglobal.com/2026-08-15-race-{number:03d}"
-                for number in range(SEARCH_PAGE_SIZE - 1)
-            ],
+            *[f"https://press.spglobal.com/2026-08-15-race-{number:03d}" for number in range(SEARCH_PAGE_SIZE - 1)],
         ]
         self.second_page = _search_page_body(second_urls)
         self.changed_second_page = _search_page_body(
@@ -710,9 +690,7 @@ def _search_page_body(
     changed_title_at: int | None = None,
 ) -> bytes:
     links = "".join(
-        f'<a href="{url}">'
-        f'{"Changed archive item" if number == changed_title_at else "Unrelated archive item"}'
-        "</a>"
+        f'<a href="{url}">{"Changed archive item" if number == changed_title_at else "Unrelated archive item"}</a>'
         for number, url in enumerate(urls)
     )
     return f"<html><body>{links}</body></html>".encode()
@@ -744,13 +722,7 @@ def _large_observed_membership_fixture() -> tuple[pd.DataFrame, bytes, bytes]:
                 "schema_version": "market_data.v1",
             }
         )
-        anchor_rows.append(
-            "<tr>"
-            f"<td>{ticker}</td><td>{ticker} Company</td>"
-            "<td>Industrials</td><td>Machinery</td>"
-            f"<td>{cik}</td>"
-            "</tr>"
-        )
+        anchor_rows.append(f"<tr><td>{ticker}</td><td>{ticker} Company</td><td>Industrials</td><td>Machinery</td><td>{cik}</td></tr>")
         sec_records[str(number)] = {"ticker": ticker, "cik_str": 100_000 + number}
     for number in range(4_500):
         sec_records[str(500 + number)] = {
@@ -760,19 +732,14 @@ def _large_observed_membership_fixture() -> tuple[pd.DataFrame, bytes, bytes]:
     anchor_body = (
         "<html><body><table id='constituents'>"
         "<tr><th>Symbol</th><th>Security</th><th>GICS Sector</th>"
-        "<th>GICS Sub-Industry</th><th>CIK</th></tr>"
-        + "".join(anchor_rows)
-        + "</table></body></html>"
+        "<th>GICS Sub-Industry</th><th>CIK</th></tr>" + "".join(anchor_rows) + "</table></body></html>"
     ).encode()
     return pd.DataFrame(memberships), anchor_body, json.dumps(sec_records).encode()
 
 
 def _quiet_official_search_page() -> bytes:
     links = "".join(
-        (
-            '<a href="https://press.spglobal.com/'
-            f'2026-08-15-quiet-fixture-{number:03d}">Unrelated archive item</a>'
-        )
+        (f'<a href="https://press.spglobal.com/2026-08-15-quiet-fixture-{number:03d}">Unrelated archive item</a>')
         for number in range(SEARCH_PAGE_SIZE)
     )
     return f"<html><body>{links}</body></html>".encode()
@@ -868,11 +835,7 @@ def test_public_collect_load_round_trip_and_inventory_poison(
 
 def _sec_bulk_without(sec_body: bytes, ticker: str) -> bytes:
     records = json.loads(sec_body)
-    matching = [
-        key
-        for key, record in records.items()
-        if str(record.get("ticker", "")).upper() == ticker
-    ]
+    matching = [key for key, record in records.items() if str(record.get("ticker", "")).upper() == ticker]
     assert len(matching) == 1
     del records[matching[0]]
     records["fallback-size-replacement"] = {
@@ -973,9 +936,7 @@ def _rewrite_manifest_envelope(root: Path, manifest: dict[str, object]) -> None:
     observed._atomic_json(root / "_manifest.json", manifest)
     observed._atomic_json(root / "_status.json", manifest)
     authority = json.loads((root / "_authority.json").read_text(encoding="utf-8"))
-    authority["artifact_sha256"] = hashlib.sha256(
-        (root / "_manifest.json").read_bytes()
-    ).hexdigest()
+    authority["artifact_sha256"] = hashlib.sha256((root / "_manifest.json").read_bytes()).hexdigest()
     observed._atomic_json(root / "_authority.json", authority)
 
 
@@ -1001,15 +962,8 @@ def _replace_retained_unit_body(
     )
     raw_units = manifest["raw_units"]
     assert isinstance(raw_units, list)
-    manifest["raw_units"] = [
-        updated if value.get("unit_id") == updated["unit_id"] else value
-        for value in raw_units
-    ]
-    retained_paths = {
-        str(value["body_path"])
-        for value in manifest["raw_units"]
-        if isinstance(value, dict)
-    }
+    manifest["raw_units"] = [updated if value.get("unit_id") == updated["unit_id"] else value for value in raw_units]
+    retained_paths = {str(value["body_path"]) for value in manifest["raw_units"] if isinstance(value, dict)}
     if old_path != new_path and old_path.relative_to(root).as_posix() not in retained_paths:
         old_path.unlink()
     manifest["raw_unit_set_sha256"] = observed._json_sha256(manifest["raw_units"])
@@ -1031,9 +985,7 @@ def test_public_collect_and_load_retains_missing_bulk_identity_fallback(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    output_root, client, manifest, fallback_body = (
-        _collect_missing_bulk_identity_authority(tmp_path, monkeypatch)
-    )
+    output_root, client, manifest, fallback_body = _collect_missing_bulk_identity_authority(tmp_path, monkeypatch)
 
     authority = observed.load_observed_sp500_membership_authority(output_root)
     fallback = _fallback_unit(manifest)
@@ -1045,10 +997,13 @@ def test_public_collect_and_load_retains_missing_bulk_identity_fallback(
     assert fallback["requested_url"] == fallback_url
     assert fallback["final_url"] == fallback_url
     assert (output_root / str(fallback["body_path"])).read_bytes() == fallback_body
-    assert authority.memberships.loc[
-        authority.memberships["ticker"].eq("T007"),
-        "security_id",
-    ].item() == "cik:0000100007"
+    assert (
+        authority.memberships.loc[
+            authority.memberships["ticker"].eq("T007"),
+            "security_id",
+        ].item()
+        == "cik:0000100007"
+    )
     assert fallback_url in client.calls
     assert client.allow_redirects_values == [False] * 5
 
@@ -1079,18 +1034,10 @@ def test_strict_replay_rejects_invalid_sec_fallback_inventory_and_identity(
 
     missing_root = tmp_path / "missing"
     shutil.copytree(valid_root, missing_root)
-    missing_manifest = json.loads(
-        (missing_root / "_manifest.json").read_text(encoding="utf-8")
-    )
+    missing_manifest = json.loads((missing_root / "_manifest.json").read_text(encoding="utf-8"))
     missing_unit = _fallback_unit(missing_manifest)
-    missing_manifest["raw_units"] = [
-        unit
-        for unit in missing_manifest["raw_units"]
-        if unit.get("role") != "identity_fallback"
-    ]
-    missing_manifest["raw_unit_set_sha256"] = observed._json_sha256(
-        missing_manifest["raw_units"]
-    )
+    missing_manifest["raw_units"] = [unit for unit in missing_manifest["raw_units"] if unit.get("role") != "identity_fallback"]
+    missing_manifest["raw_unit_set_sha256"] = observed._json_sha256(missing_manifest["raw_units"])
     (missing_root / "units" / f"{missing_unit['unit_id']}.json").unlink()
     (missing_root / str(missing_unit["body_path"])).unlink()
     _rewrite_manifest_envelope(missing_root, missing_manifest)
@@ -1099,9 +1046,7 @@ def test_strict_replay_rejects_invalid_sec_fallback_inventory_and_identity(
 
     extra_root = tmp_path / "extra"
     shutil.copytree(valid_root, extra_root)
-    extra_manifest = json.loads(
-        (extra_root / "_manifest.json").read_text(encoding="utf-8")
-    )
+    extra_manifest = json.loads((extra_root / "_manifest.json").read_text(encoding="utf-8"))
     extra_unit = _fallback_unit(extra_manifest)
     duplicate = dict(extra_unit)
     duplicate["unit_id"] = f"{extra_unit['unit_id']}-extra"
@@ -1111,9 +1056,7 @@ def test_strict_replay_rejects_invalid_sec_fallback_inventory_and_identity(
         duplicate,
     )
     extra_manifest["raw_units"].append(duplicate)
-    extra_manifest["raw_unit_set_sha256"] = observed._json_sha256(
-        extra_manifest["raw_units"]
-    )
+    extra_manifest["raw_unit_set_sha256"] = observed._json_sha256(extra_manifest["raw_units"])
     _rewrite_manifest_envelope(extra_root, extra_manifest)
     with pytest.raises(DataReadinessError, match="fallback inventory changed"):
         observed.load_observed_sp500_membership_authority(extra_root)
@@ -1132,9 +1075,7 @@ def test_strict_replay_rejects_invalid_sec_fallback_inventory_and_identity(
     for number, payload in enumerate(conflicting_payloads):
         conflict_root = tmp_path / f"conflict-{number}"
         shutil.copytree(valid_root, conflict_root)
-        conflict_manifest = json.loads(
-            (conflict_root / "_manifest.json").read_text(encoding="utf-8")
-        )
+        conflict_manifest = json.loads((conflict_root / "_manifest.json").read_text(encoding="utf-8"))
         _replace_fallback_body(conflict_root, conflict_manifest, payload)
         with pytest.raises(
             DataReadinessError,
@@ -1169,10 +1110,7 @@ def test_strict_replay_rejects_forged_fallback_raw_envelope(
     )
     raw_units = manifest["raw_units"]
     assert isinstance(raw_units, list)
-    manifest["raw_units"] = [
-        fallback if unit.get("role") == "identity_fallback" else unit
-        for unit in raw_units
-    ]
+    manifest["raw_units"] = [fallback if unit.get("role") == "identity_fallback" else unit for unit in raw_units]
     manifest["raw_unit_set_sha256"] = observed._json_sha256(manifest["raw_units"])
     _rewrite_manifest_envelope(output_root, manifest)
 
@@ -1189,20 +1127,14 @@ def test_strict_replay_rejects_changed_canonical_membership_lineage(
         monkeypatch,
     )
     membership_path = output_root / observed.MEMBERSHIP_FILE
-    canonical_manifest_path = membership_path.with_suffix(
-        membership_path.suffix + ".manifest.json"
-    )
-    canonical_manifest = json.loads(
-        canonical_manifest_path.read_text(encoding="utf-8")
-    )
+    canonical_manifest_path = membership_path.with_suffix(membership_path.suffix + ".manifest.json")
+    canonical_manifest = json.loads(canonical_manifest_path.read_text(encoding="utf-8"))
     canonical_manifest["inputs"] = {
         **canonical_manifest["inputs"],
         "request_sha256": "0" * 64,
     }
     observed._atomic_json(canonical_manifest_path, canonical_manifest)
-    manifest["membership_manifest_sha256"] = hashlib.sha256(
-        canonical_manifest_path.read_bytes()
-    ).hexdigest()
+    manifest["membership_manifest_sha256"] = hashlib.sha256(canonical_manifest_path.read_bytes()).hexdigest()
     _rewrite_manifest_envelope(output_root, manifest)
 
     with pytest.raises(DataReadinessError, match="canonical lineage changed"):
@@ -1213,9 +1145,7 @@ def test_strict_replay_rejects_retained_old_cik_fallback_for_changed_anchor(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    output_root, _, manifest, fallback_body = (
-        _collect_missing_bulk_identity_authority(tmp_path, monkeypatch)
-    )
+    output_root, _, manifest, fallback_body = _collect_missing_bulk_identity_authority(tmp_path, monkeypatch)
     fallback = _fallback_unit(manifest)
     assert fallback["cik"] == "0000100007"
     assert json.loads(fallback_body)["tickers"] == ["t007"]
@@ -1242,11 +1172,7 @@ def test_strict_replay_rejects_retained_old_cik_fallback_for_changed_anchor(
 
 def _sec_bulk_with_changed_cik(sec_body: bytes, ticker: str, cik: int) -> bytes:
     records = json.loads(sec_body)
-    matching = [
-        record
-        for record in records.values()
-        if str(record.get("ticker", "")).upper() == ticker
-    ]
+    matching = [record for record in records.values() if str(record.get("ticker", "")).upper() == ticker]
     assert len(matching) == 1
     matching[0]["cik_str"] = cik
     return json.dumps(records).encode()
@@ -1265,11 +1191,7 @@ def _sec_bulk_with_renamed_ticker(
     new_ticker: str,
 ) -> bytes:
     records = json.loads(sec_body)
-    matching = [
-        record
-        for record in records.values()
-        if str(record.get("ticker", "")).upper() == old_ticker
-    ]
+    matching = [record for record in records.values() if str(record.get("ticker", "")).upper() == old_ticker]
     assert len(matching) == 1
     matching[0]["ticker"] = new_ticker
     return json.dumps(records).encode()
@@ -1377,9 +1299,7 @@ def test_public_collect_and_strict_replay_split_inherited_ticker_on_new_sec_cik(
     )
 
     authority = observed.load_observed_sp500_membership_authority(output_root)
-    histories = authority.memberships.loc[
-        authority.memberships["ticker"].eq("T007")
-    ].sort_values("effective_from_utc", kind="stable")
+    histories = authority.memberships.loc[authority.memberships["ticker"].eq("T007")].sort_values("effective_from_utc", kind="stable")
     assert len(histories) == 2
     old, new = list(histories.itertuples(index=False))
     base_old = base.loc[base["ticker"].eq("T007")].iloc[0]
@@ -1410,12 +1330,10 @@ def test_public_collect_and_strict_replay_same_cik_ticker_successor(
     )
 
     authority = observed.load_observed_sp500_membership_authority(output_root)
-    predecessor = authority.memberships.loc[
-        authority.memberships["ticker"].eq("T007")
-    ].sort_values("effective_from_utc", kind="stable").iloc[-1]
-    successor = authority.memberships.loc[
-        authority.memberships["ticker"].eq("T007N")
-    ].iloc[-1]
+    predecessor = (
+        authority.memberships.loc[authority.memberships["ticker"].eq("T007")].sort_values("effective_from_utc", kind="stable").iloc[-1]
+    )
+    successor = authority.memberships.loc[authority.memberships["ticker"].eq("T007N")].iloc[-1]
     base_predecessor = base.loc[base["ticker"].eq("T007")].iloc[0]
 
     assert predecessor["security_id"] == base_predecessor["security_id"]

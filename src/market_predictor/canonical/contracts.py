@@ -5,7 +5,7 @@ from typing import Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from market_predictor.v3.contracts import normalized_ticker
+from market_predictor.core.symbols import normalized_ticker
 
 CANONICAL_SCHEMA_VERSION = "market_data.v1"
 AvailabilityPolicy = Literal["observed", "market_interval_close", "provider_publication_proxy"]

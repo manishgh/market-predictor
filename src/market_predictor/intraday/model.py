@@ -16,6 +16,7 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 
 from market_predictor.canonical.reconciliation import stamped_hash, stamped_scalar
+from market_predictor.core.errors import DataReadinessError, SchemaMismatchError
 from market_predictor.drift import build_feature_reference_profile
 from market_predictor.execution_policy import (
     DEFAULT_EXECUTION_POLICY,
@@ -45,6 +46,20 @@ from market_predictor.intraday.evaluation import (
     regime_audit,
 )
 from market_predictor.label_policy import stamped_label_policy
+from market_predictor.modeling.calibration import (
+    CausalCalibrationFit,
+    apply_isotonic,
+    fit_final_isotonic,
+    fit_prior_isotonic,
+)
+from market_predictor.modeling.validation import (
+    PurgedWalkForwardFold,
+    SessionPurgedWalkForwardSplit,
+    causal_fold_training_indices,
+    deterministic_stratified_ticker_holdout,
+    identity_set_sha256,
+    validation_row_identities,
+)
 from market_predictor.prediction_policy import (
     PredictionSelectionPolicy,
     group_ranking_metrics,
@@ -62,21 +77,6 @@ from market_predictor.registry import (
     write_model_manifest,
 )
 from market_predictor.resources import assert_memory_budget, memory_audit, release_process_memory
-from market_predictor.v3.calibration import (
-    CausalCalibrationFit,
-    apply_isotonic,
-    fit_final_isotonic,
-    fit_prior_isotonic,
-)
-from market_predictor.core.errors import DataReadinessError, SchemaMismatchError
-from market_predictor.v3.validation import (
-    V3Fold,
-    V3PurgedWalkForwardSplit,
-    causal_fold_training_indices,
-    deterministic_stratified_ticker_holdout,
-    identity_set_sha256,
-    validation_row_identities,
-)
 
 
 class ProbabilityEstimator(Protocol):
@@ -122,7 +122,7 @@ def train_intraday_model(
     ticker_count = int(data["ticker"].nunique())
     if ticker_count < config.min_training_tickers:
         raise DataReadinessError(f"intraday training needs at least {config.min_training_tickers} tickers; found {ticker_count}")
-    splitter = V3PurgedWalkForwardSplit(
+    splitter = SessionPurgedWalkForwardSplit(
         n_splits=config.n_splits,
         embargo_sessions=config.embargo_sessions,
         min_train_sessions=config.min_train_sessions,
@@ -901,7 +901,7 @@ def _intraday_fold_evidence(
 
 
 def _fold_evidence_record(
-    fold: V3Fold,
+    fold: PurgedWalkForwardFold,
     *,
     scope: str,
     train: pd.DataFrame,

@@ -8,7 +8,7 @@ import pytest
 
 import market_predictor.edge_rebuild.sp500_memberships as membership_module
 from market_predictor.core.errors import DataReadinessError
-from market_predictor.v3.universe import (
+from market_predictor.universe.sp500.membership_history import (
     IndexChange,
     IndexChangeSource,
     VerifiedIndexChanges,
@@ -131,14 +131,10 @@ def test_extension_preserves_base_prefix_and_allows_later_metadata() -> None:
     )
     assert set(current.loc[current["ticker"].eq("T000"), "security_id"]) == {"cik:0000000001"}
     assert set(current.loc[current["ticker"].eq("T001"), "security_id"]) == {"cik:0000000002"}
-    t001 = current.loc[current["ticker"].eq("T001")].sort_values(
-        "effective_from_utc"
-    )
+    t001 = current.loc[current["ticker"].eq("T001")].sort_values("effective_from_utc")
     assert list(t001["sector"]) == ["Industrials", "Health Care"]
     poisoned = current.copy()
-    historical = poisoned["effective_from_utc"].lt(
-        pd.Timestamp("2026-07-09T00:00:00Z")
-    )
+    historical = poisoned["effective_from_utc"].lt(pd.Timestamp("2026-07-09T00:00:00Z"))
     poisoned.loc[historical & poisoned["ticker"].eq("T001"), "sector"] = "Energy"
     with pytest.raises(DataReadinessError, match="base identity namespace"):
         membership_module.verify_membership_namespace_extension(
@@ -208,10 +204,7 @@ def test_extension_keeps_current_ticker_for_cik_continuous_transition() -> None:
         base_cutoff_date=date(2026, 7, 8),
     )
 
-    active = current[
-        current["effective_to_utc"].isna()
-        & current["ticker"].eq("NEW")
-    ]
+    active = current[current["effective_to_utc"].isna() & current["ticker"].eq("NEW")]
     assert set(active["security_id"]) == {"cik:0000000002"}
     membership_module.verify_membership_namespace_extension(
         base,
@@ -317,9 +310,7 @@ def test_anchor_poison_invalidates_published_membership_authority(
         )
         poisoned_authority = {
             **original_authority,
-            "artifact_sha256": membership_module.file_sha256(
-                output / "_manifest.json"
-            ),
+            "artifact_sha256": membership_module.file_sha256(output / "_manifest.json"),
         }
         membership_module._write_json_atomic(
             output / "_authority.json",

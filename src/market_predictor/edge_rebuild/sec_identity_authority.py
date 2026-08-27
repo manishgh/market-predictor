@@ -3,9 +3,8 @@
 This authority is intentionally offline.  It consumes an explicitly supplied
 SEC ``company_tickers.json`` snapshot and never downloads or guesses identity.
 """
+
 from __future__ import annotations
-
-
 
 import hashlib
 import json
@@ -25,14 +24,14 @@ from zoneinfo import ZoneInfo
 import pandas as pd
 
 from market_predictor.canonical.store import file_sha256
+from market_predictor.core.errors import DataReadinessError
+from market_predictor.core.symbols import normalized_ticker
 from market_predictor.edge_rebuild.sp500_memberships import (
     require_sp500_membership_authority,
 )
 from market_predictor.edge_rebuild.sp500_transitions import (
     require_sp500_transition_authority,
 )
-from market_predictor.v3.contracts import normalized_ticker
-from market_predictor.core.errors import DataReadinessError
 
 SEC_IDENTITY_REQUEST_SCHEMA: Final = "edge_rebuild.sec_identity_request.v2"
 SEC_IDENTITY_MANIFEST_SCHEMA: Final = "edge_rebuild.sec_identity_manifest.v2"
@@ -222,9 +221,7 @@ def load_reviewed_sec_identity_overrides(path: Path) -> pd.DataFrame:
         if file_sha256(evidence).lower() != str(row.evidence_raw_sha256).lower():
             raise DataReadinessError(f"reviewed SEC identity evidence hash mismatch for {row.security_id}")
         evidence_url = urlsplit(str(row.evidence_url))
-        expected_archive_prefix = (
-            f"/Archives/edgar/data/{int(str(row.sec_cik))}/{str(row.evidence_accession).replace('-', '')}/"
-        )
+        expected_archive_prefix = f"/Archives/edgar/data/{int(str(row.sec_cik))}/{str(row.evidence_accession).replace('-', '')}/"
         if not evidence_url.path.startswith(expected_archive_prefix):
             raise DataReadinessError(f"reviewed SEC identity evidence URL mismatch for {row.security_id}")
         if not _filing_names_trading_symbol(evidence, str(row.ticker)):
@@ -665,9 +662,10 @@ def _validate_override_for_security(
         raise DataReadinessError(f"reviewed SEC identity override ticker mismatch for {security_id}")
     if ticker_security_count != 1:
         raise DataReadinessError(f"reviewed SEC identity override ticker is reused for {security_id}")
-    if pd.Timestamp(override["effective_from_utc"]) != intervals["effective_from_utc"].min() or pd.Timestamp(
-        override["effective_to_utc"]
-    ) != intervals["effective_to_utc"].max():
+    if (
+        pd.Timestamp(override["effective_from_utc"]) != intervals["effective_from_utc"].min()
+        or pd.Timestamp(override["effective_to_utc"]) != intervals["effective_to_utc"].max()
+    ):
         raise DataReadinessError(f"reviewed SEC identity override interval mismatch for {security_id}")
     embedded_cik = _embedded_cik(security_id)
     if embedded_cik is not None and embedded_cik != str(override["sec_cik"]):
@@ -695,10 +693,13 @@ def _filing_names_trading_symbol(path: Path, ticker: str) -> bool:
         raise DataReadinessError(f"reviewed SEC identity evidence is unreadable: {path}") from exc
     plain = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", raw))
     symbol = re.escape(ticker)
-    return re.search(
-        rf"(?i)(trading\s+symbol|symbol).{{0,500}}\b{symbol}\b|\b{symbol}\b.{{0,500}}(trading\s+symbol|symbol)",
-        plain,
-    ) is not None
+    return (
+        re.search(
+            rf"(?i)(trading\s+symbol|symbol).{{0,500}}\b{symbol}\b|\b{symbol}\b.{{0,500}}(trading\s+symbol|symbol)",
+            plain,
+        )
+        is not None
+    )
 
 
 def _normalize_transitions(frame: pd.DataFrame) -> pd.DataFrame:

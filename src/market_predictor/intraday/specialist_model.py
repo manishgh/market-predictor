@@ -1,8 +1,6 @@
 """Causal evaluation engine for KS4 intraday specialist candidates."""
 from __future__ import annotations
 
-
-
 import hashlib
 import importlib
 import json
@@ -20,6 +18,7 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 
+from market_predictor.core.errors import DataReadinessError
 from market_predictor.execution_policy import DEFAULT_EXECUTION_POLICY
 from market_predictor.intraday.evaluation import (
     classification_metrics,
@@ -31,6 +30,18 @@ from market_predictor.intraday.specialist_contracts import (
     EstimatorFamily,
     IntradaySpecialistResearchConfig,
 )
+from market_predictor.modeling.calibration import (
+    CausalCalibrationFit,
+    apply_isotonic,
+    fit_final_isotonic,
+    fit_prior_isotonic,
+)
+from market_predictor.modeling.validation import (
+    PurgedWalkForwardFold,
+    causal_fold_training_indices,
+    deterministic_stratified_ticker_holdout,
+    identity_set_sha256,
+)
 from market_predictor.prediction_policy import (
     INTRADAY_SELECTION_DOWNSIDE_CEILING,
     group_ranking_metrics,
@@ -41,19 +52,6 @@ from market_predictor.resources import (
     assert_memory_budget,
     memory_audit,
     release_process_memory,
-)
-from market_predictor.v3.calibration import (
-    CausalCalibrationFit,
-    apply_isotonic,
-    fit_final_isotonic,
-    fit_prior_isotonic,
-)
-from market_predictor.core.errors import DataReadinessError
-from market_predictor.v3.validation import (
-    V3Fold,
-    causal_fold_training_indices,
-    deterministic_stratified_ticker_holdout,
-    identity_set_sha256,
 )
 
 SPECIALIST_VALIDATION_SPLIT = (
@@ -138,7 +136,7 @@ class SpecialistSplitPlan:
     data: pd.DataFrame
     development: pd.DataFrame
     ticker_holdout: pd.DataFrame
-    folds: tuple[V3Fold, ...]
+    folds: tuple[PurgedWalkForwardFold, ...]
     holdout_tickers: frozenset[str]
     representation_audit: pd.DataFrame
     features: tuple[str, ...]
@@ -1445,7 +1443,7 @@ def _candidate_metrics(
 
 
 def _fold_record(
-    fold: V3Fold,
+    fold: PurgedWalkForwardFold,
     *,
     scope: str,
     train: pd.DataFrame,
@@ -1608,7 +1606,7 @@ def _xnys_purged_walk_forward_split(
     frame: pd.DataFrame,
     *,
     config: IntradaySpecialistResearchConfig,
-) -> tuple[V3Fold, ...]:
+) -> tuple[PurgedWalkForwardFold, ...]:
     """Build expanding folds on actual XNYS ordinals, not sparse row dates."""
 
     sessions = pd.to_datetime(
@@ -1633,7 +1631,7 @@ def _xnys_purged_walk_forward_split(
             "and requested folds"
         )
     fold_size = max(1, remaining // config.n_splits)
-    folds: list[V3Fold] = []
+    folds: list[PurgedWalkForwardFold] = []
     for fold_number in range(config.n_splits):
         test_start = first_test + fold_number * fold_size
         test_end = (
@@ -1666,7 +1664,7 @@ def _xnys_purged_walk_forward_split(
                 "a KS4 decision group crosses an XNYS fold"
             )
         folds.append(
-            V3Fold(
+            PurgedWalkForwardFold(
                 fold=fold_number,
                 train_indices=train_indices,
                 test_indices=test_indices,
@@ -1688,7 +1686,7 @@ def _xnys_purged_walk_forward_split(
 def _split_identity(
     development: pd.DataFrame,
     ticker_holdout: pd.DataFrame,
-    folds: tuple[V3Fold, ...],
+    folds: tuple[PurgedWalkForwardFold, ...],
     holdout_tickers: frozenset[str],
 ) -> str:
     records = [

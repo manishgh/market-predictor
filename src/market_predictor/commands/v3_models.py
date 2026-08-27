@@ -8,14 +8,16 @@ import pandas as pd
 import typer
 from rich.console import Console
 
-from market_predictor.heavy_jobs import serialized_heavy_job
-from market_predictor.v3.development import load_verified_development_dataset
 from market_predictor.core.errors import DataReadinessError
-from market_predictor.v3.models import (
+from market_predictor.heavy_jobs import serialized_heavy_job
+from market_predictor.research.intraday_cross_sectional.development_dataset import (
+    load_verified_development_dataset,
+)
+from market_predictor.research.intraday_cross_sectional.model_training import (
     MODEL_FAMILIES,
+    CrossSectionalTrainingConfig,
     ModelFamily,
-    V3TrainingConfig,
-    train_v3_model_suite,
+    train_cross_sectional_model_suite,
     training_input_columns,
 )
 
@@ -29,7 +31,10 @@ def register_v3_model_commands(app: typer.Typer, console: Console) -> None:
         report_out: Path = typer.Option(Path("data/reports/v3_training_report_latest.json"), help="Training report JSON."),
         predictions_out: Path = typer.Option(Path("data/reports/v3_oof_predictions_latest.parquet"), help="OOF prediction parquet."),
         feature_audit_out: Path = typer.Option(Path("data/reports/v3_feature_fold_audit_latest.csv"), help="Fold feature audit CSV."),
-        families: str = typer.Option("B0,B1,B2,R1,D1", help="Comma-separated model families."),
+        families: str = typer.Option(
+            ",".join(MODEL_FAMILIES),
+            help="Comma-separated model families.",
+        ),
         n_splits: int = typer.Option(4, min=2, max=10, help="Expanding walk-forward fold count."),
         embargo_sessions: int = typer.Option(1, min=0, max=10, help="Purged sessions between train and test."),
         min_train_sessions: int = typer.Option(20, min=2, help="Minimum initial training sessions."),
@@ -41,7 +46,7 @@ def register_v3_model_commands(app: typer.Typer, console: Console) -> None:
         """Train V3 baselines, ranker, and downside model with purged OOF evidence."""
         parsed = _parse_families(families)
         training_data, dataset_fingerprint = _read_dataset(dataset, columns=training_input_columns())
-        config = V3TrainingConfig(
+        config = CrossSectionalTrainingConfig(
             families=parsed,
             n_splits=n_splits,
             embargo_sessions=embargo_sessions,
@@ -51,7 +56,7 @@ def register_v3_model_commands(app: typer.Typer, console: Console) -> None:
             max_training_memory_gb=max_training_memory_gb,
             training_dataset_fingerprint=dataset_fingerprint,
         )
-        report, predictions, feature_audit = train_v3_model_suite(
+        report, predictions, feature_audit = train_cross_sectional_model_suite(
             training_data,
             output_dir,
             config=config,
@@ -75,7 +80,7 @@ def register_v3_model_commands(app: typer.Typer, console: Console) -> None:
 
 
 def _parse_families(value: str) -> tuple[ModelFamily, ...]:
-    parsed = tuple(part.strip().upper() for part in value.split(",") if part.strip())
+    parsed = tuple(part.strip().lower() for part in value.split(",") if part.strip())
     invalid = sorted(set(parsed).difference(MODEL_FAMILIES))
     if not parsed or invalid:
         raise typer.BadParameter(f"families must be selected from {MODEL_FAMILIES}; invalid={invalid}")

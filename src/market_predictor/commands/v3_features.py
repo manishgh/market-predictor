@@ -7,7 +7,10 @@ import typer
 from rich.console import Console
 
 from market_predictor.heavy_jobs import serialized_heavy_job
-from market_predictor.v3.features import build_v3_features, core_feature_columns
+from market_predictor.intraday.features.cross_sectional import (
+    build_cross_sectional_features,
+    core_feature_columns,
+)
 
 
 def register_v3_feature_commands(app: typer.Typer, console: Console) -> None:
@@ -25,7 +28,7 @@ def register_v3_feature_commands(app: typer.Typer, console: Console) -> None:
         if out.exists() and not overwrite:
             raise typer.BadParameter(f"Output already exists; pass --overwrite to replace it: {out}")
         availability = _read_frame(source_availability) if source_availability is not None else None
-        features = build_v3_features(
+        features = build_cross_sectional_features(
             _read_frame(bars),
             _read_frame(benchmarks),
             source_availability=availability,

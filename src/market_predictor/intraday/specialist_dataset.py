@@ -1,8 +1,6 @@
 """Causal setup extraction and selective one-minute requirements for KS4."""
 from __future__ import annotations
 
-
-
 import hashlib
 import json
 import shutil
@@ -18,6 +16,10 @@ import pandas as pd
 import pyarrow.parquet as pq
 
 from market_predictor.canonical.store import file_sha256
+from market_predictor.core.errors import DataReadinessError, SchemaMismatchError
+from market_predictor.intraday.features.cross_sectional import (
+    finalize_cross_sectional_features,
+)
 from market_predictor.intraday.specialist_contracts import (
     INTRADAY_SPECIALIST_IDS,
     IntradaySpecialistResearchConfig,
@@ -29,10 +31,6 @@ from market_predictor.resources import (
     assert_memory_budget,
     assert_peak_memory_budget,
     memory_audit,
-)
-from market_predictor.core.errors import DataReadinessError, SchemaMismatchError
-from market_predictor.v3.features import (
-    finalize_v3_cross_sectional_features,
 )
 
 SPECIALIST_SETUP_BUNDLE_SCHEMA = "intraday.specialist_setup_bundle.v1"
@@ -330,7 +328,7 @@ def build_intraday_specialist_setup_bundle(
                 month_rows_removed += removed
                 if daily_technical.empty:
                     continue
-                frame = finalize_v3_cross_sectional_features(
+                frame = finalize_cross_sectional_features(
                     daily_technical,
                     daily_benchmarks,
                     minimum_cross_section=int(

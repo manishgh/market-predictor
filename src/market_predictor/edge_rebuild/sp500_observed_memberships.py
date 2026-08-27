@@ -1,7 +1,6 @@
 """Observed-time S&P membership authority for prospective weekday collection."""
+
 from __future__ import annotations
-
-
 
 import hashlib
 import json
@@ -24,6 +23,8 @@ from market_predictor.canonical.store import (
     manifest_path_for,
     write_canonical_artifact,
 )
+from market_predictor.core.errors import DataReadinessError
+from market_predictor.core.symbols import normalized_ticker
 from market_predictor.edge_rebuild.sp500_memberships import (
     load_sp500_membership_authority_envelope,
     verify_membership_namespace_extension,
@@ -31,23 +32,23 @@ from market_predictor.edge_rebuild.sp500_memberships import (
 from market_predictor.locking import LockTimeout, file_lock
 from market_predictor.resources import assert_memory_budget, assert_peak_memory_budget
 from market_predictor.sources.http import HttpByteResponse, HttpClient
-from market_predictor.v3.contracts import normalized_ticker
-from market_predictor.core.errors import DataReadinessError
-from market_predictor.v3.spglobal_archive import (
+from market_predictor.sources.spglobal.archive import (
+    ARCHIVE_QUERY,
     MAXIMUM_MEMORY_GIB,
     MEMORY_HEADROOM_GIB,
     SEARCH_PAGE_SIZE,
     SEARCH_PAGE_STRIDE,
+    SP_GLOBAL_ARCHIVE_URL,
     SpGlobalAnnouncement,
     decode_spglobal_html,
     decode_spglobal_http_entity,
     parse_spglobal_archive_search_inventory,
 )
-from market_predictor.v3.spglobal_events import require_spglobal_event_reconstruction_ready
-from market_predictor.v3.universe import (
-    ARCHIVE_QUERY,
+from market_predictor.universe.sp500.index_change_events import (
+    require_spglobal_event_reconstruction_ready,
+)
+from market_predictor.universe.sp500.membership_history import (
     SECTOR_BENCHMARKS,
-    SP_GLOBAL_ARCHIVE_URL,
     IndexChange,
     parse_sp500_changes,
 )
@@ -263,14 +264,8 @@ def _collect_locked(
         request_sha256=request_sha256,
         role="release_confirmation",
     )
-    original_release_hashes = {
-        str(unit["source_url"]): str(unit["body_sha256"])
-        for unit in release_units
-    }
-    confirmation_release_hashes = {
-        str(unit["source_url"]): str(unit["body_sha256"])
-        for unit in release_confirmation_units
-    }
+    original_release_hashes = {str(unit["source_url"]): str(unit["body_sha256"]) for unit in release_units}
+    confirmation_release_hashes = {str(unit["source_url"]): str(unit["body_sha256"]) for unit in release_confirmation_units}
     if confirmation_release_hashes != original_release_hashes:
         raise DataReadinessError("official release body changed during anchor observation")
     confirmation_pages: list[dict[str, object]] = []
@@ -348,9 +343,7 @@ def _collect_locked(
         observed_changes,
         observed_at=observed_at,
     )
-    next_pending_effective_at = (
-        pending_changes[0].effective_at_utc.isoformat() if pending_changes else None
-    )
+    next_pending_effective_at = pending_changes[0].effective_at_utc.isoformat() if pending_changes else None
     _atomic_json(pending_path, [_change_record(item) for item in pending_changes])
     membership_path = output_directory / MEMBERSHIP_FILE
     checks = audit_universe_memberships(memberships, require_observed=False)
@@ -382,10 +375,7 @@ def _collect_locked(
         "official_search_page_count": len(first_pages),
         "new_release_count": len(release_units),
         "observed_event_count": len(observed_changes),
-        "no_membership_release_count": sum(
-            outcome["disposition"] == "no_membership_event"
-            for outcome in release_outcomes
-        ),
+        "no_membership_release_count": sum(outcome["disposition"] == "no_membership_event" for outcome in release_outcomes),
         "pending_change_count": len(pending_changes),
         "next_pending_effective_at_utc": next_pending_effective_at,
         "anchor_constituent_count": len(anchor),
@@ -497,14 +487,10 @@ def load_observed_sp500_membership_authority(
     )
     search_units = [unit for unit in units if unit.get("role") == "search_page"]
     release_units = [unit for unit in units if unit.get("role") == "release"]
-    release_confirmation_units = [
-        unit for unit in units if unit.get("role") == "release_confirmation"
-    ]
+    release_confirmation_units = [unit for unit in units if unit.get("role") == "release_confirmation"]
     anchor_units = [unit for unit in units if unit.get("role") == "anchor"]
     identity_units = [unit for unit in units if unit.get("role") == "identity_anchor"]
-    identity_fallback_units = [
-        unit for unit in units if unit.get("role") == "identity_fallback"
-    ]
+    identity_fallback_units = [unit for unit in units if unit.get("role") == "identity_fallback"]
     confirmation_units = [unit for unit in units if unit.get("role") == "search_confirmation"]
     recognized_units = (
         len(search_units)
@@ -542,9 +528,7 @@ def load_observed_sp500_membership_authority(
         raise DataReadinessError("observed official prefix does not reach the closed cutoff")
     confirmation_previous_url: str | None = None
     confirmation_seen_urls: set[str] = set()
-    for page_number, (search_unit, confirmation_unit) in enumerate(
-        zip(search_units, confirmation_units, strict=True)
-    ):
+    for page_number, (search_unit, confirmation_unit) in enumerate(zip(search_units, confirmation_units, strict=True)):
         page_announcements, page_urls = _parse_search_unit(root, search_unit)
         confirmation_announcements, confirmation_urls = _parse_search_unit(
             root,
@@ -569,18 +553,9 @@ def load_observed_sp500_membership_authority(
     )
     if sorted(str(unit.get("source_url", "")) for unit in release_units) != expected_release_urls:
         raise DataReadinessError("observed release inventory differs from search discovery")
-    if (
-        sorted(str(unit.get("source_url", "")) for unit in release_confirmation_units)
-        != expected_release_urls
-        or {
-            str(unit["source_url"]): str(unit["body_sha256"])
-            for unit in release_confirmation_units
-        }
-        != {
-            str(unit["source_url"]): str(unit["body_sha256"])
-            for unit in release_units
-        }
-    ):
+    if sorted(str(unit.get("source_url", "")) for unit in release_confirmation_units) != expected_release_urls or {
+        str(unit["source_url"]): str(unit["body_sha256"]) for unit in release_confirmation_units
+    } != {str(unit["source_url"]): str(unit["body_sha256"]) for unit in release_units}:
         raise DataReadinessError("observed release confirmation does not replay")
     anchor_source = _parse_anchor_source(root, anchor_units[0])
     sec_identities = _parse_sec_identities(root, identity_units[0])
@@ -590,10 +565,7 @@ def load_observed_sp500_membership_authority(
         anchor=anchor_source,
         sec_identities=sec_identities,
     )
-    observed_fallbacks = sorted(
-        (str(unit.get("ticker", "")), str(unit.get("cik", "")))
-        for unit in identity_fallback_units
-    )
+    observed_fallbacks = sorted((str(unit.get("ticker", "")), str(unit.get("cik", ""))) for unit in identity_fallback_units)
     if observed_fallbacks != expected_fallbacks:
         raise DataReadinessError("observed SEC identity fallback inventory changed")
     anchor = _parse_anchor(
@@ -630,9 +602,7 @@ def load_observed_sp500_membership_authority(
         observed_changes,
         observed_at=observed_at,
     )
-    next_pending_effective_at = (
-        pending_changes[0].effective_at_utc.isoformat() if pending_changes else None
-    )
+    next_pending_effective_at = pending_changes[0].effective_at_utc.isoformat() if pending_changes else None
     if _load_json(pending_path) != [_change_record(item) for item in pending_changes]:
         raise DataReadinessError("observed membership pending changes do not replay")
     if not manifest_path_for(membership_path).is_file() or manifest.get("membership_manifest_sha256") != file_sha256(
@@ -649,10 +619,7 @@ def load_observed_sp500_membership_authority(
         "base_membership_authority_sha256": str(base_parent["authority_sha256"]),
         "observation_unit_set_sha256": _json_sha256(units),
     }
-    if (
-        canonical_manifest.get("inputs") != expected_canonical_inputs
-        or canonical_manifest.get("production_ready") is not False
-    ):
+    if canonical_manifest.get("inputs") != expected_canonical_inputs or canonical_manifest.get("production_ready") is not False:
         raise DataReadinessError("observed membership canonical lineage changed")
     if _membership_records(actual) != _membership_records(expected):
         raise DataReadinessError("observed membership table does not replay")
@@ -674,10 +641,8 @@ def load_observed_sp500_membership_authority(
         or manifest.get("observed_at_utc") != observed_at.isoformat()
         or manifest.get("effective_horizon_date") != horizon_date
         or authority.get("effective_horizon_date") != horizon_date
-        or manifest.get("next_pending_effective_at_utc")
-        != next_pending_effective_at
-        or authority.get("next_pending_effective_at_utc")
-        != next_pending_effective_at
+        or manifest.get("next_pending_effective_at_utc") != next_pending_effective_at
+        or authority.get("next_pending_effective_at_utc") != next_pending_effective_at
         or manifest.get("universe_sha256") != universe_sha256
         or authority.get("universe_sha256") != universe_sha256
         or int(manifest.get("membership_intervals", -1)) != len(actual)
@@ -685,8 +650,7 @@ def load_observed_sp500_membership_authority(
         or int(manifest.get("ticker_count", -1)) != actual["ticker"].nunique()
         or int(manifest.get("pending_change_count", -1)) != len(pending_changes)
         or int(manifest.get("anchor_constituent_count", -1)) != len(anchor)
-        or int(manifest.get("sec_identity_count", -1))
-        != len(sec_identities) + len(identity_fallback_units)
+        or int(manifest.get("sec_identity_count", -1)) != len(sec_identities) + len(identity_fallback_units)
     ):
         raise DataReadinessError("observed membership semantic counts are invalid")
     verify_membership_namespace_extension(
@@ -966,11 +930,7 @@ def _validate_page_overlap(
             raise DataReadinessError("observed official first page has prior state")
         if overlap:
             raise DataReadinessError("observed official first page repeats URLs")
-    elif (
-        previous_last_url is None
-        or dated_urls[0][1] != previous_last_url
-        or (seen_urls is not None and overlap != {previous_last_url})
-    ):
+    elif previous_last_url is None or dated_urls[0][1] != previous_last_url or (seen_urls is not None and overlap != {previous_last_url}):
         raise DataReadinessError("observed official pagination overlap is invalid")
     if seen_urls is not None:
         seen_urls.update(urls)
@@ -1000,15 +960,11 @@ def _parse_anchor(
     )
     overlap = sorted(set(sec_identities).intersection(fallback_identities))
     if overlap:
-        raise DataReadinessError(
-            f"SEC identity fallback duplicates bulk-map tickers: {overlap[:20]}"
-        )
+        raise DataReadinessError(f"SEC identity fallback duplicates bulk-map tickers: {overlap[:20]}")
     sec_identities.update(fallback_identities)
     missing_identities = sorted(set(anchor["ticker"]).difference(sec_identities))
     if missing_identities:
-        raise DataReadinessError(
-            f"SEC identity anchor is missing S&P tickers: {missing_identities[:20]}"
-        )
+        raise DataReadinessError(f"SEC identity anchor is missing S&P tickers: {missing_identities[:20]}")
     anchor["cik"] = anchor["ticker"].map(sec_identities)
     return anchor.sort_values("ticker", kind="stable").reset_index(drop=True)
 
@@ -1124,38 +1080,23 @@ def _required_identity_fallbacks(
     if bool(data["effective_from_utc"].isna().any()):
         raise DataReadinessError("base membership identity timestamps are invalid")
     boundary = pd.Timestamp(base_cutoff, tz="UTC") + pd.Timedelta(days=1)
-    active = data[
-        data["effective_from_utc"].lt(boundary)
-        & (data["effective_to_utc"].isna() | data["effective_to_utc"].ge(boundary))
-    ]
+    active = data[data["effective_from_utc"].lt(boundary) & (data["effective_to_utc"].isna() | data["effective_to_utc"].ge(boundary))]
     anchor_index = anchor.set_index("ticker", drop=False).to_dict("index")
     requests: list[tuple[str, str]] = []
     for ticker in missing:
         inherited = active[active["ticker"].astype(str).eq(ticker)]
-        inherited_ciks = {
-            cik
-            for cik in (
-                _security_cik(str(value)) for value in inherited["security_id"]
-            )
-            if cik is not None
-        }
+        inherited_ciks = {cik for cik in (_security_cik(str(value)) for value in inherited["security_id"]) if cik is not None}
         if len(inherited_ciks) > 1:
-            raise DataReadinessError(
-                f"SEC identity fallback has ambiguous inherited CIK: {ticker}"
-            )
+            raise DataReadinessError(f"SEC identity fallback has ambiguous inherited CIK: {ticker}")
         anchor_cik = str(anchor_index[ticker]["cik"])
         if inherited_ciks:
             candidate = next(iter(inherited_ciks))
             if candidate != anchor_cik:
-                raise DataReadinessError(
-                    f"SEC identity fallback anchor CIK conflicts for {ticker}"
-                )
+                raise DataReadinessError(f"SEC identity fallback anchor CIK conflicts for {ticker}")
         else:
             candidate = anchor_cik
         if not candidate.isdigit() or len(candidate) != 10:
-            raise DataReadinessError(
-                f"SEC identity fallback CIK is invalid: {ticker}"
-            )
+            raise DataReadinessError(f"SEC identity fallback CIK is invalid: {ticker}")
         requests.append((ticker, candidate))
     return requests
 
@@ -1193,22 +1134,14 @@ def _parse_identity_fallbacks(
             raise DataReadinessError("SEC identity fallback response is not an object")
         response_cik = str(payload.get("cik", "")).strip().zfill(10)
         response_tickers = payload.get("tickers")
-        if not isinstance(response_tickers, list) or not all(
-            isinstance(value, str) for value in response_tickers
-        ):
+        if not isinstance(response_tickers, list) or not all(isinstance(value, str) for value in response_tickers):
             raise DataReadinessError("SEC identity fallback ticker inventory is invalid")
-        normalized_response_tickers = {
-            normalized_ticker(value.replace("-", ".")) for value in response_tickers
-        }
+        normalized_response_tickers = {normalized_ticker(value.replace("-", ".")) for value in response_tickers}
         if response_cik != cik or ticker not in normalized_response_tickers:
-            raise DataReadinessError(
-                f"SEC identity fallback does not verify ticker and CIK: {ticker}"
-            )
+            raise DataReadinessError(f"SEC identity fallback does not verify ticker and CIK: {ticker}")
         existing = identities.get(ticker)
         if existing is not None and existing != cik:
-            raise DataReadinessError(
-                f"SEC identity fallback is ambiguous: {ticker}"
-            )
+            raise DataReadinessError(f"SEC identity fallback is ambiguous: {ticker}")
         identities[ticker] = cik
     return identities
 
@@ -1326,9 +1259,7 @@ def _extend_memberships(
     for row_index, record in normalized_anchor.iterrows():
         inherited_ticker = active_by_cik.get(str(record["cik"]))
         observed_ticker = str(record["ticker"])
-        if inherited_ticker is not None and _punctuation_alias(
-            inherited_ticker, observed_ticker
-        ):
+        if inherited_ticker is not None and _punctuation_alias(inherited_ticker, observed_ticker):
             normalized_anchor.loc[row_index, "ticker"] = inherited_ticker
     if bool(normalized_anchor["ticker"].duplicated().any()):
         raise DataReadinessError("independent S&P anchor aliases collide")
@@ -1407,11 +1338,7 @@ def _extend_memberships(
     anchor_tickers = set(anchor_index)
     missing_tickers = anchor_tickers.difference(active_tickers)
     extra_tickers = active_tickers.difference(anchor_tickers)
-    pending_event_tickers = {
-        item.ticker
-        for item in (*closed_changes, *observed_changes)
-        if item.effective_at_utc > observed_at
-    }
+    pending_event_tickers = {item.ticker for item in (*closed_changes, *observed_changes) if item.effective_at_utc > observed_at}
     missing_by_cik: dict[str, list[str]] = {}
     extra_by_cik: dict[str, list[str]] = {}
     for ticker in missing_tickers:
@@ -1427,9 +1354,7 @@ def _extend_memberships(
             continue
         successor_ticker = successors[0]
         predecessor_ticker = predecessors[0]
-        if {successor_ticker, predecessor_ticker}.intersection(
-            pending_event_tickers
-        ):
+        if {successor_ticker, predecessor_ticker}.intersection(pending_event_tickers):
             continue
         predecessor_index = active_index.pop(predecessor_ticker)
         security_id = str(data.loc[predecessor_index, "security_id"])
@@ -1472,21 +1397,13 @@ def _extend_memberships(
         if actual_cik == expected_cik:
             continue
         if actual_cik is None:
-            raise DataReadinessError(
-                f"observed S&P inherited identity has no CIK for {ticker}"
-            )
-        conflicting_owners = active_cik_owners.get(expected_cik, set()).difference(
-            {ticker}
-        )
+            raise DataReadinessError(f"observed S&P inherited identity has no CIK for {ticker}")
+        conflicting_owners = active_cik_owners.get(expected_cik, set()).difference({ticker})
         if conflicting_owners:
-            raise DataReadinessError(
-                f"observed S&P successor CIK is already active for {ticker}"
-            )
+            raise DataReadinessError(f"observed S&P successor CIK is already active for {ticker}")
         identities = cik_identities.get(expected_cik, set())
         if len(identities) > 1:
-            raise DataReadinessError(
-                f"observed S&P successor CIK identity is ambiguous for {ticker}"
-            )
+            raise DataReadinessError(f"observed S&P successor CIK identity is ambiguous for {ticker}")
         anchor_row = anchor_index[ticker]
         security_id = next(iter(identities), f"cik:{expected_cik}")
         data.loc[row_index, "effective_to_utc"] = pd.Timestamp(observed_at)
@@ -1550,11 +1467,7 @@ def _verify_unit_inventory(
         or any(path.is_symlink() for path in root_entries)
         or not (root / "objects").is_dir()
         or not (root / "units").is_dir()
-        or any(
-            path.is_dir()
-            for path in root_entries
-            if path.name not in {"objects", "units"}
-        )
+        or any(path.is_dir() for path in root_entries if path.name not in {"objects", "units"})
     ):
         raise DataReadinessError("observed membership root files differ from inventory")
     expected_units = {f"{unit['unit_id']}.json" for unit in units}
@@ -1590,9 +1503,7 @@ def _verify_unit_inventory(
 def _unit_body(root: Path, unit: Mapping[str, object]) -> bytes:
     path = _resolve_inside(root, str(unit.get("body_path", "")))
     body = path.read_bytes()
-    if len(body) != int(str(unit.get("body_length", -1))) or hashlib.sha256(
-        body
-    ).hexdigest() != unit.get("body_sha256"):
+    if len(body) != int(str(unit.get("body_length", -1))) or hashlib.sha256(body).hexdigest() != unit.get("body_sha256"):
         raise DataReadinessError("observed membership response body changed")
     return body
 

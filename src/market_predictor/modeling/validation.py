@@ -13,8 +13,8 @@ import pandas as pd
 from market_predictor.core.errors import DataReadinessError
 
 
-@dataclass(frozen=True)
-class V3Fold:
+@dataclass(frozen=True, slots=True)
+class PurgedWalkForwardFold:
     fold: int
     train_indices: np.ndarray
     test_indices: np.ndarray
@@ -36,6 +36,7 @@ class V3Fold:
             "embargo_sessions": self.embargo_sessions,
         }
 
+
 @dataclass(frozen=True)
 class TickerHoldoutPlan:
     holdout_tickers: frozenset[str]
@@ -43,7 +44,8 @@ class TickerHoldoutPlan:
     assignment_cutoff_utc: str
     ticker_summary_sha256: str
 
-class V3PurgedWalkForwardSplit:
+
+class SessionPurgedWalkForwardSplit:
     """Expanding-window session split that preserves every ranking query."""
 
     def __init__(
@@ -65,14 +67,14 @@ class V3PurgedWalkForwardSplit:
         self.min_train_sessions = min_train_sessions
         self.min_train_rows = min_train_rows
 
-    def split(self, frame: pd.DataFrame) -> list[V3Fold]:
+    def split(self, frame: pd.DataFrame) -> list[PurgedWalkForwardFold]:
         required = {"session_date_et", "decision_group_id"}
         missing = sorted(required.difference(frame.columns))
         if missing:
-            raise DataReadinessError(f"V3 validation input missing columns: {', '.join(missing)}")
+            raise DataReadinessError(f"cross-sectional validation input missing columns: {', '.join(missing)}")
         sessions = pd.to_datetime(frame["session_date_et"], errors="coerce").dt.date
         if bool(sessions.isna().any()):
-            raise DataReadinessError("V3 validation contains invalid session_date_et values")
+            raise DataReadinessError("cross-sectional validation contains invalid session dates")
         query_session_count = (
             pd.DataFrame({"query": frame["decision_group_id"].astype(str), "session": sessions}).groupby("query")["session"].nunique()
         )
@@ -84,7 +86,7 @@ class V3PurgedWalkForwardSplit:
         if remaining < self.n_splits:
             raise DataReadinessError("insufficient sessions for the minimum training window, embargo, and requested folds")
         fold_size = max(1, remaining // self.n_splits)
-        folds: list[V3Fold] = []
+        folds: list[PurgedWalkForwardFold] = []
         for fold_number in range(self.n_splits):
             test_start_position = first_test_position + fold_number * fold_size
             test_end_position = (
@@ -109,7 +111,7 @@ class V3PurgedWalkForwardSplit:
             if train_queries & test_queries:
                 raise DataReadinessError("ranking query was split between train and test")
             folds.append(
-                V3Fold(
+                PurgedWalkForwardFold(
                     fold=fold_number,
                     train_indices=train_indices,
                     test_indices=test_indices,
@@ -121,8 +123,9 @@ class V3PurgedWalkForwardSplit:
                 )
             )
         if len(folds) < 2:
-            raise DataReadinessError("fewer than two valid V3 walk-forward folds remain")
+            raise DataReadinessError("fewer than two valid cross-sectional walk-forward folds remain")
         return folds
+
 
 def deterministic_ticker_holdout(
     tickers: pd.Series,
@@ -139,6 +142,7 @@ def deterministic_ticker_holdout(
     minimum = 2 if len(scored) >= 3 else 1
     count = min(len(scored) - 1, max(minimum, round(len(scored) * fraction)))
     return frozenset(scored[:count])
+
 
 def deterministic_stratified_ticker_holdout(
     frame: pd.DataFrame,
@@ -204,6 +208,7 @@ def deterministic_stratified_ticker_holdout(
         ticker_summary_sha256=summary_hash,
     )
 
+
 def validation_row_identities(frame: pd.DataFrame) -> pd.Series:
     required = {"ticker", "decision_group_id", "decision_time_utc"}
     missing = sorted(required.difference(frame.columns))
@@ -227,9 +232,11 @@ def validation_row_identities(frame: pd.DataFrame) -> pd.Series:
         raise DataReadinessError("validation row identity is not unique")
     return identities
 
+
 def identity_set_sha256(values: Iterable[object]) -> str:
     normalized = sorted(str(value) for value in values)
     return hashlib.sha256("\n".join(normalized).encode("utf-8")).hexdigest()
+
 
 def causal_fold_training_indices(
     frame: pd.DataFrame,
@@ -256,6 +263,7 @@ def causal_fold_training_indices(
     if not max_train_label < min_test_decision:
         raise DataReadinessError("max train label availability must be strictly earlier than min test decision")
     return train_indices, max_train_label, min_test_decision
+
 
 def _ticker_summaries(
     frame: pd.DataFrame,
@@ -320,6 +328,7 @@ def _ticker_summaries(
     }
     return pd.DataFrame(records), availability
 
+
 def _stratum_groups(
     summaries: pd.DataFrame,
     dimensions: Sequence[str],
@@ -334,6 +343,7 @@ def _stratum_groups(
             if len(tickers) >= 2:
                 groups[(dimension, str(stratum))] = tickers
     return groups
+
 
 def _balanced_assignment(
     summaries: pd.DataFrame,
@@ -370,6 +380,7 @@ def _balanced_assignment(
         selected = best
     return selected
 
+
 def _representation_audit(
     summaries: pd.DataFrame,
     *,
@@ -401,6 +412,7 @@ def _representation_audit(
             )
     return pd.DataFrame(records)
 
+
 def _category_or_one_hot(data: pd.DataFrame, *, category: str, prefix: str) -> pd.Series:
     if category in data.columns:
         return _normalized_category(data[category], data.index)
@@ -411,16 +423,19 @@ def _category_or_one_hot(data: pd.DataFrame, *, category: str, prefix: str) -> p
     chosen = numeric.idxmax(axis=1).str.removeprefix(prefix)
     return chosen.where(numeric.max(axis=1).gt(0), "unknown").astype("string")
 
+
 def _normalized_category(values: pd.Series | None, index: pd.Index) -> pd.Series:
     if values is None:
         return pd.Series("unknown", index=index, dtype="string")
     normalized = values.fillna("unknown").astype(str).str.strip().str.lower()
     return normalized.where(normalized.ne(""), "unknown").astype("string")
 
+
 def _stable_mode(values: pd.Series) -> str:
     counts = values.fillna("unknown").astype(str).value_counts()
     maximum = int(counts.max()) if not counts.empty else 0
     return sorted(counts[counts.eq(maximum)].index)[0] if maximum else "unknown"
+
 
 def _rate_bucket(value: float) -> str:
     if not np.isfinite(value):
@@ -430,6 +445,7 @@ def _rate_bucket(value: float) -> str:
     if value < 2 / 3:
         return "medium"
     return "high"
+
 
 def _coverage_bucket(value: float) -> str:
     if not np.isfinite(value):
@@ -442,12 +458,14 @@ def _coverage_bucket(value: float) -> str:
         return "medium"
     return "high"
 
+
 def _has_valid_one_hot(frame: pd.DataFrame, prefix: str) -> bool:
     columns = [column for column in frame.columns if column.startswith(prefix)]
     if not columns:
         return False
     values = frame[columns].apply(pd.to_numeric, errors="coerce").stack().dropna().unique()
     return bool(len(values) and set(values).issubset({0, 1}))
+
 
 def _utc_iso(value: pd.Timestamp | datetime) -> str:
     timestamp = pd.Timestamp(value)

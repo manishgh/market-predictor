@@ -13,10 +13,10 @@ from market_predictor.canonical.contracts import (
     AvailabilityPolicy,
     CanonicalUniverseMembership,
 )
+from market_predictor.core.errors import DataReadinessError, SchemaMismatchError
+from market_predictor.core.symbols import normalized_ticker
 from market_predictor.data_quality import sanitize_events_frame
 from market_predictor.source_taxonomy import source_family_for_source
-from market_predictor.v3.contracts import normalized_ticker
-from market_predictor.core.errors import DataReadinessError, SchemaMismatchError
 
 BAR_DURATIONS = {
     "1m": pd.Timedelta(minutes=1),
@@ -124,10 +124,14 @@ def canonicalize_universe_memberships(
             raw["effective_to_utc"] = None
         membership = CanonicalUniverseMembership.model_validate(raw)
         records.append(membership.model_dump())
-    return pd.DataFrame(records, columns=CANONICAL_MEMBERSHIP_COLUMNS).sort_values(
-        ["ticker", "effective_from_utc", "available_at_utc"],
-        kind="stable",
-    ).reset_index(drop=True)
+    return (
+        pd.DataFrame(records, columns=CANONICAL_MEMBERSHIP_COLUMNS)
+        .sort_values(
+            ["ticker", "effective_from_utc", "available_at_utc"],
+            kind="stable",
+        )
+        .reset_index(drop=True)
+    )
 
 
 def canonicalize_bars(
@@ -278,9 +282,7 @@ def canonicalize_events(
         available = content_time
 
     sentiment_input = (
-        clean["sentiment_numeric"]
-        if "sentiment_numeric" in clean.columns
-        else pd.Series(float("nan"), index=clean.index, dtype=float)
+        clean["sentiment_numeric"] if "sentiment_numeric" in clean.columns else pd.Series(float("nan"), index=clean.index, dtype=float)
     )
     sentiment = pd.to_numeric(sentiment_input, errors="coerce")
     has_sentiment = sentiment.notna()
@@ -344,9 +346,7 @@ def canonicalize_events(
             "text": clean["text"].fillna("").astype(str),
             "sentiment_numeric": sentiment.clip(-1, 1),
             "relevance": pd.to_numeric(
-                clean["relevance"]
-                if "relevance" in clean.columns
-                else pd.Series(float("nan"), index=clean.index, dtype=float),
+                clean["relevance"] if "relevance" in clean.columns else pd.Series(float("nan"), index=clean.index, dtype=float),
                 errors="coerce",
             ),
             "availability_policy": availability_policy,

@@ -9,9 +9,17 @@ from rich.console import Console
 
 from market_predictor.commands.v3_labels import parse_horizons
 from market_predictor.heavy_jobs import serialized_heavy_job
-from market_predictor.v3.audits import build_data_audit
-from market_predictor.v3.development import DevelopmentDatasetConfig, build_monthly_development_dataset
-from market_predictor.v3.partitions import partition_development_shadow, write_shadow_partition
+from market_predictor.research.intraday_cross_sectional.data_audit import (
+    build_data_audit,
+)
+from market_predictor.research.intraday_cross_sectional.development_dataset import (
+    DevelopmentDatasetConfig,
+    build_monthly_development_dataset,
+)
+from market_predictor.research.intraday_cross_sectional.development_partition import (
+    partition_development_shadow,
+    write_shadow_partition,
+)
 
 
 def register_v3_data_commands(app: typer.Typer, console: Console) -> None:
@@ -60,9 +68,7 @@ def register_v3_data_commands(app: typer.Typer, console: Console) -> None:
             ),
         )
         summary = report["summary"]
-        console.print(
-            f"Wrote {summary['label_rows']:,} V3 development rows across {summary['months']} months to {out_dir}"
-        )
+        console.print(f"Wrote {summary['label_rows']:,} V3 development rows across {summary['months']} months to {out_dir}")
 
     @app.command("audit-v3-data")
     def audit_v3_data(

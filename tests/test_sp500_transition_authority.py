@@ -10,7 +10,7 @@ import pytest
 import market_predictor.edge_rebuild.sp500_transitions as transition_module
 from market_predictor.canonical.store import file_sha256
 from market_predictor.core.errors import DataReadinessError
-from market_predictor.v3.spglobal_archive import VerifiedSpGlobalRawArchive
+from market_predictor.sources.spglobal.archive import VerifiedSpGlobalRawArchive
 
 
 def test_official_fox_transitions_are_one_atomic_batch(

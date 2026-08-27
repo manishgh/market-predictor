@@ -10,7 +10,7 @@ Nothing here is reimplemented. The causal feature history, the exact next-open t
 horizon-close label path, the point-in-time membership join, and the deterministic
 ticker holdout all come from the existing canonical implementations
 (:mod:`market_predictor.swing.dataset`, :mod:`market_predictor.swing.labels`,
-:mod:`market_predictor.canonical.joins`, :mod:`market_predictor.v3.validation`).
+:mod:`market_predictor.canonical.joins`, :mod:`market_predictor.modeling.validation`).
 This module contributes exactly one new thing: the deterministic setup rule.
 
 The rule, evaluated after the completed daily bar of session ``t`` at the frozen
@@ -90,7 +90,7 @@ The rule, evaluated after the completed daily bar of session ``t`` at the frozen
 ``Scopes.``
     ``unseen_ticker`` is the deterministic-hash 20% ticker holdout required by the
     contract, applied through the shared
-    :func:`market_predictor.v3.validation.deterministic_ticker_holdout`. A security
+    :func:`market_predictor.modeling.validation.deterministic_ticker_holdout`. A security
     that was renamed carries several tickers; it is held out when *any* of them is,
     so no held-out ticker string can appear in ``walk_forward`` and no security is
     ever split across scopes. The trade cap is applied per scope, because each
@@ -103,9 +103,8 @@ The rule, evaluated after the completed daily bar of session ``t`` at the frozen
     is still emitted, and its single value is honest evidence rather than a
     fabricated split.
 """
+
 from __future__ import annotations
-
-
 
 import json
 from collections.abc import Iterator, Sequence
@@ -120,6 +119,7 @@ from market_predictor.canonical.joins import (
     join_universe_membership,
 )
 from market_predictor.canonical.store import file_sha256, load_canonical_artifact
+from market_predictor.core.errors import DataReadinessError
 from market_predictor.edge_rebuild.setup_economics import (
     MANDATORY_CONCENTRATION_DIMENSIONS,
     UNSEEN_TICKER_SCOPE,
@@ -129,11 +129,10 @@ from market_predictor.edge_rebuild.setup_economics import (
 from market_predictor.edge_rebuild.strategy_contract import StrategyContract
 from market_predictor.edge_rebuild.swing_features import swing_dataset_config
 from market_predictor.edge_rebuild.swing_pipeline_steps import SetupComponentsStep
+from market_predictor.modeling.validation import deterministic_ticker_holdout
 from market_predictor.resources import assert_memory_budget
 from market_predictor.swing.dataset import build_swing_feature_history
 from market_predictor.swing.labels import add_exact_swing_labels
-from market_predictor.core.errors import DataReadinessError
-from market_predictor.v3.validation import deterministic_ticker_holdout
 
 SWING_SETUP_SCHEMA = "edge_rebuild.swing_setups.v1"
 SWING_SETUP_FEATURE_PROFILE = "technical_market"
@@ -232,11 +231,7 @@ def swing_setup_mask(components: pd.DataFrame, *, contract: StrategyContract) ->
     )
     trend = components["dist_sma_200"].gt(0.0) & components["sma_200_slope_20d"].gt(0.0)
     pullback = components["prior_dist_ema_10"].lt(0.0) & components["prior_dist_sma_200"].gt(0.0)
-    reclaim = (
-        components["dist_ema_10"].gt(0.0)
-        & components["intraday_return"].gt(0.0)
-        & components["volume_ratio_20"].gt(1.0)
-    )
+    reclaim = components["dist_ema_10"].gt(0.0) & components["intraday_return"].gt(0.0) & components["volume_ratio_20"].gt(1.0)
     horizon = swing.horizon_sessions
     labels = [
         f"future_gross_return_{horizon}d",
@@ -313,12 +308,8 @@ def _candidate_frame(
             "gross_return": selected[f"future_gross_return_{horizon}d"].astype(float),
             "cost": float(cost),
             "net_return": selected[f"future_net_return_{horizon}d"].astype(float),
-            "spy_excess_return": selected[
-                f"future_excess_return_{horizon}d_vs_spy"
-            ].astype(float),
-            "sector_excess_return": selected[
-                f"future_excess_return_{horizon}d_vs_sector"
-            ].astype(float),
+            "spy_excess_return": selected[f"future_excess_return_{horizon}d_vs_spy"].astype(float),
+            "sector_excess_return": selected[f"future_excess_return_{horizon}d_vs_sector"].astype(float),
             "sector": selected["sector"].astype(str),
             "market_regime": selected["market_regime"].astype(str),
             "session_segment": SWING_SESSION_SEGMENT,
@@ -350,9 +341,7 @@ def _verify_label_economics(frame: pd.DataFrame) -> None:
         raise DataReadinessError("swing setup labels contain non-finite economics")
     residual = (frame["net_return"] - (frame["gross_return"] - frame["cost"])).abs()
     if float(residual.max()) > 1e-9:
-        raise DataReadinessError(
-            "swing setup labels violate the single-cost identity net = gross - cost"
-        )
+        raise DataReadinessError("swing setup labels violate the single-cost identity net = gross - cost")
 
 
 # --------------------------------------------------------------------------- #
@@ -386,11 +375,7 @@ def finalize_swing_setup_population(
     # A renamed security carries several tickers. Holding out the security whenever
     # any of its tickers is held out keeps every held-out ticker string out of
     # walk_forward and never splits one security across two scopes.
-    held_out_security = (
-        frame.assign(_held=frame["ticker"].isin(holdout))
-        .groupby("security_id", sort=False)["_held"]
-        .transform("any")
-    )
+    held_out_security = frame.assign(_held=frame["ticker"].isin(holdout)).groupby("security_id", sort=False)["_held"].transform("any")
     frame["scope"] = np.where(held_out_security, UNSEEN_TICKER_SCOPE, WALK_FORWARD_SCOPE)
 
     # The contract's trade cap, applied per scope because each scope is an
@@ -402,18 +387,11 @@ def finalize_swing_setup_population(
         ascending=[True, True, False, True],
         kind="stable",
     )
-    capped = ordered.groupby(["scope", "session"], sort=False).head(
-        swing.maximum_trades_per_decision
-    )
-    population = capped.sort_values(
-        ["decision_time_utc", "security_id"], kind="stable"
-    ).reset_index(drop=True)
+    capped = ordered.groupby(["scope", "session"], sort=False).head(swing.maximum_trades_per_decision)
+    population = capped.sort_values(["decision_time_utc", "security_id"], kind="stable").reset_index(drop=True)
     duplicates = population.duplicated(subset=["security_id", "decision_time_utc"])
     if bool(duplicates.any()):
-        raise DataReadinessError(
-            "swing setup population repeats a security/decision "
-            f"{int(duplicates.sum())} time(s)"
-        )
+        raise DataReadinessError(f"swing setup population repeats a security/decision {int(duplicates.sum())} time(s)")
     return population.loc[:, list(SWING_SETUP_COLUMNS)]
 
 
@@ -456,9 +434,7 @@ def collect_swing_setup_population(
     )
     zero_volume_benchmark = int(benchmark_bars["volume"].le(0).sum())
     if zero_volume_benchmark:
-        raise DataReadinessError(
-            f"benchmark bars contain {zero_volume_benchmark} zero-volume placeholder(s)"
-        )
+        raise DataReadinessError(f"benchmark bars contain {zero_volume_benchmark} zero-volume placeholder(s)")
     sessions = _session_calendar(benchmark_bars, contract.labels.benchmark_market.upper())
 
     batches: list[pd.DataFrame] = []
@@ -574,9 +550,7 @@ def load_security_batch_bars(
     for ticker, intervals in group.groupby("ticker", sort=True):
         name = str(ticker).strip().upper()
         if name not in cache:
-            traded, placeholders = drop_placeholder_bars(
-                load_daily_bars(name, artifacts)
-            )
+            traded, placeholders = drop_placeholder_bars(load_daily_bars(name, artifacts))
             dropped += placeholders
             cache[name] = traded
         bars = cache[name]

@@ -8,25 +8,27 @@ import pandas as pd
 import typer
 from rich.console import Console
 
-from market_predictor.registry import file_sha256
-from market_predictor.v3.catalysts import (
-    O1AuditConfig,
-    O1OverlayConfig,
-    build_o1_overlay_evidence,
-    evaluate_o1_ablation,
-)
-from market_predictor.v3.development import load_verified_development_dataset
-from market_predictor.v3.diagnostics import (
-    FAILURE_ATTRIBUTION_DATASET_COLUMNS,
-    FailureAttributionConfig,
-    build_failure_attribution,
-)
 from market_predictor.core.errors import DataReadinessError, MarketPredictorError
-from market_predictor.v3.evaluation import (
+from market_predictor.modeling.ranking_economics import (
     RankingAuditConfig,
     build_multi_output_evidence,
     evaluate_ranking_economics,
     fit_disjoint_calibrator,
+)
+from market_predictor.registry import file_sha256
+from market_predictor.research.intraday_cross_sectional.catalyst_ablation import (
+    CatalystAblationConfig,
+    CatalystOverlayConfig,
+    build_catalyst_overlay_evidence,
+    evaluate_catalyst_ablation,
+)
+from market_predictor.research.intraday_cross_sectional.development_dataset import (
+    load_verified_development_dataset,
+)
+from market_predictor.research.intraday_cross_sectional.failure_diagnostics import (
+    FAILURE_ATTRIBUTION_DATASET_COLUMNS,
+    FailureAttributionConfig,
+    build_failure_attribution,
 )
 
 
@@ -35,7 +37,10 @@ def register_v3_evaluation_commands(app: typer.Typer, console: Console) -> None:
     def audit_v3_failure_attribution(
         predictions: Path = typer.Option(..., help="Frozen model OOF prediction parquet."),
         dataset: Path = typer.Option(..., help="Hash-verified V3 development dataset directory."),
-        family: str = typer.Option("R1", help="Rejected family to diagnose."),
+        family: str = typer.Option(
+            "xgboost_ranker",
+            help="Rejected family to diagnose.",
+        ),
         top_k: int = typer.Option(10, min=1, help="Fixed selected names per decision group."),
         bootstrap_iterations: int = typer.Option(1_000, min=100, help="Session-blocked bootstrap iterations."),
         report_out: Path = typer.Option(
@@ -111,12 +116,12 @@ def register_v3_evaluation_commands(app: typer.Typer, console: Console) -> None:
             if path.exists() and not overwrite:
                 raise typer.BadParameter(f"Output already exists; pass --overwrite to replace it: {path}")
         try:
-            overlay_config = O1OverlayConfig(
+            overlay_config = CatalystOverlayConfig(
                 coverage_start_utc=pd.Timestamp(coverage_start).to_pydatetime(),
                 coverage_end_utc=pd.Timestamp(coverage_end).to_pydatetime(),
                 availability_policy=availability_policy,
             )
-            evidence, readiness = build_o1_overlay_evidence(
+            evidence, readiness = build_catalyst_overlay_evidence(
                 _read_predictions(predictions),
                 event_directories=event_dir,
                 market_context_path=market_context,
@@ -134,9 +139,12 @@ def register_v3_evaluation_commands(app: typer.Typer, console: Console) -> None:
             report_out.write_text(json.dumps(report, indent=2, sort_keys=True), encoding="utf-8")
             console.print(f"[red]O1 readiness failed; wrote audit to {report_out}[/red]")
             raise typer.Exit(code=2)
-        ablation, selected = evaluate_o1_ablation(
+        ablation, selected = evaluate_catalyst_ablation(
             evidence,
-            config=O1AuditConfig(top_k=top_k, bootstrap_iterations=bootstrap_iterations),
+            config=CatalystAblationConfig(
+                top_k=top_k,
+                bootstrap_iterations=bootstrap_iterations,
+            ),
         )
         evidence_out.parent.mkdir(parents=True, exist_ok=True)
         selected_out.parent.mkdir(parents=True, exist_ok=True)
@@ -154,8 +162,14 @@ def register_v3_evaluation_commands(app: typer.Typer, console: Console) -> None:
     @app.command("audit-v3-ranking")
     def audit_v3_ranking(
         predictions: Path = typer.Option(..., help="Combined V3 OOF prediction parquet."),
-        opportunity_family: str = typer.Option("R1", help="Opportunity family to rank."),
-        downside_family: str = typer.Option("D1", help="Probabilistic downside family."),
+        opportunity_family: str = typer.Option(
+            "xgboost_ranker",
+            help="Opportunity family to rank.",
+        ),
+        downside_family: str = typer.Option(
+            "downside_classifier",
+            help="Probabilistic downside family.",
+        ),
         calibration_method: str = typer.Option("sigmoid", help="Downside calibration: sigmoid or isotonic."),
         top_k: int = typer.Option(10, min=1, help="Maximum selected names per decision group."),
         maximum_downside_probability: float = typer.Option(0.5, min=0, max=1, help="Calibrated downside veto threshold."),

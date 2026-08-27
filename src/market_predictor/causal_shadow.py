@@ -12,15 +12,15 @@ from uuid import uuid4
 
 import pandas as pd
 
+from market_predictor.core.errors import DataReadinessError
 from market_predictor.hypothesis_registry import TEST_CLOCK_ENV
 from market_predictor.locking import file_lock
+from market_predictor.modeling.ranking_economics import session_block_interval
 from market_predictor.outcome_contracts import (
     MaturedOutcomeV1,
     PredictionMaturationIntentV2,
 )
 from market_predictor.outcome_repository import OutcomeRepository
-from market_predictor.core.errors import DataReadinessError
-from market_predictor.v3.evaluation import session_block_interval
 
 CAUSAL_SHADOW_SCHEMA = "market_predictor.causal_shadow_evidence.v2"
 

@@ -4,18 +4,24 @@ import re
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-ML_V3_SCHEMA_VERSION = "ml_v3.v1"
+CROSS_SECTIONAL_SCHEMA_VERSION = "ml_v3.v1"
 
 _SCHEMA_TOKEN = re.compile(r"^[a-z][a-z0-9_]*(?:\.[a-z0-9_]+)*$")
 
+
 class FrozenContract(BaseModel):
-    """Strict immutable base for persisted V3 contracts."""
+    """Strict immutable base for persisted contracts."""
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
+
 class SchemaIdentity(FrozenContract):
     name: str = Field(min_length=1, max_length=80)
-    version: str = Field(default=ML_V3_SCHEMA_VERSION, min_length=1, max_length=80)
+    version: str = Field(
+        default=CROSS_SECTIONAL_SCHEMA_VERSION,
+        min_length=1,
+        max_length=80,
+    )
 
     @field_validator("name", "version")
     @classmethod

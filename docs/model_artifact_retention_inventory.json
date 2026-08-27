@@ -103,7 +103,7 @@
       "status": "development_rejection_evidence"
     },
     {
-      "action": "retire_before_old_namespace_removal",
+      "action": "retired_before_old_namespace_removal",
       "direct_references": [],
       "paths": [
         "models/v3/c8_b0_20260711/b0_candidate.joblib",
@@ -111,7 +111,12 @@
       ],
       "promotion_permitted": false,
       "reason": "The serialized payloads import market_predictor.v3, have no configured consumer or active pointer, and correspond to rejected historical experiments.",
-      "status": "reference_rejected"
+      "retained_manifests": [
+        "models/v3/c8_b0_20260711/b0_candidate.joblib.manifest.json",
+        "models/v3/v4_h1_b0_20260721/b0_candidate.joblib.manifest.json"
+      ],
+      "retired_at_utc": "2026-08-27T11:13:23Z",
+      "status": "namespace_bound_payloads_deleted"
     },
     {
       "action": "retire_after_reference_and_regeneration_audit",
@@ -159,16 +164,13 @@
   ],
   "namespace_dependencies": {
     "market_predictor.edge_rebuild": [],
-    "market_predictor.v3": [
-      "models/v3/c8_b0_20260711/b0_candidate.joblib",
-      "models/v3/v4_h1_b0_20260721/b0_candidate.joblib"
-    ]
+    "market_predictor.v3": []
   },
   "observed_counts": {
     "serialized_files_importing_market_predictor_edge_rebuild": 0,
-    "serialized_files_importing_market_predictor_v3": 2,
+    "serialized_files_importing_market_predictor_v3": 0,
     "source_or_test_files_importing_market_predictor_edge_rebuild": 126,
-    "source_or_test_files_importing_market_predictor_v3": 53,
+    "source_or_test_files_importing_market_predictor_v3": 0,
     "tracked_chronology_named_paths": 171
   },
   "retired_legacy_promotion": {

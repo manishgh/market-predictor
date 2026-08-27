@@ -8,10 +8,10 @@ import pytest
 from typer.testing import CliRunner
 
 import market_predictor.commands.v3_readiness as command_module
-import market_predictor.v3.spglobal_events as event_module
-from market_predictor.research_cli import app as research_app
+import market_predictor.universe.sp500.index_change_events as event_module
 from market_predictor.core.errors import DataReadinessError
-from market_predictor.v3.spglobal_archive import VerifiedSpGlobalRawArchive
+from market_predictor.research_cli import app as research_app
+from market_predictor.sources.spglobal.archive import VerifiedSpGlobalRawArchive
 
 
 def test_event_extraction_reconciles_duplicate_source_assertions(
@@ -64,14 +64,10 @@ def test_event_extraction_reconciles_duplicate_source_assertions(
     events[0]["ticker"] = "FAKE"
     event_module._atomic_json(output / "events.json", events)
     published_manifest = _json_object(output / "_manifest.json")
-    published_manifest["artifacts"]["events"] = event_module._artifact_record(
-        output / "events.json"
-    )
+    published_manifest["artifacts"]["events"] = event_module._artifact_record(output / "events.json")
     event_module._atomic_json(output / "_manifest.json", published_manifest)
     published_authority = _json_object(output / "_authority.json")
-    published_authority["artifact_sha256"] = event_module._file_sha256(
-        output / "_manifest.json"
-    )
+    published_authority["artifact_sha256"] = event_module._file_sha256(output / "_manifest.json")
     published_authority["event_set_sha256"] = event_module._json_sha256(events)
     event_module._atomic_json(output / "_authority.json", published_authority)
     with pytest.raises(DataReadinessError, match="counts or identity"):
@@ -135,9 +131,7 @@ def test_event_extraction_blocks_effective_date_before_publication(
     assert manifest["status"] == "blocked"
     assert manifest["parsed_release_count"] == 0
     assert manifest["unresolved_release_count"] == 1
-    assert "precedes its official publication date" in str(
-        manifest["unresolved_releases"]
-    )
+    assert "precedes its official publication date" in str(manifest["unresolved_releases"])
     assert not (tmp_path / "events" / "_authority.json").exists()
 
 

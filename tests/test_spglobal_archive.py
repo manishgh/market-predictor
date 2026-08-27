@@ -15,11 +15,11 @@ import pytest
 from typer.testing import CliRunner
 
 import market_predictor.commands.v3_readiness as command_module
-import market_predictor.v3.spglobal_archive as archive_module
+import market_predictor.sources.spglobal.archive as archive_module
 from market_predictor.collection_cli import app as collection_app
-from market_predictor.locking import file_lock
 from market_predictor.core.errors import DataReadinessError
-from market_predictor.v3.spglobal_archive import (
+from market_predictor.locking import file_lock
+from market_predictor.sources.spglobal.archive import (
     ARCHIVE_AUTHORITY_SCHEMA,
     ArchiveCollectionConfig,
     collect_spglobal_archive,
@@ -55,9 +55,7 @@ class _Transport:
         self.bodies = bodies
         self.final_urls = final_urls or {}
         self.redirect_chains = redirect_chains or {}
-        self.retrieved_at_utc = retrieved_at_utc or datetime(
-            2026, 7, 31, 12, tzinfo=UTC
-        )
+        self.retrieved_at_utc = retrieved_at_utc or datetime(2026, 7, 31, 12, tzinfo=UTC)
         self.calls: list[str] = []
         self.lock = threading.Lock()
 
@@ -85,11 +83,7 @@ class _Client:
         body = self.transport.bodies[key]
         if len(body) > maximum_body_bytes:
             raise RuntimeError("fixture body exceeds maximum_body_bytes")
-        requested_url = (
-            f"{url}?{urlencode(sorted((str(k), str(v)) for k, v in params.items()))}"
-            if params is not None
-            else url
-        )
+        requested_url = f"{url}?{urlencode(sorted((str(k), str(v)) for k, v in params.items()))}" if params is not None else url
         final_url = self.transport.final_urls.get(key, requested_url)
         return _Response(
             body=body,
@@ -136,7 +130,7 @@ def test_discovery_refuses_authority_when_page_limit_does_not_reach_boundary(tmp
                         "2025-01-01",
                         "Older release",
                         "https://press.spglobal.com/2025-01-01-older",
-                    )
+                    ),
                 ]
             ),
         }
@@ -170,9 +164,7 @@ def test_period_used_urls_may_be_subset_of_complete_source_manifest(
 def test_period_used_urls_cannot_reference_unknown_source(tmp_path: Path) -> None:
     audit_path, _, _ = _write_source_audit(tmp_path)
     audit = _read_json(audit_path)
-    audit["source_urls"].append(
-        "https://press.spglobal.com/2026-07-01-unknown-source"
-    )
+    audit["source_urls"].append("https://press.spglobal.com/2026-07-01-unknown-source")
     audit_path.write_text(json.dumps(audit), encoding="utf-8")
 
     with pytest.raises(DataReadinessError, match="outside source_manifest"):
@@ -212,7 +204,7 @@ def test_discovery_unions_seed_urls_and_broad_membership_title(tmp_path: Path) -
                         "2018-04-13",
                         "Archive boundary",
                         "https://press.spglobal.com/2018-04-13-boundary",
-                    )
+                    ),
                 ],
                 page_tag="boundary-one",
             ),
@@ -298,9 +290,7 @@ def test_truncated_first_search_page_cannot_publish_authority(tmp_path: Path) ->
 
 def test_boundary_date_split_across_pages_is_fully_collected(tmp_path: Path) -> None:
     audit_path, audit_hash, seeds = _write_source_audit(tmp_path)
-    boundary_release = (
-        "https://press.spglobal.com/2018-04-14-Boundary-Company-Set-to-Join-S-P-500"
-    )
+    boundary_release = "https://press.spglobal.com/2018-04-14-Boundary-Company-Set-to-Join-S-P-500"
     transport = _Transport(
         {
             "search:0": _search_page(
@@ -333,7 +323,7 @@ def test_boundary_date_split_across_pages_is_fully_collected(tmp_path: Path) -> 
                         "2018-04-14",
                         "Boundary Company Set to Join S&P 500",
                         boundary_release,
-                    )
+                    ),
                 ],
                 page_tag="split-one",
                 overlap_out=(
@@ -352,7 +342,7 @@ def test_boundary_date_split_across_pages_is_fully_collected(tmp_path: Path) -> 
                         "2018-04-13",
                         "Older archive item",
                         "https://press.spglobal.com/2018-04-13-older",
-                    )
+                    ),
                 ]
             ),
         }
@@ -368,9 +358,7 @@ def test_boundary_date_split_across_pages_is_fully_collected(tmp_path: Path) -> 
 
     discovery = _read_json(tmp_path / "out" / "_discovery.json")
     assert status["discovery_complete"] is True
-    assert boundary_release in {
-        str(record["url"]) for record in discovery["announcements"]
-    }
+    assert boundary_release in {str(record["url"]) for record in discovery["announcements"]}
     assert transport.calls == ["search:0", "search:99", "search:198"]
 
 
@@ -408,7 +396,7 @@ def test_discovery_includes_generic_sp500_changes_title(tmp_path: Path) -> None:
                     ),
                 ],
                 page_tag="generic-one",
-            )
+            ),
         }
     )
 
@@ -443,10 +431,7 @@ def test_final_archive_preserves_exact_bytes_without_parser_metadata(tmp_path: P
     assert manifest["status"] == "complete"
     assert manifest["release_url_count"] == 84
     assert all(record["sha256"] == digest for record in manifest["releases"])
-    assert all(
-        not any(key.startswith("parser_") for key in record)
-        for record in manifest["releases"]
-    )
+    assert all(not any(key.startswith("parser_") for key in record) for record in manifest["releases"])
     authority = _read_json(tmp_path / "out" / "_authority.json")
     assert authority["schema"] == ARCHIVE_AUTHORITY_SCHEMA
     assert authority["state"] == "raw_complete"
@@ -454,10 +439,7 @@ def test_final_archive_preserves_exact_bytes_without_parser_metadata(tmp_path: P
     assert "event_extraction_ready" not in authority
     verified = archive_module.require_spglobal_raw_archive_complete(tmp_path / "out")
     assert len(verified.releases) == 84
-    assert all(
-        not any(key.startswith("parser_") for key in record)
-        for record in verified.releases
-    )
+    assert all(not any(key.startswith("parser_") for key in record) for record in verified.releases)
 
 
 def test_raw_verifier_binds_discovery_seeds_to_frozen_request(tmp_path: Path) -> None:
@@ -471,22 +453,16 @@ def test_raw_verifier_binds_discovery_seeds_to_frozen_request(tmp_path: Path) ->
     )
     discovery_path = output / "_discovery.json"
     discovery = _read_json(discovery_path)
-    seed_record = next(
-        record for record in discovery["announcements"] if record["origin"] == "seed"
-    )
+    seed_record = next(record for record in discovery["announcements"] if record["origin"] == "seed")
     seed_record["url"] = "https://press.spglobal.com/2099-01-01-forged-seed"
     discovery_path.write_text(json.dumps(discovery), encoding="utf-8")
     manifest_path = output / "_manifest.json"
     manifest = _read_json(manifest_path)
-    manifest["discovery_sha256"] = hashlib.sha256(
-        discovery_path.read_bytes()
-    ).hexdigest()
+    manifest["discovery_sha256"] = hashlib.sha256(discovery_path.read_bytes()).hexdigest()
     manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
     authority_path = output / "_authority.json"
     authority = _read_json(authority_path)
-    authority["artifact_sha256"] = hashlib.sha256(
-        manifest_path.read_bytes()
-    ).hexdigest()
+    authority["artifact_sha256"] = hashlib.sha256(manifest_path.read_bytes()).hexdigest()
     authority_path.write_text(json.dumps(authority), encoding="utf-8")
 
     with pytest.raises(DataReadinessError, match="frozen seed set"):
@@ -677,9 +653,7 @@ def test_each_search_redirect_hop_must_preserve_query_identity(tmp_path: Path) -
     audit_path, audit_hash, _ = _write_source_audit(tmp_path)
     transport = _Transport(
         {"search:0": _search_page([])},
-        redirect_chains={
-            "search:0": ("https://press.spglobal.com/index.php?wrong=1",)
-        },
+        redirect_chains={"search:0": ("https://press.spglobal.com/index.php?wrong=1",)},
     )
 
     with pytest.raises(DataReadinessError, match="changed the query identity"):
@@ -974,10 +948,7 @@ def test_provider_template_marker_is_accepted_with_verified_http_lineage(
 ) -> None:
     audit_path, audit_hash, seeds = _write_source_audit(tmp_path)
     transport = _complete_transport(seeds)
-    transport.bodies[seeds[0]] = (
-        b"<!-- saved from url=(0051)https://www.spglobal.com/press/press-releases -->"
-        + _release_body()
-    )
+    transport.bodies[seeds[0]] = b"<!-- saved from url=(0051)https://www.spglobal.com/press/press-releases -->" + _release_body()
 
     manifest = collect_spglobal_archive(
         source_audit_path=audit_path,
@@ -995,9 +966,7 @@ def test_raw_archive_accepts_unparseable_release_as_immutable_evidence(
 ) -> None:
     audit_path, audit_hash, seeds = _write_source_audit(tmp_path)
     transport = _complete_transport(seeds)
-    transport.bodies[seeds[0]] = (
-        b"<html><body><h1>Official S&amp;P 500 announcement</h1></body></html>"
-    )
+    transport.bodies[seeds[0]] = b"<html><body><h1>Official S&amp;P 500 announcement</h1></body></html>"
 
     manifest = collect_spglobal_archive(
         source_audit_path=audit_path,
@@ -1010,9 +979,7 @@ def test_raw_archive_accepts_unparseable_release_as_immutable_evidence(
     assert manifest["status"] == "complete"
     assert "parser_unresolved_releases" not in manifest
     assert not any(key.startswith("parser_") for key in record)
-    assert (
-        tmp_path / "out" / str(record["path"])
-    ).read_bytes() == transport.bodies[seeds[0]]
+    assert (tmp_path / "out" / str(record["path"])).read_bytes() == transport.bodies[seeds[0]]
     authority = _read_json(tmp_path / "out" / "_authority.json")
     assert authority["state"] == "raw_complete"
     assert "event_extraction_ready" not in authority
@@ -1020,9 +987,7 @@ def test_raw_archive_accepts_unparseable_release_as_immutable_evidence(
     assert len(verified.releases) == 84
 
 
-def test_raw_collection_does_not_decode_release_bodies(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_raw_collection_does_not_decode_release_bodies(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     audit_path, audit_hash, seeds = _write_source_audit(tmp_path)
     transport = _complete_transport(seeds)
     original = archive_module._decode_http_entity
@@ -1051,10 +1016,7 @@ def test_raw_collection_does_not_decode_release_bodies(
 
     assert manifest["status"] == "complete"
     assert "parser_unresolved_releases" not in manifest
-    assert all(
-        (tmp_path / "out" / str(record["path"])).is_file()
-        for record in manifest["releases"]
-    )
+    assert all((tmp_path / "out" / str(record["path"])).is_file() for record in manifest["releases"])
 
 
 def test_raw_readiness_recomputes_manifest_counts_and_release_set(
@@ -1074,9 +1036,7 @@ def test_raw_readiness_recomputes_manifest_counts_and_release_set(
     manifest["completed_releases"] = int(manifest["completed_releases"]) - 1
     manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
     authority = _read_json(authority_path)
-    authority["artifact_sha256"] = hashlib.sha256(
-        manifest_path.read_bytes()
-    ).hexdigest()
+    authority["artifact_sha256"] = hashlib.sha256(manifest_path.read_bytes()).hexdigest()
     authority_path.write_text(json.dumps(authority), encoding="utf-8")
 
     with pytest.raises(DataReadinessError, match="lineage or release counts"):
@@ -1146,7 +1106,7 @@ def _complete_transport(seeds: list[str], *, release_body: bytes | None = None) 
                 "2018-04-13",
                 "Archive boundary",
                 "https://press.spglobal.com/2018-04-13-boundary",
-            )
+            ),
         ],
         page_tag="complete-one",
     )
@@ -1169,18 +1129,14 @@ def _search_page(
 ) -> bytes:
     padded = list(rows)
     filler_date = min(
-        [item[0] for item in rows]
-        + ([overlap_out[0]] if overlap_out is not None else []),
+        [item[0] for item in rows] + ([overlap_out[0]] if overlap_out is not None else []),
         default="2026-07-09",
     )
     used = {url for _, _, url in padded}
     target_before_overlap = total_dated_urls - (1 if overlap_out is not None else 0)
     index = 0
     while len(used) < target_before_overlap:
-        url = (
-            f"https://press.spglobal.com/"
-            f"{filler_date}-fixture-{page_tag}-{index}"
-        )
+        url = f"https://press.spglobal.com/{filler_date}-fixture-{page_tag}-{index}"
         index += 1
         if url in used:
             continue
