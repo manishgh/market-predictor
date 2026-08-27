@@ -1275,12 +1275,23 @@ test, and task names.
        Ninety-eight focused tests passed with Ruff, strict mypy on six source files,
        compileall, architecture guards, and diff checks. The assigned senior reviewer
        accepted the final diff with no P0, P1, or P2 finding.
-     - **Issuer event family and precision authorities (`current task`).** Move causal
+     - **Issuer event family and precision authorities (`active sequence`).** Move causal
        issuer evidence in four independently reviewed checkpoints without changing
        any classifier, coverage, audit, or artifact contract:
-       1. Move Alpaca issuer-news evidence collection and audit from `swing` to
-          `catalysts/issuer_events`; keep provider transport in `sources/alpaca.py`.
-       2. Move reusable classification, attribution, and attribution-history logic to
+       1. **Alpaca issuer-news evidence collection and audit (`completed`).**
+          Implementation commit `4f271ca` moves the immutable collector and strict
+          audit from `swing` to `catalysts/issuer_events`; `sources/alpaca.py` remains
+          the provider transport. Persisted schema strings are unchanged in
+          `news_history_contracts.py`. Canonical symbols now belong to `core/symbols.py`
+          and provider-specific mappings to `sources/provider_symbols.py`, avoiding a
+          reverse catalyst dependency on the old mixed symbol module. Old modules,
+          imports, and tests are absent and guarded against reintroduction. Verification
+          passed 109 focused parity tests and the complete suite with 1,530 passed and
+          2 skipped, plus affected-file Ruff, strict mypy on 14 source files,
+          compileall, dependency/file-absence guards, and diff checks. The assigned
+          senior reviewer found no P0, P1, or P2 issue.
+       2. **Classification and attribution foundations (`current task`).** Move
+          reusable classification, attribution, and attribution-history logic to
           `catalysts/issuer_events`, including the rule-variant classifier helper.
        3. Move the swing-specific family cohort authority to `swing/datasets` and the
           swing-specific decision authority to `swing/features`.

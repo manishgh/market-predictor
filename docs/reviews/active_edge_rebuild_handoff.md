@@ -8,7 +8,7 @@ Repository: `C:\project\market-predictor`
 
 Branch: `er-intraday-refactoring`
 
-Last completed implementation commit: `5e1f65f` (`Separate GDELT transport and global event authorities`)
+Last completed implementation commit: `4f271ca` (`Move Alpaca issuer news evidence into catalysts`)
 
 ## Purpose
 
@@ -653,19 +653,29 @@ source files, compileall, removed-module/API guards, and diff checks. No Python 
 remained. The assigned senior reviewer accepted the final diff with no P0, P1, or P2
 finding.
 
-The assigned reviewer approved four bounded issuer-event checkpoints. First move
-Alpaca issuer-news evidence collection and its audit from `swing/news_history.py` and
-`swing/news_history_audit.py` to `catalysts/issuer_events`, with unchanged persisted
-schema strings in a semantic contracts module; `sources/alpaca.py` remains the sole
-provider transport. Next move reusable classification and attribution foundations to
-that catalyst package. Then move the swing-specific family authority to
-`swing/datasets` and decision authority to `swing/features`. Finally move precision
-sampling, review, and admission evidence to `governance`. The required direction is
-`sources -> catalysts -> swing -> governance`; commands remain outer adapters.
+Implementation commit `4f271ca` completes **Alpaca issuer-news evidence collection and
+audit migration**. The immutable collector and strict audit now belong to
+`catalysts/issuer_events/alpaca_news_collection.py` and `alpaca_news_audit.py`;
+`sources/alpaca.py` remains the sole provider transport. Persisted schema strings are
+unchanged and centralized in `news_history_contracts.py`. Canonical symbol handling
+belongs to `core/symbols.py`, while provider-specific symbol mappings belong to
+`sources/provider_symbols.py`, so catalyst code no longer depends on the former mixed
+top-level symbol module.
 
-Exact next checkpoint: complete **Alpaca issuer-news evidence collection migration**.
-Preserve request/work-unit behavior, source coverage, canonical normalization,
-availability, hashes, locks, resume semantics, memory limits, persisted schemas, and
-strict audit replay. Rename active modules and tests by behavior, remove old files and
-imports without aliases, run focused parity verification, and obtain the assigned
-reviewer's diff acceptance before checkpointing.
+Old news-history and symbol modules, imports, and tests are absent. Architecture guards
+reject every removed import form and require the removed files to remain absent.
+Collector/audit behavior, request and work-unit identity, source coverage, canonical
+normalization, availability, hashes, locking, resume behavior, memory limits, persisted
+schemas, and strict replay are unchanged. Verification passed 109 focused parity tests
+and the complete suite with 1,530 passed and 2 skipped. Affected-file Ruff, strict mypy
+on 14 source files, compileall, dependency/file-absence guards, diff checks, and the
+process/memory check passed. The assigned senior reviewer accepted the final diff with
+no P0, P1, or P2 finding.
+
+Exact next checkpoint: complete **issuer-event classification and attribution
+foundations migration**. Move reusable classification, relevance, attribution, and
+attribution-history behavior into `catalysts/issuer_events`, including the rule-variant
+classifier helper. Preserve every classification rule, timestamp boundary, issuer
+anchor, coverage state, hash, schema string, and replay result. Remove old modules and
+imports without aliases, add removed-module and dependency guards, run focused parity
+verification, and obtain the assigned reviewer's diff acceptance before checkpointing.
