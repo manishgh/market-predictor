@@ -1,14 +1,12 @@
+"""Provider-specific ticker formatting."""
 from __future__ import annotations
+
+from market_predictor.core.symbols import canonical_symbol
 
 PROVIDER_ALPACA = "alpaca"
 PROVIDER_YAHOO = "yahoo"
 PROVIDER_FINVIZ = "finviz"
 PROVIDER_SEC = "sec"
-
-
-def canonical_symbol(symbol: str) -> str:
-    cleaned = str(symbol or "").upper().strip()
-    return cleaned.replace(".", "-")
 
 
 def provider_symbol(symbol: str, provider: str) -> str:

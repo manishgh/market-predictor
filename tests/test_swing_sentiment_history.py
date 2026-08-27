@@ -19,16 +19,18 @@ from market_predictor.canonical.store import (
     load_canonical_artifact,
     write_canonical_artifact,
 )
-from market_predictor.sources.alpaca import AlpacaNewsPage
-from market_predictor.swing.news_history import collect_alpaca_news_history
-from market_predictor.swing.news_history_audit import (
+from market_predictor.catalysts.issuer_events.alpaca_news_audit import (
     audit_alpaca_news_history,
 )
+from market_predictor.catalysts.issuer_events.alpaca_news_collection import (
+    collect_alpaca_news_history,
+)
+from market_predictor.core.errors import DataReadinessError
+from market_predictor.sources.alpaca import AlpacaNewsPage
 from market_predictor.swing.sentiment_history import (
     SENTIMENT_AVAILABILITY_POLICY,
     score_alpaca_news_history,
 )
-from market_predictor.core.errors import DataReadinessError
 
 
 class _DeterministicScorer:

@@ -49,7 +49,7 @@ CATALYSTS_ALLOWED_DEPENDENCIES = (
     "market_predictor.sources",
     "market_predictor.universe",
 )
-REMOVED_AUTHORITY_MODULES = (
+REMOVED_PRODUCTION_MODULES = (
     "market_predictor.edge_rebuild.corpus_integrity",
     "market_predictor.edge_rebuild.global_event_authority",
     "market_predictor.edge_rebuild.global_event_collection",
@@ -60,8 +60,11 @@ REMOVED_AUTHORITY_MODULES = (
     "market_predictor.edge_rebuild.sp500_observed_memberships",
     "market_predictor.edge_rebuild.sp500_transitions",
     "market_predictor.edge_rebuild.universe_identity",
+    "market_predictor.swing.news_history",
+    "market_predictor.swing.news_history_audit",
+    "market_predictor.symbols",
 )
-REMOVED_AUTHORITY_FILES = (
+REMOVED_EDGE_REBUILD_FILES = (
     "corpus_integrity.py",
     "global_event_authority.py",
     "global_event_collection.py",
@@ -72,6 +75,11 @@ REMOVED_AUTHORITY_FILES = (
     "sp500_observed_memberships.py",
     "sp500_transitions.py",
     "universe_identity.py",
+)
+REMOVED_MIGRATED_FILES = (
+    "symbols.py",
+    "swing/news_history.py",
+    "swing/news_history_audit.py",
 )
 REMOVED_ACTIVE_SYMBOLS = (
     "GLOBAL_EVENT_QUERY_POLICY_V1",
@@ -141,21 +149,26 @@ def test_catalyst_package_uses_only_approved_dependency_layers() -> None:
     assert not violations, "Catalyst dependency violations:\n" + "\n".join(sorted(violations))
 
 
-def test_removed_authority_modules_have_no_imports_or_files() -> None:
+def test_removed_production_modules_have_no_imports_or_files() -> None:
     violations: list[str] = []
     for root in (PACKAGE_ROOT, TEST_ROOT, SCRIPT_ROOT):
         if not root.exists():
             continue
         for path in root.rglob("*.py"):
             for node, imported_name in _module_imports(path):
-                if _matches_any_dependency(imported_name, REMOVED_AUTHORITY_MODULES):
+                if _matches_any_dependency(imported_name, REMOVED_PRODUCTION_MODULES):
                     relative_path = path.relative_to(REPOSITORY_ROOT)
                     violations.append(f"{relative_path}:{node.lineno}: {imported_name}")
 
     old_package = PACKAGE_ROOT / "edge_rebuild"
-    remaining_files = [str(old_package / name) for name in REMOVED_AUTHORITY_FILES if (old_package / name).exists()]
-    assert not remaining_files, "Removed authority files still exist:\n" + "\n".join(remaining_files)
-    assert not violations, "Removed authority imports remain:\n" + "\n".join(sorted(violations))
+    remaining_files = [str(old_package / name) for name in REMOVED_EDGE_REBUILD_FILES if (old_package / name).exists()]
+    remaining_files.extend(
+        str(PACKAGE_ROOT / relative_path)
+        for relative_path in REMOVED_MIGRATED_FILES
+        if (PACKAGE_ROOT / relative_path).exists()
+    )
+    assert not remaining_files, "Removed production files still exist:\n" + "\n".join(remaining_files)
+    assert not violations, "Removed production imports remain:\n" + "\n".join(sorted(violations))
 
 
 @pytest.mark.parametrize(
@@ -170,7 +183,7 @@ def test_removed_authority_modules_have_no_imports_or_files() -> None:
 def test_removed_authority_import_guard_recognizes_every_import_form(statement: str) -> None:
     tree = ast.parse(statement)
     imported_names = tuple(name for node in ast.walk(tree) for name in _imported_names(node))
-    assert any(_matches_any_dependency(name, REMOVED_AUTHORITY_MODULES) for name in imported_names)
+    assert any(_matches_any_dependency(name, REMOVED_PRODUCTION_MODULES) for name in imported_names)
 
 
 @pytest.mark.parametrize(
@@ -189,7 +202,7 @@ def test_removed_authority_import_guard_recognizes_every_import_form(statement: 
 def test_removed_sec_filing_import_guard_recognizes_every_import_form(statement: str) -> None:
     tree = ast.parse(statement)
     imported_names = tuple(name for node in ast.walk(tree) for name in _imported_names(node))
-    assert any(_matches_any_dependency(name, REMOVED_AUTHORITY_MODULES) for name in imported_names)
+    assert any(_matches_any_dependency(name, REMOVED_PRODUCTION_MODULES) for name in imported_names)
 
 
 @pytest.mark.parametrize(
@@ -206,7 +219,26 @@ def test_removed_sec_filing_import_guard_recognizes_every_import_form(statement:
 def test_removed_global_event_import_guard_recognizes_every_import_form(statement: str) -> None:
     tree = ast.parse(statement)
     imported_names = tuple(name for node in ast.walk(tree) for name in _imported_names(node))
-    assert any(_matches_any_dependency(name, REMOVED_AUTHORITY_MODULES) for name in imported_names)
+    assert any(_matches_any_dependency(name, REMOVED_PRODUCTION_MODULES) for name in imported_names)
+
+
+@pytest.mark.parametrize(
+    "statement",
+    (
+        "import market_predictor.symbols",
+        "from market_predictor import symbols",
+        "from market_predictor.symbols import canonical_symbol",
+        "import market_predictor.swing.news_history",
+        "from market_predictor.swing import news_history",
+        "from market_predictor.swing.news_history import collect_alpaca_news_history",
+        "import market_predictor.swing.news_history_audit",
+        "from market_predictor.swing.news_history_audit import audit_alpaca_news_history",
+    ),
+)
+def test_removed_issuer_news_import_guard_recognizes_every_import_form(statement: str) -> None:
+    tree = ast.parse(statement)
+    imported_names = tuple(name for node in ast.walk(tree) for name in _imported_names(node))
+    assert any(_matches_any_dependency(name, REMOVED_PRODUCTION_MODULES) for name in imported_names)
 
 
 def test_removed_global_event_api_names_are_absent_from_python_code() -> None:

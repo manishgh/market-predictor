@@ -26,18 +26,20 @@ from market_predictor.canonical.store import (
     manifest_path_for,
     write_canonical_artifact,
 )
+from market_predictor.catalysts.issuer_events.news_history_contracts import (
+    NEWS_HISTORY_MANIFEST_SCHEMA,
+    NEWS_HISTORY_REQUEST_SCHEMA,
+    NEWS_PAGE_SCHEMA,
+)
+from market_predictor.core.errors import DataReadinessError
+from market_predictor.core.symbols import canonical_symbol
 from market_predictor.resources import (
     assert_memory_budget,
     memory_audit,
     release_process_memory,
 )
 from market_predictor.sources.alpaca import AlpacaNewsPage
-from market_predictor.symbols import canonical_symbol
-from market_predictor.core.errors import DataReadinessError
 
-NEWS_HISTORY_REQUEST_SCHEMA = "swing.alpaca_news_history_request.v1"
-NEWS_HISTORY_MANIFEST_SCHEMA = "swing.alpaca_news_history_manifest.v1"
-NEWS_PAGE_SCHEMA = "swing.alpaca_news_page.v1"
 NewsPageFetcher = Callable[
     [str, datetime, datetime, str | None],
     AlpacaNewsPage,

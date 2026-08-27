@@ -7,15 +7,13 @@ master is content-addressed so its identity can be bound to datasets and models.
 """
 from __future__ import annotations
 
-
-
 import hashlib
 import json
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import date
 
-from market_predictor.symbols import canonical_symbol
+from market_predictor.core.symbols import canonical_symbol
 
 ACTIVE = "active"
 DELISTED = "delisted"

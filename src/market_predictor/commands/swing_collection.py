@@ -6,6 +6,9 @@ from typing import Any
 
 import typer
 
+from market_predictor.catalysts.issuer_events.alpaca_news_collection import (
+    collect_alpaca_news_history,
+)
 from market_predictor.config import get_settings
 from market_predictor.edge_rebuild.swing_history_collection import (
     AlpacaSwingDailyPageSource,
@@ -14,8 +17,7 @@ from market_predictor.edge_rebuild.swing_history_collection import (
 )
 from market_predictor.heavy_jobs import serialized_heavy_job
 from market_predictor.sources.alpaca import AlpacaNewsPage, AlpacaSource
-from market_predictor.swing.news_history import collect_alpaca_news_history
-from market_predictor.symbols import PROVIDER_ALPACA, provider_symbol
+from market_predictor.sources.provider_symbols import PROVIDER_ALPACA, provider_symbol
 
 
 def register_swing_collection_commands(app: typer.Typer, console: Any) -> None:

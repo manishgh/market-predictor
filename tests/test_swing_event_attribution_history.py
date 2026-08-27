@@ -19,13 +19,15 @@ from market_predictor.canonical.store import (
     manifest_path_for,
     write_canonical_artifact,
 )
+from market_predictor.catalysts.issuer_events.news_history_contracts import (
+    NEWS_HISTORY_MANIFEST_SCHEMA,
+)
+from market_predictor.core.errors import DataReadinessError
 from market_predictor.swing.event_attribution_history import (
     ATTRIBUTION_MANIFEST_SCHEMA,
     attribute_alpaca_news_history,
     load_event_attribution_history,
 )
-from market_predictor.swing.news_history import NEWS_HISTORY_MANIFEST_SCHEMA
-from market_predictor.core.errors import DataReadinessError
 
 
 class SwingEventAttributionHistoryTests(unittest.TestCase):

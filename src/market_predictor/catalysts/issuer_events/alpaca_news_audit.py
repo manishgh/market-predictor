@@ -16,17 +16,17 @@ from market_predictor.canonical.store import (
     load_canonical_artifact,
     manifest_path_for,
 )
-from market_predictor.resources import (
-    assert_memory_budget,
-    memory_audit,
-    release_process_memory,
-)
-from market_predictor.swing.news_history import (
+from market_predictor.catalysts.issuer_events.news_history_contracts import (
     NEWS_HISTORY_MANIFEST_SCHEMA,
     NEWS_HISTORY_REQUEST_SCHEMA,
     NEWS_PAGE_SCHEMA,
 )
 from market_predictor.core.errors import DataReadinessError
+from market_predictor.resources import (
+    assert_memory_budget,
+    memory_audit,
+    release_process_memory,
+)
 
 
 def audit_alpaca_news_history(

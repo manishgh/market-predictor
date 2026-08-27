@@ -22,6 +22,10 @@ from market_predictor.canonical.store import (
     manifest_path_for,
     write_canonical_artifact,
 )
+from market_predictor.catalysts.issuer_events.news_history_contracts import (
+    NEWS_HISTORY_MANIFEST_SCHEMA,
+)
+from market_predictor.core.errors import DataReadinessError
 from market_predictor.resources import assert_memory_budget, release_process_memory
 from market_predictor.swing.event_attribution import (
     ATTRIBUTION_POLICY_SHA256,
@@ -29,8 +33,6 @@ from market_predictor.swing.event_attribution import (
     RELATION_COLUMNS,
     build_event_security_relations,
 )
-from market_predictor.swing.news_history import NEWS_HISTORY_MANIFEST_SCHEMA
-from market_predictor.core.errors import DataReadinessError
 
 ATTRIBUTION_REQUEST_SCHEMA = "swing.event_attribution_request.v1"
 ATTRIBUTION_MANIFEST_SCHEMA = "swing.event_attribution_manifest.v1"
