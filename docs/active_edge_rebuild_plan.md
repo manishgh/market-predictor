@@ -1202,7 +1202,7 @@ test, and task names.
    provenance still blocks broader cleanup. Ten focused tests, touched Ruff, strict
    mypy, default-service smoke, retained-bundle hash checks, and specialist evidence
    replay checks passed. The assigned senior reviewer accepted the bounded diff.
-3. **Market evidence and research package migration (`in progress`).**
+3. **Market evidence and research package migration (`completed`).**
    Consolidate base contracts under `core`, immutable lineage under `evidence`, source
    transports under `sources`, membership and identity under `universe`, issuer and
    global events under `catalysts`, reusable estimators and validation under

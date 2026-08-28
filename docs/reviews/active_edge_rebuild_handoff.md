@@ -779,7 +779,7 @@ removed-module scans, diff checks, temporary-directory cleanup, and process chec
 passed. The same assigned senior reviewer accepted the final diff with no P0, P1, or
 P2 finding.
 
-Exact next checkpoint: consolidate **swing and intraday packages** under descriptive
+The following phase consolidates **swing and intraday packages** under descriptive
 `contracts`, `datasets`, `features`, `labels`, `training`, `evaluation`, and `live`
 packages. Remove the intraday evaluation module/package collision and remaining
 chronology/checkpoint names without compatibility aliases. Preserve mathematical,
