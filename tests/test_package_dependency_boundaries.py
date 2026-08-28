@@ -121,6 +121,25 @@ def test_chronology_named_v3_package_is_absent() -> None:
     assert not (PACKAGE_ROOT / "v3").exists()
 
 
+def test_production_tree_has_no_module_package_name_collisions() -> None:
+    assert not _module_package_collisions(PACKAGE_ROOT)
+
+
+def test_module_package_collision_guard_detects_shadow_module(tmp_path: Path) -> None:
+    package = tmp_path / "example"
+    package.mkdir()
+    (package / "signals.py").write_text("VALUE = 1\n", encoding="utf-8")
+    (package / "signals").mkdir()
+    (package / "signals" / "__init__.py").write_text("VALUE = 2\n", encoding="utf-8")
+
+    assert _module_package_collisions(package) == ("signals.py <-> signals/",)
+
+
+def test_removed_intraday_shadow_modules_are_absent() -> None:
+    assert not (PACKAGE_ROOT / "intraday" / "contracts.py").exists()
+    assert not (PACKAGE_ROOT / "intraday" / "evaluation.py").exists()
+
+
 def test_universe_package_uses_only_approved_dependency_layers() -> None:
     violations: list[str] = []
     for path in (PACKAGE_ROOT / "universe").rglob("*.py"):
@@ -459,6 +478,19 @@ def _forbidden_imports(path: Path) -> list[str]:
             relative_path = path.relative_to(PACKAGE_ROOT.parent)
             violations.append(f"{relative_path}:{node.lineno}: {imported_name}")
     return violations
+
+
+def _module_package_collisions(root: Path) -> tuple[str, ...]:
+    collisions: list[str] = []
+    for module_path in root.rglob("*.py"):
+        if module_path.name == "__init__.py":
+            continue
+        package_path = module_path.with_suffix("")
+        if (package_path / "__init__.py").is_file():
+            module_relative = module_path.relative_to(root).as_posix()
+            package_relative = package_path.relative_to(root).as_posix()
+            collisions.append(f"{module_relative} <-> {package_relative}/")
+    return tuple(sorted(collisions))
 
 
 def _top_level_binding_lines(tree: ast.Module, name: str) -> list[int]:
