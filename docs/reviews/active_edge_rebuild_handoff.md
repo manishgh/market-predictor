@@ -802,7 +802,23 @@ skipped in 14 minutes 41 seconds. Touched Ruff, compileall, deleted-path scans, 
 checks, temporary-directory cleanup, and process checks passed. The assigned senior
 reviewer accepted the final diff with no P0, P1, or P2 finding.
 
-Exact next checkpoint: move the shared `edge_rebuild/strategy_contract.py` owner to
-`modeling/strategy_contract.py`. Update every consumer directly, guard the old module
-against reintroduction, and verify serialized artifact ownership before any horizon-
-specific module move. Rollback anchor: `a176fbb`.
+Implementation commit `c408d58` completes the **shared strategy contract migration**.
+The cross-horizon contract now has one production owner at
+`modeling/strategy_contract.py`; all consumers import it directly and no compatibility
+alias exists. The persisted schema string remains `edge_rebuild.strategy_contract.v2`,
+the active configuration SHA-256 remains
+`39213ad6bd5c1f09f30065f737ffecadf05bbb0ae81b81f2ffda7a343967e972`, and retained
+artifact scans found no serialized Python owner at the removed module path. Recursive
+architecture guards reject every old import form and reintroduction of the old file.
+
+Verification passed 452 affected tests with two skipped and the complete isolated suite
+with 1,605 passed and three skipped in 14 minutes 7 seconds. Ruff on the migrated
+authority and boundary tests, strict mypy, compileall, import smoke, removed-path scans,
+diff checks, and process-memory checks passed. The assigned senior reviewer accepted the
+final diff with no P0, P1, or P2 finding.
+
+Exact next checkpoint: inventory cross-horizon feature, label, return, ranking, and
+evaluation math still owned by `edge_rebuild`. Move only genuinely shared mathematical
+authorities to `modeling`, preserve exact numerical behavior and persisted identities,
+update every consumer directly, and prohibit compatibility aliases. Rollback anchor:
+`c408d58`.

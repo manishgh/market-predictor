@@ -1248,7 +1248,7 @@ test, and task names.
      tests pass. Final checkpoint verification passed 113 affected tests, Ruff, strict
      mypy on six source files, compileall, import smoke, and diff checks. The assigned
      senior reviewer accepted the diff with no P0, P1, or P2 finding.
-   - **Issuer and global catalyst authority migration (in progress).** Move the
+   - **Issuer and global catalyst authority migration (`completed`).** Move the
      remaining source-independent issuer-event, SEC-filing, global-event, and
      market-context authorities out of `edge_rebuild` into `catalysts`, `sources`, and
      `evidence` without changing source coverage, availability, or causal semantics.
@@ -1275,7 +1275,7 @@ test, and task names.
        Ninety-eight focused tests passed with Ruff, strict mypy on six source files,
        compileall, architecture guards, and diff checks. The assigned senior reviewer
        accepted the final diff with no P0, P1, or P2 finding.
-     - **Issuer event family and precision authorities (`active sequence`).** Move causal
+     - **Issuer event family and precision authorities (`completed sequence`).** Move causal
        issuer evidence in four independently reviewed checkpoints without changing
        any classifier, coverage, audit, or artifact contract:
        1. **Alpaca issuer-news evidence collection and audit (`completed`).**
@@ -1364,9 +1364,22 @@ test, and task names.
      Ruff, compileall, direct-path scans, diff checks, cleanup, and process checks
      passed. The assigned senior reviewer accepted the diff with no P0, P1, or P2
      finding.
-   - **Shared strategy contract migration (`next`).** Move the cross-horizon strategy
-     contract from `edge_rebuild` to `modeling` before moving either horizon, preserving
-     persisted identities and updating every consumer directly without aliases.
+   - **Shared strategy contract migration (`completed`).** Implementation commit
+     `c408d58` moves the cross-horizon contract from `edge_rebuild` to `modeling` and
+     updates every consumer directly without a compatibility alias. The schema string
+     remains `edge_rebuild.strategy_contract.v2`, the active configuration SHA-256
+     remains `39213ad6bd5c1f09f30065f737ffecadf05bbb0ae81b81f2ffda7a343967e972`,
+     and retained artifact scans found no serialized Python owner at the removed path.
+     Architecture guards reject every old import form and reintroduction of the removed
+     file. Verification passed 452 affected tests with two skipped and the complete
+     suite with 1,605 passed and three skipped. Ruff on the migrated authority and its
+     boundary tests, strict mypy, compileall, import smoke, removed-path scans, diff
+     checks, and process-memory checks passed. The assigned senior reviewer accepted
+     the final diff with no P0, P1, or P2 finding.
+   - **Shared mathematical primitives migration (`next`).** Inventory cross-horizon
+     feature, label, return, ranking, and evaluation math still owned by `edge_rebuild`;
+     move only genuinely shared authorities into `modeling`, preserve exact numerical
+     behavior and persisted identities, update consumers directly, and prohibit aliases.
 5. **Governance, serving, and command package migration (`pending`).**
    Move readiness, promotion, drift, and outcomes to `governance`; bundle loading,
    prediction services, and API behavior to `serving`; and retain only thin CLI
