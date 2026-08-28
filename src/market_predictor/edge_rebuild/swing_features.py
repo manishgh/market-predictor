@@ -274,11 +274,11 @@ def build_swing_feature_rows(
         effective,
         inplace=True,
     )
-    from market_predictor.edge_rebuild.pipeline import FeaturePipeline
     from market_predictor.edge_rebuild.swing_pipeline_steps import (
         SetupComponentsStep,
         TechnicalRelationshipsStep,
     )
+    from market_predictor.modeling.feature_pipeline import FeaturePipeline
 
     # Indicators are computed inside `build_swing_feature_history`, which sees the
     # full warm-up history. Nothing here may recompute them: an AdvancedIndicators
@@ -325,12 +325,12 @@ def finalize_swing_feature_panel(
 ) -> pd.DataFrame:
     """Add same-session transforms and the sector-relative managed-return label."""
 
-    from market_predictor.edge_rebuild.pipeline import FeaturePipeline
     from market_predictor.edge_rebuild.swing_pipeline_steps import (
         CrossSectionalRankStep,
         CrossSectionalValidationStep,
         SectorRelativeScalingStep,
     )
+    from market_predictor.modeling.feature_pipeline import FeaturePipeline
 
     pipeline = FeaturePipeline([
         CrossSectionalValidationStep(expected_security_ids=expected_security_ids),
