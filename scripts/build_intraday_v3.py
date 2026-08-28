@@ -3,9 +3,9 @@ import warnings
 from pathlib import Path
 
 import pandas as pd
-
 from market_predictor.edge_rebuild.intraday_pipeline_steps import IntradayAdvancedIndicatorsStep
-from market_predictor.edge_rebuild.strategy_contract import load_strategy_contract
+
+from market_predictor.modeling.strategy_contract import load_strategy_contract
 
 V2_PANEL_DIR = Path("data/features/edge_rebuild_intraday_dataset_causal_20260802_v2/partitions")
 V3_PANEL_DIR = Path("data/features/edge_rebuild_intraday_dataset_causal_20260804_v3/partitions")

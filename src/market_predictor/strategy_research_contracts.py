@@ -8,7 +8,7 @@ from typing import Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from market_predictor.edge_rebuild.strategy_contract import load_strategy_contract
+from market_predictor.core.errors import ArtifactIntegrityError, DataReadinessError
 from market_predictor.edge_rebuild.swing_training import load_swing_training_config
 from market_predictor.execution_policy import (
     EXECUTION_POLICY_ID,
@@ -19,13 +19,13 @@ from market_predictor.intraday.contracts import (
     IntradayPromotionConfig,
     IntradayTrainingConfig,
 )
+from market_predictor.modeling.strategy_contract import load_strategy_contract
 from market_predictor.strategy_governance import (
     CATALOG_ID_PATTERN,
     StrategyExecutionLedger,
     validate_strategy_execution_ledger,
 )
 from market_predictor.swing.contracts import SwingDatasetConfig
-from market_predictor.core.errors import ArtifactIntegrityError, DataReadinessError
 
 SHA256_PATTERN = r"^[0-9a-f]{64}$"
 REQUIRED_CONTRACT_BINDINGS = frozenset(

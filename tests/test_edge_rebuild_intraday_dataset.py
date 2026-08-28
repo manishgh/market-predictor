@@ -10,6 +10,7 @@ import pytest
 
 import market_predictor.intraday.datasets.dataset_v2 as dataset_module
 from market_predictor.canonical.store import file_sha256
+from market_predictor.core.errors import DataReadinessError
 from market_predictor.intraday.datasets.dataset_v2 import (
     INTRADAY_DATASET_SCHEMA,
     _Artifact,
@@ -17,17 +18,16 @@ from market_predictor.intraday.datasets.dataset_v2 import (
     load_complete_intraday_dataset,
     publish_intraday_dataset,
 )
-from market_predictor.intraday.features.labels import (
-    build_exact_causal_intraday_labels,
-)
 from market_predictor.intraday.datasets.selection import (
     INTRADAY_SELECTION_SCHEMA,
 )
-from market_predictor.edge_rebuild.strategy_contract import (
+from market_predictor.intraday.features.labels import (
+    build_exact_causal_intraday_labels,
+)
+from market_predictor.modeling.strategy_contract import (
     StrategyContract,
     load_strategy_contract,
 )
-from market_predictor.core.errors import DataReadinessError
 
 ROOT = Path(__file__).resolve().parents[1]
 CONTRACT_PATH = ROOT / "configs" / "edge_rebuild_strategy_contract.toml"

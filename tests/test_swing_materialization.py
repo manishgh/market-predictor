@@ -8,7 +8,7 @@ import pandas as pd
 import pytest
 
 from market_predictor.canonical.store import file_sha256
-from market_predictor.edge_rebuild.strategy_contract import load_strategy_contract
+from market_predictor.core.errors import DataReadinessError
 from market_predictor.edge_rebuild.swing_daily_combination import (
     CombinedDailyStore,
     VerifiedCombinedInputs,
@@ -22,8 +22,8 @@ from market_predictor.edge_rebuild.swing_materialization import (
     load_complete_swing_feature_panel,
     materialize_swing_feature_panel,
 )
+from market_predictor.modeling.strategy_contract import load_strategy_contract
 from market_predictor.swing.contracts import MINIMUM_SWING_DECISION_DATE
-from market_predictor.core.errors import DataReadinessError
 
 
 def _memberships() -> pd.DataFrame:

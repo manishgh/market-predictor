@@ -1,8 +1,6 @@
 """Scoped intraday contract identity and explicit parent-hash migration evidence."""
 from __future__ import annotations
 
-
-
 import hashlib
 import json
 import tomllib
@@ -12,11 +10,11 @@ from pathlib import Path
 from typing import Any, Final
 
 from market_predictor.canonical.store import file_sha256
-from market_predictor.edge_rebuild.strategy_contract import (
+from market_predictor.core.errors import DataReadinessError
+from market_predictor.modeling.strategy_contract import (
     StrategyContract,
     load_strategy_contract,
 )
-from market_predictor.core.errors import DataReadinessError
 
 INTRADAY_DATA_CONTRACT_SCHEMA: Final = "edge_rebuild.intraday_data_contract.v1"
 INTRADAY_CONTRACT_LINEAGE_SCHEMA: Final = (

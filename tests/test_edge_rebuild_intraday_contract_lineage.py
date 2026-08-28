@@ -6,12 +6,12 @@ from pathlib import Path
 import pytest
 
 from market_predictor.canonical.store import file_sha256
+from market_predictor.core.errors import DataReadinessError
 from market_predictor.intraday.contracts.lineage import (
     intraday_data_contract_sha256,
     require_intraday_contract_lineage,
 )
-from market_predictor.edge_rebuild.strategy_contract import load_strategy_contract
-from market_predictor.core.errors import DataReadinessError
+from market_predictor.modeling.strategy_contract import load_strategy_contract
 
 CONTRACT_PATH = Path("configs/edge_rebuild_strategy_contract.toml")
 LINEAGE_PATH = Path("configs/edge_rebuild_intraday_contract_lineage.toml")

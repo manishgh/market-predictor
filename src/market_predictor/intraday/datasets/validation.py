@@ -1,8 +1,6 @@
 """Atomic, lineage-bound publisher for the causal intraday training dataset."""
 from __future__ import annotations
 
-
-
 from collections.abc import Mapping, Sequence
 from datetime import date
 from pathlib import Path
@@ -24,25 +22,6 @@ from market_predictor.edge_rebuild.history_contracts import (
     SELECTED_SESSION_BENCHMARK_PLAN_SCHEMA,
     SELECTED_SESSION_ONE_MINUTE_PLAN_SCHEMA,
 )
-from market_predictor.intraday.contracts.lineage import (
-    DEFAULT_INTRADAY_CONTRACT_LINEAGE_PATH,
-    require_intraday_contract_lineage,
-)
-from market_predictor.intraday.features.features import (
-    FEATURE_SCHEMA_VERSION,
-)
-from market_predictor.intraday.datasets.history import (
-    load_complete_intraday_history_plan,
-    load_plan_json,
-)
-from market_predictor.intraday.features.labels import (
-    LABEL_SCHEMA_VERSION,
-)
-from market_predictor.intraday.datasets.selection import (
-    INTRADAY_SELECTION_SCHEMA,
-    _load_sp500_membership_eligibility,
-    load_complete_intraday_selection,
-)
 from market_predictor.edge_rebuild.one_minute_coverage import (
     load_complete_one_minute_coverage,
     verify_canonical_five_minute_store,
@@ -50,14 +29,18 @@ from market_predictor.edge_rebuild.one_minute_coverage import (
 from market_predictor.edge_rebuild.selected_session_history import (
     verify_selected_stock_sessions,
 )
-from market_predictor.edge_rebuild.strategy_contract import (
-    StrategyContract,
-    load_strategy_contract,
-)
 from market_predictor.intraday.contracts.dataset_schemas import (
     _REQUIRED_BENCHMARKS,
     MAXIMUM_SECURITY_EXCLUSION_FRACTION,
     _VerifiedInputs,
+)
+from market_predictor.intraday.contracts.lineage import (
+    DEFAULT_INTRADAY_CONTRACT_LINEAGE_PATH,
+    require_intraday_contract_lineage,
+)
+from market_predictor.intraday.datasets.history import (
+    load_complete_intraday_history_plan,
+    load_plan_json,
 )
 from market_predictor.intraday.datasets.io import (
     _PARQUET_FILE,
@@ -66,11 +49,26 @@ from market_predictor.intraday.datasets.io import (
     _resolve_inside,
     _same_path,
 )
+from market_predictor.intraday.datasets.selection import (
+    INTRADAY_SELECTION_SCHEMA,
+    _load_sp500_membership_eligibility,
+    load_complete_intraday_selection,
+)
 from market_predictor.intraday.datasets.transformations import (
     _collection_artifacts,
     _load_coverage_tables,
     _membership_sector_exclusions,
     _normalize_selection,
+)
+from market_predictor.intraday.features.features import (
+    FEATURE_SCHEMA_VERSION,
+)
+from market_predictor.intraday.features.labels import (
+    LABEL_SCHEMA_VERSION,
+)
+from market_predictor.modeling.strategy_contract import (
+    StrategyContract,
+    load_strategy_contract,
 )
 
 

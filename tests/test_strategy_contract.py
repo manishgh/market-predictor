@@ -6,11 +6,12 @@ from typing import Any
 
 import pytest
 
-from market_predictor.edge_rebuild.strategy_contract import (
+from market_predictor.core.errors import DataReadinessError
+from market_predictor.modeling.strategy_contract import (
+    STRATEGY_CONTRACT_SCHEMA,
     StrategyContract,
     load_strategy_contract,
 )
-from market_predictor.core.errors import DataReadinessError
 
 CONTRACT_PATH = Path("configs/edge_rebuild_strategy_contract.toml")
 
@@ -22,9 +23,11 @@ def _raw() -> dict[str, Any]:
 def test_frozen_contract_loads_and_is_hashable() -> None:
     contract = load_strategy_contract(CONTRACT_PATH)
 
+    assert STRATEGY_CONTRACT_SCHEMA == "edge_rebuild.strategy_contract.v2"
+    assert StrategyContract.__module__ == "market_predictor.modeling.strategy_contract"
     assert contract.swing.strategy_id == "swing"
     assert contract.intraday.strategy_id == "intraday"
-    assert len(contract.sha256()) == 64
+    assert contract.sha256() == "39213ad6bd5c1f09f30065f737ffecadf05bbb0ae81b81f2ffda7a343967e972"
     # The same content must always hash the same, or the contract cannot be bound
     # to the evidence produced under it.
     assert contract.sha256() == load_strategy_contract(CONTRACT_PATH).sha256()

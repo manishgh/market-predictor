@@ -8,8 +8,6 @@ enter either historical denominator.
 """
 from __future__ import annotations
 
-
-
 from collections import deque
 from collections.abc import Collection, Iterable, Mapping
 from dataclasses import dataclass
@@ -28,12 +26,13 @@ from market_predictor.canonical.store import (
     load_canonical_artifact,
     manifest_path_for,
 )
+from market_predictor.core.errors import DataReadinessError
 from market_predictor.intraday.datasets.history import (
     json_sha256,
     load_plan_json,
     write_plan_json,
 )
-from market_predictor.edge_rebuild.strategy_contract import (
+from market_predictor.modeling.strategy_contract import (
     IntradayUniverseContract,
     StrategyContract,
 )
@@ -42,7 +41,6 @@ from market_predictor.resources import (
     memory_audit,
     release_process_memory,
 )
-from market_predictor.core.errors import DataReadinessError
 
 INTRADAY_SELECTION_SCHEMA = "edge_rebuild.intraday_universe_selection.v3"
 INTRADAY_SELECTION_AUTHORITY_SCHEMA = "edge_rebuild.intraday_universe_selection_authority.v3"

@@ -1,8 +1,6 @@
 """Atomic, lineage-bound publisher for the causal intraday training dataset."""
 from __future__ import annotations
 
-
-
 import json
 import re
 import shutil
@@ -24,36 +22,13 @@ from market_predictor.canonical.store import (
     file_sha256,
     load_canonical_artifact,
 )
+from market_predictor.core.errors import DataReadinessError
 from market_predictor.edge_rebuild.history_collection import (
     load_complete_intraday_history_collection,
 )
 from market_predictor.edge_rebuild.history_contracts import (
     SELECTED_SESSION_BENCHMARK_PLAN_SCHEMA,
     SELECTED_SESSION_ONE_MINUTE_PLAN_SCHEMA,
-)
-from market_predictor.intraday.contracts.lineage import (
-    DEFAULT_INTRADAY_CONTRACT_LINEAGE_PATH,
-    require_intraday_contract_lineage,
-)
-from market_predictor.intraday.features.features import (
-    FEATURE_SCHEMA_VERSION,
-    build_causal_intraday_features,
-)
-from market_predictor.intraday.datasets.history import (
-    json_sha256,
-    load_complete_intraday_history_plan,
-    load_plan_json,
-)
-from market_predictor.intraday.features.labels import (
-    LABEL_SCHEMA_VERSION,
-    _add_contemporaneous_rank,
-    _empty_label_columns,
-    build_exact_causal_intraday_labels,
-)
-from market_predictor.intraday.datasets.selection import (
-    INTRADAY_SELECTION_SCHEMA,
-    _load_sp500_membership_eligibility,
-    load_complete_intraday_selection,
 )
 from market_predictor.edge_rebuild.one_minute_coverage import (
     load_complete_one_minute_coverage,
@@ -62,18 +37,41 @@ from market_predictor.edge_rebuild.one_minute_coverage import (
 from market_predictor.edge_rebuild.selected_session_history import (
     verify_selected_stock_sessions,
 )
-from market_predictor.edge_rebuild.strategy_contract import (
+from market_predictor.edge_rebuild.volume_bars import build_causal_volume_bars
+from market_predictor.intraday.contracts.lineage import (
+    DEFAULT_INTRADAY_CONTRACT_LINEAGE_PATH,
+    require_intraday_contract_lineage,
+)
+from market_predictor.intraday.datasets.history import (
+    json_sha256,
+    load_complete_intraday_history_plan,
+    load_plan_json,
+)
+from market_predictor.intraday.datasets.selection import (
+    INTRADAY_SELECTION_SCHEMA,
+    _load_sp500_membership_eligibility,
+    load_complete_intraday_selection,
+)
+from market_predictor.intraday.features.features import (
+    FEATURE_SCHEMA_VERSION,
+    build_causal_intraday_features,
+)
+from market_predictor.intraday.features.labels import (
+    LABEL_SCHEMA_VERSION,
+    _add_contemporaneous_rank,
+    _empty_label_columns,
+    build_exact_causal_intraday_labels,
+)
+from market_predictor.modeling.strategy_contract import (
     StrategyContract,
     load_strategy_contract,
 )
-from market_predictor.edge_rebuild.volume_bars import build_causal_volume_bars
 from market_predictor.resources import (
     assert_memory_budget,
     assert_peak_memory_budget,
     memory_audit,
     release_process_memory,
 )
-from market_predictor.core.errors import DataReadinessError
 
 INTRADAY_DATASET_SCHEMA: Final = "edge_rebuild.intraday_dataset.v2"
 INTRADAY_DATASET_AUTHORITY_SCHEMA: Final = "edge_rebuild.intraday_dataset_authority.v2"

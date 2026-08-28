@@ -8,16 +8,16 @@ import pandas as pd
 import pandas.testing as pdt
 import pytest
 
+from market_predictor.core.errors import DataReadinessError
 from market_predictor.intraday.features.features import (
     CAUSAL_INTRADAY_MODEL_FEATURE_COLUMNS,
     FEATURE_SCHEMA_VERSION,
     build_causal_intraday_features,
 )
-from market_predictor.edge_rebuild.strategy_contract import (
+from market_predictor.modeling.strategy_contract import (
     StrategyContract,
     load_strategy_contract,
 )
-from market_predictor.core.errors import DataReadinessError
 
 ROOT = Path(__file__).resolve().parents[1]
 

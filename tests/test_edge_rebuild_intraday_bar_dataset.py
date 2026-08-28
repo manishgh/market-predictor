@@ -8,15 +8,15 @@ from typing import Any
 import pandas as pd
 import pytest
 
-from market_predictor.canonical.store import file_sha256
 import market_predictor.intraday.datasets.bar_dataset as module
+from market_predictor.canonical.store import file_sha256
+from market_predictor.core.errors import DataReadinessError
 from market_predictor.intraday.datasets.bar_dataset import (
     INTRADAY_BAR_DATASET_AUTHORITY_SCHEMA,
     load_complete_intraday_bar_dataset,
     publish_intraday_bar_dataset,
 )
-from market_predictor.edge_rebuild.strategy_contract import load_strategy_contract
-from market_predictor.core.errors import DataReadinessError
+from market_predictor.modeling.strategy_contract import load_strategy_contract
 
 CONTRACT_PATH = Path("configs/edge_rebuild_strategy_contract.toml")
 

@@ -21,16 +21,14 @@ rolling path can cross the overnight gap.
 """
 from __future__ import annotations
 
-
-
 from dataclasses import dataclass
 from typing import Final
 
 import numpy as np
 import pandas as pd
 
-from market_predictor.edge_rebuild.strategy_contract import StrategyContract
 from market_predictor.core.errors import DataReadinessError
+from market_predictor.modeling.strategy_contract import StrategyContract
 
 _BASE_FEATURE_NAMES: Final = (
     "rsi_bearish_divergence_strength",

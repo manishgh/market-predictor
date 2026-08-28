@@ -1,8 +1,6 @@
 """Atomic, lineage-bound publisher for the causal intraday training dataset."""
 from __future__ import annotations
 
-
-
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -11,7 +9,7 @@ from typing import Any, Final
 import pandas as pd
 import pyarrow as pa
 
-from market_predictor.edge_rebuild.strategy_contract import (
+from market_predictor.modeling.strategy_contract import (
     StrategyContract,
 )
 

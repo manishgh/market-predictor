@@ -1,8 +1,6 @@
 """Production-grade candidate training for the ten-session edge-rebuild swing strategy."""
 from __future__ import annotations
 
-
-
 from collections.abc import Mapping
 from datetime import date
 from typing import Any, Final
@@ -11,11 +9,11 @@ import numpy as np
 import pandas as pd
 from sklearn.metrics import average_precision_score, brier_score_loss, roc_auc_score
 
+from market_predictor.core.errors import DataReadinessError
 from market_predictor.edge_rebuild.outcome_diagnostics import (
     binary_outcome_diagnostic,
     label_permutation_control,
 )
-from market_predictor.edge_rebuild.strategy_contract import StrategyContract
 from market_predictor.edge_rebuild.swing_features import (
     MANAGED_EXCESS_RETURN_COLUMNS,
     MANAGED_PATH_NET_RETURN_COLUMNS,
@@ -53,10 +51,10 @@ from market_predictor.edge_rebuild.training.walk_forward import (
     WalkForwardFold,
     _assert_label_purge,
 )
+from market_predictor.modeling.strategy_contract import StrategyContract
 from market_predictor.resources import (
     release_process_memory,
 )
-from market_predictor.core.errors import DataReadinessError
 
 TRAINING_SCHEMA: Final = "edge_rebuild.swing_training.v5"
 MODEL_SCHEMA: Final = "edge_rebuild.swing_candidate.v5"

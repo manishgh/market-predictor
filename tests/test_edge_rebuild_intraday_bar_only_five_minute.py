@@ -9,18 +9,18 @@ import pandas as pd
 import pytest
 
 from market_predictor.canonical.store import file_sha256
-from market_predictor.intraday.features.bar_only_five_minute import (
-    PROJECTION_AUTHORITY_SCHEMA,
-    load_complete_selected_session_five_minute_projection,
-    publish_selected_session_five_minute_projection,
-)
+from market_predictor.core.errors import DataReadinessError
 from market_predictor.intraday.datasets.selection import (
     INTRADAY_SELECTION_SCHEMA,
     IntradaySelectionResult,
     publish_intraday_selection,
 )
-from market_predictor.edge_rebuild.strategy_contract import load_strategy_contract
-from market_predictor.core.errors import DataReadinessError
+from market_predictor.intraday.features.bar_only_five_minute import (
+    PROJECTION_AUTHORITY_SCHEMA,
+    load_complete_selected_session_five_minute_projection,
+    publish_selected_session_five_minute_projection,
+)
+from market_predictor.modeling.strategy_contract import load_strategy_contract
 
 CONTRACT = Path("configs/edge_rebuild_strategy_contract.toml")
 SESSIONS = ("2024-01-03", "2024-02-01", "2024-02-02")

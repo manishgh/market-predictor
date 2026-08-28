@@ -1,52 +1,6 @@
 """Production-grade candidate training for the ten-session edge-rebuild swing strategy."""
 from __future__ import annotations
 
-
-
-from market_predictor.edge_rebuild.training.swing_types import (
-    SwingTrainingConfig,
-    CandidateSpec,
-    FittedCandidate,
-    SwingTrainingResult,
-    SwingPanelBinding,
-    SwingProfileData,
-    _guard,
-    _read_json,
-    _write_json,
-    _resolve_inside,
-    _strict_bool,
-    _is_unapproved_source_feature,
-    _sequence_sha256,
-    _json_sha256,
-    _iso,
-)
-from market_predictor.edge_rebuild.training.data_io import (
-    load_complete_swing_feature_panel,
-    load_swing_panel_binding,
-    load_swing_profile,
-    _partition_records_for_sessions,
-    _validate_profile_session_coverage,
-    _validate_profile_frame,
-    _projected_profile_memory_bytes,
-    _security_holdout_mask,
-)
-from market_predictor.edge_rebuild.training.lgbm_models import (
-    _fit_candidate,
-    _predict_probability,
-    _raw_probability,
-    _linex_objective,
-)
-from market_predictor.edge_rebuild.training.swing_evaluation import (
-    _evaluate_validation_candidate,
-    _evaluation_metrics,
-    _validation_scopes_pass_economic_gates,
-    _probability_distribution,
-    _threshold_selection_key,
-    _scope_economic_key,
-    _selection_key,
-    _evaluation_columns,
-)
-
 import shutil
 import tempfile
 import tomllib
@@ -60,7 +14,7 @@ import joblib
 import pandas as pd
 
 from market_predictor.canonical.store import file_sha256
-from market_predictor.edge_rebuild.strategy_contract import StrategyContract
+from market_predictor.core.errors import DataReadinessError
 from market_predictor.edge_rebuild.swing_artifact_contracts import (
     SWING_MATERIALIZATION_MANIFEST_SCHEMA,
 )
@@ -75,7 +29,12 @@ from market_predictor.edge_rebuild.temporal_manifest import (
     load_temporal_manifest_config,
 )
 from market_predictor.edge_rebuild.training.data_io import (
+    _partition_records_for_sessions,
+    _projected_profile_memory_bytes,
     _security_holdout_mask,
+    _validate_profile_frame,
+    _validate_profile_session_coverage,
+    load_complete_swing_feature_panel,
     load_swing_panel_binding,
     load_swing_profile,
 )
@@ -84,24 +43,35 @@ from market_predictor.edge_rebuild.training.evaluation import (
 )
 from market_predictor.edge_rebuild.training.lgbm_models import (
     _fit_candidate,
+    _linex_objective,
     _predict_probability,
+    _raw_probability,
 )
 from market_predictor.edge_rebuild.training.swing_evaluation import (
     _evaluate_validation_candidate,
     _evaluation_columns,
     _evaluation_metrics,
+    _probability_distribution,
+    _scope_economic_key,
     _selection_key,
+    _threshold_selection_key,
+    _validation_scopes_pass_economic_gates,
 )
 from market_predictor.edge_rebuild.training.swing_types import (
     CandidateSpec,
+    FittedCandidate,
     SwingPanelBinding,
+    SwingProfileData,
     SwingTrainingConfig,
     SwingTrainingResult,
     _guard,
+    _is_unapproved_source_feature,
+    _iso,
     _json_sha256,
     _read_json,
     _resolve_inside,
     _sequence_sha256,
+    _strict_bool,
     _write_json,
 )
 from market_predictor.edge_rebuild.training.utils import (
@@ -113,11 +83,11 @@ from market_predictor.edge_rebuild.training.walk_forward import (
     _governed_model_sessions,
     _split_record,
 )
+from market_predictor.modeling.strategy_contract import StrategyContract
 from market_predictor.resources import (
     memory_audit,
     release_process_memory,
 )
-from market_predictor.core.errors import DataReadinessError
 
 TRAINING_SCHEMA: Final = "edge_rebuild.swing_training.v5"
 MODEL_SCHEMA: Final = "edge_rebuild.swing_candidate.v5"

@@ -9,6 +9,7 @@ from urllib.parse import urlencode
 import pandas as pd
 import pytest
 
+from market_predictor.core.errors import DataReadinessError
 from market_predictor.edge_rebuild.history_collection import (
     collect_intraday_history,
     load_complete_intraday_history_collection,
@@ -23,6 +24,10 @@ from market_predictor.edge_rebuild.history_materialization import (
     selected_ticker_sessions,
     session_bounds_for,
 )
+from market_predictor.edge_rebuild.selected_session_history import (
+    build_selected_session_history_plan,
+    verify_selected_stock_sessions,
+)
 from market_predictor.intraday.datasets.history import (
     load_complete_intraday_history_plan,
 )
@@ -31,12 +36,7 @@ from market_predictor.intraday.datasets.selection import (
     IntradaySelectionResult,
     publish_intraday_selection,
 )
-from market_predictor.edge_rebuild.selected_session_history import (
-    build_selected_session_history_plan,
-    verify_selected_stock_sessions,
-)
-from market_predictor.edge_rebuild.strategy_contract import load_strategy_contract
-from market_predictor.core.errors import DataReadinessError
+from market_predictor.modeling.strategy_contract import load_strategy_contract
 
 POLICY = Path("configs/edge_rebuild_selected_session_history.toml")
 ONE_MINUTE_POLICY = Path(

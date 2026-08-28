@@ -1,8 +1,6 @@
 """Causal, session-scoped volume bars for the active intraday design."""
 from __future__ import annotations
 
-
-
 from dataclasses import dataclass
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -10,9 +8,9 @@ from zoneinfo import ZoneInfo
 import numpy as np
 import pandas as pd
 
-from market_predictor.edge_rebuild.strategy_contract import StrategyContract
-from market_predictor.resources import assert_memory_budget, memory_audit
 from market_predictor.core.errors import DataReadinessError
+from market_predictor.modeling.strategy_contract import StrategyContract
+from market_predictor.resources import assert_memory_budget, memory_audit
 
 EXCHANGE_TIMEZONE = ZoneInfo("America/New_York")
 MEMORY_HARD_BUDGET_GIB = 4.0

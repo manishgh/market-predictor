@@ -9,16 +9,16 @@ from typing import TYPE_CHECKING, Any, cast
 import numpy as np
 import pandas as pd
 
-from market_predictor.edge_rebuild.strategy_contract import StrategyContract
 from market_predictor.edge_rebuild.swing_features import (
     MANAGED_PATH_NET_RETURN_COLUMNS,
     MANAGED_PATH_SESSION_ORDINAL_COLUMNS,
 )
+from market_predictor.modeling.strategy_contract import StrategyContract
 
 if TYPE_CHECKING:
     from market_predictor.edge_rebuild.training.swing_types import SwingTrainingConfig
-from market_predictor.edge_rebuild.training.utils import _finite, _mapping
 from market_predictor.core.errors import DataReadinessError
+from market_predictor.edge_rebuild.training.utils import _finite, _mapping
 
 
 def _session_economic_blocks(

@@ -17,7 +17,7 @@ from market_predictor.edge_rebuild.history_contracts import (
 from market_predictor.intraday.datasets.history import (
     load_complete_intraday_history_plan,
 )
-from market_predictor.edge_rebuild.strategy_contract import load_strategy_contract
+from market_predictor.modeling.strategy_contract import load_strategy_contract
 
 POLICY = Path("configs/edge_rebuild_selected_session_benchmarks.toml")
 CONTRACT = Path("configs/edge_rebuild_strategy_contract.toml")

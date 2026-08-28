@@ -19,10 +19,6 @@ from market_predictor.edge_rebuild.serving import (
     canonical_payload_sha256,
     validate_batch_live_feature_parity,
 )
-from market_predictor.edge_rebuild.strategy_contract import (
-    StrategyContract,
-    load_strategy_contract,
-)
 from market_predictor.edge_rebuild.swing_features import (
     SWING_CATALYST_FEATURE_PROFILE,
     SWING_FEATURE_PROFILE,
@@ -39,6 +35,10 @@ from market_predictor.edge_rebuild.swing_live import (
     FileSwingLiveInputProvider,
     SwingLiveFeatureFrames,
     build_live_swing_features,
+)
+from market_predictor.modeling.strategy_contract import (
+    StrategyContract,
+    load_strategy_contract,
 )
 from market_predictor.resources import process_memory_snapshot
 from market_predictor.swing.features.catalyst_decision_authority import (

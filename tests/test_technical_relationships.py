@@ -6,14 +6,14 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from market_predictor.edge_rebuild.strategy_contract import load_strategy_contract
+from market_predictor.core.errors import DataReadinessError
 from market_predictor.edge_rebuild.technical_relationships import (
     TechnicalRelationshipSpec,
     add_technical_relationship_features,
     relationship_spec_from_contract,
     technical_relationship_feature_names,
 )
-from market_predictor.core.errors import DataReadinessError
+from market_predictor.modeling.strategy_contract import load_strategy_contract
 
 
 def _spec(

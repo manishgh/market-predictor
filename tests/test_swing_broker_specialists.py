@@ -6,9 +6,9 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from market_predictor.edge_rebuild import swing_broker_specialists as specialists
-from market_predictor.edge_rebuild.strategy_contract import load_strategy_contract
 from market_predictor.core.errors import DataReadinessError
+from market_predictor.edge_rebuild import swing_broker_specialists as specialists
+from market_predictor.modeling.strategy_contract import load_strategy_contract
 
 _ROOT = Path(__file__).parents[1]
 _POLICY = _ROOT / "configs" / "swing_broker_action_specialists.toml"

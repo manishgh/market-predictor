@@ -23,7 +23,6 @@ from market_predictor.catalysts.issuer_events.classification import (
     issuer_event_rule_variant,
 )
 from market_predictor.core.errors import DataReadinessError
-from market_predictor.edge_rebuild.strategy_contract import StrategyContract
 from market_predictor.edge_rebuild.swing_features import (
     SWING_FEATURE_PROFILE,
     swing_model_feature_columns,
@@ -37,6 +36,7 @@ from market_predictor.governance.issuer_event_precision.admission_authority impo
 from market_predictor.governance.issuer_event_precision.contracts import (
     IssuerEventPrecisionAudit,
 )
+from market_predictor.modeling.strategy_contract import StrategyContract
 from market_predictor.resources import (
     assert_memory_budget,
     assert_peak_memory_budget,

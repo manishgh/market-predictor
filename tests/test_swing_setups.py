@@ -16,12 +16,12 @@ import pandas as pd
 import pytest
 
 from market_predictor.canonical.normalize import canonicalize_bars
+from market_predictor.core.errors import DataReadinessError
 from market_predictor.edge_rebuild.setup_economics import (
     UNSEEN_TICKER_SCOPE,
     WALK_FORWARD_SCOPE,
     evaluate_setup_economics,
 )
-from market_predictor.edge_rebuild.strategy_contract import StrategyContract
 from market_predictor.edge_rebuild.swing_pipeline_steps import SetupComponentsStep
 from market_predictor.edge_rebuild.swing_setups import (
     SWING_SETUP_COLUMNS,
@@ -32,7 +32,7 @@ from market_predictor.edge_rebuild.swing_setups import (
     swing_dataset_config,
     swing_setup_mask,
 )
-from market_predictor.core.errors import DataReadinessError
+from market_predictor.modeling.strategy_contract import StrategyContract
 
 CALENDAR = xcals.get_calendar("XNYS")
 SESSION_COUNT = 620
@@ -138,7 +138,7 @@ def _memberships(sessions: Sequence[date]) -> pd.DataFrame:
 def contract() -> StrategyContract:
     from pathlib import Path
 
-    from market_predictor.edge_rebuild.strategy_contract import load_strategy_contract
+    from market_predictor.modeling.strategy_contract import load_strategy_contract
 
     root = Path(__file__).resolve().parents[1]
     return load_strategy_contract(root / "configs" / "edge_rebuild_strategy_contract.toml")

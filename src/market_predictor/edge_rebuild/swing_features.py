@@ -38,7 +38,6 @@ from market_predictor.edge_rebuild.labeling import (
     apply_triple_barrier,
     forward_return_from_barrier,
 )
-from market_predictor.edge_rebuild.strategy_contract import StrategyContract
 from market_predictor.edge_rebuild.swing_catalyst_features import (
     _scope_catalyst_aggregates_to_required_sources as _scope_catalyst_aggregates_to_required_sources,
 )
@@ -69,6 +68,7 @@ from market_predictor.edge_rebuild.swing_filters import (
 from market_predictor.edge_rebuild.swing_filters import (
     apply_sparse_session_gap_abstentions as apply_sparse_session_gap_abstentions,
 )
+from market_predictor.modeling.strategy_contract import StrategyContract
 from market_predictor.swing.contracts import SwingDatasetConfig
 from market_predictor.swing.dataset import build_swing_feature_history
 from market_predictor.swing.features.catalyst_decision_authority import (

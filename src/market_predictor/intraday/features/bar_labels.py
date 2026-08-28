@@ -1,8 +1,6 @@
 """Exact managed-path labels for fixed-clock intraday decision cohorts."""
 from __future__ import annotations
 
-
-
 from collections.abc import Iterable
 from typing import Any, Final
 
@@ -10,6 +8,7 @@ import numpy as np
 import pandas as pd
 from pandas.api.types import is_bool_dtype
 
+from market_predictor.core.errors import DataReadinessError
 from market_predictor.edge_rebuild.labeling import (
     RANK_BOTTOM,
     RANK_MIDDLE,
@@ -18,13 +17,12 @@ from market_predictor.edge_rebuild.labeling import (
     TARGET_HIT,
     TIMEOUT,
 )
-from market_predictor.edge_rebuild.strategy_contract import StrategyContract
 from market_predictor.label_paths import (
     IntradayBarrierBatch,
     evaluate_intraday_barrier_paths,
     open_close_return,
 )
-from market_predictor.core.errors import DataReadinessError
+from market_predictor.modeling.strategy_contract import StrategyContract
 
 INTRADAY_BAR_LABEL_SCHEMA_VERSION: Final = "edge_rebuild.intraday_bar_labels.v1"
 _ONE_MINUTE: Final = pd.Timedelta(minutes=1)

@@ -13,10 +13,6 @@ from market_predictor.core.errors import DataReadinessError
 from market_predictor.edge_rebuild import swing_catalyst_features as swing_catalyst_module
 from market_predictor.edge_rebuild import swing_features as swing_feature_module
 from market_predictor.edge_rebuild.cross_sectional import RANK_SUFFIX
-from market_predictor.edge_rebuild.strategy_contract import (
-    StrategyContract,
-    load_strategy_contract,
-)
 from market_predictor.edge_rebuild.swing_features import (
     CATALYST_AUDIT_FEATURES,
     CATALYST_RANKING_FEATURES,
@@ -26,6 +22,10 @@ from market_predictor.edge_rebuild.swing_features import (
     build_swing_feature_rows,
     finalize_swing_feature_panel,
     swing_model_feature_columns,
+)
+from market_predictor.modeling.strategy_contract import (
+    StrategyContract,
+    load_strategy_contract,
 )
 from market_predictor.swing.features.catalyst_decision_authority import (
     COVERAGE_FLAG_COLUMNS,

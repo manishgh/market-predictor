@@ -1,21 +1,19 @@
 """Fail-closed live adapter for the shared fixed-cohort bar transformation."""
 from __future__ import annotations
 
-
-
 from dataclasses import dataclass
 from typing import Final
 
 import numpy as np
 import pandas as pd
 
+from market_predictor.core.errors import DataReadinessError
 from market_predictor.intraday.features.bar_features import (
     INTRADAY_BAR_MODEL_FEATURE_COLUMNS,
     INTRADAY_BAR_MODEL_FEATURES_SHA256,
     build_causal_intraday_bar_features,
 )
-from market_predictor.edge_rebuild.strategy_contract import StrategyContract
-from market_predictor.core.errors import DataReadinessError
+from market_predictor.modeling.strategy_contract import StrategyContract
 
 INTRADAY_BAR_LIVE_SCHEMA_VERSION: Final = "edge_rebuild.intraday_bar_live.v1"
 INTRADAY_BAR_LIVE_AUDIT_COLUMNS: Final = (

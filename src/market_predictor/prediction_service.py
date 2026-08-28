@@ -17,6 +17,7 @@ from market_predictor.catalyst_overlay import (
     CatalystAssessment,
     assess_catalyst_overlay,
 )
+from market_predictor.core.errors import DataReadinessError, MarketPredictorError
 from market_predictor.drift_policy import DriftAssessmentV2, DriftStateStore
 from market_predictor.edge_rebuild.policy import (
     combined_readiness,
@@ -29,7 +30,6 @@ from market_predictor.edge_rebuild.serving import (
     SwingInferenceEngine,
     SwingModelGenerationCache,
 )
-from market_predictor.edge_rebuild.strategy_contract import StrategyContract, load_strategy_contract
 from market_predictor.edge_rebuild.swing_live import (
     FileSwingLiveInputProvider,
     SwingLiveInputProvider,
@@ -40,6 +40,7 @@ from market_predictor.edge_rebuild.swing_selection import (
 )
 from market_predictor.feature_store import LiveFeatureStore
 from market_predictor.intraday.model import score_intraday_payload
+from market_predictor.modeling.strategy_contract import StrategyContract, load_strategy_contract
 from market_predictor.prediction_contracts import (
     CatalystConfirmationInfo,
     FeatureArtifactIdentityV1,
@@ -83,7 +84,6 @@ from market_predictor.serving_context import (
     ActiveReleaseRoute,
     ModelContextProvider,
 )
-from market_predictor.core.errors import DataReadinessError, MarketPredictorError
 
 DEFAULT_MODE_HORIZONS = {"swing": "10b", "intraday": "60m"}
 SERVING_POLICY_ID = "market_predictor.serving_policy_bundle.v2"

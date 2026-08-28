@@ -3,8 +3,8 @@ from collections.abc import Sequence
 import numpy as np
 import pandas as pd
 
-from market_predictor.edge_rebuild.strategy_contract import StrategyContract
 from market_predictor.core.errors import DataReadinessError
+from market_predictor.modeling.strategy_contract import StrategyContract
 
 
 class SetupComponentsStep:

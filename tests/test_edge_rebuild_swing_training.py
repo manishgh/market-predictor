@@ -1,8 +1,4 @@
 from __future__ import annotations
-import market_predictor.edge_rebuild.training.economics
-from market_predictor.edge_rebuild.training.swing_evaluation import select_constrained_swing_portfolio
-
-import market_predictor.edge_rebuild.swing_artifact_contracts as swing_artifact_contracts
 
 import json
 import os
@@ -15,12 +11,11 @@ import numpy as np
 import pandas as pd
 import pytest
 
+import market_predictor.edge_rebuild.swing_artifact_contracts as swing_artifact_contracts
+import market_predictor.edge_rebuild.training.economics
 from market_predictor.canonical.store import file_sha256
+from market_predictor.core.errors import DataReadinessError
 from market_predictor.edge_rebuild import swing_training
-from market_predictor.edge_rebuild.strategy_contract import (
-    StrategyContract,
-    load_strategy_contract,
-)
 from market_predictor.edge_rebuild.swing_features import (
     MANAGED_EXCESS_RETURN_COLUMNS,
     MANAGED_PATH_NET_RETURN_COLUMNS,
@@ -46,8 +41,12 @@ from market_predictor.edge_rebuild.temporal_manifest import (
     load_temporal_manifest_config,
 )
 from market_predictor.edge_rebuild.training import evaluation, walk_forward
+from market_predictor.edge_rebuild.training.swing_evaluation import select_constrained_swing_portfolio
+from market_predictor.modeling.strategy_contract import (
+    StrategyContract,
+    load_strategy_contract,
+)
 from market_predictor.process_memory import process_memory_snapshot, release_process_memory
-from market_predictor.core.errors import DataReadinessError
 
 
 def test_repository_policy_is_frozen_for_ten_session_candidate_training() -> None:

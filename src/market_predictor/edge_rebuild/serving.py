@@ -42,9 +42,6 @@ from market_predictor.core.errors import (
     PromotionGateError,
     SchemaMismatchError,
 )
-from market_predictor.edge_rebuild.strategy_contract import (
-    StrategyContract,
-)
 from market_predictor.edge_rebuild.swing_features import (
     SWING_FEATURE_PANEL_SCHEMA,
     swing_model_feature_columns,
@@ -57,6 +54,9 @@ from market_predictor.intraday.features.features import (
 )
 from market_predictor.intraday.features.features import (
     FEATURE_SCHEMA_VERSION as INTRADAY_FEATURE_SCHEMA_VERSION,
+)
+from market_predictor.modeling.strategy_contract import (
+    StrategyContract,
 )
 from market_predictor.promotion_attestation import (
     promotion_attestation_path_for,

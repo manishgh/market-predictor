@@ -1,8 +1,6 @@
 """Read-only, hash-bound ER1 data-readiness audit."""
 from __future__ import annotations
 
-
-
 import hashlib
 import json
 import shutil
@@ -17,6 +15,7 @@ import numpy as np
 import pandas as pd
 
 from market_predictor.canonical.store import file_sha256
+from market_predictor.core.errors import DataReadinessError
 from market_predictor.edge_rebuild import contracts
 from market_predictor.edge_rebuild.contracts import (
     EdgeRebuildReadinessConfig,
@@ -24,10 +23,6 @@ from market_predictor.edge_rebuild.contracts import (
 from market_predictor.edge_rebuild.serving import (
     PromotedSwingBundle,
     validate_file_backed_promoted_bundle,
-)
-from market_predictor.edge_rebuild.strategy_contract import (
-    StrategyContract,
-    load_strategy_contract,
 )
 from market_predictor.edge_rebuild.swing_features import (
     SWING_FEATURE_PROFILE,
@@ -45,12 +40,15 @@ from market_predictor.intraday.specialist_experiments import (
     VerifiedTrainingBundle,
     verify_intraday_specialist_training_bundle,
 )
+from market_predictor.modeling.strategy_contract import (
+    StrategyContract,
+    load_strategy_contract,
+)
 from market_predictor.resources import (
     assert_memory_budget,
     memory_audit,
     release_process_memory,
 )
-from market_predictor.core.errors import DataReadinessError
 
 READINESS_RUN_SCHEMA = "edge_rebuild.readiness.run.v3"
 READINESS_AUTHORITY_SCHEMA = "edge_rebuild.readiness.authority.v3"

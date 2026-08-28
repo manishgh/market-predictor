@@ -62,6 +62,7 @@ REMOVED_PRODUCTION_MODULES = (
     "market_predictor.edge_rebuild.sp500_memberships",
     "market_predictor.edge_rebuild.sp500_observed_memberships",
     "market_predictor.edge_rebuild.sp500_transitions",
+    "market_predictor.edge_rebuild.strategy_contract",
     "market_predictor.edge_rebuild.universe_identity",
     "market_predictor.swing.news_history",
     "market_predictor.swing.news_history_audit",
@@ -84,6 +85,7 @@ REMOVED_EDGE_REBUILD_FILES = (
     "sp500_memberships.py",
     "sp500_observed_memberships.py",
     "sp500_transitions.py",
+    "strategy_contract.py",
     "universe_identity.py",
 )
 REMOVED_MIGRATED_FILES = (
@@ -397,6 +399,29 @@ def test_rule_variant_helper_has_one_semantic_owner() -> None:
     ),
 )
 def test_removed_precision_audit_import_guard_recognizes_every_import_form(
+    statement: str,
+) -> None:
+    imported_names = tuple(
+        name
+        for node in ast.walk(ast.parse(statement))
+        for name in _imported_names(node)
+    )
+    assert any(
+        _matches_any_dependency(name, REMOVED_PRODUCTION_MODULES)
+        for name in imported_names
+    )
+
+
+@pytest.mark.parametrize(
+    "statement",
+    (
+        "import market_predictor.edge_rebuild.strategy_contract",
+        "import market_predictor.edge_rebuild.strategy_contract as contract",
+        "from market_predictor.edge_rebuild import strategy_contract",
+        "from market_predictor.edge_rebuild.strategy_contract import StrategyContract",
+    ),
+)
+def test_removed_strategy_contract_import_guard_recognizes_every_import_form(
     statement: str,
 ) -> None:
     imported_names = tuple(

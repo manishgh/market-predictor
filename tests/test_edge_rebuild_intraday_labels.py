@@ -9,17 +9,17 @@ import pandas as pd
 import pandas.testing as pdt
 import pytest
 
+from market_predictor.core.errors import DataReadinessError
+from market_predictor.edge_rebuild.labeling import RANK_BOTTOM, RANK_TOP, STOP_HIT
 from market_predictor.intraday.features.features import FEATURE_SCHEMA_VERSION
 from market_predictor.intraday.features.labels import (
     LABEL_SCHEMA_VERSION,
     build_exact_causal_intraday_labels,
 )
-from market_predictor.edge_rebuild.labeling import RANK_BOTTOM, RANK_TOP, STOP_HIT
-from market_predictor.edge_rebuild.strategy_contract import (
+from market_predictor.modeling.strategy_contract import (
     StrategyContract,
     load_strategy_contract,
 )
-from market_predictor.core.errors import DataReadinessError
 
 ROOT = Path(__file__).resolve().parents[1]
 

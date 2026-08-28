@@ -13,13 +13,13 @@ from fastapi.testclient import TestClient
 import market_predictor.prediction_service as service_module
 from market_predictor.api import create_app
 from market_predictor.canonical.store import file_sha256
+from market_predictor.core.errors import DataReadinessError
 from market_predictor.edge_rebuild.serving import (
     LoadedSwingModelGeneration,
     canonical_payload_sha256,
     ordered_values_sha256,
     validate_promoted_bundle,
 )
-from market_predictor.edge_rebuild.strategy_contract import load_strategy_contract
 from market_predictor.edge_rebuild.swing_features import (
     SWING_FEATURE_PANEL_SCHEMA,
     swing_model_feature_columns,
@@ -31,9 +31,9 @@ from market_predictor.edge_rebuild.swing_live import (
     SwingLiveInputs,
 )
 from market_predictor.edge_rebuild.swing_training import MODEL_SCHEMA
+from market_predictor.modeling.strategy_contract import load_strategy_contract
 from market_predictor.prediction_contracts import PredictionRequest
 from market_predictor.prediction_service import PredictionService, ServingRoute
-from market_predictor.core.errors import DataReadinessError
 
 ROOT = Path(__file__).resolve().parents[1]
 NOW = datetime(2026, 7, 8, 22, 5, tzinfo=UTC)

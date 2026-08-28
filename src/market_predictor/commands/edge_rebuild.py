@@ -70,7 +70,6 @@ from market_predictor.edge_rebuild.readiness import (
 from market_predictor.edge_rebuild.selected_session_history import (
     build_selected_session_history_plan,
 )
-from market_predictor.edge_rebuild.strategy_contract import load_strategy_contract
 from market_predictor.edge_rebuild.swing_broker_specialists import (
     train_swing_broker_specialists,
 )
@@ -134,6 +133,7 @@ from market_predictor.intraday.specialist_contracts import (
 from market_predictor.intraday.training.coordinator import (
     train_intraday_development_candidate,
 )
+from market_predictor.modeling.strategy_contract import load_strategy_contract
 from market_predictor.sources.alpaca import AlpacaSource
 from market_predictor.sources.gdelt import (
     GdeltDocumentRequest,

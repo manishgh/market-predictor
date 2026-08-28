@@ -1,8 +1,6 @@
 """Exact, causal intraday labels from executable one-minute paths."""
 from __future__ import annotations
 
-
-
 from collections.abc import Iterable
 from datetime import time
 from typing import Any, Final, TypedDict
@@ -12,7 +10,7 @@ import numpy as np
 import pandas as pd
 from pandas.api.types import is_bool_dtype
 
-from market_predictor.intraday.features.features import FEATURE_SCHEMA_VERSION
+from market_predictor.core.errors import DataReadinessError
 from market_predictor.edge_rebuild.labeling import (
     RANK_BOTTOM,
     RANK_MIDDLE,
@@ -21,9 +19,9 @@ from market_predictor.edge_rebuild.labeling import (
     TARGET_HIT,
     TIMEOUT,
 )
-from market_predictor.edge_rebuild.strategy_contract import StrategyContract
 from market_predictor.execution_policy import executable_fill_price
-from market_predictor.core.errors import DataReadinessError
+from market_predictor.intraday.features.features import FEATURE_SCHEMA_VERSION
+from market_predictor.modeling.strategy_contract import StrategyContract
 
 LABEL_SCHEMA_VERSION: Final = "edge_rebuild.intraday_labels.v2"
 EXCHANGE_TIMEZONE: Final = ZoneInfo("America/New_York")

@@ -6,12 +6,12 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from market_predictor.core.errors import DataReadinessError
 from market_predictor.intraday.features.bar_labels import (
     INTRADAY_BAR_LABEL_SCHEMA_VERSION,
     build_exact_intraday_bar_labels,
 )
-from market_predictor.edge_rebuild.strategy_contract import load_strategy_contract
-from market_predictor.core.errors import DataReadinessError
+from market_predictor.modeling.strategy_contract import load_strategy_contract
 
 CONTRACT_PATH = Path("configs/edge_rebuild_strategy_contract.toml")
 DECISION = pd.Timestamp("2026-07-08T14:00:00Z")

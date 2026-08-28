@@ -24,7 +24,6 @@ from market_predictor.edge_rebuild.serving import (
     canonical_payload_sha256,
     validate_ordered_feature_frame,
 )
-from market_predictor.edge_rebuild.strategy_contract import StrategyContract
 from market_predictor.edge_rebuild.swing_features import (
     SWING_CATALYST_FEATURE_PROFILE,
     SWING_FEATURE_PROFILE,
@@ -33,6 +32,7 @@ from market_predictor.edge_rebuild.swing_features import (
     finalize_swing_feature_panel,
     swing_model_feature_columns,
 )
+from market_predictor.modeling.strategy_contract import StrategyContract
 from market_predictor.resources import assert_memory_budget
 from market_predictor.swing.features.catalyst_decision_authority import (
     REQUIRED_MODEL_SOURCE_FAMILIES,

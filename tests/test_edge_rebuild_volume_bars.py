@@ -7,15 +7,15 @@ import pandas as pd
 import pandas.testing as pdt
 import pytest
 
-from market_predictor.edge_rebuild.strategy_contract import (
-    StrategyContract,
-    load_strategy_contract,
-)
+from market_predictor.core.errors import DataReadinessError
 from market_predictor.edge_rebuild.volume_bars import (
     VolumeBarBuildResult,
     build_causal_volume_bars,
 )
-from market_predictor.core.errors import DataReadinessError
+from market_predictor.modeling.strategy_contract import (
+    StrategyContract,
+    load_strategy_contract,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
 

@@ -1,8 +1,6 @@
 """Resumable, immutable materialization of the ER1A swing ranking panel."""
 from __future__ import annotations
 
-
-
 import hashlib
 import json
 import shutil
@@ -17,7 +15,7 @@ import pandas as pd
 from market_predictor.canonical.store import (
     file_sha256,
 )
-from market_predictor.edge_rebuild.strategy_contract import StrategyContract
+from market_predictor.core.errors import DataReadinessError
 from market_predictor.edge_rebuild.swing_artifact_contracts import (
     SWING_MATERIALIZATION_AUTHORITY_SCHEMA,
     SWING_MATERIALIZATION_MANIFEST_SCHEMA,
@@ -41,6 +39,7 @@ from market_predictor.edge_rebuild.swing_setups import (
     load_security_batch_bars,
 )
 from market_predictor.locking import file_lock
+from market_predictor.modeling.strategy_contract import StrategyContract
 from market_predictor.resources import (
     assert_memory_budget,
     assert_peak_memory_budget,
@@ -48,7 +47,6 @@ from market_predictor.resources import (
     release_process_memory,
 )
 from market_predictor.swing.contracts import MINIMUM_SWING_DECISION_DATE
-from market_predictor.core.errors import DataReadinessError
 
 SWING_MATERIALIZATION_REQUEST_SCHEMA: Final = (
     "edge_rebuild.swing_panel_materialization_request.v11"

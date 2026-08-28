@@ -5,8 +5,6 @@ broker-action, and combined features on identical event-conditioned decisions.
 """
 from __future__ import annotations
 
-
-
 import hashlib
 import json
 import math
@@ -34,10 +32,7 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 
 from market_predictor.canonical.store import file_sha256
-from market_predictor.edge_rebuild.strategy_contract import (
-    StrategyContract,
-    load_strategy_contract,
-)
+from market_predictor.core.errors import DataReadinessError
 from market_predictor.edge_rebuild.swing_event_ablation import (
     AUTHORITY_SCHEMA as SOURCE_AUTHORITY_SCHEMA,
 )
@@ -57,13 +52,16 @@ from market_predictor.edge_rebuild.swing_training import (
 )
 from market_predictor.edge_rebuild.training.swing_evaluation import _evaluation_columns, _evaluation_metrics
 from market_predictor.edge_rebuild.training.swing_types import SwingTrainingConfig
+from market_predictor.modeling.strategy_contract import (
+    StrategyContract,
+    load_strategy_contract,
+)
 from market_predictor.resources import (
     assert_memory_budget,
     assert_peak_memory_budget,
     memory_audit,
     release_process_memory,
 )
-from market_predictor.core.errors import DataReadinessError
 
 POLICY_SCHEMA: Final = "market_predictor.swing_broker_action_specialists.v1"
 REQUEST_SCHEMA: Final = "edge_rebuild.swing_broker_specialist_request.v1"

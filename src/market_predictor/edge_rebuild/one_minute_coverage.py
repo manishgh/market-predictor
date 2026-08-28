@@ -1,8 +1,6 @@
 """Replay selected-session one-minute coverage and publish exclusions."""
 from __future__ import annotations
 
-
-
 import json
 import shutil
 import uuid
@@ -15,6 +13,7 @@ import pandas as pd
 import pyarrow.parquet as pq
 
 from market_predictor.canonical.store import file_sha256
+from market_predictor.core.errors import DataReadinessError
 from market_predictor.edge_rebuild.history_collection import (
     load_complete_intraday_history_collection,
 )
@@ -29,8 +28,7 @@ from market_predictor.intraday.datasets.history import (
 from market_predictor.intraday.datasets.selection import (
     load_complete_intraday_selection,
 )
-from market_predictor.edge_rebuild.strategy_contract import StrategyContract
-from market_predictor.core.errors import DataReadinessError
+from market_predictor.modeling.strategy_contract import StrategyContract
 
 COVERAGE_SCHEMA = "edge_rebuild.selected_session_one_minute_coverage.v2"
 COVERAGE_AUTHORITY_SCHEMA = "edge_rebuild.selected_session_one_minute_coverage_authority.v2"

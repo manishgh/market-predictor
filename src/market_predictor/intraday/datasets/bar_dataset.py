@@ -1,8 +1,6 @@
 """Resumable authority publisher for the fixed-cohort intraday bar dataset."""
 from __future__ import annotations
 
-
-
 import json
 import os
 import shutil
@@ -21,6 +19,23 @@ import pandas as pd
 import pyarrow.parquet as pq
 
 from market_predictor.canonical.store import file_sha256
+from market_predictor.core.errors import DataReadinessError
+from market_predictor.edge_rebuild.volume_bars import build_causal_volume_bars
+from market_predictor.intraday.contracts.lineage import (
+    DEFAULT_INTRADAY_CONTRACT_LINEAGE_PATH,
+)
+from market_predictor.intraday.datasets.history import json_sha256
+from market_predictor.intraday.datasets.publisher import (
+    _activation_abstention_reason,
+    _Artifact,
+    _benchmark_artifact_index,
+    _load_benchmark_session,
+    _load_stock_session_batch,
+    _membership_for_pair,
+    _stock_artifact_index,
+    _VerifiedInputs,
+    _verify_inputs,
+)
 from market_predictor.intraday.features.bar_features import (
     INTRADAY_BAR_FEATURE_SCHEMA_VERSION,
     INTRADAY_BAR_MODEL_FEATURE_COLUMNS,
@@ -34,30 +49,13 @@ from market_predictor.intraday.features.bar_labels import (
 from market_predictor.intraday.features.bar_only_five_minute import (
     load_complete_selected_session_five_minute_projection,
 )
-from market_predictor.intraday.contracts.lineage import (
-    DEFAULT_INTRADAY_CONTRACT_LINEAGE_PATH,
-)
-from market_predictor.intraday.datasets.publisher import (
-    _activation_abstention_reason,
-    _Artifact,
-    _benchmark_artifact_index,
-    _load_benchmark_session,
-    _load_stock_session_batch,
-    _membership_for_pair,
-    _stock_artifact_index,
-    _VerifiedInputs,
-    _verify_inputs,
-)
-from market_predictor.intraday.datasets.history import json_sha256
-from market_predictor.edge_rebuild.strategy_contract import StrategyContract
-from market_predictor.edge_rebuild.volume_bars import build_causal_volume_bars
+from market_predictor.modeling.strategy_contract import StrategyContract
 from market_predictor.resources import (
     assert_memory_budget,
     assert_peak_memory_budget,
     memory_audit,
     release_process_memory,
 )
-from market_predictor.core.errors import DataReadinessError
 
 INTRADAY_BAR_DATASET_SCHEMA: Final = "edge_rebuild.intraday_bar_dataset.v1"
 INTRADAY_BAR_DATASET_AUTHORITY_SCHEMA: Final = (

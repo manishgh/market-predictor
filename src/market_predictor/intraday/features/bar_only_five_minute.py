@@ -1,8 +1,6 @@
 """Immutable selected-session projection of canonical SIP five-minute bars."""
 from __future__ import annotations
 
-
-
 import json
 import shutil
 import uuid
@@ -17,6 +15,13 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 
 from market_predictor.canonical.store import file_sha256
+from market_predictor.core.errors import DataReadinessError
+from market_predictor.edge_rebuild.one_minute_coverage import (
+    verify_canonical_five_minute_store,
+)
+from market_predictor.edge_rebuild.selected_session_history import (
+    verify_selected_stock_sessions,
+)
 from market_predictor.intraday.contracts.lineage import (
     DEFAULT_INTRADAY_CONTRACT_LINEAGE_PATH,
     IntradayContractIdentity,
@@ -26,13 +31,7 @@ from market_predictor.intraday.datasets.history import json_sha256
 from market_predictor.intraday.datasets.selection import (
     load_complete_intraday_selection,
 )
-from market_predictor.edge_rebuild.one_minute_coverage import (
-    verify_canonical_five_minute_store,
-)
-from market_predictor.edge_rebuild.selected_session_history import (
-    verify_selected_stock_sessions,
-)
-from market_predictor.edge_rebuild.strategy_contract import (
+from market_predictor.modeling.strategy_contract import (
     StrategyContract,
     load_strategy_contract,
 )
@@ -42,7 +41,6 @@ from market_predictor.resources import (
     memory_audit,
     release_process_memory,
 )
-from market_predictor.core.errors import DataReadinessError
 
 PROJECTION_SCHEMA: Final = "edge_rebuild.intraday_bar_only_five_minute_projection.v1"
 PROJECTION_AUTHORITY_SCHEMA: Final = (

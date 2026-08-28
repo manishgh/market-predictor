@@ -23,8 +23,6 @@ stores are materialized.
 """
 from __future__ import annotations
 
-
-
 import shutil
 import uuid
 from collections.abc import Iterator
@@ -38,6 +36,7 @@ import exchange_calendars as xcals
 import pandas as pd
 
 from market_predictor.canonical.store import file_sha256
+from market_predictor.core.errors import DataReadinessError
 from market_predictor.edge_rebuild.history_contracts import (
     REGULAR_SEGMENT,
     SELECTED_SESSION_ONE_MINUTE_PLAN_SCHEMA,
@@ -59,13 +58,12 @@ from market_predictor.intraday.datasets.history import (
 from market_predictor.intraday.datasets.selection import (
     load_complete_intraday_selection,
 )
-from market_predictor.edge_rebuild.strategy_contract import StrategyContract
+from market_predictor.modeling.strategy_contract import StrategyContract
 from market_predictor.resources import (
     assert_memory_budget,
     assert_peak_memory_budget,
     memory_audit,
 )
-from market_predictor.core.errors import DataReadinessError
 
 SELECTED_SESSION_COLUMNS = (
     "session_date_et",

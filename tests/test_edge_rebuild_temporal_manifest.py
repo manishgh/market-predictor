@@ -9,7 +9,7 @@ import pytest
 from pydantic import ValidationError
 
 from market_predictor.canonical.store import file_sha256
-from market_predictor.edge_rebuild.strategy_contract import load_strategy_contract
+from market_predictor.core.errors import DataReadinessError
 from market_predictor.edge_rebuild.temporal_manifest import (
     SWING_PANEL_AUTHORITY_SCHEMA,
     SWING_PANEL_MANIFEST_SCHEMA,
@@ -19,7 +19,7 @@ from market_predictor.edge_rebuild.temporal_manifest import (
     load_temporal_manifest_config,
     publish_temporal_manifest,
 )
-from market_predictor.core.errors import DataReadinessError
+from market_predictor.modeling.strategy_contract import load_strategy_contract
 
 ROOT = Path(__file__).resolve().parents[1]
 POLICY = ROOT / "configs" / "edge_rebuild_temporal_manifest.toml"

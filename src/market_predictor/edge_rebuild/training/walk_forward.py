@@ -6,12 +6,12 @@ from typing import TYPE_CHECKING, Any, cast
 
 import pandas as pd
 
-from market_predictor.edge_rebuild.strategy_contract import StrategyContract
+from market_predictor.core.errors import DataReadinessError
 from market_predictor.edge_rebuild.temporal_manifest import (
     TemporalManifestConfig,
     TemporalSchedule,
 )
-from market_predictor.core.errors import DataReadinessError
+from market_predictor.modeling.strategy_contract import StrategyContract
 
 if TYPE_CHECKING:
     from market_predictor.edge_rebuild.training.swing_types import SwingTrainingConfig

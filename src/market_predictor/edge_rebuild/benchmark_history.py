@@ -1,8 +1,6 @@
 """Hash-bound one-minute benchmark planning for selected intraday sessions."""
 from __future__ import annotations
 
-
-
 import shutil
 import uuid
 from datetime import UTC, datetime
@@ -14,10 +12,14 @@ import exchange_calendars as xcals
 import pandas as pd
 
 from market_predictor.canonical.store import file_sha256
+from market_predictor.core.errors import DataReadinessError
 from market_predictor.edge_rebuild.history_contracts import (
     REGULAR_SEGMENT,
     SELECTED_SESSION_BENCHMARK_PLAN_SCHEMA,
     SelectedSessionBenchmarkConfig,
+)
+from market_predictor.edge_rebuild.selected_session_history import (
+    verify_selected_stock_sessions,
 )
 from market_predictor.intraday.datasets.history import (
     SELECTED_SESSION_BENCHMARK_PLAN_AUTHORITY_SCHEMA,
@@ -28,16 +30,12 @@ from market_predictor.intraday.datasets.history import (
     stable_identity_hash,
     write_plan_json,
 )
-from market_predictor.edge_rebuild.selected_session_history import (
-    verify_selected_stock_sessions,
-)
-from market_predictor.edge_rebuild.strategy_contract import StrategyContract
+from market_predictor.modeling.strategy_contract import StrategyContract
 from market_predictor.resources import (
     assert_memory_budget,
     assert_peak_memory_budget,
     memory_audit,
 )
-from market_predictor.core.errors import DataReadinessError
 
 
 def build_selected_session_benchmark_plan(
