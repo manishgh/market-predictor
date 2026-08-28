@@ -870,9 +870,46 @@ complete isolated suite with 1,631 passed and three skipped in 13 minutes 12 sec
 Touched Ruff, strict mypy, compileall, collection CLI import/help, exact source-hash
 parity, old-path scans, diff checks, and the 4 GiB process-memory gate passed.
 
-Exact next checkpoint: migrate only swing-owned contract authorities into the
-descriptive `swing/contracts` package after confirming their serialized Python owners,
-retained-artifact references, and complete consumer set. Do not move the cross-horizon
-`edge_rebuild/contracts.py`; it remains scheduled for `governance/readiness`. Preserve
-schema strings, hashes, validators, feature order, and behavior with no compatibility
-aliases. Rollback anchor: `09341dc`.
+Implementation commit `26c048d` completes **swing contract package and materialization
+schema ownership**. `swing/contracts.py` is now byte-for-byte
+`swing/contracts/__init__.py`, so `FrozenConfig`, `SwingDatasetConfig`,
+`SwingTrainingConfig`, and `SwingPromotionConfig` retain Python and pickle owner
+`market_predictor.swing.contracts`. The source identity remains
+`36b698837a09a8cd0b23e9b48e4be291afa91727`.
+
+The two swing materialization schema constants moved byte-for-byte from
+`edge_rebuild/swing_artifact_contracts.py` to
+`swing/contracts/materialization.py`, retaining source identity
+`c7add055ab12ab53d46988f89da862f0a631649a` and schema strings
+`edge_rebuild.swing_panel_materialization.v12` and
+`edge_rebuild.swing_panel_materialization_authority.v12`. Every consumer uses the
+canonical module explicitly. The reviewer found and then verified the fix for one P2:
+direct constant imports had temporarily exposed accidental aliases on three legacy
+modules. Regression tests now prove those aliases are absent.
+
+Characterization freezes class owners and pickle round trips, the 99-feature full
+profile hash `a841554e6edb6e63e6571cf653e064f51fb9c67a893aac63b266b6e0dfe3792f`,
+the 53-feature technical profile hash
+`4d68fd5327f1cc535ba1458a1138cd4faac866a4c129c686c2a48bede0de81fb`,
+default dataset/training/promotion hashes, and label-policy hash. Accessible retained
+artifacts contain no old materialization module reference; the four pre-existing
+Windows-ACL-protected intraday model directories were unchanged.
+
+Verification passed 208 affected tests with one skipped and the complete isolated
+suite with 1,645 passed and three skipped in 13 minutes 35 seconds. New-file Ruff,
+changed import-order Ruff, strict mypy, compileall, import/no-alias smoke, source-hash
+parity, old-path scans, diff checks, and the 4 GiB process-memory gate passed. The
+known pre-existing unused re-export findings in `swing_training.py` remain part of the
+Step 6 static-quality baseline. The reviewer accepted the final diff with no remaining
+P0, P1, or P2 finding.
+
+Exact next checkpoint: move `edge_rebuild/technical_relationships.py` byte-for-byte to
+`swing/features/technical_relationships.py`, update both lazy imports in
+`edge_rebuild/swing_pipeline_steps.py`, and rename
+`tests/test_technical_relationships.py` to
+`tests/test_swing_technical_relationship_features.py`. Before deletion, scan retained
+pickle/joblib artifacts for `TechnicalRelationshipSpec` at the old owner; any match
+blocks the move unless that artifact is explicitly retired. Freeze output order,
+specification hash, pickle owner, representative numerical parity, prefix/future
+causality, and session/group resets. Do not move `cross_sectional.py` or the mixed
+`labeling.py` in this checkpoint. No compatibility alias. Rollback anchor: `26c048d`.

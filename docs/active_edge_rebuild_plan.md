@@ -1406,11 +1406,32 @@ test, and task names.
      code-hash parity, artifact scans, diff checks, and the 4 GiB process-memory gate
      passed. The assigned senior reviewer accepted the final diff with no P0, P1, or
      P2 finding.
-   - **Swing contract migration (`next`).** Move only swing-owned contracts into the
-     descriptive `swing/contracts` package after a serialized-owner and consumer
-     inventory. Preserve schema strings, hashes, validators, feature order, and direct
-     behavior. Keep the cross-horizon `edge_rebuild/contracts.py` readiness/catalyst
-     policy for the later governance migration, and add no compatibility aliases.
+   - **Swing contract package and materialization ownership (`completed`).**
+     Implementation commit `26c048d` converts `swing/contracts.py` byte-for-byte into
+     `swing/contracts/__init__.py`, preserving the Python and pickle owner
+     `market_predictor.swing.contracts`, and moves the swing materialization schema
+     constants from `edge_rebuild` to `swing/contracts/materialization.py`. All
+     consumers use the canonical materialization module directly; regression tests
+     prohibit accidental constant aliases on the legacy materialization and training
+     modules. Both moves are byte- and AST-identical, with source identities
+     `36b698837a09a8cd0b23e9b48e4be291afa91727` and
+     `c7add055ab12ab53d46988f89da862f0a631649a`. Characterization freezes config
+     owners and pickle round trips, both materialization schemas, the 99-feature and
+     53-feature profile hashes, three default config hashes, and the label-policy hash.
+     Verification passed 208 affected tests with one skipped and the complete suite
+     with 1,645 passed and three skipped. New-file Ruff, changed import-order Ruff,
+     strict mypy, compileall, import/no-alias smoke, old-path and artifact scans, diff
+     checks, and the 4 GiB process-memory gate passed. Known pre-existing unused
+     re-export findings in `swing_training.py` remain assigned to Step 6. The reviewer
+     found one accidental-alias P2, verified its fix, and accepted the final diff with
+     no remaining P0, P1, or P2 finding.
+   - **Swing technical-relationship feature ownership (`next`).** Move
+     `edge_rebuild/technical_relationships.py` byte-for-byte to
+     `swing/features/technical_relationships.py`, update both lazy consumers in
+     `swing_pipeline_steps.py`, rename its test for descriptive ownership, and delete
+     the old path without an alias. A retained-artifact scan must first prove no pickle
+     contains the changing `TechnicalRelationshipSpec` module owner. Keep
+     cross-sectional scaling and the mixed label module for separate checkpoints.
 5. **Governance, serving, and command package migration (`pending`).**
    Move readiness, promotion, drift, and outcomes to `governance`; bundle loading,
    prediction services, and API behavior to `serving`; and retain only thin CLI
