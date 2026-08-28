@@ -1390,9 +1390,27 @@ test, and task names.
      strict mypy, compileall, code-hash parity, removed-path scans, diff checks, and
      process-memory checks passed. The assigned senior reviewer accepted the final diff
      with no P0, P1, or P2 finding.
-   - **Horizon contract migration (`next`).** Move swing and intraday contract owners
-     into their descriptive horizon packages, preserving schema strings, hashes,
-     validators, feature order, serialized ownership, and direct consumer behavior.
+   - **Intraday history-collection contract migration (`completed`).** Implementation
+     commit `09341dc` moves the complete intraday Alpaca/SIP history acquisition
+     contract from `edge_rebuild/history_contracts.py` to
+     `intraday/contracts/history_collection.py`. The implementation is byte- and
+     AST-identical with source hash
+     `6b5d3b42c73aeb40958ca01b5a35b2a821d1de46`; all collectors, intraday datasets,
+     command adapters, and tests import the new owner directly. No compatibility alias
+     exists. New characterization freezes all eight Pydantic owners and the six active
+     configuration schema/hash pairs. Architecture guards reject every old import form
+     and old-file reintroduction, while existing dependency guards prohibit provider
+     sources from importing horizon code. Verification passed 171 focused tests, 56
+     interrupted-refactor regression tests, and the complete suite with 1,631 passed
+     and three skipped. Touched Ruff, strict mypy, compileall, CLI import/help, exact
+     code-hash parity, artifact scans, diff checks, and the 4 GiB process-memory gate
+     passed. The assigned senior reviewer accepted the final diff with no P0, P1, or
+     P2 finding.
+   - **Swing contract migration (`next`).** Move only swing-owned contracts into the
+     descriptive `swing/contracts` package after a serialized-owner and consumer
+     inventory. Preserve schema strings, hashes, validators, feature order, and direct
+     behavior. Keep the cross-horizon `edge_rebuild/contracts.py` readiness/catalyst
+     policy for the later governance migration, and add no compatibility aliases.
 5. **Governance, serving, and command package migration (`pending`).**
    Move readiness, promotion, drift, and outcomes to `governance`; bundle loading,
    prediction services, and API behavior to `serving`; and retain only thin CLI

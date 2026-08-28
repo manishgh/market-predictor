@@ -840,7 +840,39 @@ findings (107 import-order, 61 import-placement, 20 unused imports, 10 unused
 redefinitions), and strict mypy reports 348 existing findings across 61 files. These
 counts are the baseline for the dedicated static-quality checkpoint, not passes.
 
-Exact next checkpoint: move swing and intraday contract owners into their descriptive
-horizon packages. Preserve schema strings, hashes, validators, feature order, serialized
-ownership, and direct consumer behavior; update old-path poison guards and do not add
-compatibility aliases. Rollback anchor: `8d42d26`.
+Implementation commit `09341dc` completes the **intraday history-collection contract
+migration**. The full Alpaca/SIP acquisition contract now has one production owner at
+`intraday/contracts/history_collection.py`. All collectors, intraday datasets, command
+adapters, and tests import the new owner directly; the old module is absent and no
+compatibility alias exists. The moved implementation is byte- and AST-identical with
+source hash `6b5d3b42c73aeb40958ca01b5a35b2a821d1de46`.
+
+Characterization freezes all eight Pydantic class owners and the six active
+configuration identities:
+
+- intraday history: `252886fb7b7fcfca19917a1daa8e1ea43d950e006287adca12796525c911a830`
+- extended sessions: `2fb6118c448438c5ffe59a1cb3319b39f4e80bf47bca5c77df55948e204700d6`
+- selected five-minute sessions: `536a8194d376cf2e6925d90b8bf22e7f071fc2854c793c9b5a365b78b2841c22`
+- selected one-minute sessions: `0c2896b7e40a5c0afb502c65b6ce167f16705d1b36aa44d0a90c94f2ffe1e318`
+- selected benchmarks: `4215b3f63b7b5ff0cf30c6415d35362653f4f492510a9cab9a04b971be14c2cf`
+- broad intraday history: `07bd5c64ef9c1b66b09cec7122e62c3abd4cda83e3ebea1d34742b497e993832`
+
+Architecture guards reject all old import forms and reintroduction of the removed
+file. Existing package-direction tests keep `sources` independent of horizon
+contracts. Readable retained artifacts contain no serialized reference to the removed
+owner; four pre-existing model directories remain unreadable under their Windows ACL
+and were not modified. The reviewer found no retained serialized artifact risk and
+approved the final diff with no P0, P1, or P2 finding.
+
+Verification passed 171 focused tests, all 56 intraday development tests after an
+interrupted external test edit was restored to the current production owners, and the
+complete isolated suite with 1,631 passed and three skipped in 13 minutes 12 seconds.
+Touched Ruff, strict mypy, compileall, collection CLI import/help, exact source-hash
+parity, old-path scans, diff checks, and the 4 GiB process-memory gate passed.
+
+Exact next checkpoint: migrate only swing-owned contract authorities into the
+descriptive `swing/contracts` package after confirming their serialized Python owners,
+retained-artifact references, and complete consumer set. Do not move the cross-horizon
+`edge_rebuild/contracts.py`; it remains scheduled for `governance/readiness`. Preserve
+schema strings, hashes, validators, feature order, and behavior with no compatibility
+aliases. Rollback anchor: `09341dc`.
