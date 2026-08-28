@@ -1425,13 +1425,28 @@ test, and task names.
      re-export findings in `swing_training.py` remain assigned to Step 6. The reviewer
      found one accidental-alias P2, verified its fix, and accepted the final diff with
      no remaining P0, P1, or P2 finding.
-   - **Swing technical-relationship feature ownership (`next`).** Move
-     `edge_rebuild/technical_relationships.py` byte-for-byte to
-     `swing/features/technical_relationships.py`, update both lazy consumers in
-     `swing_pipeline_steps.py`, rename its test for descriptive ownership, and delete
-     the old path without an alias. A retained-artifact scan must first prove no pickle
-     contains the changing `TechnicalRelationshipSpec` module owner. Keep
-     cross-sectional scaling and the mixed label module for separate checkpoints.
+   - **Swing technical-relationship feature ownership (`completed`).** Implementation
+     commit `dd4dbcd` moves `technical_relationships.py` byte-for-byte from
+     `edge_rebuild` to `swing/features`, updates both lazy pipeline consumers directly,
+     and renames the characterization test for descriptive ownership. Source identity
+     remains `391bac1540b6ef414dced0338b842cedc5e54bdb`; no alias exists. Tests freeze
+     the new `TechnicalRelationshipSpec` owner and pickle round trip, nine-column
+     output-order hash, strategy-derived specification hash, representative output
+     hash, future-prefix causality, and session-boundary resets. Architecture guards
+     reject all old import forms and old-file reintroduction. Verification passed 170
+     affected tests with two skipped and the complete suite with 1,651 passed and three
+     skipped. New-owner Ruff, changed import-order Ruff, strict mypy, compileall,
+     import smoke, source parity, old-path and artifact scans, diff checks, and the 4
+     GiB memory gate passed. The reviewer accepted the final diff with no P0, P1, or
+     P2 finding.
+   - **Swing cross-sectional feature ownership (`next`).** Move
+     `edge_rebuild/cross_sectional.py` byte-for-byte to
+     `swing/features/cross_sectional.py`, update the three direct consumers with
+     module-qualified imports, rename its test descriptively, and delete the old path
+     without an alias. First prove no retained pickle contains the changing
+     `CrossSectionSpec` owner. Preserve suffixes, output order, grouping, winsorization,
+     minimum-peer behavior, and numerical parity. Do not combine it with the distinct
+     intraday implementation or move the mixed label module.
 5. **Governance, serving, and command package migration (`pending`).**
    Move readiness, promotion, drift, and outcomes to `governance`; bundle loading,
    prediction services, and API behavior to `serving`; and retain only thin CLI

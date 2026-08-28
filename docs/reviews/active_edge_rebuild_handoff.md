@@ -903,13 +903,39 @@ known pre-existing unused re-export findings in `swing_training.py` remain part 
 Step 6 static-quality baseline. The reviewer accepted the final diff with no remaining
 P0, P1, or P2 finding.
 
-Exact next checkpoint: move `edge_rebuild/technical_relationships.py` byte-for-byte to
-`swing/features/technical_relationships.py`, update both lazy imports in
-`edge_rebuild/swing_pipeline_steps.py`, and rename
-`tests/test_technical_relationships.py` to
-`tests/test_swing_technical_relationship_features.py`. Before deletion, scan retained
-pickle/joblib artifacts for `TechnicalRelationshipSpec` at the old owner; any match
-blocks the move unless that artifact is explicitly retired. Freeze output order,
-specification hash, pickle owner, representative numerical parity, prefix/future
-causality, and session/group resets. Do not move `cross_sectional.py` or the mixed
-`labeling.py` in this checkpoint. No compatibility alias. Rollback anchor: `26c048d`.
+Implementation commit `dd4dbcd` completes **swing technical-relationship feature
+ownership**. `edge_rebuild/technical_relationships.py` moved byte-for-byte to
+`swing/features/technical_relationships.py`; both lazy pipeline imports now reference
+the new owner directly, the old source and test names are absent, and no compatibility
+alias exists. Source identity remains
+`391bac1540b6ef414dced0338b842cedc5e54bdb`.
+
+Characterization freezes `TechnicalRelationshipSpec` at Python/pickle owner
+`market_predictor.swing.features.technical_relationships`, ordered nine-feature hash
+`6fc5f34e633e3be00092da294bc86afd1d155d3898b7faff415497d67770bf38`,
+strategy-derived specification hash
+`9409760785ae9d31b67866e5f5f92cd118f1dd32b3a3c5a473a107b4836890a4`, and
+representative output hash
+`814c438377415f3255c7fcd2bb16f005243f47c75302e8a5463c173c4845d4ec`.
+Existing tests continue to prove five-bar pivot confirmation timing, append-only future
+causality, price/volume and trend/range calculations, session/group resets, input
+validation, and row-order preservation.
+
+Readable retained artifact scans found no old Python owner; the same four
+Windows-ACL-protected intraday specialist model directories were unchanged and cannot
+contain this swing-only specification. Verification passed 170 affected tests with two
+skipped and the complete isolated suite with 1,651 passed and three skipped in 16
+minutes 30 seconds. New-owner Ruff, changed import-order Ruff, strict mypy, compileall,
+import smoke, exact source parity, old-path scans, diff checks, and the 4 GiB memory
+gate passed. The reviewer accepted the final diff with no P0, P1, or P2 finding.
+
+Exact next checkpoint: move `edge_rebuild/cross_sectional.py` byte-for-byte to
+`swing/features/cross_sectional.py`; update module-qualified imports in
+`edge_rebuild/swing_features.py`, `edge_rebuild/swing_pipeline_steps.py`, and
+`tests/test_swing_features.py`; and rename `tests/test_cross_sectional.py` to
+`tests/test_swing_cross_sectional_features.py`. First scan retained artifacts for the
+changing `CrossSectionSpec` Python owner. Freeze its pickle round trip, specification
+hash, suffix values, emitted-column order, representative output, future-session
+causality, and session/sector isolation. Do not merge it with
+`intraday/features/cross_sectional.py` or move `edge_rebuild/labeling.py`. No alias or
+artifact rewrite. Rollback anchor: `dd4dbcd`.
