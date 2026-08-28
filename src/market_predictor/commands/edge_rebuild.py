@@ -51,10 +51,6 @@ from market_predictor.edge_rebuild.history_contracts import (
 from market_predictor.edge_rebuild.history_materialization import (
     reorganize_intraday_history,
 )
-from market_predictor.edge_rebuild.issuer_event_precision_audit import (
-    finalize_issuer_event_precision_audit,
-    publish_issuer_event_precision_sample,
-)
 from market_predictor.edge_rebuild.one_minute_coverage import (
     publish_selected_session_one_minute_coverage,
 )
@@ -95,6 +91,12 @@ from market_predictor.edge_rebuild.swing_training import (
 from market_predictor.edge_rebuild.temporal_manifest import (
     load_temporal_manifest_config,
     publish_temporal_manifest,
+)
+from market_predictor.governance.issuer_event_precision.admission_authority import (
+    finalize_issuer_event_precision_audit,
+)
+from market_predictor.governance.issuer_event_precision.sample_authority import (
+    publish_issuer_event_precision_sample,
 )
 from market_predictor.heavy_jobs import serialized_heavy_job
 from market_predictor.intraday.datasets.bar_audit import (

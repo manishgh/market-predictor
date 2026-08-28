@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import sqlite3
 from dataclasses import dataclass, replace
+from inspect import signature
 from pathlib import Path
 
 import pandas as pd
@@ -23,14 +24,25 @@ from market_predictor.catalysts.issuer_events.news_history_contracts import (
     NEWS_HISTORY_MANIFEST_SCHEMA,
 )
 from market_predictor.core.errors import DataReadinessError
-from market_predictor.edge_rebuild import issuer_event_precision_audit as audit_module
-from market_predictor.edge_rebuild.issuer_event_precision_audit import (
-    IssuerEventPrecisionSample,
+from market_predictor.governance.issuer_event_precision import (
+    admission_authority as admission_module,
+)
+from market_predictor.governance.issuer_event_precision import (
+    sample_authority as sample_module,
+)
+from market_predictor.governance.issuer_event_precision.admission_authority import (
     finalize_issuer_event_precision_audit,
     load_issuer_event_precision_audit,
+    wilson_lower_bound,
+)
+from market_predictor.governance.issuer_event_precision.contracts import (
+    RULE_VARIANT_METRIC_COLUMNS,
+    IssuerEventPrecisionSample,
+    load_issuer_event_precision_policy,
+)
+from market_predictor.governance.issuer_event_precision.sample_authority import (
     load_issuer_event_precision_sample,
     publish_issuer_event_precision_sample,
-    wilson_lower_bound,
 )
 from market_predictor.swing.datasets.issuer_event_family_cohort import (
     publish_swing_issuer_family_cohort,
@@ -236,20 +248,20 @@ def test_source_authority_filter_requires_research_eligibility_and_allowed_sourc
         ]
     )
 
-    eligible = audit_module._source_authorized_events(frame)
+    eligible = sample_module._source_authorized_events(frame)
 
     assert eligible["family_event_id"].tolist() == ["eligible", "sec"]
 
 
 def test_cluster_selection_hash_is_independent_of_cluster_row_count() -> None:
     source = _candidate_source("Shared issuer earnings headline")
-    first = audit_module._candidate_index_row(
+    first = sample_module._candidate_index_row(
         _candidate_family("event-a", "security:a"),
         source,
         chunk_id="chunk-1",
         policy_sha256="a" * 64,
     )
-    second = audit_module._candidate_index_row(
+    second = sample_module._candidate_index_row(
         _candidate_family("event-b", "security:b"),
         source,
         chunk_id="chunk-1",
@@ -262,20 +274,20 @@ def test_cluster_selection_hash_is_independent_of_cluster_row_count() -> None:
 
 
 def test_paired_wrong_issuer_row_is_excluded_from_inference() -> None:
-    policy = audit_module.load_issuer_event_precision_policy(_ROOT / "configs" / "issuer_event_precision_audit.toml")
+    policy = load_issuer_event_precision_policy(_ROOT / "configs" / "issuer_event_precision_audit.toml")
     connection = sqlite3.connect(":memory:")
-    audit_module._create_candidate_index(connection)
+    sample_module._create_candidate_index(connection)
     source = _candidate_source("Shared issuer earnings headline")
     connection.executemany(
         "INSERT INTO candidates VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         [
-            audit_module._candidate_index_row(
+            sample_module._candidate_index_row(
                 _candidate_family("event-a", "security:a"),
                 source,
                 chunk_id="chunk-1",
                 policy_sha256="a" * 64,
             ),
-            audit_module._candidate_index_row(
+            sample_module._candidate_index_row(
                 _candidate_family("event-b", "security:b"),
                 source,
                 chunk_id="chunk-1",
@@ -283,7 +295,7 @@ def test_paired_wrong_issuer_row_is_excluded_from_inference() -> None:
             ),
         ],
     )
-    selected = audit_module._select_uniform_cluster_rows(
+    selected = sample_module._select_uniform_cluster_rows(
         connection,
         policy=policy,
         policy_sha256="a" * 64,
@@ -398,7 +410,7 @@ def test_malformed_review_fails_before_authority_replay(
         raise AssertionError("authority replay started before ledger preflight")
 
     monkeypatch.setattr(
-        audit_module,
+        admission_module,
         "load_issuer_event_precision_sample",
         fail_if_replay_starts,
     )
@@ -425,7 +437,7 @@ def test_reviewer_agreement_and_kappa_are_per_field_diagnostics() -> None:
         }
     )
 
-    metrics = audit_module._reviewer_agreement_by_field(reviews, minimum_decisions=10)
+    metrics = admission_module._reviewer_agreement_by_field(reviews, minimum_decisions=10)
 
     assert set(metrics) == {
         "family_correct",
@@ -440,7 +452,7 @@ def test_reviewer_agreement_and_kappa_are_per_field_diagnostics() -> None:
 
 def test_each_estimable_reviewer_field_has_its_own_admission_gate() -> None:
     policy = replace(
-        audit_module.load_issuer_event_precision_policy(_ROOT / "configs" / "issuer_event_precision_audit.toml"),
+        load_issuer_event_precision_policy(_ROOT / "configs" / "issuer_event_precision_audit.toml"),
         minimum_reviewer_agreement=0.9,
         minimum_reviewer_kappa=0.8,
         minimum_kappa_decisions=10,
@@ -475,14 +487,14 @@ def test_each_estimable_reviewer_field_has_its_own_admission_gate() -> None:
             "reviewer_two_event_announced_or_completed": opposite,
         }
     )
-    metrics = audit_module._build_family_metrics(
+    metrics = admission_module._build_family_metrics(
         sample,
         reviews,
         population={
             "earnings": {"eligible_events": 10, "clusters": 10, "issuers": 10},
             **{family: {"eligible_events": 0, "clusters": 0, "issuers": 0} for family in EVENT_FAMILIES if family != "earnings"},
         },
-        rule_variant_metrics=pd.DataFrame(columns=audit_module.RULE_VARIANT_METRIC_COLUMNS),
+        rule_variant_metrics=pd.DataFrame(columns=RULE_VARIANT_METRIC_COLUMNS),
         policy=policy,
     )
 
@@ -495,7 +507,7 @@ def test_each_estimable_reviewer_field_has_its_own_admission_gate() -> None:
 
 
 def test_rule_variant_gate_uses_inferential_clusters_only() -> None:
-    policy = audit_module.load_issuer_event_precision_policy(_ROOT / "configs" / "issuer_event_precision_audit.toml")
+    policy = load_issuer_event_precision_policy(_ROOT / "configs" / "issuer_event_precision_audit.toml")
     sample = pd.DataFrame(
         {
             "sample_id": [f"sample-{index}" for index in range(10)],
@@ -519,7 +531,7 @@ def test_rule_variant_gate_uses_inferential_clusters_only() -> None:
         }
     )
 
-    metrics = audit_module._build_rule_variant_metrics(
+    metrics = admission_module._build_rule_variant_metrics(
         pd.concat([sample, diagnostic], ignore_index=True),
         reviews,
         population={
@@ -548,6 +560,112 @@ def test_tampered_sample_or_authority_is_rejected(tmp_path: Path, target: str) -
         path.write_text(json.dumps(payload), encoding="utf-8")
 
     with pytest.raises(DataReadinessError):
+        load_issuer_event_precision_sample(sample.directory)
+
+
+def test_changed_sample_artifact_path_is_rejected(tmp_path: Path) -> None:
+    sample = _publish_sample(tmp_path)
+    manifest_path = sample.directory / "sample.parquet.manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["artifact_path"] = str((tmp_path / "other" / "sample.parquet").resolve())
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    with pytest.raises(DataReadinessError, match="artifact lineage"):
+        load_issuer_event_precision_sample(sample.directory)
+
+
+def test_public_loaders_do_not_expose_staging_path_override() -> None:
+    assert "_expected_artifact_directory" not in signature(
+        load_issuer_event_precision_sample,
+    ).parameters
+    assert "_expected_artifact_directory" not in signature(
+        load_issuer_event_precision_audit,
+    ).parameters
+
+
+def test_sample_publication_is_not_visible_after_rewritten_path_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    inputs = _publish_inputs(tmp_path / "source")
+    output = tmp_path / "sample"
+    original = sample_module._rewrite_artifact_path
+
+    def corrupt_rewritten_path(path: Path, final_path: Path) -> None:
+        original(path, final_path)
+        manifest_path = path.with_suffix(path.suffix + ".manifest.json")
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        manifest["artifact_path"] = str((tmp_path / "wrong" / path.name).resolve())
+        manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    monkeypatch.setattr(sample_module, "_rewrite_artifact_path", corrupt_rewritten_path)
+
+    with pytest.raises(DataReadinessError, match="artifact lineage"):
+        publish_issuer_event_precision_sample(
+            authority_directory=inputs.authority_dir,
+            policy_path=inputs.precision_policy,
+            output_directory=output,
+        )
+    assert not output.exists()
+
+
+def test_audit_publication_is_not_visible_after_rewritten_path_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    sample = _publish_sample(tmp_path)
+    one, two, adjudication = _review_ledgers(tmp_path, sample.directory)
+    output = tmp_path / "final"
+    original = admission_module._rewrite_artifact_path
+
+    def corrupt_rewritten_path(path: Path, final_path: Path) -> None:
+        original(path, final_path)
+        manifest_path = path.with_suffix(path.suffix + ".manifest.json")
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        manifest["artifact_path"] = str((tmp_path / "wrong" / path.name).resolve())
+        manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    monkeypatch.setattr(admission_module, "_rewrite_artifact_path", corrupt_rewritten_path)
+
+    with pytest.raises(DataReadinessError, match="artifact lineage"):
+        finalize_issuer_event_precision_audit(
+            sample_directory=sample.directory,
+            reviewer_one_path=one,
+            reviewer_two_path=two,
+            adjudication_path=adjudication,
+            output_directory=output,
+        )
+    assert not output.exists()
+
+
+def test_inventory_rejects_symlink_entry_without_os_privilege(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    sample = _publish_sample(tmp_path)
+    original = Path.is_symlink
+
+    def report_sample_as_symlink(path: Path) -> bool:
+        return path.name == "sample.parquet" or original(path)
+
+    monkeypatch.setattr(Path, "is_symlink", report_sample_as_symlink)
+
+    with pytest.raises(DataReadinessError, match="file inventory"):
+        load_issuer_event_precision_sample(sample.directory)
+
+
+def test_symlinked_sample_artifact_is_rejected(tmp_path: Path) -> None:
+    sample = _publish_sample(tmp_path)
+    sample_path = sample.directory / "sample.parquet"
+    target = tmp_path / "copied-sample.parquet"
+    target.write_bytes(sample_path.read_bytes())
+    sample_path.unlink()
+    try:
+        sample_path.symlink_to(target)
+    except OSError as exc:
+        pytest.skip(f"file symlinks are unavailable: {exc}")
+
+    with pytest.raises(DataReadinessError, match="file inventory"):
         load_issuer_event_precision_sample(sample.directory)
 
 

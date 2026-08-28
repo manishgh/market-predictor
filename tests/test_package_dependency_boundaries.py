@@ -55,6 +55,7 @@ REMOVED_PRODUCTION_MODULES = (
     "market_predictor.edge_rebuild.global_event_authority",
     "market_predictor.edge_rebuild.global_event_collection",
     "market_predictor.edge_rebuild.issuer_event_family_authority",
+    "market_predictor.edge_rebuild.issuer_event_precision_audit",
     "market_predictor.edge_rebuild.sec_filing_authority",
     "market_predictor.edge_rebuild.sec_filing_collection",
     "market_predictor.edge_rebuild.sec_identity_authority",
@@ -76,6 +77,7 @@ REMOVED_EDGE_REBUILD_FILES = (
     "global_event_authority.py",
     "global_event_collection.py",
     "issuer_event_family_authority.py",
+    "issuer_event_precision_audit.py",
     "sec_filing_authority.py",
     "sec_filing_collection.py",
     "sec_identity_authority.py",
@@ -341,7 +343,6 @@ def test_cross_horizon_dependency_guard_recognizes_import_forms(
 
 def test_rule_variant_helper_has_one_semantic_owner() -> None:
     expected_owner = PACKAGE_ROOT / "catalysts" / "issuer_events" / "classification.py"
-    legacy_owner = PACKAGE_ROOT / "edge_rebuild" / "issuer_event_precision_audit.py"
     definitions: list[Path] = []
     forbidden_imports: list[str] = []
     for root in (PACKAGE_ROOT, TEST_ROOT, SCRIPT_ROOT):
@@ -366,9 +367,39 @@ def test_rule_variant_helper_has_one_semantic_owner() -> None:
     assert definitions == [expected_owner]
     assert not forbidden_imports, "Rule-variant consumers import the old owner:\n" + "\n".join(forbidden_imports)
 
-    legacy_tree = ast.parse(legacy_owner.read_text(encoding="utf-8-sig"), filename=str(legacy_owner))
-    legacy_bindings = _top_level_binding_lines(legacy_tree, "issuer_event_rule_variant")
-    assert not legacy_bindings, f"Old precision-audit module binds rule-variant helper at lines {legacy_bindings}"
+
+@pytest.mark.parametrize(
+    "statement",
+    (
+        "import market_predictor.edge_rebuild.issuer_event_precision_audit",
+        "import market_predictor.edge_rebuild.issuer_event_precision_audit as precision",
+        "from market_predictor.edge_rebuild import issuer_event_precision_audit",
+        "from market_predictor.edge_rebuild.issuer_event_precision_audit import IssuerEventPrecisionAudit",
+    ),
+)
+def test_removed_precision_audit_import_guard_recognizes_every_import_form(
+    statement: str,
+) -> None:
+    imported_names = tuple(
+        name
+        for node in ast.walk(ast.parse(statement))
+        for name in _imported_names(node)
+    )
+    assert any(
+        _matches_any_dependency(name, REMOVED_PRODUCTION_MODULES)
+        for name in imported_names
+    )
+
+
+def test_issuer_event_precision_governance_is_horizon_neutral() -> None:
+    violations: list[str] = []
+    package = PACKAGE_ROOT / "governance" / "issuer_event_precision"
+    for path in package.rglob("*.py"):
+        for node, imported_name in _module_imports(path):
+            if imported_name.startswith(("market_predictor.swing", "market_predictor.intraday")):
+                relative = path.relative_to(PACKAGE_ROOT.parent)
+                violations.append(f"{relative}:{node.lineno}: {imported_name}")
+    assert not violations, "Precision governance depends on a trading horizon:\n" + "\n".join(violations)
 
 
 @pytest.mark.parametrize(
