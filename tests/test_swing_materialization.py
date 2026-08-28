@@ -7,6 +7,7 @@ from typing import Any
 import pandas as pd
 import pytest
 
+import market_predictor.swing.contracts.materialization as swing_materialization_contracts
 from market_predictor.canonical.store import file_sha256
 from market_predictor.core.errors import DataReadinessError
 from market_predictor.edge_rebuild.swing_daily_combination import (
@@ -15,8 +16,6 @@ from market_predictor.edge_rebuild.swing_daily_combination import (
 )
 from market_predictor.edge_rebuild.swing_features import SWING_FEATURE_PANEL_SCHEMA
 from market_predictor.edge_rebuild.swing_materialization import (
-    SWING_MATERIALIZATION_AUTHORITY_SCHEMA,
-    SWING_MATERIALIZATION_MANIFEST_SCHEMA,
     SWING_MATERIALIZATION_REQUEST_SCHEMA,
     _json_sha256,
     load_complete_swing_feature_panel,
@@ -192,7 +191,9 @@ def test_materialization_resumes_then_publishes_immutable_panel(
     assert complete["stage_one_shards"] == 2
     assert complete["rows"] == 8
     assert complete["feature_profiles"] == ["technical_market"]
-    assert complete["schema"] == SWING_MATERIALIZATION_MANIFEST_SCHEMA
+    assert complete["schema"] == (
+        swing_materialization_contracts.SWING_MATERIALIZATION_MANIFEST_SCHEMA
+    )
     assert complete["swing_feature_panel_schema"] == SWING_FEATURE_PANEL_SCHEMA
     assert complete["decision_start_date"] == MINIMUM_SWING_DECISION_DATE.isoformat()
     request = json.loads((output / "_request.json").read_text(encoding="utf-8"))
@@ -200,7 +201,9 @@ def test_materialization_resumes_then_publishes_immutable_panel(
         (output / "final" / "_authority.json").read_text(encoding="utf-8")
     )
     assert request["schema"] == SWING_MATERIALIZATION_REQUEST_SCHEMA
-    assert authority["schema"] == SWING_MATERIALIZATION_AUTHORITY_SCHEMA
+    assert authority["schema"] == (
+        swing_materialization_contracts.SWING_MATERIALIZATION_AUTHORITY_SCHEMA
+    )
     assert request["decision_start_date"] == MINIMUM_SWING_DECISION_DATE.isoformat()
     assert request["modeled_security_count"] == 4
     assert request["warmup_only_security_ids"] == ["sec:warmup"]

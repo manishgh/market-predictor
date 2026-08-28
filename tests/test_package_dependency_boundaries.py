@@ -65,6 +65,7 @@ REMOVED_PRODUCTION_MODULES = (
     "market_predictor.edge_rebuild.sp500_observed_memberships",
     "market_predictor.edge_rebuild.sp500_transitions",
     "market_predictor.edge_rebuild.strategy_contract",
+    "market_predictor.edge_rebuild.swing_artifact_contracts",
     "market_predictor.edge_rebuild.universe_identity",
     "market_predictor.swing.news_history",
     "market_predictor.swing.news_history_audit",
@@ -90,6 +91,7 @@ REMOVED_EDGE_REBUILD_FILES = (
     "sp500_observed_memberships.py",
     "sp500_transitions.py",
     "strategy_contract.py",
+    "swing_artifact_contracts.py",
     "universe_identity.py",
 )
 REMOVED_MIGRATED_FILES = (
@@ -100,6 +102,7 @@ REMOVED_MIGRATED_FILES = (
     "swing/event_attribution_history.py",
     "swing/event_families.py",
     "swing/event_relevance.py",
+    "swing/contracts.py",
 )
 REMOVED_ACTIVE_SYMBOLS = (
     "GLOBAL_EVENT_QUERY_POLICY_V1",
@@ -472,6 +475,29 @@ def test_removed_feature_pipeline_import_guard_recognizes_every_import_form(
     ),
 )
 def test_removed_intraday_history_contract_import_guard_recognizes_every_import_form(
+    statement: str,
+) -> None:
+    imported_names = tuple(
+        name
+        for node in ast.walk(ast.parse(statement))
+        for name in _imported_names(node)
+    )
+    assert any(
+        _matches_any_dependency(name, REMOVED_PRODUCTION_MODULES)
+        for name in imported_names
+    )
+
+
+@pytest.mark.parametrize(
+    "statement",
+    (
+        "import market_predictor.edge_rebuild.swing_artifact_contracts",
+        "import market_predictor.edge_rebuild.swing_artifact_contracts as contracts",
+        "from market_predictor.edge_rebuild import swing_artifact_contracts",
+        "from market_predictor.edge_rebuild.swing_artifact_contracts import SWING_MATERIALIZATION_AUTHORITY_SCHEMA",
+    ),
+)
+def test_removed_swing_materialization_contract_import_guard_recognizes_every_import_form(
     statement: str,
 ) -> None:
     imported_names = tuple(

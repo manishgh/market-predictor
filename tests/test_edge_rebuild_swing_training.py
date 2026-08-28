@@ -11,8 +11,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
-import market_predictor.edge_rebuild.swing_artifact_contracts as swing_artifact_contracts
 import market_predictor.edge_rebuild.training.economics
+import market_predictor.swing.contracts.materialization as swing_materialization_contracts
 from market_predictor.canonical.store import file_sha256
 from market_predictor.core.errors import DataReadinessError
 from market_predictor.edge_rebuild import swing_training
@@ -142,7 +142,7 @@ def test_input_authority_rejects_pre_cutoff_decisions(
     manifest_path = final / "_manifest.json"
     manifest_path.write_text("{}\n", encoding="utf-8")
     authority = {
-        "schema": swing_artifact_contracts.SWING_MATERIALIZATION_AUTHORITY_SCHEMA,
+        "schema": swing_materialization_contracts.SWING_MATERIALIZATION_AUTHORITY_SCHEMA,
         "state": "complete",
         "artifact_sha256": file_sha256(manifest_path),
     }
@@ -150,7 +150,7 @@ def test_input_authority_rejects_pre_cutoff_decisions(
         json.dumps(authority, sort_keys=True) + "\n", encoding="utf-8"
     )
     manifest = {
-        "schema": swing_training.SWING_MATERIALIZATION_MANIFEST_SCHEMA,
+        "schema": swing_materialization_contracts.SWING_MATERIALIZATION_MANIFEST_SCHEMA,
         "strategy_contract_sha256": contract.sha256(),
         "feature_profiles": list(swing_training.ALLOWED_PROFILES),
         "first_session": "2018-05-29",

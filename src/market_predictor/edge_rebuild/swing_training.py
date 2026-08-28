@@ -13,11 +13,9 @@ from typing import Any, Final
 import joblib
 import pandas as pd
 
+import market_predictor.swing.contracts.materialization as swing_materialization_contracts
 from market_predictor.canonical.store import file_sha256
 from market_predictor.core.errors import DataReadinessError
-from market_predictor.edge_rebuild.swing_artifact_contracts import (
-    SWING_MATERIALIZATION_MANIFEST_SCHEMA,
-)
 from market_predictor.edge_rebuild.swing_features import (
     MANAGED_PATH_COST_POLICY,
     SWING_BASELINE_ABLATION_ORDER,
@@ -902,7 +900,9 @@ def load_swing_candidate_authority(directory: Path) -> dict[str, Any]:
 
 def _binding_record(binding: SwingPanelBinding, decision_ids_sha256: str) -> dict[str, Any]:
     return {
-        "panel_manifest_schema": SWING_MATERIALIZATION_MANIFEST_SCHEMA,
+        "panel_manifest_schema": (
+            swing_materialization_contracts.SWING_MATERIALIZATION_MANIFEST_SCHEMA
+        ),
         "panel_manifest_sha256": binding.manifest_sha256,
         "panel_authority_sha256": binding.authority_sha256,
         "panel_request_sha256": binding.request_sha256,

@@ -13,12 +13,9 @@ import pyarrow as pa
 import pyarrow.dataset as pds
 import pyarrow.parquet as pq
 
+import market_predictor.swing.contracts.materialization as swing_materialization_contracts
 from market_predictor.canonical.store import file_sha256
 from market_predictor.core.errors import DataReadinessError
-from market_predictor.edge_rebuild.swing_artifact_contracts import (
-    SWING_MATERIALIZATION_AUTHORITY_SCHEMA,
-    SWING_MATERIALIZATION_MANIFEST_SCHEMA,
-)
 from market_predictor.edge_rebuild.swing_features import (
     MANAGED_BENCHMARK_RETURN_COLUMNS,
     MANAGED_EXCESS_RETURN_COLUMNS,
@@ -121,9 +118,15 @@ def load_swing_panel_binding(
     manifest_path = final / _MANIFEST_NAME
     authority_path = final / _AUTHORITY_NAME
     authority = _read_json(authority_path, "swing panel authority")
-    if manifest.get("schema") != SWING_MATERIALIZATION_MANIFEST_SCHEMA:
+    if (
+        manifest.get("schema")
+        != swing_materialization_contracts.SWING_MATERIALIZATION_MANIFEST_SCHEMA
+    ):
         raise DataReadinessError("only the current edge-rebuild swing panel is accepted")
-    if authority.get("schema") != SWING_MATERIALIZATION_AUTHORITY_SCHEMA:
+    if (
+        authority.get("schema")
+        != swing_materialization_contracts.SWING_MATERIALIZATION_AUTHORITY_SCHEMA
+    ):
         raise DataReadinessError("swing panel authority schema is not current")
     if authority.get("state") != "complete":
         raise DataReadinessError("swing panel authority is not complete")

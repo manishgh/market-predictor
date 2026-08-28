@@ -12,14 +12,11 @@ from typing import Any, Final
 
 import pandas as pd
 
+import market_predictor.swing.contracts.materialization as swing_materialization_contracts
 from market_predictor.canonical.store import (
     file_sha256,
 )
 from market_predictor.core.errors import DataReadinessError
-from market_predictor.edge_rebuild.swing_artifact_contracts import (
-    SWING_MATERIALIZATION_AUTHORITY_SCHEMA,
-    SWING_MATERIALIZATION_MANIFEST_SCHEMA,
-)
 from market_predictor.edge_rebuild.swing_daily_combination import (
     CUTOFF_DATE,
     VerifiedCombinedInputs,
@@ -241,7 +238,8 @@ def load_complete_swing_feature_panel(output_dir: Path) -> dict[str, Any]:
         != "technical_features_and_full_population_labels_only"
         or request.get("request_sha256") != request_sha256
         or not _population_audit_verifies(request)
-        or manifest.get("schema") != SWING_MATERIALIZATION_MANIFEST_SCHEMA
+        or manifest.get("schema")
+        != swing_materialization_contracts.SWING_MATERIALIZATION_MANIFEST_SCHEMA
         or manifest.get("decision_start_date")
         != MINIMUM_SWING_DECISION_DATE.isoformat()
         or manifest.get("swing_feature_panel_schema")
@@ -267,7 +265,8 @@ def load_complete_swing_feature_panel(output_dir: Path) -> dict[str, Any]:
         != ["feature_profile", "calendar_month"]
         or manifest.get("physical_partitioning")
         != ["feature_profile", "calendar_month"]
-        or authority.get("schema") != SWING_MATERIALIZATION_AUTHORITY_SCHEMA
+        or authority.get("schema")
+        != swing_materialization_contracts.SWING_MATERIALIZATION_AUTHORITY_SCHEMA
         or authority.get("decision_start_date")
         != MINIMUM_SWING_DECISION_DATE.isoformat()
         or authority.get("swing_feature_panel_schema")
@@ -735,7 +734,7 @@ def _finalize_and_publish_stage_one(
         ):
             raise DataReadinessError("swing panel stage two produced no partitions")
         manifest: dict[str, Any] = {
-            "schema": SWING_MATERIALIZATION_MANIFEST_SCHEMA,
+            "schema": swing_materialization_contracts.SWING_MATERIALIZATION_MANIFEST_SCHEMA,
             "created_at_utc": datetime.now(UTC).isoformat(),
             "request_sha256": request_sha256,
             "strategy_contract_sha256": request["strategy_contract_sha256"],
@@ -817,7 +816,7 @@ def _finalize_and_publish_stage_one(
         _write_json_atomic(
             staging / "_authority.json",
             {
-                "schema": SWING_MATERIALIZATION_AUTHORITY_SCHEMA,
+                "schema": swing_materialization_contracts.SWING_MATERIALIZATION_AUTHORITY_SCHEMA,
                 "state": "complete",
                 "request_sha256": request_sha256,
                 "strategy_contract_sha256": request[
