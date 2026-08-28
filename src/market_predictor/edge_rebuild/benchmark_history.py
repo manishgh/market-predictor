@@ -13,13 +13,13 @@ import pandas as pd
 
 from market_predictor.canonical.store import file_sha256
 from market_predictor.core.errors import DataReadinessError
-from market_predictor.edge_rebuild.history_contracts import (
+from market_predictor.edge_rebuild.selected_session_history import (
+    verify_selected_stock_sessions,
+)
+from market_predictor.intraday.contracts.history_collection import (
     REGULAR_SEGMENT,
     SELECTED_SESSION_BENCHMARK_PLAN_SCHEMA,
     SelectedSessionBenchmarkConfig,
-)
-from market_predictor.edge_rebuild.selected_session_history import (
-    verify_selected_stock_sessions,
 )
 from market_predictor.intraday.datasets.history import (
     SELECTED_SESSION_BENCHMARK_PLAN_AUTHORITY_SCHEMA,

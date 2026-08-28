@@ -12,8 +12,6 @@ silently reweight it.
 """
 from __future__ import annotations
 
-
-
 import shutil
 import uuid
 from datetime import UTC, datetime
@@ -25,10 +23,11 @@ import exchange_calendars as xcals
 import pandas as pd
 
 from market_predictor.canonical.store import file_sha256
+from market_predictor.core.errors import DataReadinessError
 from market_predictor.edge_rebuild.history_collection import (
     load_complete_intraday_history_collection,
 )
-from market_predictor.edge_rebuild.history_contracts import (
+from market_predictor.intraday.contracts.history_collection import (
     EXTENDED_CONTEXT_PLAN_SCHEMA,
     INTRADAY_HISTORY_PLAN_SCHEMA,
     POSTMARKET_SEGMENT,
@@ -54,7 +53,6 @@ from market_predictor.resources import (
     assert_peak_memory_budget,
     memory_audit,
 )
-from market_predictor.core.errors import DataReadinessError
 
 EXCHANGE_TIMEZONE = "America/New_York"
 SESSION_WINDOW_COLUMNS = (

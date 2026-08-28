@@ -5,7 +5,8 @@ import pandas as pd
 import pytest
 
 from market_predictor.canonical.store import file_sha256
-from market_predictor.edge_rebuild.history_contracts import (
+from market_predictor.core.errors import DataReadinessError
+from market_predictor.intraday.contracts.history_collection import (
     INTRADAY_HISTORY_SCHEMA,
     IntradayHistoryConfig,
     load_intraday_history_config,
@@ -14,7 +15,6 @@ from market_predictor.intraday.datasets.history import (
     build_intraday_history_plan,
     load_complete_intraday_history_plan,
 )
-from market_predictor.core.errors import DataReadinessError
 
 POLICY_PATH = Path("configs/edge_rebuild_intraday_history.toml")
 

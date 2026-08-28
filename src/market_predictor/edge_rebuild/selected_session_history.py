@@ -37,7 +37,7 @@ import pandas as pd
 
 from market_predictor.canonical.store import file_sha256
 from market_predictor.core.errors import DataReadinessError
-from market_predictor.edge_rebuild.history_contracts import (
+from market_predictor.intraday.contracts.history_collection import (
     REGULAR_SEGMENT,
     SELECTED_SESSION_ONE_MINUTE_PLAN_SCHEMA,
     SELECTED_SESSION_PLAN_SCHEMA,

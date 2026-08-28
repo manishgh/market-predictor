@@ -1,8 +1,6 @@
 """Resumable Alpaca transport for ER1A five-minute history units."""
 from __future__ import annotations
 
-
-
 import hashlib
 import json
 import shutil
@@ -19,7 +17,8 @@ import pandas as pd
 
 from market_predictor.canonical.normalize import canonicalize_bars
 from market_predictor.canonical.store import file_sha256
-from market_predictor.edge_rebuild.history_contracts import (
+from market_predictor.core.errors import DataReadinessError, SchemaMismatchError
+from market_predictor.intraday.contracts.history_collection import (
     IntradayTransportConfig,
 )
 from market_predictor.intraday.datasets.history import (
@@ -32,7 +31,6 @@ from market_predictor.resources import (
     release_process_memory,
 )
 from market_predictor.sources.alpaca import AlpacaBarsPage, AlpacaSource
-from market_predictor.core.errors import DataReadinessError, SchemaMismatchError
 
 HISTORY_COLLECTION_SCHEMA = "edge_rebuild.intraday_history_collection.v1"
 HISTORY_UNIT_SCHEMA = "edge_rebuild.intraday_history_unit.v1"

@@ -1,8 +1,6 @@
 """Plan missing broad-universe regular-session five-minute history."""
 from __future__ import annotations
 
-
-
 import json
 import shutil
 import uuid
@@ -20,7 +18,8 @@ import pyarrow.compute as pc
 import pyarrow.parquet as pq
 
 from market_predictor.canonical.store import file_sha256
-from market_predictor.edge_rebuild.history_contracts import (
+from market_predictor.core.errors import DataReadinessError
+from market_predictor.intraday.contracts.history_collection import (
     BROAD_INTRADAY_HISTORY_PLAN_SCHEMA,
     BroadIntradayHistoryConfig,
 )
@@ -40,7 +39,6 @@ from market_predictor.resources import (
     assert_peak_memory_budget,
     memory_audit,
 )
-from market_predictor.core.errors import DataReadinessError
 
 _MEMBERSHIP_COLUMNS = {
     "ticker",

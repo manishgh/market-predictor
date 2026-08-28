@@ -8,6 +8,7 @@ import pandas as pd
 import pytest
 
 from market_predictor.canonical.store import file_sha256
+from market_predictor.core.errors import DataReadinessError
 from market_predictor.edge_rebuild.extended_session_context import (
     build_extended_session_context_plan,
 )
@@ -15,7 +16,7 @@ from market_predictor.edge_rebuild.history_collection import (
     HISTORY_AUTHORITY_SCHEMA,
     HISTORY_COLLECTION_SCHEMA,
 )
-from market_predictor.edge_rebuild.history_contracts import (
+from market_predictor.intraday.contracts.history_collection import (
     EXTENDED_CONTEXT_PLAN_SCHEMA,
     INTRADAY_HISTORY_PLAN_SCHEMA,
     POSTMARKET_SEGMENT,
@@ -28,7 +29,6 @@ from market_predictor.intraday.datasets.history import (
     PLAN_AUTHORITY_SCHEMA,
     json_sha256,
 )
-from market_predictor.core.errors import DataReadinessError
 
 CONTEXT_POLICY = Path("configs/edge_rebuild_extended_session_context.toml")
 HISTORY_POLICY = Path("configs/edge_rebuild_intraday_history.toml")

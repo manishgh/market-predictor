@@ -7,16 +7,16 @@ import pandas as pd
 import pytest
 
 from market_predictor.canonical.store import file_sha256
+from market_predictor.core.errors import DataReadinessError
 from market_predictor.edge_rebuild.broad_intraday_history import (
     build_broad_intraday_history_plan,
     load_complete_broad_intraday_history_plan,
 )
-from market_predictor.edge_rebuild.history_contracts import (
+from market_predictor.intraday.contracts.history_collection import (
     BroadIntradayHistoryConfig,
     load_broad_intraday_history_config,
     load_collection_transport_config,
 )
-from market_predictor.core.errors import DataReadinessError
 
 POLICY = Path("configs/edge_rebuild_broad_intraday_history.toml")
 EARLY_CLOSE = "2024-07-03"

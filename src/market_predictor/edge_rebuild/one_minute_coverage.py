@@ -17,7 +17,7 @@ from market_predictor.core.errors import DataReadinessError
 from market_predictor.edge_rebuild.history_collection import (
     load_complete_intraday_history_collection,
 )
-from market_predictor.edge_rebuild.history_contracts import (
+from market_predictor.intraday.contracts.history_collection import (
     SELECTED_SESSION_ONE_MINUTE_PLAN_SCHEMA,
 )
 from market_predictor.intraday.datasets.history import (

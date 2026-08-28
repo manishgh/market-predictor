@@ -11,11 +11,12 @@ import pandas as pd
 import pytest
 
 from market_predictor.canonical.store import file_sha256
+from market_predictor.core.errors import DataReadinessError
 from market_predictor.edge_rebuild.history_collection import (
     collect_intraday_history,
     load_complete_intraday_history_collection,
 )
-from market_predictor.edge_rebuild.history_contracts import (
+from market_predictor.intraday.contracts.history_collection import (
     INTRADAY_HISTORY_PLAN_SCHEMA,
     load_intraday_history_config,
 )
@@ -23,7 +24,6 @@ from market_predictor.intraday.datasets.history import (
     PLAN_AUTHORITY_SCHEMA,
 )
 from market_predictor.sources.alpaca import AlpacaBarsPage
-from market_predictor.core.errors import DataReadinessError
 
 POLICY_PATH = Path("configs/edge_rebuild_intraday_history.toml")
 

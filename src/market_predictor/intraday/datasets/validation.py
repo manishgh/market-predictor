@@ -18,10 +18,6 @@ from market_predictor.core.errors import DataReadinessError
 from market_predictor.edge_rebuild.history_collection import (
     load_complete_intraday_history_collection,
 )
-from market_predictor.edge_rebuild.history_contracts import (
-    SELECTED_SESSION_BENCHMARK_PLAN_SCHEMA,
-    SELECTED_SESSION_ONE_MINUTE_PLAN_SCHEMA,
-)
 from market_predictor.edge_rebuild.one_minute_coverage import (
     load_complete_one_minute_coverage,
     verify_canonical_five_minute_store,
@@ -33,6 +29,10 @@ from market_predictor.intraday.contracts.dataset_schemas import (
     _REQUIRED_BENCHMARKS,
     MAXIMUM_SECURITY_EXCLUSION_FRACTION,
     _VerifiedInputs,
+)
+from market_predictor.intraday.contracts.history_collection import (
+    SELECTED_SESSION_BENCHMARK_PLAN_SCHEMA,
+    SELECTED_SESSION_ONE_MINUTE_PLAN_SCHEMA,
 )
 from market_predictor.intraday.contracts.lineage import (
     DEFAULT_INTRADAY_CONTRACT_LINEAGE_PATH,

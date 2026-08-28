@@ -54,6 +54,7 @@ REMOVED_PRODUCTION_MODULES = (
     "market_predictor.edge_rebuild.corpus_integrity",
     "market_predictor.edge_rebuild.global_event_authority",
     "market_predictor.edge_rebuild.global_event_collection",
+    "market_predictor.edge_rebuild.history_contracts",
     "market_predictor.edge_rebuild.issuer_event_family_authority",
     "market_predictor.edge_rebuild.issuer_event_precision_audit",
     "market_predictor.edge_rebuild.pipeline",
@@ -78,6 +79,7 @@ REMOVED_EDGE_REBUILD_FILES = (
     "corpus_integrity.py",
     "global_event_authority.py",
     "global_event_collection.py",
+    "history_contracts.py",
     "issuer_event_family_authority.py",
     "issuer_event_precision_audit.py",
     "pipeline.py",
@@ -447,6 +449,29 @@ def test_removed_strategy_contract_import_guard_recognizes_every_import_form(
     ),
 )
 def test_removed_feature_pipeline_import_guard_recognizes_every_import_form(
+    statement: str,
+) -> None:
+    imported_names = tuple(
+        name
+        for node in ast.walk(ast.parse(statement))
+        for name in _imported_names(node)
+    )
+    assert any(
+        _matches_any_dependency(name, REMOVED_PRODUCTION_MODULES)
+        for name in imported_names
+    )
+
+
+@pytest.mark.parametrize(
+    "statement",
+    (
+        "import market_predictor.edge_rebuild.history_contracts",
+        "import market_predictor.edge_rebuild.history_contracts as contracts",
+        "from market_predictor.edge_rebuild import history_contracts",
+        "from market_predictor.edge_rebuild.history_contracts import IntradayHistoryConfig",
+    ),
+)
+def test_removed_intraday_history_contract_import_guard_recognizes_every_import_form(
     statement: str,
 ) -> None:
     imported_names = tuple(

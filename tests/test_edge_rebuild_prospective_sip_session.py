@@ -12,7 +12,7 @@ import pytest
 
 import market_predictor.edge_rebuild.prospective_sip_session as module
 from market_predictor.core.errors import DataReadinessError
-from market_predictor.edge_rebuild.history_contracts import (
+from market_predictor.intraday.contracts.history_collection import (
     load_intraday_history_config,
     load_selected_session_benchmark_config,
 )

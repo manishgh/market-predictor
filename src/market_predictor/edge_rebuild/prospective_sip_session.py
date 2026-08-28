@@ -20,7 +20,7 @@ from market_predictor.edge_rebuild.history_collection import (
     collect_intraday_history,
     load_complete_intraday_history_collection,
 )
-from market_predictor.edge_rebuild.history_contracts import (
+from market_predictor.intraday.contracts.history_collection import (
     INTRADAY_HISTORY_PLAN_SCHEMA,
     SELECTED_SESSION_BENCHMARK_PLAN_SCHEMA,
     IntradayHistoryConfig,

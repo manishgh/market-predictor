@@ -39,15 +39,6 @@ from market_predictor.edge_rebuild.extended_session_context import (
 from market_predictor.edge_rebuild.history_collection import (
     collect_intraday_history,
 )
-from market_predictor.edge_rebuild.history_contracts import (
-    load_broad_intraday_history_config,
-    load_collection_transport_config,
-    load_extended_session_context_config,
-    load_intraday_history_config,
-    load_selected_session_benchmark_config,
-    load_selected_session_history_config,
-    load_selected_session_one_minute_config,
-)
 from market_predictor.edge_rebuild.history_materialization import (
     reorganize_intraday_history,
 )
@@ -98,6 +89,15 @@ from market_predictor.governance.issuer_event_precision.sample_authority import 
     publish_issuer_event_precision_sample,
 )
 from market_predictor.heavy_jobs import serialized_heavy_job
+from market_predictor.intraday.contracts.history_collection import (
+    load_broad_intraday_history_config,
+    load_collection_transport_config,
+    load_extended_session_context_config,
+    load_intraday_history_config,
+    load_selected_session_benchmark_config,
+    load_selected_session_history_config,
+    load_selected_session_one_minute_config,
+)
 from market_predictor.intraday.datasets.bar_audit import (
     publish_intraday_bar_dataset_audit,
 )

@@ -10,7 +10,7 @@ from market_predictor.edge_rebuild import benchmark_history
 from market_predictor.edge_rebuild.benchmark_history import (
     build_selected_session_benchmark_plan,
 )
-from market_predictor.edge_rebuild.history_contracts import (
+from market_predictor.intraday.contracts.history_collection import (
     SelectedSessionBenchmarkConfig,
     load_selected_session_benchmark_config,
 )
