@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import hashlib
+import json
+import pickle
+from dataclasses import asdict
 from pathlib import Path
 
 import numpy as np
@@ -7,13 +11,13 @@ import pandas as pd
 import pytest
 
 from market_predictor.core.errors import DataReadinessError
-from market_predictor.edge_rebuild.technical_relationships import (
+from market_predictor.modeling.strategy_contract import load_strategy_contract
+from market_predictor.swing.features.technical_relationships import (
     TechnicalRelationshipSpec,
     add_technical_relationship_features,
     relationship_spec_from_contract,
     technical_relationship_feature_names,
 )
-from market_predictor.modeling.strategy_contract import load_strategy_contract
 
 
 def _spec(
@@ -193,6 +197,57 @@ def test_contract_binds_the_shared_relationship_spec() -> None:
     assert spec.obv_lookback_bars == 20
     assert spec.efficiency_lookback_bars == 20
     assert spec.group_columns == ("ticker", "session_date_et")
+
+
+def test_relationship_contract_owner_and_hashes_are_stable() -> None:
+    contract = load_strategy_contract(
+        Path("configs/edge_rebuild_strategy_contract.toml")
+    )
+    spec = relationship_spec_from_contract(
+        contract,
+        group_columns=("ticker", "session_date_et"),
+        time_column="bar_end_utc",
+        rsi_column="rsi_14_5m",
+        suffix="_5m",
+    )
+    restored = pickle.loads(pickle.dumps(spec))
+    feature_names = technical_relationship_feature_names()
+
+    assert TechnicalRelationshipSpec.__module__ == (
+        "market_predictor.swing.features.technical_relationships"
+    )
+    assert restored == spec
+    assert type(restored).__module__ == (
+        "market_predictor.swing.features.technical_relationships"
+    )
+    assert hashlib.sha256(
+        json.dumps(feature_names, separators=(",", ":")).encode("utf-8")
+    ).hexdigest() == (
+        "6fc5f34e633e3be00092da294bc86afd1d155d3898b7faff415497d67770bf38"
+    )
+    assert hashlib.sha256(
+        json.dumps(asdict(spec), sort_keys=True, separators=(",", ":")).encode(
+            "utf-8"
+        )
+    ).hexdigest() == (
+        "9409760785ae9d31b67866e5f5f92cd118f1dd32b3a3c5a473a107b4836890a4"
+    )
+
+
+def test_representative_relationship_output_hash_is_stable() -> None:
+    frame = _bars(
+        [100, 101, 104, 102, 101, 103, 106, 104, 103, 105, 102, 101],
+        rsi=[45, 55, 75, 60, 50, 58, 62, 54, 48, 57, 43, 40],
+    )
+    output = add_technical_relationship_features(frame, spec=_spec())
+    payload = output.loc[:, technical_relationship_feature_names()].to_json(
+        orient="split",
+        double_precision=15,
+    )
+
+    assert hashlib.sha256(payload.encode("utf-8")).hexdigest() == (
+        "814c438377415f3255c7fcd2bb16f005243f47c75302e8a5463c173c4845d4ec"
+    )
 
 
 def test_invalid_or_ambiguous_input_fails_closed() -> None:

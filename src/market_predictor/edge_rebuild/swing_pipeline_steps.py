@@ -36,7 +36,7 @@ class SetupComponentsStep:
 
 class TechnicalRelationshipsStep:
     def __init__(self, contract: StrategyContract):
-        from market_predictor.edge_rebuild.technical_relationships import relationship_spec_from_contract
+        from market_predictor.swing.features.technical_relationships import relationship_spec_from_contract
         self.spec = relationship_spec_from_contract(
             contract,
             group_columns=("security_id",),
@@ -44,7 +44,7 @@ class TechnicalRelationshipsStep:
         )
         
     def transform(self, df: pd.DataFrame) -> pd.DataFrame:
-        from market_predictor.edge_rebuild.technical_relationships import add_technical_relationship_features
+        from market_predictor.swing.features.technical_relationships import add_technical_relationship_features
         return add_technical_relationship_features(df, spec=self.spec)
 
 
