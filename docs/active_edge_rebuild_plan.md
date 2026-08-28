@@ -1376,10 +1376,23 @@ test, and task names.
      boundary tests, strict mypy, compileall, import smoke, removed-path scans, diff
      checks, and process-memory checks passed. The assigned senior reviewer accepted
      the final diff with no P0, P1, or P2 finding.
-   - **Shared mathematical primitives migration (`next`).** Inventory cross-horizon
-     feature, label, return, ranking, and evaluation math still owned by `edge_rebuild`;
-     move only genuinely shared authorities into `modeling`, preserve exact numerical
-     behavior and persisted identities, update consumers directly, and prohibit aliases.
+   - **Shared mathematical primitive ownership (`completed`).** Implementation commit
+     `8d42d26` moves the only horizon-neutral authority found in this pass,
+     `FeatureStep` and `FeaturePipeline`, from `edge_rebuild` to
+     `modeling/feature_pipeline.py`. The implementation is byte- and AST-identical;
+     swing and intraday consumers import the new owner directly, no alias exists, and
+     architecture tests reject every old import form and old-file reintroduction. The
+     review explicitly keeps cross-sectional scaling and technical relationships out of
+     `modeling`: their current policies and consumers are swing-specific, so they move
+     later to `swing/features`. The mixed label module must be split during the horizon
+     label migrations rather than moved wholesale. Verification passed 119 focused
+     tests and the complete suite with 1,613 passed and three skipped. Touched Ruff,
+     strict mypy, compileall, code-hash parity, removed-path scans, diff checks, and
+     process-memory checks passed. The assigned senior reviewer accepted the final diff
+     with no P0, P1, or P2 finding.
+   - **Horizon contract migration (`next`).** Move swing and intraday contract owners
+     into their descriptive horizon packages, preserving schema strings, hashes,
+     validators, feature order, serialized ownership, and direct consumer behavior.
 5. **Governance, serving, and command package migration (`pending`).**
    Move readiness, promotion, drift, and outcomes to `governance`; bundle loading,
    prediction services, and API behavior to `serving`; and retain only thin CLI
@@ -1390,7 +1403,10 @@ test, and task names.
 6. **Repository-wide static quality (`pending`).**
    Resolve all configured repository-wide Ruff and strict mypy findings, remove only
    reference-proven scratch or placeholder artifacts, and add architecture guards that
-   prevent duplicate production namespaces from returning.
+   prevent duplicate production namespaces from returning. The measured baseline after
+   `8d42d26` is 198 Ruff findings (107 import-order, 61 import-placement, 20 unused
+   imports, and 10 unused redefinitions) and 348 strict mypy findings across 61 files;
+   these are existing repository debt, not accepted passes.
 7. **Full verification and closure (`pending`).**
    Run focused tests after each task, then repository-wide Ruff, strict mypy, the full
    test suite under the configured writable runtime directory, `git diff --check`, and

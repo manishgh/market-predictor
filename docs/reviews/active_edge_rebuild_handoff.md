@@ -817,8 +817,30 @@ authority and boundary tests, strict mypy, compileall, import smoke, removed-pat
 diff checks, and process-memory checks passed. The assigned senior reviewer accepted the
 final diff with no P0, P1, or P2 finding.
 
-Exact next checkpoint: inventory cross-horizon feature, label, return, ranking, and
-evaluation math still owned by `edge_rebuild`. Move only genuinely shared mathematical
-authorities to `modeling`, preserve exact numerical behavior and persisted identities,
-update every consumer directly, and prohibit compatibility aliases. Rollback anchor:
-`c408d58`.
+Implementation commit `8d42d26` completes the **shared mathematical primitive
+ownership** checkpoint. `FeatureStep` and `FeaturePipeline` now have one production
+owner at `modeling/feature_pipeline.py`; the file is byte- and AST-identical to the
+removed `edge_rebuild/pipeline.py`, both horizons import it directly, and no alias
+exists. Old-path poison guards cover every Python import form and old-file
+reintroduction. No retained serialized artifact references the removed owner.
+
+The independent design review rejected moving `edge_rebuild/cross_sectional.py` or
+`edge_rebuild/technical_relationships.py` into `modeling`: their actual transforms and
+consumers are swing-specific, so they belong in the later `swing/features` migration.
+It also requires `edge_rebuild/labeling.py` to be split: shared outcome constants move
+to a horizon-neutral owner, while daily barriers and session/sector rank labels move to
+`swing/labels`; intraday keeps its exact minute-path label authority.
+
+Verification passed 119 focused tests and the complete isolated suite with 1,613 passed
+and three skipped in 14 minutes 5 seconds. Touched Ruff, strict mypy, compileall,
+code-hash parity, removed-path scans, diff checks, and process-memory checks passed. The
+assigned senior reviewer accepted the final diff with no P0, P1, or P2 finding.
+Repository-wide static verification was run and remains open: Ruff reports 198 existing
+findings (107 import-order, 61 import-placement, 20 unused imports, 10 unused
+redefinitions), and strict mypy reports 348 existing findings across 61 files. These
+counts are the baseline for the dedicated static-quality checkpoint, not passes.
+
+Exact next checkpoint: move swing and intraday contract owners into their descriptive
+horizon packages. Preserve schema strings, hashes, validators, feature order, serialized
+ownership, and direct consumer behavior; update old-path poison guards and do not add
+compatibility aliases. Rollback anchor: `8d42d26`.
