@@ -1331,9 +1331,20 @@ test, and task names.
           1,584 passed and 2 skipped. Both retained v2 eras passed strict real-data
           replay below 2 GiB, affected-file Ruff and strict mypy passed, and the assigned
           reviewer accepted the final diff with no P0, P1, or P2 finding.
-       5. **Issuer-event precision governance (`current task`).** Move precision
-          sampling, review, and admission evidence to `governance` without changing
-          stored schemas, hashes, eligibility, or admission semantics.
+       5. **Issuer-event precision governance (`completed`).** Implementation commit
+          `7ce23a0` moves deterministic sampling, blind review resolution, artifact
+          integrity, and family/rule-variant admission into
+          `governance/issuer_event_precision`. The old combined module is absent and
+          guarded against reintroduction; command names and swing-ablation behavior
+          are unchanged. Public loaders remain strict, staged publication validates
+          fully rewritten final paths before atomic rename, and failure-injection tests
+          prove invalid authorities are never made visible. Both retained periods
+          replay with unchanged sample/audit authority hashes and 1,796/1,859 review
+          rows. Verification passed 120 affected tests with one skipped, 25 final
+          governance tests with one skipped, and the complete suite with 1,594 passed
+          and three skipped. Affected Ruff, strict mypy, compileall, removed-path
+          scans, diff checks, and process checks passed. The assigned senior reviewer
+          accepted the final diff with no P0, P1, or P2 finding.
        The required dependency direction is `sources -> catalysts -> swing ->
        governance`; commands remain outer adapters.
 4. **Swing and intraday package migration (`pending`).**

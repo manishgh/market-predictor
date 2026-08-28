@@ -749,8 +749,39 @@ P2 finding. Repository-wide static cleanup remains plan task 6: current whole-tr
 Ruff reports 278 pre-existing findings and strict mypy reports 16 errors in three
 intraday dataset files; they were not expanded into this bounded checkpoint.
 
-Exact next checkpoint: move **issuer-event precision sampling, review, and admission
-evidence** from `edge_rebuild/issuer_event_precision_audit.py` to descriptive
-`governance` modules. Preserve persisted schemas, hashes, deterministic sampling,
-review lineage, precision gates, and admission decisions. Obtain design review before
-editing and final diff acceptance before closure.
+Implementation commit `7ce23a0` completes **issuer-event precision governance**.
+Deterministic sample publication, blind review resolution, immutable artifact
+integrity, and family/rule-variant admission now belong to
+`governance/issuer_event_precision`. The old combined module and test name are absent;
+architecture guards reject every old import form and prevent governance from importing
+either trading horizon. Command names and swing-ablation semantics are unchanged.
+
+Publication remains fail-closed and atomic. Child manifests are rewritten to their
+intended final paths while still staged, the complete staged authority is replayed
+against that intended location, and only then is the directory atomically published.
+The final public loaders do not expose the staging-only path binding. Injected sample
+and audit corruption leaves no output directory. Symlink rejection has both a real
+filesystem test and a permission-independent inventory test.
+
+Strict retained-data replay after the final implementation:
+
+- `2019-07-09` through `2021-07-08`: 1,796 sample/review rows, sample authority
+  `1de62f84b72d8e793b0d10de65354edaac7baab9f97433096ab3dceb1873cddd`, audit
+  authority `e68f66dd47d8f156e6040ccb473556aed75b0c74acaa01065d85eff0a475946f`.
+- `2021-07-09` through `2026-07-08`: 1,859 sample/review rows, sample authority
+  `b4bab375d8f1cd5dcae2d349fdac5bb3d1967398cd808c932aaec873c59c37c9`, audit
+  authority `4e82c21cfd4b5daf9cdc4ad85d52bea52c81fc98f3dbe6eb405becdf0985735a`.
+
+Verification: 120 affected tests passed with one skipped; the final focused governance
+suite passed 25 tests with one skipped; the complete isolated suite passed 1,594 tests
+with three skipped in 15 minutes 6 seconds. Affected Ruff and strict mypy, compileall,
+removed-module scans, diff checks, temporary-directory cleanup, and process checks
+passed. The same assigned senior reviewer accepted the final diff with no P0, P1, or
+P2 finding.
+
+Exact next checkpoint: consolidate **swing and intraday packages** under descriptive
+`contracts`, `datasets`, `features`, `labels`, `training`, `evaluation`, and `live`
+packages. Remove the intraday evaluation module/package collision and remaining
+chronology/checkpoint names without compatibility aliases. Preserve mathematical,
+causal, artifact, and command behavior and obtain independent design and final diff
+review before closure.
