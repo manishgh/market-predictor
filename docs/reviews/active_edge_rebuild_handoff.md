@@ -785,3 +785,24 @@ packages. Remove the intraday evaluation module/package collision and remaining
 chronology/checkpoint names without compatibility aliases. Preserve mathematical,
 causal, artifact, and command behavior and obtain independent design and final diff
 review before closure.
+
+Implementation commit `a176fbb` completes **intraday module/package collision
+removal**. The unreachable `intraday/contracts.py` and `intraday/evaluation.py` shadow
+files are deleted. Python continues resolving the public APIs to
+`intraday/contracts/__init__.py` and `intraday/evaluation/__init__.py`; configuration
+classes retain their serialized owner `market_predictor.intraday.contracts.configs`.
+No production import, persisted artifact, or CLI changed.
+
+A repository-wide recursive guard now rejects any sibling module/package collision,
+and a poison fixture proves nested collisions are detected. Characterization freezes
+the 95-feature order hash, schema strings, default label policy and SHA-256, Pydantic
+validators, pickle ownership, and representative evaluation metrics. Verification
+passed 143 affected tests and the complete isolated suite with 1,601 passed and three
+skipped in 14 minutes 41 seconds. Touched Ruff, compileall, deleted-path scans, diff
+checks, temporary-directory cleanup, and process checks passed. The assigned senior
+reviewer accepted the final diff with no P0, P1, or P2 finding.
+
+Exact next checkpoint: move the shared `edge_rebuild/strategy_contract.py` owner to
+`modeling/strategy_contract.py`. Update every consumer directly, guard the old module
+against reintroduction, and verify serialized artifact ownership before any horizon-
+specific module move. Rollback anchor: `a176fbb`.

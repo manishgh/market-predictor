@@ -1347,11 +1347,26 @@ test, and task names.
           accepted the final diff with no P0, P1, or P2 finding.
        The required dependency direction is `sources -> catalysts -> swing ->
        governance`; commands remain outer adapters.
-4. **Swing and intraday package migration (`pending`).**
+4. **Swing and intraday package migration (`in progress`).**
    Consolidate each horizon under descriptive `contracts`, `datasets`, `features`,
    `labels`, `training`, `evaluation`, and `live` packages and remove the intraday
    evaluation module/package collision. Compatibility aliases are prohibited because
    this repository is not deployed.
+   - **Intraday module/package collision removal (`completed`).** Implementation
+     commit `a176fbb` deletes the unreachable `intraday/contracts.py` and
+     `intraday/evaluation.py` shadows. Runtime and pickle ownership remain in the
+     existing canonical packages; no consumer import or artifact identity changed. A
+     recursive architecture guard rejects future module/package collisions, with an
+     explicit poison fixture and deleted-file assertions. Characterization freezes
+     package origins, schema and feature-order hashes, label policy/hash, validators,
+     pickle ownership, and deterministic evaluation outputs. Verification passed 143
+     affected tests and the complete suite with 1,601 passed and three skipped. Touched
+     Ruff, compileall, direct-path scans, diff checks, cleanup, and process checks
+     passed. The assigned senior reviewer accepted the diff with no P0, P1, or P2
+     finding.
+   - **Shared strategy contract migration (`next`).** Move the cross-horizon strategy
+     contract from `edge_rebuild` to `modeling` before moving either horizon, preserving
+     persisted identities and updating every consumer directly without aliases.
 5. **Governance, serving, and command package migration (`pending`).**
    Move readiness, promotion, drift, and outcomes to `governance`; bundle loading,
    prediction services, and API behavior to `serving`; and retain only thin CLI
