@@ -20,23 +20,15 @@ regardless of how far it moved against you.
 """
 from __future__ import annotations
 
-
-
 from dataclasses import dataclass
 from typing import Final
 
 import numpy as np
 import pandas as pd
 
-from market_predictor.execution_policy import executable_fill_price
+import market_predictor.modeling.label_outcomes as label_outcomes
 from market_predictor.core.errors import DataReadinessError
-
-TARGET_HIT: Final = 1
-STOP_HIT: Final = -1
-TIMEOUT: Final = 0
-RANK_TOP: Final = 1
-RANK_BOTTOM: Final = -1
-RANK_MIDDLE: Final = 0
+from market_predictor.execution_policy import executable_fill_price
 
 BARRIER_COLUMNS: Final = (
     "barrier_label",
@@ -127,28 +119,44 @@ def apply_triple_barrier(
         touched_stop = lows[window] <= stop
         touched_target = highs[window] >= target
 
-        label = TIMEOUT
+        label = label_outcomes.TIMEOUT
         offset = spec.horizon_sessions - 1
         exit_price = float(closes[last_index])
         first_stop = int(np.argmax(touched_stop)) if touched_stop.any() else -1
         first_target = int(np.argmax(touched_target)) if touched_target.any() else -1
         if first_stop >= 0 or first_target >= 0:
             if first_stop < 0:
-                label, offset, exit_price = TARGET_HIT, first_target, target
+                label, offset, exit_price = (
+                    label_outcomes.TARGET_HIT,
+                    first_target,
+                    target,
+                )
             elif first_target < 0:
-                label, offset, exit_price = STOP_HIT, first_stop, stop
+                label, offset, exit_price = (
+                    label_outcomes.STOP_HIT,
+                    first_stop,
+                    stop,
+                )
             elif first_stop <= first_target:
                 # Ties included: the same bar touching both resolves to the stop.
-                label, offset, exit_price = STOP_HIT, first_stop, stop
+                label, offset, exit_price = (
+                    label_outcomes.STOP_HIT,
+                    first_stop,
+                    stop,
+                )
             else:
-                label, offset, exit_price = TARGET_HIT, first_target, target
+                label, offset, exit_price = (
+                    label_outcomes.TARGET_HIT,
+                    first_target,
+                    target,
+                )
         trigger_open = float(opens[entry_index + offset])
         exit_price = executable_fill_price(
             outcome=(
                 "stop_first"
-                if label == STOP_HIT
+                if label == label_outcomes.STOP_HIT
                 else "target_first"
-                if label == TARGET_HIT
+                if label == label_outcomes.TARGET_HIT
                 else "timeout"
             ),
             target_price=target,
@@ -220,9 +228,9 @@ def apply_cross_sectional_rank(
     # Strict above, inclusive below, so the two tails hold equal counts: a
     # percentile of exactly the cut belongs to the middle on the top side and to
     # the tail on the bottom side.
-    label = pd.Series(RANK_MIDDLE, index=frame.index, dtype=int)
-    label[percentile > 1.0 - top_quantile] = RANK_TOP
-    label[percentile <= bottom_quantile] = RANK_BOTTOM
+    label = pd.Series(label_outcomes.RANK_MIDDLE, index=frame.index, dtype=int)
+    label[percentile > 1.0 - top_quantile] = label_outcomes.RANK_TOP
+    label[percentile <= bottom_quantile] = label_outcomes.RANK_BOTTOM
     frame["rank_label"] = label.where(eligible & returns.notna())
     frame["rank_percentile"] = percentile.where(eligible & returns.notna())
     frame["ranking_group_size"] = group_size

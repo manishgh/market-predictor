@@ -22,6 +22,10 @@ PRODUCTION_PACKAGES = (
     "serving",
 )
 FORBIDDEN_DEPENDENCIES = ("market_predictor.research", "market_predictor.commands")
+MODELING_FORBIDDEN_DEPENDENCIES = (
+    "market_predictor.swing",
+    "market_predictor.intraday",
+)
 UNIVERSE_ALLOWED_DEPENDENCIES = (
     "market_predictor.core",
     "market_predictor.evidence",
@@ -58,6 +62,7 @@ REMOVED_PRODUCTION_MODULES = (
     "market_predictor.edge_rebuild.history_contracts",
     "market_predictor.edge_rebuild.issuer_event_family_authority",
     "market_predictor.edge_rebuild.issuer_event_precision_audit",
+    "market_predictor.edge_rebuild.labeling",
     "market_predictor.edge_rebuild.pipeline",
     "market_predictor.edge_rebuild.sec_filing_authority",
     "market_predictor.edge_rebuild.sec_filing_collection",
@@ -86,6 +91,7 @@ REMOVED_EDGE_REBUILD_FILES = (
     "history_contracts.py",
     "issuer_event_family_authority.py",
     "issuer_event_precision_audit.py",
+    "labeling.py",
     "pipeline.py",
     "sec_filing_authority.py",
     "sec_filing_collection.py",
@@ -107,6 +113,7 @@ REMOVED_MIGRATED_FILES = (
     "swing/event_families.py",
     "swing/event_relevance.py",
     "swing/contracts.py",
+    "swing/labels.py",
 )
 REMOVED_ACTIVE_SYMBOLS = (
     "GLOBAL_EVENT_QUERY_POLICY_V1",
@@ -136,6 +143,59 @@ def test_chronology_named_v3_package_is_absent() -> None:
 
 def test_production_tree_has_no_module_package_name_collisions() -> None:
     assert not _module_package_collisions(PACKAGE_ROOT)
+
+
+def test_modeling_package_is_horizon_neutral() -> None:
+    violations: list[str] = []
+    for path in (PACKAGE_ROOT / "modeling").rglob("*.py"):
+        for node, imported_name in _module_imports(path):
+            if _matches_any_dependency(
+                imported_name,
+                MODELING_FORBIDDEN_DEPENDENCIES,
+            ):
+                relative_path = path.relative_to(PACKAGE_ROOT.parent)
+                violations.append(
+                    f"{relative_path}:{node.lineno}: {imported_name}"
+                )
+
+    assert not violations, "Modeling horizon violations:\n" + "\n".join(
+        sorted(violations)
+    )
+
+
+@pytest.mark.parametrize(
+    ("statement", "package_name"),
+    (
+        ("import market_predictor.swing", "market_predictor.modeling"),
+        (
+            "import market_predictor.intraday.features as features",
+            "market_predictor.modeling",
+        ),
+        ("from market_predictor import swing", "market_predictor.modeling"),
+        (
+            "from market_predictor.intraday import dataset",
+            "market_predictor.modeling",
+        ),
+        ("from .. import swing", "market_predictor.modeling"),
+        (
+            "from ..intraday.features import labels",
+            "market_predictor.modeling",
+        ),
+    ),
+)
+def test_modeling_horizon_guard_recognizes_every_import_form(
+    statement: str,
+    package_name: str,
+) -> None:
+    imported_names = tuple(
+        name
+        for node in ast.walk(ast.parse(statement))
+        for name in _imported_names(node, package_name=package_name)
+    )
+    assert any(
+        _matches_any_dependency(name, MODELING_FORBIDDEN_DEPENDENCIES)
+        for name in imported_names
+    )
 
 
 def test_module_package_collision_guard_detects_shadow_module(tmp_path: Path) -> None:
@@ -561,6 +621,29 @@ def test_removed_swing_cross_sectional_import_guard_recognizes_every_import_form
     )
 
 
+@pytest.mark.parametrize(
+    "statement",
+    (
+        "import market_predictor.edge_rebuild.labeling",
+        "import market_predictor.edge_rebuild.labeling as labels",
+        "from market_predictor.edge_rebuild import labeling",
+        "from market_predictor.edge_rebuild.labeling import BarrierSpec",
+    ),
+)
+def test_removed_labeling_import_guard_recognizes_every_import_form(
+    statement: str,
+) -> None:
+    imported_names = tuple(
+        name
+        for node in ast.walk(ast.parse(statement))
+        for name in _imported_names(node)
+    )
+    assert any(
+        _matches_any_dependency(name, REMOVED_PRODUCTION_MODULES)
+        for name in imported_names
+    )
+
+
 def test_issuer_event_precision_governance_is_horizon_neutral() -> None:
     violations: list[str] = []
     package = PACKAGE_ROOT / "governance" / "issuer_event_precision"
@@ -670,16 +753,45 @@ def _module_imports(path: Path) -> tuple[tuple[ast.AST, str], ...]:
         pytest.fail(f"Cannot inspect invalid Python module {path}: {exc}")
 
     imports: list[tuple[ast.AST, str]] = []
+    package_name = _package_name_for_path(path)
     for node in ast.walk(tree):
-        imports.extend((node, imported_name) for imported_name in _imported_names(node))
+        imports.extend(
+            (node, imported_name)
+            for imported_name in _imported_names(
+                node,
+                package_name=package_name,
+            )
+        )
     return tuple(imports)
 
 
-def _imported_names(node: ast.AST) -> tuple[str, ...]:
+def _package_name_for_path(path: Path) -> str | None:
+    try:
+        relative = path.relative_to(PACKAGE_ROOT.parent).with_suffix("")
+    except ValueError:
+        return None
+    package_parts = relative.parts[:-1]
+    return ".".join(package_parts) if package_parts else None
+
+
+def _imported_names(
+    node: ast.AST,
+    *,
+    package_name: str | None = None,
+) -> tuple[str, ...]:
     if isinstance(node, ast.Import):
         return tuple(alias.name for alias in node.names)
     if isinstance(node, ast.ImportFrom):
         module = node.module or ""
+        if node.level:
+            if package_name is None:
+                return ()
+            package_parts = package_name.split(".")
+            retained = len(package_parts) - node.level + 1
+            if retained < 1:
+                return ()
+            module_parts = module.split(".") if module else []
+            module = ".".join((*package_parts[:retained], *module_parts))
         if module == "market_predictor":
             return tuple(f"{module}.{alias.name}" for alias in node.names)
         return (module, *(f"{module}.{alias.name}" for alias in node.names))

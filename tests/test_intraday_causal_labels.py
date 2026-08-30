@@ -9,8 +9,8 @@ import pandas as pd
 import pandas.testing as pdt
 import pytest
 
+import market_predictor.modeling.label_outcomes as label_outcomes
 from market_predictor.core.errors import DataReadinessError
-from market_predictor.edge_rebuild.labeling import RANK_BOTTOM, RANK_TOP, STOP_HIT
 from market_predictor.intraday.features.features import FEATURE_SCHEMA_VERSION
 from market_predictor.intraday.features.labels import (
     LABEL_SCHEMA_VERSION,
@@ -157,7 +157,7 @@ def test_same_minute_collision_is_conservatively_stop_first() -> None:
 
     result = _build(features, stocks, benchmarks).iloc[0]
 
-    assert result["barrier_label"] == STOP_HIT
+    assert result["barrier_label"] == label_outcomes.STOP_HIT
     assert result["label_outcome"] == "stop_first"
     assert result["label_outcome_reason"] == "same_minute_collision_stop_first"
     assert result["exit_price"] == pytest.approx(98.5)
@@ -282,8 +282,8 @@ def test_contemporaneous_rank_uses_only_same_decision_group() -> None:
     result = _build(features, pd.concat(stocks, ignore_index=True), benchmarks)
 
     assert result["ranking_group_size"].eq(10).all()
-    assert int(result["rank_label"].eq(RANK_TOP).sum()) == 2
-    assert int(result["rank_label"].eq(RANK_BOTTOM).sum()) == 2
+    assert int(result["rank_label"].eq(label_outcomes.RANK_TOP).sum()) == 2
+    assert int(result["rank_label"].eq(label_outcomes.RANK_BOTTOM).sum()) == 2
 
 
 @pytest.mark.parametrize(

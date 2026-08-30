@@ -8,15 +8,8 @@ import numpy as np
 import pandas as pd
 from pandas.api.types import is_bool_dtype
 
+import market_predictor.modeling.label_outcomes as label_outcomes
 from market_predictor.core.errors import DataReadinessError
-from market_predictor.edge_rebuild.labeling import (
-    RANK_BOTTOM,
-    RANK_MIDDLE,
-    RANK_TOP,
-    STOP_HIT,
-    TARGET_HIT,
-    TIMEOUT,
-)
 from market_predictor.label_paths import (
     IntradayBarrierBatch,
     evaluate_intraday_barrier_paths,
@@ -254,9 +247,9 @@ def _apply_candidate(
         "timeout": "timeout_at_horizon",
     }[outcome]
     barrier = {
-        "target_first": TARGET_HIT,
-        "stop_first": STOP_HIT,
-        "timeout": TIMEOUT,
+        "target_first": label_outcomes.TARGET_HIT,
+        "stop_first": label_outcomes.STOP_HIT,
+        "timeout": label_outcomes.TIMEOUT,
     }[outcome]
     net = float(paths.net_return[position])
     output.loc[index, list(_LABEL_UPDATE_COLUMNS)] = [
@@ -338,9 +331,17 @@ def _add_fixed_cohort_ranks(
         if not output.loc[indices, "decision_time_utc"].eq(decision_time).all():
             raise DataReadinessError("intraday rank cohort mixed decision timestamps")
         percentile = output.loc[indices, "net_return"].astype(float).rank(pct=True, method="average")
-        labels = pd.Series(RANK_MIDDLE, index=indices, dtype="Int64")
-        labels.loc[percentile > 1.0 - contract.labels.rank_top_quantile] = RANK_TOP
-        labels.loc[percentile <= contract.labels.rank_bottom_quantile] = RANK_BOTTOM
+        labels = pd.Series(
+            label_outcomes.RANK_MIDDLE,
+            index=indices,
+            dtype="Int64",
+        )
+        labels.loc[
+            percentile > 1.0 - contract.labels.rank_top_quantile
+        ] = label_outcomes.RANK_TOP
+        labels.loc[
+            percentile <= contract.labels.rank_bottom_quantile
+        ] = label_outcomes.RANK_BOTTOM
         output.loc[indices, "rank_percentile"] = percentile
         output.loc[indices, "rank_label"] = labels
     return output

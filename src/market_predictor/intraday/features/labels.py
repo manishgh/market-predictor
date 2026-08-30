@@ -10,15 +10,8 @@ import numpy as np
 import pandas as pd
 from pandas.api.types import is_bool_dtype
 
+import market_predictor.modeling.label_outcomes as label_outcomes
 from market_predictor.core.errors import DataReadinessError
-from market_predictor.edge_rebuild.labeling import (
-    RANK_BOTTOM,
-    RANK_MIDDLE,
-    RANK_TOP,
-    STOP_HIT,
-    TARGET_HIT,
-    TIMEOUT,
-)
 from market_predictor.execution_policy import executable_fill_price
 from market_predictor.intraday.features.features import FEATURE_SCHEMA_VERSION
 from market_predictor.modeling.strategy_contract import StrategyContract
@@ -349,17 +342,17 @@ def _evaluate_path(
     collision = first_target == first_stop and first_stop < missing
     if first_stop <= first_target and first_stop < missing:
         outcome = "stop_first"
-        barrier_label = STOP_HIT
+        barrier_label = label_outcomes.STOP_HIT
         outcome_offset = first_stop
         reason = "same_minute_collision_stop_first" if collision else "stop_touched_first"
     elif first_target < first_stop:
         outcome = "target_first"
-        barrier_label = TARGET_HIT
+        barrier_label = label_outcomes.TARGET_HIT
         outcome_offset = first_target
         reason = "target_touched_first"
     else:
         outcome = "timeout"
-        barrier_label = TIMEOUT
+        barrier_label = label_outcomes.TIMEOUT
         outcome_offset = len(path) - 1
         reason = "timeout_at_horizon"
 
@@ -418,9 +411,17 @@ def _add_contemporaneous_rank(
             continue
         returns = output.loc[indices, "net_return"].astype(float)
         percentile = returns.rank(pct=True, method="average")
-        labels = pd.Series(RANK_MIDDLE, index=indices, dtype="Int64")
-        labels.loc[percentile > 1.0 - contract.labels.rank_top_quantile] = RANK_TOP
-        labels.loc[percentile <= contract.labels.rank_bottom_quantile] = RANK_BOTTOM
+        labels = pd.Series(
+            label_outcomes.RANK_MIDDLE,
+            index=indices,
+            dtype="Int64",
+        )
+        labels.loc[
+            percentile > 1.0 - contract.labels.rank_top_quantile
+        ] = label_outcomes.RANK_TOP
+        labels.loc[
+            percentile <= contract.labels.rank_bottom_quantile
+        ] = label_outcomes.RANK_BOTTOM
         output.loc[indices, "rank_percentile"] = percentile
         output.loc[indices, "rank_label"] = labels
     return output

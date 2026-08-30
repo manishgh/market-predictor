@@ -24,17 +24,13 @@ import numpy as np
 import pandas as pd
 
 import market_predictor.swing.features.cross_sectional as swing_cross_sectional
+import market_predictor.swing.labels.barrier_and_rank as swing_barrier_labels
 from market_predictor.canonical.joins import (
     decisions_from_completed_bars,
     join_universe_membership,
 )
 from market_predictor.canonical.reconciliation import stamp_canonical_decision_ids
 from market_predictor.core.errors import DataReadinessError
-from market_predictor.edge_rebuild.labeling import (
-    BarrierSpec,
-    apply_triple_barrier,
-    forward_return_from_barrier,
-)
 from market_predictor.edge_rebuild.swing_catalyst_features import (
     _scope_catalyst_aggregates_to_required_sources as _scope_catalyst_aggregates_to_required_sources,
 )
@@ -421,7 +417,7 @@ def _add_barrier_outcomes(
     benchmark_bars: pd.DataFrame,
     contract: StrategyContract,
 ) -> pd.DataFrame:
-    spec = BarrierSpec(
+    spec = swing_barrier_labels.BarrierSpec(
         target_atr_multiple=contract.swing.target_atr_multiple,
         stop_atr_multiple=contract.swing.stop_atr_multiple,
         horizon_sessions=contract.swing.horizon_sessions,
@@ -447,7 +443,11 @@ def _add_barrier_outcomes(
                 ),
             }
         )
-        outcomes = apply_triple_barrier(bars, entries, spec=spec)
+        outcomes = swing_barrier_labels.apply_triple_barrier(
+            bars,
+            entries,
+            spec=spec,
+        )
         availability = ordered.set_index("session_date_et")[
             "available_at_utc"
         ]
@@ -502,7 +502,7 @@ def _add_barrier_outcomes(
         how="left",
         validate="one_to_one",
     )
-    barrier_gross = forward_return_from_barrier(
+    barrier_gross = swing_barrier_labels.forward_return_from_barrier(
         pd.DataFrame({"exit_price": data["barrier_exit_price"]}),
         data["entry_price"],
     )

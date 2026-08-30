@@ -3,6 +3,7 @@ from collections.abc import Sequence
 import numpy as np
 import pandas as pd
 
+import market_predictor.swing.labels.barrier_and_rank as swing_barrier_labels
 from market_predictor.core.errors import DataReadinessError
 from market_predictor.modeling.strategy_contract import StrategyContract
 
@@ -181,7 +182,6 @@ class CrossSectionalRankStep:
         self.contract = contract
 
     def transform(self, df: pd.DataFrame) -> pd.DataFrame:
-        from market_predictor.edge_rebuild.labeling import apply_cross_sectional_rank
         data = df.copy()
         eligible = (
             data["feature_eligible"].fillna(False).astype(bool)
@@ -196,7 +196,7 @@ class CrossSectionalRankStep:
             & data["barrier_label"].notna()
             & data["forward_return"].notna()
         )
-        ranked = apply_cross_sectional_rank(
+        ranked = swing_barrier_labels.apply_cross_sectional_rank(
             data.loc[
                 rank_eligible,
                 ["session_date_et", "sector", "forward_return"],
