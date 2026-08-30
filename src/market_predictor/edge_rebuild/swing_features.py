@@ -23,16 +23,13 @@ from typing import Final
 import numpy as np
 import pandas as pd
 
+import market_predictor.swing.features.cross_sectional as swing_cross_sectional
 from market_predictor.canonical.joins import (
     decisions_from_completed_bars,
     join_universe_membership,
 )
 from market_predictor.canonical.reconciliation import stamp_canonical_decision_ids
 from market_predictor.core.errors import DataReadinessError
-from market_predictor.edge_rebuild.cross_sectional import (
-    CrossSectionSpec,
-    cross_sectional_feature_names,
-)
 from market_predictor.edge_rebuild.labeling import (
     BarrierSpec,
     apply_triple_barrier,
@@ -379,7 +376,7 @@ def swing_model_feature_columns(
         *(CATALYST_RANKING_FEATURES if catalyst else ()),
     ]
     columns = tuple(
-        cross_sectional_feature_names(
+        swing_cross_sectional.cross_sectional_feature_names(
             inputs,
             spec=_cross_section_spec(contract),
         )
@@ -411,7 +408,7 @@ def swing_baseline_feature_columns(
             f"unsupported swing baseline feature group: {feature_group}"
         )
     return tuple(
-        cross_sectional_feature_names(
+        swing_cross_sectional.cross_sectional_feature_names(
             inputs,
             spec=_cross_section_spec(contract),
         )
@@ -604,9 +601,11 @@ def _managed_benchmark_return(
     return pd.Series(values - 1.0, index=decisions.index, dtype="float64")
 
 
-def _cross_section_spec(contract: StrategyContract) -> CrossSectionSpec:
+def _cross_section_spec(
+    contract: StrategyContract,
+) -> swing_cross_sectional.CrossSectionSpec:
     features = contract.features
-    return CrossSectionSpec(
+    return swing_cross_sectional.CrossSectionSpec(
         minimum_cross_section=contract.labels.minimum_cross_section_for_ranking,
         winsorize_quantile=features.cross_sectional_winsorize_quantile,
         emit_zscore=features.cross_sectional_emit_zscore,

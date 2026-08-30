@@ -1,10 +1,17 @@
 from __future__ import annotations
 
+import hashlib
+import importlib
+import json
+import pickle
+from dataclasses import asdict
+
 import numpy as np
 import pandas as pd
 import pytest
 
-from market_predictor.edge_rebuild.cross_sectional import (
+from market_predictor.core.errors import DataReadinessError
+from market_predictor.swing.features.cross_sectional import (
     RANK_SUFFIX,
     SECTOR_Z_SUFFIX,
     Z_SUFFIX,
@@ -12,7 +19,6 @@ from market_predictor.edge_rebuild.cross_sectional import (
     add_cross_sectional_features,
     cross_sectional_feature_names,
 )
-from market_predictor.core.errors import DataReadinessError
 
 SPEC = CrossSectionSpec(minimum_cross_section=50, winsorize_quantile=0.0)
 
@@ -178,3 +184,86 @@ def test_missing_columns_fail_closed() -> None:
             ["rsi"],
             spec=SPEC,
         )
+
+
+def test_contract_owner_suffixes_and_hashes_are_stable() -> None:
+    spec = CrossSectionSpec(
+        minimum_cross_section=20,
+        winsorize_quantile=0.05,
+    )
+    restored = pickle.loads(pickle.dumps(spec))
+    names = cross_sectional_feature_names(["rsi", "atr"], spec=spec)
+
+    assert CrossSectionSpec.__module__ == (
+        "market_predictor.swing.features.cross_sectional"
+    )
+    assert restored == spec
+    assert type(restored).__module__ == (
+        "market_predictor.swing.features.cross_sectional"
+    )
+    assert (Z_SUFFIX, RANK_SUFFIX, SECTOR_Z_SUFFIX) == (
+        "_xs_z",
+        "_xs_rank",
+        "_sector_z",
+    )
+    assert hashlib.sha256(
+        json.dumps(asdict(spec), sort_keys=True, separators=(",", ":")).encode(
+            "utf-8"
+        )
+    ).hexdigest() == (
+        "2700655375ed15afba2c3c96a49c5c794bb4cf455179df7bd49c7f22ffbec45e"
+    )
+    assert hashlib.sha256(
+        json.dumps(names, separators=(",", ":")).encode("utf-8")
+    ).hexdigest() == (
+        "3cc6ebd5f00ec0a89737fe7468aac1e782706e782ad3b8e619a977b0ac4f9867"
+    )
+
+
+def test_representative_cross_sectional_output_hash_is_stable() -> None:
+    spec = CrossSectionSpec(
+        minimum_cross_section=20,
+        winsorize_quantile=0.05,
+    )
+    panel = _panel(
+        {"2024-01-02": list(np.linspace(0.0, 39.0, 40))},
+        sectors=["Tech"] * 20 + ["Utilities"] * 20,
+    )
+    output = add_cross_sectional_features(panel, ["rsi"], spec=spec)
+    payload = output.loc[
+        :, cross_sectional_feature_names(["rsi"], spec=spec)
+    ].to_json(orient="split", double_precision=15)
+
+    assert hashlib.sha256(payload.encode("utf-8")).hexdigest() == (
+        "209c3b424677ac8c282439673917fbef6cf2bae3d37c3ffb338496412ba05cec"
+    )
+
+
+@pytest.mark.parametrize(
+    "module_name",
+    (
+        "market_predictor.edge_rebuild.swing_features",
+        "market_predictor.edge_rebuild.swing_pipeline_steps",
+    ),
+)
+def test_cross_sectional_contract_has_no_accidental_consumer_aliases(
+    module_name: str,
+) -> None:
+    module = importlib.import_module(module_name)
+
+    assert not hasattr(module, "CrossSectionSpec")
+    assert not hasattr(module, "Z_SUFFIX")
+    assert not hasattr(module, "RANK_SUFFIX")
+    assert not hasattr(module, "SECTOR_Z_SUFFIX")
+
+
+def test_output_collisions_fail_closed_and_empty_frames_preserve_schema() -> None:
+    panel = _panel({"2024-01-02": list(np.linspace(0.0, 1.0, 60))})
+    panel[f"rsi{Z_SUFFIX}"] = 0.0
+
+    with pytest.raises(DataReadinessError, match="output columns already exist"):
+        add_cross_sectional_features(panel, ["rsi"], spec=SPEC)
+
+    empty = panel.iloc[:0].drop(columns=f"rsi{Z_SUFFIX}")
+    output = add_cross_sectional_features(empty, ["rsi"], spec=SPEC)
+    pd.testing.assert_frame_equal(output, empty)

@@ -100,14 +100,13 @@ class SectorRelativeScalingStep:
         self.contract = contract
 
     def transform(self, df: pd.DataFrame) -> pd.DataFrame:
-        from market_predictor.edge_rebuild.cross_sectional import (
-            add_cross_sectional_features,
-            cross_sectional_feature_names,
-        )
         from market_predictor.edge_rebuild.swing_features import (
             CATALYST_RANKING_FEATURES,
             TECHNICAL_RANKING_FEATURES,
             _cross_section_spec,
+        )
+        from market_predictor.swing.features import (
+            cross_sectional as swing_cross_sectional,
         )
         
         data = df.copy()
@@ -128,7 +127,7 @@ class SectorRelativeScalingStep:
                 )
             ranking_inputs.extend(CATALYST_RANKING_FEATURES)
         spec = _cross_section_spec(self.contract)
-        transformed_names = cross_sectional_feature_names(
+        transformed_names = swing_cross_sectional.cross_sectional_feature_names(
             ranking_inputs,
             spec=spec,
         )
@@ -136,7 +135,7 @@ class SectorRelativeScalingStep:
             data["feature_eligible"].fillna(False).astype(bool)
             & data["daily_bar_count"].ge(self.contract.swing.minimum_warmup_sessions)
         )
-        transformed = add_cross_sectional_features(
+        transformed = swing_cross_sectional.add_cross_sectional_features(
             data.loc[eligible],
             ranking_inputs,
             spec=spec,

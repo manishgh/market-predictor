@@ -8,11 +8,11 @@ import numpy as np
 import pandas as pd
 import pytest
 
+import market_predictor.swing.features.cross_sectional as swing_cross_sectional
 from market_predictor.canonical.normalize import canonicalize_bars
 from market_predictor.core.errors import DataReadinessError
 from market_predictor.edge_rebuild import swing_catalyst_features as swing_catalyst_module
 from market_predictor.edge_rebuild import swing_features as swing_feature_module
-from market_predictor.edge_rebuild.cross_sectional import RANK_SUFFIX
 from market_predictor.edge_rebuild.swing_features import (
     CATALYST_AUDIT_FEATURES,
     CATALYST_RANKING_FEATURES,
@@ -78,7 +78,7 @@ def test_complete_panel_has_one_row_and_both_labels(
     assert output["rank_label"].notna().all()
     assert "forward_return" in output
     assert any(
-        column.endswith(RANK_SUFFIX)
+        column.endswith(swing_cross_sectional.RANK_SUFFIX)
         for column in output.columns
     )
     for session_rows in output.groupby("session_date_et", sort=False):

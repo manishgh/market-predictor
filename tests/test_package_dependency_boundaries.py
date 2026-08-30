@@ -52,6 +52,7 @@ CATALYSTS_ALLOWED_DEPENDENCIES = (
 REMOVED_PRODUCTION_MODULES = (
     "market_predictor.edge_rebuild.catalyst_authority",
     "market_predictor.edge_rebuild.corpus_integrity",
+    "market_predictor.edge_rebuild.cross_sectional",
     "market_predictor.edge_rebuild.global_event_authority",
     "market_predictor.edge_rebuild.global_event_collection",
     "market_predictor.edge_rebuild.history_contracts",
@@ -79,6 +80,7 @@ REMOVED_PRODUCTION_MODULES = (
 REMOVED_EDGE_REBUILD_FILES = (
     "catalyst_authority.py",
     "corpus_integrity.py",
+    "cross_sectional.py",
     "global_event_authority.py",
     "global_event_collection.py",
     "history_contracts.py",
@@ -523,6 +525,29 @@ def test_removed_swing_materialization_contract_import_guard_recognizes_every_im
     ),
 )
 def test_removed_swing_technical_relationship_import_guard_recognizes_every_import_form(
+    statement: str,
+) -> None:
+    imported_names = tuple(
+        name
+        for node in ast.walk(ast.parse(statement))
+        for name in _imported_names(node)
+    )
+    assert any(
+        _matches_any_dependency(name, REMOVED_PRODUCTION_MODULES)
+        for name in imported_names
+    )
+
+
+@pytest.mark.parametrize(
+    "statement",
+    (
+        "import market_predictor.edge_rebuild.cross_sectional",
+        "import market_predictor.edge_rebuild.cross_sectional as cross_sectional",
+        "from market_predictor.edge_rebuild import cross_sectional",
+        "from market_predictor.edge_rebuild.cross_sectional import CrossSectionSpec",
+    ),
+)
+def test_removed_swing_cross_sectional_import_guard_recognizes_every_import_form(
     statement: str,
 ) -> None:
     imported_names = tuple(
