@@ -2,13 +2,13 @@
 
 Status: active
 
-Last updated: 2026-08-28
+Last updated: 2026-08-30
 
 Repository: `C:\project\market-predictor`
 
 Branch: `er-intraday-refactoring`
 
-Last completed implementation commit: `03f8233` (`Separate issuer family evidence from swing cohorts`)
+Last completed implementation commit: `61f6f4c` (`Refactor label outcomes into domain packages`)
 
 ## Purpose
 
@@ -956,16 +956,61 @@ parity, old-path scans, diff checks, and the 4 GiB memory gate passed. The moved
 byte-identical file retains its pre-existing import-spacing Ruff finding for Step 6.
 The reviewer accepted the final diff with no P0, P1, or P2 finding.
 
-Exact next checkpoint: create `modeling/label_outcomes.py` as the sole owner of
-`TARGET_HIT`, `STOP_HIT`, `TIMEOUT`, `RANK_TOP`, `RANK_BOTTOM`, and `RANK_MIDDLE`;
-convert `swing/labels.py` byte-for-byte to `swing/labels/__init__.py`; and move
-`BarrierSpec`, barrier/rank columns, swing barrier/rank functions, and their private
-helpers from `edge_rebuild/labeling.py` to `swing/labels/barrier_and_rank.py`. Update
-`edge_rebuild/swing_features.py`, `edge_rebuild/swing_pipeline_steps.py`,
-`intraday/features/bar_labels.py`, and `intraday/features/labels.py` with
-module-qualified canonical imports. Rename label tests descriptively and add unique
-constant-owner guards. Before deletion, scan retained artifacts for the changing
-`BarrierSpec` owner. Freeze constant/spec/column hashes, pickle identity,
-representative barrier/rank outputs, timing, fills, unknown outcomes, causal append
-invariance, group isolation, and fixed-horizon swing parity. No aliases, enum changes,
-or artifact rewrites. Rollback anchor: `68d9893`.
+Implementation commit `61f6f4c` completes **shared label outcomes and swing
+barrier/rank ownership**. `modeling/label_outcomes.py` is the sole owner of
+`TARGET_HIT`, `STOP_HIT`, `TIMEOUT`, `RANK_TOP`, `RANK_BOTTOM`, and `RANK_MIDDLE`.
+The compact canonical JSON hash is
+`b021c7ad67fedfe5ca3685189f184488520994bb86c0e68535beb76c52d36c19`.
+Intraday minute-path labels and swing daily-path labels reference that module without
+re-exporting the constants.
+
+`swing/labels.py` moved byte-for-byte to `swing/labels/__init__.py`, preserving the
+existing `market_predictor.swing.labels` function owner and Git object identity
+`142a32c95ca97f99a06bd807037233949e06f96b`. `BarrierSpec`, barrier/rank columns,
+and daily/session-sector implementations now belong to
+`swing/labels/barrier_and_rank.py`; the old mixed module and test names are absent.
+Frozen identities are:
+
+- barrier specification: `1a6bee0ccb2e5c0b8c54b6ff45b9d5e641d4e57da747092a605da39baceb960f`
+- barrier columns: `2513343a01863d35bbca80c97b980666f20a2ef381c1e9ff00e619c957469cfa`
+- rank columns: `f89aa0051ff32e5a4b7d8efae2aa9e9ef4876e3a03a71182bc1c40b09fd59b56`
+- representative barrier plus managed-return output: `47ea63e0186f0509f1bb2e3ebf9f697026968fc20fbbd3a01344d62e346faa3d`
+- representative sector-rank output: `72fbbb05ec4fedd5fbe7cc271e2f233ed33d48c7d0a8cd3592b60f48bdfe5c14`
+
+Tests also freeze output columns/dtypes, class/pickle ownership, conservative fills,
+unknown horizons, future-prefix causality, session and sector isolation, package
+origin, and absence of accidental consumer aliases. Architecture tests reject the old
+module in every import form and prohibit `modeling` from importing `swing` or
+`intraday`, including relative imports. Readable retained artifacts contained no old
+owner reference; the same four Windows-ACL-protected intraday specialist directories
+were not modified and cannot contain the swing-only `BarrierSpec`.
+
+Verification passed 155 direct label/boundary tests, 133 broader swing/intraday tests
+with two skipped, 135 tests after output/boundary review fixes, and 112 final boundary
+tests. The complete isolated suite passed 1,681 tests with three skipped in 21 minutes
+51 seconds. Affected Ruff, strict mypy on six production files, compileall, package
+byte parity, old-owner scans, diff checks, generated-temp cleanup, and the 4 GiB memory
+gate passed. The assigned senior reviewer found three P2 test/guard gaps, verified all
+fixes, and approved the final diff with no remaining P0, P1, or P2 finding.
+
+Exact next checkpoint: move `edge_rebuild/volume_bars.py` byte-for-byte to
+`intraday/datasets/volume_bars.py` and rename
+`test_edge_rebuild_volume_bars.py` to `test_intraday_causal_volume_bars.py`. Update
+`intraday/datasets/publisher.py`, `dataset_v2.py`, and `bar_dataset.py`, including the
+transformation-module identity, with direct canonical imports. Before deleting the old
+module, scan ignored `models/` and `data/` manifests and joblib/pickle files for
+`market_predictor.edge_rebuild.volume_bars` and `VolumeBarBuildResult`; any match blocks
+the move and no artifact may be rewritten.
+
+Freeze source SHA-256
+`93213b79c6d3de0f2463821f3228c33408857877f8a775bfc93ef4e2bb96f900`,
+`VOLUME_BAR_COLUMNS` hash
+`55a343087cce34eb04f438c55cce369b0f35ffbdf1e552b675ff4507fc02f849`,
+`AUDIT_COLUMNS` hash
+`a840bf2a667f85d3a78f3e4747282e64b4ee26128878587963ba86c87d8f2388`,
+representative bar/audit schemas, dtypes, ordering and hashes, future-prefix causality,
+session/ticker isolation, threshold and incomplete-remainder behavior, model
+eligibility, complete transformation identity, new pickle owner, and the 4 GiB memory
+limit with 0.75 GiB headroom. Exclude all adjacent history, coverage, label, feature,
+training, serving, and command migrations. No alias, schema change, regenerated
+artifact, or behavioral change. Rollback anchor: `61f6f4c`.

@@ -2,7 +2,7 @@
 
 Status: active
 
-Last updated: 2026-08-27
+Last updated: 2026-08-30
 
 Repository: `C:\project\market-predictor`
 
@@ -1453,13 +1453,30 @@ test, and task names.
      scans, diff checks, and the 4 GiB memory gate passed. The moved byte-identical file
      retains its pre-existing import-spacing Ruff finding for Step 6. The reviewer
      accepted the final diff with no P0, P1, or P2 finding.
-   - **Shared label outcomes and swing barrier/rank ownership (`next`).** Create
-     `modeling/label_outcomes.py` as the sole owner of the six integer outcome/rank
-     constants; convert `swing/labels.py` byte-for-byte to `swing/labels/__init__.py`;
-     move swing barrier and rank logic from `edge_rebuild/labeling.py` to
-     `swing/labels/barrier_and_rank.py`; and update swing/intraday consumers directly.
-     Preserve all label timing, fills, rank boundaries, schemas, dtypes, output order,
-     and the `market_predictor.swing.labels` owner. No aliases or artifact rewrites.
+   - **Shared label outcomes and swing barrier/rank ownership (`completed`).**
+     Implementation commit `61f6f4c` makes `modeling/label_outcomes.py` the only
+     owner of the six integer outcome/rank constants, converts `swing/labels.py`
+     byte-for-byte to `swing/labels/__init__.py`, and moves the daily barrier and
+     session/sector ranking implementation to `swing/labels/barrier_and_rank.py`.
+     Swing and intraday consumers use module-qualified canonical imports; no alias or
+     old file remains. Tests freeze constant, specification, column, representative
+     output, dtype, package, and pickle identity; append-only causality and group
+     isolation remain explicit. Modeling is now guarded against absolute and relative
+     imports from either horizon. Verification passed 155 direct label/boundary tests,
+     133 broader regression tests with two skipped, and the complete suite with 1,681
+     passed and three skipped in 21 minutes 51 seconds. Affected Ruff, strict source
+     mypy, compileall, old-path scans, staged diff checks, temporary-output cleanup,
+     and the 4 GiB process gate passed. The assigned reviewer verified all P2 fixes and
+     approved the final diff with no remaining P0, P1, or P2 finding.
+   - **Intraday causal volume-bar dataset ownership (`next`).** Move
+     `edge_rebuild/volume_bars.py` byte-for-byte to
+     `intraday/datasets/volume_bars.py`, rename its test descriptively, and update the
+     three intraday dataset consumers and transformation identity directly. Before
+     changing `VolumeBarBuildResult` ownership, scan retained manifests and serialized
+     artifacts for the old owner. Freeze source, column, representative output,
+     transformation, pickle, causality, isolation, threshold, remainder, eligibility,
+     and memory behavior. No aliases, schema changes, artifact rewrites, or adjacent
+     history/feature/training migration. Rollback anchor: `61f6f4c`.
 5. **Governance, serving, and command package migration (`pending`).**
    Move readiness, promotion, drift, and outcomes to `governance`; bundle loading,
    prediction services, and API behavior to `serving`; and retain only thin CLI
