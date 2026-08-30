@@ -929,13 +929,43 @@ minutes 30 seconds. New-owner Ruff, changed import-order Ruff, strict mypy, comp
 import smoke, exact source parity, old-path scans, diff checks, and the 4 GiB memory
 gate passed. The reviewer accepted the final diff with no P0, P1, or P2 finding.
 
-Exact next checkpoint: move `edge_rebuild/cross_sectional.py` byte-for-byte to
-`swing/features/cross_sectional.py`; update module-qualified imports in
-`edge_rebuild/swing_features.py`, `edge_rebuild/swing_pipeline_steps.py`, and
-`tests/test_swing_features.py`; and rename `tests/test_cross_sectional.py` to
-`tests/test_swing_cross_sectional_features.py`. First scan retained artifacts for the
-changing `CrossSectionSpec` Python owner. Freeze its pickle round trip, specification
-hash, suffix values, emitted-column order, representative output, future-session
-causality, and session/sector isolation. Do not merge it with
-`intraday/features/cross_sectional.py` or move `edge_rebuild/labeling.py`. No alias or
-artifact rewrite. Rollback anchor: `dd4dbcd`.
+Implementation commit `68d9893` completes **swing cross-sectional feature ownership**.
+`edge_rebuild/cross_sectional.py` moved byte-for-byte to
+`swing/features/cross_sectional.py`; all production/test consumers use the canonical
+module explicitly, the old source and test names are absent, and no compatibility
+alias exists. Source identity remains `cfb54c43d06382235fd341d9a9713a5262715c4f`.
+
+Characterization freezes `CrossSectionSpec` at Python/pickle owner
+`market_predictor.swing.features.cross_sectional`, specification hash
+`2700655375ed15afba2c3c96a49c5c794bb4cf455179df7bd49c7f22ffbec45e`, emitted
+column-order hash `3cc6ebd5f00ec0a89737fe7468aac1e782706e782ad3b8e619a977b0ac4f9867`,
+representative output hash
+`209c3b424677ac8c282439673917fbef6cf2bae3d37c3ffb338496412ba05cec`, and exact
+suffixes `_xs_z`, `_xs_rank`, and `_sector_z`. Existing and added tests prove
+future-session causality, session/sector isolation, sample-standard-deviation behavior,
+winsorization, minimum peers, constant/outlier behavior, row/output ordering,
+collisions, missing columns, and empty frames.
+
+Readable retained artifacts contain no old Python owner; the same four protected
+intraday-only specialist model directories were unchanged. Verification passed 181
+affected tests with two skipped and the resumed complete suite with 1,660 passed and
+three skipped. The suite reported 2 days 2 hours because the app was closed while the
+same process was suspended; it resumed and completed without duplication or failure.
+New-test and changed-import Ruff, strict mypy, compileall, import smoke, exact source
+parity, old-path scans, diff checks, and the 4 GiB memory gate passed. The moved
+byte-identical file retains its pre-existing import-spacing Ruff finding for Step 6.
+The reviewer accepted the final diff with no P0, P1, or P2 finding.
+
+Exact next checkpoint: create `modeling/label_outcomes.py` as the sole owner of
+`TARGET_HIT`, `STOP_HIT`, `TIMEOUT`, `RANK_TOP`, `RANK_BOTTOM`, and `RANK_MIDDLE`;
+convert `swing/labels.py` byte-for-byte to `swing/labels/__init__.py`; and move
+`BarrierSpec`, barrier/rank columns, swing barrier/rank functions, and their private
+helpers from `edge_rebuild/labeling.py` to `swing/labels/barrier_and_rank.py`. Update
+`edge_rebuild/swing_features.py`, `edge_rebuild/swing_pipeline_steps.py`,
+`intraday/features/bar_labels.py`, and `intraday/features/labels.py` with
+module-qualified canonical imports. Rename label tests descriptively and add unique
+constant-owner guards. Before deletion, scan retained artifacts for the changing
+`BarrierSpec` owner. Freeze constant/spec/column hashes, pickle identity,
+representative barrier/rank outputs, timing, fills, unknown outcomes, causal append
+invariance, group isolation, and fixed-horizon swing parity. No aliases, enum changes,
+or artifact rewrites. Rollback anchor: `68d9893`.

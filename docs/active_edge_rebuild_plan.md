@@ -1439,14 +1439,27 @@ test, and task names.
      import smoke, source parity, old-path and artifact scans, diff checks, and the 4
      GiB memory gate passed. The reviewer accepted the final diff with no P0, P1, or
      P2 finding.
-   - **Swing cross-sectional feature ownership (`next`).** Move
-     `edge_rebuild/cross_sectional.py` byte-for-byte to
-     `swing/features/cross_sectional.py`, update the three direct consumers with
-     module-qualified imports, rename its test descriptively, and delete the old path
-     without an alias. First prove no retained pickle contains the changing
-     `CrossSectionSpec` owner. Preserve suffixes, output order, grouping, winsorization,
-     minimum-peer behavior, and numerical parity. Do not combine it with the distinct
-     intraday implementation or move the mixed label module.
+   - **Swing cross-sectional feature ownership (`completed`).** Implementation commit
+     `68d9893` moves `cross_sectional.py` byte-for-byte from `edge_rebuild` to
+     `swing/features`, updates all three consumers with module-qualified imports, and
+     renames its characterization test descriptively. Source identity remains
+     `cfb54c43d06382235fd341d9a9713a5262715c4f`; no alias exists. Tests freeze the
+     `CrossSectionSpec` owner and pickle round trip, suffixes, specification and emitted
+     column hashes, representative output hash, future-session causality, session and
+     sector isolation, winsorization, peer floors, collision handling, and empty-frame
+     behavior. Verification passed 181 affected tests with two skipped and the resumed
+     complete suite with 1,660 passed and three skipped. New-test and changed-import
+     Ruff, strict mypy, compileall, import smoke, source parity, old-path and artifact
+     scans, diff checks, and the 4 GiB memory gate passed. The moved byte-identical file
+     retains its pre-existing import-spacing Ruff finding for Step 6. The reviewer
+     accepted the final diff with no P0, P1, or P2 finding.
+   - **Shared label outcomes and swing barrier/rank ownership (`next`).** Create
+     `modeling/label_outcomes.py` as the sole owner of the six integer outcome/rank
+     constants; convert `swing/labels.py` byte-for-byte to `swing/labels/__init__.py`;
+     move swing barrier and rank logic from `edge_rebuild/labeling.py` to
+     `swing/labels/barrier_and_rank.py`; and update swing/intraday consumers directly.
+     Preserve all label timing, fills, rank boundaries, schemas, dtypes, output order,
+     and the `market_predictor.swing.labels` owner. No aliases or artifact rewrites.
 5. **Governance, serving, and command package migration (`pending`).**
    Move readiness, promotion, drift, and outcomes to `governance`; bundle loading,
    prediction services, and API behavior to `serving`; and retain only thin CLI
