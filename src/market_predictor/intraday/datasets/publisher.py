@@ -34,7 +34,6 @@ from market_predictor.canonical.store import (
     file_sha256,
 )
 from market_predictor.core.errors import DataReadinessError
-from market_predictor.edge_rebuild.volume_bars import build_causal_volume_bars
 from market_predictor.intraday.contracts.dataset_schemas import (
     _LABEL_COLUMNS,
     INTRADAY_DATASET_AUTHORITY_SCHEMA,
@@ -83,6 +82,7 @@ from market_predictor.intraday.datasets.validation import (
     _verify_inputs,
     _verify_monthly_partition_files,
 )
+from market_predictor.intraday.datasets.volume_bars import build_causal_volume_bars
 from market_predictor.intraday.features.features import (
     FEATURE_SCHEMA_VERSION,
     build_causal_intraday_features,

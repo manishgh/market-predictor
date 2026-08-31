@@ -309,6 +309,66 @@ def test_transformation_change_cannot_reuse_completed_session(
     assert len(list(output.parent.glob(f".{output.name}.*.work"))) == 1
 
 
+@pytest.mark.parametrize(
+    "obsolete_sha256",
+    (
+        "deb322cde9cfb8c0077f98832948253bacdc6900be36652101787179f2fab693",
+        "0da898cc6fd3c1e933406ce07f24de197fc1fa34c4a909c4b9c4a28e2e96f3f6",
+    ),
+)
+def test_obsolete_transformation_is_rejected_without_mutating_artifact(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    obsolete_sha256: str,
+) -> None:
+    inputs = _inputs(tmp_path)
+    _patch_verified_inputs(monkeypatch, inputs)
+    monkeypatch.setattr(module, "_projection_bar_files", lambda *_args: {})
+    monkeypatch.setattr(
+        module,
+        "_build_session",
+        lambda **kwargs: (
+            pd.DataFrame(
+                {
+                    "session_date_et": [str(kwargs["session_date"])],
+                    "ticker": ["AAA"],
+                    "decision_time_utc": [
+                        pd.Timestamp(f"{kwargs['session_date']}T15:01:00Z")
+                    ],
+                    "dataset_eligible": [True],
+                }
+            ),
+            {"session_date_et": str(kwargs["session_date"]), "stock_sessions": []},
+        ),
+    )
+    current_transformation = module._transformation_identity
+    obsolete = {
+        "schema": "edge_rebuild.intraday_bar_transformation.v1",
+        "files": [],
+        "sha256": obsolete_sha256,
+    }
+    monkeypatch.setattr(module, "_transformation_identity", lambda: obsolete)
+    output = tmp_path / "output" / f"obsolete-{obsolete_sha256[:8]}"
+    _publish(inputs, output)
+    before = _file_inventory(output)
+
+    monkeypatch.setattr(module, "_transformation_identity", current_transformation)
+    with pytest.raises(DataReadinessError, match="matching complete authority"):
+        load_complete_intraday_bar_dataset(output)
+    with pytest.raises(DataReadinessError, match="matching complete authority"):
+        _publish(inputs, output)
+
+    assert _file_inventory(output) == before
+
+
+def _file_inventory(directory: Path) -> dict[str, str]:
+    return {
+        path.relative_to(directory).as_posix(): file_sha256(path)
+        for path in sorted(directory.rglob("*"))
+        if path.is_file()
+    }
+
+
 def _publish(
     inputs: dict[str, Any],
     output: Path,

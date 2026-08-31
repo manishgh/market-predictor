@@ -1,6 +1,7 @@
 """Resumable authority publisher for the fixed-cohort intraday bar dataset."""
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import shutil
@@ -20,7 +21,6 @@ import pyarrow.parquet as pq
 
 from market_predictor.canonical.store import file_sha256
 from market_predictor.core.errors import DataReadinessError
-from market_predictor.edge_rebuild.volume_bars import build_causal_volume_bars
 from market_predictor.intraday.contracts.lineage import (
     DEFAULT_INTRADAY_CONTRACT_LINEAGE_PATH,
 )
@@ -36,6 +36,7 @@ from market_predictor.intraday.datasets.publisher import (
     _VerifiedInputs,
     _verify_inputs,
 )
+from market_predictor.intraday.datasets.volume_bars import build_causal_volume_bars
 from market_predictor.intraday.features.bar_features import (
     INTRADAY_BAR_FEATURE_SCHEMA_VERSION,
     INTRADAY_BAR_MODEL_FEATURE_COLUMNS,
@@ -62,7 +63,7 @@ INTRADAY_BAR_DATASET_AUTHORITY_SCHEMA: Final = (
     "edge_rebuild.intraday_bar_dataset_authority.v1"
 )
 INTRADAY_BAR_TRANSFORMATION_SCHEMA: Final = (
-    "edge_rebuild.intraday_bar_transformation.v1"
+    "market_predictor.intraday.bar_dataset_transformation.v2"
 )
 MEMORY_HARD_BUDGET_GIB: Final = 4.0
 MEMORY_HEADROOM_GIB: Final = 0.75
@@ -1147,23 +1148,36 @@ def _resolve_inside(root: Path, relative: str) -> Path:
 
 def _transformation_identity() -> dict[str, Any]:
     import sys
-    files = [
-        {
-            "path": Path(sys.modules[mod].__file__).name,
-            "sha256": file_sha256(Path(sys.modules[mod].__file__)),
-        }
-        for mod in (
-            "market_predictor.intraday.datasets.bar_dataset",
-            "market_predictor.intraday.features.bar_features",
-            "market_predictor.intraday.features.bar_labels",
-            "market_predictor.edge_rebuild.volume_bars",
+
+    files = []
+    for module_name in (
+        "market_predictor.intraday.datasets.bar_dataset",
+        "market_predictor.intraday.features.bar_features",
+        "market_predictor.intraday.features.bar_labels",
+        "market_predictor.intraday.datasets.volume_bars",
+    ):
+        source = sys.modules[module_name].__file__
+        if source is None:
+            raise DataReadinessError(
+                f"intraday transformation module has no source file: {module_name}"
+            )
+        source_path = Path(source)
+        files.append(
+            {
+                "path": source_path.name,
+                "sha256": _source_file_sha256(source_path),
+            }
         )
-    ]
     payload = {
         "schema": INTRADAY_BAR_TRANSFORMATION_SCHEMA,
         "files": files,
     }
     return {**payload, "sha256": json_sha256(payload)}
+
+
+def _source_file_sha256(path: Path) -> str:
+    canonical = path.read_bytes().replace(b"\r\n", b"\n").replace(b"\r", b"\n")
+    return hashlib.sha256(canonical).hexdigest()
 
 
 def _run_bounded_process_tasks(

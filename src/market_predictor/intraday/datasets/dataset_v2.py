@@ -33,7 +33,6 @@ from market_predictor.edge_rebuild.one_minute_coverage import (
 from market_predictor.edge_rebuild.selected_session_history import (
     verify_selected_stock_sessions,
 )
-from market_predictor.edge_rebuild.volume_bars import build_causal_volume_bars
 from market_predictor.intraday.contracts.history_collection import (
     SELECTED_SESSION_BENCHMARK_PLAN_SCHEMA,
     SELECTED_SESSION_ONE_MINUTE_PLAN_SCHEMA,
@@ -52,6 +51,7 @@ from market_predictor.intraday.datasets.selection import (
     _load_sp500_membership_eligibility,
     load_complete_intraday_selection,
 )
+from market_predictor.intraday.datasets.volume_bars import build_causal_volume_bars
 from market_predictor.intraday.features.features import (
     FEATURE_SCHEMA_VERSION,
     build_causal_intraday_features,

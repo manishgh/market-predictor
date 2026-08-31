@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import hashlib
+import json
+import pickle
 from datetime import date
 from pathlib import Path
 
@@ -8,7 +11,14 @@ import pandas.testing as pdt
 import pytest
 
 from market_predictor.core.errors import DataReadinessError
-from market_predictor.edge_rebuild.volume_bars import (
+from market_predictor.intraday.datasets.bar_dataset import (
+    _source_file_sha256,
+    _transformation_identity,
+)
+from market_predictor.intraday.datasets.history import json_sha256
+from market_predictor.intraday.datasets.volume_bars import (
+    AUDIT_COLUMNS,
+    VOLUME_BAR_COLUMNS,
     VolumeBarBuildResult,
     build_causal_volume_bars,
 )
@@ -18,6 +28,19 @@ from market_predictor.modeling.strategy_contract import (
 )
 
 ROOT = Path(__file__).resolve().parents[1]
+SOURCE_PATH = (
+    ROOT
+    / "src"
+    / "market_predictor"
+    / "intraday"
+    / "datasets"
+    / "volume_bars.py"
+)
+
+
+def _json_hash(value: object) -> str:
+    payload = json.dumps(value, separators=(",", ":"))
+    return hashlib.sha256(payload.encode()).hexdigest()
 
 
 def _contract() -> StrategyContract:
@@ -79,6 +102,129 @@ def _build(bars: pd.DataFrame, activations: pd.DataFrame) -> VolumeBarBuildResul
         contract=contract,
         strategy_contract_sha256=contract.sha256(),
     )
+
+
+def test_volume_bar_contract_ownership_and_identities_are_frozen() -> None:
+    result = _build(_bars(), _activations())
+
+    assert VolumeBarBuildResult.__module__ == (
+        "market_predictor.intraday.datasets.volume_bars"
+    )
+    restored = pickle.loads(pickle.dumps(result))
+    pdt.assert_frame_equal(restored.bars, result.bars)
+    pdt.assert_frame_equal(restored.audit, result.audit)
+    assert restored.memory == result.memory
+    assert _source_file_sha256(SOURCE_PATH) == (
+        "0ab5baee5f9e7d92e1592855b554d89ee35ebc8a865ab4152f82e11697c5912d"
+    )
+    assert _json_hash(VOLUME_BAR_COLUMNS) == (
+        "55a343087cce34eb04f438c55cce369b0f35ffbdf1e552b675ff4507fc02f849"
+    )
+    assert _json_hash(AUDIT_COLUMNS) == (
+        "a840bf2a667f85d3a78f3e4747282e64b4ee26128878587963ba86c87d8f2388"
+    )
+
+
+def test_representative_outputs_and_transformation_identity_are_frozen() -> None:
+    result = _build(_bars(), _activations())
+    bars_payload = result.bars.to_json(
+        orient="split",
+        double_precision=15,
+        date_format="iso",
+    )
+    audit_payload = result.audit.to_json(
+        orient="split",
+        double_precision=15,
+        date_format="iso",
+    )
+
+    assert tuple(result.bars.columns) == VOLUME_BAR_COLUMNS
+    assert tuple(result.audit.columns) == AUDIT_COLUMNS
+    assert tuple(map(str, result.bars.dtypes)) == (
+        "str",
+        "object",
+        "int64",
+        "datetime64[us, UTC]",
+        "datetime64[us, UTC]",
+        "datetime64[us, UTC]",
+        "datetime64[us, UTC]",
+        "datetime64[us, UTC]",
+        "float64",
+        "float64",
+        "float64",
+        "float64",
+        "float64",
+        "int64",
+        "float64",
+        "float64",
+        "float64",
+        "datetime64[us, UTC]",
+        "bool",
+        "str",
+        "str",
+        "str",
+        "str",
+        "str",
+    )
+    assert tuple(map(str, result.audit.dtypes)) == (
+        "str",
+        "object",
+        "datetime64[us, UTC]",
+        "float64",
+        "float64",
+        "int64",
+        "float64",
+        "int64",
+        "float64",
+        "int64",
+        "int64",
+        "int64",
+        "float64",
+        "datetime64[us, UTC]",
+        "datetime64[us, UTC]",
+        "str",
+    )
+    assert hashlib.sha256(bars_payload.encode()).hexdigest() == (
+        "5a3856eda8f43ef4ea80765d5ce99268d9ceb9b8bb5a85360d864e43497d7c6f"
+    )
+    assert hashlib.sha256(audit_payload.encode()).hexdigest() == (
+        "c7b26557b7bb29a2ed5a8d59a6859a49d8b51cf29256fd583a1fac97e1b308dc"
+    )
+    identity = _transformation_identity()
+    assert identity == {
+        "schema": "market_predictor.intraday.bar_dataset_transformation.v2",
+        "files": [
+            {
+                "path": "bar_dataset.py",
+                "sha256": "33eed13e1a8f0bf0d0441c875cce60f64bd8e48d88628eac7bb146d87e8ea4cb",
+            },
+            {
+                "path": "bar_features.py",
+                "sha256": "a14ebe84d3e678e7702a013fa850ce46cecc2091f52beeae169de6caa46ef461",
+            },
+            {
+                "path": "bar_labels.py",
+                "sha256": "4459aea30820f983b3513d7186be1c12f72ef25054640e8bd918d503780b49de",
+            },
+            {
+                "path": "volume_bars.py",
+                "sha256": "0ab5baee5f9e7d92e1592855b554d89ee35ebc8a865ab4152f82e11697c5912d",
+            },
+        ],
+        "sha256": "6fdfd0c8f07e4f7445b66d038cbd936e4459db68e087a5ddbcb30eac4795cb51",
+    }
+    assert identity["sha256"] == json_sha256(
+        {"schema": identity["schema"], "files": identity["files"]}
+    )
+
+
+def test_transformation_source_hash_is_line_ending_independent(tmp_path: Path) -> None:
+    lf = tmp_path / "lf.py"
+    crlf = tmp_path / "crlf.py"
+    lf.write_bytes(b"first = 1\nsecond = 2\n")
+    crlf.write_bytes(b"first = 1\r\nsecond = 2\r\n")
+
+    assert _source_file_sha256(lf) == _source_file_sha256(crlf)
 
 
 def test_builds_fixed_threshold_ohlcv_and_audits_incomplete_remainder() -> None:
