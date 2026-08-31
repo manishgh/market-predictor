@@ -2,13 +2,13 @@
 
 Status: active
 
-Last updated: 2026-08-30
+Last updated: 2026-08-31
 
 Repository: `C:\project\market-predictor`
 
 Branch: `er-intraday-refactoring`
 
-Last completed implementation commit: `61f6f4c` (`Refactor label outcomes into domain packages`)
+Last completed implementation commit: `a4002ce` (`Consolidate intraday ledger ownership`)
 
 ## Purpose
 
@@ -993,24 +993,63 @@ byte parity, old-owner scans, diff checks, generated-temp cleanup, and the 4 GiB
 gate passed. The assigned senior reviewer found three P2 test/guard gaps, verified all
 fixes, and approved the final diff with no remaining P0, P1, or P2 finding.
 
-Exact next checkpoint: move `edge_rebuild/volume_bars.py` byte-for-byte to
-`intraday/datasets/volume_bars.py` and rename
-`test_edge_rebuild_volume_bars.py` to `test_intraday_causal_volume_bars.py`. Update
-`intraday/datasets/publisher.py`, `dataset_v2.py`, and `bar_dataset.py`, including the
-transformation-module identity, with direct canonical imports. Before deleting the old
-module, scan ignored `models/` and `data/` manifests and joblib/pickle files for
-`market_predictor.edge_rebuild.volume_bars` and `VolumeBarBuildResult`; any match blocks
-the move and no artifact may be rewritten.
+## Intraday Causal Volume-Bar Ownership Result
 
-Freeze source SHA-256
-`93213b79c6d3de0f2463821f3228c33408857877f8a775bfc93ef4e2bb96f900`,
-`VOLUME_BAR_COLUMNS` hash
-`55a343087cce34eb04f438c55cce369b0f35ffbdf1e552b675ff4507fc02f849`,
-`AUDIT_COLUMNS` hash
-`a840bf2a667f85d3a78f3e4747282e64b4ee26128878587963ba86c87d8f2388`,
-representative bar/audit schemas, dtypes, ordering and hashes, future-prefix causality,
-session/ticker isolation, threshold and incomplete-remainder behavior, model
-eligibility, complete transformation identity, new pickle owner, and the 4 GiB memory
-limit with 0.75 GiB headroom. Exclude all adjacent history, coverage, label, feature,
-training, serving, and command migrations. No alias, schema change, regenerated
-artifact, or behavioral change. Rollback anchor: `61f6f4c`.
+Implementation commit `e76bf8d` is pushed. The byte-identical implementation now lives
+at `intraday/datasets/volume_bars.py`; `publisher.py`, `dataset_v2.py`, and
+`bar_dataset.py` import it directly. The renamed characterization test freezes
+`VolumeBarBuildResult` at its new pickle owner. Architecture guards reject the removed
+module and all four Python import forms. No compatibility alias or old file exists.
+
+The direct `bar_dataset.py` import change necessarily changed the complete
+transformation identity because that module hashes itself. The current contract is:
+
+- schema: `market_predictor.intraday.bar_dataset_transformation.v2`
+- aggregate SHA-256: `6fdfd0c8f07e4f7445b66d038cbd936e4459db68e087a5ddbcb30eac4795cb51`
+- canonical volume-bar source SHA-256:
+  `0ab5baee5f9e7d92e1592855b554d89ee35ebc8a865ab4152f82e11697c5912d`
+- `VOLUME_BAR_COLUMNS` SHA-256:
+  `55a343087cce34eb04f438c55cce369b0f35ffbdf1e552b675ff4507fc02f849`
+- `AUDIT_COLUMNS` SHA-256:
+  `a840bf2a667f85d3a78f3e4747282e64b4ee26128878587963ba86c87d8f2388`
+- representative bars/audit SHA-256:
+  `5a3856eda8f43ef4ea80765d5ce99268d9ceb9b8bb5a85360d864e43497d7c6f` /
+  `c7b26557b7bb29a2ed5a8d59a6859a49d8b51cf29256fd583a1fac97e1b308dc`
+
+Source identity normalizes CRLF and LF before hashing, so Windows publication and
+Linux/cloud replay are identical. It does not normalize provider data or artifact
+bytes. Focused verification passed 194 tests; Ruff, compileall, diff checks, package
+guards, old-import scans, publication/resume/atomicity, obsolete-identity rejection,
+and immutable-old-output tests passed. The code reviewer re-ran the remediation and
+reported no P0, P1, or P2 finding. After both implementation commits, the complete
+isolated suite passed 1,691 tests with three skipped in 13 minutes 30 seconds.
+
+During full-suite preparation, an interrupted external test edit exposed two
+AST-identical ledger implementations. Supplemental implementation commit `a4002ce`
+makes `intraday/evaluation/ledger.py` the sole owner of position-ledger construction,
+position closing, and ledger metrics. `gates.py` and `training/coordinator.py` import
+that owner directly; `economics.py` now owns only ranking diagnostics. A runtime test
+freezes all three production bindings. Verification passed 173 affected tests, Ruff,
+strict mypy on four source files, compileall, and a one-owner source scan. The code
+reviewer approved the remediation with no remaining P0, P1, or P2 finding.
+
+The retained
+`data/features/edge_rebuild_intraday_bar_only_causal_20260814_v1` authority remains
+immutable historical evidence with 3,095,688 rows and transformation `0da898cc...`.
+The current loader rejects it. It cannot be resumed, trained, promoted, or served as a
+current authority. Bound historical evidence includes its audit report, both
+`edge_rebuild_intraday_event_preflight_20260815_v1` and
+`edge_rebuild_intraday_event_preflight_20260820_v2`, and the retained bar-only,
+event-confirmed, upgrade-confirmed, and downgrade-confirmed continuation/reversion
+development bundles. None is promotable. Four Windows-ACL-protected swing candidate
+directories are separately classified as historical/non-promotable in
+`docs/model_artifact_retention_inventory.json`; they are not intraday volume-bar
+authorities and were not modified.
+
+Exact next checkpoint: deterministically rematerialize the causal intraday bar dataset
+under a new output directory and request hash using transformation v2, then replay its
+complete authority before allowing any intraday training. Do not rewrite or resume the
+2026-08-14 directory. Task-review this data operation first, preserve one heavy process
+below 4 GiB, and retain failed partial work only through the publisher's verified work
+directory contract. Rollback anchor for the ownership implementation is
+`1640bf68f65d4c293d043ffb57000f0100d245cd`.

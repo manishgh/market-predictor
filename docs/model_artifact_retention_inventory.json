@@ -142,6 +142,18 @@
       "status": "ungoverned_or_superseded"
     },
     {
+      "action": "retain_as_historical_evidence",
+      "direct_references": [],
+      "paths": [
+        "data/features/swing_candidate_v5",
+        "data/features/swing_candidate_v6",
+        "data/features/swing_candidate_v7"
+      ],
+      "promotion_permitted": false,
+      "reason": "Windows ACLs prevent a complete serialized-owner scan. These are superseded swing feature candidates with no active registry reference and no intraday volume-bar runtime role.",
+      "status": "historical_current_ineligible"
+    },
+    {
       "action": "retain",
       "paths": [
         "data/artifacts",

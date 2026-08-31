@@ -1468,15 +1468,39 @@ test, and task names.
      mypy, compileall, old-path scans, staged diff checks, temporary-output cleanup,
      and the 4 GiB process gate passed. The assigned reviewer verified all P2 fixes and
      approved the final diff with no remaining P0, P1, or P2 finding.
-   - **Intraday causal volume-bar dataset ownership (`next`).** Move
-     `edge_rebuild/volume_bars.py` byte-for-byte to
-     `intraday/datasets/volume_bars.py`, rename its test descriptively, and update the
-     three intraday dataset consumers and transformation identity directly. Before
-     changing `VolumeBarBuildResult` ownership, scan retained manifests and serialized
-     artifacts for the old owner. Freeze source, column, representative output,
-     transformation, pickle, causality, isolation, threshold, remainder, eligibility,
-     and memory behavior. No aliases, schema changes, artifact rewrites, or adjacent
-     history/feature/training migration. Rollback anchor: `61f6f4c`.
+   - **Intraday causal volume-bar dataset ownership (`completed`).** Implementation
+     commit `e76bf8d` moves the byte-identical implementation to
+     `intraday/datasets/volume_bars.py`, renames its test descriptively, and updates all
+     three dataset consumers directly. No alias or old file remains. Because the
+     transformation identity hashes `bar_dataset.py` itself, the direct import change
+     truthfully creates schema `market_predictor.intraday.bar_dataset_transformation.v2`
+     with aggregate SHA-256
+     `6fdfd0c8f07e4f7445b66d038cbd936e4459db68e087a5ddbcb30eac4795cb51`.
+     Source hashing now canonicalizes only CRLF/LF so Windows publication and Linux
+     replay share one identity. Tests freeze the canonical source, column,
+     representative output, transformation, pickle, causality, isolation, threshold,
+     remainder, eligibility, memory, publication, resume, and immutability contracts.
+     The retained `edge_rebuild_intraday_bar_only_causal_20260814_v1` authority remains
+     unchanged historical evidence under transformation `0da898cc...`; it is rejected
+     by the current loader and cannot train or promote. Its audit, two event-preflight
+     authorities, and eight retained development/rejection model bundles are likewise
+     historical. A current intraday authority requires deterministic rematerialization
+     into a new output directory and request hash. Focused verification passed 194
+     tests; the code reviewer approved the portability remediation with no remaining
+     P0, P1, or P2 finding. Rollback anchor was
+     `1640bf68f65d4c293d043ffb57000f0100d245cd`.
+   - **Canonical intraday ledger ownership (`completed`).** Supplemental commit
+     `a4002ce` completes an interrupted test refactor by making
+     `intraday/evaluation/ledger.py` the sole owner of position-ledger construction,
+     position closing, and ledger metrics. The seven functions removed from
+     `economics.py` were AST-identical duplicates; `economics.py` now owns only
+     ranking diagnostics. Production gates and training coordination import the
+     canonical ledger directly, and a runtime identity test prevents tests from
+     exercising an unused implementation. Verification passed 173 affected tests,
+     Ruff, strict mypy, compileall, and a one-owner scan. The code reviewer approved
+     the final diff with no remaining P0, P1, or P2 finding. The complete isolated
+     suite after both implementation commits passed 1,691 tests with three skipped in
+     13 minutes 30 seconds.
 5. **Governance, serving, and command package migration (`pending`).**
    Move readiness, promotion, drift, and outcomes to `governance`; bundle loading,
    prediction services, and API behavior to `serving`; and retain only thin CLI

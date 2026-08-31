@@ -1,6 +1,6 @@
 # Current Feature Engineering Audit
 
-Last updated: 2026-08-15
+Last updated: 2026-08-31
 
 ## Scope
 
@@ -54,8 +54,15 @@ learned candidate.
 - News/catalyst remains outside the intraday entry estimator. It is a separately
   hash-bound confirmation, explanation, and ranking overlay because the earlier
   direct-feature ablation reduced validation quality.
-- Intraday V2 is published and replayable but economically rejected after costs.
-  It is not serveable. The later V3 branch declared five cross-sectional z-score
+- The prior Intraday V2 model experiment remains economically rejected after costs
+  and is not serveable. Its retained bar authority uses obsolete transformation
+  `0da898cc...` and is historical/current-ineligible after the canonical volume-bar
+  owner migration. Current code requires transformation schema
+  `market_predictor.intraday.bar_dataset_transformation.v2` with SHA-256
+  `6fdfd0c8f07e4f7445b66d038cbd936e4459db68e087a5ddbcb30eac4795cb51`.
+  No full current-v2 dataset authority exists yet, so intraday training and promotion
+  fail closed until deterministic rematerialization into a new directory passes strict
+  replay. The later V3 branch declared five cross-sectional z-score
   columns without a valid contemporaneous decision-cohort implementation; the
   columns were undefined for asynchronous or single-member timestamps. Commit
   `e168482` removes that invalid contract. Any artifact requiring those columns is
