@@ -101,8 +101,8 @@ from market_predictor.intraday.contracts.history_collection import (
 from market_predictor.intraday.datasets.bar_audit import (
     publish_intraday_bar_dataset_audit,
 )
-from market_predictor.intraday.datasets.bar_dataset import (
-    publish_intraday_bar_dataset,
+from market_predictor.intraday.datasets.bar_execution_evidence import (
+    publish_intraday_bar_dataset_with_execution_evidence,
 )
 from market_predictor.intraday.datasets.event_preflight import (
     load_intraday_event_preflight_config,
@@ -1587,6 +1587,7 @@ def register_edge_rebuild_commands(app: typer.Typer, console: Any) -> None:
         membership_authority_dir: Path = typer.Option(...),
         five_minute_projection_dir: Path = typer.Option(...),
         out_dir: Path = typer.Option(...),
+        execution_evidence_dir: Path = typer.Option(...),
         contract: Path = typer.Option(Path("configs/edge_rebuild_strategy_contract.toml")),
         intraday_contract_lineage: Path = typer.Option(Path("configs/edge_rebuild_intraday_contract_lineage.toml")),
         max_sessions: int | None = typer.Option(None, min=1),
@@ -1594,7 +1595,7 @@ def register_edge_rebuild_commands(app: typer.Typer, console: Any) -> None:
     ) -> None:
         """Publish the resumable fixed-cohort bar-only dataset."""
 
-        result = publish_intraday_bar_dataset(
+        result = publish_intraday_bar_dataset_with_execution_evidence(
             selection_directory=selection_dir,
             stock_collection_directory=stock_collection_dir,
             stock_coverage_directory=stock_coverage_dir,
@@ -1604,6 +1605,7 @@ def register_edge_rebuild_commands(app: typer.Typer, console: Any) -> None:
             strategy_contract=load_strategy_contract(contract),
             strategy_contract_path=contract,
             output_directory=out_dir,
+            execution_evidence_directory=execution_evidence_dir,
             intraday_contract_lineage_path=intraday_contract_lineage,
             max_sessions_per_invocation=max_sessions,
             session_workers=session_workers,

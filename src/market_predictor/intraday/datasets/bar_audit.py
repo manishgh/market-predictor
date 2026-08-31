@@ -1,7 +1,6 @@
 """Reproducible row-level audit for the immutable A4.3 intraday dataset."""
+
 from __future__ import annotations
-
-
 
 import json
 import math
@@ -13,6 +12,7 @@ from typing import Any, Final, cast
 import pandas as pd
 
 from market_predictor.canonical.store import file_sha256
+from market_predictor.core.errors import DataReadinessError
 from market_predictor.intraday.datasets.bar_dataset import (
     MEMORY_HARD_BUDGET_GIB,
     MEMORY_HEADROOM_GIB,
@@ -22,11 +22,8 @@ from market_predictor.intraday.features.bar_only_five_minute import (
     load_complete_selected_session_five_minute_projection,
 )
 from market_predictor.resources import assert_memory_budget
-from market_predictor.core.errors import DataReadinessError
 
-INTRADAY_BAR_DATASET_AUDIT_SCHEMA: Final = (
-    "edge_rebuild.intraday_bar_dataset_audit.v1"
-)
+INTRADAY_BAR_DATASET_AUDIT_SCHEMA: Final = "market_predictor.intraday.bar_dataset_audit.v2"
 _BANNED_FEATURE_TOKENS: Final = (
     "macd",
     "catalyst",
@@ -39,6 +36,7 @@ _AUDIT_COLUMNS: Final = (
     "ticker",
     "session_date_et",
     "decision_time_utc",
+    "source_feature_available_at_utc",
     "feature_available_at_utc",
     "label_available_at_utc",
     "exit_bar_end_utc",
@@ -47,6 +45,7 @@ _AUDIT_COLUMNS: Final = (
     "dataset_eligible",
     "atr_14_5m",
     "five_minute_bar_observed",
+    "five_minute_prefix_complete",
     "ordered_feature_sha256",
     "feature_schema_version",
     "label_schema_version",
@@ -54,12 +53,14 @@ _AUDIT_COLUMNS: Final = (
 _ZERO_CHECKS: Final = (
     "duplicate_ticker_decision_rows",
     "feature_cutoff_violations",
+    "source_feature_cutoff_violations",
     "label_availability_violations",
     "eligibility_implication_violations",
     "eligible_atr_violations",
     "ordered_feature_hash_violations",
     "schema_identity_violations",
     "missing_five_minute_feature_eligible_violations",
+    "incomplete_five_minute_prefix_feature_eligible_violations",
 )
 
 
@@ -76,8 +77,11 @@ def publish_intraday_bar_dataset_audit(
         (dataset_directory, five_minute_projection_directory),
     )
     manifest = load_complete_intraday_bar_dataset(dataset_directory)
-    projection = load_complete_selected_session_five_minute_projection(
-        five_minute_projection_directory
+    projection = load_complete_selected_session_five_minute_projection(five_minute_projection_directory)
+    _require_projection_binding(
+        dataset_manifest=manifest,
+        projection_manifest=projection,
+        projection_directory=five_minute_projection_directory,
     )
     incomplete_pairs = _incomplete_projection_pairs(
         five_minute_projection_directory,
@@ -91,24 +95,14 @@ def publish_intraday_bar_dataset_audit(
     if not isinstance(raw_features, list) or not expected_feature_hash:
         raise DataReadinessError("intraday bar dataset feature identity is invalid")
     features = [str(value) for value in raw_features]
-    prohibited = sorted(
-        name
-        for name in features
-        if any(token in name.lower() for token in _BANNED_FEATURE_TOKENS)
-    )
+    prohibited = sorted(name for name in features if any(token in name.lower() for token in _BANNED_FEATURE_TOKENS))
     counters = _empty_counters()
     tickers: set[str] = set()
-    incomplete_stats = {
-        pair: {"rows": 0, "feature_eligible_rows": 0, "observed_rows": 0}
-        for pair in incomplete_pairs
-    }
+    incomplete_stats = {pair: {"rows": 0, "feature_eligible_rows": 0, "observed_rows": 0} for pair in incomplete_pairs}
     sessions = cast(list[str], manifest["planned_sessions"])
     for index, session_date in enumerate(sessions, start=1):
         rows = pd.read_parquet(
-            dataset_directory
-            / "sessions"
-            / f"session_date_et={session_date}"
-            / "rows.parquet",
+            dataset_directory / "sessions" / f"session_date_et={session_date}" / "rows.parquet",
             columns=list(_AUDIT_COLUMNS),
         )
         _audit_session(
@@ -128,9 +122,7 @@ def publish_intraday_bar_dataset_audit(
         expected_rows = int(str(summary["rows"]))
         expected_eligible_rows = int(str(summary["dataset_eligible_rows"]))
     except (KeyError, ValueError) as exc:
-        raise DataReadinessError(
-            "intraday bar dataset summary counts are invalid"
-        ) from exc
+        raise DataReadinessError("intraday bar dataset summary counts are invalid") from exc
     report = {
         "schema": INTRADAY_BAR_DATASET_AUDIT_SCHEMA,
         "dataset_directory": str(dataset_directory.resolve()),
@@ -138,35 +130,21 @@ def publish_intraday_bar_dataset_audit(
         "dataset_authority_sha256": file_sha256(dataset_directory / "_authority.json"),
         "dataset_request_sha256": str(manifest["request_sha256"]),
         "dataset_transformation_sha256": str(manifest["transformation_sha256"]),
-        "session_unit_inventory_sha256": str(
-            manifest["session_unit_inventory_sha256"]
-        ),
-        "five_minute_projection_directory": str(
-            five_minute_projection_directory.resolve()
-        ),
-        "five_minute_projection_manifest_sha256": file_sha256(
-            five_minute_projection_directory / "_manifest.json"
-        ),
-        "five_minute_projection_authority_sha256": file_sha256(
-            five_minute_projection_directory / "_authority.json"
-        ),
-        "five_minute_projection_inventory_sha256": str(
-            projection["file_inventory_sha256"]
-        ),
+        "session_unit_inventory_sha256": str(manifest["session_unit_inventory_sha256"]),
+        "five_minute_projection_directory": str(five_minute_projection_directory.resolve()),
+        "five_minute_projection_manifest_sha256": file_sha256(five_minute_projection_directory / "_manifest.json"),
+        "five_minute_projection_authority_sha256": file_sha256(five_minute_projection_directory / "_authority.json"),
+        "five_minute_projection_inventory_sha256": str(projection["file_inventory_sha256"]),
+        "five_minute_projection_lineage_verified": True,
         "sessions": len(sessions),
         "tickers": len(tickers),
         **counters,
         "prohibited_model_features": prohibited,
         "projection_incomplete_pairs": len(incomplete_pairs),
-        "projection_incomplete_pairs_represented": sum(
-            value["rows"] > 0 for value in incomplete_stats.values()
-        ),
-        "projection_incomplete_pairs_with_observed_rows": sum(
-            value["observed_rows"] > 0 for value in incomplete_stats.values()
-        ),
+        "projection_incomplete_pairs_represented": sum(value["rows"] > 0 for value in incomplete_stats.values()),
+        "projection_incomplete_pairs_with_observed_rows": sum(value["observed_rows"] > 0 for value in incomplete_stats.values()),
         "projection_incomplete_pairs_with_eligible_earlier_rows": sum(
-            value["feature_eligible_rows"] > 0
-            for value in incomplete_stats.values()
+            value["feature_eligible_rows"] > 0 for value in incomplete_stats.values()
         ),
     }
     report["status"] = (
@@ -179,9 +157,7 @@ def publish_intraday_bar_dataset_audit(
     )
     _publish_report(output_path, report)
     if report["status"] != "pass":
-        raise DataReadinessError(
-            f"intraday bar dataset audit failed; evidence={output_path}"
-        )
+        raise DataReadinessError(f"intraday bar dataset audit failed; evidence={output_path}")
     return report
 
 
@@ -198,9 +174,7 @@ def _audit_session(
     if frame.empty:
         return
     tickers.update(frame["ticker"].astype(str))
-    counters["duplicate_ticker_decision_rows"] += int(
-        frame.duplicated(["ticker", "decision_time_utc"]).sum()
-    )
+    counters["duplicate_ticker_decision_rows"] += int(frame.duplicated(["ticker", "decision_time_utc"]).sum())
     feature_ok = frame["feature_eligible"].fillna(False).astype(bool)
     label_ok = frame["label_eligible"].fillna(False).astype(bool)
     dataset_ok = frame["dataset_eligible"].fillna(False).astype(bool)
@@ -208,59 +182,29 @@ def _audit_session(
     counters["label_eligible_rows"] += int(label_ok.sum())
     counters["dataset_eligible_rows"] += int(dataset_ok.sum())
     decision = pd.to_datetime(frame["decision_time_utc"], utc=True, errors="coerce")
-    feature_at = pd.to_datetime(
-        frame["feature_available_at_utc"], utc=True, errors="coerce"
-    )
-    label_at = pd.to_datetime(
-        frame["label_available_at_utc"], utc=True, errors="coerce"
-    )
+    feature_at = pd.to_datetime(frame["feature_available_at_utc"], utc=True, errors="coerce")
+    source_feature_at = pd.to_datetime(frame["source_feature_available_at_utc"], utc=True, errors="coerce")
+    label_at = pd.to_datetime(frame["label_available_at_utc"], utc=True, errors="coerce")
     exit_end = pd.to_datetime(frame["exit_bar_end_utc"], utc=True, errors="coerce")
-    counters["feature_cutoff_violations"] += int(
-        (
-            feature_ok
-            & (feature_at.isna() | decision.isna() | feature_at.gt(decision))
-        ).sum()
+    counters["feature_cutoff_violations"] += int((feature_ok & (feature_at.isna() | decision.isna() | feature_at.gt(decision))).sum())
+    counters["source_feature_cutoff_violations"] += int(
+        (feature_ok & (source_feature_at.isna() | decision.isna() | source_feature_at.gt(decision))).sum()
     )
     counters["label_availability_violations"] += int(
-        (
-            label_ok
-            & (
-                label_at.isna()
-                | exit_end.isna()
-                | label_at.lt(exit_end)
-                | label_at.le(decision)
-            )
-        ).sum()
+        (label_ok & (label_at.isna() | exit_end.isna() | label_at.lt(exit_end) | label_at.le(decision))).sum()
     )
-    counters["eligibility_implication_violations"] += int(
-        (dataset_ok & ~(feature_ok & label_ok)).sum()
-    )
+    counters["eligibility_implication_violations"] += int((dataset_ok & ~(feature_ok & label_ok)).sum())
     atr = pd.to_numeric(frame["atr_14_5m"], errors="coerce")
-    counters["eligible_atr_violations"] += int(
-        (dataset_ok & (~atr.map(math.isfinite) | atr.le(0))).sum()
-    )
-    counters["ordered_feature_hash_violations"] += int(
-        frame["ordered_feature_sha256"]
-        .astype(str)
-        .ne(expected_feature_hash)
-        .sum()
-    )
+    counters["eligible_atr_violations"] += int((dataset_ok & (~atr.map(math.isfinite) | atr.le(0))).sum())
+    counters["ordered_feature_hash_violations"] += int(frame["ordered_feature_sha256"].astype(str).ne(expected_feature_hash).sum())
     counters["schema_identity_violations"] += int(
-        frame["feature_schema_version"]
-        .astype(str)
-        .ne("edge_rebuild.intraday_bar_features.v1")
-        .sum()
+        frame["feature_schema_version"].astype(str).ne("edge_rebuild.intraday_bar_features.v1").sum()
     )
-    counters["schema_identity_violations"] += int(
-        frame["label_schema_version"]
-        .astype(str)
-        .ne("edge_rebuild.intraday_bar_labels.v1")
-        .sum()
-    )
+    counters["schema_identity_violations"] += int(frame["label_schema_version"].astype(str).ne("edge_rebuild.intraday_bar_labels.v1").sum())
     observed = frame["five_minute_bar_observed"].fillna(False).astype(bool)
-    counters["missing_five_minute_feature_eligible_violations"] += int(
-        (~observed & feature_ok).sum()
-    )
+    counters["missing_five_minute_feature_eligible_violations"] += int((~observed & feature_ok).sum())
+    prefix_complete = frame["five_minute_prefix_complete"].fillna(False).astype(bool)
+    counters["incomplete_five_minute_prefix_feature_eligible_violations"] += int((~prefix_complete & feature_ok).sum())
     for ticker, indices in frame.groupby("ticker", observed=True).groups.items():
         pair = (session_date, str(ticker))
         stats = incomplete_stats.get(pair)
@@ -268,12 +212,8 @@ def _audit_session(
             continue
         part = frame.loc[indices]
         stats["rows"] += len(part)
-        stats["feature_eligible_rows"] += int(
-            part["feature_eligible"].fillna(False).astype(bool).sum()
-        )
-        stats["observed_rows"] += int(
-            part["five_minute_bar_observed"].fillna(False).astype(bool).sum()
-        )
+        stats["feature_eligible_rows"] += int(part["feature_eligible"].fillna(False).astype(bool).sum())
+        stats["observed_rows"] += int(part["five_minute_bar_observed"].fillna(False).astype(bool).sum())
 
 
 def _incomplete_projection_pairs(
@@ -298,10 +238,31 @@ def _incomplete_projection_pairs(
     coverage = pd.concat(parts, ignore_index=True)
     return {
         (str(row.session_date_et), str(row.ticker))
-        for row in coverage.loc[
-            coverage["coverage_status"].ne("complete")
-        ].itertuples(index=False)
+        for row in coverage.loc[coverage["coverage_status"].ne("complete")].itertuples(index=False)
     }
+
+
+def _require_projection_binding(
+    *,
+    dataset_manifest: Mapping[str, Any],
+    projection_manifest: Mapping[str, Any],
+    projection_directory: Path,
+) -> None:
+    parent = dataset_manifest.get("parent_lineage")
+    recorded_directory = dataset_manifest.get("five_minute_projection_directory")
+    if (
+        not isinstance(parent, Mapping)
+        or not isinstance(recorded_directory, str)
+        or Path(recorded_directory).resolve() != projection_directory.resolve()
+    ):
+        raise DataReadinessError("intraday dataset and five-minute projection path differ")
+    actual = {
+        "five_minute_projection_authority_sha256": file_sha256(projection_directory / "_authority.json"),
+        "five_minute_projection_manifest_sha256": file_sha256(projection_directory / "_manifest.json"),
+        "five_minute_projection_inventory_sha256": str(projection_manifest.get("file_inventory_sha256", "")),
+    }
+    if any(parent.get(key) != value for key, value in actual.items()):
+        raise DataReadinessError("intraday dataset and five-minute projection lineage differ")
 
 
 def _empty_counters() -> dict[str, int]:
@@ -319,13 +280,9 @@ def _publish_report(path: Path, report: Mapping[str, Any]) -> None:
         try:
             existing = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError) as exc:
-            raise DataReadinessError(
-                f"intraday bar audit report is unreadable: {path}"
-            ) from exc
+            raise DataReadinessError(f"intraday bar audit report is unreadable: {path}") from exc
         if existing != report:
-            raise DataReadinessError(
-                f"intraday bar audit report is immutable and differs: {path}"
-            )
+            raise DataReadinessError(f"intraday bar audit report is immutable and differs: {path}")
         return
     path.parent.mkdir(parents=True, exist_ok=True)
     staging = path.with_name(f".{path.name}.{uuid.uuid4().hex}.tmp")
