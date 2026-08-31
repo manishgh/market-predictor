@@ -78,6 +78,11 @@ There is no fallback from the active path to legacy models or schemas.
 - The completed bar-only authority binds every session unit to the exact feature/label
   transformation hashes, replays source hashes at read time and before final publish,
   and preserves missing five-minute observations as row-level abstentions.
+- Audit v2 independently binds the supplied five-minute projection path and hashes,
+  verifies the maximum raw source timestamp and five-minute prefix completeness, and
+  fails on any eligible row using late or incomplete evidence. Dataset execution
+  telemetry is a separate authority because it cannot change feature or label identity;
+  future resumable publications require hash-bound per-invocation memory receipts.
 - SPY, QQQ, and the point-in-time sector ETF use the identical decision and outcome
   interval as the stock.
 

@@ -157,9 +157,14 @@ shuffled-label control must remain at chance.
    report-only. Its 12 development experiments produced no candidate, so the locked
    test remains unopened and serving remains disabled.
 4. Keep API scoring disabled unless a promoted bundle verifies at load time.
-5. Preserve A4.3's completed bar-only causal dataset and its hash-bound audit. Keep
-   A4.2/A4.5 trade/quote features blocked until the complete A4.1 raw authority can be
-   stored and replayed.
+5. Preserve the current A4.3 authority at
+   `data/features/intraday_causal_volume_bar_dataset_20260831_v2` and its immutable audit
+   v2. Audit v2 must bind the exact five-minute projection, raw source cutoff, and
+   five-minute prefix state. Future publication commands also require a separate
+   execution-evidence directory so every resumable invocation is memory-audited. The
+   current post-hoc execution assessment is incomplete and must not be upgraded by
+   inference. Keep A4.2/A4.5 trade/quote features blocked until the complete A4.1 raw
+   authority can be stored and replayed.
 6. Preserve A4.4 continuation and long-reversion outputs as rejection evidence. Both
    are `no_candidate`; neither may serve or open the future holdout. The best audited
    positive-return ROC-AUC values are near 0.51 and controlling after-cost scopes fail.

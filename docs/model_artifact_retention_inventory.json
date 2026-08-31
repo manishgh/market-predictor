@@ -154,6 +154,17 @@
       "status": "historical_current_ineligible"
     },
     {
+      "action": "retain_as_current_intraday_data_authority",
+      "paths": [
+        "data/features/intraday_causal_volume_bar_dataset_20260831_v2",
+        "data/reports/intraday_causal_volume_bar_dataset_20260831_v2_audit_v2.json",
+        "data/reports/intraday_causal_volume_bar_dataset_20260831_v2_execution_assessment.json"
+      ],
+      "promotion_permitted": false,
+      "reason": "The dataset and audit v2 are current causal data evidence. The execution assessment is explicitly incomplete, and no model training, promotion, serving, or locked-test access is authorized.",
+      "status": "current_data_authority_training_not_authorized"
+    },
+    {
       "action": "retain",
       "paths": [
         "data/artifacts",
@@ -166,12 +177,13 @@
       "status": "protected_input_or_evidence"
     }
   ],
-  "generated_at_utc": "2026-08-27T09:19:27Z",
-  "generated_from_commit": "a57648e4d3ba8c874ddd2ad963ed0c1f2b2e79d4",
+  "generated_at_utc": "2026-09-01T00:00:00Z",
+  "generated_from_commit": "1829fce24b543afb49413a517b6849c3684aacb3",
   "inventory_scope": [
     "models",
     "data/models",
     "data/artifacts",
+    "data/reports",
     "tracked references"
   ],
   "namespace_dependencies": {

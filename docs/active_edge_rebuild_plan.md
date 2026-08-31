@@ -371,24 +371,29 @@ simplified economic calculation.
    tests; complete dataset publication under 4 GiB; no locked-test access and no model
    training in this checkpoint.
 
-   Completion evidence: implementation commit `8a76ec1`; immutable five-minute
+   Completion evidence: implementation commits `8a76ec1`, `e76bf8d`, and `1829fce`;
+   immutable five-minute
    projection `data/canonical/edge_rebuild_selected_session_5m_bar_only_causal_20260814_v2`
    with 43,226 selected stock-sessions, 3,364,335 rows, 43,132 complete pairs, 94
    incomplete pairs retained as coverage, and no provider download; immutable dataset
-   `data/features/edge_rebuild_intraday_bar_only_causal_20260814_v1` with 794 sessions,
-   501 tickers, 3,095,688 rows, and 1,365,015 eligible rows. Dataset request SHA-256 is
-   `83820269d80019a46754aa451c1f1e13773995a889a51e605595511315af4bb2` and
+   `data/features/intraday_causal_volume_bar_dataset_20260831_v2` with 794 sessions,
+   501 tickers, 3,095,688 rows, and 1,365,015 eligible rows. Dataset manifest SHA-256 is
+   `1f09a55489a2889b40899eff44ecb4205dba2162c3198f8def559b6e50951a58`, request SHA-256 is
+   `5e8c508a4237320d6ea56205502f670244a49f713b22dbff10a336d4d2dc303a`, and
    transformation SHA-256 is
-   `0da898cc6fd3c1e933406ce07f24de197fc1fa34c4a909c4b9c4a28e2e96f3f6`.
-   The reproducible audit report at
-   `data/reports/edge_rebuild_intraday_bar_only_causal_20260814_v1_audit.json` is
-   bound to the dataset manifest, authority, session inventory, projection manifest,
-   projection authority, and projection inventory. It reports zero duplicate decisions,
-   causal-cutoff violations, label-availability violations, eligible ATR violations,
-   feature-hash violations, and prohibited features. Aggregate publication peak upper
-   bound was 2.218 GiB. Verification closed with 1,293 tests passed, 2 skipped, tracked
-   Ruff clean, strict mypy clean across 226 source files, compileall clean, and two
-   independent re-reviewers reporting no remaining medium-or-higher findings.
+   `6fdfd0c8f07e4f7445b66d038cbd936e4459db68e087a5ddbcb30eac4795cb51`.
+   Audit v2 at
+   `data/reports/intraday_causal_volume_bar_dataset_20260831_v2_audit_v2.json`
+   (SHA-256 `f1b21af3704317d070f479ac6a562fdb126c21d2b7da021ddf5c7b6108be97e8`)
+   binds the dataset and exact projection path/authority/manifest/inventory. It reports
+   zero duplicate decisions, normalized or raw source cutoff violations, incomplete
+   five-minute-prefix eligibility, label-availability violations, eligible ATR defects,
+   feature-hash defects, schema defects, and prohibited features. The resumed build
+   predates mandatory per-invocation execution receipts, so
+   `data/reports/intraday_causal_volume_bar_dataset_20260831_v2_execution_assessment.json`
+   truthfully records `complete_run_memory_proven=false`; earlier invocation memory was
+   not reconstructed. This operational limitation does not alter the independently
+   replayed row or lineage evidence, but it cannot be cited as complete-run memory proof.
 4. **A4.4 - Train separate bar-only continuation and reversion baselines (`complete; no candidate`).** Use purged,
    embargoed chronological selection and the canonical intraday portfolio evaluator.
    Do not open the future holdout unless a preregistered development candidate passes
@@ -1484,11 +1489,19 @@ test, and task names.
      unchanged historical evidence under transformation `0da898cc...`; it is rejected
      by the current loader and cannot train or promote. Its audit, two event-preflight
      authorities, and eight retained development/rejection model bundles are likewise
-     historical. A current intraday authority requires deterministic rematerialization
-     into a new output directory and request hash. Focused verification passed 194
-     tests; the code reviewer approved the portability remediation with no remaining
-     P0, P1, or P2 finding. Rollback anchor was
-     `1640bf68f65d4c293d043ffb57000f0100d245cd`.
+     historical. Deterministic rematerialization completed at
+     `intraday_causal_volume_bar_dataset_20260831_v2` with request `5e8c508a...303a` and
+     the current transformation `6fdfd0c8...cb51`. Audit-remediation commit `1829fce`
+     adds projection-lineage, raw-source-cutoff, and five-minute-prefix poison gates.
+     Future CLI publications require separate hash-bound per-invocation execution
+     evidence with aggregate process/worker memory validation and crash recovery. The
+     present artifact's execution assessment remains incomplete because that telemetry
+     was introduced after its resumable invocations. Verification passed 25 focused
+     remediation tests and the complete suite with 1,714 passed and three skipped;
+     affected Ruff, strict mypy, compileall, diff, CLI-help, and transformation checks
+     passed. Independent code and ML-design reviewers reported no remaining P0, P1, or
+     P2 finding. This registers a current data authority only: intraday training,
+     promotion, serving, and locked-test access remain unauthorized.
    - **Canonical intraday ledger ownership (`completed`).** Supplemental commit
      `a4002ce` completes an interrupted test refactor by making
      `intraday/evaluation/ledger.py` the sole owner of position-ledger construction,
@@ -1512,9 +1525,8 @@ test, and task names.
    Resolve all configured repository-wide Ruff and strict mypy findings, remove only
    reference-proven scratch or placeholder artifacts, and add architecture guards that
    prevent duplicate production namespaces from returning. The measured baseline after
-   `8d42d26` is 198 Ruff findings (107 import-order, 61 import-placement, 20 unused
-   imports, and 10 unused redefinitions) and 348 strict mypy findings across 61 files;
-   these are existing repository debt, not accepted passes.
+   `1829fce` is 168 Ruff findings and 14 strict mypy findings across three files; none is
+   in the files changed by `1829fce`. These remain repository debt, not accepted passes.
 7. **Full verification and closure (`pending`).**
    Run focused tests after each task, then repository-wide Ruff, strict mypy, the full
    test suite under the configured writable runtime directory, `git diff --check`, and

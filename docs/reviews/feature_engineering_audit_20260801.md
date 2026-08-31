@@ -1,6 +1,6 @@
 # Current Feature Engineering Audit
 
-Last updated: 2026-08-31
+Last updated: 2026-09-01
 
 ## Scope
 
@@ -60,9 +60,14 @@ learned candidate.
   owner migration. Current code requires transformation schema
   `market_predictor.intraday.bar_dataset_transformation.v2` with SHA-256
   `6fdfd0c8f07e4f7445b66d038cbd936e4459db68e087a5ddbcb30eac4795cb51`.
-  No full current-v2 dataset authority exists yet, so intraday training and promotion
-  fail closed until deterministic rematerialization into a new directory passes strict
-  replay. The later V3 branch declared five cross-sectional z-score
+  The current data authority now exists at
+  `data/features/intraday_causal_volume_bar_dataset_20260831_v2` with 794 sessions,
+  3,095,688 rows, and 1,365,015 eligible rows. Audit v2 binds the exact five-minute
+  projection and reports zero raw-source-cutoff or incomplete-prefix eligibility
+  violations. Its execution assessment remains incomplete because per-invocation
+  telemetry was introduced after the resumed build; no historical memory evidence was
+  inferred. Data-authority registration does not authorize training, promotion,
+  serving, or locked-test access. The later V3 branch declared five cross-sectional z-score
   columns without a valid contemporaneous decision-cohort implementation; the
   columns were undefined for asynchronous or single-member timestamps. Commit
   `e168482` removes that invalid contract. Any artifact requiring those columns is

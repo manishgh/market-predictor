@@ -2,13 +2,13 @@
 
 Status: active
 
-Last updated: 2026-08-31
+Last updated: 2026-09-01
 
 Repository: `C:\project\market-predictor`
 
 Branch: `er-intraday-refactoring`
 
-Last completed implementation commit: `a4002ce` (`Consolidate intraday ledger ownership`)
+Last completed implementation commit: `1829fce` (`Strengthen intraday dataset audit evidence`)
 
 ## Purpose
 
@@ -37,7 +37,9 @@ specialists; A6 performs locked evaluation and promotion.
 - No promoted serving bundle exists. Production prediction paths must fail closed.
 - Reddit and Seeking Alpha remain retired and prohibited.
 - Swing decisions begin on `2019-07-09`; earlier bars are warm-up only.
-- Intraday estimator input is the ordered A4.3 bar-only technical contract, sampled on
+- The current intraday data authority is
+  `data/features/intraday_causal_volume_bar_dataset_20260831_v2`. Intraday estimator
+  input is the ordered A4.3 bar-only technical contract, sampled on
   fixed five-minute cohorts from causal completed evidence. The V3 z-score lineage is
   invalid and prohibited.
 - `swing_features.py` has been refactored into a `FeaturePipeline` orchestrator, with logic decoupled into `swing_pipeline_steps.py`, `swing_filters.py`, and `swing_catalyst_features.py`. Shared cross-cutting utilities reside in `edge_rebuild/utils/`.
@@ -225,26 +227,37 @@ coverage.
   for immutable failed-attempt inventory, path overlap, page-level resume, causal
   population selection, matched ablation, and zero-sided quotes.
 
-## A4.3: Bar-Only Technical Intraday Authority
+## A4.3: Current Bar-Only Technical Intraday Authority
 
-- Commit `8a76ec1` publishes the fixed-cohort bar-only dataset authority without a
-  provider download or any trade/quote/microstructure input.
+- Commits `8a76ec1`, `e76bf8d`, and `1829fce` publish and verify the fixed-cohort
+  bar-only dataset authority without a provider download or any
+  trade/quote/microstructure input.
 - The immutable five-minute projection contains 43,226 selected stock-sessions and
   3,364,335 rows: 43,132 stock-session pairs are complete and 94 incomplete pairs are
   retained as explicit coverage metadata.
-- The immutable dataset contains 794 sessions, 501 tickers, 3,095,688 rows, and
-  1,365,015 eligible rows. Aggregate publication peak upper bound was 2.218 GiB.
+- The current immutable dataset is
+  `data/features/intraday_causal_volume_bar_dataset_20260831_v2`. It contains 794
+  sessions, 501 tickers, 3,095,688 rows, and 1,365,015 eligible rows.
 - Dataset request SHA-256:
-  `83820269d80019a46754aa451c1f1e13773995a889a51e605595511315af4bb2`.
+  `5e8c508a4237320d6ea56205502f670244a49f713b22dbff10a336d4d2dc303a`.
   Transformation SHA-256:
-  `0da898cc6fd3c1e933406ce07f24de197fc1fa34c4a909c4b9c4a28e2e96f3f6`.
-- The bound audit is
-  `data/reports/edge_rebuild_intraday_bar_only_causal_20260814_v1_audit.json`. It
-  replays the exact dataset/projection manifest, authority, and inventory hashes and
-  reports zero duplicate-decision, causal-cutoff, label-availability, eligible-ATR,
-  ordered-feature-hash, schema-identity, and prohibited-feature violations.
-- Two independent re-reviewers reported no remaining medium-or-higher findings.
-- No model was trained, no locked test was opened, and no serving bundle was promoted.
+  `6fdfd0c8f07e4f7445b66d038cbd936e4459db68e087a5ddbcb30eac4795cb51`.
+- Audit v2 is
+  `data/reports/intraday_causal_volume_bar_dataset_20260831_v2_audit_v2.json`, SHA-256
+  `f1b21af3704317d070f479ac6a562fdb126c21d2b7da021ddf5c7b6108be97e8`.
+  It requires the exact projection path and authority/manifest/inventory hashes and
+  reports zero normalized cutoff, raw source cutoff, incomplete five-minute prefix,
+  duplicate, label-availability, eligible-ATR, ordered-feature-hash, schema, or
+  prohibited-feature violations.
+- The resumed publication occurred before mandatory per-invocation execution receipts.
+  `data/reports/intraday_causal_volume_bar_dataset_20260831_v2_execution_assessment.json`
+  therefore records `status=incomplete`, `recorded_scope=final_invocation_only`, and
+  `complete_run_memory_proven=false`. Do not reconstruct or overstate this evidence.
+- Future publication requires a separate execution-evidence directory. Every invocation
+  is receipt-bound, aggregate parent/worker memory must remain within 3.25 GiB, and
+  interrupted evidence-authority finalization resumes deterministically.
+- Two independent reviewers reported no remaining P0, P1, or P2 findings. No model was
+  trained, no locked test was opened, and no serving bundle was promoted.
 
 ## A4.4 Result
 
@@ -1046,10 +1059,29 @@ directories are separately classified as historical/non-promotable in
 `docs/model_artifact_retention_inventory.json`; they are not intraday volume-bar
 authorities and were not modified.
 
-Exact next checkpoint: deterministically rematerialize the causal intraday bar dataset
-under a new output directory and request hash using transformation v2, then replay its
-complete authority before allowing any intraday training. Do not rewrite or resume the
-2026-08-14 directory. Task-review this data operation first, preserve one heavy process
-below 4 GiB, and retain failed partial work only through the publisher's verified work
-directory contract. Rollback anchor for the ownership implementation is
-`1640bf68f65d4c293d043ffb57000f0100d245cd`.
+Deterministic rematerialization is complete at
+`data/features/intraday_causal_volume_bar_dataset_20260831_v2`. Strict loader replay,
+audit v2, and all 794 session units pass. The old and current row/session hashes are
+identical; this is code-lineage rematerialization, not new statistical evidence. Commit
+`1829fce` closes the audit and future execution-evidence defects without modifying
+`bar_dataset.py`, `bar_features.py`, `bar_labels.py`, or `volume_bars.py`; transformation
+SHA remains `6fdfd0c8...cb51`.
+
+Verification after the final code change: 25 focused audit/execution tests, 63 broader
+intraday/architecture tests, 57 corrected development tests, and the complete suite with
+1,714 passed and three skipped. Affected Ruff and strict mypy, compileall, CLI help,
+strict data replay, audit replay, diff checks, and process checks pass. Repository-wide
+static cleanup remains Step 6 debt: 168 Ruff findings and 14 strict mypy findings across
+three untouched files.
+
+This registers the current intraday **data authority only**. The historical A4.4 models
+remain rejected; identical rows do not justify retraining them. Historical event
+preflights remain bound to the obsolete authority and retrospective provider timestamps.
+Intraday training, promotion, serving, and locked-test access remain unauthorized.
+
+Exact next checkpoint: continue Step 4 package ownership with a task-reviewed inventory
+of the remaining intraday history planning/materialization modules under
+`src/market_predictor/edge_rebuild`. Move one behaviorally coherent owner group at a
+time into `intraday/contracts` or `intraday/datasets`, with no aliases and no artifact
+regeneration unless a transformation identity actually changes. Do not begin model
+training. Rollback anchor for this completed data/audit checkpoint is `1829fce`.

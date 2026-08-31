@@ -80,12 +80,17 @@ hash-verified promoted bundle.
   coverage is metadata, not an earlier-decision selector. A two-job live Alpaca probe
   completed with zero failures at 0.35 GiB peak RSS. It is intentionally incomplete
   and cannot authorize microstructure features or training.
-- A4.3's separately identified bar-only intraday authority is complete: 794 sessions,
-  501 tickers, 3,095,688 rows, and 1,365,015 eligible rows from verified SIP/all one-
-  and five-minute bars, SPY, QQQ, sector ETFs, and point-in-time membership. Its
-  hash-bound row audit passes with zero causal, schema, duplicate, ATR, or prohibited-
-  feature violations. A4.4 trained separate continuation and long-reversion bar-only
-  baselines on this authority. Both published immutable `no_candidate` evidence: the
+- A4.3's current bar-only intraday data authority is
+  `data/features/intraday_causal_volume_bar_dataset_20260831_v2`: 794 sessions, 501
+  tickers, 3,095,688 rows, and 1,365,015 eligible rows from verified SIP/all one- and
+  five-minute bars, SPY, QQQ, sector ETFs, and point-in-time membership. Audit schema
+  `market_predictor.intraday.bar_dataset_audit.v2` verifies the exact projection lineage,
+  raw source cutoffs, five-minute prefix completeness, labels, schemas, duplicates, ATR,
+  and prohibited-feature rules. Full per-invocation memory evidence was introduced after
+  this resumed build, so its execution assessment remains explicitly incomplete; no
+  memory history was reconstructed. A4.4 trained separate continuation and long-reversion
+  bar-only baselines on the byte-identical historical authority. Both published immutable
+  `no_candidate` evidence: the
   best audited positive-return ROC-AUC was 0.510/0.516 for continuation and 0.513/0.508
   for reversion across seen/unseen securities, with negative after-cost economics in
   the controlling scopes. No candidate model was written and the future holdout stayed
