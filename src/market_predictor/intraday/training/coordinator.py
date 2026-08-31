@@ -1,13 +1,33 @@
+"""Development-only, cost-aware intraday model training and evaluation."""
+
 from __future__ import annotations
 
-from market_predictor.intraday.evaluation.economics import _position_ledger
-from market_predictor.intraday.training.config import IntradayDevelopmentConfig, _CandidateSpec
+import gc
+from collections.abc import Mapping
+from dataclasses import asdict, dataclass
+from pathlib import Path
+from typing import Any, Final
+
+import numpy as np
+import pandas as pd
+
+from market_predictor.core.errors import DataReadinessError
 from market_predictor.intraday.evaluation.gates import (
     _audit_policy_choice,
     _evaluate_spec,
     _profile_mask,
     _selection_key,
     baseline_profile,
+)
+from market_predictor.intraday.evaluation.ledger import _position_ledger
+from market_predictor.intraday.training.config import (
+    IntradayDevelopmentConfig,
+    _CandidateSpec,
+)
+from market_predictor.intraday.training.event_training import (
+    DIRECTIONAL_EVENT_SUBTYPES,
+    filter_to_research_event_cohort,
+    load_intraday_research_event_cohort,
 )
 from market_predictor.intraday.training.io import (
     _dataset_identity,
@@ -22,29 +42,16 @@ from market_predictor.intraday.training.io import (
     load_complete_intraday_development_output,
 )
 from market_predictor.intraday.training.models import _fit_pair, _predict_pair
-from market_predictor.intraday.training.validation import _Fold, _security_set_sha256, _stable_security_holdout, _walk_forward_folds
-
-"""Development-only, cost-aware intraday model training and evaluation."""
-
-import gc
-from collections.abc import Mapping
-from dataclasses import asdict, dataclass
-from pathlib import Path
-from typing import Any, Final
-
-import numpy as np
-import pandas as pd
-
-from market_predictor.core.errors import DataReadinessError
-from market_predictor.intraday.training.event_training import (
-    DIRECTIONAL_EVENT_SUBTYPES,
-    filter_to_research_event_cohort,
-    load_intraday_research_event_cohort,
-)
 from market_predictor.intraday.training.training import (
     MODEL_FEATURE_COLUMNS,
     PublishedIntradayDataset,
     load_published_intraday_dataset,
+)
+from market_predictor.intraday.training.validation import (
+    _Fold,
+    _security_set_sha256,
+    _stable_security_holdout,
+    _walk_forward_folds,
 )
 from market_predictor.resources import (
     memory_audit,

@@ -13,8 +13,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
-import market_predictor.intraday.evaluation.economics as economics_module
 import market_predictor.intraday.evaluation.gates as gates_module
+import market_predictor.intraday.evaluation.ledger as ledger_module
 import market_predictor.intraday.training.coordinator as coordinator_module
 import market_predictor.intraday.training.io as io_module
 import market_predictor.intraday.training.models as models_module
@@ -51,6 +51,12 @@ def test_repository_policy_freezes_complete_a44_contract() -> None:
     assert config.reversion_max_vwap_distance_atr == -0.5
     assert config.reversion_max_volume_rsi_14 == 45.0
     assert config.maximum_process_memory_gib == 4.0
+
+
+def test_production_uses_the_canonical_intraday_ledger_owner() -> None:
+    assert gates_module._position_ledger is ledger_module._position_ledger
+    assert gates_module._ledger_metrics is ledger_module._ledger_metrics
+    assert coordinator_module._position_ledger is ledger_module._position_ledger
 
 
 def test_training_requires_an_explicit_supported_hypothesis(
@@ -624,7 +630,7 @@ def test_portfolio_ledger_enforces_risk_capital_concurrency_cooldown_and_cost_on
         per_security_cooldown_minutes=30,
     )
 
-    ledger = economics_module._position_ledger(
+    ledger = ledger_module._position_ledger(
         pd.DataFrame(rows),
         0.0,
         0.35,
@@ -632,7 +638,7 @@ def test_portfolio_ledger_enforces_risk_capital_concurrency_cooldown_and_cost_on
         config,
     )
     positions = ledger["position_records"]
-    metrics = economics_module._ledger_metrics(ledger)
+    metrics = ledger_module._ledger_metrics(ledger)
 
     assert len(positions) == 4
     assert {row["security_id"] for row in positions} == {"B", "C"}
@@ -680,14 +686,14 @@ def test_conservative_open_stop_marks_contribute_to_drawdown() -> None:
         position_weight=1.0,
     )
 
-    ledger = economics_module._position_ledger(
+    ledger = ledger_module._position_ledger(
         pd.DataFrame(rows),
         0.0,
         0.35,
         0.0,
         config,
     )
-    metrics = economics_module._ledger_metrics(ledger)
+    metrics = ledger_module._ledger_metrics(ledger)
 
     assert min(ledger["equity_marks"]) == pytest.approx(0.80)
     assert metrics["maximum_drawdown"] == pytest.approx(0.20)
@@ -715,7 +721,7 @@ def test_simultaneous_exits_add_one_order_independent_post_batch_equity_mark() -
         completed: list[dict[str, Any]] = []
         equity_marks = [1.0]
 
-        _cash, equity = economics_module._close_due_positions(
+        _cash, equity = ledger_module._close_due_positions(
             open_positions,
             cutoff=exit_time,
             cash=0.0,
