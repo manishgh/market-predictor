@@ -1514,6 +1514,25 @@ test, and task names.
      the final diff with no remaining P0, P1, or P2 finding. The complete isolated
      suite after both implementation commits passed 1,691 tests with three skipped in
      13 minutes 30 seconds.
+   - **Intraday selected-session planning ownership (`completed`).** Implementation
+     commit `d34ea25` moves the complete selected stock-session verification and
+     one-minute/five-minute acquisition-plan publisher byte-for-byte from
+     `edge_rebuild/selected_session_history.py` to
+     `intraday/datasets/selected_session_history.py`. All five production consumers
+     and both direct test consumers import the canonical owner; no compatibility alias
+     or old file remains. The source Git object remains
+     `2f43aa9ffd48a8a4f76f7b7bb448c204ccf7f2bd`. Tests freeze the new function and
+     `SelectedSession` owners, pickle round trip, exchange-calendar and early-close
+     behavior, selection lineage, one-minute alignment, and all old import forms.
+     Persisted schemas, policy hashes, plan fingerprints, unit identities, and existing
+     authorities are unchanged. The current volume-bar transformation remains
+     `6fdfd0c8...cb51`, and its 794-session authority replays without regeneration.
+     Verification passed 174 focused tests and the complete suite with 1,719 passed and
+     three skipped. Affected Ruff, strict mypy, compileall, CLI help, import/old-path,
+     source-parity, diff, process, and temporary-output checks passed. Repository-wide
+     static results remain the recorded Step 6 baseline of 168 Ruff and 14 strict mypy
+     findings in untouched files. Independent code and ML-design reviewers reported no
+     remaining P0, P1, or P2 finding.
 5. **Governance, serving, and command package migration (`pending`).**
    Move readiness, promotion, drift, and outcomes to `governance`; bundle loading,
    prediction services, and API behavior to `serving`; and retain only thin CLI

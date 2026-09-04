@@ -2,13 +2,13 @@
 
 Status: active
 
-Last updated: 2026-09-01
+Last updated: 2026-09-04
 
 Repository: `C:\project\market-predictor`
 
 Branch: `er-intraday-refactoring`
 
-Last completed implementation commit: `1829fce` (`Strengthen intraday dataset audit evidence`)
+Last completed implementation commit: `d34ea25` (`Move selected-session planning into intraday datasets`)
 
 ## Purpose
 
@@ -1079,9 +1079,26 @@ remain rejected; identical rows do not justify retraining them. Historical event
 preflights remain bound to the obsolete authority and retrospective provider timestamps.
 Intraday training, promotion, serving, and locked-test access remain unauthorized.
 
-Exact next checkpoint: continue Step 4 package ownership with a task-reviewed inventory
-of the remaining intraday history planning/materialization modules under
-`src/market_predictor/edge_rebuild`. Move one behaviorally coherent owner group at a
-time into `intraday/contracts` or `intraday/datasets`, with no aliases and no artifact
-regeneration unless a transformation identity actually changes. Do not begin model
-training. Rollback anchor for this completed data/audit checkpoint is `1829fce`.
+Commit `d34ea25` moves selected stock-session verification and one-minute/five-minute
+acquisition planning byte-for-byte to
+`intraday/datasets/selected_session_history.py`. All direct consumers use the new
+owner, the old module is absent and guarded against reintroduction, and
+`SelectedSession` now has explicit owner and pickle characterization. Persisted plan
+schemas, fingerprints, unit identities, policy hashes, and artifact bytes are
+unchanged. The source Git object remains `2f43aa9f...f2bd`; current transformation
+`6fdfd0c8...cb51` and the 794-session data authority replay unchanged.
+
+Verification passed 174 focused planning/coverage/benchmark/projection/dataset/boundary
+tests and the complete suite with 1,719 passed and three skipped. Affected Ruff and
+strict mypy, compileall, research CLI help, import smoke, old-path and source-parity
+scans, diff checks, process checks, and temporary-output cleanup passed. The
+repository-wide Step 6 baseline remains exactly 168 Ruff and 14 strict mypy findings in
+untouched files. Independent code and ML-design reviews closed with no P0, P1, or P2.
+
+Exact next checkpoint: task-review `edge_rebuild/history_materialization.py` and its
+direct consumers as the next coherent intraday dataset owner. If its persisted schemas,
+source identities, and replay behavior can remain exact, move it byte-for-byte to
+`intraday/datasets/history_materialization.py`, update every consumer directly, and add
+old-path plus owner guards. Do not include collection, coverage, configuration renames,
+artifact regeneration, model training, promotion, serving, or locked-test access.
+Rollback anchor is `d34ea25`.

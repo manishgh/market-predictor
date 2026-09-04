@@ -50,8 +50,11 @@ estimator without the same governance.
 
 - `sp500_transitions.py`, `sp500_memberships.py`, `universe_identity.py`: historical
   membership and security identity.
-- `history_collection.py`, `history_materialization.py`: Alpaca intraday transport and
-  canonical history.
+- `intraday/datasets/selected_session_history.py`: verified selected stock-session
+  acquisition planning at exact exchange-session bounds.
+- `edge_rebuild/history_collection.py`, `edge_rebuild/history_materialization.py`:
+  Alpaca intraday transport and canonical history; these remain explicit Step 4
+  migration owners.
 - `swing_history_collection.py`, `swing_daily_combination.py`: swing daily history.
 - `benchmark_history.py`, `corpus_integrity.py`, `readiness.py`: benchmark and corpus
   admission checks.
