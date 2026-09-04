@@ -1533,6 +1533,26 @@ test, and task names.
      static results remain the recorded Step 6 baseline of 168 Ruff and 14 strict mypy
      findings in untouched files. Independent code and ML-design reviewers reported no
      remaining P0, P1, or P2 finding.
+   - **Intraday canonical history materialization ownership (`completed`).**
+     Implementation commit `7e96bc4` moves the complete two-pass bar shuffle,
+     exchange-session segmentation, selected-session eligibility, overlapping-source
+     resolution, and ticker-defect quarantine byte-for-byte from
+     `edge_rebuild/history_materialization.py` to
+     `intraday/datasets/history_materialization.py`. The command adapter and both test
+     consumers import the canonical owner; no compatibility alias or old file remains.
+     The source Git object remains `f5acc0e7de04dc00f0213a54beec1b8a5531f74a`.
+     Tests freeze `SessionBounds` owner and pickle identity, all five public function
+     owners, every old import form, early-close/session-segment behavior, source
+     overlap, ticker quarantine, and selected-session eligibility. Persisted schemas
+     remain `edge_rebuild.intraday_materialization.v1` and
+     `edge_rebuild.intraday_materialization_authority.v1`; no authority regeneration
+     occurred. The current volume-bar transformation remains `6fdfd0c8...cb51`, and
+     its 794-session authority replays unchanged. Verification passed 200 focused tests
+     and the complete suite with 1,724 passed and three skipped. Affected Ruff, strict
+     mypy, compileall, CLI help, import/old-path, source-parity, diff, process, and
+     temporary-output checks passed. Repository-wide static results remain the Step 6
+     baseline of 168 Ruff and 14 strict mypy findings in untouched files. Independent
+     code and ML-design reviews closed with no remaining P0, P1, or P2 finding.
 5. **Governance, serving, and command package migration (`pending`).**
    Move readiness, promotion, drift, and outcomes to `governance`; bundle loading,
    prediction services, and API behavior to `serving`; and retain only thin CLI

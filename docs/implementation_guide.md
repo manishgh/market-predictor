@@ -52,9 +52,10 @@ estimator without the same governance.
   membership and security identity.
 - `intraday/datasets/selected_session_history.py`: verified selected stock-session
   acquisition planning at exact exchange-session bounds.
-- `edge_rebuild/history_collection.py`, `edge_rebuild/history_materialization.py`:
-  Alpaca intraday transport and canonical history; these remain explicit Step 4
-  migration owners.
+- `intraday/datasets/history_materialization.py`: bounded canonical per-symbol history
+  construction, exchange-session segmentation, and source-integrity quarantine.
+- `edge_rebuild/history_collection.py`: Alpaca intraday transport; this remains an
+  explicit Step 4 migration owner.
 - `swing_history_collection.py`, `swing_daily_combination.py`: swing daily history.
 - `benchmark_history.py`, `corpus_integrity.py`, `readiness.py`: benchmark and corpus
   admission checks.
