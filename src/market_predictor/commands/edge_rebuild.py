@@ -58,9 +58,6 @@ from market_predictor.edge_rebuild.prospective_sip_session import (
 from market_predictor.edge_rebuild.readiness import (
     run_edge_rebuild_readiness_audit,
 )
-from market_predictor.edge_rebuild.selected_session_history import (
-    build_selected_session_history_plan,
-)
 from market_predictor.edge_rebuild.swing_broker_specialists import (
     train_swing_broker_specialists,
 )
@@ -115,6 +112,9 @@ from market_predictor.intraday.datasets.microstructure_history import (
     build_intraday_microstructure_plan,
     collect_intraday_microstructure_history,
     load_microstructure_collection_config,
+)
+from market_predictor.intraday.datasets.selected_session_history import (
+    build_selected_session_history_plan,
 )
 from market_predictor.intraday.datasets.selection import (
     build_intraday_selection,

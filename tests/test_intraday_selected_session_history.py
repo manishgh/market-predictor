@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import pickle
 from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
@@ -9,6 +10,7 @@ from urllib.parse import urlencode
 import pandas as pd
 import pytest
 
+import market_predictor.intraday.datasets.selected_session_history as selected_session_history
 from market_predictor.core.errors import DataReadinessError
 from market_predictor.edge_rebuild.history_collection import (
     collect_intraday_history,
@@ -18,10 +20,6 @@ from market_predictor.edge_rebuild.history_materialization import (
     selected_ticker_sessions,
     session_bounds_for,
 )
-from market_predictor.edge_rebuild.selected_session_history import (
-    build_selected_session_history_plan,
-    verify_selected_stock_sessions,
-)
 from market_predictor.intraday.contracts.history_collection import (
     SELECTED_SESSION_PLAN_SCHEMA,
     load_collection_transport_config,
@@ -30,6 +28,11 @@ from market_predictor.intraday.contracts.history_collection import (
 )
 from market_predictor.intraday.datasets.history import (
     load_complete_intraday_history_plan,
+)
+from market_predictor.intraday.datasets.selected_session_history import (
+    SelectedSession,
+    build_selected_session_history_plan,
+    verify_selected_stock_sessions,
 )
 from market_predictor.intraday.datasets.selection import (
     INTRADAY_SELECTION_SCHEMA,
@@ -46,6 +49,35 @@ STRATEGY_CONTRACT_PATH = Path("configs/edge_rebuild_strategy_contract.toml")
 # 2024-07-03 is a half day closing at 13:00 ET; 2024-07-05 is a full session.
 EARLY_CLOSE = "2024-07-03"
 FULL_SESSION = "2024-07-05"
+
+
+def test_selected_session_planning_has_one_canonical_owner() -> None:
+    selected = pd.DataFrame({"ticker": ["AAA"]})
+    value = SelectedSession(
+        session=pd.Timestamp(FULL_SESSION),
+        open_at=pd.Timestamp(f"{FULL_SESSION} 13:30:00+00:00"),
+        close_at=pd.Timestamp(f"{FULL_SESSION} 20:00:00+00:00"),
+        selected=selected,
+    )
+    restored = pickle.loads(pickle.dumps(value))
+
+    assert Path(selected_session_history.__file__).resolve() == (
+        Path(__file__).resolve().parents[1]
+        / "src"
+        / "market_predictor"
+        / "intraday"
+        / "datasets"
+        / "selected_session_history.py"
+    )
+    assert SelectedSession.__module__ == (
+        "market_predictor.intraday.datasets.selected_session_history"
+    )
+    assert build_selected_session_history_plan.__module__ == SelectedSession.__module__
+    assert verify_selected_stock_sessions.__module__ == SelectedSession.__module__
+    assert type(restored).__module__ == SelectedSession.__module__
+    assert restored.month == "2024-07"
+    assert restored.tickers == ["AAA"]
+    pd.testing.assert_frame_equal(restored.selected, selected)
 
 
 def _publish_selection(

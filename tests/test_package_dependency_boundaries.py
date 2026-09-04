@@ -67,6 +67,7 @@ REMOVED_PRODUCTION_MODULES = (
     "market_predictor.edge_rebuild.sec_filing_authority",
     "market_predictor.edge_rebuild.sec_filing_collection",
     "market_predictor.edge_rebuild.sec_identity_authority",
+    "market_predictor.edge_rebuild.selected_session_history",
     "market_predictor.edge_rebuild.sp500_memberships",
     "market_predictor.edge_rebuild.sp500_observed_memberships",
     "market_predictor.edge_rebuild.sp500_transitions",
@@ -97,6 +98,7 @@ REMOVED_EDGE_REBUILD_FILES = (
     "sec_filing_authority.py",
     "sec_filing_collection.py",
     "sec_identity_authority.py",
+    "selected_session_history.py",
     "sp500_memberships.py",
     "sp500_observed_memberships.py",
     "sp500_transitions.py",
@@ -656,6 +658,29 @@ def test_removed_labeling_import_guard_recognizes_every_import_form(
     ),
 )
 def test_removed_volume_bar_import_guard_recognizes_every_import_form(
+    statement: str,
+) -> None:
+    imported_names = tuple(
+        name
+        for node in ast.walk(ast.parse(statement))
+        for name in _imported_names(node)
+    )
+    assert any(
+        _matches_any_dependency(name, REMOVED_PRODUCTION_MODULES)
+        for name in imported_names
+    )
+
+
+@pytest.mark.parametrize(
+    "statement",
+    (
+        "import market_predictor.edge_rebuild.selected_session_history",
+        "import market_predictor.edge_rebuild.selected_session_history as history",
+        "from market_predictor.edge_rebuild import selected_session_history",
+        "from market_predictor.edge_rebuild.selected_session_history import SelectedSession",
+    ),
+)
+def test_removed_selected_session_history_import_guard_recognizes_every_import_form(
     statement: str,
 ) -> None:
     imported_names = tuple(

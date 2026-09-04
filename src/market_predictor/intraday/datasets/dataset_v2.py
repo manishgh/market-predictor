@@ -30,9 +30,6 @@ from market_predictor.edge_rebuild.one_minute_coverage import (
     load_complete_one_minute_coverage,
     verify_canonical_five_minute_store,
 )
-from market_predictor.edge_rebuild.selected_session_history import (
-    verify_selected_stock_sessions,
-)
 from market_predictor.intraday.contracts.history_collection import (
     SELECTED_SESSION_BENCHMARK_PLAN_SCHEMA,
     SELECTED_SESSION_ONE_MINUTE_PLAN_SCHEMA,
@@ -45,6 +42,9 @@ from market_predictor.intraday.datasets.history import (
     json_sha256,
     load_complete_intraday_history_plan,
     load_plan_json,
+)
+from market_predictor.intraday.datasets.selected_session_history import (
+    verify_selected_stock_sessions,
 )
 from market_predictor.intraday.datasets.selection import (
     INTRADAY_SELECTION_SCHEMA,

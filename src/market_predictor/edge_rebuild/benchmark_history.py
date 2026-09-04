@@ -13,9 +13,6 @@ import pandas as pd
 
 from market_predictor.canonical.store import file_sha256
 from market_predictor.core.errors import DataReadinessError
-from market_predictor.edge_rebuild.selected_session_history import (
-    verify_selected_stock_sessions,
-)
 from market_predictor.intraday.contracts.history_collection import (
     REGULAR_SEGMENT,
     SELECTED_SESSION_BENCHMARK_PLAN_SCHEMA,
@@ -29,6 +26,9 @@ from market_predictor.intraday.datasets.history import (
     request_unit_record,
     stable_identity_hash,
     write_plan_json,
+)
+from market_predictor.intraday.datasets.selected_session_history import (
+    verify_selected_stock_sessions,
 )
 from market_predictor.modeling.strategy_contract import StrategyContract
 from market_predictor.resources import (
