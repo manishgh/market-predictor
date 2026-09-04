@@ -1,20 +1,48 @@
 from __future__ import annotations
 
+import pickle
+
 import pandas as pd
 import pytest
 
+import market_predictor.intraday.datasets.history_materialization as history_materialization
 from market_predictor.core.errors import DataReadinessError
-from market_predictor.edge_rebuild.history_materialization import (
+from market_predictor.evidence.corpus_integrity import IntegrityThresholds
+from market_predictor.intraday.datasets.history_materialization import (
     POSTMARKET,
     PREMARKET,
     REGULAR,
+    SessionBounds,
     _quarantine_ticker_defects,
     _resolve_overlapping_sources,
     classify_segments,
     expected_bars_per_session_segment,
+    reorganize_intraday_history,
+    selected_ticker_sessions,
     session_bounds_for,
 )
-from market_predictor.evidence.corpus_integrity import IntegrityThresholds
+
+
+def test_intraday_history_materialization_has_one_canonical_owner() -> None:
+    value = SessionBounds(
+        open_at=pd.Timestamp("2024-01-03 14:30:00+00:00"),
+        close_at=pd.Timestamp("2024-01-03 21:00:00+00:00"),
+    )
+    restored = pickle.loads(pickle.dumps(value))
+    owner = "market_predictor.intraday.datasets.history_materialization"
+
+    assert SessionBounds.__module__ == owner
+    assert type(restored).__module__ == owner
+    assert restored == value
+    assert history_materialization.SessionBounds is SessionBounds
+    for function in (
+        reorganize_intraday_history,
+        session_bounds_for,
+        classify_segments,
+        selected_ticker_sessions,
+        expected_bars_per_session_segment,
+    ):
+        assert function.__module__ == owner
 
 
 def _bars(times_utc: list[str]) -> pd.DataFrame:

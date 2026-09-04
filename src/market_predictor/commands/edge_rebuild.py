@@ -39,9 +39,6 @@ from market_predictor.edge_rebuild.extended_session_context import (
 from market_predictor.edge_rebuild.history_collection import (
     collect_intraday_history,
 )
-from market_predictor.edge_rebuild.history_materialization import (
-    reorganize_intraday_history,
-)
 from market_predictor.edge_rebuild.one_minute_coverage import (
     publish_selected_session_one_minute_coverage,
 )
@@ -107,6 +104,9 @@ from market_predictor.intraday.datasets.event_preflight import (
 )
 from market_predictor.intraday.datasets.history import (
     build_intraday_history_plan,
+)
+from market_predictor.intraday.datasets.history_materialization import (
+    reorganize_intraday_history,
 )
 from market_predictor.intraday.datasets.microstructure_history import (
     build_intraday_microstructure_plan,
