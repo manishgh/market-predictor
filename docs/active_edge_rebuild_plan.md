@@ -1639,6 +1639,29 @@ test, and task names.
      remains 166 Ruff findings and 14 strict-mypy findings in the same three untouched
      files. Independent task, code, and ML/data reviews closed with no remaining P0,
      P1, or P2 finding.
+   - **Extended-session context acquisition planning ownership (`completed`).**
+     Implementation commit `1702991` moves pre/post-market planning from
+     `edge_rebuild/extended_session_context.py` to
+     `intraday/datasets/extended_session_context.py` and removes the old owner without
+     an alias. It also closes two independent-review findings: ER1B now binds the
+     membership Parquet hash, membership-audit hash, and universe snapshot ID to the
+     frozen ER1A plan; and an explicit suffix must be a non-empty canonical XNYS
+     session rather than a weekend/holiday that the calendar could round forward.
+     Tests freeze the function owner, all old import forms, empty-date rejection, DST
+     conversion, and normal/early-close bar counts. Alpaca SIP five-minute
+     `adjustment=all` acquisition, exact 04:00 ET-to-open and close-to-20:00 ET
+     windows, atomic publication, and the hard separation from regular-session VWAP,
+     EMA, ATR, and RVOL remain unchanged. Both retained plans and the completed
+     1,925,863-row collection strictly replay without regeneration. The suffix plan
+     remains 313 sessions and 6,886 units at fingerprint `e005505b...f7999`, manifest
+     `8e753572...3415`, and authority `ce0842af...52d9`; collection manifest remains
+     `f22147ee...5658`. Verification passed 217 focused tests and the complete suite
+     with 1,755 passed and three skipped. Touched Ruff and strict mypy, compileall, CLI
+     help, canonical/old-path imports, exact ER1A membership lineage, retained-plan
+     and collection replay, diff, process, and temporary-output checks passed.
+     Repository-wide Step 6 debt remains 166 Ruff findings and 14 strict-mypy findings
+     in the same three untouched files. Independent task, code, and ML/data reviews
+     closed with no remaining P0, P1, or P2 finding.
 5. **Governance, serving, and command package migration (`pending`).**
    Move readiness, promotion, drift, and outcomes to `governance`; bundle loading,
    prediction services, and API behavior to `serving`; and retain only thin CLI

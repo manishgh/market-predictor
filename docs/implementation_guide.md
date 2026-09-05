@@ -60,6 +60,8 @@ estimator without the same governance.
   one-minute acquisition planning at exact exchange-session bounds.
 - `intraday/datasets/broad_intraday_history.py`: research-only broad-universe
   regular-session five-minute acquisition planning with explicit membership limits.
+- `intraday/datasets/extended_session_context.py`: separately bound premarket and
+  postmarket five-minute context planning with exact exchange-calendar windows.
 - `swing_history_collection.py`, `swing_daily_combination.py`: swing daily history.
 - `corpus_integrity.py`, `readiness.py`: corpus admission checks.
 

@@ -8,7 +8,7 @@ Repository: `C:\project\market-predictor`
 
 Branch: `er-intraday-refactoring`
 
-Last completed implementation commit: `7affd05` (`Move broad history planning into intraday datasets`)
+Last completed implementation commit: `1702991` (`Move and harden extended session planning`)
 
 ## Purpose
 
@@ -1208,12 +1208,44 @@ Ruff findings and 14 strict-mypy findings in the same three untouched files.
 Independent task, code, and ML/data reviews closed with no remaining P0, P1, or P2
 finding.
 
-Exact next checkpoint: task-review `edge_rebuild/extended_session_context.py` and its
-direct consumers as the canonical intraday pre/post-market acquisition-plan owner. If
-its regular-session collection binding, point-in-time membership lineage, XNYS/DST
-windows, separate-corpus rule, source Git object, schemas, resource limits, and
-retained plan identities remain exact, move it to
-`intraday/datasets/extended_session_context.py`, update every consumer directly, and
-add owner plus old-path guards. Do not combine extended bars with regular-session
-VWAP/EMA/ATR/RVOL, download data, regenerate artifacts, train models, promote, serve,
-or open a locked test. Rollback anchor is `7affd05`.
+Implementation commit `1702991` moves ER1B pre/post-market acquisition planning to
+`intraday/datasets/extended_session_context.py`, updates the sole command consumer,
+and prohibits every old import form. No alias remains. The original source Git object
+before the targeted validation changes was
+`63caadaba0364683accb020e9b8b06b2c0319520`.
+
+The migration also closes two independent-review findings. New plans require all
+three frozen membership identities to match ER1A: membership Parquet SHA-256,
+membership-audit SHA-256, and universe snapshot ID. An explicit `first_session` must
+be non-empty canonical `YYYY-MM-DD` and an exact XNYS session; omission is represented
+only by `None`. Tests cover all three identity mismatches, weekend and empty suffixes,
+DST conversion, and the 66-bar premarket, 48-bar normal postmarket, and 84-bar
+early-close postmarket windows. Extended bars remain a separate Alpaca SIP
+`5Min`/`adjustment=all` layer and cannot enter regular-session VWAP, EMA, ATR, or RVOL.
+
+Both retained plans strictly replay without regeneration. The full plan remains 804
+sessions, 17,688 units, and 47,421,498 maximum rows at fingerprint
+`89c91d17...a250`. The suffix plan remains 313 sessions, 6,886 units, and 18,468,096
+maximum rows at fingerprint `e005505b...f7999`, manifest `8e753572...3415`, and
+authority `ce0842af...52d9`. The completed collection replays all 6,886 units with
+zero failures and 1,925,863 rows at manifest `f22147ee...5658`; it remains
+`coverage_status=not_evaluated` and `model_data_ready=false`. No provider request,
+artifact regeneration, training, promotion, serving, or locked-test access occurred.
+
+Verification passed 217 focused tests and the complete suite with 1,755 passed and
+three skipped in 12 minutes 33 seconds. Touched Ruff and strict mypy, compileall, CLI
+help, canonical and old-path imports, exact ER1A membership lineage, retained-plan
+and collection replay, diff, process, and temporary-output checks passed.
+Repository-wide Step 6 debt remains 166 Ruff findings and 14 strict-mypy findings in
+the same three untouched files. Independent task, code, and ML/data reviews closed
+with no remaining P0, P1, or P2 finding.
+
+Exact next checkpoint: task-review `edge_rebuild/prospective_sip_session.py` and its
+direct consumers as the canonical closed-session prospective SIP evidence collector.
+If its source identities, immutable raw/canonical evidence, point-in-time membership,
+session-finality, provider/feed/adjustment, retry/resume, memory, and retained authority
+contracts can remain exact, move it to
+`intraday/datasets/prospective_sip_session.py`, update every consumer directly, and add
+owner plus old-path guards. Do not combine it with prospective broker-action or
+analyst-horizon modules, perform provider collection, regenerate artifacts, train,
+promote, serve, or open a locked test. Rollback anchor is `1702991`.
