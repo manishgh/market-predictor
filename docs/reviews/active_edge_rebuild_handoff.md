@@ -8,7 +8,7 @@ Repository: `C:\project\market-predictor`
 
 Branch: `er-intraday-refactoring`
 
-Last completed implementation commit: `9a59d6f` (`Move benchmark planning into intraday datasets`)
+Last completed implementation commit: `7affd05` (`Move broad history planning into intraday datasets`)
 
 ## Purpose
 
@@ -1181,11 +1181,39 @@ checks passed. Repository-wide Step 6 debt remains 166 Ruff findings and 14 stri
 mypy findings in the same three untouched files. Independent task, code, and ML/data
 reviews closed with no remaining P0, P1, or P2 finding.
 
-Exact next checkpoint: task-review `edge_rebuild/broad_intraday_history.py` and its
-direct consumers as the canonical broad intraday acquisition-plan owner. If its
-schema, source and membership lineage, date/session rules, resource limits, source Git
-object, and retained artifact identities can remain exact, move it to
-`intraday/datasets/broad_intraday_history.py`, update every consumer directly, and add
-owner plus old-path guards. Do not include extended-session planning,
-prospective-session orchestration, provider downloads, artifact regeneration, model
-training, promotion, serving, or locked-test access. Rollback anchor is `9a59d6f`.
+Implementation commit `7affd05` moves broad-universe regular-session five-minute
+acquisition planning byte-for-byte to
+`intraday/datasets/broad_intraday_history.py`. The source Git object remains
+`a014735fd60d6ba04d764804854649c752896cf8`; both public functions have one canonical
+owner, every old import form is prohibited, and no alias remains. Alpaca SIP
+`5Min`/`adjustment=all`, XNYS regular-session bounds, valid existing-corpus
+subtraction, truncated-session replanning, current-snapshot broad membership
+limitations, point-in-time S&P precedence, explicit fund exclusion, atomic
+publication, and the 4 GiB/0.75 GiB memory controls are unchanged.
+
+Both retained plans strictly replay with the same request SHA, policy hash, and
+fingerprint `cc7ead87...3b8e`. The latest directory contains 814 sessions, 867,733
+eligible symbol-sessions, 419,582 existing sessions subtracted, 448,151 missing
+symbol-sessions across 579 symbols, 9,428 acquisition units, and 34,793,778 maximum
+expected rows. Its manifest is `ae454a08...5d88a` and authority is
+`f372997e...9e6f`; the earlier logically equivalent directory remains untouched. No
+provider request, artifact regeneration, training, promotion, serving, or locked-test
+access occurred.
+
+Verification passed 213 focused tests and the complete suite with 1,744 passed and
+three skipped in 12 minutes. Touched Ruff and strict mypy, compileall, CLI help,
+canonical and old-path imports, source parity, both retained-plan replays, diff,
+process, and temporary-output checks passed. Repository-wide Step 6 debt remains 166
+Ruff findings and 14 strict-mypy findings in the same three untouched files.
+Independent task, code, and ML/data reviews closed with no remaining P0, P1, or P2
+finding.
+
+Exact next checkpoint: task-review `edge_rebuild/extended_session_context.py` and its
+direct consumers as the canonical intraday pre/post-market acquisition-plan owner. If
+its regular-session collection binding, point-in-time membership lineage, XNYS/DST
+windows, separate-corpus rule, source Git object, schemas, resource limits, and
+retained plan identities remain exact, move it to
+`intraday/datasets/extended_session_context.py`, update every consumer directly, and
+add owner plus old-path guards. Do not combine extended bars with regular-session
+VWAP/EMA/ATR/RVOL, download data, regenerate artifacts, train models, promote, serve,
+or open a locked test. Rollback anchor is `7affd05`.

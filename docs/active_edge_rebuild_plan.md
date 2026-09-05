@@ -1616,6 +1616,29 @@ test, and task names.
      checks passed. Repository-wide Step 6 debt remains 166 Ruff findings and 14
      strict-mypy findings in the same three untouched files. Independent task, code,
      and ML/data reviews closed with no remaining P0, P1, or P2 finding.
+   - **Broad intraday five-minute acquisition planning ownership (`completed`).**
+     Implementation commit `7affd05` moves the two broad-history plan functions
+     byte-for-byte from `edge_rebuild/broad_intraday_history.py` to
+     `intraday/datasets/broad_intraday_history.py`. The command adapter and direct
+     tests use the canonical owner; no compatibility alias or old file remains. The
+     source Git object stays `a014735fd60d6ba04d764804854649c752896cf8`, and tests
+     freeze both function owners plus every old import form. Alpaca SIP five-minute
+     bars with `adjustment=all`, exact XNYS regular-session bounds, existing-corpus
+     subtraction, truncated-session replanning, explicit fund exclusion, and the
+     current-snapshot limitation of the broad Finviz proxy are unchanged. The latest
+     retained research plan strictly replays 814 sessions, 448,151 missing
+     symbol-sessions across 579 symbols, 9,428 bounded acquisition units, and
+     34,793,778 maximum expected rows at fingerprint `cc7ead87...3b8e`, manifest
+     `ae454a08...5d88a`, and authority `f372997e...9e6f`. The earlier logically
+     equivalent plan also replays and remains untouched. No provider request,
+     artifact regeneration, training, promotion, serving, or locked-test access
+     occurred. Verification passed 213 focused tests and the complete suite with
+     1,744 passed and three skipped. Touched Ruff and strict mypy, compileall, CLI
+     help, canonical/old-path imports, source parity, both retained-plan replays,
+     diff, process, and temporary-output checks passed. Repository-wide Step 6 debt
+     remains 166 Ruff findings and 14 strict-mypy findings in the same three untouched
+     files. Independent task, code, and ML/data reviews closed with no remaining P0,
+     P1, or P2 finding.
 5. **Governance, serving, and command package migration (`pending`).**
    Move readiness, promotion, drift, and outcomes to `governance`; bundle loading,
    prediction services, and API behavior to `serving`; and retain only thin CLI

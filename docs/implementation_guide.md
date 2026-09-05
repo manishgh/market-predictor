@@ -58,6 +58,8 @@ estimator without the same governance.
   collection with immutable raw-page, canonical-bar, and authority replay.
 - `intraday/datasets/benchmark_history.py`: selected-session SPY, QQQ, and sector-ETF
   one-minute acquisition planning at exact exchange-session bounds.
+- `intraday/datasets/broad_intraday_history.py`: research-only broad-universe
+  regular-session five-minute acquisition planning with explicit membership limits.
 - `swing_history_collection.py`, `swing_daily_combination.py`: swing daily history.
 - `corpus_integrity.py`, `readiness.py`: corpus admission checks.
 
