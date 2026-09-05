@@ -56,9 +56,10 @@ estimator without the same governance.
   construction, exchange-session segmentation, and source-integrity quarantine.
 - `intraday/datasets/history_collection.py`: bounded, resumable Alpaca/SIP intraday
   collection with immutable raw-page, canonical-bar, and authority replay.
+- `intraday/datasets/benchmark_history.py`: selected-session SPY, QQQ, and sector-ETF
+  one-minute acquisition planning at exact exchange-session bounds.
 - `swing_history_collection.py`, `swing_daily_combination.py`: swing daily history.
-- `benchmark_history.py`, `corpus_integrity.py`, `readiness.py`: benchmark and corpus
-  admission checks.
+- `corpus_integrity.py`, `readiness.py`: corpus admission checks.
 
 ### Swing path
 

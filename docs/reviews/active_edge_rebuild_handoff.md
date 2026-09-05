@@ -8,7 +8,7 @@ Repository: `C:\project\market-predictor`
 
 Branch: `er-intraday-refactoring`
 
-Last completed implementation commit: `268c62d` (`Move one-minute coverage into intraday datasets`)
+Last completed implementation commit: `9a59d6f` (`Move benchmark planning into intraday datasets`)
 
 ## Purpose
 
@@ -1159,12 +1159,33 @@ Import ordering corrected in two touched files, so repository-wide Ruff debt is 
 166 findings; strict mypy debt remains 14 findings in the same three untouched files.
 Independent task, code, and ML/data reviews closed with no remaining P0, P1, or P2.
 
-Exact next checkpoint: task-review `edge_rebuild/benchmark_history.py` and its direct
-consumers as the canonical selected-session benchmark acquisition-plan owner. If its
-plan schema, strategy/selection/membership lineage, SPY/QQQ/sector-ETF requirements,
-source Git object, and retained plan identities can remain exact, move it to
-`intraday/datasets/benchmark_history.py`, update every consumer directly, and add
-old-path plus owner guards. Do not include broad-history planning, extended-session
-planning, prospective-session orchestration, configuration renames, provider
-downloads, artifact regeneration, model training, promotion, serving, or locked-test
-access. Rollback anchor is `268c62d`.
+Implementation commit `9a59d6f` moves selected-session benchmark acquisition planning
+byte-for-byte to `intraday/datasets/benchmark_history.py`. The source Git object
+remains `1c106774cadf7fdf6c514406f72590cf0d782e62`; the command adapter and direct tests
+use the canonical owner, every old import form is prohibited, and no alias remains.
+SPY, QQQ, all eleven sector ETFs, exact XNYS session bounds, 390 normal-session and
+210 early-close bars, SIP, `adjustment=all`, selection/membership lineage, atomic
+publication, and the 4 GiB process limit with 0.75 GiB headroom are unchanged.
+
+The retained plan at
+`data/research/edge_rebuild_selected_session_benchmark_1m_plan_causal_20260801_v1`
+strictly replays 794 sessions, 13 benchmarks, and eight early closes at manifest
+`b855b250...e72`, authority `ffd0783d...0a0`, and fingerprint
+`af77d941...6616`. No provider request, artifact regeneration, training, promotion,
+serving, or locked-test access occurred.
+
+Verification passed 228 focused tests and the complete suite with 1,739 passed and
+three skipped in 12 minutes 15 seconds. Compileall, CLI help, canonical and old-path
+imports, source parity, retained-plan replay, diff, process, and temporary-output
+checks passed. Repository-wide Step 6 debt remains 166 Ruff findings and 14 strict
+mypy findings in the same three untouched files. Independent task, code, and ML/data
+reviews closed with no remaining P0, P1, or P2 finding.
+
+Exact next checkpoint: task-review `edge_rebuild/broad_intraday_history.py` and its
+direct consumers as the canonical broad intraday acquisition-plan owner. If its
+schema, source and membership lineage, date/session rules, resource limits, source Git
+object, and retained artifact identities can remain exact, move it to
+`intraday/datasets/broad_intraday_history.py`, update every consumer directly, and add
+owner plus old-path guards. Do not include extended-session planning,
+prospective-session orchestration, provider downloads, artifact regeneration, model
+training, promotion, serving, or locked-test access. Rollback anchor is `9a59d6f`.

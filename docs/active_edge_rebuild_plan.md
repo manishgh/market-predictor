@@ -2,7 +2,7 @@
 
 Status: active
 
-Last updated: 2026-08-30
+Last updated: 2026-09-05
 
 Repository: `C:\project\market-predictor`
 
@@ -1597,6 +1597,25 @@ test, and task names.
      reduced repository-wide Ruff debt from 168 to 166; strict mypy debt remains 14
      findings in the same three untouched files. Independent task, code, and ML/data
      reviews closed with no remaining P0, P1, or P2 finding.
+   - **Selected-session benchmark acquisition planning ownership (`completed`).**
+     Implementation commit `9a59d6f` moves the benchmark acquisition-plan builder
+     byte-for-byte from `edge_rebuild/benchmark_history.py` to
+     `intraday/datasets/benchmark_history.py`. The command adapter and direct tests use
+     the canonical owner; no compatibility alias or old file remains. The source Git
+     object remains `1c106774cadf7fdf6c514406f72590cf0d782e62`, and tests freeze the
+     function owner plus every old import form. The policy still requires SPY, QQQ,
+     and all eleven sector ETFs, exact XNYS regular-session bounds, 390 normal-session
+     and 210 early-close one-minute bars, SIP, `adjustment=all`, and a 4 GiB process
+     limit with 0.75 GiB headroom. The retained 794-session plan replays unchanged at
+     manifest `b855b250...e72`, authority `ffd0783d...0a0`, and fingerprint
+     `af77d941...6616`; it contains 13 benchmarks and eight early closes. No provider
+     request, artifact regeneration, training, promotion, serving, or locked-test
+     access occurred. Verification passed 228 focused tests and the complete suite
+     with 1,739 passed and three skipped. Compileall, CLI help, canonical/old-path
+     imports, source parity, retained-plan replay, diff, process, and temporary-output
+     checks passed. Repository-wide Step 6 debt remains 166 Ruff findings and 14
+     strict-mypy findings in the same three untouched files. Independent task, code,
+     and ML/data reviews closed with no remaining P0, P1, or P2 finding.
 5. **Governance, serving, and command package migration (`pending`).**
    Move readiness, promotion, drift, and outcomes to `governance`; bundle loading,
    prediction services, and API behavior to `serving`; and retain only thin CLI
