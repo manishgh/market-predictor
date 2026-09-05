@@ -2,13 +2,13 @@
 
 Status: active
 
-Last updated: 2026-09-04
+Last updated: 2026-09-05
 
 Repository: `C:\project\market-predictor`
 
 Branch: `er-intraday-refactoring`
 
-Last completed implementation commit: `7e96bc4` (`Move intraday history materialization into datasets`)
+Last completed implementation commit: `01275d4` (`Move intraday history collection into datasets`)
 
 ## Purpose
 
@@ -1111,11 +1111,35 @@ cleanup passed. Repository-wide Step 6 debt remains exactly 168 Ruff and 14 stri
 findings in untouched files. Independent code and ML-design reviews closed with no P0,
 P1, or P2.
 
-Exact next checkpoint: task-review `edge_rebuild/history_collection.py` and all of its
-direct consumers as the canonical Alpaca/SIP intraday history collection owner. If its
-persisted collection/unit/authority schemas, raw-page replay, resume semantics, and
-source Git object can remain exact, move it to
-`intraday/datasets/history_collection.py`, update every consumer directly, and add
-old-path plus owner guards. Do not include one-minute coverage, prospective session
-orchestration, configuration renames, provider downloads, artifact regeneration, model
-training, promotion, serving, or locked-test access. Rollback anchor is `7e96bc4`.
+Implementation commit `01275d4` moves bounded Alpaca/SIP intraday history collection
+byte-for-byte to `intraday/datasets/history_collection.py`. The source Git object
+remains `ce3c6f3...c6b2b4`; all six production consumers use the canonical owner, all
+old import forms are prohibited, and no alias remains. Exact request validation,
+raw-page replay, resume without network access, bounded concurrency and memory,
+atomic publication, and all six persisted collection/unit/authority schemas are
+unchanged.
+
+The retained stock collection replays 2,116 units and 16,636,841 rows with authority
+`63d9d714...fd5c` and manifest `625b0832...b76`. The retained benchmark collection
+replays 794 units and 4,005,350 rows with authority `889dcc46...dde6` and manifest
+`8b3f1e57...bd61`. The downstream 794-session authority remains 3,095,688 rows with
+1,365,015 eligible rows under request `5e8c508a...303a` and transformation
+`6fdfd0c8...cb51`. No provider request, artifact regeneration, training, promotion,
+serving, or locked-test access occurred.
+
+Verification passed 242 focused tests and the complete suite with 1,729 passed and
+three skipped in 22 minutes 20 seconds. Affected Ruff and strict mypy, compileall,
+collection CLI help, import and old-path scans, source parity, both retained collection
+replays, downstream authority replay, diff checks, process checks, and temporary-output
+cleanup passed. Repository-wide Step 6 debt remains exactly 168 Ruff and 14 strict
+mypy findings in the same three untouched files. Independent task, code, and ML/data
+reviews closed with no remaining P0, P1, or P2 finding.
+
+Exact next checkpoint: task-review `edge_rebuild/one_minute_coverage.py` and all direct
+consumers as the canonical selected-session one-minute coverage authority. If its
+persisted coverage schemas, exact stock/benchmark evidence checks, exclusion behavior,
+source Git object, and retained authority identities can remain exact, move it to
+`intraday/datasets/one_minute_coverage.py`, update every consumer directly, and add
+old-path plus owner guards. Do not include prospective-session orchestration,
+configuration renames, provider downloads, artifact regeneration, model training,
+promotion, serving, or locked-test access. Rollback anchor is `01275d4`.

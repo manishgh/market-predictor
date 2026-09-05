@@ -54,8 +54,8 @@ estimator without the same governance.
   acquisition planning at exact exchange-session bounds.
 - `intraday/datasets/history_materialization.py`: bounded canonical per-symbol history
   construction, exchange-session segmentation, and source-integrity quarantine.
-- `edge_rebuild/history_collection.py`: Alpaca intraday transport; this remains an
-  explicit Step 4 migration owner.
+- `intraday/datasets/history_collection.py`: bounded, resumable Alpaca/SIP intraday
+  collection with immutable raw-page, canonical-bar, and authority replay.
 - `swing_history_collection.py`, `swing_daily_combination.py`: swing daily history.
 - `benchmark_history.py`, `corpus_integrity.py`, `readiness.py`: benchmark and corpus
   admission checks.

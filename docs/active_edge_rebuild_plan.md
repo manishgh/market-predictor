@@ -1553,6 +1553,26 @@ test, and task names.
      temporary-output checks passed. Repository-wide static results remain the Step 6
      baseline of 168 Ruff and 14 strict mypy findings in untouched files. Independent
      code and ML-design reviews closed with no remaining P0, P1, or P2 finding.
+   - **Intraday Alpaca/SIP history collection ownership (`completed`).**
+     Implementation commit `01275d4` moves the complete bounded intraday collector
+     byte-for-byte from `edge_rebuild/history_collection.py` to
+     `intraday/datasets/history_collection.py`. All six production consumers and four
+     direct test consumers import the canonical owner; no compatibility alias or old
+     file remains. The source Git object remains
+     `ce3c6f3132b1bf10df1f50b2a24a28aee0c6b2b4`, and tests freeze all three public
+     function owners plus every old import form. All six persisted collection, unit,
+     and authority schema strings remain unchanged. Retained stock collection evidence
+     replays 2,116 units and 16,636,841 rows at authority `63d9d714...fd5c`; retained
+     benchmark evidence replays 794 units and 4,005,350 rows at authority
+     `889dcc46...dde6`. Their manifest hashes are unchanged. The derived 794-session
+     volume-bar authority still replays 3,095,688 rows, including 1,365,015 eligible
+     rows, under request `5e8c508a...303a` and transformation `6fdfd0c8...cb51`.
+     Verification passed 242 focused tests and the complete suite with 1,729 passed
+     and three skipped. Affected Ruff, strict mypy, compileall, collection CLI help,
+     import/old-path, source-parity, real-authority replay, diff, process, and temporary
+     output checks passed. Repository-wide static results remain the Step 6 baseline
+     of 168 Ruff and 14 strict mypy findings in untouched files. Independent task,
+     code, and ML/data-design reviews closed with no remaining P0, P1, or P2 finding.
 5. **Governance, serving, and command package migration (`pending`).**
    Move readiness, promotion, drift, and outcomes to `governance`; bundle loading,
    prediction services, and API behavior to `serving`; and retain only thin CLI
