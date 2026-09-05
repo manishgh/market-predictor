@@ -15,10 +15,6 @@ from market_predictor.canonical.store import (
     load_canonical_artifact,
 )
 from market_predictor.core.errors import DataReadinessError
-from market_predictor.edge_rebuild.one_minute_coverage import (
-    load_complete_one_minute_coverage,
-    verify_canonical_five_minute_store,
-)
 from market_predictor.intraday.contracts.dataset_schemas import (
     _REQUIRED_BENCHMARKS,
     MAXIMUM_SECURITY_EXCLUSION_FRACTION,
@@ -45,6 +41,10 @@ from market_predictor.intraday.datasets.io import (
     _load_json,
     _resolve_inside,
     _same_path,
+)
+from market_predictor.intraday.datasets.one_minute_coverage import (
+    load_complete_one_minute_coverage,
+    verify_canonical_five_minute_store,
 )
 from market_predictor.intraday.datasets.selected_session_history import (
     verify_selected_stock_sessions,

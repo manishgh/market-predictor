@@ -12,6 +12,7 @@ import pandas as pd
 import pytest
 
 from market_predictor.canonical.store import file_sha256
+from market_predictor.core.errors import DataReadinessError
 from market_predictor.intraday.datasets.microstructure_history import (
     COLLECTION_AUTHORITY_SCHEMA,
     MicrostructureCollectionConfig,
@@ -21,12 +22,11 @@ from market_predictor.intraday.datasets.microstructure_history import (
     load_complete_intraday_microstructure_plan,
     load_microstructure_collection_config,
 )
-from market_predictor.edge_rebuild.one_minute_coverage import (
+from market_predictor.intraday.datasets.one_minute_coverage import (
     COVERAGE_AUTHORITY_SCHEMA,
     COVERAGE_SCHEMA,
 )
 from market_predictor.sources.alpaca import AlpacaQuotesPage, AlpacaTradesPage
-from market_predictor.core.errors import DataReadinessError
 
 
 def _write_json(path: Path, value: Mapping[str, Any]) -> None:

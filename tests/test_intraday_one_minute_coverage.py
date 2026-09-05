@@ -11,18 +11,20 @@ import exchange_calendars as xcals
 import pandas as pd
 import pytest
 
+import market_predictor.intraday.datasets.one_minute_coverage as one_minute_coverage
 from market_predictor.canonical.store import file_sha256
 from market_predictor.core.errors import DataReadinessError
-from market_predictor.edge_rebuild.one_minute_coverage import (
-    load_complete_one_minute_coverage,
-    publish_selected_session_one_minute_coverage,
-)
 from market_predictor.intraday.contracts.history_collection import (
     load_collection_transport_config,
     load_selected_session_one_minute_config,
 )
 from market_predictor.intraday.datasets.history import write_plan_json
 from market_predictor.intraday.datasets.history_collection import collect_intraday_history
+from market_predictor.intraday.datasets.one_minute_coverage import (
+    load_complete_one_minute_coverage,
+    publish_selected_session_one_minute_coverage,
+    verify_canonical_five_minute_store,
+)
 from market_predictor.intraday.datasets.selected_session_history import (
     build_selected_session_history_plan,
 )
@@ -34,6 +36,21 @@ from market_predictor.modeling.strategy_contract import load_strategy_contract
 from market_predictor.sources.alpaca import AlpacaBarsPage
 
 POLICY = Path("configs/edge_rebuild_selected_session_one_minute.toml")
+
+
+def test_one_minute_coverage_has_one_canonical_owner() -> None:
+    owner = "market_predictor.intraday.datasets.one_minute_coverage"
+
+    assert (
+        one_minute_coverage.publish_selected_session_one_minute_coverage
+        is publish_selected_session_one_minute_coverage
+    )
+    for function in (
+        publish_selected_session_one_minute_coverage,
+        load_complete_one_minute_coverage,
+        verify_canonical_five_minute_store,
+    ):
+        assert function.__module__ == owner
 CONTRACT_PATH = Path("configs/edge_rebuild_strategy_contract.toml")
 SESSION = "2024-07-05"
 EARLY_CLOSE_SESSION = "2024-07-03"

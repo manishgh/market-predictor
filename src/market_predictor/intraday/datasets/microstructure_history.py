@@ -1,8 +1,6 @@
 """Immutable planning and resumable Alpaca SIP microstructure collection."""
 from __future__ import annotations
 
-
-
 import gzip
 import hashlib
 import io
@@ -22,7 +20,8 @@ from typing import Any, Final, Literal, cast
 import pandas as pd
 
 from market_predictor.canonical.store import file_sha256
-from market_predictor.edge_rebuild.one_minute_coverage import (
+from market_predictor.core.errors import DataReadinessError
+from market_predictor.intraday.datasets.one_minute_coverage import (
     load_complete_one_minute_coverage,
 )
 from market_predictor.resources import (
@@ -36,7 +35,6 @@ from market_predictor.sources.alpaca import (
     AlpacaSource,
     AlpacaTradesPage,
 )
-from market_predictor.core.errors import DataReadinessError
 
 PLAN_SCHEMA: Final = "edge_rebuild.intraday_microstructure_plan.v1"
 PLAN_AUTHORITY_SCHEMA: Final = (

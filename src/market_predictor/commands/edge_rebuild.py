@@ -36,9 +36,6 @@ from market_predictor.edge_rebuild.contracts import (
 from market_predictor.edge_rebuild.extended_session_context import (
     build_extended_session_context_plan,
 )
-from market_predictor.edge_rebuild.one_minute_coverage import (
-    publish_selected_session_one_minute_coverage,
-)
 from market_predictor.edge_rebuild.prospective_analyst_revision_horizon import (
     publish_prospective_analyst_revision_horizon,
 )
@@ -112,6 +109,9 @@ from market_predictor.intraday.datasets.microstructure_history import (
     build_intraday_microstructure_plan,
     collect_intraday_microstructure_history,
     load_microstructure_collection_config,
+)
+from market_predictor.intraday.datasets.one_minute_coverage import (
+    publish_selected_session_one_minute_coverage,
 )
 from market_predictor.intraday.datasets.selected_session_history import (
     build_selected_session_history_plan,

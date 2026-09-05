@@ -16,15 +16,15 @@ import pyarrow.parquet as pq
 
 from market_predictor.canonical.store import file_sha256
 from market_predictor.core.errors import DataReadinessError
-from market_predictor.edge_rebuild.one_minute_coverage import (
-    verify_canonical_five_minute_store,
-)
 from market_predictor.intraday.contracts.lineage import (
     DEFAULT_INTRADAY_CONTRACT_LINEAGE_PATH,
     IntradayContractIdentity,
     require_intraday_contract_lineage,
 )
 from market_predictor.intraday.datasets.history import json_sha256
+from market_predictor.intraday.datasets.one_minute_coverage import (
+    verify_canonical_five_minute_store,
+)
 from market_predictor.intraday.datasets.selected_session_history import (
     verify_selected_stock_sessions,
 )

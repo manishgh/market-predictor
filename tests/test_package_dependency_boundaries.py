@@ -65,6 +65,7 @@ REMOVED_PRODUCTION_MODULES = (
     "market_predictor.edge_rebuild.issuer_event_family_authority",
     "market_predictor.edge_rebuild.issuer_event_precision_audit",
     "market_predictor.edge_rebuild.labeling",
+    "market_predictor.edge_rebuild.one_minute_coverage",
     "market_predictor.edge_rebuild.pipeline",
     "market_predictor.edge_rebuild.sec_filing_authority",
     "market_predictor.edge_rebuild.sec_filing_collection",
@@ -98,6 +99,7 @@ REMOVED_EDGE_REBUILD_FILES = (
     "issuer_event_family_authority.py",
     "issuer_event_precision_audit.py",
     "labeling.py",
+    "one_minute_coverage.py",
     "pipeline.py",
     "sec_filing_authority.py",
     "sec_filing_collection.py",
@@ -731,6 +733,29 @@ def test_removed_history_materialization_import_guard_recognizes_every_import_fo
     ),
 )
 def test_removed_history_collection_import_guard_recognizes_every_import_form(
+    statement: str,
+) -> None:
+    imported_names = tuple(
+        name
+        for node in ast.walk(ast.parse(statement))
+        for name in _imported_names(node)
+    )
+    assert any(
+        _matches_any_dependency(name, REMOVED_PRODUCTION_MODULES)
+        for name in imported_names
+    )
+
+
+@pytest.mark.parametrize(
+    "statement",
+    (
+        "import market_predictor.edge_rebuild.one_minute_coverage",
+        "import market_predictor.edge_rebuild.one_minute_coverage as coverage",
+        "from market_predictor.edge_rebuild import one_minute_coverage",
+        "from market_predictor.edge_rebuild.one_minute_coverage import load_complete_one_minute_coverage",
+    ),
+)
+def test_removed_one_minute_coverage_import_guard_recognizes_every_import_form(
     statement: str,
 ) -> None:
     imported_names = tuple(
