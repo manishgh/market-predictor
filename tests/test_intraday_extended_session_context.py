@@ -7,11 +7,9 @@ from typing import Any
 import pandas as pd
 import pytest
 
+import market_predictor.intraday.datasets.extended_session_context as context_module
 from market_predictor.canonical.store import file_sha256
 from market_predictor.core.errors import DataReadinessError
-from market_predictor.edge_rebuild.extended_session_context import (
-    build_extended_session_context_plan,
-)
 from market_predictor.intraday.contracts.history_collection import (
     EXTENDED_CONTEXT_PLAN_SCHEMA,
     INTRADAY_HISTORY_PLAN_SCHEMA,
@@ -19,6 +17,9 @@ from market_predictor.intraday.contracts.history_collection import (
     PREMARKET_SEGMENT,
     load_extended_session_context_config,
     load_intraday_history_config,
+)
+from market_predictor.intraday.datasets.extended_session_context import (
+    build_extended_session_context_plan,
 )
 from market_predictor.intraday.datasets.history import (
     EXTENDED_CONTEXT_PLAN_AUTHORITY_SCHEMA,
@@ -40,6 +41,16 @@ SESSION_COUNT = 3
 FROZEN_ER1A_POLICY_SHA256 = (
     "252886fb7b7fcfca19917a1daa8e1ea43d950e006287adca12796525c911a830"
 )
+
+
+def test_extended_session_context_has_one_canonical_owner() -> None:
+    owner = "market_predictor.intraday.datasets.extended_session_context"
+
+    assert (
+        context_module.build_extended_session_context_plan
+        is build_extended_session_context_plan
+    )
+    assert build_extended_session_context_plan.__module__ == owner
 
 
 def test_frozen_er1a_policy_identity_is_unchanged() -> None:
@@ -83,6 +94,30 @@ def test_context_plan_covers_both_segments_without_regular_session_rows(
     assert set(units["timeframe"]) == {"5Min"}
     assert set(units["price_feed"]) == {"sip"}
     assert set(units["adjustment"]) == {"all"}
+
+    expected_bars = {
+        ("2024-07-01", PREMARKET_SEGMENT): 66,
+        ("2024-07-01", POSTMARKET_SEGMENT): 48,
+        ("2024-07-02", PREMARKET_SEGMENT): 66,
+        ("2024-07-02", POSTMARKET_SEGMENT): 48,
+        ("2024-07-03", PREMARKET_SEGMENT): 66,
+        ("2024-07-03", POSTMARKET_SEGMENT): 84,
+    }
+    observed_bars = {
+        (str(row.session_date_et), str(row.session_segment)): int(
+            row.expected_bars_per_symbol
+        )
+        for row in units[
+            [
+                "session_date_et",
+                "session_segment",
+                "expected_bars_per_symbol",
+            ]
+        ]
+        .drop_duplicates()
+        .itertuples(index=False)
+    }
+    assert observed_bars == expected_bars
 
     premarket = units[units["session_segment"] == PREMARKET_SEGMENT]
     postmarket = units[units["session_segment"] == POSTMARKET_SEGMENT]
@@ -163,6 +198,84 @@ def test_window_outside_the_frozen_range_fails_closed(tmp_path: Path) -> None:
             config=load_extended_session_context_config(CONTEXT_POLICY),
             first_session="2019-01-02",
         )
+
+
+@pytest.mark.parametrize("first_session", ("2024-06-29", ""))
+def test_window_must_start_on_an_exact_xnys_session(
+    tmp_path: Path,
+    first_session: str,
+) -> None:
+    plan_dir, collection_dir = _write_regular_layer(
+        tmp_path,
+        first_session="2024-06-28",
+    )
+
+    with pytest.raises(DataReadinessError, match="canonical XNYS session"):
+        build_extended_session_context_plan(
+            intraday_plan_directory=plan_dir,
+            intraday_collection_directory=collection_dir,
+            memberships_path=tmp_path / MEMBERSHIPS,
+            membership_audit_path=tmp_path / MEMBERSHIP_AUDIT,
+            policy_path=CONTEXT_POLICY,
+            output_directory=tmp_path / "weekend",
+            config=load_extended_session_context_config(CONTEXT_POLICY),
+            first_session=first_session,
+        )
+
+
+@pytest.mark.parametrize(
+    "mismatched_field",
+    ("sha256", "audit_sha256", "universe_snapshot_id"),
+)
+def test_context_plan_binds_every_membership_identity_field(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    mismatched_field: str,
+) -> None:
+    membership_identity: dict[str, object] = {
+        "sha256": "membership-hash",
+        "audit_sha256": "audit-hash",
+        "universe_snapshot_id": "snapshot-id",
+    }
+    regular_identity: dict[str, object] = {
+        "membership_sha256": membership_identity["sha256"],
+        "membership_audit_sha256": membership_identity["audit_sha256"],
+        "universe_snapshot_id": membership_identity["universe_snapshot_id"],
+        "first_history_session": FIRST_SESSION,
+        "last_history_session": LAST_SESSION,
+        "planned_history_sessions": SESSION_COUNT,
+    }
+    membership_identity[mismatched_field] = "different"
+    monkeypatch.setattr(
+        context_module,
+        "_verify_regular_session_layer",
+        lambda *_args, **_kwargs: regular_identity,
+    )
+    monkeypatch.setattr(
+        context_module,
+        "verify_point_in_time_memberships",
+        lambda *_args, **_kwargs: (pd.DataFrame(), membership_identity),
+    )
+
+    with pytest.raises(DataReadinessError, match="universe differs"):
+        build_extended_session_context_plan(
+            intraday_plan_directory=tmp_path / "regular-plan",
+            intraday_collection_directory=tmp_path / "regular-collection",
+            memberships_path=tmp_path / MEMBERSHIPS,
+            membership_audit_path=tmp_path / MEMBERSHIP_AUDIT,
+            policy_path=CONTEXT_POLICY,
+            output_directory=tmp_path / "context-plan",
+            config=load_extended_session_context_config(CONTEXT_POLICY),
+        )
+
+
+def test_exchange_clock_conversion_observes_dst() -> None:
+    assert context_module._exchange_moment(
+        "2024-03-08", "04:00"
+    ) == pd.Timestamp("2024-03-08 09:00", tz="UTC")
+    assert context_module._exchange_moment(
+        "2024-03-11", "04:00"
+    ) == pd.Timestamp("2024-03-11 08:00", tz="UTC")
 
 
 def test_context_plan_binds_to_the_frozen_regular_session_layer(
@@ -288,6 +401,7 @@ def _write_regular_layer(
             "path": str(root / MEMBERSHIPS),
             "audit_path": str(root / MEMBERSHIP_AUDIT),
             "sha256": file_sha256(root / MEMBERSHIPS),
+            "audit_sha256": file_sha256(root / MEMBERSHIP_AUDIT),
             "universe_snapshot_id": "test-pit-snapshot",
         },
     }

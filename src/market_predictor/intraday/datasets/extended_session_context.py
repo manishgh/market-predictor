@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import shutil
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from importlib.metadata import version
 from pathlib import Path
 from typing import Any
@@ -103,17 +103,44 @@ def build_extended_session_context_plan(
         membership_audit_path,
         minimum_cross_section=config.minimum_session_cross_section,
     )
-    if membership_identity["sha256"] != regular["membership_sha256"]:
+    if (
+        membership_identity["sha256"] != regular["membership_sha256"]
+        or membership_identity["audit_sha256"]
+        != regular["membership_audit_sha256"]
+        or membership_identity["universe_snapshot_id"]
+        != regular["universe_snapshot_id"]
+    ):
         raise DataReadinessError(
             "ER1B universe differs from the frozen ER1A universe"
-        )
+    )
     regular_first = str(regular["first_history_session"])
     regular_last = str(regular["last_history_session"])
-    window_first = first_session or regular_first
+    window_first = regular_first if first_session is None else first_session
+    try:
+        window_first_date = date.fromisoformat(window_first)
+    except ValueError as exc:
+        raise DataReadinessError(
+            "ER1B first session must be a canonical XNYS session"
+        ) from exc
+    if window_first != window_first_date.isoformat():
+        raise DataReadinessError(
+            "ER1B first session must be a canonical XNYS session"
+        )
     if not regular_first <= window_first <= regular_last:
         raise DataReadinessError(
             f"ER1B first session {window_first} is outside the frozen ER1A range "
             f"{regular_first}..{regular_last}"
+        )
+    calendar = xcals.get_calendar(config.calendar)
+    sessions = calendar.sessions_in_range(window_first, regular_last)
+    if not len(sessions) or sessions[0].date() != window_first_date:
+        raise DataReadinessError(
+            "ER1B first session must be a canonical XNYS session"
+        )
+    full_range = calendar.sessions_in_range(regular_first, regular_last)
+    if len(full_range) != int(str(regular["planned_history_sessions"])):
+        raise DataReadinessError(
+            "ER1B session window does not match the frozen ER1A session count"
         )
     request = {
         "schema": EXTENDED_CONTEXT_PLAN_SCHEMA,
@@ -129,15 +156,6 @@ def build_extended_session_context_plan(
         "download_performed": False,
     }
     plan_fingerprint = json_sha256(request)
-    calendar = xcals.get_calendar(config.calendar)
-    sessions = calendar.sessions_in_range(window_first, regular_last)
-    full_range = calendar.sessions_in_range(regular_first, regular_last)
-    if len(full_range) != int(str(regular["planned_history_sessions"])):
-        raise DataReadinessError(
-            "ER1B session window does not match the frozen ER1A session count"
-        )
-    if not len(sessions):
-        raise DataReadinessError("ER1B session window is empty")
     window_frames, unit_frames, totals = _build_context_frames(
         memberships=memberships,
         sessions=sessions,
@@ -281,6 +299,7 @@ def _verify_regular_session_layer(
         ),
         "collection_total_rows": int(collection["total_rows"]),
         "membership_sha256": str(membership["sha256"]),
+        "membership_audit_sha256": str(membership["audit_sha256"]),
         "universe_snapshot_id": str(membership["universe_snapshot_id"]),
         "first_history_session": str(summary["first_history_session"]),
         "last_history_session": str(summary["last_history_session"]),
