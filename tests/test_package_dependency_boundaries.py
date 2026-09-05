@@ -59,6 +59,7 @@ REMOVED_PRODUCTION_MODULES = (
     "market_predictor.edge_rebuild.cross_sectional",
     "market_predictor.edge_rebuild.global_event_authority",
     "market_predictor.edge_rebuild.global_event_collection",
+    "market_predictor.edge_rebuild.history_collection",
     "market_predictor.edge_rebuild.history_materialization",
     "market_predictor.edge_rebuild.history_contracts",
     "market_predictor.edge_rebuild.issuer_event_family_authority",
@@ -91,6 +92,7 @@ REMOVED_EDGE_REBUILD_FILES = (
     "cross_sectional.py",
     "global_event_authority.py",
     "global_event_collection.py",
+    "history_collection.py",
     "history_materialization.py",
     "history_contracts.py",
     "issuer_event_family_authority.py",
@@ -706,6 +708,29 @@ def test_removed_selected_session_history_import_guard_recognizes_every_import_f
     ),
 )
 def test_removed_history_materialization_import_guard_recognizes_every_import_form(
+    statement: str,
+) -> None:
+    imported_names = tuple(
+        name
+        for node in ast.walk(ast.parse(statement))
+        for name in _imported_names(node)
+    )
+    assert any(
+        _matches_any_dependency(name, REMOVED_PRODUCTION_MODULES)
+        for name in imported_names
+    )
+
+
+@pytest.mark.parametrize(
+    "statement",
+    (
+        "import market_predictor.edge_rebuild.history_collection",
+        "import market_predictor.edge_rebuild.history_collection as collection",
+        "from market_predictor.edge_rebuild import history_collection",
+        "from market_predictor.edge_rebuild.history_collection import collect_intraday_history",
+    ),
+)
+def test_removed_history_collection_import_guard_recognizes_every_import_form(
     statement: str,
 ) -> None:
     imported_names = tuple(

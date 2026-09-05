@@ -10,12 +10,9 @@ from urllib.parse import urlencode
 import pandas as pd
 import pytest
 
+import market_predictor.intraday.datasets.history_collection as history_collection
 from market_predictor.canonical.store import file_sha256
 from market_predictor.core.errors import DataReadinessError
-from market_predictor.edge_rebuild.history_collection import (
-    collect_intraday_history,
-    load_complete_intraday_history_collection,
-)
 from market_predictor.intraday.contracts.history_collection import (
     INTRADAY_HISTORY_PLAN_SCHEMA,
     load_intraday_history_config,
@@ -23,9 +20,26 @@ from market_predictor.intraday.contracts.history_collection import (
 from market_predictor.intraday.datasets.history import (
     PLAN_AUTHORITY_SCHEMA,
 )
+from market_predictor.intraday.datasets.history_collection import (
+    collect_intraday_history,
+    discard_incomplete_collection,
+    load_complete_intraday_history_collection,
+)
 from market_predictor.sources.alpaca import AlpacaBarsPage
 
 POLICY_PATH = Path("configs/edge_rebuild_intraday_history.toml")
+
+
+def test_intraday_history_collection_has_one_canonical_owner() -> None:
+    owner = "market_predictor.intraday.datasets.history_collection"
+
+    assert history_collection.collect_intraday_history is collect_intraday_history
+    for function in (
+        collect_intraday_history,
+        load_complete_intraday_history_collection,
+        discard_incomplete_collection,
+    ):
+        assert function.__module__ == owner
 
 
 def test_collector_publishes_raw_lineage_and_complete_authority(

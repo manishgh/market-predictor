@@ -16,10 +16,6 @@ import pandas as pd
 
 from market_predictor.canonical.store import file_sha256
 from market_predictor.core.errors import DataReadinessError
-from market_predictor.edge_rebuild.history_collection import (
-    collect_intraday_history,
-    load_complete_intraday_history_collection,
-)
 from market_predictor.intraday.contracts.history_collection import (
     INTRADAY_HISTORY_PLAN_SCHEMA,
     SELECTED_SESSION_BENCHMARK_PLAN_SCHEMA,
@@ -36,6 +32,10 @@ from market_predictor.intraday.datasets.history import (
     request_unit_record,
     stable_identity_hash,
     write_plan_json,
+)
+from market_predictor.intraday.datasets.history_collection import (
+    collect_intraday_history,
+    load_complete_intraday_history_collection,
 )
 from market_predictor.resources import (
     assert_memory_budget,

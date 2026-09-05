@@ -13,7 +13,6 @@ import pytest
 
 from market_predictor.canonical.store import file_sha256
 from market_predictor.core.errors import DataReadinessError
-from market_predictor.edge_rebuild.history_collection import collect_intraday_history
 from market_predictor.edge_rebuild.one_minute_coverage import (
     load_complete_one_minute_coverage,
     publish_selected_session_one_minute_coverage,
@@ -23,6 +22,7 @@ from market_predictor.intraday.contracts.history_collection import (
     load_selected_session_one_minute_config,
 )
 from market_predictor.intraday.datasets.history import write_plan_json
+from market_predictor.intraday.datasets.history_collection import collect_intraday_history
 from market_predictor.intraday.datasets.selected_session_history import (
     build_selected_session_history_plan,
 )

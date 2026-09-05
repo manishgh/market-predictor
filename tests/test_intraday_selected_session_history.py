@@ -12,10 +12,6 @@ import pytest
 
 import market_predictor.intraday.datasets.selected_session_history as selected_session_history
 from market_predictor.core.errors import DataReadinessError
-from market_predictor.edge_rebuild.history_collection import (
-    collect_intraday_history,
-    load_complete_intraday_history_collection,
-)
 from market_predictor.intraday.contracts.history_collection import (
     SELECTED_SESSION_PLAN_SCHEMA,
     load_collection_transport_config,
@@ -24,6 +20,10 @@ from market_predictor.intraday.contracts.history_collection import (
 )
 from market_predictor.intraday.datasets.history import (
     load_complete_intraday_history_plan,
+)
+from market_predictor.intraday.datasets.history_collection import (
+    collect_intraday_history,
+    load_complete_intraday_history_collection,
 )
 from market_predictor.intraday.datasets.history_materialization import (
     selected_ticker_sessions,

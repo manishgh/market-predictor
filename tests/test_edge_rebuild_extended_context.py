@@ -12,10 +12,6 @@ from market_predictor.core.errors import DataReadinessError
 from market_predictor.edge_rebuild.extended_session_context import (
     build_extended_session_context_plan,
 )
-from market_predictor.edge_rebuild.history_collection import (
-    HISTORY_AUTHORITY_SCHEMA,
-    HISTORY_COLLECTION_SCHEMA,
-)
 from market_predictor.intraday.contracts.history_collection import (
     EXTENDED_CONTEXT_PLAN_SCHEMA,
     INTRADAY_HISTORY_PLAN_SCHEMA,
@@ -28,6 +24,10 @@ from market_predictor.intraday.datasets.history import (
     EXTENDED_CONTEXT_PLAN_AUTHORITY_SCHEMA,
     PLAN_AUTHORITY_SCHEMA,
     json_sha256,
+)
+from market_predictor.intraday.datasets.history_collection import (
+    HISTORY_AUTHORITY_SCHEMA,
+    HISTORY_COLLECTION_SCHEMA,
 )
 
 CONTEXT_POLICY = Path("configs/edge_rebuild_extended_session_context.toml")
