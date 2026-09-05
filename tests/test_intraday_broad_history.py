@@ -6,21 +6,37 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
+import market_predictor.intraday.datasets.broad_intraday_history as broad_history
 from market_predictor.canonical.store import file_sha256
 from market_predictor.core.errors import DataReadinessError
-from market_predictor.edge_rebuild.broad_intraday_history import (
-    build_broad_intraday_history_plan,
-    load_complete_broad_intraday_history_plan,
-)
 from market_predictor.intraday.contracts.history_collection import (
     BroadIntradayHistoryConfig,
     load_broad_intraday_history_config,
     load_collection_transport_config,
 )
+from market_predictor.intraday.datasets.broad_intraday_history import (
+    build_broad_intraday_history_plan,
+    load_complete_broad_intraday_history_plan,
+)
 
 POLICY = Path("configs/edge_rebuild_broad_intraday_history.toml")
 EARLY_CLOSE = "2024-07-03"
 FULL_SESSION = "2024-07-05"
+
+
+def test_broad_intraday_history_has_one_canonical_owner() -> None:
+    owner = "market_predictor.intraday.datasets.broad_intraday_history"
+
+    assert (
+        broad_history.build_broad_intraday_history_plan
+        is build_broad_intraday_history_plan
+    )
+    assert (
+        broad_history.load_complete_broad_intraday_history_plan
+        is load_complete_broad_intraday_history_plan
+    )
+    assert build_broad_intraday_history_plan.__module__ == owner
+    assert load_complete_broad_intraday_history_plan.__module__ == owner
 
 
 def test_plan_subtracts_coverage_excludes_funds_and_bounds_units(
