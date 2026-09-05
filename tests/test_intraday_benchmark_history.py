@@ -6,13 +6,13 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from market_predictor.edge_rebuild import benchmark_history
-from market_predictor.edge_rebuild.benchmark_history import (
-    build_selected_session_benchmark_plan,
-)
+import market_predictor.intraday.datasets.benchmark_history as benchmark_history
 from market_predictor.intraday.contracts.history_collection import (
     SelectedSessionBenchmarkConfig,
     load_selected_session_benchmark_config,
+)
+from market_predictor.intraday.datasets.benchmark_history import (
+    build_selected_session_benchmark_plan,
 )
 from market_predictor.intraday.datasets.history import (
     load_complete_intraday_history_plan,
@@ -21,6 +21,16 @@ from market_predictor.modeling.strategy_contract import load_strategy_contract
 
 POLICY = Path("configs/edge_rebuild_selected_session_benchmarks.toml")
 CONTRACT = Path("configs/edge_rebuild_strategy_contract.toml")
+
+
+def test_benchmark_history_has_one_canonical_owner() -> None:
+    owner = "market_predictor.intraday.datasets.benchmark_history"
+
+    assert (
+        benchmark_history.build_selected_session_benchmark_plan
+        is build_selected_session_benchmark_plan
+    )
+    assert build_selected_session_benchmark_plan.__module__ == owner
 
 
 def test_benchmark_plan_covers_every_session_with_all_benchmarks(

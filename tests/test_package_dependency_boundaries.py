@@ -54,6 +54,7 @@ CATALYSTS_ALLOWED_DEPENDENCIES = (
     "market_predictor.universe",
 )
 REMOVED_PRODUCTION_MODULES = (
+    "market_predictor.edge_rebuild.benchmark_history",
     "market_predictor.edge_rebuild.catalyst_authority",
     "market_predictor.edge_rebuild.corpus_integrity",
     "market_predictor.edge_rebuild.cross_sectional",
@@ -88,6 +89,7 @@ REMOVED_PRODUCTION_MODULES = (
     "market_predictor.symbols",
 )
 REMOVED_EDGE_REBUILD_FILES = (
+    "benchmark_history.py",
     "catalyst_authority.py",
     "corpus_integrity.py",
     "cross_sectional.py",
@@ -756,6 +758,29 @@ def test_removed_history_collection_import_guard_recognizes_every_import_form(
     ),
 )
 def test_removed_one_minute_coverage_import_guard_recognizes_every_import_form(
+    statement: str,
+) -> None:
+    imported_names = tuple(
+        name
+        for node in ast.walk(ast.parse(statement))
+        for name in _imported_names(node)
+    )
+    assert any(
+        _matches_any_dependency(name, REMOVED_PRODUCTION_MODULES)
+        for name in imported_names
+    )
+
+
+@pytest.mark.parametrize(
+    "statement",
+    (
+        "import market_predictor.edge_rebuild.benchmark_history",
+        "import market_predictor.edge_rebuild.benchmark_history as benchmark",
+        "from market_predictor.edge_rebuild import benchmark_history",
+        "from market_predictor.edge_rebuild.benchmark_history import build_selected_session_benchmark_plan",
+    ),
+)
+def test_removed_benchmark_history_import_guard_recognizes_every_import_form(
     statement: str,
 ) -> None:
     imported_names = tuple(

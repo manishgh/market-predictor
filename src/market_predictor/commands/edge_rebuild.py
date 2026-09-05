@@ -24,9 +24,6 @@ from market_predictor.catalysts.sec_filings.decision_authority import (
 )
 from market_predictor.config import get_settings
 from market_predictor.core.errors import DataReadinessError
-from market_predictor.edge_rebuild.benchmark_history import (
-    build_selected_session_benchmark_plan,
-)
 from market_predictor.edge_rebuild.broad_intraday_history import (
     build_broad_intraday_history_plan,
 )
@@ -91,6 +88,9 @@ from market_predictor.intraday.datasets.bar_audit import (
 )
 from market_predictor.intraday.datasets.bar_execution_evidence import (
     publish_intraday_bar_dataset_with_execution_evidence,
+)
+from market_predictor.intraday.datasets.benchmark_history import (
+    build_selected_session_benchmark_plan,
 )
 from market_predictor.intraday.datasets.event_preflight import (
     load_intraday_event_preflight_config,
