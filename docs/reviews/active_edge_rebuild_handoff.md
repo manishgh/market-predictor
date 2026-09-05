@@ -2,13 +2,13 @@
 
 Status: active
 
-Last updated: 2026-09-05
+Last updated: 2026-09-06
 
 Repository: `C:\project\market-predictor`
 
 Branch: `er-intraday-refactoring`
 
-Last completed implementation commit: `1702991` (`Move and harden extended session planning`)
+Last completed implementation commit: `3791541` (`Move and harden prospective SIP collection`)
 
 ## Purpose
 
@@ -1240,12 +1240,40 @@ Repository-wide Step 6 debt remains 166 Ruff findings and 14 strict-mypy finding
 the same three untouched files. Independent task, code, and ML/data reviews closed
 with no remaining P0, P1, or P2 finding.
 
-Exact next checkpoint: task-review `edge_rebuild/prospective_sip_session.py` and its
-direct consumers as the canonical closed-session prospective SIP evidence collector.
-If its source identities, immutable raw/canonical evidence, point-in-time membership,
-session-finality, provider/feed/adjustment, retry/resume, memory, and retained authority
-contracts can remain exact, move it to
-`intraday/datasets/prospective_sip_session.py`, update every consumer directly, and add
-owner plus old-path guards. Do not combine it with prospective broker-action or
-analyst-horizon modules, perform provider collection, regenerate artifacts, train,
-promote, serve, or open a locked test. Rollback anchor is `1702991`.
+Implementation commit `3791541` moves the prospective closed-session SIP collector to
+`intraday/datasets/prospective_sip_session.py`, updates the collection command, and
+prohibits every old import form without an alias. The original source Git object was
+`3ff60848019791e26ada7cb0eaee814d55e37932`.
+
+The migration closes all independent-review findings. Completed-output replay now
+matches the requested session, observed membership authority, policy files, effective
+configs, and required benchmark set. Fresh collection rejects an in-memory config that
+cannot be reconstructed from its recorded policy file. `maximum_units_this_run` is one
+parent-wide provider-request budget across both children. Replay also compares the
+retained stock membership table with the exact active observed cohort. After the next
+XNYS open, an interrupted parent may be finalized only if both child authorities were
+already complete and every retrieval timestamp verifies inside `[close + 60 seconds,
+next open)`; any incomplete child remains barred from provider access.
+
+The retained `data/raw/prospective_sip_sessions/session_20260820_v1` authority strictly
+replays 503 securities and 39,181 SIP five-minute stock rows plus all 13 benchmark ETFs
+and 5,070 SIP one-minute rows. Twenty-two sparse securities equal 4.3738%, below the
+5% whole-security ceiling. Status remains `source_complete_warmup_ineligible`, with
+training, selection, and serving eligibility all false. No provider request, artifact
+regeneration, training, promotion, serving, or locked-test access occurred.
+
+Verification passed 249 focused tests and the complete suite with 1,772 passed and
+three skipped in 13 minutes 44 seconds. Touched Ruff and strict mypy, compileall,
+collection CLI help, canonical/old-path imports, retained real-authority replay, diff,
+process, and temporary-output checks passed. Repository-wide Ruff debt is 165 findings;
+strict mypy debt remains 14 findings in the same three untouched files. Independent
+task, Python-code, and ML/data-design reviews closed with no remaining P0, P1, or P2.
+
+Exact next checkpoint: task-review `edge_rebuild/prospective_broker_actions.py`,
+`edge_rebuild/prospective_analyst_revision_horizon.py`, and their direct consumers to
+define the smallest coherent migration. Broker-action polling and immutable generation
+are horizon-neutral issuer catalyst evidence and should move under
+`catalysts/issuer_events`; analyst-horizon aggregation must depend on that canonical
+owner. Preserve all schemas and retained poll/generation/horizon replay unless review
+proves a correctness defect. Do not poll providers, regenerate artifacts, train,
+promote, serve, or open a locked test. Rollback anchor is `3791541`.

@@ -2,7 +2,7 @@
 
 Status: current edge-rebuild path
 
-Last updated: 2026-08-15
+Last updated: 2026-09-06
 
 Read `AGENTS.md`, `docs/active_edge_rebuild_plan.md`, and
 `docs/reviews/active_edge_rebuild_handoff.md` first. Command `--help` output and code
@@ -62,6 +62,13 @@ estimator without the same governance.
   regular-session five-minute acquisition planning with explicit membership limits.
 - `intraday/datasets/extended_session_context.py`: separately bound premarket and
   postmarket five-minute context planning with exact exchange-calendar windows.
+- `intraday/datasets/prospective_sip_session.py`: one closed-session prospective
+  authority combining the exact observed S&P cohort at SIP five-minute resolution with
+  SPY, QQQ, and all sector ETFs at SIP one-minute resolution. It binds policy files to
+  effective configs, shares one request budget across both children, supports
+  hash-verified crash recovery, and permits post-open parent finalization only from
+  children retrieved before that open. It does not create features, labels, or model
+  eligibility.
 - `swing_history_collection.py`, `swing_daily_combination.py`: swing daily history.
 - `corpus_integrity.py`, `readiness.py`: corpus admission checks.
 

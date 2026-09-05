@@ -2,7 +2,7 @@
 
 Status: active
 
-Last updated: 2026-09-05
+Last updated: 2026-09-06
 
 Repository: `C:\project\market-predictor`
 
@@ -1662,6 +1662,35 @@ test, and task names.
      Repository-wide Step 6 debt remains 166 Ruff findings and 14 strict-mypy findings
      in the same three untouched files. Independent task, code, and ML/data reviews
      closed with no remaining P0, P1, or P2 finding.
+   - **Prospective closed-session SIP evidence ownership (`completed`).**
+     Implementation commit `3791541` moves the closed-session collector from
+     `edge_rebuild/prospective_sip_session.py` to
+     `intraday/datasets/prospective_sip_session.py`; the collection command imports the
+     canonical owner directly, every old import form is prohibited, and no alias
+     remains. The original source Git object was
+     `3ff60848019791e26ada7cb0eaee814d55e37932`. The migration also closes independent
+     review findings: completed output is accepted only when the requested session,
+     membership authority, policy bytes, effective configs, and benchmark set match;
+     fresh configs must reconstruct exactly from their recorded policy files; the
+     invocation unit limit is shared across stock and benchmark children; and the
+     retained stock membership table must equal the causally active observed cohort.
+     A crash after both children complete can publish the parent after the next open
+     only when all immutable retrieval timestamps remain inside `[close + 60 seconds,
+     next open)`; incomplete children cannot make late Alpaca requests.
+
+     The retained `2026-08-20` authority strictly replays 503 securities, 39,181 SIP
+     five-minute stock rows, all 13 required benchmark ETFs, and 5,070 SIP one-minute
+     benchmark rows. Twenty-two sparse securities produce a 4.3738% exclusion rate,
+     below the unchanged 5% ceiling. Status remains
+     `source_complete_warmup_ineligible`; training, selection, and serving eligibility
+     are false. No provider request, artifact regeneration, training, promotion,
+     serving, or locked-test access occurred. Verification passed 249 focused tests
+     and the complete suite with 1,772 passed and three skipped. Touched Ruff and
+     strict mypy, compileall, collection CLI help, canonical and old-path imports,
+     retained-authority replay, diff, process, and temporary-output checks passed.
+     Repository-wide Ruff debt is now 165 findings; strict mypy debt remains 14
+     findings in the same three untouched files. Independent task, Python-code, and
+     ML/data-design reviews closed with no remaining P0, P1, or P2 finding.
 5. **Governance, serving, and command package migration (`pending`).**
    Move readiness, promotion, drift, and outcomes to `governance`; bundle loading,
    prediction services, and API behavior to `serving`; and retain only thin CLI
