@@ -57,6 +57,7 @@ REMOVED_PRODUCTION_MODULES = (
     "market_predictor.edge_rebuild.benchmark_history",
     "market_predictor.edge_rebuild.broad_intraday_history",
     "market_predictor.edge_rebuild.extended_session_context",
+    "market_predictor.edge_rebuild.prospective_sip_session",
     "market_predictor.edge_rebuild.catalyst_authority",
     "market_predictor.edge_rebuild.corpus_integrity",
     "market_predictor.edge_rebuild.cross_sectional",
@@ -94,6 +95,7 @@ REMOVED_EDGE_REBUILD_FILES = (
     "benchmark_history.py",
     "broad_intraday_history.py",
     "extended_session_context.py",
+    "prospective_sip_session.py",
     "catalyst_authority.py",
     "corpus_integrity.py",
     "cross_sectional.py",
@@ -831,6 +833,29 @@ def test_removed_broad_intraday_history_import_guard_recognizes_every_import_for
     ),
 )
 def test_removed_extended_session_context_import_guard_recognizes_every_import_form(
+    statement: str,
+) -> None:
+    imported_names = tuple(
+        name
+        for node in ast.walk(ast.parse(statement))
+        for name in _imported_names(node)
+    )
+    assert any(
+        _matches_any_dependency(name, REMOVED_PRODUCTION_MODULES)
+        for name in imported_names
+    )
+
+
+@pytest.mark.parametrize(
+    "statement",
+    (
+        "import market_predictor.edge_rebuild.prospective_sip_session",
+        "import market_predictor.edge_rebuild.prospective_sip_session as session",
+        "from market_predictor.edge_rebuild import prospective_sip_session",
+        "from market_predictor.edge_rebuild.prospective_sip_session import collect_prospective_sip_session",
+    ),
+)
+def test_removed_prospective_sip_session_import_guard_recognizes_every_import_form(
     statement: str,
 ) -> None:
     imported_names = tuple(

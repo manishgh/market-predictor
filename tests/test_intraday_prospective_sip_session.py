@@ -10,7 +10,7 @@ from urllib.parse import urlencode
 import pandas as pd
 import pytest
 
-import market_predictor.edge_rebuild.prospective_sip_session as module
+import market_predictor.intraday.datasets.prospective_sip_session as module
 from market_predictor.core.errors import DataReadinessError
 from market_predictor.intraday.contracts.history_collection import (
     load_intraday_history_config,
@@ -28,6 +28,13 @@ BENCHMARK_POLICY = (
 )
 REGULAR_SESSION = date(2024, 7, 8)
 COLLECTION_TIME = datetime(2024, 7, 8, 20, 2, tzinfo=UTC)
+
+
+def test_prospective_sip_session_has_one_canonical_owner() -> None:
+    owner = "market_predictor.intraday.datasets.prospective_sip_session"
+
+    assert module.collect_prospective_sip_session.__module__ == owner
+    assert module.load_complete_prospective_sip_session.__module__ == owner
 
 
 @pytest.mark.parametrize(
@@ -274,6 +281,38 @@ def test_collection_rejects_resource_policy_above_frozen_limits(
         )
 
 
+@pytest.mark.parametrize("config_name", ["five_minute", "benchmark"])
+def test_fresh_collection_rejects_config_not_loaded_from_recorded_policy(
+    tmp_path: Path,
+    config_name: str,
+) -> None:
+    five_minute_config = load_intraday_history_config(FIVE_MINUTE_POLICY)
+    benchmark_config = load_selected_session_benchmark_config(BENCHMARK_POLICY)
+    if config_name == "five_minute":
+        five_minute_config = five_minute_config.model_copy(
+            update={"collection_retries": five_minute_config.collection_retries + 1}
+        )
+    else:
+        benchmark_config = benchmark_config.model_copy(
+            update={"collection_retries": benchmark_config.collection_retries + 1}
+        )
+
+    with pytest.raises(DataReadinessError, match="differs from its policy file"):
+        module.collect_prospective_sip_session(
+            session_date=REGULAR_SESSION,
+            membership_authority_directory=tmp_path / "membership",
+            five_minute_policy_path=FIVE_MINUTE_POLICY,
+            benchmark_policy_path=BENCHMARK_POLICY,
+            output_directory=tmp_path / "output",
+            five_minute_config=five_minute_config,
+            benchmark_config=benchmark_config,
+            source_factory=lambda: pytest.fail("network must not be called"),
+            now_utc=COLLECTION_TIME,
+        )
+
+    assert not (tmp_path / "output").exists()
+
+
 def test_parent_resume_loads_completed_children_without_network(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -295,6 +334,287 @@ def test_parent_resume_loads_completed_children_without_network(
     )
 
     assert result["status"] == "source_complete_warmup_ineligible"
+
+
+def test_parent_resume_after_next_open_uses_completed_children_without_network(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    output, _, _ = _publish_authority(tmp_path, monkeypatch)
+    (output / "_authority.json").unlink()
+    (output / "_manifest.json").unlink()
+
+    result = module.collect_prospective_sip_session(
+        session_date=REGULAR_SESSION,
+        membership_authority_directory=tmp_path / "membership-authority",
+        five_minute_policy_path=FIVE_MINUTE_POLICY,
+        benchmark_policy_path=BENCHMARK_POLICY,
+        output_directory=output,
+        five_minute_config=load_intraday_history_config(FIVE_MINUTE_POLICY),
+        benchmark_config=load_selected_session_benchmark_config(BENCHMARK_POLICY),
+        source_factory=lambda: pytest.fail("completed children must not call Alpaca"),
+        now_utc=datetime(2024, 7, 10, tzinfo=UTC),
+    )
+
+    assert result["status"] == "source_complete_warmup_ineligible"
+
+
+def test_parent_resume_after_next_open_rejects_incomplete_children(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    output, _, calls = _publish_authority(
+        tmp_path,
+        monkeypatch,
+        maximum_units_this_run=1,
+        expected_status="source_incomplete",
+    )
+    calls_before_resume = len(calls)
+
+    with pytest.raises(DataReadinessError, match="next XNYS open"):
+        module.collect_prospective_sip_session(
+            session_date=REGULAR_SESSION,
+            membership_authority_directory=tmp_path / "membership-authority",
+            five_minute_policy_path=FIVE_MINUTE_POLICY,
+            benchmark_policy_path=BENCHMARK_POLICY,
+            output_directory=output,
+            five_minute_config=load_intraday_history_config(FIVE_MINUTE_POLICY),
+            benchmark_config=load_selected_session_benchmark_config(BENCHMARK_POLICY),
+            source_factory=lambda: _ExactPageSource(calls, full_grid=True),
+            now_utc=datetime(2024, 7, 10, tzinfo=UTC),
+        )
+
+    assert len(calls) == calls_before_resume
+
+
+def test_completed_output_replays_after_next_open_without_network(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    output, _, _ = _publish_authority(tmp_path, monkeypatch)
+
+    result = module.collect_prospective_sip_session(
+        session_date=REGULAR_SESSION,
+        membership_authority_directory=tmp_path / "membership-authority",
+        five_minute_policy_path=FIVE_MINUTE_POLICY,
+        benchmark_policy_path=BENCHMARK_POLICY,
+        output_directory=output,
+        five_minute_config=load_intraday_history_config(FIVE_MINUTE_POLICY),
+        benchmark_config=load_selected_session_benchmark_config(BENCHMARK_POLICY),
+        source_factory=lambda: pytest.fail("completed replay must not call Alpaca"),
+        now_utc=datetime(2024, 7, 10, tzinfo=UTC),
+    )
+
+    assert result["status"] == "source_complete_warmup_ineligible"
+
+
+def test_completed_output_rejects_a_different_session(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    output, _, _ = _publish_authority(tmp_path, monkeypatch)
+
+    with pytest.raises(DataReadinessError, match="invocation differs"):
+        module.collect_prospective_sip_session(
+            session_date=date(2024, 7, 9),
+            membership_authority_directory=tmp_path / "membership-authority",
+            five_minute_policy_path=FIVE_MINUTE_POLICY,
+            benchmark_policy_path=BENCHMARK_POLICY,
+            output_directory=output,
+            five_minute_config=load_intraday_history_config(FIVE_MINUTE_POLICY),
+            benchmark_config=load_selected_session_benchmark_config(BENCHMARK_POLICY),
+            source_factory=lambda: pytest.fail("mismatch must not call Alpaca"),
+        )
+
+
+def test_completed_output_rejects_a_different_membership_parent(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    output, _, _ = _publish_authority(tmp_path, monkeypatch)
+    alternate = tmp_path / "alternate-membership"
+    shutil.copytree(tmp_path / "membership-authority", alternate)
+    (alternate / "_authority.json").write_text("{\"changed\": true}", encoding="utf-8")
+
+    with pytest.raises(DataReadinessError, match="invocation differs"):
+        module.collect_prospective_sip_session(
+            session_date=REGULAR_SESSION,
+            membership_authority_directory=alternate,
+            five_minute_policy_path=FIVE_MINUTE_POLICY,
+            benchmark_policy_path=BENCHMARK_POLICY,
+            output_directory=output,
+            five_minute_config=load_intraday_history_config(FIVE_MINUTE_POLICY),
+            benchmark_config=load_selected_session_benchmark_config(BENCHMARK_POLICY),
+            source_factory=lambda: pytest.fail("mismatch must not call Alpaca"),
+        )
+
+
+def test_completed_output_rejects_different_policy_bytes_or_config(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    output, _, _ = _publish_authority(tmp_path, monkeypatch)
+    changed_policy = tmp_path / "five-minute-policy.toml"
+    changed_policy.write_text(
+        FIVE_MINUTE_POLICY.read_text(encoding="utf-8") + "\n# changed bytes\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(DataReadinessError, match="invocation differs"):
+        module.collect_prospective_sip_session(
+            session_date=REGULAR_SESSION,
+            membership_authority_directory=tmp_path / "membership-authority",
+            five_minute_policy_path=changed_policy,
+            benchmark_policy_path=BENCHMARK_POLICY,
+            output_directory=output,
+            five_minute_config=load_intraday_history_config(FIVE_MINUTE_POLICY),
+            benchmark_config=load_selected_session_benchmark_config(BENCHMARK_POLICY),
+            source_factory=lambda: pytest.fail("mismatch must not call Alpaca"),
+        )
+
+    changed_config = load_intraday_history_config(FIVE_MINUTE_POLICY).model_copy(
+        update={"collection_retries": 3}
+    )
+    with pytest.raises(DataReadinessError, match="differs from its policy file"):
+        module.collect_prospective_sip_session(
+            session_date=REGULAR_SESSION,
+            membership_authority_directory=tmp_path / "membership-authority",
+            five_minute_policy_path=FIVE_MINUTE_POLICY,
+            benchmark_policy_path=BENCHMARK_POLICY,
+            output_directory=output,
+            five_minute_config=changed_config,
+            benchmark_config=load_selected_session_benchmark_config(BENCHMARK_POLICY),
+            source_factory=lambda: pytest.fail("mismatch must not call Alpaca"),
+        )
+
+
+def test_unit_limited_parent_run_resumes_without_duplicate_requests(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    output, _, calls = _publish_authority(
+        tmp_path,
+        monkeypatch,
+        maximum_units_this_run=1,
+        expected_status="source_incomplete",
+    )
+    assert len(calls) == 1
+
+    result = module.collect_prospective_sip_session(
+        session_date=REGULAR_SESSION,
+        membership_authority_directory=tmp_path / "membership-authority",
+        five_minute_policy_path=FIVE_MINUTE_POLICY,
+        benchmark_policy_path=BENCHMARK_POLICY,
+        output_directory=output,
+        five_minute_config=load_intraday_history_config(FIVE_MINUTE_POLICY),
+        benchmark_config=load_selected_session_benchmark_config(BENCHMARK_POLICY),
+        source_factory=lambda: _ExactPageSource(calls, full_grid=True),
+        now_utc=COLLECTION_TIME,
+    )
+
+    assert result["status"] == "source_complete_warmup_ineligible"
+    assert len(calls) == 10
+
+
+def test_unit_limit_is_shared_across_stock_and_benchmark_children(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    output, _, calls = _publish_authority(
+        tmp_path,
+        monkeypatch,
+        maximum_units_this_run=8,
+        expected_status="source_incomplete",
+    )
+    assert len(calls) == 8
+
+    first_resume = module.collect_prospective_sip_session(
+        session_date=REGULAR_SESSION,
+        membership_authority_directory=tmp_path / "membership-authority",
+        five_minute_policy_path=FIVE_MINUTE_POLICY,
+        benchmark_policy_path=BENCHMARK_POLICY,
+        output_directory=output,
+        five_minute_config=load_intraday_history_config(FIVE_MINUTE_POLICY),
+        benchmark_config=load_selected_session_benchmark_config(BENCHMARK_POLICY),
+        source_factory=lambda: _ExactPageSource(calls, full_grid=True),
+        maximum_units_this_run=1,
+        now_utc=COLLECTION_TIME,
+    )
+
+    assert first_resume["status"] == "source_incomplete"
+    assert len(calls) == 9
+
+    second_resume = module.collect_prospective_sip_session(
+        session_date=REGULAR_SESSION,
+        membership_authority_directory=tmp_path / "membership-authority",
+        five_minute_policy_path=FIVE_MINUTE_POLICY,
+        benchmark_policy_path=BENCHMARK_POLICY,
+        output_directory=output,
+        five_minute_config=load_intraday_history_config(FIVE_MINUTE_POLICY),
+        benchmark_config=load_selected_session_benchmark_config(BENCHMARK_POLICY),
+        source_factory=lambda: _ExactPageSource(calls, full_grid=True),
+        maximum_units_this_run=1,
+        now_utc=COLLECTION_TIME,
+    )
+
+    assert second_resume["status"] == "source_complete_warmup_ineligible"
+    assert len(calls) == 10
+
+
+def test_child_membership_semantics_reject_classification_tamper(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    output, observed, _ = _publish_authority(tmp_path, monkeypatch)
+    membership_path = next(
+        (output / "plans" / "full_cohort_5m" / "session_memberships").glob(
+            "*.parquet"
+        )
+    )
+    tampered = pd.read_parquet(membership_path)
+    tampered.loc[0, "sector"] = "Tampered Sector"
+    tampered.to_parquet(membership_path, index=False)
+    expected = module._session_membership(
+        observed,
+        open_at=pd.Timestamp("2024-07-08T13:30:00Z"),
+        minimum_cross_section=400,
+    )
+
+    with pytest.raises(DataReadinessError, match="membership semantics changed"):
+        module._verify_child_membership_semantics(
+            output / "plans" / "full_cohort_5m",
+            expected=expected,
+        )
+
+
+def test_child_retrieval_window_enforces_both_boundaries() -> None:
+    ready_at = pd.Timestamp("2024-07-08T20:01:00Z")
+    next_open = pd.Timestamp("2024-07-09T13:30:00Z")
+
+    def child(retrieved_at: pd.Timestamp) -> dict[str, object]:
+        return {
+            "artifacts": [
+                {"pages": [{"retrieved_at_utc": retrieved_at.isoformat()}]}
+            ]
+        }
+
+    module._validate_child_retrieval_window(
+        child(ready_at),
+        ready_at=ready_at,
+        next_open=next_open,
+    )
+    with pytest.raises(DataReadinessError, match="post-close window"):
+        module._validate_child_retrieval_window(
+            child(ready_at - pd.Timedelta(microseconds=1)),
+            ready_at=ready_at,
+            next_open=next_open,
+        )
+    with pytest.raises(DataReadinessError, match="post-close window"):
+        module._validate_child_retrieval_window(
+            child(next_open),
+            ready_at=ready_at,
+            next_open=next_open,
+        )
 
 
 def test_five_percent_stock_exclusion_rule_is_explicit() -> None:
@@ -329,6 +649,7 @@ def _publish_authority(
     monkeypatch: pytest.MonkeyPatch,
     *,
     full_grid: bool = True,
+    maximum_units_this_run: int | None = None,
     expected_status: str = "source_complete_warmup_ineligible",
 ) -> tuple[Path, ObservedMembershipAuthority, list[tuple[str, date]]]:
     membership_directory = tmp_path / "membership-authority"
@@ -377,6 +698,7 @@ def _publish_authority(
         five_minute_config=load_intraday_history_config(FIVE_MINUTE_POLICY),
         benchmark_config=load_selected_session_benchmark_config(BENCHMARK_POLICY),
         source_factory=source_factory,
+        maximum_units_this_run=maximum_units_this_run,
         now_utc=COLLECTION_TIME,
     )
     assert result["status"] == expected_status

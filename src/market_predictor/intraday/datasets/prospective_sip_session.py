@@ -22,6 +22,8 @@ from market_predictor.intraday.contracts.history_collection import (
     IntradayHistoryConfig,
     IntradayTransportConfig,
     SelectedSessionBenchmarkConfig,
+    load_intraday_history_config,
+    load_selected_session_benchmark_config,
 )
 from market_predictor.intraday.datasets.history import (
     PLAN_AUTHORITY_SCHEMA,
@@ -85,34 +87,51 @@ def collect_prospective_sip_session(
 ) -> dict[str, Any]:
     """Collect exact post-close bars and publish one non-model source authority."""
 
-    if (output_directory / "_authority.json").exists():
-        return load_complete_prospective_sip_session(output_directory)
     if maximum_units_this_run is not None and maximum_units_this_run < 1:
         raise ValueError("maximum_units_this_run must be positive")
     _validate_prospective_resource_policy(five_minute_config)
     _validate_prospective_resource_policy(benchmark_config)
+    _validate_configs_match_policy_files(
+        five_minute_policy_path=five_minute_policy_path,
+        benchmark_policy_path=benchmark_policy_path,
+        five_minute_config=five_minute_config,
+        benchmark_config=benchmark_config,
+    )
+    benchmarks = _validate_prospective_configuration_pair(
+        five_minute_config,
+        benchmark_config,
+    )
+    if (output_directory / "_authority.json").exists():
+        manifest = load_complete_prospective_sip_session(output_directory)
+        _validate_completed_invocation(
+            session_date=session_date,
+            membership_authority_directory=membership_authority_directory,
+            five_minute_policy_path=five_minute_policy_path,
+            benchmark_policy_path=benchmark_policy_path,
+            output_directory=output_directory,
+            five_minute_config=five_minute_config,
+            benchmark_config=benchmark_config,
+            benchmarks=benchmarks,
+        )
+        return manifest
     _guard_memory(five_minute_config, "prospective SIP session start")
     observed = load_observed_sp500_membership_authority(
         membership_authority_directory
     )
-    session, open_at, close_at, next_open = _closed_session_bounds(
+    session, open_at, close_at, next_open = _calendar_session_bounds(
         session_date,
         calendar_name=five_minute_config.calendar,
+    )
+    collections = output_directory / "collections"
+    _require_collection_window_for_incomplete_children(
+        collections,
+        close_at=close_at,
+        next_open=next_open,
         finalization_delay_seconds=(
             five_minute_config.intraday_finalization_delay_seconds
         ),
         now_utc=now_utc,
     )
-    if benchmark_config.calendar != five_minute_config.calendar:
-        raise DataReadinessError("prospective SIP calendars differ")
-    if (
-        benchmark_config.intraday_finalization_delay_seconds
-        != five_minute_config.intraday_finalization_delay_seconds
-    ):
-        raise DataReadinessError("prospective SIP finalization delays differ")
-    benchmarks = benchmark_config.normalized_benchmarks()
-    if set(benchmarks) != REQUIRED_BENCHMARKS:
-        raise DataReadinessError("prospective SIP benchmark set is incomplete")
     _validate_membership_observation(
         observed,
         session=session,
@@ -220,11 +239,21 @@ def collect_prospective_sip_session(
         ),
         session_membership=None,
     )
-    collections = output_directory / "collections"
+    _require_collection_window_for_incomplete_child(
+        collections / "full_cohort_5m",
+        close_at=close_at,
+        next_open=next_open,
+        finalization_delay_seconds=(
+            five_minute_config.intraday_finalization_delay_seconds
+        ),
+        now_utc=now_utc,
+    )
+    five_collection = collections / "full_cohort_5m"
+    five_was_complete = (five_collection / "_authority.json").exists()
     five_result = _collect_or_load_child(
         plan_directory=five_plan,
         policy_path=five_minute_policy_path,
-        output_directory=collections / "full_cohort_5m",
+        output_directory=five_collection,
         config=five_minute_config,
         source_factory=source_factory,
         maximum_units_this_run=maximum_units_this_run,
@@ -238,15 +267,42 @@ def collect_prospective_sip_session(
             benchmarks=None,
             five_minute_config=five_minute_config,
         )
+    remaining_units = _remaining_unit_budget(
+        maximum_units_this_run,
+        child_was_complete=five_was_complete,
+        child_result=five_result,
+    )
     release_process_memory()
     _guard_memory(five_minute_config, "prospective SIP five-minute complete")
+    benchmark_collection = collections / "benchmarks_1m"
+    if (
+        remaining_units == 0
+        and not (benchmark_collection / "_authority.json").exists()
+    ):
+        return _publish_status(
+            output_directory,
+            request_sha256=request_sha256,
+            status="source_incomplete",
+            full_cohort=five_result,
+            benchmarks=None,
+            five_minute_config=five_minute_config,
+        )
+    _require_collection_window_for_incomplete_child(
+        benchmark_collection,
+        close_at=close_at,
+        next_open=next_open,
+        finalization_delay_seconds=(
+            five_minute_config.intraday_finalization_delay_seconds
+        ),
+        now_utc=now_utc,
+    )
     benchmark_result = _collect_or_load_child(
         plan_directory=benchmark_plan,
         policy_path=benchmark_policy_path,
-        output_directory=collections / "benchmarks_1m",
+        output_directory=benchmark_collection,
         config=benchmark_config,
         source_factory=source_factory,
-        maximum_units_this_run=maximum_units_this_run,
+        maximum_units_this_run=remaining_units,
     )
     if benchmark_result["status"] != "transport_complete":
         return _publish_status(
@@ -257,14 +313,6 @@ def collect_prospective_sip_session(
             benchmarks=benchmark_result,
             five_minute_config=five_minute_config,
         )
-    _closed_session_bounds(
-        session_date,
-        calendar_name=five_minute_config.calendar,
-        finalization_delay_seconds=(
-            five_minute_config.intraday_finalization_delay_seconds
-        ),
-        now_utc=now_utc,
-    )
     ready_at = close_at + pd.Timedelta(
         seconds=five_minute_config.intraday_finalization_delay_seconds
     )
@@ -316,6 +364,53 @@ def collect_prospective_sip_session(
         },
     )
     return load_complete_prospective_sip_session(output_directory)
+
+
+def _validate_completed_invocation(
+    *,
+    session_date: date,
+    membership_authority_directory: Path,
+    five_minute_policy_path: Path,
+    benchmark_policy_path: Path,
+    output_directory: Path,
+    five_minute_config: IntradayHistoryConfig,
+    benchmark_config: SelectedSessionBenchmarkConfig,
+    benchmarks: tuple[str, ...],
+) -> None:
+    request = _load_json(output_directory / "_request.json")
+    session, open_at, close_at, next_open = _calendar_session_bounds(
+        session_date,
+        calendar_name=five_minute_config.calendar,
+    )
+    observed = load_observed_sp500_membership_authority(
+        membership_authority_directory
+    )
+    expected = {
+        "session_date_et": session.date().isoformat(),
+        "session_open_utc": open_at.isoformat(),
+        "session_close_utc": close_at.isoformat(),
+        "next_session_open_utc": next_open.isoformat(),
+        "finalization_delay_seconds": (
+            five_minute_config.intraday_finalization_delay_seconds
+        ),
+        "membership_parent": _membership_parent(
+            membership_authority_directory,
+            observed,
+        ),
+        "five_minute_policy_path": str(five_minute_policy_path),
+        "five_minute_policy_file_sha256": file_sha256(
+            five_minute_policy_path
+        ),
+        "five_minute_policy_sha256": five_minute_config.sha256(),
+        "benchmark_policy_path": str(benchmark_policy_path),
+        "benchmark_policy_file_sha256": file_sha256(benchmark_policy_path),
+        "benchmark_policy_sha256": benchmark_config.sha256(),
+        "benchmark_symbols": list(benchmarks),
+    }
+    if any(request.get(key) != value for key, value in expected.items()):
+        raise DataReadinessError(
+            "completed prospective SIP invocation differs from its authority"
+        )
 
 
 def load_complete_prospective_sip_session(
@@ -408,6 +503,7 @@ def load_complete_prospective_sip_session(
     )
     load_complete_intraday_history_plan(five_plan)
     load_complete_intraday_history_plan(benchmark_plan)
+    _verify_child_membership_semantics(five_plan, expected=active)
     full = load_complete_intraday_history_collection(
         directory / "collections" / "full_cohort_5m"
     )
@@ -633,6 +729,24 @@ def _collect_or_load_child(
     )
 
 
+def _remaining_unit_budget(
+    maximum_units_this_run: int | None,
+    *,
+    child_was_complete: bool,
+    child_result: Mapping[str, Any],
+) -> int | None:
+    if maximum_units_this_run is None or child_was_complete:
+        return maximum_units_this_run
+    attempted_units = (
+        int(child_result.get("requested_units", -1))
+        - int(child_result.get("resumed_units", -1))
+        - int(child_result.get("unattempted_units", -1))
+    )
+    if not 0 <= attempted_units <= maximum_units_this_run:
+        raise DataReadinessError("prospective SIP child unit accounting is invalid")
+    return maximum_units_this_run - attempted_units
+
+
 def _verify_child_plan_identity(
     directory: Path,
     *,
@@ -671,6 +785,31 @@ def _verify_child_plan_identity(
     }
     if payload != expected or fingerprint != _json_sha256(expected):
         raise DataReadinessError("prospective SIP child plan identity changed")
+
+
+def _verify_child_membership_semantics(
+    directory: Path,
+    *,
+    expected: pd.DataFrame,
+) -> None:
+    paths = sorted((directory / "session_memberships").glob("*.parquet"))
+    if len(paths) != 1:
+        raise DataReadinessError(
+            "prospective SIP child membership inventory is invalid"
+        )
+    actual = pd.read_parquet(paths[0]).reset_index(drop=True)
+    expected_frame = expected.reset_index(drop=True)
+    try:
+        pd.testing.assert_frame_equal(
+            actual,
+            expected_frame,
+            check_dtype=False,
+            check_exact=True,
+        )
+    except AssertionError as exc:
+        raise DataReadinessError(
+            "prospective SIP child membership semantics changed"
+        ) from exc
 
 
 def _verify_child_collection_lineage(
@@ -769,7 +908,66 @@ def _closed_session_bounds(
         session_date,
         calendar_name=calendar_name,
     )
-    observed_now = pd.Timestamp(now_utc or datetime.now(UTC)).tz_convert("UTC")
+    _require_collection_window(
+        close_at=close_at,
+        next_open=next_open,
+        finalization_delay_seconds=finalization_delay_seconds,
+        now_utc=now_utc,
+    )
+    return session, open_at, close_at, next_open
+
+
+def _require_collection_window_for_incomplete_children(
+    collections_directory: Path,
+    *,
+    close_at: pd.Timestamp,
+    next_open: pd.Timestamp,
+    finalization_delay_seconds: int,
+    now_utc: datetime | None,
+) -> None:
+    children = (
+        collections_directory / "full_cohort_5m",
+        collections_directory / "benchmarks_1m",
+    )
+    if all((child / "_authority.json").exists() for child in children):
+        return
+    _require_collection_window(
+        close_at=close_at,
+        next_open=next_open,
+        finalization_delay_seconds=finalization_delay_seconds,
+        now_utc=now_utc,
+    )
+
+
+def _require_collection_window_for_incomplete_child(
+    child_directory: Path,
+    *,
+    close_at: pd.Timestamp,
+    next_open: pd.Timestamp,
+    finalization_delay_seconds: int,
+    now_utc: datetime | None,
+) -> None:
+    if (child_directory / "_authority.json").exists():
+        return
+    _require_collection_window(
+        close_at=close_at,
+        next_open=next_open,
+        finalization_delay_seconds=finalization_delay_seconds,
+        now_utc=now_utc,
+    )
+
+
+def _require_collection_window(
+    *,
+    close_at: pd.Timestamp,
+    next_open: pd.Timestamp,
+    finalization_delay_seconds: int,
+    now_utc: datetime | None,
+) -> None:
+    observed_now = pd.Timestamp(now_utc or datetime.now(UTC))
+    if observed_now.tzinfo is None:
+        raise DataReadinessError("prospective SIP observation time is timezone-naive")
+    observed_now = observed_now.tz_convert("UTC")
     ready_at = close_at + pd.Timedelta(seconds=finalization_delay_seconds)
     if observed_now < ready_at:
         raise DataReadinessError("XNYS session bars have not finalized")
@@ -777,7 +975,6 @@ def _closed_session_bounds(
         raise DataReadinessError(
             "prospective SIP collection window closed at the next XNYS open"
         )
-    return session, open_at, close_at, next_open
 
 
 def _calendar_session_bounds(
@@ -988,6 +1185,50 @@ def _validate_prospective_resource_policy(
         raise DataReadinessError("prospective SIP memory limit exceeds 4 GiB")
     if config.collection_workers > 2:
         raise DataReadinessError("prospective SIP transport workers exceed two")
+
+
+def _validate_configs_match_policy_files(
+    *,
+    five_minute_policy_path: Path,
+    benchmark_policy_path: Path,
+    five_minute_config: IntradayHistoryConfig,
+    benchmark_config: SelectedSessionBenchmarkConfig,
+) -> None:
+    policy_five_minute = load_intraday_history_config(five_minute_policy_path)
+    policy_benchmark = load_selected_session_benchmark_config(
+        benchmark_policy_path
+    )
+    if (
+        policy_five_minute != five_minute_config
+        or policy_five_minute.sha256() != five_minute_config.sha256()
+    ):
+        raise DataReadinessError(
+            "prospective SIP five-minute config differs from its policy file"
+        )
+    if (
+        policy_benchmark != benchmark_config
+        or policy_benchmark.sha256() != benchmark_config.sha256()
+    ):
+        raise DataReadinessError(
+            "prospective SIP benchmark config differs from its policy file"
+        )
+
+
+def _validate_prospective_configuration_pair(
+    five_minute_config: IntradayHistoryConfig,
+    benchmark_config: SelectedSessionBenchmarkConfig,
+) -> tuple[str, ...]:
+    if benchmark_config.calendar != five_minute_config.calendar:
+        raise DataReadinessError("prospective SIP calendars differ")
+    if (
+        benchmark_config.intraday_finalization_delay_seconds
+        != five_minute_config.intraday_finalization_delay_seconds
+    ):
+        raise DataReadinessError("prospective SIP finalization delays differ")
+    benchmarks = benchmark_config.normalized_benchmarks()
+    if set(benchmarks) != REQUIRED_BENCHMARKS:
+        raise DataReadinessError("prospective SIP benchmark set is incomplete")
+    return benchmarks
 
 
 def _write_or_validate_json(path: Path, payload: Mapping[str, Any]) -> None:
