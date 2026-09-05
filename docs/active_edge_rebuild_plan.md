@@ -1573,6 +1573,30 @@ test, and task names.
      output checks passed. Repository-wide static results remain the Step 6 baseline
      of 168 Ruff and 14 strict mypy findings in untouched files. Independent task,
      code, and ML/data-design reviews closed with no remaining P0, P1, or P2 finding.
+   - **Selected-session one-minute coverage ownership (`completed`).**
+     Implementation commit `268c62d` moves the complete one-minute coverage and
+     canonical five-minute verification authority byte-for-byte from
+     `edge_rebuild/one_minute_coverage.py` to
+     `intraday/datasets/one_minute_coverage.py`. All five production consumers and two
+     direct test consumers use the canonical owner; no compatibility alias or old file
+     remains. The source Git object remains
+     `c770f369f8f103d0895c4fb9d8363f29b0006ead`, and tests freeze all three public
+     function owners plus every old import form. Persisted schemas remain
+     `edge_rebuild.selected_session_one_minute_coverage.v2` and
+     `edge_rebuild.selected_session_one_minute_coverage_authority.v2`. The retained
+     authority replays ready at 43,226 stock-sessions across 502 securities, with 13
+     incomplete sessions retained as metadata, zero excluded securities, a 95%
+     continuity floor, and the unchanged 5% whole-security exclusion ceiling. Its
+     authority remains `e18adef7...a75b` and manifest `d21c1733...c560`. The downstream
+     794-session volume-bar authority still replays 3,095,688 rows, including 1,365,015
+     eligible rows, under request `5e8c508a...303a` and transformation
+     `6fdfd0c8...cb51`. Verification passed 249 focused tests and the complete suite
+     with 1,734 passed and three skipped. Affected Ruff, strict mypy, compileall, CLI
+     help, import/old-path, source-parity, retained-authority replay, diff, process, and
+     temporary-output checks passed. Correcting import order in two touched files
+     reduced repository-wide Ruff debt from 168 to 166; strict mypy debt remains 14
+     findings in the same three untouched files. Independent task, code, and ML/data
+     reviews closed with no remaining P0, P1, or P2 finding.
 5. **Governance, serving, and command package migration (`pending`).**
    Move readiness, promotion, drift, and outcomes to `governance`; bundle loading,
    prediction services, and API behavior to `serving`; and retain only thin CLI

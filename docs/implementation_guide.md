@@ -113,9 +113,10 @@ point-in-time authority exists. No new real A2 candidate has been trained.
 - `volume_bars.py`, `intraday_bar_features.py`: causal completed volume-bar state sampled
   on fixed five-minute cohorts, canonical five-minute ATR, exact market/sector context,
   and the ordered bar-only feature contract.
-- `intraday_bar_labels.py`, `one_minute_coverage.py`: exact next-minute entry,
-  thirty-minute target/stop/timeout path, and holding-aligned SPY, QQQ, and point-in-time
-  sector returns. Missing exact stock or benchmark evidence abstains only that row.
+- `intraday_bar_labels.py`, `intraday/datasets/one_minute_coverage.py`: exact
+  next-minute entry evidence, whole-security coverage admission, thirty-minute
+  target/stop/timeout paths, and holding-aligned SPY, QQQ, and point-in-time sector
+  returns. Missing exact stock or benchmark evidence abstains only that row.
 - `intraday_bar_only_five_minute.py`: local immutable selected-session projection from
   the verified SIP/all five-minute authority; it never downloads provider data.
 - `intraday_bar_dataset.py`, `intraday_bar_live.py`: transformation-hash-bound resumable
