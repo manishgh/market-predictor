@@ -69,6 +69,13 @@ estimator without the same governance.
   hash-verified crash recovery, and permits post-open parent finalization only from
   children retrieved before that open. It does not create features, labels, or model
   eligibility.
+- `intraday/datasets/prospective_broker_actions.py`: resumable observed-time Alpaca
+  broker-action polls and immutable revision generations bound to the A4.3 security
+  namespace. Historical replay exposes identity hashes only and cannot authorize stale
+  bars. Fresh collection requires the current complete bar authority. Cutoff registry
+  commits follow strict replay, generation publication is atomic, Windows reparse paths
+  fail closed, and all poll/generation children remain research-only and ineligible for
+  training or serving.
 - `swing_history_collection.py`, `swing_daily_combination.py`: swing daily history.
 - `corpus_integrity.py`, `readiness.py`: corpus admission checks.
 

@@ -1691,6 +1691,31 @@ test, and task names.
      Repository-wide Ruff debt is now 165 findings; strict mypy debt remains 14
      findings in the same three untouched files. Independent task, Python-code, and
      ML/data-design reviews closed with no remaining P0, P1, or P2 finding.
+   - **Prospective broker-action evidence ownership (`completed`).** Implementation
+     commit `4a98f29` moves Alpaca polling and immutable generation publication from
+     `edge_rebuild/prospective_broker_actions.py` to
+     `intraday/datasets/prospective_broker_actions.py`; no alias remains and every old
+     import form is prohibited. The intraday owner is intentional because collection
+     binds the A4.3 security namespace and observed poll cadence. Downstream issuer
+     classification remains under catalyst policy.
+
+     Historical retained polls use a hash-only identity verifier and therefore remain
+     auditable after the A4.3 transformation changed, but stale bar rows cannot enter
+     training, selection, or serving. Fresh collection still requires the full current
+     bar authority. Strict replay now covers exact JSON schemas, duplicate/non-finite
+     values, numeric types, causal timestamps, derived counts, child eligibility,
+     registry claims/commits, Windows reparse ancestry, and immutable artifact paths.
+     Generation publication stages under a verified ownership marker and atomically
+     renames only after complete replay; unowned staging is never deleted.
+
+     Three retained polls replay 76, 460, and 451 observations; two retained generations
+     replay 536 and 451 revisions. They remain explicitly ineligible for training and
+     serving. No provider call, artifact regeneration, training, promotion, serving, or
+     locked-test access occurred. Verification passed 283 focused tests and the final
+     complete suite with 1,810 passed and three skipped. Touched Ruff, strict mypy,
+     compileall, CLI help, import guards, retained evidence replay, diff, memory, and
+     temporary-output checks passed. Independent Python and ML/data reviewers reported
+     no remaining P0, P1, or P2 finding.
 5. **Governance, serving, and command package migration (`pending`).**
    Move readiness, promotion, drift, and outcomes to `governance`; bundle loading,
    prediction services, and API behavior to `serving`; and retain only thin CLI

@@ -8,7 +8,7 @@ Repository: `C:\project\market-predictor`
 
 Branch: `er-intraday-refactoring`
 
-Last completed implementation commit: `3791541` (`Move and harden prospective SIP collection`)
+Last completed implementation commit: `4a98f29` (`Move and harden prospective broker evidence`)
 
 ## Purpose
 
@@ -1269,11 +1269,38 @@ process, and temporary-output checks passed. Repository-wide Ruff debt is 165 fi
 strict mypy debt remains 14 findings in the same three untouched files. Independent
 task, Python-code, and ML/data-design reviews closed with no remaining P0, P1, or P2.
 
-Exact next checkpoint: task-review `edge_rebuild/prospective_broker_actions.py`,
-`edge_rebuild/prospective_analyst_revision_horizon.py`, and their direct consumers to
-define the smallest coherent migration. Broker-action polling and immutable generation
-are horizon-neutral issuer catalyst evidence and should move under
-`catalysts/issuer_events`; analyst-horizon aggregation must depend on that canonical
-owner. Preserve all schemas and retained poll/generation/horizon replay unless review
-proves a correctness defect. Do not poll providers, regenerate artifacts, train,
-promote, serve, or open a locked test. Rollback anchor is `3791541`.
+Implementation commit `4a98f29` moves prospective Alpaca broker-action polling and
+immutable generation publication to
+`intraday/datasets/prospective_broker_actions.py`. This owner is deliberate: the
+evidence is bound to the intraday A4.3 security namespace and observed polling cadence;
+issuer-event classification remains a downstream catalyst concern. The old
+`edge_rebuild/prospective_broker_actions.py` path and every import form are prohibited,
+with no alias.
+
+The migration adds historical identity-only replay so retained polls remain verifiable
+after the A4.3 transformation changed, while the full current bar loader still rejects
+stale rows for training. Fresh collection continues to require the current complete bar
+authority. Poll and generation JSON use duplicate-key, non-finite, exact-schema, strict
+integer, timestamp, hash, path, count, and causal-lineage checks. Original and ancestor
+Windows reparse points are rejected. Cutoff claims commit only after strict poll replay.
+Generation publication uses an owned sibling staging directory and atomic rename;
+unowned staging is preserved rather than deleted. Every child remains
+`production_ready=false`, and top-level training/serving eligibility remains false.
+
+The retained polls strictly replay 76, 460, and 451 observations. The retained
+generations strictly replay 536 and 451 revisions. No provider request, artifact
+regeneration, training, promotion, serving, or locked-test access occurred. Verification
+passed 283 focused integration tests and the final complete suite with 1,810 passed and
+three skipped. Touched Ruff, strict mypy, compileall, collection/research CLI help,
+canonical/old-path imports, real retained evidence replay, diff, memory, and temporary
+output checks passed. Repository-wide Ruff debt remains 165 findings; strict mypy debt
+remains 14 findings in the same three untouched files. Independent Python and ML/data
+reviews closed with no remaining P0, P1, or P2 finding.
+
+Exact next checkpoint: independently review, then move and harden
+`edge_rebuild/prospective_analyst_revision_horizon.py` under its semantic intraday
+dataset owner. Fix zero-news publication, pre-load memory enforcement, and exact
+authority schemas; preserve strict replay of horizon authorities
+`prospective_analyst_revision_horizon_20260817_v2` and
+`prospective_analyst_revision_horizon_20260821_v4`. Do not poll providers, regenerate
+artifacts, train, promote, serve, or open a locked test. Rollback anchor is `4a98f29`.
