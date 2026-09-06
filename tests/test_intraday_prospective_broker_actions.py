@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
+import subprocess
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -18,8 +20,14 @@ from market_predictor.canonical.audits import (
 )
 from market_predictor.canonical.store import file_sha256, write_canonical_artifact
 from market_predictor.core.errors import DataReadinessError
-from market_predictor.edge_rebuild import prospective_broker_actions as prospective
-from market_predictor.edge_rebuild.prospective_broker_actions import (
+from market_predictor.intraday.datasets import bar_dataset
+from market_predictor.intraday.datasets import prospective_broker_actions as prospective
+from market_predictor.intraday.datasets.bar_dataset import (
+    _arrow_schema_record,
+    _transformation_identity,
+)
+from market_predictor.intraday.datasets.history import json_sha256
+from market_predictor.intraday.datasets.prospective_broker_actions import (
     _build_source_collections,
     _require_membership_authority_progression,
     _require_membership_observed_before_poll,
@@ -28,20 +36,172 @@ from market_predictor.edge_rebuild.prospective_broker_actions import (
     load_prospective_broker_action_poll,
     publish_prospective_broker_action_generation,
 )
-from market_predictor.edge_rebuild.prospective_broker_actions import (
+from market_predictor.intraday.datasets.prospective_broker_actions import (
     collect_prospective_broker_action_poll as _collect_prospective_poll,
 )
-from market_predictor.intraday.datasets.bar_dataset import (
-    _arrow_schema_record,
-    _transformation_identity,
-)
-from market_predictor.intraday.datasets.history import json_sha256
 from market_predictor.sources.alpaca import AlpacaAssetSnapshot, AlpacaNewsPage
+from market_predictor.universe.sp500.historical_security_namespace import (
+    verify_historical_security_namespace,
+)
 from market_predictor.universe.sp500.membership_authority import (
     _membership_sha256 as membership_sha256,
 )
 
 OBSERVED_AT = datetime(2026, 8, 15, 12, 0, tzinfo=UTC)
+
+
+def test_prospective_broker_action_evidence_has_one_canonical_owner() -> None:
+    owner = "market_predictor.intraday.datasets.prospective_broker_actions"
+
+    assert prospective.ProspectivePoll.__module__ == owner
+    assert prospective.ProspectiveGeneration.__module__ == owner
+    assert prospective.collect_prospective_broker_action_poll.__module__ == owner
+    assert prospective.load_prospective_broker_action_poll.__module__ == owner
+    assert prospective.publish_prospective_broker_action_generation.__module__ == owner
+    assert prospective.load_prospective_broker_action_generation.__module__ == owner
+
+
+def test_historical_namespace_replay_does_not_authorize_stale_training_rows(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    membership = _membership_authority(tmp_path)
+    dataset = _a43_dataset(membership)
+    poll = tmp_path / "poll"
+    collect_prospective_broker_action_poll(
+        membership_authority_directory=membership,
+        intraday_bar_dataset_directory=dataset,
+        output_directory=poll,
+        fetch_assets=_assets,
+        fetch_page=lambda *_: _page(None, None, ()),
+        observed_at_utc=OBSERVED_AT,
+        clock=_Clock(),
+    )
+    original = _transformation_identity()
+    monkeypatch.setattr(
+        bar_dataset,
+        "_transformation_identity",
+        lambda: {**original, "sha256": "f" * 64},
+    )
+
+    with pytest.raises(DataReadinessError, match="matching complete authority"):
+        bar_dataset.load_complete_intraday_bar_dataset(dataset)
+    assert load_prospective_broker_action_poll(poll).directory == poll.resolve()
+
+
+def test_historical_namespace_requires_exact_metadata_schema(tmp_path: Path) -> None:
+    membership = _membership_authority(tmp_path)
+    dataset = _a43_dataset(membership)
+    poll = tmp_path / "poll"
+    collect_prospective_broker_action_poll(
+        membership_authority_directory=membership,
+        intraday_bar_dataset_directory=dataset,
+        output_directory=poll,
+        fetch_assets=_assets,
+        fetch_page=lambda *_: _page(None, None, ()),
+        observed_at_utc=OBSERVED_AT,
+        clock=_Clock(),
+    )
+    request = _json_object(poll / "_request.json")
+    authority_path = dataset / "_authority.json"
+    authority = _json_object(authority_path)
+    _write_json(authority_path, {**authority, "unexpected": True})
+
+    with pytest.raises(DataReadinessError, match="authority schema differs"):
+        _verify_historical_namespace(
+            request,
+            membership=membership,
+            dataset=dataset,
+            authority_sha256=file_sha256(authority_path),
+        )
+
+
+def test_historical_namespace_rejects_namespace_substitution(tmp_path: Path) -> None:
+    membership = _membership_authority(tmp_path)
+    dataset = _a43_dataset(membership)
+    poll = tmp_path / "poll"
+    collect_prospective_broker_action_poll(
+        membership_authority_directory=membership,
+        intraday_bar_dataset_directory=dataset,
+        output_directory=poll,
+        fetch_assets=_assets,
+        fetch_page=lambda *_: _page(None, None, ()),
+        observed_at_utc=OBSERVED_AT,
+        clock=_Clock(),
+    )
+    request = _json_object(poll / "_request.json")
+
+    with pytest.raises(DataReadinessError, match="namespace changed"):
+        _verify_historical_namespace(
+            request,
+            membership=membership,
+            dataset=dataset,
+            namespace_sha256="f" * 64,
+        )
+
+
+def test_historical_namespace_rejects_numeric_overflow(tmp_path: Path) -> None:
+    membership = _membership_authority(tmp_path)
+    dataset = _a43_dataset(membership)
+    request_path = dataset / "_request.json"
+    request_text = request_path.read_text(encoding="utf-8")
+    request_path.write_text(
+        request_text.replace(
+            '"memory_hard_budget_gib": 4.0',
+            '"memory_hard_budget_gib": 1e10000',
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(DataReadinessError, match="not strict"):
+        verify_historical_security_namespace(
+            dataset,
+            current_membership_directory=membership,
+            expected_intraday_bar_authority_sha256="a" * 64,
+            expected_intraday_bar_manifest_sha256="b" * 64,
+            expected_intraday_bar_request_sha256="c" * 64,
+            expected_intraday_bar_parent_lineage_sha256="d" * 64,
+            expected_security_identity_namespace_sha256="e" * 64,
+            expected_current_membership_authority_sha256="f" * 64,
+            expected_current_membership_manifest_sha256="0" * 64,
+            expected_current_membership_table_sha256="1" * 64,
+            expected_current_membership_universe_sha256="2" * 64,
+            expected_current_membership_cutoff_date="2026-08-15",
+        )
+
+
+def test_historical_namespace_rejects_boolean_counts(tmp_path: Path) -> None:
+    membership = _membership_authority(tmp_path)
+    dataset = _a43_dataset(membership)
+    poll = tmp_path / "poll"
+    collect_prospective_broker_action_poll(
+        membership_authority_directory=membership,
+        intraday_bar_dataset_directory=dataset,
+        output_directory=poll,
+        fetch_assets=_assets,
+        fetch_page=lambda *_: _page(None, None, ()),
+        observed_at_utc=OBSERVED_AT,
+        clock=_Clock(),
+    )
+    request = _json_object(poll / "_request.json")
+    manifest_path = dataset / "_manifest.json"
+    manifest = _json_object(manifest_path)
+    summary = dict(manifest["summary"])
+    summary["completed_sessions"] = True
+    _write_json(manifest_path, {**manifest, "summary": summary})
+    authority_path = dataset / "_authority.json"
+    authority = _json_object(authority_path)
+    authority["artifact_sha256"] = file_sha256(manifest_path)
+    _write_json(authority_path, authority)
+
+    with pytest.raises(DataReadinessError, match="completed session count"):
+        _verify_historical_namespace(
+            request,
+            membership=membership,
+            dataset=dataset,
+            authority_sha256=file_sha256(authority_path),
+            manifest_sha256=file_sha256(manifest_path),
+        )
 
 
 def _observed_membership_parent(
@@ -187,6 +347,52 @@ def collect_prospective_broker_action_poll(**kwargs: Any) -> dict[str, object]:
     kwargs["fetch_assets"] = bound_assets
     kwargs["fetch_page"] = bound_page
     return _collect_prospective_poll(**kwargs)
+
+
+def _verify_historical_namespace(
+    request: dict[str, Any],
+    *,
+    membership: Path,
+    dataset: Path,
+    authority_sha256: str | None = None,
+    manifest_sha256: str | None = None,
+    namespace_sha256: str | None = None,
+) -> object:
+    return verify_historical_security_namespace(
+        dataset,
+        current_membership_directory=membership,
+        expected_intraday_bar_authority_sha256=(
+            authority_sha256 or str(request["intraday_bar_authority_sha256"])
+        ),
+        expected_intraday_bar_manifest_sha256=(
+            manifest_sha256 or str(request["intraday_bar_manifest_sha256"])
+        ),
+        expected_intraday_bar_request_sha256=str(
+            request["intraday_bar_request_sha256"]
+        ),
+        expected_intraday_bar_parent_lineage_sha256=str(
+            request["intraday_bar_parent_lineage_sha256"]
+        ),
+        expected_security_identity_namespace_sha256=(
+            namespace_sha256
+            or str(request["security_identity_namespace_sha256"])
+        ),
+        expected_current_membership_authority_sha256=str(
+            request["membership_authority_sha256"]
+        ),
+        expected_current_membership_manifest_sha256=str(
+            request["membership_manifest_sha256"]
+        ),
+        expected_current_membership_table_sha256=str(
+            request["membership_table_sha256"]
+        ),
+        expected_current_membership_universe_sha256=str(
+            request["membership_universe_sha256"]
+        ),
+        expected_current_membership_cutoff_date=str(
+            request["membership_cutoff_date"]
+        ),
+    )
 
 
 def test_first_seen_is_observed_response_time_not_provider_publication(
@@ -576,6 +782,102 @@ def test_generation_keeps_earliest_first_seen_and_all_content_revisions(
     assert bool(revisions["provider_timestamp_anomaly"].all())
     assert not bool(manifest["training_eligible"])
     assert not bool(manifest["serving_eligible"])
+
+
+def test_generation_failure_leaves_no_visible_or_staging_output(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    membership = _membership_authority(tmp_path)
+    poll = tmp_path / "poll"
+    collect_prospective_broker_action_poll(
+        membership_authority_directory=membership,
+        output_directory=poll,
+        fetch_assets=_assets,
+        fetch_page=lambda *_: _page(None, None, (_news(),)),
+        observed_at_utc=OBSERVED_AT,
+        clock=_Clock(),
+    )
+    output = tmp_path / "generation"
+
+    def fail_write(*args: Any, **kwargs: Any) -> dict[str, object]:
+        del args, kwargs
+        raise RuntimeError("injected generation write failure")
+
+    monkeypatch.setattr(prospective, "write_canonical_artifact", fail_write)
+    with pytest.raises(RuntimeError, match="injected generation write failure"):
+        publish_prospective_broker_action_generation(
+            poll_directories=[poll],
+            output_directory=output,
+        )
+
+    assert not output.exists()
+    assert not output.with_name(f".{output.name}.staging").exists()
+
+
+def test_generation_refuses_unowned_stale_staging_directory(tmp_path: Path) -> None:
+    membership = _membership_authority(tmp_path)
+    poll = tmp_path / "poll"
+    collect_prospective_broker_action_poll(
+        membership_authority_directory=membership,
+        output_directory=poll,
+        fetch_assets=_assets,
+        fetch_page=lambda *_: _page(None, None, (_news(),)),
+        observed_at_utc=OBSERVED_AT,
+        clock=_Clock(),
+    )
+    output = tmp_path / "generation"
+    staging = output.with_name(f".{output.name}.staging")
+    staging.mkdir()
+    retained = staging / "unowned.txt"
+    retained.write_text("unowned", encoding="utf-8")
+
+    with pytest.raises(DataReadinessError, match="not owned"):
+        publish_prospective_broker_action_generation(
+            poll_directories=[poll],
+            output_directory=output,
+        )
+    assert retained.read_text(encoding="utf-8") == "unowned"
+
+
+def test_generation_recovers_owned_stale_staging_directory(tmp_path: Path) -> None:
+    membership = _membership_authority(tmp_path)
+    poll = tmp_path / "poll"
+    collect_prospective_broker_action_poll(
+        membership_authority_directory=membership,
+        output_directory=poll,
+        fetch_assets=_assets,
+        fetch_page=lambda *_: _page(None, None, (_news(),)),
+        observed_at_utc=OBSERVED_AT,
+        clock=_Clock(),
+    )
+    output = tmp_path / "generation"
+    staging = output.with_name(f".{output.name}.staging")
+    staging.mkdir()
+    (staging / "partial.txt").write_text("partial", encoding="utf-8")
+    _write_json(
+        output.with_name(f".{output.name}.staging.owner.json"),
+        {
+            "schema": prospective.GENERATION_STAGING_OWNER_SCHEMA,
+            "staging_directory": str(staging),
+            "output_directory": str(output),
+        },
+    )
+
+    publish_prospective_broker_action_generation(
+        poll_directories=[poll],
+        output_directory=output,
+    )
+
+    assert output.is_dir()
+    assert not staging.exists()
+    for artifact in (
+        "event_revisions.parquet",
+        "source_collections.parquet",
+        "identity_observations.parquet",
+    ):
+        sidecar = _json_object(output / f"{artifact}.manifest.json")
+        assert sidecar["artifact_path"] == str(output / artifact)
 
 
 def test_generation_replay_rejects_parent_poll_tamper(tmp_path: Path) -> None:
@@ -973,6 +1275,612 @@ def test_registry_rejects_duplicate_scheduled_cutoffs_before_fetch(
         )
 
 
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"observed_at_utc": OBSERVED_AT + timedelta(minutes=1)},
+        {"previous_poll_directory": Path("different-previous-poll")},
+        {"lookback_hours": 26},
+        {"batch_size": 25},
+        {"maximum_continuous_gap_seconds": 180},
+    ],
+)
+def test_completed_poll_rejects_a_different_effective_invocation(
+    tmp_path: Path,
+    overrides: dict[str, object],
+) -> None:
+    membership = _membership_authority(tmp_path)
+    output = tmp_path / "poll"
+    collect_prospective_broker_action_poll(
+        membership_authority_directory=membership,
+        output_directory=output,
+        fetch_assets=_assets,
+        fetch_page=lambda *_: _page(None, None, ()),
+        observed_at_utc=OBSERVED_AT,
+        clock=_Clock(),
+    )
+
+    invocation: dict[str, object] = {
+        "membership_authority_directory": membership,
+        "output_directory": output,
+        "fetch_assets": lambda: pytest.fail("completed mismatch must not fetch"),
+        "fetch_page": lambda *_: pytest.fail("completed mismatch must not fetch"),
+        "observed_at_utc": OBSERVED_AT,
+        "clock": _Clock(),
+    }
+    invocation.update(overrides)
+    with pytest.raises(DataReadinessError, match="invocation differs"):
+        collect_prospective_broker_action_poll(**invocation)
+
+
+def test_incomplete_poll_rejects_a_changed_cutoff_before_fetch(
+    tmp_path: Path,
+) -> None:
+    membership = _membership_authority(tmp_path)
+    output = tmp_path / "poll"
+    incomplete = collect_prospective_broker_action_poll(
+        membership_authority_directory=membership,
+        output_directory=output,
+        fetch_assets=_assets,
+        fetch_page=lambda *_: (_ for _ in ()).throw(RuntimeError("stop")),
+        observed_at_utc=OBSERVED_AT,
+        clock=_Clock(),
+    )
+    assert incomplete["status"] == "incomplete"
+
+    with pytest.raises(DataReadinessError, match="cutoff differs"):
+        collect_prospective_broker_action_poll(
+            membership_authority_directory=membership,
+            output_directory=output,
+            fetch_assets=lambda: pytest.fail("cutoff mismatch must not fetch"),
+            fetch_page=lambda *_: pytest.fail("cutoff mismatch must not fetch"),
+            observed_at_utc=OBSERVED_AT + timedelta(minutes=1),
+            clock=_Clock(),
+        )
+
+
+def test_invalid_completed_poll_cannot_create_registry_commit(
+    tmp_path: Path,
+) -> None:
+    membership = _membership_authority(tmp_path)
+    registry = tmp_path / "registry"
+    output = tmp_path / "poll"
+    collect_prospective_broker_action_poll(
+        membership_authority_directory=membership,
+        registry_directory=registry,
+        output_directory=output,
+        fetch_assets=_assets,
+        fetch_page=lambda *_: _page(None, None, ()),
+        observed_at_utc=OBSERVED_AT,
+        clock=_Clock(),
+    )
+    commit = next((registry / "commits").rglob("*.json"))
+    commit.unlink()
+    manifest_path = output / "_manifest.json"
+    manifest = _json_object(manifest_path)
+    _write_json(manifest_path, {**manifest, "status": "incomplete"})
+
+    with pytest.raises(DataReadinessError, match="manifest or authority"):
+        collect_prospective_broker_action_poll(
+            membership_authority_directory=membership,
+            registry_directory=registry,
+            output_directory=output,
+            fetch_assets=lambda: pytest.fail("invalid completed poll must not fetch"),
+            fetch_page=lambda *_: pytest.fail(
+                "invalid completed poll must not fetch"
+            ),
+            observed_at_utc=OBSERVED_AT,
+            clock=_Clock(),
+        )
+    assert not commit.exists()
+
+
+def test_collection_rejects_boolean_runtime_integer_before_fetch(
+    tmp_path: Path,
+) -> None:
+    membership = _membership_authority(tmp_path)
+
+    with pytest.raises(ValueError, match="batch_size must be an integer"):
+        collect_prospective_broker_action_poll(
+            membership_authority_directory=membership,
+            output_directory=tmp_path / "poll",
+            fetch_assets=lambda: pytest.fail("argument validation must precede fetch"),
+            fetch_page=lambda *_: pytest.fail("argument validation must precede fetch"),
+            observed_at_utc=OBSERVED_AT,
+            batch_size=True,
+            clock=_Clock(),
+        )
+
+
+def test_strict_replay_rejects_duplicate_json_keys(tmp_path: Path) -> None:
+    membership = _membership_authority(tmp_path)
+    output = tmp_path / "poll"
+    collect_prospective_broker_action_poll(
+        membership_authority_directory=membership,
+        output_directory=output,
+        fetch_assets=_assets,
+        fetch_page=lambda *_: _page(None, None, ()),
+        observed_at_utc=OBSERVED_AT,
+        clock=_Clock(),
+    )
+    request_path = output / "_request.json"
+    request_path.write_text(
+        request_path.read_text(encoding="utf-8").replace(
+            '"batch_size": 50,',
+            '"batch_size": 1,\n  "batch_size": 50,',
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(DataReadinessError, match="unreadable"):
+        load_prospective_broker_action_poll(output)
+
+
+def test_poll_request_rejects_boolean_numeric_field(tmp_path: Path) -> None:
+    membership = _membership_authority(tmp_path)
+    output = tmp_path / "poll"
+    collect_prospective_broker_action_poll(
+        membership_authority_directory=membership,
+        output_directory=output,
+        fetch_assets=_assets,
+        fetch_page=lambda *_: _page(None, None, ()),
+        observed_at_utc=OBSERVED_AT,
+        clock=_Clock(),
+    )
+    request_path = output / "_request.json"
+    request = _json_object(request_path)
+    request["batch_size"] = True
+    payload = {key: value for key, value in request.items() if key != "request_sha256"}
+    request["request_sha256"] = json_sha256(payload)
+    _write_json(request_path, request)
+
+    with pytest.raises(DataReadinessError, match="batch_size is missing or invalid"):
+        load_prospective_broker_action_poll(output)
+
+
+def test_poll_manifest_rejects_boolean_derived_count(tmp_path: Path) -> None:
+    membership = _membership_authority(tmp_path)
+    output = tmp_path / "poll"
+    collect_prospective_broker_action_poll(
+        membership_authority_directory=membership,
+        output_directory=output,
+        fetch_assets=_assets,
+        fetch_page=lambda *_: _page(None, None, ()),
+        observed_at_utc=OBSERVED_AT,
+        clock=_Clock(),
+    )
+    manifest_path = output / "_manifest.json"
+    manifest = _json_object(manifest_path)
+    manifest["security_count"] = True
+    _write_json(manifest_path, manifest)
+    _write_json(output / "_status.json", manifest)
+    authority_path = output / "_authority.json"
+    authority = _json_object(authority_path)
+    authority["artifact_sha256"] = file_sha256(manifest_path)
+    _write_json(authority_path, authority)
+    commit_path = next((tmp_path / "poll-registry" / "commits").rglob("*.json"))
+    commit = _json_object(commit_path)
+    commit["poll_manifest_sha256"] = file_sha256(manifest_path)
+    commit["poll_authority_sha256"] = file_sha256(authority_path)
+    commit_payload = {
+        key: value for key, value in commit.items() if key != "record_sha256"
+    }
+    commit["record_sha256"] = json_sha256(commit_payload)
+    _write_json(commit_path, commit)
+
+    with pytest.raises(DataReadinessError, match="security_count is missing or invalid"):
+        load_prospective_broker_action_poll(output)
+
+
+def test_poll_manifest_rejects_cutoff_divergence_from_request(tmp_path: Path) -> None:
+    membership = _membership_authority(tmp_path)
+    output = tmp_path / "poll"
+    collect_prospective_broker_action_poll(
+        membership_authority_directory=membership,
+        output_directory=output,
+        fetch_assets=_assets,
+        fetch_page=lambda *_: _page(None, None, ()),
+        observed_at_utc=OBSERVED_AT,
+        clock=_Clock(),
+    )
+    manifest_path = output / "_manifest.json"
+    manifest = _json_object(manifest_path)
+    manifest["observed_at_utc"] = "2099-01-01T00:00:00+00:00"
+    _write_json(manifest_path, manifest)
+    _write_json(output / "_status.json", manifest)
+    authority_path = output / "_authority.json"
+    authority = _json_object(authority_path)
+    authority["observed_at_utc"] = manifest["observed_at_utc"]
+    authority["artifact_sha256"] = file_sha256(manifest_path)
+    _write_json(authority_path, authority)
+    commit_path = next((tmp_path / "poll-registry" / "commits").rglob("*.json"))
+    commit = _json_object(commit_path)
+    commit["poll_manifest_sha256"] = file_sha256(manifest_path)
+    commit["poll_authority_sha256"] = file_sha256(authority_path)
+    commit_payload = {
+        key: value for key, value in commit.items() if key != "record_sha256"
+    }
+    commit["record_sha256"] = json_sha256(commit_payload)
+    _write_json(commit_path, commit)
+
+    with pytest.raises(DataReadinessError, match="manifest causal lineage changed"):
+        load_prospective_broker_action_poll(output)
+
+
+def test_generation_manifest_rejects_boolean_count(tmp_path: Path) -> None:
+    membership = _membership_authority(tmp_path)
+    poll = tmp_path / "poll"
+    collect_prospective_broker_action_poll(
+        membership_authority_directory=membership,
+        output_directory=poll,
+        fetch_assets=_assets,
+        fetch_page=lambda *_: _page(None, None, ()),
+        observed_at_utc=OBSERVED_AT,
+        clock=_Clock(),
+    )
+    generation = tmp_path / "generation"
+    publish_prospective_broker_action_generation(
+        poll_directories=[poll],
+        output_directory=generation,
+    )
+    manifest_path = generation / "_manifest.json"
+    manifest = _json_object(manifest_path)
+    manifest["poll_count"] = True
+    _write_json(manifest_path, manifest)
+    authority_path = generation / "_authority.json"
+    authority = _json_object(authority_path)
+    authority["artifact_sha256"] = file_sha256(manifest_path)
+    _write_json(authority_path, authority)
+
+    with pytest.raises(DataReadinessError, match="poll_count is missing or invalid"):
+        load_prospective_broker_action_generation(generation)
+
+
+def test_generation_manifest_rejects_incorrect_poll_boundary(tmp_path: Path) -> None:
+    membership = _membership_authority(tmp_path)
+    poll = tmp_path / "poll"
+    collect_prospective_broker_action_poll(
+        membership_authority_directory=membership,
+        output_directory=poll,
+        fetch_assets=_assets,
+        fetch_page=lambda *_: _page(None, None, ()),
+        observed_at_utc=OBSERVED_AT,
+        clock=_Clock(),
+    )
+    generation = tmp_path / "generation"
+    publish_prospective_broker_action_generation(
+        poll_directories=[poll],
+        output_directory=generation,
+    )
+    manifest_path = generation / "_manifest.json"
+    manifest = _json_object(manifest_path)
+    manifest["first_poll_at_utc"] = "2026-01-01T00:00:00+00:00"
+    _write_json(manifest_path, manifest)
+    authority_path = generation / "_authority.json"
+    authority = _json_object(authority_path)
+    authority["artifact_sha256"] = file_sha256(manifest_path)
+    _write_json(authority_path, authority)
+
+    with pytest.raises(DataReadinessError, match="counts do not verify"):
+        load_prospective_broker_action_generation(generation)
+
+
+def test_generation_request_rejects_poll_cutoff_divergence(tmp_path: Path) -> None:
+    membership = _membership_authority(tmp_path)
+    poll = tmp_path / "poll"
+    collect_prospective_broker_action_poll(
+        membership_authority_directory=membership,
+        output_directory=poll,
+        fetch_assets=_assets,
+        fetch_page=lambda *_: _page(None, None, ()),
+        observed_at_utc=OBSERVED_AT,
+        clock=_Clock(),
+    )
+    generation = tmp_path / "generation"
+    publish_prospective_broker_action_generation(
+        poll_directories=[poll],
+        output_directory=generation,
+    )
+    request_path = generation / "_request.json"
+    request = _json_object(request_path)
+    request["polls"][0]["observed_at_utc"] = "2099-01-01T00:00:00+00:00"
+    request["poll_inventory_sha256"] = json_sha256(request["polls"])
+    request_payload = {
+        key: value for key, value in request.items() if key != "request_sha256"
+    }
+    request["request_sha256"] = json_sha256(request_payload)
+    _write_json(request_path, request)
+
+    with pytest.raises(DataReadinessError, match="poll lineage changed"):
+        load_prospective_broker_action_generation(generation)
+
+
+def test_generation_rejects_production_ready_child_sidecar(tmp_path: Path) -> None:
+    membership = _membership_authority(tmp_path)
+    poll = tmp_path / "poll"
+    collect_prospective_broker_action_poll(
+        membership_authority_directory=membership,
+        output_directory=poll,
+        fetch_assets=_assets,
+        fetch_page=lambda *_: _page(None, None, ()),
+        observed_at_utc=OBSERVED_AT,
+        clock=_Clock(),
+    )
+    generation = tmp_path / "generation"
+    publish_prospective_broker_action_generation(
+        poll_directories=[poll],
+        output_directory=generation,
+    )
+    sidecar_path = generation / "event_revisions.parquet.manifest.json"
+    sidecar = _json_object(sidecar_path)
+    sidecar["production_ready"] = True
+    _write_json(sidecar_path, sidecar)
+    manifest_path = generation / "_manifest.json"
+    manifest = _json_object(manifest_path)
+    manifest["artifact_manifest_hashes"]["event_revisions"] = file_sha256(
+        sidecar_path
+    )
+    _write_json(manifest_path, manifest)
+    authority_path = generation / "_authority.json"
+    authority = _json_object(authority_path)
+    authority["artifact_sha256"] = file_sha256(manifest_path)
+    _write_json(authority_path, authority)
+
+    with pytest.raises(DataReadinessError, match="lineage changed"):
+        load_prospective_broker_action_generation(generation)
+
+
+def test_poll_and_generation_replay_reject_top_level_symlinks(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    membership = _membership_authority(tmp_path)
+    poll = tmp_path / "poll"
+    collect_prospective_broker_action_poll(
+        membership_authority_directory=membership,
+        output_directory=poll,
+        fetch_assets=_assets,
+        fetch_page=lambda *_: _page(None, None, ()),
+        observed_at_utc=OBSERVED_AT,
+        clock=_Clock(),
+    )
+    generation = tmp_path / "generation"
+    publish_prospective_broker_action_generation(
+        poll_directories=[poll],
+        output_directory=generation,
+    )
+    original = Path.is_symlink
+    reported: set[Path] = set()
+
+    def report_selected(path: Path) -> bool:
+        return path in reported or original(path)
+
+    monkeypatch.setattr(Path, "is_symlink", report_selected)
+    reported.add(poll / "_manifest.json")
+    with pytest.raises(DataReadinessError, match="symlink or reparse point"):
+        load_prospective_broker_action_poll(poll)
+
+    reported.clear()
+    reported.add(generation / "_manifest.json")
+    with pytest.raises(DataReadinessError, match="symlink or reparse point"):
+        load_prospective_broker_action_generation(generation)
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Windows junction regression")
+def test_poll_replay_rejects_nested_windows_junction(tmp_path: Path) -> None:
+    membership = _membership_authority(tmp_path)
+    poll = tmp_path / "poll"
+    collect_prospective_broker_action_poll(
+        membership_authority_directory=membership,
+        output_directory=poll,
+        fetch_assets=_assets,
+        fetch_page=lambda *_: _page(None, None, ()),
+        observed_at_utc=OBSERVED_AT,
+        clock=_Clock(),
+    )
+    batch = poll / "raw_pages" / "batch-0000"
+    external = tmp_path / "external-batch"
+    batch.rename(external)
+    created = subprocess.run(
+        ["cmd", "/c", "mklink", "/J", str(batch), str(external)],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if created.returncode != 0:
+        pytest.skip(f"junction creation unavailable: {created.stderr.strip()}")
+
+    with pytest.raises(DataReadinessError, match="reparse point"):
+        load_prospective_broker_action_poll(poll)
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Windows junction regression")
+@pytest.mark.parametrize("registry_child", ["claims", "commits"])
+def test_collection_rejects_registry_child_windows_junction(
+    tmp_path: Path,
+    registry_child: str,
+) -> None:
+    membership = _membership_authority(tmp_path)
+    registry = tmp_path / "registry"
+    registry.mkdir()
+    external = tmp_path / f"external-{registry_child}"
+    external.mkdir()
+    created = subprocess.run(
+        ["cmd", "/c", "mklink", "/J", str(registry / registry_child), str(external)],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if created.returncode != 0:
+        pytest.skip(f"junction creation unavailable: {created.stderr.strip()}")
+
+    with pytest.raises(DataReadinessError, match="reparse point"):
+        collect_prospective_broker_action_poll(
+            membership_authority_directory=membership,
+            registry_directory=registry,
+            output_directory=tmp_path / "poll",
+            fetch_assets=lambda: pytest.fail("registry validation must precede fetch"),
+            fetch_page=lambda *_: pytest.fail("registry validation must precede fetch"),
+            observed_at_utc=OBSERVED_AT,
+            clock=_Clock(),
+        )
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Windows junction regression")
+def test_collection_rejects_incomplete_output_windows_junction(
+    tmp_path: Path,
+) -> None:
+    membership = _membership_authority(tmp_path)
+    output = tmp_path / "poll"
+    output.mkdir()
+    external = tmp_path / "external-raw-pages"
+    external.mkdir()
+    created = subprocess.run(
+        ["cmd", "/c", "mklink", "/J", str(output / "raw_pages"), str(external)],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if created.returncode != 0:
+        pytest.skip(f"junction creation unavailable: {created.stderr.strip()}")
+
+    with pytest.raises(DataReadinessError, match="reparse point"):
+        collect_prospective_broker_action_poll(
+            membership_authority_directory=membership,
+            output_directory=output,
+            fetch_assets=lambda: pytest.fail("output validation must precede fetch"),
+            fetch_page=lambda *_: pytest.fail("output validation must precede fetch"),
+            observed_at_utc=OBSERVED_AT,
+            clock=_Clock(),
+        )
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Windows junction regression")
+def test_generation_replay_rejects_root_windows_junction(tmp_path: Path) -> None:
+    membership = _membership_authority(tmp_path)
+    poll = tmp_path / "poll"
+    collect_prospective_broker_action_poll(
+        membership_authority_directory=membership,
+        output_directory=poll,
+        fetch_assets=_assets,
+        fetch_page=lambda *_: _page(None, None, ()),
+        observed_at_utc=OBSERVED_AT,
+        clock=_Clock(),
+    )
+    generation = tmp_path / "generation"
+    publish_prospective_broker_action_generation(
+        poll_directories=[poll],
+        output_directory=generation,
+    )
+    external = tmp_path / "external-generation"
+    generation.rename(external)
+    created = subprocess.run(
+        ["cmd", "/c", "mklink", "/J", str(generation), str(external)],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if created.returncode != 0:
+        pytest.skip(f"junction creation unavailable: {created.stderr.strip()}")
+
+    with pytest.raises(DataReadinessError, match="reparse point"):
+        load_prospective_broker_action_generation(generation)
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Windows junction regression")
+def test_generation_publication_rejects_output_windows_junction(
+    tmp_path: Path,
+) -> None:
+    membership = _membership_authority(tmp_path)
+    poll = tmp_path / "poll"
+    collect_prospective_broker_action_poll(
+        membership_authority_directory=membership,
+        output_directory=poll,
+        fetch_assets=_assets,
+        fetch_page=lambda *_: _page(None, None, ()),
+        observed_at_utc=OBSERVED_AT,
+        clock=_Clock(),
+    )
+    external = tmp_path / "external-generation-output"
+    external.mkdir()
+    output = tmp_path / "generation"
+    created = subprocess.run(
+        ["cmd", "/c", "mklink", "/J", str(output), str(external)],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if created.returncode != 0:
+        pytest.skip(f"junction creation unavailable: {created.stderr.strip()}")
+
+    with pytest.raises(DataReadinessError, match="reparse point"):
+        publish_prospective_broker_action_generation(
+            poll_directories=[poll],
+            output_directory=output,
+        )
+    assert not any(external.iterdir())
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Windows junction regression")
+def test_poll_replay_rejects_ancestor_windows_junction(tmp_path: Path) -> None:
+    real_parent = tmp_path / "real-parent"
+    real_parent.mkdir()
+    membership = _membership_authority(real_parent)
+    poll = real_parent / "poll"
+    collect_prospective_broker_action_poll(
+        membership_authority_directory=membership,
+        output_directory=poll,
+        fetch_assets=_assets,
+        fetch_page=lambda *_: _page(None, None, ()),
+        observed_at_utc=OBSERVED_AT,
+        clock=_Clock(),
+    )
+    linked_parent = tmp_path / "linked-parent"
+    created = subprocess.run(
+        ["cmd", "/c", "mklink", "/J", str(linked_parent), str(real_parent)],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if created.returncode != 0:
+        pytest.skip(f"junction creation unavailable: {created.stderr.strip()}")
+
+    with pytest.raises(DataReadinessError, match="reparse point"):
+        load_prospective_broker_action_poll(linked_parent / "poll")
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Windows junction regression")
+def test_generation_replay_rejects_poll_windows_junction(tmp_path: Path) -> None:
+    membership = _membership_authority(tmp_path)
+    poll = tmp_path / "poll"
+    collect_prospective_broker_action_poll(
+        membership_authority_directory=membership,
+        output_directory=poll,
+        fetch_assets=_assets,
+        fetch_page=lambda *_: _page(None, None, ()),
+        observed_at_utc=OBSERVED_AT,
+        clock=_Clock(),
+    )
+    generation = tmp_path / "generation"
+    publish_prospective_broker_action_generation(
+        poll_directories=[poll],
+        output_directory=generation,
+    )
+    external = tmp_path / "external-poll"
+    poll.rename(external)
+    created = subprocess.run(
+        ["cmd", "/c", "mklink", "/J", str(poll), str(external)],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if created.returncode != 0:
+        pytest.skip(f"junction creation unavailable: {created.stderr.strip()}")
+
+    with pytest.raises(DataReadinessError, match="reparse point"):
+        load_prospective_broker_action_generation(generation)
+
+
 def test_previous_poll_must_precede_child_cutoff(tmp_path: Path) -> None:
     membership = _membership_authority(tmp_path)
     first = tmp_path / "first"
@@ -1154,11 +2062,21 @@ def _a43_dataset(membership: Path) -> Path:
     if root.exists():
         return root
     root.mkdir()
-    membership_request = _json_object(membership / "_request.json")
     membership_manifest = _json_object(membership / "_manifest.json")
     membership_record = membership_manifest["membership_artifact"]
     assert isinstance(membership_record, dict)
     parent_lineage = {
+        "benchmark_collection_authority_sha256": "a" * 64,
+        "benchmark_collection_manifest_sha256": "b" * 64,
+        "five_minute_canonical_authority_sha256": "c" * 64,
+        "five_minute_canonical_file_inventory_sha256": "d" * 64,
+        "five_minute_canonical_manifest_sha256": "e" * 64,
+        "five_minute_projection_authority_sha256": "f" * 64,
+        "five_minute_projection_inventory_sha256": "0" * 64,
+        "five_minute_projection_manifest_sha256": "1" * 64,
+        "intraday_contract_lineage_file_sha256": "2" * 64,
+        "intraday_data_contract_sha256": "3" * 64,
+        "intraday_parent_contract_sha256": "4" * 64,
         "membership_authority_sha256": file_sha256(
             membership / "_authority.json"
         ),
@@ -1166,15 +2084,42 @@ def _a43_dataset(membership: Path) -> Path:
             membership / "_manifest.json"
         ),
         "membership_table_sha256": membership_record["sha256"],
+        "selection_authority_sha256": "5" * 64,
+        "selection_manifest_sha256": "6" * 64,
+        "selection_table_sha256": "7" * 64,
+        "stock_collection_authority_sha256": "8" * 64,
+        "stock_collection_manifest_sha256": "9" * 64,
+        "stock_coverage_authority_sha256": "a" * 64,
+        "stock_coverage_manifest_sha256": "b" * 64,
+        "strategy_contract_file_sha256": "c" * 64,
+        "strategy_contract_sha256": "d" * 64,
     }
     transformation = _transformation_identity()
     request_payload = {
         "schema": "edge_rebuild.intraday_bar_dataset.v1",
+        "benchmark_collection_directory": str(membership.resolve()),
+        "decision_clock": "fixed_five_minute_cohort_after_activation",
+        "feature_schema_version": "edge_rebuild.intraday_bar_features.v1",
+        "five_minute_projection_directory": str(membership.resolve()),
+        "intraday_contract_lineage_file_sha256": parent_lineage[
+            "intraday_contract_lineage_file_sha256"
+        ],
+        "intraday_contract_lineage_path": str(membership.resolve()),
+        "label_schema_version": "edge_rebuild.intraday_bar_labels.v1",
+        "maximum_session_workers": 1,
         "membership_authority_directory": str(membership.resolve()),
+        "memory_hard_budget_gib": 4.0,
+        "ordered_feature_names": [],
+        "ordered_feature_sha256": json_sha256([]),
         "parent_lineage": parent_lineage,
         "parent_lineage_sha256": json_sha256(parent_lineage),
         "planned_sessions": ["2026-08-14"],
-        "membership_request_sha256": membership_request["request_sha256"],
+        "processing_unit": "session_date_et",
+        "selection_directory": str(membership.resolve()),
+        "stock_collection_directory": str(membership.resolve()),
+        "stock_coverage_directory": str(membership.resolve()),
+        "strategy_contract_path": str(membership.resolve()),
+        "strategy_contract_sha256": parent_lineage["strategy_contract_sha256"],
         "transformation": transformation,
         "transformation_sha256": transformation["sha256"],
     }
@@ -1218,17 +2163,21 @@ def _a43_dataset(membership: Path) -> Path:
     _write_json(unit_root / "_unit.json", unit)
     units = [unit]
     manifest = {
-        "schema": "edge_rebuild.intraday_bar_dataset.v1",
+        **{**request_payload, "request_sha256": request_sha256},
         "state": "complete",
-        "request_sha256": request_sha256,
-        "parent_lineage": parent_lineage,
-        "parent_lineage_sha256": json_sha256(parent_lineage),
+        "created_at_utc": OBSERVED_AT.isoformat(),
         "session_units": units,
         "session_unit_inventory_sha256": json_sha256(units),
         "summary": {
             "completed_sessions": 1,
             "rows": 0,
             "dataset_eligible_rows": 0,
+        },
+        "training_contract": {
+            "eligibility_column": "dataset_eligible",
+            "ordered_feature_names": [],
+            "ordered_feature_sha256": json_sha256([]),
+            "label_columns": [],
         },
     }
     _write_json(root / "_manifest.json", manifest)

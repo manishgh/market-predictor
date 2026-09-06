@@ -20,13 +20,13 @@ from market_predictor.edge_rebuild.prospective_analyst_revision_horizon import (
     load_prospective_analyst_revision_horizon,
     publish_prospective_analyst_revision_horizon,
 )
-from market_predictor.edge_rebuild.prospective_broker_actions import (
+from market_predictor.intraday.datasets.prospective_broker_actions import (
     publish_prospective_broker_action_generation,
 )
 from market_predictor.universe.sp500.membership_authority import (
     _membership_sha256 as membership_sha256,
 )
-from tests.test_edge_rebuild_prospective_broker_actions import (
+from tests.test_intraday_prospective_broker_actions import (
     OBSERVED_AT,
     _a43_dataset,
     _assets_with_id,

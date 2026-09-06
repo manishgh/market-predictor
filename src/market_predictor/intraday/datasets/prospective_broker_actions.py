@@ -8,7 +8,9 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import os
+import shutil
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -33,6 +35,7 @@ from market_predictor.canonical.store import (
     manifest_path_for,
     write_canonical_artifact,
 )
+from market_predictor.core import path_integrity
 from market_predictor.core.errors import DataReadinessError
 from market_predictor.core.symbols import canonical_symbol
 from market_predictor.intraday.datasets.bar_dataset import (
@@ -46,6 +49,9 @@ from market_predictor.resources import (
     memory_audit,
 )
 from market_predictor.sources.alpaca import AlpacaAssetSnapshot, AlpacaNewsPage
+from market_predictor.universe.sp500.historical_security_namespace import (
+    verify_historical_security_namespace,
+)
 from market_predictor.universe.sp500.membership_authority import (
     load_sp500_membership_authority_envelope,
     verify_membership_namespace_extension,
@@ -63,6 +69,9 @@ IDENTITY_AUDIT_SCHEMA: Final = "edge_rebuild.prospective_security_identity_audit
 GENERATION_REQUEST_SCHEMA: Final = "edge_rebuild.prospective_broker_action_generation_request.v1"
 GENERATION_MANIFEST_SCHEMA: Final = "edge_rebuild.prospective_broker_action_generation_manifest.v1"
 GENERATION_AUTHORITY_SCHEMA: Final = "edge_rebuild.prospective_broker_action_generation_authority.v1"
+GENERATION_STAGING_OWNER_SCHEMA: Final = (
+    "edge_rebuild.prospective_broker_action_generation_staging_owner.v1"
+)
 REVISION_SCHEMA: Final = "edge_rebuild.prospective_broker_action_revision.v1"
 SECURITY_NAMESPACE_SCHEMA: Final = "edge_rebuild.a43_security_identity_namespace.v1"
 ATTEMPT_SCHEMA: Final = "edge_rebuild.prospective_broker_action_attempt.v1"
@@ -70,6 +79,101 @@ MAX_PAGES_PER_BATCH: Final = 200
 MAX_BYTES_PER_BATCH: Final = 32 * 1024 * 1024
 MAX_BYTES_PER_POLL: Final = 64 * 1024 * 1024
 MAX_GENERATION_INPUT_BYTES: Final = 64 * 1024 * 1024
+_POLL_REQUEST_KEYS: Final = frozenset(
+    {
+        "schema",
+        "observed_at_utc",
+        "query_start_utc",
+        "query_end_utc",
+        "lookback_hours",
+        "batch_size",
+        "maximum_continuous_gap_seconds",
+        "source",
+        "availability_policy",
+        "membership_authority_directory",
+        "membership_authority_sha256",
+        "membership_manifest_sha256",
+        "membership_table_sha256",
+        "membership_universe_sha256",
+        "membership_cutoff_date",
+        "intraday_bar_dataset_directory",
+        "intraday_bar_authority_sha256",
+        "intraday_bar_manifest_sha256",
+        "intraday_bar_request_sha256",
+        "intraday_bar_parent_lineage_sha256",
+        "security_identity_namespace_sha256",
+        "registry_directory",
+        "previous_poll",
+        "request_sha256",
+    }
+)
+_GENERATION_REQUEST_KEYS: Final = frozenset(
+    {
+        "schema",
+        "polls",
+        "poll_inventory_sha256",
+        "availability_policy",
+        "revision_identity",
+        "identity_conflict_policy",
+        "request_sha256",
+    }
+)
+_POLL_MANIFEST_KEYS: Final = frozenset(
+    {
+        "schema",
+        "status",
+        "request_sha256",
+        "observed_at_utc",
+        "requested_batches",
+        "completed_batches",
+        "failed_batches",
+        "security_count",
+        "identity_eligible_security_count",
+        "event_observation_count",
+        "production_identity_event_count",
+        "artifacts",
+        "artifact_manifest_hashes",
+        "raw_assets_sha256",
+        "raw_assets_body_sha256",
+        "raw_pages_inventory_sha256",
+        "attempt_inventory_sha256",
+        "membership_authority_sha256",
+        "membership_manifest_sha256",
+        "membership_table_sha256",
+        "membership_cutoff_date",
+        "intraday_bar_authority_sha256",
+        "intraday_bar_manifest_sha256",
+        "intraday_bar_request_sha256",
+        "intraday_bar_parent_lineage_sha256",
+        "security_identity_namespace_sha256",
+        "registry_claim_sha256",
+        "availability_policy",
+        "production_ready",
+        "completed_at_utc",
+        "memory",
+    }
+)
+_GENERATION_MANIFEST_KEYS: Final = frozenset(
+    {
+        "schema",
+        "status",
+        "request_sha256",
+        "poll_inventory_sha256",
+        "first_poll_at_utc",
+        "last_poll_at_utc",
+        "poll_count",
+        "revision_count",
+        "provider_event_count",
+        "production_identity_revision_count",
+        "source_collection_count",
+        "artifacts",
+        "artifact_manifest_hashes",
+        "availability_policy",
+        "training_eligible",
+        "serving_eligible",
+        "memory",
+    }
+)
 ALPACA_ASSET_HOSTNAMES: Final = frozenset({"api.alpaca.markets", "paper-api.alpaca.markets"})
 NEW_YORK: Final = ZoneInfo("America/New_York")
 _ROOT_FILES: Final = frozenset(
@@ -194,13 +298,33 @@ def collect_prospective_broker_action_poll(
 ) -> dict[str, object]:
     """Collect one resumable, immutable prospective Alpaca news poll."""
 
-    output = output_directory.resolve()
+    output = _validated_poll_output_path(output_directory)
+    membership = path_integrity.verify_no_reparse_ancestry(
+        membership_authority_directory,
+        label="prospective membership authority",
+    ).resolve()
+    intraday_dataset = path_integrity.verify_no_reparse_ancestry(
+        intraday_bar_dataset_directory,
+        label="prospective intraday dataset",
+    ).resolve()
+    registry = path_integrity.verify_no_reparse_ancestry(
+        registry_directory,
+        label="prospective registry",
+    ).resolve()
+    previous = (
+        path_integrity.verify_no_reparse_ancestry(
+            previous_poll_directory,
+            label="prospective previous poll",
+        ).resolve()
+        if previous_poll_directory is not None
+        else None
+    )
     _validate_poll_paths(
         output=output,
-        membership=membership_authority_directory.resolve(),
-        intraday_dataset=intraday_bar_dataset_directory.resolve(),
-        registry=registry_directory.resolve(),
-        previous=(previous_poll_directory.resolve() if previous_poll_directory is not None else None),
+        membership=membership,
+        intraday_dataset=intraday_dataset,
+        registry=registry,
+        previous=previous,
     )
     try:
         with file_lock(output / "_collector", timeout=0.0):
@@ -243,17 +367,27 @@ def _collect_prospective_broker_action_poll(
 ) -> dict[str, object]:
     """Implementation executed under the poll-specific process lock."""
 
-    if not 24 <= lookback_hours <= 48:
-        raise ValueError("lookback_hours must be between 24 and 48")
-    if not 1 <= batch_size <= 50:
-        raise ValueError("batch_size must be between 1 and 50")
-    if not 60 <= maximum_continuous_gap_seconds <= 300:
-        raise ValueError("maximum_continuous_gap_seconds must be between 60 and 300")
+    _validate_runtime_int(
+        lookback_hours,
+        "lookback_hours",
+        minimum=24,
+        maximum=48,
+    )
+    _validate_runtime_int(batch_size, "batch_size", minimum=1, maximum=50)
+    _validate_runtime_int(
+        maximum_continuous_gap_seconds,
+        "maximum_continuous_gap_seconds",
+        minimum=60,
+        maximum=300,
+    )
     now = clock or (lambda: datetime.now(UTC))
-    output = output_directory.resolve()
+    output = _validated_poll_output_path(output_directory)
     membership_root = membership_authority_directory.resolve()
     intraday_dataset_root = intraday_bar_dataset_directory.resolve()
-    registry_root = registry_directory.resolve()
+    registry_root = path_integrity.verify_no_reparse_ancestry(
+        registry_directory,
+        label="prospective registry",
+    ).resolve()
     output.mkdir(parents=True, exist_ok=True)
     registry_root.mkdir(parents=True, exist_ok=True)
     if (output / "_authority.json").exists():
@@ -262,6 +396,11 @@ def _collect_prospective_broker_action_poll(
             registry_root=registry_root,
             membership_root=membership_root,
             intraday_dataset_root=intraday_dataset_root,
+            observed_at_utc=observed_at_utc,
+            previous_poll_directory=previous_poll_directory,
+            lookback_hours=lookback_hours,
+            batch_size=batch_size,
+            maximum_continuous_gap_seconds=maximum_continuous_gap_seconds,
         )
 
     membership, parent = _load_membership_authority(membership_root)
@@ -274,6 +413,15 @@ def _collect_prospective_broker_action_poll(
     existing_request = _json_object(request_path) if request_path.exists() else None
     if existing_request is not None:
         observed = _required_utc(existing_request, "observed_at_utc")
+        if observed_at_utc is not None:
+            requested_observed = _utc(observed_at_utc).replace(
+                second=0,
+                microsecond=0,
+            )
+            if requested_observed != observed:
+                raise DataReadinessError(
+                    "incomplete prospective poll cutoff differs from its request"
+                )
     else:
         observed = _utc(observed_at_utc or now()).replace(second=0, microsecond=0)
     query_start = observed - timedelta(hours=lookback_hours)
@@ -282,11 +430,20 @@ def _collect_prospective_broker_action_poll(
         raise DataReadinessError("prospective previous poll must precede the scheduled cutoff")
     if previous is not None and (
         previous.request.get("security_identity_namespace_sha256") != namespace["security_identity_namespace_sha256"]
-        or Path(str(previous.request.get("registry_directory", ""))).resolve() != registry_root
+        or _required_directory_path(
+            previous.request,
+            "registry_directory",
+            label="prospective previous registry",
+        )
+        != registry_root
     ):
         raise DataReadinessError("prospective previous poll uses a different authority or registry")
     if previous is not None:
-        previous_membership_root = Path(str(previous.request.get("membership_authority_directory", ""))).resolve()
+        previous_membership_root = _required_directory_path(
+            previous.request,
+            "membership_authority_directory",
+            label="prospective previous membership authority",
+        )
         previous_memberships, previous_parent = _load_membership_authority(previous_membership_root)
         _require_membership_authority_chain(
             previous_memberships,
@@ -474,7 +631,10 @@ def _collect_prospective_broker_action_poll(
                 maximum_continuous_gap_seconds=maximum_continuous_gap_seconds,
             )
             batch_times[batch_id] = (started_at, completed_at)
-            poll_body_bytes += sum(int(payload["body_bytes"]) for _, _, payload in pages)
+            poll_body_bytes += sum(
+                _required_int(payload, "body_bytes", minimum=0)
+                for _, _, payload in pages
+            )
             if poll_body_bytes > MAX_BYTES_PER_POLL:
                 raise DataReadinessError("Alpaca news poll exceeded the 64 MiB raw evidence limit")
             page_rows.extend((batch_id, page_index, received, payload) for page_index, received, payload in pages)
@@ -539,8 +699,12 @@ def _collect_prospective_broker_action_poll(
     inputs = {
         "request_sha256": request_sha256,
         "registry_claim_sha256": str(claim["claim_file_sha256"]),
-        "intraday_bar_authority_sha256": str(namespace["intraday_bar_authority_sha256"]),
-        "security_identity_namespace_sha256": str(namespace["security_identity_namespace_sha256"]),
+        "intraday_bar_authority_sha256": str(
+            namespace["intraday_bar_authority_sha256"]
+        ),
+        "security_identity_namespace_sha256": str(
+            namespace["security_identity_namespace_sha256"]
+        ),
         "membership_authority_sha256": str(parent["authority_sha256"]),
         "membership_table_sha256": str(parent["membership_table_sha256"]),
         "raw_assets_sha256": file_sha256(raw_assets_path),
@@ -613,7 +777,11 @@ def _collect_prospective_broker_action_poll(
         "registry_claim_sha256": claim["claim_file_sha256"],
         "availability_policy": "observed",
         "production_ready": False,
-        "completed_at_utc": _utc(now()).isoformat(),
+        "completed_at_utc": max(
+            _utc(now()),
+            assets_received,
+            *(completed for _, completed in batch_times.values()),
+        ).isoformat(),
         "memory": memory_audit(
             hard_budget_gib=memory_hard_budget_gib,
             headroom_gib=memory_headroom_gib,
@@ -639,6 +807,7 @@ def _collect_prospective_broker_action_poll(
         "production_ready": False,
     }
     _atomic_json(output / "_authority.json", authority)
+    _load_poll_before_registry_commit(output)
     _commit_poll_cutoff(registry_root, poll_root=output)
     load_prospective_broker_action_poll(output)
     return manifest
@@ -651,16 +820,22 @@ def load_prospective_broker_action_poll(
 
     chain: list[Path] = []
     visited: set[Path] = set()
-    current = directory.resolve()
+    current = path_integrity.verify_tree_containment(
+        directory,
+        label="prospective poll",
+    )
     child_cutoff: datetime | None = None
     while True:
         if current in visited:
             raise DataReadinessError("prospective previous-poll lineage contains a cycle")
         visited.add(current)
+        _require_exact_root_inventory(
+            current,
+            expected=_ROOT_FILES,
+            label="prospective poll",
+        )
         request = _json_object(current / "_request.json")
-        payload = {str(key): value for key, value in request.items() if key != "request_sha256"}
-        if request.get("schema") != POLL_REQUEST_SCHEMA or request.get("request_sha256") != json_sha256(payload):
-            raise DataReadinessError("prospective poll request identity does not verify")
+        _validate_poll_request(request)
         cutoff = _required_utc(request, "observed_at_utc")
         if child_cutoff is not None and cutoff >= child_cutoff:
             raise DataReadinessError("prospective previous-poll cutoffs are not strictly increasing")
@@ -671,11 +846,18 @@ def load_prospective_broker_action_poll(
         if not isinstance(previous_record, Mapping):
             raise DataReadinessError("prospective previous-poll identity is malformed")
         child_cutoff = cutoff
-        current = Path(str(previous_record.get("directory", ""))).resolve()
+        current = path_integrity.verify_tree_containment(
+            Path(str(previous_record.get("directory", ""))),
+            label="prospective previous poll",
+        )
 
     previous: ProspectivePoll | None = None
     for root in reversed(chain):
-        previous = _load_prospective_broker_action_poll_once(root, preloaded_previous=previous)
+        previous = _load_prospective_broker_action_poll_once(
+            root,
+            preloaded_previous=previous,
+            require_registry_commit=True,
+        )
     if previous is None:
         raise DataReadinessError("prospective poll chain is empty")
     return previous
@@ -685,22 +867,25 @@ def _load_prospective_broker_action_poll_once(
     root: Path,
     *,
     preloaded_previous: ProspectivePoll | None,
+    require_registry_commit: bool,
 ) -> ProspectivePoll:
     """Replay exactly one poll using its already verified parent."""
 
-    if not root.is_dir() or {path.name for path in root.iterdir()} != _ROOT_FILES:
-        raise DataReadinessError("prospective poll root inventory does not verify")
+    _require_exact_root_inventory(
+        root,
+        expected=_ROOT_FILES,
+        label="prospective poll",
+    )
     request = _json_object(root / "_request.json")
-    payload = {str(key): value for key, value in request.items() if key != "request_sha256"}
+    _, batch_size, maximum_gap_seconds = _validate_poll_request(request)
     request_sha256 = request.get("request_sha256")
-    if request.get("schema") != POLL_REQUEST_SCHEMA or request_sha256 != json_sha256(payload):
-        raise DataReadinessError("prospective poll request identity does not verify")
     manifest_path = root / "_manifest.json"
     manifest = _json_object(manifest_path)
     status = _json_object(root / "_status.json")
     authority = _json_object(root / "_authority.json")
     if (
         manifest != status
+        or set(manifest) != _POLL_MANIFEST_KEYS
         or manifest.get("schema") != POLL_MANIFEST_SCHEMA
         or manifest.get("status") != "complete"
         or manifest.get("request_sha256") != request_sha256
@@ -729,14 +914,18 @@ def _load_prospective_broker_action_poll_once(
         or manifest.get("production_ready") is not False
     ):
         raise DataReadinessError("prospective poll manifest or authority does not verify")
-    membership_root = Path(str(request.get("membership_authority_directory", ""))).resolve()
+    membership_root = _required_directory_path(
+        request,
+        "membership_authority_directory",
+        label="prospective membership authority",
+    )
     if root == membership_root or root in membership_root.parents or membership_root in root.parents:
         raise DataReadinessError("prospective poll parent path overlaps its output")
     memberships, membership_parent = _load_membership_authority(membership_root)
     _require_membership_observed_before_poll(
         membership_parent,
         poll_cutoff=_required_utc(request, "observed_at_utc"),
-        maximum_age_seconds=int(request.get("maximum_continuous_gap_seconds", -1)),
+        maximum_age_seconds=maximum_gap_seconds,
     )
     expected_membership = {
         "membership_authority_sha256": membership_parent["authority_sha256"],
@@ -747,30 +936,77 @@ def _load_prospective_broker_action_poll_once(
     }
     if any(request.get(key) != value for key, value in expected_membership.items()):
         raise DataReadinessError("prospective poll membership parent changed")
-    intraday_root = Path(str(request.get("intraday_bar_dataset_directory", ""))).resolve()
-    namespace = _load_a43_security_namespace(
-        intraday_root,
-        membership_root=membership_root,
-        membership_parent=membership_parent,
-    )
-    expected_namespace = {
-        "intraday_bar_authority_sha256": namespace["intraday_bar_authority_sha256"],
-        "intraday_bar_manifest_sha256": namespace["intraday_bar_manifest_sha256"],
-        "intraday_bar_request_sha256": namespace["intraday_bar_request_sha256"],
-        "intraday_bar_parent_lineage_sha256": namespace["intraday_bar_parent_lineage_sha256"],
-        "security_identity_namespace_sha256": namespace["security_identity_namespace_sha256"],
+    expected_manifest_membership = {
+        key: value
+        for key, value in expected_membership.items()
+        if key != "membership_universe_sha256"
     }
+    if (
+        manifest.get("observed_at_utc") != request.get("observed_at_utc")
+        or any(
+            manifest.get(key) != value
+            for key, value in expected_manifest_membership.items()
+        )
+    ):
+        raise DataReadinessError(
+            "prospective poll manifest causal lineage changed"
+        )
+    intraday_root = _required_directory_path(
+        request,
+        "intraday_bar_dataset_directory",
+        label="prospective intraday parent",
+    )
+    namespace = verify_historical_security_namespace(
+        intraday_root,
+        current_membership_directory=membership_root,
+        expected_intraday_bar_authority_sha256=str(
+            request.get("intraday_bar_authority_sha256", "")
+        ),
+        expected_intraday_bar_manifest_sha256=str(
+            request.get("intraday_bar_manifest_sha256", "")
+        ),
+        expected_intraday_bar_request_sha256=str(
+            request.get("intraday_bar_request_sha256", "")
+        ),
+        expected_intraday_bar_parent_lineage_sha256=str(
+            request.get("intraday_bar_parent_lineage_sha256", "")
+        ),
+        expected_security_identity_namespace_sha256=str(
+            request.get("security_identity_namespace_sha256", "")
+        ),
+        expected_current_membership_authority_sha256=str(
+            request.get("membership_authority_sha256", "")
+        ),
+        expected_current_membership_manifest_sha256=str(
+            request.get("membership_manifest_sha256", "")
+        ),
+        expected_current_membership_table_sha256=str(
+            request.get("membership_table_sha256", "")
+        ),
+        expected_current_membership_universe_sha256=str(
+            request.get("membership_universe_sha256", "")
+        ),
+        expected_current_membership_cutoff_date=str(
+            request.get("membership_cutoff_date", "")
+        ),
+    )
+    expected_namespace = namespace.as_dict()
     if any(request.get(key) != value for key, value in expected_namespace.items()):
         raise DataReadinessError("prospective poll A4.3 namespace parent changed")
     if any(manifest.get(key) != value for key, value in expected_namespace.items()):
         raise DataReadinessError("prospective poll manifest namespace changed")
-    registry_root = Path(str(request.get("registry_directory", ""))).resolve()
+    registry_root = _required_directory_path(
+        request,
+        "registry_directory",
+        label="prospective registry",
+    )
     claim = _verify_poll_registry(
         registry_root,
         poll_root=root,
         request=request,
         manifest=manifest,
         authority=authority,
+        require_commit=require_registry_commit,
     )
     if manifest.get("registry_claim_sha256") != claim["claim_file_sha256"]:
         raise DataReadinessError("prospective poll registry claim changed")
@@ -779,7 +1015,11 @@ def _load_prospective_broker_action_poll_once(
     if previous_record is not None:
         if not isinstance(previous_record, Mapping):
             raise DataReadinessError("prospective previous-poll identity is malformed")
-        previous_root = Path(str(previous_record.get("directory", ""))).resolve()
+        previous_root = _required_directory_path(
+            previous_record,
+            "directory",
+            label="prospective previous poll",
+        )
         if root == previous_root or root in previous_root.parents or previous_root in root.parents:
             raise DataReadinessError("prospective previous-poll path overlaps child output")
         if previous is None or previous.directory != previous_root:
@@ -790,9 +1030,11 @@ def _load_prospective_broker_action_poll_once(
             or previous.manifest.get("observed_at_utc") != previous_record.get("observed_at_utc")
         ):
             raise DataReadinessError("prospective previous-poll lineage changed")
-        previous_membership_root = Path(
-            str(previous.request.get("membership_authority_directory", ""))
-        ).resolve()
+        previous_membership_root = _required_directory_path(
+            previous.request,
+            "membership_authority_directory",
+            label="prospective previous membership authority",
+        )
         previous_memberships, previous_membership_parent = (
             _load_membership_authority(previous_membership_root)
         )
@@ -839,18 +1081,31 @@ def _load_prospective_broker_action_poll_once(
         if not isinstance(record, Mapping):
             raise DataReadinessError(f"prospective poll {role} inventory is missing")
         path = _resolve_inside(root, str(record.get("path", "")))
-        if file_sha256(path) != record.get("sha256") or file_sha256(manifest_path_for(path)) != sidecars.get(role):
+        if (
+            file_sha256(path) != record.get("sha256")
+            or _required_int(record, "bytes", minimum=0) != path.stat().st_size
+            or file_sha256(manifest_path_for(path)) != sidecars.get(role)
+        ):
             raise DataReadinessError(f"prospective poll {role} hash does not verify")
         frame, child = load_canonical_artifact(path, expected_type=artifact_type, allow_research=True)
         child_inputs = child.get("inputs")
-        if not isinstance(child_inputs, Mapping) or child_inputs.get("request_sha256") != request_sha256:
+        if (
+            not isinstance(child_inputs, Mapping)
+            or child_inputs.get("request_sha256") != request_sha256
+            or child.get("artifact_path") != str(path)
+            or child.get("production_ready") is not False
+        ):
             raise DataReadinessError(f"prospective poll {role} lineage does not verify")
         loaded[role] = frame
     common_inputs = {
         "request_sha256": request_sha256,
         "registry_claim_sha256": str(claim["claim_file_sha256"]),
-        "intraday_bar_authority_sha256": str(namespace["intraday_bar_authority_sha256"]),
-        "security_identity_namespace_sha256": str(namespace["security_identity_namespace_sha256"]),
+        "intraday_bar_authority_sha256": expected_namespace[
+            "intraday_bar_authority_sha256"
+        ],
+        "security_identity_namespace_sha256": expected_namespace[
+            "security_identity_namespace_sha256"
+        ],
         "membership_authority_sha256": str(membership_parent["authority_sha256"]),
         "membership_table_sha256": str(membership_parent["membership_table_sha256"]),
         "raw_assets_sha256": file_sha256(raw_assets_path),
@@ -883,7 +1138,11 @@ def _load_prospective_broker_action_poll_once(
         raise DataReadinessError("prospective assets do not replay from raw evidence")
     identity_received = _required_utc(raw_assets, "response_received_at_utc")
     poll_cutoff = _required_utc(request, "observed_at_utc")
-    if not (poll_cutoff <= identity_received <= poll_cutoff + timedelta(seconds=int(request["maximum_continuous_gap_seconds"]))):
+    if not (
+        poll_cutoff
+        <= identity_received
+        <= poll_cutoff + timedelta(seconds=maximum_gap_seconds)
+    ):
         raise DataReadinessError("prospective asset snapshot exceeded the continuous-coverage limit")
     expected_identity = _build_identity_audit(
         memberships,
@@ -896,14 +1155,17 @@ def _load_prospective_broker_action_poll_once(
     if not _frames_equal(loaded["identity_audit"], expected_identity):
         raise DataReadinessError("prospective identity audit does not replay")
     symbols = tuple(sorted(expected_identity["ticker"].astype(str)))
-    batches = [symbols[index : index + int(request["batch_size"])] for index in range(0, len(symbols), int(request["batch_size"]))]
+    batches = [
+        symbols[index : index + batch_size]
+        for index in range(0, len(symbols), batch_size)
+    ]
     page_rows, batch_times = _replay_raw_pages(
         raw_pages_root,
         batches=batches,
         request_sha256=str(request_sha256),
         query_start=_required_utc(request, "query_start_utc"),
         query_end=_required_utc(request, "query_end_utc"),
-        maximum_continuous_gap_seconds=int(request["maximum_continuous_gap_seconds"]),
+        maximum_continuous_gap_seconds=maximum_gap_seconds,
     )
     _verify_attempt_inventory(attempts_root, request_sha256=str(request_sha256))
     expected_observations = _build_observations(
@@ -920,10 +1182,40 @@ def _load_prospective_broker_action_poll_once(
         identity=expected_identity,
         observed_at=_required_utc(request, "observed_at_utc"),
         previous=previous,
-        maximum_gap_seconds=int(request["maximum_continuous_gap_seconds"]),
+        maximum_gap_seconds=maximum_gap_seconds,
     )
     if not _frames_equal(loaded["source_collections"], expected_collections):
         raise DataReadinessError("prospective source coverage does not replay")
+    completed_at = _required_utc(manifest, "completed_at_utc")
+    latest_source_completion = cast(
+        pd.Timestamp,
+        pd.to_datetime(
+            expected_collections["completed_at_utc"],
+            utc=True,
+            errors="raise",
+        ).max(),
+    ).to_pydatetime()
+    if (
+        manifest.get("availability_policy") != "observed"
+        or _required_int(manifest, "requested_batches", minimum=0) != len(batches)
+        or _required_int(manifest, "completed_batches", minimum=0)
+        != len(batch_times)
+        or len(batch_times) != len(batches)
+        or _required_int(manifest, "security_count", minimum=0)
+        != len(expected_identity)
+        or _required_int(manifest, "identity_eligible_security_count", minimum=0)
+        != int(expected_identity["identity_eligible"].sum())
+        or _required_int(manifest, "event_observation_count", minimum=0)
+        != len(observations)
+        or _required_int(manifest, "production_identity_event_count", minimum=0)
+        != (
+            int(observations["identity_eligible"].sum())
+            if not observations.empty
+            else 0
+        )
+        or completed_at < latest_source_completion
+    ):
+        raise DataReadinessError("prospective poll audit metadata does not verify")
     return ProspectivePoll(
         directory=root,
         request=request,
@@ -943,16 +1235,60 @@ def publish_prospective_broker_action_generation(
 ) -> dict[str, object]:
     """Compact immutable polls without losing first-seen or revision history."""
 
-    output = output_directory.resolve()
+    output = path_integrity.verify_no_reparse_ancestry(
+        output_directory,
+        label="prospective generation output",
+    ).resolve(strict=False)
     output.parent.mkdir(parents=True, exist_ok=True)
+    path_integrity.verify_no_reparse_ancestry(
+        output,
+        label="prospective generation output",
+    )
+    staging = output.with_name(f".{output.name}.staging")
+    staging_owner = output.with_name(f".{output.name}.staging.owner.json")
     try:
         with file_lock(output.with_name(f".{output.name}.publisher"), timeout=0.0):
-            return _publish_prospective_broker_action_generation(
-                poll_directories=poll_directories,
-                output_directory=output,
-                memory_hard_budget_gib=memory_hard_budget_gib,
-                memory_headroom_gib=memory_headroom_gib,
+            if output.exists():
+                raise DataReadinessError(
+                    f"prospective generation output must be new: {output}"
+                )
+            _remove_stale_generation_staging(
+                staging,
+                output=output,
+                owner_path=staging_owner,
             )
+            _write_new_json(
+                staging_owner,
+                {
+                    "schema": GENERATION_STAGING_OWNER_SCHEMA,
+                    "staging_directory": str(staging),
+                    "output_directory": str(output),
+                },
+            )
+            staging.mkdir()
+            try:
+                manifest = _publish_prospective_broker_action_generation(
+                    poll_directories=poll_directories,
+                    output_directory=staging,
+                    published_directory=output,
+                    memory_hard_budget_gib=memory_hard_budget_gib,
+                    memory_headroom_gib=memory_headroom_gib,
+                )
+                if output.exists():
+                    raise DataReadinessError(
+                        f"prospective generation output appeared during publication: {output}"
+                    )
+                staging.replace(output)
+                staging_owner.unlink()
+            except Exception:
+                _remove_stale_generation_staging(
+                    staging,
+                    output=output,
+                    owner_path=staging_owner,
+                )
+                raise
+            load_prospective_broker_action_generation(output)
+            return manifest
     except LockTimeout as exc:
         raise DataReadinessError(f"another process owns prospective generation {output}") from exc
 
@@ -961,6 +1297,7 @@ def _publish_prospective_broker_action_generation(
     *,
     poll_directories: Sequence[Path],
     output_directory: Path,
+    published_directory: Path,
     memory_hard_budget_gib: float,
     memory_headroom_gib: float,
 ) -> dict[str, object]:
@@ -974,7 +1311,7 @@ def _publish_prospective_broker_action_generation(
     polls: list[ProspectivePoll] = []
     input_bytes = 0
     for path in poll_directories:
-        input_bytes += _poll_artifact_bytes(path.resolve())
+        input_bytes += _poll_artifact_bytes(path)
         if input_bytes > MAX_GENERATION_INPUT_BYTES:
             raise DataReadinessError("prospective generation inputs exceed the bounded compaction limit")
         assert_memory_budget(
@@ -1083,6 +1420,11 @@ def _publish_prospective_broker_action_generation(
         inputs=child_inputs,
         production_ready=False,
     )
+    for path in (revisions_path, collections_path, identity_path):
+        _retarget_canonical_manifest(
+            path,
+            published_path=published_directory / path.name,
+        )
     artifacts = {
         "event_revisions": _artifact_record(revisions_path),
         "source_collections": _artifact_record(collections_path),
@@ -1127,8 +1469,61 @@ def _publish_prospective_broker_action_generation(
         "serving_eligible": False,
     }
     _atomic_json(output / "_authority.json", authority)
-    load_prospective_broker_action_generation(output)
+    _load_prospective_broker_action_generation(
+        output,
+        expected_artifact_directory=published_directory,
+    )
     return manifest
+
+
+def _remove_stale_generation_staging(
+    staging: Path,
+    *,
+    output: Path,
+    owner_path: Path,
+) -> None:
+    absolute = path_integrity.verify_no_reparse_ancestry(
+        staging,
+        label="prospective generation staging",
+    )
+    owner_absolute = path_integrity.verify_no_reparse_ancestry(
+        owner_path,
+        label="prospective generation staging owner",
+    )
+    if not absolute.exists() and not owner_absolute.exists():
+        return
+    if not owner_absolute.is_file():
+        raise DataReadinessError(
+            "prospective generation staging is not owned by this publisher"
+        )
+    owner = _json_object(owner_absolute)
+    if owner != {
+        "schema": GENERATION_STAGING_OWNER_SCHEMA,
+        "staging_directory": str(staging),
+        "output_directory": str(output),
+    }:
+        raise DataReadinessError(
+            "prospective generation staging owner does not verify"
+        )
+    if not absolute.exists():
+        owner_absolute.unlink()
+        return
+    verified = path_integrity.verify_tree_containment(
+        absolute,
+        label="prospective generation staging",
+    )
+    shutil.rmtree(verified)
+    owner_absolute.unlink()
+
+
+def _retarget_canonical_manifest(path: Path, *, published_path: Path) -> None:
+    sidecar = manifest_path_for(path)
+    manifest = _json_object(sidecar)
+    if manifest.get("artifact_path") != str(path):
+        raise DataReadinessError(
+            "prospective generation canonical artifact path does not verify"
+        )
+    _atomic_json(sidecar, {**manifest, "artifact_path": str(published_path)})
 
 
 def load_prospective_broker_action_generation(
@@ -1136,27 +1531,50 @@ def load_prospective_broker_action_generation(
 ) -> ProspectiveGeneration:
     """Strictly replay one compacted prospective poll generation."""
 
-    root = directory.resolve()
-    if not root.is_dir() or {path.name for path in root.iterdir()} != _GENERATION_ROOT_FILES:
-        raise DataReadinessError("prospective generation root inventory does not verify")
+    return _load_prospective_broker_action_generation(
+        directory,
+        expected_artifact_directory=directory,
+    )
+
+
+def _load_prospective_broker_action_generation(
+    directory: Path,
+    *,
+    expected_artifact_directory: Path,
+) -> ProspectiveGeneration:
+    """Replay a generation staged for one immutable publication directory."""
+
+    root = path_integrity.verify_tree_containment(
+        directory,
+        label="prospective generation",
+    )
+    expected_artifact_root = path_integrity.verify_no_reparse_ancestry(
+        expected_artifact_directory,
+        label="prospective generation artifact root",
+    ).resolve(strict=False)
+    _require_exact_root_inventory(
+        root,
+        expected=_GENERATION_ROOT_FILES,
+        label="prospective generation",
+    )
     request = _json_object(root / "_request.json")
-    request_payload = {str(key): value for key, value in request.items() if key != "request_sha256"}
+    poll_records = _validate_generation_request(request)
+    request_payload = {
+        str(key): value
+        for key, value in request.items()
+        if key != "request_sha256"
+    }
     request_sha256 = request.get("request_sha256")
-    poll_records = request_payload.get("polls")
-    if (
-        request.get("schema") != GENERATION_REQUEST_SCHEMA
-        or request_sha256 != json_sha256(request_payload)
-        or not isinstance(poll_records, list)
-        or not poll_records
-        or request_payload.get("poll_inventory_sha256") != json_sha256(poll_records)
-    ):
-        raise DataReadinessError("prospective generation request does not verify")
     polls: list[ProspectivePoll] = []
     input_bytes = 0
     for raw_record in poll_records:
         if not isinstance(raw_record, Mapping):
             raise DataReadinessError("prospective generation poll record is malformed")
-        poll_root = Path(str(raw_record.get("directory", ""))).resolve()
+        poll_root = _required_directory_path(
+            raw_record,
+            "directory",
+            label="prospective generation poll",
+        )
         input_bytes += _poll_artifact_bytes(poll_root)
         if input_bytes > MAX_GENERATION_INPUT_BYTES:
             raise DataReadinessError("prospective generation inputs exceed the bounded replay limit")
@@ -1176,13 +1594,16 @@ def load_prospective_broker_action_generation(
             file_sha256(poll.directory / "_manifest.json") != raw_record.get("manifest_sha256")
             or file_sha256(poll.directory / "_authority.json") != raw_record.get("authority_sha256")
             or poll.request.get("request_sha256") != raw_record.get("request_sha256")
+            or poll.manifest.get("observed_at_utc")
+            != raw_record.get("observed_at_utc")
         ):
             raise DataReadinessError("prospective generation poll lineage changed")
     manifest_path = root / "_manifest.json"
     manifest = _json_object(manifest_path)
     authority = _json_object(root / "_authority.json")
     if (
-        manifest.get("schema") != GENERATION_MANIFEST_SCHEMA
+        set(manifest) != _GENERATION_MANIFEST_KEYS
+        or manifest.get("schema") != GENERATION_MANIFEST_SCHEMA
         or manifest.get("status") != "complete"
         or manifest.get("request_sha256") != request_sha256
         or authority.get("schema") != GENERATION_AUTHORITY_SCHEMA
@@ -1221,23 +1642,55 @@ def load_prospective_broker_action_generation(
         if not isinstance(record, Mapping):
             raise DataReadinessError(f"prospective generation {role} is missing")
         path = _resolve_inside(root, str(record.get("path", "")))
-        if file_sha256(path) != record.get("sha256") or file_sha256(manifest_path_for(path)) != sidecars.get(role):
+        if (
+            file_sha256(path) != record.get("sha256")
+            or _required_int(record, "bytes", minimum=0) != path.stat().st_size
+            or file_sha256(manifest_path_for(path)) != sidecars.get(role)
+        ):
             raise DataReadinessError(f"prospective generation {role} hash changed")
         frame, child = load_canonical_artifact(path, expected_type=artifact_type, allow_research=True)
         inputs = child.get("inputs")
-        if inputs != {
-            "request_sha256": request_sha256,
-            "poll_inventory_sha256": request_payload["poll_inventory_sha256"],
-        }:
+        if (
+            inputs
+            != {
+                "request_sha256": request_sha256,
+                "poll_inventory_sha256": request_payload[
+                    "poll_inventory_sha256"
+                ],
+            }
+            or child.get("artifact_path")
+            != str(expected_artifact_root / path.name)
+            or child.get("production_ready") is not False
+        ):
             raise DataReadinessError(f"prospective generation {role} lineage changed")
         loaded[role] = frame
     revisions = loaded["event_revisions"]
     if bool(revisions.duplicated(["revision_id", "ticker"]).any()):
         raise DataReadinessError("prospective generation contains duplicate revisions")
+    first_poll_at = _required_utc(manifest, "first_poll_at_utc")
+    last_poll_at = _required_utc(manifest, "last_poll_at_utc")
     if (
-        int(manifest.get("poll_count", -1)) != len(polls)
-        or int(manifest.get("revision_count", -1)) != len(revisions)
-        or int(manifest.get("source_collection_count", -1)) != len(loaded["source_collections"])
+        manifest.get("poll_inventory_sha256")
+        != request_payload["poll_inventory_sha256"]
+        or manifest.get("availability_policy") != "observed"
+        or first_poll_at != _required_utc(polls[0].manifest, "observed_at_utc")
+        or last_poll_at != _required_utc(polls[-1].manifest, "observed_at_utc")
+        or _required_int(manifest, "poll_count", minimum=0) != len(polls)
+        or _required_int(manifest, "revision_count", minimum=0) != len(revisions)
+        or _required_int(manifest, "provider_event_count", minimum=0)
+        != (int(revisions["provider_event_id"].nunique()) if not revisions.empty else 0)
+        or _required_int(
+            manifest,
+            "production_identity_revision_count",
+            minimum=0,
+        )
+        != (
+            int(revisions["identity_eligible"].sum())
+            if not revisions.empty
+            else 0
+        )
+        or _required_int(manifest, "source_collection_count", minimum=0)
+        != len(loaded["source_collections"])
     ):
         raise DataReadinessError("prospective generation counts do not verify")
     expected_revisions = _compact_revision_observations(polls)
@@ -1915,7 +2368,31 @@ def _previous_identity(previous: ProspectivePoll | None) -> dict[str, object] | 
 def _registry_paths(root: Path, observed_at: datetime) -> tuple[Path, Path]:
     cutoff = _utc(observed_at)
     relative = Path(f"{cutoff:%Y}") / f"{cutoff:%m}" / f"{cutoff:%d}" / f"{cutoff:%Y%m%dT%H%M%SZ}.json"
-    return root / "claims" / relative, root / "commits" / relative
+    return (
+        path_integrity.resolve_write_path_inside(
+            root,
+            Path("claims") / relative,
+            label="prospective poll claim registry",
+        ),
+        path_integrity.resolve_write_path_inside(
+            root,
+            Path("commits") / relative,
+            label="prospective poll commit registry",
+        ),
+    )
+
+
+def _validated_poll_output_path(path: Path) -> Path:
+    absolute = path_integrity.verify_no_reparse_ancestry(
+        path,
+        label="prospective poll output",
+    )
+    if absolute.exists():
+        return path_integrity.verify_tree_containment(
+            absolute,
+            label="prospective poll output",
+        )
+    return absolute.resolve(strict=False)
 
 
 def _validate_poll_paths(
@@ -2023,14 +2500,23 @@ def _verify_poll_registry(
     request: Mapping[str, object],
     manifest: Mapping[str, object],
     authority: Mapping[str, object],
+    require_commit: bool,
 ) -> dict[str, object]:
-    if not root.is_dir() or root.is_symlink():
+    if not root.is_dir() or path_integrity.is_reparse_point(root):
         raise DataReadinessError("prospective poll registry is unavailable")
     claim_path, commit_path = _registry_paths(root, _required_utc(request, "observed_at_utc"))
     claim = _json_object(claim_path)
     claim_payload = {str(key): value for key, value in claim.items() if key != "record_sha256"}
-    commit = _json_object(commit_path)
-    commit_payload = {str(key): value for key, value in commit.items() if key != "record_sha256"}
+    commit = _json_object(commit_path) if require_commit else None
+    commit_payload = (
+        {
+            str(key): value
+            for key, value in commit.items()
+            if key != "record_sha256"
+        }
+        if commit is not None
+        else None
+    )
     previous_record = request.get("previous_poll")
     expected_previous_authority = previous_record.get("authority_sha256") if isinstance(previous_record, Mapping) else None
     if (
@@ -2044,19 +2530,33 @@ def _verify_poll_registry(
         or claim.get("membership_authority_sha256") != request.get("membership_authority_sha256")
         or claim.get("membership_table_sha256") != request.get("membership_table_sha256")
         or claim.get("previous_poll_authority_sha256") != expected_previous_authority
-        or commit.get("schema") != "edge_rebuild.prospective_broker_action_cutoff_commit.v1"
+        or authority.get("registry_claim_sha256") != file_sha256(claim_path)
+    ):
+        raise DataReadinessError("prospective poll cutoff registry does not verify")
+    if require_commit and (
+        commit is None
+        or commit_payload is None
+        or commit.get("schema")
+        != "edge_rebuild.prospective_broker_action_cutoff_commit.v1"
         or commit.get("record_sha256") != json_sha256(commit_payload)
         or commit.get("claim_file_sha256") != file_sha256(claim_path)
         or commit.get("poll_output_directory") != str(poll_root)
         or commit.get("poll_request_sha256") != request.get("request_sha256")
-        or commit.get("poll_manifest_sha256") != file_sha256(poll_root / "_manifest.json")
-        or commit.get("poll_authority_sha256") != file_sha256(poll_root / "_authority.json")
-        or commit.get("raw_pages_inventory_sha256") != manifest.get("raw_pages_inventory_sha256")
-        or authority.get("registry_claim_sha256") != file_sha256(claim_path)
+        or commit.get("poll_manifest_sha256")
+        != file_sha256(poll_root / "_manifest.json")
+        or commit.get("poll_authority_sha256")
+        != file_sha256(poll_root / "_authority.json")
+        or commit.get("raw_pages_inventory_sha256")
+        != manifest.get("raw_pages_inventory_sha256")
     ):
         raise DataReadinessError("prospective poll cutoff registry does not verify")
     _required_utc(claim, "claimed_at_utc")
-    _required_utc(commit, "committed_at_utc")
+    if require_commit:
+        if commit is None:
+            raise DataReadinessError(
+                "prospective poll cutoff registry does not verify"
+            )
+        _required_utc(commit, "committed_at_utc")
     return {**claim, "claim_file_sha256": file_sha256(claim_path)}
 
 
@@ -2066,6 +2566,11 @@ def _resume_completed_poll(
     registry_root: Path,
     membership_root: Path,
     intraday_dataset_root: Path,
+    observed_at_utc: datetime | None,
+    previous_poll_directory: Path | None,
+    lookback_hours: int,
+    batch_size: int,
+    maximum_continuous_gap_seconds: int,
 ) -> dict[str, object]:
     request = _json_object(output / "_request.json")
     expected_directories = {
@@ -2073,10 +2578,95 @@ def _resume_completed_poll(
         "membership_authority_directory": membership_root,
         "intraday_bar_dataset_directory": intraday_dataset_root,
     }
-    if any(Path(str(request.get(key, ""))).resolve() != expected for key, expected in expected_directories.items()):
+    if any(
+        _required_directory_path(
+            request,
+            key,
+            label=f"completed prospective poll {key}",
+        )
+        != expected
+        for key, expected in expected_directories.items()
+    ):
         raise DataReadinessError("completed prospective poll parent changed")
+    requested_previous = (
+        previous_poll_directory.resolve()
+        if previous_poll_directory is not None
+        else None
+    )
+    recorded_previous = request.get("previous_poll")
+    recorded_previous_root = (
+        _required_directory_path(
+            recorded_previous,
+            "directory",
+            label="completed prospective previous poll",
+        )
+        if isinstance(recorded_previous, Mapping)
+        else None
+    )
+    expected_values: dict[str, object] = {
+        "lookback_hours": lookback_hours,
+        "batch_size": batch_size,
+        "maximum_continuous_gap_seconds": maximum_continuous_gap_seconds,
+    }
+    if observed_at_utc is not None:
+        observed = _utc(observed_at_utc).replace(second=0, microsecond=0)
+        expected_values.update(
+            {
+                "observed_at_utc": observed.isoformat(),
+                "query_start_utc": (
+                    observed - timedelta(hours=lookback_hours)
+                ).isoformat(),
+                "query_end_utc": observed.isoformat(),
+            }
+        )
+    if (
+        requested_previous != recorded_previous_root
+        or any(request.get(key) != value for key, value in expected_values.items())
+    ):
+        raise DataReadinessError(
+            "completed prospective poll invocation differs from its authority"
+        )
+    _load_poll_before_registry_commit(output)
     _commit_poll_cutoff(registry_root, poll_root=output)
     return dict(load_prospective_broker_action_poll(output).manifest)
+
+
+def _load_poll_before_registry_commit(directory: Path) -> ProspectivePoll:
+    root = path_integrity.verify_tree_containment(
+        directory,
+        label="prospective poll",
+    )
+    request = _json_object(root / "_request.json")
+    previous_record = request.get("previous_poll")
+    previous: ProspectivePoll | None = None
+    if previous_record is not None:
+        if not isinstance(previous_record, Mapping):
+            raise DataReadinessError("prospective previous-poll identity is malformed")
+        previous_path = _required_directory_path(
+            previous_record,
+            "directory",
+            label="prospective previous poll",
+        )
+        previous = load_prospective_broker_action_poll(previous_path)
+    return _load_prospective_broker_action_poll_once(
+        root,
+        preloaded_previous=previous,
+        require_registry_commit=False,
+    )
+
+
+def _require_exact_root_inventory(
+    root: Path,
+    *,
+    expected: frozenset[str],
+    label: str,
+) -> None:
+    verified_root = path_integrity.verify_tree_containment(root, label=label)
+    entries = tuple(verified_root.iterdir())
+    if {path.name for path in entries} != expected or any(
+        path_integrity.is_reparse_point(path) for path in entries
+    ):
+        raise DataReadinessError(f"{label} root inventory does not verify")
 
 
 def _artifact_record(path: Path) -> dict[str, object]:
@@ -2084,6 +2674,10 @@ def _artifact_record(path: Path) -> dict[str, object]:
 
 
 def _poll_artifact_bytes(root: Path) -> int:
+    root = path_integrity.verify_tree_containment(
+        root,
+        label="prospective poll",
+    )
     manifest = _json_object(root / "_manifest.json")
     records = manifest.get("artifacts")
     if not isinstance(records, Mapping):
@@ -2094,7 +2688,7 @@ def _poll_artifact_bytes(root: Path) -> int:
             raise DataReadinessError("prospective poll artifact record is malformed")
         path = _resolve_inside(root, str(record.get("path", "")))
         actual = path.stat().st_size
-        if int(record.get("bytes", -1)) != actual:
+        if _required_int(record, "bytes", minimum=0) != actual:
             raise DataReadinessError("prospective poll artifact byte count changed")
         parquet = pq.ParquetFile(path)  # type: ignore[no-untyped-call]
         total += sum(parquet.metadata.row_group(index).total_byte_size for index in range(parquet.metadata.num_row_groups))
@@ -2145,8 +2739,10 @@ def _replay_raw_pages(
     list[tuple[str, int, datetime, dict[str, Any]]],
     dict[str, tuple[datetime, datetime]],
 ]:
-    if root.is_symlink() or any(path.is_symlink() for path in root.rglob("*")):
-        raise DataReadinessError("prospective raw-page inventory contains a symlink")
+    root = path_integrity.verify_tree_containment(
+        root,
+        label="prospective raw-page inventory",
+    )
     expected_directories = {f"batch-{index:04d}" for index in range(len(batches))}
     actual_directories = {path.name for path in root.iterdir() if path.is_dir()}
     if actual_directories != expected_directories or any(path.is_file() for path in root.iterdir()):
@@ -2185,7 +2781,8 @@ def _replay_raw_pages(
                 or envelope.get("symbols") != list(symbols)
                 or envelope.get("request_page_token") != token
                 or envelope.get("body_sha256") != file_sha256(body_path)
-                or int(envelope.get("body_bytes", -1)) != body_path.stat().st_size
+                or _required_int(envelope, "body_bytes", minimum=0)
+                != body_path.stat().st_size
                 or envelope.get("status_code") != 200
             ):
                 raise DataReadinessError(f"prospective raw-page envelope is invalid for {name}")
@@ -2273,8 +2870,10 @@ def _record_asset_failure(
 
 
 def _verify_attempt_inventory(root: Path, *, request_sha256: str) -> None:
-    if root.is_symlink() or any(path.is_symlink() for path in root.rglob("*")):
-        raise DataReadinessError("prospective attempt inventory contains a symlink")
+    root = path_integrity.verify_tree_containment(
+        root,
+        label="prospective attempt inventory",
+    )
     for path in root.rglob("*"):
         if path.is_dir():
             if path.parent != root or (not path.name.startswith("batch-") and path.name != "asset-snapshot"):
@@ -2384,8 +2983,10 @@ def _verify_exact_alpaca_request(
 
 
 def _directory_inventory_sha256(directory: Path) -> str:
-    if directory.is_symlink() or any(path.is_symlink() for path in directory.rglob("*")):
-        raise DataReadinessError("authority inventory contains a symlink")
+    directory = path_integrity.verify_tree_containment(
+        directory,
+        label="authority inventory",
+    )
     records = [
         {"path": path.relative_to(directory).as_posix(), "sha256": file_sha256(path), "bytes": path.stat().st_size}
         for path in sorted(directory.rglob("*"))
@@ -2429,9 +3030,36 @@ def _atomic_bytes(path: Path, payload: bytes) -> None:
 
 
 def _json_object(path: Path) -> dict[str, Any]:
+    def reject_duplicates(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+        result: dict[str, Any] = {}
+        for key, value in pairs:
+            if key in result:
+                raise ValueError(f"duplicate key: {key}")
+            result[key] = value
+        return result
+
+    def reject_non_finite(value: str) -> None:
+        raise ValueError(f"non-finite value: {value}")
+
+    def parse_finite_float(value: str) -> float:
+        parsed = float(value)
+        if not math.isfinite(parsed):
+            raise ValueError(f"non-finite value: {value}")
+        return parsed
+
     try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        payload = json.loads(
+            path.read_text(encoding="utf-8"),
+            object_pairs_hook=reject_duplicates,
+            parse_constant=reject_non_finite,
+            parse_float=parse_finite_float,
+        )
+    except (
+        OSError,
+        UnicodeDecodeError,
+        json.JSONDecodeError,
+        ValueError,
+    ) as exc:
         raise DataReadinessError(f"JSON artifact is unreadable: {path}") from exc
     if not isinstance(payload, dict):
         raise DataReadinessError(f"JSON artifact must be an object: {path}")
@@ -2439,14 +3067,186 @@ def _json_object(path: Path) -> dict[str, Any]:
 
 
 def _resolve_inside(root: Path, relative: str) -> Path:
-    candidate = (root / relative).resolve()
-    if candidate == root or root not in candidate.parents or not candidate.is_file():
-        raise DataReadinessError("artifact path escapes authority root or is missing")
-    return candidate
+    return path_integrity.resolve_existing_file_inside(
+        root,
+        relative,
+        label="authority artifact",
+    )
+
+
+def _required_string(record: Mapping[str, object], key: str) -> str:
+    value = record.get(key)
+    if not isinstance(value, str) or not value.strip():
+        raise DataReadinessError(f"{key} is missing or invalid")
+    return value
+
+
+def _required_sha256(record: Mapping[str, object], key: str) -> str:
+    value = _required_string(record, key)
+    if len(value) != 64 or any(character not in "0123456789abcdef" for character in value):
+        raise DataReadinessError(f"{key} is not a lowercase SHA-256 digest")
+    return value
+
+
+def _required_directory_path(
+    record: Mapping[str, object],
+    key: str,
+    *,
+    label: str,
+) -> Path:
+    path = Path(_required_string(record, key))
+    return path_integrity.verify_no_reparse_ancestry(path, label=label).resolve()
+
+
+def _required_int(
+    record: Mapping[str, object],
+    key: str,
+    *,
+    minimum: int | None = None,
+    maximum: int | None = None,
+) -> int:
+    value = record.get(key)
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise DataReadinessError(f"{key} is missing or invalid")
+    if minimum is not None and value < minimum:
+        raise DataReadinessError(f"{key} is below its permitted minimum")
+    if maximum is not None and value > maximum:
+        raise DataReadinessError(f"{key} exceeds its permitted maximum")
+    return value
+
+
+def _validate_runtime_int(
+    value: int,
+    name: str,
+    *,
+    minimum: int,
+    maximum: int,
+) -> None:
+    if type(value) is not int or not minimum <= value <= maximum:
+        raise ValueError(f"{name} must be an integer between {minimum} and {maximum}")
+
+
+def _validate_poll_request(
+    request: Mapping[str, object],
+) -> tuple[int, int, int]:
+    if set(request) != _POLL_REQUEST_KEYS:
+        raise DataReadinessError("prospective poll request schema differs")
+    payload = {
+        str(key): value
+        for key, value in request.items()
+        if key != "request_sha256"
+    }
+    if (
+        request.get("schema") != POLL_REQUEST_SCHEMA
+        or request.get("source") != "alpaca:benzinga"
+        or request.get("availability_policy") != "observed"
+        or _required_sha256(request, "request_sha256") != json_sha256(payload)
+    ):
+        raise DataReadinessError("prospective poll request identity does not verify")
+    lookback_hours = _required_int(
+        request,
+        "lookback_hours",
+        minimum=24,
+        maximum=48,
+    )
+    batch_size = _required_int(request, "batch_size", minimum=1, maximum=50)
+    maximum_gap_seconds = _required_int(
+        request,
+        "maximum_continuous_gap_seconds",
+        minimum=60,
+        maximum=300,
+    )
+    observed = _required_utc(request, "observed_at_utc")
+    query_start = _required_utc(request, "query_start_utc")
+    query_end = _required_utc(request, "query_end_utc")
+    if query_end != observed or query_start != observed - timedelta(hours=lookback_hours):
+        raise DataReadinessError("prospective poll request time window is invalid")
+    for key in (
+        "membership_authority_directory",
+        "membership_cutoff_date",
+        "intraday_bar_dataset_directory",
+        "registry_directory",
+    ):
+        _required_string(request, key)
+    for key in (
+        "membership_authority_sha256",
+        "membership_manifest_sha256",
+        "membership_table_sha256",
+        "membership_universe_sha256",
+        "intraday_bar_authority_sha256",
+        "intraday_bar_manifest_sha256",
+        "intraday_bar_request_sha256",
+        "intraday_bar_parent_lineage_sha256",
+        "security_identity_namespace_sha256",
+    ):
+        _required_sha256(request, key)
+    previous = request.get("previous_poll")
+    if previous is not None:
+        if not isinstance(previous, Mapping) or set(previous) != {
+            "directory",
+            "authority_sha256",
+            "manifest_sha256",
+            "observed_at_utc",
+        }:
+            raise DataReadinessError("prospective previous-poll identity is malformed")
+        _required_string(previous, "directory")
+        _required_sha256(previous, "authority_sha256")
+        _required_sha256(previous, "manifest_sha256")
+        _required_utc(previous, "observed_at_utc")
+    return lookback_hours, batch_size, maximum_gap_seconds
+
+
+def _validate_generation_request(
+    request: Mapping[str, object],
+) -> list[Mapping[str, object]]:
+    if set(request) != _GENERATION_REQUEST_KEYS:
+        raise DataReadinessError("prospective generation request schema differs")
+    payload = {
+        str(key): value
+        for key, value in request.items()
+        if key != "request_sha256"
+    }
+    records = request.get("polls")
+    if (
+        request.get("schema") != GENERATION_REQUEST_SCHEMA
+        or request.get("availability_policy") != "observed"
+        or request.get("revision_identity")
+        != "provider_event_id|provider_updated_at_utc|raw_sha256"
+        or request.get("identity_conflict_policy") != "abstain"
+        or _required_sha256(request, "request_sha256") != json_sha256(payload)
+        or not isinstance(records, list)
+        or not records
+        or len(records) > 60
+        or request.get("poll_inventory_sha256") != json_sha256(records)
+    ):
+        raise DataReadinessError("prospective generation request does not verify")
+    validated: list[Mapping[str, object]] = []
+    expected_record_keys = {
+        "directory",
+        "observed_at_utc",
+        "request_sha256",
+        "manifest_sha256",
+        "authority_sha256",
+    }
+    for record in records:
+        if not isinstance(record, Mapping) or set(record) != expected_record_keys:
+            raise DataReadinessError("prospective generation poll record is malformed")
+        _required_string(record, "directory")
+        _required_utc(record, "observed_at_utc")
+        for key in ("request_sha256", "manifest_sha256", "authority_sha256"):
+            _required_sha256(record, key)
+        validated.append(record)
+    return validated
 
 
 def _required_utc(record: Mapping[str, object], key: str) -> datetime:
-    value = pd.to_datetime(record.get(key), utc=True, errors="coerce")
+    raw = record.get(key)
+    if not isinstance(raw, str) or not raw.strip():
+        raise DataReadinessError(f"{key} is missing or invalid")
+    try:
+        value = pd.to_datetime(raw, utc=True, errors="coerce")
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise DataReadinessError(f"{key} is missing or invalid") from exc
     if pd.isna(value):
         raise DataReadinessError(f"{key} is missing or invalid")
     return cast(datetime, cast(pd.Timestamp, value).to_pydatetime())
