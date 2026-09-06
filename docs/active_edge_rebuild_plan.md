@@ -1740,6 +1740,31 @@ test, and task names.
      checks passed. Independent Python and ML/data reviews closed with no remaining P0,
      P1, or P2 finding. Repository-wide debt is 166 Ruff findings and 14 strict-mypy
      findings in three untouched intraday dataset files.
+   - **Prediction-data readiness governance (`completed`).** Implementation commit
+     `e417960` moves readiness orchestration and contracts to
+     `governance/readiness`, extracts immutable authority replay to
+     `evidence/readiness_authority.py`, and moves promoted-bundle contracts and
+     verification to `governance/promotion`. The research CLI now exposes the
+     behavior-named `audit-prediction-data-readiness` command and uses
+     `configs/prediction_data_readiness.toml`; no readiness compatibility alias
+     remains.
+
+     Current authorities bind exact swing and intraday strategy identities, XNYS
+     calendar package/version, costs, folds, dimensions, exclusions, catalyst channel
+     policy, availability, counts, and causal event/assignment replay. Historical-v1
+     evidence remains strictly replayable but cannot authorize current planning.
+     Readiness loads and reduces each large horizon independently under the 4 GiB
+     process limit. Pytest discovery is fixed to `tests/`, so local data, model,
+     scratch, and cache artifacts cannot change repository test collection.
+
+     Verification passed 354 focused tests with one skip and the exact complete suite
+     with 1,933 passed and three skipped in 18 minutes 41 seconds. Touched Ruff and
+     strict mypy, compileall, CLI help, retained historical replay, and diff checks
+     passed. Independent Python and ML/data reviewers reported no remaining P0, P1,
+     or P2 finding. Repository-wide debt is 161 Ruff findings and 14 strict-mypy
+     findings in the same three untouched intraday dataset files. No provider call,
+     artifact regeneration, training, promotion, serving, or locked-test access
+     occurred.
 5. **Governance, serving, and command package migration (`pending`).**
    Move readiness, promotion, drift, and outcomes to `governance`; bundle loading,
    prediction services, and API behavior to `serving`; and retain only thin CLI
@@ -1757,6 +1782,13 @@ test, and task names.
    Run focused tests after each task, then repository-wide Ruff, strict mypy, the full
    test suite under the configured writable runtime directory, `git diff --check`, and
    a process/memory check. Update the handoff with measured evidence only.
+
+The exact next checkpoint is the prediction-serving ownership migration. Move bundle
+loading, swing/intraday prediction orchestration, and API-facing prediction contracts
+from `edge_rebuild/serving.py`, `edge_rebuild/swing_live.py`, and the top-level
+`prediction_service.py` into behavior-named modules under `serving`. Keep command
+modules as thin adapters, add dependency guards, prohibit every removed import path,
+and preserve prediction output and bundle-verification behavior without aliases.
 
 Rollback is the last pushed task commit. A task is not accepted until the same senior
 reviewer has inspected its bounded diff and all supported P0/P1 findings are fixed.

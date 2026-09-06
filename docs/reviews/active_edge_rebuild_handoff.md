@@ -1323,10 +1323,35 @@ temporary-output checks passed. Independent Python and ML/data reviewers reporte
 remaining P0, P1, or P2 finding. Repository-wide debt is 166 Ruff findings and 14
 strict-mypy findings in three untouched intraday dataset files.
 
-Exact next checkpoint: independently review the readiness dependency boundary. Move
-readiness audit orchestration to `governance/readiness`, but first extract the strict
-readiness-authority replay contract needed by `intraday/datasets/history.py` into an
-allowed lower-level package so intraday never imports governance. Update the command
-adapter and tests, prohibit the old owner without an alias, and strictly replay retained
-readiness authorities. Do not run providers, regenerate data, train, promote, serve, or
-open a locked test. Rollback anchor is `7419df8`.
+Implementation commit `e417960` completes the prediction-data readiness governance
+boundary. Readiness orchestration and contracts now live under `governance/readiness`;
+strict immutable authority replay lives under `evidence`; promoted-bundle contracts
+and verification live under `governance/promotion`. The behavior-named research
+command is `audit-prediction-data-readiness`, its policy is
+`configs/prediction_data_readiness.toml`, and no readiness compatibility alias remains.
+
+Current authority publication and replay bind exact swing/intraday strategy and proxy
+identities, XNYS calendar package/version, costs, folds, dimensions, exclusions,
+catalyst channel policy, availability, counts, causal event/assignment projections,
+and canonical artifact hashes. Historical-v1 authorities replay without consulting a
+mutable current calendar runtime and remain prohibited from current planning. Large
+swing, intraday, and catalyst populations are verified and reduced sequentially under
+the 4 GiB process limit. Pytest now collects only `tests/`, preventing local data,
+models, scratch files, or caches from entering the suite.
+
+Verification passed 354 focused tests with one skip and the exact complete suite with
+1,933 passed and three skipped in 18 minutes 41 seconds. Touched Ruff and strict mypy,
+compileall, CLI help, retained historical replay, and diff checks passed. Independent
+Python and ML/data reviewers closed with no remaining P0, P1, or P2 finding.
+Repository-wide debt is 161 Ruff findings and 14 strict-mypy findings in
+`intraday/datasets/publisher.py`, `intraday/datasets/bar_dataset.py`, and
+`intraday/datasets/dataset_io.py`. No provider request, data regeneration, training,
+promotion, serving, or locked-test access occurred.
+
+Exact next checkpoint: independently review and implement prediction-serving ownership.
+Move bundle loading, swing/intraday prediction orchestration, and API-facing prediction
+contracts from `edge_rebuild/serving.py`, `edge_rebuild/swing_live.py`, and the top-level
+`prediction_service.py` into behavior-named modules under `serving`. Keep commands thin,
+enforce package direction, prohibit every removed import path without aliases, and
+preserve prediction and bundle-verification behavior. Do not run providers, regenerate
+data, train, promote, serve, or open a locked test. Rollback anchor is `e417960`.
