@@ -27,9 +27,6 @@ from market_predictor.core.errors import DataReadinessError
 from market_predictor.edge_rebuild.contracts import (
     load_edge_rebuild_readiness_config,
 )
-from market_predictor.edge_rebuild.prospective_analyst_revision_horizon import (
-    publish_prospective_analyst_revision_horizon,
-)
 from market_predictor.edge_rebuild.readiness import (
     run_edge_rebuild_readiness_audit,
 )
@@ -105,6 +102,9 @@ from market_predictor.intraday.datasets.microstructure_history import (
 )
 from market_predictor.intraday.datasets.one_minute_coverage import (
     publish_selected_session_one_minute_coverage,
+)
+from market_predictor.intraday.datasets.prospective_analyst_revision_horizon import (
+    publish_prospective_analyst_revision_horizon,
 )
 from market_predictor.intraday.datasets.prospective_broker_actions import (
     collect_prospective_broker_action_poll,
