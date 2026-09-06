@@ -1,8 +1,8 @@
-﻿"""Trading policy functions for determining actionable signals from raw predictions."""
+"""Trading policy functions for determining actionable signals from raw predictions."""
 
 from typing import Any
 
-from market_predictor.prediction_contracts import IntradayPrediction, SwingPrediction
+from market_predictor.core.prediction_contracts import IntradayPrediction, SwingPrediction
 from market_predictor.prediction_policy import (
     INTRADAY_WATCH,
     INTRADAY_WATCH_MAX_DOWNSIDE,

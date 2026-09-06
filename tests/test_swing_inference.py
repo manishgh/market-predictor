@@ -9,11 +9,9 @@ from pathlib import Path
 import joblib
 import pandas as pd
 import pytest
-from pydantic import ValidationError
 
-import market_predictor.edge_rebuild.serving as serving_module
+import market_predictor.serving.swing_inference as serving_module
 from market_predictor.canonical.store import file_sha256
-from market_predictor.catalysts.global_events.decision_authority import GlobalEventAuthority
 from market_predictor.core import path_integrity
 from market_predictor.core.errors import (
     ArtifactIntegrityError,
@@ -21,23 +19,6 @@ from market_predictor.core.errors import (
     PromotionGateError,
     SchemaMismatchError,
 )
-from market_predictor.edge_rebuild.serving import (
-    ACTIVE_GENERATION_SCHEMA,
-    BenchmarkComparison,
-    CatalystContextSnapshot,
-    CatalystSourceSnapshot,
-    GlobalContextSnapshot,
-    PredictionResult,
-    SwingModelGenerationCache,
-    build_global_context_snapshot,
-    validate_batch_live_feature_parity,
-    validate_ordered_feature_frame,
-)
-from market_predictor.edge_rebuild.swing_features import (
-    SWING_FEATURE_PANEL_SCHEMA,
-    swing_model_feature_columns,
-)
-from market_predictor.edge_rebuild.swing_training import MODEL_SCHEMA
 from market_predictor.governance.promotion.bundle_contracts import (
     canonical_payload_sha256,
     ordered_values_sha256,
@@ -58,6 +39,21 @@ from market_predictor.promotion_attestation import (
     promotion_attestation_path_for,
 )
 from market_predictor.registry import write_model_manifest
+from market_predictor.serving.swing_inference import (
+    ACTIVE_GENERATION_SCHEMA,
+    LoadedSwingModelGeneration,
+    SwingInferenceEngine,
+    SwingModelGenerationCache,
+    validate_batch_live_feature_parity,
+    validate_ordered_feature_frame,
+)
+from market_predictor.swing.contracts.model_artifact import (
+    SWING_CANDIDATE_MODEL_SCHEMA,
+)
+from market_predictor.swing.features.panel import (
+    SWING_FEATURE_PANEL_SCHEMA,
+    swing_model_feature_columns,
+)
 from tests.r4_fixtures import (
     authorize_candidate_for_test,
     synthetic_identity_metrics,
@@ -91,6 +87,48 @@ class _VerifiedFittedCandidate:
 
     def __init__(self, feature_columns: tuple[str, ...]) -> None:
         self.feature_columns = feature_columns
+
+
+@pytest.mark.parametrize(
+    "thresholds",
+    (
+        None,
+        {"classifier": float("nan")},
+        {"classifier": 0.60, "unexpected": 0.50},
+    ),
+)
+def test_swing_inference_rejects_missing_or_unbound_thresholds(
+    thresholds: dict[str, float] | None,
+) -> None:
+    bundle = validate_promoted_bundle(
+        _base_bundle(mode="swing"),
+        strategy_contract=CONTRACT,
+        expected_mode="swing",
+    )
+    features = bundle.ordered_feature_columns
+    payload: dict[str, object] = {
+        "schema": SWING_CANDIDATE_MODEL_SCHEMA,
+        "status": "candidate",
+        "promotion_permitted": False,
+        "candidate_id": bundle.model_id,
+        "model_family": bundle.model_family,
+        "strategy_contract_sha256": bundle.strategy_contract_sha256,
+        "feature_columns": features,
+        "ablation_profile": bundle.feature_profile,
+        "fitted_models": {"classifier": _VerifiedFittedCandidate(features)},
+    }
+    if thresholds is not None:
+        payload["probability_thresholds"] = thresholds
+
+    with pytest.raises(SchemaMismatchError, match="threshold"):
+        SwingInferenceEngine(
+            LoadedSwingModelGeneration(
+                generation_id=bundle.sha256(),
+                pointer_sha256="a" * 64,
+                bundle=bundle,
+                model_payload=payload,
+            )
+        )
 
 
 def _base_bundle(*, mode: str) -> dict[str, object]:
@@ -172,7 +210,7 @@ def _publish_signed_swing_generation(
     model_path.parent.mkdir(parents=True)
     features = swing_model_feature_columns(contract=CONTRACT, catalyst=False)
     payload = {
-        "schema": MODEL_SCHEMA,
+        "schema": SWING_CANDIDATE_MODEL_SCHEMA,
         "status": "candidate",
         "promotion_permitted": False,
         "candidate_id": candidate_id,
@@ -200,7 +238,7 @@ def _publish_signed_swing_generation(
     write_model_manifest(
         model_path=model_path,
         model_type="canonical_swing",
-        schema_version=MODEL_SCHEMA,
+        schema_version=SWING_CANDIDATE_MODEL_SCHEMA,
         target_col="target",
         features=list(features),
         training_data=training,
@@ -667,263 +705,6 @@ def test_file_backed_bundle_rejects_missing_and_tampered_artifacts(
             bundle_root=root,
             strategy_contract=CONTRACT,
             attestation_trust_store_path=TRUST_STORE,
-        )
-
-
-def test_global_context_is_built_from_exact_verified_authority_row(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    directory = tmp_path / "global-authority"
-    directory.mkdir()
-    authority_file = directory / "_authority.json"
-    authority_file.write_text('{"state":"complete"}', encoding="utf-8")
-    decisions = pd.DataFrame(
-        {
-            "decision_time_utc": [NOW],
-            "global_source_complete_1d": [True],
-            "global_source_complete_3d": [True],
-            "global_event_count_1d": [4.0],
-            "global_event_count_3d": [11.0],
-            "global_sentiment_mean_1d": [-0.2],
-            "global_sentiment_mean_3d": [-0.1],
-            "global_sentiment_coverage_1d": [1.0],
-            "global_sentiment_coverage_3d": [0.9],
-            "global_latest_event_feature_available_at_utc_1d": [NOW],
-            "global_latest_event_feature_available_at_utc_3d": [NOW],
-        }
-    )
-    authority = GlobalEventAuthority(
-        directory=directory,
-        decisions=decisions,
-        coverage=pd.DataFrame(),
-        manifest={
-            "production_ready": True,
-            "required_historical_sources": ["alpaca", "gdelt"],
-        },
-        authority={"state": "complete"},
-    )
-    monkeypatch.setattr(
-        "market_predictor.edge_rebuild.serving.load_global_event_authority",
-        lambda *_args, **_kwargs: authority,
-    )
-    authority_sha256 = file_sha256(authority_file)
-
-    snapshot = build_global_context_snapshot(
-        authority,
-        decision_time_utc=NOW,
-        authority_sha256=authority_sha256,
-    )
-
-    assert snapshot.event_count_3d == 11
-    assert snapshot.source_families == ("alpaca", "gdelt")
-    assert "risk_score" not in GlobalContextSnapshot.model_fields
-    assert "regime" not in GlobalContextSnapshot.model_fields
-    unsourced = snapshot.model_dump()
-    unsourced.update({"risk_score": -0.2, "regime": "risk_off"})
-    with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
-        GlobalContextSnapshot.model_validate(unsourced)
-
-    authority_file.write_text('{"state":"tampered"}', encoding="utf-8")
-    with pytest.raises(ArtifactIntegrityError, match="SHA256"):
-        build_global_context_snapshot(
-            authority,
-            decision_time_utc=NOW,
-            authority_sha256=authority_sha256,
-        )
-
-
-def test_scored_result_exposes_technical_catalyst_global_and_benchmark_fields() -> None:
-    result = PredictionResult(
-        mode="swing",
-        strategy_id="swing",
-        model_id="swing-promoted-001",
-        bundle_sha256="a" * 64,
-        ticker="MSFT",
-        as_of_utc=NOW,
-        horizon_value=10,
-        horizon_unit="sessions",
-        status="scored",
-        predicted_direction="up",
-        model_score=0.76,
-        technical_score=0.71,
-        catalyst_overlay_status="incorporated",
-        catalyst_context_available=True,
-        catalyst_context=CatalystContextSnapshot(
-            as_of_utc=NOW,
-            authority_sha256="e" * 64,
-            required_model_sources_complete=True,
-            event_count_1d=2,
-            event_count_3d=5,
-            sentiment_mean_1d=0.4,
-            sentiment_mean_3d=0.2,
-            sentiment_coverage_1d=1.0,
-            sentiment_coverage_3d=0.8,
-            latest_event_feature_available_at_utc=NOW,
-            sources=(
-                CatalystSourceSnapshot(
-                    source_family="alpaca",
-                    coverage_known=True,
-                    event_count_1d=2,
-                    event_count_3d=5,
-                ),
-                CatalystSourceSnapshot(
-                    source_family="sec",
-                    coverage_known=False,
-                ),
-            ),
-        ),
-        global_context_available=True,
-        global_context=GlobalContextSnapshot(
-            as_of_utc=NOW,
-            authority_sha256="d" * 64,
-            source_coverage_complete=True,
-            event_count_1d=4,
-            event_count_3d=11,
-            sentiment_mean_1d=-0.2,
-            sentiment_mean_3d=-0.1,
-            sentiment_coverage_1d=1.0,
-            sentiment_coverage_3d=0.9,
-            source_families=("alpaca",),
-        ),
-        benchmark_comparisons=(
-            BenchmarkComparison(
-                symbol="SPY",
-                predicted_stock_return=0.03,
-                predicted_benchmark_return=0.01,
-                predicted_excess_return=0.02,
-            ),
-            BenchmarkComparison(
-                symbol="QQQ",
-                predicted_stock_return=0.03,
-                predicted_benchmark_return=0.015,
-                predicted_excess_return=0.015,
-            ),
-        ),
-    )
-
-    assert result.technical_score == pytest.approx(0.71)
-    assert result.catalyst_overlay_status == "incorporated"
-    assert result.global_context is not None
-    assert result.benchmark_comparisons[0].predicted_excess_return == pytest.approx(0.02)
-
-
-def test_unavailable_global_context_is_null_and_abstention_is_explicit() -> None:
-    result = PredictionResult(
-        mode="intraday",
-        strategy_id="intraday",
-        model_id="intraday-promoted-001",
-        bundle_sha256="a" * 64,
-        ticker="RGTI",
-        as_of_utc=NOW,
-        horizon_value=30,
-        horizon_unit="minutes",
-        status="abstained",
-        predicted_direction=None,
-        model_score=None,
-        technical_score=None,
-        catalyst_overlay_status="unavailable",
-        catalyst_context_available=False,
-        catalyst_context=None,
-        global_context_available=False,
-        global_context=None,
-        abstention_reasons=("feature_value_unavailable",),
-    )
-
-    assert result.global_context is None
-    assert result.abstention_reasons == ("feature_value_unavailable",)
-
-    invalid = result.model_dump()
-    invalid["global_context_available"] = True
-    with pytest.raises(ValidationError, match="global_context must be null"):
-        PredictionResult.model_validate(invalid)
-
-
-def test_scored_result_requires_spy_and_qqq_and_abstention_cannot_leak_score() -> None:
-    common: dict[str, object] = {
-        "mode": "intraday",
-        "strategy_id": "intraday",
-        "model_id": "intraday-promoted-001",
-        "bundle_sha256": "a" * 64,
-        "ticker": "NVDA",
-        "as_of_utc": NOW,
-        "horizon_value": 30,
-        "horizon_unit": "minutes",
-        "catalyst_overlay_status": "neutral",
-        "catalyst_context_available": False,
-        "catalyst_context": None,
-        "global_context_available": False,
-        "global_context": None,
-    }
-    with pytest.raises(ValidationError, match="SPY"):
-        PredictionResult(
-            **common,
-            status="scored",
-            predicted_direction="up",
-            model_score=0.65,
-            technical_score=0.6,
-            benchmark_comparisons=(
-                BenchmarkComparison(
-                    symbol="QQQ",
-                    predicted_stock_return=0.01,
-                    predicted_benchmark_return=0.005,
-                    predicted_excess_return=0.005,
-                ),
-            ),
-        )
-    with pytest.raises(ValidationError, match="QQQ"):
-        PredictionResult(
-            **common,
-            status="scored",
-            predicted_direction="up",
-            model_score=0.65,
-            technical_score=0.6,
-            benchmark_comparisons=(
-                BenchmarkComparison(
-                    symbol="SPY",
-                    predicted_stock_return=0.01,
-                    predicted_benchmark_return=0.005,
-                    predicted_excess_return=0.005,
-                ),
-            ),
-        )
-    with pytest.raises(ValidationError, match="cannot expose a model score"):
-        PredictionResult(
-            **common,
-            status="abstained",
-            predicted_direction="down",
-            model_score=0.2,
-            technical_score=0.2,
-            abstention_reasons=("stale_features",),
-        )
-
-
-def test_catalyst_context_preserves_unknown_source_coverage() -> None:
-    with pytest.raises(ValidationError, match="counts must be null"):
-        CatalystSourceSnapshot(
-            source_family="sec",
-            coverage_known=False,
-            event_count_1d=0,
-            event_count_3d=0,
-        )
-
-    with pytest.raises(ValidationError, match="aggregates must be null"):
-        CatalystContextSnapshot(
-            as_of_utc=NOW,
-            authority_sha256="e" * 64,
-            required_model_sources_complete=False,
-            event_count_1d=0,
-            event_count_3d=0,
-            sentiment_mean_1d=0.0,
-            sentiment_mean_3d=0.0,
-            sentiment_coverage_1d=0.0,
-            sentiment_coverage_3d=0.0,
-            sources=(
-                CatalystSourceSnapshot(
-                    source_family="alpaca",
-                    coverage_known=False,
-                ),
-            ),
         )
 
 

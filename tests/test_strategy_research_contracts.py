@@ -10,7 +10,10 @@ from pathlib import Path
 
 from pydantic import ValidationError
 
-from market_predictor.edge_rebuild.swing_features import CATALYST_RANKING_FEATURES
+from market_predictor.core.errors import (
+    ArtifactIntegrityError,
+    DataReadinessError,
+)
 from market_predictor.strategy_research_contracts import (
     ReferenceModelInventory,
     ResearchHypothesisRegistry,
@@ -23,10 +26,7 @@ from market_predictor.swing.contracts import (
     SwingDatasetConfig,
     swing_features_for_profile,
 )
-from market_predictor.core.errors import (
-    ArtifactIntegrityError,
-    DataReadinessError,
-)
+from market_predictor.swing.features.panel import CATALYST_RANKING_FEATURES
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 

@@ -16,8 +16,7 @@ from market_predictor.api_security import (
     PrincipalRateLimiter,
 )
 from market_predictor.config import get_settings
-from market_predictor.investment_replay import AlpacaReplayPriceProvider, InvestmentReplayService
-from market_predictor.prediction_contracts import (
+from market_predictor.core.prediction_contracts import (
     InvestmentReplayRequest,
     InvestmentReplayResponse,
     PredictionApiError,
@@ -30,7 +29,8 @@ from market_predictor.prediction_contracts import (
     PredictionServiceError,
     PredictionValidationError,
 )
-from market_predictor.prediction_service import (
+from market_predictor.serving.investment_replay import AlpacaReplayPriceProvider, InvestmentReplayService
+from market_predictor.serving.prediction_service import (
     PredictionService,
     serving_routes_from_config,
     swing_live_input_provider_from_config,

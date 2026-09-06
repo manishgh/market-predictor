@@ -242,8 +242,8 @@ def test_representative_cross_sectional_output_hash_is_stable() -> None:
 @pytest.mark.parametrize(
     "module_name",
     (
-        "market_predictor.edge_rebuild.swing_features",
-        "market_predictor.edge_rebuild.swing_pipeline_steps",
+        "market_predictor.swing.features.panel",
+        "market_predictor.swing.features.pipeline",
     ),
 )
 def test_cross_sectional_contract_has_no_accidental_consumer_aliases(

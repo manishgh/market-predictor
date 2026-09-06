@@ -9,6 +9,9 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
+from market_predictor.core import path_integrity
+from market_predictor.core.errors import DataReadinessError
+from market_predictor.core.json_integrity import parse_strict_json_object
 from market_predictor.feature_store import (
     LIVE_FEATURE_SCHEMA,
     LiveFeatureStore,
@@ -18,9 +21,8 @@ from market_predictor.live_features import LIVE_ARTIFACT_TYPES, LIVE_SCHEMA_VERS
 from market_predictor.locking import file_lock
 from market_predictor.registry import file_sha256
 from market_predictor.release import verify_local_release
-from market_predictor.core.errors import DataReadinessError
 
-SERVING_BUNDLE_SCHEMA = "market_predictor.serving_bundle.v1"
+SERVING_BUNDLE_SCHEMA = "market_predictor.serving.bundle.v1"
 ACTIVE_SERVING_BUNDLE_SCHEMA = "market_predictor.active_serving_bundle.v1"
 SERVING_BUNDLE_MANIFEST = "bundle.json"
 ACTIVE_SERVING_BUNDLE_POINTER = "active_serving_bundle.json"
@@ -43,7 +45,7 @@ def publish_serving_bundle(
 ) -> dict[str, Any]:
     """Publish an immutable model/feature serving generation."""
 
-    repository = root.resolve()
+    repository = _repository_root(root)
     generated = _utc(generated_at or datetime.now(UTC))
     release = verify_local_release(
         repository,
@@ -152,7 +154,7 @@ def verify_serving_bundle(
     feature_store_config: LiveFeatureStoreConfig | None = None,
 ) -> dict[str, Any]:
     _require_sha256(bundle_id, "serving bundle id")
-    repository = root.resolve()
+    repository = _repository_root(root)
     bundle_dir = repository / _BUNDLE_DIRECTORY / bundle_id
     _validate_bundle_directory(bundle_dir, repository / _BUNDLE_DIRECTORY)
     return _verify_bundle_directory(
@@ -173,7 +175,7 @@ def activate_serving_bundle(
     activated_at: datetime | None = None,
     feature_store_config: LiveFeatureStoreConfig | None = None,
 ) -> dict[str, Any]:
-    repository = root.resolve()
+    repository = _repository_root(root)
     pointer_path = repository / ACTIVE_SERVING_BUNDLE_POINTER
     with file_lock(pointer_path):
         return _activate_serving_bundle_locked(
@@ -194,7 +196,7 @@ def rollback_serving_bundle(
     activated_at: datetime | None = None,
     feature_store_config: LiveFeatureStoreConfig | None = None,
 ) -> dict[str, Any]:
-    repository = root.resolve()
+    repository = _repository_root(root)
     pointer_path = repository / ACTIVE_SERVING_BUNDLE_POINTER
     with file_lock(pointer_path):
         current = _load_active_pointer(pointer_path)
@@ -219,7 +221,7 @@ def load_active_serving_bundle(
     as_of: datetime | None = None,
     feature_store_config: LiveFeatureStoreConfig | None = None,
 ) -> dict[str, Any]:
-    repository = root.resolve()
+    repository = _repository_root(root)
     pointer = _load_active_pointer(repository / ACTIVE_SERVING_BUNDLE_POINTER)
     bundle_id = str(pointer["bundle_id"])
     bundle = verify_serving_bundle(
@@ -236,14 +238,16 @@ def load_active_serving_bundle(
 
 
 def load_active_serving_bundle_pointer(root: Path) -> dict[str, Any]:
-    return _load_active_pointer(root.resolve() / ACTIVE_SERVING_BUNDLE_POINTER)
+    return _load_active_pointer(
+        _repository_root(root) / ACTIVE_SERVING_BUNDLE_POINTER
+    )
 
 
 def serving_bundle_asset_paths(
     root: Path,
     bundle: dict[str, Any],
 ) -> tuple[Path, Path]:
-    repository = root.resolve()
+    repository = _repository_root(root)
     bundle_id = str(bundle.get("bundle_id") or "")
     _require_sha256(bundle_id, "serving bundle id")
     bundle_dir = repository / _BUNDLE_DIRECTORY / bundle_id
@@ -588,17 +592,32 @@ def _safe_child(root: Path, relative: str) -> Path:
     candidate = Path(relative)
     if not relative or candidate.is_absolute() or ".." in candidate.parts:
         raise DataReadinessError("serving bundle path is unsafe")
-    resolved_root = root.resolve()
-    resolved = (resolved_root / candidate).resolve()
-    if not resolved.is_relative_to(resolved_root):
-        raise DataReadinessError("serving bundle path escapes its root")
-    return resolved
+    return path_integrity.resolve_existing_file_inside(
+        root,
+        relative,
+        label="serving bundle artifact",
+    )
 
 
 def _validate_bundle_directory(path: Path, root: Path) -> None:
     expected = root.resolve() / path.name
     if not path.is_dir() or path.resolve() != expected:
         raise DataReadinessError("serving bundle directory escapes its repository")
+    path_integrity.verify_tree_containment(path, label="serving bundle directory")
+
+
+def _repository_root(root: Path) -> Path:
+    absolute = path_integrity.verify_no_reparse_ancestry(
+        root,
+        label="serving repository",
+    )
+    try:
+        resolved = absolute.resolve(strict=True)
+    except OSError as exc:
+        raise DataReadinessError("serving repository is unavailable") from exc
+    if not resolved.is_dir():
+        raise DataReadinessError("serving repository is not a directory")
+    return resolved
 
 
 def _remove_staging_directory(staging: Path, root: Path) -> None:
@@ -644,11 +663,10 @@ def _fsync_directory(path: Path) -> None:
 
 def _load_json_object(path: Path, name: str) -> dict[str, Any]:
     try:
-        loaded = json.loads(path.read_text(encoding="utf-8"))
-    except (FileNotFoundError, json.JSONDecodeError, OSError) as exc:
+        safe_path = path_integrity.verify_no_reparse_ancestry(path, label=name)
+        loaded = parse_strict_json_object(safe_path.read_bytes(), label=name)
+    except (FileNotFoundError, OSError, ValueError) as exc:
         raise DataReadinessError(f"{name} is unavailable or invalid") from exc
-    if not isinstance(loaded, dict):
-        raise DataReadinessError(f"{name} must contain an object")
     return {str(key): value for key, value in loaded.items()}
 
 

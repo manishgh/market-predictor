@@ -29,8 +29,13 @@ MODELING_FORBIDDEN_DEPENDENCIES = (
 GOVERNANCE_FORBIDDEN_DEPENDENCIES = (
     "market_predictor.serving",
     "market_predictor.edge_rebuild.serving",
+    "market_predictor.edge_rebuild.swing_live",
+    "market_predictor.edge_rebuild.policy",
+    "market_predictor.prediction_service",
 )
 INTRADAY_FORBIDDEN_DEPENDENCIES = ("market_predictor.governance",)
+SERVING_FORBIDDEN_DEPENDENCIES = ("market_predictor.edge_rebuild",)
+SWING_FORBIDDEN_DEPENDENCIES = ("market_predictor.edge_rebuild",)
 UNIVERSE_ALLOWED_DEPENDENCIES = (
     "market_predictor.core",
     "market_predictor.evidence",
@@ -59,6 +64,22 @@ CATALYSTS_ALLOWED_DEPENDENCIES = (
     "market_predictor.universe",
 )
 REMOVED_PRODUCTION_MODULES = (
+    "market_predictor.edge_rebuild.serving",
+    "market_predictor.edge_rebuild.swing_live",
+    "market_predictor.edge_rebuild.policy",
+    "market_predictor.prediction_service",
+    "market_predictor.prediction_contracts",
+    "market_predictor.prediction_snapshot",
+    "market_predictor.serving_bundle",
+    "market_predictor.serving_context",
+    "market_predictor.edge_rebuild.swing_features",
+    "market_predictor.edge_rebuild.swing_selection",
+    "market_predictor.edge_rebuild.swing_catalyst_features",
+    "market_predictor.edge_rebuild.swing_filters",
+    "market_predictor.edge_rebuild.swing_pipeline_steps",
+    "market_predictor.serving.contracts",
+    "market_predictor.outcome_intents",
+    "market_predictor.investment_replay",
     "market_predictor.edge_rebuild.benchmark_history",
     "market_predictor.edge_rebuild.broad_intraday_history",
     "market_predictor.edge_rebuild.extended_session_context",
@@ -134,6 +155,14 @@ REMOVED_EDGE_REBUILD_FILES = (
     "technical_relationships.py",
     "universe_identity.py",
     "volume_bars.py",
+    "serving.py",
+    "swing_live.py",
+    "policy.py",
+    "swing_features.py",
+    "swing_selection.py",
+    "swing_catalyst_features.py",
+    "swing_filters.py",
+    "swing_pipeline_steps.py",
 )
 REMOVED_MIGRATED_FILES = (
     "symbols.py",
@@ -145,6 +174,14 @@ REMOVED_MIGRATED_FILES = (
     "swing/event_relevance.py",
     "swing/contracts.py",
     "swing/labels.py",
+    "prediction_service.py",
+    "prediction_contracts.py",
+    "prediction_snapshot.py",
+    "serving_bundle.py",
+    "serving_context.py",
+    "outcome_intents.py",
+    "investment_replay.py",
+    "serving/contracts.py",
 )
 REMOVED_ACTIVE_SYMBOLS = (
     "GLOBAL_EVENT_QUERY_POLICY_V1",
@@ -195,6 +232,8 @@ def test_modeling_package_is_horizon_neutral() -> None:
     (
         ("governance", GOVERNANCE_FORBIDDEN_DEPENDENCIES),
         ("intraday", INTRADAY_FORBIDDEN_DEPENDENCIES),
+        ("serving", SERVING_FORBIDDEN_DEPENDENCIES),
+        ("swing", SWING_FORBIDDEN_DEPENDENCIES),
     ),
 )
 def test_production_dependency_direction_is_enforced(
@@ -222,6 +261,54 @@ def test_production_dependency_direction_is_enforced(
     ),
 )
 def test_removed_readiness_import_guard_recognizes_every_import_form(
+    statement: str,
+) -> None:
+    imported_names = tuple(name for node in ast.walk(ast.parse(statement)) for name in _imported_names(node))
+    assert any(_matches_any_dependency(name, REMOVED_PRODUCTION_MODULES) for name in imported_names)
+
+
+@pytest.mark.parametrize(
+    "statement",
+    (
+        "import market_predictor.edge_rebuild.serving",
+        "from market_predictor.edge_rebuild import serving",
+        "from market_predictor.edge_rebuild.serving import SwingInferenceEngine",
+        "import market_predictor.edge_rebuild.swing_live",
+        "from market_predictor.edge_rebuild import swing_live",
+        "from market_predictor.edge_rebuild.swing_live import build_live_swing_features",
+        "import market_predictor.edge_rebuild.policy",
+        "from market_predictor.edge_rebuild import policy",
+        "from market_predictor.edge_rebuild.policy import determine_final_signal",
+        "import market_predictor.prediction_service",
+        "from market_predictor import prediction_service",
+        "from market_predictor.prediction_service import PredictionService",
+        "import market_predictor.prediction_contracts",
+        "from market_predictor.prediction_contracts import PredictionRequest",
+        "import market_predictor.prediction_snapshot",
+        "from market_predictor.prediction_snapshot import PredictionSnapshotStore",
+        "import market_predictor.serving_bundle",
+        "from market_predictor.serving_bundle import load_active_serving_bundle",
+        "import market_predictor.serving_context",
+        "from market_predictor.serving_context import ActiveModelContext",
+        "import market_predictor.edge_rebuild.swing_features",
+        "from market_predictor.edge_rebuild.swing_features import build_swing_feature_rows",
+        "import market_predictor.edge_rebuild.swing_selection",
+        "from market_predictor.edge_rebuild.swing_selection import select_swing_candidates",
+        "import market_predictor.edge_rebuild.swing_catalyst_features",
+        "from market_predictor.edge_rebuild.swing_catalyst_features import aggregate_catalyst_features",
+        "import market_predictor.edge_rebuild.swing_filters",
+        "from market_predictor.edge_rebuild.swing_filters import apply_swing_filters",
+        "import market_predictor.edge_rebuild.swing_pipeline_steps",
+        "from market_predictor.edge_rebuild.swing_pipeline_steps import SetupComponentsStep",
+        "import market_predictor.serving.contracts",
+        "from market_predictor.serving.contracts import PredictionRequest",
+        "import market_predictor.outcome_intents",
+        "from market_predictor.outcome_intents import register_snapshot_intents",
+        "import market_predictor.investment_replay",
+        "from market_predictor.investment_replay import InvestmentReplayService",
+    ),
+)
+def test_removed_serving_import_guard_recognizes_every_import_form(
     statement: str,
 ) -> None:
     imported_names = tuple(name for node in ast.walk(ast.parse(statement)) for name in _imported_names(node))

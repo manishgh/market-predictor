@@ -106,7 +106,9 @@ class ArchitectureBoundaryTests(unittest.TestCase):
         self.assertNotIn("azure-publish-models", research_commands)
         self.assertFalse((package_root / "deployment.py").exists())
 
-        prediction_service = (package_root / "prediction_service.py").read_text(encoding="utf-8")
+        prediction_service = (
+            package_root / "serving" / "prediction_service.py"
+        ).read_text(encoding="utf-8")
         self.assertNotIn("market_predictor.entry_exit", prediction_service)
 
     def test_prediction_api_exposes_no_alert_or_execution_routes(self) -> None:

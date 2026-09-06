@@ -14,16 +14,6 @@ from market_predictor.edge_rebuild.outcome_diagnostics import (
     binary_outcome_diagnostic,
     label_permutation_control,
 )
-from market_predictor.edge_rebuild.swing_features import (
-    MANAGED_EXCESS_RETURN_COLUMNS,
-    MANAGED_PATH_NET_RETURN_COLUMNS,
-    MANAGED_PATH_SESSION_ORDINAL_COLUMNS,
-    SWING_FEATURE_PROFILE,
-)
-from market_predictor.edge_rebuild.swing_selection import (
-    EFFECTIVE_SECTOR_WEIGHT_COLUMN,
-    select_constrained_swing_portfolio,
-)
 from market_predictor.edge_rebuild.training.data_io import _security_holdout_mask
 from market_predictor.edge_rebuild.training.economics import (
     _daily_position_ledger,
@@ -55,9 +45,18 @@ from market_predictor.modeling.strategy_contract import StrategyContract
 from market_predictor.resources import (
     release_process_memory,
 )
+from market_predictor.swing.features.panel import (
+    MANAGED_EXCESS_RETURN_COLUMNS,
+    MANAGED_PATH_NET_RETURN_COLUMNS,
+    MANAGED_PATH_SESSION_ORDINAL_COLUMNS,
+    SWING_FEATURE_PROFILE,
+)
+from market_predictor.swing.selection import (
+    EFFECTIVE_SECTOR_WEIGHT_COLUMN,
+    select_constrained_swing_portfolio,
+)
 
 TRAINING_SCHEMA: Final = "edge_rebuild.swing_training.v5"
-MODEL_SCHEMA: Final = "edge_rebuild.swing_candidate.v5"
 EVALUATION_SCHEMA: Final = "edge_rebuild.swing_evaluation.v7"
 MODEL_CARD_SCHEMA: Final = "edge_rebuild.swing_model_card.v7"
 OUTPUT_AUTHORITY_SCHEMA: Final = "edge_rebuild.swing_candidate_authority.v5"

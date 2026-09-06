@@ -13,9 +13,6 @@ from market_predictor.core.errors import (
     DataReadinessError,
     PromotionGateError,
 )
-from market_predictor.edge_rebuild.swing_training import (
-    MODEL_SCHEMA as SWING_CANDIDATE_MODEL_SCHEMA,
-)
 from market_predictor.governance.promotion.bundle_contracts import (
     PromotedIntradayBundle,
     PromotedSwingBundle,
@@ -25,6 +22,9 @@ from market_predictor.modeling.strategy_contract import StrategyContract
 from market_predictor.promotion_attestation import (
     promotion_attestation_path_for,
     verify_promotion_attestation,
+)
+from market_predictor.swing.contracts.model_artifact import (
+    SWING_CANDIDATE_MODEL_SCHEMA,
 )
 
 

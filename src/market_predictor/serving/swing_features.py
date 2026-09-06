@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import hashlib
-import json
 import os
 import threading
 from collections.abc import Mapping, Sequence
@@ -20,26 +19,28 @@ from market_predictor.canonical.cutoffs import swing_prediction_cutoffs
 from market_predictor.canonical.joins import MEMBERSHIP_VALUE_COLUMNS
 from market_predictor.canonical.reconciliation import stamp_canonical_decision_ids
 from market_predictor.canonical.store import file_sha256
+from market_predictor.core import path_integrity
 from market_predictor.core.errors import DataReadinessError
-from market_predictor.edge_rebuild.serving import validate_ordered_feature_frame
-from market_predictor.edge_rebuild.swing_features import (
+from market_predictor.core.json_integrity import parse_strict_json_object
+from market_predictor.governance.promotion.bundle_contracts import (
+    canonical_payload_sha256,
+)
+from market_predictor.modeling.strategy_contract import StrategyContract
+from market_predictor.resources import assert_memory_budget
+from market_predictor.serving.swing_inference import validate_ordered_feature_frame
+from market_predictor.swing.features.catalyst_decision_authority import (
+    REQUIRED_MODEL_SOURCE_FAMILIES,
+    TRACKED_SOURCE_FAMILIES,
+    CatalystDecisionAuthority,
+    load_catalyst_decision_authority,
+)
+from market_predictor.swing.features.panel import (
     SWING_CATALYST_FEATURE_PROFILE,
     SWING_FEATURE_PROFILE,
     build_swing_ablation_rows,
     build_swing_feature_rows,
     finalize_swing_feature_panel,
     swing_model_feature_columns,
-)
-from market_predictor.governance.promotion.bundle_contracts import (
-    canonical_payload_sha256,
-)
-from market_predictor.modeling.strategy_contract import StrategyContract
-from market_predictor.resources import assert_memory_budget
-from market_predictor.swing.features.catalyst_decision_authority import (
-    REQUIRED_MODEL_SOURCE_FAMILIES,
-    TRACKED_SOURCE_FAMILIES,
-    CatalystDecisionAuthority,
-    load_catalyst_decision_authority,
 )
 
 SWING_LIVE_SCHEMA_VERSION: Final = "edge_rebuild.swing_live.v1"
@@ -124,7 +125,10 @@ class FileSwingLiveInputProvider:
         maximum_bytes: int,
         maximum_rows: int,
     ) -> SwingLiveInputs:
-        root = self.directory.resolve()
+        root = path_integrity.verify_tree_containment(
+            self.directory,
+            label="swing live-input repository",
+        )
         pointer = _load_input_pointer(root)
         cached = self._cached
         if cached is not None and cached.pointer_sha256 == pointer["pointer_sha256"]:
@@ -204,9 +208,11 @@ class FileSwingLiveInputProvider:
             manifest.get("catalyst_authority_directory"),
             label="catalyst authority",
         )
-        catalyst_authority_path = catalyst / "_authority.json"
-        if catalyst_authority_path.is_symlink() or not catalyst_authority_path.is_file():
-            raise DataReadinessError("swing live catalyst authority identity is unavailable")
+        catalyst_authority_path = path_integrity.resolve_existing_file_inside(
+            catalyst,
+            "_authority.json",
+            label="swing live catalyst authority",
+        )
         expected_catalyst_sha256 = str(manifest.get("catalyst_authority_sha256", ""))
         if (
             len(expected_catalyst_sha256) != 64
@@ -480,7 +486,11 @@ def _verify_live_feature_bindings(
         (live_manifest_path, expected_live_manifest_sha256, "live input manifest"),
     )
     for path, expected, label in files:
-        if len(expected) != 64 or path.is_symlink() or not path.is_file() or file_sha256(path) != expected:
+        safe_path = path_integrity.verify_no_reparse_ancestry(
+            path,
+            label=f"swing live {label}",
+        )
+        if len(expected) != 64 or not safe_path.is_file() or file_sha256(safe_path) != expected:
             raise DataReadinessError(f"swing live {label} changed or does not match its generation")
 
 
@@ -825,12 +835,16 @@ def _load_input_pointer(root: Path) -> dict[str, str]:
 def _verified_input_generation_root(root: Path, generation_id: str) -> Path:
     generations = root / SWING_LIVE_INPUT_GENERATIONS
     candidate = generations / generation_id
-    if generations.is_symlink() or candidate.is_symlink():
-        raise DataReadinessError("swing live-input generation cannot use symlinks")
     try:
-        generations_root = generations.resolve(strict=True)
-        resolved = candidate.resolve(strict=True)
-    except FileNotFoundError as exc:
+        generations_root = path_integrity.verify_no_reparse_ancestry(
+            generations,
+            label="swing live-input generations",
+        ).resolve(strict=True)
+        resolved = path_integrity.verify_tree_containment(
+            candidate,
+            label="swing live-input generation",
+        )
+    except (DataReadinessError, FileNotFoundError) as exc:
         raise DataReadinessError("swing live-input generation is unavailable") from exc
     if not resolved.is_dir() or not resolved.is_relative_to(generations_root):
         raise DataReadinessError("swing live-input generation escapes its repository")
@@ -855,7 +869,12 @@ def _read_projected_parquet(
     path = _verified_relative_path(root, record.get("path"), label=label)
     expected_sha = str(record.get("sha256", ""))
     expected_rows = record.get("rows")
-    if len(expected_sha) != 64 or not isinstance(expected_rows, int) or expected_rows < 1:
+    if (
+        len(expected_sha) != 64
+        or isinstance(expected_rows, bool)
+        or not isinstance(expected_rows, int)
+        or expected_rows < 1
+    ):
         raise DataReadinessError(f"swing live {label} identity is invalid")
     try:
         with path.open("rb") as handle:
@@ -951,15 +970,14 @@ def _validate_cached_input_cutoff(inputs: SwingLiveInputs, as_of_utc: datetime) 
 
 
 def _read_json(path: Path, label: str) -> dict[str, object]:
-    if path.is_symlink() or not path.is_file():
-        raise DataReadinessError(f"{label} is unavailable")
     try:
-        value = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        safe_path = path_integrity.verify_no_reparse_ancestry(path, label=label)
+        if not safe_path.is_file():
+            raise OSError(f"{label} is unavailable")
+        value = parse_strict_json_object(safe_path.read_bytes(), label=label)
+    except (OSError, ValueError) as exc:
         raise DataReadinessError(f"{label} is unreadable") from exc
-    if not isinstance(value, dict):
-        raise DataReadinessError(f"{label} must be an object")
-    return {str(key): item for key, item in value.items()}
+    return value
 
 
 def _read_hashed_json(
@@ -968,10 +986,9 @@ def _read_hashed_json(
     expected_sha256: str,
     label: str,
 ) -> dict[str, object]:
-    if path.is_symlink():
-        raise DataReadinessError(f"{label} cannot be a symlink")
     try:
-        with path.open("rb") as handle:
+        safe_path = path_integrity.verify_no_reparse_ancestry(path, label=label)
+        with safe_path.open("rb") as handle:
             payload = handle.read(1024 * 1024 + 1)
     except OSError as exc:
         raise DataReadinessError(f"{label} is unreadable") from exc
@@ -980,12 +997,10 @@ def _read_hashed_json(
     if hashlib.sha256(payload).hexdigest() != expected_sha256:
         raise DataReadinessError(f"{label} hash does not verify")
     try:
-        value = json.loads(payload.decode("utf-8"))
-    except (UnicodeError, json.JSONDecodeError) as exc:
+        value = parse_strict_json_object(payload, label=label)
+    except ValueError as exc:
         raise DataReadinessError(f"{label} is unreadable") from exc
-    if not isinstance(value, dict):
-        raise DataReadinessError(f"{label} must be an object")
-    return {str(key): item for key, item in value.items()}
+    return value
 
 
 def _verified_manifest_file(root: Path, value: object, *, label: str) -> Path:
@@ -1022,16 +1037,21 @@ def _verified_relative_path(
         or any(part in {"", ".", ".."} for part in relative.parts)
     ):
         raise DataReadinessError(f"swing live {label} path is invalid")
-    path = root.joinpath(*relative.parts)
-    current = root
-    for part in relative.parts:
-        current = current / part
-        if current.is_symlink():
-            raise DataReadinessError(f"swing live {label} path contains a symlink")
+    native_relative = str(Path(*relative.parts))
+    if require_file:
+        return path_integrity.resolve_existing_file_inside(
+            root,
+            native_relative,
+            label=f"swing live {label}",
+        )
+    path = path_integrity.verify_no_reparse_ancestry(
+        root.joinpath(*relative.parts),
+        label=f"swing live {label}",
+    )
     try:
         resolved = path.resolve(strict=True)
     except FileNotFoundError as exc:
         raise DataReadinessError(f"swing live {label} artifact is unavailable") from exc
-    if not resolved.is_relative_to(root) or (require_file and not resolved.is_file()):
+    if not resolved.is_relative_to(root) or not resolved.is_dir():
         raise DataReadinessError(f"swing live {label} path escapes its authority")
     return resolved

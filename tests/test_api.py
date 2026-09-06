@@ -8,7 +8,7 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 
 from market_predictor.api import create_app
-from market_predictor.prediction_contracts import (
+from market_predictor.core.prediction_contracts import (
     InvestmentReplayRequest,
     InvestmentReplayResponse,
     PredictionCapacityError,
@@ -24,7 +24,8 @@ from market_predictor.prediction_contracts import (
     PredictionThrottledError,
     PredictionValidationError,
 )
-from market_predictor.prediction_service import PredictionService, ServingRoute
+from market_predictor.serving.prediction_service import PredictionService
+from market_predictor.serving.routes import ServingRoute
 from market_predictor.telemetry import RuntimeTelemetry
 
 

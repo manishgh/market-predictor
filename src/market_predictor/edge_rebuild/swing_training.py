@@ -16,23 +16,12 @@ import pandas as pd
 import market_predictor.swing.contracts.materialization as swing_materialization_contracts
 from market_predictor.canonical.store import file_sha256
 from market_predictor.core.errors import DataReadinessError
-from market_predictor.edge_rebuild.swing_features import (
-    MANAGED_PATH_COST_POLICY,
-    SWING_BASELINE_ABLATION_ORDER,
-    SWING_FEATURE_PROFILE,
-    swing_baseline_feature_columns,
-)
 from market_predictor.edge_rebuild.temporal_manifest import (
     build_temporal_schedule,
     load_temporal_manifest_config,
 )
 from market_predictor.edge_rebuild.training.data_io import (
-    _partition_records_for_sessions,
-    _projected_profile_memory_bytes,
     _security_holdout_mask,
-    _validate_profile_frame,
-    _validate_profile_session_coverage,
-    load_complete_swing_feature_panel,
     load_swing_panel_binding,
     load_swing_profile,
 )
@@ -41,35 +30,24 @@ from market_predictor.edge_rebuild.training.evaluation import (
 )
 from market_predictor.edge_rebuild.training.lgbm_models import (
     _fit_candidate,
-    _linex_objective,
     _predict_probability,
-    _raw_probability,
 )
 from market_predictor.edge_rebuild.training.swing_evaluation import (
     _evaluate_validation_candidate,
     _evaluation_columns,
     _evaluation_metrics,
-    _probability_distribution,
-    _scope_economic_key,
     _selection_key,
-    _threshold_selection_key,
-    _validation_scopes_pass_economic_gates,
 )
 from market_predictor.edge_rebuild.training.swing_types import (
     CandidateSpec,
-    FittedCandidate,
     SwingPanelBinding,
-    SwingProfileData,
     SwingTrainingConfig,
     SwingTrainingResult,
     _guard,
-    _is_unapproved_source_feature,
-    _iso,
     _json_sha256,
     _read_json,
     _resolve_inside,
     _sequence_sha256,
-    _strict_bool,
     _write_json,
 )
 from market_predictor.edge_rebuild.training.utils import (
@@ -86,9 +64,15 @@ from market_predictor.resources import (
     memory_audit,
     release_process_memory,
 )
+from market_predictor.swing.contracts.model_artifact import SWING_CANDIDATE_MODEL_SCHEMA
+from market_predictor.swing.features.panel import (
+    MANAGED_PATH_COST_POLICY,
+    SWING_BASELINE_ABLATION_ORDER,
+    SWING_FEATURE_PROFILE,
+    swing_baseline_feature_columns,
+)
 
 TRAINING_SCHEMA: Final = "edge_rebuild.swing_training.v5"
-MODEL_SCHEMA: Final = "edge_rebuild.swing_candidate.v5"
 EVALUATION_SCHEMA: Final = "edge_rebuild.swing_evaluation.v7"
 MODEL_CARD_SCHEMA: Final = "edge_rebuild.swing_model_card.v7"
 OUTPUT_AUTHORITY_SCHEMA: Final = "edge_rebuild.swing_candidate_authority.v5"
@@ -294,7 +278,7 @@ def train_swing_edge_candidate(
         }
         no_candidate_model_card = {
             "schema": MODEL_CARD_SCHEMA,
-            "model_schema": MODEL_SCHEMA,
+            "model_schema": SWING_CANDIDATE_MODEL_SCHEMA,
             "status": "no_candidate",
             "model_family": "swing_baseline",
             "promotion_permitted": False,
@@ -513,7 +497,7 @@ def train_swing_edge_candidate(
     }
     model_card: dict[str, Any] = {
         "schema": MODEL_CARD_SCHEMA,
-        "model_schema": MODEL_SCHEMA,
+        "model_schema": SWING_CANDIDATE_MODEL_SCHEMA,
         "status": "candidate",
         "model_family": "swing_baseline",
         "promotion_permitted": False,
@@ -551,7 +535,7 @@ def train_swing_edge_candidate(
         ],
     }
     payload: dict[str, Any] = {
-        "schema": MODEL_SCHEMA,
+        "schema": SWING_CANDIDATE_MODEL_SCHEMA,
         "status": "candidate",
         "model_family": "swing_baseline",
         "promotion_permitted": False,
@@ -768,7 +752,7 @@ def _publish_immutable(
         }
         state = "candidate" if candidate is not None else "no_candidate"
         manifest = {
-            "schema": MODEL_SCHEMA,
+            "schema": SWING_CANDIDATE_MODEL_SCHEMA,
             "state": state,
             "promotion_permitted": False,
             "created_at_utc": datetime.now(UTC).isoformat(),
@@ -804,7 +788,7 @@ def load_swing_candidate_authority(directory: Path) -> dict[str, Any]:
     authority = _read_json(authority_path, "swing candidate authority")
     state = str(manifest.get("state"))
     if (
-        manifest.get("schema") != MODEL_SCHEMA
+        manifest.get("schema") != SWING_CANDIDATE_MODEL_SCHEMA
         or state not in {"candidate", "no_candidate"}
         or manifest.get("promotion_permitted") is not False
         or authority.get("schema") != OUTPUT_AUTHORITY_SCHEMA
@@ -867,7 +851,7 @@ def load_swing_candidate_authority(directory: Path) -> dict[str, Any]:
         or model_card.get("schema") != MODEL_CARD_SCHEMA
         or model_card.get("status") != "candidate"
         or model_card.get("promotion_permitted") is not False
-        or payload.get("schema") != MODEL_SCHEMA
+        or payload.get("schema") != SWING_CANDIDATE_MODEL_SCHEMA
         or payload.get("status") != "candidate"
         or payload.get("promotion_permitted") is not False
         or evaluation.get("model_family") != "swing_baseline"

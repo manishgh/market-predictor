@@ -18,30 +18,7 @@ from market_predictor.catalyst_overlay import (
     assess_catalyst_overlay,
 )
 from market_predictor.core.errors import DataReadinessError, MarketPredictorError
-from market_predictor.drift_policy import DriftAssessmentV2, DriftStateStore
-from market_predictor.edge_rebuild.policy import (
-    combined_readiness,
-    determine_final_signal,
-    determine_intraday_signal,
-)
-from market_predictor.edge_rebuild.serving import (
-    LoadedSwingModelGeneration,
-    SwingInferenceEngine,
-    SwingModelGenerationCache,
-)
-from market_predictor.edge_rebuild.swing_live import (
-    FileSwingLiveInputProvider,
-    SwingLiveInputProvider,
-    build_live_swing_features,
-)
-from market_predictor.edge_rebuild.swing_selection import (
-    select_constrained_swing_portfolio,
-)
-from market_predictor.feature_store import LiveFeatureStore
-from market_predictor.governance.promotion.bundle_contracts import PromotedSwingBundle
-from market_predictor.intraday.model import score_intraday_payload
-from market_predictor.modeling.strategy_contract import StrategyContract, load_strategy_contract
-from market_predictor.prediction_contracts import (
+from market_predictor.core.prediction_contracts import (
     CatalystConfirmationInfo,
     FeatureArtifactIdentityV1,
     IntradayPrediction,
@@ -64,13 +41,17 @@ from market_predictor.prediction_contracts import (
     SwingPrediction,
     UnifiedTickerPrediction,
 )
+from market_predictor.drift_policy import DriftAssessmentV2, DriftStateStore
+from market_predictor.feature_store import LiveFeatureStore
+from market_predictor.governance.promotion.bundle_contracts import PromotedSwingBundle
+from market_predictor.intraday.model import score_intraday_payload
+from market_predictor.modeling.strategy_contract import StrategyContract, load_strategy_contract
 from market_predictor.prediction_policy import (
     PredictionSelectionPolicy,
     intraday_decision_score,
     parse_prediction_policy,
     select_intraday_candidates,
 )
-from market_predictor.prediction_snapshot import PredictionSnapshotStore
 from market_predictor.readiness import (
     INVALID,
     VALID,
@@ -78,18 +59,41 @@ from market_predictor.readiness import (
 )
 from market_predictor.registry import file_sha256
 from market_predictor.resources import assert_memory_budget, memory_audit
-from market_predictor.serving_context import (
+from market_predictor.serving.decision_policy import (
+    combined_readiness,
+    determine_final_signal,
+    determine_intraday_signal,
+)
+from market_predictor.serving.model_context import (
     ActiveModelContext,
     ActiveModelContextCache,
-    ActiveReleaseRoute,
     ModelContextProvider,
+)
+from market_predictor.serving.routes import ServingRoute
+from market_predictor.serving.snapshot_store import PredictionSnapshotStore
+from market_predictor.serving.swing_features import (
+    FileSwingLiveInputProvider,
+    SwingLiveInputProvider,
+    build_live_swing_features,
+)
+from market_predictor.serving.swing_inference import (
+    LoadedSwingModelGeneration,
+    SwingInferenceEngine,
+    SwingModelGenerationCache,
+)
+from market_predictor.swing.contracts.outcome_policy import (
+    swing_outcome_policy,
+    swing_outcome_policy_sha256,
+)
+from market_predictor.swing.contracts.prediction_policy import SwingPredictionPolicy
+from market_predictor.swing.selection import (
+    select_constrained_swing_portfolio,
 )
 
 DEFAULT_MODE_HORIZONS = {"swing": "10b", "intraday": "60m"}
 SERVING_POLICY_ID = "market_predictor.serving_policy_bundle.v2"
 # Serving thresholds are sourced from the canonical prediction policy so the
 # served signal semantics and the promotion-evaluated policy share one definition.
-ServingRoute = ActiveReleaseRoute
 
 
 @dataclass(frozen=True)
@@ -221,7 +225,7 @@ class PredictionService:
         self.memory_headroom_gib = memory_headroom_gib
         if self.swing_live_input_provider is None:
             self.swing_live_input_provider = FileSwingLiveInputProvider(
-                self.root / "data/live/edge_rebuild/swing",
+                self.root / "data/live/swing",
                 memory_budget_gib=memory_budget_gib,
                 memory_headroom_gib=memory_headroom_gib,
             )
@@ -280,6 +284,7 @@ class PredictionService:
 
     def predict_swing(self, request: PredictionRequest) -> PredictionResponse:
         try:
+            _validate_swing_requested_models(request.requested_models)
             route, resolved_horizon = self._serving_route("swing", request)
             try:
                 contract = load_strategy_contract(self._resolve(Path("configs/edge_rebuild_strategy_contract.toml")))
@@ -290,7 +295,26 @@ class PredictionService:
                 raise
             generation = self._edge_swing_generation(route, contract=contract)
             bundle = generation.bundle
+            engine = SwingInferenceEngine(generation)
+            prediction_policy, prediction_policy_sha256 = _swing_prediction_policy(
+                probability_threshold=engine.threshold,
+                contract=contract,
+            )
+            model = _edge_swing_model_info(
+                generation,
+                bundle_root=self._resolve(route.repository),
+                resolved_horizon=resolved_horizon,
+                contract=contract,
+                prediction_policy=prediction_policy,
+                prediction_policy_sha256=prediction_policy_sha256,
+            )
             as_of = request.as_of or datetime.now(UTC)
+            self._require_actionable_drift(
+                mode="swing",
+                horizon=resolved_horizon,
+                model=model,
+                checked_at=as_of,
+            )
             if bundle.promoted_at_utc > as_of.astimezone(UTC):
                 raise DataReadinessError("promoted swing bundle was unavailable at the requested as_of")
             if self.swing_live_input_provider is None:
@@ -313,7 +337,6 @@ class PredictionService:
                 memory_budget_gib=self.memory_budget_gib,
                 memory_headroom_gib=self.memory_headroom_gib,
             )
-            engine = SwingInferenceEngine(generation)
             model_features = live.technical_market if generation.bundle.feature_profile == "technical_market" else live.catalyst_full
             raw_scores = engine.predict(
                 feature_frame=model_features,
@@ -351,11 +374,6 @@ class PredictionService:
                 live_input_manifest_sha256=inputs.manifest_sha256,
                 catalyst_authority_sha256=inputs.catalyst_authority_sha256,
             )
-            model = _edge_swing_model_info(
-                generation,
-                bundle_root=self._resolve(route.repository),
-                resolved_horizon=resolved_horizon,
-            )
             response = _edge_swing_response(
                 request=request,
                 model=model,
@@ -371,6 +389,11 @@ class PredictionService:
                 headroom_gib=self.memory_headroom_gib,
                 stage="after swing response construction",
             )
+            if not self.swing_model_generation_cache.is_current(
+                self._resolve(route.repository),
+                generation,
+            ):
+                raise DataReadinessError("active swing model generation changed during inference")
             return response
         except PredictionServiceError:
             raise
@@ -419,6 +442,7 @@ class PredictionService:
                 mode="intraday",
                 horizon=resolved_horizon,
                 model=model,
+                checked_at=request.as_of or datetime.now(UTC),
             )
             frame = self._feature_frame(
                 source.frame,
@@ -432,13 +456,22 @@ class PredictionService:
                 model.status,
                 prediction_policy,
             )
-            return self._response(
+            response = self._response(
                 request,
                 models={"intraday": model},
                 feature_sources={"intraday": source},
                 feature_frames={"intraday": frame},
                 intraday_predictions=predictions,
             )
+            if not self.model_context_cache.is_current(
+                "intraday",
+                resolved_horizon,
+                route,
+            ):
+                raise DataReadinessError(
+                    "active intraday model generation changed during inference"
+                )
+            return response
         except PredictionServiceError:
             raise
         except (
@@ -519,6 +552,13 @@ class PredictionService:
                 )
                 for row in rows
             ]
+        try:
+            self._require_unified_generations_current(
+                models=models,
+                resolved_horizons=resolved_horizons,
+            )
+        except (DataReadinessError, FileNotFoundError, KeyError, OSError, ValueError) as exc:
+            raise PredictionReadinessError from exc
         return PredictionResponse(
             request_id=request_id,
             mode="unified",
@@ -530,6 +570,47 @@ class PredictionService:
             errors=errors,
             evidence=evidence,
         )
+
+    def _require_unified_generations_current(
+        self,
+        *,
+        models: Mapping[str, ModelInfo],
+        resolved_horizons: Mapping[str, str],
+    ) -> None:
+        for mode, model in models.items():
+            horizon = resolved_horizons.get(mode)
+            if horizon is None:
+                raise DataReadinessError("unified response has no resolved model horizon")
+            route = self.routes.get(mode, {}).get(horizon)
+            if route is None:
+                raise DataReadinessError("unified response route is unavailable")
+            if mode == "swing":
+                contract = load_strategy_contract(
+                    self._resolve(Path("configs/edge_rebuild_strategy_contract.toml"))
+                )
+                generation = self._edge_swing_generation(route, contract=contract)
+                if (
+                    model.serving_bundle_id != generation.bundle.sha256()
+                    or not self.swing_model_generation_cache.is_current(
+                        self._resolve(route.repository),
+                        generation,
+                    )
+                ):
+                    raise DataReadinessError(
+                        "active swing model generation changed during unified inference"
+                    )
+                continue
+            if mode != "intraday":
+                raise DataReadinessError("unified response contains an unsupported model view")
+            context = self.model_context_cache.get(mode, horizon, route)
+            if (
+                model.release_id != context.release_id
+                or model.serving_bundle_id != context.serving_bundle_id
+                or not self.model_context_cache.is_current(mode, horizon, route)
+            ):
+                raise DataReadinessError(
+                    "active intraday model generation changed during unified inference"
+                )
 
     def health(self, *, as_of: datetime | None = None) -> dict[str, object]:
         """Return deployment readiness from the verified cached generations."""
@@ -548,6 +629,19 @@ class PredictionService:
                             contract=contract,
                         )
                         bundle = generation.bundle
+                        engine = SwingInferenceEngine(generation)
+                        prediction_policy, prediction_policy_sha256 = _swing_prediction_policy(
+                            probability_threshold=engine.threshold,
+                            contract=contract,
+                        )
+                        info = _edge_swing_model_info(
+                            generation,
+                            bundle_root=self._resolve(route.repository),
+                            resolved_horizon=horizon,
+                            contract=contract,
+                            prediction_policy=prediction_policy,
+                            prediction_policy_sha256=prediction_policy_sha256,
+                        )
                         components[name] = {
                             "status": "ready",
                             "model_status": bundle.model_status,
@@ -571,6 +665,25 @@ class PredictionService:
                                 "price_feed": "sip",
                                 "adjustment": "all",
                             }
+                        drift_name = f"drift:{mode}:{horizon}"
+                        if not self.enforce_drift:
+                            components[drift_name] = {
+                                "status": "disabled",
+                                "reason": "drift enforcement is disabled",
+                            }
+                        else:
+                            assessment = self._load_drift_assessment(
+                                mode=mode,
+                                horizon=horizon,
+                                model=info,
+                                checked_at=checked_at,
+                            )
+                            components[drift_name] = {
+                                "status": ("ready" if assessment.actionability == "actionable" else "not_ready"),
+                                **assessment.model_dump(mode="json"),
+                            }
+                            if assessment.actionability != "actionable":
+                                ready = False
                         continue
                     if not self.model_context_cache.is_current(mode, horizon, route):
                         raise DataReadinessError("active model context is missing or its pointer changed")
@@ -692,6 +805,7 @@ class PredictionService:
         mode: str,
         horizon: str,
         model: ModelInfo,
+        checked_at: datetime | None = None,
     ) -> DriftAssessmentV2 | None:
         if not self.enforce_drift:
             return None
@@ -700,7 +814,7 @@ class PredictionService:
                 mode=mode,
                 horizon=horizon,
                 model=model,
-                checked_at=datetime.now(UTC),
+                checked_at=checked_at or datetime.now(UTC),
             )
         except (DataReadinessError, PredictionConflictError, ValueError) as exc:
             raise PredictionDriftBlockedError from exc
@@ -729,7 +843,7 @@ class PredictionService:
         evaluated_at = assessment.evaluated_at_utc.astimezone(UTC)
         if checked_at.astimezone(UTC) - evaluated_at > self.maximum_drift_assessment_age:
             raise DataReadinessError("route drift assessment is stale")
-        if evaluated_at > checked_at.astimezone(UTC) + timedelta(minutes=5):
+        if evaluated_at > checked_at.astimezone(UTC):
             raise DataReadinessError("route drift assessment is from the future")
         return assessment
 
@@ -1332,6 +1446,9 @@ def _edge_swing_model_info(
     *,
     bundle_root: Path,
     resolved_horizon: str,
+    contract: StrategyContract,
+    prediction_policy: dict[str, object],
+    prediction_policy_sha256: str,
 ) -> ModelInfo:
     bundle = generation.bundle
     return ModelInfo(
@@ -1347,13 +1464,45 @@ def _edge_swing_model_info(
         resolved_horizon=resolved_horizon,
         bar_timeframe="1Day",
         created_at_utc=bundle.promoted_at_utc.isoformat(),
-        label_policy_sha256=bundle.strategy_contract_sha256,
-        label_policy={
-            "horizon_sessions": bundle.horizon_sessions,
-            "strategy_contract_sha256": bundle.strategy_contract_sha256,
-        },
+        label_policy_sha256=swing_outcome_policy_sha256(contract.swing),
+        label_policy=swing_outcome_policy(contract.swing),
         execution_policy_sha256=bundle.strategy_contract_sha256,
+        prediction_policy_sha256=prediction_policy_sha256,
+        prediction_policy=prediction_policy,
     )
+
+
+def _validate_swing_requested_models(requested_models: list[str] | None) -> None:
+    if requested_models is None:
+        return
+    requested = tuple(requested_models)
+    if not requested or len(requested) != len(set(requested)):
+        raise PredictionValidationError
+    allowed = {"all", "classifier", "xgboost_regressor"}
+    if not set(requested).issubset(allowed):
+        raise PredictionValidationError
+    if "all" in requested:
+        if len(requested) != 1:
+            raise PredictionValidationError
+        return
+    if "classifier" not in requested:
+        raise PredictionValidationError
+
+
+def _swing_prediction_policy(
+    *,
+    probability_threshold: float,
+    contract: StrategyContract,
+) -> tuple[dict[str, object], str]:
+    policy = SwingPredictionPolicy(
+        horizon_sessions=contract.swing.horizon_sessions,
+        minimum_probability=probability_threshold,
+        maximum_predictions_per_decision=contract.swing.maximum_trades_per_decision,
+        target_maximum_sector_weight=contract.swing.target_maximum_sector_weight,
+        hard_maximum_sector_weight=contract.swing.hard_maximum_sector_weight,
+        minimum_distinct_sectors=contract.swing.minimum_distinct_sectors_for_selection,
+    )
+    return policy.specification(), policy.sha256()
 
 
 def _selected_edge_swing_security_ids(
@@ -1616,23 +1765,21 @@ def _edge_swing_response(
             primary_benchmark=str(row["primary_benchmark"]),
             market_regime=str(row["market_regime"]),
             sector=str(row["sector"]),
+            market_cap_bucket=str(row["market_cap_bucket"]),
+            liquidity_bucket=str(row["liquidity_bucket"]),
             price_feed=str(row["price_feed"]),
+            decision_atr=(
+                _required_edge_float(row, "atr_pct_14")
+                * _required_edge_float(row, "close")
+            ),
         )
         for _, row in requested.iterrows()
     ]
     cutoff = max((row.decision_time_utc for row in row_evidence), default=request.as_of or datetime.now(UTC))
     bundle_sha256 = bundle.sha256()
-    policy_sha256 = hashlib.sha256(
-        json.dumps(
-            {
-                "bundle_sha256": bundle_sha256,
-                "horizon_sessions": 10,
-                "role": "prediction_intelligence_only_no_alerts_or_execution",
-            },
-            sort_keys=True,
-            separators=(",", ":"),
-        ).encode("ascii")
-    ).hexdigest()
+    policy_sha256 = model.prediction_policy_sha256
+    if policy_sha256 is None or model.prediction_policy is None:
+        raise DataReadinessError("swing prediction policy identity is incomplete")
     evidence = PredictionEvidenceV3(
         request_id=request_id,
         correlation_id=request.correlation_id or request_id,
@@ -1643,7 +1790,7 @@ def _edge_swing_response(
                 mode="swing",
                 artifact_sha256=live_input_manifest_sha256,
                 source_artifact_sha256=catalyst_authority_sha256,
-                source_artifact_type="edge_rebuild_live_swing_inputs",
+                source_artifact_type="swing_live_inputs",
                 feature_schema_version=bundle.feature_schema_version,
             )
         },
@@ -1656,7 +1803,7 @@ def _edge_swing_response(
         resolved_horizons={"swing": "10b"},
         view_prediction_cutoffs_utc={"swing": cutoff},
         view_prediction_policy_sha256={"swing": policy_sha256},
-        serving_policy_id="edge_rebuild.swing_prediction_intelligence.v1",
+        serving_policy_id="market_predictor.swing_prediction_policy.v1",
         serving_policy_sha256=policy_sha256,
         identity_status="complete",
     )
@@ -1732,7 +1879,7 @@ def _serving_policy_bundle_sha256(
 
 def _serving_bundle_set_sha256(view_bundle_ids: Mapping[str, str]) -> str:
     payload = {
-        "contract_version": "market_predictor.serving_bundle_set.v1",
+        "contract_version": "market_predictor.serving.bundle_set.v1",
         "view_serving_bundle_ids": dict(sorted(view_bundle_ids.items())),
     }
     return hashlib.sha256(json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
@@ -1885,7 +2032,7 @@ def _require_bundle_available_at(
         raise ValueError("serving bundle generation timestamp is missing")
     if cutoff is None:
         raise ValueError("serving bundle availability cutoff is invalid")
-    if generated > cutoff + timedelta(minutes=1):
+    if generated > cutoff:
         raise ValueError("serving bundle was generated after the requested as_of")
 
 

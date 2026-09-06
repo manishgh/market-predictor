@@ -11,6 +11,10 @@ PredictionMode = Literal["swing", "intraday", "unified"]
 PredictionView = Literal["swing", "intraday"]
 PredictionDataSource = Literal["curated", "live"]
 
+
+class _PredictionContract(BaseModel):
+    model_config = ConfigDict(allow_inf_nan=False)
+
 class PredictionServiceError(Exception):
     """Base class for stable, non-leaking service failures."""
 
@@ -98,7 +102,7 @@ _HORIZON_ALIASES = {
 }
 
 
-class PredictionRequest(BaseModel):
+class PredictionRequest(_PredictionContract):
     """Typed request used by CLI, API, and tests.
 
     Training and collection stay outside this contract. Model artifacts,
@@ -146,7 +150,7 @@ class PredictionRequest(BaseModel):
         return as_of
 
 
-class ModelInfo(BaseModel):
+class ModelInfo(_PredictionContract):
     path: str
     status: str
     release_id: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
@@ -180,7 +184,7 @@ class ModelInfo(BaseModel):
     prediction_policy: dict[str, object] | None = None
 
 
-class FeatureArtifactIdentityV1(BaseModel):
+class FeatureArtifactIdentityV1(_PredictionContract):
     mode: PredictionView
     artifact_sha256: str = Field(..., pattern=r"^[0-9a-f]{64}$")
     source_artifact_sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
@@ -188,7 +192,7 @@ class FeatureArtifactIdentityV1(BaseModel):
     feature_schema_version: str | None = None
 
 
-class PredictionRowEvidenceV1(BaseModel):
+class PredictionRowEvidenceV1(_PredictionContract):
     ticker: str
     view: PredictionView
     decision_time_utc: datetime
@@ -212,7 +216,7 @@ class PredictionRowEvidenceV1(BaseModel):
         return value.astimezone(UTC)
 
 
-class PredictionEvidenceV3(BaseModel):
+class PredictionEvidenceV3(_PredictionContract):
     """Immutable identities and point-in-time evidence for one served response."""
 
     contract_version: Literal["market_predictor.prediction_evidence.v3"] = (
@@ -301,18 +305,18 @@ class PredictionEvidenceV3(BaseModel):
         return value
 
 
-class PredictionApiError(BaseModel):
+class PredictionApiError(_PredictionContract):
     code: str
     message: str
     correlation_id: str
     retryable: bool = False
 
 
-class PredictionApiErrorEnvelope(BaseModel):
+class PredictionApiErrorEnvelope(_PredictionContract):
     error: PredictionApiError
 
 
-class ReadinessInfo(BaseModel):
+class ReadinessInfo(_PredictionContract):
     status: Literal["valid", "warn", "invalid"]
     reasons: list[str] = Field(default_factory=list)
     timeframe: Literal["daily", "intraday"] = "daily"
@@ -327,14 +331,14 @@ class ReadinessInfo(BaseModel):
     source_status: str = "unknown"
 
 
-class GlobalContextInfo(BaseModel):
+class GlobalContextInfo(_PredictionContract):
     net_impact: float = 0.0
     positive_impact: float = 0.0
     negative_impact: float = 0.0
     active_flashpoints: list[str] = Field(default_factory=list)
 
 
-class CatalystConfirmationInfo(BaseModel):
+class CatalystConfirmationInfo(_PredictionContract):
     status: Literal["confirmed", "conflicting", "veto", "mixed", "absent"] = "absent"
     direction: Literal["positive", "negative", "mixed", "none"] = "none"
     score: float = 0.0
@@ -347,7 +351,7 @@ class CatalystConfirmationInfo(BaseModel):
     reasons: list[str] = Field(default_factory=list)
 
 
-class SwingBenchmarkContext(BaseModel):
+class SwingBenchmarkContext(_PredictionContract):
     symbol: str
     role: Literal["broad_market", "growth_market", "sector"]
     stock_return_5d: float
@@ -358,7 +362,7 @@ class SwingBenchmarkContext(BaseModel):
     excess_return_20d: float
 
 
-class SwingManagedRiskContext(BaseModel):
+class SwingManagedRiskContext(_PredictionContract):
     entry_reference: Literal["next_session_open"] = "next_session_open"
     price_levels_available: Literal[False] = False
     atr_fraction_of_latest_close: float = Field(gt=0.0)
@@ -370,7 +374,7 @@ class SwingManagedRiskContext(BaseModel):
     exit_rule: str
     round_trip_cost_bps: float = Field(ge=0.0)
 
-class SwingPrediction(BaseModel):
+class SwingPrediction(_PredictionContract):
     ticker: str
     date: str | None = None
     probability: float | None = None
@@ -432,7 +436,7 @@ class SwingPrediction(BaseModel):
         return self
 
 
-class IntradayPrediction(BaseModel):
+class IntradayPrediction(_PredictionContract):
     ticker: str
     date: str | None = None
     opportunity_probability: float | None = None
@@ -467,7 +471,7 @@ class IntradayPrediction(BaseModel):
         return self
 
 
-class UnifiedTickerPrediction(BaseModel):
+class UnifiedTickerPrediction(_PredictionContract):
     ticker: str
     final_signal: str
     readiness_status: Literal["valid", "warn", "invalid"]
@@ -476,7 +480,7 @@ class UnifiedTickerPrediction(BaseModel):
     errors: list[str] = Field(default_factory=list)
 
 
-class PredictionResponse(BaseModel):
+class PredictionResponse(_PredictionContract):
     contract_version: Literal["market_predictor.prediction.v2"] = "market_predictor.prediction.v2"
     request_id: str = Field(default_factory=lambda: str(uuid4()))
     generated_at_utc: datetime = Field(default_factory=lambda: datetime.now(UTC))
@@ -492,7 +496,7 @@ class PredictionResponse(BaseModel):
     snapshot_sha256: str | None = None
 
 
-class InvestmentReplayRequest(BaseModel):
+class InvestmentReplayRequest(_PredictionContract):
     snapshot_id: str = Field(..., pattern=r"^[0-9a-f]{64}$")
     ticker: str = Field(..., min_length=1, max_length=16)
     model_view: PredictionView = "swing"
@@ -518,7 +522,7 @@ class InvestmentReplayRequest(BaseModel):
         return value
 
 
-class InvestmentLegResult(BaseModel):
+class InvestmentLegResult(_PredictionContract):
     ticker: str
     entry_time: datetime
     entry_price: float
@@ -531,7 +535,7 @@ class InvestmentLegResult(BaseModel):
     return_pct: float
 
 
-class InvestmentReplayResponse(BaseModel):
+class InvestmentReplayResponse(_PredictionContract):
     replay_id: str = Field(default_factory=lambda: str(uuid4()))
     generated_at_utc: datetime = Field(default_factory=lambda: datetime.now(UTC))
     snapshot_id: str

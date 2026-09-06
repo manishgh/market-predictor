@@ -31,42 +31,42 @@ from market_predictor.canonical.joins import (
 )
 from market_predictor.canonical.reconciliation import stamp_canonical_decision_ids
 from market_predictor.core.errors import DataReadinessError
-from market_predictor.edge_rebuild.swing_catalyst_features import (
-    _scope_catalyst_aggregates_to_required_sources as _scope_catalyst_aggregates_to_required_sources,
-)
-from market_predictor.edge_rebuild.swing_catalyst_features import (
-    build_swing_ablation_rows as build_swing_ablation_rows,
-)
-from market_predictor.edge_rebuild.swing_filters import (
-    MANAGED_BENCHMARK_RETURN_COLUMNS as MANAGED_BENCHMARK_RETURN_COLUMNS,
-)
-from market_predictor.edge_rebuild.swing_filters import (
-    MANAGED_EXCESS_RETURN_COLUMNS as MANAGED_EXCESS_RETURN_COLUMNS,
-)
-from market_predictor.edge_rebuild.swing_filters import (
-    MANAGED_PATH_COST_POLICY as MANAGED_PATH_COST_POLICY,
-)
-from market_predictor.edge_rebuild.swing_filters import (
-    MANAGED_PATH_NET_RETURN_COLUMNS as MANAGED_PATH_NET_RETURN_COLUMNS,
-)
-from market_predictor.edge_rebuild.swing_filters import (
-    MANAGED_PATH_SESSION_ORDINAL_COLUMNS as MANAGED_PATH_SESSION_ORDINAL_COLUMNS,
-)
-from market_predictor.edge_rebuild.swing_filters import (
-    _apply_sector_benchmark_eligibility as _apply_sector_benchmark_eligibility,
-)
-from market_predictor.edge_rebuild.swing_filters import (
-    _mask_sector_benchmark_ineligible_outcomes as _mask_sector_benchmark_ineligible_outcomes,
-)
-from market_predictor.edge_rebuild.swing_filters import (
-    apply_sparse_session_gap_abstentions as apply_sparse_session_gap_abstentions,
-)
 from market_predictor.modeling.strategy_contract import StrategyContract
 from market_predictor.swing.contracts import SwingDatasetConfig
 from market_predictor.swing.dataset import build_swing_feature_history
+from market_predictor.swing.features.catalyst_aggregates import (
+    _scope_catalyst_aggregates_to_required_sources as _scope_catalyst_aggregates_to_required_sources,
+)
+from market_predictor.swing.features.catalyst_aggregates import (
+    build_swing_ablation_rows as build_swing_ablation_rows,
+)
 from market_predictor.swing.features.catalyst_decision_authority import (
     REQUIRED_MODEL_SOURCE_FAMILIES,
     TRACKED_SOURCE_FAMILIES,
+)
+from market_predictor.swing.features.eligibility import (
+    MANAGED_BENCHMARK_RETURN_COLUMNS as MANAGED_BENCHMARK_RETURN_COLUMNS,
+)
+from market_predictor.swing.features.eligibility import (
+    MANAGED_EXCESS_RETURN_COLUMNS as MANAGED_EXCESS_RETURN_COLUMNS,
+)
+from market_predictor.swing.features.eligibility import (
+    MANAGED_PATH_COST_POLICY as MANAGED_PATH_COST_POLICY,
+)
+from market_predictor.swing.features.eligibility import (
+    MANAGED_PATH_NET_RETURN_COLUMNS as MANAGED_PATH_NET_RETURN_COLUMNS,
+)
+from market_predictor.swing.features.eligibility import (
+    MANAGED_PATH_SESSION_ORDINAL_COLUMNS as MANAGED_PATH_SESSION_ORDINAL_COLUMNS,
+)
+from market_predictor.swing.features.eligibility import (
+    _apply_sector_benchmark_eligibility as _apply_sector_benchmark_eligibility,
+)
+from market_predictor.swing.features.eligibility import (
+    _mask_sector_benchmark_ineligible_outcomes as _mask_sector_benchmark_ineligible_outcomes,
+)
+from market_predictor.swing.features.eligibility import (
+    apply_sparse_session_gap_abstentions as apply_sparse_session_gap_abstentions,
 )
 from market_predictor.swing.labels import add_exact_swing_labels
 
@@ -267,11 +267,11 @@ def build_swing_feature_rows(
         effective,
         inplace=True,
     )
-    from market_predictor.edge_rebuild.swing_pipeline_steps import (
+    from market_predictor.modeling.feature_pipeline import FeaturePipeline
+    from market_predictor.swing.features.pipeline import (
         SetupComponentsStep,
         TechnicalRelationshipsStep,
     )
-    from market_predictor.modeling.feature_pipeline import FeaturePipeline
 
     # Indicators are computed inside `build_swing_feature_history`, which sees the
     # full warm-up history. Nothing here may recompute them: an AdvancedIndicators
@@ -318,12 +318,12 @@ def finalize_swing_feature_panel(
 ) -> pd.DataFrame:
     """Add same-session transforms and the sector-relative managed-return label."""
 
-    from market_predictor.edge_rebuild.swing_pipeline_steps import (
+    from market_predictor.modeling.feature_pipeline import FeaturePipeline
+    from market_predictor.swing.features.pipeline import (
         CrossSectionalRankStep,
         CrossSectionalValidationStep,
         SectorRelativeScalingStep,
     )
-    from market_predictor.modeling.feature_pipeline import FeaturePipeline
 
     pipeline = FeaturePipeline([
         CrossSectionalValidationStep(expected_security_ids=expected_security_ids),

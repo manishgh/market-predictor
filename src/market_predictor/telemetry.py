@@ -8,7 +8,7 @@ from collections.abc import Mapping
 from datetime import UTC, datetime
 from typing import Any
 
-from market_predictor.prediction_contracts import InvestmentReplayResponse, PredictionResponse
+from market_predictor.core.prediction_contracts import InvestmentReplayResponse, PredictionResponse
 from market_predictor.resources import memory_audit
 
 LOGGER = logging.getLogger("market_predictor.telemetry")

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import hashlib
-import json
 import re
 import threading
 from collections.abc import Mapping
@@ -12,6 +11,9 @@ from typing import Any, Protocol
 import joblib
 import pandas as pd
 
+from market_predictor.core import path_integrity
+from market_predictor.core.errors import DataReadinessError
+from market_predictor.core.json_integrity import parse_strict_json_object
 from market_predictor.intraday.contracts import (
     INTRADAY_FEATURE_SCHEMA_VERSION,
     INTRADAY_MODEL_SCHEMA_VERSION,
@@ -23,30 +25,17 @@ from market_predictor.resources import (
     process_memory_snapshot,
     release_process_memory,
 )
-from market_predictor.serving_bundle import (
+from market_predictor.serving.bundle import (
     load_active_serving_bundle,
     load_active_serving_bundle_pointer,
     serving_bundle_asset_paths,
 )
+from market_predictor.serving.routes import ServingRoute
 from market_predictor.swing.contracts import (
     SWING_FEATURE_SCHEMA_VERSION,
     SWING_MODEL_SCHEMA_VERSION,
     SWING_MODEL_TYPE,
 )
-from market_predictor.core.errors import DataReadinessError
-
-
-@dataclass(frozen=True, slots=True)
-class ActiveReleaseRoute:
-    repository: Path
-    attestation_trust_store: Path
-    promotion_gate_policy_sha256: str = ""
-    bar_timeframe: str = "unknown"
-    curated_dataset: Path | None = None
-    estimated_resident_gib: float = 0.5
-    max_model_bytes: int = 512 * 1024 * 1024
-    max_feature_bytes: int = 512 * 1024 * 1024
-    max_feature_rows: int = 250_000
 
 
 @dataclass(frozen=True, slots=True)
@@ -69,7 +58,7 @@ class ModelContextProvider(Protocol):
         self,
         mode: str,
         horizon: str,
-        route: ActiveReleaseRoute,
+        route: ServingRoute,
     ) -> ActiveModelContext: ...
 
     def snapshot(self) -> dict[str, object]: ...
@@ -80,7 +69,7 @@ class ModelContextProvider(Protocol):
         self,
         mode: str,
         horizon: str,
-        route: ActiveReleaseRoute,
+        route: ServingRoute,
     ) -> bool: ...
 
 
@@ -95,7 +84,10 @@ class ActiveModelContextCache:
         memory_headroom_gib: float,
         max_contexts: int,
     ) -> None:
-        self._root = root.resolve()
+        self._root = path_integrity.verify_no_reparse_ancestry(
+            root,
+            label="prediction service root",
+        )
         self._memory_budget_gib = memory_budget_gib
         self._memory_headroom_gib = memory_headroom_gib
         if max_contexts < 1:
@@ -110,7 +102,7 @@ class ActiveModelContextCache:
         self,
         mode: str,
         horizon: str,
-        route: ActiveReleaseRoute,
+        route: ServingRoute,
     ) -> ActiveModelContext:
         key = (mode, horizon)
         with self._index_lock:
@@ -179,7 +171,8 @@ class ActiveModelContextCache:
                     repository
                     / "serving_bundles"
                     / bundle_id
-                    / str(bundle["feature_manifest_path"])
+                    / str(bundle["feature_manifest_path"]),
+                    expected_sha256=str(bundle["feature_manifest_sha256"]),
                 )
                 feature_frame = _load_parquet_from_verified_handle(
                     feature_path,
@@ -239,7 +232,7 @@ class ActiveModelContextCache:
         self,
         mode: str,
         horizon: str,
-        route: ActiveReleaseRoute,
+        route: ServingRoute,
     ) -> bool:
         context = self.cached(mode, horizon)
         if context is None:
@@ -466,13 +459,24 @@ def _load_parquet_from_verified_handle(
     return frame
 
 
-def _load_json_mapping(path: Path) -> dict[str, Any]:
+def _load_json_mapping(path: Path, *, expected_sha256: str) -> dict[str, Any]:
     try:
-        loaded = json.loads(path.read_text(encoding="utf-8"))
-    except (FileNotFoundError, json.JSONDecodeError, OSError) as exc:
+        safe_path = path_integrity.verify_no_reparse_ancestry(
+            path,
+            label="serving bundle feature manifest",
+        )
+        with safe_path.open("rb") as handle:
+            if _handle_sha256(handle) != expected_sha256:
+                raise DataReadinessError(
+                    "serving bundle feature manifest integrity failed"
+                )
+            handle.seek(0)
+            loaded = parse_strict_json_object(
+                handle.read(),
+                label="serving bundle feature manifest",
+            )
+    except (FileNotFoundError, OSError, ValueError) as exc:
         raise DataReadinessError("serving bundle feature manifest is unavailable") from exc
-    if not isinstance(loaded, dict):
-        raise DataReadinessError("serving bundle feature manifest must contain an object")
     return {str(key): value for key, value in loaded.items()}
 
 

@@ -15,7 +15,7 @@ from market_predictor.release import (
     rollback_local_release,
     verify_local_release,
 )
-from market_predictor.serving_bundle import (
+from market_predictor.serving.bundle import (
     activate_serving_bundle,
     load_active_serving_bundle,
     publish_serving_bundle,

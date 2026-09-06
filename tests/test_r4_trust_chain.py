@@ -10,7 +10,7 @@ from pathlib import Path
 import joblib
 import pandas as pd
 
-from market_predictor.edge_rebuild.swing_training import MODEL_SCHEMA
+from market_predictor.core.errors import DataReadinessError
 from market_predictor.hypothesis_registry import declare_hypothesis
 from market_predictor.promotion_attestation import (
     build_promotion_attestation,
@@ -25,7 +25,9 @@ from market_predictor.shadow_ledger import (
     load_shadow_ledger,
     shadow_gate_failures,
 )
-from market_predictor.core.errors import DataReadinessError
+from market_predictor.swing.contracts.model_artifact import (
+    SWING_CANDIDATE_MODEL_SCHEMA,
+)
 from tests.r4_fixtures import (
     load_test_shadow_bundle,
     write_test_shadow_bundle,
@@ -442,7 +444,7 @@ def _candidate(root: Path) -> tuple[Path, dict[str, object], Path]:
     manifest = write_model_manifest(
         model_path=model,
         model_type="canonical_swing",
-        schema_version=MODEL_SCHEMA,
+        schema_version=SWING_CANDIDATE_MODEL_SCHEMA,
         target_col="target_top_sector_relative_quantile_10b",
         features=["return_1d"],
         training_data=training,

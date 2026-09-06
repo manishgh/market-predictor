@@ -12,7 +12,8 @@ from unittest.mock import patch
 import joblib
 import pandas as pd
 
-from market_predictor import serving_context as serving_context_module
+from market_predictor.canonical.store import file_sha256
+from market_predictor.core.errors import DataReadinessError
 from market_predictor.feature_store import LiveFeatureStore
 from market_predictor.intraday.contracts import (
     INTRADAY_FEATURE_SCHEMA_VERSION,
@@ -22,15 +23,15 @@ from market_predictor.intraday.contracts import (
 from market_predictor.live_features import live_feature_columns
 from market_predictor.registry import write_model_manifest
 from market_predictor.release import publish_local_release
-from market_predictor.serving_bundle import (
+from market_predictor.serving import model_context as serving_context_module
+from market_predictor.serving.bundle import (
     activate_serving_bundle,
     publish_serving_bundle,
 )
-from market_predictor.serving_context import (
+from market_predictor.serving.model_context import (
     ActiveModelContextCache,
-    ActiveReleaseRoute,
 )
-from market_predictor.core.errors import DataReadinessError
+from market_predictor.serving.routes import ServingRoute
 from tests.r4_fixtures import (
     authorize_candidate_for_test,
     synthetic_identity_metrics,
@@ -45,6 +46,26 @@ class ProbabilityEstimatorStub:
 
 
 class ActiveModelContextCacheTests(unittest.TestCase):
+    def test_feature_manifest_read_requires_the_bundle_bound_hash(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = Path(temp_dir) / "feature.manifest.json"
+            path.write_text('{"columns":["close"],"rows":1}', encoding="utf-8")
+            expected = file_sha256(path)
+
+            self.assertEqual(
+                serving_context_module._load_json_mapping(
+                    path,
+                    expected_sha256=expected,
+                )["rows"],
+                1,
+            )
+            path.write_text('{"columns":["close"],"rows":2}', encoding="utf-8")
+            with self.assertRaisesRegex(DataReadinessError, "integrity"):
+                serving_context_module._load_json_mapping(
+                    path,
+                    expected_sha256=expected,
+                )
+
     def test_deserializes_active_release_once_and_reuses_context(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
@@ -75,14 +96,14 @@ class ActiveModelContextCacheTests(unittest.TestCase):
                     memory_headroom_gib=0.25,
                     max_contexts=1,
                 )
-                route = ActiveReleaseRoute(
+                route = ServingRoute(
                     repository=repository,
                     attestation_trust_store=trust_store,
                     bar_timeframe="5Min",
                 )
 
                 with patch(
-                    "market_predictor.serving_context.joblib.load",
+                    "market_predictor.serving.model_context.joblib.load",
                     wraps=joblib.load,
                 ) as load:
                     first = cache.get("intraday", "60m", route)
@@ -121,7 +142,7 @@ class ActiveModelContextCacheTests(unittest.TestCase):
                 memory_headroom_gib=0.25,
                 max_contexts=1,
             )
-            route = ActiveReleaseRoute(
+            route = ServingRoute(
                 repository=repository,
                 attestation_trust_store=trust_store,
             )
@@ -197,7 +218,7 @@ class ActiveModelContextCacheTests(unittest.TestCase):
                 memory_headroom_gib=0.25,
                 max_contexts=1,
             )
-            route = ActiveReleaseRoute(
+            route = ServingRoute(
                 repository=repository,
                 attestation_trust_store=trust_store,
             )
@@ -212,7 +233,7 @@ class ActiveModelContextCacheTests(unittest.TestCase):
                 return original_load(*args, **kwargs)  # type: ignore[arg-type]
 
             with patch(
-                "market_predictor.serving_context._load_joblib_from_verified_handle",
+                "market_predictor.serving.model_context._load_joblib_from_verified_handle",
                 side_effect=blocking_load,
             ):
                 with ThreadPoolExecutor(max_workers=1) as pool:
@@ -271,7 +292,7 @@ class ActiveModelContextCacheTests(unittest.TestCase):
                 cache.get(
                     "intraday",
                     "60m",
-                    ActiveReleaseRoute(
+                    ServingRoute(
                         repository=repository,
                         attestation_trust_store=trust_store,
                     ),
@@ -308,7 +329,7 @@ class ActiveModelContextCacheTests(unittest.TestCase):
                 cache.get(
                     "intraday",
                     "60m",
-                    ActiveReleaseRoute(
+                    ServingRoute(
                         repository=repository,
                         attestation_trust_store=trust_store,
                         max_feature_rows=1,

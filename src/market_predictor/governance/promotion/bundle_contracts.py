@@ -26,10 +26,6 @@ from market_predictor.core.errors import (
     PromotionGateError,
     SchemaMismatchError,
 )
-from market_predictor.edge_rebuild.swing_features import (
-    SWING_FEATURE_PANEL_SCHEMA,
-    swing_model_feature_columns,
-)
 from market_predictor.intraday.features.features import (
     CAUSAL_INTRADAY_MODEL_FEATURE_COLUMNS,
 )
@@ -40,6 +36,10 @@ from market_predictor.modeling.strategy_contract import StrategyContract
 from market_predictor.swing.features.catalyst_decision_authority import (
     REQUIRED_MODEL_SOURCE_FAMILIES,
     TRACKED_SOURCE_FAMILIES,
+)
+from market_predictor.swing.features.panel import (
+    SWING_FEATURE_PANEL_SCHEMA,
+    swing_model_feature_columns,
 )
 
 SERVING_BUNDLE_SCHEMA: Final = "edge_rebuild.promoted_bundle.v2"

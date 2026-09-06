@@ -126,12 +126,12 @@ from market_predictor.edge_rebuild.setup_economics import (
     WALK_FORWARD_SCOPE,
     SetupEconomicsConfig,
 )
-from market_predictor.edge_rebuild.swing_features import swing_dataset_config
-from market_predictor.edge_rebuild.swing_pipeline_steps import SetupComponentsStep
 from market_predictor.modeling.strategy_contract import StrategyContract
 from market_predictor.modeling.validation import deterministic_ticker_holdout
 from market_predictor.resources import assert_memory_budget
 from market_predictor.swing.dataset import build_swing_feature_history
+from market_predictor.swing.features.panel import swing_dataset_config
+from market_predictor.swing.features.pipeline import SetupComponentsStep
 from market_predictor.swing.labels import add_exact_swing_labels
 
 SWING_SETUP_SCHEMA = "edge_rebuild.swing_setups.v1"

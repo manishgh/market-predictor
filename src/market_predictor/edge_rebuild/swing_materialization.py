@@ -23,13 +23,6 @@ from market_predictor.edge_rebuild.swing_daily_combination import (
     prepare_combined_daily_store,
     verify_combined_swing_inputs,
 )
-from market_predictor.edge_rebuild.swing_features import (
-    MANAGED_PATH_COST_POLICY,
-    SWING_FEATURE_PANEL_SCHEMA,
-    SWING_FEATURE_PROFILE,
-    build_swing_feature_rows,
-    finalize_swing_feature_panel,
-)
 from market_predictor.edge_rebuild.swing_setups import (
     iter_security_batches,
     load_daily_bars,
@@ -44,6 +37,13 @@ from market_predictor.resources import (
     release_process_memory,
 )
 from market_predictor.swing.contracts import MINIMUM_SWING_DECISION_DATE
+from market_predictor.swing.features.panel import (
+    MANAGED_PATH_COST_POLICY,
+    SWING_FEATURE_PANEL_SCHEMA,
+    SWING_FEATURE_PROFILE,
+    build_swing_feature_rows,
+    finalize_swing_feature_panel,
+)
 
 SWING_MATERIALIZATION_REQUEST_SCHEMA: Final = (
     "edge_rebuild.swing_panel_materialization_request.v11"

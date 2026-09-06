@@ -7,8 +7,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from market_predictor.investment_replay import InvestmentReplayService
-from market_predictor.prediction_contracts import (
+from market_predictor.core.prediction_contracts import (
     GlobalContextInfo,
     InvestmentReplayRequest,
     ModelInfo,
@@ -18,7 +17,8 @@ from market_predictor.prediction_contracts import (
     SwingPrediction,
     UnifiedTickerPrediction,
 )
-from market_predictor.prediction_snapshot import PredictionSnapshotStore
+from market_predictor.serving.investment_replay import InvestmentReplayService
+from market_predictor.serving.snapshot_store import PredictionSnapshotStore
 
 
 class StaticPriceProvider:

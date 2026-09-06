@@ -7,13 +7,13 @@ from typing import Literal, Protocol
 import pandas as pd
 
 from market_predictor.config import Settings
-from market_predictor.prediction_contracts import (
+from market_predictor.core.prediction_contracts import (
     InvestmentLegResult,
     InvestmentReplayRequest,
     InvestmentReplayResponse,
     ModelInfo,
 )
-from market_predictor.prediction_snapshot import PredictionSnapshotStore
+from market_predictor.serving.snapshot_store import PredictionSnapshotStore
 from market_predictor.sources.alpaca import AlpacaSource
 
 ACTIONABLE_SIGNALS = {

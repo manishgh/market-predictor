@@ -6,7 +6,11 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
+from pydantic import ValidationError
+
 from market_predictor.execution_policy import EXECUTION_POLICY_SHA256
+from market_predictor.label_policy import policy_sha256
+from market_predictor.modeling.strategy_contract import load_strategy_contract
 from market_predictor.outcome_contracts import (
     MaturationAttemptV1,
     MaturedOutcomeV1,
@@ -16,14 +20,86 @@ from market_predictor.outcome_contracts import (
     semantic_prediction_sha256,
 )
 from market_predictor.outcome_repository import OutcomeRepository
-from market_predictor.prediction_policy import (
-    DEFAULT_PREDICTION_POLICY,
-    PREDICTION_POLICY_SHA256,
+from market_predictor.swing.contracts.outcome_policy import (
+    swing_outcome_policy,
+    swing_outcome_policy_sha256,
 )
-from market_predictor.swing.contracts import SwingDatasetConfig
+from market_predictor.swing.contracts.prediction_policy import SwingPredictionPolicy
+
+ROOT = Path(__file__).resolve().parents[1]
 
 
 class OutcomeRepositoryTests(unittest.TestCase):
+    def test_swing_intent_rejects_intraday_policy_contract(self) -> None:
+        valid = _intent().model_dump(
+            mode="python",
+            exclude={"maturation_key", "semantic_prediction_id"},
+        )
+        valid["prediction_policy"] = {
+            "contract_version": "market_predictor.prediction_policy.v2"
+        }
+        semantic = semantic_prediction_sha256(valid)
+        with self.assertRaisesRegex(ValidationError, "swing prediction policy"):
+            PredictionMaturationIntentV2.model_validate(
+                {
+                    **valid,
+                    "semantic_prediction_id": semantic,
+                    "maturation_key": maturation_key_sha256(
+                        str(valid["snapshot_id"]), semantic
+                    ),
+                }
+            )
+
+    def test_swing_outcome_rejects_legacy_path_and_calibration_target(self) -> None:
+        intent = _intent()
+        evidence = [{"ticker": "MSFT"}]
+        valid = _outcome(intent, evidence).model_dump(
+            mode="python",
+            exclude={"outcome_id"},
+        )
+        valid.update({"path_outcome": "positive", "opportunity_target": 1})
+        with self.assertRaisesRegex(ValidationError, "managed barrier semantics"):
+            MaturedOutcomeV1.model_validate(
+                {**valid, "outcome_id": content_sha256(valid)}
+            )
+
+    def test_swing_intent_rejects_mismatched_label_horizon(self) -> None:
+        valid = _intent().model_dump(
+            mode="python",
+            exclude={"maturation_key", "semantic_prediction_id"},
+        )
+        label_policy = dict(valid["label_policy"])
+        label_policy["horizon_sessions"] = 9
+        valid["label_policy"] = label_policy
+        valid["label_policy_sha256"] = policy_sha256(label_policy)
+        semantic = semantic_prediction_sha256(valid)
+
+        with self.assertRaisesRegex(ValidationError, "policy horizons"):
+            PredictionMaturationIntentV2.model_validate(
+                {
+                    **valid,
+                    "semantic_prediction_id": semantic,
+                    "maturation_key": maturation_key_sha256(
+                        str(valid["snapshot_id"]), semantic
+                    ),
+                }
+            )
+
+    def test_outcome_rejects_availability_before_exit(self) -> None:
+        intent = _intent()
+        valid = _outcome(intent, [{"ticker": "MSFT"}]).model_dump(
+            mode="python",
+            exclude={"outcome_id"},
+        )
+        invalid_time = valid["exit_time_utc"] - timedelta(microseconds=1)
+        valid["label_available_at_utc"] = invalid_time
+        valid["matured_at_utc"] = invalid_time
+
+        with self.assertRaisesRegex(ValidationError, "before its exit"):
+            MaturedOutcomeV1.model_validate(
+                {**valid, "outcome_id": content_sha256(valid)}
+            )
+
     def test_records_intent_attempt_and_outcome_idempotently(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             repository = OutcomeRepository(Path(temp_dir))
@@ -83,7 +159,18 @@ class OutcomeRepositoryTests(unittest.TestCase):
 
 
 def _intent(snapshot_id: str = "1" * 64) -> PredictionMaturationIntentV2:
-    config = SwingDatasetConfig()
+    strategy = load_strategy_contract(
+        ROOT / "configs" / "edge_rebuild_strategy_contract.toml"
+    )
+    swing_contract = strategy.swing
+    prediction_policy = SwingPredictionPolicy(
+        horizon_sessions=swing_contract.horizon_sessions,
+        minimum_probability=0.5,
+        maximum_predictions_per_decision=10,
+        target_maximum_sector_weight=1.0,
+        hard_maximum_sector_weight=1.0,
+        minimum_distinct_sectors=1,
+    )
     decision = datetime(2026, 7, 24, 22, 0, tzinfo=UTC)
     base: dict[str, object] = {
         "contract_version": "market_predictor.maturation_intent.v2",
@@ -97,11 +184,11 @@ def _intent(snapshot_id: str = "1" * 64) -> PredictionMaturationIntentV2:
         "model_release_id": "a" * 64,
         "model_artifact_sha256": "b" * 64,
         "feature_artifact_sha256": "c" * 64,
-        "prediction_policy_sha256": PREDICTION_POLICY_SHA256,
-        "label_policy_sha256": config.label_config_sha256(),
+        "prediction_policy_sha256": prediction_policy.sha256(),
+        "label_policy_sha256": swing_outcome_policy_sha256(swing_contract),
         "execution_policy_sha256": EXECUTION_POLICY_SHA256,
-        "prediction_policy": DEFAULT_PREDICTION_POLICY.specification(),
-        "label_policy": config.label_policy(),
+        "prediction_policy": prediction_policy.specification(),
+        "label_policy": swing_outcome_policy(swing_contract),
         "primary_benchmark": "XLK",
         "market_regime": "risk_on",
         "sector": "Technology",
@@ -117,7 +204,7 @@ def _intent(snapshot_id: str = "1" * 64) -> PredictionMaturationIntentV2:
         "selected_for_policy": True,
         "actionable": True,
         "catalyst_status": "confirmed",
-        "decision_atr": None,
+        "decision_atr": 1.0,
     }
     semantic = semantic_prediction_sha256(base)
     return PredictionMaturationIntentV2.model_validate(
@@ -170,9 +257,9 @@ def _outcome(
         "net_return": 0.049,
         "mfe": 0.07,
         "mae": -0.02,
-        "path_outcome": "positive",
-        "opportunity_target": 1,
-        "downside_target": None,
+        "path_outcome": "timeout",
+        "opportunity_target": 0 if intent.view == "intraday" else None,
+        "downside_target": 0 if intent.view == "intraday" else None,
         "spy_return": 0.01,
         "qqq_return": 0.012,
         "sector_return": 0.008,

@@ -6,17 +6,22 @@ from typing import TypeAlias, cast
 import numpy as np
 import pandas as pd
 
+from market_predictor.core.errors import DataReadinessError
 from market_predictor.label_paths import (
     evaluate_intraday_barrier_paths,
     evaluate_swing_paths,
 )
+from market_predictor.modeling.label_outcomes import STOP_HIT, TARGET_HIT
 from market_predictor.outcome_contracts import (
     MaturationAttemptV1,
     MaturedOutcomeV1,
     PredictionMaturationIntentV2,
     content_sha256,
 )
-from market_predictor.core.errors import DataReadinessError
+from market_predictor.swing.labels.barrier_and_rank import (
+    BarrierSpec,
+    apply_triple_barrier,
+)
 
 MaturationResult: TypeAlias = MaturationAttemptV1 | MaturedOutcomeV1
 _BAR_COLUMNS = {
@@ -82,7 +87,9 @@ def _mature_swing(
     observed: datetime,
 ) -> tuple[MaturationResult, list[dict[str, object]]]:
     policy = intent.label_policy
-    _require_policy(policy, "policy", "swing_label.v2")
+    _require_policy(policy, "policy", "market_predictor.swing_outcome_policy.v1")
+    if intent.decision_atr is None:
+        raise DataReadinessError("swing intent has no decision ATR")
     horizon = _policy_int(policy, "horizon_sessions")
     spy_ticker = str(policy["broad_benchmark"]).upper()
     qqq_ticker = str(policy["growth_benchmark"]).upper()
@@ -102,12 +109,57 @@ def _mature_swing(
         ), []
     path_sessions = sessions[decision_index + 1 : decision_index + horizon + 1]
     entry_session = path_sessions[0]
-    exit_session = path_sessions[-1]
     stock_path, missing = _daily_path(
         bars,
         ticker=intent.ticker,
         sessions=path_sessions,
     )
+    decision_row = _one_daily_row(
+        bars,
+        ticker=intent.ticker,
+        session=intent.decision_session_et,
+    )
+    if decision_row is None:
+        missing.append(f"{intent.ticker}:{intent.decision_session_et}:decision")
+    if missing:
+        return _pending(
+            intent,
+            observed,
+            reasons=("required_bar_path_incomplete",),
+            missing_intervals=tuple(sorted(missing)),
+        ), []
+    assert decision_row is not None
+    barrier_bars = pd.concat(
+        [pd.DataFrame([decision_row]), stock_path],
+        ignore_index=True,
+    ).loc[:, ["session_date_et", "open", "high", "low", "close"]]
+    barrier_bars = barrier_bars.rename(columns={"session_date_et": "session"})
+    resolved = apply_triple_barrier(
+        barrier_bars,
+        pd.DataFrame(
+            {
+                "session": [intent.decision_session_et],
+                "atr": [intent.decision_atr],
+            }
+        ),
+        spec=BarrierSpec(
+            target_atr_multiple=_policy_float(policy, "target_atr_multiple"),
+            stop_atr_multiple=_policy_float(policy, "stop_atr_multiple"),
+            horizon_sessions=horizon,
+            same_bar_resolution=str(policy["same_bar_barrier_resolution"]),
+        ),
+    ).iloc[0]
+    if pd.isna(resolved["exit_session"]) or pd.isna(resolved["exit_price"]):
+        return _pending(
+            intent,
+            observed,
+            reasons=("managed_path_unresolved",),
+        ), []
+    exit_session = pd.Timestamp(resolved["exit_session"]).date()
+    holding_sessions = int(resolved["holding_sessions"])
+    if holding_sessions < 1 or holding_sessions > horizon:
+        raise DataReadinessError("managed swing holding period is invalid")
+    realized_path = stock_path.iloc[:holding_sessions].copy()
     benchmark_tickers = (spy_ticker, qqq_ticker, intent.primary_benchmark)
     benchmark_pairs: dict[str, tuple[pd.Series, pd.Series]] = {}
     for ticker in benchmark_tickers:
@@ -126,15 +178,14 @@ def _mature_swing(
             reasons=("required_bar_path_incomplete",),
             missing_intervals=tuple(sorted(missing)),
         ), []
-
     entry_price = float(stock_path.iloc[0]["open"])
-    exit_price = float(stock_path.iloc[-1]["close"])
+    exit_price = float(resolved["exit_price"])
     _require_positive_prices(entry_price, exit_price)
     evaluated = evaluate_swing_paths(
         entry_price=np.asarray([entry_price]),
         exit_price=np.asarray([exit_price]),
-        path_high=stock_path["high"].to_numpy(float)[None, :],
-        path_low=stock_path["low"].to_numpy(float)[None, :],
+        path_high=realized_path["high"].to_numpy(float)[None, :],
+        path_low=realized_path["low"].to_numpy(float)[None, :],
         round_trip_cost_bps=_policy_float(policy, "round_trip_cost_bps"),
     )
     gross = float(evaluated.gross_return[0])
@@ -142,14 +193,14 @@ def _mature_swing(
     spy_return = _pair_return(benchmark_pairs[spy_ticker])
     qqq_return = _pair_return(benchmark_pairs[qqq_ticker])
     sector_return = _pair_return(benchmark_pairs[intent.primary_benchmark])
-    evidence_frames = [stock_path]
+    evidence_frames = [pd.DataFrame([decision_row]), realized_path]
     evidence_frames.extend(pd.DataFrame([entry, exit_row]) for entry, exit_row in benchmark_pairs.values())
     evidence_rows = _evidence_rows(evidence_frames)
     label_available = _max_available(evidence_frames)
     outcome = _outcome(
         intent,
         entry_time=_timestamp(stock_path.iloc[0]["bar_start_utc"]),
-        exit_time=_timestamp(stock_path.iloc[-1]["bar_end_utc"]),
+        exit_time=_timestamp(realized_path.iloc[-1]["bar_end_utc"]),
         label_available=label_available,
         entry_price=entry_price,
         exit_price=exit_price,
@@ -157,8 +208,14 @@ def _mature_swing(
         net_return=net,
         mfe=float(evaluated.mfe[0]),
         mae=float(evaluated.mae[0]),
-        path_outcome="positive" if net > 0 else "negative",
-        opportunity_target=int(net > 0),
+        path_outcome=(
+            "target_first"
+            if int(resolved["barrier_label"]) == TARGET_HIT
+            else "stop_first"
+            if int(resolved["barrier_label"]) == STOP_HIT
+            else "timeout"
+        ),
+        opportunity_target=None,
         downside_target=None,
         spy_return=spy_return,
         qqq_return=qqq_return,
@@ -280,7 +337,7 @@ def _outcome(
     mfe: float,
     mae: float,
     path_outcome: str,
-    opportunity_target: int,
+    opportunity_target: int | None,
     downside_target: int | None,
     spy_return: float,
     qqq_return: float,

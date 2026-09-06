@@ -10,6 +10,9 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 from market_predictor.label_policy import policy_sha256
 from market_predictor.prediction_policy import parse_prediction_policy
+from market_predictor.swing.contracts.prediction_policy import (
+    parse_swing_prediction_policy,
+)
 
 SHA256_PATTERN = r"^[0-9a-f]{64}$"
 
@@ -71,10 +74,44 @@ class PredictionMaturationIntentV2(FrozenContract):
 
     @model_validator(mode="after")
     def validate_identity(self) -> Self:
-        parse_prediction_policy(
-            self.prediction_policy,
-            expected_sha256=self.prediction_policy_sha256,
-        )
+        if self.view == "swing":
+            if (
+                self.prediction_policy.get("contract_version")
+                != "market_predictor.swing_prediction_policy.v1"
+            ):
+                raise ValueError("swing intent requires the swing prediction policy")
+            prediction_policy = parse_swing_prediction_policy(
+                self.prediction_policy,
+                expected_sha256=self.prediction_policy_sha256,
+            )
+            horizon = _horizon_amount(self.horizon, unit="b", view="swing")
+            if (
+                self.label_policy.get("policy")
+                != "market_predictor.swing_outcome_policy.v1"
+                or self.label_policy.get("horizon_sessions") != horizon
+                or prediction_policy.horizon_sessions != horizon
+            ):
+                raise ValueError("swing intent policy horizons are inconsistent")
+            if self.downside_probability is not None:
+                raise ValueError("swing intent cannot contain downside probability")
+        else:
+            if (
+                self.prediction_policy.get("contract_version")
+                != "market_predictor.prediction_policy.v2"
+            ):
+                raise ValueError("intraday intent requires the intraday prediction policy")
+            parse_prediction_policy(
+                self.prediction_policy,
+                expected_sha256=self.prediction_policy_sha256,
+            )
+            horizon = _horizon_amount(self.horizon, unit="m", view="intraday")
+            if (
+                self.label_policy.get("policy") != "intraday_label.v2"
+                or self.label_policy.get("horizon_minutes") != horizon
+            ):
+                raise ValueError("intraday intent policy horizon is inconsistent")
+            if self.downside_probability is None:
+                raise ValueError("intraday intent requires downside probability")
         if policy_sha256(self.label_policy) != self.label_policy_sha256:
             raise ValueError("label policy hash does not match its payload")
         if self.selected_for_policy and not self.selection_eligible:
@@ -88,8 +125,8 @@ class PredictionMaturationIntentV2(FrozenContract):
             raise ValueError("semantic prediction identity is invalid")
         if maturation_key_sha256(self.snapshot_id, semantic) != self.maturation_key:
             raise ValueError("maturation key is invalid")
-        if self.view == "intraday" and self.decision_atr is None:
-            raise ValueError("intraday maturation requires decision ATR")
+        if self.decision_atr is None:
+            raise ValueError(f"{self.view} maturation requires decision ATR")
         return self
 
 
@@ -142,7 +179,7 @@ class MaturedOutcomeV1(FrozenContract):
     mfe: float
     mae: float
     path_outcome: Literal["positive", "negative", "target_first", "stop_first", "timeout"]
-    opportunity_target: int = Field(ge=0, le=1)
+    opportunity_target: int | None = Field(default=None, ge=0, le=1)
     downside_target: int | None = Field(default=None, ge=0, le=1)
     spy_return: float
     qqq_return: float
@@ -170,6 +207,18 @@ class MaturedOutcomeV1(FrozenContract):
             raise ValueError("outcome exit must follow entry")
         if self.matured_at_utc != self.label_available_at_utc:
             raise ValueError("matured_at_utc must equal deterministic label availability")
+        if self.label_available_at_utc < self.exit_time_utc:
+            raise ValueError("outcome cannot be available before its exit")
+        if self.view == "swing":
+            if self.path_outcome not in {"target_first", "stop_first", "timeout"}:
+                raise ValueError("swing outcome must use managed barrier semantics")
+            if self.opportunity_target is not None or self.downside_target is not None:
+                raise ValueError("swing outcome cannot contain intraday calibration targets")
+        else:
+            if self.path_outcome not in {"target_first", "stop_first", "timeout"}:
+                raise ValueError("intraday outcome must use managed barrier semantics")
+            if self.opportunity_target is None or self.downside_target is None:
+                raise ValueError("intraday outcome requires both calibration targets")
         content = self.model_dump(mode="json", exclude={"outcome_id"})
         if content_sha256(content) != self.outcome_id:
             raise ValueError("matured outcome identity is invalid")
@@ -188,6 +237,13 @@ def semantic_prediction_sha256(intent_without_key: dict[str, object]) -> str:
         default=_json_default,
     )
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def _horizon_amount(horizon: str, *, unit: str, view: str) -> int:
+    match = re.fullmatch(rf"([1-9]\d*){re.escape(unit)}", horizon)
+    if match is None:
+        raise ValueError(f"{view} intent horizon has the wrong unit")
+    return int(match.group(1))
 
 
 def maturation_key_sha256(snapshot_id: str, semantic_prediction_id: str) -> str:

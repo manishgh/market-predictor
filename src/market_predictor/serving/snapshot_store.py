@@ -9,7 +9,9 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
-from market_predictor.prediction_contracts import (
+from market_predictor.core import path_integrity
+from market_predictor.core.json_integrity import parse_strict_json_object
+from market_predictor.core.prediction_contracts import (
     PredictionConflictError,
     PredictionDependencyError,
     PredictionNotFoundError,
@@ -18,7 +20,7 @@ from market_predictor.prediction_contracts import (
     PredictionValidationError,
 )
 
-SNAPSHOT_SCHEMA = "market_predictor.prediction_snapshot.v3"
+SNAPSHOT_SCHEMA = "market_predictor.serving.snapshot_store.v3"
 _SNAPSHOT_ID = re.compile(r"^[0-9a-f]{64}$")
 
 
@@ -29,27 +31,42 @@ class PredictionSnapshotStore:
         self.root = Path(root)
 
     def record(self, request: PredictionRequest, response: PredictionResponse) -> PredictionResponse:
-        content = {
-            "recorded_at_utc": datetime.now(UTC).isoformat(),
-            "request": request.model_dump(mode="json"),
-            "response": response.model_dump(
-                mode="json",
-                exclude={"snapshot_id", "snapshot_sha256"},
-            ),
-        }
-        digest = _content_sha256(content)
-        envelope = {
-            "schema": SNAPSHOT_SCHEMA,
-            "snapshot_id": digest,
-            "content_sha256": digest,
-            "content": content,
-        }
-        path = self.path_for(digest)
         try:
+            validated_request = PredictionRequest.model_validate(
+                request.model_dump(mode="python")
+            )
+            validated_response = PredictionResponse.model_validate(
+                response.model_dump(mode="python")
+            )
+            content = {
+                "recorded_at_utc": datetime.now(UTC).isoformat(),
+                "request": validated_request.model_dump(mode="json"),
+                "response": validated_response.model_dump(
+                    mode="json",
+                    exclude={"snapshot_id", "snapshot_sha256"},
+                ),
+            }
+            digest = _content_sha256(content)
+            envelope = {
+                "schema": SNAPSHOT_SCHEMA,
+                "snapshot_id": digest,
+                "content_sha256": digest,
+                "content": content,
+            }
+            path = self.path_for(digest)
             path.parent.mkdir(parents=True, exist_ok=True)
-            encoded = json.dumps(envelope, indent=2, sort_keys=True, ensure_ascii=True)
+            encoded = json.dumps(
+                envelope,
+                indent=2,
+                sort_keys=True,
+                ensure_ascii=True,
+                allow_nan=False,
+            )
             if path.exists():
-                existing = json.loads(path.read_text(encoding="utf-8"))
+                existing = parse_strict_json_object(
+                    path.read_bytes(),
+                    label="prediction snapshot",
+                )
                 self._validate_envelope(existing, expected_id=digest)
             else:
                 temporary = path.with_name(f".{path.name}.{uuid4().hex}.tmp")
@@ -57,27 +74,34 @@ class PredictionSnapshotStore:
                 os.replace(temporary, path)
         except PredictionConflictError:
             raise
-        except (json.JSONDecodeError, TypeError, ValueError) as exc:
+        except (TypeError, ValueError) as exc:
             raise PredictionConflictError from exc
         except OSError as exc:
             raise PredictionDependencyError from exc
-        return response.model_copy(update={"snapshot_id": digest, "snapshot_sha256": digest})
+        return validated_response.model_copy(
+            update={"snapshot_id": digest, "snapshot_sha256": digest}
+        )
 
     def load(self, snapshot_id: str) -> tuple[PredictionRequest, PredictionResponse, dict[str, Any]]:
         path = self.path_for(snapshot_id)
         if not path.exists():
             raise PredictionNotFoundError
         try:
-            envelope = json.loads(path.read_text(encoding="utf-8"))
+            envelope = parse_strict_json_object(
+                path.read_bytes(),
+                label="prediction snapshot",
+            )
             self._validate_envelope(envelope, expected_id=snapshot_id)
-            content = envelope["content"]
-            request = PredictionRequest.model_validate(content["request"])
-            response = PredictionResponse.model_validate(content["response"]).model_copy(
+            content = envelope.get("content")
+            if not isinstance(content, dict):
+                raise PredictionConflictError
+            request = PredictionRequest.model_validate(content.get("request"))
+            response = PredictionResponse.model_validate(content.get("response")).model_copy(
                 update={"snapshot_id": snapshot_id, "snapshot_sha256": snapshot_id}
             )
         except PredictionConflictError:
             raise
-        except (json.JSONDecodeError, KeyError, TypeError, ValueError) as exc:
+        except (KeyError, TypeError, ValueError) as exc:
             raise PredictionConflictError from exc
         except OSError as exc:
             raise PredictionDependencyError from exc
@@ -89,7 +113,10 @@ class PredictionSnapshotStore:
         normalized = snapshot_id.strip().lower()
         if not _SNAPSHOT_ID.fullmatch(normalized):
             raise PredictionValidationError
-        return self.root / normalized[:2] / f"{normalized}.json"
+        return path_integrity.verify_no_reparse_ancestry(
+            self.root / normalized[:2] / f"{normalized}.json",
+            label="prediction snapshot",
+        )
 
     @staticmethod
     def _validate_envelope(envelope: dict[str, Any], *, expected_id: str) -> None:
@@ -103,5 +130,11 @@ class PredictionSnapshotStore:
 
 
 def _content_sha256(value: Any) -> str:
-    canonical = json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+    canonical = json.dumps(
+        value,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=True,
+        allow_nan=False,
+    )
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()

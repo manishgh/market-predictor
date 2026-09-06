@@ -12,13 +12,13 @@ import numpy as np
 import pandas as pd
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from market_predictor.core.errors import DataReadinessError
 from market_predictor.outcome_contracts import (
     MaturedOutcomeV1,
     PredictionMaturationIntentV2,
     content_sha256,
 )
 from market_predictor.outcome_repository import OutcomeRepository
-from market_predictor.core.errors import DataReadinessError
 
 PERFORMANCE_REPORT_VERSION = "market_predictor.selected_policy_performance.v2"
 SHA256_PATTERN = r"^[0-9a-f]{64}$"
@@ -166,10 +166,7 @@ class SelectedPolicyCohortV2(BaseModel):
             value is not None for value in probability_fields
         ):
             raise ValueError("empty selected-policy cohort has score evidence")
-        outcome_fields = (
-            self.opportunity_observed_rate,
-            self.opportunity_brier_score,
-            self.opportunity_calibration_error,
+        economic_outcome_fields = (
             self.average_net_return,
             self.average_excess_return_vs_spy,
             self.cumulative_net_return,
@@ -178,10 +175,15 @@ class SelectedPolicyCohortV2(BaseModel):
             self.last_matured_outcome_utc,
         )
         if self.matured_selected_samples == 0:
-            if any(value is not None for value in outcome_fields):
+            if any(value is not None for value in economic_outcome_fields):
                 raise ValueError("unmatured selected-policy cohort has outcome evidence")
-        elif any(value is None for value in outcome_fields):
+        elif any(value is None for value in economic_outcome_fields):
             raise ValueError("matured selected-policy cohort lacks outcome evidence")
+        opportunity_fields = (
+            self.opportunity_observed_rate,
+            self.opportunity_brier_score,
+            self.opportunity_calibration_error,
+        )
         downside_fields = (
             self.mean_downside_probability,
             self.downside_observed_rate,
@@ -189,10 +191,12 @@ class SelectedPolicyCohortV2(BaseModel):
             self.downside_calibration_error,
         )
         if self.view == "intraday" and self.matured_selected_samples > 0:
+            if any(value is None for value in opportunity_fields):
+                raise ValueError("intraday cohort lacks opportunity calibration evidence")
             if any(value is None for value in downside_fields):
                 raise ValueError("intraday cohort lacks downside calibration evidence")
-        elif any(value is not None for value in downside_fields):
-            raise ValueError("swing or unmatured cohort has downside evidence")
+        elif any(value is not None for value in (*opportunity_fields, *downside_fields)):
+            raise ValueError("swing or unmatured cohort has calibration evidence")
         content = self.model_dump(mode="json", exclude={"cohort_id"})
         if content_sha256(content) != self.cohort_id:
             raise ValueError("selected-policy cohort identity is invalid")
@@ -417,6 +421,14 @@ def _matured_selected_outcome(
         or outcome.ticker != intent.ticker
         or outcome.view != intent.view
         or outcome.horizon != intent.horizon
+        or (
+            intent.view == "swing"
+            and outcome.entry_time_utc <= intent.decision_time_utc
+        )
+        or (
+            intent.view == "intraday"
+            and outcome.entry_time_utc != intent.decision_time_utc
+        )
     ):
         raise DataReadinessError(
             "selected-policy outcome identity does not match its intent"
@@ -605,8 +617,6 @@ def _outcome_metrics(
     }
     if matured.empty:
         return empty
-    probability = matured["probability"].to_numpy(float)
-    opportunity = matured["opportunity_target"].to_numpy(float)
     returns = matured["net_return"].to_numpy(float)
     period_returns = (
         matured.groupby(
@@ -625,16 +635,8 @@ def _outcome_metrics(
         out=np.ones_like(equity_with_origin),
         where=peak != 0,
     )
-    result = {
+    result: dict[str, object] = {
         **empty,
-        "opportunity_observed_rate": float(np.mean(opportunity)),
-        "opportunity_brier_score": float(
-            np.mean(np.square(probability - opportunity))
-        ),
-        "opportunity_calibration_error": _expected_calibration_error(
-            probability,
-            opportunity,
-        ),
         "average_net_return": float(np.mean(returns)),
         "average_excess_return_vs_spy": float(
             matured["excess_return_vs_spy"].mean()
@@ -648,6 +650,22 @@ def _outcome_metrics(
             matured["matured_at_utc"].max()
         ),
     }
+    calibrated = matured.dropna(subset=["opportunity_target"])
+    if not calibrated.empty:
+        probability = calibrated["probability"].to_numpy(float)
+        opportunity = calibrated["opportunity_target"].to_numpy(float)
+        result.update(
+            {
+                "opportunity_observed_rate": float(np.mean(opportunity)),
+                "opportunity_brier_score": float(
+                    np.mean(np.square(probability - opportunity))
+                ),
+                "opportunity_calibration_error": _expected_calibration_error(
+                    probability,
+                    opportunity,
+                ),
+            }
+        )
     if view == "intraday":
         downside_probability = matured["downside_probability"].to_numpy(float)
         downside = matured["downside_target"].to_numpy(float)

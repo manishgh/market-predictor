@@ -16,15 +16,6 @@ import pyarrow.parquet as pq
 import market_predictor.swing.contracts.materialization as swing_materialization_contracts
 from market_predictor.canonical.store import file_sha256
 from market_predictor.core.errors import DataReadinessError
-from market_predictor.edge_rebuild.swing_features import (
-    MANAGED_BENCHMARK_RETURN_COLUMNS,
-    MANAGED_EXCESS_RETURN_COLUMNS,
-    MANAGED_PATH_NET_RETURN_COLUMNS,
-    MANAGED_PATH_SESSION_ORDINAL_COLUMNS,
-    SWING_FEATURE_PANEL_SCHEMA,
-    SWING_FEATURE_PROFILE,
-    swing_model_feature_columns,
-)
 from market_predictor.edge_rebuild.training.swing_types import (
     SwingPanelBinding,
     SwingProfileData,
@@ -43,9 +34,17 @@ from market_predictor.modeling.strategy_contract import StrategyContract
 from market_predictor.resources import (
     release_process_memory,
 )
+from market_predictor.swing.features.panel import (
+    MANAGED_BENCHMARK_RETURN_COLUMNS,
+    MANAGED_EXCESS_RETURN_COLUMNS,
+    MANAGED_PATH_NET_RETURN_COLUMNS,
+    MANAGED_PATH_SESSION_ORDINAL_COLUMNS,
+    SWING_FEATURE_PANEL_SCHEMA,
+    SWING_FEATURE_PROFILE,
+    swing_model_feature_columns,
+)
 
 TRAINING_SCHEMA: Final = "edge_rebuild.swing_training.v5"
-MODEL_SCHEMA: Final = "edge_rebuild.swing_candidate.v5"
 EVALUATION_SCHEMA: Final = "edge_rebuild.swing_evaluation.v7"
 MODEL_CARD_SCHEMA: Final = "edge_rebuild.swing_model_card.v7"
 OUTPUT_AUTHORITY_SCHEMA: Final = "edge_rebuild.swing_candidate_authority.v5"

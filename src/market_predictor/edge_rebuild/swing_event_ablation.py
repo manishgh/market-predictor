@@ -23,10 +23,6 @@ from market_predictor.catalysts.issuer_events.classification import (
     issuer_event_rule_variant,
 )
 from market_predictor.core.errors import DataReadinessError
-from market_predictor.edge_rebuild.swing_features import (
-    SWING_FEATURE_PROFILE,
-    swing_model_feature_columns,
-)
 from market_predictor.edge_rebuild.swing_materialization import (
     load_complete_swing_feature_panel,
 )
@@ -46,6 +42,10 @@ from market_predictor.resources import (
 from market_predictor.swing.datasets.issuer_event_family_cohort import (
     SwingIssuerFamilyCohort,
     load_swing_issuer_family_cohort,
+)
+from market_predictor.swing.features.panel import (
+    SWING_FEATURE_PROFILE,
+    swing_model_feature_columns,
 )
 
 POLICY_SCHEMA: Final = "market_predictor.swing_analyst_revision_ablation.v1"

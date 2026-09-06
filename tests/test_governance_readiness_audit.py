@@ -7,8 +7,7 @@ import pytest
 
 from market_predictor.canonical.store import file_sha256
 from market_predictor.core.errors import DataReadinessError
-from market_predictor.edge_rebuild.swing_features import SWING_FEATURE_PROFILE
-from market_predictor.edge_rebuild.swing_training import SwingPanelBinding
+from market_predictor.edge_rebuild.training.swing_types import SwingPanelBinding
 from market_predictor.governance.readiness.audit import (
     _SWING_PANEL_READINESS_COLUMNS,
     VerifiedCatalystSources,
@@ -28,6 +27,7 @@ from market_predictor.governance.readiness.audit import (
 from market_predictor.governance.readiness.contracts import (
     load_prediction_data_readiness_config,
 )
+from market_predictor.swing.features.panel import SWING_FEATURE_PROFILE
 
 
 def test_candidate_must_bind_current_ten_session_panel(tmp_path: Path) -> None:

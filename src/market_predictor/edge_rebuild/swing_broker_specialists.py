@@ -44,9 +44,6 @@ from market_predictor.edge_rebuild.swing_event_ablation import (
 from market_predictor.edge_rebuild.swing_event_ablation import (
     MANIFEST_SCHEMA as SOURCE_MANIFEST_SCHEMA,
 )
-from market_predictor.edge_rebuild.swing_selection import (
-    select_constrained_swing_portfolio,
-)
 from market_predictor.edge_rebuild.swing_training import (
     load_swing_training_config,
 )
@@ -61,6 +58,9 @@ from market_predictor.resources import (
     assert_peak_memory_budget,
     memory_audit,
     release_process_memory,
+)
+from market_predictor.swing.selection import (
+    select_constrained_swing_portfolio,
 )
 
 POLICY_SCHEMA: Final = "market_predictor.swing_broker_action_specialists.v1"

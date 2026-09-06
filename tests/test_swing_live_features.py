@@ -8,31 +8,13 @@ import numpy as np
 import pandas as pd
 import pytest
 
-import market_predictor.edge_rebuild.swing_live as live_module
+import market_predictor.serving.swing_features as live_module
 from market_predictor.canonical.reconciliation import (
     apply_event_assignment_features,
     event_feature_columns,
 )
 from market_predictor.canonical.store import file_sha256
 from market_predictor.core.errors import DataReadinessError
-from market_predictor.edge_rebuild.serving import validate_batch_live_feature_parity
-from market_predictor.edge_rebuild.swing_features import (
-    SWING_CATALYST_FEATURE_PROFILE,
-    SWING_FEATURE_PROFILE,
-    TECHNICAL_RANKING_FEATURES,
-    build_swing_ablation_rows,
-    finalize_swing_feature_panel,
-    swing_model_feature_columns,
-)
-from market_predictor.edge_rebuild.swing_live import (
-    SWING_LIVE_IDENTITY_COLUMNS,
-    SWING_LIVE_INPUT_POINTER_SCHEMA,
-    SWING_LIVE_INPUT_SCHEMA_VERSION,
-    SWING_LIVE_REQUIRED_WATERMARKS,
-    FileSwingLiveInputProvider,
-    SwingLiveFeatureFrames,
-    build_live_swing_features,
-)
 from market_predictor.governance.promotion.bundle_contracts import (
     canonical_payload_sha256,
 )
@@ -41,11 +23,29 @@ from market_predictor.modeling.strategy_contract import (
     load_strategy_contract,
 )
 from market_predictor.resources import process_memory_snapshot
+from market_predictor.serving.swing_features import (
+    SWING_LIVE_IDENTITY_COLUMNS,
+    SWING_LIVE_INPUT_POINTER_SCHEMA,
+    SWING_LIVE_INPUT_SCHEMA_VERSION,
+    SWING_LIVE_REQUIRED_WATERMARKS,
+    FileSwingLiveInputProvider,
+    SwingLiveFeatureFrames,
+    build_live_swing_features,
+)
+from market_predictor.serving.swing_inference import validate_batch_live_feature_parity
 from market_predictor.swing.features.catalyst_decision_authority import (
     REQUIRED_MODEL_SOURCE_FAMILIES,
     TRACKED_SOURCE_FAMILIES,
     WINDOWS,
     CatalystDecisionAuthority,
+)
+from market_predictor.swing.features.panel import (
+    SWING_CATALYST_FEATURE_PROFILE,
+    SWING_FEATURE_PROFILE,
+    TECHNICAL_RANKING_FEATURES,
+    build_swing_ablation_rows,
+    finalize_swing_feature_panel,
+    swing_model_feature_columns,
 )
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -603,6 +603,50 @@ def test_file_live_input_provider_verifies_atomic_manifest(tmp_path: Path) -> No
     authority_path.write_bytes(authority_bytes)
     (generation / "stock_daily_bars.parquet").write_bytes(b"tampered")
     with pytest.raises(DataReadinessError, match="hash does not verify"):
+        FileSwingLiveInputProvider(root).load(
+            as_of_utc=AS_OF.to_pydatetime(),
+            maximum_bytes=10_000_000,
+            maximum_rows=100,
+        )
+
+
+@pytest.mark.parametrize(
+    "pointer_payload",
+    (
+        '{"schema":"first","schema":"second"}',
+        '{"schema":"first","value":NaN}',
+        '{"schema":"first","value":1e999}',
+    ),
+)
+def test_file_live_input_provider_rejects_ambiguous_pointer_json(
+    tmp_path: Path,
+    pointer_payload: str,
+) -> None:
+    root = tmp_path / "live"
+    root.mkdir()
+    (root / "active_generation.json").write_text(pointer_payload, encoding="utf-8")
+
+    with pytest.raises(DataReadinessError, match="pointer.*unreadable"):
+        FileSwingLiveInputProvider(root).load(
+            as_of_utc=AS_OF.to_pydatetime(),
+            maximum_bytes=10_000_000,
+            maximum_rows=100,
+        )
+
+
+def test_file_live_input_provider_rejects_reparse_repository(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    root = tmp_path / "live"
+    root.mkdir()
+    monkeypatch.setattr(
+        live_module.path_integrity,
+        "is_reparse_point",
+        lambda path: path == root,
+    )
+
+    with pytest.raises(DataReadinessError, match="symlink or reparse point"):
         FileSwingLiveInputProvider(root).load(
             as_of_utc=AS_OF.to_pydatetime(),
             maximum_bytes=10_000_000,

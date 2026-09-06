@@ -16,19 +16,7 @@ import market_predictor.swing.contracts.materialization as swing_materialization
 from market_predictor.canonical.store import file_sha256
 from market_predictor.core.errors import DataReadinessError
 from market_predictor.edge_rebuild import swing_training
-from market_predictor.edge_rebuild.swing_features import (
-    MANAGED_EXCESS_RETURN_COLUMNS,
-    MANAGED_PATH_NET_RETURN_COLUMNS,
-    MANAGED_PATH_SESSION_ORDINAL_COLUMNS,
-    SWING_BASELINE_ABLATION_ORDER,
-    SWING_FEATURE_PANEL_SCHEMA,
-    SWING_FEATURE_PROFILE,
-    swing_baseline_feature_columns,
-    swing_model_feature_columns,
-)
 from market_predictor.edge_rebuild.swing_training import (
-    SwingPanelBinding,
-    SwingProfileData,
     SwingTrainingConfig,
     load_swing_candidate_authority,
     load_swing_training_config,
@@ -40,13 +28,33 @@ from market_predictor.edge_rebuild.temporal_manifest import (
     build_temporal_schedule,
     load_temporal_manifest_config,
 )
-from market_predictor.edge_rebuild.training import evaluation, walk_forward
+from market_predictor.edge_rebuild.training import (
+    data_io,
+    evaluation,
+    swing_evaluation,
+    swing_types,
+    walk_forward,
+)
 from market_predictor.edge_rebuild.training.swing_evaluation import select_constrained_swing_portfolio
+from market_predictor.edge_rebuild.training.swing_types import (
+    SwingPanelBinding,
+    SwingProfileData,
+)
 from market_predictor.modeling.strategy_contract import (
     StrategyContract,
     load_strategy_contract,
 )
 from market_predictor.process_memory import process_memory_snapshot, release_process_memory
+from market_predictor.swing.features.panel import (
+    MANAGED_EXCESS_RETURN_COLUMNS,
+    MANAGED_PATH_NET_RETURN_COLUMNS,
+    MANAGED_PATH_SESSION_ORDINAL_COLUMNS,
+    SWING_BASELINE_ABLATION_ORDER,
+    SWING_FEATURE_PANEL_SCHEMA,
+    SWING_FEATURE_PROFILE,
+    swing_baseline_feature_columns,
+    swing_model_feature_columns,
+)
 
 
 def test_repository_policy_is_frozen_for_ten_session_candidate_training() -> None:
@@ -127,7 +135,7 @@ def test_baseline_ablation_contract_is_nested_and_excludes_catalysts() -> None:
     assert groups[-1] == technical
     assert all("alpaca" not in column for group in groups for column in group)
     assert not any(
-        swing_training._is_unapproved_source_feature(column)
+        swing_types._is_unapproved_source_feature(column)
         for group in groups
         for column in group
     )
@@ -185,7 +193,7 @@ def test_development_partition_selection_physically_excludes_locked_test_months(
             "last_session": "2025-07-31",
         },
     ]
-    selected = swing_training._partition_records_for_sessions(
+    selected = data_io._partition_records_for_sessions(
         records,
         ("2025-06-12", "2025-06-30"),
     )
@@ -202,16 +210,16 @@ def test_profile_session_coverage_requires_every_governed_session() -> None:
         "2019-07-15",
     )
 
-    swing_training._validate_profile_session_coverage(set(governed), governed)
+    data_io._validate_profile_session_coverage(set(governed), governed)
     with pytest.raises(DataReadinessError, match="missing governed sessions"):
-        swing_training._validate_profile_session_coverage(
+        data_io._validate_profile_session_coverage(
             {"2019-07-10", "2019-07-11", "2019-07-12", "2019-07-15"},
             governed,
         )
 
 
 def test_probability_distribution_is_complete_and_finite() -> None:
-    result = swing_training._probability_distribution(
+    result = swing_evaluation._probability_distribution(
         np.asarray([0.1, 0.2, 0.3, 0.4], dtype="float64")
     )
 
@@ -219,7 +227,7 @@ def test_probability_distribution_is_complete_and_finite() -> None:
     assert result["median"] == pytest.approx(0.25)
     assert result["maximum"] == pytest.approx(0.4)
     with pytest.raises(DataReadinessError, match="finite vector"):
-        swing_training._probability_distribution(np.asarray([np.nan]))
+        swing_evaluation._probability_distribution(np.asarray([np.nan]))
 
 def test_trains_sequential_ablations_and_publishes_candidate_only(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -387,7 +395,7 @@ def test_profile_validation_rejects_double_cost_and_late_membership() -> None:
     invalid_cost = profile.frame.copy()
     invalid_cost["barrier_net_return"] -= 0.002
     with pytest.raises(DataReadinessError, match="cost exactly once"):
-        swing_training._validate_profile_frame(
+        data_io._validate_profile_frame(
             invalid_cost,
             profile=SWING_FEATURE_PROFILE,
             feature_columns=profile.feature_columns,
@@ -397,7 +405,7 @@ def test_profile_validation_rejects_double_cost_and_late_membership() -> None:
     late = profile.frame.copy()
     late["membership_available_at_utc"] = late["decision_time_utc"] + pd.Timedelta(seconds=1)
     with pytest.raises(DataReadinessError, match="membership was unavailable"):
-        swing_training._validate_profile_frame(
+        data_io._validate_profile_frame(
             late,
             profile=SWING_FEATURE_PROFILE,
             feature_columns=profile.feature_columns,
@@ -414,7 +422,7 @@ def test_profile_validation_preserves_bounded_feature_missingness() -> None:
     partially_missing = profile.frame.copy()
     partially_missing.loc[partially_missing.index[0], feature] = np.nan
 
-    validated = swing_training._validate_profile_frame(
+    validated = data_io._validate_profile_frame(
         partially_missing,
         profile=SWING_FEATURE_PROFILE,
         feature_columns=profile.feature_columns,
@@ -426,7 +434,7 @@ def test_profile_validation_preserves_bounded_feature_missingness() -> None:
     entirely_missing = profile.frame.copy()
     entirely_missing[feature] = np.nan
     with pytest.raises(DataReadinessError, match="entirely missing"):
-        swing_training._validate_profile_frame(
+        data_io._validate_profile_frame(
             entirely_missing,
             profile=SWING_FEATURE_PROFILE,
             feature_columns=profile.feature_columns,
@@ -436,7 +444,7 @@ def test_profile_validation_preserves_bounded_feature_missingness() -> None:
     infinite = profile.frame.copy()
     infinite.loc[infinite.index[0], feature] = np.inf
     with pytest.raises(DataReadinessError, match="contains infinity"):
-        swing_training._validate_profile_frame(
+        data_io._validate_profile_frame(
             infinite,
             profile=SWING_FEATURE_PROFILE,
             feature_columns=profile.feature_columns,
@@ -593,14 +601,14 @@ def test_economic_gate_uses_holding_aligned_benchmarks_and_portfolio_path() -> N
 
 
 def test_validation_threshold_requires_every_scope_economic_gate() -> None:
-    assert not swing_training._validation_scopes_pass_economic_gates({})
-    assert not swing_training._validation_scopes_pass_economic_gates(
+    assert not swing_evaluation._validation_scopes_pass_economic_gates({})
+    assert not swing_evaluation._validation_scopes_pass_economic_gates(
         {
             "temporal": {"economic_gate": {"passed": True}},
             "unseen_security": {"economic_gate": {"passed": False}},
         }
     )
-    assert swing_training._validation_scopes_pass_economic_gates(
+    assert swing_evaluation._validation_scopes_pass_economic_gates(
         {
             "temporal": {"economic_gate": {"passed": True}},
             "unseen_security": {"economic_gate": {"passed": True}},
@@ -650,7 +658,7 @@ def test_no_candidate_evidence_is_immutable_and_does_not_open_test(
 
 
 def test_production_technical_profile_memory_projection_stays_below_budget() -> None:
-    one_profile = swing_training._projected_profile_memory_bytes(853_417, 138)
+    one_profile = data_io._projected_profile_memory_bytes(853_417, 138)
     safety_threshold = int(3.25 * 1024**3)
 
     assert one_profile < safety_threshold

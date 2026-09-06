@@ -3,20 +3,20 @@ from __future__ import annotations
 from datetime import date
 from zoneinfo import ZoneInfo
 
+from market_predictor.core.errors import DataReadinessError
+from market_predictor.core.prediction_contracts import (
+    IntradayPrediction,
+    PredictionResponse,
+    PredictionRowEvidenceV1,
+    SwingPrediction,
+)
 from market_predictor.outcome_contracts import (
     PredictionMaturationIntentV2,
     maturation_key_sha256,
     semantic_prediction_sha256,
 )
 from market_predictor.outcome_repository import OutcomeRepository
-from market_predictor.prediction_contracts import (
-    IntradayPrediction,
-    PredictionResponse,
-    PredictionRowEvidenceV1,
-    SwingPrediction,
-)
-from market_predictor.prediction_snapshot import PredictionSnapshotStore
-from market_predictor.core.errors import DataReadinessError
+from market_predictor.serving.snapshot_store import PredictionSnapshotStore
 
 _EASTERN = ZoneInfo("America/New_York")
 
@@ -43,7 +43,11 @@ def maturation_intents_from_response(
         raise DataReadinessError("only identity-complete live predictions can mature")
     intents: list[PredictionMaturationIntentV2] = []
     for prediction in response.predictions:
-        if prediction.swing is not None:
+        if (
+            prediction.swing is not None
+            and prediction.swing.probability is not None
+            and prediction.swing.readiness.status == "valid"
+        ):
             intents.append(
                 _intent(
                     response,
@@ -53,7 +57,11 @@ def maturation_intents_from_response(
                     prediction=prediction.swing,
                 )
             )
-        if prediction.intraday is not None:
+        if (
+            prediction.intraday is not None
+            and prediction.intraday.opportunity_probability is not None
+            and prediction.intraday.readiness.status == "valid"
+        ):
             intents.append(
                 _intent(
                     response,

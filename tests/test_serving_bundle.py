@@ -9,18 +9,18 @@ from pathlib import Path
 
 from typer.testing import CliRunner
 
+from market_predictor.core.errors import DataReadinessError
 from market_predictor.feature_store import LiveFeatureStore
 from market_predictor.intraday.contracts import INTRADAY_FEATURE_SCHEMA_VERSION
 from market_predictor.production_cli import app
 from market_predictor.release import publish_local_release
-from market_predictor.serving_bundle import (
+from market_predictor.serving.bundle import (
     activate_serving_bundle,
     load_active_serving_bundle,
     publish_serving_bundle,
     rollback_serving_bundle,
     verify_serving_bundle,
 )
-from market_predictor.core.errors import DataReadinessError
 from tests.r4_fixtures import test_signing_material as signing_material_for_test
 from tests.test_serving_context import _promoted_intraday_model, _publish_intraday
 

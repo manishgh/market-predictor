@@ -8,13 +8,13 @@ from pathlib import Path
 
 from pydantic import ValidationError
 
+from market_predictor.core.prediction_contracts import PredictionConflictError
 from market_predictor.drift_policy import (
     DriftPolicyV2,
     DriftStateStore,
     evaluate_drift,
 )
 from market_predictor.outcome_contracts import content_sha256
-from market_predictor.prediction_contracts import PredictionConflictError
 
 
 class DriftPolicyTests(unittest.TestCase):
@@ -33,7 +33,14 @@ class DriftPolicyTests(unittest.TestCase):
     def test_stable_and_warning_performance_remain_actionable(self) -> None:
         stable = self._evaluate(self._report(samples=20))
         warning = self._evaluate(
-            self._report(samples=20, opportunity_brier=0.30)
+            self._report(
+                samples=20,
+                opportunity_brier=0.30,
+                view="intraday",
+                horizon="60m",
+            ),
+            mode="intraday",
+            horizon="60m",
         )
 
         self.assertEqual(
@@ -92,6 +99,20 @@ class DriftPolicyTests(unittest.TestCase):
             (assessment.state, assessment.actionability),
             ("severe", "not_ready"),
         )
+
+    def test_future_performance_evidence_is_rejected_without_clock_tolerance(self) -> None:
+        assessment = self._evaluate(
+            self._report(
+                samples=20,
+                generated_at=self.now + timedelta(microseconds=1),
+            )
+        )
+
+        self.assertEqual(
+            (assessment.state, assessment.actionability),
+            ("stale", "not_ready"),
+        )
+        self.assertIn("performance_report_from_future", assessment.reasons)
 
     def test_identity_mismatch_is_not_ready(self) -> None:
         report = self._report(samples=20)
@@ -218,9 +239,9 @@ class DriftPolicyTests(unittest.TestCase):
             "decision_score_p90": 0.70,
             "mean_selected_rank": 1.0,
             "selected_rank_p90": 1.0,
-            "opportunity_observed_rate": 0.55,
-            "opportunity_brier_score": opportunity_brier,
-            "opportunity_calibration_error": 0.05,
+            "opportunity_observed_rate": 0.55 if view == "intraday" else None,
+            "opportunity_brier_score": opportunity_brier if view == "intraday" else None,
+            "opportunity_calibration_error": 0.05 if view == "intraday" else None,
             "mean_downside_probability": 0.30 if view == "intraday" else None,
             "downside_observed_rate": 0.25 if view == "intraday" else None,
             "downside_brier_score": (

@@ -12,6 +12,15 @@ import joblib
 import numpy as np
 import pandas as pd
 
+from market_predictor.core.prediction_contracts import (
+    PredictionCapacityError,
+    PredictionDataSource,
+    PredictionDriftBlockedError,
+    PredictionModelUnavailableError,
+    PredictionReadinessError,
+    PredictionRequest,
+    PredictionValidationError,
+)
 from market_predictor.drift_policy import (
     DriftAssessmentV2,
     DriftPolicyV2,
@@ -26,30 +35,21 @@ from market_predictor.intraday.contracts import (
 )
 from market_predictor.live_features import live_feature_columns
 from market_predictor.outcome_contracts import content_sha256
-from market_predictor.prediction_contracts import (
-    PredictionCapacityError,
-    PredictionDataSource,
-    PredictionDriftBlockedError,
-    PredictionModelUnavailableError,
-    PredictionReadinessError,
-    PredictionRequest,
-    PredictionValidationError,
-)
 from market_predictor.prediction_policy import (
     PredictionSelectionPolicy,
     prediction_policy_identity,
 )
-from market_predictor.prediction_service import (
-    PredictionService,
-    ServingRoute,
-    serving_routes_from_config,
-)
 from market_predictor.registry import load_model_manifest, write_model_manifest
-from market_predictor.serving_context import (
+from market_predictor.serving.model_context import (
     ActiveModelContext,
-    ActiveReleaseRoute,
     verify_serving_model_artifact,
 )
+from market_predictor.serving.prediction_service import (
+    PredictionService,
+    _require_bundle_available_at,
+    serving_routes_from_config,
+)
+from market_predictor.serving.routes import ServingRoute
 from tests.r4_fixtures import (
     authorize_candidate_for_test,
     synthetic_identity_metrics,
@@ -84,13 +84,14 @@ class StaticModelContextProvider:
     ) -> None:
         self.root = root
         self.live_feature_store = live_feature_store
+        self.current = True
         self.contexts: dict[tuple[str, str, Path], ActiveModelContext] = {}
 
     def get(
         self,
         mode: str,
         horizon: str,
-        route: ActiveReleaseRoute,
+        route: ServingRoute,
     ) -> ActiveModelContext:
         if mode != "intraday":
             raise PredictionModelUnavailableError
@@ -160,10 +161,10 @@ class StaticModelContextProvider:
         self,
         mode: str,
         horizon: str,
-        route: ActiveReleaseRoute,
+        route: ServingRoute,
     ) -> bool:
         del route
-        return self.cached(mode, horizon) is not None
+        return self.current and self.cached(mode, horizon) is not None
 
 
 class BlockingModelContextProvider(StaticModelContextProvider):
@@ -176,7 +177,7 @@ class BlockingModelContextProvider(StaticModelContextProvider):
         self,
         mode: str,
         horizon: str,
-        route: ActiveReleaseRoute,
+        route: ServingRoute,
     ) -> ActiveModelContext:
         self.entered.set()
         if not self.release.wait(timeout=5):
@@ -184,7 +185,52 @@ class BlockingModelContextProvider(StaticModelContextProvider):
         return super().get(mode, horizon, route)
 
 
+class UnifiedRolloverModelContextProvider(StaticModelContextProvider):
+    def __init__(self, root: Path) -> None:
+        super().__init__(root)
+        self.current_checks = 0
+
+    def is_current(
+        self,
+        mode: str,
+        horizon: str,
+        route: ServingRoute,
+    ) -> bool:
+        self.current_checks += 1
+        return self.current_checks == 1 and super().is_current(mode, horizon, route)
+
+
 class PredictionServiceTests(unittest.TestCase):
+    def test_historical_as_of_rejects_any_future_serving_bundle(self) -> None:
+        cutoff = datetime(2026, 7, 8, 20, 0, tzinfo=UTC)
+        context = ActiveModelContext(
+            mode="intraday",
+            horizon="60m",
+            release_id="a" * 64,
+            pointer_sha256="b" * 64,
+            model_path=Path("model.joblib"),
+            manifest={},
+            payload={},
+            serving_bundle_generated_at_utc="2026-07-08T20:00:00.000001+00:00",
+        )
+
+        with self.assertRaisesRegex(ValueError, "generated after"):
+            _require_bundle_available_at(context, cutoff)
+
+        _require_bundle_available_at(
+            ActiveModelContext(
+                mode="intraday",
+                horizon="60m",
+                release_id="a" * 64,
+                pointer_sha256="b" * 64,
+                model_path=Path("model.joblib"),
+                manifest={},
+                payload={},
+                serving_bundle_generated_at_utc=cutoff.isoformat(),
+            ),
+            cutoff,
+        )
+
     def test_serving_routes_load_signed_ten_session_swing_configuration(self) -> None:
         routes = serving_routes_from_config(
             {
@@ -306,6 +352,25 @@ class PredictionServiceTests(unittest.TestCase):
                         {"intraday": "60m"},
                     )
 
+    def test_intraday_rejects_model_generation_rollover_during_inference(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            dataset, model = _intraday_inputs(root)
+            provider = StaticModelContextProvider(root)
+            service = _intraday_service(
+                root,
+                dataset=dataset,
+                model=model,
+                provider=provider,
+            )
+            provider.current = False
+
+            with self.assertRaises(PredictionReadinessError) as raised:
+                service.predict_intraday(
+                    PredictionRequest(tickers=["MSFT"], mode="intraday")
+                )
+            self.assertIn("model generation changed", str(raised.exception.__cause__))
+
     def test_intraday_as_of_excludes_unclosed_bar(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
@@ -399,6 +464,23 @@ class PredictionServiceTests(unittest.TestCase):
             self.assertTrue(response.errors)
             self.assertEqual(response.predictions[0].final_signal, "not_ready")
 
+    def test_unified_rejects_generation_rollover_after_view_predictions(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            dataset, model = _intraday_inputs(root)
+            provider = UnifiedRolloverModelContextProvider(root)
+
+            with self.assertRaises(PredictionReadinessError) as raised:
+                _intraday_service(
+                    root,
+                    dataset=dataset,
+                    model=model,
+                    provider=provider,
+                ).predict_unified(
+                    PredictionRequest(tickers=["MSFT"], mode="unified")
+                )
+            self.assertIn("generation changed", str(raised.exception.__cause__))
+
     def test_model_artifact_mutation_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
@@ -440,6 +522,38 @@ class PredictionServiceTests(unittest.TestCase):
             with self.assertRaises(PredictionDriftBlockedError):
                 service.predict_intraday(
                     PredictionRequest(tickers=["MSFT"], mode="intraday")
+                )
+
+    def test_historical_prediction_rejects_future_drift_assessment(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            dataset, model = _intraday_inputs(root)
+            cutoff = datetime(2026, 7, 9, 3, 0, tzinfo=UTC)
+            store = DriftStateStore(root / "drift")
+            store.publish(
+                _drift_assessment(
+                    "intraday",
+                    "60m",
+                    "stable",
+                    cutoff.replace(microsecond=1),
+                    model,
+                )
+            )
+            service = _intraday_service(
+                root,
+                dataset=dataset,
+                model=model,
+                drift_state_store=store,
+                enforce_drift=True,
+            )
+
+            with self.assertRaises(PredictionDriftBlockedError):
+                service.predict_intraday(
+                    PredictionRequest(
+                        tickers=["MSFT"],
+                        mode="intraday",
+                        as_of=cutoff,
+                    )
                 )
 
 
@@ -635,8 +749,8 @@ def _drift_assessment(
         "feature_artifact_set_sha256": "3" * 64,
         "evaluated_at_utc": evaluated_at.isoformat().replace("+00:00", "Z"),
         "state": state,
-        "actionability": "not_ready",
-        "reasons": ("selected_policy_performance_severe",),
+        "actionability": "actionable" if state == "stable" else "not_ready",
+        "reasons": () if state == "stable" else ("selected_policy_performance_severe",),
         "feature_drift_status": "stable",
         "total_predictions": 50,
         "selected_predictions": 10,

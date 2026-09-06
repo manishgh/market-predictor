@@ -18,11 +18,11 @@ from pydantic import (
     model_validator,
 )
 
+from market_predictor.core.errors import DataReadinessError
+from market_predictor.core.prediction_contracts import PredictionConflictError
 from market_predictor.locking import file_lock
 from market_predictor.outcome_contracts import content_sha256
 from market_predictor.performance_monitoring import validate_performance_report
-from market_predictor.prediction_contracts import PredictionConflictError
-from market_predictor.core.errors import DataReadinessError
 
 DRIFT_ASSESSMENT_VERSION = "market_predictor.drift_assessment.v2"
 SHA256_PATTERN = r"^[0-9a-f]{64}$"
@@ -375,7 +375,7 @@ def _performance_state(
         performance_report.get("generated_at_utc"),
         "generated_at_utc",
     )
-    if generated > now + timedelta(minutes=5):
+    if generated > now:
         reasons.append("performance_report_from_future")
         return "stale", "not_ready"
     if now - generated > timedelta(minutes=policy.maximum_report_age_minutes):
@@ -400,7 +400,7 @@ def _performance_state(
         row.get("last_matured_outcome_utc"),
         "last_matured_outcome_utc",
     )
-    if last_matured > now + timedelta(minutes=5):
+    if last_matured > now:
         reasons.append("last_matured_outcome_from_future")
         return "stale", "not_ready"
     if now - last_matured > timedelta(
@@ -408,13 +408,21 @@ def _performance_state(
     ):
         reasons.append("last_matured_outcome_stale")
         return "stale", "not_ready"
-    opportunity_brier = _as_float(
-        row.get("opportunity_brier_score"),
-        "opportunity_brier_score",
+    opportunity_brier = (
+        _as_float(
+            row.get("opportunity_brier_score"),
+            "opportunity_brier_score",
+        )
+        if row.get("view") == "intraday"
+        else 0.0
     )
-    opportunity_calibration = _as_float(
-        row.get("opportunity_calibration_error"),
-        "opportunity_calibration_error",
+    opportunity_calibration = (
+        _as_float(
+            row.get("opportunity_calibration_error"),
+            "opportunity_calibration_error",
+        )
+        if row.get("view") == "intraday"
+        else 0.0
     )
     downside_brier = (
         _as_float(row.get("downside_brier_score"), "downside_brier_score")

@@ -5,7 +5,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 
-from market_predictor.prediction_contracts import (
+from market_predictor.core.prediction_contracts import (
     PredictionCapacityError,
     PredictionMemoryPressureError,
 )

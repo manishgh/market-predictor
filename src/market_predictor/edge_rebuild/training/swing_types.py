@@ -1,8 +1,6 @@
 """Production-grade candidate training for the ten-session edge-rebuild swing strategy."""
 from __future__ import annotations
 
-
-
 import hashlib
 import json
 from collections.abc import Mapping, Sequence
@@ -15,18 +13,17 @@ import numpy as np
 import pandas as pd
 from sklearn.linear_model import LogisticRegression
 
-from market_predictor.edge_rebuild.swing_features import (
-    SWING_BASELINE_ABLATION_ORDER,
-    SWING_FEATURE_PROFILE,
-)
+from market_predictor.core.errors import DataReadinessError
 from market_predictor.resources import (
     assert_memory_budget,
     assert_peak_memory_budget,
 )
-from market_predictor.core.errors import DataReadinessError
+from market_predictor.swing.features.panel import (
+    SWING_BASELINE_ABLATION_ORDER,
+    SWING_FEATURE_PROFILE,
+)
 
 TRAINING_SCHEMA: Final = "edge_rebuild.swing_training.v5"
-MODEL_SCHEMA: Final = "edge_rebuild.swing_candidate.v5"
 EVALUATION_SCHEMA: Final = "edge_rebuild.swing_evaluation.v7"
 MODEL_CARD_SCHEMA: Final = "edge_rebuild.swing_model_card.v7"
 OUTPUT_AUTHORITY_SCHEMA: Final = "edge_rebuild.swing_candidate_authority.v5"

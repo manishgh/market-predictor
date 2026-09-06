@@ -17,9 +17,6 @@ from market_predictor.canonical.store import file_sha256
 from market_predictor.core import path_integrity
 from market_predictor.core.errors import DataReadinessError
 from market_predictor.edge_rebuild import swing_training as swing_source_verification
-from market_predictor.edge_rebuild.swing_features import (
-    SWING_FEATURE_PROFILE,
-)
 from market_predictor.edge_rebuild.swing_training import (
     load_swing_candidate_authority,
     load_swing_training_config,
@@ -66,6 +63,9 @@ from market_predictor.resources import (
     release_process_memory,
 )
 from market_predictor.swing import catalyst_lineage as catalyst_source_verification
+from market_predictor.swing.features.panel import (
+    SWING_FEATURE_PROFILE,
+)
 
 _PROMOTED_BUNDLE_NAME = "bundle.json"
 _SWING_TECHNICAL_READINESS_COLUMNS = (

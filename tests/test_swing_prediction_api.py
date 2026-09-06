@@ -10,32 +10,41 @@ import pandas as pd
 import pytest
 from fastapi.testclient import TestClient
 
-import market_predictor.prediction_service as service_module
+import market_predictor.serving.prediction_service as service_module
 from market_predictor.api import create_app
 from market_predictor.canonical.store import file_sha256
 from market_predictor.core.errors import DataReadinessError
-from market_predictor.edge_rebuild.serving import (
-    LoadedSwingModelGeneration,
+from market_predictor.core.prediction_contracts import (
+    PredictionDriftBlockedError,
+    PredictionReadinessError,
+    PredictionRequest,
+    PredictionValidationError,
 )
-from market_predictor.edge_rebuild.swing_features import (
-    SWING_FEATURE_PANEL_SCHEMA,
-    swing_model_feature_columns,
-)
-from market_predictor.edge_rebuild.swing_live import (
-    SWING_LIVE_IDENTITY_COLUMNS,
-    SWING_LIVE_REQUIRED_WATERMARKS,
-    SwingLiveFeatureFrames,
-    SwingLiveInputs,
-)
-from market_predictor.edge_rebuild.swing_training import MODEL_SCHEMA
 from market_predictor.governance.promotion.bundle_contracts import (
     canonical_payload_sha256,
     ordered_values_sha256,
     validate_promoted_bundle,
 )
 from market_predictor.modeling.strategy_contract import load_strategy_contract
-from market_predictor.prediction_contracts import PredictionRequest
-from market_predictor.prediction_service import PredictionService, ServingRoute
+from market_predictor.serving.outcome_intents import maturation_intents_from_response
+from market_predictor.serving.prediction_service import PredictionService
+from market_predictor.serving.routes import ServingRoute
+from market_predictor.serving.swing_features import (
+    SWING_LIVE_IDENTITY_COLUMNS,
+    SWING_LIVE_REQUIRED_WATERMARKS,
+    SwingLiveFeatureFrames,
+    SwingLiveInputs,
+)
+from market_predictor.serving.swing_inference import (
+    LoadedSwingModelGeneration,
+)
+from market_predictor.swing.contracts.model_artifact import (
+    SWING_CANDIDATE_MODEL_SCHEMA,
+)
+from market_predictor.swing.features.panel import (
+    SWING_FEATURE_PANEL_SCHEMA,
+    swing_model_feature_columns,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
 NOW = datetime(2026, 7, 8, 22, 5, tzinfo=UTC)
@@ -107,9 +116,13 @@ class _UnavailableInputs:
 class _GenerationCache:
     def __init__(self, generation: LoadedSwingModelGeneration) -> None:
         self.generation = generation
+        self.current = True
 
     def get(self, *_args: object, **_kwargs: object) -> LoadedSwingModelGeneration:
         return self.generation
+
+    def is_current(self, *_args: object, **_kwargs: object) -> bool:
+        return self.current
 
 
 def test_promoted_ten_session_swing_api_returns_human_contract(
@@ -126,7 +139,7 @@ def test_promoted_ten_session_swing_api_returns_human_contract(
     evidence_path = model_path.with_suffix(model_path.suffix + ".promotion.attestation.json")
     model_path.parent.mkdir(parents=True)
     model_payload = {
-        "schema": MODEL_SCHEMA,
+        "schema": SWING_CANDIDATE_MODEL_SCHEMA,
         "status": "candidate",
         "promotion_permitted": False,
         "candidate_id": "swing-promoted-test",
@@ -134,7 +147,7 @@ def test_promoted_ten_session_swing_api_returns_human_contract(
         "strategy_contract_sha256": contract.sha256(),
         "feature_columns": features,
         "ablation_profile": "technical_market",
-        "probability_threshold": 0.60,
+        "probability_thresholds": {"classifier": 0.60},
         "fitted_models": {"classifier": _Fitted(features[:1])},
     }
     joblib.dump(model_payload, model_path)
@@ -206,13 +219,14 @@ def test_promoted_ten_session_swing_api_returns_human_contract(
             "candidate": {
                 "artifact_sha256": bundle["model_artifact_sha256"],
                 "model_run_id": bundle["model_id"],
-                "model_schema_version": MODEL_SCHEMA,
+                "model_schema_version": SWING_CANDIDATE_MODEL_SCHEMA,
             },
             "approver_principal": {"principal_id": approver_id},
             "ledger_receipt": {"result": "passed"},
             "gate_config_sha256": TEST_GATE_POLICY_SHA256,
         },
     )
+    generation_cache = _GenerationCache(generation)
     service = PredictionService(
         tmp_path,
         routes={
@@ -226,8 +240,18 @@ def test_promoted_ten_session_swing_api_returns_human_contract(
             }
         },
         swing_live_input_provider=_Inputs(),
-        swing_model_generation_cache=_GenerationCache(generation),
+        swing_model_generation_cache=generation_cache,
         persist_snapshots=False,
+    )
+    with pytest.raises(PredictionDriftBlockedError):
+        service.predict_swing(
+            PredictionRequest(tickers=["T000"], mode="swing", as_of=NOW)
+        )
+    drift_checks: list[dict[str, object]] = []
+    monkeypatch.setattr(
+        service,
+        "_require_actionable_drift",
+        lambda **kwargs: drift_checks.append(kwargs),
     )
     direct = service.predict_swing(
         PredictionRequest(
@@ -237,6 +261,18 @@ def test_promoted_ten_session_swing_api_returns_human_contract(
         )
     )
     assert direct.predictions[0].swing is not None
+    assert direct.evidence is not None
+    assert direct.evidence.identity_status == "complete"
+    model = direct.models["swing"]
+    assert model.prediction_policy is not None
+    assert model.prediction_policy_sha256 == direct.evidence.view_prediction_policy_sha256["swing"]
+    assert model.prediction_policy["minimum_probability"] == 0.60
+    assert (
+        model.prediction_policy["maximum_predictions_per_decision"]
+        == contract.swing.maximum_trades_per_decision
+    )
+    intents = maturation_intents_from_response(direct, snapshot_id="a" * 64)
+    assert {intent.ticker for intent in intents} == {"T000", "T059"}
 
     with TestClient(create_app(service)) as client:
         response = client.post(
@@ -270,6 +306,33 @@ def test_promoted_ten_session_swing_api_returns_human_contract(
     assert abstained["action"] == "abstain"
     assert abstained["abstention_reasons"] == ["out_of_universe"]
     assert payload["evidence"]["identity_status"] == "complete"
+    assert len(drift_checks) == 2
+    assert all(check["checked_at"] == NOW for check in drift_checks)
+
+    with pytest.raises(PredictionValidationError):
+        service.predict_swing(
+            PredictionRequest(
+                tickers=["T000"],
+                mode="swing",
+                as_of=NOW,
+                requested_models=["xgboost_regressor"],
+            )
+        )
+
+    generation_cache.current = False
+    with pytest.raises(PredictionReadinessError) as rollover:
+        service.predict_swing(
+            PredictionRequest(tickers=["T000"], mode="swing", as_of=NOW)
+        )
+    assert rollover.value.__cause__ is not None
+    assert "generation changed" in str(rollover.value.__cause__)
+
+    _, changed_policy_sha256 = service_module._swing_prediction_policy(
+        probability_threshold=0.61,
+        contract=contract,
+    )
+    assert changed_policy_sha256 != model.prediction_policy_sha256
+    generation_cache.current = True
 
     service.swing_live_input_provider = _UnavailableInputs()
     with TestClient(create_app(service)) as client:
@@ -305,6 +368,8 @@ def _live_frames(
                 "sector": f"Sector-{index % 10}",
                 "primary_benchmark": f"XL{index % 10}",
                 "market_regime": "risk_on",
+                "market_cap_bucket": "large_cap",
+                "liquidity_bucket": "liquid",
                 "price_feed": "sip",
                 "adjustment": "all",
                 "daily_bar_count": 300,

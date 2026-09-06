@@ -1,8 +1,6 @@
 """Production-grade candidate training for the ten-session edge-rebuild swing strategy."""
 from __future__ import annotations
 
-
-
 from datetime import date
 from typing import Any, Final
 
@@ -13,9 +11,7 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 
-from market_predictor.edge_rebuild.swing_features import (
-    SWING_FEATURE_PROFILE,
-)
+from market_predictor.core.errors import DataReadinessError
 from market_predictor.edge_rebuild.training.swing_types import (
     CandidateSpec,
     FittedCandidate,
@@ -25,10 +21,11 @@ from market_predictor.edge_rebuild.training.swing_types import (
 from market_predictor.edge_rebuild.training.walk_forward import (
     _split_fit_calibration,
 )
-from market_predictor.core.errors import DataReadinessError
+from market_predictor.swing.features.panel import (
+    SWING_FEATURE_PROFILE,
+)
 
 TRAINING_SCHEMA: Final = "edge_rebuild.swing_training.v5"
-MODEL_SCHEMA: Final = "edge_rebuild.swing_candidate.v5"
 EVALUATION_SCHEMA: Final = "edge_rebuild.swing_evaluation.v7"
 MODEL_CARD_SCHEMA: Final = "edge_rebuild.swing_model_card.v7"
 OUTPUT_AUTHORITY_SCHEMA: Final = "edge_rebuild.swing_candidate_authority.v5"

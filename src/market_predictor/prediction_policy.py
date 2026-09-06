@@ -16,8 +16,6 @@ bound into promotion evidence and prediction snapshots as identity.
 """
 from __future__ import annotations
 
-
-
 import hashlib
 import json
 import math

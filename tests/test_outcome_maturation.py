@@ -23,8 +23,10 @@ from market_predictor.prediction_policy import (
     DEFAULT_PREDICTION_POLICY,
     PREDICTION_POLICY_SHA256,
 )
-from market_predictor.swing.contracts import SwingDatasetConfig
-from market_predictor.swing.labels import add_exact_swing_labels
+from market_predictor.swing.labels.barrier_and_rank import (
+    BarrierSpec,
+    apply_triple_barrier,
+)
 from tests.test_outcome_repository import _intent as swing_intent
 
 
@@ -42,7 +44,7 @@ class OutcomeMaturationTests(unittest.TestCase):
         matured, evidence = mature_prediction(
             intent,
             bars,
-            observed_as_of=datetime(2026, 8, 1, 12, 0, tzinfo=UTC),
+            observed_as_of=datetime(2026, 8, 8, 12, 0, tzinfo=UTC),
             source_artifact_sha256="9" * 64,
         )
 
@@ -50,9 +52,13 @@ class OutcomeMaturationTests(unittest.TestCase):
         self.assertEqual(pending_evidence, [])
         self.assertIsInstance(matured, MaturedOutcomeV1)
         assert isinstance(matured, MaturedOutcomeV1)
-        self.assertEqual(matured.path_outcome, "positive")
-        self.assertAlmostEqual(matured.gross_return, 0.05)
-        self.assertAlmostEqual(matured.net_return, 0.049)
+        self.assertEqual(matured.path_outcome, "target_first")
+        self.assertAlmostEqual(matured.gross_return, 0.03)
+        self.assertAlmostEqual(
+            matured.net_return,
+            0.03 - float(intent.label_policy["round_trip_cost_bps"]) / 10_000.0,
+        )
+        self.assertIsNone(matured.opportunity_target)
         self.assertGreater(len(evidence), 5)
         self.assertEqual(matured.label_available_at_utc, matured.matured_at_utc)
 
@@ -136,20 +142,29 @@ class OutcomeMaturationTests(unittest.TestCase):
         intent = swing_intent()
         bars = _swing_bars()
         stock = bars[bars["ticker"].eq("MSFT")].copy()
-        stock["security_id"] = "test:msft"
-        stock["feature_eligible"] = True
-        stock["primary_benchmark"] = "XLK"
-        stock["decision_group_id"] = stock["session_date_et"].astype(str)
-        benchmarks = bars[bars["ticker"].isin({"SPY", "QQQ", "XLK"})].copy()
-        offline = add_exact_swing_labels(
-            stock,
-            benchmarks,
-            SwingDatasetConfig(),
+        offline = apply_triple_barrier(
+            stock.loc[
+                :, ["session_date_et", "open", "high", "low", "close"]
+            ].rename(columns={"session_date_et": "session"}),
+            pd.DataFrame(
+                {
+                    "session": [intent.decision_session_et],
+                    "atr": [intent.decision_atr],
+                }
+            ),
+            spec=BarrierSpec(
+                target_atr_multiple=float(intent.label_policy["target_atr_multiple"]),
+                stop_atr_multiple=float(intent.label_policy["stop_atr_multiple"]),
+                horizon_sessions=int(intent.label_policy["horizon_sessions"]),
+                same_bar_resolution=str(
+                    intent.label_policy["same_bar_barrier_resolution"]
+                ),
+            ),
         ).iloc[0]
         matured, _ = mature_prediction(
             intent,
             bars,
-            observed_as_of=datetime(2026, 8, 1, 12, 0, tzinfo=UTC),
+            observed_as_of=datetime(2026, 8, 8, 12, 0, tzinfo=UTC),
             source_artifact_sha256="9" * 64,
         )
 
@@ -157,14 +172,15 @@ class OutcomeMaturationTests(unittest.TestCase):
         assert isinstance(matured, MaturedOutcomeV1)
         self.assertAlmostEqual(
             matured.gross_return,
-            float(offline["future_gross_return_5d"]),
+            float(offline["exit_price"]) / 100.0 - 1.0,
         )
         self.assertAlmostEqual(
             matured.net_return,
-            float(offline["future_net_return_5d"]),
+            float(offline["exit_price"]) / 100.0
+            - 1.0
+            - float(intent.label_policy["round_trip_cost_bps"]) / 10_000.0,
         )
-        self.assertAlmostEqual(matured.mfe, float(offline["future_mfe_5d"]))
-        self.assertAlmostEqual(matured.mae, float(offline["future_mae_5d"]))
+        self.assertEqual(matured.path_outcome, "target_first")
 
     def test_worker_matures_only_canonical_semantic_occurrence(self) -> None:
         with TemporaryDirectory() as temp_dir:
@@ -177,7 +193,7 @@ class OutcomeMaturationTests(unittest.TestCase):
             summary = mature_pending_intents(
                 repository,
                 _swing_bars(),
-                observed_as_of=datetime(2026, 8, 1, 12, 0, tzinfo=UTC),
+                observed_as_of=datetime(2026, 8, 8, 12, 0, tzinfo=UTC),
                 source_artifact_sha256="9" * 64,
             )
 
@@ -244,6 +260,11 @@ def _swing_bars() -> pd.DataFrame:
         date(2026, 7, 29),
         date(2026, 7, 30),
         date(2026, 7, 31),
+        date(2026, 8, 3),
+        date(2026, 8, 4),
+        date(2026, 8, 5),
+        date(2026, 8, 6),
+        date(2026, 8, 7),
     ]
     rows: list[dict[str, object]] = []
     for ticker, base in (("SPY", 500.0), ("MSFT", 100.0)):
@@ -254,9 +275,10 @@ def _swing_bars() -> pd.DataFrame:
             if ticker == "MSFT" and session == sessions[-1]:
                 close_price = 105.0
             rows.append(_daily_row(ticker, session, open_price, close_price))
-    for ticker, entry, exit_price in (("QQQ", 400.0, 408.0), ("XLK", 200.0, 202.0)):
-        rows.append(_daily_row(ticker, sessions[1], entry, entry + 1.0))
-        rows.append(_daily_row(ticker, sessions[-1], exit_price - 1.0, exit_price))
+    for ticker, base in (("QQQ", 400.0), ("XLK", 200.0)):
+        for offset, session in enumerate(sessions):
+            open_price = base + offset
+            rows.append(_daily_row(ticker, session, open_price, open_price + 1.0))
     return pd.DataFrame(rows)
 
 

@@ -18,7 +18,7 @@ def build_swing_ablation_rows(
     catalyst_authority: CatalystDecisionAuthority,
 ) -> dict[str, pd.DataFrame]:
     """Create matched technical and catalyst populations from one row authority."""
-    from market_predictor.edge_rebuild.swing_features import (
+    from market_predictor.swing.features.panel import (
         CATALYST_AUDIT_FEATURES,
         CATALYST_RANKING_FEATURES,
         SWING_CATALYST_FEATURE_PROFILE,

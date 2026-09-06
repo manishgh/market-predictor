@@ -14,7 +14,6 @@ from market_predictor.drift_policy import (
     DriftStateStore,
     evaluate_drift,
 )
-from market_predictor.outcome_intents import register_snapshot_intents
 from market_predictor.outcome_repository import OutcomeRepository
 from market_predictor.outcome_worker import mature_pending_intents
 from market_predictor.performance_monitoring import (
@@ -22,7 +21,8 @@ from market_predictor.performance_monitoring import (
     load_performance_report,
     write_performance_report,
 )
-from market_predictor.prediction_snapshot import PredictionSnapshotStore
+from market_predictor.serving.outcome_intents import register_snapshot_intents
+from market_predictor.serving.snapshot_store import PredictionSnapshotStore
 
 
 def register_outcome_commands(app: typer.Typer, console: Any) -> None:

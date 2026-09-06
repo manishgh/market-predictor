@@ -8,6 +8,7 @@ from uuid import uuid4
 
 from pydantic import BaseModel
 
+from market_predictor.core.prediction_contracts import PredictionConflictError
 from market_predictor.locking import file_lock
 from market_predictor.outcome_contracts import (
     MaturationAttemptV1,
@@ -15,7 +16,6 @@ from market_predictor.outcome_contracts import (
     PredictionMaturationIntentV2,
     content_sha256,
 )
-from market_predictor.prediction_contracts import PredictionConflictError
 
 T = TypeVar("T", bound=BaseModel)
 

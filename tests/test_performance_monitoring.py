@@ -5,6 +5,7 @@ import unittest
 from datetime import UTC, datetime
 from pathlib import Path
 
+from market_predictor.core.errors import DataReadinessError
 from market_predictor.intraday.contracts import IntradayDatasetConfig
 from market_predictor.outcome_contracts import (
     MaturedOutcomeV1,
@@ -19,10 +20,37 @@ from market_predictor.performance_monitoring import (
     load_performance_report,
     write_performance_report,
 )
+from market_predictor.prediction_policy import (
+    DEFAULT_PREDICTION_POLICY,
+    PREDICTION_POLICY_SHA256,
+)
 from tests.test_outcome_repository import _intent, _outcome
 
 
 class PerformanceMonitoringTests(unittest.TestCase):
+    def test_rejects_outcome_entered_before_its_prediction_decision(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repository = OutcomeRepository(Path(temp_dir))
+            intent = _intent_variant("MSFT", "1", probability=0.8)
+            evidence = [{"ticker": intent.ticker}]
+            base = _outcome(intent, evidence).model_dump(
+                mode="python",
+                exclude={"outcome_id"},
+            )
+            base["entry_time_utc"] = intent.decision_time_utc
+            outcome = MaturedOutcomeV1.model_validate(
+                {**base, "outcome_id": content_sha256(base)}
+            )
+            repository.record_intent(intent)
+            repository.record_outcome(outcome, evidence_rows=evidence)
+
+            with self.assertRaisesRegex(DataReadinessError, "does not match"):
+                build_performance_cohorts(
+                    repository,
+                    generated_at=datetime(2026, 8, 2, tzinfo=UTC),
+                    minimum_samples=1,
+                )
+
     def test_aggregates_calibration_economics_and_drawdown(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             repository = OutcomeRepository(Path(temp_dir))
@@ -85,8 +113,8 @@ class PerformanceMonitoringTests(unittest.TestCase):
             self.assertEqual(row["pending_selected_samples"], 0)
             self.assertEqual(row["evidence_status"], "sufficient")
             self.assertAlmostEqual(row["selection_rate"], 2 / 3)
-            self.assertAlmostEqual(row["opportunity_brier_score"], 0.04)
-            self.assertAlmostEqual(row["opportunity_calibration_error"], 0.20)
+            self.assertIsNone(row["opportunity_brier_score"])
+            self.assertIsNone(row["opportunity_calibration_error"])
             self.assertAlmostEqual(row["average_net_return"], 0.025)
             self.assertAlmostEqual(row["average_excess_return_vs_spy"], 0.01)
             self.assertAlmostEqual(row["win_rate"], 0.5)
@@ -359,6 +387,8 @@ def _intraday_intent_variant(
             "calibration_bin": min(9, int(opportunity_probability * 10)),
             "label_policy": config.label_policy(),
             "label_policy_sha256": config.label_config_sha256(),
+            "prediction_policy": DEFAULT_PREDICTION_POLICY.specification(),
+            "prediction_policy_sha256": PREDICTION_POLICY_SHA256,
             "decision_atr": 1.0,
             "signal": "entry_candidate",
         }
@@ -391,13 +421,18 @@ def _record(
     )
     base.update(
         {
-            "opportunity_target": target,
-            "downside_target": downside_target,
+            "opportunity_target": target if intent.view == "intraday" else None,
+            "downside_target": downside_target if intent.view == "intraday" else None,
             "net_return": net_return,
             "gross_return": net_return + 0.001,
-            "path_outcome": "positive" if target else "negative",
+            "path_outcome": "target_first" if target else "stop_first",
             "excess_return_vs_spy": excess_return,
             "evidence_sha256": content_sha256(evidence),
+            "entry_time_utc": (
+                intent.decision_time_utc
+                if intent.view == "intraday"
+                else base["entry_time_utc"]
+            ),
         }
     )
     outcome = MaturedOutcomeV1.model_validate(

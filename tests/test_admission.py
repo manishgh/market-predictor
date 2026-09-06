@@ -4,7 +4,7 @@ import unittest
 from unittest.mock import patch
 
 from market_predictor.admission import InferenceAdmissionController
-from market_predictor.prediction_contracts import (
+from market_predictor.core.prediction_contracts import (
     PredictionCapacityError,
     PredictionMemoryPressureError,
 )

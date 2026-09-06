@@ -14,7 +14,6 @@ from market_predictor.edge_rebuild.swing_daily_combination import (
     CombinedDailyStore,
     VerifiedCombinedInputs,
 )
-from market_predictor.edge_rebuild.swing_features import SWING_FEATURE_PANEL_SCHEMA
 from market_predictor.edge_rebuild.swing_materialization import (
     SWING_MATERIALIZATION_REQUEST_SCHEMA,
     _json_sha256,
@@ -23,6 +22,7 @@ from market_predictor.edge_rebuild.swing_materialization import (
 )
 from market_predictor.modeling.strategy_contract import load_strategy_contract
 from market_predictor.swing.contracts import MINIMUM_SWING_DECISION_DATE
+from market_predictor.swing.features.panel import SWING_FEATURE_PANEL_SCHEMA
 
 
 def _memberships() -> pd.DataFrame:

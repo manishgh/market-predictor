@@ -8,7 +8,6 @@ enforces fail-closed batch/live feature parity.
 from __future__ import annotations
 
 import hashlib
-import json
 import os
 import threading
 from collections.abc import Mapping, Sequence
@@ -25,25 +24,17 @@ from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
-    field_validator,
-    model_validator,
 )
 
 from market_predictor.canonical.store import file_sha256
-from market_predictor.catalysts.global_events.decision_authority import (
-    GLOBAL_EVENT_SOURCE_FAMILIES,
-    GlobalEventAuthority,
-    load_global_event_authority,
-)
+from market_predictor.core import path_integrity
 from market_predictor.core.errors import (
     ArtifactIntegrityError,
     DataReadinessError,
     PromotionGateError,
     SchemaMismatchError,
 )
-from market_predictor.edge_rebuild.swing_training import (
-    MODEL_SCHEMA as SWING_CANDIDATE_MODEL_SCHEMA,
-)
+from market_predictor.core.json_integrity import parse_strict_json_object
 from market_predictor.governance.promotion import (
     bundle_contracts as _promotion_contracts,
 )
@@ -54,250 +45,17 @@ from market_predictor.modeling.strategy_contract import (
     StrategyContract,
 )
 from market_predictor.resources import assert_memory_budget, process_memory_snapshot
-from market_predictor.swing.features.catalyst_decision_authority import (
-    REQUIRED_MODEL_SOURCE_FAMILIES,
-    TRACKED_SOURCE_FAMILIES,
-)
+from market_predictor.swing.contracts.model_artifact import SWING_CANDIDATE_MODEL_SCHEMA
 
-PREDICTION_RESULT_SCHEMA: Final = "edge_rebuild.prediction_result.v2"
 ACTIVE_GENERATION_SCHEMA: Final = "edge_rebuild.active_generation.v1"
 ACTIVE_GENERATION_POINTER: Final = "active_generation.json"
 GENERATION_DIRECTORY: Final = "generations"
-SWING_HORIZON_SESSIONS: Final = 10
-INTRADAY_HORIZON_MINUTES: Final = 30
 
 _SHA256_PATTERN: Final = r"^[0-9a-f]{64}$"
-_TRACKED_SOURCE_FAMILY_SET: Final = frozenset(TRACKED_SOURCE_FAMILIES)
 
 
 class _FrozenModel(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
-
-
-class GlobalContextSnapshot(_FrozenModel):
-    as_of_utc: datetime
-    authority_sha256: str = Field(pattern=_SHA256_PATTERN)
-    source_coverage_complete: Literal[True]
-    event_count_1d: int = Field(ge=0)
-    event_count_3d: int = Field(ge=0)
-    sentiment_mean_1d: float = Field(ge=-1.0, le=1.0)
-    sentiment_mean_3d: float = Field(ge=-1.0, le=1.0)
-    sentiment_coverage_1d: float = Field(ge=0.0, le=1.0)
-    sentiment_coverage_3d: float = Field(ge=0.0, le=1.0)
-    source_families: tuple[str, ...] = Field(min_length=1)
-
-    @field_validator("as_of_utc")
-    @classmethod
-    def require_utc_timestamp(cls, value: datetime) -> datetime:
-        if value.tzinfo is None or value.utcoffset() is None:
-            raise ValueError("global context timestamp must be timezone-aware")
-        return value.astimezone(UTC)
-
-    @field_validator("source_families")
-    @classmethod
-    def validate_source_families(cls, value: tuple[str, ...]) -> tuple[str, ...]:
-        if any(not family or family.strip().lower() != family for family in value):
-            raise ValueError("global context source families must be non-empty normalized values")
-        if len(value) != len(set(value)):
-            raise ValueError("global context source families must be unique")
-        unknown = set(value).difference(GLOBAL_EVENT_SOURCE_FAMILIES)
-        if unknown:
-            raise ValueError(f"unrecognized global context sources: {sorted(unknown)}")
-        canonical_order = tuple(family for family in GLOBAL_EVENT_SOURCE_FAMILIES if family in value)
-        if value != canonical_order:
-            raise ValueError("global context sources are not in canonical order")
-        return value
-
-
-class CatalystSourceSnapshot(_FrozenModel):
-    source_family: str = Field(min_length=1)
-    coverage_known: bool
-    event_count_1d: int | None = Field(default=None, ge=0)
-    event_count_3d: int | None = Field(default=None, ge=0)
-
-    @model_validator(mode="after")
-    def validate_missingness(self) -> CatalystSourceSnapshot:
-        normalized = self.source_family.strip().lower()
-        if self.source_family != normalized or normalized not in _TRACKED_SOURCE_FAMILY_SET:
-            raise ValueError("catalyst source family is not a supported normalized value")
-        counts_available = self.event_count_1d is not None and self.event_count_3d is not None
-        if self.coverage_known != counts_available:
-            raise ValueError("catalyst counts must be null exactly when source coverage is unknown")
-        return self
-
-
-class CatalystContextSnapshot(_FrozenModel):
-    as_of_utc: datetime
-    authority_sha256: str = Field(pattern=_SHA256_PATTERN)
-    required_model_sources_complete: bool
-    event_count_1d: int | None = Field(default=None, ge=0)
-    event_count_3d: int | None = Field(default=None, ge=0)
-    sentiment_mean_1d: float | None = Field(default=None, ge=-1.0, le=1.0)
-    sentiment_mean_3d: float | None = Field(default=None, ge=-1.0, le=1.0)
-    sentiment_coverage_1d: float | None = Field(default=None, ge=0.0, le=1.0)
-    sentiment_coverage_3d: float | None = Field(default=None, ge=0.0, le=1.0)
-    latest_event_feature_available_at_utc: datetime | None = None
-    sources: tuple[CatalystSourceSnapshot, ...] = Field(min_length=1)
-
-    @field_validator("as_of_utc", "latest_event_feature_available_at_utc")
-    @classmethod
-    def require_utc_timestamp(cls, value: datetime | None) -> datetime | None:
-        if value is None:
-            return None
-        if value.tzinfo is None or value.utcoffset() is None:
-            raise ValueError("catalyst context timestamps must be timezone-aware")
-        return value.astimezone(UTC)
-
-    @model_validator(mode="after")
-    def validate_context(self) -> CatalystContextSnapshot:
-        families = tuple(source.source_family for source in self.sources)
-        canonical = tuple(family for family in TRACKED_SOURCE_FAMILIES if family in families)
-        if len(families) != len(set(families)) or families != canonical:
-            raise ValueError("catalyst source snapshots must be unique and canonical")
-        required_known = all(
-            source.coverage_known for source in self.sources if source.source_family in REQUIRED_MODEL_SOURCE_FAMILIES
-        ) and set(REQUIRED_MODEL_SOURCE_FAMILIES).issubset(families)
-        if self.required_model_sources_complete != required_known:
-            raise ValueError("required catalyst source completeness is inconsistent")
-        aggregates = (
-            self.event_count_1d,
-            self.event_count_3d,
-            self.sentiment_mean_1d,
-            self.sentiment_mean_3d,
-            self.sentiment_coverage_1d,
-            self.sentiment_coverage_3d,
-        )
-        aggregates_available = all(value is not None for value in aggregates)
-        if self.required_model_sources_complete != aggregates_available:
-            raise ValueError("catalyst aggregates must be null exactly when required sources are incomplete")
-        if self.latest_event_feature_available_at_utc is not None and self.latest_event_feature_available_at_utc > self.as_of_utc:
-            raise ValueError("catalyst context contains future evidence")
-        return self
-
-
-class BenchmarkComparison(_FrozenModel):
-    symbol: str = Field(pattern=r"^[A-Z][A-Z0-9.-]{0,9}$")
-    predicted_stock_return: float
-    predicted_benchmark_return: float
-    predicted_excess_return: float
-
-    @model_validator(mode="after")
-    def validate_returns(self) -> BenchmarkComparison:
-        values = (
-            self.predicted_stock_return,
-            self.predicted_benchmark_return,
-            self.predicted_excess_return,
-        )
-        if not all(np.isfinite(value) for value in values):
-            raise ValueError("benchmark comparison returns must be finite")
-        expected = self.predicted_stock_return - self.predicted_benchmark_return
-        if not np.isclose(
-            self.predicted_excess_return,
-            expected,
-            rtol=1e-12,
-            atol=1e-12,
-        ):
-            raise ValueError("predicted excess return is inconsistent")
-        return self
-
-
-AbstentionReason = Literal[
-    "benchmark_unavailable",
-    "catalyst_source_unavailable",
-    "data_quality_failure",
-    "feature_schema_mismatch",
-    "feature_value_unavailable",
-    "live_batch_parity_failure",
-    "market_data_unavailable",
-    "model_not_promoted",
-    "out_of_universe",
-    "stale_features",
-    "strategy_contract_mismatch",
-]
-
-
-class PredictionResult(_FrozenModel):
-    """Non-executable model intelligence returned by the edge serving core."""
-
-    schema_version: Literal["edge_rebuild.prediction_result.v2"] = PREDICTION_RESULT_SCHEMA
-    mode: Literal["swing", "intraday"]
-    strategy_id: Literal["swing", "intraday"]
-    model_id: str = Field(min_length=1, max_length=200)
-    bundle_sha256: str = Field(pattern=_SHA256_PATTERN)
-    ticker: str = Field(pattern=r"^[A-Z][A-Z0-9.-]{0,9}$")
-    as_of_utc: datetime
-    horizon_value: int
-    horizon_unit: Literal["sessions", "minutes"]
-    status: Literal["scored", "abstained"]
-    predicted_direction: Literal["up", "down", "neutral"] | None
-    model_score: float | None = Field(default=None, ge=0.0, le=1.0)
-    technical_score: float | None = Field(default=None, ge=0.0, le=1.0)
-    catalyst_overlay_status: Literal[
-        "incorporated",
-        "confirmed",
-        "contradicted",
-        "neutral",
-        "unavailable",
-    ]
-    catalyst_context_available: bool
-    catalyst_context: CatalystContextSnapshot | None
-    global_context_available: bool
-    global_context: GlobalContextSnapshot | None
-    benchmark_comparisons: tuple[BenchmarkComparison, ...] = ()
-    abstention_reasons: tuple[AbstentionReason, ...] = ()
-
-    @field_validator("as_of_utc")
-    @classmethod
-    def require_utc_timestamp(cls, value: datetime) -> datetime:
-        if value.tzinfo is None or value.utcoffset() is None:
-            raise ValueError("prediction timestamp must be timezone-aware")
-        return value.astimezone(UTC)
-
-    @model_validator(mode="after")
-    def validate_result_contract(self) -> PredictionResult:
-        if self.mode != self.strategy_id:
-            raise ValueError("prediction mode and strategy identity disagree")
-        expected_horizon = (SWING_HORIZON_SESSIONS, "sessions") if self.mode == "swing" else (INTRADAY_HORIZON_MINUTES, "minutes")
-        if (self.horizon_value, self.horizon_unit) != expected_horizon:
-            raise ValueError(f"{self.mode} prediction horizon must be {expected_horizon[0]} {expected_horizon[1]}")
-        if self.global_context_available != (self.global_context is not None):
-            raise ValueError("global_context must be null exactly when global context is unavailable")
-        if self.catalyst_context_available != (self.catalyst_context is not None):
-            raise ValueError("catalyst_context must be null exactly when catalyst context is unavailable")
-        if self.catalyst_context is not None and self.catalyst_context.as_of_utc > self.as_of_utc:
-            raise ValueError("catalyst context cannot be newer than the prediction")
-        if self.global_context is not None and self.global_context.as_of_utc > self.as_of_utc:
-            raise ValueError("global context cannot be newer than the prediction")
-        if len(self.abstention_reasons) != len(set(self.abstention_reasons)):
-            raise ValueError("abstention reasons must be unique")
-        if self.status == "scored":
-            if self.predicted_direction is None or self.model_score is None or self.technical_score is None:
-                raise ValueError("scored predictions require direction, model score, and technical score")
-            if self.abstention_reasons:
-                raise ValueError("scored predictions cannot carry abstention reasons")
-            if not self.benchmark_comparisons:
-                raise ValueError("scored predictions require benchmark comparison")
-            benchmark_symbols = tuple(item.symbol for item in self.benchmark_comparisons)
-            if len(benchmark_symbols) != len(set(benchmark_symbols)):
-                raise ValueError("benchmark comparison symbols must be unique")
-            symbols = set(benchmark_symbols)
-            missing_benchmarks = {"SPY", "QQQ"}.difference(symbols)
-            if missing_benchmarks:
-                raise ValueError(f"scored predictions require SPY and QQQ comparisons; missing {sorted(missing_benchmarks)}")
-            if self.mode == "swing" and self.catalyst_overlay_status != "incorporated":
-                raise ValueError("scored swing predictions require incorporated catalyst features")
-            if self.mode == "swing" and (self.catalyst_context is None or not self.catalyst_context.required_model_sources_complete):
-                raise ValueError("scored swing predictions require complete bound catalyst context")
-        else:
-            if not self.abstention_reasons:
-                raise ValueError("abstained predictions require at least one reason")
-            if self.predicted_direction is not None or self.model_score is not None or self.technical_score is not None:
-                raise ValueError("abstained predictions cannot expose a model score")
-            if self.benchmark_comparisons:
-                raise ValueError("abstained predictions cannot expose benchmark forecasts")
-        if self.mode == "intraday" and self.catalyst_overlay_status == "incorporated":
-            raise ValueError("intraday catalyst is a confirmation overlay, not a model feature")
-        return self
 
 
 class FeatureParityReport(_FrozenModel):
@@ -309,26 +67,6 @@ class FeatureParityReport(_FrozenModel):
     maximum_relative_difference: float = Field(ge=0.0)
     relative_tolerance: float = Field(ge=0.0)
     absolute_tolerance: float = Field(ge=0.0)
-
-
-class SwingModelScores(_FrozenModel):
-    """Calibrated outputs from one promoted ten-session swing model."""
-
-    probabilities: tuple[float, ...]
-    probability_threshold: float = Field(gt=0.0, lt=1.0)
-
-    classifier_probabilities: tuple[float, ...] | None = None
-    regressor_probabilities: tuple[float, ...] | None = None
-    unified_probabilities: tuple[float, ...] | None = None
-
-    @field_validator("probabilities", "classifier_probabilities", "regressor_probabilities", "unified_probabilities")
-    @classmethod
-    def validate_probabilities(cls, values: tuple[float, ...] | None) -> tuple[float, ...] | None:
-        if values is None:
-            return None
-        if not values or any(not np.isfinite(value) or value < 0.0 or value > 1.0 for value in values):
-            raise ValueError("swing probabilities must be a non-empty finite sequence in [0, 1]")
-        return values
 
 
 @dataclass(frozen=True, slots=True)
@@ -369,7 +107,12 @@ class SwingModelGenerationCache:
         estimated_resident_gib: float,
     ) -> LoadedSwingModelGeneration:
         root = _promotion_verification.resolve_verified_bundle_root(repository)
-        trust_store = attestation_trust_store_path.resolve(strict=True)
+        trust_store = path_integrity.verify_no_reparse_ancestry(
+            attestation_trust_store_path,
+            label="promotion attestation trust store",
+        ).resolve(strict=True)
+        if not trust_store.is_file():
+            raise ArtifactIntegrityError("promotion attestation trust store is unavailable")
         cache_key = (
             root,
             strategy_contract.sha256(),
@@ -406,11 +149,12 @@ class SwingModelGenerationCache:
                 label="swing generation bundle",
             )
             try:
-                raw = json.loads(bundle_bytes.decode("utf-8"))
-            except (UnicodeError, json.JSONDecodeError) as exc:
+                raw = parse_strict_json_object(
+                    bundle_bytes,
+                    label="swing generation bundle",
+                )
+            except ValueError as exc:
                 raise ArtifactIntegrityError("swing generation bundle is unreadable") from exc
-            if not isinstance(raw, Mapping):
-                raise SchemaMismatchError("swing generation bundle must be an object")
             bundle = _promotion_verification.validate_file_backed_promoted_bundle(
                 raw,
                 bundle_root=generation_root,
@@ -489,74 +233,19 @@ def load_active_generation_pointer(root: Path) -> dict[str, str]:
     return {str(key): str(value) if value is not None else "" for key, value in payload.items()}
 
 
-def build_global_context_snapshot(
-    authority: GlobalEventAuthority,
-    *,
-    decision_time_utc: datetime,
-    authority_sha256: str,
-) -> GlobalContextSnapshot:
-    """Build serving context from one exact row of a verified production authority."""
-
-    authority_path = authority.directory.resolve() / "_authority.json"
-    if not authority_path.is_file() or authority_path.is_symlink():
-        raise ArtifactIntegrityError("global event authority file is missing or unsafe")
-    if file_sha256(authority_path) != authority_sha256:
-        raise ArtifactIntegrityError("global event authority SHA256 does not verify")
-    verified = load_global_event_authority(
-        authority.directory,
-        require_production_ready=True,
-    )
-    decision_time = pd.Timestamp(decision_time_utc)
-    if decision_time.tzinfo is None:
-        raise DataReadinessError("global context decision time must be timezone-aware")
-    decision_time = decision_time.tz_convert("UTC")
-    observed_times = pd.to_datetime(
-        verified.decisions["decision_time_utc"],
-        utc=True,
-        errors="coerce",
-    )
-    matches = verified.decisions.loc[observed_times == decision_time]
-    if len(matches) != 1:
-        raise DataReadinessError("global event authority requires exactly one row for the requested decision")
-    row = matches.iloc[0]
-    for window in ("1d", "3d"):
-        complete = row[f"global_source_complete_{window}"]
-        if not isinstance(complete, (bool, np.bool_)) or not bool(complete):
-            raise DataReadinessError(f"global source coverage is incomplete for the {window} window")
-        latest_value = row[f"global_latest_event_feature_available_at_utc_{window}"]
-        if not pd.isna(latest_value):
-            latest = pd.Timestamp(latest_value)
-            if latest.tzinfo is None or latest.tz_convert("UTC") > decision_time:
-                raise DataReadinessError("global context contains future event evidence")
-    source_values = verified.manifest.get("required_historical_sources")
-    if not isinstance(source_values, list) or not source_values:
-        raise ArtifactIntegrityError("global authority source contract is malformed")
-    source_families = tuple(str(value) for value in source_values)
-    return GlobalContextSnapshot(
-        as_of_utc=decision_time.to_pydatetime(),
-        authority_sha256=authority_sha256,
-        source_coverage_complete=True,
-        event_count_1d=_authority_nonnegative_integer(row["global_event_count_1d"]),
-        event_count_3d=_authority_nonnegative_integer(row["global_event_count_3d"]),
-        sentiment_mean_1d=_authority_finite_float(row["global_sentiment_mean_1d"]),
-        sentiment_mean_3d=_authority_finite_float(row["global_sentiment_mean_3d"]),
-        sentiment_coverage_1d=_authority_finite_float(row["global_sentiment_coverage_1d"]),
-        sentiment_coverage_3d=_authority_finite_float(row["global_sentiment_coverage_3d"]),
-        source_families=source_families,
-    )
-
-
 def _verified_generation_root(root: Path, generation_id: str) -> Path:
     generations = root / GENERATION_DIRECTORY
-    if generations.is_symlink():
-        raise ArtifactIntegrityError("swing generation directory cannot be a symlink")
     candidate = generations / generation_id
-    if candidate.is_symlink():
-        raise ArtifactIntegrityError("active swing generation cannot be a symlink")
     try:
-        resolved = candidate.resolve(strict=True)
-        generations_resolved = generations.resolve(strict=True)
-    except FileNotFoundError as exc:
+        generations_resolved = path_integrity.verify_no_reparse_ancestry(
+            generations,
+            label="swing generation directory",
+        ).resolve(strict=True)
+        resolved = path_integrity.verify_tree_containment(
+            candidate,
+            label="active swing generation",
+        )
+    except (DataReadinessError, FileNotFoundError) as exc:
         raise ArtifactIntegrityError("active swing generation is unavailable") from exc
     if not resolved.is_dir() or not resolved.is_relative_to(generations_resolved):
         raise ArtifactIntegrityError("active swing generation escapes its repository")
@@ -571,12 +260,10 @@ def _read_json_bytes(path: Path, *, label: str) -> dict[str, object]:
         label=label,
     )
     try:
-        value = json.loads(raw.decode("utf-8"))
-    except (UnicodeError, json.JSONDecodeError) as exc:
+        value = parse_strict_json_object(raw, label=label)
+    except ValueError as exc:
         raise ArtifactIntegrityError(f"{label} is unreadable") from exc
-    if not isinstance(value, dict):
-        raise ArtifactIntegrityError(f"{label} must be an object")
-    return {str(key): item for key, item in value.items()}
+    return value
 
 
 def _read_verified_file_bytes(
@@ -672,6 +359,13 @@ def _validate_swing_model_payload(
         raise SchemaMismatchError("promoted swing model is missing fitted models")
     if "classifier" not in fitted_models:
         raise SchemaMismatchError("promoted swing model is missing its classifier")
+    thresholds = payload.get("probability_thresholds")
+    if not isinstance(thresholds, Mapping) or set(thresholds) != set(fitted_models):
+        raise SchemaMismatchError(
+            "promoted swing model thresholds must identify every fitted model"
+        )
+    for name, threshold in thresholds.items():
+        _finite_probability(threshold, f"{name} probability threshold")
     expected_positions = {column: index for index, column in enumerate(features)}
     for name, model in fitted_models.items():
         if getattr(model, "estimator", None) is None or getattr(model, "calibrator", None) is None:
@@ -709,23 +403,6 @@ def _assert_projected_rss(
     current_gib = snapshot[0] / 1024**3
     if current_gib + estimated_resident_gib > hard_budget_gib - headroom_gib:
         raise DataReadinessError("swing generation load would exceed the configured RSS safety threshold")
-
-
-def _authority_nonnegative_integer(value: object) -> int:
-    numeric = _authority_finite_float(value)
-    if numeric < 0 or not numeric.is_integer():
-        raise DataReadinessError("global authority event count is not a nonnegative integer")
-    return int(numeric)
-
-
-def _authority_finite_float(value: object) -> float:
-    try:
-        numeric = float(cast(Any, value))
-    except (TypeError, ValueError) as exc:
-        raise DataReadinessError("global authority metric is not numeric") from exc
-    if not np.isfinite(numeric):
-        raise DataReadinessError("global authority metric is not finite")
-    return numeric
 
 
 def validate_ordered_feature_frame(
@@ -766,14 +443,27 @@ class SwingInferenceEngine:
         self.payload = generation.model_payload
         _validate_swing_model_payload(self.payload, self.bundle)
         self.fitted_models = cast(dict[str, Any], self.payload.get("fitted_models") or {})
-        thresholds = cast(dict[str, Any], self.payload.get("probability_thresholds") or {})
-        self.threshold = _finite_probability(thresholds.get("classifier", 0.5), "probability_threshold")
+        thresholds = cast(dict[str, Any], self.payload["probability_thresholds"])
+        self.threshold = _finite_probability(
+            thresholds["classifier"],
+            "probability_threshold",
+        )
 
     def predict(
         self,
         feature_frame: pd.DataFrame,
         requested_models: list[str] | None = None,
     ) -> dict[str, tuple[float, ...]]:
+        if requested_models:
+            requested = tuple(requested_models)
+            allowed = {"all", "classifier", "xgboost_regressor"}
+            if (
+                len(requested) != len(set(requested))
+                or not set(requested).issubset(allowed)
+                or ("all" in requested and len(requested) != 1)
+                or ("all" not in requested and "classifier" not in requested)
+            ):
+                raise DataReadinessError("swing scoring requires one supported request containing the classifier")
         matrix = validate_ordered_feature_frame(
             feature_frame,
             self.bundle.ordered_feature_columns,
@@ -824,24 +514,6 @@ class SwingInferenceEngine:
             if scores is not None:
                 results[model_name] = scores
         return results
-
-
-def score_promoted_swing_model(
-    generation: LoadedSwingModelGeneration,
-    *,
-    feature_frame: pd.DataFrame,
-) -> SwingModelScores:
-    """Score with the already verified, immutable in-memory model generation."""
-
-    engine = SwingInferenceEngine(generation)
-    scores = engine.predict(feature_frame, requested_models=["all"])
-
-    return SwingModelScores(
-        probabilities=scores.get("classifier", tuple()),
-        probability_threshold=engine.threshold,
-        classifier_probabilities=scores.get("classifier"),
-        regressor_probabilities=scores.get("xgboost_regressor"),
-    )
 
 
 def _required_sequence(payload: Mapping[str, object], field: str) -> Sequence[object]:

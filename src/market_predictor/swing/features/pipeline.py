@@ -56,7 +56,7 @@ class CrossSectionalValidationStep:
         self.expected_security_ids = expected_security_ids
 
     def transform(self, df: pd.DataFrame) -> pd.DataFrame:
-        from market_predictor.edge_rebuild.swing_features import TECHNICAL_RANKING_FEATURES
+        from market_predictor.swing.features.panel import TECHNICAL_RANKING_FEATURES
         required = {
             "security_id",
             "session_date_et",
@@ -101,13 +101,13 @@ class SectorRelativeScalingStep:
         self.contract = contract
 
     def transform(self, df: pd.DataFrame) -> pd.DataFrame:
-        from market_predictor.edge_rebuild.swing_features import (
+        from market_predictor.swing.features import (
+            cross_sectional as swing_cross_sectional,
+        )
+        from market_predictor.swing.features.panel import (
             CATALYST_RANKING_FEATURES,
             TECHNICAL_RANKING_FEATURES,
             _cross_section_spec,
-        )
-        from market_predictor.swing.features import (
-            cross_sectional as swing_cross_sectional,
         )
         
         data = df.copy()

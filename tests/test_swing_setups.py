@@ -22,7 +22,6 @@ from market_predictor.edge_rebuild.setup_economics import (
     WALK_FORWARD_SCOPE,
     evaluate_setup_economics,
 )
-from market_predictor.edge_rebuild.swing_pipeline_steps import SetupComponentsStep
 from market_predictor.edge_rebuild.swing_setups import (
     SWING_SETUP_COLUMNS,
     SWING_SETUP_ECONOMICS_CONFIG,
@@ -33,6 +32,7 @@ from market_predictor.edge_rebuild.swing_setups import (
     swing_setup_mask,
 )
 from market_predictor.modeling.strategy_contract import StrategyContract
+from market_predictor.swing.features.pipeline import SetupComponentsStep
 
 CALENDAR = xcals.get_calendar("XNYS")
 SESSION_COUNT = 620
