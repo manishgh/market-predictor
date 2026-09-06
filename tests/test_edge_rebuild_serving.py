@@ -11,8 +11,10 @@ import pandas as pd
 import pytest
 from pydantic import ValidationError
 
+import market_predictor.edge_rebuild.serving as serving_module
 from market_predictor.canonical.store import file_sha256
 from market_predictor.catalysts.global_events.decision_authority import GlobalEventAuthority
+from market_predictor.core import path_integrity
 from market_predictor.core.errors import (
     ArtifactIntegrityError,
     DataReadinessError,
@@ -28,18 +30,24 @@ from market_predictor.edge_rebuild.serving import (
     PredictionResult,
     SwingModelGenerationCache,
     build_global_context_snapshot,
-    canonical_payload_sha256,
-    ordered_values_sha256,
     validate_batch_live_feature_parity,
-    validate_file_backed_promoted_bundle,
     validate_ordered_feature_frame,
-    validate_promoted_bundle,
 )
 from market_predictor.edge_rebuild.swing_features import (
     SWING_FEATURE_PANEL_SCHEMA,
     swing_model_feature_columns,
 )
 from market_predictor.edge_rebuild.swing_training import MODEL_SCHEMA
+from market_predictor.governance.promotion.bundle_contracts import (
+    canonical_payload_sha256,
+    ordered_values_sha256,
+    validate_promoted_bundle,
+)
+from market_predictor.governance.promotion.bundle_verification import (
+    resolve_verified_bundle_artifact,
+    resolve_verified_bundle_root,
+    validate_file_backed_promoted_bundle,
+)
 from market_predictor.intraday.features.features import (
     CAUSAL_INTRADAY_MODEL_FEATURE_COLUMNS,
     FEATURE_SCHEMA_VERSION,
@@ -65,6 +73,18 @@ NOW = datetime(2026, 8, 1, 12, 0, tzinfo=UTC)
 TEST_GATE_POLICY_SHA256 = canonical_payload_sha256({"test_fixture": True})
 
 
+def test_serving_does_not_export_governance_promotion_symbols() -> None:
+    assert not hasattr(serving_module, "PromotedSwingBundle")
+    assert not hasattr(serving_module, "PromotedIntradayBundle")
+    assert not hasattr(serving_module, "validate_promoted_bundle")
+    assert not hasattr(serving_module, "validate_file_backed_promoted_bundle")
+
+
+def test_governance_owns_promoted_bundle_contracts() -> None:
+    assert validate_promoted_bundle.__module__ == ("market_predictor.governance.promotion.bundle_contracts")
+    assert validate_file_backed_promoted_bundle.__module__ == ("market_predictor.governance.promotion.bundle_verification")
+
+
 class _VerifiedFittedCandidate:
     estimator = object()
     calibrator = object()
@@ -74,11 +94,7 @@ class _VerifiedFittedCandidate:
 
 
 def _base_bundle(*, mode: str) -> dict[str, object]:
-    features = (
-        swing_model_feature_columns(contract=CONTRACT, catalyst=False)
-        if mode == "swing"
-        else CAUSAL_INTRADAY_MODEL_FEATURE_COLUMNS
-    )
+    features = swing_model_feature_columns(contract=CONTRACT, catalyst=False) if mode == "swing" else CAUSAL_INTRADAY_MODEL_FEATURE_COLUMNS
     overlays = ("alpaca", "sec", "finviz")
     model_sources: tuple[str, ...] = ()
     global_sources = ("alpaca", "gdelt")
@@ -138,18 +154,10 @@ def _base_bundle(*, mode: str) -> dict[str, object]:
 
 
 def test_default_serving_hash_matches_frozen_swing_gate_policy() -> None:
-    policy = tomllib.loads(
-        (ROOT / "configs" / "edge_rebuild_swing_promotion.toml").read_text(
-            encoding="utf-8"
-        )
-    )["promotion_gate_policy"]
-    default = tomllib.loads(
-        (ROOT / "configs" / "default.toml").read_text(encoding="utf-8")
-    )
+    policy = tomllib.loads((ROOT / "configs" / "edge_rebuild_swing_promotion.toml").read_text(encoding="utf-8"))["promotion_gate_policy"]
+    default = tomllib.loads((ROOT / "configs" / "default.toml").read_text(encoding="utf-8"))
 
-    assert canonical_payload_sha256(policy) == default["prediction_serving"][
-        "promotion_gate_policy_sha256"
-    ]
+    assert canonical_payload_sha256(policy) == default["prediction_serving"]["promotion_gate_policy_sha256"]
 
 
 def _publish_signed_swing_generation(
@@ -210,9 +218,7 @@ def _publish_signed_swing_generation(
             "model_id": candidate_id,
             "model_artifact_path": "model/model.joblib",
             "model_artifact_sha256": file_sha256(model_path),
-            "promotion_evidence_path": (
-                "model/model.joblib.promotion.attestation.json"
-            ),
+            "promotion_evidence_path": ("model/model.joblib.promotion.attestation.json"),
             "promotion_evidence_sha256": file_sha256(attestation_path),
             "promotion_attestation_id": attestation["attestation_id"],
             "promotion_gate_policy_sha256": attestation["gate_config_sha256"],
@@ -255,6 +261,65 @@ def _publish_signed_swing_generation(
     )
     _, trust_store, _ = _test_signing_material()
     return generation_id, trust_store
+
+
+def test_governance_verifies_file_backed_swing_bundle_with_explicit_authority(
+    tmp_path: Path,
+) -> None:
+    repository = tmp_path / "repository"
+    generation_id, trust_store = _publish_signed_swing_generation(
+        repository,
+        candidate_id="governance-owned-swing",
+        marker="governance",
+    )
+    generation = repository / "generations" / generation_id
+    payload = json.loads((generation / "bundle.json").read_text(encoding="utf-8"))
+
+    bundle = validate_file_backed_promoted_bundle(
+        payload,
+        bundle_root=generation,
+        strategy_contract=CONTRACT,
+        attestation_trust_store_path=trust_store,
+        promotion_gate_policy_sha256=TEST_GATE_POLICY_SHA256,
+        expected_mode="swing",
+    )
+
+    assert bundle.model_id == "governance-owned-swing"
+    assert bundle.sha256() == generation_id
+
+
+@pytest.mark.parametrize(
+    ("trust_store", "policy_hash", "message"),
+    (
+        (None, TEST_GATE_POLICY_SHA256, "trust store"),
+        (TRUST_STORE, None, "gate-policy hash"),
+    ),
+)
+def test_governance_swing_verification_requires_explicit_authority(
+    tmp_path: Path,
+    trust_store: Path | None,
+    policy_hash: str | None,
+    message: str,
+) -> None:
+    repository = tmp_path / "repository"
+    generation_id, actual_trust_store = _publish_signed_swing_generation(
+        repository,
+        candidate_id=f"missing-{message}",
+        marker=message,
+    )
+    generation = repository / "generations" / generation_id
+    payload = json.loads((generation / "bundle.json").read_text(encoding="utf-8"))
+    configured_trust_store = actual_trust_store if trust_store is not None else None
+
+    with pytest.raises(PromotionGateError, match=message):
+        validate_file_backed_promoted_bundle(
+            payload,
+            bundle_root=generation,
+            strategy_contract=CONTRACT,
+            attestation_trust_store_path=configured_trust_store,
+            promotion_gate_policy_sha256=policy_hash,
+            expected_mode="swing",
+        )
 
 
 def test_validates_strict_swing_and_intraday_promoted_bundles() -> None:
@@ -461,13 +526,7 @@ def test_cached_swing_generation_revalidates_changed_strategy_contract(
         maximum_model_bytes=10_000_000,
         estimated_resident_gib=0.01,
     )
-    changed = CONTRACT.model_copy(
-        update={
-            "swing": CONTRACT.swing.model_copy(
-                update={"minimum_expected_net_edge_bps": 6.0}
-            )
-        }
-    )
+    changed = CONTRACT.model_copy(update={"swing": CONTRACT.swing.model_copy(update={"minimum_expected_net_edge_bps": 6.0})})
 
     with pytest.raises(ArtifactIntegrityError, match="active strategy contract"):
         cache.get(
@@ -525,6 +584,46 @@ def test_file_backed_bundle_rejects_artifact_path_escape(
             bundle_root=root,
             strategy_contract=CONTRACT,
             attestation_trust_store_path=TRUST_STORE,
+        )
+
+
+def test_promoted_bundle_root_rejects_reparse_ancestry(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    root = tmp_path / "bundle"
+    root.mkdir()
+    original = path_integrity.is_reparse_point
+    monkeypatch.setattr(
+        path_integrity,
+        "is_reparse_point",
+        lambda path: path == root or original(path),
+    )
+
+    with pytest.raises(ArtifactIntegrityError, match="symlink or reparse point"):
+        resolve_verified_bundle_root(root)
+
+
+def test_promoted_bundle_artifact_rejects_child_reparse_point(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    root = (tmp_path / "bundle").resolve()
+    artifact_directory = root / "model"
+    artifact_directory.mkdir(parents=True)
+    (artifact_directory / "model.bin").write_bytes(b"model")
+    original = path_integrity.is_reparse_point
+    monkeypatch.setattr(
+        path_integrity,
+        "is_reparse_point",
+        lambda path: path == artifact_directory or original(path),
+    )
+
+    with pytest.raises(ArtifactIntegrityError, match="symlink or reparse point"):
+        resolve_verified_bundle_artifact(
+            root,
+            "model/model.bin",
+            label="model",
         )
 
 

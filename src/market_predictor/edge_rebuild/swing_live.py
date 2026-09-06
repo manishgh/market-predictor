@@ -1,4 +1,5 @@
 """Fail-closed live construction for edge-rebuild swing model features."""
+
 from __future__ import annotations
 
 import hashlib
@@ -20,10 +21,7 @@ from market_predictor.canonical.joins import MEMBERSHIP_VALUE_COLUMNS
 from market_predictor.canonical.reconciliation import stamp_canonical_decision_ids
 from market_predictor.canonical.store import file_sha256
 from market_predictor.core.errors import DataReadinessError
-from market_predictor.edge_rebuild.serving import (
-    canonical_payload_sha256,
-    validate_ordered_feature_frame,
-)
+from market_predictor.edge_rebuild.serving import validate_ordered_feature_frame
 from market_predictor.edge_rebuild.swing_features import (
     SWING_CATALYST_FEATURE_PROFILE,
     SWING_FEATURE_PROFILE,
@@ -31,6 +29,9 @@ from market_predictor.edge_rebuild.swing_features import (
     build_swing_feature_rows,
     finalize_swing_feature_panel,
     swing_model_feature_columns,
+)
+from market_predictor.governance.promotion.bundle_contracts import (
+    canonical_payload_sha256,
 )
 from market_predictor.modeling.strategy_contract import StrategyContract
 from market_predictor.resources import assert_memory_budget
@@ -144,9 +145,7 @@ class FileSwingLiveInputProvider:
             )
             after = _load_input_pointer(root)
             if after["pointer_sha256"] != pointer["pointer_sha256"]:
-                raise DataReadinessError(
-                    "active swing live-input generation changed during verification"
-                )
+                raise DataReadinessError("active swing live-input generation changed during verification")
             self._cached = loaded
             return loaded
 
@@ -208,51 +207,61 @@ class FileSwingLiveInputProvider:
         catalyst_authority_path = catalyst / "_authority.json"
         if catalyst_authority_path.is_symlink() or not catalyst_authority_path.is_file():
             raise DataReadinessError("swing live catalyst authority identity is unavailable")
-        expected_catalyst_sha256 = str(
-            manifest.get("catalyst_authority_sha256", "")
-        )
+        expected_catalyst_sha256 = str(manifest.get("catalyst_authority_sha256", ""))
         if (
             len(expected_catalyst_sha256) != 64
-            or any(
-                character not in "0123456789abcdef"
-                for character in expected_catalyst_sha256
-            )
+            or any(character not in "0123456789abcdef" for character in expected_catalyst_sha256)
             or file_sha256(catalyst_authority_path) != expected_catalyst_sha256
         ):
-            raise DataReadinessError(
-                "swing live catalyst authority hash does not verify"
-            )
+            raise DataReadinessError("swing live catalyst authority hash does not verify")
         watermarks_raw = manifest.get("source_watermarks")
-        if not isinstance(watermarks_raw, Mapping) or set(watermarks_raw) != set(
-            SWING_LIVE_REQUIRED_WATERMARKS
-        ):
+        if not isinstance(watermarks_raw, Mapping) or set(watermarks_raw) != set(SWING_LIVE_REQUIRED_WATERMARKS):
             raise DataReadinessError("swing live source watermarks are missing")
         watermarks: dict[str, str] = {}
         for key in SWING_LIVE_REQUIRED_WATERMARKS:
-            value = _strict_utc_value(
-                watermarks_raw[key], f"swing live source watermark {key}"
-            )
+            value = _strict_utc_value(watermarks_raw[key], f"swing live source watermark {key}")
             if value > cutoff:
                 raise DataReadinessError("swing live source watermark is after as_of_utc")
             watermarks[key] = value.isoformat()
         if max(_strict_utc_value(value, key) for key, value in watermarks.items()) > generated:
-            raise DataReadinessError(
-                "swing live generation predates one or more source watermarks"
-            )
+            raise DataReadinessError("swing live generation predates one or more source watermarks")
         projections = {
             "stock_daily_bars": (
-                "ticker", "timeframe", "bar_start_utc", "bar_end_utc",
-                "available_at_utc", "open", "high", "low", "close",
-                "volume", "price_feed", "adjustment", "schema_version",
+                "ticker",
+                "timeframe",
+                "bar_start_utc",
+                "bar_end_utc",
+                "available_at_utc",
+                "open",
+                "high",
+                "low",
+                "close",
+                "volume",
+                "price_feed",
+                "adjustment",
+                "schema_version",
             ),
             "benchmark_daily_bars": (
-                "ticker", "timeframe", "bar_start_utc", "bar_end_utc",
-                "available_at_utc", "open", "high", "low", "close",
-                "volume", "price_feed", "adjustment", "schema_version",
+                "ticker",
+                "timeframe",
+                "bar_start_utc",
+                "bar_end_utc",
+                "available_at_utc",
+                "open",
+                "high",
+                "low",
+                "close",
+                "volume",
+                "price_feed",
+                "adjustment",
+                "schema_version",
             ),
             "point_in_time_memberships": (
-                "ticker", "effective_from_utc", "effective_to_utc",
-                "available_at_utc", *MEMBERSHIP_VALUE_COLUMNS,
+                "ticker",
+                "effective_from_utc",
+                "effective_to_utc",
+                "available_at_utc",
+                *MEMBERSHIP_VALUE_COLUMNS,
             ),
         }
         frames: dict[str, pd.DataFrame] = {}
@@ -384,10 +393,12 @@ def build_live_swing_features(
     if not bool(catalyst_ready.all()):
         catalyst_exclusions = tuple(
             sorted(
-                ablations[SWING_CATALYST_FEATURE_PROFILE].loc[
+                ablations[SWING_CATALYST_FEATURE_PROFILE]
+                .loc[
                     ~catalyst_ready,
                     "security_id",
-                ].astype(str)
+                ]
+                .astype(str)
             )
         )
         excluded_security_ids = _validate_live_security_exclusions(
@@ -396,10 +407,7 @@ def build_live_swing_features(
             contract=contract,
             reason="market or catalyst evidence",
         )
-        ablations = {
-            profile: frame.loc[catalyst_ready].reset_index(drop=True)
-            for profile, frame in ablations.items()
-        }
+        ablations = {profile: frame.loc[catalyst_ready].reset_index(drop=True) for profile, frame in ablations.items()}
         current = current.loc[catalyst_ready].reset_index(drop=True)
     surviving_ids = tuple(sorted(current["security_id"].astype(str)))
     finalized = {
@@ -472,15 +480,8 @@ def _verify_live_feature_bindings(
         (live_manifest_path, expected_live_manifest_sha256, "live input manifest"),
     )
     for path, expected, label in files:
-        if (
-            len(expected) != 64
-            or path.is_symlink()
-            or not path.is_file()
-            or file_sha256(path) != expected
-        ):
-            raise DataReadinessError(
-                f"swing live {label} changed or does not match its generation"
-            )
+        if len(expected) != 64 or path.is_symlink() or not path.is_file() or file_sha256(path) != expected:
+            raise DataReadinessError(f"swing live {label} changed or does not match its generation")
 
 
 def _select_complete_current_cross_section(
@@ -520,17 +521,12 @@ def _select_complete_current_cross_section(
     observed = tuple(sorted(current["security_id"].astype(str)))
     unexpected_ids = sorted(set(observed).difference(expected_security_ids))
     if unexpected_ids:
-        raise DataReadinessError(
-            "latest swing decision contains unexpected security identities: "
-            f"{unexpected_ids[:10]}"
-        )
+        raise DataReadinessError(f"latest swing decision contains unexpected security identities: {unexpected_ids[:10]}")
     missing_ids = tuple(sorted(set(expected_security_ids).difference(observed)))
     warmup = pd.to_numeric(current["daily_bar_count"], errors="coerce")
     cold = warmup.lt(contract.swing.minimum_warmup_sessions) | warmup.isna()
     ineligible = ~current["feature_eligible"].fillna(False).astype(bool)
-    rejected_ids = tuple(
-        sorted(current.loc[cold | ineligible, "security_id"].astype(str))
-    )
+    rejected_ids = tuple(sorted(current.loc[cold | ineligible, "security_id"].astype(str)))
     exclusions = _validate_live_security_exclusions(
         expected_security_ids,
         (*missing_ids, *rejected_ids),
@@ -556,9 +552,7 @@ def _validate_live_security_exclusions(
     excluded = tuple(sorted(set(excluded_security_ids)))
     unexpected = sorted(set(excluded).difference(expected_security_ids))
     if unexpected:
-        raise DataReadinessError(
-            f"live swing exclusions contain unexpected identities: {unexpected[:10]}"
-        )
+        raise DataReadinessError(f"live swing exclusions contain unexpected identities: {unexpected[:10]}")
     fraction = len(excluded) / len(expected_security_ids)
     if fraction > contract.data_quality.maximum_security_exclusion_fraction:
         raise DataReadinessError(
@@ -651,9 +645,7 @@ def _model_frame(
 ) -> pd.DataFrame:
     eligible = rows["feature_eligible"].fillna(False).astype(bool) & rows["cross_section_eligible"].fillna(False).astype(bool)
     if not bool(eligible.any()):
-        raise DataReadinessError(
-            f"{profile} has no stocks meeting the sector peer floor"
-        )
+        raise DataReadinessError(f"{profile} has no stocks meeting the sector peer floor")
     eligible_rows = rows.loc[eligible]
     identity = pd.MultiIndex.from_frame(
         eligible_rows.loc[:, SWING_LIVE_IDENTITY_COLUMNS],
@@ -680,9 +672,7 @@ def _effective_membership_security_ids(
     }
     missing = sorted(required.difference(memberships.columns))
     if missing:
-        raise DataReadinessError(
-            f"point-in-time membership authority is missing columns: {missing}"
-        )
+        raise DataReadinessError(f"point-in-time membership authority is missing columns: {missing}")
     data = memberships.loc[:, sorted(required)].copy()
     data["ticker"] = data["ticker"].astype(str).str.upper().str.strip()
     data["security_id"] = data["security_id"].astype(str).str.strip()
@@ -701,16 +691,10 @@ def _effective_membership_security_ids(
     active = effective_from.le(decision_time) & available.le(decision_time)
     active &= effective_to.isna() | effective_to.gt(decision_time)
     current = data.loc[active].copy()
-    if current.empty or bool(
-        current[["ticker", "security_id"]].eq("").any(axis=None)
-    ):
+    if current.empty or bool(current[["ticker", "security_id"]].eq("").any(axis=None)):
         raise DataReadinessError("effective point-in-time membership is empty or invalid")
-    if bool(current.duplicated("ticker").any()) or bool(
-        current.duplicated("security_id").any()
-    ):
-        raise DataReadinessError(
-            "effective point-in-time membership has ambiguous ticker/security identity"
-        )
+    if bool(current.duplicated("ticker").any()) or bool(current.duplicated("security_id").any()):
+        raise DataReadinessError("effective point-in-time membership has ambiguous ticker/security identity")
     normalized = tuple(sorted(current["security_id"].astype(str)))
     minimum = contract.labels.minimum_cross_section_for_ranking
     if len(normalized) < minimum:
@@ -826,25 +810,16 @@ def _load_input_pointer(root: Path) -> dict[str, str]:
     for field in ("generation_id", "manifest_file_sha256", "pointer_sha256"):
         value = str(payload.get(field, ""))
         if len(value) != 64 or any(character not in "0123456789abcdef" for character in value):
-            raise DataReadinessError(
-                f"swing live-input generation pointer {field} is invalid"
-            )
+            raise DataReadinessError(f"swing live-input generation pointer {field} is invalid")
     if payload.get("generation_id") != payload.get("manifest_file_sha256"):
-        raise DataReadinessError(
-            "swing live-input generation identity must equal its manifest hash"
-        )
+        raise DataReadinessError("swing live-input generation identity must equal its manifest hash")
     _strict_utc_value(payload.get("activated_at_utc"), "live-input activation")
     previous = payload.get("previous_generation_id")
     if previous is not None and (
-        not isinstance(previous, str)
-        or len(previous) != 64
-        or any(character not in "0123456789abcdef" for character in previous)
+        not isinstance(previous, str) or len(previous) != 64 or any(character not in "0123456789abcdef" for character in previous)
     ):
         raise DataReadinessError("swing live-input previous generation is invalid")
-    return {
-        str(key): str(value) if value is not None else ""
-        for key, value in payload.items()
-    }
+    return {str(key): str(value) if value is not None else "" for key, value in payload.items()}
 
 
 def _verified_input_generation_root(root: Path, generation_id: str) -> Path:
@@ -900,14 +875,10 @@ def _read_projected_parquet(
             schema_columns = tuple(parquet.schema_arrow.names)
             missing = sorted(set(columns).difference(schema_columns))
             if missing:
-                raise DataReadinessError(
-                    f"swing live {label} is missing projected columns: {missing}"
-                )
+                raise DataReadinessError(f"swing live {label} is missing projected columns: {missing}")
             projected_bytes = _projected_parquet_bytes(parquet, columns)
             if projected_bytes > maximum_bytes:
-                raise DataReadinessError(
-                    f"swing live {label} projected byte limit exceeded"
-                )
+                raise DataReadinessError(f"swing live {label} projected byte limit exceeded")
             assert_memory_budget(
                 hard_budget_gib=memory_budget_gib,
                 headroom_gib=memory_headroom_gib,

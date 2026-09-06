@@ -26,7 +26,6 @@ from market_predictor.edge_rebuild.policy import (
 )
 from market_predictor.edge_rebuild.serving import (
     LoadedSwingModelGeneration,
-    PromotedSwingBundle,
     SwingInferenceEngine,
     SwingModelGenerationCache,
 )
@@ -39,6 +38,7 @@ from market_predictor.edge_rebuild.swing_selection import (
     select_constrained_swing_portfolio,
 )
 from market_predictor.feature_store import LiveFeatureStore
+from market_predictor.governance.promotion.bundle_contracts import PromotedSwingBundle
 from market_predictor.intraday.model import score_intraday_payload
 from market_predictor.modeling.strategy_contract import StrategyContract, load_strategy_contract
 from market_predictor.prediction_contracts import (
@@ -109,25 +109,12 @@ def serving_routes_from_config(config: Mapping[str, Any]) -> dict[str, dict[str,
 
     serving = config.get("prediction_serving")
     route_config = serving.get("routes") if isinstance(serving, dict) else None
-    trust_store = (
-        str(serving.get("attestation_trust_store", "")).strip()
-        if isinstance(serving, dict)
-        else ""
-    )
-    promotion_gate_policy_sha256 = (
-        str(serving.get("promotion_gate_policy_sha256", "")).strip().lower()
-        if isinstance(serving, dict)
-        else ""
-    )
+    trust_store = str(serving.get("attestation_trust_store", "")).strip() if isinstance(serving, dict) else ""
+    promotion_gate_policy_sha256 = str(serving.get("promotion_gate_policy_sha256", "")).strip().lower() if isinstance(serving, dict) else ""
     if not trust_store:
         raise ValueError("prediction_serving.attestation_trust_store must be configured")
-    if len(promotion_gate_policy_sha256) != 64 or any(
-        character not in "0123456789abcdef"
-        for character in promotion_gate_policy_sha256
-    ):
-        raise ValueError(
-            "prediction_serving.promotion_gate_policy_sha256 must be configured"
-        )
+    if len(promotion_gate_policy_sha256) != 64 or any(character not in "0123456789abcdef" for character in promotion_gate_policy_sha256):
+        raise ValueError("prediction_serving.promotion_gate_policy_sha256 must be configured")
     if not isinstance(route_config, dict):
         raise ValueError("prediction_serving.routes must be configured")
     routes: dict[str, dict[str, ServingRoute]] = {}
@@ -143,40 +130,22 @@ def serving_routes_from_config(config: Mapping[str, Any]) -> dict[str, dict[str,
                 raise ValueError(f"prediction serving route {mode}.{horizon} must be a table")
             repository = str(raw_route.get("release_repository", "")).strip()
             if not repository:
-                raise ValueError(
-                    f"prediction serving route {mode}.{horizon} is missing release_repository"
-                )
+                raise ValueError(f"prediction serving route {mode}.{horizon} is missing release_repository")
             if "model" in raw_route:
-                raise ValueError(
-                    f"prediction serving route {mode}.{horizon} cannot use a direct model path"
-                )
+                raise ValueError(f"prediction serving route {mode}.{horizon} cannot use a direct model path")
             canonical_horizon = _canonical_horizon(str(horizon))
             if normalized_mode == "swing" and canonical_horizon != "10b":
-                raise ValueError(
-                    "public swing serving accepts only the ten-session 10b route"
-                )
+                raise ValueError("public swing serving accepts only the ten-session 10b route")
             if canonical_horizon in parsed:
                 raise ValueError(f"duplicate prediction serving route after horizon normalization: {mode}.{canonical_horizon}")
-            estimated_resident_gib = float(
-                raw_route.get("estimated_resident_gib", 0.5)
-            )
+            estimated_resident_gib = float(raw_route.get("estimated_resident_gib", 0.5))
             if estimated_resident_gib <= 0:
-                raise ValueError(
-                    f"prediction serving route {mode}.{horizon} has an invalid "
-                    "estimated_resident_gib"
-                )
-            max_model_bytes = int(
-                raw_route.get("max_model_bytes", 512 * 1024 * 1024)
-            )
-            max_feature_bytes = int(
-                raw_route.get("max_feature_bytes", 512 * 1024 * 1024)
-            )
+                raise ValueError(f"prediction serving route {mode}.{horizon} has an invalid estimated_resident_gib")
+            max_model_bytes = int(raw_route.get("max_model_bytes", 512 * 1024 * 1024))
+            max_feature_bytes = int(raw_route.get("max_feature_bytes", 512 * 1024 * 1024))
             max_feature_rows = int(raw_route.get("max_feature_rows", 250_000))
             if min(max_model_bytes, max_feature_bytes, max_feature_rows) < 1:
-                raise ValueError(
-                    f"prediction serving route {mode}.{horizon} has invalid "
-                    "model/feature artifact limits"
-                )
+                raise ValueError(f"prediction serving route {mode}.{horizon} has invalid model/feature artifact limits")
             parsed[canonical_horizon] = ServingRoute(
                 repository=Path(repository),
                 attestation_trust_store=Path(trust_store),
@@ -256,30 +225,17 @@ class PredictionService:
                 memory_budget_gib=memory_budget_gib,
                 memory_headroom_gib=memory_headroom_gib,
             )
-        self.swing_model_generation_cache = (
-            swing_model_generation_cache
-            or SwingModelGenerationCache(
-                memory_budget_gib=memory_budget_gib,
-                memory_headroom_gib=memory_headroom_gib,
-            )
+        self.swing_model_generation_cache = swing_model_generation_cache or SwingModelGenerationCache(
+            memory_budget_gib=memory_budget_gib,
+            memory_headroom_gib=memory_headroom_gib,
         )
-        maximum_artifact_bytes = int(
-            (memory_budget_gib - memory_headroom_gib) * 1024**3
-        )
+        maximum_artifact_bytes = int((memory_budget_gib - memory_headroom_gib) * 1024**3)
         for mode_routes in self.routes.values():
             for route in mode_routes.values():
-                if (
-                    route.max_model_bytes + route.max_feature_bytes
-                    > maximum_artifact_bytes
-                ):
-                    raise ValueError(
-                        "combined route artifact byte limits exceed the memory "
-                        "safety threshold"
-                    )
+                if route.max_model_bytes + route.max_feature_bytes > maximum_artifact_bytes:
+                    raise ValueError("combined route artifact byte limits exceed the memory safety threshold")
         if max_concurrent_inference != 1 or max_tickers_per_request < 1:
-            raise ValueError(
-                "inference concurrency must be one and the ticker limit must be positive"
-            )
+            raise ValueError("inference concurrency must be one and the ticker limit must be positive")
         self.max_concurrent_inference = max_concurrent_inference
         self.max_tickers_per_request = max_tickers_per_request
         if inference_memory_reservation_gib <= 0:
@@ -299,21 +255,15 @@ class PredictionService:
         )
         if maximum_drift_assessment_age_minutes < 1:
             raise ValueError("maximum drift assessment age must be positive")
-        self.drift_state_store = drift_state_store or DriftStateStore(
-            self.root / "data/monitoring/drift"
-        )
+        self.drift_state_store = drift_state_store or DriftStateStore(self.root / "data/monitoring/drift")
         self.enforce_drift = enforce_drift
-        self.maximum_drift_assessment_age = timedelta(
-            minutes=maximum_drift_assessment_age_minutes
-        )
+        self.maximum_drift_assessment_age = timedelta(minutes=maximum_drift_assessment_age_minutes)
 
     def predict(self, request: PredictionRequest) -> PredictionResponse:
         if len(request.tickers) > self.max_tickers_per_request:
             raise PredictionValidationError
         try:
-            with self.admission.lease(
-                estimated_incremental_gib=self.inference_memory_reservation_gib
-            ):
+            with self.admission.lease(estimated_incremental_gib=self.inference_memory_reservation_gib):
                 if request.mode == "swing":
                     response = self.predict_swing(request)
                 elif request.mode == "intraday":
@@ -332,11 +282,7 @@ class PredictionService:
         try:
             route, resolved_horizon = self._serving_route("swing", request)
             try:
-                contract = load_strategy_contract(
-                    self._resolve(
-                        Path("configs/edge_rebuild_strategy_contract.toml")
-                    )
-                )
+                contract = load_strategy_contract(self._resolve(Path("configs/edge_rebuild_strategy_contract.toml")))
             except DataReadinessError as exc:
                 repository = self._resolve(route.repository)
                 if not (repository / "active_generation.json").is_file():
@@ -346,9 +292,7 @@ class PredictionService:
             bundle = generation.bundle
             as_of = request.as_of or datetime.now(UTC)
             if bundle.promoted_at_utc > as_of.astimezone(UTC):
-                raise DataReadinessError(
-                    "promoted swing bundle was unavailable at the requested as_of"
-                )
+                raise DataReadinessError("promoted swing bundle was unavailable at the requested as_of")
             if self.swing_live_input_provider is None:
                 raise DataReadinessError("swing live-input provider is unavailable")
             inputs = self.swing_live_input_provider.load(
@@ -370,11 +314,7 @@ class PredictionService:
                 memory_headroom_gib=self.memory_headroom_gib,
             )
             engine = SwingInferenceEngine(generation)
-            model_features = (
-                live.technical_market
-                if generation.bundle.feature_profile == "technical_market"
-                else live.catalyst_full
-            )
+            model_features = live.technical_market if generation.bundle.feature_profile == "technical_market" else live.catalyst_full
             raw_scores = engine.predict(
                 feature_frame=model_features,
                 requested_models=request.requested_models,
@@ -394,15 +334,9 @@ class PredictionService:
                 scored_context,
                 probability_threshold=engine.threshold,
                 maximum_trades=contract.swing.maximum_trades_per_decision,
-                target_maximum_sector_weight=(
-                    contract.swing.target_maximum_sector_weight
-                ),
-                hard_maximum_sector_weight=(
-                    contract.swing.hard_maximum_sector_weight
-                ),
-                minimum_distinct_sectors=(
-                    contract.swing.minimum_distinct_sectors_for_selection
-                ),
+                target_maximum_sector_weight=(contract.swing.target_maximum_sector_weight),
+                hard_maximum_sector_weight=(contract.swing.hard_maximum_sector_weight),
+                minimum_distinct_sectors=(contract.swing.minimum_distinct_sectors_for_selection),
             )
             predictions = _edge_swing_predictions(
                 request=request,
@@ -457,9 +391,7 @@ class PredictionService:
             for horizon, route in sorted(mode_routes.items()):
                 if mode == "swing":
                     try:
-                        contract = load_strategy_contract(
-                            self._resolve(Path("configs/edge_rebuild_strategy_contract.toml"))
-                        )
+                        contract = load_strategy_contract(self._resolve(Path("configs/edge_rebuild_strategy_contract.toml")))
                         self._edge_swing_generation(route, contract=contract)
                     except (DataReadinessError, PredictionModelUnavailableError):
                         # Absence is an expected fail-closed deployment state;
@@ -566,16 +498,8 @@ class PredictionService:
                     ticker=ticker,
                     swing=swing_row,
                     intraday=intraday_row,
-                    final_signal=(
-                        "not_ready"
-                        if row_errors
-                        else determine_final_signal(swing_row, intraday_row)
-                    ),
-                    readiness_status=(
-                        INVALID
-                        if row_errors
-                        else combined_readiness(swing_row, intraday_row)
-                    ),
+                    final_signal=("not_ready" if row_errors else determine_final_signal(swing_row, intraday_row)),
+                    readiness_status=(INVALID if row_errors else combined_readiness(swing_row, intraday_row)),
                     errors=row_errors,
                 )
             )
@@ -586,16 +510,8 @@ class PredictionService:
             rows = [
                 row.model_copy(
                     update={
-                        "swing": (
-                            _suppress_swing_prediction(row.swing, reason)
-                            if row.swing is not None
-                            else None
-                        ),
-                        "intraday": (
-                            _suppress_intraday_prediction(row.intraday, reason)
-                            if row.intraday is not None
-                            else None
-                        ),
+                        "swing": (_suppress_swing_prediction(row.swing, reason) if row.swing is not None else None),
+                        "intraday": (_suppress_intraday_prediction(row.intraday, reason) if row.intraday is not None else None),
                         "final_signal": "not_ready",
                         "readiness_status": INVALID,
                         "errors": list(dict.fromkeys([*row.errors, reason])),
@@ -626,9 +542,7 @@ class PredictionService:
                 name = f"model:{mode}:{horizon}"
                 try:
                     if mode == "swing":
-                        contract = load_strategy_contract(
-                            self._resolve(Path("configs/edge_rebuild_strategy_contract.toml"))
-                        )
+                        contract = load_strategy_contract(self._resolve(Path("configs/edge_rebuild_strategy_contract.toml")))
                         generation = self._edge_swing_generation(
                             route,
                             contract=contract,
@@ -643,9 +557,7 @@ class PredictionService:
                         }
                         if self.data_source == "live":
                             if self.swing_live_input_provider is None:
-                                raise DataReadinessError(
-                                    "swing live-input provider is unavailable"
-                                )
+                                raise DataReadinessError("swing live-input provider is unavailable")
                             inputs = self.swing_live_input_provider.load(
                                 as_of_utc=checked_at,
                                 maximum_bytes=route.max_feature_bytes,
@@ -661,9 +573,7 @@ class PredictionService:
                             }
                         continue
                     if not self.model_context_cache.is_current(mode, horizon, route):
-                        raise DataReadinessError(
-                            "active model context is missing or its pointer changed"
-                        )
+                        raise DataReadinessError("active model context is missing or its pointer changed")
                     context = self.model_context_cache.cached(mode, horizon)
                     if context is None:
                         raise DataReadinessError("active model context is not preloaded")
@@ -680,10 +590,7 @@ class PredictionService:
                     }
                     if self.data_source == "live":
                         _require_bundle_available_at(context, checked_at)
-                        feature_manifest = {
-                            str(key): value
-                            for key, value in context.feature_manifest.items()
-                        }
+                        feature_manifest = {str(key): value for key, value in context.feature_manifest.items()}
                         self.live_feature_store.validate_bound_manifest(
                             cast(Any, mode),
                             feature_manifest,
@@ -692,19 +599,11 @@ class PredictionService:
                         components[f"features:{mode}:{horizon}"] = {
                             "status": "ready",
                             "serving_bundle_id": context.serving_bundle_id,
-                            "generated_at_utc": feature_manifest.get(
-                                "generated_at_utc"
-                            ),
-                            "last_feature_time": feature_manifest.get(
-                                "last_feature_time"
-                            ),
+                            "generated_at_utc": feature_manifest.get("generated_at_utc"),
+                            "last_feature_time": feature_manifest.get("last_feature_time"),
                             "price_feed": feature_manifest.get("price_feed"),
-                            "source_artifact_sha256": feature_manifest.get(
-                                "source_artifact_sha256"
-                            ),
-                            "feature_schema_version": feature_manifest.get(
-                                "feature_schema_version"
-                            ),
+                            "source_artifact_sha256": feature_manifest.get("source_artifact_sha256"),
+                            "feature_schema_version": feature_manifest.get("feature_schema_version"),
                         }
                 except Exception as exc:
                     ready = False
@@ -725,11 +624,7 @@ class PredictionService:
                         checked_at=checked_at,
                     )
                     components[drift_name] = {
-                        "status": (
-                            "ready"
-                            if assessment.actionability == "actionable"
-                            else "not_ready"
-                        ),
+                        "status": ("ready" if assessment.actionability == "actionable" else "not_ready"),
                         **assessment.model_dump(mode="json"),
                     }
                     if assessment.actionability != "actionable":
@@ -829,13 +724,8 @@ class PredictionService:
             horizon,
             route_identity["model_release_id"],
         )
-        if any(
-            getattr(assessment, field) != value
-            for field, value in route_identity.items()
-        ):
-            raise DataReadinessError(
-                "route drift assessment model or policy identity mismatch"
-            )
+        if any(getattr(assessment, field) != value for field, value in route_identity.items()):
+            raise DataReadinessError("route drift assessment model or policy identity mismatch")
         evaluated_at = assessment.evaluated_at_utc.astimezone(UTC)
         if checked_at.astimezone(UTC) - evaluated_at > self.maximum_drift_assessment_age:
             raise DataReadinessError("route drift assessment is stale")
@@ -853,9 +743,7 @@ class PredictionService:
             return self.swing_model_generation_cache.get(
                 self._resolve(route.repository),
                 strategy_contract=contract,
-                attestation_trust_store_path=self._resolve(
-                    route.attestation_trust_store
-                ),
+                attestation_trust_store_path=self._resolve(route.attestation_trust_store),
                 promotion_gate_policy_sha256=route.promotion_gate_policy_sha256,
                 maximum_model_bytes=route.max_model_bytes,
                 estimated_resident_gib=route.estimated_resident_gib,
@@ -903,20 +791,10 @@ class PredictionService:
             warm_count = _int_or_none(row.get("five_minute_bar_count"))
             readiness_by_index[int(row_index)] = self._intraday_readiness(
                 row,
-                (
-                    warm_count
-                    if warm_count is not None
-                    else int(intraday_counts.get(ticker, 0))
-                ),
+                (warm_count if warm_count is not None else int(intraday_counts.get(ticker, 0))),
                 model_status,
             )
-        ready_rows = rows.loc[
-            [
-                index
-                for index, readiness in readiness_by_index.items()
-                if readiness.status == VALID
-            ]
-        ]
+        ready_rows = rows.loc[[index for index, readiness in readiness_by_index.items() if readiness.status == VALID]]
         selected_indexes = set(
             select_intraday_candidates(
                 ready_rows,
@@ -956,13 +834,10 @@ class PredictionService:
                         is_ready
                         and (
                             _float_or_none(row.get(downside_col)) is not None
-                            and float(row[downside_col])
-                            <= prediction_policy.intraday_downside_ceiling
+                            and float(row[downside_col]) <= prediction_policy.intraday_downside_ceiling
                         )
                     ),
-                    selected_for_policy=(
-                        is_ready and row_index in selected_indexes
-                    ),
+                    selected_for_policy=(is_ready and row_index in selected_indexes),
                     close=_float_or_none(row.get("close")),
                     return_15m=_float_or_none(row.get("return_3bar_5m")),
                     relative_volume=_float_or_none(row.get("relative_volume_same_slot_20d_5m")),
@@ -1095,12 +970,7 @@ class PredictionService:
             bar_available = _strict_utc_series(working["bar_available_at_utc"])
             if bool(decision.isna().any() | bar_available.isna().any() | bar_available.gt(decision).any()):
                 raise ValueError("live swing cutoff timestamps are invalid")
-            if bool(
-                working["prediction_cutoff_policy_id"]
-                .astype(str)
-                .ne(SWING_NIGHTLY_CUTOFF.policy_id)
-                .any()
-            ):
+            if bool(working["prediction_cutoff_policy_id"].astype(str).ne(SWING_NIGHTLY_CUTOFF.policy_id).any()):
                 raise ValueError("live swing cutoff policy identity is invalid")
         if request.as_of is None:
             _require_requested_tickers(working, symbols, timeframe=timeframe)
@@ -1167,31 +1037,14 @@ class PredictionService:
             created_at_utc=_optional_str(manifest.get("created_at_utc")),
             training_data_start=_optional_str(dataset.get("first_date")),
             training_data_end=_optional_str(dataset.get("last_date")),
-            label_policy_sha256=_optional_str(
-                manifest.get("dataset_label_config_sha256")
-                or metrics.get("dataset_label_config_sha256")
-            ),
-            label_policy=(
-                dict(extra["label_policy"])
-                if isinstance(extra.get("label_policy"), dict)
-                else None
-            ),
-            execution_policy_sha256=_optional_str(
-                manifest.get("execution_policy_sha256")
-                or metrics.get("execution_policy_sha256")
-            ),
-            prediction_policy_sha256=_optional_str(
-                manifest.get("prediction_policy_sha256")
-                or metrics.get("prediction_policy_sha256")
-            ),
+            label_policy_sha256=_optional_str(manifest.get("dataset_label_config_sha256") or metrics.get("dataset_label_config_sha256")),
+            label_policy=(dict(extra["label_policy"]) if isinstance(extra.get("label_policy"), dict) else None),
+            execution_policy_sha256=_optional_str(manifest.get("execution_policy_sha256") or metrics.get("execution_policy_sha256")),
+            prediction_policy_sha256=_optional_str(manifest.get("prediction_policy_sha256") or metrics.get("prediction_policy_sha256")),
             prediction_policy=(
                 dict(extra["prediction_policy"])
                 if isinstance(extra.get("prediction_policy"), dict)
-                else (
-                    dict(metrics["prediction_policy"])
-                    if isinstance(metrics.get("prediction_policy"), dict)
-                    else None
-                )
+                else (dict(metrics["prediction_policy"]) if isinstance(metrics.get("prediction_policy"), dict) else None)
             ),
         )
 
@@ -1267,9 +1120,7 @@ class PredictionService:
             latest = self._latest_rows(frame)
             for _, row in latest.iterrows():
                 decision = _aware_datetime_or_none(row.get("decision_time_utc"))
-                availability = _aware_datetime_or_none(
-                    row.get("_feature_available_at_utc", row.get("feature_available_at_utc"))
-                )
+                availability = _aware_datetime_or_none(row.get("_feature_available_at_utc", row.get("feature_available_at_utc")))
                 ticker = str(row.get("ticker", "")).upper()
                 if decision is None or availability is None or not ticker:
                     gaps.append(f"{mode} row availability identity is missing")
@@ -1283,9 +1134,7 @@ class PredictionService:
                         view=mode,
                         decision_time_utc=decision,
                         feature_available_at_utc=availability,
-                        canonical_security_id=_optional_str(
-                            row.get("canonical_security_id", row.get("canonical_id"))
-                        ),
+                        canonical_security_id=_optional_str(row.get("canonical_security_id", row.get("canonical_id"))),
                         decision_group_id=_optional_str(row.get("decision_group_id")),
                         session_date_et=_optional_str(row.get("session_date_et")),
                         primary_benchmark=_optional_str(row.get("primary_benchmark")),
@@ -1311,20 +1160,11 @@ class PredictionService:
                         "liquidity_bucket": row.get("liquidity_bucket"),
                         "price_feed": row.get("price_feed"),
                     }
-                    missing_row_identity = sorted(
-                        name
-                        for name, value in required_row_identity.items()
-                        if _optional_str(value) is None
-                    )
-                    if mode == "intraday" and _float_or_none(
-                        row.get("atr_14_price_5m")
-                    ) is None:
+                    missing_row_identity = sorted(name for name, value in required_row_identity.items() if _optional_str(value) is None)
+                    if mode == "intraday" and _float_or_none(row.get("atr_14_price_5m")) is None:
                         missing_row_identity.append("decision_atr")
                     if missing_row_identity:
-                        gaps.append(
-                            f"{mode} maturation row identity is missing: "
-                            f"{', '.join(missing_row_identity)}"
-                        )
+                        gaps.append(f"{mode} maturation row identity is missing: {', '.join(missing_row_identity)}")
                 cutoffs.append(decision)
 
             source = feature_sources[mode]
@@ -1332,9 +1172,7 @@ class PredictionService:
                 feature_artifacts[mode] = FeatureArtifactIdentityV1(
                     mode=mode,
                     artifact_sha256=str(source.artifact_sha256),
-                    source_artifact_sha256=(
-                        str(source.source_artifact_sha256) if _is_sha256(source.source_artifact_sha256) else None
-                    ),
+                    source_artifact_sha256=(str(source.source_artifact_sha256) if _is_sha256(source.source_artifact_sha256) else None),
                     source_artifact_type=source.source_artifact_type,
                     feature_schema_version=source.feature_schema_version,
                 )
@@ -1371,15 +1209,11 @@ class PredictionService:
                 model_bundle_ids[mode] = str(model.serving_bundle_id)
             elif self.data_source == "live":
                 gaps.append(f"{mode} model serving bundle identity is missing")
-            if model.label_policy is None or not _is_sha256(
-                model.label_policy_sha256
-            ):
+            if model.label_policy is None or not _is_sha256(model.label_policy_sha256):
                 gaps.append(f"{mode} model label policy identity is missing")
             if not _is_sha256(model.execution_policy_sha256):
                 gaps.append(f"{mode} execution policy identity is missing")
-            if model.prediction_policy is None or not _is_sha256(
-                model.prediction_policy_sha256
-            ):
+            if model.prediction_policy is None or not _is_sha256(model.prediction_policy_sha256):
                 gaps.append(f"{mode} prediction policy identity is missing")
             else:
                 try:
@@ -1390,27 +1224,17 @@ class PredictionService:
                 except (TypeError, ValueError):
                     gaps.append(f"{mode} prediction policy identity is invalid")
                 else:
-                    prediction_policy_hashes[mode] = str(
-                        model.prediction_policy_sha256
-                    )
+                    prediction_policy_hashes[mode] = str(model.prediction_policy_sha256)
 
         if not cutoffs:
             raise PredictionReadinessError
         if self.data_source == "live":
             for mode in models:
                 if feature_release_ids.get(mode) != model_release_ids.get(mode):
-                    gaps.append(
-                        f"{mode} model and feature release identities conflict"
-                    )
+                    gaps.append(f"{mode} model and feature release identities conflict")
                 if feature_bundle_ids.get(mode) != model_bundle_ids.get(mode):
-                    gaps.append(
-                        f"{mode} model and feature serving bundle identities conflict"
-                    )
-        release_id = (
-            next(iter(model_release_ids.values()))
-            if len(set(model_release_ids.values())) == 1
-            else None
-        )
+                    gaps.append(f"{mode} model and feature serving bundle identities conflict")
+        release_id = next(iter(model_release_ids.values())) if len(set(model_release_ids.values())) == 1 else None
         identity_status = "research_only" if self.data_source == "curated" else ("incomplete" if gaps else "complete")
         return PredictionEvidenceV3(
             request_id=request_id,
@@ -1421,30 +1245,18 @@ class PredictionService:
             release_id=release_id,
             model_release_ids=model_release_ids,
             view_serving_bundle_ids=model_bundle_ids,
-            serving_bundle_sha256=(
-                _serving_bundle_set_sha256(model_bundle_ids)
-                if model_bundle_ids
-                else None
-            ),
+            serving_bundle_sha256=(_serving_bundle_set_sha256(model_bundle_ids) if model_bundle_ids else None),
             model_artifact_sha256=model_hashes,
             source_watermarks=source_watermarks,
-            resolved_horizons={
-                name: info.resolved_horizon for name, info in models.items() if info.resolved_horizon is not None
-            },
+            resolved_horizons={name: info.resolved_horizon for name, info in models.items() if info.resolved_horizon is not None},
             view_prediction_cutoffs_utc={
-                mode: max(
-                    row.decision_time_utc
-                    for row in rows
-                    if row.view == mode
-                )
+                mode: max(row.decision_time_utc for row in rows if row.view == mode)
                 for mode in feature_frames
                 if any(row.view == mode for row in rows)
             },
             view_prediction_policy_sha256=prediction_policy_hashes,
             serving_policy_id=SERVING_POLICY_ID,
-            serving_policy_sha256=_serving_policy_bundle_sha256(
-                prediction_policy_hashes
-            ),
+            serving_policy_sha256=_serving_policy_bundle_sha256(prediction_policy_hashes),
             identity_status=identity_status,
             identity_gaps=sorted(set(gaps)),
         )
@@ -1481,20 +1293,14 @@ class PredictionService:
             context,
             request.as_of or datetime.now(UTC),
         )
-        manifest = {
-            str(key): value for key, value in context.feature_manifest.items()
-        }
+        manifest = {str(key): value for key, value in context.feature_manifest.items()}
         self.live_feature_store.validate_bound_manifest(
             cast(Any, mode),
             manifest,
             as_of=request.as_of,
         )
         watermarks_raw = manifest.get("source_watermarks")
-        watermarks = (
-            {str(key): str(value) for key, value in watermarks_raw.items()}
-            if isinstance(watermarks_raw, dict)
-            else {}
-        )
+        watermarks = {str(key): str(value) for key, value in watermarks_raw.items()} if isinstance(watermarks_raw, dict) else {}
         return _FeatureSource(
             frame=context.feature_frame,
             artifact_sha256=_optional_str(manifest.get("artifact_sha256")),
@@ -1529,12 +1335,7 @@ def _edge_swing_model_info(
 ) -> ModelInfo:
     bundle = generation.bundle
     return ModelInfo(
-        path=str(
-            bundle_root
-            / "generations"
-            / generation.generation_id
-            / bundle.model_artifact_path
-        ),
+        path=str(bundle_root / "generations" / generation.generation_id / bundle.model_artifact_path),
         status=bundle.model_status,
         release_id=bundle.sha256(),
         serving_bundle_id=bundle.sha256(),
@@ -1564,11 +1365,7 @@ def _selected_edge_swing_security_ids(
     hard_maximum_sector_weight: float,
     minimum_distinct_sectors: int,
 ) -> set[str]:
-    eligible = frame.loc[
-        pd.to_numeric(frame["__probability"], errors="coerce").ge(
-            probability_threshold
-        )
-    ]
+    eligible = frame.loc[pd.to_numeric(frame["__probability"], errors="coerce").ge(probability_threshold)]
     selected = select_constrained_swing_portfolio(
         eligible,
         maximum_trades=maximum_trades,
@@ -1593,19 +1390,13 @@ def _edge_swing_predictions(
     live_input_manifest_sha256: str,
     catalyst_authority_sha256: str,
 ) -> list[SwingPrediction]:
-    by_ticker = {
-        str(row["ticker"]).upper(): row
-        for _, row in context.iterrows()
-    }
+    by_ticker = {str(row["ticker"]).upper(): row for _, row in context.iterrows()}
     ranked = context.sort_values(
         ["__probability", "security_id"],
         ascending=[False, True],
         kind="stable",
     )
-    ranks = {
-        str(row["security_id"]): rank
-        for rank, (_, row) in enumerate(ranked.iterrows(), start=1)
-    }
+    ranks = {str(row["security_id"]): rank for rank, (_, row) in enumerate(ranked.iterrows(), start=1)}
     predictions: list[SwingPrediction] = []
     for ticker in request.tickers:
         row = by_ticker.get(ticker)
@@ -1692,12 +1483,8 @@ def _edge_swing_predictions(
                 managed_risk=SwingManagedRiskContext(
                     entry_reference="next_session_open",
                     atr_fraction_of_latest_close=atr_pct,
-                    target_distance_fraction=(
-                        contract.swing.target_atr_multiple * atr_pct
-                    ),
-                    stop_distance_fraction=(
-                        contract.swing.stop_atr_multiple * atr_pct
-                    ),
+                    target_distance_fraction=(contract.swing.target_atr_multiple * atr_pct),
+                    stop_distance_fraction=(contract.swing.stop_atr_multiple * atr_pct),
                     target_atr_multiple=contract.swing.target_atr_multiple,
                     stop_atr_multiple=contract.swing.stop_atr_multiple,
                     maximum_holding_sessions=10,
@@ -1726,9 +1513,7 @@ def _edge_swing_predictions(
                     "promoted_probability_threshold": threshold,
                     "atr_pct_14": atr_pct,
                     "return_20d": _required_edge_float(row, "return_20d"),
-                    "relative_return_20d_vs_spy": _required_edge_float(
-                        row, "rel_return_20d_vs_spy"
-                    ),
+                    "relative_return_20d_vs_spy": _required_edge_float(row, "rel_return_20d_vs_spy"),
                     "decision_time_utc": decision_time.isoformat(),
                     "sector": str(row["sector"]),
                     "primary_benchmark": str(row["primary_benchmark"]),
@@ -1782,11 +1567,7 @@ def _edge_catalyst_confirmation(
     relevance = _required_edge_float(row, "event_relevance_mean_3d")
     latest = _optional_edge_datetime(row.get("latest_event_feature_available_at_utc"))
     decision = _required_edge_datetime(row, "decision_time_utc")
-    minutes = (
-        max(0.0, (decision - latest).total_seconds() / 60.0)
-        if latest is not None
-        else None
-    )
+    minutes = max(0.0, (decision - latest).total_seconds() / 60.0) if latest is not None else None
     if count == 0:
         status, direction = "absent", "none"
     elif sentiment > 0.10:
@@ -1821,9 +1602,7 @@ def _edge_swing_response(
     source_watermarks: dict[str, str],
 ) -> PredictionResponse:
     request_id = str(uuid4())
-    latest = context.sort_values("decision_time_utc", kind="stable").groupby(
-        "ticker", as_index=False
-    ).tail(1)
+    latest = context.sort_values("decision_time_utc", kind="stable").groupby("ticker", as_index=False).tail(1)
     requested = latest.loc[latest["ticker"].astype(str).str.upper().isin(request.tickers)]
     row_evidence = [
         PredictionRowEvidenceV1(
@@ -1948,9 +1727,7 @@ def _serving_policy_bundle_sha256(
         "contract_version": SERVING_POLICY_ID,
         "view_prediction_policy_sha256": dict(sorted(view_policy_hashes.items())),
     }
-    return hashlib.sha256(
-        json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
-    ).hexdigest()
+    return hashlib.sha256(json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
 
 
 def _serving_bundle_set_sha256(view_bundle_ids: Mapping[str, str]) -> str:
@@ -1958,9 +1735,7 @@ def _serving_bundle_set_sha256(view_bundle_ids: Mapping[str, str]) -> str:
         "contract_version": "market_predictor.serving_bundle_set.v1",
         "view_serving_bundle_ids": dict(sorted(view_bundle_ids.items())),
     }
-    return hashlib.sha256(
-        json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
-    ).hexdigest()
+    return hashlib.sha256(json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
 
 
 def _require_requested_tickers(
@@ -1972,10 +1747,7 @@ def _require_requested_tickers(
     available = set(frame["ticker"].astype(str))
     missing = sorted(requested.difference(available))
     if missing:
-        raise ValueError(
-            f"no {timeframe} feature rows found for requested tickers: "
-            f"{', '.join(missing)}"
-        )
+        raise ValueError(f"no {timeframe} feature rows found for requested tickers: {', '.join(missing)}")
 
 
 def _suppress_swing_prediction(row: SwingPrediction, reason: str) -> SwingPrediction:
@@ -1991,9 +1763,7 @@ def _suppress_swing_prediction(row: SwingPrediction, reason: str) -> SwingPredic
             "model_prediction": None,
             "signal": "not_ready",
             "action": "abstain",
-            "abstention_reasons": list(
-                dict.fromkeys([*row.abstention_reasons, reason])
-            ),
+            "abstention_reasons": list(dict.fromkeys([*row.abstention_reasons, reason])),
             "rank": None,
             "selection_eligible": False,
             "selected_for_policy": False,
@@ -2037,48 +1807,18 @@ def _combine_evidence(
     if not evidence_parts:
         raise PredictionReadinessError
     rows = [row for evidence in evidence_parts for row in evidence.row_feature_availability]
-    artifacts = {
-        mode: artifact
-        for evidence in evidence_parts
-        for mode, artifact in evidence.feature_artifacts.items()
-    }
-    model_hashes = {
-        mode: digest
-        for evidence in evidence_parts
-        for mode, digest in evidence.model_artifact_sha256.items()
-    }
-    watermarks = {
-        mode: values
-        for evidence in evidence_parts
-        for mode, values in evidence.source_watermarks.items()
-    }
-    horizons = {
-        mode: horizon
-        for evidence in evidence_parts
-        for mode, horizon in evidence.resolved_horizons.items()
-    }
-    model_release_ids = {
-        mode: release_id
-        for evidence in evidence_parts
-        for mode, release_id in evidence.model_release_ids.items()
-    }
-    serving_bundle_ids = {
-        mode: bundle_id
-        for evidence in evidence_parts
-        for mode, bundle_id in evidence.view_serving_bundle_ids.items()
-    }
+    artifacts = {mode: artifact for evidence in evidence_parts for mode, artifact in evidence.feature_artifacts.items()}
+    model_hashes = {mode: digest for evidence in evidence_parts for mode, digest in evidence.model_artifact_sha256.items()}
+    watermarks = {mode: values for evidence in evidence_parts for mode, values in evidence.source_watermarks.items()}
+    horizons = {mode: horizon for evidence in evidence_parts for mode, horizon in evidence.resolved_horizons.items()}
+    model_release_ids = {mode: release_id for evidence in evidence_parts for mode, release_id in evidence.model_release_ids.items()}
+    serving_bundle_ids = {mode: bundle_id for evidence in evidence_parts for mode, bundle_id in evidence.view_serving_bundle_ids.items()}
     gaps = [gap for evidence in evidence_parts for gap in evidence.identity_gaps]
     prediction_policy_hashes = {
-        mode: digest
-        for evidence in evidence_parts
-        for mode, digest in evidence.view_prediction_policy_sha256.items()
+        mode: digest for evidence in evidence_parts for mode, digest in evidence.view_prediction_policy_sha256.items()
     }
     release_ids = {evidence.release_id for evidence in evidence_parts if evidence.release_id is not None}
-    expected_views = {
-        mode
-        for evidence in evidence_parts
-        for mode in evidence.model_release_ids
-    }
+    expected_views = {mode for evidence in evidence_parts for mode in evidence.model_release_ids}
     if data_source == "live" and set(serving_bundle_ids) != expected_views:
         gaps.append("prediction views do not have complete serving bundle identities")
     if data_source == "curated":
@@ -2096,24 +1836,16 @@ def _combine_evidence(
         release_id=next(iter(release_ids)) if len(release_ids) == 1 else None,
         model_release_ids=model_release_ids,
         view_serving_bundle_ids=serving_bundle_ids,
-        serving_bundle_sha256=(
-            _serving_bundle_set_sha256(serving_bundle_ids)
-            if serving_bundle_ids
-            else None
-        ),
+        serving_bundle_sha256=(_serving_bundle_set_sha256(serving_bundle_ids) if serving_bundle_ids else None),
         model_artifact_sha256=model_hashes,
         source_watermarks=watermarks,
         resolved_horizons=horizons,
         view_prediction_cutoffs_utc={
-            mode: cutoff
-            for evidence in evidence_parts
-            for mode, cutoff in evidence.view_prediction_cutoffs_utc.items()
+            mode: cutoff for evidence in evidence_parts for mode, cutoff in evidence.view_prediction_cutoffs_utc.items()
         },
         view_prediction_policy_sha256=prediction_policy_hashes,
         serving_policy_id=SERVING_POLICY_ID,
-        serving_policy_sha256=_serving_policy_bundle_sha256(
-            prediction_policy_hashes
-        ),
+        serving_policy_sha256=_serving_policy_bundle_sha256(prediction_policy_hashes),
         identity_status=identity_status,
         identity_gaps=sorted(set(gaps)),
     )
@@ -2175,13 +1907,8 @@ def _model_drift_identity(model: ModelInfo) -> dict[str, str]:
         "execution_policy_sha256": model.execution_policy_sha256,
     }
     if any(not _is_sha256(value) for value in values.values()):
-        raise DataReadinessError(
-            "active model identity is incomplete for drift enforcement"
-        )
-    return {
-        field: str(value)
-        for field, value in values.items()
-    }
+        raise DataReadinessError("active model identity is incomplete for drift enforcement")
+    return {field: str(value) for field, value in values.items()}
 
 
 def _drivers(row: pd.Series, columns: list[str]) -> dict[str, float | int | str | None]:

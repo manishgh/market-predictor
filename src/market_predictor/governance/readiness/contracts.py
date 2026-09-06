@@ -1,7 +1,6 @@
-"""Frozen contracts for the ER1 edge-rebuild readiness audit."""
+"""Frozen contracts for prediction-data readiness policy."""
+
 from __future__ import annotations
-
-
 
 import hashlib
 import json
@@ -13,17 +12,22 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from market_predictor.core.errors import DataReadinessError
 
-READINESS_SCHEMA = "edge_rebuild.readiness.v2"
-SWING_STRATEGY_ID = "SWING.SECTOR_RESIDUAL_MOMENTUM.10D.V1"
-INTRADAY_STRATEGY_ID = "INTRADAY.VWAP_EXHAUSTION_REVERSAL.30M.V1"
-INTRADAY_PROXY_STRATEGY_ID = "INTRADAY.VWAP_REVERSION.30M.V1"
+__all__ = [
+    "PredictionDataReadinessConfig",
+    "load_prediction_data_readiness_config",
+]
+
+_READINESS_SCHEMA = "edge_rebuild.readiness.v2"
+_SWING_STRATEGY_ID = "SWING.SECTOR_RESIDUAL_MOMENTUM.10D.V1"
+_INTRADAY_STRATEGY_ID = "INTRADAY.VWAP_EXHAUSTION_REVERSAL.30M.V1"
+_INTRADAY_PROXY_STRATEGY_ID = "INTRADAY.VWAP_REVERSION.30M.V1"
 
 
-class FrozenModel(BaseModel):
+class _FrozenModel(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
 
-class SwingReadinessConfig(FrozenModel):
+class _SwingReadinessConfig(_FrozenModel):
     strategy_id: str
     proposed_horizon_sessions: int = Field(ge=2, le=20)
     non_overlapping_phases: int = Field(ge=2, le=20)
@@ -33,7 +37,7 @@ class SwingReadinessConfig(FrozenModel):
 
     @model_validator(mode="after")
     def validate_swing(self) -> Self:
-        if self.strategy_id != SWING_STRATEGY_ID:
+        if self.strategy_id != _SWING_STRATEGY_ID:
             raise ValueError("swing readiness strategy ID is not frozen")
         if self.proposed_horizon_sessions != 10:
             raise ValueError("swing readiness horizon must be ten sessions")
@@ -42,7 +46,7 @@ class SwingReadinessConfig(FrozenModel):
         return self
 
 
-class IntradayReadinessConfig(FrozenModel):
+class _IntradayReadinessConfig(_FrozenModel):
     strategy_id: str
     proxy_strategy_id: str
     proposed_horizon_minutes: int = Field(ge=5, le=120)
@@ -53,24 +57,20 @@ class IntradayReadinessConfig(FrozenModel):
 
     @model_validator(mode="after")
     def validate_intraday(self) -> Self:
-        if self.strategy_id != INTRADAY_STRATEGY_ID:
+        if self.strategy_id != _INTRADAY_STRATEGY_ID:
             raise ValueError("intraday readiness strategy ID is not frozen")
-        if self.proxy_strategy_id != INTRADAY_PROXY_STRATEGY_ID:
+        if self.proxy_strategy_id != _INTRADAY_PROXY_STRATEGY_ID:
             raise ValueError("intraday readiness proxy strategy ID is not frozen")
         if self.proposed_horizon_minutes != 30:
             raise ValueError("intraday readiness horizon must be thirty minutes")
         if self.required_timeframe != "1Min":
             raise ValueError("intraday exact-path source must use one-minute bars")
-        if (
-            self.required_purged_folds
-            * self.minimum_test_sessions_per_fold
-            > self.minimum_causal_sessions
-        ):
+        if self.required_purged_folds * self.minimum_test_sessions_per_fold > self.minimum_causal_sessions:
             raise ValueError("intraday fold capacity exceeds minimum session history")
         return self
 
 
-class CatalystReadinessConfig(FrozenModel):
+class _CatalystReadinessConfig(_FrozenModel):
     required_source_families: tuple[str, ...]
     required_relation_channels: tuple[str, ...]
     required_fields: tuple[str, ...]
@@ -96,20 +96,22 @@ class CatalystReadinessConfig(FrozenModel):
         return self
 
 
-class EdgeRebuildReadinessConfig(FrozenModel):
+class PredictionDataReadinessConfig(_FrozenModel):
+    """Validated policy governing prediction-data readiness."""
+
     schema_version: str
     required_price_feed: str
     required_adjustment: str
     target_history_sessions: int = Field(ge=1_000)
     maximum_process_memory_gib: float = Field(ge=1, le=5)
     memory_guard_headroom_gib: float = Field(ge=0.5, le=2)
-    swing: SwingReadinessConfig
-    intraday: IntradayReadinessConfig
-    catalyst: CatalystReadinessConfig
+    swing: _SwingReadinessConfig
+    intraday: _IntradayReadinessConfig
+    catalyst: _CatalystReadinessConfig
 
     @model_validator(mode="after")
     def validate_contract(self) -> Self:
-        if self.schema_version != READINESS_SCHEMA:
+        if self.schema_version != _READINESS_SCHEMA:
             raise ValueError("unsupported edge-rebuild readiness schema")
         if self.required_price_feed.strip().lower() != "sip":
             raise ValueError("volume-dependent readiness requires SIP")
@@ -128,18 +130,14 @@ class EdgeRebuildReadinessConfig(FrozenModel):
         return hashlib.sha256(encoded).hexdigest()
 
 
-def load_edge_rebuild_readiness_config(
-    path: Path,
-) -> EdgeRebuildReadinessConfig:
+def load_prediction_data_readiness_config(path: Path) -> PredictionDataReadinessConfig:
+    """Load a readiness policy, failing closed on IO, TOML, or validation errors."""
+
     try:
         raw = tomllib.loads(path.read_text(encoding="utf-8"))
     except (OSError, tomllib.TOMLDecodeError) as exc:
-        raise DataReadinessError(
-            f"edge-rebuild readiness policy is unreadable: {path}"
-        ) from exc
+        raise DataReadinessError(f"edge-rebuild readiness policy is unreadable: {path}") from exc
     try:
-        return EdgeRebuildReadinessConfig.model_validate(raw)
+        return PredictionDataReadinessConfig.model_validate(raw)
     except ValueError as exc:
-        raise DataReadinessError(
-            f"edge-rebuild readiness policy is invalid: {path}"
-        ) from exc
+        raise DataReadinessError(f"edge-rebuild readiness policy is invalid: {path}") from exc

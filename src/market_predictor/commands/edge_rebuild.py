@@ -24,12 +24,6 @@ from market_predictor.catalysts.sec_filings.decision_authority import (
 )
 from market_predictor.config import get_settings
 from market_predictor.core.errors import DataReadinessError
-from market_predictor.edge_rebuild.contracts import (
-    load_edge_rebuild_readiness_config,
-)
-from market_predictor.edge_rebuild.readiness import (
-    run_edge_rebuild_readiness_audit,
-)
 from market_predictor.edge_rebuild.swing_broker_specialists import (
     train_swing_broker_specialists,
 )
@@ -126,9 +120,6 @@ from market_predictor.intraday.evaluation.gates import (
 )
 from market_predictor.intraday.features.bar_only_five_minute import (
     publish_selected_session_five_minute_projection,
-)
-from market_predictor.intraday.specialist_contracts import (
-    load_intraday_specialist_research_config,
 )
 from market_predictor.intraday.training.coordinator import (
     train_intraday_development_candidate,
@@ -1427,12 +1418,8 @@ def register_edge_rebuild_commands(app: typer.Typer, console: Any) -> None:
             five_minute_policy_path=five_minute_policy,
             benchmark_policy_path=benchmark_policy,
             output_directory=out_dir,
-            five_minute_config=load_intraday_history_config(
-                five_minute_policy
-            ),
-            benchmark_config=load_selected_session_benchmark_config(
-                benchmark_policy
-            ),
+            five_minute_config=load_intraday_history_config(five_minute_policy),
+            benchmark_config=load_selected_session_benchmark_config(benchmark_policy),
             source_factory=lambda: AlpacaSource(settings),
             maximum_units_this_run=max_units,
         )
@@ -1645,17 +1632,11 @@ def register_edge_rebuild_commands(app: typer.Typer, console: Any) -> None:
         out_dir: Path = typer.Option(...),
         event_preflight_dir: Path | None = typer.Option(
             None,
-            help=(
-                "Corrected historical event preflight. When supplied, train the "
-                "research-only event-confirmed cohort."
-            ),
+            help=("Corrected historical event preflight. When supplied, train the research-only event-confirmed cohort."),
         ),
         event_subtype: str | None = typer.Option(
             None,
-            help=(
-                "Optional governed analyst subtype: bare_upgrade, bare_downgrade, "
-                "or coverage. Requires --event-preflight-dir."
-            ),
+            help=("Optional governed analyst subtype: bare_upgrade, bare_downgrade, or coverage. Requires --event-preflight-dir."),
         ),
         config_path: Path = typer.Option(
             Path("configs/edge_rebuild_intraday_development.toml"),
@@ -1819,41 +1800,3 @@ def register_edge_rebuild_commands(app: typer.Typer, console: Any) -> None:
                 )
             }
         )
-
-    @app.command("audit-edge-rebuild-readiness")
-    @serialized_heavy_job("audit-edge-rebuild-readiness")
-    def audit_edge_rebuild_readiness(
-        swing_panel_dir: Path = typer.Option(...),
-        swing_candidate_dir: Path = typer.Option(...),
-        swing_promoted_bundle_dir: Path | None = typer.Option(None),
-        intraday_training_dir: Path = typer.Option(...),
-        intraday_collection_dir: Path = typer.Option(...),
-        intraday_coverage_dir: Path = typer.Option(...),
-        catalyst_lineage_dir: Path = typer.Option(...),
-        news_source_dir: Path = typer.Option(...),
-        out_dir: Path = typer.Option(...),
-        policy: Path = typer.Option(Path("configs/edge_rebuild_readiness.toml")),
-        swing_training_policy: Path = typer.Option(Path("configs/edge_rebuild_swing_training.toml")),
-        strategy_contract: Path = typer.Option(Path("configs/edge_rebuild_strategy_contract.toml")),
-        intraday_policy: Path = typer.Option(Path("configs/intraday_specialist_research.toml")),
-    ) -> None:
-        """Audit independent source capacity without fitting a model."""
-
-        result = run_edge_rebuild_readiness_audit(
-            swing_panel_dir=swing_panel_dir,
-            swing_candidate_dir=swing_candidate_dir,
-            swing_promoted_bundle_dir=swing_promoted_bundle_dir,
-            intraday_training_dir=intraday_training_dir,
-            intraday_collection_dir=intraday_collection_dir,
-            intraday_coverage_dir=intraday_coverage_dir,
-            catalyst_lineage_dir=catalyst_lineage_dir,
-            news_source_dir=news_source_dir,
-            out_dir=out_dir,
-            config=load_edge_rebuild_readiness_config(policy),
-            policy_path=policy,
-            swing_training_policy_path=swing_training_policy,
-            strategy_contract_path=strategy_contract,
-            intraday_config=load_intraday_specialist_research_config(intraday_policy),
-            intraday_policy_path=intraday_policy,
-        )
-        console.print(result)

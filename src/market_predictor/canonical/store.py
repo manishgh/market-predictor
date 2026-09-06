@@ -8,11 +8,12 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import pandas as pd
+import pyarrow.parquet as pq
 
 from market_predictor.canonical.audits import CanonicalAuditReport
 from market_predictor.canonical.contracts import CANONICAL_SCHEMA_VERSION
-from market_predictor.locking import file_lock
 from market_predictor.core.errors import DataReadinessError
+from market_predictor.locking import file_lock
 
 CANONICAL_MANIFEST_SCHEMA = "market_data.artifact_manifest.v1"
 
@@ -41,11 +42,7 @@ def write_canonical_artifact(
         audit.raise_for_failure()
     path.parent.mkdir(parents=True, exist_ok=True)
     availability_column = next(
-        (
-            column
-            for column in ("feature_available_at_utc", "available_at_utc", "decision_time_utc")
-            if column in frame.columns
-        ),
+        (column for column in ("feature_available_at_utc", "available_at_utc", "decision_time_utc") if column in frame.columns),
         None,
     )
     availability = (
@@ -111,19 +108,19 @@ def load_canonical_artifact(
     manifest_columns = list(manifest.get("columns", []))
     projected_columns = list(columns) if columns is not None else manifest_columns
     if len(projected_columns) != len(set(projected_columns)):
-        raise DataReadinessError(
-            f"canonical projected columns contain duplicates: {path}"
-        )
-    missing_projection = sorted(
-        set(projected_columns).difference(manifest_columns)
-    )
+        raise DataReadinessError(f"canonical projected columns contain duplicates: {path}")
+    missing_projection = sorted(set(projected_columns).difference(manifest_columns))
     if missing_projection:
-        raise DataReadinessError(
-            "canonical projected columns are absent from the manifest: "
-            f"{missing_projection[:10]}"
-        )
+        raise DataReadinessError(f"canonical projected columns are absent from the manifest: {missing_projection[:10]}")
     frame = pd.read_parquet(path, columns=projected_columns)
-    if len(frame) != int(manifest.get("rows", -1)):
+    expected_rows = int(manifest.get("rows", -1))
+    if not projected_columns:
+        parquet = pq.ParquetFile(path, memory_map=True)  # type: ignore[no-untyped-call]
+        physical_rows = -1 if parquet.metadata is None else int(parquet.metadata.num_rows)
+        if physical_rows != expected_rows:
+            raise DataReadinessError(f"canonical artifact row count does not match manifest: {path}")
+        frame = pd.DataFrame(index=pd.RangeIndex(expected_rows))
+    if len(frame) != expected_rows:
         raise DataReadinessError(f"canonical artifact row count does not match manifest: {path}")
     if list(frame.columns) != projected_columns:
         raise DataReadinessError(f"canonical artifact columns do not match manifest: {path}")
@@ -135,14 +132,10 @@ def canonical_artifact_columns(path: Path) -> tuple[str, ...]:
 
     manifest_path = manifest_path_for(path)
     if not manifest_path.exists():
-        raise FileNotFoundError(
-            f"canonical artifact manifest is missing: {manifest_path}"
-        )
+        raise FileNotFoundError(f"canonical artifact manifest is missing: {manifest_path}")
     loaded = json.loads(manifest_path.read_text(encoding="utf-8"))
     if not isinstance(loaded, dict) or loaded.get("schema") != CANONICAL_MANIFEST_SCHEMA:
-        raise DataReadinessError(
-            f"unsupported canonical manifest schema: {manifest_path}"
-        )
+        raise DataReadinessError(f"unsupported canonical manifest schema: {manifest_path}")
     columns = loaded.get("columns")
     if (
         not isinstance(columns, list)
@@ -150,9 +143,7 @@ def canonical_artifact_columns(path: Path) -> tuple[str, ...]:
         or any(not isinstance(column, str) or not column for column in columns)
         or len(columns) != len(set(columns))
     ):
-        raise DataReadinessError(
-            f"canonical manifest has invalid columns: {manifest_path}"
-        )
+        raise DataReadinessError(f"canonical manifest has invalid columns: {manifest_path}")
     return tuple(columns)
 
 

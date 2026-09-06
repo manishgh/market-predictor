@@ -1,5 +1,6 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
+import json
 import unittest
 from datetime import UTC, datetime
 from pathlib import Path
@@ -36,7 +37,11 @@ from market_predictor.canonical.normalize import (
     canonicalize_events,
     canonicalize_universe_memberships,
 )
-from market_predictor.canonical.store import load_canonical_artifact, write_canonical_artifact
+from market_predictor.canonical.store import (
+    load_canonical_artifact,
+    manifest_path_for,
+    write_canonical_artifact,
+)
 from market_predictor.core.errors import DataReadinessError, SchemaMismatchError
 
 
@@ -585,6 +590,29 @@ class CanonicalJoinAndAuditTests(unittest.TestCase):
             changed.to_parquet(path, index=False)
             with self.assertRaises(DataReadinessError):
                 load_canonical_artifact(path, expected_type="bars")
+
+    def test_empty_projection_preserves_rows_and_detects_manifest_row_mismatch(self) -> None:
+        bars = canonicalize_bars(self._daily_bar("2026-07-21T00:00:00Z"))
+        audit = CanonicalAuditReport(checks=audit_canonical_bars(bars))
+        with TemporaryDirectory() as temp_dir:
+            path = Path(temp_dir) / "bars.parquet"
+            write_canonical_artifact(bars, path, artifact_type="bars", audit=audit)
+
+            projected, _ = load_canonical_artifact(
+                path,
+                expected_type="bars",
+                columns=[],
+            )
+
+            self.assertEqual(list(projected.columns), [])
+            self.assertEqual(len(projected), len(bars))
+
+            sidecar_path = manifest_path_for(path)
+            sidecar = json.loads(sidecar_path.read_text(encoding="utf-8"))
+            sidecar["rows"] = len(bars) + 1
+            sidecar_path.write_text(json.dumps(sidecar), encoding="utf-8")
+            with self.assertRaisesRegex(DataReadinessError, "row count"):
+                load_canonical_artifact(path, expected_type="bars", columns=[])
 
     @staticmethod
     def _daily_bar(session_timestamp: str) -> pd.DataFrame:

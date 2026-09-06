@@ -1,7 +1,6 @@
 """Hash-bound historical catalyst lineage and decision assignment replay."""
+
 from __future__ import annotations
-
-
 
 import gc
 import hashlib
@@ -12,12 +11,16 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import cast
 from uuid import uuid4
 
 import pandas as pd
 
 from market_predictor.canonical.audits import CanonicalAuditCheck, CanonicalAuditReport
 from market_predictor.canonical.reconciliation import (
+    ASSIGNMENT_COLUMNS,
+    ASSIGNMENT_SCHEMA_VERSION,
+    ASSIGNMENT_STATUSES,
     assignment_integrity_summary,
     build_event_assignments,
     reconciliation_sha256,
@@ -29,6 +32,8 @@ from market_predictor.canonical.store import (
     manifest_path_for,
     write_canonical_artifact,
 )
+from market_predictor.core import path_integrity
+from market_predictor.core.errors import DataReadinessError
 from market_predictor.resources import (
     assert_memory_budget,
     memory_audit,
@@ -37,7 +42,6 @@ from market_predictor.resources import (
 from market_predictor.swing.news_source_inventory import (
     build_source_news_shard_inventory,
 )
-from market_predictor.core.errors import DataReadinessError
 
 CATALYST_LINEAGE_REQUEST_SCHEMA = "swing.catalyst_lineage_request.v2"
 CATALYST_LINEAGE_MANIFEST_SCHEMA = "swing.catalyst_lineage_manifest.v2"
@@ -45,8 +49,23 @@ CATALYST_EVENT_SCHEMA = "swing.catalyst_event.v1"
 CATALYST_COVERAGE_SCHEMA = "swing.catalyst_source_coverage.v1"
 FEATURE_INVENTORY_SCHEMA = "swing.catalyst_feature_inventory.v1"
 _EXPECTED_POLICY_SCHEMA = "market_predictor.catalyst_lineage.v1"
-_SUPPORTED_CHANNELS = frozenset(
-    {"direct_issuer", "business_exposure", "sector_context"}
+_SUPPORTED_CHANNELS = frozenset({"direct_issuer", "business_exposure", "sector_context"})
+_TRAINING_ELIGIBLE_CHANNELS = frozenset({"direct_issuer"})
+_RESEARCH_ONLY_CHANNELS = _SUPPORTED_CHANNELS - _TRAINING_ELIGIBLE_CHANNELS
+_FEATURE_INVENTORY_KEYS = frozenset(
+    {
+        "availability_policy",
+        "channel_counts",
+        "coverage_states",
+        "event_artifact_count",
+        "production_ready",
+        "profiles",
+        "request_sha256",
+        "research_only_channels",
+        "schema",
+        "training_contract",
+        "training_eligible_channels",
+    }
 )
 _DECISION_COLUMNS = (
     "ticker",
@@ -89,6 +108,97 @@ CATALYST_EVENT_COLUMNS = (
     "training_exclusion_reason",
     "schema_version",
 )
+CATALYST_COVERAGE_COLUMNS = (
+    "collection_id",
+    "chunk_id",
+    "security_id",
+    "ticker",
+    "source_family",
+    "requested_start_utc",
+    "requested_end_utc",
+    "status",
+    "row_count",
+    "coverage_state",
+    "missingness_known",
+    "zero_event_semantics",
+    "training_eligible",
+    "schema_version",
+)
+
+_REQUEST_KEYS = frozenset(
+    {
+        "schema",
+        "collection_manifest_sha256",
+        "collection_audit_sha256",
+        "attribution_manifest_sha256",
+        "sentiment_manifest_sha256",
+        "decisions_sha256",
+        "source_collections_sha256",
+        "policy_sha256",
+        "excluded_security_ids",
+        "production_ready",
+        "request_sha256",
+    }
+)
+_MANIFEST_KEYS = frozenset(
+    {
+        "schema",
+        "request_sha256",
+        "status",
+        "requested_chunks",
+        "observed_chunks",
+        "skipped_chunks",
+        "failed_chunks",
+        "excluded_security_ids",
+        "source_event_rows",
+        "related_source_events",
+        "relation_rows",
+        "training_eligible_rows",
+        "channel_counts",
+        "assignment_rows",
+        "assignment_status_counts",
+        "coverage",
+        "feature_inventory",
+        "artifacts",
+        "lineage_sha256",
+        "memory",
+        "completed_at_utc",
+        "production_ready",
+    }
+)
+_ARTIFACT_RECORD_KEYS = frozenset(
+    {
+        "chunk_id",
+        "source_event_sha256",
+        "relation_sha256",
+        "sentiment_sha256",
+        "event_path",
+        "event_sha256",
+        "event_rows",
+        "training_eligible_rows",
+        "assignment_path",
+        "assignment_sha256",
+        "assignment_material_sha256",
+        "assignment_rows",
+    }
+)
+_CANONICAL_MANIFEST_KEYS = frozenset(
+    {
+        "schema",
+        "canonical_schema_version",
+        "artifact_type",
+        "artifact_path",
+        "artifact_sha256",
+        "created_at_utc",
+        "rows",
+        "columns",
+        "first_available_at_utc",
+        "last_available_at_utc",
+        "inputs",
+        "audit",
+        "production_ready",
+    }
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -101,6 +211,23 @@ class CatalystLineagePolicy:
     maximum_process_memory_gib: float
     memory_guard_headroom_gib: float
     raw: Mapping[str, object]
+
+
+@dataclass(frozen=True, slots=True)
+class VerifiedCatalystLineage:
+    """Verified metadata for one immutable completed catalyst-lineage bundle."""
+
+    directory: Path
+    manifest: Mapping[str, object]
+    request: Mapping[str, object]
+    feature_inventory: Mapping[str, object]
+    coverage: pd.DataFrame
+    manifest_sha256: str
+    request_sha256: str
+    coverage_sha256: str
+    coverage_manifest_sha256: str
+    feature_inventory_sha256: str
+    lineage_sha256: str
 
 
 def load_catalyst_lineage_policy(path: Path) -> CatalystLineagePolicy:
@@ -117,10 +244,7 @@ def load_catalyst_lineage_policy(path: Path) -> CatalystLineagePolicy:
     raw_windows = raw.get("assignment_windows")
     if not isinstance(raw_windows, dict) or not raw_windows:
         raise DataReadinessError("catalyst lineage policy has no assignment windows")
-    windows = {
-        str(name): pd.Timedelta(str(duration))
-        for name, duration in raw_windows.items()
-    }
+    windows = {str(name): pd.Timedelta(str(duration)) for name, duration in raw_windows.items()}
     if any(duration <= pd.Timedelta(0) for duration in windows.values()):
         raise DataReadinessError("catalyst assignment windows must be positive")
     raw_profiles = raw.get("feature_profiles")
@@ -151,6 +275,307 @@ def load_catalyst_lineage_policy(path: Path) -> CatalystLineagePolicy:
     )
 
 
+def verify_completed_catalyst_lineage(directory: Path) -> VerifiedCatalystLineage:
+    """Verify a completed lineage bundle without loading any artifact columns."""
+
+    root = path_integrity.verify_tree_containment(
+        directory,
+        label="catalyst lineage bundle",
+    )
+    manifest_path = path_integrity.resolve_existing_file_inside(
+        root,
+        "_manifest.json",
+        label="catalyst lineage manifest",
+    )
+    request_path = path_integrity.resolve_existing_file_inside(
+        root,
+        "_request.json",
+        label="catalyst lineage request",
+    )
+    status_path = path_integrity.resolve_existing_file_inside(
+        root,
+        "_status.json",
+        label="catalyst lineage status",
+    )
+    inventory_path = path_integrity.resolve_existing_file_inside(
+        root,
+        "feature_inventory.json",
+        label="catalyst feature inventory",
+    )
+    coverage_path = path_integrity.resolve_existing_file_inside(
+        root,
+        "source_coverage.parquet",
+        label="catalyst source coverage",
+    )
+
+    manifest = _json_object(manifest_path)
+    if set(manifest) != _MANIFEST_KEYS:
+        raise DataReadinessError("catalyst lineage manifest fields do not match the contract")
+    if (
+        manifest.get("schema") != CATALYST_LINEAGE_MANIFEST_SCHEMA
+        or manifest.get("status") != "complete"
+        or manifest.get("failed_chunks") != {}
+        or manifest.get("production_ready") is not False
+    ):
+        raise DataReadinessError(f"catalyst lineage is not a completed research bundle: {root}")
+    status = _json_object(status_path)
+    if status != manifest:
+        raise DataReadinessError("catalyst lineage status and manifest do not match")
+
+    request = _json_object(request_path)
+    if set(request) != _REQUEST_KEYS:
+        raise DataReadinessError("catalyst lineage request fields do not match the contract")
+    request_material = dict(request)
+    embedded_request_sha256 = _verified_sha256(
+        request_material.pop("request_sha256", None),
+        "request_sha256",
+    )
+    if (
+        request_material.get("schema") != CATALYST_LINEAGE_REQUEST_SCHEMA
+        or request_material.get("production_ready") is not False
+        or _json_sha256(request_material) != embedded_request_sha256
+        or manifest.get("request_sha256") != embedded_request_sha256
+    ):
+        raise DataReadinessError("catalyst lineage request hash binding does not verify")
+    for key in (
+        "collection_manifest_sha256",
+        "collection_audit_sha256",
+        "attribution_manifest_sha256",
+        "sentiment_manifest_sha256",
+        "decisions_sha256",
+        "source_collections_sha256",
+        "policy_sha256",
+    ):
+        _verified_sha256(request_material.get(key), key)
+
+    inventory_record = _verified_mapping(manifest.get("feature_inventory"), "feature_inventory")
+    if set(inventory_record) != {"path", "sha256"}:
+        raise DataReadinessError("catalyst feature inventory record is malformed")
+    if Path(_verified_text(inventory_record.get("path"), "feature_inventory.path")).resolve() != inventory_path:
+        raise DataReadinessError("catalyst feature inventory path does not verify")
+    feature_inventory_sha256 = _verified_sha256(
+        inventory_record.get("sha256"),
+        "feature_inventory.sha256",
+    )
+    inventory = _json_object(inventory_path)
+    if (
+        file_sha256(inventory_path) != feature_inventory_sha256
+        or inventory.get("schema") != FEATURE_INVENTORY_SCHEMA
+        or inventory.get("request_sha256") != embedded_request_sha256
+        or inventory.get("production_ready") is not False
+    ):
+        raise DataReadinessError("catalyst feature inventory identity does not verify")
+    _verify_feature_inventory(inventory, manifest=manifest)
+
+    coverage_record = _verified_mapping(manifest.get("coverage"), "coverage")
+    if set(coverage_record) != {"path", "sha256", "rows", "states"}:
+        raise DataReadinessError("catalyst coverage record is malformed")
+    if Path(_verified_text(coverage_record.get("path"), "coverage.path")).resolve() != coverage_path:
+        raise DataReadinessError("catalyst coverage path does not verify")
+    coverage_sha256 = _verified_sha256(coverage_record.get("sha256"), "coverage.sha256")
+    coverage_frame, coverage_manifest = _load_canonical_identity(
+        coverage_path,
+        expected_type="catalyst_source_coverage",
+    )
+    del coverage_frame
+    _verify_canonical_manifest(
+        coverage_manifest,
+        path=coverage_path,
+        artifact_sha256=coverage_sha256,
+        rows=_verified_nonnegative_int(coverage_record.get("rows"), "coverage.rows"),
+        expected_inputs={
+            "catalyst_lineage_request_sha256": embedded_request_sha256,
+            "source_collections_sha256": _verified_sha256(
+                request_material.get("source_collections_sha256"),
+                "source_collections_sha256",
+            ),
+        },
+    )
+    records = _verified_lineage_records(manifest)
+    requested_chunks = _verified_nonnegative_int(manifest.get("requested_chunks"), "requested_chunks")
+    observed_chunks = _verified_nonnegative_int(manifest.get("observed_chunks"), "observed_chunks")
+    if requested_chunks != observed_chunks or observed_chunks != len(records):
+        raise DataReadinessError("catalyst lineage chunk counts do not reconcile")
+
+    expected_files = {
+        "_manifest.json",
+        "_request.json",
+        "_status.json",
+        "feature_inventory.json",
+        "source_coverage.parquet",
+        "source_coverage.parquet.manifest.json",
+    }
+    for record in records:
+        chunk_id = _verified_chunk_id(record.get("chunk_id"))
+        expected_files.update(
+            {
+                f"events/{chunk_id}.parquet",
+                f"events/{chunk_id}.parquet.manifest.json",
+                f"assignments/{chunk_id}.parquet",
+                f"assignments/{chunk_id}.parquet.manifest.json",
+            }
+        )
+    _verify_exact_lineage_inventory(root, expected_files)
+    initial_file_hashes = {relative: file_sha256(root / Path(relative)) for relative in sorted(expected_files)}
+    coverage, projected_coverage_manifest = load_canonical_artifact(
+        coverage_path,
+        expected_type="catalyst_source_coverage",
+        allow_research=True,
+        columns=CATALYST_COVERAGE_COLUMNS,
+    )
+    if projected_coverage_manifest != coverage_manifest:
+        raise DataReadinessError("catalyst coverage sidecar changed during projected load")
+    _verify_coverage_semantics(coverage, manifest=manifest)
+    event_rows = 0
+    eligible_rows = 0
+    assignment_rows = 0
+    observed_channel_counts = {channel: 0 for channel in sorted(_SUPPORTED_CHANNELS)}
+    observed_assignment_status_counts: dict[str, int] = {}
+    eligible_channels = tuple(str(value) for value in cast(list[object], inventory["training_eligible_channels"]))
+    decisions_sha256 = _verified_sha256(request_material.get("decisions_sha256"), "decisions_sha256")
+    for record in records:
+        chunk_id = _verified_chunk_id(record.get("chunk_id"))
+        event_relative = f"events/{chunk_id}.parquet"
+        assignment_relative = f"assignments/{chunk_id}.parquet"
+        event_path = path_integrity.resolve_existing_file_inside(
+            root,
+            event_relative,
+            label=f"catalyst event artifact {chunk_id}",
+        )
+        assignment_path = path_integrity.resolve_existing_file_inside(
+            root,
+            assignment_relative,
+            label=f"catalyst assignment artifact {chunk_id}",
+        )
+        if Path(_verified_text(record.get("event_path"), "event_path")).resolve() != event_path:
+            raise DataReadinessError(f"catalyst event path mismatch: {chunk_id}")
+        if Path(_verified_text(record.get("assignment_path"), "assignment_path")).resolve() != assignment_path:
+            raise DataReadinessError(f"catalyst assignment path mismatch: {chunk_id}")
+
+        source_event_sha256 = _verified_sha256(record.get("source_event_sha256"), "source_event_sha256")
+        relation_sha256 = _verified_sha256(record.get("relation_sha256"), "relation_sha256")
+        sentiment_sha256 = _verified_sha256(record.get("sentiment_sha256"), "sentiment_sha256")
+        event_sha256 = _verified_sha256(record.get("event_sha256"), "event_sha256")
+        assignment_sha256 = _verified_sha256(record.get("assignment_sha256"), "assignment_sha256")
+        assignment_material_sha256 = _verified_sha256(
+            record.get("assignment_material_sha256"),
+            "assignment_material_sha256",
+        )
+        chunk_event_rows = _verified_nonnegative_int(record.get("event_rows"), "event_rows")
+        chunk_eligible_rows = _verified_nonnegative_int(
+            record.get("training_eligible_rows"),
+            "training_eligible_rows",
+        )
+        chunk_assignment_rows = _verified_nonnegative_int(
+            record.get("assignment_rows"),
+            "assignment_rows",
+        )
+        if chunk_eligible_rows > chunk_event_rows:
+            raise DataReadinessError(f"catalyst eligible rows exceed event rows: {chunk_id}")
+        common_inputs = {
+            "catalyst_lineage_request_sha256": embedded_request_sha256,
+            "source_event_sha256": source_event_sha256,
+            "relation_sha256": relation_sha256,
+            "sentiment_sha256": sentiment_sha256,
+            "decisions_sha256": decisions_sha256,
+        }
+        event_frame, event_manifest = _load_canonical_identity(
+            event_path,
+            expected_type="catalyst_events",
+            columns=CATALYST_EVENT_COLUMNS,
+        )
+        _verify_canonical_manifest(
+            event_manifest,
+            path=event_path,
+            artifact_sha256=event_sha256,
+            rows=chunk_event_rows,
+            expected_inputs=common_inputs,
+        )
+        chunk_channel_counts = _verify_event_semantics(
+            event_frame,
+            eligible_channels=eligible_channels,
+        )
+        if int(_strict_bool_values(event_frame["training_eligible"], "event training eligibility").sum()) != chunk_eligible_rows:
+            raise DataReadinessError(f"catalyst eligible event count differs: {chunk_id}")
+        assignment_frame, assignment_manifest = _load_canonical_identity(
+            assignment_path,
+            expected_type="catalyst_event_assignments",
+            columns=ASSIGNMENT_COLUMNS,
+        )
+        _verify_canonical_manifest(
+            assignment_manifest,
+            path=assignment_path,
+            artifact_sha256=assignment_sha256,
+            rows=chunk_assignment_rows,
+            expected_inputs={
+                **common_inputs,
+                "catalyst_events_sha256": event_sha256,
+                "assignment_sha256": assignment_material_sha256,
+            },
+        )
+        chunk_assignment_counts = _verify_assignment_semantics(
+            assignment_frame,
+            event_ids=set(event_frame["event_id"].astype(str)),
+            expected_material_sha256=assignment_material_sha256,
+        )
+        for channel, count in chunk_channel_counts.items():
+            observed_channel_counts[channel] += count
+        for status_name, count in chunk_assignment_counts.items():
+            observed_assignment_status_counts[status_name] = observed_assignment_status_counts.get(status_name, 0) + count
+        del event_frame, assignment_frame
+        event_rows += chunk_event_rows
+        eligible_rows += chunk_eligible_rows
+        assignment_rows += chunk_assignment_rows
+
+    if (
+        event_rows != _verified_nonnegative_int(manifest.get("relation_rows"), "relation_rows")
+        or eligible_rows != _verified_nonnegative_int(manifest.get("training_eligible_rows"), "training_eligible_rows")
+        or assignment_rows != _verified_nonnegative_int(manifest.get("assignment_rows"), "assignment_rows")
+        or inventory.get("event_artifact_count") != len(records)
+    ):
+        raise DataReadinessError("catalyst lineage aggregate counts do not reconcile")
+    if observed_channel_counts != _verified_count_mapping(manifest.get("channel_counts"), "channel_counts"):
+        raise DataReadinessError("catalyst lineage channel counts do not reconcile")
+    if observed_assignment_status_counts != _verified_count_mapping(
+        manifest.get("assignment_status_counts"),
+        "assignment_status_counts",
+    ):
+        raise DataReadinessError("catalyst lineage assignment status counts do not reconcile")
+
+    lineage_sha256 = _verified_sha256(manifest.get("lineage_sha256"), "lineage_sha256")
+    lineage_material = {
+        "request": request_material,
+        "coverage_sha256": coverage_sha256,
+        "artifacts": records,
+        "feature_inventory": inventory,
+    }
+    if _json_sha256(lineage_material) != lineage_sha256:
+        raise DataReadinessError("catalyst lineage hash does not verify")
+
+    if _json_object(manifest_path) != manifest or _json_object(request_path) != request:
+        raise DataReadinessError("catalyst lineage metadata changed during verification")
+    if _json_object(status_path) != status or _json_object(inventory_path) != inventory:
+        raise DataReadinessError("catalyst lineage metadata changed during verification")
+    for relative, observed_sha256 in initial_file_hashes.items():
+        if file_sha256(root / Path(relative)) != observed_sha256:
+            raise DataReadinessError("catalyst lineage artifact changed during verification")
+
+    coverage_manifest_path = manifest_path_for(coverage_path)
+    return VerifiedCatalystLineage(
+        directory=root,
+        manifest=manifest,
+        request=request,
+        feature_inventory=inventory,
+        coverage=coverage,
+        manifest_sha256=file_sha256(manifest_path),
+        request_sha256=embedded_request_sha256,
+        coverage_sha256=coverage_sha256,
+        coverage_manifest_sha256=file_sha256(coverage_manifest_path),
+        feature_inventory_sha256=feature_inventory_sha256,
+        lineage_sha256=lineage_sha256,
+    )
+
+
 def build_catalyst_lineage(
     *,
     collection_dir: Path,
@@ -172,16 +597,10 @@ def build_catalyst_lineage(
     attribution = _complete_manifest(attribution_manifest_path, "event attribution")
     sentiment = _complete_manifest(sentiment_manifest_path, "event sentiment")
     collection_audit = _json_object(collection_audit_path)
-    if (
-        not bool(collection_audit.get("passed"))
-        or collection_audit.get("request_sha256") != collection.get("request_sha256")
-    ):
+    if not bool(collection_audit.get("passed")) or collection_audit.get("request_sha256") != collection.get("request_sha256"):
         raise DataReadinessError("catalyst lineage requires a passed collection audit")
     excluded = _validated_exclusions(collection_audit, attribution, sentiment)
-    source_inventory = {
-        str(record["chunk_id"]): record
-        for record in build_source_news_shard_inventory(collection_dir, collection)
-    }
+    source_inventory = {str(record["chunk_id"]): record for record in build_source_news_shard_inventory(collection_dir, collection)}
     source_records = _records_by_chunk(collection, "news collection")
     relation_records = _records_by_chunk(attribution, "event attribution")
     sentiment_records = _records_by_chunk(sentiment, "event sentiment")
@@ -191,16 +610,12 @@ def build_catalyst_lineage(
         expected_type="source_collections",
         allow_research=True,
     )
-    if (
-        str(source_collection_manifest.get("artifact_sha256", ""))
-        != str(collection.get("source_collections_sha256", ""))
-        or bool(source_collection_manifest.get("production_ready"))
+    if str(source_collection_manifest.get("artifact_sha256", "")) != str(collection.get("source_collections_sha256", "")) or bool(
+        source_collection_manifest.get("production_ready")
     ):
         raise DataReadinessError("collection source-ledger identity is invalid")
     eligible_chunk_ids = sorted(
-        chunk_id
-        for chunk_id, record in source_records.items()
-        if str(record.get("security_id", "")) not in excluded
+        chunk_id for chunk_id, record in source_records.items() if str(record.get("security_id", "")) not in excluded
     )
     if set(relation_records) != set(eligible_chunk_ids):
         raise DataReadinessError("event attribution chunk inventory does not match eligible news chunks")
@@ -221,10 +636,7 @@ def build_catalyst_lineage(
         columns=_DECISION_COLUMNS,
     )
     decisions["security_id"] = decisions["security_id"].astype(str).str.strip()
-    decision_indices = {
-        str(security_id): indices
-        for security_id, indices in decisions.groupby("security_id", sort=False).indices.items()
-    }
+    decision_indices = {str(security_id): indices for security_id, indices in decisions.groupby("security_id", sort=False).indices.items()}
     request = {
         "schema": CATALYST_LINEAGE_REQUEST_SCHEMA,
         "collection_manifest_sha256": file_sha256(collection_manifest_path),
@@ -334,15 +746,9 @@ def build_catalyst_lineage(
                 direct = event_frame.loc[event_frame["training_eligible"].astype(bool)].copy()
                 target_security_ids = direct["security_id"].astype(str).unique()
                 parts = [
-                    decisions.iloc[decision_indices[security_id]]
-                    for security_id in target_security_ids
-                    if security_id in decision_indices
+                    decisions.iloc[decision_indices[security_id]] for security_id in target_security_ids if security_id in decision_indices
                 ]
-                decision_part = (
-                    pd.concat(parts, ignore_index=True)
-                    if parts
-                    else decisions.iloc[0:0].copy()
-                )
+                decision_part = pd.concat(parts, ignore_index=True) if parts else decisions.iloc[0:0].copy()
                 assignments = build_event_assignments(
                     decision_part,
                     direct,
@@ -416,9 +822,7 @@ def build_catalyst_lineage(
             for channel, count in event_frame["relation_channel"].value_counts().items():
                 channel_counts[str(channel)] += int(count)
             for status, count in assignments["status"].value_counts().items():
-                assignment_status_counts[str(status)] = (
-                    assignment_status_counts.get(str(status), 0) + int(count)
-                )
+                assignment_status_counts[str(status)] = assignment_status_counts.get(str(status), 0) + int(count)
             observed.append(record)
             _progress(
                 progress,
@@ -463,11 +867,7 @@ def build_catalyst_lineage(
     )
     inventory_path = out_dir / "feature_inventory.json"
     _atomic_json(inventory_path, inventory)
-    status = (
-        "complete"
-        if not failures and len(observed) == len(eligible_chunk_ids)
-        else "incomplete"
-    )
+    status = "complete" if not failures and len(observed) == len(eligible_chunk_ids) else "incomplete"
     result: dict[str, object] = {
         "schema": CATALYST_LINEAGE_MANIFEST_SCHEMA,
         "request_sha256": request_sha256,
@@ -480,24 +880,15 @@ def build_catalyst_lineage(
         "source_event_rows": _required_int(sentiment, "total_rows"),
         "related_source_events": len(source_event_ids),
         "relation_rows": sum(_required_int(record, "event_rows") for record in observed),
-        "training_eligible_rows": sum(
-            _required_int(record, "training_eligible_rows")
-            for record in observed
-        ),
+        "training_eligible_rows": sum(_required_int(record, "training_eligible_rows") for record in observed),
         "channel_counts": channel_counts,
-        "assignment_rows": sum(
-            _required_int(record, "assignment_rows")
-            for record in observed
-        ),
+        "assignment_rows": sum(_required_int(record, "assignment_rows") for record in observed),
         "assignment_status_counts": dict(sorted(assignment_status_counts.items())),
         "coverage": {
             "path": str(coverage_path.resolve()),
             "sha256": str(coverage_manifest["artifact_sha256"]),
             "rows": len(coverage),
-            "states": {
-                str(key): int(value)
-                for key, value in coverage["coverage_state"].value_counts().sort_index().items()
-            },
+            "states": {str(key): int(value) for key, value in coverage["coverage_state"].value_counts().sort_index().items()},
         },
         "feature_inventory": {
             "path": str(inventory_path.resolve()),
@@ -695,9 +1086,7 @@ def _coverage_frame(
     output.loc[complete & has_relation & has_sentiment, "coverage_state"] = "observed_complete"
     output.loc[empty, "coverage_state"] = "observed_empty"
     output.loc[blind, "coverage_state"] = "coverage_blindspot"
-    output["missingness_known"] = output["coverage_state"].isin(
-        {"observed_complete", "observed_empty"}
-    )
+    output["missingness_known"] = output["coverage_state"].isin({"observed_complete", "observed_empty"})
     output["zero_event_semantics"] = output["coverage_state"].map(
         {
             "observed_complete": "observed_history",
@@ -732,10 +1121,7 @@ def _catalyst_event_audit(
         failures += int((available < relation_available).sum())
         failures += int((available < sentiment_available).sum())
         failures += int(
-            (
-                frame["training_eligible"].astype(bool)
-                != frame["relation_channel"].astype(str).isin(policy.training_eligible_channels)
-            ).sum()
+            (frame["training_eligible"].astype(bool) != frame["relation_channel"].astype(str).isin(policy.training_eligible_channels)).sum()
         )
     return _audit_report(
         "catalyst_events",
@@ -757,12 +1143,7 @@ def _assignment_audit(
         decision_time = _strict_utc(assigned["decision_time_utc"], "assigned decision time")
         failures += int((event_available > decision_time).sum())
         age = decision_time - event_available
-        failures += int(
-            (
-                age.dt.total_seconds()
-                > pd.to_numeric(assigned["window_seconds"], errors="coerce")
-            ).sum()
-        )
+        failures += int((age.dt.total_seconds() > pd.to_numeric(assigned["window_seconds"], errors="coerce")).sum())
     return _audit_report(
         "catalyst_event_assignments",
         failures,
@@ -773,12 +1154,7 @@ def _assignment_audit(
 
 def _coverage_audit(frame: pd.DataFrame) -> CanonicalAuditReport:
     failures = int(frame["coverage_state"].eq("failed_or_unobserved").sum())
-    failures += int(
-        (
-            frame["training_eligible"].astype(bool)
-            & ~frame["missingness_known"].astype(bool)
-        ).sum()
-    )
+    failures += int((frame["training_eligible"].astype(bool) & ~frame["missingness_known"].astype(bool)).sum())
     return _audit_report(
         "catalyst_source_coverage",
         failures,
@@ -816,13 +1192,7 @@ def _feature_inventory(
 ) -> dict[str, object]:
     windows = list(policy.assignment_windows)
     profiles = {
-        name: sorted(
-            {
-                template.format(window=window)
-                for template in templates
-                for window in windows
-            }
-        )
+        name: sorted({template.format(window=window) for template in templates for window in windows})
         for name, templates in policy.feature_profiles.items()
     }
     return {
@@ -833,14 +1203,10 @@ def _feature_inventory(
         "research_only_channels": list(policy.research_only_channels),
         "availability_policy": policy.availability_policy,
         "channel_counts": dict(channel_counts),
-        "coverage_states": {
-            str(key): int(value)
-            for key, value in coverage["coverage_state"].value_counts().sort_index().items()
-        },
+        "coverage_states": {str(key): int(value) for key, value in coverage["coverage_state"].value_counts().sort_index().items()},
         "event_artifact_count": len(event_records),
         "training_contract": (
-            "Only direct-issuer rows from source-complete windows may produce "
-            "catalyst-only or technical-plus-catalyst features."
+            "Only direct-issuer rows from source-complete windows may produce catalyst-only or technical-plus-catalyst features."
         ),
         "production_ready": False,
     }
@@ -895,16 +1261,8 @@ def _load_existing_chunk(
     event_audit.raise_for_failure()
     direct = events.loc[events["training_eligible"].astype(bool)]
     target_security_ids = direct["security_id"].astype(str).unique()
-    parts = [
-        decisions.iloc[decision_indices[security_id]]
-        for security_id in target_security_ids
-        if security_id in decision_indices
-    ]
-    decision_part = (
-        pd.concat(parts, ignore_index=True)
-        if parts
-        else decisions.iloc[0:0].copy()
-    )
+    parts = [decisions.iloc[decision_indices[security_id]] for security_id in target_security_ids if security_id in decision_indices]
+    decision_part = pd.concat(parts, ignore_index=True) if parts else decisions.iloc[0:0].copy()
     integrity = assignment_integrity_summary(
         decision_part,
         direct,
@@ -1056,10 +1414,7 @@ def _reconcile_sentiment_inventory(
     ].copy()
     if bool(source_rows["chunk_id"].astype(str).duplicated().any()):
         raise DataReadinessError("source collection inventory has duplicate chunk IDs")
-    source_by_chunk = {
-        str(row["chunk_id"]): row
-        for row in source_rows.to_dict(orient="records")
-    }
+    source_by_chunk = {str(row["chunk_id"]): row for row in source_rows.to_dict(orient="records")}
     for chunk_id in extras:
         source = source_by_chunk.get(chunk_id)
         sentiment = records[chunk_id]
@@ -1073,10 +1428,8 @@ def _reconcile_sentiment_inventory(
             or _required_int(source, "row_count") != 0
             or _required_int(sentiment, "rows") != 0
             or str(sentiment.get("security_id", "")) != str(source["security_id"])
-            or str(sentiment.get("ticker", "")).upper()
-            != str(source.get("ticker", "")).upper()
-            or _required_text(sentiment, "source_event_artifact_sha256")
-            != _required_text(source_evidence, "sha256")
+            or str(sentiment.get("ticker", "")).upper() != str(source.get("ticker", "")).upper()
+            or _required_text(sentiment, "source_event_artifact_sha256") != _required_text(source_evidence, "sha256")
         ):
             raise DataReadinessError("sentiment chunk inventory does not match eligible news chunks")
         _validate_empty_sentiment_artifact(
@@ -1186,6 +1539,289 @@ def _required_text_from_manifest_input(
     return value
 
 
+def _verified_mapping(value: object, name: str) -> dict[str, object]:
+    if not isinstance(value, dict):
+        raise DataReadinessError(f"catalyst lineage {name} must be an object")
+    return {str(key): item for key, item in value.items()}
+
+
+def _verified_text(value: object, name: str) -> str:
+    if not isinstance(value, str) or not value.strip():
+        raise DataReadinessError(f"catalyst lineage {name} must be non-empty text")
+    return value
+
+
+def _verified_sha256(value: object, name: str) -> str:
+    text = _verified_text(value, name)
+    if len(text) != 64 or any(character not in "0123456789abcdef" for character in text):
+        raise DataReadinessError(f"catalyst lineage {name} must be a lowercase SHA-256")
+    return text
+
+
+def _verified_nonnegative_int(value: object, name: str) -> int:
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        raise DataReadinessError(f"catalyst lineage {name} must be a nonnegative integer")
+    return value
+
+
+def _verified_chunk_id(value: object) -> str:
+    chunk_id = _verified_text(value, "chunk_id")
+    if Path(chunk_id).name != chunk_id or chunk_id in {".", ".."}:
+        raise DataReadinessError("catalyst lineage chunk_id is unsafe")
+    return chunk_id
+
+
+def _verified_lineage_records(manifest: Mapping[str, object]) -> list[dict[str, object]]:
+    raw_records = manifest.get("artifacts")
+    if not isinstance(raw_records, list):
+        raise DataReadinessError("catalyst lineage artifacts must be a list")
+    records: list[dict[str, object]] = []
+    chunk_ids: set[str] = set()
+    for raw_record in raw_records:
+        record = _verified_mapping(raw_record, "artifact record")
+        if set(record) != _ARTIFACT_RECORD_KEYS:
+            raise DataReadinessError("catalyst lineage artifact record fields do not match the contract")
+        chunk_id = _verified_chunk_id(record.get("chunk_id"))
+        if chunk_id in chunk_ids:
+            raise DataReadinessError("catalyst lineage contains duplicate chunk IDs")
+        chunk_ids.add(chunk_id)
+        records.append(record)
+    return sorted(records, key=lambda record: str(record["chunk_id"]))
+
+
+def _load_canonical_identity(
+    path: Path,
+    *,
+    expected_type: str,
+    columns: tuple[str, ...] = (),
+) -> tuple[pd.DataFrame, dict[str, object]]:
+    return load_canonical_artifact(
+        path,
+        expected_type=expected_type,
+        allow_research=True,
+        columns=columns,
+    )
+
+
+def _verify_feature_inventory(
+    inventory: Mapping[str, object],
+    *,
+    manifest: Mapping[str, object],
+) -> None:
+    if set(inventory) != _FEATURE_INVENTORY_KEYS:
+        raise DataReadinessError("catalyst feature inventory fields differ")
+    eligible = inventory.get("training_eligible_channels")
+    research_only = inventory.get("research_only_channels")
+    if not isinstance(eligible, list) or not isinstance(research_only, list):
+        raise DataReadinessError("catalyst feature inventory channel policy is malformed")
+    eligible_set = {str(value) for value in eligible}
+    research_set = {str(value) for value in research_only}
+    if (
+        eligible_set != _TRAINING_ELIGIBLE_CHANNELS
+        or research_set != _RESEARCH_ONLY_CHANNELS
+        or eligible_set.intersection(research_set)
+        or eligible_set.union(research_set) != _SUPPORTED_CHANNELS
+    ):
+        raise DataReadinessError("catalyst feature inventory channel policy differs")
+    availability = inventory.get("availability_policy")
+    if not isinstance(availability, str) or not availability.strip():
+        raise DataReadinessError("catalyst feature inventory availability policy is invalid")
+    if _verified_count_mapping(inventory.get("channel_counts"), "inventory channel_counts") != _verified_count_mapping(
+        manifest.get("channel_counts"),
+        "channel_counts",
+    ):
+        raise DataReadinessError("catalyst feature inventory channel counts differ")
+    coverage_record = _verified_mapping(manifest.get("coverage"), "coverage")
+    if _verified_count_mapping(inventory.get("coverage_states"), "inventory coverage_states") != _verified_count_mapping(
+        coverage_record.get("states"),
+        "coverage states",
+    ):
+        raise DataReadinessError("catalyst feature inventory coverage states differ")
+    profiles = inventory.get("profiles")
+    if not isinstance(profiles, dict) or set(profiles) != {"catalyst_only", "technical_plus_catalyst"}:
+        raise DataReadinessError("catalyst feature inventory profiles differ")
+
+
+def _verify_coverage_semantics(
+    coverage: pd.DataFrame,
+    *,
+    manifest: Mapping[str, object],
+) -> None:
+    if tuple(coverage.columns) != CATALYST_COVERAGE_COLUMNS:
+        raise DataReadinessError("catalyst coverage columns differ")
+    if coverage["chunk_id"].astype(str).duplicated().any():
+        raise DataReadinessError("catalyst coverage contains duplicate chunk identities")
+    states = coverage["coverage_state"].astype(str)
+    allowed_states = {
+        "observed_complete",
+        "observed_empty",
+        "coverage_blindspot",
+        "failed_or_unobserved",
+    }
+    if not states.isin(allowed_states).all():
+        raise DataReadinessError("catalyst coverage contains an unsupported state")
+    known = _strict_bool_values(coverage["missingness_known"], "coverage missingness")
+    eligible = _strict_bool_values(coverage["training_eligible"], "coverage training eligibility")
+    if not eligible.eq(known).all():
+        raise DataReadinessError("catalyst coverage eligibility contradicts missingness")
+    status = coverage["status"].astype(str)
+    row_count = pd.to_numeric(coverage["row_count"], errors="coerce")
+    if row_count.isna().any() or row_count.lt(0).any() or row_count.mod(1).ne(0).any():
+        raise DataReadinessError("catalyst coverage row counts are invalid")
+    complete = states.eq("observed_complete")
+    empty = states.eq("observed_empty")
+    unknown = ~(complete | empty)
+    if (
+        (~status.loc[complete].eq("observed")).any()
+        or (~status.loc[empty].eq("observed_empty")).any()
+        or row_count.loc[empty].ne(0).any()
+        or (~known.loc[complete | empty]).any()
+        or known.loc[unknown].any()
+    ):
+        raise DataReadinessError("catalyst coverage state semantics do not reconcile")
+    if not coverage["schema_version"].astype(str).eq(CATALYST_COVERAGE_SCHEMA).all():
+        raise DataReadinessError("catalyst coverage schema differs")
+    coverage_record = _verified_mapping(manifest.get("coverage"), "coverage")
+    expected_states = _verified_count_mapping(coverage_record.get("states"), "coverage states")
+    observed_states = {
+        str(key): int(value)
+        for key, value in states.value_counts().sort_index().items()
+    }
+    if observed_states != expected_states:
+        raise DataReadinessError("catalyst coverage state counts do not reconcile")
+
+
+def _verify_event_semantics(
+    events: pd.DataFrame,
+    *,
+    eligible_channels: tuple[str, ...],
+) -> dict[str, int]:
+    if tuple(events.columns) != CATALYST_EVENT_COLUMNS:
+        raise DataReadinessError("catalyst event columns differ")
+    event_ids = events["event_id"].astype(str)
+    if event_ids.str.strip().eq("").any() or event_ids.duplicated().any():
+        raise DataReadinessError("catalyst events have invalid identities")
+    channels = events["relation_channel"].astype(str)
+    if not channels.isin(_SUPPORTED_CHANNELS).all():
+        raise DataReadinessError("catalyst events contain unsupported relation channels")
+    eligible = _strict_bool_values(events["training_eligible"], "event training eligibility")
+    if not eligible.eq(channels.isin(eligible_channels)).all():
+        raise DataReadinessError("catalyst event eligibility contradicts its relation channel")
+    published = _strict_utc(events["published_at_utc"], "event publication")
+    event_available = _strict_utc(events["event_available_at_utc"], "event availability")
+    relation_available = _strict_utc(events["relation_feature_available_at_utc"], "relation availability")
+    sentiment_available = _strict_utc(events["sentiment_feature_available_at_utc"], "sentiment availability")
+    feature_available = _strict_utc(events["feature_available_at_utc"], "feature availability")
+    expected_feature_available = pd.concat(
+        [relation_available, sentiment_available],
+        axis=1,
+    ).max(axis=1)
+    if (
+        published.gt(event_available).any()
+        or relation_available.lt(event_available).any()
+        or sentiment_available.lt(event_available).any()
+        or not feature_available.eq(expected_feature_available).all()
+    ):
+        raise DataReadinessError("catalyst event availability is not causal")
+    if not events["schema_version"].astype(str).eq(CATALYST_EVENT_SCHEMA).all():
+        raise DataReadinessError("catalyst event schema differs")
+    return {
+        str(channel): int(count)
+        for channel, count in channels.value_counts().sort_index().items()
+    }
+
+
+def _verify_assignment_semantics(
+    assignments: pd.DataFrame,
+    *,
+    event_ids: set[str],
+    expected_material_sha256: str,
+) -> dict[str, int]:
+    if tuple(assignments.columns) != ASSIGNMENT_COLUMNS:
+        raise DataReadinessError("catalyst assignment columns differ")
+    assignment_ids = assignments["assignment_id"].astype(str)
+    if assignment_ids.str.strip().eq("").any() or assignment_ids.duplicated().any():
+        raise DataReadinessError("catalyst assignments have invalid identities")
+    statuses = assignments["status"].astype(str)
+    if not statuses.isin(ASSIGNMENT_STATUSES).all():
+        raise DataReadinessError("catalyst assignments contain an unsupported status")
+    if not set(assignments["event_id"].astype(str)).issubset(event_ids):
+        raise DataReadinessError("catalyst assignment references an unrelated event")
+    if not assignments["schema_version"].astype(str).eq(ASSIGNMENT_SCHEMA_VERSION).all():
+        raise DataReadinessError("catalyst assignment schema differs")
+    assigned = assignments.loc[statuses.eq("assigned")]
+    if not assigned.empty:
+        available = _strict_utc(assigned["feature_available_at_utc"], "assigned event availability")
+        decision = _strict_utc(assigned["decision_time_utc"], "assigned decision time")
+        window_seconds = pd.to_numeric(assigned["window_seconds"], errors="coerce")
+        age_seconds = (decision - available).dt.total_seconds()
+        if (
+            assigned["decision_id"].fillna("").astype(str).str.strip().eq("").any()
+            or assigned["window_name"].fillna("").astype(str).str.strip().eq("").any()
+            or window_seconds.isna().any()
+            or window_seconds.le(0).any()
+            or age_seconds.lt(0).any()
+            or age_seconds.gt(window_seconds).any()
+        ):
+            raise DataReadinessError("catalyst assignment violates its causal window")
+    if reconciliation_sha256(assignments) != expected_material_sha256:
+        raise DataReadinessError("catalyst assignment material hash does not reconcile")
+    return {
+        str(status): int(count)
+        for status, count in statuses.value_counts().sort_index().items()
+    }
+
+
+def _strict_bool_values(values: pd.Series, label: str) -> pd.Series:
+    if values.dtype == bool:
+        return values
+    normalized = values.astype(str).str.strip().str.lower()
+    if not normalized.isin(("true", "false", "1", "0")).all():
+        raise DataReadinessError(f"catalyst {label} contains a non-canonical Boolean")
+    return normalized.isin(("true", "1"))
+
+
+def _verified_count_mapping(value: object, name: str) -> dict[str, int]:
+    raw = _verified_mapping(value, name)
+    return {
+        str(key): _verified_nonnegative_int(count, f"{name}.{key}")
+        for key, count in raw.items()
+    }
+
+
+def _verify_canonical_manifest(
+    manifest: Mapping[str, object],
+    *,
+    path: Path,
+    artifact_sha256: str,
+    rows: int,
+    expected_inputs: Mapping[str, str],
+) -> None:
+    if set(manifest) != _CANONICAL_MANIFEST_KEYS:
+        raise DataReadinessError(f"canonical sidecar fields do not match the contract: {path}")
+    inputs = _verified_mapping(manifest.get("inputs"), "canonical inputs")
+    if (
+        Path(_verified_text(manifest.get("artifact_path"), "artifact_path")).resolve() != path
+        or manifest.get("artifact_sha256") != artifact_sha256
+        or manifest.get("rows") != rows
+        or manifest.get("production_ready") is not False
+        or inputs != dict(expected_inputs)
+        or file_sha256(path) != artifact_sha256
+    ):
+        raise DataReadinessError(f"canonical artifact or sidecar identity does not verify: {path}")
+
+
+def _verify_exact_lineage_inventory(root: Path, expected_files: set[str]) -> None:
+    expected_with_locks = {
+        *expected_files,
+        *(f"{relative}.lock" for relative in expected_files if relative.endswith(".parquet")),
+    }
+    actual_files = {path.relative_to(root).as_posix() for path in root.rglob("*") if path.is_file()}
+    actual_directories = {path.relative_to(root).as_posix() for path in root.rglob("*") if path.is_dir()}
+    if actual_files != expected_with_locks or actual_directories != {"events", "assignments"}:
+        raise DataReadinessError("catalyst lineage bundle inventory does not match its manifest")
+
+
 def _write_or_validate_request(
     path: Path,
     request: Mapping[str, object],
@@ -1208,7 +1844,25 @@ def _progress(
 
 
 def _json_object(path: Path) -> dict[str, object]:
-    loaded = json.loads(path.read_text(encoding="utf-8"))
+    def reject_constant(value: str) -> object:
+        raise ValueError(f"non-finite JSON constant {value}")
+
+    def reject_duplicates(pairs: list[tuple[str, object]]) -> dict[str, object]:
+        result: dict[str, object] = {}
+        for key, value in pairs:
+            if key in result:
+                raise ValueError(f"duplicate JSON key {key}")
+            result[key] = value
+        return result
+
+    try:
+        loaded = json.loads(
+            path.read_text(encoding="utf-8"),
+            object_pairs_hook=reject_duplicates,
+            parse_constant=reject_constant,
+        )
+    except (OSError, UnicodeError, json.JSONDecodeError, ValueError) as exc:
+        raise DataReadinessError(f"JSON artifact is invalid: {path}") from exc
     if not isinstance(loaded, dict):
         raise DataReadinessError(f"JSON artifact must contain an object: {path}")
     return {str(key): value for key, value in loaded.items()}
@@ -1216,7 +1870,12 @@ def _json_object(path: Path) -> dict[str, object]:
 
 def _json_sha256(value: object) -> str:
     return hashlib.sha256(
-        json.dumps(value, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        json.dumps(
+            value,
+            sort_keys=True,
+            separators=(",", ":"),
+            allow_nan=False,
+        ).encode("utf-8")
     ).hexdigest()
 
 
@@ -1225,7 +1884,7 @@ def _atomic_json(path: Path, payload: Mapping[str, object]) -> None:
     temporary = path.with_name(f".{path.name}.{uuid4().hex}.tmp")
     try:
         temporary.write_text(
-            json.dumps(payload, indent=2, sort_keys=True),
+            json.dumps(payload, indent=2, sort_keys=True, allow_nan=False),
             encoding="utf-8",
         )
         os.replace(temporary, path)

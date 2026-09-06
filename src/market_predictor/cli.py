@@ -24,6 +24,7 @@ from market_predictor.commands.intraday_specialists import (
     register_intraday_specialist_commands,
 )
 from market_predictor.commands.market_context import collect_gdelt_market_context_events
+from market_predictor.commands.readiness import register_readiness_commands
 from market_predictor.commands.strategy_governance import (
     register_strategy_governance_commands,
 )
@@ -64,6 +65,7 @@ register_swing_collection_commands(app, console)
 register_swing_research_commands(app, console)
 register_intraday_model_commands(app, console)
 register_intraday_specialist_commands(app, console)
+register_readiness_commands(app, console)
 register_v3_data_commands(app, console)
 register_v3_feature_commands(app, console)
 register_v3_evaluation_commands(app, console)
@@ -707,8 +709,6 @@ def verify_events(
     console.print(report.to_record())
 
 
-
-
 @app.command("export-ohlcv-artifacts")
 def export_ohlcv_artifacts(
     tickers: str | None = typer.Option(None, help="Comma-separated symbols. Defaults to configured swing universe."),
@@ -1099,5 +1099,6 @@ def build_market_context_from_proxies(
     pd.DataFrame(summary).to_csv(summary_path, index=False)
     console.print({"rows": len(combined), "out": str(out), "summary": str(summary_path)})
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     app()

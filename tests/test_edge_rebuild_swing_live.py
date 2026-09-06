@@ -15,10 +15,7 @@ from market_predictor.canonical.reconciliation import (
 )
 from market_predictor.canonical.store import file_sha256
 from market_predictor.core.errors import DataReadinessError
-from market_predictor.edge_rebuild.serving import (
-    canonical_payload_sha256,
-    validate_batch_live_feature_parity,
-)
+from market_predictor.edge_rebuild.serving import validate_batch_live_feature_parity
 from market_predictor.edge_rebuild.swing_features import (
     SWING_CATALYST_FEATURE_PROFILE,
     SWING_FEATURE_PROFILE,
@@ -35,6 +32,9 @@ from market_predictor.edge_rebuild.swing_live import (
     FileSwingLiveInputProvider,
     SwingLiveFeatureFrames,
     build_live_swing_features,
+)
+from market_predictor.governance.promotion.bundle_contracts import (
+    canonical_payload_sha256,
 )
 from market_predictor.modeling.strategy_contract import (
     StrategyContract,
@@ -254,9 +254,19 @@ def test_production_sized_projected_live_input_stays_below_four_gib(
     frame.to_parquet(path, index=False)
     del frame
     columns = (
-        "ticker", "timeframe", "bar_start_utc", "bar_end_utc",
-        "available_at_utc", "open", "high", "low", "close", "volume",
-        "price_feed", "adjustment", "schema_version",
+        "ticker",
+        "timeframe",
+        "bar_start_utc",
+        "bar_end_utc",
+        "available_at_utc",
+        "open",
+        "high",
+        "low",
+        "close",
+        "volume",
+        "price_feed",
+        "adjustment",
+        "schema_version",
     )
     loaded, _, observed_rows = live_module._read_projected_parquet(  # noqa: SLF001
         tmp_path,
@@ -534,9 +544,7 @@ def test_file_live_input_provider_verifies_atomic_manifest(tmp_path: Path) -> No
         "files": files,
         "catalyst_authority_directory": "catalyst",
         "catalyst_authority_sha256": file_sha256(catalyst / "_authority.json"),
-        "source_watermarks": {
-            key: DECISION_TIME.isoformat() for key in SWING_LIVE_REQUIRED_WATERMARKS
-        },
+        "source_watermarks": {key: DECISION_TIME.isoformat() for key in SWING_LIVE_REQUIRED_WATERMARKS},
     }
     manifest_path = generation_staging / "_manifest.json"
     manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
@@ -565,9 +573,7 @@ def test_file_live_input_provider_verifies_atomic_manifest(tmp_path: Path) -> No
     )
 
     assert loaded.generation_id == generation_id
-    assert loaded.catalyst_authority_sha256 == file_sha256(
-        generation / "catalyst" / "_authority.json"
-    )
+    assert loaded.catalyst_authority_sha256 == file_sha256(generation / "catalyst" / "_authority.json")
     with pytest.raises(DataReadinessError, match="aggregate input limit|row limit"):
         FileSwingLiveInputProvider(root).load(
             as_of_utc=AS_OF.to_pydatetime(),

@@ -16,9 +16,6 @@ from market_predictor.canonical.store import file_sha256
 from market_predictor.core.errors import DataReadinessError
 from market_predictor.edge_rebuild.serving import (
     LoadedSwingModelGeneration,
-    canonical_payload_sha256,
-    ordered_values_sha256,
-    validate_promoted_bundle,
 )
 from market_predictor.edge_rebuild.swing_features import (
     SWING_FEATURE_PANEL_SCHEMA,
@@ -31,6 +28,11 @@ from market_predictor.edge_rebuild.swing_live import (
     SwingLiveInputs,
 )
 from market_predictor.edge_rebuild.swing_training import MODEL_SCHEMA
+from market_predictor.governance.promotion.bundle_contracts import (
+    canonical_payload_sha256,
+    ordered_values_sha256,
+    validate_promoted_bundle,
+)
 from market_predictor.modeling.strategy_contract import load_strategy_contract
 from market_predictor.prediction_contracts import PredictionRequest
 from market_predictor.prediction_service import PredictionService, ServingRoute
@@ -84,9 +86,7 @@ class _Inputs:
             manifest_path=Path("unused-manifest.json"),
             manifest_sha256="d" * 64,
             generated_at_utc=NOW,
-            source_watermarks={
-                key: DECISION.isoformat() for key in SWING_LIVE_REQUIRED_WATERMARKS
-            },
+            source_watermarks={key: DECISION.isoformat() for key in SWING_LIVE_REQUIRED_WATERMARKS},
             generation_id="e" * 64,
             pointer_sha256="f" * 64,
         )
@@ -123,9 +123,7 @@ def test_promoted_ten_session_swing_api_returns_human_contract(
     features = swing_model_feature_columns(contract=contract, catalyst=False)
     bundle_root = tmp_path / "models" / "swing"
     model_path = bundle_root / "model" / "model.joblib"
-    evidence_path = model_path.with_suffix(
-        model_path.suffix + ".promotion.attestation.json"
-    )
+    evidence_path = model_path.with_suffix(model_path.suffix + ".promotion.attestation.json")
     model_path.parent.mkdir(parents=True)
     model_payload = {
         "schema": MODEL_SCHEMA,
@@ -180,9 +178,7 @@ def test_promoted_ten_session_swing_api_returns_human_contract(
         "global_source_families": ["alpaca"],
         "global_source_families_sha256": ordered_values_sha256(("alpaca",)),
     }
-    (bundle_root / "bundle.json").write_text(
-        json.dumps(bundle), encoding="utf-8"
-    )
+    (bundle_root / "bundle.json").write_text(json.dumps(bundle), encoding="utf-8")
     promoted_bundle = validate_promoted_bundle(
         bundle,
         strategy_contract=contract,
@@ -203,7 +199,7 @@ def test_promoted_ten_session_swing_api_returns_human_contract(
     )
     monkeypatch.setattr(service_module, "build_live_swing_features", lambda *_args, **_kwargs: live)
     monkeypatch.setattr(
-        "market_predictor.edge_rebuild.serving.verify_promotion_attestation",
+        "market_predictor.governance.promotion.bundle_verification.verify_promotion_attestation",
         lambda *_args, **_kwargs: {
             "attestation_id": attestation_id,
             "promoted_at_utc": "2026-07-08T20:00:00+00:00",

@@ -4,6 +4,8 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from typing import cast
+from unittest.mock import patch
 
 import pandas as pd
 
@@ -21,8 +23,13 @@ from market_predictor.catalysts.issuer_events.attribution import (
 )
 from market_predictor.core.errors import DataReadinessError
 from market_predictor.swing.catalyst_lineage import (
+    CATALYST_COVERAGE_COLUMNS,
     _reconcile_sentiment_inventory,
+    _verify_assignment_semantics,
+    _verify_coverage_semantics,
+    _verify_feature_inventory,
     build_catalyst_lineage,
+    verify_completed_catalyst_lineage,
 )
 
 
@@ -75,15 +82,195 @@ class SwingCatalystLineageTests(unittest.TestCase):
                 allow_research=True,
             )
             self.assertEqual(coverage["coverage_state"].tolist(), ["observed_complete"])
-            inventory = json.loads(
-                (fixture.output / "feature_inventory.json").read_text(
-                    encoding="utf-8"
-                )
-            )
+            inventory = json.loads((fixture.output / "feature_inventory.json").read_text(encoding="utf-8"))
             self.assertIn("catalyst_only", inventory["profiles"])
             self.assertIn("technical_plus_catalyst", inventory["profiles"])
             with self.assertRaisesRegex(DataReadinessError, "immutable"):
                 fixture.build()
+
+    def test_verifies_complete_bundle_with_bounded_semantic_projections(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            fixture = _Fixture(Path(temporary))
+            fixture.publish()
+            result = fixture.build()
+
+            with patch(
+                "market_predictor.swing.catalyst_lineage.pd.read_parquet",
+                wraps=pd.read_parquet,
+            ) as reader:
+                verified = verify_completed_catalyst_lineage(fixture.output)
+
+            coverage_record = cast(dict[str, object], result["coverage"])
+            self.assertEqual(verified.manifest, result)
+            self.assertEqual(verified.request_sha256, result["request_sha256"])
+            self.assertEqual(verified.coverage_sha256, coverage_record["sha256"])
+            self.assertEqual(verified.lineage_sha256, result["lineage_sha256"])
+            self.assertEqual(tuple(verified.coverage.columns), CATALYST_COVERAGE_COLUMNS)
+            self.assertEqual(len(verified.coverage), 1)
+            projections = [call.kwargs["columns"] for call in reader.call_args_list]
+            self.assertEqual(reader.call_count, 4)
+            self.assertEqual(projections.count([]), 1)
+            self.assertIn(list(CATALYST_COVERAGE_COLUMNS), projections)
+
+    def test_verifier_rejects_request_hash_mismatch(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            fixture = _completed_fixture(Path(temporary))
+            request_path = fixture.output / "_request.json"
+            request = json.loads(request_path.read_text(encoding="utf-8"))
+            request["policy_sha256"] = "0" * 64
+            request_path.write_text(json.dumps(request), encoding="utf-8")
+
+            with self.assertRaisesRegex(DataReadinessError, "request hash binding"):
+                verify_completed_catalyst_lineage(fixture.output)
+
+    def test_verifier_rejects_duplicate_json_keys(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            fixture = _completed_fixture(Path(temporary))
+            request_path = fixture.output / "_request.json"
+            raw = request_path.read_text(encoding="utf-8").rstrip()
+            request_path.write_text(
+                raw[:-1] + ',"request_sha256":"' + "0" * 64 + '"}',
+                encoding="utf-8",
+            )
+
+            with self.assertRaisesRegex(DataReadinessError, "JSON artifact is invalid"):
+                verify_completed_catalyst_lineage(fixture.output)
+
+    def test_verifier_rejects_nonfinite_json(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            fixture = _completed_fixture(Path(temporary))
+            for name in ("_manifest.json", "_status.json"):
+                path = fixture.output / name
+                payload = json.loads(path.read_text(encoding="utf-8"))
+                payload["memory"]["peak_working_set_gib"] = float("nan")
+                path.write_text(json.dumps(payload, allow_nan=True), encoding="utf-8")
+
+            with self.assertRaisesRegex(DataReadinessError, "JSON artifact is invalid"):
+                verify_completed_catalyst_lineage(fixture.output)
+
+    def test_verifier_rejects_feature_inventory_tamper(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            fixture = _completed_fixture(Path(temporary))
+            inventory_path = fixture.output / "feature_inventory.json"
+            inventory = json.loads(inventory_path.read_text(encoding="utf-8"))
+            inventory["event_artifact_count"] = 99
+            inventory_path.write_text(json.dumps(inventory), encoding="utf-8")
+
+            with self.assertRaisesRegex(DataReadinessError, "feature inventory identity"):
+                verify_completed_catalyst_lineage(fixture.output)
+
+    def test_verifier_rejects_coverage_artifact_tamper(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            fixture = _completed_fixture(Path(temporary))
+            with (fixture.output / "source_coverage.parquet").open("ab") as handle:
+                handle.write(b"tampered")
+
+            with self.assertRaisesRegex(DataReadinessError, "integrity check failed"):
+                verify_completed_catalyst_lineage(fixture.output)
+
+    def test_feature_inventory_rejects_overlapping_channel_policy(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            fixture = _completed_fixture(Path(temporary))
+            inventory = json.loads(
+                (fixture.output / "feature_inventory.json").read_text(encoding="utf-8")
+            )
+            manifest = json.loads(
+                (fixture.output / "_manifest.json").read_text(encoding="utf-8")
+            )
+            inventory["training_eligible_channels"].append("business_exposure")
+
+            with self.assertRaisesRegex(DataReadinessError, "channel policy differs"):
+                _verify_feature_inventory(inventory, manifest=manifest)
+
+    def test_coverage_semantics_reject_unknown_missingness_as_eligible(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            fixture = _completed_fixture(Path(temporary))
+            coverage, _ = load_canonical_artifact(
+                fixture.output / "source_coverage.parquet",
+                expected_type="catalyst_source_coverage",
+                allow_research=True,
+            )
+            manifest = json.loads((fixture.output / "_manifest.json").read_text(encoding="utf-8"))
+            coverage.loc[0, "missingness_known"] = False
+
+            with self.assertRaisesRegex(DataReadinessError, "contradicts missingness"):
+                _verify_coverage_semantics(coverage, manifest=manifest)
+
+    def test_coverage_semantics_reconciles_manifest_state_counts(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            fixture = _completed_fixture(Path(temporary))
+            coverage, _ = load_canonical_artifact(
+                fixture.output / "source_coverage.parquet",
+                expected_type="catalyst_source_coverage",
+                allow_research=True,
+            )
+            manifest = json.loads((fixture.output / "_manifest.json").read_text(encoding="utf-8"))
+            manifest["coverage"]["states"] = {"observed_complete": 2}
+
+            with self.assertRaisesRegex(DataReadinessError, "state counts"):
+                _verify_coverage_semantics(coverage, manifest=manifest)
+
+    def test_assignment_semantics_reject_future_information(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            fixture = _completed_fixture(Path(temporary))
+            assignments, _ = load_canonical_artifact(
+                fixture.output / "assignments" / "chunk-1.parquet",
+                expected_type="catalyst_event_assignments",
+                allow_research=True,
+            )
+            events, _ = load_canonical_artifact(
+                fixture.output / "events" / "chunk-1.parquet",
+                expected_type="catalyst_events",
+                allow_research=True,
+            )
+            assignments.loc[:, "decision_time_utc"] = pd.Timestamp("2025-01-02T13:00:00Z")
+
+            with self.assertRaisesRegex(DataReadinessError, "causal window"):
+                _verify_assignment_semantics(
+                    assignments,
+                    event_ids=set(events["event_id"].astype(str)),
+                    expected_material_sha256="0" * 64,
+                )
+
+    def test_verifier_rejects_event_artifact_tamper(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            fixture = _completed_fixture(Path(temporary))
+            with (fixture.output / "events" / "chunk-1.parquet").open("ab") as handle:
+                handle.write(b"tampered")
+
+            with self.assertRaisesRegex(DataReadinessError, "integrity check failed"):
+                verify_completed_catalyst_lineage(fixture.output)
+
+    def test_verifier_rejects_assignment_sidecar_identity_tamper(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            fixture = _completed_fixture(Path(temporary))
+            sidecar_path = fixture.output / "assignments" / "chunk-1.parquet.manifest.json"
+            sidecar = json.loads(sidecar_path.read_text(encoding="utf-8"))
+            sidecar["inputs"]["catalyst_events_sha256"] = "0" * 64
+            sidecar_path.write_text(json.dumps(sidecar), encoding="utf-8")
+
+            with self.assertRaisesRegex(DataReadinessError, "sidecar identity"):
+                verify_completed_catalyst_lineage(fixture.output)
+
+    def test_verifier_rejects_unexpected_artifact(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            fixture = _completed_fixture(Path(temporary))
+            (fixture.output / "unexpected.json").write_text("{}", encoding="utf-8")
+
+            with self.assertRaisesRegex(DataReadinessError, "inventory does not match"):
+                verify_completed_catalyst_lineage(fixture.output)
+
+    def test_verifier_recomputes_lineage_hash(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            fixture = _completed_fixture(Path(temporary))
+            for name in ("_manifest.json", "_status.json"):
+                path = fixture.output / name
+                payload = json.loads(path.read_text(encoding="utf-8"))
+                payload["lineage_sha256"] = "0" * 64
+                path.write_text(json.dumps(payload), encoding="utf-8")
+
+            with self.assertRaisesRegex(DataReadinessError, "lineage hash does not verify"):
+                verify_completed_catalyst_lineage(fixture.output)
 
     def test_missing_sentiment_fails_chunk_reconciliation(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -93,22 +280,20 @@ class SwingCatalystLineageTests(unittest.TestCase):
             result = fixture.build()
 
             self.assertEqual(result["status"], "incomplete")
-            self.assertIn("sentiment event inventory mismatch", result["failed_chunks"]["chunk-1"])
+            failures = cast(dict[str, str], result["failed_chunks"])
+            self.assertIn("sentiment event inventory mismatch", failures["chunk-1"])
             self.assertFalse((fixture.output / "_manifest.json").exists())
 
     def test_backdated_relation_fails_chunk_reconciliation(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             fixture = _Fixture(Path(temporary))
-            fixture.publish(
-                relation_feature_available_at=pd.Timestamp(
-                    "2025-01-02T13:59:00Z"
-                )
-            )
+            fixture.publish(relation_feature_available_at=pd.Timestamp("2025-01-02T13:59:00Z"))
 
             result = fixture.build()
 
             self.assertEqual(result["status"], "incomplete")
-            self.assertIn("backdated availability", result["failed_chunks"]["chunk-1"])
+            failures = cast(dict[str, str], result["failed_chunks"])
+            self.assertIn("backdated availability", failures["chunk-1"])
 
     def test_zero_row_sentiment_for_observed_empty_source_is_ignored(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -126,7 +311,7 @@ class SwingCatalystLineageTests(unittest.TestCase):
                 },
                 production_ready=False,
             )
-            records = {
+            records: dict[str, dict[str, object]] = {
                 "observed": {"rows": 2},
                 "empty": {
                     "path": str(empty_path),
@@ -152,9 +337,7 @@ class SwingCatalystLineageTests(unittest.TestCase):
                 eligible_chunk_ids={"observed"},
                 source_collections=source_collections,
                 excluded_security_ids=set(),
-                source_inventory={
-                    "empty": {"source_empty": True, "sha256": "empty-source-sha"}
-                },
+                source_inventory={"empty": {"source_empty": True, "sha256": "empty-source-sha"}},
                 sentiment_dir=sentiment_dir,
                 sentiment_request_sha256="sentiment-request",
             )
@@ -178,9 +361,7 @@ class SwingCatalystLineageTests(unittest.TestCase):
                 eligible_chunk_ids={"observed"},
                 source_collections=source_collections,
                 excluded_security_ids=set(),
-                source_inventory={
-                    "extra": {"source_empty": True, "sha256": "empty-source-sha"}
-                },
+                source_inventory={"extra": {"source_empty": True, "sha256": "empty-source-sha"}},
                 sentiment_dir=Path("sentiment"),
                 sentiment_request_sha256="sentiment-request",
             )
@@ -219,7 +400,7 @@ class SwingCatalystLineageTests(unittest.TestCase):
                     "row_count": [2, 0],
                 }
             )
-            cases = (
+            cases: tuple[tuple[str, dict[str, object], str, set[str]], ...] = (
                 ("artifact hash", {"sha256": "0" * 64}, "sentiment-request", set()),
                 ("security", {"security_id": "security:other"}, "sentiment-request", set()),
                 (
@@ -294,9 +475,7 @@ class SwingCatalystLineageTests(unittest.TestCase):
                         }
                     ),
                     excluded_security_ids=set(),
-                    source_inventory={
-                        "empty": {"source_empty": True, "sha256": "empty-source-sha"}
-                    },
+                    source_inventory={"empty": {"source_empty": True, "sha256": "empty-source-sha"}},
                     sentiment_dir=sentiment_dir,
                     sentiment_request_sha256="sentiment-request",
                 )
@@ -323,6 +502,13 @@ class SwingCatalystLineageTests(unittest.TestCase):
 
             with self.assertRaisesRegex(DataReadinessError, "passed collection audit"):
                 fixture.build()
+
+
+def _completed_fixture(root: Path) -> _Fixture:
+    fixture = _Fixture(root)
+    fixture.publish()
+    fixture.build()
+    return fixture
 
 
 class _Fixture:
@@ -367,9 +553,7 @@ class _Fixture:
                     "production_ready": False,
                     "request_sha256": "collection-request",
                     "source_collections_path": str(source_collections_path),
-                    "source_collections_sha256": source_collections_manifest[
-                        "artifact_sha256"
-                    ],
+                    "source_collections_sha256": source_collections_manifest["artifact_sha256"],
                     "artifacts": [
                         {
                             "chunk_id": "chunk-1",
@@ -413,10 +597,7 @@ class _Fixture:
 
         relation_path = self.attribution / "relations" / "chunk-1.parquet"
         relation_manifest = write_canonical_artifact(
-            _relations(
-                relation_feature_available_at
-                or pd.Timestamp("2025-01-02T14:00:00Z")
-            ),
+            _relations(relation_feature_available_at or pd.Timestamp("2025-01-02T14:00:00Z")),
             relation_path,
             artifact_type="event_security_relations",
             audit=_audit(1),
@@ -448,9 +629,7 @@ class _Fixture:
             "event-unrelated",
         ]
         sentiment_path = self.sentiment / "sentiment" / "chunk-1.parquet"
-        sentiment_frame = _sentiments().loc[
-            lambda frame: frame["event_id"].isin(selected_sentiment_ids)
-        ].reset_index(drop=True)
+        sentiment_frame = _sentiments().loc[lambda frame: frame["event_id"].isin(selected_sentiment_ids)].reset_index(drop=True)
         sentiment_manifest = write_canonical_artifact(
             sentiment_frame,
             sentiment_path,
@@ -539,12 +718,8 @@ def _relations(feature_available_at: pd.Timestamp) -> pd.DataFrame:
             "matched_business_labels": ["[]"],
             "matched_label_types": ["[]"],
             "matched_terms": ['["$wdc"]'],
-            "event_feature_available_at_utc": [
-                pd.Timestamp("2025-01-02T14:00:00Z")
-            ],
-            "identity_available_at_utc": [
-                pd.Timestamp("2024-01-01T00:00:00Z")
-            ],
+            "event_feature_available_at_utc": [pd.Timestamp("2025-01-02T14:00:00Z")],
+            "identity_available_at_utc": [pd.Timestamp("2024-01-01T00:00:00Z")],
             "label_available_at_utc": [pd.NaT],
             "feature_available_at_utc": [feature_available_at],
             "attribution_policy_version": [ATTRIBUTION_POLICY_VERSION],
@@ -569,9 +744,7 @@ def _sentiments() -> pd.DataFrame:
             "source_family": ["alpaca", "alpaca"],
             "published_at_utc": times,
             "event_available_at_utc": times,
-            "research_feature_available_at_utc": [
-                value + pd.Timedelta(minutes=5) for value in times
-            ],
+            "research_feature_available_at_utc": [value + pd.Timedelta(minutes=5) for value in times],
             "sentiment_label": ["positive", "negative"],
             "sentiment_confidence": [0.9, 0.8],
             "sentiment_numeric": [0.9, -0.8],

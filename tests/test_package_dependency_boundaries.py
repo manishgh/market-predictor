@@ -26,6 +26,11 @@ MODELING_FORBIDDEN_DEPENDENCIES = (
     "market_predictor.swing",
     "market_predictor.intraday",
 )
+GOVERNANCE_FORBIDDEN_DEPENDENCIES = (
+    "market_predictor.serving",
+    "market_predictor.edge_rebuild.serving",
+)
+INTRADAY_FORBIDDEN_DEPENDENCIES = ("market_predictor.governance",)
 UNIVERSE_ALLOWED_DEPENDENCIES = (
     "market_predictor.core",
     "market_predictor.evidence",
@@ -60,6 +65,8 @@ REMOVED_PRODUCTION_MODULES = (
     "market_predictor.edge_rebuild.prospective_analyst_revision_horizon",
     "market_predictor.edge_rebuild.prospective_broker_actions",
     "market_predictor.edge_rebuild.prospective_sip_session",
+    "market_predictor.edge_rebuild.contracts",
+    "market_predictor.edge_rebuild.readiness",
     "market_predictor.edge_rebuild.catalyst_authority",
     "market_predictor.edge_rebuild.corpus_integrity",
     "market_predictor.edge_rebuild.cross_sectional",
@@ -100,6 +107,8 @@ REMOVED_EDGE_REBUILD_FILES = (
     "prospective_analyst_revision_horizon.py",
     "prospective_broker_actions.py",
     "prospective_sip_session.py",
+    "contracts.py",
+    "readiness.py",
     "catalyst_authority.py",
     "corpus_integrity.py",
     "cross_sectional.py",
@@ -176,13 +185,47 @@ def test_modeling_package_is_horizon_neutral() -> None:
                 MODELING_FORBIDDEN_DEPENDENCIES,
             ):
                 relative_path = path.relative_to(PACKAGE_ROOT.parent)
-                violations.append(
-                    f"{relative_path}:{node.lineno}: {imported_name}"
-                )
+                violations.append(f"{relative_path}:{node.lineno}: {imported_name}")
 
-    assert not violations, "Modeling horizon violations:\n" + "\n".join(
-        sorted(violations)
-    )
+    assert not violations, "Modeling horizon violations:\n" + "\n".join(sorted(violations))
+
+
+@pytest.mark.parametrize(
+    ("package_name", "forbidden_dependencies"),
+    (
+        ("governance", GOVERNANCE_FORBIDDEN_DEPENDENCIES),
+        ("intraday", INTRADAY_FORBIDDEN_DEPENDENCIES),
+    ),
+)
+def test_production_dependency_direction_is_enforced(
+    package_name: str,
+    forbidden_dependencies: tuple[str, ...],
+) -> None:
+    violations: list[str] = []
+    for path in (PACKAGE_ROOT / package_name).rglob("*.py"):
+        for node, imported_name in _module_imports(path):
+            if _matches_any_dependency(imported_name, forbidden_dependencies):
+                relative_path = path.relative_to(PACKAGE_ROOT.parent)
+                violations.append(f"{relative_path}:{node.lineno}: {imported_name}")
+    assert not violations, f"{package_name} dependency violations:\n" + "\n".join(sorted(violations))
+
+
+@pytest.mark.parametrize(
+    "statement",
+    (
+        "import market_predictor.edge_rebuild.contracts",
+        "from market_predictor.edge_rebuild import contracts",
+        "from market_predictor.edge_rebuild.contracts import EdgeRebuildReadinessConfig",
+        "import market_predictor.edge_rebuild.readiness",
+        "from market_predictor.edge_rebuild import readiness",
+        "from market_predictor.edge_rebuild.readiness import run_edge_rebuild_readiness_audit",
+    ),
+)
+def test_removed_readiness_import_guard_recognizes_every_import_form(
+    statement: str,
+) -> None:
+    imported_names = tuple(name for node in ast.walk(ast.parse(statement)) for name in _imported_names(node))
+    assert any(_matches_any_dependency(name, REMOVED_PRODUCTION_MODULES) for name in imported_names)
 
 
 @pytest.mark.parametrize(
@@ -209,15 +252,8 @@ def test_modeling_horizon_guard_recognizes_every_import_form(
     statement: str,
     package_name: str,
 ) -> None:
-    imported_names = tuple(
-        name
-        for node in ast.walk(ast.parse(statement))
-        for name in _imported_names(node, package_name=package_name)
-    )
-    assert any(
-        _matches_any_dependency(name, MODELING_FORBIDDEN_DEPENDENCIES)
-        for name in imported_names
-    )
+    imported_names = tuple(name for node in ast.walk(ast.parse(statement)) for name in _imported_names(node, package_name=package_name))
+    assert any(_matches_any_dependency(name, MODELING_FORBIDDEN_DEPENDENCIES) for name in imported_names)
 
 
 def test_module_package_collision_guard_detects_shadow_module(tmp_path: Path) -> None:
@@ -291,9 +327,7 @@ def test_removed_production_modules_have_no_imports_or_files() -> None:
     old_package = PACKAGE_ROOT / "edge_rebuild"
     remaining_files = [str(old_package / name) for name in REMOVED_EDGE_REBUILD_FILES if (old_package / name).exists()]
     remaining_files.extend(
-        str(PACKAGE_ROOT / relative_path)
-        for relative_path in REMOVED_MIGRATED_FILES
-        if (PACKAGE_ROOT / relative_path).exists()
+        str(PACKAGE_ROOT / relative_path) for relative_path in REMOVED_MIGRATED_FILES if (PACKAGE_ROOT / relative_path).exists()
     )
     assert not remaining_files, "Removed production files still exist:\n" + "\n".join(remaining_files)
     assert not violations, "Removed production imports remain:\n" + "\n".join(sorted(violations))
@@ -465,8 +499,7 @@ def test_rule_variant_helper_has_one_semantic_owner() -> None:
         for path in root.rglob("*.py"):
             tree = ast.parse(path.read_text(encoding="utf-8-sig"), filename=str(path))
             if any(
-                isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
-                and node.name == "issuer_event_rule_variant"
+                isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == "issuer_event_rule_variant"
                 for node in ast.walk(tree)
             ):
                 definitions.append(path)
@@ -494,15 +527,8 @@ def test_rule_variant_helper_has_one_semantic_owner() -> None:
 def test_removed_precision_audit_import_guard_recognizes_every_import_form(
     statement: str,
 ) -> None:
-    imported_names = tuple(
-        name
-        for node in ast.walk(ast.parse(statement))
-        for name in _imported_names(node)
-    )
-    assert any(
-        _matches_any_dependency(name, REMOVED_PRODUCTION_MODULES)
-        for name in imported_names
-    )
+    imported_names = tuple(name for node in ast.walk(ast.parse(statement)) for name in _imported_names(node))
+    assert any(_matches_any_dependency(name, REMOVED_PRODUCTION_MODULES) for name in imported_names)
 
 
 @pytest.mark.parametrize(
@@ -517,15 +543,8 @@ def test_removed_precision_audit_import_guard_recognizes_every_import_form(
 def test_removed_strategy_contract_import_guard_recognizes_every_import_form(
     statement: str,
 ) -> None:
-    imported_names = tuple(
-        name
-        for node in ast.walk(ast.parse(statement))
-        for name in _imported_names(node)
-    )
-    assert any(
-        _matches_any_dependency(name, REMOVED_PRODUCTION_MODULES)
-        for name in imported_names
-    )
+    imported_names = tuple(name for node in ast.walk(ast.parse(statement)) for name in _imported_names(node))
+    assert any(_matches_any_dependency(name, REMOVED_PRODUCTION_MODULES) for name in imported_names)
 
 
 @pytest.mark.parametrize(
@@ -540,15 +559,8 @@ def test_removed_strategy_contract_import_guard_recognizes_every_import_form(
 def test_removed_feature_pipeline_import_guard_recognizes_every_import_form(
     statement: str,
 ) -> None:
-    imported_names = tuple(
-        name
-        for node in ast.walk(ast.parse(statement))
-        for name in _imported_names(node)
-    )
-    assert any(
-        _matches_any_dependency(name, REMOVED_PRODUCTION_MODULES)
-        for name in imported_names
-    )
+    imported_names = tuple(name for node in ast.walk(ast.parse(statement)) for name in _imported_names(node))
+    assert any(_matches_any_dependency(name, REMOVED_PRODUCTION_MODULES) for name in imported_names)
 
 
 @pytest.mark.parametrize(
@@ -563,15 +575,8 @@ def test_removed_feature_pipeline_import_guard_recognizes_every_import_form(
 def test_removed_intraday_history_contract_import_guard_recognizes_every_import_form(
     statement: str,
 ) -> None:
-    imported_names = tuple(
-        name
-        for node in ast.walk(ast.parse(statement))
-        for name in _imported_names(node)
-    )
-    assert any(
-        _matches_any_dependency(name, REMOVED_PRODUCTION_MODULES)
-        for name in imported_names
-    )
+    imported_names = tuple(name for node in ast.walk(ast.parse(statement)) for name in _imported_names(node))
+    assert any(_matches_any_dependency(name, REMOVED_PRODUCTION_MODULES) for name in imported_names)
 
 
 @pytest.mark.parametrize(
@@ -586,15 +591,8 @@ def test_removed_intraday_history_contract_import_guard_recognizes_every_import_
 def test_removed_swing_materialization_contract_import_guard_recognizes_every_import_form(
     statement: str,
 ) -> None:
-    imported_names = tuple(
-        name
-        for node in ast.walk(ast.parse(statement))
-        for name in _imported_names(node)
-    )
-    assert any(
-        _matches_any_dependency(name, REMOVED_PRODUCTION_MODULES)
-        for name in imported_names
-    )
+    imported_names = tuple(name for node in ast.walk(ast.parse(statement)) for name in _imported_names(node))
+    assert any(_matches_any_dependency(name, REMOVED_PRODUCTION_MODULES) for name in imported_names)
 
 
 @pytest.mark.parametrize(
@@ -609,15 +607,8 @@ def test_removed_swing_materialization_contract_import_guard_recognizes_every_im
 def test_removed_swing_technical_relationship_import_guard_recognizes_every_import_form(
     statement: str,
 ) -> None:
-    imported_names = tuple(
-        name
-        for node in ast.walk(ast.parse(statement))
-        for name in _imported_names(node)
-    )
-    assert any(
-        _matches_any_dependency(name, REMOVED_PRODUCTION_MODULES)
-        for name in imported_names
-    )
+    imported_names = tuple(name for node in ast.walk(ast.parse(statement)) for name in _imported_names(node))
+    assert any(_matches_any_dependency(name, REMOVED_PRODUCTION_MODULES) for name in imported_names)
 
 
 @pytest.mark.parametrize(
@@ -632,15 +623,8 @@ def test_removed_swing_technical_relationship_import_guard_recognizes_every_impo
 def test_removed_swing_cross_sectional_import_guard_recognizes_every_import_form(
     statement: str,
 ) -> None:
-    imported_names = tuple(
-        name
-        for node in ast.walk(ast.parse(statement))
-        for name in _imported_names(node)
-    )
-    assert any(
-        _matches_any_dependency(name, REMOVED_PRODUCTION_MODULES)
-        for name in imported_names
-    )
+    imported_names = tuple(name for node in ast.walk(ast.parse(statement)) for name in _imported_names(node))
+    assert any(_matches_any_dependency(name, REMOVED_PRODUCTION_MODULES) for name in imported_names)
 
 
 @pytest.mark.parametrize(
@@ -655,15 +639,8 @@ def test_removed_swing_cross_sectional_import_guard_recognizes_every_import_form
 def test_removed_labeling_import_guard_recognizes_every_import_form(
     statement: str,
 ) -> None:
-    imported_names = tuple(
-        name
-        for node in ast.walk(ast.parse(statement))
-        for name in _imported_names(node)
-    )
-    assert any(
-        _matches_any_dependency(name, REMOVED_PRODUCTION_MODULES)
-        for name in imported_names
-    )
+    imported_names = tuple(name for node in ast.walk(ast.parse(statement)) for name in _imported_names(node))
+    assert any(_matches_any_dependency(name, REMOVED_PRODUCTION_MODULES) for name in imported_names)
 
 
 @pytest.mark.parametrize(
@@ -678,15 +655,8 @@ def test_removed_labeling_import_guard_recognizes_every_import_form(
 def test_removed_volume_bar_import_guard_recognizes_every_import_form(
     statement: str,
 ) -> None:
-    imported_names = tuple(
-        name
-        for node in ast.walk(ast.parse(statement))
-        for name in _imported_names(node)
-    )
-    assert any(
-        _matches_any_dependency(name, REMOVED_PRODUCTION_MODULES)
-        for name in imported_names
-    )
+    imported_names = tuple(name for node in ast.walk(ast.parse(statement)) for name in _imported_names(node))
+    assert any(_matches_any_dependency(name, REMOVED_PRODUCTION_MODULES) for name in imported_names)
 
 
 @pytest.mark.parametrize(
@@ -701,15 +671,8 @@ def test_removed_volume_bar_import_guard_recognizes_every_import_form(
 def test_removed_selected_session_history_import_guard_recognizes_every_import_form(
     statement: str,
 ) -> None:
-    imported_names = tuple(
-        name
-        for node in ast.walk(ast.parse(statement))
-        for name in _imported_names(node)
-    )
-    assert any(
-        _matches_any_dependency(name, REMOVED_PRODUCTION_MODULES)
-        for name in imported_names
-    )
+    imported_names = tuple(name for node in ast.walk(ast.parse(statement)) for name in _imported_names(node))
+    assert any(_matches_any_dependency(name, REMOVED_PRODUCTION_MODULES) for name in imported_names)
 
 
 @pytest.mark.parametrize(
@@ -724,15 +687,8 @@ def test_removed_selected_session_history_import_guard_recognizes_every_import_f
 def test_removed_history_materialization_import_guard_recognizes_every_import_form(
     statement: str,
 ) -> None:
-    imported_names = tuple(
-        name
-        for node in ast.walk(ast.parse(statement))
-        for name in _imported_names(node)
-    )
-    assert any(
-        _matches_any_dependency(name, REMOVED_PRODUCTION_MODULES)
-        for name in imported_names
-    )
+    imported_names = tuple(name for node in ast.walk(ast.parse(statement)) for name in _imported_names(node))
+    assert any(_matches_any_dependency(name, REMOVED_PRODUCTION_MODULES) for name in imported_names)
 
 
 @pytest.mark.parametrize(
@@ -747,15 +703,8 @@ def test_removed_history_materialization_import_guard_recognizes_every_import_fo
 def test_removed_history_collection_import_guard_recognizes_every_import_form(
     statement: str,
 ) -> None:
-    imported_names = tuple(
-        name
-        for node in ast.walk(ast.parse(statement))
-        for name in _imported_names(node)
-    )
-    assert any(
-        _matches_any_dependency(name, REMOVED_PRODUCTION_MODULES)
-        for name in imported_names
-    )
+    imported_names = tuple(name for node in ast.walk(ast.parse(statement)) for name in _imported_names(node))
+    assert any(_matches_any_dependency(name, REMOVED_PRODUCTION_MODULES) for name in imported_names)
 
 
 @pytest.mark.parametrize(
@@ -770,15 +719,8 @@ def test_removed_history_collection_import_guard_recognizes_every_import_form(
 def test_removed_one_minute_coverage_import_guard_recognizes_every_import_form(
     statement: str,
 ) -> None:
-    imported_names = tuple(
-        name
-        for node in ast.walk(ast.parse(statement))
-        for name in _imported_names(node)
-    )
-    assert any(
-        _matches_any_dependency(name, REMOVED_PRODUCTION_MODULES)
-        for name in imported_names
-    )
+    imported_names = tuple(name for node in ast.walk(ast.parse(statement)) for name in _imported_names(node))
+    assert any(_matches_any_dependency(name, REMOVED_PRODUCTION_MODULES) for name in imported_names)
 
 
 @pytest.mark.parametrize(
@@ -793,15 +735,8 @@ def test_removed_one_minute_coverage_import_guard_recognizes_every_import_form(
 def test_removed_benchmark_history_import_guard_recognizes_every_import_form(
     statement: str,
 ) -> None:
-    imported_names = tuple(
-        name
-        for node in ast.walk(ast.parse(statement))
-        for name in _imported_names(node)
-    )
-    assert any(
-        _matches_any_dependency(name, REMOVED_PRODUCTION_MODULES)
-        for name in imported_names
-    )
+    imported_names = tuple(name for node in ast.walk(ast.parse(statement)) for name in _imported_names(node))
+    assert any(_matches_any_dependency(name, REMOVED_PRODUCTION_MODULES) for name in imported_names)
 
 
 @pytest.mark.parametrize(
@@ -816,15 +751,8 @@ def test_removed_benchmark_history_import_guard_recognizes_every_import_form(
 def test_removed_broad_intraday_history_import_guard_recognizes_every_import_form(
     statement: str,
 ) -> None:
-    imported_names = tuple(
-        name
-        for node in ast.walk(ast.parse(statement))
-        for name in _imported_names(node)
-    )
-    assert any(
-        _matches_any_dependency(name, REMOVED_PRODUCTION_MODULES)
-        for name in imported_names
-    )
+    imported_names = tuple(name for node in ast.walk(ast.parse(statement)) for name in _imported_names(node))
+    assert any(_matches_any_dependency(name, REMOVED_PRODUCTION_MODULES) for name in imported_names)
 
 
 @pytest.mark.parametrize(
@@ -839,15 +767,8 @@ def test_removed_broad_intraday_history_import_guard_recognizes_every_import_for
 def test_removed_extended_session_context_import_guard_recognizes_every_import_form(
     statement: str,
 ) -> None:
-    imported_names = tuple(
-        name
-        for node in ast.walk(ast.parse(statement))
-        for name in _imported_names(node)
-    )
-    assert any(
-        _matches_any_dependency(name, REMOVED_PRODUCTION_MODULES)
-        for name in imported_names
-    )
+    imported_names = tuple(name for node in ast.walk(ast.parse(statement)) for name in _imported_names(node))
+    assert any(_matches_any_dependency(name, REMOVED_PRODUCTION_MODULES) for name in imported_names)
 
 
 @pytest.mark.parametrize(
@@ -862,15 +783,8 @@ def test_removed_extended_session_context_import_guard_recognizes_every_import_f
 def test_removed_prospective_sip_session_import_guard_recognizes_every_import_form(
     statement: str,
 ) -> None:
-    imported_names = tuple(
-        name
-        for node in ast.walk(ast.parse(statement))
-        for name in _imported_names(node)
-    )
-    assert any(
-        _matches_any_dependency(name, REMOVED_PRODUCTION_MODULES)
-        for name in imported_names
-    )
+    imported_names = tuple(name for node in ast.walk(ast.parse(statement)) for name in _imported_names(node))
+    assert any(_matches_any_dependency(name, REMOVED_PRODUCTION_MODULES) for name in imported_names)
 
 
 @pytest.mark.parametrize(
@@ -885,15 +799,8 @@ def test_removed_prospective_sip_session_import_guard_recognizes_every_import_fo
 def test_removed_prospective_broker_actions_import_guard_recognizes_every_import_form(
     statement: str,
 ) -> None:
-    imported_names = tuple(
-        name
-        for node in ast.walk(ast.parse(statement))
-        for name in _imported_names(node)
-    )
-    assert any(
-        _matches_any_dependency(name, REMOVED_PRODUCTION_MODULES)
-        for name in imported_names
-    )
+    imported_names = tuple(name for node in ast.walk(ast.parse(statement)) for name in _imported_names(node))
+    assert any(_matches_any_dependency(name, REMOVED_PRODUCTION_MODULES) for name in imported_names)
 
 
 @pytest.mark.parametrize(
@@ -908,15 +815,8 @@ def test_removed_prospective_broker_actions_import_guard_recognizes_every_import
 def test_removed_prospective_analyst_horizon_import_guard_recognizes_every_import_form(
     statement: str,
 ) -> None:
-    imported_names = tuple(
-        name
-        for node in ast.walk(ast.parse(statement))
-        for name in _imported_names(node)
-    )
-    assert any(
-        _matches_any_dependency(name, REMOVED_PRODUCTION_MODULES)
-        for name in imported_names
-    )
+    imported_names = tuple(name for node in ast.walk(ast.parse(statement)) for name in _imported_names(node))
+    assert any(_matches_any_dependency(name, REMOVED_PRODUCTION_MODULES) for name in imported_names)
 
 
 def test_issuer_event_precision_governance_is_horizon_neutral() -> None:

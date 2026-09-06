@@ -1,9 +1,10 @@
-"""Strict serving contracts for promoted edge-rebuild models.
+"""Strict runtime serving for promoted edge-rebuild models.
 
 This module is deliberately independent of the legacy prediction service.  It
-defines the only artifacts and outputs that a future edge-rebuild API may
-serve, plus a fail-closed batch/live feature parity check.
+loads governance-verified model bundles, defines prediction outputs, and
+enforces fail-closed batch/live feature parity.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -13,8 +14,8 @@ import threading
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from pathlib import Path, PurePosixPath
-from typing import Annotated, Any, Final, Literal, cast, overload
+from pathlib import Path
+from typing import Any, Final, Literal, cast
 
 import joblib
 import numpy as np
@@ -24,8 +25,6 @@ from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
-    TypeAdapter,
-    ValidationError,
     field_validator,
     model_validator,
 )
@@ -42,25 +41,17 @@ from market_predictor.core.errors import (
     PromotionGateError,
     SchemaMismatchError,
 )
-from market_predictor.edge_rebuild.swing_features import (
-    SWING_FEATURE_PANEL_SCHEMA,
-    swing_model_feature_columns,
-)
 from market_predictor.edge_rebuild.swing_training import (
     MODEL_SCHEMA as SWING_CANDIDATE_MODEL_SCHEMA,
 )
-from market_predictor.intraday.features.features import (
-    CAUSAL_INTRADAY_MODEL_FEATURE_COLUMNS,
+from market_predictor.governance.promotion import (
+    bundle_contracts as _promotion_contracts,
 )
-from market_predictor.intraday.features.features import (
-    FEATURE_SCHEMA_VERSION as INTRADAY_FEATURE_SCHEMA_VERSION,
+from market_predictor.governance.promotion import (
+    bundle_verification as _promotion_verification,
 )
 from market_predictor.modeling.strategy_contract import (
     StrategyContract,
-)
-from market_predictor.promotion_attestation import (
-    promotion_attestation_path_for,
-    verify_promotion_attestation,
 )
 from market_predictor.resources import assert_memory_budget, process_memory_snapshot
 from market_predictor.swing.features.catalyst_decision_authority import (
@@ -68,7 +59,6 @@ from market_predictor.swing.features.catalyst_decision_authority import (
     TRACKED_SOURCE_FAMILIES,
 )
 
-SERVING_BUNDLE_SCHEMA: Final = "edge_rebuild.promoted_bundle.v2"
 PREDICTION_RESULT_SCHEMA: Final = "edge_rebuild.prediction_result.v2"
 ACTIVE_GENERATION_SCHEMA: Final = "edge_rebuild.active_generation.v1"
 ACTIVE_GENERATION_POINTER: Final = "active_generation.json"
@@ -82,188 +72,6 @@ _TRACKED_SOURCE_FAMILY_SET: Final = frozenset(TRACKED_SOURCE_FAMILIES)
 
 class _FrozenModel(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
-
-
-class _PromotedBundleBase(_FrozenModel):
-    schema_version: Literal["edge_rebuild.promoted_bundle.v2"]
-    model_id: str = Field(min_length=1, max_length=200)
-    model_status: Literal["promoted"]
-    promotion_permitted: Literal[True]
-    model_artifact_path: str = Field(min_length=1, max_length=500)
-    model_artifact_sha256: str = Field(pattern=_SHA256_PATTERN)
-    promotion_evidence_path: str = Field(min_length=1, max_length=500)
-    promotion_evidence_sha256: str = Field(pattern=_SHA256_PATTERN)
-    promotion_attestation_id: str = Field(pattern=_SHA256_PATTERN)
-    promotion_gate_policy_sha256: str = Field(pattern=_SHA256_PATTERN)
-    approved_by_principal_id: str = Field(min_length=1, max_length=200)
-    promoted_at_utc: datetime
-    feature_schema_version: str = Field(min_length=1)
-    ordered_feature_columns: tuple[str, ...] = Field(min_length=1)
-    ordered_feature_sha256: str = Field(pattern=_SHA256_PATTERN)
-    strategy_contract_schema_version: Literal[
-        "edge_rebuild.strategy_contract.v2"
-    ]
-    strategy_contract_sha256: str = Field(pattern=_SHA256_PATTERN)
-    market_data_provider: Literal["alpaca"]
-    market_data_feed: Literal["sip"]
-    market_data_adjustment: Literal["all"]
-    model_source_families: tuple[str, ...]
-    model_source_families_sha256: str = Field(pattern=_SHA256_PATTERN)
-    catalyst_overlay_source_families: tuple[str, ...]
-    catalyst_overlay_source_families_sha256: str = Field(pattern=_SHA256_PATTERN)
-    catalyst_policy_sha256: str = Field(pattern=_SHA256_PATTERN)
-    global_context_policy: Literal["ranking_overlay"]
-    global_authority_schema_version: str = Field(min_length=1)
-    global_source_families: tuple[str, ...] = Field(min_length=1)
-    global_source_families_sha256: str = Field(pattern=_SHA256_PATTERN)
-
-    @field_validator("promoted_at_utc")
-    @classmethod
-    def require_utc_timestamp(cls, value: datetime) -> datetime:
-        if value.tzinfo is None or value.utcoffset() is None:
-            raise ValueError("promoted_at_utc must be timezone-aware")
-        return value.astimezone(UTC)
-
-    @field_validator("model_artifact_path", "promotion_evidence_path")
-    @classmethod
-    def validate_artifact_path_text(cls, value: str) -> str:
-        if value.strip() != value or "\x00" in value:
-            raise ValueError("bundle artifact paths must be trimmed and contain no NUL")
-        return value
-
-    @field_validator("ordered_feature_columns")
-    @classmethod
-    def validate_ordered_features(cls, value: tuple[str, ...]) -> tuple[str, ...]:
-        if any(not column or column.strip() != column for column in value):
-            raise ValueError("ordered feature names must be non-empty and trimmed")
-        if len(value) != len(set(value)):
-            raise ValueError("ordered feature names must be unique")
-        return value
-
-    @field_validator("model_source_families", "catalyst_overlay_source_families")
-    @classmethod
-    def validate_source_families(cls, value: tuple[str, ...]) -> tuple[str, ...]:
-        normalized = tuple(family.strip().lower() for family in value)
-        if value != normalized:
-            raise ValueError("source families must be normalized lowercase values")
-        if len(value) != len(set(value)):
-            raise ValueError("source families must be unique")
-        unknown = set(value).difference(_TRACKED_SOURCE_FAMILY_SET)
-        if unknown:
-            raise ValueError(f"unrecognized source families: {sorted(unknown)}")
-        canonical_order = tuple(
-            family for family in TRACKED_SOURCE_FAMILIES if family in value
-        )
-        if value != canonical_order:
-            raise ValueError("source families are not in canonical authority order")
-        return value
-
-    @field_validator("global_source_families")
-    @classmethod
-    def validate_global_source_families(
-        cls,
-        value: tuple[str, ...],
-    ) -> tuple[str, ...]:
-        normalized = tuple(family.strip().lower() for family in value)
-        if value != normalized or len(value) != len(set(value)):
-            raise ValueError("global source families must be normalized and unique")
-        unknown = set(value).difference(GLOBAL_EVENT_SOURCE_FAMILIES)
-        if unknown:
-            raise ValueError(f"unrecognized global source families: {sorted(unknown)}")
-        canonical_order = tuple(
-            family for family in GLOBAL_EVENT_SOURCE_FAMILIES if family in value
-        )
-        if value != canonical_order:
-            raise ValueError("global source families are not in canonical authority order")
-        return value
-
-    @model_validator(mode="after")
-    def validate_hash_bindings(self) -> _PromotedBundleBase:
-        if self.model_artifact_path == self.promotion_evidence_path:
-            raise ValueError("model and promotion evidence must be distinct artifacts")
-        expected_features = ordered_values_sha256(self.ordered_feature_columns)
-        if self.ordered_feature_sha256 != expected_features:
-            raise ValueError("ordered feature hash does not match ordered feature columns")
-        source_hashes = (
-            (self.model_source_families, self.model_source_families_sha256),
-            (
-                self.catalyst_overlay_source_families,
-                self.catalyst_overlay_source_families_sha256,
-            ),
-            (self.global_source_families, self.global_source_families_sha256),
-        )
-        if any(ordered_values_sha256(values) != digest for values, digest in source_hashes):
-            raise ValueError("source-family hash does not match its ordered source contract")
-        return self
-
-    def sha256(self) -> str:
-        return canonical_payload_sha256(self.model_dump(mode="json"))
-
-
-class PromotedSwingBundle(_PromotedBundleBase):
-    """Serving identity for a promoted ten-session swing model."""
-
-    mode: Literal["swing"]
-    strategy_id: Literal["swing"]
-    horizon_sessions: Literal[10]
-    model_family: Literal["swing_baseline", "swing_event_driven"]
-    feature_profile: Literal["technical_market", "catalyst_full"]
-    catalyst_policy: Literal["confirmation_overlay", "required_model_feature"]
-
-    @model_validator(mode="after")
-    def validate_swing_schema(self) -> PromotedSwingBundle:
-        if self.feature_schema_version != SWING_FEATURE_PANEL_SCHEMA:
-            raise ValueError(
-                f"swing bundle requires feature schema {SWING_FEATURE_PANEL_SCHEMA}"
-            )
-        if self.model_family == "swing_baseline":
-            if self.feature_profile != "technical_market":
-                raise ValueError("swing baseline requires technical_market features")
-            if self.catalyst_policy != "confirmation_overlay":
-                raise ValueError("swing baseline requires catalyst confirmation overlay")
-            if self.model_source_families:
-                raise ValueError("swing baseline estimator cannot consume catalyst sources")
-        elif self.feature_profile != "catalyst_full":
-            raise ValueError("swing event-driven model requires catalyst_full features")
-        elif self.catalyst_policy != "required_model_feature":
-            raise ValueError("swing event-driven model requires catalyst model features")
-        elif self.model_source_families != REQUIRED_MODEL_SOURCE_FAMILIES:
-            raise ValueError(
-                "swing event-driven estimator source contract must be exactly Alpaca"
-            )
-        return self
-
-
-class PromotedIntradayBundle(_PromotedBundleBase):
-    """Serving identity for a promoted thirty-minute intraday model."""
-
-    mode: Literal["intraday"]
-    strategy_id: Literal["intraday"]
-    horizon_minutes: Literal[30]
-    feature_profile: Literal["technical_market"]
-    catalyst_policy: Literal["confirmation_overlay"]
-
-    @model_validator(mode="after")
-    def validate_intraday_schema(self) -> PromotedIntradayBundle:
-        if self.feature_schema_version != INTRADAY_FEATURE_SCHEMA_VERSION:
-            raise ValueError(
-                "intraday bundle requires feature schema "
-                f"{INTRADAY_FEATURE_SCHEMA_VERSION}"
-            )
-        if self.model_source_families:
-            raise ValueError(
-                "intraday estimator is technical-only; catalyst sources are overlay-only"
-            )
-        return self
-
-
-PromotedBundle = Annotated[
-    PromotedSwingBundle | PromotedIntradayBundle,
-    Field(discriminator="mode"),
-]
-_PROMOTED_BUNDLE_ADAPTER: Final[TypeAdapter[PromotedBundle]] = TypeAdapter(
-    PromotedBundle
-)
 
 
 class GlobalContextSnapshot(_FrozenModel):
@@ -289,17 +97,13 @@ class GlobalContextSnapshot(_FrozenModel):
     @classmethod
     def validate_source_families(cls, value: tuple[str, ...]) -> tuple[str, ...]:
         if any(not family or family.strip().lower() != family for family in value):
-            raise ValueError(
-                "global context source families must be non-empty normalized values"
-            )
+            raise ValueError("global context source families must be non-empty normalized values")
         if len(value) != len(set(value)):
             raise ValueError("global context source families must be unique")
         unknown = set(value).difference(GLOBAL_EVENT_SOURCE_FAMILIES)
         if unknown:
             raise ValueError(f"unrecognized global context sources: {sorted(unknown)}")
-        canonical_order = tuple(
-            family for family in GLOBAL_EVENT_SOURCE_FAMILIES if family in value
-        )
+        canonical_order = tuple(family for family in GLOBAL_EVENT_SOURCE_FAMILIES if family in value)
         if value != canonical_order:
             raise ValueError("global context sources are not in canonical order")
         return value
@@ -318,9 +122,7 @@ class CatalystSourceSnapshot(_FrozenModel):
             raise ValueError("catalyst source family is not a supported normalized value")
         counts_available = self.event_count_1d is not None and self.event_count_3d is not None
         if self.coverage_known != counts_available:
-            raise ValueError(
-                "catalyst counts must be null exactly when source coverage is unknown"
-            )
+            raise ValueError("catalyst counts must be null exactly when source coverage is unknown")
         return self
 
 
@@ -353,9 +155,7 @@ class CatalystContextSnapshot(_FrozenModel):
         if len(families) != len(set(families)) or families != canonical:
             raise ValueError("catalyst source snapshots must be unique and canonical")
         required_known = all(
-            source.coverage_known
-            for source in self.sources
-            if source.source_family in REQUIRED_MODEL_SOURCE_FAMILIES
+            source.coverage_known for source in self.sources if source.source_family in REQUIRED_MODEL_SOURCE_FAMILIES
         ) and set(REQUIRED_MODEL_SOURCE_FAMILIES).issubset(families)
         if self.required_model_sources_complete != required_known:
             raise ValueError("required catalyst source completeness is inconsistent")
@@ -369,13 +169,8 @@ class CatalystContextSnapshot(_FrozenModel):
         )
         aggregates_available = all(value is not None for value in aggregates)
         if self.required_model_sources_complete != aggregates_available:
-            raise ValueError(
-                "catalyst aggregates must be null exactly when required sources are incomplete"
-            )
-        if (
-            self.latest_event_feature_available_at_utc is not None
-            and self.latest_event_feature_available_at_utc > self.as_of_utc
-        ):
+            raise ValueError("catalyst aggregates must be null exactly when required sources are incomplete")
+        if self.latest_event_feature_available_at_utc is not None and self.latest_event_feature_available_at_utc > self.as_of_utc:
             raise ValueError("catalyst context contains future evidence")
         return self
 
@@ -424,9 +219,7 @@ AbstentionReason = Literal[
 class PredictionResult(_FrozenModel):
     """Non-executable model intelligence returned by the edge serving core."""
 
-    schema_version: Literal[
-        "edge_rebuild.prediction_result.v2"
-    ] = PREDICTION_RESULT_SCHEMA
+    schema_version: Literal["edge_rebuild.prediction_result.v2"] = PREDICTION_RESULT_SCHEMA
     mode: Literal["swing", "intraday"]
     strategy_id: Literal["swing", "intraday"]
     model_id: str = Field(min_length=1, max_length=200)
@@ -464,88 +257,46 @@ class PredictionResult(_FrozenModel):
     def validate_result_contract(self) -> PredictionResult:
         if self.mode != self.strategy_id:
             raise ValueError("prediction mode and strategy identity disagree")
-        expected_horizon = (
-            (SWING_HORIZON_SESSIONS, "sessions")
-            if self.mode == "swing"
-            else (INTRADAY_HORIZON_MINUTES, "minutes")
-        )
+        expected_horizon = (SWING_HORIZON_SESSIONS, "sessions") if self.mode == "swing" else (INTRADAY_HORIZON_MINUTES, "minutes")
         if (self.horizon_value, self.horizon_unit) != expected_horizon:
-            raise ValueError(
-                f"{self.mode} prediction horizon must be "
-                f"{expected_horizon[0]} {expected_horizon[1]}"
-            )
+            raise ValueError(f"{self.mode} prediction horizon must be {expected_horizon[0]} {expected_horizon[1]}")
         if self.global_context_available != (self.global_context is not None):
-            raise ValueError(
-                "global_context must be null exactly when global context is unavailable"
-            )
+            raise ValueError("global_context must be null exactly when global context is unavailable")
         if self.catalyst_context_available != (self.catalyst_context is not None):
-            raise ValueError(
-                "catalyst_context must be null exactly when catalyst context is unavailable"
-            )
+            raise ValueError("catalyst_context must be null exactly when catalyst context is unavailable")
         if self.catalyst_context is not None and self.catalyst_context.as_of_utc > self.as_of_utc:
             raise ValueError("catalyst context cannot be newer than the prediction")
-        if (
-            self.global_context is not None
-            and self.global_context.as_of_utc > self.as_of_utc
-        ):
+        if self.global_context is not None and self.global_context.as_of_utc > self.as_of_utc:
             raise ValueError("global context cannot be newer than the prediction")
         if len(self.abstention_reasons) != len(set(self.abstention_reasons)):
             raise ValueError("abstention reasons must be unique")
         if self.status == "scored":
-            if (
-                self.predicted_direction is None
-                or self.model_score is None
-                or self.technical_score is None
-            ):
-                raise ValueError(
-                    "scored predictions require direction, model score, and "
-                    "technical score"
-                )
+            if self.predicted_direction is None or self.model_score is None or self.technical_score is None:
+                raise ValueError("scored predictions require direction, model score, and technical score")
             if self.abstention_reasons:
                 raise ValueError("scored predictions cannot carry abstention reasons")
             if not self.benchmark_comparisons:
                 raise ValueError("scored predictions require benchmark comparison")
-            benchmark_symbols = tuple(
-                item.symbol for item in self.benchmark_comparisons
-            )
+            benchmark_symbols = tuple(item.symbol for item in self.benchmark_comparisons)
             if len(benchmark_symbols) != len(set(benchmark_symbols)):
                 raise ValueError("benchmark comparison symbols must be unique")
             symbols = set(benchmark_symbols)
             missing_benchmarks = {"SPY", "QQQ"}.difference(symbols)
             if missing_benchmarks:
-                raise ValueError(
-                    "scored predictions require SPY and QQQ comparisons; missing "
-                    f"{sorted(missing_benchmarks)}"
-                )
-            if (
-                self.mode == "swing"
-                and self.catalyst_overlay_status != "incorporated"
-            ):
-                raise ValueError(
-                    "scored swing predictions require incorporated catalyst features"
-                )
-            if self.mode == "swing" and (
-                self.catalyst_context is None
-                or not self.catalyst_context.required_model_sources_complete
-            ):
-                raise ValueError(
-                    "scored swing predictions require complete bound catalyst context"
-                )
+                raise ValueError(f"scored predictions require SPY and QQQ comparisons; missing {sorted(missing_benchmarks)}")
+            if self.mode == "swing" and self.catalyst_overlay_status != "incorporated":
+                raise ValueError("scored swing predictions require incorporated catalyst features")
+            if self.mode == "swing" and (self.catalyst_context is None or not self.catalyst_context.required_model_sources_complete):
+                raise ValueError("scored swing predictions require complete bound catalyst context")
         else:
             if not self.abstention_reasons:
                 raise ValueError("abstained predictions require at least one reason")
-            if (
-                self.predicted_direction is not None
-                or self.model_score is not None
-                or self.technical_score is not None
-            ):
+            if self.predicted_direction is not None or self.model_score is not None or self.technical_score is not None:
                 raise ValueError("abstained predictions cannot expose a model score")
             if self.benchmark_comparisons:
                 raise ValueError("abstained predictions cannot expose benchmark forecasts")
         if self.mode == "intraday" and self.catalyst_overlay_status == "incorporated":
-            raise ValueError(
-                "intraday catalyst is a confirmation overlay, not a model feature"
-            )
+            raise ValueError("intraday catalyst is a confirmation overlay, not a model feature")
         return self
 
 
@@ -565,7 +316,7 @@ class SwingModelScores(_FrozenModel):
 
     probabilities: tuple[float, ...]
     probability_threshold: float = Field(gt=0.0, lt=1.0)
-    
+
     classifier_probabilities: tuple[float, ...] | None = None
     regressor_probabilities: tuple[float, ...] | None = None
     unified_probabilities: tuple[float, ...] | None = None
@@ -586,7 +337,7 @@ class LoadedSwingModelGeneration:
 
     generation_id: str
     pointer_sha256: str
-    bundle: PromotedSwingBundle
+    bundle: _promotion_contracts.PromotedSwingBundle
     model_payload: Mapping[str, object]
 
 
@@ -617,7 +368,7 @@ class SwingModelGenerationCache:
         maximum_model_bytes: int,
         estimated_resident_gib: float,
     ) -> LoadedSwingModelGeneration:
-        root = _verified_bundle_root(repository)
+        root = _promotion_verification.resolve_verified_bundle_root(repository)
         trust_store = attestation_trust_store_path.resolve(strict=True)
         cache_key = (
             root,
@@ -660,23 +411,18 @@ class SwingModelGenerationCache:
                 raise ArtifactIntegrityError("swing generation bundle is unreadable") from exc
             if not isinstance(raw, Mapping):
                 raise SchemaMismatchError("swing generation bundle must be an object")
-            bundle = cast(
-                PromotedSwingBundle,
-                validate_file_backed_promoted_bundle(
-                    raw,
-                    bundle_root=generation_root,
-                    strategy_contract=strategy_contract,
-                    attestation_trust_store_path=attestation_trust_store_path,
-                    promotion_gate_policy_sha256=promotion_gate_policy_sha256,
-                    maximum_model_bytes=maximum_model_bytes,
-                    expected_mode="swing",
-                ),
+            bundle = _promotion_verification.validate_file_backed_promoted_bundle(
+                raw,
+                bundle_root=generation_root,
+                strategy_contract=strategy_contract,
+                attestation_trust_store_path=attestation_trust_store_path,
+                promotion_gate_policy_sha256=promotion_gate_policy_sha256,
+                maximum_model_bytes=maximum_model_bytes,
+                expected_mode="swing",
             )
             if bundle.sha256() != pointer["generation_id"]:
-                raise ArtifactIntegrityError(
-                    "active swing generation identity does not match its bundle"
-                )
-            model_path = _verified_bundle_artifact_path(
+                raise ArtifactIntegrityError("active swing generation identity does not match its bundle")
+            model_path = _promotion_verification.resolve_verified_bundle_artifact(
                 generation_root,
                 bundle.model_artifact_path,
                 label="model",
@@ -691,9 +437,7 @@ class SwingModelGenerationCache:
             _validate_swing_model_payload(payload, bundle)
             after = load_active_generation_pointer(root)
             if after["pointer_sha256"] != pointer["pointer_sha256"]:
-                raise DataReadinessError(
-                    "active swing model generation changed during verification"
-                )
+                raise DataReadinessError("active swing model generation changed during verification")
             loaded = LoadedSwingModelGeneration(
                 generation_id=pointer["generation_id"],
                 pointer_sha256=pointer["pointer_sha256"],
@@ -709,14 +453,14 @@ class SwingModelGenerationCache:
             return loaded
 
     def is_current(self, repository: Path, generation: LoadedSwingModelGeneration) -> bool:
-        pointer = load_active_generation_pointer(_verified_bundle_root(repository))
+        pointer = load_active_generation_pointer(_promotion_verification.resolve_verified_bundle_root(repository))
         return pointer["pointer_sha256"] == generation.pointer_sha256
 
 
 def load_active_generation_pointer(root: Path) -> dict[str, str]:
     """Read and verify the single atomic pointer to an immutable generation."""
 
-    path = _verified_bundle_root(root) / ACTIVE_GENERATION_POINTER
+    path = _promotion_verification.resolve_verified_bundle_root(root) / ACTIVE_GENERATION_POINTER
     payload = _read_json_bytes(path, label="active generation pointer")
     expected_fields = {
         "schema",
@@ -730,7 +474,7 @@ def load_active_generation_pointer(root: Path) -> dict[str, str]:
         raise ArtifactIntegrityError("active generation pointer schema is invalid")
     unsigned = dict(payload)
     pointer_sha = str(unsigned.pop("pointer_sha256", ""))
-    if canonical_payload_sha256(unsigned) != pointer_sha:
+    if _promotion_contracts.canonical_payload_sha256(unsigned) != pointer_sha:
         raise ArtifactIntegrityError("active generation pointer hash is invalid")
     for field in ("generation_id", "bundle_file_sha256", "pointer_sha256"):
         value = str(payload.get(field, ""))
@@ -739,238 +483,10 @@ def load_active_generation_pointer(root: Path) -> dict[str, str]:
     _ = _strict_utc_datetime(payload.get("activated_at_utc"), "active generation activation")
     previous = payload.get("previous_generation_id")
     if previous is not None and (
-        not isinstance(previous, str)
-        or len(previous) != 64
-        or any(character not in "0123456789abcdef" for character in previous)
+        not isinstance(previous, str) or len(previous) != 64 or any(character not in "0123456789abcdef" for character in previous)
     ):
         raise ArtifactIntegrityError("active generation previous identity is invalid")
     return {str(key): str(value) if value is not None else "" for key, value in payload.items()}
-
-
-def ordered_values_sha256(values: Sequence[str]) -> str:
-    """Hash an ordered string contract without platform-dependent formatting."""
-
-    payload = json.dumps(
-        list(values),
-        separators=(",", ":"),
-        ensure_ascii=True,
-    ).encode("ascii")
-    return hashlib.sha256(payload).hexdigest()
-
-
-def canonical_payload_sha256(payload: Mapping[str, object]) -> str:
-    """Hash a JSON-compatible contract using one canonical representation."""
-
-    encoded = json.dumps(
-        payload,
-        sort_keys=True,
-        separators=(",", ":"),
-        ensure_ascii=True,
-    ).encode("ascii")
-    return hashlib.sha256(encoded).hexdigest()
-
-
-@overload
-def validate_promoted_bundle(
-    payload: Mapping[str, object],
-    *,
-    strategy_contract: StrategyContract,
-    expected_mode: Literal["swing"],
-) -> PromotedSwingBundle: ...
-
-
-@overload
-def validate_promoted_bundle(
-    payload: Mapping[str, object],
-    *,
-    strategy_contract: StrategyContract,
-    expected_mode: Literal["intraday"],
-) -> PromotedIntradayBundle: ...
-
-
-@overload
-def validate_promoted_bundle(
-    payload: Mapping[str, object],
-    *,
-    strategy_contract: StrategyContract,
-    expected_mode: None = None,
-) -> PromotedSwingBundle | PromotedIntradayBundle: ...
-
-
-def validate_promoted_bundle(
-    payload: Mapping[str, object],
-    *,
-    strategy_contract: StrategyContract,
-    expected_mode: Literal["swing", "intraday"] | None = None,
-) -> PromotedSwingBundle | PromotedIntradayBundle:
-    """Parse and bind a promoted bundle to the active frozen strategy contract."""
-
-    if payload.get("model_status") != "promoted" or payload.get(
-        "promotion_permitted"
-    ) is not True:
-        raise PromotionGateError("only explicitly promoted models may be served")
-    mode = payload.get("mode")
-    if mode not in {"swing", "intraday"}:
-        raise SchemaMismatchError("serving bundle mode must be swing or intraday")
-    if expected_mode is not None and mode != expected_mode:
-        raise SchemaMismatchError(
-            f"expected a {expected_mode} serving bundle, received {mode}"
-        )
-    try:
-        bundle = _PROMOTED_BUNDLE_ADAPTER.validate_python(payload)
-    except ValidationError as exc:
-        horizon = "10 sessions" if mode == "swing" else "30 minutes"
-        raise SchemaMismatchError(
-            f"invalid {mode} promoted bundle; required horizon is {horizon}: {exc}"
-        ) from exc
-
-    if bundle.strategy_contract_schema_version != strategy_contract.schema_version:
-        raise ArtifactIntegrityError("bundle strategy contract schema is stale")
-    if bundle.strategy_contract_sha256 != strategy_contract.sha256():
-        raise ArtifactIntegrityError("bundle does not bind the active strategy contract")
-    expected_strategy_id = (
-        strategy_contract.swing.strategy_id
-        if bundle.mode == "swing"
-        else strategy_contract.intraday.strategy_id
-    )
-    if bundle.strategy_id != expected_strategy_id:
-        raise ArtifactIntegrityError("bundle strategy identity is stale")
-    expected_features = (
-        swing_model_feature_columns(
-            contract=strategy_contract,
-            catalyst=bundle.feature_profile == "catalyst_full",
-        )
-        if bundle.mode == "swing"
-        else CAUSAL_INTRADAY_MODEL_FEATURE_COLUMNS
-    )
-    if bundle.ordered_feature_columns != expected_features:
-        raise SchemaMismatchError(
-            f"{bundle.mode} bundle feature columns do not match the active "
-            f"{bundle.feature_profile} estimator schema"
-        )
-    return bundle
-
-
-def validate_file_backed_promoted_bundle(
-    payload: Mapping[str, object],
-    *,
-    bundle_root: Path,
-    strategy_contract: StrategyContract,
-    attestation_trust_store_path: Path | None = None,
-    promotion_gate_policy_sha256: str | None = None,
-    maximum_model_bytes: int | None = None,
-    maximum_evidence_bytes: int = 1024 * 1024,
-    expected_mode: Literal["swing", "intraday"] | None = None,
-) -> PromotedSwingBundle | PromotedIntradayBundle:
-    """Validate bundle metadata, artifacts, and signed promotion authorization."""
-
-    bundle = validate_promoted_bundle(
-        payload,
-        strategy_contract=strategy_contract,
-        expected_mode=expected_mode,
-    )
-    root = _verified_bundle_root(bundle_root)
-    artifacts = (
-        (
-            "model",
-            bundle.model_artifact_path,
-            bundle.model_artifact_sha256,
-            maximum_model_bytes,
-        ),
-        (
-            "promotion evidence",
-            bundle.promotion_evidence_path,
-            bundle.promotion_evidence_sha256,
-            maximum_evidence_bytes,
-        ),
-    )
-    for label, relative_path, expected_sha256, maximum_bytes in artifacts:
-        artifact_path = _verified_bundle_artifact_path(
-            root,
-            relative_path,
-            label=label,
-        )
-        before = artifact_path.stat()
-        if maximum_bytes is not None and (
-            maximum_bytes < 1 or before.st_size > maximum_bytes
-        ):
-            raise DataReadinessError(f"{label} artifact byte limit exceeded")
-        observed_sha256 = file_sha256(artifact_path)
-        after = artifact_path.stat()
-        identity_before = (
-            before.st_dev,
-            before.st_ino,
-            before.st_size,
-            before.st_mtime_ns,
-        )
-        identity_after = (
-            after.st_dev,
-            after.st_ino,
-            after.st_size,
-            after.st_mtime_ns,
-        )
-        if identity_before != identity_after:
-            raise ArtifactIntegrityError(
-                f"{label} changed while its serving hash was being verified"
-            )
-        if observed_sha256 != expected_sha256:
-            raise ArtifactIntegrityError(f"{label} artifact SHA256 does not verify")
-    if bundle.mode != "swing":
-        return bundle
-    if attestation_trust_store_path is None:
-        raise PromotionGateError(
-            "a configured promotion attestation trust store is required"
-        )
-    if promotion_gate_policy_sha256 is None:
-        raise PromotionGateError(
-            "a configured promotion gate-policy hash is required"
-        )
-    if bundle.promotion_gate_policy_sha256 != promotion_gate_policy_sha256:
-        raise PromotionGateError(
-            "serving bundle promotion gate policy differs from configuration"
-        )
-    model_path = _verified_bundle_artifact_path(
-        root,
-        bundle.model_artifact_path,
-        label="model",
-    )
-    evidence_path = _verified_bundle_artifact_path(
-        root,
-        bundle.promotion_evidence_path,
-        label="promotion evidence",
-    )
-    if evidence_path != promotion_attestation_path_for(model_path):
-        raise PromotionGateError(
-            "promotion evidence must be the immutable candidate attestation"
-        )
-    try:
-        attestation = verify_promotion_attestation(
-            model_path,
-            trust_store_path=attestation_trust_store_path,
-        )
-    except (DataReadinessError, OSError, TypeError, ValueError) as exc:
-        raise PromotionGateError("promotion attestation did not verify") from exc
-    candidate = attestation.get("candidate")
-    approver = attestation.get("approver_principal")
-    ledger = attestation.get("ledger_receipt")
-    if not isinstance(candidate, Mapping) or not isinstance(approver, Mapping):
-        raise PromotionGateError("promotion attestation identity is incomplete")
-    if (
-        candidate.get("artifact_sha256") != bundle.model_artifact_sha256
-        or candidate.get("model_run_id") != bundle.model_id
-        or candidate.get("model_schema_version") != SWING_CANDIDATE_MODEL_SCHEMA
-        or attestation.get("attestation_id") != bundle.promotion_attestation_id
-        or attestation.get("gate_config_sha256")
-        != bundle.promotion_gate_policy_sha256
-        or approver.get("principal_id") != bundle.approved_by_principal_id
-        or attestation.get("promoted_at_utc") != bundle.promoted_at_utc.isoformat()
-    ):
-        raise PromotionGateError(
-            "promotion attestation does not bind the served candidate identity"
-        )
-    if not isinstance(ledger, Mapping) or ledger.get("result") != "passed":
-        raise PromotionGateError("promotion attestation does not prove passed gates")
-    return bundle
 
 
 def build_global_context_snapshot(
@@ -1001,16 +517,12 @@ def build_global_context_snapshot(
     )
     matches = verified.decisions.loc[observed_times == decision_time]
     if len(matches) != 1:
-        raise DataReadinessError(
-            "global event authority requires exactly one row for the requested decision"
-        )
+        raise DataReadinessError("global event authority requires exactly one row for the requested decision")
     row = matches.iloc[0]
     for window in ("1d", "3d"):
         complete = row[f"global_source_complete_{window}"]
         if not isinstance(complete, (bool, np.bool_)) or not bool(complete):
-            raise DataReadinessError(
-                f"global source coverage is incomplete for the {window} window"
-            )
+            raise DataReadinessError(f"global source coverage is incomplete for the {window} window")
         latest_value = row[f"global_latest_event_feature_available_at_utc_{window}"]
         if not pd.isna(latest_value):
             latest = pd.Timestamp(latest_value)
@@ -1028,62 +540,10 @@ def build_global_context_snapshot(
         event_count_3d=_authority_nonnegative_integer(row["global_event_count_3d"]),
         sentiment_mean_1d=_authority_finite_float(row["global_sentiment_mean_1d"]),
         sentiment_mean_3d=_authority_finite_float(row["global_sentiment_mean_3d"]),
-        sentiment_coverage_1d=_authority_finite_float(
-            row["global_sentiment_coverage_1d"]
-        ),
-        sentiment_coverage_3d=_authority_finite_float(
-            row["global_sentiment_coverage_3d"]
-        ),
+        sentiment_coverage_1d=_authority_finite_float(row["global_sentiment_coverage_1d"]),
+        sentiment_coverage_3d=_authority_finite_float(row["global_sentiment_coverage_3d"]),
         source_families=source_families,
     )
-
-
-def _verified_bundle_root(bundle_root: Path) -> Path:
-    if bundle_root.is_symlink():
-        raise ArtifactIntegrityError("immutable bundle root cannot be a symlink")
-    try:
-        root = bundle_root.resolve(strict=True)
-    except FileNotFoundError as exc:
-        raise ArtifactIntegrityError("immutable bundle root does not exist") from exc
-    if not root.is_dir():
-        raise ArtifactIntegrityError("immutable bundle root must be a directory")
-    return root
-
-
-def _verified_bundle_artifact_path(
-    root: Path,
-    value: str,
-    *,
-    label: str,
-) -> Path:
-    if "\\" in value:
-        raise ArtifactIntegrityError(
-            f"{label} path must use canonical bundle-relative POSIX syntax"
-        )
-    relative = PurePosixPath(value)
-    if (
-        relative.as_posix() != value
-        or relative.is_absolute()
-        or not relative.parts
-        or any(part in {"", ".", ".."} for part in relative.parts)
-        or ":" in relative.parts[0]
-    ):
-        raise ArtifactIntegrityError(f"{label} path escapes the immutable bundle root")
-    candidate = root.joinpath(*relative.parts)
-    current = root
-    for part in relative.parts:
-        current = current / part
-        if current.is_symlink():
-            raise ArtifactIntegrityError(f"{label} path contains a symlink")
-    try:
-        resolved = candidate.resolve(strict=True)
-    except FileNotFoundError as exc:
-        raise ArtifactIntegrityError(f"{label} artifact is missing") from exc
-    if not resolved.is_relative_to(root) or not resolved.is_file():
-        raise ArtifactIntegrityError(
-            f"{label} artifact is not a regular file below the immutable bundle root"
-        )
-    return resolved
 
 
 def _verified_generation_root(root: Path, generation_id: str) -> Path:
@@ -1178,9 +638,7 @@ def _load_joblib_from_verified_handle(
                 after.st_size,
                 after.st_mtime_ns,
             ):
-                raise ArtifactIntegrityError(
-                    "promoted swing model changed during deserialization"
-                )
+                raise ArtifactIntegrityError("promoted swing model changed during deserialization")
             return payload
     except FileNotFoundError as exc:
         raise ArtifactIntegrityError("promoted swing model is unavailable") from exc
@@ -1192,14 +650,12 @@ def _load_joblib_from_verified_handle(
 
 def _validate_swing_model_payload(
     payload: Mapping[str, object],
-    bundle: PromotedSwingBundle,
+    bundle: _promotion_contracts.PromotedSwingBundle,
 ) -> None:
     if payload.get("schema") != SWING_CANDIDATE_MODEL_SCHEMA:
         raise SchemaMismatchError("promoted swing model payload schema is unsupported")
     if payload.get("status") != "candidate" or payload.get("promotion_permitted") is not False:
-        raise PromotionGateError(
-            "served model must remain an immutable candidate authorized by attestation"
-        )
+        raise PromotionGateError("served model must remain an immutable candidate authorized by attestation")
     if payload.get("candidate_id") != bundle.model_id:
         raise ArtifactIntegrityError("promoted model candidate identity differs")
     if payload.get("model_family") != bundle.model_family:
@@ -1218,28 +674,15 @@ def _validate_swing_model_payload(
         raise SchemaMismatchError("promoted swing model is missing its classifier")
     expected_positions = {column: index for index, column in enumerate(features)}
     for name, model in fitted_models.items():
-        if (
-            getattr(model, "estimator", None) is None
-            or getattr(model, "calibrator", None) is None
-        ):
-            raise SchemaMismatchError(
-                f"promoted swing model {name} is missing estimator or calibrator"
-            )
-        model_columns = tuple(
-            str(column) for column in getattr(model, "feature_columns", ())
-        )
+        if getattr(model, "estimator", None) is None or getattr(model, "calibrator", None) is None:
+            raise SchemaMismatchError(f"promoted swing model {name} is missing estimator or calibrator")
+        model_columns = tuple(str(column) for column in getattr(model, "feature_columns", ()))
         if not model_columns or len(model_columns) != len(set(model_columns)):
-            raise SchemaMismatchError(
-                f"promoted swing model {name} has an invalid feature subset"
-            )
+            raise SchemaMismatchError(f"promoted swing model {name} has an invalid feature subset")
         if any(column not in expected_positions for column in model_columns):
-            raise SchemaMismatchError(
-                f"promoted swing model {name} feature subset is outside its bundle"
-            )
+            raise SchemaMismatchError(f"promoted swing model {name} feature subset is outside its bundle")
         if tuple(sorted(model_columns, key=expected_positions.__getitem__)) != model_columns:
-            raise SchemaMismatchError(
-                f"promoted swing model {name} feature subset order is invalid"
-            )
+            raise SchemaMismatchError(f"promoted swing model {name} feature subset order is invalid")
 
 
 def _strict_utc_datetime(value: object, label: str) -> datetime:
@@ -1265,9 +708,7 @@ def _assert_projected_rss(
         return
     current_gib = snapshot[0] / 1024**3
     if current_gib + estimated_resident_gib > hard_budget_gib - headroom_gib:
-        raise DataReadinessError(
-            "swing generation load would exceed the configured RSS safety threshold"
-        )
+        raise DataReadinessError("swing generation load would exceed the configured RSS safety threshold")
 
 
 def _authority_nonnegative_integer(value: object) -> int:
@@ -1305,27 +746,16 @@ def validate_ordered_feature_frame(
     observed = tuple(str(column) for column in frame.columns)
     if observed != expected:
         raise SchemaMismatchError(
-            f"{frame_name} feature columns differ from promoted order; "
-            f"expected={list(expected)!r}, observed={list(observed)!r}"
+            f"{frame_name} feature columns differ from promoted order; expected={list(expected)!r}, observed={list(observed)!r}"
         )
-    invalid_types = [
-        column
-        for column in expected
-        if is_bool_dtype(frame[column].dtype)
-        or not is_numeric_dtype(frame[column].dtype)
-    ]
+    invalid_types = [column for column in expected if is_bool_dtype(frame[column].dtype) or not is_numeric_dtype(frame[column].dtype)]
     if invalid_types:
-        raise SchemaMismatchError(
-            f"{frame_name} contains non-numeric model features: {invalid_types}"
-        )
+        raise SchemaMismatchError(f"{frame_name} contains non-numeric model features: {invalid_types}")
     values = frame.loc[:, expected].to_numpy(dtype="float64", copy=False)
     if not bool(np.isfinite(values).all()):
         locations = np.argwhere(~np.isfinite(values))
         row, column = (int(value) for value in locations[0])
-        raise DataReadinessError(
-            f"{frame_name} contains a non-finite feature at row {row}, "
-            f"column {expected[column]}"
-        )
+        raise DataReadinessError(f"{frame_name} contains a non-finite feature at row {row}, column {expected[column]}")
     return cast(np.ndarray[Any, np.dtype[np.float64]], values)
 
 
@@ -1335,15 +765,9 @@ class SwingInferenceEngine:
         self.bundle = generation.bundle
         self.payload = generation.model_payload
         _validate_swing_model_payload(self.payload, self.bundle)
-        self.fitted_models = cast(
-            dict[str, Any], self.payload.get("fitted_models") or {}
-        )
-        thresholds = cast(
-            dict[str, Any], self.payload.get("probability_thresholds") or {}
-        )
-        self.threshold = _finite_probability(
-            thresholds.get("classifier", 0.5), "probability_threshold"
-        )
+        self.fitted_models = cast(dict[str, Any], self.payload.get("fitted_models") or {})
+        thresholds = cast(dict[str, Any], self.payload.get("probability_thresholds") or {})
+        self.threshold = _finite_probability(thresholds.get("classifier", 0.5), "probability_threshold")
 
     def predict(
         self,
@@ -1355,10 +779,7 @@ class SwingInferenceEngine:
             self.bundle.ordered_feature_columns,
             frame_name="promoted swing",
         ).astype("float32", copy=False)
-        feature_positions = {
-            column: index
-            for index, column in enumerate(self.bundle.ordered_feature_columns)
-        }
+        feature_positions = {column: index for index, column in enumerate(self.bundle.ordered_feature_columns)}
 
         def _score_model(fitted: object) -> tuple[float, ...] | None:
             if fitted is None:
@@ -1367,25 +788,15 @@ class SwingInferenceEngine:
             calibrator = getattr(fitted, "calibrator", None)
             if estimator is None or calibrator is None:
                 return None
-            model_columns = tuple(
-                str(column) for column in getattr(fitted, "feature_columns", ())
-            )
+            model_columns = tuple(str(column) for column in getattr(fitted, "feature_columns", ()))
             if not model_columns:
-                raise DataReadinessError(
-                    "promoted swing model is missing its ordered feature subset"
-                )
+                raise DataReadinessError("promoted swing model is missing its ordered feature subset")
             try:
-                model_matrix = matrix[
-                    :, [feature_positions[column] for column in model_columns]
-                ]
+                model_matrix = matrix[:, [feature_positions[column] for column in model_columns]]
             except KeyError as exc:
-                raise DataReadinessError(
-                    "promoted swing model feature subset is outside its bundle"
-                ) from exc
+                raise DataReadinessError("promoted swing model feature subset is outside its bundle") from exc
             try:
-                raw = np.asarray(
-                    estimator.predict_proba(model_matrix), dtype="float64"
-                )
+                raw = np.asarray(estimator.predict_proba(model_matrix), dtype="float64")
                 if raw.ndim != 2 or raw.shape != (len(model_matrix), 2):
                     raise ValueError("estimator probability shape is invalid")
                 calibrated = np.asarray(
@@ -1393,15 +804,9 @@ class SwingInferenceEngine:
                     dtype="float64",
                 )
             except (AttributeError, TypeError, ValueError) as exc:
-                raise DataReadinessError(
-                    "promoted swing model could not score live features"
-                ) from exc
-            if calibrated.shape != (len(model_matrix),) or not np.isfinite(
-                calibrated
-            ).all():
-                raise DataReadinessError(
-                    "promoted swing model produced invalid probabilities"
-                )
+                raise DataReadinessError("promoted swing model could not score live features") from exc
+            if calibrated.shape != (len(model_matrix),) or not np.isfinite(calibrated).all():
+                raise DataReadinessError("promoted swing model produced invalid probabilities")
             if bool(((calibrated < 0.0) | (calibrated > 1.0)).any()):
                 raise DataReadinessError("promoted swing probabilities are outside [0, 1]")
             return tuple(float(value) for value in calibrated)
@@ -1430,7 +835,7 @@ def score_promoted_swing_model(
 
     engine = SwingInferenceEngine(generation)
     scores = engine.predict(feature_frame, requested_models=["all"])
-    
+
     return SwingModelScores(
         probabilities=scores.get("classifier", tuple()),
         probability_threshold=engine.threshold,
@@ -1480,10 +885,7 @@ def validate_batch_live_feature_parity(
         frame_name="live",
     )
     if batch_values.shape != live_values.shape:
-        raise SchemaMismatchError(
-            "batch/live feature shapes differ; "
-            f"batch={batch_values.shape}, live={live_values.shape}"
-        )
+        raise SchemaMismatchError(f"batch/live feature shapes differ; batch={batch_values.shape}, live={live_values.shape}")
     if not batch.index.equals(live.index):
         raise SchemaMismatchError("batch/live feature row identities or order differ")
     absolute_difference = np.abs(batch_values - live_values)
@@ -1509,13 +911,9 @@ def validate_batch_live_feature_parity(
     return FeatureParityReport(
         row_count=int(batch_values.shape[0]),
         feature_count=int(batch_values.shape[1]),
-        ordered_feature_sha256=ordered_values_sha256(expected),
-        maximum_absolute_difference=(
-            float(absolute_difference.max()) if absolute_difference.size else 0.0
-        ),
-        maximum_relative_difference=(
-            float(relative_difference.max()) if relative_difference.size else 0.0
-        ),
+        ordered_feature_sha256=_promotion_contracts.ordered_values_sha256(expected),
+        maximum_absolute_difference=(float(absolute_difference.max()) if absolute_difference.size else 0.0),
+        maximum_relative_difference=(float(relative_difference.max()) if relative_difference.size else 0.0),
         relative_tolerance=relative_tolerance,
         absolute_tolerance=absolute_tolerance,
     )

@@ -1,4 +1,5 @@
 """Hash-bound ER1A historical intraday acquisition planning."""
+
 from __future__ import annotations
 
 import hashlib
@@ -17,8 +18,8 @@ import pandas as pd
 
 from market_predictor.canonical.store import file_sha256
 from market_predictor.core.errors import DataReadinessError
-from market_predictor.edge_rebuild.readiness import (
-    load_complete_readiness_audit,
+from market_predictor.evidence.readiness_authority import (
+    load_readiness_authority,
 )
 from market_predictor.intraday.contracts.history_collection import (
     BROAD_INTRADAY_HISTORY_PLAN_SCHEMA,
@@ -37,31 +38,17 @@ from market_predictor.resources import (
 from market_predictor.sources.provider_symbols import provider_symbol
 
 PLAN_AUTHORITY_SCHEMA = "edge_rebuild.intraday_history_plan_authority.v1"
-EXTENDED_CONTEXT_PLAN_AUTHORITY_SCHEMA = (
-    "edge_rebuild.extended_session_context_plan_authority.v1"
-)
-SELECTED_SESSION_PLAN_AUTHORITY_SCHEMA = (
-    "edge_rebuild.selected_session_history_plan_authority.v1"
-)
-SELECTED_SESSION_ONE_MINUTE_PLAN_AUTHORITY_SCHEMA = (
-    "edge_rebuild.selected_session_one_minute_plan_authority.v1"
-)
-SELECTED_SESSION_BENCHMARK_PLAN_AUTHORITY_SCHEMA = (
-    "edge_rebuild.selected_session_benchmark_one_minute_plan_authority.v1"
-)
-BROAD_INTRADAY_HISTORY_PLAN_AUTHORITY_SCHEMA = (
-    "edge_rebuild.broad_intraday_history_plan_authority.v1"
-)
+EXTENDED_CONTEXT_PLAN_AUTHORITY_SCHEMA = "edge_rebuild.extended_session_context_plan_authority.v1"
+SELECTED_SESSION_PLAN_AUTHORITY_SCHEMA = "edge_rebuild.selected_session_history_plan_authority.v1"
+SELECTED_SESSION_ONE_MINUTE_PLAN_AUTHORITY_SCHEMA = "edge_rebuild.selected_session_one_minute_plan_authority.v1"
+SELECTED_SESSION_BENCHMARK_PLAN_AUTHORITY_SCHEMA = "edge_rebuild.selected_session_benchmark_one_minute_plan_authority.v1"
+BROAD_INTRADAY_HISTORY_PLAN_AUTHORITY_SCHEMA = "edge_rebuild.broad_intraday_history_plan_authority.v1"
 ACCEPTED_PLAN_SCHEMAS = {
     INTRADAY_HISTORY_PLAN_SCHEMA: PLAN_AUTHORITY_SCHEMA,
     EXTENDED_CONTEXT_PLAN_SCHEMA: EXTENDED_CONTEXT_PLAN_AUTHORITY_SCHEMA,
     SELECTED_SESSION_PLAN_SCHEMA: SELECTED_SESSION_PLAN_AUTHORITY_SCHEMA,
-    SELECTED_SESSION_ONE_MINUTE_PLAN_SCHEMA: (
-        SELECTED_SESSION_ONE_MINUTE_PLAN_AUTHORITY_SCHEMA
-    ),
-    SELECTED_SESSION_BENCHMARK_PLAN_SCHEMA: (
-        SELECTED_SESSION_BENCHMARK_PLAN_AUTHORITY_SCHEMA
-    ),
+    SELECTED_SESSION_ONE_MINUTE_PLAN_SCHEMA: (SELECTED_SESSION_ONE_MINUTE_PLAN_AUTHORITY_SCHEMA),
+    SELECTED_SESSION_BENCHMARK_PLAN_SCHEMA: (SELECTED_SESSION_BENCHMARK_PLAN_AUTHORITY_SCHEMA),
     BROAD_INTRADAY_HISTORY_PLAN_SCHEMA: BROAD_INTRADAY_HISTORY_PLAN_AUTHORITY_SCHEMA,
 }
 SESSION_MEMBERSHIP_COLUMNS = (
@@ -102,18 +89,11 @@ def build_intraday_history_plan(
     """Plan PIT five-minute history; exact one-minute paths remain selective."""
 
     if output_directory.exists():
-        raise DataReadinessError(
-            f"ER1A history plan output must be new: {output_directory}"
-        )
+        raise DataReadinessError(f"ER1A history plan output must be new: {output_directory}")
     _assert_memory(config, "ER1A history planning start")
-    readiness = _verify_readiness_audit(readiness_audit_directory)
-    existing_sessions = _existing_usable_sessions(
-        readiness_audit_directory
-    )
+    readiness, existing_sessions = _verify_readiness_audit(readiness_audit_directory)
     if existing_sessions >= config.target_usable_sessions:
-        raise DataReadinessError(
-            "ER1A history acquisition is unnecessary at the frozen target"
-        )
+        raise DataReadinessError("ER1A history acquisition is unnecessary at the frozen target")
     memberships, membership_identity = verify_point_in_time_memberships(
         memberships_path,
         membership_audit_path,
@@ -128,9 +108,7 @@ def build_intraday_history_plan(
         config=config,
     )
     if stock_identity["start_utc"] != benchmark_identity["start_utc"]:
-        raise DataReadinessError(
-            "existing stock and benchmark histories start at different times"
-        )
+        raise DataReadinessError("existing stock and benchmark histories start at different times")
     request = {
         "schema": INTRADAY_HISTORY_PLAN_SCHEMA,
         "policy_path": str(policy_path),
@@ -166,9 +144,7 @@ def build_intraday_history_plan(
         plan_fingerprint=plan_fingerprint,
     )
     _assert_memory(config, "ER1A history planning frames")
-    temporary = output_directory.with_name(
-        f".{output_directory.name}.{uuid.uuid4().hex}.tmp"
-    )
+    temporary = output_directory.with_name(f".{output_directory.name}.{uuid.uuid4().hex}.tmp")
     temporary.mkdir(parents=True)
     try:
         files: list[dict[str, Any]] = []
@@ -198,9 +174,7 @@ def build_intraday_history_plan(
             "policy_sha256": config.sha256(),
             "research_only": True,
             "promotion_eligible": False,
-            "membership_availability_policy": (
-                "provider_publication_proxy_research_only"
-            ),
+            "membership_availability_policy": ("provider_publication_proxy_research_only"),
             "acquisition": {
                 "provider": "alpaca",
                 "calendar": config.calendar,
@@ -269,11 +243,7 @@ def load_complete_intraday_history_plan(
     authority = load_plan_json(directory / "_authority.json")
     fingerprint = str(request.get("plan_fingerprint", ""))
     plan_schema = str(manifest.get("schema", ""))
-    unhashed_request = {
-        key: value
-        for key, value in request.items()
-        if key != "plan_fingerprint"
-    }
+    unhashed_request = {key: value for key, value in request.items() if key != "plan_fingerprint"}
     if (
         not fingerprint
         or json_sha256(unhashed_request) != fingerprint
@@ -283,12 +253,9 @@ def load_complete_intraday_history_plan(
         or authority.get("state") != "complete"
         or authority.get("plan_fingerprint") != fingerprint
         or authority.get("artifact") != "_manifest.json"
-        or authority.get("artifact_sha256")
-        != file_sha256(directory / "_manifest.json")
+        or authority.get("artifact_sha256") != file_sha256(directory / "_manifest.json")
     ):
-        raise DataReadinessError(
-            "five-minute acquisition plan lacks matching complete authority"
-        )
+        raise DataReadinessError("five-minute acquisition plan lacks matching complete authority")
     raw_files = manifest.get("files")
     if not isinstance(raw_files, list) or not raw_files:
         raise DataReadinessError("ER1A plan has no registered files")
@@ -306,27 +273,18 @@ def load_complete_intraday_history_plan(
             or path.stat().st_size != int(raw.get("bytes", -1))
             or file_sha256(path) != raw.get("sha256")
         ):
-            raise DataReadinessError(
-                f"ER1A plan artifact does not verify: {path}"
-            )
-    actual = {
-        str(path.relative_to(directory))
-        for path in directory.rglob("*")
-        if path.is_file()
-    }
+            raise DataReadinessError(f"ER1A plan artifact does not verify: {path}")
+    actual = {str(path.relative_to(directory)) for path in directory.rglob("*") if path.is_file()}
     if actual != expected:
         raise DataReadinessError("ER1A plan artifact file set differs")
     return manifest
 
 
-def _verify_readiness_audit(directory: Path) -> dict[str, object]:
-    request = load_plan_json(directory / "_request.json")
-    request_sha256 = json_sha256(request)
-    load_complete_readiness_audit(
-        directory,
-        expected_request_sha256=request_sha256,
-    )
-    summary = load_plan_json(directory / "summary.json")
+def _verify_readiness_audit(
+    directory: Path,
+) -> tuple[dict[str, object], int]:
+    verified = load_readiness_authority(directory, require_current=True)
+    summary = verified.summary
     acquisition = summary.get("acquisition_plan")
     if (
         summary.get("status") != "blocked_pending_targeted_acquisition"
@@ -336,26 +294,22 @@ def _verify_readiness_audit(directory: Path) -> dict[str, object]:
         or str(acquisition.get("feed", "")).lower() != "sip"
         or str(acquisition.get("adjustment", "")).lower() != "all"
     ):
-        raise DataReadinessError(
-            "ER1A requires a verified audit blocked only on acquisition"
-        )
-    return {
-        "path": str(directory),
-        "request_sha256": request_sha256,
-        "manifest_sha256": file_sha256(directory / "_manifest.json"),
-        "summary_sha256": file_sha256(directory / "summary.json"),
+        raise DataReadinessError("ER1A requires a verified audit blocked only on acquisition")
+    identity = {
+        "path": str(verified.directory),
+        "format_version": verified.format_version,
+        "request_sha256": verified.request_sha256,
+        "manifest_sha256": verified.manifest_sha256,
+        "authority_sha256": verified.authority_sha256,
+        "summary_sha256": verified.artifact_sha256["summary.json"],
+        "session_calendar_sha256": verified.artifact_sha256["session_calendar.csv"],
         "status": summary["status"],
     }
+    return identity, _existing_usable_sessions(verified.session_calendar)
 
 
-def _existing_usable_sessions(directory: Path) -> int:
-    calendar = pd.read_csv(
-        directory / "session_calendar.csv",
-        usecols=["strategy_id", "session_date_et"],
-    )
-    intraday = calendar[
-        calendar["strategy_id"].astype(str).str.startswith("INTRADAY.")
-    ]
+def _existing_usable_sessions(calendar: pd.DataFrame) -> int:
+    intraday = calendar[calendar["strategy_id"].astype(str).str.startswith("INTRADAY.")]
     count = int(intraday["session_date_et"].nunique())
     if count < 1:
         raise DataReadinessError("ER1 audit has no usable intraday sessions")
@@ -375,9 +329,7 @@ def verify_point_in_time_memberships(
     frame = pd.read_parquet(path)
     missing = REQUIRED_MEMBERSHIP_COLUMNS.difference(frame.columns)
     if missing:
-        raise DataReadinessError(
-            f"ER1A memberships lack required columns: {sorted(missing)}"
-        )
+        raise DataReadinessError(f"ER1A memberships lack required columns: {sorted(missing)}")
     frame = frame.copy()
     frame["ticker"] = frame["ticker"].astype(str).str.upper().str.strip()
     frame["effective_from_utc"] = pd.to_datetime(
@@ -396,40 +348,25 @@ def verify_point_in_time_memberships(
         or bool(frame["security_id"].astype(str).str.strip().eq("").any())
         or frame["universe_snapshot_id"].nunique() != 1
         or not bool(frame["effective_to_utc"].notna().any())
-        or bool(
-            frame["membership_source_urls"]
-            .astype(str)
-            .str.strip()
-            .isin({"", "[]"})
-            .any()
-        )
+        or bool(frame["membership_source_urls"].astype(str).str.strip().isin({"", "[]"}).any())
     ):
-        raise DataReadinessError(
-            "ER1A memberships are not a sourced point-in-time universe"
-        )
+        raise DataReadinessError("ER1A memberships are not a sourced point-in-time universe")
     _reject_membership_overlaps(frame)
     audit = load_plan_json(audit_path)
     if (
-        audit.get("universe_snapshot_id")
-        != frame["universe_snapshot_id"].iloc[0]
-        or int(audit.get("historical_tickers", 0))
-        != int(frame["ticker"].nunique())
+        audit.get("universe_snapshot_id") != frame["universe_snapshot_id"].iloc[0]
+        or int(audit.get("historical_tickers", 0)) != int(frame["ticker"].nunique())
         or int(audit.get("membership_intervals", 0)) != len(frame)
         or audit.get("contradictions") not in ([], None)
-        or int(audit.get("historical_tickers", 0))
-        < minimum_cross_section
+        or int(audit.get("historical_tickers", 0)) < minimum_cross_section
     ):
-        raise DataReadinessError(
-            "ER1A membership audit does not match the universe"
-        )
+        raise DataReadinessError("ER1A membership audit does not match the universe")
     return frame, {
         "path": str(path),
         "sha256": file_sha256(path),
         "audit_path": str(audit_path),
         "audit_sha256": file_sha256(audit_path),
-        "universe_snapshot_id": str(
-            frame["universe_snapshot_id"].iloc[0]
-        ),
+        "universe_snapshot_id": str(frame["universe_snapshot_id"].iloc[0]),
         "membership_intervals": len(frame),
         "historical_tickers": int(frame["ticker"].nunique()),
         "first_effective_at_utc": frame["effective_from_utc"].min().isoformat(),
@@ -444,15 +381,9 @@ def _reject_membership_overlaps(frame: pd.DataFrame) -> None:
         for row in ordered.itertuples(index=False):
             start = pd.Timestamp(row.effective_from_utc)
             if previous_end is not None and start < previous_end:
-                raise DataReadinessError(
-                    f"ER1A membership intervals overlap for {ticker}"
-                )
+                raise DataReadinessError(f"ER1A membership intervals overlap for {ticker}")
             raw_end = row.effective_to_utc
-            previous_end = (
-                pd.Timestamp.max.tz_localize("UTC")
-                if pd.isna(raw_end)
-                else pd.Timestamp(raw_end)
-            )
+            previous_end = pd.Timestamp.max.tz_localize("UTC") if pd.isna(raw_end) else pd.Timestamp(raw_end)
 
 
 def verify_existing_ohlcv_identity(
@@ -469,17 +400,13 @@ def verify_existing_ohlcv_identity(
     if (
         schema.get("schema_version") != "ohlcv.v1"
         or str(schema.get("source", "")).lower() != "alpaca"
-        or str(schema.get("price_feed", "")).lower()
-        != config.required_price_feed
-        or str(schema.get("adjustment", "")).lower()
-        != config.required_adjustment
+        or str(schema.get("price_feed", "")).lower() != config.required_price_feed
+        or str(schema.get("adjustment", "")).lower() != config.required_adjustment
         or schema.get("timeframes") != ["5m"]
         or manifest.empty
         or set(manifest["timeframe"].astype(str).str.lower()) != {"5m"}
     ):
-        raise DataReadinessError(
-            f"existing OHLCV identity is incompatible: {directory}"
-        )
+        raise DataReadinessError(f"existing OHLCV identity is incompatible: {directory}")
     return {
         "path": str(directory),
         "schema_sha256": file_sha256(schema_path),
@@ -540,25 +467,15 @@ def iter_point_in_time_sessions(
 
     for session in sessions:
         open_at = pd.Timestamp(calendar.session_open(session)).tz_convert("UTC")
-        close_at = pd.Timestamp(calendar.session_close(session)).tz_convert(
-            "UTC"
-        )
+        close_at = pd.Timestamp(calendar.session_close(session)).tz_convert("UTC")
         active = memberships[
             memberships["effective_from_utc"].le(open_at)
-            & (
-                memberships["effective_to_utc"].isna()
-                | memberships["effective_to_utc"].gt(open_at)
-            )
+            & (memberships["effective_to_utc"].isna() | memberships["effective_to_utc"].gt(open_at))
         ].sort_values("ticker", kind="stable")
         if len(active) < minimum_cross_section:
-            raise DataReadinessError(
-                f"ER1A PIT cross-section is too small on {session.date()}: "
-                f"{len(active)}"
-            )
+            raise DataReadinessError(f"ER1A PIT cross-section is too small on {session.date()}: {len(active)}")
         if bool(active["ticker"].duplicated().any()):
-            raise DataReadinessError(
-                f"ER1A PIT membership is ambiguous on {session.date()}"
-            )
+            raise DataReadinessError(f"ER1A PIT membership is ambiguous on {session.date()}")
         yield PointInTimeSession(
             session=session,
             open_at=open_at,
@@ -594,13 +511,9 @@ def chunk_request_symbols(
         raise DataReadinessError(f"unit row cap cannot fit {label}")
     for offset in range(0, len(symbols), symbols_per_unit):
         chunk = symbols[offset : offset + symbols_per_unit]
-        mapping = {
-            provider_symbol(ticker, "alpaca"): ticker for ticker in chunk
-        }
+        mapping = {provider_symbol(ticker, "alpaca"): ticker for ticker in chunk}
         if len(mapping) != len(chunk):
-            raise DataReadinessError(
-                f"provider-symbol collision on {label}"
-            )
+            raise DataReadinessError(f"provider-symbol collision on {label}")
         yield chunk, mapping
 
 
@@ -665,9 +578,7 @@ def _build_plan_frames(
     total_expected_rows = 0
     unit_count = 0
     all_tickers: set[str] = set()
-    benchmark_tickers = tuple(
-        ticker.strip().upper() for ticker in config.benchmark_tickers
-    )
+    benchmark_tickers = tuple(ticker.strip().upper() for ticker in config.benchmark_tickers)
     for entry in iter_point_in_time_sessions(
         memberships=memberships,
         sessions=sessions,
@@ -684,9 +595,7 @@ def _build_plan_frames(
             symbols,
             expected_bars_per_symbol=expected_bars_per_symbol,
             maximum_symbols_per_unit=config.maximum_symbols_per_unit,
-            maximum_expected_rows_per_unit=(
-                config.maximum_expected_rows_per_unit
-            ),
+            maximum_expected_rows_per_unit=(config.maximum_expected_rows_per_unit),
             label=str(session.date()),
         ):
             unit_id = stable_identity_hash(
@@ -728,13 +637,17 @@ def _build_plan_frames(
         )
         for month, rows in unit_rows.items()
     }
-    return membership_frames, units, {
-        "historical_tickers": len(all_tickers),
-        "ticker_sessions": sum(len(frame) for frame in membership_frames.values()),
-        "acquisition_units": unit_count,
-        "maximum_expected_feature_rows": total_expected_rows,
-        "benchmark_tickers": len(benchmark_tickers),
-    }
+    return (
+        membership_frames,
+        units,
+        {
+            "historical_tickers": len(all_tickers),
+            "ticker_sessions": sum(len(frame) for frame in membership_frames.values()),
+            "acquisition_units": unit_count,
+            "maximum_expected_feature_rows": total_expected_rows,
+            "benchmark_tickers": len(benchmark_tickers),
+        },
+    )
 
 
 def file_record(path: Path, root: Path, rows: int) -> dict[str, object]:

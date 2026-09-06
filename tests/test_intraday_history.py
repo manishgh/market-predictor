@@ -12,6 +12,7 @@ from market_predictor.intraday.contracts.history_collection import (
     load_intraday_history_config,
 )
 from market_predictor.intraday.datasets.history import (
+    _verify_readiness_audit,
     build_intraday_history_plan,
     load_complete_intraday_history_plan,
 )
@@ -60,9 +61,7 @@ def test_plan_is_hash_bound_point_in_time_and_selective(
     (audit_dir / "session_calendar.csv").write_text(
         "strategy_id,session_date_et\n"
         + "\n".join(
-            "INTRADAY.VWAP_EXHAUSTION_REVERSAL.30M.V1,"
-            f"{date.date().isoformat()}"
-            for date in pd.bdate_range("2022-01-03", periods=980)
+            f"INTRADAY.VWAP_EXHAUSTION_REVERSAL.30M.V1,{date.date().isoformat()}" for date in pd.bdate_range("2022-01-03", periods=980)
         ),
         encoding="utf-8",
     )
@@ -86,23 +85,29 @@ def test_plan_is_hash_bound_point_in_time_and_selective(
     )
     (audit_dir / "_manifest.json").write_text("{}", encoding="utf-8")
     monkeypatch.setattr(
-        "market_predictor.intraday.datasets.history."
-        "load_complete_readiness_audit",
-        lambda *_args, **_kwargs: {},
+        "market_predictor.intraday.datasets.history._verify_readiness_audit",
+        lambda _directory: (
+            {
+                "path": str(audit_dir),
+                "format_version": "current_v3",
+                "request_sha256": "a" * 64,
+                "manifest_sha256": "b" * 64,
+                "authority_sha256": "c" * 64,
+                "summary_sha256": "d" * 64,
+                "session_calendar_sha256": "e" * 64,
+                "status": "blocked_pending_targeted_acquisition",
+            },
+            980,
+        ),
     )
     memberships_path = tmp_path / "memberships.parquet"
     tickers = [f"T{i:03d}" for i in range(300)]
     memberships = pd.DataFrame(
         {
             "ticker": tickers + ["OLD"],
-            "security_id": [f"security:{value}" for value in tickers]
-            + ["security:old"],
-            "effective_from_utc": [
-                pd.Timestamp("2019-01-01", tz="UTC")
-            ]
-            * 301,
-            "effective_to_utc": [pd.NaT] * 300
-            + [pd.Timestamp("2020-01-01", tz="UTC")],
+            "security_id": [f"security:{value}" for value in tickers] + ["security:old"],
+            "effective_from_utc": [pd.Timestamp("2019-01-01", tz="UTC")] * 301,
+            "effective_to_utc": [pd.NaT] * 300 + [pd.Timestamp("2020-01-01", tz="UTC")],
             "sector": ["Information Technology"] * 301,
             "primary_benchmark": ["XLK"] * 301,
             "universe_snapshot_id": ["snapshot-1"] * 301,
@@ -143,23 +148,12 @@ def test_plan_is_hash_bound_point_in_time_and_selective(
     assert result["summary"]["historical_tickers"] == 300
     assert result["summary"]["memory"]["hard_budget_gib"] == 4
     assert result["acquisition"]["feature_discovery"]["timeframe"] == "5Min"
-    assert (
-        result["acquisition"]["exact_path_labels"]["timeframe"]
-        == "1Min"
-    )
-    assert (
-        result["acquisition"]["exact_path_labels"][
-            "planned_in_this_artifact"
-        ]
-        is False
-    )
+    assert result["acquisition"]["exact_path_labels"]["timeframe"] == "1Min"
+    assert result["acquisition"]["exact_path_labels"]["planned_in_this_artifact"] is False
     assert result["research_only"] is True
     assert verified["plan_fingerprint"] == result["plan_fingerprint"]
     units = pd.concat(
-        [
-            pd.read_parquet(path)
-            for path in sorted((output / "units" / "5Min").glob("*.parquet"))
-        ],
+        [pd.read_parquet(path) for path in sorted((output / "units" / "5Min").glob("*.parquet"))],
         ignore_index=True,
     )
     assert set(units["price_feed"]) == {"sip"}
@@ -170,23 +164,12 @@ def test_plan_is_hash_bound_point_in_time_and_selective(
     assert "OLD" not in "".join(units["canonical_symbols_json"].astype(str))
 
 
-def test_plan_rejects_static_membership(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(
-        "market_predictor.intraday.datasets.history."
-        "load_complete_readiness_audit",
-        lambda *_args, **_kwargs: {},
-    )
+def test_plan_rejects_static_membership(tmp_path: Path) -> None:
     memberships = pd.DataFrame(
         {
             "ticker": ["AAPL"] * 450,
             "security_id": ["security:aapl"] * 450,
-            "effective_from_utc": [
-                pd.Timestamp("2019-01-01", tz="UTC")
-            ]
-            * 450,
+            "effective_from_utc": [pd.Timestamp("2019-01-01", tz="UTC")] * 450,
             "effective_to_utc": [pd.NaT] * 450,
             "sector": ["Technology"] * 450,
             "primary_benchmark": ["XLK"] * 450,
@@ -209,6 +192,13 @@ def test_plan_rejects_static_membership(
             audit,
             minimum_cross_section=300,
         )
+
+
+def test_historical_readiness_cannot_authorize_a_new_history_plan() -> None:
+    retained = Path(__file__).parents[1] / "data" / "research" / "edge_rebuild_readiness_er1_20260728"
+
+    with pytest.raises(DataReadinessError, match="cannot authorize current planning"):
+        _verify_readiness_audit(retained)
 
 
 def test_plan_detects_mutated_artifact(
