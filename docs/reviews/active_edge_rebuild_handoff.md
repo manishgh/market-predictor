@@ -8,7 +8,7 @@ Repository: `C:\project\market-predictor`
 
 Branch: `er-intraday-refactoring`
 
-Last completed implementation commit: `4a98f29` (`Move and harden prospective broker evidence`)
+Last completed implementation commit: `7419df8` (`Move and harden prospective analyst evidence`)
 
 ## Purpose
 
@@ -1297,10 +1297,36 @@ output checks passed. Repository-wide Ruff debt remains 165 findings; strict myp
 remains 14 findings in the same three untouched files. Independent Python and ML/data
 reviews closed with no remaining P0, P1, or P2 finding.
 
-Exact next checkpoint: independently review, then move and harden
-`edge_rebuild/prospective_analyst_revision_horizon.py` under its semantic intraday
-dataset owner. Fix zero-news publication, pre-load memory enforcement, and exact
-authority schemas; preserve strict replay of horizon authorities
-`prospective_analyst_revision_horizon_20260817_v2` and
-`prospective_analyst_revision_horizon_20260821_v4`. Do not poll providers, regenerate
-artifacts, train, promote, serve, or open a locked test. Rollback anchor is `4a98f29`.
+Implementation commit `7419df8` moves prospective analyst-revision classification,
+episode construction, coverage, capacity audit, publication, and strict replay to
+`intraday/datasets/prospective_analyst_revision_horizon.py`. The command imports the
+canonical owner, every old import form is prohibited, and no compatibility alias
+remains. Immutable schema identifiers retain their existing values because they name
+persisted evidence formats rather than Python ownership.
+
+The hardened publisher supports a valid zero-news horizon, enforces memory before and
+after every parent load and derivation, bounds total parent bytes and projected frame
+expansion, validates exact JSON and tabular schemas, rejects duplicate/non-finite
+metadata and Boolean integers, verifies security identity across generations, and
+recomputes provider timestamp collisions and first-seen event time over the complete
+horizon. Publication uses an owned sibling staging directory and atomic rename.
+Source-event capacity never claims matched market-session capacity, and all outputs
+remain explicitly ineligible for training and serving.
+
+Both retained authorities strictly replay without regeneration. The August 17
+authority contains 536 revisions, three episodes, and 1,006 coverage rows; the August
+21 authority contains 451 revisions, 12 episodes, and 503 coverage rows. Verification
+passed 273 focused migration/integration tests, the restored 57-test intraday
+development file, and the exact complete suite with 1,846 passed and three skipped.
+Touched Ruff, strict mypy, compileall, CLI help, retained-authority replay, diff, and
+temporary-output checks passed. Independent Python and ML/data reviewers reported no
+remaining P0, P1, or P2 finding. Repository-wide debt is 166 Ruff findings and 14
+strict-mypy findings in three untouched intraday dataset files.
+
+Exact next checkpoint: independently review the readiness dependency boundary. Move
+readiness audit orchestration to `governance/readiness`, but first extract the strict
+readiness-authority replay contract needed by `intraday/datasets/history.py` into an
+allowed lower-level package so intraday never imports governance. Update the command
+adapter and tests, prohibit the old owner without an alias, and strictly replay retained
+readiness authorities. Do not run providers, regenerate data, train, promote, serve, or
+open a locked test. Rollback anchor is `7419df8`.

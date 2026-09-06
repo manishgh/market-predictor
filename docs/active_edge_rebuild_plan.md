@@ -1716,6 +1716,30 @@ test, and task names.
      compileall, CLI help, import guards, retained evidence replay, diff, memory, and
      temporary-output checks passed. Independent Python and ML/data reviewers reported
      no remaining P0, P1, or P2 finding.
+   - **Prospective analyst-revision horizon ownership (`completed`).** Implementation
+     commit `7419df8` moves classification, episode construction, source coverage,
+     capacity audit, publication, and strict replay from
+     `edge_rebuild/prospective_analyst_revision_horizon.py` to
+     `intraday/datasets/prospective_analyst_revision_horizon.py`. The command uses the
+     canonical owner, all old import forms are prohibited, and no alias remains.
+
+     The publisher now handles zero-news horizons, enforces pre-load and post-load
+     memory checks plus bounded parent bytes and projected expansion, requires exact
+     metadata and frame schemas, verifies cross-generation security identity, and
+     recomputes provider-time collisions and event first-seen time across the complete
+     horizon. Owned sibling staging and atomic rename prevent partial publication.
+     Source-event capacity is kept separate from matched market-session capacity, and
+     training and serving eligibility remain false.
+
+     Both retained authorities replay without regeneration. The August 17 horizon has
+     536 classified revisions, three episodes, and 1,006 coverage rows; the August 21
+     horizon has 451 revisions, 12 episodes, and 503 coverage rows. Verification passed
+     273 focused migration/integration tests, the restored 57-test intraday development
+     file, and the exact full suite with 1,846 passed and three skipped. Touched Ruff,
+     strict mypy, compileall, CLI help, retained replay, diff, and temporary-output
+     checks passed. Independent Python and ML/data reviews closed with no remaining P0,
+     P1, or P2 finding. Repository-wide debt is 166 Ruff findings and 14 strict-mypy
+     findings in three untouched intraday dataset files.
 5. **Governance, serving, and command package migration (`pending`).**
    Move readiness, promotion, drift, and outcomes to `governance`; bundle loading,
    prediction services, and API behavior to `serving`; and retain only thin CLI
