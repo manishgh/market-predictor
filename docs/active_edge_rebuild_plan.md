@@ -1765,6 +1765,25 @@ test, and task names.
      findings in the same three untouched intraday dataset files. No provider call,
      artifact regeneration, training, promotion, serving, or locked-test access
      occurred.
+   - **Prediction-serving ownership (`completed`).** Implementation commit
+     `fc2a32e` consolidates bundle loading, API-facing prediction contracts,
+     prediction orchestration, snapshots, outcome-intent registration, investment
+     replay, and swing inference under behavior-named `core`, `serving`, and `swing`
+     packages. Every removed top-level or `edge_rebuild` import path is prohibited
+     without an alias. Serving now rejects duplicate or non-finite JSON, reparse-point
+     paths, manifest races, future model generations, stale drift evidence, policy
+     identity mismatches, and incomplete requested model pairs. Swing outcomes use the
+     bound ten-session triple-barrier policy; intraday outcomes retain their separate
+     minute-horizon calibration and managed-outcome contract.
+
+     Verification passed 442 focused tests with two skipped and the exact complete
+     suite with 1,995 passed and three skipped. Changed-file Ruff, strict mypy over 46
+     source files, compileall, CLI help, and staged diff checks passed. Independent
+     architecture and ML/governance reviewers reported no P0, P1, or P2 finding.
+     Repository-wide debt is 130 Ruff findings and 14 strict-mypy findings in
+     `intraday/datasets/publisher.py`, `intraday/datasets/bar_dataset.py`, and
+     `intraday/datasets/dataset_io.py`. No provider call, data regeneration, training,
+     promotion, serving process, or locked-test access occurred.
 5. **Governance, serving, and command package migration (`pending`).**
    Move readiness, promotion, drift, and outcomes to `governance`; bundle loading,
    prediction services, and API behavior to `serving`; and retain only thin CLI
@@ -1783,12 +1802,12 @@ test, and task names.
    test suite under the configured writable runtime directory, `git diff --check`, and
    a process/memory check. Update the handoff with measured evidence only.
 
-The exact next checkpoint is the prediction-serving ownership migration. Move bundle
-loading, swing/intraday prediction orchestration, and API-facing prediction contracts
-from `edge_rebuild/serving.py`, `edge_rebuild/swing_live.py`, and the top-level
-`prediction_service.py` into behavior-named modules under `serving`. Keep command
-modules as thin adapters, add dependency guards, prohibit every removed import path,
-and preserve prediction output and bundle-verification behavior without aliases.
+The exact next checkpoint is governance outcome and drift ownership. Move drift policy,
+prediction policy, outcome contracts, outcome maturation, outcome persistence, and
+performance monitoring from top-level modules into behavior-named modules under
+`governance`. Keep serving dependent on governance, never the reverse; update commands
+as thin adapters; prohibit every removed import path without aliases; and preserve
+persisted evidence schemas and governed behavior.
 
 Rollback is the last pushed task commit. A task is not accepted until the same senior
 reviewer has inspected its bounded diff and all supported P0/P1 findings are fixed.

@@ -1348,10 +1348,35 @@ Repository-wide debt is 161 Ruff findings and 14 strict-mypy findings in
 `intraday/datasets/dataset_io.py`. No provider request, data regeneration, training,
 promotion, serving, or locked-test access occurred.
 
-Exact next checkpoint: independently review and implement prediction-serving ownership.
-Move bundle loading, swing/intraday prediction orchestration, and API-facing prediction
-contracts from `edge_rebuild/serving.py`, `edge_rebuild/swing_live.py`, and the top-level
-`prediction_service.py` into behavior-named modules under `serving`. Keep commands thin,
-enforce package direction, prohibit every removed import path without aliases, and
-preserve prediction and bundle-verification behavior. Do not run providers, regenerate
-data, train, promote, serve, or open a locked test. Rollback anchor is `e417960`.
+Implementation commit `fc2a32e` completes prediction-serving ownership. Bundle loading,
+API-facing contracts, prediction orchestration, snapshots, outcome-intent registration,
+investment replay, swing feature construction, and swing inference now have canonical
+owners under `core`, `serving`, and `swing`. Removed top-level and `edge_rebuild` paths
+are absent and guarded against reintroduction; no compatibility alias remains.
+
+The checkpoint also closes serving correctness gaps. Strict JSON rejects duplicate and
+non-finite values. Bundle and feature-manifest reads reject reparse paths, bind bytes to
+their hashes, and prevent path or same-file races. Direct and unified prediction paths
+reject future or changed model generations. Swing readiness binds exact drift, policy,
+market, liquidity, and ten-session outcome-policy identities. Swing maturation uses the
+triple barrier and records `target_first`, `stop_first`, or `timeout`; intraday keeps its
+separate minute-horizon calibration and managed-outcome requirements. Invalid or
+abstained rows cannot create maturation intents.
+
+Verification passed 442 focused tests with two skipped and the exact complete suite
+with 1,995 passed and three skipped in 18 minutes 42 seconds. Changed-file Ruff, strict
+mypy over 46 source files, compileall, CLI help, staged diff, and import-path scans
+passed. Independent architecture and ML/governance reviewers reported no remaining P0,
+P1, or P2 finding. Repository-wide debt is 130 Ruff findings and 14 strict-mypy findings
+in `intraday/datasets/publisher.py`, `intraday/datasets/bar_dataset.py`, and
+`intraday/datasets/dataset_io.py`. No provider call, data regeneration, training,
+promotion, serving process, or locked-test access occurred.
+
+Exact next checkpoint: independently review and implement governance outcome and drift
+ownership. Move drift policy, prediction policy, outcome contracts, outcome maturation,
+outcome persistence, and performance monitoring from top-level modules into
+behavior-named modules under `governance`. Keep serving dependent on governance, never
+the reverse; keep commands thin; prohibit every removed import path without aliases;
+and preserve persisted evidence schemas and governed behavior. Do not run providers,
+regenerate data, train, promote, serve, or open a locked test. Rollback anchor is
+`fc2a32e`.
