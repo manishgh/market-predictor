@@ -29,6 +29,7 @@ import pandas as pd
 import market_predictor.modeling.label_outcomes as label_outcomes
 from market_predictor.core.errors import DataReadinessError
 from market_predictor.execution_policy import executable_fill_price
+from market_predictor.swing.labels.holding_paths import holding_calendar
 
 BARRIER_COLUMNS: Final = (
     "barrier_label",
@@ -89,18 +90,34 @@ def apply_triple_barrier(
         return _empty_barrier_frame(entries)
 
     ordered = bars.sort_values("session", kind="stable").reset_index(drop=True)
+    if ordered["session"].isna().any() or ordered["session"].duplicated().any():
+        raise DataReadinessError("barrier paths require unique non-null sessions")
+    observed_dates = pd.to_datetime(ordered["session"], errors="coerce")
+    if observed_dates.isna().any() or observed_dates.ne(observed_dates.dt.normalize()).any():
+        raise DataReadinessError("barrier paths contain invalid session dates")
+    string_sessions = isinstance(ordered["session"].iloc[0], str)
+    ordered["session"] = observed_dates.dt.date.map(lambda day: day.isoformat() if string_sessions else day)
+    if ordered["session"].duplicated().any():
+        raise DataReadinessError("barrier paths duplicate a normalized session")
+    dates = holding_calendar(observed_dates.min().date(), observed_dates.max().date())
+    if not set(observed_dates.dt.date).issubset(dates):
+        raise DataReadinessError("barrier paths contain non-exchange sessions")
+    # Exact calendar slots preserve missing observations; OHLC values are never filled.
+    slots = [day.isoformat() for day in dates] if string_sessions else list(dates)
+    ordered = ordered.set_index("session").reindex(pd.Index(slots, name="session")).reset_index()
     sessions = ordered["session"].to_numpy()
     opens = ordered["open"].to_numpy(dtype=float)
     highs = ordered["high"].to_numpy(dtype=float)
     lows = ordered["low"].to_numpy(dtype=float)
     closes = ordered["close"].to_numpy(dtype=float)
-    position_of = {session: index for index, session in enumerate(sessions)}
+    price_rows = np.column_stack((opens, highs, lows, closes))
+    position_of = {pd.Timestamp(session).date(): index for index, session in enumerate(sessions)}
 
     records: list[dict[str, object]] = []
     for decision_session, atr in zip(
         entries["session"], entries["atr"], strict=True
     ):
-        decision_index = position_of.get(decision_session)
+        decision_index = position_of.get(pd.Timestamp(decision_session).date())
         if decision_index is None or not np.isfinite(atr) or atr <= 0:
             records.append(_unresolved_record(decision_session))
             continue
@@ -113,6 +130,10 @@ def apply_triple_barrier(
             continue
 
         entry_price = float(opens[entry_index])
+        prices = price_rows[entry_index : last_index + 1]
+        if not np.isfinite(prices).all() or (prices <= 0).any():
+            records.append(_unresolved_record(decision_session))
+            continue
         target = entry_price + spec.target_atr_multiple * float(atr)
         stop = entry_price - spec.stop_atr_multiple * float(atr)
         window = slice(entry_index, last_index + 1)

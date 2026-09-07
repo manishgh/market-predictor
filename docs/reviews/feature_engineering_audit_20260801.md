@@ -67,13 +67,55 @@ BIIB's two rows and CTXS's first row have expected windows but inexact paths.
 The sector-label-unavailable reason is downstream of masked labels, not independent
 evidence of missing sector ETF bars (`swing/features/eligibility.py`). The label
 builder masks all eight fixed returns when the path is inexact
-(`swing/labels/__init__.py`). Provider-level causes and delisting proceeds have not
-been established. Repair requires complete outcomes for already-selected holdings,
+(`swing/labels/__init__.py`). The following source review supersedes the earlier
+reason-code-only diagnosis. Repair requires complete outcomes for already-selected holdings,
 not future-aware exclusions or treating index removal as an unexplained disappearance.
 [Alpaca's declared adjustment basis](https://docs.alpaca.markets/us/reference/stockbarsingle-1)
 includes splits, dividends and spin-offs under `all`; it does not independently
 reconcile every retained event or authorize separate dividend credit. Use retained
 evidence first without speculative bulk redownloads.
+
+### Holding-Path Source Review
+
+Independent projected review of 36 hash-verified stock artifacts found 40 paths
+with complete positive-volume prices (12 tickers), nine paths with zero-volume
+records (BIIB 2, LB 7), and 21 paths with absent retained sessions (CTXS 10, FRC 2,
+NLSN 4, XLNX 5). The 40 price-complete paths require 91 sessions omitted from the
+combined layer. All 129 overlapping projected OHLCV rows matched raw values.
+Raw artifacts have no security_id; collection-era and current panel membership IDs
+differ for 17/18 tickers. Thus **price-complete does not mean identity-reconciled**.
+
+Source manifests: raw daily `b99a1d13d9075220db30c3870bc0796b3631bf4ec0bf6424469feeeec9115d93`;
+combined daily `c5780d2f406531ec2f6d98372577c105a60687ea72c57a7b6c739515934a7e34`.
+No old authority was modified and no selected observation was excluded.
+
+Canonical labels now resolve separate security-identified outcome bars using XNYS,
+not observed stock or SPY row counts. Membership end no longer suppresses expected
+holding outcomes. Fixed/managed paths and live maturation reject unusable daily
+observations; precise daily open/close timestamps include early closes. This code
+correction does not certify historical identity or corporate-action return units.
+
+The retained SEC inventory has relevant accession metadata but not the filing
+bodies needed for accounting. The independent reviewer inspected these official
+documents online; they are research pointers, **not retained hash-bound admission**:
+
+- [LB closing 8-K](https://www.sec.gov/Archives/edgar/data/701985/000114036121026658/nt10026698x7_8k.htm):
+  parent rename and VSCO distribution, not a simple ticker-only continuation.
+- [AMD closing 8-K](https://ir.amd.com/financial-information/sec-filings/content/0000002488-22-000031/amd-20220214.htm):
+  XLNX consideration requires successor-share entitlement, not ticker splicing.
+- [CTXS closing 8-K](https://www.sec.gov/Archives/edgar/data/877890/000119312522256805/d393433d8k.htm)
+  and [Nasdaq cessation notice](https://www.nasdaqtrader.com/TraderNews.aspx?id=eca2022-262):
+  consideration and cessation do not establish the spendable cash-credit date.
+- [NLSN closing 8-K](https://www.sec.gov/Archives/edgar/data/1492633/000119312522260583/d407513d8k.htm):
+  cash consideration requires separately bound settlement treatment.
+- [FRC OTC notice](https://infomemo.theocc.com/infomemos?number=52358):
+  receivership does not justify assuming common shares were worth zero.
+- [BIIB halt notice](https://infomemo.theocc.com/infomemos?number=47809):
+  an options-processing reference price is not an executable stock entry.
+
+Next admission requires independent source identity intervals, corporate-action
+terms/valuation/settlement policy, total-return reconciliation, and a new immutable
+outcome authority with independent replay. Training remains blocked, not failed.
 
 ## Scope
 

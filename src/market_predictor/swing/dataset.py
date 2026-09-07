@@ -74,6 +74,7 @@ def build_swing_dataset(
     decisions: pd.DataFrame,
     benchmark_bars: pd.DataFrame,
     *,
+    outcome_bars: pd.DataFrame | None = None,
     global_events: pd.DataFrame | None = None,
     global_source_collections: pd.DataFrame | None = None,
     config: SwingDatasetConfig | None = None,
@@ -81,6 +82,7 @@ def build_swing_dataset(
     """Build post-close swing features and next-open labels from canonical inputs."""
 
     config = config or SwingDatasetConfig()
+    outcome_source = decisions if outcome_bars is None else outcome_bars
     data, benchmark_features = _build_swing_feature_history(
         decisions,
         benchmark_bars,
@@ -113,6 +115,7 @@ def build_swing_dataset(
         data,
         benchmark_features,
         config,
+        outcome_bars=outcome_source,
         inplace=True,
     )
     _assert_build_memory(config, "swing exact labels")
@@ -126,6 +129,7 @@ def build_swing_dataset(
         data,
         config,
         source_frame=label_source,
+        outcome_bars=outcome_source,
         benchmark_bars=benchmark_features,
     )
     memory = memory_audit(

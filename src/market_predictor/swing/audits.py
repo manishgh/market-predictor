@@ -22,6 +22,7 @@ def audit_swing_dataset(
     config: SwingDatasetConfig,
     *,
     source_frame: pd.DataFrame | None = None,
+    outcome_bars: pd.DataFrame | None = None,
     benchmark_bars: pd.DataFrame | None = None,
 ) -> CanonicalAuditReport:
     horizon = config.horizon_sessions
@@ -204,13 +205,14 @@ def audit_swing_dataset(
     )
     reconciliation_hashes = data["label_source_reconciliation_sha256"].fillna("").astype(str).unique()
     lineage_failures += int(len(reconciliation_hashes) != 1 or len(reconciliation_hashes[0]) != 64)
-    if (source_frame is None) != (benchmark_bars is None):
+    if len({source_frame is None, benchmark_bars is None, outcome_bars is None}) > 1:
         lineage_failures += 1
-    elif source_frame is not None and benchmark_bars is not None:
+    elif source_frame is not None and benchmark_bars is not None and outcome_bars is not None:
         reproduced = add_exact_swing_labels(
             source_frame,
             benchmark_bars,
             config,
+            outcome_bars=outcome_bars,
         )
         lineage_failures += replay_mismatch_count(
             data,

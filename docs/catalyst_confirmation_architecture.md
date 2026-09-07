@@ -60,6 +60,20 @@ There is no fallback from the active path to legacy models or schemas.
 
 ### Offline Swing Accounting
 
+`swing/labels/holding_paths.py` owns exact XNYS holding calendars and daily
+observation validation. Fixed labels take a separate security-identified outcome
+source; membership controls entry eligibility, not the lifetime of an existing
+holding. The same source supplies barrier outcomes and managed daily marks.
+Calendar gaps remain unknown observations, never next-available-bar entries.
+Exact opens/closes include DST and early-close sessions. Live maturation shares
+observation validation and does not accept zero-volume price placeholders.
+Passing identity shape checks is not provider identity proof. Post-removal source
+mapping and new immutable/replayed outcome authorities are required before training;
+old membership-truncated authorities are retained historical evidence, not patched.
+The materialization request binds the named independent-holding panel schema and
+holding-path implementation hashes. Resume and completed-authority loading reject
+old or changed implementations before reusing their partitions.
+
 `swing/evaluation/ledger.py` owns the single funded ledger. Each cohort
 requests one tenth of prior-close NAV, equal-weight across its selected securities.
 Cash caps the cohort pro rata including prepaid round-trip costs. Entries precede

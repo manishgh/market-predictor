@@ -275,8 +275,10 @@ def build_swing_setup_candidates(
         benchmark_bars,
         config=config,
     )
+    labelled = add_exact_swing_labels(
+        features, benchmark_features, config, outcome_bars=decisions, inplace=True,
+    )
     del decisions
-    labelled = add_exact_swing_labels(features, benchmark_features, config, inplace=True)
     del features
     step = SetupComponentsStep(benchmark_features)
     components = step.transform(labelled)

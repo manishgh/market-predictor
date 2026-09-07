@@ -69,8 +69,9 @@ from market_predictor.swing.features.eligibility import (
     apply_sparse_session_gap_abstentions as apply_sparse_session_gap_abstentions,
 )
 from market_predictor.swing.labels import add_exact_swing_labels
+from market_predictor.swing.labels.holding_paths import future_outcome_rows, holding_calendar, outcome_bar_lookup
 
-SWING_FEATURE_PANEL_SCHEMA: Final = "edge_rebuild.swing_feature_panel.v9"
+SWING_FEATURE_PANEL_SCHEMA: Final = "market_predictor.swing_panel.independent_holding_paths"
 SWING_FEATURE_PROFILE: Final = "technical_market"
 SWING_CATALYST_FEATURE_PROFILE: Final = "catalyst_full"
 SWING_ABLATION_PROFILES: Final = (
@@ -222,6 +223,7 @@ def build_swing_feature_rows(
     benchmark_bars: pd.DataFrame,
     memberships: pd.DataFrame,
     *,
+    outcome_bars: pd.DataFrame | None = None,
     contract: StrategyContract,
     config: SwingDatasetConfig | None = None,
     sparse_missing_sessions_by_ticker: Mapping[str, Sequence[date]] | None = None,
@@ -252,6 +254,7 @@ def build_swing_feature_rows(
     decisions = decisions_from_completed_bars(traded, mode="swing-nightly")
     decisions = join_universe_membership(decisions, memberships)
     decisions = stamp_canonical_decision_ids(decisions)
+    outcome_source = decisions if outcome_bars is None else outcome_bars
     decisions["feature_profile"] = effective.feature_profile
     features, benchmark_features = build_swing_feature_history(
         decisions,
@@ -265,6 +268,7 @@ def build_swing_feature_rows(
         features,
         benchmark_features,
         effective,
+        outcome_bars=outcome_source,
         inplace=True,
     )
     from market_predictor.modeling.feature_pipeline import FeaturePipeline
@@ -290,6 +294,7 @@ def build_swing_feature_rows(
     )
     rows = _add_barrier_outcomes(
         rows,
+        outcome_bars=outcome_source,
         benchmark_bars=benchmark_features,
         contract=contract,
     )
@@ -337,6 +342,7 @@ def build_swing_feature_panel(
     benchmark_bars: pd.DataFrame,
     memberships: pd.DataFrame,
     *,
+    outcome_bars: pd.DataFrame | None = None,
     contract: StrategyContract,
     config: SwingDatasetConfig | None = None,
     global_events: pd.DataFrame | None = None,
@@ -348,6 +354,7 @@ def build_swing_feature_panel(
         stock_bars,
         benchmark_bars,
         memberships,
+        outcome_bars=outcome_bars,
         contract=contract,
         config=config,
         global_events=global_events,
@@ -414,6 +421,7 @@ def swing_baseline_feature_columns(
 def _add_barrier_outcomes(
     rows: pd.DataFrame,
     *,
+    outcome_bars: pd.DataFrame,
     benchmark_bars: pd.DataFrame,
     contract: StrategyContract,
 ) -> pd.DataFrame:
@@ -424,6 +432,11 @@ def _add_barrier_outcomes(
         same_bar_resolution=contract.swing.same_bar_barrier_resolution,
     )
     parts: list[pd.DataFrame] = []
+    spy_dates = benchmark_bars.loc[benchmark_bars["ticker"].eq("SPY"), "session_date_et"]
+    if spy_dates.empty:
+        raise DataReadinessError("swing holding calendar requires SPY coverage bounds")
+    sessions = holding_calendar(min(spy_dates), max(spy_dates))
+    lookup = outcome_bar_lookup(outcome_bars)
     for security_id, security_rows in rows.groupby(
         "security_id",
         sort=False,
@@ -431,9 +444,12 @@ def _add_barrier_outcomes(
         ordered = security_rows.sort_values(
             "session_date_et", kind="stable"
         ).reset_index(drop=True)
-        bars = ordered.loc[
-            :, ["session_date_et", "open", "high", "low", "close"]
-        ].rename(columns={"session_date_et": "session"})
+        paths = list(future_outcome_rows(ordered, lookup, sessions, spec.horizon_sessions))
+        keys = pd.MultiIndex.from_product([[security_id], sessions], names=lookup.index.names)
+        history = lookup.reindex(keys).reset_index(level="security_id", drop=True)
+        bars = history.loc[:, ["open", "high", "low", "close"]].reset_index().rename(
+            columns={"session_date_et": "session"},
+        )
         entries = pd.DataFrame(
             {
                 "session": ordered["session_date_et"],
@@ -448,14 +464,12 @@ def _add_barrier_outcomes(
             entries,
             spec=spec,
         )
-        availability = ordered.set_index("session_date_et")[
-            "available_at_utc"
-        ]
-        outcomes["barrier_label_available_at_utc"] = outcomes[
-            "exit_session"
-        ].map(availability)
-        entry = pd.to_numeric(ordered["open"].shift(-1), errors="coerce")
+        entry = pd.to_numeric(paths[0]["open"], errors="coerce")
         holding = pd.to_numeric(outcomes["holding_sessions"], errors="coerce")
+        outcomes["barrier_label_available_at_utc"] = pd.concat(
+            [path["available_at_utc"].where(holding.ge(offset)) for offset, path in enumerate(paths, start=1)],
+            axis=1,
+        ).max(axis=1)
         exit_price = pd.to_numeric(outcomes["exit_price"], errors="coerce")
         cost = contract.swing.round_trip_cost_bps / 10_000.0
         for offset, (session_column, return_column) in enumerate(
@@ -467,10 +481,10 @@ def _add_barrier_outcomes(
             start=1,
         ):
             path_session = pd.to_datetime(
-                ordered["session_date_et"].shift(-offset), errors="coerce"
+                paths[offset - 1]["session_date_et"], errors="coerce"
             )
             path_close = pd.to_numeric(
-                ordered["close"].shift(-offset), errors="coerce"
+                paths[offset - 1]["close"], errors="coerce"
             )
             mark = path_close.where(holding.gt(offset), exit_price)
             valid = (

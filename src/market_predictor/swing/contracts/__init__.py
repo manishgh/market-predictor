@@ -223,12 +223,14 @@ class SwingDatasetConfig(FrozenConfig):
         """Complete reproducible swing outcome semantics."""
 
         return {
-            "policy": "swing_label.v2",
+            "policy": "swing_independent_holding_paths",
             "horizon_sessions": self.horizon_sessions,
             "round_trip_cost_bps": self.round_trip_cost_bps,
             "entry_rule": "next_exact_exchange_session_open",
             "exit_rule": "decision_plus_horizon_session_close",
             "path_rule": "all_exchange_sessions_required",
+            "outcome_source": "security_identified_bars_independent_of_membership",
+            "calendar": "XNYS_not_observed_provider_rows",
             "broad_benchmark": self.broad_benchmark.upper(),
             "growth_benchmark": self.growth_benchmark.upper(),
         }

@@ -11,6 +11,7 @@ from market_predictor.swing.contracts import (
     swing_net_return_column,
     swing_target_column,
 )
+from market_predictor.swing.labels.holding_paths import future_outcome_rows, holding_calendar, outcome_bar_lookup
 
 
 def add_exact_swing_labels(
@@ -18,6 +19,7 @@ def add_exact_swing_labels(
     benchmarks: pd.DataFrame,
     config: SwingDatasetConfig,
     *,
+    outcome_bars: pd.DataFrame,
     inplace: bool = False,
 ) -> pd.DataFrame:
     if "security_id" not in frame.columns:
@@ -38,64 +40,30 @@ def add_exact_swing_labels(
     spy = benchmarks[benchmarks["ticker"].eq(config.broad_benchmark.upper())].sort_values("session_date_et")
     if spy.empty:
         raise DataReadinessError(f"benchmark bars do not contain {config.broad_benchmark}")
-    ordered_sessions = list(spy["session_date_et"])
+    ordered_sessions = holding_calendar(min(spy["session_date_et"]), max(spy["session_date_et"]))
     session_ordinal = {session: index for index, session in enumerate(ordered_sessions)}
-    data["_session_ordinal"] = data["session_date_et"].map(session_ordinal)
-    if bool(data["_session_ordinal"].isna().any()):
-        raise DataReadinessError("equity decisions contain sessions absent from SPY")
-
-    grouped = data.groupby("security_id", sort=False)
-    data["entry_time_utc"] = grouped["bar_start_utc"].shift(-1)
-    data["exit_time_utc"] = grouped["bar_end_utc"].shift(-horizon)
-    data["label_available_at_utc"] = grouped["available_at_utc"].shift(-horizon)
-    data["entry_session_date_et"] = grouped["session_date_et"].shift(-1)
-    data["exit_session_date_et"] = grouped["session_date_et"].shift(-horizon)
-    data["entry_price"] = grouped["open"].shift(-1)
-    data["exit_price"] = grouped["close"].shift(-horizon)
-    expected_entry = data["_session_ordinal"] + 1
-    expected_exit = data["_session_ordinal"] + horizon
-    actual_entry = data["entry_session_date_et"].map(session_ordinal)
-    actual_exit = data["exit_session_date_et"].map(session_ordinal)
-    market_window_expected = expected_exit.lt(len(ordered_sessions))
-    membership_window_expected = pd.Series(True, index=data.index)
-    if "membership_effective_to_utc" in data.columns:
-        membership_end = pd.to_datetime(
-            data["membership_effective_to_utc"],
-            utc=True,
-            errors="coerce",
-        )
-        membership_end_date = membership_end.dt.tz_convert(
-            "America/New_York"
-        ).dt.date
-        expected_exit_date = expected_exit.map(
-            lambda ordinal: (
-                ordered_sessions[int(ordinal)]
-                if pd.notna(ordinal)
-                and int(ordinal) >= 0
-                and int(ordinal) < len(ordered_sessions)
-                else pd.NaT
-            )
-        )
-        membership_window_expected = (
-            membership_end_date.isna()
-            | (
-                pd.Series(expected_exit_date, index=data.index)
-                < membership_end_date
-            )
-        )
-    data["label_window_expected"] = (
-        market_window_expected & membership_window_expected
-    )
-    data["label_path_exact"] = actual_entry.eq(expected_entry) & actual_exit.eq(expected_exit)
-
-    future_highs = pd.concat(
-        [grouped["high"].shift(-offset) for offset in range(1, horizon + 1)],
-        axis=1,
-    )
-    future_lows = pd.concat(
-        [grouped["low"].shift(-offset) for offset in range(1, horizon + 1)],
-        axis=1,
-    )
+    decision_ordinals = data["session_date_et"].map(session_ordinal)
+    if decision_ordinals.isna().any():
+        raise DataReadinessError("equity decisions contain non-exchange sessions")
+    lookup = outcome_bar_lookup(outcome_bars)
+    paths = list(future_outcome_rows(data, lookup, ordered_sessions, horizon))
+    first, last = paths[0], paths[-1]
+    data["entry_time_utc"] = first["bar_start_utc"]
+    data["exit_time_utc"] = last["bar_end_utc"]
+    data["label_available_at_utc"] = pd.concat(
+        [path["available_at_utc"] for path in paths], axis=1,
+    ).max(axis=1)
+    data["entry_session_date_et"] = first["session_date_et"]
+    data["exit_session_date_et"] = last["session_date_et"]
+    data["entry_price"] = first["open"]
+    data["exit_price"] = last["close"]
+    # Membership admits a decision; it never cancels an already-open holding.
+    data["label_window_expected"] = (decision_ordinals + horizon).lt(len(ordered_sessions))
+    data["label_path_exact"] = pd.concat(
+        [path["outcome_observation_valid"].eq(True) for path in paths], axis=1,
+    ).all(axis=1)
+    future_highs = pd.concat([path["high"] for path in paths], axis=1)
+    future_lows = pd.concat([path["low"] for path in paths], axis=1)
     evaluated = evaluate_swing_paths(
         entry_price=pd.to_numeric(
             data["entry_price"],
@@ -158,7 +126,7 @@ def add_exact_swing_labels(
         & data["label_path_exact"]
         & data[swing_target_column(horizon)].notna()
     )
-    return data.drop(columns="_session_ordinal")
+    return data
 
 
 def _benchmark_label_return(

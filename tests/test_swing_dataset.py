@@ -70,7 +70,7 @@ class SwingDatasetTests(unittest.TestCase):
             check_exact=True,
         )
 
-    def test_label_window_stops_at_exclusive_membership_end(self) -> None:
+    def test_label_window_continues_past_exclusive_membership_end(self) -> None:
         sessions = pd.date_range("2026-07-06", periods=4, tz="UTC")
         decisions = _daily_rows("EXIT", sessions, 0.0)
         decisions["membership_effective_to_utc"] = pd.Timestamp(
@@ -97,13 +97,14 @@ class SwingDatasetTests(unittest.TestCase):
             decisions,
             benchmarks,
             SwingDatasetConfig(horizon_sessions=1),
+            outcome_bars=decisions,
         )
 
         before_exit = labeled.loc[
             labeled["session_date_et"].eq(sessions[1].date())
         ].iloc[0]
-        self.assertFalse(before_exit["label_window_expected"])
-        self.assertFalse(before_exit["label_eligible"])
+        self.assertTrue(before_exit["label_window_expected"])
+        self.assertTrue(before_exit["label_eligible"])
 
     def test_benchmark_label_return_vectorizes_exact_paths_and_missing_rows(
         self,
@@ -262,6 +263,7 @@ class SwingDatasetTests(unittest.TestCase):
             decisions,
             benchmarks,
             SwingDatasetConfig(horizon_sessions=1),
+            outcome_bars=decisions,
         )
 
         counts = labeled.groupby("security_id")["daily_bar_count"].apply(list).to_dict()
@@ -483,8 +485,9 @@ def _daily_rows(
     base = 100.0 + offset + positions * 0.15 + np.sin(positions / 7.0)
     open_price = base * (1.0 + 0.001 * np.sin(positions / 3.0))
     close = base * (1.0 + 0.002 * np.cos(positions / 5.0))
-    start = sessions + pd.Timedelta(hours=14, minutes=30)
-    end = sessions + pd.Timedelta(hours=21)
+    schedule = xcals.get_calendar("XNYS").schedule.reindex(sessions.tz_localize(None))
+    start = pd.DatetimeIndex(schedule["open"])
+    end = pd.DatetimeIndex(schedule["close"])
     available = end + pd.Timedelta(minutes=15)
     frame = pd.DataFrame(
         {

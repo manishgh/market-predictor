@@ -232,6 +232,7 @@ def load_complete_swing_feature_panel(output_dir: Path) -> dict[str, Any]:
         != MINIMUM_SWING_DECISION_DATE.isoformat()
         or request.get("swing_feature_panel_schema")
         != SWING_FEATURE_PANEL_SCHEMA
+        or request.get("holding_path_implementation") != _holding_path_implementation()
         or request.get("feature_profiles")
         != list(SWING_MATERIALIZATION_PROFILES)
         or request.get("profile_policy")
@@ -372,6 +373,7 @@ def _build_request(
         "combined_daily_inputs": verified.request_payload,
         "strategy_contract_sha256": contract.sha256(),
         "swing_feature_panel_schema": SWING_FEATURE_PANEL_SCHEMA,
+        "holding_path_implementation": _holding_path_implementation(),
         "managed_path_cost_policy": MANAGED_PATH_COST_POLICY,
         "physical_partitioning": ["feature_profile", "calendar_month"],
         "decision_start_date": MINIMUM_SWING_DECISION_DATE.isoformat(),
@@ -394,6 +396,20 @@ def _build_request(
         "memory_budget_gib": memory_budget_gib,
         "memory_headroom_gib": memory_headroom_gib,
     }
+
+
+def _holding_path_implementation() -> dict[str, str]:
+    package = Path(__file__).resolve().parents[1]
+    owners = (
+        "swing/labels/__init__.py", "swing/labels/holding_paths.py",
+        "swing/labels/barrier_and_rank.py", "swing/features/panel.py",
+        "swing/dataset.py", "swing/features/eligibility.py",
+        "edge_rebuild/swing_materialization.py",
+        "edge_rebuild/swing_setups.py", "edge_rebuild/swing_daily_combination.py",
+        "swing/contracts/__init__.py", "execution_policy.py", "label_paths.py",
+        "modeling/label_outcomes.py",
+    )
+    return {owner: file_sha256(package / owner) for owner in owners}
 
 
 def _population_audit_verifies(payload: Mapping[str, Any]) -> bool:

@@ -72,7 +72,10 @@ def test_swing_feature_and_default_config_hashes_are_stable() -> None:
         "491edfa821bd96459690d00cc4a9fdfb7b8f16628314f22d881fdc0d57ccaae5"
     )
     assert contracts.SwingDatasetConfig().label_config_sha256() == (
-        "20a8bfdf233102f702eca13141cdeddc45afd5aa3db38703bb8f6edbeffe281e"
+        "2f9ec85d7bc23a3456565d5eac1906c74d3e3d1be8fe18c9a7c383a5c988358e"
+    )
+    assert contracts.SwingDatasetConfig().label_policy()["outcome_source"] == (
+        "security_identified_bars_independent_of_membership"
     )
 
 

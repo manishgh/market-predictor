@@ -27,6 +27,7 @@ from market_predictor.swing.labels.barrier_and_rank import (
     BarrierSpec,
     apply_triple_barrier,
 )
+from market_predictor.swing.labels.holding_paths import holding_calendar, validate_outcome_observations
 
 
 def evaluate_swing_maturation(
@@ -40,18 +41,30 @@ def evaluate_swing_maturation(
     horizon = policy_int(policy, "horizon_sessions")
     spy_ticker = str(policy["broad_benchmark"]).upper()
     qqq_ticker = str(policy["growth_benchmark"]).upper()
-    sessions = (
+    observed_sessions = (
         bars.loc[bars["ticker"].eq(spy_ticker), "session_date_et"]
         .drop_duplicates()
         .sort_values()
         .tolist()
     )
-    if intent.decision_session_et not in sessions:
+    if intent.decision_session_et not in observed_sessions:
         return PendingPath(reasons=("decision_session_not_observed",))
+    sessions: list[object] = list(holding_calendar(intent.decision_session_et, max(observed_sessions)))
     decision_index = sessions.index(intent.decision_session_et)
     if decision_index + horizon >= len(sessions):
         return PendingPath(reasons=("horizon_not_complete",))
     path_sessions = sessions[decision_index + 1 : decision_index + horizon + 1]
+    required_tickers = {intent.ticker, spy_ticker, qqq_ticker, intent.primary_benchmark}
+    observations = validate_outcome_observations(bars.loc[
+        bars["session_date_et"].isin([intent.decision_session_et, *path_sessions])
+        & bars["ticker"].isin(required_tickers)
+    ])
+    invalid = observations.loc[~observations["outcome_observation_valid"]]
+    if not invalid.empty:
+        return PendingPath(
+            reasons=("required_bar_path_incomplete",),
+            missing_intervals=tuple(sorted(f"{row.ticker}:{row.session_date_et}:invalid_observation" for row in invalid.itertuples())),
+        )
     entry_session = path_sessions[0]
     stock_path, missing = daily_path(
         bars,

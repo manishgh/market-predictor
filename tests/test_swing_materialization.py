@@ -7,6 +7,7 @@ from typing import Any
 import pandas as pd
 import pytest
 
+import market_predictor.edge_rebuild.swing_materialization as swing_materialization
 import market_predictor.swing.contracts.materialization as swing_materialization_contracts
 from market_predictor.canonical.store import file_sha256
 from market_predictor.core.errors import DataReadinessError
@@ -201,6 +202,8 @@ def test_materialization_resumes_then_publishes_immutable_panel(
         (output / "final" / "_authority.json").read_text(encoding="utf-8")
     )
     assert request["schema"] == SWING_MATERIALIZATION_REQUEST_SCHEMA
+    assert request["swing_feature_panel_schema"] == "market_predictor.swing_panel.independent_holding_paths"
+    assert "swing/labels/holding_paths.py" in request["holding_path_implementation"]
     assert authority["schema"] == (
         swing_materialization_contracts.SWING_MATERIALIZATION_AUTHORITY_SCHEMA
     )
@@ -231,6 +234,40 @@ def test_materialization_resumes_then_publishes_immutable_panel(
             output_dir=output,
             securities_per_shard=1,
         )
+
+
+@pytest.mark.parametrize("complete", [False, True])
+@pytest.mark.parametrize("owner", ["swing/labels/holding_paths.py", "edge_rebuild/swing_setups.py"])
+def test_changed_label_implementation_refuses_resume_or_complete_authority(
+    tmp_path: Path,
+    materialization_inputs: tuple[Path, Path, dict[str, int]],
+    monkeypatch: pytest.MonkeyPatch,
+    complete: bool,
+    owner: str,
+) -> None:
+    source_root, _, calls = materialization_inputs
+    output = tmp_path / "panel"
+    contract = load_strategy_contract(Path(__file__).parents[1] / "configs/edge_rebuild_strategy_contract.toml")
+    materialize_swing_feature_panel(
+        **_source_arguments(source_root), contract=contract, output_dir=output,
+        securities_per_shard=2, maximum_stage_one_shards_this_run=None if complete else 1,
+    )
+    request_before = (output / "_request.json").read_bytes()
+    calls_before = calls.copy()
+    changed = swing_materialization._holding_path_implementation()
+    assert owner in changed
+    changed[owner] = "f" * 64
+    monkeypatch.setattr(swing_materialization, "_holding_path_implementation", lambda: changed)
+    with pytest.raises(DataReadinessError):
+        if complete:
+            load_complete_swing_feature_panel(output)
+        else:
+            materialize_swing_feature_panel(
+                **_source_arguments(source_root), contract=contract, output_dir=output,
+                securities_per_shard=2,
+            )
+    assert calls == calls_before
+    assert (output / "_request.json").read_bytes() == request_before
 
 
 def test_resume_refuses_a_corrupted_stage_one_shard(

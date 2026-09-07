@@ -5,6 +5,7 @@ import json
 import pickle
 from dataclasses import asdict
 
+import exchange_calendars as xcals
 import numpy as np
 import pandas as pd
 import pandas.testing as pdt
@@ -47,11 +48,11 @@ def test_barrier_contract_ownership_and_values_are_frozen() -> None:
 
 def test_representative_barrier_and_managed_return_output_is_stable() -> None:
     rows = _flat(10)
-    rows[1] = ("2024-01-02", 100.0, 104.0, 99.0, 103.0)
-    rows[3] = ("2024-01-04", 100.0, 101.0, 98.0, 99.0)
+    rows[1] = ("2024-01-03", 100.0, 104.0, 99.0, 103.0)
+    rows[3] = ("2024-01-05", 100.0, 101.0, 98.0, 99.0)
     entries = pd.DataFrame(
         {
-            "session": ["2024-01-01", "2024-01-03", "2024-01-05"],
+            "session": ["2024-01-02", "2024-01-04", "2024-01-08"],
             "atr": [1.0, 1.0, 1.0],
         }
     )
@@ -78,7 +79,7 @@ def test_representative_barrier_and_managed_return_output_is_stable() -> None:
         "float64",
     )
     assert hashlib.sha256(payload.encode()).hexdigest() == (
-        "47ea63e0186f0509f1bb2e3ebf9f697026968fc20fbbd3a01344d62e346faa3d"
+        "085f5f03e5b4b92704998100f4ee87b1d61ec60c08e78efe9fb232d6009823f6"
     )
 
 
@@ -90,27 +91,27 @@ def _bars(rows: list[tuple[str, float, float, float, float]]) -> pd.DataFrame:
 
 def _flat(sessions: int, price: float = 100.0) -> list[tuple[str, float, float, float, float]]:
     return [
-        (f"2024-01-{day:02d}", price, price, price, price)
-        for day in range(1, sessions + 1)
+        (day.date().isoformat(), price, price, price, price)
+        for day in xcals.get_calendar("XNYS").sessions_in_range("2024-01-02", "2024-04-30")[:sessions]
     ]
 
 
 def test_target_hit_resolves_to_the_target_price() -> None:
     rows = _flat(8)
-    rows[3] = ("2024-01-04", 100.0, 106.0, 99.0, 105.0)  # +6 clears a +3 target
-    entries = pd.DataFrame({"session": ["2024-01-01"], "atr": [1.0]})
+    rows[3] = ("2024-01-05", 100.0, 106.0, 99.0, 105.0)  # +6 clears a +3 target
+    entries = pd.DataFrame({"session": ["2024-01-02"], "atr": [1.0]})
 
     out = apply_triple_barrier(_bars(rows), entries, spec=SPEC)
 
     assert out.loc[0, "barrier_label"] == label_outcomes.TARGET_HIT
     assert out.loc[0, "exit_price"] == pytest.approx(103.0)
-    assert out.loc[0, "exit_session"] == "2024-01-04"
+    assert out.loc[0, "exit_session"] == "2024-01-05"
 
 
 def test_stop_hit_resolves_to_the_stop_price() -> None:
     rows = _flat(8)
-    rows[2] = ("2024-01-03", 100.0, 101.0, 98.0, 98.5)  # -2 breaches a -1.5 stop
-    entries = pd.DataFrame({"session": ["2024-01-01"], "atr": [1.0]})
+    rows[2] = ("2024-01-04", 100.0, 101.0, 98.0, 98.5)  # -2 breaches a -1.5 stop
+    entries = pd.DataFrame({"session": ["2024-01-02"], "atr": [1.0]})
 
     out = apply_triple_barrier(_bars(rows), entries, spec=SPEC)
 
@@ -120,8 +121,8 @@ def test_stop_hit_resolves_to_the_stop_price() -> None:
 
 def test_gap_through_stop_fills_at_worse_open() -> None:
     rows = _flat(8)
-    rows[2] = ("2024-01-03", 96.0, 97.0, 95.0, 96.5)
-    entries = pd.DataFrame({"session": ["2024-01-01"], "atr": [1.0]})
+    rows[2] = ("2024-01-04", 96.0, 97.0, 95.0, 96.5)
+    entries = pd.DataFrame({"session": ["2024-01-02"], "atr": [1.0]})
 
     out = apply_triple_barrier(_bars(rows), entries, spec=SPEC)
 
@@ -132,8 +133,8 @@ def test_gap_through_stop_fills_at_worse_open() -> None:
 
 def test_gap_through_target_uses_conservative_resting_limit_fill() -> None:
     rows = _flat(8)
-    rows[2] = ("2024-01-03", 106.0, 107.0, 105.0, 106.5)
-    entries = pd.DataFrame({"session": ["2024-01-01"], "atr": [1.0]})
+    rows[2] = ("2024-01-04", 106.0, 107.0, 105.0, 106.5)
+    entries = pd.DataFrame({"session": ["2024-01-02"], "atr": [1.0]})
 
     out = apply_triple_barrier(_bars(rows), entries, spec=SPEC)
 
@@ -146,8 +147,8 @@ def test_a_bar_touching_both_barriers_resolves_to_the_stop() -> None:
     """The bar records that both prices traded, not which came first."""
 
     rows = _flat(8)
-    rows[1] = ("2024-01-02", 100.0, 110.0, 90.0, 100.0)
-    entries = pd.DataFrame({"session": ["2024-01-01"], "atr": [1.0]})
+    rows[1] = ("2024-01-03", 100.0, 110.0, 90.0, 100.0)
+    entries = pd.DataFrame({"session": ["2024-01-02"], "atr": [1.0]})
 
     out = apply_triple_barrier(_bars(rows), entries, spec=SPEC)
 
@@ -156,7 +157,7 @@ def test_a_bar_touching_both_barriers_resolves_to_the_stop() -> None:
 
 
 def test_untouched_barriers_time_out_at_the_horizon_close() -> None:
-    entries = pd.DataFrame({"session": ["2024-01-01"], "atr": [1.0]})
+    entries = pd.DataFrame({"session": ["2024-01-02"], "atr": [1.0]})
 
     out = apply_triple_barrier(_bars(_flat(8)), entries, spec=SPEC)
 
@@ -168,13 +169,13 @@ def test_entry_never_uses_the_decision_bar() -> None:
     """Entry is the next session's open, so the decision bar cannot price it."""
 
     rows = _flat(8)
-    rows[0] = ("2024-01-01", 100.0, 999.0, 1.0, 100.0)  # violent decision bar
-    rows[1] = ("2024-01-02", 50.0, 50.0, 50.0, 50.0)
-    entries = pd.DataFrame({"session": ["2024-01-01"], "atr": [1.0]})
+    rows[0] = ("2024-01-02", 100.0, 999.0, 1.0, 100.0)  # violent decision bar
+    rows[1] = ("2024-01-03", 50.0, 50.0, 50.0, 50.0)
+    entries = pd.DataFrame({"session": ["2024-01-02"], "atr": [1.0]})
 
     out = apply_triple_barrier(_bars(rows), entries, spec=SPEC)
 
-    # Barriers are struck from the 50.0 open, not from anything on 2024-01-01.
+    # Barriers are struck from the 50.0 open, not from anything on 2024-01-02.
     assert out.loc[0, "target_price"] == pytest.approx(53.0)
     assert out.loc[0, "stop_price"] == pytest.approx(48.5)
 
@@ -182,7 +183,7 @@ def test_entry_never_uses_the_decision_bar() -> None:
 def test_a_horizon_running_past_the_data_is_unresolved_not_a_timeout() -> None:
     """Labelling an unknown outcome zero would invent an observation."""
 
-    entries = pd.DataFrame({"session": ["2024-01-03"], "atr": [1.0]})
+    entries = pd.DataFrame({"session": ["2024-01-04"], "atr": [1.0]})
 
     out = apply_triple_barrier(_bars(_flat(5)), entries, spec=SPEC)
 
@@ -343,7 +344,7 @@ def test_missing_columns_fail_closed() -> None:
 
 
 def test_non_finite_atr_is_unresolved() -> None:
-    entries = pd.DataFrame({"session": ["2024-01-01"], "atr": [np.nan]})
+    entries = pd.DataFrame({"session": ["2024-01-02"], "atr": [np.nan]})
 
     out = apply_triple_barrier(_bars(_flat(8)), entries, spec=SPEC)
 
@@ -351,15 +352,15 @@ def test_non_finite_atr_is_unresolved() -> None:
 
 
 def test_appending_future_bars_does_not_change_resolved_barrier() -> None:
-    entries = pd.DataFrame({"session": ["2024-01-01"], "atr": [1.0]})
+    entries = pd.DataFrame({"session": ["2024-01-02"], "atr": [1.0]})
     original = _bars(_flat(8))
     extended = pd.concat(
         [
             original,
             _bars(
                 [
-                    ("2024-01-09", 999.0, 999.0, 1.0, 999.0),
-                    ("2024-01-10", 1.0, 999.0, 1.0, 1.0),
+                    ("2024-01-12", 999.0, 999.0, 1.0, 999.0),
+                    ("2024-01-16", 1.0, 999.0, 1.0, 1.0),
                 ]
             ),
         ],

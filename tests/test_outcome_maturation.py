@@ -32,6 +32,16 @@ from tests.test_outcome_repository import _intent as swing_intent
 
 
 class OutcomeMaturationTests(unittest.TestCase):
+    def test_swing_zero_volume_observation_remains_pending(self) -> None:
+        bars = _swing_bars()
+        bars.loc[bars["ticker"].eq("MSFT") & bars["session_date_et"].eq(date(2026, 7, 27)), "volume"] = 0
+        result, evidence = mature_prediction(
+            swing_intent(), bars, observed_as_of=datetime(2026, 8, 8, 12, tzinfo=UTC),
+            source_artifact_sha256="9" * 64,
+        )
+        self.assertEqual(result.status, "pending")
+        self.assertEqual(evidence, [])
+
     def test_swing_rejects_non_daily_timeframe(self) -> None:
         intent = swing_intent()
         bars = _swing_bars()

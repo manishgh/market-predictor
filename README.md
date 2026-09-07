@@ -57,12 +57,20 @@ hash-verified promoted bundle.
 - The first retained-data accounting control is **blocked**: 70 of 30,525 selected
   stock-days lack complete fixed-horizon outcomes. No stock was dropped to produce
   a performance score, and no real-data ledger or SPY result was emitted.
+- Swing labels now accept separate security-identified outcome bars, retain holding
+  windows after index removal, and use exact XNYS sessions and daily timestamps.
+  Missing sessions and zero-volume records cannot produce invented fills. This
+  corrects the builder, not the retained data: 40 affected paths have price coverage
+  pending identity proof, while 30 require additional source evidence. No repaired
+  authority or new trained model is claimed.
 - Live inference excludes individual missing or cold securities through the governed
   5% ceiling. Cached models are bound to the active contract, trust store, promotion
   policy, and model-size limit.
-- Swing V12 is published and strictly replayed as one catalyst-independent authority:
+- The retained pre-repair swing authority was published and strictly replayed:
   853,417 `technical_market` rows, 604 modeled securities, and 1,759 sessions from
   `2019-07-09` through `2026-07-08`.
+  It remains historical evidence; the updated holding-path loader requires a new
+  schema and implementation-bound authority, rather than reusing these old labels.
 - Prior swing candidates are rejection evidence only; no rejected or obsolete model
   is retained as a supported compatibility path.
 - A2 replaces that experiment contract with four nested technical ablations
