@@ -8,7 +8,58 @@ Repository: `C:\project\market-predictor`
 
 Branch: `er-intraday-refactoring`
 
-Last completed implementation commit: `bc9dbd5` (`Separate swing holding outcomes from decision membership`)
+Last completed implementation commit: `e1e4803` (`Collect immutable official evidence for swing holding recovery`)
+
+## Current Session Work Tracking
+
+2026-09-07: source-document collection implementation `e1e4803` is verified and
+pushed. Historical bar/source authorities, selections and model files are unchanged.
+The pending changes at this boundary are this handoff and the active plan only;
+generated `.test-tmp` remains untracked and must not be staged.
+
+| Owned work | Identifier | State and purpose |
+| --- | --- | --- |
+| Rawls review agent | `01a07c79-2c20-7de0-95c8-7a0aa6ba3880` | Complete and closed; retained identity input inventory assembled |
+| Pascal review agent | `01a07c79-2cb1-7461-b404-e04733af35e6` | Review complete; closed after recording policy boundaries |
+| Full pytest job | exec session `98594` | Complete; Python worker `25936` and launcher `28424` exited |
+| Official source collection | exec session `32034` | Completed; no collection worker remains |
+
+Final verification command: `.venv\Scripts\python.exe -m pytest -q -x
+-p no:cacheprovider --basetemp .test-tmp/official-documents-verified
+--junitxml=.test-tmp/official-documents-verified.xml`. Result: **2,226 passed,
+three skipped, 133 warnings in 16m29s**. Ruff and strict mypy on 321 source files
+pass; focused sets overlap: 265 collector/HTTP/boundary and 45 CLI/collector tests.
+The initial full attempt found the new command missing from the CLI inventory;
+it was corrected before the final full run. Review fixes cover raw stream-error
+normalization, external attempt containment and relative-path offline replay.
+Observed peak working set during verification was 0.323 GiB, not a complete run
+memory trace. No owned worker or review agent remains at this checkpoint boundary.
+Maintain this table as work resumes; never kill unrelated user processes.
+
+## Newly Retained Official Evidence
+
+The source collector is `sources/official_documents.py`; command adapter is
+`commands/swing_collection.py`, exposed by the collection CLI. No compatibility
+wrapper or second ledger was added. Exact URLs and limits are configuration.
+Successful documents resume only after receipt/body/report verification. Failures
+remain immutable; forbidden/rate-limited hosts defer without blocking other hosts.
+Response acquisition does not prove historical availability, identity or accounting.
+
+- `data/raw/swing_holding_source_documents`: six of ten archived, two failed,
+  two deferred after OCC HTTP 403. Frozen report SHA-256:
+  `3b5dbc4b888034d7c36f2275ec40d49710778b4a39ed5c93503b3ed52654f52c`.
+  Inventory SHA-256:
+  `a32b83ac554047fcdc7383af4a5870549d7c21b2b0f4c2a7f0dac53de5484391`.
+- `data/raw/swing_aiv_distribution_documents`: two of two archived under a separate
+  request, report SHA-256:
+  `41e6324d175dfb17cd89d0f78aa371aceca3aa3b6c2b4b53a4ef0ebfa2c73904`.
+- Both collections replayed offline. The quant reviewer inspected all eight bodies
+  and verified hashes. They establish relevant terms, not complete valuation/fill
+  treatment. See the feature audit for AIV, merger and distribution distinctions.
+- User decision pending: keep execution-based treatment or approve a separately
+  named synthetic research convention for merger redemption/fractional return units.
+  Until a reply, do not change frozen accounting assumptions. Continue independent
+  identity/source work. Personal brokerage records are not automatically required.
 
 ## Purpose
 
@@ -1671,19 +1722,30 @@ occurred.
 
 ## Exact Next Checkpoint
 
-Exact next checkpoint: **Bind post-membership identities and corporate-action outcomes**.
+Exact next checkpoint: **Bind retrospective index-transfer holding identities**.
 The objective is complete in `3b2bff5`; funded accounting is verified in `6758671`;
-holding-path code and cache invalidation are verified/pushed in `bc9dbd5`.
+holding-path code and cache invalidation are verified/pushed in `bc9dbd5`;
+official-source acquisition is verified/pushed in `e1e4803`.
 The frozen real-data control still has 70 unresolved old outcomes and an unverified
 price basis. The user authorizes continuing through training without another model,
 but not inventing data or skipping these admission gates.
 
-1. Build an evidence-bound security-identity relation for the 40 price-complete
-   paths, independent of index membership. Reuse retained raw bars and current
-   identity/transition authorities; do not transplant old collection IDs.
-2. Retain the official filing/halt/merger source documents identified in the current
-   feature audit. Define and verify entitlement, valuation and cash-availability
-   treatment for the remaining 30 paths before reconstructing outcomes.
+1. Build an evidence-bound retrospective identity relation for 38 explicit index-
+   transfer paths: ADS 6, CPRI 5, DXC 1, GPS 1, KSS 3, NKTR 3, PRGO 5, SEDG 1,
+   SLG 9, WU 1 and XRX 3. Reuse ten retained S&P transfer bodies and ADS/GPS SEC
+   stock-class filings. Nine other filing URLs are obtainable from the existing SEC
+   accession inventory (latest 10-K/10-Q on or before the first selected decision).
+   Rawls' closed review above contains the exact input table if resuming that agent.
+   Bound canonical security, issuer and specific class; do not transplant raw IDs.
+   Use eleven short `fetch_bars_page` requests with explicit membership-date `asof`,
+   then compare against retained observations; unexplained differences stay blocked.
+   This is positive-evidence retrospective attribution bounded to needed sessions,
+   not a lifetime mapping or a demand for daily absence-of-event certificates.
+2. AIV's two price-complete paths also require corporate-action treatment, as do
+   the 30 paths with zero-volume/missing observations. Use the eight newly retained
+   bodies and feature-audit supplemental references. Define entitlement, valuation,
+   tradability and cash availability separately. Synthetic accounting conventions
+   remain pending user approval; no holding/selection is dropped to force a pass.
 3. Thread verified independent outcome history into the materialization callers
    and bind it in a new immutable request/authority. Replay both fixed and managed
    outcomes and the unchanged selection/calendar. Never overwrite the old panel.

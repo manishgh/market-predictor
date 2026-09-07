@@ -476,6 +476,48 @@ API support does not supply missing source history. Current materialization call
 still require verified post-membership source expansion. Preserve the 70-row blocked
 receipt, frozen selected IDs and calendar until a new authority can be replayed.
 
+**Official-source collection implementation complete (`e1e4803`, pushed):**
+2,226 tests passed, three skipped, 133 warnings, 16m29s; full Ruff and strict mypy
+on 321 source files pass. Report: `.test-tmp/official-documents-verified.xml`.
+The first full attempt exposed an omitted collection-CLI inventory entry; corrected
+before the final full run. The bounded review's stream-error isolation and external
+attempt-path findings are fixed and tested, including relative-path offline replay.
+Eight official bodies were retained: six from the ten-document holding inventory
+and both AIV follow-up filings. Two initial requests failed and two were deferred;
+see the feature audit for immutable report identities. No historical bar, selected
+decision or model was changed. Acquisition is not financial/source admission.
+
+**Frozen source-collection scope:** retain the official filing, exchange and
+regulator documents behind the unresolved holding periods. Reuse retained evidence
+before networking. A configuration names exact public URLs and document purposes;
+collection stores bounded response bytes, retrieval metadata and content hashes.
+Successful documents resume without another download. A failure on one source
+must not erase or block unrelated documents; tampered retained evidence fails closed.
+Request identity and immutable per-attempt receipts must be verifiable offline.
+No collection receipt authorizes security mapping, distributions, settlement,
+training or serving. Historical publication and today's retrieval remain distinct.
+Exit checks: offline replay, request/body tamper, independent failure/resume,
+redirect/error-body rejection, bounded network reads, dependency boundaries,
+independent review, Ruff, strict typing and the complete test suite. Corporate-action
+interpretation and the separately reviewed post-membership identity relation follow
+only from retained evidence; the frozen stock selection and old panel stay unchanged.
+
+**Next bounded identity work:** publish `retrospective_index_transfer_identity`
+evidence for the 38 explicit transfer paths across eleven tickers. This is a
+retrospective source-attribution interpretation, not an investment-rule change or
+an assertion of lifetime continuity. Bind canonical membership/issuer/stock class,
+the retained positive S&P transfer announcement, exact permitted holding sessions,
+and an explicitly date-anchored Alpaca replay. Reuse existing filings and prices;
+collect only the nine missing class-document candidates and eleven short provider
+windows. A successful `asof` response alone is insufficient because provider lookup
+may fall back to symbol-only resolution. Review concrete class/reuse/reorganization
+contradictions, without demanding a certificate of no event for every day. Hash and
+replay all sources; tamper, conflicting class, wrong interval, changed decisions or
+unexplained price differences fail closed. Identity admission never clears the
+separate total-return/fill gate. AIV and other action-dependent cases are outside
+this 38-path interpretation. Synthetic merger redemption/distribution conventions
+remain unapproved pending the asynchronous user decision; keep existing rules.
+
 The bounded continuation of accounting repairs decision/outcome separation, not
 the selected population. The source audit reproduced 40 recoverable paths across
 12 tickers, requiring 91 retained sessions omitted from combined history. Thirty
