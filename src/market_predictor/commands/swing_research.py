@@ -20,7 +20,8 @@ from market_predictor.catalysts.issuer_events.attribution_history import (
     attribute_alpaca_news_history,
 )
 from market_predictor.config import get_settings
-from market_predictor.heavy_jobs import serialized_heavy_job
+from market_predictor.heavy_jobs import HEAVY_JOB_BUSY_EXIT_CODE, HeavyJobBusyError, serialized_heavy_job
+from market_predictor.research.swing_accounting_control import run_swing_accounting_control_audit
 from market_predictor.sentiment import FinbertScorer
 from market_predictor.swing.catalyst_lineage import build_catalyst_lineage
 from market_predictor.swing.evaluation.research_evidence import audit_swing_research_evidence
@@ -31,6 +32,29 @@ from market_predictor.swing.sentiment_history import score_alpaca_news_history
 
 
 def register_swing_research_commands(app: typer.Typer, console: Console) -> None:
+    @app.command("audit-swing-accounting-control")
+    def audit_swing_accounting_control_command(
+        root: Path = typer.Option(Path(".")),
+        policy: Path = typer.Option(Path("configs/swing_accounting_audit.toml")),
+        output_directory: Path = typer.Option(..., help="New immutable accounting audit directory."),
+    ) -> None:
+        """Replay the initial-fit momentum control without fitting or opening test outcomes."""
+        try:
+            report = run_swing_accounting_control_audit(
+                root=root,
+                policy_path=root / policy if not policy.is_absolute() else policy,
+                output_directory=root / output_directory if not output_directory.is_absolute() else output_directory,
+            )
+        except HeavyJobBusyError as exc:
+            typer.echo(str(exc), err=True)
+            raise typer.Exit(code=HEAVY_JOB_BUSY_EXIT_CODE) from exc
+        typer.echo(json.dumps({
+            "status": report["status"],
+            "output_directory": str(output_directory),
+        }, sort_keys=True, allow_nan=False))
+        if report["status"] == "blocked":
+            raise typer.Exit(code=2)
+
     @app.command("audit-swing-research-evidence")
     def audit_swing_research_evidence_command(
         root: Path = typer.Option(Path(".")),

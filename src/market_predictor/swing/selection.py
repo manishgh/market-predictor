@@ -18,8 +18,9 @@ def select_constrained_swing_portfolio(
     target_maximum_sector_weight: float,
     hard_maximum_sector_weight: float,
     minimum_distinct_sectors: int,
+    score_column: str = "__probability",
 ) -> pd.DataFrame:
-    """Select highest probabilities under the approved adaptive sector policy.
+    """Select highest scores under the approved adaptive sector policy.
 
     The target limit remains 20% when five or more sectors are available. A
     four- or three-sector candidate set uses its mathematically necessary 25%
@@ -31,7 +32,7 @@ def select_constrained_swing_portfolio(
         "decision_time_utc",
         "security_id",
         "sector",
-        "__probability",
+        score_column,
     }
     missing = sorted(required.difference(candidates.columns))
     if missing:
@@ -56,7 +57,7 @@ def select_constrained_swing_portfolio(
         observed=True,
     ):
         ordered = group.sort_values(
-            ["__probability", "security_id"],
+            [score_column, "security_id"],
             ascending=[False, True],
             kind="stable",
         )

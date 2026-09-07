@@ -276,6 +276,10 @@ def train_swing_edge_candidate(
             "selection_basis": "validation_only",
             "test_access_count": 0,
             "locked_test_outcomes_read": False,
+            "price_basis_status": "price_basis_pending",
+            "benchmark_evaluation_basis": (
+                "funded daily SPY accounting required; approximate managed-exit-close comparisons are diagnostic only"
+            ),
             "outcome_contract": _swing_outcome_contract(config, strategy_contract),
             "dataset": _binding_record(binding, profile_identity),
             "training_config": config_record,
@@ -442,13 +446,11 @@ def train_swing_edge_candidate(
         "promotion_permitted": False,
         "selection_basis": "validation_only",
         "selection_policy": {
-            "name": "SWING_CONSERVATIVE_ECONOMICS_V2",
+            "name": "funded_daily_spy_excess_with_price_basis_admission",
             "auc_used_for_selection": False,
             "ordered_key": [
-                "worst_holding_aligned_SPY_QQQ_sector_excess_calendar_ci_low",
-                "portfolio_daily_return_bootstrap_ci_low",
-                "worst_mean_holding_aligned_SPY_QQQ_sector_excess",
-                "mean_managed_net_return",
+                "worst_scope_primary_daily_active_return_ci_low_vs_spy",
+                "worst_scope_net_cagr_difference_vs_spy",
                 "negative_daily_mark_to_market_drawdown",
                 "negative_turnover",
                 "lower_probability_threshold_tie_break",
@@ -495,9 +497,10 @@ def train_swing_edge_candidate(
             "unseen_security_generalization_stable_20pct": unseen_final_metrics,
         },
         "benchmark_evaluation_basis": (
-            "selection uses managed stock net return plus exact fixed-ten-session "
-            "SPY, QQQ, and sector excess; managed-exit-session-close benchmark "
-            "comparisons are approximate diagnostics only"
+            "economic admission requires funded daily NAV versus SPY and independently "
+            "reconciled price basis; retained scope metrics lack that admission. "
+            "Fixed-ten-session labels and approximate managed-exit-session-close "
+            "comparisons are diagnostic, not interchangeable portfolio benchmarks"
         ),
         "managed_path_cost_policy": MANAGED_PATH_COST_POLICY,
         "memory": memory_audit(

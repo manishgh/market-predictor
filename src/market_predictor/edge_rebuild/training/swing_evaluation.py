@@ -16,9 +16,7 @@ from market_predictor.edge_rebuild.outcome_diagnostics import (
 )
 from market_predictor.edge_rebuild.training.data_io import _security_holdout_mask
 from market_predictor.edge_rebuild.training.economics import (
-    _daily_position_ledger,
     _economic_gate,
-    _moving_block_bootstrap_mean_interval,
     _session_bootstrap,
     _session_economic_blocks,
     _stability_breakdown,
@@ -41,10 +39,12 @@ from market_predictor.edge_rebuild.training.walk_forward import (
     WalkForwardFold,
     _assert_label_purge,
 )
+from market_predictor.modeling.resampling import moving_block_mean_interval
 from market_predictor.modeling.strategy_contract import StrategyContract
 from market_predictor.resources import (
     release_process_memory,
 )
+from market_predictor.swing.evaluation.ledger import build_funded_swing_ledger
 from market_predictor.swing.features.panel import (
     MANAGED_EXCESS_RETURN_COLUMNS,
     MANAGED_PATH_NET_RETURN_COLUMNS,
@@ -313,7 +313,7 @@ def _evaluate_validation_candidate(
             "candidate_eligible": False,
             "reason": "no threshold selected enough validation trades",
         }
-    selected = max(eligible or diagnostic, key=_threshold_selection_key)
+    selected = max(eligible, key=_threshold_selection_key) if eligible else diagnostic[0]
     metrics = _mapping(selected.get("scopes"), "selected threshold scopes")
     for threshold_record in threshold_records:
         if threshold_record is selected:
@@ -335,6 +335,7 @@ def _evaluate_validation_candidate(
         "selected_probability_threshold": float(selected["probability_threshold"]),
         "selected_validation_metrics": metrics,
         "candidate_eligible": bool(eligible),
+        "diagnostic_threshold_policy": None if eligible else "first_configured_threshold_with_observations_not_a_performance_winner",
     }
     if eligible:
         record["selection_key"] = list(_selection_key(record))
@@ -406,12 +407,12 @@ def _evaluation_metrics(
     has_two_classes = np.unique(target).size == 2
     base_rate = float(target.mean())
     selected_rate = float(selected["target"].mean())
-    ledger = _daily_position_ledger(
+    ledger = build_funded_swing_ledger(
         selected,
         config,
         session_calendar=session_calendar,
     )
-    stress_ledger = _daily_position_ledger(
+    stress_ledger = build_funded_swing_ledger(
         selected,
         config,
         session_calendar=session_calendar,
@@ -429,14 +430,14 @@ def _evaluation_metrics(
         config,
         session_calendar=session_calendar,
     )
-    bootstrap["portfolio_daily_return"] = _moving_block_bootstrap_mean_interval(
+    bootstrap["portfolio_daily_return"] = moving_block_mean_interval(
         np.asarray(ledger["daily_returns"], dtype="float64"),
         config.bootstrap_samples,
         config.bootstrap_block_sessions,
         config.random_seed + 10_001,
     )
     bootstrap["double_cost_portfolio_daily_return"] = (
-        _moving_block_bootstrap_mean_interval(
+        moving_block_mean_interval(
             np.asarray(stress_ledger["daily_returns"], dtype="float64"),
             config.bootstrap_samples,
             config.bootstrap_block_sessions,
@@ -586,31 +587,12 @@ def _threshold_selection_key(record: Mapping[str, Any]) -> tuple[float, ...]:
 
 
 def _scope_economic_key(metrics: Mapping[str, Any]) -> tuple[float, ...]:
-    bootstrap = _mapping(metrics.get("moving_block_bootstrap_95_ci"), "bootstrap")
-    portfolio_ci = _mapping(
-        bootstrap.get("portfolio_daily_return"), "portfolio daily CI"
-    )
-    spy_ci = _mapping(
-        bootstrap.get("calendar_average_managed_exit_session_close_spy_excess"),
-        "managed SPY CI",
-    )
-    qqq_ci = _mapping(
-        bootstrap.get("calendar_average_managed_exit_session_close_qqq_excess"),
-        "managed QQQ CI",
-    )
-    sector_ci = _mapping(
-        bootstrap.get("calendar_average_managed_exit_session_close_sector_excess"),
-        "managed sector CI",
-    )
+    summary = _mapping(metrics.get("funded_spy_accounting"), "funded SPY accounting summary")
+    intervals = _mapping(summary.get("active_return_ci"), "active return intervals")
+    base = _mapping(intervals.get("base"), "base active intervals")
+    interval = _mapping(base.get("20"), "primary active interval")
     return (
-        min(_finite(spy_ci, "low"), _finite(qqq_ci, "low"), _finite(sector_ci, "low")),
-        _finite(portfolio_ci, "low"),
-        min(
-            _finite(metrics, "calendar_average_managed_exit_session_close_spy_excess"),
-            _finite(metrics, "calendar_average_managed_exit_session_close_qqq_excess"),
-            _finite(metrics, "calendar_average_managed_exit_session_close_sector_excess"),
-        ),
-        _finite(metrics, "selected_average_managed_net_return"),
+        _finite(interval, "low"), _finite(summary, "net_cagr_difference_vs_spy"),
         -_finite(metrics, "daily_mark_to_market_max_drawdown_after_costs"),
         -_finite(metrics, "turnover"),
     )

@@ -5,17 +5,53 @@ import subprocess
 import sys
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from typer.main import get_command
 from typer.testing import CliRunner
 
 from market_predictor.cli_surface import command_names
 from market_predictor.collection_cli import app as collection_app
+from market_predictor.heavy_jobs import HeavyJobBusyError
 from market_predictor.production_cli import app as production_app
 from market_predictor.research_cli import app as research_app
 
 
 class CliSurfaceTests(unittest.TestCase):
+    def test_accounting_control_passes_explicit_root_and_does_not_open_a_second_lease(self) -> None:
+        with patch("market_predictor.commands.swing_research.run_swing_accounting_control_audit") as run:
+            run.return_value = {"status": "price_ratio_diagnostics"}
+            result = CliRunner().invoke(research_app, [
+                "audit-swing-accounting-control", "--root", "example-root",
+                "--output-directory", "reports/control",
+            ])
+        self.assertEqual(result.exit_code, 0, result.output)
+        run.assert_called_once_with(
+            root=Path("example-root"),
+            policy_path=Path("example-root/configs/swing_accounting_audit.toml"),
+            output_directory=Path("example-root/reports/control"),
+        )
+        self.assertEqual(json.loads(result.output)["status"], "price_ratio_diagnostics")
+
+    def test_accounting_control_reports_busy_lease_without_retry(self) -> None:
+        with patch("market_predictor.commands.swing_research.run_swing_accounting_control_audit") as run:
+            run.side_effect = HeavyJobBusyError("another heavy job")
+            result = CliRunner().invoke(research_app, [
+                "audit-swing-accounting-control", "--output-directory", "reports/control",
+            ])
+        self.assertEqual(result.exit_code, 75, result.output)
+        self.assertIn("another heavy job", result.output)
+        run.assert_called_once()
+
+    def test_accounting_control_blocked_report_is_not_cli_success(self) -> None:
+        with patch("market_predictor.commands.swing_research.run_swing_accounting_control_audit") as run:
+            run.return_value = {"status": "blocked"}
+            result = CliRunner().invoke(research_app, [
+                "audit-swing-accounting-control", "--output-directory", "reports/control",
+            ])
+        self.assertEqual(result.exit_code, 2, result.output)
+        self.assertEqual(json.loads(result.output)["status"], "blocked")
+
     def test_global_event_commands_have_correct_surfaces_and_options(self) -> None:
         runner = CliRunner()
 

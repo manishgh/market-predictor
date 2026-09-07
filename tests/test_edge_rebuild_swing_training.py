@@ -7,6 +7,7 @@ from datetime import date
 from pathlib import Path
 from types import SimpleNamespace
 
+import exchange_calendars as xcals
 import numpy as np
 import pandas as pd
 import pytest
@@ -40,6 +41,7 @@ from market_predictor.edge_rebuild.training.swing_types import (
     SwingPanelBinding,
     SwingProfileData,
 )
+from market_predictor.modeling.resampling import moving_block_mean_interval
 from market_predictor.modeling.strategy_contract import (
     StrategyContract,
     load_strategy_contract,
@@ -232,6 +234,7 @@ def test_probability_distribution_is_complete_and_finite() -> None:
 def test_trains_sequential_ablations_and_publishes_candidate_only(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    _isolate_candidate_publication_from_source_admission(monkeypatch)
     contract = _contract()
     config = _config()
     technical = _profile(contract)
@@ -338,6 +341,7 @@ def test_trains_sequential_ablations_and_publishes_candidate_only(
 def test_candidate_authority_rejects_tampering(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    _isolate_candidate_publication_from_source_admission(monkeypatch)
     contract = _contract()
     technical = _profile(contract)
     binding = _binding(tmp_path)
@@ -360,6 +364,7 @@ def test_candidate_authority_rejects_tampering(
 def test_validation_selection_is_unchanged_when_only_final_test_is_poisoned(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    _isolate_candidate_publication_from_source_admission(monkeypatch)
     contract = _contract()
     config = _config()
     technical = _profile(contract)
@@ -492,6 +497,23 @@ def test_constrained_selection_enforces_trade_and_sector_caps() -> None:
     assert selected.groupby("sector").size().max() / len(selected) <= 0.20
 
 
+def test_constrained_selection_accepts_named_continuous_scores_without_fake_probabilities() -> None:
+    frame = pd.DataFrame({
+        "decision_group_id": ["2024-01-02"] * 6,
+        "decision_time_utc": [pd.Timestamp("2024-01-02T21:00:00Z")] * 6,
+        "security_id": [f"security-{index}" for index in range(6)],
+        "sector": ["A", "B", "C"] * 2,
+        "expected_excess_return": [-0.02, -0.01, -0.03, -0.2, -0.1, -0.3],
+    })
+    selected = select_constrained_swing_portfolio(
+        frame, maximum_trades=3, target_maximum_sector_weight=0.2,
+        hard_maximum_sector_weight=1 / 3, minimum_distinct_sectors=3,
+        score_column="expected_excess_return",
+    )
+    assert set(selected["security_id"]) == {"security-0", "security-1", "security-2"}
+    assert "__probability" not in selected
+
+
 @pytest.mark.parametrize(
     ("sectors", "expected_weight"),
     ((["A", "B", "C", "D"], 0.25), (["A", "B", "C"], 1.0 / 3.0)),
@@ -550,8 +572,8 @@ def test_constrained_selection_rejects_fewer_than_three_sectors() -> None:
 def test_moving_block_bootstrap_is_deterministic_and_uses_frozen_block() -> None:
     values = np.sin(np.arange(200, dtype="float64") / 10.0) / 100.0
 
-    first = market_predictor.edge_rebuild.training.economics._moving_block_bootstrap_mean_interval(values, 2_000, 20, 42)
-    second = market_predictor.edge_rebuild.training.economics._moving_block_bootstrap_mean_interval(values, 2_000, 20, 42)
+    first = moving_block_mean_interval(values, 2_000, 20, 42)
+    second = moving_block_mean_interval(values, 2_000, 20, 42)
 
     assert first == second
     assert first["block_sessions"] == 20
@@ -577,7 +599,7 @@ def test_session_economic_calendar_includes_zero_return_no_position_sessions() -
     assert [record["barrier_net_return"] for record in blocks] == [0.0, 0.02, 0.0]
 
 
-def test_economic_gate_uses_holding_aligned_benchmarks_and_portfolio_path() -> None:
+def test_approximate_benchmarks_cannot_authorize_economic_admission() -> None:
     interval = {"estimate": 0.01, "low": 0.005, "high": 0.015}
     metrics = {
         "selected_average_managed_net_return": 0.01,
@@ -595,9 +617,12 @@ def test_economic_gate_uses_holding_aligned_benchmarks_and_portfolio_path() -> N
 
     gate = market_predictor.edge_rebuild.training.economics._economic_gate(metrics, _contract())
 
-    assert gate["passed"] is True
-    assert "worst_holding_aligned_benchmark_ci_low_positive" in gate["checks"]
-    assert "portfolio_daily_return_ci_low_positive" in gate["checks"]
+    assert gate["passed"] is False
+    assert gate["status"] == "price_basis_pending"
+    assert gate["checks"]["stock_and_spy_price_basis_reconciled"] is False
+    metrics["funded_spy_accounting"] = {"eligible": True, "verified": True}
+    forged = market_predictor.edge_rebuild.training.economics._economic_gate(metrics, _contract())
+    assert forged["passed"] is False
 
 
 def test_validation_threshold_requires_every_scope_economic_gate() -> None:
@@ -715,7 +740,8 @@ def _contract() -> StrategyContract:
 
 
 def _profile(contract: StrategyContract) -> SwingProfileData:
-    sessions = pd.bdate_range("2019-07-09", periods=430, tz="UTC")
+    calendar = xcals.get_calendar("XNYS", start="2019-01-01", end="2023-01-01")
+    sessions = calendar.sessions_in_range("2019-07-09", "2022-01-01")[:430].tz_localize("UTC")
     securities = [f"SEC-{index:03d}" for index in range(30)]
     rows: list[dict[str, object]] = []
     rng = np.random.default_rng(42)
@@ -745,7 +771,7 @@ def _profile(contract: StrategyContract) -> SwingProfileData:
                     "membership_effective_from_utc": pd.Timestamp("2010-01-01", tz="UTC"),
                     "membership_effective_to_utc": pd.NaT,
                     "membership_available_at_utc": pd.Timestamp("2010-01-01", tz="UTC"),
-                    "entry_time_utc": decision + pd.Timedelta(hours=17, minutes=30),
+                    "entry_time_utc": calendar.session_open(sessions[session_index + 1].tz_localize(None)),
                     "barrier_exit_session_date_et": barrier_exit.date().isoformat(),
                     "barrier_label_available_at_utc": barrier_exit + pd.Timedelta(hours=21),
                     "horizon_sessions": 10,
@@ -839,6 +865,29 @@ def _binding(tmp_path: Path) -> SwingPanelBinding:
         authority_sha256="b" * 64,
         request_sha256="c" * 64,
         strategy_contract_sha256=_contract().sha256(),
+    )
+
+
+def _isolate_candidate_publication_from_source_admission(monkeypatch: pytest.MonkeyPatch) -> None:
+    # These serialization/holdout tests isolate external price-basis admission.
+    # Actual admission is tested independently and cannot be overridden in production.
+    monkeypatch.setattr(
+        swing_evaluation,
+        "_economic_gate",
+        lambda metrics, contract: {
+            "passed": metrics["selected_average_managed_net_return"] > 0,
+            "test_only_admission_isolation": True,
+        },
+    )
+    monkeypatch.setattr(
+        swing_evaluation,
+        "_scope_economic_key",
+        lambda metrics: (
+            metrics["selected_average_managed_net_return"],
+            -metrics["daily_mark_to_market_max_drawdown_after_costs"],
+            -metrics["turnover"],
+            0.0,
+        ),
     )
 
 
@@ -966,6 +1015,8 @@ def _poison_final_test(frame: pd.DataFrame, config: SwingTrainingConfig) -> pd.D
     poisoned.loc[selected, "barrier_net_return"] = (
         poisoned.loc[selected, "barrier_gross_return"] - 0.002
     )
+    for column in MANAGED_PATH_NET_RETURN_COLUMNS:
+        poisoned.loc[selected, column] = -(poisoned.loc[selected, column] + 0.002) - 0.002
     for column in (
         "future_excess_return_10d_vs_spy",
         "future_excess_return_10d_vs_qqq",

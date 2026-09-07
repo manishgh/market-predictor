@@ -45,9 +45,18 @@ hash-verified promoted bundle.
 - Sector allocation targets 20%; it adapts to 25% when only four sectors are
   represented and 33.3% when only three are represented. Sessions with fewer than
   three represented sectors are skipped.
-- The retained evaluator uses approximate managed-exit-session-close benchmark
-  comparisons. These are not exact intraday exit comparisons and cannot establish
-  the new SPY objective. Funded daily NAV accounting is the next checkpoint.
+- Swing accounting now replays cash-funded overlapping lots, daily marked holdings,
+  one cost deduction, idle sessions and the complete ten-session exit tail against
+  SPY buy-and-hold. Approximate managed-exit-close comparisons cannot qualify or
+  rank candidates. Price-basis admission remains blocked: declared adjusted prices
+  are not independently verified total-return evidence. No outperformance is claimed.
+- `market-predictor-research audit-swing-accounting-control --root .
+  --output-directory data/reports/swing_accounting_control` replays a frozen
+  initial-fit momentum control from retained files. It neither trains a model nor
+  opens validation/test outcomes. Output is immutable and research-only.
+- The first retained-data accounting control is **blocked**: 70 of 30,525 selected
+  stock-days lack complete fixed-horizon outcomes. No stock was dropped to produce
+  a performance score, and no real-data ledger or SPY result was emitted.
 - Live inference excludes individual missing or cold securities through the governed
   5% ceiling. Cached models are bound to the active contract, trust store, promotion
   policy, and model-size limit.

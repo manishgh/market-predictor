@@ -58,6 +58,32 @@ There is no fallback from the active path to legacy models or schemas.
   stock barrier exit. The new economic objective is complete daily NAV versus SPY;
   QQQ/sector and approximate trade-level comparisons remain diagnostics.
 
+### Offline Swing Accounting
+
+`swing/evaluation/ledger.py` owns the single funded ledger. Each cohort
+requests one tenth of prior-close NAV, equal-weight across its selected securities.
+Cash caps the cohort pro rata including prepaid round-trip costs. Entries precede
+exits; exit proceeds become available next session. Separate exit lots aggregate
+security/sector exposure. Daily cash, holdings and realized/unrealized P&L reconcile
+to NAV, including idle sessions and the fixed maturation tail.
+
+`swing/evaluation/accounting.py` compares this ledger with SPY on exactly that
+calendar, at base and stressed costs. QQQ and point-in-time sector curves remain
+required diagnostics. Familywise-adjusted 20/40-session block intervals evaluate
+daily portfolio-minus-SPY returns, not independent stock rows. Full-account returns
+are distinct from fixed-horizon stock labels and approximate barrier-exit comparisons.
+
+`modeling/resampling.py` owns the shared, horizon-neutral moving-block calculation.
+`research/swing_accounting_control.py` verifies pinned metadata and selected partitions,
+selects a deterministic momentum control before loading its outcomes, and publishes
+an immutable report. The entire decision/outcome window stays inside initial fit.
+No estimator is fitted and the report is not out-of-sample performance.
+
+Current output is `price_ratio_diagnostics`, with `price_basis_pending` and economic
+eligibility false. Adjusted-price declarations or caller-authored flags cannot prove
+total-return/distribution reconciliation. No raw-share execution, dividend credit,
+deployment approval or dollar-capacity claim is inferred from this offline account.
+
 ### Intraday
 
 - Strategy identity: `intraday`; hypothesis: VWAP Exhaustion Reversal.

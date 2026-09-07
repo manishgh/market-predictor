@@ -43,8 +43,33 @@ that history based on the stale May-2019 requirement.
 The July-2025 through June-2026 technical test is already exposed. Specialist
 unopened-test statements below are historical per-run facts only. Fixed-ten-session
 forecasts and managed returns stay distinct; new selection requires funded NAV
-versus SPY, not approximate managed-exit-close excess. Accounting and independent
-total-return reconciliation are checkpoint 2 work, not metadata-audit achievements.
+versus SPY, not approximate managed-exit-close excess. Checkpoint 2 adds a funded
+ledger and paired base/stress SPY accounting, not a new estimator or feature. Its
+initial-fit control selects by causal eligibility before outcomes. Separate lots,
+cash funding, costs, marks and the maturation tail are explicit; missing selected
+outcomes cannot be filtered away. Independent total-return reconciliation remains
+unverified, so output is `price_ratio_diagnostics` / `price_basis_pending` and
+economically ineligible. This is not a metadata-audit achievement or model alpha.
+The retained control additionally fails selected-outcome completeness: 70/30,525
+selected stock-days have all eight fixed-horizon return fields nonfinite. Its
+immutable blocked receipt is `data/reports/swing_accounting_control/_manifest.json`
+(file SHA-256 `f4411da442dcce28c904050045371c3e1ee20e4e1f6e9f041686e7c4f385ee9e`).
+It covers 1,221 initial-fit decisions and 1,230 valuation sessions, never validation
+or test outcomes. No benchmark payload or funded real-data result was consumed or
+produced after that failure; the 70 rows were not filtered away.
+
+Bounded identity/reason replay found 18 affected tickers: ADS (6), AIV (2), BIIB (2),
+CPRI (5), CTXS (10), DXC (1), FRC (2), GPS (1), KSS (3), LB (7), NKTR (3), NLSN (4),
+PRGO (5), SEDG (1), SLG (9), WU (1), XLNX (5), XRX (3). All 70 have an inexact label
+path; 67 also have an unexpected window at recorded membership boundaries. Seventeen
+explicitly cross a missing session (CTXS 10, FRC 2, XLNX 5); these categories overlap.
+BIIB's two rows and CTXS's first row have expected windows but inexact paths.
+The sector-label-unavailable reason is downstream of masked labels, not independent
+evidence of missing sector ETF bars (`swing/features/eligibility.py`). The label
+builder masks all eight fixed returns when the path is inexact
+(`swing/labels/__init__.py`). Provider-level causes and delisting proceeds have not
+been established. Repair requires complete outcomes for already-selected holdings,
+not future-aware exclusions or treating index removal as an unexplained disappearance.
 [Alpaca's declared adjustment basis](https://docs.alpaca.markets/us/reference/stockbarsingle-1)
 includes splits, dividends and spin-offs under `all`; it does not independently
 reconcile every retained event or authorize separate dividend credit. Use retained

@@ -34,6 +34,33 @@ feature contract. The command prints JSON, reads no feature/outcome rows, perfor
 no provider requests, and does not fit a model. A metadata match is not a fresh
 raw-source replay or proof of economic performance.
 
+To verify funded accounting against retained initial-fit data:
+
+```powershell
+.\.venv\Scripts\market-predictor-research.exe audit-swing-accounting-control --root . --output-directory data/reports/swing_accounting_control
+```
+
+`configs/swing_accounting_audit.toml` freezes the source identities, initial-fit
+window and `return_20d_xs_rank` control. The command acquires the workspace heavy-job
+lease, reads projected monthly columns, freezes selection before outcomes, and
+writes `_manifest.json` in a new immutable output directory. It does not download,
+fit a model, select by outcome completeness, or inspect validation/test outcomes.
+
+The report binds source/config hashes, selected decision IDs, calendars and the
+base/stress ledgers. `swing/evaluation/accounting.py` supplies SPY comparisons around
+the canonical ledger in `swing/evaluation/ledger.py`. The frozen control orchestrator
+is `research/swing_accounting_control.py`; shared resampling belongs to
+`modeling/resampling.py`. No compatibility imports from the old ledger owner remain. Missing selected
+outcomes, calendar mismatches, changed inputs and invalid cash/P&L fail the audit.
+Successful execution still reports `price_basis_pending`: source total-return
+reconciliation is not established, so the report cannot authorize promotion.
+
+The retained run at `data/reports/swing_accounting_control/_manifest.json` records
+70 incomplete selected outcomes among 30,525 stock-days. It preserves the frozen
+selection, input hashes and calendars, but contains no accounting/performance result.
+The command returns nonzero for a blocked report. Do not overwrite that receipt or
+drop incomplete outcomes and rerun the same control as if its population were unchanged.
+
 ## Source Roles
 
 - Alpaca SIP/all bars: estimator market data.

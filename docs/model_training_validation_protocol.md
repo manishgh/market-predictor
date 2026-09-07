@@ -155,7 +155,19 @@ inconclusive.
 Headline economics require funded daily NAV against buy-and-hold SPY on the same
 calendar, plus net CAGR difference, costs, cash/exposure, drawdown and attribution.
 Unit equity does not establish dollar capacity. Costs occur exactly once under the
-new contract's timing convention. Checkpoint 2 accounting remains pending.
+new contract's timing convention. The canonical funded ledger requests one tenth of
+prior-close NAV per cohort, caps purchases including costs to available cash, and
+makes exit proceeds available only next session. Repeated-security lots keep their
+separate exits while aggregating exposure. Valuation includes idle sessions and the
+entire fixed maturation tail, irrespective of selected outcomes.
+
+`audit-swing-accounting-control` uses only the initial-fit period, with its final
+ten sessions reserved for maturation. Selection uses causal eligibility and the
+frozen momentum rank before outcome loading; missing selected outcomes fail rather
+than disappear. This is an accounting control, not learned out-of-sample evidence.
+Price-ratio results remain economically ineligible until independent source-basis
+reconciliation is bound. Positive diagnostics or caller-supplied flags cannot waive
+that requirement. Approximate managed-exit-close excess does not rank candidates.
 
 [Alpaca's bar documentation](https://docs.alpaca.markets/us/reference/stockbarsingle-1)
 declares that `all` adjusts splits, cash dividends and spin-offs. This is declared
