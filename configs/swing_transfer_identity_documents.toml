@@ -1,0 +1,65 @@
+schema_version = "market_predictor.official_document_inventory"
+maximum_response_bytes = 16777216
+attempts_per_document_per_run = 1
+
+# Latest retained 10-K/10-Q on or before each first selected decision.
+# ADS and GPS class filings already exist locally and are intentionally not fetched.
+[[documents]]
+document_id = "cpri_historical_stock_class"
+url = "https://www.sec.gov/Archives/edgar/data/1530721/000153072120000008/cpri-20191228.htm"
+purpose = "CPRI stock-class evidence candidate for the historical index-transfer holding window; content requires review."
+expected_media = "html"
+
+[[documents]]
+document_id = "dxc_historical_stock_class"
+url = "https://www.sec.gov/Archives/edgar/data/1688568/000168856823000090/dxc-20230630.htm"
+purpose = "DXC stock-class evidence candidate for the historical index-transfer holding window; content requires review."
+expected_media = "html"
+
+[[documents]]
+document_id = "kss_historical_stock_class"
+url = "https://www.sec.gov/Archives/edgar/data/885639/000156459020042509/kss-10q_20200801.htm"
+purpose = "KSS stock-class evidence candidate for the historical index-transfer holding window; content requires review."
+expected_media = "html"
+
+[[documents]]
+document_id = "nktr_historical_stock_class"
+url = "https://www.sec.gov/Archives/edgar/data/906709/000090670919000006/nktr2019-06x30x10q.htm"
+purpose = "NKTR stock-class evidence candidate for the historical index-transfer holding window; content requires review."
+expected_media = "html"
+
+[[documents]]
+document_id = "prgo_historical_stock_class"
+url = "https://www.sec.gov/Archives/edgar/data/1585364/000158536421000102/prgo-20210703.htm"
+purpose = "PRGO stock-class evidence candidate for the historical index-transfer holding window; content requires review."
+expected_media = "html"
+
+[[documents]]
+document_id = "sedg_historical_stock_class"
+url = "https://www.sec.gov/Archives/edgar/data/1419612/000117891323003538/zk2330473.htm"
+purpose = "SEDG stock-class evidence candidate for the historical index-transfer holding window; content requires review."
+expected_media = "html"
+
+[[documents]]
+document_id = "slg_historical_stock_class"
+url = "https://www.sec.gov/Archives/edgar/data/1040971/000104097121000007/slg-20201231.htm"
+purpose = "SLG stock-class evidence candidate for the historical index-transfer holding window; content requires review."
+expected_media = "html"
+
+[[documents]]
+document_id = "wu_historical_stock_class"
+url = "https://www.sec.gov/Archives/edgar/data/1365135/000155837021014103/wu-20210930x10q.htm"
+purpose = "WU stock-class evidence candidate for the historical index-transfer holding window; content requires review."
+expected_media = "html"
+
+[[documents]]
+document_id = "xrx_historical_stock_class"
+url = "https://www.sec.gov/Archives/edgar/data/1770450/000177045021000013/xrx-20201231.htm"
+purpose = "XRX stock-class evidence candidate for the historical index-transfer holding window; content requires review."
+expected_media = "html"
+
+[[documents]]
+document_id = "lb_distribution_regular_way_rights"
+url = "https://www.sec.gov/Archives/edgar/data/701985/000114036121023926/nt10022999x10_ex99-1.htm"
+purpose = "Supplemental LB regular-way distribution-rights announcement; not part of the 38 simple transfer-path identity cases."
+expected_media = "html"

@@ -208,6 +208,17 @@ shuffled-label control must remain at chance.
   without fetching again. This source layer does not interpret corporate actions
   or grant identity, accounting, model or serving readiness.
 
+- `research/swing_transfer_sources.py`: projected, hash-bound preparation of the
+  selected index-transfer replay population and exact daily holding windows.
+- `research/swing_transfer_replay.py`: sequential Alpaca evidence acquisition,
+  immutable failed/successful attempts, offline replay and exact OHLCV comparison.
+  Configuration: `configs/swing_transfer_replay.toml`; research command adapter:
+  `replay-swing-transfer-history` in `commands/swing_research.py`. The canonical
+  response decoder remains in `sources/alpaca.py`; no second transport was added.
+- `universe/security_class_evidence.py`: pure SEC stock-class fact extraction from
+  pinned bytes, with explicit context association and ambiguity rejection. It does
+  not infer lifetime mapping intervals or historical availability.
+
 - `sources/sec.py`, `catalysts/sec_filings/collection.py`, and
   `catalysts/sec_filings/decision_authority.py`: SEC transport, immutable issuer
   evidence, and zero-versus-unknown decision-time coverage semantics.

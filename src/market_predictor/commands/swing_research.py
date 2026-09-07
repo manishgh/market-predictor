@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import json
 import os
+from datetime import date, datetime
 from pathlib import Path
+from typing import Any
 from uuid import uuid4
 
 import typer
@@ -22,7 +24,9 @@ from market_predictor.catalysts.issuer_events.attribution_history import (
 from market_predictor.config import get_settings
 from market_predictor.heavy_jobs import HEAVY_JOB_BUSY_EXIT_CODE, HeavyJobBusyError, serialized_heavy_job
 from market_predictor.research.swing_accounting_control import run_swing_accounting_control_audit
+from market_predictor.research.swing_transfer_replay import run_swing_transfer_replay
 from market_predictor.sentiment import FinbertScorer
+from market_predictor.sources.alpaca import AlpacaBarsPage, AlpacaSource
 from market_predictor.swing.catalyst_lineage import build_catalyst_lineage
 from market_predictor.swing.evaluation.research_evidence import audit_swing_research_evidence
 from market_predictor.swing.security_label_artifact import (
@@ -32,6 +36,46 @@ from market_predictor.swing.sentiment_history import score_alpaca_news_history
 
 
 def register_swing_research_commands(app: typer.Typer, console: Console) -> None:
+    @app.command("replay-swing-transfer-history")
+    def replay_swing_transfer_history_command(
+        root: Path = typer.Option(Path(".")),
+        config: Path = typer.Option(Path("configs/swing_transfer_replay.toml")),
+        output_directory: Path = typer.Option(..., help="Immutable historical source replay directory."),
+        offline: bool = typer.Option(False, help="Verify retained responses without provider access."),
+    ) -> None:
+        """Compare date-anchored SIP observations; never authorize identity or accounting."""
+        source: AlpacaSource | None = None
+
+        def fetch(unit: dict[str, Any], token: str | None) -> AlpacaBarsPage:
+            nonlocal source
+            if source is None:
+                source = AlpacaSource(get_settings())
+            params = unit["parameters"]
+            return source.fetch_bars_page(
+                (unit["ticker"],), datetime.fromisoformat(params["start"]), datetime.fromisoformat(params["end"]),
+                timeframe=params["timeframe"], page_token=token, asof=date.fromisoformat(params["asof"]),
+                limit=params["limit"], retries=1,
+            )
+
+        try:
+            report = run_swing_transfer_replay(
+                root=root, config_path=config if config.is_absolute() else root / config,
+                output_directory=output_directory if output_directory.is_absolute() else root / output_directory,
+                fetch=None if offline else fetch,
+            )
+        except HeavyJobBusyError as exc:
+            typer.echo(str(exc), err=True)
+            raise typer.Exit(code=HEAVY_JOB_BUSY_EXIT_CODE) from exc
+        finally:
+            if source is not None:
+                source.client.session.close()
+        typer.echo(json.dumps({key: report[key] for key in (
+            "acquisition_status", "requested_units", "acquired_units", "exact_match_units",
+            "identity_admission", "accounting_eligible", "retained_observations_replaced",
+        )}, sort_keys=True, allow_nan=False))
+        if report["acquisition_status"] != "complete" or report["exact_match_units"] != report["requested_units"]:
+            raise typer.Exit(code=2)
+
     @app.command("audit-swing-accounting-control")
     def audit_swing_accounting_control_command(
         root: Path = typer.Option(Path(".")),

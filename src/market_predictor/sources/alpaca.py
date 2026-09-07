@@ -10,8 +10,9 @@ from urllib.parse import parse_qsl, urlsplit
 import pandas as pd
 
 from market_predictor.config import Settings
+from market_predictor.core.json_integrity import parse_strict_json_object
 from market_predictor.schemas import NewsEvent
-from market_predictor.sources.http import HttpClient
+from market_predictor.sources.http import HttpByteResponse, HttpClient
 
 
 @dataclass(frozen=True, slots=True)
@@ -547,81 +548,7 @@ class AlpacaSource:
             maximum_body_bytes=32 * 1024 * 1024,
             allow_redirects=False,
         )
-        if (
-            response.status_code != 200
-            or response.redirect_chain
-            or response.final_url != response.requested_url
-        ):
-            raise RuntimeError("Alpaca bars page transport must be a direct HTTP 200 response")
-        if (
-            response.retrieved_at_utc.tzinfo is None
-            or response.retrieved_at_utc.utcoffset() is None
-        ):
-            raise RuntimeError("Alpaca bars page retrieval time must be timezone-aware")
-        _verify_bars_page_request_url(response.requested_url, params=params)
-        if (response.content_type or "").split(";", maxsplit=1)[0].strip().lower() != "application/json":
-            raise RuntimeError("Alpaca bars page response must use application/json")
-        if (
-            response.body_length != len(response.body)
-            or response.sha256 != sha256(response.body).hexdigest()
-            or response.body_representation != "http_entity_encoded"
-        ):
-            raise RuntimeError("Alpaca bars page response body metadata is inconsistent")
-        try:
-            payload = json.loads(response.body.decode("utf-8"))
-        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-            raise RuntimeError("Alpaca bars page response is not valid UTF-8 JSON") from exc
-        if not isinstance(payload, dict):
-            raise RuntimeError("Alpaca bars page response must be an object")
-        raw_bars = payload.get("bars", {})
-        if not isinstance(raw_bars, dict):
-            raise RuntimeError("Alpaca bars page has invalid bars")
-        unexpected = sorted(
-            set(str(symbol).upper() for symbol in raw_bars).difference(
-                normalized
-            )
-        )
-        if unexpected:
-            raise RuntimeError(
-                "Alpaca bars page returned unexpected symbols: "
-                + ", ".join(unexpected)
-            )
-        bars: dict[str, tuple[dict[str, Any], ...]] = {}
-        for symbol, rows in raw_bars.items():
-            if not isinstance(rows, list) or any(
-                not isinstance(row, dict) for row in rows
-            ):
-                raise RuntimeError(
-                    f"Alpaca bars page has invalid rows for {symbol}"
-                )
-            bars[str(symbol).upper()] = tuple(
-                {str(key): value for key, value in row.items()}
-                for row in rows
-            )
-        next_value = payload.get("next_page_token")
-        next_token = (
-            str(next_value).strip()
-            if next_value is not None and str(next_value).strip()
-            else None
-        )
-        return AlpacaBarsPage(
-            request_page_token=page_token,
-            next_page_token=next_token,
-            bars=bars,
-            response_headers={
-                str(key): str(value)
-                for key, value in response.safe_headers
-            },
-            raw_payload={
-                str(key): value for key, value in payload.items()
-            },
-            raw_body=response.body,
-            requested_url=response.requested_url,
-            status_code=response.status_code,
-            retrieved_at_utc=response.retrieved_at_utc,
-            final_url=response.final_url,
-            redirect_chain=response.redirect_chain,
-        )
+        return decode_bars_page_response(response, expected_params=params)
 
     def fetch_trades_page(
         self,
@@ -784,3 +711,89 @@ class AlpacaSource:
                 break
             request_params["page_token"] = token
         return rows
+
+
+def decode_bars_page_response(
+    response: HttpByteResponse, *, expected_params: dict[str, Any],
+) -> AlpacaBarsPage:
+    """Replay the same exact response checks used by live historical-bar fetching."""
+    params = expected_params
+    normalized = tuple(str(params["symbols"]).split(","))
+    page_token = str(params["page_token"]) if params.get("page_token") is not None else None
+    if (
+        response.status_code != 200
+        or response.redirect_chain
+        or response.final_url != response.requested_url
+    ):
+        raise RuntimeError("Alpaca bars page transport must be a direct HTTP 200 response")
+    if (
+        response.retrieved_at_utc.tzinfo is None
+        or response.retrieved_at_utc.utcoffset() is None
+    ):
+        raise RuntimeError("Alpaca bars page retrieval time must be timezone-aware")
+    _verify_bars_page_request_url(response.requested_url, params=params)
+    if (response.content_type or "").split(";", maxsplit=1)[0].strip().lower() != "application/json":
+        raise RuntimeError("Alpaca bars page response must use application/json")
+    if (
+        response.body_length != len(response.body)
+        or response.sha256 != sha256(response.body).hexdigest()
+        or response.body_representation != "http_entity_encoded"
+    ):
+        raise RuntimeError("Alpaca bars page response body metadata is inconsistent")
+    try:
+        payload = parse_strict_json_object(response.body, label="Alpaca bars page response")
+    except ValueError as exc:
+        raise RuntimeError("Alpaca bars page response is not valid UTF-8 JSON") from exc
+    if not isinstance(payload, dict):
+        raise RuntimeError("Alpaca bars page response must be an object")
+    raw_bars = payload.get("bars", {})
+    if not isinstance(raw_bars, dict):
+        raise RuntimeError("Alpaca bars page has invalid bars")
+    unexpected = sorted(
+        set(str(symbol).upper() for symbol in raw_bars).difference(
+            normalized
+        )
+    )
+    if unexpected:
+        raise RuntimeError(
+            "Alpaca bars page returned unexpected symbols: "
+            + ", ".join(unexpected)
+        )
+    bars: dict[str, tuple[dict[str, Any], ...]] = {}
+    for symbol, rows in raw_bars.items():
+        if str(symbol).upper() in bars:
+            raise RuntimeError("Alpaca bars page has colliding normalized symbols")
+        if not isinstance(rows, list) or any(
+            not isinstance(row, dict) for row in rows
+        ):
+            raise RuntimeError(
+                f"Alpaca bars page has invalid rows for {symbol}"
+            )
+        bars[str(symbol).upper()] = tuple(
+            {str(key): value for key, value in row.items()}
+            for row in rows
+        )
+    next_value = payload.get("next_page_token")
+    next_token = (
+        str(next_value).strip()
+        if next_value is not None and str(next_value).strip()
+        else None
+    )
+    return AlpacaBarsPage(
+        request_page_token=page_token,
+        next_page_token=next_token,
+        bars=bars,
+        response_headers={
+            str(key): str(value)
+            for key, value in response.safe_headers
+        },
+        raw_payload={
+            str(key): value for key, value in payload.items()
+        },
+        raw_body=response.body,
+        requested_url=response.requested_url,
+        status_code=response.status_code,
+        retrieved_at_utc=response.retrieved_at_utc,
+        final_url=response.final_url,
+        redirect_chain=response.redirect_chain,
+    )

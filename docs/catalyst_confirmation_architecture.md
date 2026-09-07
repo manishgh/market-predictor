@@ -90,6 +90,23 @@ identity continuity, entitlement, cash availability, total returns or readiness.
 initial archive is incomplete; interpretation and expanded outcome admission
 remain separate required work. No compatibility path or alternate ledger is added.
 
+`research/swing_transfer_sources.py` binds selected initial-fit decision identities,
+canonical membership/issuer anchors and retained daily bars to exact XNYS holding
+sessions. `research/swing_transfer_replay.py` acquires only those short SIP windows,
+with an explicit historical `asof`, exact raw pages, bounded pagination and immutable
+attempt/report hashes. It uses the same response decoder as `sources/alpaca.py`.
+The root-scoped heavy-job lease precedes input loading; collection is sequential.
+Offline replay needs no credentials. Successful acquisitions are not fetched again.
+Failures are isolated per ticker; memory or publication failures stop the job.
+Price comparisons are diagnostics, not identity or accounting admission.
+
+`universe/security_class_evidence.py` extracts explicit SEC iXBRL facts from pinned
+filing bytes. Symbol/title/exchange must share one table row and context; issuer
+association preserves legal-entity dimensions. Ambiguous classes or registrants
+fail closed. These facts and S&P transfer evidence still require a separately
+reviewed, session-bounded retrospective identity binding. Neither a matching CIK
+nor a successful Alpaca `asof` lookup alone authorizes that binding.
+
 `swing/evaluation/ledger.py` owns the single funded ledger. Each cohort
 requests one tenth of prior-close NAV, equal-weight across its selected securities.
 Cash caps the cohort pro rata including prepaid round-trip costs. Entries precede

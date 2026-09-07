@@ -72,6 +72,16 @@ hash-verified promoted bundle.
   The initial acquisition retained six of ten documents, with two failed and two
   deferred after an OCC HTTP 403. These are unreviewed response bytes, not approved
   corporate-action returns, historical availability or security identities.
+- `market-predictor-research replay-swing-transfer-history --root .
+  --output-directory data/raw/swing_transfer_history` collects only configured,
+  date-anchored daily SIP windows for selected index-transfer holdings. Add
+  `--offline` to replay retained bytes without credentials. The frozen inventory
+  is `configs/swing_transfer_replay.toml`: eleven tickers, 38 decisions and 140
+  required ticker-sessions. Reports show exact OHLCV differences; they never
+  overwrite retained bars or authorize identity, fills or total-return accounting.
+- `universe/security_class_evidence.py` extracts hash-bound SEC cover-page stock
+  class, exchange and issuer facts. Ambiguous registrants/classes fail closed;
+  reporting-period dates are not historical ticker-validity intervals.
 - Live inference excludes individual missing or cold securities through the governed
   5% ceiling. Cached models are bound to the active contract, trust store, promotion
   policy, and model-size limit.

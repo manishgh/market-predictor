@@ -1,0 +1,81 @@
+schema_version = "market_predictor.swing_transfer_replay"
+control_receipt = "data/reports/swing_accounting_control/_manifest.json"
+control_receipt_sha256 = "f4411da442dcce28c904050045371c3e1ee20e4e1f6e9f041686e7c4f385ee9e"
+membership_path = "data/canonical/index_membership/sp500_memberships_20180529_20260708_v1/memberships.parquet"
+membership_sha256 = "c70b305cb64e54bda2c5664729bcb25ed766f6f7a56d3a57e3cf5875c06406c2"
+sec_relations_path = "data/canonical/sec_identity/sec_identity_20190709_20260708_v2/sec_identity_relations.parquet"
+sec_relations_sha256 = "507043d1d60d9b17db26727a5aeff9bfa23ae2962cc9d80d5637a1ba000a9720"
+raw_manifest_path = "data/raw/swing_daily_sip_sp500_pit_20190709_20260708_v3/_manifest.json"
+raw_manifest_sha256 = "b99a1d13d9075220db30c3870bc0796b3631bf4ec0bf6424469feeeec9115d93"
+horizon_sessions = 10
+maximum_pages_per_ticker = 3
+expected_security_count = 11
+expected_decision_count = 38
+
+# Historical dates already present in the frozen selected control.
+# These request annotations are corroborating anchors, not proof of stock class.
+[[securities]]
+ticker = "ADS"
+security_id = "sp500-historical:9c7f784178fafddc55a371c4"
+sec_cik = "0001101215"
+decision_dates = ["2020-06-08","2020-06-09","2020-06-10","2020-06-11","2020-06-12","2020-06-15"]
+
+[[securities]]
+ticker = "CPRI"
+security_id = "sp500-historical:ab041e093eb8caa445cd0350"
+sec_cik = "0001530721"
+decision_dates = ["2020-04-28","2020-04-29","2020-04-30","2020-05-01","2020-05-04"]
+
+[[securities]]
+ticker = "DXC"
+security_id = "sp500-historical:4c273e9e0f34f60b37445f04"
+sec_cik = "0001688568"
+decision_dates = ["2023-10-02"]
+
+[[securities]]
+ticker = "GPS"
+security_id = "sp500-historical:18d05980c1c5de768e2264e3"
+sec_cik = "0000039911"
+decision_dates = ["2022-01-27"]
+
+[[securities]]
+ticker = "KSS"
+security_id = "sp500-historical:4318dca071906f96d8609214"
+sec_cik = "0000885639"
+decision_dates = ["2020-09-16","2020-09-17","2020-09-18"]
+
+[[securities]]
+ticker = "NKTR"
+security_id = "sp500-historical:65cd74f32260fdb5ed6a1784"
+sec_cik = "0000906709"
+decision_dates = ["2019-09-19","2019-09-20","2019-09-23"]
+
+[[securities]]
+ticker = "PRGO"
+security_id = "sp500-historical:e813dfdd6e9f906a7249bfb9"
+sec_cik = "0001585364"
+decision_dates = ["2021-09-13","2021-09-14","2021-09-15","2021-09-16","2021-09-17"]
+
+[[securities]]
+ticker = "SEDG"
+security_id = "sp500-historical:733eee55c895daa2697e2360"
+sec_cik = "0001419612"
+decision_dates = ["2023-12-15"]
+
+[[securities]]
+ticker = "SLG"
+security_id = "sp500-historical:945052b0136d8a941c2d0381"
+sec_cik = "0001040971"
+decision_dates = ["2021-03-08","2021-03-09","2021-03-11","2021-03-12","2021-03-15","2021-03-16","2021-03-17","2021-03-18","2021-03-19"]
+
+[[securities]]
+ticker = "WU"
+security_id = "sp500-historical:b63526c7c1b7dd29b2a55afb"
+sec_cik = "0001365135"
+decision_dates = ["2021-12-16"]
+
+[[securities]]
+ticker = "XRX"
+security_id = "sp500-historical:371a1b09e9fbefdee357f7e2"
+sec_cik = "0001770450"
+decision_dates = ["2021-03-08","2021-03-11","2021-03-12"]

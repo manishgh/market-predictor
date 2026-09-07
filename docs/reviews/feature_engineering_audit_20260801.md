@@ -89,6 +89,26 @@ Source manifests: raw daily `b99a1d13d9075220db30c3870bc0796b3631bf4ec0bf6424469
 combined daily `c5780d2f406531ec2f6d98372577c105a60687ea72c57a7b6c739515934a7e34`.
 No old authority was modified and no selected observation was excluded.
 
+The bounded transfer replay now retains all eleven configured, historical-`asof`
+Alpaca windows at `data/raw/swing_transfer_history`. Offline replay reproduces
+report file SHA-256
+`b8daebd9322da94bd10617d54a1a9cc4c9eb07baa4459f237d76300bc3797198`.
+All 140 required ticker-sessions have positive-volume, valid daily observations.
+CPRI, DXC, KSS, NKTR, SEDG, SLG, WU and XRX match retained OHLCV exactly (26 selected
+decisions, 101 ticker-sessions). ADS, GPS and PRGO have matching volumes but 60,
+40 and 56 differing OHLC fields respectively (twelve decisions, 39 ticker-sessions).
+No source was overwritten, rescaled or admitted. Price differences remain a source
+reconciliation issue, not a reason to exclude previously selected holdings.
+
+The source decoder rejects duplicate JSON keys and colliding normalized symbols;
+offline replay uses that same decoder rather than trusting cached parsed values.
+SEC stock-class facts now extract for all eleven targets from hash-bound filing
+bodies. Nine missing filings and the LB rights announcement were acquired using
+`configs/swing_transfer_identity_documents.toml`; ten-of-ten report file SHA-256:
+`e09a8ee202c6a195f1c7d2c67b830c96e1efae31f16296b644d7b5f01e70e87a`.
+ADS and GPS filings were reused. Facts and matching prices are inputs to the
+separate retrospective identity interpretation, not an already published relation.
+
 Canonical labels now resolve separate security-identified outcome bars using XNYS,
 not observed stock or SPY row counts. Membership end no longer suppresses expected
 holding outcomes. Fixed/managed paths and live maturation reject unusable daily
@@ -157,7 +177,9 @@ per AIV Class A share; AIV continues. The December 16 filing concerns financing,
 not another distribution. Ex-distribution and regular-way rights still require
 evidence. LB's similar entitlement issue has a supplemental official
 [regular-way trading announcement](https://www.sec.gov/Archives/edgar/data/701985/000114036121023926/nt10022999x10_ex99-1.htm)
-identified online but not retained. Record dates alone cannot decide these rights.
+subsequently retained in the transfer identity document collection above. Record
+dates alone cannot decide these rights; retaining the body does not implement its
+entitlements or approve an accounting convention.
 
 Three unresolved policy boundaries are now explicit: cash-merger receivable versus
 spendable funds; fractional/distribution reinvestment convention; and mandatory
