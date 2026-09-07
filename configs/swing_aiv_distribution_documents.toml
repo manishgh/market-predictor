@@ -1,0 +1,17 @@
+schema_version = "market_predictor.official_document_inventory"
+maximum_response_bytes = 16777216
+attempts_per_document_per_run = 1
+
+# Exact URLs retained in the SEC event inventory. Content awaits review.
+# Separate request: do not mutate the existing ten-document collection identity.
+[[documents]]
+document_id = "aiv_december_fifteen_filing"
+url = "https://www.sec.gov/Archives/edgar/data/922864/000119312520317477/d772672d8k.htm"
+purpose = "AIV 2020-12-15 filing candidate near the AIRC separation; verify completion and stock-class terms from the body."
+expected_media = "html"
+
+[[documents]]
+document_id = "aiv_december_sixteen_filing"
+url = "https://www.sec.gov/Archives/edgar/data/922864/000119312520319176/d71118d8k.htm"
+purpose = "AIV 2020-12-16 filing candidate near the AIRC separation; collection does not approve entitlement or return treatment."
+expected_media = "html"

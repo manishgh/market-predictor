@@ -200,6 +200,14 @@ shuffled-label control must remain at chance.
 
 ### Overlay and serving paths
 
+- `sources/official_documents.py`: bounded official-document acquisition and offline
+  receipt/body replay. `configs/swing_holding_source_documents.toml` names exact
+  source URLs; `commands/swing_collection.py` is its collection-CLI adapter. Uses
+  existing HTTP, SEC pacing, hash, strict JSON and locking utilities. Response bytes
+  and acquisition failures are immutable per attempt; successful documents resume
+  without fetching again. This source layer does not interpret corporate actions
+  or grant identity, accounting, model or serving readiness.
+
 - `sources/sec.py`, `catalysts/sec_filings/collection.py`, and
   `catalysts/sec_filings/decision_authority.py`: SEC transport, immutable issuer
   evidence, and zero-versus-unknown decision-time coverage semantics.

@@ -17,10 +17,38 @@ from market_predictor.edge_rebuild.swing_history_collection import (
 )
 from market_predictor.heavy_jobs import serialized_heavy_job
 from market_predictor.sources.alpaca import AlpacaNewsPage, AlpacaSource
+from market_predictor.sources.official_documents import (
+    OfficialDocumentSource,
+    collect_official_documents,
+    load_official_document_inventory,
+    verify_official_document_collection,
+)
 from market_predictor.sources.provider_symbols import PROVIDER_ALPACA, provider_symbol
 
 
 def register_swing_collection_commands(app: typer.Typer, console: Any) -> None:
+    @app.command("collect-swing-holding-source-documents")
+    def collect_swing_holding_source_documents_command(
+        inventory: Path = typer.Option(Path("configs/swing_holding_source_documents.toml")),
+        out_dir: Path = typer.Option(..., help="New or matching resumable official response archive."),
+        offline: bool = typer.Option(False, help="Verify existing bytes without a network request."),
+    ) -> None:
+        """Retain official evidence without approving its accounting interpretation."""
+        policy = load_official_document_inventory(inventory)
+        if offline:
+            result = verify_official_document_collection(out_dir, policy)
+        else:
+            source = OfficialDocumentSource(get_settings())
+            try:
+                result = collect_official_documents(inventory=policy, output_directory=out_dir, fetch=source.fetch)
+            finally:
+                source.close()
+        console.print({key: result[key] for key in (
+            "status", "requested_documents", "archived_documents", "interpretation_status", "accounting_eligible",
+        )})
+        if result["status"] != "collected_unreviewed":
+            raise typer.Exit(code=2)
+
     @app.command("collect-edge-rebuild-swing-history")
     @serialized_heavy_job("collect-edge-rebuild-swing-history")
     def collect_edge_rebuild_swing_history_command(

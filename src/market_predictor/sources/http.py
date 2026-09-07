@@ -10,6 +10,7 @@ from hashlib import sha256
 from typing import Any, cast
 
 import requests
+from urllib3.exceptions import HTTPError as Urllib3HTTPError
 
 _SAFE_RESPONSE_HEADERS = (
     "cache-control",
@@ -314,7 +315,11 @@ def _read_bounded_http_entity(
     chunks: list[bytes] = []
     total = 0
     while True:
-        chunk = response.raw.read(min(_READ_CHUNK_BYTES, maximum_body_bytes - total + 1))
+        try:
+            chunk = response.raw.read(min(_READ_CHUNK_BYTES, maximum_body_bytes - total + 1))
+        except Urllib3HTTPError as exc:
+            # raw.read bypasses requests' iter_content exception translation.
+            raise requests.ConnectionError("HTTP response stream failed") from exc
         if not chunk:
             break
         total += len(chunk)

@@ -21,6 +21,7 @@ COLLECTION_COMMANDS = frozenset(
         "collect-market-context",
         "collect-sp500-official-source-archive",
         "collect-swing",
+        "collect-swing-holding-source-documents",
         "download-finviz",
         "download-finviz-screeners",
         "download-model",

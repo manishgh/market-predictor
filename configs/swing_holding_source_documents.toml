@@ -1,0 +1,64 @@
+schema_version = "market_predictor.official_document_inventory"
+maximum_response_bytes = 16777216
+attempts_per_document_per_run = 1
+
+# Source acquisition only. These references do not establish settlement or fills.
+[[documents]]
+document_id = "lb_bbwi_separation_filing"
+url = "https://www.sec.gov/Archives/edgar/data/701985/000114036121026658/nt10026698x7_8k.htm"
+purpose = "LB to BBWI name change and VSCO separation terms; entitlement and settlement require review."
+expected_media = "html"
+
+[[documents]]
+document_id = "lb_bbwi_distribution_tax_notice"
+url = "https://investors.bbwinc.com/static-files/b771f363-3863-4b55-b2ef-2d1e6dee794e"
+purpose = "Issuer distribution tax notice; tax basis values are not executable stock prices."
+expected_media = "pdf"
+
+[[documents]]
+document_id = "xlnx_amd_merger_filing"
+url = "https://ir.amd.com/financial-information/sec-filings/content/0000002488-22-000031/amd-20220214.htm"
+purpose = "AMD filing accession 0000002488-22-000031 concerning XLNX consideration; verify delivery separately."
+expected_media = "html"
+
+[[documents]]
+document_id = "ctxs_merger_closing_filing"
+url = "https://www.sec.gov/Archives/edgar/data/877890/000119312522256805/d393433d8k.htm"
+purpose = "CTXS merger closing and stated consideration; closing does not prove spendable cash date."
+expected_media = "html"
+
+[[documents]]
+document_id = "ctxs_nasdaq_trading_notice"
+url = "https://www.nasdaqtrader.com/TraderNews.aspx?id=eca2022-262"
+purpose = "Nasdaq CTXS trading halt and merger notice; review exact trading boundaries."
+expected_media = "html"
+
+[[documents]]
+document_id = "nlsn_merger_closing_filing"
+url = "https://www.sec.gov/Archives/edgar/data/1492633/000119312522260583/d407513d8k.htm"
+purpose = "NLSN merger closing, consideration and suspension; payment availability remains separate."
+expected_media = "html"
+
+[[documents]]
+document_id = "frc_fdic_receivership_notice"
+url = "https://www.fdic.gov/resources/resolutions/bank-failures/failed-bank-list/first-republic.html"
+purpose = "FRC receivership context; receivership alone does not prove common-stock cancellation or zero recovery."
+expected_media = "html"
+
+[[documents]]
+document_id = "frc_occ_symbol_change_notice"
+url = "https://infomemo.theocc.com/infomemos?number=52352"
+purpose = "OCC FRC to FRCB symbol change reference; options terms are not stock fills."
+expected_media = "pdf"
+
+[[documents]]
+document_id = "frcb_occ_trading_notice"
+url = "https://infomemo.theocc.com/infomemos?number=52358"
+purpose = "OCC FRCB trading reference; stock identity and OTC prices still require verification."
+expected_media = "pdf"
+
+[[documents]]
+document_id = "biib_occ_halt_notice"
+url = "https://infomemo.theocc.com/infomemos?number=47809"
+purpose = "BIIB halt evidence; options expiration reference price must not be used as an executable stock fill."
+expected_media = "pdf"

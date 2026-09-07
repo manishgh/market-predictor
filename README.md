@@ -63,6 +63,15 @@ hash-verified promoted bundle.
   corrects the builder, not the retained data: 40 affected paths have price coverage
   pending identity proof, while 30 require additional source evidence. No repaired
   authority or new trained model is claimed.
+- Official holding-source documents are collected through
+  `market-predictor-collect collect-swing-holding-source-documents --out-dir
+  data/raw/swing_holding_source_documents`. Add `--offline` to verify without
+  networking. Exact URLs and byte limits live in
+  `configs/swing_holding_source_documents.toml`; SEC requests use `SEC_USER_AGENT`.
+  Successful responses resume without refetching; failures remain explicit.
+  The initial acquisition retained six of ten documents, with two failed and two
+  deferred after an OCC HTTP 403. These are unreviewed response bytes, not approved
+  corporate-action returns, historical availability or security identities.
 - Live inference excludes individual missing or cold securities through the governed
   5% ceiling. Cached models are bound to the active contract, trust store, promotion
   policy, and model-size limit.

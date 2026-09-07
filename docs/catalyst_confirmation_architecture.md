@@ -74,6 +74,22 @@ The materialization request binds the named independent-holding panel schema and
 holding-path implementation hashes. Resume and completed-authority loading reject
 old or changed implementations before reusing their partitions.
 
+`sources/official_documents.py` acquires the exact official URLs configured in
+`configs/swing_holding_source_documents.toml`. It uses the existing bounded HTTP
+transport and SEC governor, rejects automatic redirects, and atomically publishes
+each response body and immutable attempt receipt. Encoded bytes, retrieval clock,
+URL, headers and hash remain distinct from publication or acceptance time. One
+failed source does not erase other documents; a forbidden/rate-limited host is
+deferred for the remainder of the run. Successful requests resume after offline
+verification. Content-addressed reports bind the receipt inventory.
+
+The command adapter lives in `commands/swing_collection.py`, exposed only on the
+collection CLI. Source collection does not import swing evaluators or decide
+identity continuity, entitlement, cash availability, total returns or readiness.
+`archived_unreviewed` means bytes acquired, not document content approved. The
+initial archive is incomplete; interpretation and expanded outcome admission
+remain separate required work. No compatibility path or alternate ledger is added.
+
 `swing/evaluation/ledger.py` owns the single funded ledger. Each cohort
 requests one tenth of prior-close NAV, equal-weight across its selected securities.
 Cash caps the cohort pro rata including prepaid round-trip costs. Entries precede

@@ -95,9 +95,21 @@ holding outcomes. Fixed/managed paths and live maturation reject unusable daily
 observations; precise daily open/close timestamps include early closes. This code
 correction does not certify historical identity or corporate-action return units.
 
-The retained SEC inventory has relevant accession metadata but not the filing
-bodies needed for accounting. The independent reviewer inspected these official
-documents online; they are research pointers, **not retained hash-bound admission**:
+The original SEC inventory has accession metadata but not the filing bodies needed
+for accounting. The new official-document acquisition retained six configured
+responses at `data/raw/swing_holding_source_documents`, verified offline. Its
+immutable report file SHA-256 is
+`3b5dbc4b888034d7c36f2275ec40d49710778b4a39ed5c93503b3ed52654f52c`;
+inventory SHA-256 is
+`a32b83ac554047fcdc7383af4a5870549d7c21b2b0f4c2a7f0dac53de5484391`.
+It contains six `archived_unreviewed` acquisitions, two failed requests (BBWI tax
+notice transport failure and OCC HTTP 403), and two unattempted OCC documents
+deferred after the 403. No error-response body was claimed as archived.
+
+The retained six are LB/BBWI separation, AMD/XLNX closing, CTXS closing, CTXS Nasdaq
+cessation, NLSN closing and FRC FDIC receivership. Bounded local body inspection
+confirmed relevant stated terms, not a completed financial interpretation. These
+documents still **do not authorize outcome, identity or total-return admission**:
 
 - [LB closing 8-K](https://www.sec.gov/Archives/edgar/data/701985/000114036121026658/nt10026698x7_8k.htm):
   parent rename and VSCO distribution, not a simple ticker-only continuation.
@@ -109,9 +121,52 @@ documents online; they are research pointers, **not retained hash-bound admissio
 - [NLSN closing 8-K](https://www.sec.gov/Archives/edgar/data/1492633/000119312522260583/d407513d8k.htm):
   cash consideration requires separately bound settlement treatment.
 - [FRC OTC notice](https://infomemo.theocc.com/infomemos?number=52358):
-  receivership does not justify assuming common shares were worth zero.
+  not retained because the OCC host was deferred. The separately retained FDIC
+  receivership page does not justify assuming common shares were worth zero.
 - [BIIB halt notice](https://infomemo.theocc.com/infomemos?number=47809):
-  an options-processing reference price is not an executable stock entry.
+  not retained because the OCC host was deferred. An options-processing reference
+  price is not an executable stock entry.
+
+Independent identity review adds an important distinction to the 40 price-complete
+paths: 38 across 11 tickers have explicit retained S&P index-transfer announcements,
+while two AIV paths involve a documented planned AIRC spin-off. All twelve raw
+artifact legacy membership IDs differ from current decision IDs. SEC relation
+intervals end at membership removal because the existing constructor copies those
+boundaries; they cannot independently authorize the missing tails. The absence of
+a transition row, current CIK equality, matching prices or an arbitrary ten-session
+extension is not historical security-class continuity evidence.
+
+AIV's retained S&P announcement body is
+`data/raw/index_membership/spglobal_official_20180414_20260708_v1/objects/6a/6a14c38afcc16ae39f5d32698ab6e21561d91568746afaed6eb5717b72329a19.html`
+(the filename digest is its verified SHA-256). Its December 11 announcement expected
+the spin-off after the December 14 close; it does not prove completion. Existing
+SEC metadata explicitly records candidate filings
+[December 15 8-K](https://www.sec.gov/Archives/edgar/data/922864/000119312520317477/d772672d8k.htm)
+and [December 16 8-K](https://www.sec.gov/Archives/edgar/data/922864/000119312520319176/d71118d8k.htm).
+Both candidate bodies were subsequently acquired, without changing the ten-document
+request, using `configs/swing_aiv_distribution_documents.toml`. Their separate raw
+archive is `data/raw/swing_aiv_distribution_documents`, with a two-of-two unreviewed
+acquisition report SHA-256
+`41e6324d175dfb17cd89d0f78aa371aceca3aa3b6c2b4b53a4ef0ebfa2c73904`.
+Acquisition does not establish completion, entitlement or return treatment; semantic
+review remains required. The already-retained S&P announcement was not downloaded again.
+
+The independent quant review inspected all eight retained bodies and verified their
+receipt/body hashes. The December 15 AIV filing establishes one AIR Class A share
+per AIV Class A share; AIV continues. The December 16 filing concerns financing,
+not another distribution. Ex-distribution and regular-way rights still require
+evidence. LB's similar entitlement issue has a supplemental official
+[regular-way trading announcement](https://www.sec.gov/Archives/edgar/data/701985/000114036121023926/nt10022999x10_ex99-1.htm)
+identified online but not retained. Record dates alone cannot decide these rights.
+
+Three unresolved policy boundaries are now explicit: cash-merger receivable versus
+spendable funds; fractional/distribution reinvestment convention; and mandatory
+termination or halt nonexecution/valuation. Normalized total-return units can be
+researched without personal brokerage records, but synthetic next-session merger
+redemption is not verified settlement. Likewise, adding component daily highs/lows
+does not produce a synchronized basket barrier path. An asynchronous user decision
+was requested on a separately named synthetic research convention; until approved,
+the frozen execution-based rules remain unchanged. Identity/source work may continue.
 
 Next admission requires independent source identity intervals, corporate-action
 terms/valuation/settlement policy, total-return reconciliation, and a new immutable
