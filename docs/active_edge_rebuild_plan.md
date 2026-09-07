@@ -14,7 +14,12 @@ This is the only active execution plan. Exact artifact state is recorded in
 
 ## Objective And Boundary
 
-Build causal prediction intelligence for:
+Current research priority, requested 2026-09-07: **long-only swing stock selection
+with verifiable net outperformance of buy-and-hold SPY**. Intraday development and
+unrelated structural cleanup are paused, not deleted or declared complete. This is
+a research and implementation plan; no profitable candidate is asserted.
+
+The repository's existing supported horizons remain:
 
 - **Swing:** ten-session stock direction, managed return, and excess return against
   SPY, QQQ, and the point-in-time sector benchmark.
@@ -24,6 +29,428 @@ This repository produces predictions, abstentions, explanations, benchmark
 comparisons, and matured outcomes. It does not produce alerts, orders, positions,
 portfolio risk, or execution instructions. `trading_flow` may consume only a promoted,
 versioned prediction API.
+
+Offline portfolio accounting is necessary to evaluate predictions. It is not live
+portfolio management: alerts, orders, final position sizing, and execution remain
+outside this repository.
+
+## Long-Only Swing Research And Implementation Plan
+
+### Decision And Scope
+
+The recommendation is a **benchmark-aware cross-sectional return model conditioned
+on issuer news and the price/volume reaction already observable at decision time**.
+Start with the existing ten-exchange-session horizon and point-in-time S&P universe.
+Do not restart intraday, buy another data feed, change language, or launch another
+repository refactor to do this research.
+
+The economic question is: does a funded, unlevered, long-only stock portfolio end
+with more money than SPY over the same calendar period, after costs? A high win rate,
+positive average trade return, or AUC of 0.60 does not answer that question. A stock
+that rises 1% while SPY rises 2% has positive direction but negative benchmark excess.
+No paper, software design, or model provider can guarantee future outperformance.
+
+This section supersedes the earlier four-model *work sequence* and its proposed
+universal AUC gate for this new campaign. Existing artifacts and their rejection
+decisions remain unchanged. Changes to labels, estimator sources, selection, or
+promotion require new explicit contracts and tests before implementation; this
+document does not silently modify a frozen model or authorize serving.
+
+### What The Existing Evidence Establishes
+
+- The retained technical authority has 853,417 rows, 604 securities, and 1,759
+  sessions. This is substantial data, not 853,417 independent market histories.
+  Stocks share market shocks and overlapping ten-session outcomes.
+- The corrected broker-action comparison has 27,087 matched prediction rows from
+  11,720 unique latest announcements per profile. The historical 113/19-event
+  reductions were not evidence that the entire news archive was that small.
+- Reported directional broker experiments reached worst-scope inner AUC of 0.524
+  for upgrades and 0.552 for downgrades; they did not produce a candidate. This is
+  evidence against those exact models, not against every news-conditioned strategy.
+- Current technical labels emphasize a top sector-relative quantile of managed
+  return. That is different from estimating the amount of future SPY excess.
+  Subtracting the same SPY return from every stock on a date does **not** change
+  their order; changing the target alone cannot create a predictive signal.
+- The latest implementation checkpoint, `880f2a8`, improved outcome/drift correctness
+  and passed its tests. It did not train a new model or produce economic evidence.
+- The retained August 9 `data/models/swing/technical/evaluation.json` explicitly
+  records `locked_test_outcomes_read=true` and `test_access_count=1`. Its reported
+  July-2025 through June-2026 results are already exposed. Later specialist runs
+  keeping their own locked reads at zero does not make that calendar globally fresh.
+- The reviewer verified a historical inconsistency in that August 9 V11-lineage
+  bundle: candidate eligibility is true despite failed selected economic gates.
+  Current evaluation requires those gates; no current bypass was reproduced. Do not
+  use that old bundle as evidence of a qualified current baseline or deployment.
+- In that old run, classifier/regressor managed portfolios reported approximately
+  +4.49%/+7.91% compounded return, yet approximate managed SPY excess per selected
+  trade was -27.37/-9.27 bps. Unseen-security portfolios returned -1.58%/-0.23%.
+  These are exposed historical diagnostics, not exact portfolio SPY excess and not
+  performance of the current technical authority.
+- A current semantic conflict is reproduced: `training/economics.py::_economic_gate`
+  and swing candidate ordering use managed-exit-session-close benchmark excess, while
+  `edge_rebuild/swing_training.py` metadata says it is diagnostic only. Daily close
+  benchmark prices are not necessarily contemporaneous with a stock barrier fill.
+  Its numerical bias is unmeasured; correcting it does not automatically create alpha.
+- The May-2019 schedule/missing-warm-up language in the older validation protocol is
+  stale. Current config begins decisions 2019-07-09, and the panel request records
+  history beginning 2018-05-29. Do not download that history again based on stale prose.
+
+Immediate diagnosis must distinguish six measurable causes: weak stock ranking,
+return-magnitude mistakes, missing/misclassified catalyst information, exit-policy
+losses, transaction costs, and benchmark exposure/cash/sector effects. These are
+hypotheses until attributed from the actual ledger, not excuses for a rejected run.
+
+### Research Basis And Limits
+
+| Primary evidence | Relevant result | Application here and important limitation |
+| --- | --- | --- |
+| [Gu, Kelly and Xiu, Empirical Asset Pricing via Machine Learning](https://academic.oup.com/rfs/article/33/5/2223/5758276) | Nonlinear interactions improved return forecasts; momentum, liquidity and volatility were influential. | Use regularized and shallow tree return models as controlled comparisons. Their sample covers approximately 30,000 stocks over 1957-2016, largely monthly forecasts. It does not establish ten-day, long-only S&P alpha. |
+| [AQR, Implementing Momentum](https://www.aqr.com/Insights/Research/Working-Paper/Implementing-Momentum-What-Have-We-Learned) | Examines seven years of live momentum implementation and returns after multiple real-world frictions. | Evidence that implementation matters, not a promise that a new swing model will work. This is manager-authored evidence. |
+| [AQR momentum methodology](https://www.aqr.com/insights/datasets/momentum-indices-monthly) | Uses prior twelve-month performance excluding the latest month and quarterly reconstitution. | Separate slow momentum context from short-term entry/reaction features. Do not cite this as evidence for rapidly rotating ten-day positions. |
+| [Acadian, Machine Learning in Quant Investing](https://www.acadian-asset.com/au/investment-insights/systematic-methods/machine-learning-in-quant-investing-revolution-or-evolution) | Demonstrates nonlinear enhancement of a financially motivated signal and emphasizes explicit research discipline. | Learn conditional relationships with a small, motivated feature set, not an unconstrained indicator search. Its case study is not our holding horizon or a replication of its live strategy. |
+| [Novy-Marx and Velikov, Trading Costs](https://www.nber.org/papers/w20721) | Buy/hold separation reduces turnover; many high-turnover anomalies lose significance after costs. | Measure replacement benefit versus cost and inspect how many positions the policy churns. Evidence comes from anomaly portfolios, not a guaranteed threshold for this system. |
+| [Frazzini, Israel and Moskowitz, Trading Costs of Anomalies](https://www.aqr.com/insights/research/working-paper/trading-costs-of-asset-pricing-anomalies) | Uses institutional live trades to study costs, capacity and cost-aware implementation. | Report size-dependent slippage and stress costs. Institutional execution estimates cannot simply be borrowed for a personal account. |
+| [Daniel and Moskowitz, Momentum Crashes](https://www.nber.org/papers/w20439) | Momentum losses depend on panic/rebound conditions. | Test interactions with observable volatility and market rebound state. Much of this evidence concerns long-short momentum; do not transplant its crash statistics to our long-only portfolio. |
+| [Savor, Stock Returns After Major Price Shocks](https://faculty.wharton.upenn.edu/wp-content/uploads/2012/10/Stock-Returns-After-Major-Price-Shocks---May-2012---Final.pdf) | Studies 1995-2009 shocks and subsequent 5/10/20/40-trading-day responses; analyst-report-associated shocks behave differently from other shocks. | Test information type multiplied by already-observed reaction. Its event classification can use day +1 information; we must not copy that into a day-0 prediction. Evidence is not a costed long-only SPY strategy. |
+| [Tetlock, All the News That's Fit to Reprint, October 2010 manuscript](https://business.columbia.edu/sites/default/files-efs/pubfiles/3099/Tetlock%20Fit%20to%20Reprint%2010%2010.pdf) | Examines over 850,000 news firm-days in 1996-2008; repeated issuer text is associated with subsequent short-horizon reversal. | Measure novelty against prior available stories, not headline tone alone. The study's five-day reversal evidence is not ten-day long-only net performance. |
+| [DellaVigna and Pollet, Investor Inattention, December 2006 working paper](https://eml.berkeley.edu/~sdellavi/wp/earnfr06-12-11NewTitle.pdf) | Studies 1995-2004 earnings; attention affects delayed reactions. | Motivation for earnings reaction, not a Friday trading rule. It relies on analyst expectations and much longer delayed-return windows than our ten-session forecast. |
+| [Lerman and Livnat, The New Form 8-K Disclosures, March 2008 working paper](https://pages.stern.nyu.edu/~jlivnat/f8k%20current.pdf) | Studies item-specific filing reactions in 2005-2006, including later 30/60/90-calendar-day returns. | Form occurrence alone is not positive news. Verify content and first disclosure; do not imply ten-day SPY alpha from an 8-K flag. |
+| [Bailey and Lopez de Prado, Deflated Sharpe Ratio](https://www.davidhbailey.com/dhbpapers/deflated-sharpe.pdf) | Selecting the best of many trials inflates apparent performance. | Record all model/policy trials and assess uncertainty using time blocks. A correction does not turn reused historical validation into fresh evidence. |
+
+These sources motivate experiments, not advertised expected returns. Public material
+from quantitative firms does not disclose a reproducible recipe for their proprietary
+alpha. No claim is made that this design copies a successful fund.
+
+### Proposed Prediction And Evaluation Contract
+
+1. **Universe and clock.** Reuse eligible point-in-time S&P members, including former
+   members. Finviz may inspect today's candidates but may not select a historical
+   training population using today's winners. Score after the configured completed
+   session cutoff, enter at the next exact session open, and count ten actual exchange
+   sessions. News arriving after cutoff belongs to a later decision.
+2. **Return target.** Add a separately named fixed-horizon total-return target:
+   `stock_next_open_to_tenth_close - SPY_same_interval - stock_round_trip_cost`.
+   Train magnitude as well as ordering. Preserve raw gross returns and cost columns;
+   cost adjustment occurs once. QQQ and the sector ETF remain reported diagnostics,
+   not three independent markets the model must simultaneously beat to satisfy a
+   SPY-specific objective. Required benchmark data integrity remains strict.
+3. **Managed outcomes.** Keep the existing 3 ATR target, 1.5 ATR stop, ten-session
+   timeout as the control execution policy. Fixed-horizon forecasts are not falsely
+   labeled managed-profit forecasts. Evaluate every candidate using the actual
+   frozen exit policy. A second, preregistered research policy may remove only the
+   profit cap while retaining the stop and ten-session maximum; it is an experiment,
+   not an already approved live change. This tests whether early profit-taking loses
+   continuation gains. Do not optimize a grid of stops or extend the holding period
+   until a backtest looks good.
+4. **Benchmark honesty.** A daily high/low reveals a possible barrier hit but not the
+   simultaneous SPY quote. Keep exact fixed-horizon comparisons separate from
+   managed-exit-time estimates. If exact intraday benchmark prices are unavailable,
+   mark that trade-level comparison unavailable/approximate. Full-calendar daily NAV
+   versus buy-and-hold SPY is still a valid portfolio comparison with documented fill
+   assumptions; do not pretend an exit-session close is the intraday exit instant.
+5. **One funded account.** Replay available cash, marked holdings, entries, exits,
+   exposure, and total equity each session. Overlapping recommendations cannot each
+   spend the entire account. Aggregate repeated positions, enforce funded capacity,
+   include idle days and capital tied up in losing positions, and charge only actual
+   transactions. Report realized and unrealized P&L. Unit-test reconciliation.
+6. **Costs and distributions.** Start from the existing 20 bps round-trip estimate
+   and 40 bps stress case; neither is claimed to be measured live slippage. Model gaps
+   and conservative ambiguous fills. Verify split/dividend treatment for stocks and
+   SPY, using either verified total-return series or explicit cash distributions,
+   never both. Check adjusted prices are not mistaken for executable raw prices.
+   Cash yield is explicitly zero unless a contemporaneous cash-rate source is bound.
+   Results are pre-tax; account-specific taxes are not silently estimated.
+7. **Attribution, not benchmark substitution.** Report full-account excess versus
+   SPY, beta/exposure, cash drag, sector contribution, concentration, turnover, and
+   costs. Also compare an exposure-matched SPY diagnostic and the same-universe
+   deterministic control. Neither may replace buy-and-hold SPY as the headline
+   benchmark. Do not add leverage, shorting, or a permanent SPY allocation to make the
+   result pass. An index-core allocation would be a different approved experiment.
+
+### Feature And Data Design
+
+Use one global stock model, not a model per ticker or sector. Preserve the existing
+technical source contract as the comparator. Inspect the actual ordered feature list
+before adding anything; the following are groups, not permission to duplicate inputs.
+
+| Group | Candidate information available before entry | Historical requirement |
+| --- | --- | --- |
+| Medium-term relative strength | Existing 20/60-session stock/sector/market returns; distinct six/twelve-month momentum excluding the latest month where supported | Complete price warm-up; insufficient windows excluded, not shortened silently |
+| Short-term reaction/reversal | One/five-session residual move, overnight gap, close location, distance from trend, rebound after a pullback | Separate information already reflected in price from return after next-open entry |
+| Volume and liquidity | Trailing dollar volume, abnormal volume against lagged history, volatility-normalized move, liquidity/size proxy | SIP feed known; current observation excluded from its baseline |
+| Regime interactions | Existing SPY/QQQ/sector trend, realized volatility, market breadth, stock beta/residual return; interaction with short-term reaction | Causal rolling estimates and contemporaneous universe; no retrospective bull/bear labels |
+| Issuer news | Event family/direction, age, novelty, deduplicated recurrence, issuer precision, and source coverage | Archived exact article/version, security identity, availability and cutoff; no latest edited text leaking backward |
+| Event response | Observed stock-minus-market/sector reaction and abnormal volume in an explicitly defined post-release or announcement window, plus event-age interactions | Verify both start and end boundaries; no future reaction, high, closing volume, or pre-release move mislabeled post-release |
+| SEC issuer events | Filing type and material content, earnings releases, financing/dilution, or business changes when verified | Accession and acceptance time, original exhibit/fact availability; no restated latest facts assigned to old dates |
+
+Prioritize **earnings/guidance continuation** and **news-conditioned continuation
+versus covered-source no-qualifying-event reversal** as event hypotheses. Broker upgrades/downgrades remain
+comparators rather than the sole definition of catalyst. Negative issuer news can
+help avoid a long purchase; a negative event is not an instruction to short.
+
+An earnings "surprise" requires an estimate known before the announcement. Without
+that evidence, use honestly named reported growth/guidance changes or observed price
+reaction; never synthesize an analyst consensus from the later actual. SEC reporting
+time is not necessarily the first earnings-announcement time. FinBERT tone alone is
+not economic surprise. An LLM may assist extraction only with a frozen auditable
+extractor, not use hindsight to decide whether an old headline was important.
+
+For earnings-reaction continuation, admit reported issuer results, not previews or
+calendar notices. For guidance, require an explicit issuer guidance raise/lower for
+an identified fiscal period; reaffirmation and initiation are different events.
+Supporting source spans must be retained. Waiting for a completed post-announcement
+reaction session moves the decision and next-open entry forward. An after-close
+announcement cannot already have tomorrow's reaction as an evening feature.
+
+Freeze the reaction start as well as its end. With daily evidence, a strict
+post-release reaction can use the first complete session whose open follows event
+availability: same-day for a premarket release, next-session for an intraday or
+after-close release. An event-day close-to-close return or gap may also be useful,
+but call it **announcement-window context**, not a pure post-release move; it can
+contain trading before the release. More precise intraday reaction requires exact
+retained bars with starts after availability and independently accepted coverage.
+Test that pre-release price moves cannot enter the post-release reaction feature.
+
+The SEC manifest inspected in this review reports 689,467 filing events across 624
+issuers and a companion 853,417-decision authority. These counts are manifest
+inspection, not a fresh full replay. SEC is therefore not wholly absent. However,
+current canonical form-level text does not prove original exhibit/content coverage,
+EPS, guidance or 8-K item meaning; inspect retained document bytes before collection.
+Both historical news and SEC timing remain retrospective research evidence where
+first-observed history is unproven. Do not manufacture prospective availability.
+
+Audit precision **and recall** on development-only article samples stratified by
+event family, year, issuer and market session. Record actual source denominators,
+unique announcements, duplicate reports, and attached stock decisions separately.
+Include unclassified and rejected articles as well as detected events in the recall
+sample; reviewing only admitted events cannot measure what the classifier missed.
+Name the negative control **no qualifying event in the covered source window**, not
+"no public information". Provider coverage cannot prove that no news existed
+elsewhere; unclassified evidence must not automatically certify a clean control.
+Ground truth must be independently source-checked; an extractor grading its own
+answers is not an independent audit. Record whether labels were human-reviewed or
+model-assisted and retain research-only status where admission evidence is insufficient.
+Weak classification of one family must not make all other news disappear. Missing
+coverage is not neutral sentiment and does not mean "no catalyst". New feature
+profiles must explicitly define nulls, required-source abstention and optional-source
+missingness; never silently switch the source set of a fitted model.
+
+Global events are separate market/sector context. Start with observable market and
+sector reactions already supported by the bars. GDELT/open-source flashpoint text
+may enter only through a separate timestamped, full-history, preregistered ablation;
+no fabricated war labels, current supply-chain maps applied backward, or ticker
+attribution merely because the article mentions oil or technology. It is not a
+dependency of the first bounded experiment.
+
+Existing archives are the first source. Backfill accepted new transformations across
+the complete permitted history. Download only an enumerated, genuinely missing
+source/date range after checking raw archives and permissions. Missing SEC or news
+coverage must be reported by ticker/year and source; it cannot be replaced with zero.
+The first decision date remains 2019-07-09; source coverage before then is irrelevant
+to modeled decisions. Retain the 5% whole-security exclusion rule and affected-window
+handling, and show whether exclusions distort the universe.
+
+### Bounded Experiment
+
+Compare two existing-stack learner families: **regularized linear return regression**
+and **shallow gradient-boosted return regression**. Forecast continuous return rather
+than force every estimator through a top-quantile binary target. Rank predictions by
+decision date. An independently calibrated binary view may still report the chance
+of positive excess, but an uncalibrated score is not a probability.
+
+Use at most six learned specifications: those two learners crossed with these three
+feature profiles. Freeze exact columns and estimator settings before inspecting new
+validation outcomes. Repeated folds/refits are logged but do not license new searches.
+
+| Profile | Purpose |
+| --- | --- |
+| Existing technical features | Isolate the objective/learner change from new information |
+| Technical features plus distinct price/volume/regime relationships | Test incremental relationships, not another collection of redundant indicators |
+| Same relationships plus qualified issuer news and SEC reaction features | Measure catalyst value on exactly matched decisions as well as overall deployable coverage |
+
+Source-blocked profiles are reported as not trained; train ready technical profiles
+without pretending they include news. Paired comparisons use identical security/date
+rows, weights, labels, splits, costs, and policies. Also report each profile's actual
+full-universe coverage so a highly filtered event cohort cannot hide poor opportunity
+coverage. Include known negative/non-event outcomes, not only stocks that later rose.
+Neither a losing deterministic baseline nor a prior rejected specialist prevents a
+valid new estimator from being trained.
+
+Control models are SPY buy-and-hold, a same-universe simple momentum rank, and the
+existing technical formula on the same policy. They are not extra learned families.
+The two predefined exit policies give at most twelve learned model/policy comparisons;
+they count toward the complete trial record. No post-result threshold grid, seed
+shopping, sector winner-picking, or retrospective best holding-period selection.
+
+A portfolio replacement must cover its incremental cost. Freeze entry/hold separation
+and capital/sector constraints before evaluation, using current constraints as the
+control. Do not reduce a sector peer threshold or a risk limit simply to get trades.
+Measure losses caused by those constraints first. A change to sector-relative ranking
+eligibility or hard sector allocation is a separately named contract decision.
+
+### Validation And Success
+
+- First reconcile the current split config: the feature audit describes initial fit
+  2019-07-09 through 2024-05-28, a ten-session embargo, 252 validation sessions, and
+  locked test 2025-07-01 through 2026-06-30. The older protocol's May-2019 requirement
+  conflicts with the approved news cutoff. Do not move the cutoff or open outcomes
+  while reconciling this discrepancy.
+- Use session-grouped rolling/expanding development folds inside the permitted fit
+  range, with purging based on actual label end time and at least the ten-session
+  embargo. All fitting, normalization, clipping, feature selection and calibration
+  precede scored dates. Give each date controlled weight; duplicated news decisions
+  must not multiply one announcement into independent evidence.
+- The July-2025 through June-2026 holdout has already been evaluated by the retained
+  August 9 technical run. Its results are historical/exploratory for this new design,
+  not an untouched final test. Preserve all genuinely unobserved outcomes by an
+  access-audited manifest; use a newly accruing prospective holdout when none exists.
+  Reviewed validation remains development evidence even when called out-of-sample.
+  Do not relabel old dates "untouched" after three months of experiments.
+- Primary outcome: positive net CAGR difference versus SPY on the complete funded
+  equity curve, with a positive mean daily active return and uncertainty measured
+  from **time blocks**, not a bootstrap of individual stock rows. Use the existing
+  20-session block length as the primary setting; 40-session sensitivity must be
+  reported rather than cherry-picked. Report confidence bounds and effective sample
+  length, including the dependence from overlapping holdings.
+- For promotion, require positive base-cost excess, survival under doubled costs,
+  the frozen drawdown/capacity limits, and statistical evidence of positive active
+  return after accounting for the complete trial search. Freeze the exact confidence
+  procedure in the first checkpoint. A positive point estimate with an interval
+  spanning zero is **inconclusive**, not proof of edge and not a fabricated failure
+  to collect enough rows. No claim of 0.85 AUC or guaranteed CAGR.
+- Report rank correlation, top-ranked return, calibration where applicable, turnover,
+  drawdown, sector/year/regime attribution and unseen-security stress. AUC is a
+  diagnostic for an explicitly named binary target, not an arbitrary universal veto
+  on a useful continuous-return model. Beating QQQ every year is not the SPY mandate.
+- If no model passes, publish the measured reason: weak ranking before costs, costs
+  consuming gross edge, exit-policy damage, concentrated exposure, or uncertain
+  evidence. Do not resume unbounded tuning on the same validation window.
+
+### Ordered Checkpoints
+
+Only the first checkpoint is current. Design is recorded; implementation/training has
+not started. Names describe behavior rather than experiment serial numbers.
+
+1. **Define the SPY objective and reconcile evidence (`in progress`).**
+   Freeze the new research objective, exact candidate/policy budget, chronological
+   split, capital/cost assumptions, statistical procedure and target semantics.
+   Reconcile conflicting current documents/configs without rewriting old artifacts.
+   Produce a source/feature/experiment inventory and an access record for held-out
+   data. Map each proposed relationship to an existing feature or a real gap.
+   Owners: `configs/edge_rebuild_swing_training.toml`, swing/strategy contracts,
+   temporal manifest, current feature audit, and the governing validation protocol.
+   Exit: one reproducible contract and no contradictory current instructions; no
+   training or locked-outcome access. Review: independent ML/economics reviewer.
+
+2. **Reconcile returns, capital and SPY accounting (`pending`).**
+   Extend the existing label/evaluation owners with named fixed-horizon return
+   evidence and a funded daily ledger. Replay retained development predictions only
+   if immutable row-level prediction evidence actually exists. The inspected
+   specialist rejection artifacts retain aggregates, not fitted models or prediction
+   rows. Otherwise verify accounting with real-data deterministic controls and unit
+   fixtures, then attribute learned-policy results from step 4's saved chronological
+   out-of-fold predictions. Never score fitting data with a final fitted model and
+   call it historical out-of-sample replay. Attribute gross ranking, managed exits,
+   costs, cash and sector effects where row-level evidence supports it; do not call
+   an accounting repair a new alpha result.
+   Owners: `swing/labels/barrier_and_rank.py`, `edge_rebuild/training/swing_evaluation.py`,
+   `edge_rebuild/training/economics.py`, `modeling/ranking_economics.py`,
+   `swing/evaluation`, and outcome contracts. Reuse the existing daily-position
+   ledger and existing fixed-horizon labels; extend/reconcile them rather than
+   introduce a second accounting or labeling engine.
+   Exit tests: identical stock/SPY produces zero gross excess; one cost deduction;
+   overlapping trades conserve cash; no negative cash/leverage; no free dividends;
+   mark-to-market drawdowns; gap/collision cases; deterministic replay and tamper
+   rejection. Exact managed benchmark unavailability remains visible.
+
+3. **Complete causal news and reaction features (`pending`).**
+   Audit existing Alpaca/SEC artifacts, broaden eligible issuer categories only after
+   development precision/recall evidence, and backfill the accepted feature profiles
+   across the existing horizon. Expose the same transforms in batch and inference.
+   Owners: `catalysts`, `swing/news_source_inventory.py`, `swing/datasets`,
+   `swing/features/pipeline.py`, `catalyst_aggregates.py`, `technical_relationships.py`,
+   and `serving/swing_features.py` where the current owner requires it.
+   Exit: per-ticker/year coverage, first/last usable news and bars, exclusions, event
+   counts, feature availability, and full vertical feature acceptance matrix.
+   Tests: after-close news, revised text, wrong issuer, duplicate announcements,
+   known-zero versus unknown, SEC acceptance timing, future-poison and batch/live
+   parity. No new feature is "done" with batch-only implementation.
+
+4. **Train the six bounded return-model comparisons (`pending`).**
+   Use the existing Python stack and shared data IO. Fit models sequentially with a
+   workspace lease, bounded projected batches and a 5 GiB process-memory limit.
+   Store every development prediction with source/feature/split/model identity.
+   Owners: `edge_rebuild/swing_training.py`, `edge_rebuild/training`, `modeling`,
+   `swing/contracts/model_artifact.py`, and thin research CLI adapters.
+   Exit: reproducible fits, chronological calibration, matched-profile comparisons,
+   date-weighted metrics, complete failure records, and no held-out data reads.
+   No more feature changes are permitted after this checkpoint's validation starts.
+
+5. **Evaluate the frozen long-only policies (`pending`).**
+   Replay each learned specification under the two preregistered exit policies and
+   the same funding/cost constraints. Report net NAV versus SPY and attribution,
+   source coverage, turnover/capacity, doubled costs and drawdowns. Rank candidates
+   by the frozen economic criterion, not highest AUC or average winning-trade return.
+   Exit: one selected candidate or `no_candidate`, all twelve or fewer comparisons
+   accounted for, independent review of row-to-NAV reconciliation, and no manual
+   policy adjustment. This is offline evaluation, not trading_flow execution code.
+
+6. **Start frozen prospective validation (`pending`).**
+   Freeze estimator, sources, feature order, selection/exit policy, costs and thresholds
+   before producing research predictions for newly observed sessions. The exposed old
+   test year is usable only as disclosed historical evaluation; it cannot substitute
+   for this forward record. Start the forward prediction/outcome record immediately
+   after candidate selection, not after a promotion that depends on that record.
+   Preserve first-observed news, filing and bar times. Include the separately fitted
+   unseen-security stress and inherited robustness diagnostics without treating them
+   as additional independent calendar histories. Freeze the final assessment date,
+   sample requirements and stopping rule before observing results; do not repeatedly
+   test until a favorable confidence interval appears. Collection and maturation may
+   progress while evidence is insufficient, without issuing actionable predictions.
+   Owners: `swing/evaluation`, `governance/outcomes`, model/selection contracts and
+   existing research/collection adapters. Exit: immutable forward predictions and
+   matured outcomes, complete clock/source/policy identity, and a scheduled fixed
+   evaluation boundary. Insufficient future data does not block earlier historical
+   feature engineering or training.
+
+7. **Evaluate once and publish verified swing serving (`pending`).**
+   At the preregistered boundary, evaluate the protected forward predictions and
+   compare the same economic policy. Publish a model card with net SPY difference,
+   uncertainty, capacity and limitations, or an honest rejected/inconclusive result.
+   Historical selection and this forward test must use the identical feature builder.
+   Owners: `swing/evaluation`, `governance/outcomes`, `governance/promotion`, `serving`.
+   Exit: sufficient preregistered evidence, reproducible realized/predicted differences
+   and accepted promotion, with no retuning against final outcomes. No promotion from
+   retrospective publication-time news alone. API returns named ten-session expected excess,
+   calibrated uncertainty only where validated, benchmark, cutoff, catalyst evidence,
+   source coverage, release identity and abstention reasons. No alerts or orders.
+
+After the contract checkpoint, label/accounting work and source/feature work can run
+in parallel on disjoint files with reviewer oversight. Training and heavy verification
+remain sequential. Each implementation step gets a bounded design/diff review,
+focused tests, the required repository verification, a Git checkpoint, and updates
+to these same two continuity documents. Close reviewers and owned workers afterward.
+
+Stop conditions are named: `source_blocked`, `contract_conflict`, `no_candidate`,
+`statistically_inconclusive`, or `prospective_evidence_pending`. None is silently
+converted to a pass. No new infrastructure, model architecture, or data purchase is
+a substitute for diagnosing which of those states actually applies.
+
+### Research Checkpoint Status
+
+Research and planning only. No implementation files, feature authorities, trained
+models, selection thresholds, promotions or source archives are changed by this
+documentation checkpoint. Existing failed models remain failed. The immediate next
+implementation is the objective/evidence reconciliation above, not another broad
+cleanup or intraday run. The historical sections below explain retained artifacts;
+they are not a competing current work queue.
+
+Two independent reviewers completed the evidence/design pass. Their actionable
+corrections are incorporated: exposed historical holdout, approximate benchmark
+semantics, SEC content versus inventory, conditional prediction replay, reaction
+start boundaries, and missed-event/control-cohort audit. Both continuity-document
+tests passed; no training or full-suite run was performed for this documentation-only
+change. Implementation exit gates above are future work, not claimed passes.
 
 ## Frozen Data Policy
 
@@ -52,7 +479,7 @@ versioned prediction API.
 | --- | --- | --- |
 | Swing V12 technical panel | published and replayed | 853,417 `technical_market` rows; 604 securities; 1,759 sessions |
 | A3.4 broker-action comparison | corrected, published, and independently replayed | 27,087 prediction rows from 11,720 unique latest broker announcements per comparison dataset; research-only |
-| Prior swing candidates | rejected evidence only | no candidate passed both temporal and unseen-security economic gates; locked test unopened |
+| Prior swing candidates | rejected evidence only | no promotion; some specialist runs left locked outcomes unopened, but August 9 technical evidence already exposed July 2025-June 2026 |
 | A2 swing baseline trainer | implementation complete; no new candidate artifact | four nested technical ablations plus bounded full-feature ranker/regressor; a later governed run must publish separate statistical evidence |
 | Intraday V2 | published and rejected | economically failed after costs; not serveable |
 | Intraday V3 z-score lineage | invalid; prohibited | five declared cross-sectional inputs lacked a valid contemporaneous decision-cohort transformation |
@@ -96,9 +523,9 @@ invalidated and cannot be evaluated, trained, or served. A replacement intraday
 cross-sectional feature contract must define one causal decision cohort, share the
 same batch/live transformation, and be fully backfilled before candidate training.
 
-## Active Four-Model Improvement Program
+## Historical Four-Model Improvement Program
 
-The four governed model families are swing baseline, swing event-driven, intraday
+The prior four governed model families are swing baseline, swing event-driven, intraday
 baseline, and intraday event-driven. `ROC-AUC >= 0.60` is frozen as a validation and
 later locked-test gate for their comparable binary outcome view; it is not permission
 to optimize repeatedly on either split. Ranking quality, calibration, benchmark-relative net economics,
@@ -1170,7 +1597,7 @@ are audit evidence, never fallbacks.
 - [ ] Promote only a model that passes every gate.
 
 
-## Active Structural Repair Checkpoint
+## Paused Structural Repair Checkpoint
 
 The August 24 review reopened the incomplete package refactor with reproducible
 correctness and verification failures. This checkpoint changes code structure only;
@@ -1352,7 +1779,7 @@ test, and task names.
           accepted the final diff with no P0, P1, or P2 finding.
        The required dependency direction is `sources -> catalysts -> swing ->
        governance`; commands remain outer adapters.
-4. **Swing and intraday package migration (`in progress`).**
+4. **Swing and intraday package migration (`paused`).**
    Consolidate each horizon under descriptive `contracts`, `datasets`, `features`,
    `labels`, `training`, `evaluation`, and `live` packages and remove the intraday
    evaluation module/package collision. Compatibility aliases are prohibited because
@@ -1818,7 +2245,7 @@ test, and task names.
    test suite under the configured writable runtime directory, `git diff --check`, and
    a process/memory check. Update the handoff with measured evidence only.
 
-The exact next structural checkpoint is repository-wide static quality. Resolve the
+The paused next structural checkpoint is repository-wide static quality. Resolve the
 current configured Ruff and strict-mypy debt without changing features, labels,
 policies, datasets, model state, or artifact identities. The 2026-09-07 repository-wide
 Ruff scan reports 106 errors; the last verified strict-mypy baseline remains 14 findings
@@ -1826,14 +2253,11 @@ in three intraday dataset files and must be remeasured before editing. Use indep
 reviewers, one constrained Python process at a time, and close every reviewer and test
 worker after the checkpoint.
 
-The clean Astra model-improvement checkpoint is implementation commit `880f2a8` plus
-its documentation closure. Astra may begin evidence review and freeze hypotheses at
-that point. Model training must still use the four explicit families, causal source
-authorities, purged walk-forward validation, untouched locked tests, realistic costs,
-and after-cost excess return versus SPY, QQQ, and the point-in-time sector ETF. The
-primary goal is positive, stable benchmark-relative economics; ROC-AUC is diagnostic,
-not the optimization target. No model may be promoted merely because its AUC reaches
-0.60.
+The clean model-research checkpoint is implementation commit `880f2a8` plus its
+documentation closure. The user's 2026-09-07 request supersedes the four-family next
+step: follow the Long-Only Swing Research And Implementation Plan above. Keep causal
+source authorities, chronological validation, costs and source integrity; do not
+promote merely because AUC reaches 0.60. Intraday and unrelated cleanup remain paused.
 
 Rollback is the last pushed task commit. A task is not accepted until the same senior
 reviewer has inspected its bounded diff and all supported P0/P1 findings are fixed.

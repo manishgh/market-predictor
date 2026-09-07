@@ -12,27 +12,108 @@ Last completed implementation commit: `880f2a8` (`Consolidate outcome and drift 
 
 ## Purpose
 
-Continue the four-model prediction rebuild: swing baseline, swing event-driven,
-intraday baseline, and intraday event-driven. A0 through A2 implementation are closed.
-A3 issuer-event specialist development is complete with no candidate. A4.1 collector,
-A4.3 bar-only causal dataset publication, and A4.4 continuation/reversion development
-are complete. Both A4.4 hypotheses were rejected. A5.1 is also complete and blocked:
-the available event history is retrospective and exact security identity overlap is
-too small. The first real closed-session SIP authority now strictly replays for
-`2026-08-20`, but it is only session 1 of the required 20-session warm-up. A separate
-August 21 observed-time event chain also strictly replays with 451 identity-bound
-observations and 12 qualifying analyst episodes. It is not joined to the interrupted
-August 17 chain. Do not train A5.2, open a locked test, or claim model quality.
+Current user request, 2026-09-07: research and plan **long-only swing stock selection
+that can demonstrate after-cost outperformance of SPY**. Read the new Long-Only Swing
+Research And Implementation Plan near the beginning of
+`docs/active_edge_rebuild_plan.md`. Intraday and unrelated structural cleanup are
+paused. No model, source set, economic gate, or runtime behavior was changed during
+this research/documentation checkpoint. No new training was requested or run.
 
 This repository produces prediction intelligence and abstention. Alerts, orders,
 positions, portfolio risk, and execution remain in `trading_flow`.
 
-Checkpoint names: A0 restores research integrity; A1 verifies labels and leakage;
-A2 builds the technical swing baseline; A3 builds catalyst-driven swing specialists;
-A4 builds the technical intraday baseline; A5 builds catalyst-driven intraday
-specialists; A6 performs locked evaluation and promotion.
+The proposed next implementation needs explicit objective, target, policy and
+validation contracts before fitting. It is not another promise to reach AUC 0.60.
+Existing rejected artifacts remain rejected and no promoted serving bundle exists.
 
-## Verified State
+## Current Swing Research Findings
+
+Two independent read-only reviewers inspected model/evaluation evidence and catalyst
+research respectively. The main reviewer also reproduced the benchmark metadata/code
+conflict and read the historical technical evaluation's holdout-access fields.
+
+1. **Previously exposed holdout.**
+   `data/models/swing/technical/evaluation.json` records
+   `locked_test_outcomes_read=true`, `test_access_count=1`, and final-test results for
+   July 2025-June 2026. Its V11-lineage bundle is not a current V12/A2 candidate. The
+   independent reviewer checked its model/evaluation/card/manifest hashes and found
+   historical candidate-eligibility flags inconsistent with failed economic gates.
+   Current code requires the gates; a current bypass was not reproduced. Later
+   specialist runs had no final-test reads, but this does not restore calendar
+   independence. Earlier unqualified "locked test unopened" statements below are
+   historical per-run statements, not a valid current claim for the whole project.
+2. **Benchmark semantics disagree.**
+   `src/market_predictor/edge_rebuild/training/economics.py::_economic_gate` and
+   `training/swing_evaluation.py::_selection_key` consume approximate
+   managed-exit-session-close excess. Generated `swing_training.py` metadata describes
+   fixed-ten-session comparisons as the selection authority instead. The approximation
+   compares a stock barrier fill to a benchmark close, not necessarily the same time.
+   Correct contracts, reporting and gates together; the performance effect has not
+   been quantified. Existing fixed-horizon labels and the daily-position ledger
+   should be reused, not duplicated.
+   Historical specialist rejections retain aggregate metrics, not immutable prediction
+   rows. Do not promise to replay unavailable predictions. Verify accounting first
+   with deterministic controls, then attribute learned results from new saved
+   chronological out-of-fold predictions.
+3. **Real weak results, not just an AUC threshold.**
+   The August 20 upgrade/downgrade development experiments produced zero models; best
+   worst-scope AUC was approximately 0.524/0.552. The old August 9 technical
+   classifier/regressor reported positive managed portfolio returns, but negative
+   approximate SPY excess per selected trade and negative unseen-security portfolio
+   returns. Removing the 0.60 gate alone would not rescue those results. Full details
+   and artifact boundaries are in the active plan; these are not new backtests.
+4. **Data already exists.**
+   Technical panel: 853,417 rows, 604 securities, 1,759 sessions. Corrected broker
+   comparison: 27,087 matched rows and 11,720 unique latest announcements per profile.
+   Do not return to the invalid 113/19-event interpretation. SEC manifests report
+   689,467 events across 624 issuers; this review inspected manifests, not every raw
+   filing. Existing canonical SEC text is form-level and does not prove that original
+   exhibits, guidance values, or earnings surprises are available as model inputs.
+5. **Stale split prose.**
+   `docs/model_training_validation_protocol.md` still describes a May-2019 requirement
+   and missing warm-up. Current temporal config and the feature audit use
+   2019-07-09 through 2024-05-28 for initial fit; the panel request includes history
+   from 2018-05-29. Reconcile the protocol in the first implementation checkpoint,
+   without downloading already-retained history or moving the approved news cutoff.
+
+### Recommended Implementation Sequence
+
+1. Define the SPY objective and reconcile evidence, split/access history and contracts.
+2. Reconcile fixed/managed returns, one-account funding, costs and daily SPY accounting.
+3. Complete causal issuer-news/reaction features using existing archives first.
+4. Train at most six return-model specifications sequentially under 5 GiB.
+5. Evaluate the predefined long-only policies on funded net equity curves.
+6. Start frozen prospective research predictions, never recycle the exposed test year.
+7. Evaluate at the fixed boundary and promote only verified swing inference/API.
+
+The active plan contains the research citations, known-strategy names, six-specification
+experiment, two-policy trial cap, source/feature requirements, exit tests, ownership,
+and stop conditions. Earnings-reaction continuation and explicit guidance changes
+are the first issuer hypotheses. News novelty, volume and the reaction already known
+before the decision matter more than generic positive/negative tone. SEC form flags
+and retrospective edited headlines are not substitutes for original causal content.
+Reaction features must distinguish a completed post-release interval from an
+announcement-window return containing pre-release trading. Recall audits include
+unclassified/rejected articles; the control is no qualifying event in a covered
+source window, never proof that no public news existed.
+
+The independent economic and catalyst reviewers completed one consolidated design
+review; all supported plan corrections were incorporated. Documentation verification:
+`python -B -m pytest -q -p no:cacheprovider tests/test_active_continuity_documents.py`
+passed both tests. No full-suite run or new model run is claimed for this docs-only
+checkpoint. Historical implementation verification below remains historical.
+
+No guarantee of beating SPY is made. New code can be correct while an experiment is
+economically rejected or statistically inconclusive. Keep those statuses distinct.
+
+## Historical Verified State
+
+The sections below retain earlier implementation and per-run evidence. Their old
+checkpoint codes, source counts and next-step wording do not override the current
+long-only swing sequence above. In particular, historical per-run holdout protection
+does not prove this project's July-2025 to June-2026 outcomes remain unseen.
+
+### Retained Implementation Facts
 
 - No promoted serving bundle exists. Production prediction paths must fail closed.
 - Reddit and Seeking Alpha remain retired and prohibited.
@@ -42,7 +123,9 @@ specialists; A6 performs locked evaluation and promotion.
   input is the ordered A4.3 bar-only technical contract, sampled on
   fixed five-minute cohorts from causal completed evidence. The V3 z-score lineage is
   invalid and prohibited.
-- `swing_features.py` has been refactored into a `FeaturePipeline` orchestrator, with logic decoupled into `swing_pipeline_steps.py`, `swing_filters.py`, and `swing_catalyst_features.py`. Shared cross-cutting utilities reside in `edge_rebuild/utils/`.
+- Current swing feature construction is owned by `swing/features` with serving
+  adapters under `serving/swing_features.py`; older top-level module names below
+  describe historical migrations, not current import paths.
 - The swing base authority contains only `technical_market`. A3 event evidence is
   published separately and cannot alter baseline probability.
 - The swing trainer no longer attaches a hard-coded SEC authority, fills unknown SEC
@@ -1396,37 +1479,36 @@ set was approximately 0.13 GiB, and no Python process remained at closure. No pr
 request, data regeneration, training, promotion, serving process, or locked-test access
 occurred.
 
-## Exact Next Structural Checkpoint
+## Exact Next Checkpoint
 
-Exact next checkpoint: run repository-wide static quality as one bounded checkpoint.
-First remeasure both
-configured tools. The 2026-09-07 Ruff scan reports 106 errors, primarily import
-formatting; the last strict-mypy baseline is 14 findings in
-`intraday/datasets/publisher.py`, `intraday/datasets/bar_dataset.py`, and
-`intraday/datasets/dataset_io.py`. Fix only static/dependency defects, keep model and
-artifact semantics unchanged, use two independent reviewers, run one Python process at
-a time, then run the full suite and terminate all workers. Rollback anchor is
-`880f2a8`.
+Exact next checkpoint: **Define the SPY objective and reconcile evidence** in the
+active plan's Long-Only Swing Research And Implementation Plan. This turn completed
+research/planning only. Before training, reconcile fixed-horizon versus managed
+targets, approximate benchmark gates, held-out-data exposure, the stale validation
+protocol, source content coverage, and the frozen experiment/statistical contract.
+Do not read additional test outcomes to choose the design. The already exposed
+July-2025 to June-2026 calendar cannot supply a new untouched final test.
 
-## Astra Model-Improvement Pickup
+Read in order: `AGENTS.md`, the new current section of the active plan, this handoff's
+current findings, the feature audit, temporal/training/strategy configs, and the named
+evaluation owners. Do not restart unrelated structural cleanup or intraday work.
+Ruff/mypy debt remains recorded rather than falsely passed; code checkpoint
+verification still follows the covenant. Implementation rollback anchor is `880f2a8`.
 
-`880f2a8` plus this documentation closure is a clean handoff for model research. Read,
-in order: `AGENTS.md`, `docs/active_edge_rebuild_plan.md`, this handoff, and
-`docs/reviews/feature_engineering_audit_20260801.md`. Use Astra xhigh for hypothesis and
-evaluation design; high is sufficient after the design is frozen.
+Research artifacts to inspect without retraining:
 
-The objective is not an arbitrary AUC increase. Improve four explicit families:
-swing technical, swing plus catalyst, intraday technical, and intraday plus catalyst.
-The primary acceptance evidence is positive and stable after-cost excess return versus
-SPY, QQQ, and the point-in-time sector ETF across purged walk-forward periods,
-unseen-security stress, regimes, turnover, capacity, and drawdown. ROC-AUC of at least
-0.60 is a diagnostic gate, not proof of deployable edge. Preserve untouched locked
-tests and never retune against them.
+- `data/models/swing/technical/{evaluation.json,model_card.json,_manifest.json}`:
+  historical technical evidence; not a current eligible model.
+- `data/models/swing_directional_broker_action_specialists_dev_20260820_v1`:
+  development specialist rejection evidence.
+- `data/features/edge_rebuild_swing_technical_panel_20190709_20260708_v1`:
+  current technical authority/request; no full replay was performed this turn.
+- `data/features/swing_broker_action_ablation_20190709_20260708_v2`:
+  corrected matched event/technical profiles.
+- `data/external/sec_filings_20190709_20260708_v1/_manifest.json`:
+  SEC inventory, not proof of original-text or prospective availability.
 
-Start with an evidence-only diagnosis using existing immutable data. Attribute failure
-separately to label noise, feature weakness, regime instability, calibration, ranking,
-costs, and capacity. Then freeze one hypothesis at a time with exact source authority,
-availability timestamp, feature formula, affected model family, ablation control,
-validation windows, economic gates, and rollback. Do not download data unless a named
-accepted hypothesis proves existing causal coverage insufficient. Do not train or
-promote during the diagnosis checkpoint.
+Use existing data first. Parallel reviewers and disjoint light implementation tasks
+are permitted; heavy tests and training remain sequential. Stop and close owned
+workers/reviewers when their bounded work is complete. No deployment, provider
+collection, model training, or promotion occurred in this documentation checkpoint.
