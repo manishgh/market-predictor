@@ -8,7 +8,7 @@ Repository: `C:\project\market-predictor`
 
 Branch: `er-intraday-refactoring`
 
-Last completed implementation commit: `6758671` (`Add funded swing accounting and immutable control audit`)
+Last completed implementation commit: `bc9dbd5` (`Separate swing holding outcomes from decision membership`)
 
 ## Purpose
 
@@ -24,6 +24,68 @@ Read the Long-Only Swing Research And Implementation Plan at the front of
 `docs/active_edge_rebuild_plan.md`. No real model was trained or promoted.
 
 ## Accounting Implementation And Current Blocker
+
+### Verified Holding-Path Repair
+
+Implementation `bc9dbd5` is verified and pushed to `er-intraday-refactoring`.
+It adds one canonical holding-path/calendar/observation owner under
+`swing/labels/holding_paths.py`. Fixed labels consume separate security-identified
+outcome bars; the original decision membership, features and sector are preserved.
+Membership removal no longer suppresses the expected holding window. Barrier
+outcomes and managed marks use the same independent history. Missing observations
+cannot compress the exchange calendar or create next-available-bar entries.
+
+Daily timestamps must match the actual XNYS open and close, including DST and
+early closes. Zero-volume/invalid-price observations remain unavailable. Maturation
+uses the same daily observation validation. Timestamp/date barrier keys normalize
+consistently. Label policy is named `swing_independent_holding_paths`; default
+label hash is `2f9ec85d7bc23a3456565d5eac1906c74d3e3d1be8fe18c9a7c383a5c988358e`.
+
+The named panel schema is `market_predictor.swing_panel.independent_holding_paths`.
+Materialization binds holding-path and source-selection implementation files.
+Partial resume and complete loading reject changed implementations before reuse;
+a real metadata-only check rejected the pre-repair retained authority. No old
+artifact was patched, regenerated or admitted under the new schema. Default builder
+inputs still cannot supply source history they do not possess: caller source
+expansion and a verified new authority remain required.
+
+Final full suite: **2,193 passed, three skipped, 133 warnings in 15m46s**.
+Report: `.test-tmp/holding-path-verified.xml`. Full Ruff and strict mypy on 320
+source files pass. Focused sets (overlapping, do not sum): 377 outcome/boundary,
+76 training/control/evidence and one skip, 236 boundary/materialization, and 29
+ownership/materialization. All supported independent-review findings were closed;
+review agents and owned Python workers are closed.
+
+Verification corrections were explicit: the first full attempt was stopped to
+bind resume identity; the next stopped after 1,839 passes because a test still
+expected the old label-policy hash. That expectation was corrected before the
+passing final full run. A sampled worker peak was 0.322 GiB during verification,
+not a complete whole-run memory trace. Only generated `.test-tmp` remains untracked.
+
+### Remaining Source Admission
+
+The 70-source review found **40 price-complete paths, nine zero-volume paths and
+21 missing paths**; none is yet a published repaired authority. Forty need independent
+identity mapping because retained raw bars lack security_id, and collection-era
+membership IDs differ from panel IDs for 17/18 tickers. Do not assign panel IDs by
+ticker matching alone. The 40 price-complete paths require 91 retained sessions
+omitted from combined history; all 129 overlapping projected OHLCV rows matched.
+
+Thirty paths need additional halt, successor/distribution or settlement evidence:
+BIIB 2, LB 7, CTXS 10, FRC 2, NLSN 4 and XLNX 5. Official sources and accession
+identities are recorded in the current feature audit. Existing SEC inventory has
+accession metadata, not retained filing bodies sufficient for accounting. Online
+source inspection is not a hash-bound repaired outcome authority.
+
+Preserve selected IDs, calendar, allocation and raw sources. Do not drop these
+observations, fabricate merger proceeds or credit a stock fill using an options
+reference price. `adjustment=all` still lacks independent total-return reconciliation.
+The frozen control therefore remains blocked on all 70 old outcomes until a new
+authority is built and replayed. No real model was trained, no provider data was
+downloaded, and no SPY outperformance or promotion was claimed. Feature expansion
+and training remain pending source/label admission; intraday remains paused.
+
+### Previously Verified Accounting
 
 - Pushed implementation: `6758671`. The single ledger is now
   `swing/evaluation/ledger.py`; paired SPY evaluation is
@@ -1609,23 +1671,36 @@ occurred.
 
 ## Exact Next Checkpoint
 
-Exact next checkpoint: **Resolve selected-outcome gaps for accounting acceptance**.
-The objective checkpoint is complete in `3b2bff5`; accounting implementation is
-verified/pushed in `6758671`, but the frozen real-data control remains blocked on
-70 outcomes and unverified price basis. The user's latest instruction authorizes
-continuing the ordered plan through training after documentation closure.
-Investigate retained bars and membership-boundary label semantics
-for the 18 named tickers before changing data contracts. Do not select another
-population/window to obtain a pass. Dependent feature expansion and real training
-must still pass their frozen gates. The exposed July-2025 to June-2026 interval is not fresh.
+Exact next checkpoint: **Bind post-membership identities and corporate-action outcomes**.
+The objective is complete in `3b2bff5`; funded accounting is verified in `6758671`;
+holding-path code and cache invalidation are verified/pushed in `bc9dbd5`.
+The frozen real-data control still has 70 unresolved old outcomes and an unverified
+price basis. The user authorizes continuing through training without another model,
+but not inventing data or skipping these admission gates.
 
-Read in order: `AGENTS.md`, the new current section of the active plan, this handoff's
-current findings, the feature audit, temporal/training/strategy configs, and the named
-evaluation owners. Do not restart unrelated structural cleanup or intraday work.
-Full Ruff/mypy now pass; older debt statements below/above are historical. Code
-checkpoint verification still follows the covenant. Run package-boundary tests in
-the focused pass before the full suite. Pre-accounting rollback anchor is `55133e4`;
-the verified current implementation is `6758671`.
+1. Build an evidence-bound security-identity relation for the 40 price-complete
+   paths, independent of index membership. Reuse retained raw bars and current
+   identity/transition authorities; do not transplant old collection IDs.
+2. Retain the official filing/halt/merger source documents identified in the current
+   feature audit. Define and verify entitlement, valuation and cash-availability
+   treatment for the remaining 30 paths before reconstructing outcomes.
+3. Thread verified independent outcome history into the materialization callers
+   and bind it in a new immutable request/authority. Replay both fixed and managed
+   outcomes and the unchanged selection/calendar. Never overwrite the old panel.
+4. Reconcile stock and benchmark total-return treatment with independently bound
+   corporate-action evidence. Rerun the control; an unsuccessful economic control
+   is diagnostic, not a requirement that the untrained population must be profitable.
+5. Then continue causal feature completion and the six sequential return-model fits.
+   The exposed July-2025 through June-2026 interval is not a fresh final test.
+
+Read `AGENTS.md`, the active plan's current section, this handoff's verified repair
+and remaining source sections, the current feature audit, and
+`swing/labels/holding_paths.py`, `swing/labels/__init__.py`,
+`swing/features/panel.py`, `edge_rebuild/swing_materialization.py`,
+`edge_rebuild/swing_setups.py`, `universe/sec_identity_authority.py` and the
+current identity/transition contracts. The default membership-derived source still
+cannot recover post-removal bars by itself; do not mistake the new API for completed
+data collection or a repaired authority. Do not reopen unrelated structural work.
 
 Research artifacts to inspect without retraining:
 
@@ -1634,7 +1709,7 @@ Research artifacts to inspect without retraining:
 - `data/models/swing_directional_broker_action_specialists_dev_20260820_v1`:
   development specialist rejection evidence.
 - `data/features/edge_rebuild_swing_technical_panel_20190709_20260708_v1`:
-  current technical authority/request; no full replay was performed this turn.
+  retained pre-repair historical authority/request; the current loader rejects it.
 - `data/features/swing_broker_action_ablation_20190709_20260708_v2`:
   corrected matched event/technical profiles.
 - `data/external/sec_filings_20190709_20260708_v1/_manifest.json`:

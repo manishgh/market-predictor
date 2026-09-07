@@ -454,6 +454,51 @@ a substitute for diagnosing which of those states actually applies.
 
 ### Research Checkpoint Status
 
+#### Selected Holding-Path Repair Scope
+
+Code checkpoint **verified and pushed in `bc9dbd5`**. Full suite: **2,193 passed,
+three skipped, 133 warnings, 15m46s**; Ruff and strict mypy on 320 source files pass.
+The corrected source/path code, exact XNYS clocks, missing/zero-volume handling,
+Timestamp parity and implementation-bound resume/complete rejection have focused
+tests and independent review. A real metadata check rejected the old retained
+authority; its bytes were not changed. Final report:
+`.test-tmp/holding-path-verified.xml`. Agents and owned Python workers are closed.
+
+The current panel schema is `market_predictor.swing_panel.independent_holding_paths`.
+Old partitions cannot be resumed under this schema. The initial full attempt was
+stopped for missing resume binding; a later full run caught an outdated label-policy
+hash expectation after 1,839 passes. Both were corrected before final verification.
+
+**Source admission remains blocked, so checkpoint two is not fully accepted.** No
+repaired authority or model was produced. Forty price-complete paths are not yet
+identity-reconciled; 30 need additional halt/merger/distribution evidence. Canonical
+API support does not supply missing source history. Current materialization callers
+still require verified post-membership source expansion. Preserve the 70-row blocked
+receipt, frozen selected IDs and calendar until a new authority can be replayed.
+
+The bounded continuation of accounting repairs decision/outcome separation, not
+the selected population. The source audit reproduced 40 recoverable paths across
+12 tickers, requiring 91 retained sessions omitted from combined history. Thirty
+other selected paths remain unavailable: nine contain zero-volume records and 21
+contain absent sessions. These classifications do not establish corporate-action
+proceeds, trading status or investor total returns.
+
+- Decisions retain their original membership, sector, score and cutoff. Index
+  removal does not terminate an existing holding or erase its expected label.
+- Fixed and managed labels consume separate, explicitly security-identified daily
+  outcome history. Align every future session to the benchmark calendar; never
+  shift over a missing session or fabricate an executable zero-volume bar.
+- Reuse canonical return/barrier evaluators. Preserve existing feature values and
+  immutable source/panel authorities. Repaired outputs require new bound artifacts;
+  no in-place patch of old labels and no compatibility implementation.
+- Verify membership-removal continuation, exact missing-session behavior, duplicate
+  identity rejection, zero-volume handling, future-outcome poison isolation, both
+  fixed/managed paths, source reconciliation and unchanged ordinary complete paths.
+- Missing source identity or corporate-action economics remains source-blocked.
+  Independent distribution reconciliation remains required for admission; neither
+  recovering 40 price paths nor passing fixtures authorizes training or promotion.
+
+
 **Accounting implementation (`6758671`, pushed):** cash-conserving overlapping lots,
 single prepaid costs, daily marked P&L, fixed idle/tail calendar, required SPY/QQQ/
 sector curves, paired base/stress SPY comparisons and descriptive beta/exposure.
