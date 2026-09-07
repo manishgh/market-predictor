@@ -9,18 +9,19 @@ import typer
 
 from market_predictor.canonical.store import load_canonical_artifact
 from market_predictor.commands.configuration import load_typed_config
-from market_predictor.drift_policy import (
+from market_predictor.core.json_integrity import parse_strict_json_object
+from market_predictor.governance.drift.policy import (
     DriftPolicyV2,
     DriftStateStore,
     evaluate_drift,
 )
-from market_predictor.outcome_repository import OutcomeRepository
-from market_predictor.outcome_worker import mature_pending_intents
-from market_predictor.performance_monitoring import (
+from market_predictor.governance.outcomes.performance import (
     build_performance_cohorts,
     load_performance_report,
     write_performance_report,
 )
+from market_predictor.governance.outcomes.repository import OutcomeRepository
+from market_predictor.governance.outcomes.worker import mature_pending_intents
 from market_predictor.serving.outcome_intents import register_snapshot_intents
 from market_predictor.serving.snapshot_store import PredictionSnapshotStore
 
@@ -165,6 +166,14 @@ def register_outcome_commands(app: typer.Typer, console: Any) -> None:
             ...,
             help="Active execution-policy SHA-256 identity.",
         ),
+        feature_reference_profile_sha256: str = typer.Option(
+            ...,
+            help="Feature-reference SHA-256 identity bound to the active model.",
+        ),
+        feature_reference_names_sha256: str = typer.Option(
+            ...,
+            help="Feature-name-set SHA-256 identity bound to the active model.",
+        ),
         feature_drift_report: Path = typer.Option(
             ...,
             help="Feature-drift JSON produced from the active model reference.",
@@ -202,6 +211,12 @@ def register_outcome_commands(app: typer.Typer, console: Any) -> None:
             prediction_policy_sha256=prediction_policy_sha256.strip().lower(),
             label_policy_sha256=label_policy_sha256.strip().lower(),
             execution_policy_sha256=execution_policy_sha256.strip().lower(),
+            feature_reference_profile_sha256=(
+                feature_reference_profile_sha256.strip().lower()
+            ),
+            feature_reference_names_sha256=(
+                feature_reference_names_sha256.strip().lower()
+            ),
             feature_drift=feature_drift,
             performance_report=report,
             policy=policy,
@@ -215,9 +230,7 @@ def _load_json_object(path: Path) -> dict[str, object]:
     if not path.exists():
         raise typer.BadParameter(f"JSON input does not exist: {path}")
     try:
-        loaded = json.loads(path.read_text(encoding="utf-8"))
-    except json.JSONDecodeError as exc:
+        loaded = parse_strict_json_object(path.read_bytes(), label="JSON input")
+    except (OSError, ValueError) as exc:
         raise typer.BadParameter(f"invalid JSON input: {path}") from exc
-    if not isinstance(loaded, dict):
-        raise typer.BadParameter(f"JSON input must contain an object: {path}")
     return {str(key): value for key, value in loaded.items()}

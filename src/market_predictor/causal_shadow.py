@@ -13,14 +13,15 @@ from uuid import uuid4
 import pandas as pd
 
 from market_predictor.core.errors import DataReadinessError
+from market_predictor.core.prediction_contracts import PredictionConflictError
+from market_predictor.governance.outcomes.contracts import (
+    MaturedOutcomeV2,
+    PredictionMaturationIntentV2,
+)
+from market_predictor.governance.outcomes.repository import OutcomeRepository
 from market_predictor.hypothesis_registry import TEST_CLOCK_ENV
 from market_predictor.locking import file_lock
 from market_predictor.modeling.ranking_economics import session_block_interval
-from market_predictor.outcome_contracts import (
-    MaturedOutcomeV1,
-    PredictionMaturationIntentV2,
-)
-from market_predictor.outcome_repository import OutcomeRepository
 
 CAUSAL_SHADOW_SCHEMA = "market_predictor.causal_shadow_evidence.v2"
 
@@ -337,10 +338,14 @@ def _side_record(
     repository: OutcomeRepository,
     intent: PredictionMaturationIntentV2,
 ) -> dict[str, Any]:
-    outcome: MaturedOutcomeV1 | None = None
+    outcome: MaturedOutcomeV2 | None = None
     if intent.selected_for_policy:
         try:
             outcome = repository.load_outcome(intent.maturation_key)
+        except PredictionConflictError as exc:
+            raise DataReadinessError(
+                "causal shadow outcomes do not reproduce"
+            ) from exc
         except FileNotFoundError as exc:
             raise DataReadinessError(
                 "selected shadow prediction has no matured outcome"

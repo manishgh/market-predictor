@@ -19,6 +19,7 @@ from market_predictor.core.errors import (
     PromotionGateError,
     SchemaMismatchError,
 )
+from market_predictor.execution_policy import EXECUTION_POLICY_SHA256
 from market_predictor.governance.promotion.bundle_contracts import (
     canonical_payload_sha256,
     ordered_values_sha256,
@@ -32,6 +33,10 @@ from market_predictor.governance.promotion.bundle_verification import (
 from market_predictor.intraday.features.features import (
     CAUSAL_INTRADAY_MODEL_FEATURE_COLUMNS,
     FEATURE_SCHEMA_VERSION,
+)
+from market_predictor.modeling.feature_reference import (
+    feature_reference_names_sha256,
+    feature_reference_profile_sha256,
 )
 from market_predictor.modeling.strategy_contract import load_strategy_contract
 from market_predictor.promotion_attestation import (
@@ -106,6 +111,7 @@ def test_swing_inference_rejects_missing_or_unbound_thresholds(
         expected_mode="swing",
     )
     features = bundle.ordered_feature_columns
+    feature_reference = _feature_reference(features)
     payload: dict[str, object] = {
         "schema": SWING_CANDIDATE_MODEL_SCHEMA,
         "status": "candidate",
@@ -113,7 +119,15 @@ def test_swing_inference_rejects_missing_or_unbound_thresholds(
         "candidate_id": bundle.model_id,
         "model_family": bundle.model_family,
         "strategy_contract_sha256": bundle.strategy_contract_sha256,
+        "execution_policy_sha256": bundle.execution_policy_sha256,
         "feature_columns": features,
+        "feature_reference_profile": feature_reference,
+        "feature_reference_profile_sha256": feature_reference_profile_sha256(
+            feature_reference
+        ),
+        "feature_reference_names_sha256": feature_reference_names_sha256(
+            feature_reference
+        ),
         "ablation_profile": bundle.feature_profile,
         "fitted_models": {"classifier": _VerifiedFittedCandidate(features)},
     }
@@ -129,6 +143,19 @@ def test_swing_inference_rejects_missing_or_unbound_thresholds(
                 model_payload=payload,
             )
         )
+
+
+def _feature_reference(features: tuple[str, ...]) -> dict[str, dict[str, object]]:
+    return {
+        feature: {
+            "rows": 100,
+            "observed": 100,
+            "missing_rate": 0.0,
+            "mean": 0.0,
+            "std": 1.0,
+        }
+        for feature in features
+    }
 
 
 def _base_bundle(*, mode: str) -> dict[str, object]:
@@ -154,6 +181,7 @@ def _base_bundle(*, mode: str) -> dict[str, object]:
         "ordered_feature_sha256": ordered_values_sha256(features),
         "strategy_contract_schema_version": CONTRACT.schema_version,
         "strategy_contract_sha256": CONTRACT.sha256(),
+        "execution_policy_sha256": EXECUTION_POLICY_SHA256,
         "market_data_provider": "alpaca",
         "market_data_feed": "sip",
         "market_data_adjustment": "all",
@@ -209,6 +237,7 @@ def _publish_signed_swing_generation(
     model_path = source / "model.joblib"
     model_path.parent.mkdir(parents=True)
     features = swing_model_feature_columns(contract=CONTRACT, catalyst=False)
+    feature_reference = _feature_reference(features)
     payload = {
         "schema": SWING_CANDIDATE_MODEL_SCHEMA,
         "status": "candidate",
@@ -216,7 +245,15 @@ def _publish_signed_swing_generation(
         "candidate_id": candidate_id,
         "model_family": "swing_baseline",
         "strategy_contract_sha256": CONTRACT.sha256(),
+        "execution_policy_sha256": EXECUTION_POLICY_SHA256,
         "feature_columns": features,
+        "feature_reference_profile": feature_reference,
+        "feature_reference_profile_sha256": feature_reference_profile_sha256(
+            feature_reference
+        ),
+        "feature_reference_names_sha256": feature_reference_names_sha256(
+            feature_reference
+        ),
         "ablation_profile": "technical_market",
         "probability_thresholds": {"classifier": 0.60},
         "fitted_models": {"classifier": _VerifiedFittedCandidate(features)},

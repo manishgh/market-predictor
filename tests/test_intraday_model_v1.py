@@ -10,6 +10,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from market_predictor.core.errors import DataReadinessError
 from market_predictor.intraday.contracts import (
     INTRADAY_FEATURE_SCHEMA_VERSION,
     INTRADAY_MODEL_FEATURES,
@@ -29,9 +30,8 @@ from market_predictor.intraday.promotion import (
     promotion_evidence_from_result,
     write_intraday_training_evidence,
 )
-from market_predictor.prediction_policy import parse_prediction_policy
+from market_predictor.modeling.prediction_selection import parse_prediction_policy
 from market_predictor.registry import verify_model_artifact
-from market_predictor.core.errors import DataReadinessError
 from tests.r4_fixtures import trust_context_for_candidate
 
 

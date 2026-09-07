@@ -8,8 +8,9 @@ from pathlib import Path
 from typing import Any
 
 from market_predictor.causal_shadow import load_causal_shadow_bundle
+from market_predictor.core.errors import DataReadinessError
+from market_predictor.governance.outcomes.repository import OutcomeRepository
 from market_predictor.hypothesis_registry import load_hypothesis
-from market_predictor.outcome_repository import OutcomeRepository
 from market_predictor.promotion_attestation import (
     build_promotion_attestation,
     file_sha256,
@@ -25,7 +26,6 @@ from market_predictor.shadow_ledger import (
     consume_shadow_fingerprint,
     shadow_gate_failures,
 )
-from market_predictor.core.errors import DataReadinessError
 
 
 @dataclass(frozen=True)

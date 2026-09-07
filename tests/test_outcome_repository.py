@@ -8,23 +8,30 @@ from pathlib import Path
 
 from pydantic import ValidationError
 
-from market_predictor.execution_policy import EXECUTION_POLICY_SHA256
-from market_predictor.label_policy import policy_sha256
-from market_predictor.modeling.strategy_contract import load_strategy_contract
-from market_predictor.outcome_contracts import (
+from market_predictor.core.prediction_contracts import PredictionConflictError
+from market_predictor.execution_policy import (
+    DEFAULT_EXECUTION_POLICY,
+    EXECUTION_POLICY_SHA256,
+    round_trip_cost_bps,
+)
+from market_predictor.governance.outcomes.contracts import (
     MaturationAttemptV1,
-    MaturedOutcomeV1,
+    MaturedOutcomeV2,
     PredictionMaturationIntentV2,
+    PredictionMonitoringObservationV1,
     content_sha256,
     maturation_key_sha256,
+    monitoring_observation_from_intent,
     semantic_prediction_sha256,
 )
-from market_predictor.outcome_repository import OutcomeRepository
+from market_predictor.governance.outcomes.repository import OutcomeRepository
+from market_predictor.label_policy import policy_sha256
+from market_predictor.modeling.prediction_selection import SwingPredictionPolicy
+from market_predictor.modeling.strategy_contract import load_strategy_contract
 from market_predictor.swing.contracts.outcome_policy import (
     swing_outcome_policy,
     swing_outcome_policy_sha256,
 )
-from market_predictor.swing.contracts.prediction_policy import SwingPredictionPolicy
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -59,7 +66,7 @@ class OutcomeRepositoryTests(unittest.TestCase):
         )
         valid.update({"path_outcome": "positive", "opportunity_target": 1})
         with self.assertRaisesRegex(ValidationError, "managed barrier semantics"):
-            MaturedOutcomeV1.model_validate(
+            MaturedOutcomeV2.model_validate(
                 {**valid, "outcome_id": content_sha256(valid)}
             )
 
@@ -96,7 +103,21 @@ class OutcomeRepositoryTests(unittest.TestCase):
         valid["matured_at_utc"] = invalid_time
 
         with self.assertRaisesRegex(ValidationError, "before its exit"):
-            MaturedOutcomeV1.model_validate(
+            MaturedOutcomeV2.model_validate(
+                {**valid, "outcome_id": content_sha256(valid)}
+            )
+
+    def test_outcome_rejects_inconsistent_return_arithmetic(self) -> None:
+        intent = _intent()
+        evidence = [{"ticker": "MSFT"}]
+        valid = _outcome(intent, evidence).model_dump(
+            mode="python",
+            exclude={"outcome_id"},
+        )
+        valid["excess_return_vs_spy"] = 0.50
+
+        with self.assertRaisesRegex(ValidationError, "benchmark excess return"):
+            MaturedOutcomeV2.model_validate(
                 {**valid, "outcome_id": content_sha256(valid)}
             )
 
@@ -142,6 +163,69 @@ class OutcomeRepositoryTests(unittest.TestCase):
 
             self.assertTrue(all(result == outcome for result in results))
 
+    def test_conflicting_existing_outcome_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repository = OutcomeRepository(Path(temp_dir))
+            intent = _intent()
+            evidence = [{"ticker": "MSFT"}]
+            outcome = _outcome(intent, evidence)
+            repository.record_intent(intent)
+            repository.record_outcome(outcome, evidence_rows=evidence)
+
+            conflicting_content = outcome.model_dump(
+                mode="python",
+                exclude={"outcome_id"},
+            )
+            conflicting_content["mfe"] = 0.08
+            conflicting = MaturedOutcomeV2.model_validate(
+                {
+                    **conflicting_content,
+                    "outcome_id": content_sha256(conflicting_content),
+                }
+            )
+
+            with self.assertRaises(PredictionConflictError):
+                repository.record_outcome(conflicting, evidence_rows=evidence)
+
+    def test_outcome_cost_policy_must_match_its_intent(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repository = OutcomeRepository(Path(temp_dir))
+            intent = _intent()
+            evidence = [{"ticker": "MSFT"}]
+            repository.record_intent(intent)
+            content = _outcome(intent, evidence).model_dump(
+                mode="python",
+                exclude={"outcome_id"},
+            )
+            content["label_round_trip_cost_bps"] = 5.0
+            content["label_net_return"] = float(content["gross_return"]) - 0.0005
+            outcome = MaturedOutcomeV2.model_validate(
+                {**content, "outcome_id": content_sha256(content)}
+            )
+
+            with self.assertRaises(PredictionConflictError):
+                repository.record_outcome(outcome, evidence_rows=evidence)
+
+    def test_repository_rejects_duplicate_json_keys_and_nonfinite_values(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repository = OutcomeRepository(Path(temp_dir))
+            intent = _intent()
+            path = (
+                Path(temp_dir)
+                / "intents"
+                / intent.maturation_key[:2]
+                / f"{intent.maturation_key}.json"
+            )
+            path.parent.mkdir(parents=True)
+
+            path.write_text('{"ticker":"MSFT","ticker":"AAPL"}', encoding="utf-8")
+            with self.assertRaises(PredictionConflictError):
+                repository.load_intent(intent.maturation_key)
+
+            path.write_text('{"probability":NaN}', encoding="utf-8")
+            with self.assertRaises(PredictionConflictError):
+                repository.load_intent(intent.maturation_key)
+
     def test_repeated_snapshot_occurrences_share_one_semantic_identity(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             repository = OutcomeRepository(Path(temp_dir))
@@ -156,6 +240,105 @@ class OutcomeRepositoryTests(unittest.TestCase):
                 repository.semantic_canonical_key(first.semantic_prediction_id),
                 first.maturation_key,
             )
+
+    def test_semantic_index_corruption_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repository = OutcomeRepository(Path(temp_dir))
+            intent = _intent()
+            repository.record_intent(intent)
+            path = (
+                Path(temp_dir)
+                / "semantic"
+                / intent.semantic_prediction_id[:2]
+                / f"{intent.semantic_prediction_id}.json"
+            )
+            payload = path.read_text(encoding="utf-8").replace(
+                "market_predictor.semantic_prediction.v1",
+                "market_predictor.semantic_prediction.corrupt",
+            )
+            path.write_text(payload, encoding="utf-8")
+
+            with self.assertRaises(PredictionConflictError):
+                repository.semantic_canonical_key(intent.semantic_prediction_id)
+            with self.assertRaises(PredictionConflictError):
+                repository.record_intent(intent)
+
+    def test_observation_must_match_its_persisted_intent(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repository = OutcomeRepository(Path(temp_dir))
+            intent = _intent()
+            repository.record_intent(intent)
+            content = monitoring_observation_from_intent(intent).model_dump(
+                mode="python",
+                exclude={"observation_id"},
+            )
+            content["probability"] = 0.99
+            content["calibration_bin"] = 9
+            tampered = PredictionMonitoringObservationV1.model_validate(
+                {**content, "observation_id": content_sha256(content)}
+            )
+
+            with self.assertRaises(PredictionConflictError):
+                repository.record_observation(tampered)
+
+    def test_observation_read_rebinds_to_intent_and_storage_identity(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repository = OutcomeRepository(Path(temp_dir))
+            intent = _intent()
+            repository.record_intent(intent)
+            observation = monitoring_observation_from_intent(intent)
+            content = observation.model_dump(mode="python", exclude={"observation_id"})
+            content["probability"] = 0.99
+            content["calibration_bin"] = 9
+            tampered = PredictionMonitoringObservationV1.model_validate(
+                {**content, "observation_id": content_sha256(content)}
+            )
+            path = (
+                Path(temp_dir)
+                / "observations"
+                / observation.observation_id[:2]
+                / f"{observation.observation_id}.json"
+            )
+            path.write_text(tampered.model_dump_json(indent=2), encoding="utf-8")
+
+            with self.assertRaises(PredictionConflictError):
+                repository.observations()
+
+    def test_outcome_read_rebinds_execution_inputs_to_intent(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repository = OutcomeRepository(Path(temp_dir))
+            intent = _intent()
+            evidence = [{"ticker": "MSFT"}]
+            outcome = _outcome(intent, evidence)
+            repository.record_intent(intent)
+            repository.record_outcome(outcome, evidence_rows=evidence)
+            content = outcome.model_dump(mode="python", exclude={"outcome_id"})
+            content["decision_atr"] = 0.01
+            execution_cost_bps = round_trip_cost_bps(
+                price=float(content["entry_price"]),
+                atr_pct=0.01 / float(content["entry_price"]),
+                participation=0.0,
+                policy=DEFAULT_EXECUTION_POLICY,
+            )
+            net_return = float(content["gross_return"]) - execution_cost_bps / 10_000.0
+            content["execution_cost_bps"] = execution_cost_bps
+            content["net_return"] = net_return
+            content["excess_return_vs_spy"] = net_return - float(content["spy_return"])
+            content["excess_return_vs_qqq"] = net_return - float(content["qqq_return"])
+            content["excess_return_vs_sector"] = net_return - float(content["sector_return"])
+            tampered = MaturedOutcomeV2.model_validate(
+                {**content, "outcome_id": content_sha256(content)}
+            )
+            path = (
+                Path(temp_dir)
+                / "outcomes"
+                / intent.maturation_key[:2]
+                / f"{intent.maturation_key}.json"
+            )
+            path.write_text(tampered.model_dump_json(indent=2), encoding="utf-8")
+
+            with self.assertRaises(PredictionConflictError):
+                repository.load_outcome(intent.maturation_key)
 
 
 def _intent(snapshot_id: str = "1" * 64) -> PredictionMaturationIntentV2:
@@ -235,12 +418,20 @@ def _attempt(intent: PredictionMaturationIntentV2) -> MaturationAttemptV1:
 def _outcome(
     intent: PredictionMaturationIntentV2,
     evidence: list[dict[str, object]],
-) -> MaturedOutcomeV1:
+) -> MaturedOutcomeV2:
     entry = datetime(2026, 7, 27, 13, 30, tzinfo=UTC)
     exit_time = datetime(2026, 7, 31, 20, 0, tzinfo=UTC)
     available = exit_time + timedelta(minutes=15)
+    execution_cost_bps = round_trip_cost_bps(
+        price=100.0,
+        atr_pct=float(intent.decision_atr or 0.0) / 100.0,
+        participation=0.0,
+        policy=DEFAULT_EXECUTION_POLICY,
+    )
+    label_cost_bps = float(intent.label_policy["round_trip_cost_bps"])
+    net_return = 0.05 - execution_cost_bps / 10_000.0
     base = {
-        "contract_version": "market_predictor.matured_outcome.v1",
+        "contract_version": "market_predictor.matured_outcome.v2",
         "maturation_key": intent.maturation_key,
         "semantic_prediction_id": intent.semantic_prediction_id,
         "snapshot_id": intent.snapshot_id,
@@ -254,7 +445,13 @@ def _outcome(
         "entry_price": 100.0,
         "exit_price": 105.0,
         "gross_return": 0.05,
-        "net_return": 0.049,
+        "label_round_trip_cost_bps": label_cost_bps,
+        "label_net_return": 0.05 - label_cost_bps / 10_000.0,
+        "execution_policy_sha256": intent.execution_policy_sha256,
+        "decision_atr": intent.decision_atr,
+        "execution_participation_fraction": 0.0,
+        "execution_cost_bps": execution_cost_bps,
+        "net_return": net_return,
         "mfe": 0.07,
         "mae": -0.02,
         "path_outcome": "timeout",
@@ -263,12 +460,12 @@ def _outcome(
         "spy_return": 0.01,
         "qqq_return": 0.012,
         "sector_return": 0.008,
-        "excess_return_vs_spy": 0.039,
-        "excess_return_vs_qqq": 0.037,
-        "excess_return_vs_sector": 0.041,
+        "excess_return_vs_spy": net_return - 0.01,
+        "excess_return_vs_qqq": net_return - 0.012,
+        "excess_return_vs_sector": net_return - 0.008,
         "evidence_sha256": content_sha256(evidence),
     }
-    return MaturedOutcomeV1.model_validate(
+    return MaturedOutcomeV2.model_validate(
         {**base, "outcome_id": content_sha256(base)}
     )
 

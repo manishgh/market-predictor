@@ -41,6 +41,10 @@ from market_predictor.governance.promotion import (
 from market_predictor.governance.promotion import (
     bundle_verification as _promotion_verification,
 )
+from market_predictor.modeling.feature_reference import (
+    feature_reference_names_sha256,
+    feature_reference_profile_sha256,
+)
 from market_predictor.modeling.strategy_contract import (
     StrategyContract,
 )
@@ -349,9 +353,22 @@ def _validate_swing_model_payload(
         raise ArtifactIntegrityError("promoted model family differs from its bundle")
     if payload.get("strategy_contract_sha256") != bundle.strategy_contract_sha256:
         raise ArtifactIntegrityError("promoted model strategy contract binding differs")
+    if payload.get("execution_policy_sha256") != bundle.execution_policy_sha256:
+        raise ArtifactIntegrityError("promoted model execution policy binding differs")
     features = tuple(str(value) for value in _required_sequence(payload, "feature_columns"))
     if features != bundle.ordered_feature_columns:
         raise SchemaMismatchError("promoted model feature order differs from its bundle")
+    feature_reference = payload.get("feature_reference_profile")
+    if not isinstance(feature_reference, dict):
+        raise SchemaMismatchError("promoted model feature reference is missing")
+    if payload.get("feature_reference_profile_sha256") != (
+        feature_reference_profile_sha256(feature_reference)
+    ):
+        raise ArtifactIntegrityError("promoted model feature reference identity differs")
+    if payload.get("feature_reference_names_sha256") != (
+        feature_reference_names_sha256(feature_reference)
+    ):
+        raise ArtifactIntegrityError("promoted model feature-name identity differs")
     if str(payload.get("ablation_profile", "")) != bundle.feature_profile:
         raise SchemaMismatchError("promoted model feature profile differs from its bundle")
     fitted_models = payload.get("fitted_models")

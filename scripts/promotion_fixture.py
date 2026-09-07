@@ -18,22 +18,28 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from pydantic import SecretStr
 
 from market_predictor.causal_shadow import write_causal_shadow_bundle
-from market_predictor.execution_policy import EXECUTION_POLICY_SHA256
-from market_predictor.hypothesis_registry import declare_hypothesis
-from market_predictor.intraday.contracts import IntradayDatasetConfig
-from market_predictor.modeling.strategy_contract import load_strategy_contract
-from market_predictor.outcome_contracts import (
-    MaturedOutcomeV1,
+from market_predictor.execution_policy import (
+    DEFAULT_EXECUTION_POLICY,
+    EXECUTION_POLICY_SHA256,
+    round_trip_cost_bps,
+)
+from market_predictor.governance.outcomes.contracts import (
+    MaturedOutcomeV2,
     PredictionMaturationIntentV2,
     content_sha256,
     maturation_key_sha256,
     semantic_prediction_sha256,
 )
-from market_predictor.outcome_repository import OutcomeRepository
-from market_predictor.prediction_policy import (
+from market_predictor.governance.outcomes.repository import OutcomeRepository
+from market_predictor.hypothesis_registry import declare_hypothesis
+from market_predictor.intraday.contracts import IntradayDatasetConfig
+from market_predictor.modeling.prediction_selection import (
+    SwingPredictionPolicy,
     parse_prediction_policy,
+    parse_swing_prediction_policy,
     prediction_policy_identity,
 )
+from market_predictor.modeling.strategy_contract import load_strategy_contract
 from market_predictor.promotion_attestation import (
     ATTESTATION_TRUST_STORE_ENV,
     ATTESTATION_TRUST_STORE_SCHEMA,
@@ -57,10 +63,6 @@ from market_predictor.registry import load_model_manifest
 from market_predictor.swing.contracts.outcome_policy import (
     swing_outcome_policy,
     swing_outcome_policy_sha256,
-)
-from market_predictor.swing.contracts.prediction_policy import (
-    SwingPredictionPolicy,
-    parse_swing_prediction_policy,
 )
 
 
@@ -332,12 +334,25 @@ def _synthetic_outcome(
     *,
     net_return: float,
     evidence: list[dict[str, object]],
-) -> MaturedOutcomeV1:
+) -> MaturedOutcomeV2:
     entry = intent.decision_time_utc + timedelta(minutes=5)
     exit_time = entry + timedelta(minutes=30)
     available = exit_time + timedelta(minutes=1)
+    label_cost_value = intent.label_policy["round_trip_cost_bps"]
+    if isinstance(label_cost_value, bool) or not isinstance(
+        label_cost_value, (int, float)
+    ):
+        raise TypeError("round_trip_cost_bps must be numeric")
+    label_cost_bps = float(label_cost_value)
+    execution_cost_bps = round_trip_cost_bps(
+        price=100.0,
+        atr_pct=float(intent.decision_atr or 0.0) / 100.0,
+        participation=0.0,
+        policy=DEFAULT_EXECUTION_POLICY,
+    )
+    gross_return = net_return + execution_cost_bps / 10_000.0
     base = {
-        "contract_version": "market_predictor.matured_outcome.v1",
+        "contract_version": "market_predictor.matured_outcome.v2",
         "maturation_key": intent.maturation_key,
         "semantic_prediction_id": intent.semantic_prediction_id,
         "snapshot_id": intent.snapshot_id,
@@ -349,8 +364,14 @@ def _synthetic_outcome(
         "label_available_at_utc": available,
         "matured_at_utc": available,
         "entry_price": 100.0,
-        "exit_price": 100.0 * (1.0 + net_return),
-        "gross_return": net_return,
+        "exit_price": 100.0 * (1.0 + gross_return),
+        "gross_return": gross_return,
+        "label_round_trip_cost_bps": label_cost_bps,
+        "label_net_return": gross_return - label_cost_bps / 10_000.0,
+        "execution_policy_sha256": intent.execution_policy_sha256,
+        "decision_atr": intent.decision_atr,
+        "execution_participation_fraction": 0.0,
+        "execution_cost_bps": execution_cost_bps,
         "net_return": net_return,
         "mfe": max(net_return, 0.0),
         "mae": min(net_return, 0.0),
@@ -371,7 +392,7 @@ def _synthetic_outcome(
         "excess_return_vs_sector": net_return,
         "evidence_sha256": content_sha256(evidence),
     }
-    return MaturedOutcomeV1.model_validate(
+    return MaturedOutcomeV2.model_validate(
         {
             **base,
             "outcome_id": content_sha256(base),

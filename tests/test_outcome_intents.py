@@ -9,7 +9,7 @@ import pandas as pd
 
 from market_predictor.core.prediction_contracts import PredictionRequest
 from market_predictor.feature_store import LiveFeatureStore
-from market_predictor.outcome_repository import OutcomeRepository
+from market_predictor.governance.outcomes.repository import OutcomeRepository
 from market_predictor.serving.outcome_intents import register_snapshot_intents
 from tests.test_prediction_service import (
     _intraday_frame,

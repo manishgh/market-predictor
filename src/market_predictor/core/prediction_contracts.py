@@ -182,6 +182,14 @@ class ModelInfo(_PredictionContract):
         pattern=r"^[0-9a-f]{64}$",
     )
     prediction_policy: dict[str, object] | None = None
+    feature_reference_profile_sha256: str | None = Field(
+        default=None,
+        pattern=r"^[0-9a-f]{64}$",
+    )
+    feature_reference_names_sha256: str | None = Field(
+        default=None,
+        pattern=r"^[0-9a-f]{64}$",
+    )
 
 
 class FeatureArtifactIdentityV1(_PredictionContract):

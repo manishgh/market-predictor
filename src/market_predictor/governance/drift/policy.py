@@ -19,10 +19,12 @@ from pydantic import (
 )
 
 from market_predictor.core.errors import DataReadinessError
+from market_predictor.core.json_integrity import parse_strict_json_object
 from market_predictor.core.prediction_contracts import PredictionConflictError
+from market_predictor.governance.drift.features import validate_feature_drift_report
+from market_predictor.governance.outcomes.contracts import content_sha256
+from market_predictor.governance.outcomes.performance import validate_performance_report
 from market_predictor.locking import file_lock
-from market_predictor.outcome_contracts import content_sha256
-from market_predictor.performance_monitoring import validate_performance_report
 
 DRIFT_ASSESSMENT_VERSION = "market_predictor.drift_assessment.v2"
 SHA256_PATTERN = r"^[0-9a-f]{64}$"
@@ -38,6 +40,13 @@ class DriftPolicyV2(BaseModel):
     minimum_independent_decision_groups: int = Field(default=10, ge=1)
     maximum_report_age_minutes: int = Field(default=1_440, ge=1)
     maximum_last_matured_age_minutes: int = Field(default=10_080, ge=1)
+    maximum_pending_age_minutes_swing: int = Field(default=30_240, ge=1)
+    maximum_pending_age_minutes_intraday: int = Field(default=1_440, ge=1)
+    minimum_feature_drift_live_rows: int = Field(default=30, ge=1)
+    standardized_shift_warning: float = Field(default=2.0, gt=0)
+    standardized_shift_severe: float = Field(default=4.0, gt=0)
+    missing_rate_delta_warning: float = Field(default=0.20, gt=0, le=1)
+    missing_rate_delta_severe: float = Field(default=0.50, gt=0, le=1)
     warning_opportunity_brier_score: float = Field(default=0.25, ge=0, le=1)
     severe_opportunity_brier_score: float = Field(default=0.35, ge=0, le=1)
     warning_downside_brier_score: float = Field(default=0.25, ge=0, le=1)
@@ -72,6 +81,16 @@ class DriftPolicyV2(BaseModel):
                 self.warning_max_drawdown,
                 self.severe_max_drawdown,
                 "drawdown",
+            ),
+            (
+                self.standardized_shift_warning,
+                self.standardized_shift_severe,
+                "feature standardized shift",
+            ),
+            (
+                self.missing_rate_delta_warning,
+                self.missing_rate_delta_severe,
+                "feature missing-rate delta",
             ),
         )
         for warning, severe, name in pairs:
@@ -116,6 +135,15 @@ class DriftAssessmentV2(BaseModel):
         default=None,
         pattern=SHA256_PATTERN,
     )
+    feature_drift_report_id: str | None = Field(default=None, pattern=SHA256_PATTERN)
+    feature_reference_profile_sha256: str | None = Field(
+        default=None,
+        pattern=SHA256_PATTERN,
+    )
+    feature_reference_names_sha256: str | None = Field(
+        default=None,
+        pattern=SHA256_PATTERN,
+    )
     evaluated_at_utc: datetime
     state: Literal[
         "stable",
@@ -147,6 +175,22 @@ class DriftAssessmentV2(BaseModel):
     def validate_assessment_identity(self) -> Self:
         if self.selected_predictions > self.total_predictions:
             raise ValueError("drift assessment selection counts are invalid")
+        if self.feature_drift_status in {"stable", "warning", "severe"} and (
+            self.feature_drift_report_id is None
+            or self.feature_reference_profile_sha256 is None
+            or self.feature_reference_names_sha256 is None
+        ):
+            raise ValueError("available feature drift lacks bound evidence identity")
+        expected_actionability = {
+            "stable": "actionable",
+            "warning": "actionable",
+            "warming": "rank_only",
+            "severe": "not_ready",
+            "stale": "not_ready",
+            "unavailable": "not_ready",
+        }[self.state]
+        if self.actionability != expected_actionability:
+            raise ValueError("drift state and actionability are inconsistent")
         content = self.model_dump(mode="json", exclude={"assessment_id"})
         if content_sha256(content) != self.assessment_id:
             raise ValueError("drift assessment identity is invalid")
@@ -162,6 +206,8 @@ def evaluate_drift(
     prediction_policy_sha256: str,
     label_policy_sha256: str,
     execution_policy_sha256: str,
+    feature_reference_profile_sha256: str,
+    feature_reference_names_sha256: str,
     feature_drift: dict[str, object] | None,
     performance_report: dict[str, object] | None,
     policy: DriftPolicyV2,
@@ -178,17 +224,88 @@ def evaluate_drift(
     for name, value in route_identity.items():
         if re.fullmatch(SHA256_PATTERN, value) is None:
             raise ValueError(f"drift route {name} is invalid")
+    if re.fullmatch(SHA256_PATTERN, feature_reference_profile_sha256) is None:
+        raise ValueError("drift feature reference identity is invalid")
+    if re.fullmatch(SHA256_PATTERN, feature_reference_names_sha256) is None:
+        raise ValueError("drift feature-name identity is invalid")
     reasons: list[str] = []
-    feature_status = str((feature_drift or {}).get("status", "unavailable"))
-    if feature_status not in {
-        "stable",
-        "warning",
-        "severe",
-        "stale",
-        "unavailable",
-    }:
-        feature_status = "unavailable"
-        reasons.append("feature_drift_status_invalid")
+    validated_feature = (
+        validate_feature_drift_report(feature_drift)
+        if feature_drift is not None
+        else None
+    )
+    feature_status = "unavailable"
+    if validated_feature is not None:
+        feature_status = str(validated_feature["status"])
+        feature_identity = {
+            "mode": mode,
+            "horizon": horizon,
+            "model_release_id": model_release_id,
+            "model_artifact_sha256": model_artifact_sha256,
+        }
+        if any(
+            validated_feature.get(name) != value
+            for name, value in feature_identity.items()
+        ):
+            feature_status = "unavailable"
+            reasons.append("feature_drift_identity_mismatch")
+        elif (
+            validated_feature.get("reference_profile_sha256")
+            != feature_reference_profile_sha256
+        ):
+            feature_status = "unavailable"
+            reasons.append("feature_drift_reference_identity_mismatch")
+        elif (
+            validated_feature.get("feature_names_sha256")
+            != feature_reference_names_sha256
+        ):
+            feature_status = "unavailable"
+            reasons.append("feature_drift_feature_names_identity_mismatch")
+        elif any(
+            not math.isclose(
+                _as_float(validated_feature.get(name), name),
+                float(getattr(policy, name)),
+                abs_tol=1e-12,
+            )
+            for name in (
+                "standardized_shift_warning",
+                "standardized_shift_severe",
+                "missing_rate_delta_warning",
+                "missing_rate_delta_severe",
+            )
+        ):
+            feature_status = "unavailable"
+            reasons.append("feature_drift_threshold_identity_mismatch")
+        elif _as_int(validated_feature.get("live_rows"), "live_rows") < (
+            policy.minimum_feature_drift_live_rows
+        ):
+            feature_status = "unavailable"
+            reasons.append("feature_drift_sample_insufficient")
+        else:
+            feature_generated = _timestamp(
+                validated_feature.get("generated_at_utc"),
+                "feature_drift.generated_at_utc",
+            )
+            feature_window_end = _timestamp(
+                validated_feature.get("window_end_utc"),
+                "feature_drift.window_end_utc",
+            )
+            if feature_generated > now:
+                feature_status = "stale"
+                reasons.append("feature_drift_from_future")
+            elif feature_window_end > now:
+                feature_status = "stale"
+                reasons.append("feature_drift_window_from_future")
+            elif now - feature_window_end > timedelta(
+                minutes=policy.maximum_report_age_minutes
+            ):
+                feature_status = "stale"
+                reasons.append("feature_drift_observations_stale")
+            elif now - feature_generated > timedelta(
+                minutes=policy.maximum_report_age_minutes
+            ):
+                feature_status = "stale"
+                reasons.append("feature_drift_stale")
     validated_report = (
         validate_performance_report(performance_report)
         if performance_report is not None
@@ -200,6 +317,16 @@ def evaluate_drift(
         horizon=horizon,
         **route_identity,
     )
+    if validated_report is not None and row is None:
+        reasons.append("selected_policy_identity_mismatch")
+    if (
+        row is not None
+        and validated_feature is not None
+        and validated_feature.get("feature_artifact_set_sha256")
+        != row.get("feature_artifact_set_sha256")
+    ):
+        feature_status = "unavailable"
+        reasons.append("feature_drift_feature_set_mismatch")
     if policy.feature_drift_required and feature_status in {
         "unavailable",
         "stale",
@@ -241,8 +368,19 @@ def evaluate_drift(
         "feature_artifact_set_sha256": (
             str(row["feature_artifact_set_sha256"])
             if row is not None
+            else str(validated_feature["feature_artifact_set_sha256"])
+            if validated_feature is not None
             else None
         ),
+        "feature_drift_report_id": (
+            str(validated_feature["report_id"])
+            if validated_feature is not None
+            else None
+        ),
+        "feature_reference_profile_sha256": (
+            feature_reference_profile_sha256
+        ),
+        "feature_reference_names_sha256": feature_reference_names_sha256,
         "evaluated_at_utc": now.isoformat().replace("+00:00", "Z"),
         "state": state,
         "actionability": actionability,
@@ -293,6 +431,14 @@ class DriftStateStore:
             assessment.model_release_id,
         )
         with file_lock(path):
+            if path.exists():
+                existing = self._load_path(path)
+                if existing.evaluated_at_utc > assessment.evaluated_at_utc:
+                    raise PredictionConflictError
+                if existing.evaluated_at_utc == assessment.evaluated_at_utc:
+                    if existing != assessment:
+                        raise PredictionConflictError
+                    return existing
             _write_json_atomic(path, assessment.model_dump(mode="json"))
         return assessment
 
@@ -305,10 +451,17 @@ class DriftStateStore:
         path = self._path(mode, horizon, model_release_id)
         if not path.exists():
             raise DataReadinessError("route drift assessment is unavailable")
-        loaded = json.loads(path.read_text(encoding="utf-8"))
+        return self._load_path(path)
+
+    @staticmethod
+    def _load_path(path: Path) -> DriftAssessmentV2:
         try:
+            loaded = parse_strict_json_object(
+                path.read_bytes(),
+                label="route drift assessment",
+            )
             assessment = DriftAssessmentV2.model_validate(loaded)
-        except ValidationError as exc:
+        except (OSError, ValueError, ValidationError) as exc:
             raise PredictionConflictError from exc
         return assessment
 
@@ -381,6 +534,23 @@ def _performance_state(
     if now - generated > timedelta(minutes=policy.maximum_report_age_minutes):
         reasons.append("performance_report_stale")
         return "stale", "not_ready"
+    pending = _as_int(
+        row.get("pending_selected_samples"),
+        "pending_selected_samples",
+    )
+    if pending > 0:
+        oldest_pending = _timestamp(
+            row.get("oldest_pending_decision_time_utc"),
+            "oldest_pending_decision_time_utc",
+        )
+        maximum_pending_age = (
+            policy.maximum_pending_age_minutes_intraday
+            if row.get("view") == "intraday"
+            else policy.maximum_pending_age_minutes_swing
+        )
+        if now - oldest_pending > timedelta(minutes=maximum_pending_age):
+            reasons.append("selected_policy_outcomes_overdue")
+            return "unavailable", "not_ready"
     samples = _as_int(
         row.get("matured_selected_samples"),
         "matured_selected_samples",
@@ -437,20 +607,36 @@ def _performance_state(
         if row.get("view") == "intraday"
         else 0.0
     )
-    excess = _as_float(
-        row.get("average_excess_return_vs_spy"),
-        "average_excess_return_vs_spy",
-    )
+    excess_by_benchmark = {
+        "spy": _as_float(
+            row.get("average_excess_return_vs_spy"),
+            "average_excess_return_vs_spy",
+        ),
+        "qqq": _as_float(
+            row.get("average_excess_return_vs_qqq"),
+            "average_excess_return_vs_qqq",
+        ),
+        "sector": _as_float(
+            row.get("average_excess_return_vs_sector"),
+            "average_excess_return_vs_sector",
+        ),
+    }
+    weakest_excess = min(excess_by_benchmark.values())
     drawdown = _as_float(row.get("max_drawdown"), "max_drawdown")
     severe = (
         opportunity_brier >= policy.severe_opportunity_brier_score
         or downside_brier >= policy.severe_downside_brier_score
         or opportunity_calibration >= policy.severe_calibration_error
         or downside_calibration >= policy.severe_calibration_error
-        or excess <= policy.severe_min_excess_return
+        or weakest_excess <= policy.severe_min_excess_return
         or drawdown >= policy.severe_max_drawdown
     )
     if severe:
+        reasons.extend(
+            f"selected_policy_{benchmark}_excess_return_severe"
+            for benchmark, value in excess_by_benchmark.items()
+            if value <= policy.severe_min_excess_return
+        )
         reasons.append("selected_policy_performance_severe")
         return "severe", "not_ready"
     warning = (
@@ -458,10 +644,15 @@ def _performance_state(
         or downside_brier >= policy.warning_downside_brier_score
         or opportunity_calibration >= policy.warning_calibration_error
         or downside_calibration >= policy.warning_calibration_error
-        or excess <= policy.warning_min_excess_return
+        or weakest_excess <= policy.warning_min_excess_return
         or drawdown >= policy.warning_max_drawdown
     )
     if warning:
+        reasons.extend(
+            f"selected_policy_{benchmark}_excess_return_warning"
+            for benchmark, value in excess_by_benchmark.items()
+            if value <= policy.warning_min_excess_return
+        )
         reasons.append("selected_policy_performance_warning")
         return "warning", "actionable"
     return "stable", "actionable"
@@ -505,12 +696,30 @@ def _utc(value: datetime) -> datetime:
 
 def _write_json_atomic(path: Path, value: object) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
+    encoded = json.dumps(
+        value,
+        indent=2,
+        sort_keys=True,
+        ensure_ascii=True,
+        allow_nan=False,
+    ).encode("utf-8")
     temporary = path.with_name(f".{path.name}.{uuid4().hex}.tmp")
     try:
-        temporary.write_text(
-            json.dumps(value, indent=2, sort_keys=True, ensure_ascii=True),
-            encoding="utf-8",
-        )
+        with temporary.open("xb") as handle:
+            handle.write(encoded)
+            handle.flush()
+            os.fsync(handle.fileno())
         os.replace(temporary, path)
+        _fsync_directory(path.parent)
     finally:
         temporary.unlink(missing_ok=True)
+
+
+def _fsync_directory(path: Path) -> None:
+    if os.name == "nt":
+        return
+    descriptor = os.open(path, os.O_RDONLY)
+    try:
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)

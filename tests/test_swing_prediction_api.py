@@ -20,10 +20,15 @@ from market_predictor.core.prediction_contracts import (
     PredictionRequest,
     PredictionValidationError,
 )
+from market_predictor.execution_policy import EXECUTION_POLICY_SHA256
 from market_predictor.governance.promotion.bundle_contracts import (
     canonical_payload_sha256,
     ordered_values_sha256,
     validate_promoted_bundle,
+)
+from market_predictor.modeling.feature_reference import (
+    feature_reference_names_sha256,
+    feature_reference_profile_sha256,
 )
 from market_predictor.modeling.strategy_contract import load_strategy_contract
 from market_predictor.serving.outcome_intents import maturation_intents_from_response
@@ -134,6 +139,16 @@ def test_promoted_ten_session_swing_api_returns_human_contract(
     contract_path.write_bytes((ROOT / "configs" / contract_path.name).read_bytes())
     contract = load_strategy_contract(contract_path)
     features = swing_model_feature_columns(contract=contract, catalyst=False)
+    feature_reference = {
+        feature: {
+            "rows": 100,
+            "observed": 100,
+            "missing_rate": 0.0,
+            "mean": 0.0,
+            "std": 1.0,
+        }
+        for feature in features
+    }
     bundle_root = tmp_path / "models" / "swing"
     model_path = bundle_root / "model" / "model.joblib"
     evidence_path = model_path.with_suffix(model_path.suffix + ".promotion.attestation.json")
@@ -145,7 +160,15 @@ def test_promoted_ten_session_swing_api_returns_human_contract(
         "candidate_id": "swing-promoted-test",
         "model_family": "swing_baseline",
         "strategy_contract_sha256": contract.sha256(),
+        "execution_policy_sha256": EXECUTION_POLICY_SHA256,
         "feature_columns": features,
+        "feature_reference_profile": feature_reference,
+        "feature_reference_profile_sha256": feature_reference_profile_sha256(
+            feature_reference
+        ),
+        "feature_reference_names_sha256": feature_reference_names_sha256(
+            feature_reference
+        ),
         "ablation_profile": "technical_market",
         "probability_thresholds": {"classifier": 0.60},
         "fitted_models": {"classifier": _Fitted(features[:1])},
@@ -178,6 +201,7 @@ def test_promoted_ten_session_swing_api_returns_human_contract(
         "ordered_feature_sha256": ordered_values_sha256(features),
         "strategy_contract_schema_version": contract.schema_version,
         "strategy_contract_sha256": contract.sha256(),
+        "execution_policy_sha256": EXECUTION_POLICY_SHA256,
         "market_data_provider": "alpaca",
         "market_data_feed": "sip",
         "market_data_adjustment": "all",
@@ -235,6 +259,7 @@ def test_promoted_ten_session_swing_api_returns_human_contract(
                     repository=Path("models/swing"),
                     attestation_trust_store=Path("unused.json"),
                     promotion_gate_policy_sha256=TEST_GATE_POLICY_SHA256,
+                    drift_policy_sha256="b" * 64,
                     bar_timeframe="1Day",
                 )
             }

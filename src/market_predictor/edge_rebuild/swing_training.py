@@ -59,6 +59,12 @@ from market_predictor.edge_rebuild.training.walk_forward import (
     _governed_model_sessions,
     _split_record,
 )
+from market_predictor.execution_policy import EXECUTION_POLICY_SHA256
+from market_predictor.modeling.feature_reference import (
+    build_feature_reference_profile,
+    feature_reference_names_sha256,
+    feature_reference_profile_sha256,
+)
 from market_predictor.modeling.strategy_contract import StrategyContract
 from market_predictor.resources import (
     memory_audit,
@@ -495,6 +501,16 @@ def train_swing_edge_candidate(
             headroom_gib=config.memory_guard_headroom_gib,
         ).to_record(),
     }
+    feature_reference_profile = build_feature_reference_profile(
+        development,
+        selected_data.feature_columns,
+    )
+    feature_reference_sha256 = feature_reference_profile_sha256(
+        feature_reference_profile
+    )
+    feature_names_sha256 = feature_reference_names_sha256(
+        feature_reference_profile
+    )
     model_card: dict[str, Any] = {
         "schema": MODEL_CARD_SCHEMA,
         "model_schema": SWING_CANDIDATE_MODEL_SCHEMA,
@@ -516,6 +532,9 @@ def train_swing_edge_candidate(
         },
         "feature_columns": list(selected_data.feature_columns),
         "feature_set_sha256": _sequence_sha256(selected_data.feature_columns),
+        "feature_reference_profile": feature_reference_profile,
+        "feature_reference_profile_sha256": feature_reference_sha256,
+        "feature_reference_names_sha256": feature_names_sha256,
         "training_rows": len(development),
         "training_sessions": int(development["session_date_et"].nunique()),
         "training_securities": int(development["security_id"].nunique()),
@@ -523,6 +542,7 @@ def train_swing_edge_candidate(
         "locked_test_unseen_security_rows": len(unseen_final_test),
         "dataset": _binding_record(binding, profile_identity),
         "strategy_contract_sha256": strategy_contract.sha256(),
+        "execution_policy_sha256": EXECUTION_POLICY_SHA256,
         "training_config_sha256": config_sha256,
         "temporal_manifest_policy_sha256": temporal_policy_sha256,
         "calibration_method": "platt_sigmoid_on_prior_purged_sessions",
@@ -543,10 +563,14 @@ def train_swing_edge_candidate(
         "ablation_profile": reference_spec.profile,
         "feature_columns": list(selected_data.feature_columns),
         "feature_set_sha256": _sequence_sha256(selected_data.feature_columns),
+        "feature_reference_profile": feature_reference_profile,
+        "feature_reference_profile_sha256": feature_reference_sha256,
+        "feature_reference_names_sha256": feature_names_sha256,
         "dataset": _binding_record(binding, profile_identity),
         "training_config_sha256": config_sha256,
         "temporal_manifest_policy_sha256": temporal_policy_sha256,
         "strategy_contract_sha256": strategy_contract.sha256(),
+        "execution_policy_sha256": EXECUTION_POLICY_SHA256,
         "fitted_models": fitted_models,
         "probability_thresholds": selected_thresholds,
     }

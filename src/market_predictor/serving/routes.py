@@ -11,6 +11,7 @@ class ServingRoute:
     repository: Path
     attestation_trust_store: Path
     promotion_gate_policy_sha256: str = ""
+    drift_policy_sha256: str = ""
     bar_timeframe: str = "unknown"
     curated_dataset: Path | None = None
     estimated_resident_gib: float = 0.5

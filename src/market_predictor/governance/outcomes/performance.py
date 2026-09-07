@@ -13,12 +13,16 @@ import pandas as pd
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from market_predictor.core.errors import DataReadinessError
-from market_predictor.outcome_contracts import (
-    MaturedOutcomeV1,
+from market_predictor.core.json_integrity import parse_strict_json_object
+from market_predictor.core.prediction_contracts import PredictionConflictError
+from market_predictor.governance.outcomes.contracts import (
+    MaturedOutcomeV2,
     PredictionMaturationIntentV2,
+    PredictionMonitoringObservationV1,
     content_sha256,
 )
-from market_predictor.outcome_repository import OutcomeRepository
+from market_predictor.governance.outcomes.repository import OutcomeRepository
+from market_predictor.locking import file_lock
 
 PERFORMANCE_REPORT_VERSION = "market_predictor.selected_policy_performance.v2"
 SHA256_PATTERN = r"^[0-9a-f]{64}$"
@@ -44,6 +48,7 @@ class SelectedPolicyCohortV2(BaseModel):
     execution_policy_sha256: str = Field(pattern=SHA256_PATTERN)
     feature_artifact_set_sha256: str = Field(pattern=SHA256_PATTERN)
     source_intent_ids_sha256: str = Field(pattern=SHA256_PATTERN)
+    source_observation_ids_sha256: str = Field(pattern=SHA256_PATTERN)
     source_outcome_ids_sha256: str = Field(pattern=SHA256_PATTERN)
     view: Literal["swing", "intraday"]
     horizon: str = Field(pattern=r"^[1-9]\d*(?:m|d|b)$")
@@ -64,6 +69,7 @@ class SelectedPolicyCohortV2(BaseModel):
     actionable_predictions: int = Field(ge=0)
     matured_selected_samples: int = Field(ge=0)
     pending_selected_samples: int = Field(ge=0)
+    oldest_pending_decision_time_utc: datetime | None = None
     independent_decision_groups: int = Field(ge=0)
     evidence_status: Literal["sufficient", "insufficient_evidence"]
     selection_rate: float = Field(ge=0, le=1)
@@ -91,6 +97,8 @@ class SelectedPolicyCohortV2(BaseModel):
     downside_calibration_error: float | None = Field(default=None, ge=0, le=1)
     average_net_return: float | None = None
     average_excess_return_vs_spy: float | None = None
+    average_excess_return_vs_qqq: float | None = None
+    average_excess_return_vs_sector: float | None = None
     cumulative_net_return: float | None = None
     win_rate: float | None = Field(default=None, ge=0, le=1)
     max_drawdown: float | None = Field(default=None, ge=0)
@@ -104,6 +112,7 @@ class SelectedPolicyCohortV2(BaseModel):
         "first_decision_time_utc",
         "last_decision_time_utc",
         "last_matured_outcome_utc",
+        "oldest_pending_decision_time_utc",
     )
     @classmethod
     def aware_times(cls, value: datetime | None) -> datetime | None:
@@ -129,6 +138,10 @@ class SelectedPolicyCohortV2(BaseModel):
             != self.actionable_predictions
         ):
             raise ValueError("selected-policy maturation counts are inconsistent")
+        if (self.pending_selected_samples > 0) != (
+            self.oldest_pending_decision_time_utc is not None
+        ):
+            raise ValueError("selected-policy pending timestamp is inconsistent")
         if self.window_start_utc >= self.window_end_utc:
             raise ValueError("selected-policy report window is invalid")
         if not (
@@ -169,6 +182,8 @@ class SelectedPolicyCohortV2(BaseModel):
         economic_outcome_fields = (
             self.average_net_return,
             self.average_excess_return_vs_spy,
+            self.average_excess_return_vs_qqq,
+            self.average_excess_return_vs_sector,
             self.cumulative_net_return,
             self.win_rate,
             self.max_drawdown,
@@ -204,7 +219,7 @@ class SelectedPolicyCohortV2(BaseModel):
 
 
 class SelectedPolicyPerformanceReportV2(BaseModel):
-    model_config = ConfigDict(extra="forbid", frozen=True)
+    model_config = ConfigDict(extra="forbid", frozen=True, allow_inf_nan=False)
 
     contract_version: Literal[
         "market_predictor.selected_policy_performance.v2"
@@ -216,6 +231,7 @@ class SelectedPolicyPerformanceReportV2(BaseModel):
     window_start_utc: datetime
     window_end_utc: datetime
     source_intent_ids: tuple[str, ...]
+    source_observation_ids: tuple[str, ...]
     source_outcome_ids: tuple[str, ...]
     rows: tuple[SelectedPolicyCohortV2, ...]
 
@@ -232,7 +248,11 @@ class SelectedPolicyPerformanceReportV2(BaseModel):
             )
         return value.astimezone(UTC)
 
-    @field_validator("source_intent_ids", "source_outcome_ids")
+    @field_validator(
+        "source_intent_ids",
+        "source_observation_ids",
+        "source_outcome_ids",
+    )
     @classmethod
     def canonical_source_ids(cls, value: tuple[str, ...]) -> tuple[str, ...]:
         if any(
@@ -276,23 +296,40 @@ def build_performance_cohorts(
     window_start = generated - timedelta(days=lookback_days)
     records: list[dict[str, object]] = []
     source_intent_ids: set[str] = set()
+    source_observation_ids: set[str] = set()
     source_outcome_ids: set[str] = set()
-    for intent in repository.intents():
-        if (
-            repository.semantic_canonical_key(intent.semantic_prediction_id)
-            != intent.maturation_key
-            or not window_start <= intent.decision_time_utc <= generated
-        ):
-            continue
-        outcome = _matured_selected_outcome(
-            repository,
-            intent,
-            generated_at=generated,
+    intents = {
+        intent.maturation_key: intent
+        for intent in repository.intents()
+        if repository.semantic_canonical_key(intent.semantic_prediction_id)
+        == intent.maturation_key
+    }
+    observations = [
+        observation
+        for observation in repository.observations()
+        if window_start <= observation.decision_time_utc <= generated
+    ]
+    for observation in _canonical_observations(repository, observations):
+        intent = (
+            intents.get(observation.maturation_key)
+            if observation.maturation_key is not None
+            else None
         )
-        source_intent_ids.add(intent.maturation_key)
+        outcome = (
+            _matured_selected_outcome(
+                repository,
+                intent,
+                generated_at=generated,
+            )
+            if intent is not None
+            else None
+        )
+        source_observation_ids.add(observation.observation_id)
+        if intent is not None:
+            source_intent_ids.add(intent.maturation_key)
         if outcome is not None:
             source_outcome_ids.add(outcome.outcome_id)
-        records.append(_monitoring_record(intent, outcome))
+        records.append(_monitoring_record(observation, outcome))
     frame = pd.DataFrame(records)
     rows: list[dict[str, object]] = []
     if not frame.empty:
@@ -361,6 +398,7 @@ def build_performance_cohorts(
         "window_start_utc": window_start.isoformat().replace("+00:00", "Z"),
         "window_end_utc": generated.isoformat().replace("+00:00", "Z"),
         "source_intent_ids": sorted(source_intent_ids),
+        "source_observation_ids": sorted(source_observation_ids),
         "source_outcome_ids": sorted(source_outcome_ids),
         "rows": rows,
     }
@@ -379,7 +417,15 @@ def validate_performance_report(value: object) -> dict[str, object]:
 
 
 def load_performance_report(path: Path) -> dict[str, object]:
-    loaded = json.loads(path.read_text(encoding="utf-8"))
+    try:
+        loaded = parse_strict_json_object(
+            path.read_bytes(),
+            label="selected-policy performance report",
+        )
+    except (OSError, ValueError) as exc:
+        raise DataReadinessError(
+            "selected-policy performance report is unreadable"
+        ) from exc
     return validate_performance_report(loaded)
 
 
@@ -389,16 +435,87 @@ def write_performance_report(
 ) -> dict[str, object]:
     validated = validate_performance_report(report)
     path.parent.mkdir(parents=True, exist_ok=True)
+    with file_lock(path):
+        if path.exists():
+            existing = load_performance_report(path)
+            existing_time = _utc(datetime.fromisoformat(str(existing["generated_at_utc"])))
+            incoming_time = _utc(datetime.fromisoformat(str(validated["generated_at_utc"])))
+            if existing_time > incoming_time:
+                raise PredictionConflictError
+            if existing_time == incoming_time:
+                if existing != validated:
+                    raise PredictionConflictError
+                return existing
+        _write_json_durable(path, validated)
+    return validated
+
+
+def _canonical_observations(
+    repository: OutcomeRepository,
+    observations: list[PredictionMonitoringObservationV1],
+) -> list[PredictionMonitoringObservationV1]:
+    grouped: dict[str, list[PredictionMonitoringObservationV1]] = {}
+    for observation in observations:
+        grouped.setdefault(observation.semantic_prediction_id, []).append(observation)
+    canonical: list[PredictionMonitoringObservationV1] = []
+    for semantic_id, group in grouped.items():
+        canonical_key = repository.semantic_canonical_key(semantic_id)
+        candidates = (
+            [item for item in group if item.maturation_key == canonical_key]
+            if canonical_key is not None
+            else group
+        )
+        if not candidates:
+            raise DataReadinessError(
+                "semantic prediction has no canonical monitoring observation"
+            )
+        canonical.append(
+            min(
+                candidates,
+                key=lambda item: (
+                    item.decision_time_utc,
+                    item.snapshot_id,
+                    item.observation_id,
+                ),
+            )
+        )
+    return sorted(
+        canonical,
+        key=lambda item: (
+            item.decision_time_utc,
+            item.semantic_prediction_id,
+        ),
+    )
+
+
+def _write_json_durable(path: Path, value: object) -> None:
+    encoded = json.dumps(
+        value,
+        indent=2,
+        sort_keys=True,
+        ensure_ascii=True,
+        allow_nan=False,
+    ).encode("utf-8")
     temporary = path.with_name(f".{path.name}.{uuid4().hex}.tmp")
     try:
-        temporary.write_text(
-            json.dumps(validated, indent=2, sort_keys=True, ensure_ascii=True),
-            encoding="utf-8",
-        )
+        with temporary.open("xb") as handle:
+            handle.write(encoded)
+            handle.flush()
+            os.fsync(handle.fileno())
         os.replace(temporary, path)
+        _fsync_directory(path.parent)
     finally:
         temporary.unlink(missing_ok=True)
-    return validated
+
+
+def _fsync_directory(path: Path) -> None:
+    if os.name == "nt":
+        return
+    descriptor = os.open(path, os.O_RDONLY)
+    try:
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
 
 
 def _matured_selected_outcome(
@@ -406,7 +523,7 @@ def _matured_selected_outcome(
     intent: PredictionMaturationIntentV2,
     *,
     generated_at: datetime,
-) -> MaturedOutcomeV1 | None:
+) -> MaturedOutcomeV2 | None:
     if not intent.actionable:
         return None
     if not repository.has_outcome(intent.maturation_key):
@@ -437,39 +554,41 @@ def _matured_selected_outcome(
 
 
 def _monitoring_record(
-    intent: PredictionMaturationIntentV2,
-    outcome: MaturedOutcomeV1 | None,
+    observation: PredictionMonitoringObservationV1,
+    outcome: MaturedOutcomeV2 | None,
 ) -> dict[str, object]:
-    if intent.view == "intraday":
-        downside = cast(float, intent.downside_probability)
-        decision_score = intent.probability * (1.0 - downside)
+    decision_score: float | None
+    if observation.view == "intraday" and observation.probability is not None:
+        downside = cast(float, observation.downside_probability)
+        decision_score = observation.probability * (1.0 - downside)
     else:
-        decision_score = intent.probability
+        decision_score = observation.probability
     return {
-        "maturation_key": intent.maturation_key,
+        "observation_id": observation.observation_id,
+        "maturation_key": observation.maturation_key,
         "outcome_id": outcome.outcome_id if outcome is not None else None,
-        "model_release_id": intent.model_release_id,
-        "model_artifact_sha256": intent.model_artifact_sha256,
-        "feature_artifact_sha256": intent.feature_artifact_sha256,
-        "prediction_policy_sha256": intent.prediction_policy_sha256,
-        "label_policy_sha256": intent.label_policy_sha256,
-        "execution_policy_sha256": intent.execution_policy_sha256,
-        "view": intent.view,
-        "horizon": intent.horizon,
-        "market_regime": intent.market_regime,
-        "sector": intent.sector,
-        "market_cap_bucket": intent.market_cap_bucket,
-        "liquidity_bucket": intent.liquidity_bucket,
-        "calibration_bin": intent.calibration_bin,
-        "decision_group_id": intent.decision_group_id,
-        "decision_time_utc": intent.decision_time_utc,
-        "probability": intent.probability,
-        "downside_probability": intent.downside_probability,
+        "model_release_id": observation.model_release_id,
+        "model_artifact_sha256": observation.model_artifact_sha256,
+        "feature_artifact_sha256": observation.feature_artifact_sha256,
+        "prediction_policy_sha256": observation.prediction_policy_sha256,
+        "label_policy_sha256": observation.label_policy_sha256,
+        "execution_policy_sha256": observation.execution_policy_sha256,
+        "view": observation.view,
+        "horizon": observation.horizon,
+        "market_regime": observation.market_regime,
+        "sector": observation.sector,
+        "market_cap_bucket": observation.market_cap_bucket,
+        "liquidity_bucket": observation.liquidity_bucket,
+        "calibration_bin": observation.calibration_bin,
+        "decision_group_id": observation.decision_group_id,
+        "decision_time_utc": observation.decision_time_utc,
+        "probability": observation.probability,
+        "downside_probability": observation.downside_probability,
         "decision_score": decision_score,
-        "rank": intent.rank,
-        "selection_eligible": intent.selection_eligible,
-        "selected_for_policy": intent.selected_for_policy,
-        "actionable": intent.actionable,
+        "rank": observation.rank,
+        "selection_eligible": observation.selection_eligible,
+        "selected_for_policy": observation.selected_for_policy,
+        "actionable": observation.actionable,
         "opportunity_target": (
             outcome.opportunity_target if outcome is not None else None
         ),
@@ -479,6 +598,12 @@ def _monitoring_record(
         "net_return": outcome.net_return if outcome is not None else None,
         "excess_return_vs_spy": (
             outcome.excess_return_vs_spy if outcome is not None else None
+        ),
+        "excess_return_vs_qqq": (
+            outcome.excess_return_vs_qqq if outcome is not None else None
+        ),
+        "excess_return_vs_sector": (
+            outcome.excess_return_vs_sector if outcome is not None else None
         ),
         "exit_time_utc": outcome.exit_time_utc if outcome is not None else None,
         "matured_at_utc": (
@@ -498,11 +623,12 @@ def _cohort_row(
     window_end: datetime,
 ) -> dict[str, object]:
     ordered = group.sort_values(
-        ["decision_time_utc", "decision_group_id", "maturation_key"],
+        ["decision_time_utc", "decision_group_id", "observation_id"],
         kind="stable",
     )
     selected = ordered[ordered["actionable"].astype(bool)]
     matured = selected[selected["outcome_id"].notna()]
+    pending = selected[selected["outcome_id"].isna()]
     total = len(ordered)
     eligible_count = int(ordered["selection_eligible"].astype(bool).sum())
     selected_count = int(ordered["selected_for_policy"].astype(bool).sum())
@@ -511,7 +637,10 @@ def _cohort_row(
     feature_ids = sorted(
         set(ordered["feature_artifact_sha256"].astype(str))
     )
-    intent_ids = sorted(ordered["maturation_key"].astype(str))
+    intent_ids = sorted(
+        ordered.loc[ordered["maturation_key"].notna(), "maturation_key"].astype(str)
+    )
+    observation_ids = sorted(ordered["observation_id"].astype(str))
     outcome_ids = sorted(matured["outcome_id"].astype(str))
     score_metrics = _score_metrics(selected)
     outcome_metrics = _outcome_metrics(
@@ -525,6 +654,7 @@ def _cohort_row(
         },
         "feature_artifact_set_sha256": content_sha256(feature_ids),
         "source_intent_ids_sha256": content_sha256(intent_ids),
+        "source_observation_ids_sha256": content_sha256(observation_ids),
         "source_outcome_ids_sha256": content_sha256(outcome_ids),
         "cohort_type": cohort_type,
         "cohort_value": cohort_value,
@@ -536,6 +666,11 @@ def _cohort_row(
         "actionable_predictions": actionable_count,
         "matured_selected_samples": matured_count,
         "pending_selected_samples": actionable_count - matured_count,
+        "oldest_pending_decision_time_utc": (
+            _timestamp_text(pending["decision_time_utc"].min())
+            if not pending.empty
+            else None
+        ),
         "independent_decision_groups": int(
             matured["decision_group_id"].nunique()
         ),
@@ -610,6 +745,8 @@ def _outcome_metrics(
         "downside_calibration_error": None,
         "average_net_return": None,
         "average_excess_return_vs_spy": None,
+        "average_excess_return_vs_qqq": None,
+        "average_excess_return_vs_sector": None,
         "cumulative_net_return": None,
         "win_rate": None,
         "max_drawdown": None,
@@ -640,6 +777,12 @@ def _outcome_metrics(
         "average_net_return": float(np.mean(returns)),
         "average_excess_return_vs_spy": float(
             matured["excess_return_vs_spy"].mean()
+        ),
+        "average_excess_return_vs_qqq": float(
+            matured["excess_return_vs_qqq"].mean()
+        ),
+        "average_excess_return_vs_sector": float(
+            matured["excess_return_vs_sector"].mean()
         ),
         "cumulative_net_return": float(
             np.prod(1.0 + period_returns) - 1.0

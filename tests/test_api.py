@@ -82,6 +82,7 @@ class PredictionApiTests(unittest.TestCase):
                             repository=Path("models/edge-rebuild/swing"),
                             attestation_trust_store=Path("unused.json"),
                             promotion_gate_policy_sha256="a" * 64,
+                            drift_policy_sha256="b" * 64,
                             bar_timeframe="1Day",
                         )
                     }

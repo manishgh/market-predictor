@@ -17,7 +17,6 @@ from sklearn.preprocessing import StandardScaler
 
 from market_predictor.canonical.reconciliation import stamped_hash, stamped_scalar
 from market_predictor.core.errors import DataReadinessError, SchemaMismatchError
-from market_predictor.drift import build_feature_reference_profile
 from market_predictor.execution_policy import (
     DEFAULT_EXECUTION_POLICY,
     STRESS_ECONOMIC_FIELDS,
@@ -52,6 +51,19 @@ from market_predictor.modeling.calibration import (
     fit_final_isotonic,
     fit_prior_isotonic,
 )
+from market_predictor.modeling.feature_reference import (
+    build_feature_reference_profile,
+    feature_reference_names_sha256,
+    feature_reference_profile_sha256,
+)
+from market_predictor.modeling.prediction_selection import (
+    PredictionSelectionPolicy,
+    group_ranking_metrics,
+    intraday_decision_scores,
+    intraday_selection_eligible,
+    prediction_policy_identity,
+    select_intraday_candidates,
+)
 from market_predictor.modeling.validation import (
     PurgedWalkForwardFold,
     SessionPurgedWalkForwardSplit,
@@ -59,14 +71,6 @@ from market_predictor.modeling.validation import (
     deterministic_stratified_ticker_holdout,
     identity_set_sha256,
     validation_row_identities,
-)
-from market_predictor.prediction_policy import (
-    PredictionSelectionPolicy,
-    group_ranking_metrics,
-    intraday_decision_scores,
-    intraday_selection_eligible,
-    prediction_policy_identity,
-    select_intraday_candidates,
 )
 from market_predictor.registry import (
     MODEL_STATUS_CANDIDATE,
@@ -477,6 +481,7 @@ def train_intraday_model(
     capacity_min_avg_net_return = float(pd.to_numeric(capacity["avg_net_return"], errors="coerce").min())
     capacity_max_no_fill_rate = float(pd.to_numeric(capacity["no_fill_rate"], errors="coerce").max())
     capacity_liquidity_evidence_complete = bool(capacity["liquidity_evidence_complete"].astype(bool).all())
+    feature_reference_profile = build_feature_reference_profile(data, features)
     metrics: dict[str, Any] = {
         "schema_version": INTRADAY_MODEL_SCHEMA_VERSION,
         "model_type": INTRADAY_MODEL_TYPE,
@@ -593,7 +598,13 @@ def train_intraday_model(
         "negative_session_rate": robust["negative_session_rate"],
         "average_turnover": robust["average_turnover"],
         "dataset_sha256": dataset_sha256,
-        "feature_reference_profile": build_feature_reference_profile(data, features),
+        "feature_reference_profile": feature_reference_profile,
+        "feature_reference_profile_sha256": feature_reference_profile_sha256(
+            feature_reference_profile
+        ),
+        "feature_reference_names_sha256": feature_reference_names_sha256(
+            feature_reference_profile
+        ),
         "memory": memory_audit(
             hard_budget_gib=config.max_training_memory_gb,
             headroom_gib=config.memory_guard_headroom_gb,

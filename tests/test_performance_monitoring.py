@@ -6,21 +6,25 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from market_predictor.core.errors import DataReadinessError
-from market_predictor.intraday.contracts import IntradayDatasetConfig
-from market_predictor.outcome_contracts import (
-    MaturedOutcomeV1,
+from market_predictor.core.prediction_contracts import PredictionConflictError
+from market_predictor.governance.outcomes.contracts import (
+    MaturedOutcomeV2,
     PredictionMaturationIntentV2,
+    PredictionMonitoringObservationV1,
     content_sha256,
     maturation_key_sha256,
+    monitoring_observation_from_intent,
+    monitoring_semantic_sha256,
     semantic_prediction_sha256,
 )
-from market_predictor.outcome_repository import OutcomeRepository
-from market_predictor.performance_monitoring import (
+from market_predictor.governance.outcomes.performance import (
     build_performance_cohorts,
     load_performance_report,
     write_performance_report,
 )
-from market_predictor.prediction_policy import (
+from market_predictor.governance.outcomes.repository import OutcomeRepository
+from market_predictor.intraday.contracts import IntradayDatasetConfig
+from market_predictor.modeling.prediction_selection import (
     DEFAULT_PREDICTION_POLICY,
     PREDICTION_POLICY_SHA256,
 )
@@ -38,7 +42,7 @@ class PerformanceMonitoringTests(unittest.TestCase):
                 exclude={"outcome_id"},
             )
             base["entry_time_utc"] = intent.decision_time_utc
-            outcome = MaturedOutcomeV1.model_validate(
+            outcome = MaturedOutcomeV2.model_validate(
                 {**base, "outcome_id": content_sha256(base)}
             )
             repository.record_intent(intent)
@@ -158,6 +162,8 @@ class PerformanceMonitoringTests(unittest.TestCase):
             )
 
             self.assertEqual(row["matured_selected_samples"], 1)
+            self.assertEqual(row["total_predictions"], 1)
+            self.assertEqual(row["pending_selected_samples"], 0)
             self.assertAlmostEqual(row["average_net_return"], 0.10)
             self.assertEqual(len(report["source_outcome_ids"]), 1)
 
@@ -317,6 +323,93 @@ class PerformanceMonitoringTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 load_performance_report(path)
 
+    def test_invalid_observation_remains_in_population_denominator(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repository = OutcomeRepository(Path(temp_dir))
+            valid = _intent_variant("MSFT", "1", probability=0.8)
+            _record(
+                repository,
+                valid,
+                target=1,
+                net_return=0.10,
+                excess_return=0.08,
+            )
+            base = monitoring_observation_from_intent(valid).model_dump(
+                mode="python",
+                exclude={"observation_id"},
+            )
+            base.update(
+                {
+                    "ticker": "TSLA",
+                    "probability": None,
+                    "calibration_bin": None,
+                    "signal": "not_ready",
+                    "rank": None,
+                    "selection_eligible": False,
+                    "selected_for_policy": False,
+                    "actionable": False,
+                    "readiness_status": "invalid",
+                    "maturation_key": None,
+                }
+            )
+            base.pop("semantic_prediction_id")
+            base["semantic_prediction_id"] = monitoring_semantic_sha256(base)
+            invalid = PredictionMonitoringObservationV1.model_validate(
+                {**base, "observation_id": content_sha256(base)}
+            )
+            repository.record_observation(invalid)
+
+            report = build_performance_cohorts(
+                repository,
+                generated_at=datetime(2026, 8, 2, tzinfo=UTC),
+                minimum_samples=1,
+            )
+            row = next(
+                item for item in report["rows"] if item["cohort_type"] == "all"
+            )
+
+            self.assertEqual(row["total_predictions"], 2)
+            self.assertEqual(row["eligible_predictions"], 1)
+            self.assertEqual(row["selected_predictions"], 1)
+            self.assertEqual(row["matured_selected_samples"], 1)
+            self.assertEqual(len(report["source_observation_ids"]), 2)
+            self.assertEqual(len(report["source_intent_ids"]), 1)
+
+    def test_performance_report_rejects_time_regression_and_conflict(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            repository = OutcomeRepository(root / "outcomes")
+            intent = _intent_variant("MSFT", "1", probability=0.8)
+            _record(
+                repository,
+                intent,
+                target=1,
+                net_return=0.10,
+                excess_return=0.08,
+            )
+            latest = build_performance_cohorts(
+                repository,
+                generated_at=datetime(2026, 8, 3, tzinfo=UTC),
+                minimum_samples=1,
+            )
+            older = build_performance_cohorts(
+                repository,
+                generated_at=datetime(2026, 8, 2, tzinfo=UTC),
+                minimum_samples=1,
+            )
+            conflicting = build_performance_cohorts(
+                repository,
+                generated_at=datetime(2026, 8, 3, tzinfo=UTC),
+                minimum_samples=2,
+            )
+            path = root / "performance.json"
+            write_performance_report(path, latest)
+
+            with self.assertRaises(PredictionConflictError):
+                write_performance_report(path, older)
+            with self.assertRaises(PredictionConflictError):
+                write_performance_report(path, conflicting)
+
 
 def _intent_variant(
     ticker: str,
@@ -419,14 +512,24 @@ def _record(
         mode="python",
         exclude={"outcome_id"},
     )
+    execution_cost_fraction = float(base["execution_cost_bps"]) / 10_000.0
+    gross_return = net_return + execution_cost_fraction
+    label_cost_fraction = float(base["label_round_trip_cost_bps"]) / 10_000.0
     base.update(
         {
             "opportunity_target": target if intent.view == "intraday" else None,
             "downside_target": downside_target if intent.view == "intraday" else None,
             "net_return": net_return,
-            "gross_return": net_return + 0.001,
+            "gross_return": gross_return,
+            "label_net_return": gross_return - label_cost_fraction,
+            "exit_price": float(base["entry_price"]) * (1.0 + gross_return),
             "path_outcome": "target_first" if target else "stop_first",
+            "spy_return": net_return - excess_return,
+            "qqq_return": net_return - excess_return,
+            "sector_return": net_return - excess_return,
             "excess_return_vs_spy": excess_return,
+            "excess_return_vs_qqq": excess_return,
+            "excess_return_vs_sector": excess_return,
             "evidence_sha256": content_sha256(evidence),
             "entry_time_utc": (
                 intent.decision_time_utc
@@ -435,7 +538,7 @@ def _record(
             ),
         }
     )
-    outcome = MaturedOutcomeV1.model_validate(
+    outcome = MaturedOutcomeV2.model_validate(
         {**base, "outcome_id": content_sha256(base)}
     )
     repository.record_intent(intent)

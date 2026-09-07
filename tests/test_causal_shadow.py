@@ -8,12 +8,12 @@ from pathlib import Path
 import numpy as np
 
 from market_predictor.causal_shadow import load_causal_shadow_bundle
+from market_predictor.core.errors import DataReadinessError
+from market_predictor.governance.outcomes.contracts import content_sha256
+from market_predictor.governance.outcomes.repository import OutcomeRepository
 from market_predictor.hypothesis_registry import load_hypothesis
-from market_predictor.outcome_contracts import content_sha256
-from market_predictor.outcome_repository import OutcomeRepository
 from market_predictor.promotion_attestation import file_sha256
 from market_predictor.shadow_ledger import shadow_gate_failures
-from market_predictor.core.errors import DataReadinessError
 from scripts.promotion_fixture import (
     synthetic_identity_metrics,
     trust_context_for_candidate,

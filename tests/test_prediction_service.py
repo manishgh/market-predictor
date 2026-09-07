@@ -21,12 +21,13 @@ from market_predictor.core.prediction_contracts import (
     PredictionRequest,
     PredictionValidationError,
 )
-from market_predictor.drift_policy import (
+from market_predictor.feature_store import LiveFeatureStore
+from market_predictor.governance.drift.policy import (
     DriftAssessmentV2,
     DriftPolicyV2,
     DriftStateStore,
 )
-from market_predictor.feature_store import LiveFeatureStore
+from market_predictor.governance.outcomes.contracts import content_sha256
 from market_predictor.intraday.contracts import (
     INTRADAY_FEATURE_SCHEMA_VERSION,
     INTRADAY_MODEL_SCHEMA_VERSION,
@@ -34,8 +35,12 @@ from market_predictor.intraday.contracts import (
     IntradayDatasetConfig,
 )
 from market_predictor.live_features import live_feature_columns
-from market_predictor.outcome_contracts import content_sha256
-from market_predictor.prediction_policy import (
+from market_predictor.modeling.feature_reference import (
+    build_feature_reference_profile,
+    feature_reference_names_sha256,
+    feature_reference_profile_sha256,
+)
+from market_predictor.modeling.prediction_selection import (
     PredictionSelectionPolicy,
     prediction_policy_identity,
 )
@@ -237,6 +242,7 @@ class PredictionServiceTests(unittest.TestCase):
                 "prediction_serving": {
                     "attestation_trust_store": "configs/trust.json",
                     "promotion_gate_policy_sha256": "a" * 64,
+                    "drift_policy_sha256": "b" * 64,
                     "routes": {
                         "swing": {
                             "10b": {
@@ -252,6 +258,7 @@ class PredictionServiceTests(unittest.TestCase):
         route = routes["swing"]["10b"]
         self.assertEqual(route.repository, Path("models/edge_rebuild/swing/promoted"))
         self.assertEqual(route.promotion_gate_policy_sha256, "a" * 64)
+        self.assertEqual(route.drift_policy_sha256, "b" * 64)
 
     def test_serving_routes_reject_retired_five_day_swing(self) -> None:
         with self.assertRaisesRegex(ValueError, "ten-session"):
@@ -260,6 +267,7 @@ class PredictionServiceTests(unittest.TestCase):
                     "prediction_serving": {
                         "attestation_trust_store": "configs/trust.json",
                         "promotion_gate_policy_sha256": "a" * 64,
+                        "drift_policy_sha256": "b" * 64,
                         "routes": {
                             "swing": {
                                 "5d": {
@@ -282,6 +290,7 @@ class PredictionServiceTests(unittest.TestCase):
                             repository=root / "missing-generation",
                             attestation_trust_store=root / "trust.json",
                             promotion_gate_policy_sha256="a" * 64,
+                            drift_policy_sha256="b" * 64,
                         )
                     }
                 },
@@ -556,6 +565,29 @@ class PredictionServiceTests(unittest.TestCase):
                     )
                 )
 
+    def test_prediction_rejects_unapproved_drift_policy(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            dataset, model = _intraday_inputs(root)
+            store = DriftStateStore(root / "drift")
+            evaluated = datetime.now(UTC)
+            store.publish(
+                _drift_assessment("intraday", "60m", "stable", evaluated, model)
+            )
+            service = _intraday_service(
+                root,
+                dataset=dataset,
+                model=model,
+                drift_state_store=store,
+                enforce_drift=True,
+                drift_policy_sha256="f" * 64,
+            )
+
+            with self.assertRaises(PredictionDriftBlockedError):
+                service.predict_intraday(
+                    PredictionRequest(tickers=["MSFT"], mode="intraday")
+                )
+
 
 def _intraday_service(
     root: Path,
@@ -568,6 +600,7 @@ def _intraday_service(
     max_tickers_per_request: int = 100,
     drift_state_store: DriftStateStore | None = None,
     enforce_drift: bool = False,
+    drift_policy_sha256: str | None = None,
 ) -> PredictionService:
     return PredictionService(
         root,
@@ -576,6 +609,9 @@ def _intraday_service(
                 "60m": ServingRoute(
                     repository=model,
                     attestation_trust_store=Path("unused-test-trust.json"),
+                    drift_policy_sha256=(
+                        drift_policy_sha256 or DriftPolicyV2().sha256()
+                    ),
                     curated_dataset=dataset,
                     bar_timeframe="5Min",
                 )
@@ -630,6 +666,7 @@ def _write_intraday_model(path: Path) -> None:
     joblib.dump(payload, path)
     training = _intraday_frame("MSFT", rows=150)
     training[opportunity_target] = np.arange(len(training)) % 2
+    feature_reference = build_feature_reference_profile(training, features)
     model_run_id = f"prediction-service-{path.stem}"
     label_config = IntradayDatasetConfig()
     metrics = {
@@ -643,6 +680,13 @@ def _write_intraday_model(path: Path) -> None:
         "top_decile_lift": 2.1,
         "validated_rows": len(training),
         "tickers": 1,
+        "feature_reference_profile": feature_reference,
+        "feature_reference_profile_sha256": feature_reference_profile_sha256(
+            feature_reference
+        ),
+        "feature_reference_names_sha256": feature_reference_names_sha256(
+            feature_reference
+        ),
     }
     write_model_manifest(
         model_path=path,
@@ -747,6 +791,13 @@ def _drift_assessment(
         "performance_report_id": "1" * 64,
         "performance_cohort_id": "2" * 64,
         "feature_artifact_set_sha256": "3" * 64,
+        "feature_drift_report_id": "4" * 64,
+        "feature_reference_profile_sha256": metrics[
+            "feature_reference_profile_sha256"
+        ],
+        "feature_reference_names_sha256": metrics[
+            "feature_reference_names_sha256"
+        ],
         "evaluated_at_utc": evaluated_at.isoformat().replace("+00:00", "Z"),
         "state": state,
         "actionability": "actionable" if state == "stable" else "not_ready",

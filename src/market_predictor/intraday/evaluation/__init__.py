@@ -25,7 +25,7 @@ from market_predictor.intraday.contracts import (
     net_return_column,
     opportunity_target_column,
 )
-from market_predictor.prediction_policy import (
+from market_predictor.modeling.prediction_selection import (
     PredictionSelectionPolicy,
     expected_calibration_error,
     finite_or_none,

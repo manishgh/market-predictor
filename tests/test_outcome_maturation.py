@@ -7,19 +7,20 @@ from tempfile import TemporaryDirectory
 
 import pandas as pd
 
+from market_predictor.core.errors import DataReadinessError
 from market_predictor.execution_policy import EXECUTION_POLICY_SHA256
-from market_predictor.intraday.contracts import IntradayDatasetConfig
-from market_predictor.intraday.labels import add_exact_one_minute_labels
-from market_predictor.outcome_contracts import (
-    MaturedOutcomeV1,
+from market_predictor.governance.outcomes.contracts import (
+    MaturedOutcomeV2,
     PredictionMaturationIntentV2,
     maturation_key_sha256,
     semantic_prediction_sha256,
 )
-from market_predictor.outcome_maturation import mature_prediction
-from market_predictor.outcome_repository import OutcomeRepository
-from market_predictor.outcome_worker import mature_pending_intents
-from market_predictor.prediction_policy import (
+from market_predictor.governance.outcomes.maturation import mature_prediction
+from market_predictor.governance.outcomes.repository import OutcomeRepository
+from market_predictor.governance.outcomes.worker import mature_pending_intents
+from market_predictor.intraday.contracts import IntradayDatasetConfig
+from market_predictor.intraday.labels import add_exact_one_minute_labels
+from market_predictor.modeling.prediction_selection import (
     DEFAULT_PREDICTION_POLICY,
     PREDICTION_POLICY_SHA256,
 )
@@ -31,6 +32,19 @@ from tests.test_outcome_repository import _intent as swing_intent
 
 
 class OutcomeMaturationTests(unittest.TestCase):
+    def test_swing_rejects_non_daily_timeframe(self) -> None:
+        intent = swing_intent()
+        bars = _swing_bars()
+        bars["timeframe"] = "1m"
+
+        with self.assertRaises(DataReadinessError):
+            mature_prediction(
+                intent,
+                bars,
+                observed_as_of=datetime(2026, 8, 8, 12, 0, tzinfo=UTC),
+                source_artifact_sha256="9" * 64,
+            )
+
     def test_swing_remains_pending_then_matures_on_exact_session_path(self) -> None:
         intent = swing_intent()
         bars = _swing_bars()
@@ -50,12 +64,12 @@ class OutcomeMaturationTests(unittest.TestCase):
 
         self.assertEqual(pending.status, "pending")
         self.assertEqual(pending_evidence, [])
-        self.assertIsInstance(matured, MaturedOutcomeV1)
-        assert isinstance(matured, MaturedOutcomeV1)
+        self.assertIsInstance(matured, MaturedOutcomeV2)
+        assert isinstance(matured, MaturedOutcomeV2)
         self.assertEqual(matured.path_outcome, "target_first")
         self.assertAlmostEqual(matured.gross_return, 0.03)
         self.assertAlmostEqual(
-            matured.net_return,
+            matured.label_net_return,
             0.03 - float(intent.label_policy["round_trip_cost_bps"]) / 10_000.0,
         )
         self.assertIsNone(matured.opportunity_target)
@@ -73,8 +87,8 @@ class OutcomeMaturationTests(unittest.TestCase):
             source_artifact_sha256="8" * 64,
         )
 
-        self.assertIsInstance(result, MaturedOutcomeV1)
-        assert isinstance(result, MaturedOutcomeV1)
+        self.assertIsInstance(result, MaturedOutcomeV2)
+        assert isinstance(result, MaturedOutcomeV2)
         self.assertEqual(result.entry_time_utc, intent.decision_time_utc)
         self.assertEqual(result.path_outcome, "stop_first")
         self.assertEqual(result.opportunity_target, 0)
@@ -97,6 +111,32 @@ class OutcomeMaturationTests(unittest.TestCase):
         self.assertEqual(result.status, "pending")
         self.assertIn("required_bar_path_incomplete", result.reasons)
         self.assertTrue(any(intent.decision_time_utc.isoformat() in item for item in result.missing_intervals))
+        self.assertEqual(evidence, [])
+
+    def test_intraday_rejects_wrong_bar_duration(self) -> None:
+        intent = _intraday_intent()
+        bars = _intraday_bars(ambiguous=False)
+        target = bars["ticker"].eq("MSFT") & bars["bar_start_utc"].eq(
+            pd.Timestamp(intent.decision_time_utc)
+        )
+        bars.loc[target, "bar_end_utc"] = bars.loc[
+            target,
+            "bar_start_utc",
+        ] + timedelta(minutes=2)
+        bars.loc[target, "available_at_utc"] = bars.loc[target, "bar_end_utc"]
+
+        result, evidence = mature_prediction(
+            intent,
+            bars,
+            observed_as_of=datetime(2026, 7, 24, 14, 10, tzinfo=UTC),
+            source_artifact_sha256="8" * 64,
+        )
+
+        self.assertEqual(result.status, "pending")
+        self.assertIn("required_bar_path_incomplete", result.reasons)
+        self.assertTrue(
+            any("wrong_bar_duration" in item for item in result.missing_intervals)
+        )
         self.assertEqual(evidence, [])
 
     def test_intraday_maturation_matches_offline_label_builder(self) -> None:
@@ -124,15 +164,15 @@ class OutcomeMaturationTests(unittest.TestCase):
             source_artifact_sha256="8" * 64,
         )
 
-        self.assertIsInstance(matured, MaturedOutcomeV1)
-        assert isinstance(matured, MaturedOutcomeV1)
+        self.assertIsInstance(matured, MaturedOutcomeV2)
+        assert isinstance(matured, MaturedOutcomeV2)
         self.assertEqual(matured.path_outcome, offline["path_outcome"])
         self.assertAlmostEqual(
             matured.gross_return,
             float(offline["path_realized_return_gross_5m"]),
         )
         self.assertAlmostEqual(
-            matured.net_return,
+            matured.label_net_return,
             float(offline["path_realized_return_net_5m"]),
         )
         self.assertAlmostEqual(matured.mfe, float(offline["path_mfe_5m"]))
@@ -168,14 +208,14 @@ class OutcomeMaturationTests(unittest.TestCase):
             source_artifact_sha256="9" * 64,
         )
 
-        self.assertIsInstance(matured, MaturedOutcomeV1)
-        assert isinstance(matured, MaturedOutcomeV1)
+        self.assertIsInstance(matured, MaturedOutcomeV2)
+        assert isinstance(matured, MaturedOutcomeV2)
         self.assertAlmostEqual(
             matured.gross_return,
             float(offline["exit_price"]) / 100.0 - 1.0,
         )
         self.assertAlmostEqual(
-            matured.net_return,
+            matured.label_net_return,
             float(offline["exit_price"]) / 100.0
             - 1.0
             - float(intent.label_policy["round_trip_cost_bps"]) / 10_000.0,
@@ -303,6 +343,7 @@ def _daily_row(
         "volume": 1_000_000.0,
         "price_feed": "sip",
         "adjustment": "all",
+        "timeframe": "1d",
     }
 
 
@@ -335,6 +376,7 @@ def _intraday_bars(*, ambiguous: bool) -> pd.DataFrame:
                     "volume": 100_000.0,
                     "price_feed": "sip",
                     "adjustment": "all",
+                    "timeframe": "1m",
                 }
             )
     return pd.DataFrame(rows)

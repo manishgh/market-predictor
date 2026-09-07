@@ -36,16 +36,16 @@ from market_predictor.modeling.calibration import (
     fit_final_isotonic,
     fit_prior_isotonic,
 )
+from market_predictor.modeling.prediction_selection import (
+    INTRADAY_SELECTION_DOWNSIDE_CEILING,
+    group_ranking_metrics,
+    intraday_selection_eligible,
+)
 from market_predictor.modeling.validation import (
     PurgedWalkForwardFold,
     causal_fold_training_indices,
     deterministic_stratified_ticker_holdout,
     identity_set_sha256,
-)
-from market_predictor.prediction_policy import (
-    INTRADAY_SELECTION_DOWNSIDE_CEILING,
-    group_ranking_metrics,
-    intraday_selection_eligible,
 )
 from market_predictor.registry import feature_schema_hash
 from market_predictor.resources import (

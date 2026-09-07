@@ -41,17 +41,22 @@ from market_predictor.core.prediction_contracts import (
     SwingPrediction,
     UnifiedTickerPrediction,
 )
-from market_predictor.drift_policy import DriftAssessmentV2, DriftStateStore
 from market_predictor.feature_store import LiveFeatureStore
+from market_predictor.governance.drift.policy import DriftAssessmentV2, DriftStateStore
 from market_predictor.governance.promotion.bundle_contracts import PromotedSwingBundle
 from market_predictor.intraday.model import score_intraday_payload
-from market_predictor.modeling.strategy_contract import StrategyContract, load_strategy_contract
-from market_predictor.prediction_policy import (
+from market_predictor.modeling.feature_reference import (
+    feature_reference_names_sha256,
+    feature_reference_profile_sha256,
+)
+from market_predictor.modeling.prediction_selection import (
     PredictionSelectionPolicy,
+    SwingPredictionPolicy,
     intraday_decision_score,
     parse_prediction_policy,
     select_intraday_candidates,
 )
+from market_predictor.modeling.strategy_contract import StrategyContract, load_strategy_contract
 from market_predictor.readiness import (
     INVALID,
     VALID,
@@ -85,7 +90,6 @@ from market_predictor.swing.contracts.outcome_policy import (
     swing_outcome_policy,
     swing_outcome_policy_sha256,
 )
-from market_predictor.swing.contracts.prediction_policy import SwingPredictionPolicy
 from market_predictor.swing.selection import (
     select_constrained_swing_portfolio,
 )
@@ -115,10 +119,13 @@ def serving_routes_from_config(config: Mapping[str, Any]) -> dict[str, dict[str,
     route_config = serving.get("routes") if isinstance(serving, dict) else None
     trust_store = str(serving.get("attestation_trust_store", "")).strip() if isinstance(serving, dict) else ""
     promotion_gate_policy_sha256 = str(serving.get("promotion_gate_policy_sha256", "")).strip().lower() if isinstance(serving, dict) else ""
+    drift_policy_sha256 = str(serving.get("drift_policy_sha256", "")).strip().lower() if isinstance(serving, dict) else ""
     if not trust_store:
         raise ValueError("prediction_serving.attestation_trust_store must be configured")
     if len(promotion_gate_policy_sha256) != 64 or any(character not in "0123456789abcdef" for character in promotion_gate_policy_sha256):
         raise ValueError("prediction_serving.promotion_gate_policy_sha256 must be configured")
+    if len(drift_policy_sha256) != 64 or any(character not in "0123456789abcdef" for character in drift_policy_sha256):
+        raise ValueError("prediction_serving.drift_policy_sha256 must be configured")
     if not isinstance(route_config, dict):
         raise ValueError("prediction_serving.routes must be configured")
     routes: dict[str, dict[str, ServingRoute]] = {}
@@ -154,6 +161,7 @@ def serving_routes_from_config(config: Mapping[str, Any]) -> dict[str, dict[str,
                 repository=Path(repository),
                 attestation_trust_store=Path(trust_store),
                 promotion_gate_policy_sha256=promotion_gate_policy_sha256,
+                drift_policy_sha256=drift_policy_sha256,
                 bar_timeframe=str(raw_route.get("bar_timeframe", "unknown")).strip() or "unknown",
                 estimated_resident_gib=estimated_resident_gib,
                 max_model_bytes=max_model_bytes,
@@ -238,6 +246,8 @@ class PredictionService:
             for route in mode_routes.values():
                 if route.max_model_bytes + route.max_feature_bytes > maximum_artifact_bytes:
                     raise ValueError("combined route artifact byte limits exceed the memory safety threshold")
+                if enforce_drift and not _is_sha256(route.drift_policy_sha256):
+                    raise ValueError("serving route has no valid drift policy identity")
         if max_concurrent_inference != 1 or max_tickers_per_request < 1:
             raise ValueError("inference concurrency must be one and the ticker limit must be positive")
         self.max_concurrent_inference = max_concurrent_inference
@@ -840,6 +850,9 @@ class PredictionService:
         )
         if any(getattr(assessment, field) != value for field, value in route_identity.items()):
             raise DataReadinessError("route drift assessment model or policy identity mismatch")
+        expected_policy_sha256 = self.routes[mode][horizon].drift_policy_sha256
+        if assessment.policy_sha256 != expected_policy_sha256:
+            raise DataReadinessError("route drift assessment policy identity mismatch")
         evaluated_at = assessment.evaluated_at_utc.astimezone(UTC)
         if checked_at.astimezone(UTC) - evaluated_at > self.maximum_drift_assessment_age:
             raise DataReadinessError("route drift assessment is stale")
@@ -1136,6 +1149,29 @@ class PredictionService:
         extra = extra_value if isinstance(extra_value, dict) else {}
         metrics_value = manifest.get("metrics")
         metrics = metrics_value if isinstance(metrics_value, dict) else {}
+        feature_reference = metrics.get("feature_reference_profile")
+        feature_reference_sha256 = (
+            feature_reference_profile_sha256(feature_reference)
+            if isinstance(feature_reference, dict)
+            else None
+        )
+        feature_names_sha256 = (
+            feature_reference_names_sha256(feature_reference)
+            if isinstance(feature_reference, dict)
+            else None
+        )
+        stated_reference_sha256 = metrics.get("feature_reference_profile_sha256")
+        if (
+            stated_reference_sha256 is not None
+            and stated_reference_sha256 != feature_reference_sha256
+        ):
+            raise DataReadinessError("model feature reference identity is invalid")
+        stated_names_sha256 = metrics.get("feature_reference_names_sha256")
+        if (
+            stated_names_sha256 is not None
+            and stated_names_sha256 != feature_names_sha256
+        ):
+            raise DataReadinessError("model feature-name identity is invalid")
         return ModelInfo(
             path=str(model_path),
             status=status,
@@ -1160,6 +1196,8 @@ class PredictionService:
                 if isinstance(extra.get("prediction_policy"), dict)
                 else (dict(metrics["prediction_policy"]) if isinstance(metrics.get("prediction_policy"), dict) else None)
             ),
+            feature_reference_profile_sha256=feature_reference_sha256,
+            feature_reference_names_sha256=feature_names_sha256,
         )
 
     def _response(
@@ -1451,6 +1489,16 @@ def _edge_swing_model_info(
     prediction_policy_sha256: str,
 ) -> ModelInfo:
     bundle = generation.bundle
+    feature_reference = generation.model_payload.get("feature_reference_profile")
+    if not isinstance(feature_reference, dict):
+        raise DataReadinessError("promoted swing model has no feature reference")
+    feature_reference_sha256 = feature_reference_profile_sha256(feature_reference)
+    feature_names_sha256 = feature_reference_names_sha256(feature_reference)
+    if (
+        generation.model_payload.get("feature_reference_profile_sha256")
+        != feature_reference_sha256
+    ):
+        raise DataReadinessError("promoted swing feature reference identity is invalid")
     return ModelInfo(
         path=str(bundle_root / "generations" / generation.generation_id / bundle.model_artifact_path),
         status=bundle.model_status,
@@ -1466,9 +1514,11 @@ def _edge_swing_model_info(
         created_at_utc=bundle.promoted_at_utc.isoformat(),
         label_policy_sha256=swing_outcome_policy_sha256(contract.swing),
         label_policy=swing_outcome_policy(contract.swing),
-        execution_policy_sha256=bundle.strategy_contract_sha256,
+        execution_policy_sha256=bundle.execution_policy_sha256,
         prediction_policy_sha256=prediction_policy_sha256,
         prediction_policy=prediction_policy,
+        feature_reference_profile_sha256=feature_reference_sha256,
+        feature_reference_names_sha256=feature_names_sha256,
     )
 
 
@@ -2052,6 +2102,10 @@ def _model_drift_identity(model: ModelInfo) -> dict[str, str]:
         "prediction_policy_sha256": model.prediction_policy_sha256,
         "label_policy_sha256": model.label_policy_sha256,
         "execution_policy_sha256": model.execution_policy_sha256,
+        "feature_reference_profile_sha256": (
+            model.feature_reference_profile_sha256
+        ),
+        "feature_reference_names_sha256": model.feature_reference_names_sha256,
     }
     if any(not _is_sha256(value) for value in values.values()):
         raise DataReadinessError("active model identity is incomplete for drift enforcement")
