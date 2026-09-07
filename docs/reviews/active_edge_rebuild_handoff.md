@@ -8,25 +8,83 @@ Repository: `C:\project\market-predictor`
 
 Branch: `er-intraday-refactoring`
 
-Last completed implementation commit: `880f2a8` (`Consolidate outcome and drift governance`)
+Last completed implementation commit: `3b2bff5` (`Define SPY-relative swing research and verify evidence inventory`)
 
 ## Purpose
 
-Current user request, 2026-09-07: research and plan **long-only swing stock selection
-that can demonstrate after-cost outperformance of SPY**. Read the new Long-Only Swing
-Research And Implementation Plan near the beginning of
-`docs/active_edge_rebuild_plan.md`. Intraday and unrelated structural cleanup are
-paused. No model, source set, economic gate, or runtime behavior was changed during
-this research/documentation checkpoint. No new training was requested or run.
+Current user request, 2026-09-07: implement the **first two checkpoints** of the
+long-only swing plan, using High effort. Checkpoint one is verified and pushed;
+checkpoint two accounting is next. Stop after its verification and Git closure.
+Do not start issuer-feature expansion, training or intraday development in this turn.
+Read the Long-Only Swing Research And Implementation Plan at the front of
+`docs/active_edge_rebuild_plan.md`. No real model was trained or promoted.
+
+## Completed Objective And Evidence Checkpoint
+
+- `configs/swing_research.toml` and `swing/contracts/research.py` freeze the new
+  SPY objective separately from historical strategy/feature identity. Config hash:
+  `e37a72796bac9c08ad92a467d079d2a70b4d938f34e286f8dd1e0129a6e9007e`.
+- `swing/evaluation/research_evidence.py` and `configs/swing_research_evidence.toml`
+  provide a bounded metadata-only audit, exposed as
+  `market-predictor-research audit-swing-research-evidence --root .`.
+  Inventory hash: `883a141b03b1016bfdf97d5ebbb789cddbfe9ac51eb65262854e17b6cfd01d69`.
+  Real audit passed: fifteen records, 120 ordered features and sixty recorded trial
+  entries in five manifests. Duplicates and uncovered lifetime history are explicit.
+  It follows no raw/prediction payloads and does not parse the exposed evaluation.
+- The retained trainer refuses July 2025-June 2026 as a new final test before
+  loading data or fitting. Other dates are not automatically certified fresh.
+- Protocol and feature audit now match the 2019-07-09 cutoff, retained warm-up,
+  current split config, exposed historical test and bounded regression campaign.
+- Verification: 39 focused tests; complete suite **2,070 passed, three skipped,
+  133 warnings, 27m08s**; full `ruff check src tests`; strict mypy on 315 source
+  files; real CLI audit; diff checks. Two independent reviewers had no remaining
+  supported finding. Full-suite integration omissions in the documented split
+  sentence and reviewed CLI inventory were corrected before the passing rerun.
+- Existing static debt was resolved mechanically. One reference-proven unused,
+  invalid duplicate `intraday/datasets/dataset_io.py` was removed; the canonical
+  loader in `intraday/training/training.py` is unchanged semantically. A4.3's
+  current transformation remains identical. Import-only KS4 implementation hashes
+  differ, but affected retained experiments are rejected/unserved and unchanged;
+  no accepted authority or model was invalidated. Do not rebuild them.
+- Sampled test working sets were approximately 0.21-0.25 GiB; no Python worker
+  remained. The access-restricted historical evaluation required elevated read
+  access for hashing only. No permissions or protected data were changed.
+
+### Accounting Design Review
+
+Reuse the existing daily ledger. Allocate purchase notional `prior NAV / 10`,
+equal-weight within the cohort, then cap pro rata against cash including prepaid
+costs. Entries precede exits; proceeds are available next session. Add the exact
+original label cost back to cumulative net paths to recover gross holding values,
+then charge the configured cost once through cash. Aggregate repeated-security
+exposure without merging different exit lots. Include zero-selection/idle days and
+the fixed ten-session maturation tail; validate all dates before outcome loading.
+
+Use actual full-calendar SPY bars, not approximate barrier-exit-close comparisons.
+Keep those approximations diagnostic. Account returns need not equal net labels:
+upfront costs reduce affordable purchase notional. Prove normalized cash, holdings,
+realized/unrealized P&L and NAV reconciliation with deterministic fixtures and a
+hash-bound retained-data control, never fitting-data predictions called out-of-sample.
+
+Both accounting implementation and source admission must be honest. Current bars
+declare SIP and `adjustment=all`, but independent total-return/distribution proof
+has not been established. Reviewer-approved closure is **accounting code verified;
+price-basis admission blocked**. Emit `price_ratio_diagnostics` and
+`price_basis_pending`; positive metrics or caller-authored passed/verified flags
+must not override that blocker. No speculative bulk download or invented dividend
+credit is needed. Do not claim raw executable fills or verified SPY outperformance.
 
 This repository produces prediction intelligence and abstention. Alerts, orders,
 positions, portfolio risk, and execution remain in `trading_flow`.
 
-The proposed next implementation needs explicit objective, target, policy and
-validation contracts before fitting. It is not another promise to reach AUC 0.60.
+The objective, target, policy and validation declarations are now frozen; their
+accounting implementation must be verified before fitting. This is not a promise to reach AUC 0.60.
 Existing rejected artifacts remain rejected and no promoted serving bundle exists.
 
-## Current Swing Research Findings
+## Pre-Implementation Research Findings
+
+The following records the research preceding `3b2bff5`. The completed checkpoint
+above supersedes its protocol and contract gaps; accounting gaps remain current.
 
 Two independent read-only reviewers inspected model/evaluation evidence and catalyst
 research respectively. The main reviewer also reproduced the benchmark metadata/code
@@ -69,12 +127,12 @@ conflict and read the historical technical evaluation's holdout-access fields.
    689,467 events across 624 issuers; this review inspected manifests, not every raw
    filing. Existing canonical SEC text is form-level and does not prove that original
    exhibits, guidance values, or earnings surprises are available as model inputs.
-5. **Stale split prose.**
-   `docs/model_training_validation_protocol.md` still describes a May-2019 requirement
+5. **Stale split prose, resolved in `3b2bff5`.**
+   `docs/model_training_validation_protocol.md` previously described a May-2019 requirement
    and missing warm-up. Current temporal config and the feature audit use
    2019-07-09 through 2024-05-28 for initial fit; the panel request includes history
-   from 2018-05-29. Reconcile the protocol in the first implementation checkpoint,
-   without downloading already-retained history or moving the approved news cutoff.
+   from 2018-05-29. The protocol now agrees, without downloading already-retained
+   history or moving the approved news cutoff.
 
 ### Recommended Implementation Sequence
 
@@ -1481,19 +1539,17 @@ occurred.
 
 ## Exact Next Checkpoint
 
-Exact next checkpoint: **Define the SPY objective and reconcile evidence** in the
-active plan's Long-Only Swing Research And Implementation Plan. This turn completed
-research/planning only. Before training, reconcile fixed-horizon versus managed
-targets, approximate benchmark gates, held-out-data exposure, the stale validation
-protocol, source content coverage, and the frozen experiment/statistical contract.
-Do not read additional test outcomes to choose the design. The already exposed
+Exact next checkpoint: **Reconcile returns, capital and SPY accounting**. The first
+approved checkpoint is complete in `3b2bff5`; implement only the second, verify it,
+push its code and documentation, then stop. Preserve historical artifacts. No real
+training or further protected outcome access is permitted. The already exposed
 July-2025 to June-2026 calendar cannot supply a new untouched final test.
 
 Read in order: `AGENTS.md`, the new current section of the active plan, this handoff's
 current findings, the feature audit, temporal/training/strategy configs, and the named
 evaluation owners. Do not restart unrelated structural cleanup or intraday work.
-Ruff/mypy debt remains recorded rather than falsely passed; code checkpoint
-verification still follows the covenant. Implementation rollback anchor is `880f2a8`.
+Full Ruff/mypy now pass; older debt statements below/above are historical. Code
+checkpoint verification still follows the covenant. Rollback anchor is `3b2bff5`.
 
 Research artifacts to inspect without retraining:
 
@@ -1511,4 +1567,4 @@ Research artifacts to inspect without retraining:
 Use existing data first. Parallel reviewers and disjoint light implementation tasks
 are permitted; heavy tests and training remain sequential. Stop and close owned
 workers/reviewers when their bounded work is complete. No deployment, provider
-collection, model training, or promotion occurred in this documentation checkpoint.
+collection, real model training, or promotion occurred in the contract checkpoint.

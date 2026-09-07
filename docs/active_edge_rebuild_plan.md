@@ -91,8 +91,8 @@ document does not silently modify a frozen model or authorize serving.
   `edge_rebuild/swing_training.py` metadata says it is diagnostic only. Daily close
   benchmark prices are not necessarily contemporaneous with a stock barrier fill.
   Its numerical bias is unmeasured; correcting it does not automatically create alpha.
-- The May-2019 schedule/missing-warm-up language in the older validation protocol is
-  stale. Current config begins decisions 2019-07-09, and the panel request records
+- The May-2019 schedule/missing-warm-up language in the older validation protocol was
+  stale and is corrected in `3b2bff5`. Current config begins decisions 2019-07-09, and the panel request records
   history beginning 2018-05-29. Do not download that history again based on stale prose.
 
 Immediate diagnosis must distinguish six measurable causes: weak stock ranking,
@@ -290,11 +290,11 @@ eligibility or hard sector allocation is a separately named contract decision.
 
 ### Validation And Success
 
-- First reconcile the current split config: the feature audit describes initial fit
+- The reconciled split config and feature audit describe initial fit
   2019-07-09 through 2024-05-28, a ten-session embargo, 252 validation sessions, and
-  locked test 2025-07-01 through 2026-06-30. The older protocol's May-2019 requirement
-  conflicts with the approved news cutoff. Do not move the cutoff or open outcomes
-  while reconciling this discrepancy.
+  historical test 2025-07-01 through 2026-06-30. The protocol's obsolete May-2019
+  requirement was removed in `3b2bff5`. Do not move the approved cutoff or claim
+  that resolving this prose discrepancy restores holdout freshness.
 - Use session-grouped rolling/expanding development folds inside the permitted fit
   range, with purging based on actual label end time and at least the ten-session
   embargo. All fitting, normalization, clipping, feature selection and calibration
@@ -328,10 +328,11 @@ eligibility or hard sector allocation is a separately named contract decision.
 
 ### Ordered Checkpoints
 
-Only the first checkpoint is current. Design is recorded; implementation/training has
-not started. Names describe behavior rather than experiment serial numbers.
+The user approved the first two checkpoints only. The objective/evidence checkpoint
+is complete; accounting is current. No real model training is authorized or started.
+Names describe behavior rather than experiment serial numbers.
 
-1. **Define the SPY objective and reconcile evidence (`in progress`).**
+1. **Define the SPY objective and reconcile evidence (`complete`).**
    Freeze the new research objective, exact candidate/policy budget, chronological
    split, capital/cost assumptions, statistical procedure and target semantics.
    Reconcile conflicting current documents/configs without rewriting old artifacts.
@@ -342,7 +343,7 @@ not started. Names describe behavior rather than experiment serial numbers.
    Exit: one reproducible contract and no contradictory current instructions; no
    training or locked-outcome access. Review: independent ML/economics reviewer.
 
-2. **Reconcile returns, capital and SPY accounting (`pending`).**
+2. **Reconcile returns, capital and SPY accounting (`in progress`).**
    Extend the existing label/evaluation owners with named fixed-horizon return
    evidence and a funded daily ledger. Replay retained development predictions only
    if immutable row-level prediction evidence actually exists. The inspected
@@ -362,6 +363,12 @@ not started. Names describe behavior rather than experiment serial numbers.
    overlapping trades conserve cash; no negative cash/leverage; no free dividends;
    mark-to-market drawdowns; gap/collision cases; deterministic replay and tamper
    rejection. Exact managed benchmark unavailability remains visible.
+   Reviewed admission boundary: accounting-code acceptance is separate from
+   total-return evidence. Existing `adjustment=all` metadata does not independently
+   reconcile distributions or prove executable raw fills. Until scope-matched
+   source proof exists, emit price-ratio diagnostics and `price_basis_pending`,
+   with economic eligibility false. Do not accept a caller's `passed=true` assertion
+   as proof. No speculative bulk collection is required for this code checkpoint.
 
 3. **Complete causal news and reaction features (`pending`).**
    Audit existing Alpaca/SEC artifacts, broaden eligible issuer categories only after
@@ -438,19 +445,35 @@ a substitute for diagnosing which of those states actually applies.
 
 ### Research Checkpoint Status
 
-Research and planning only. No implementation files, feature authorities, trained
-models, selection thresholds, promotions or source archives are changed by this
-documentation checkpoint. Existing failed models remain failed. The immediate next
-implementation is the objective/evidence reconciliation above, not another broad
-cleanup or intraday run. The historical sections below explain retained artifacts;
-they are not a competing current work queue.
+Implementation `3b2bff5` completes the objective/evidence checkpoint and is pushed.
+`configs/swing_research.toml` freezes six return specifications, two policies,
+20/40-bps costs, funded one-tenth-NAV cohorts, delayed exit proceeds, one-sided
+Bonferroni bounds over twelve comparisons, 20/40-session blocks, 20,000 resamples,
+and one prospective assessment after 252 decision sessions plus ten maturation
+sessions. Its SHA-256 is
+`e37a72796bac9c08ad92a467d079d2a70b4d938f34e286f8dd1e0129a6e9007e`.
 
-Two independent reviewers completed the evidence/design pass. Their actionable
-corrections are incorporated: exposed historical holdout, approximate benchmark
-semantics, SEC content versus inventory, conditional prediction replay, reaction
-start boundaries, and missed-event/control-cohort audit. Both continuity-document
-tests passed; no training or full-suite run was performed for this documentation-only
-change. Implementation exit gates above are future work, not claimed passes.
+`audit-swing-research-evidence` verifies fifteen pinned metadata/config records,
+120 ordered technical inputs and sixty recorded historical trial entries across
+five manifests. Counts are not unique/lifetime experiments or raw-source replay.
+The known exposed evaluation is hash-checked, never parsed for outcomes. The
+retained trainer rejects its exposed final interval before panel loading or fitting.
+Historical strategy/data hashes are unchanged; no source or model was rebuilt.
+
+Two independent reviewers found no remaining supported checkpoint finding. The
+final full suite passed 2,070 tests with three skips and 133 warnings in 27m08s.
+Focused verification passed 39 tests; repository-wide `ruff check src tests`,
+strict mypy over 315 source files, real metadata audit and diff checks passed.
+Sampled test working sets were 0.21-0.25 GiB, not a measured training-memory claim.
+No Python worker remained after verification.
+
+The full static gate required mechanical import/string cleanup and deletion of
+one proven unreferenced duplicate loader, `intraday/datasets/dataset_io.py`.
+Its canonical implementation remains in `intraday/training/training.py`. This is
+not an intraday redesign. Current A4.3 transformation identity remains unchanged;
+import-only KS4 code-byte identities change, while rejected historical evidence
+stays immutable. No accepted/current authority was invalidated or regenerated.
+The historical sections below are retained evidence, not another active queue.
 
 ## Frozen Data Policy
 
