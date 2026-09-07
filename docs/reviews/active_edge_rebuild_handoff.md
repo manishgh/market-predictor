@@ -8,16 +8,84 @@ Repository: `C:\project\market-predictor`
 
 Branch: `er-intraday-refactoring`
 
-Last completed implementation commit: `3b2bff5` (`Define SPY-relative swing research and verify evidence inventory`)
+Last completed implementation commit: `6758671` (`Add funded swing accounting and immutable control audit`)
 
 ## Purpose
 
-Current user request, 2026-09-07: implement the **first two checkpoints** of the
-long-only swing plan, using High effort. Checkpoint one is verified and pushed;
-checkpoint two accounting is next. Stop after its verification and Git closure.
-Do not start issuer-feature expansion, training or intraday development in this turn.
+Current user request, 2026-09-07: after initially approving two checkpoints using
+High effort, the user authorized continuing the remaining long-only swing work
+through model training without waiting for another model. Checkpoint one is complete.
+Checkpoint two code is verified/pushed, but real-data acceptance is blocked; do not
+describe both checkpoints as fully accepted. Continue by resolving the identified
+outcome/source issues before dependent feature expansion and training. Intraday
+remains paused. No backward compatibility was requested or added. SPY outperformance
+is an empirical objective, not a promised result.
 Read the Long-Only Swing Research And Implementation Plan at the front of
 `docs/active_edge_rebuild_plan.md`. No real model was trained or promoted.
+
+## Accounting Implementation And Current Blocker
+
+- Pushed implementation: `6758671`. The single ledger is now
+  `swing/evaluation/ledger.py`; paired SPY evaluation is
+  `swing/evaluation/accounting.py`; shared horizon-neutral bootstrap is
+  `modeling/resampling.py`. Retained trainer callers use these owners directly.
+  Old helper definitions/re-exports and the erroneous control module path are gone.
+- Offline orchestration belongs to `research/swing_accounting_control.py`, with
+  frozen policy `configs/swing_accounting_audit.toml` and CLI
+  `market-predictor-research audit-swing-accounting-control --root . --output-directory <new-directory>`.
+  It owns the root-scoped heavy-job lease, projects monthly files, selects by
+  causal eligibility/momentum before outcomes, and binds all input identities.
+- The real retained run at `data/reports/swing_accounting_control/_manifest.json`
+  is **blocked**, with `accounting_status=not_run`. All 30,525 selected stock-days
+  remain in its receipt. Seventy have all eight fixed-horizon return fields
+  nonfinite: 560 missing values. No benchmark payloads or accounting performance
+  were read/produced after this failure; no validation/test outcomes were read.
+- The calendar is initial-fit only: 1,221 decision sessions beginning 2019-07-09,
+  1,230 valuation sessions from 2019-07-10 through 2024-05-28, with the final ten
+  source sessions reserved for outcome maturation. No alternative window was tried.
+- File SHA-256:
+  `f4411da442dcce28c904050045371c3e1ee20e4e1f6e9f041686e7c4f385ee9e`.
+  Internal `audit_sha256`:
+  `9c0fb6ac2a11262bc98e02373e526b7a16ac7ad358c5154ea7731e8df7faec0b`.
+  An exact post-ownership replay in `.test-tmp/swing-accounting-owner-replay`
+  reproduced identical receipt bytes. Preserve the original evidence.
+- Bounded reason replay found 18 affected tickers. All 70 paths are inexact;
+  67 also cross recorded membership boundaries. Seventeen explicitly cross missing
+  sessions (CTXS 10, FRC 2, XLNX 5), overlapping those boundary cases. BIIB's two
+  rows and CTXS's first row have expected windows but inexact paths. Full ticker
+  counts are in `feature_engineering_audit_20260801.md`. The downstream sector-label
+  failure does not prove absent sector ETF bars. Provider causes/delisting proceeds
+  were not established. This is not a shortage of historical news.
+- Remaining data work must reconstruct outcomes for already-selected holdings,
+  including holdings crossing index removal where bars/proceeds are verifiable.
+  Inspect retained sources first. Do not drop the 70 rows, assume zero returns,
+  fabricate exits, overwrite immutable authorities, or reinterpret the five-percent
+  whole-security allowance as permission for future-aware selected-row filtering.
+- A separate blocker remains: SIP/`adjustment=all` declarations do not independently
+  prove total-return/distribution reconciliation. Price-ratio diagnostics stay
+  `price_basis_pending` and ineligible. Operator-authored passed flags cannot waive it.
+  Exposure/cash averages and ex-post beta are descriptive; exact intraday exposure-
+  matched SPY/cash-drag decomposition is explicitly unavailable.
+
+### Verification And Continuation
+
+Final complete suite: **2,159 passed, three skipped, 133 warnings in 20m32s**.
+Focused boundary/accounting/CLI/training suite: 340 passed, one skipped.
+Full Ruff and strict mypy (319 source files) pass. Report:
+`.test-tmp/swing-funded-accounting-final.xml`.
+
+The first full run exposed a new swing-to-edge_rebuild dependency violation after
+1,149 passes. It was fixed by relocating canonical owners and changing direct
+callers, not by exceptions, wrappers or re-exports. The independent reviewer checked
+that correction; final full verification followed the last code change. A final
+rehash-mutation test also covers source changes before blocked-report publication.
+Two independent reviewers have no remaining supported code finding. Both agents
+are closed; no owned Python worker remains. Sampled test RSS was at most 0.256 GiB,
+not a measured whole-run peak. No training or provider collection occurred.
+
+Only generated `.test-tmp` artifacts remain untracked; do not stage them or perform
+broad cleanup. Existing access-restricted ignored test directories are unrelated.
+The following completed/historical sections are context, not another work queue.
 
 ## Completed Objective And Evidence Checkpoint
 
@@ -78,13 +146,15 @@ This repository produces prediction intelligence and abstention. Alerts, orders,
 positions, portfolio risk, and execution remain in `trading_flow`.
 
 The objective, target, policy and validation declarations are now frozen; their
-accounting implementation must be verified before fitting. This is not a promise to reach AUC 0.60.
+accounting code is verified, but selected-outcome and price-basis admission remain
+blocked before fitting. This is not a promise to reach AUC 0.60.
 Existing rejected artifacts remain rejected and no promoted serving bundle exists.
 
 ## Pre-Implementation Research Findings
 
-The following records the research preceding `3b2bff5`. The completed checkpoint
-above supersedes its protocol and contract gaps; accounting gaps remain current.
+The following records research preceding `3b2bff5`. Implementations above supersede
+its protocol, contract and accounting-code gaps. Only the explicitly named current
+data/price-basis blockers above are active; do not reopen corrected historical findings.
 
 Two independent read-only reviewers inspected model/evaluation evidence and catalyst
 research respectively. The main reviewer also reproduced the benchmark metadata/code
@@ -1539,17 +1609,23 @@ occurred.
 
 ## Exact Next Checkpoint
 
-Exact next checkpoint: **Reconcile returns, capital and SPY accounting**. The first
-approved checkpoint is complete in `3b2bff5`; implement only the second, verify it,
-push its code and documentation, then stop. Preserve historical artifacts. No real
-training or further protected outcome access is permitted. The already exposed
-July-2025 to June-2026 calendar cannot supply a new untouched final test.
+Exact next checkpoint: **Resolve selected-outcome gaps for accounting acceptance**.
+The objective checkpoint is complete in `3b2bff5`; accounting implementation is
+verified/pushed in `6758671`, but the frozen real-data control remains blocked on
+70 outcomes and unverified price basis. The user's latest instruction authorizes
+continuing the ordered plan through training after documentation closure.
+Investigate retained bars and membership-boundary label semantics
+for the 18 named tickers before changing data contracts. Do not select another
+population/window to obtain a pass. Dependent feature expansion and real training
+must still pass their frozen gates. The exposed July-2025 to June-2026 interval is not fresh.
 
 Read in order: `AGENTS.md`, the new current section of the active plan, this handoff's
 current findings, the feature audit, temporal/training/strategy configs, and the named
 evaluation owners. Do not restart unrelated structural cleanup or intraday work.
 Full Ruff/mypy now pass; older debt statements below/above are historical. Code
-checkpoint verification still follows the covenant. Rollback anchor is `3b2bff5`.
+checkpoint verification still follows the covenant. Run package-boundary tests in
+the focused pass before the full suite. Pre-accounting rollback anchor is `55133e4`;
+the verified current implementation is `6758671`.
 
 Research artifacts to inspect without retraining:
 

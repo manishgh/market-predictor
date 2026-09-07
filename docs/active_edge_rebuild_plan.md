@@ -86,11 +86,11 @@ document does not silently modify a frozen model or authorize serving.
   trade was -27.37/-9.27 bps. Unseen-security portfolios returned -1.58%/-0.23%.
   These are exposed historical diagnostics, not exact portfolio SPY excess and not
   performance of the current technical authority.
-- A current semantic conflict is reproduced: `training/economics.py::_economic_gate`
-  and swing candidate ordering use managed-exit-session-close benchmark excess, while
-  `edge_rebuild/swing_training.py` metadata says it is diagnostic only. Daily close
-  benchmark prices are not necessarily contemporaneous with a stock barrier fill.
-  Its numerical bias is unmeasured; correcting it does not automatically create alpha.
+- A semantic conflict was reproduced and corrected in `6758671`: approximate
+  managed-exit-session-close excess no longer authorizes or ranks swing candidates.
+  Reporting now matches the required funded daily SPY comparison. Daily benchmark
+  closes are not contemporaneous stock barrier quotes; the old numerical bias is
+  unmeasured, and correcting accounting does not automatically create alpha.
 - The May-2019 schedule/missing-warm-up language in the older validation protocol was
   stale and is corrected in `3b2bff5`. Current config begins decisions 2019-07-09, and the panel request records
   history beginning 2018-05-29. Do not download that history again based on stale prose.
@@ -328,8 +328,12 @@ eligibility or hard sector allocation is a separately named contract decision.
 
 ### Ordered Checkpoints
 
-The user approved the first two checkpoints only. The objective/evidence checkpoint
-is complete; accounting is current. No real model training is authorized or started.
+The user initially approved two checkpoints, then explicitly authorized continuing
+the remaining work through model training on 2026-09-07. The objective/evidence
+checkpoint is complete. Accounting code is verified and pushed in `6758671`, but
+retained-data acceptance remains blocked by 70 incomplete selected outcomes and
+unverified price basis. Resolve these before the dependent feature/training steps;
+the expanded authorization does not waive causal, accounting or evidence gates.
 Names describe behavior rather than experiment serial numbers.
 
 1. **Define the SPY objective and reconcile evidence (`complete`).**
@@ -344,6 +348,11 @@ Names describe behavior rather than experiment serial numbers.
    training or locked-outcome access. Review: independent ML/economics reviewer.
 
 2. **Reconcile returns, capital and SPY accounting (`in progress`).**
+   Implementation is verified/pushed (`6758671`); real-data acceptance is blocked,
+   not complete. The frozen control selected 30,525 stock-days before loading
+   outcomes; 70 have incomplete fixed-horizon labels. No filtered replacement
+   population or real-data accounting result was produced. Exact evidence follows
+   under Research Checkpoint Status and in the current feature audit.
    Extend the existing label/evaluation owners with named fixed-horizon return
    evidence and a funded daily ledger. Replay retained development predictions only
    if immutable row-level prediction evidence actually exists. The inspected
@@ -354,11 +363,11 @@ Names describe behavior rather than experiment serial numbers.
    call it historical out-of-sample replay. Attribute gross ranking, managed exits,
    costs, cash and sector effects where row-level evidence supports it; do not call
    an accounting repair a new alpha result.
-   Owners: `swing/labels/barrier_and_rank.py`, `edge_rebuild/training/swing_evaluation.py`,
-   `edge_rebuild/training/economics.py`, `modeling/ranking_economics.py`,
-   `swing/evaluation`, and outcome contracts. Reuse the existing daily-position
-   ledger and existing fixed-horizon labels; extend/reconcile them rather than
-   introduce a second accounting or labeling engine.
+   Owners: `swing/evaluation/ledger.py`, `swing/evaluation/accounting.py`,
+   `modeling/resampling.py`, `research/swing_accounting_control.py`, the existing
+   label owners and retained trainer consumers. The ledger and bootstrap have one
+   canonical implementation; no old definitions, compatibility re-exports or
+   dependency-boundary exceptions remain.
    Exit tests: identical stock/SPY produces zero gross excess; one cost deduction;
    overlapping trades conserve cash; no negative cash/leverage; no free dividends;
    mark-to-market drawdowns; gap/collision cases; deterministic replay and tamper
@@ -444,6 +453,36 @@ converted to a pass. No new infrastructure, model architecture, or data purchase
 a substitute for diagnosing which of those states actually applies.
 
 ### Research Checkpoint Status
+
+**Accounting implementation (`6758671`, pushed):** cash-conserving overlapping lots,
+single prepaid costs, daily marked P&L, fixed idle/tail calendar, required SPY/QQQ/
+sector curves, paired base/stress SPY comparisons and descriptive beta/exposure.
+Exact intraday exposure-matched SPY and cash-drag decomposition remain unavailable;
+closing cash weights are not presented as measured return drag. Approximate
+managed-exit-close comparisons cannot admit or order candidates. Price-basis
+eligibility remains false without independent total-return reconciliation.
+
+**Retained-data result:** `data/reports/swing_accounting_control/_manifest.json`
+is an immutable `blocked` receipt, not a backtest. It binds 30,525 selected IDs,
+1,221 initial-fit decision sessions and 1,230 valuation sessions ending 2024-05-28.
+Seventy rows have all eight fixed-return fields nonfinite (560 values). Eighteen
+tickers are affected; 67 rows are at recorded membership boundaries and 17 explicitly
+cross missing sessions, with overlap. Provider-level causes are not proven. The
+receipt reads no validation/test outcomes and produces no funded result. Its file
+SHA-256 is `f4411da442dcce28c904050045371c3e1ee20e4e1f6e9f041686e7c4f385ee9e`;
+post-ownership replay produced identical bytes. Do not drop selected rows after
+observing outcome availability or overwrite this evidence.
+
+**Verification:** 340 focused tests and one skip; final complete suite **2,159
+passed, three skipped, 133 warnings, 20m32s**; full Ruff and strict mypy on 319
+source files; independent review; source-tamper, gap/collision, cash, cost and
+dependency tests. The initial full run exposed a newly introduced dependency
+violation at 1,149 passed; canonical ownership was corrected, not waived, before
+the passing full rerun. Sampled test RSS stayed at or below 0.256 GiB, not a complete
+peak measurement. Review agents and Python workers are closed. No real model was
+trained, no provider collection started, and checkpoint three remains unstarted.
+
+The following records the completed objective checkpoint:
 
 Implementation `3b2bff5` completes the objective/evidence checkpoint and is pushed.
 `configs/swing_research.toml` freezes six return specifications, two policies,
