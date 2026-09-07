@@ -11,6 +11,7 @@ import joblib
 import pandas as pd
 from typer.testing import CliRunner
 
+from market_predictor.core.errors import DataReadinessError
 from market_predictor.intraday.contracts import (
     INTRADAY_MODEL_SCHEMA_VERSION,
     INTRADAY_MODEL_TYPE,
@@ -24,7 +25,6 @@ from market_predictor.release import (
     rollback_local_release,
     verify_local_release,
 )
-from market_predictor.core.errors import DataReadinessError
 from tests.r4_fixtures import (
     authorize_candidate_for_test,
     synthetic_identity_metrics,

@@ -9,8 +9,8 @@ from pathlib import Path
 from typing import Any, Literal
 from uuid import uuid4
 
-from market_predictor.locking import file_lock
 from market_predictor.core.errors import DataReadinessError
+from market_predictor.locking import file_lock
 
 HYPOTHESIS_SCHEMA = "market_predictor.promotion_hypothesis.v1"
 TEST_CLOCK_ENV = "MARKET_PREDICTOR_ALLOW_TEST_CLOCK"

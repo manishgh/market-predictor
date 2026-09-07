@@ -7,6 +7,7 @@ from typing import ClassVar
 import exchange_calendars as xcals
 import pandas as pd
 
+from market_predictor.core.errors import DataReadinessError
 from market_predictor.intraday.specialist_contracts import (
     IntradaySpecialistResearchConfig,
     load_intraday_specialist_research_config,
@@ -21,7 +22,6 @@ from market_predictor.intraday.specialist_model import (
     evaluate_specialist_experiment,
     specialist_experiment_specs,
 )
-from market_predictor.core.errors import DataReadinessError
 
 ROOT = Path(__file__).resolve().parents[1]
 STRATEGY_ID = "INTRADAY.OPENING_RANGE_BREAKOUT.60M.V1"

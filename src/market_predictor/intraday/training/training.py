@@ -1,8 +1,6 @@
 """Verified loader boundary for the immutable A4.3 intraday bar dataset."""
 from __future__ import annotations
 
-
-
 import json
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -14,11 +12,13 @@ import pandas as pd
 import pyarrow.parquet as pq
 
 from market_predictor.canonical.store import file_sha256
+from market_predictor.core.errors import DataReadinessError
 from market_predictor.intraday.datasets.bar_dataset import (
     INTRADAY_BAR_DATASET_AUTHORITY_SCHEMA,
     INTRADAY_BAR_DATASET_SCHEMA,
     load_complete_intraday_bar_dataset,
 )
+from market_predictor.intraday.datasets.history import json_sha256
 from market_predictor.intraday.features.bar_features import (
     INTRADAY_BAR_FEATURE_SCHEMA_VERSION,
     INTRADAY_BAR_MODEL_FEATURE_COLUMNS,
@@ -27,13 +27,11 @@ from market_predictor.intraday.features.bar_features import (
 from market_predictor.intraday.features.bar_labels import (
     INTRADAY_BAR_LABEL_SCHEMA_VERSION,
 )
-from market_predictor.intraday.datasets.history import json_sha256
 from market_predictor.resources import (
     assert_memory_budget,
     assert_peak_memory_budget,
     release_process_memory,
 )
-from market_predictor.core.errors import DataReadinessError
 
 MODEL_FEATURE_COLUMNS: Final = INTRADAY_BAR_MODEL_FEATURE_COLUMNS
 MEMORY_HARD_BUDGET_GIB: Final = 4.0

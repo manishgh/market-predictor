@@ -1,8 +1,6 @@
 """Atomic, lineage-bound publisher for the causal intraday training dataset."""
 from __future__ import annotations
 
-
-
 import json
 from collections.abc import Mapping, Sequence
 from datetime import date
@@ -90,7 +88,6 @@ class _MonthlyPartitionWriter:
         self._last_label: pd.Timestamp | None = None
 
     def write(self, frame: pd.DataFrame) -> dict[str, Any] | None:
-        from market_predictor.intraday.datasets.transformations import _is_missing, _normalize_arrow_records
         if frame.empty:
             raise DataReadinessError("monthly partition writer received no rows")
         sessions = sorted(set(frame["session_date_et"].astype(str)))

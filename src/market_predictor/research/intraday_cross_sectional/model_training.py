@@ -20,8 +20,6 @@ from sklearn.metrics import average_precision_score, ndcg_score, roc_auc_score
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 
-from market_predictor.process_memory import process_memory_snapshot, release_process_memory
-from market_predictor.registry import feature_schema_hash, manifest_path_for, write_model_manifest
 from market_predictor.core.errors import DataReadinessError
 from market_predictor.core.schema import CROSS_SECTIONAL_SCHEMA_VERSION, FrozenContract
 from market_predictor.intraday.features.cross_sectional import (
@@ -33,6 +31,8 @@ from market_predictor.modeling.validation import (
     SessionPurgedWalkForwardSplit,
     deterministic_ticker_holdout,
 )
+from market_predictor.process_memory import process_memory_snapshot, release_process_memory
+from market_predictor.registry import feature_schema_hash, manifest_path_for, write_model_manifest
 from market_predictor.research.intraday_cross_sectional.development_partition import (
     DevelopmentShadowPolicy,
     assert_development_only,

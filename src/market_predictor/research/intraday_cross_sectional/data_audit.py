@@ -6,9 +6,9 @@ from typing import Literal
 import pandas as pd
 from pydantic import Field
 
-from market_predictor.universe.contracts import UniverseMembership
 from market_predictor.core.errors import DataReadinessError
 from market_predictor.core.schema import CROSS_SECTIONAL_SCHEMA_VERSION, FrozenContract
+from market_predictor.universe.contracts import UniverseMembership
 
 
 class AuditCheck(FrozenContract):

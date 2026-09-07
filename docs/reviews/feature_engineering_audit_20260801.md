@@ -1,6 +1,54 @@
 # Current Feature Engineering Audit
 
-Last updated: 2026-09-01
+Last updated: 2026-09-07
+
+## Current Long-Only Swing Campaign
+
+`configs/swing_research.toml` governs two return regressors crossed with three
+profiles and two exit policies: at most six learned specifications and twelve
+model/policy comparisons. Historical records below do not authorize their old model
+sequence for this campaign. Intraday is paused. The new contract config governs the
+statistical procedure; metadata verification cannot authorize training or promotion.
+
+`configs/swing_research_evidence.toml` pins known metadata, not every data directory.
+The audit never follows raw/source payload references or parses exposed evaluation
+metrics; that evaluation is stream-hashed for identity only. Metadata counts are:
+853,417 technical rows / 604 securities / 1,759 sessions; 27,087 matched broker rows
+per profile / 11,720 latest announcements; SEC 689,467 events / 853,417 decisions.
+Five retained specialist manifests record twelve trials each, 60 total, with possible
+duplicates. Unenumerated history is uncovered, not zero. This is neither unique
+experiments nor complete lifetime trials/access history nor full source replay.
+
+The canonical technical builder returns 120 ordered inputs from 40 bases: 13
+momentum/volatility, 11 trend, 11 pullback and five volume bases, each represented
+by cross-sectional z-score/rank and sector z-score. The NUL-delimited ordered-name
+SHA-256 is `59125158f03acc0dcfef11a42da14914475c1bdd7c72af1bbb750df40ed3391e`.
+Inventory output lists every actual column and its family, with proposed overlaps:
+
+| Proposed relationship | Existing inputs | Remaining evidence gap |
+| --- | --- | --- |
+| Medium-term strength | 20/60-session returns and SPY/sector-relative context | Six/twelve-month momentum excluding latest month is absent from this estimator order |
+| Short reaction | One/five-session return, gap, intraday return, close location | Not availability-anchored post-release reaction; new residual windows require admission |
+| Volume/liquidity | Volume z-score/ratio, dollar-volume log, OBV context | New lagged interactions need causal tests; no dollar-capacity claim |
+| Regime interactions | Realized volatility and residual return | No distinct direct SPY/QQQ regime levels, breadth or beta in this order |
+| Issuer news | No technical_market issuer-news input; separate broker authority | Earnings/guidance content, novelty, precision/recall and observed-time admission unverified |
+| Event response | General price-window context only | Both post-release boundaries, availability and batch/live parity unverified |
+| SEC content | Form-level event metadata | Original exhibits, guidance, surprise and first disclosure not proven by counts |
+
+Name mapping is not vertical acceptance. New inputs still need source, batch/live,
+consumer, clock, missingness and poison-test evidence. Existing panel requests record
+warm-up input history from 2018-05-29; decisions begin 2019-07-09. Do not redownload
+that history based on the stale May-2019 requirement.
+
+The July-2025 through June-2026 technical test is already exposed. Specialist
+unopened-test statements below are historical per-run facts only. Fixed-ten-session
+forecasts and managed returns stay distinct; new selection requires funded NAV
+versus SPY, not approximate managed-exit-close excess. Accounting and independent
+total-return reconciliation are checkpoint 2 work, not metadata-audit achievements.
+[Alpaca's declared adjustment basis](https://docs.alpaca.markets/us/reference/stockbarsingle-1)
+includes splits, dividends and spin-offs under `all`; it does not independently
+reconcile every retained event or authorize separate dividend credit. Use retained
+evidence first without speculative bulk redownloads.
 
 ## Scope
 
@@ -106,9 +154,9 @@ learned candidate.
 - Barrier collisions are resolved stop-first after executable overnight-gap handling:
   stop gaps fill at the worse open and target gaps use the conservative resting-limit
   target. Return labels include the frozen round-trip cost.
-- Promotion comparisons use holding-aligned SPY, QQQ, and sector returns from entry
-  open through the managed exit session close. Fixed-ten-session returns remain
-  diagnostics because daily bars cannot identify an intraday benchmark exit instant.
+- Historical gates used managed-exit-session-close benchmark comparisons. Those
+  are approximate, not exact intraday comparisons. The new campaign uses separately
+  named fixed-ten-session forecasts and funded daily NAV economics.
 - The governed split uses explicit dates with XNYS-verified counts, never percentages:
   1,231-session initial fit from `2019-07-09` through `2024-05-28`, 10-session
   validation embargo, 252-session validation, expanding 1,493-session final refit over
@@ -145,9 +193,9 @@ learned candidate.
   27,087 matched prediction rows from 11,720 unique latest broker announcements in
   each of three exact comparison datasets. Blocked families are absent and unknown
   source coverage abstains.
-- Monthly profile partitions physically isolate locked-test outcomes. Development
-  training loads only requested months and projected columns; locked outcomes remain
-  unopened unless all validation gates pass. Replay verifies profile, decision and
+- Monthly partitions isolate historical test outcomes. Development training loads
+  requested months and columns; per-run controls do not restore the exposed year's
+  independence. Replay verifies profile, decision and
   security identities, session bounds/counts, canonical paths, and hashes.
 - Candidate v2 trained six governed logistic and histogram-gradient-boosting models.
   Diagnostic AUC reached approximately 0.55-0.57, but every candidate failed at

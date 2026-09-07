@@ -1,8 +1,6 @@
 """Exact requirement-level coverage audit for KS4 one-minute paths."""
 from __future__ import annotations
 
-
-
 import hashlib
 import json
 import shutil
@@ -16,6 +14,7 @@ import numpy as np
 import pandas as pd
 
 from market_predictor.canonical.store import file_sha256
+from market_predictor.core.errors import DataReadinessError
 from market_predictor.intraday.specialist_collection import (
     SPECIALIST_ONE_MINUTE_COLLECTION_SCHEMA,
 )
@@ -33,7 +32,6 @@ from market_predictor.resources import (
     memory_audit,
     release_process_memory,
 )
-from market_predictor.core.errors import DataReadinessError
 
 SPECIALIST_COVERAGE_AUDIT_SCHEMA = "intraday.specialist_coverage_audit.v1"
 SPECIALIST_REQUIREMENT_COVERAGE_SCHEMA = (

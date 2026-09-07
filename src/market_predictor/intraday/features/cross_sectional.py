@@ -5,8 +5,8 @@ from collections.abc import Iterable
 import numpy as np
 import pandas as pd
 
-from market_predictor.evidence.contracts import SourceAvailability
 from market_predictor.core.errors import DataReadinessError, SchemaMismatchError
+from market_predictor.evidence.contracts import SourceAvailability
 
 CROSS_SECTIONAL_FEATURE_SCHEMA_VERSION = "ml_v3.features.v2"
 RETURN_WINDOWS = (1, 3, 6, 12)

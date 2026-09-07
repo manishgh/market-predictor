@@ -2,13 +2,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from market_predictor.core.errors import DataReadinessError
 from market_predictor.process_memory import (
     process_memory_snapshot as process_memory_snapshot,
 )
 from market_predictor.process_memory import (
     release_process_memory as release_process_memory,
 )
-from market_predictor.core.errors import DataReadinessError
 
 
 @dataclass(frozen=True, slots=True)

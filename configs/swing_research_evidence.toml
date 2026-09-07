@@ -1,0 +1,127 @@
+# Metadata identity only: never follow payload paths or infer source replay.
+schema_version = "market_predictor.swing_research_evidence.v1"
+feature_count = 120
+# evidence.hashing.sequence_sha256: ordered UTF-8 names, each followed by NUL.
+feature_order_sha256 = "59125158f03acc0dcfef11a42da14914475c1bdd7c72af1bbb750df40ed3391e"
+retained_trial_manifests = 5
+retained_recorded_trials = 60
+# Class defaults supply 20% drawdown; the legacy promotion TOML has no such field.
+promotion_defaults_sha256 = "32f64f485e924e64a6490249123c2b56d0af146785fb5ecf1091091fa448c903"
+
+[[artifacts]]
+id = "strategy"
+path = "configs/edge_rebuild_strategy_contract.toml"
+sha256 = "02a087be6b9eff4971770026ca75dce3978f8f9e2028c1f21d027daefec9c0e7"
+bytes = 15151
+kind = "config"
+
+[[artifacts]]
+id = "temporal"
+path = "configs/edge_rebuild_temporal_manifest.toml"
+sha256 = "eb6365e78e75599e170c78dc08805eae45744c88f7def21ea4d6a9436e12b95b"
+bytes = 957
+kind = "config"
+
+[[artifacts]]
+id = "legacy_training"
+path = "configs/edge_rebuild_swing_training.toml"
+sha256 = "b0cd00c2dd6f2cf665f2dd0cabc9682839497a6377d07bb662cb09bc7d710e84"
+bytes = 575
+kind = "config"
+
+[[artifacts]]
+id = "panel_request"
+path = "data/features/edge_rebuild_swing_technical_panel_20190709_20260708_v1/_request.json"
+sha256 = "d0e093ce2192f8511547b5c5466ac90b892fbd44d4939b002242555a8b19a4ed"
+bytes = 30837
+kind = "metadata"
+
+[[artifacts]]
+id = "panel"
+path = "data/features/edge_rebuild_swing_technical_panel_20190709_20260708_v1/final/_manifest.json"
+sha256 = "891bb547cff304661153661b1c18acf57ec824e6c5c7ddd1eed7346a9a13886c"
+bytes = 126702
+kind = "metadata"
+counts = { rows = 853417, securities = 604, modeled_security_count = 604, sessions = 1759 }
+
+[[artifacts]]
+id = "matched"
+path = "data/features/swing_broker_action_ablation_20190709_20260708_v2/_manifest.json"
+sha256 = "57d55d67bdecb4e442b84d712a43de0fe3e08b682ea36c968a21d2a210f35083"
+bytes = 1048538
+kind = "metadata"
+counts = { rows_per_profile = 27087, unique_latest_announcement_count = 11720 }
+
+[[artifacts]]
+id = "sec"
+path = "data/canonical/sec_filing_authority_20190709_20260708_v1/_manifest.json"
+sha256 = "e1dc9484b69902f9985a118f430937db48e2d2d4fbbb46e16ddc11216d58fdcd"
+bytes = 31349
+kind = "metadata"
+counts = { event_rows = 689467, decision_rows = 853417 }
+
+[[artifacts]]
+id = "issuer_early"
+path = "data/research/issuer_event_family_20190709_20210708_v2/_manifest.json"
+sha256 = "fcbff3d109c33cbc9b99a27958dbd23c89fd172936ed0d4a8366784c0e4dcc3c"
+bytes = 1679921
+kind = "metadata"
+counts = { classified_event_rows = 9018, assignment_rows = 30875, coverage_rows = 28462, production_eligible_event_rows = 0 }
+
+[[artifacts]]
+id = "issuer_late"
+path = "data/research/issuer_event_family_20210709_20260708_v2/_manifest.json"
+sha256 = "aea5bcd6392a83204fe23bf6bb7bd1ef9b32557d12a421a8c6f81ef347725296"
+bytes = 1101821
+kind = "metadata"
+counts = { classified_event_rows = 26370, assignment_rows = 90136, coverage_rows = 18333, production_eligible_event_rows = 0 }
+
+# These are retained manifest entries, not 60 unique or lifetime experiments.
+[[artifacts]]
+id = "broker_v1"
+path = "data/models/swing_broker_action_specialists_dev_20260812_v1/_manifest.json"
+sha256 = "7fd046e0bce1583e14a01cb9a9125396513dcf7bee080ee95aa41a0f1fc48150"
+bytes = 144088
+kind = "trials"
+counts = { recorded_trials = 12 }
+
+[[artifacts]]
+id = "broker_v2"
+path = "data/models/swing_broker_action_specialists_dev_20260812_v2/_manifest.json"
+sha256 = "b08aa401651d996f161d7e5e6f2015304a4feea9ebf9455e55c7aac0eb782295"
+bytes = 144088
+kind = "trials"
+counts = { recorded_trials = 12 }
+
+[[artifacts]]
+id = "broker_v3"
+path = "data/models/swing_broker_action_specialists_dev_20260812_v3/_manifest.json"
+sha256 = "a3192a42573753afde5aaa21fc7bca2702f000b8f4163cdab34e21ae3dae08be"
+bytes = 5767057
+kind = "trials"
+counts = { recorded_trials = 12 }
+
+[[artifacts]]
+id = "broker_v4"
+path = "data/models/swing_broker_action_specialists_dev_20260812_v4/_manifest.json"
+sha256 = "ae8e21565642dad7c278075d8f211a59606215f45f7f8642943fd215b6bc89a7"
+bytes = 5767055
+kind = "trials"
+counts = { recorded_trials = 12 }
+
+[[artifacts]]
+id = "directional_v1"
+path = "data/models/swing_directional_broker_action_specialists_dev_20260820_v1/_manifest.json"
+sha256 = "2d5c081be385124b54e0e9133d4bcb9273b06ec52353e125954a8ca38bfbf7b9"
+bytes = 5726840
+kind = "trials"
+counts = { recorded_trials = 12 }
+
+# Prior review establishes exposure. Audit streams bytes for identity only,
+# never parses evaluation metrics or claims its own new outcome-access count.
+[[artifacts]]
+id = "exposed_evaluation"
+path = "data/models/swing/technical/evaluation.json"
+sha256 = "c390d25967a41756f19ae35d44a55e8c596b8d4ae8330d03c7737f0b2f933fab"
+bytes = 4312164
+kind = "access_hash_only"

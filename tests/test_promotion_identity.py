@@ -11,13 +11,13 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from pydantic import SecretStr
 
+from market_predictor.core.errors import DataReadinessError
 from market_predictor.promotion_identity import (
     APPROVER_ROLE,
     BUILD_ROLE,
     PromotionIdentityAuthenticator,
     PromotionTokens,
 )
-from market_predictor.core.errors import DataReadinessError
 from tests.r4_fixtures import test_promotion_identity_material
 
 

@@ -2,7 +2,7 @@
 
 Status: current edge-rebuild path
 
-Last updated: 2026-09-06
+Last updated: 2026-09-07
 
 Read `AGENTS.md`, `docs/active_edge_rebuild_plan.md`, and
 `docs/reviews/active_edge_rebuild_handoff.md` first. Command `--help` output and code
@@ -18,6 +18,21 @@ contracts are authoritative.
 
 No edge model is active. Production scoring must fail closed until a compatible
 promoted atomic bundle exists.
+
+### Long-Only Swing Research
+
+`configs/swing_research.toml` and `swing/contracts/research.py` define the new
+ten-session SPY-excess research objective. Their separate identity preserves the
+existing strategy/data hashes. AUC is diagnostic, not the economic objective.
+The retained automatic-final-test trainer refuses the already exposed July 2025
+through June 2026 interval before panel access. New development return-model
+training is a later step in the active plan, not enabled by changing test dates.
+
+Run `market-predictor-research audit-swing-research-evidence --root .` from the
+repository root to verify the frozen metadata inventory and ordered technical
+feature contract. The command prints JSON, reads no feature/outcome rows, performs
+no provider requests, and does not fit a model. A metadata match is not a fresh
+raw-source replay or proof of economic performance.
 
 ## Source Roles
 

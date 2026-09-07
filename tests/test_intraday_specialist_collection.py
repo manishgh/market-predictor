@@ -11,6 +11,7 @@ from types import SimpleNamespace
 import pandas as pd
 
 from market_predictor.canonical.store import file_sha256
+from market_predictor.core.errors import DataReadinessError
 from market_predictor.intraday.specialist_collection import (
     SPECIALIST_ACQUISITION_UNIT_BUNDLE_SCHEMA,
     _unit_bundle_fingerprint,
@@ -26,7 +27,6 @@ from market_predictor.intraday.specialist_dataset import (
     _collection_plan_fingerprint,
 )
 from market_predictor.sources.alpaca import AlpacaBarsPage
-from market_predictor.core.errors import DataReadinessError
 
 ROOT = Path(__file__).resolve().parents[1]
 POLICY = ROOT / "configs" / "intraday_specialist_research.toml"

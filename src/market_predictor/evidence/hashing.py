@@ -1,8 +1,6 @@
 """Hashing utilities for edge_rebuild."""
 from __future__ import annotations
 
-
-
 import hashlib
 import json
 from collections.abc import Mapping, Sequence

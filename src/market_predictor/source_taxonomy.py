@@ -2,8 +2,6 @@
 from __future__ import annotations
 
 
-
-
 def source_family_for_source(value: object) -> str:
     raw = str(value or "").strip().lower()
     if raw.startswith("alpaca"):

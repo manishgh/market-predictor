@@ -1,7 +1,7 @@
 # Catalyst-Confirmation Prediction Architecture
 
 Status: design authority
-Last updated: 2026-08-13
+Last updated: 2026-09-07
 
 This document defines stable component boundaries. Current progress and blockers are
 in `active_edge_rebuild_plan.md` and `reviews/active_edge_rebuild_handoff.md`.
@@ -33,6 +33,13 @@ There is no fallback from the active path to legacy models or schemas.
 
 ### Swing
 
+- New long-only research is governed by `configs/swing_research.toml`, separately
+  hashed from immutable historical strategy/feature contracts. It targets fixed
+  ten-session net SPY excess; managed-exit outcomes are a separate evaluation.
+  Its two regressors and three feature profiles are planned, not trained models.
+- `swing/contracts/research.py` rejects the known exposed July 2025-June 2026
+  final-test interval before the retained trainer loads data. Metadata inventory
+  verification does not replay source rows or establish total-return correctness.
 - Strategy identity: `swing`; hypothesis: Sector Residual Momentum.
 - Decision clock: completed daily session.
 - Entry: next exact exchange-session open.
@@ -46,7 +53,10 @@ There is no fallback from the active path to legacy models or schemas.
   filing issuer; they enter an estimator only after causal authority and ablation pass.
 - Context overlays: verified global and sector events through separate authorities.
   Finviz supplies screening/current metadata, not news features.
-- Required comparisons: SPY, QQQ, and point-in-time sector ETF over the same interval.
+- Fixed-horizon comparisons require SPY, QQQ, and point-in-time sector ETF over
+  the same interval. A daily benchmark close is only approximate at an intraday
+  stock barrier exit. The new economic objective is complete daily NAV versus SPY;
+  QQQ/sector and approximate trade-level comparisons remain diagnostics.
 
 ### Intraday
 

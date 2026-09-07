@@ -71,6 +71,7 @@ from market_predictor.resources import (
     release_process_memory,
 )
 from market_predictor.swing.contracts.model_artifact import SWING_CANDIDATE_MODEL_SCHEMA
+from market_predictor.swing.contracts.research import assert_unexposed_swing_test
 from market_predictor.swing.features.panel import (
     MANAGED_PATH_COST_POLICY,
     SWING_BASELINE_ABLATION_ORDER,
@@ -180,7 +181,7 @@ def train_swing_edge_candidate(
     config: SwingTrainingConfig,
     temporal_policy_path: Path,
 ) -> SwingTrainingResult:
-    """Select one candidate on validation and touch the locked final test once."""
+    """Run the retained trainer only when its final interval is not known exposed."""
 
     _guard(config, "swing training start", peak=False)
     if output_directory.exists():
@@ -217,6 +218,9 @@ def train_swing_edge_candidate(
     test_sessions = tuple(
         value.isoformat() for value in schedule.locked_test_sessions
     )
+    # This trainer automatically evaluates its final partition. Refuse a known
+    # exposed calendar before loading outcomes or spending time fitting models.
+    assert_unexposed_swing_test(test_sessions)
     final_access_sessions = tuple(sorted({*final_refit_sessions, *test_sessions}))
     binding = load_swing_panel_binding(
         panel_authority_directory,

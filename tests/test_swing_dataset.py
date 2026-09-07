@@ -9,6 +9,7 @@ import pandas as pd
 
 from market_predictor.canonical.contracts import CanonicalEvent, SourceCollection
 from market_predictor.canonical.cutoffs import SWING_NIGHTLY_CUTOFF, swing_prediction_cutoffs
+from market_predictor.core.errors import DataReadinessError
 from market_predictor.swing.audits import audit_swing_dataset
 from market_predictor.swing.contracts import (
     CATALYST_FEATURES,
@@ -25,7 +26,6 @@ from market_predictor.swing.labels import (
     _benchmark_label_return,
     add_exact_swing_labels,
 )
-from market_predictor.core.errors import DataReadinessError
 
 
 class SwingDatasetTests(unittest.TestCase):

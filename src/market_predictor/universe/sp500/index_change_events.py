@@ -9,9 +9,9 @@ from datetime import date, datetime
 from pathlib import Path
 from typing import Any, cast
 
+from market_predictor.core.errors import DataReadinessError
 from market_predictor.locking import LockTimeout, file_lock
 from market_predictor.resources import assert_memory_budget, assert_peak_memory_budget
-from market_predictor.core.errors import DataReadinessError
 from market_predictor.sources.spglobal.archive import (
     MAXIMUM_MEMORY_GIB,
     MEMORY_HEADROOM_GIB,

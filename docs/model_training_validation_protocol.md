@@ -1,7 +1,12 @@
 # Model Training And Validation Protocol
 
 Status: governing research protocol
-Aligned: 2026-07-31
+Aligned: 2026-09-07
+
+The current long-only swing campaign is governed by `configs/swing_research.toml`
+and `swing/contracts/research.py`. Those contracts supersede the retained PDF's
+general model sequence and historical test assumptions. Intraday development is
+paused; its existing contracts are unchanged. No metadata audit authorizes training.
 
 This protocol makes the repository's implementation choices explicit where the
 [quantitative trading plan](references/comprehensive_quantitative_trading_model_implementation_plan_intraday_and_swing.pdf)
@@ -16,7 +21,7 @@ classifies future opportunities across the contemporaneous tradable universe. A
 security may occur in training, validation, and test at different times. That is
 not leakage: future rows are never available to earlier decisions.
 
-Two independent scopes are required:
+Two distinct scopes are required; they are not independent calendar samples:
 
 1. **Temporal generalization:** future sessions containing the full eligible
    point-in-time cross-section.
@@ -24,48 +29,54 @@ Two independent scopes are required:
    inside development data. This measures transfer to names absent from fitting
    and must not replace the temporal test.
 
-Every row from one decision session belongs to one split. Splitting securities
-from the same session across train and validation is prohibited because it leaks
-the market regime and cross-sectional normalization state.
+Every row from one decision session belongs to one split in the chronological
+evaluation. Chronological partitions group whole sessions, never random rows. The
+separately fitted stable 20% security holdout intentionally excludes symbols from fitting;
+that transfer stress test is not a substitute for future-session evaluation.
 
 ## 2. Swing Dataset And Splits
 
 - Universe: point-in-time S&P 500 membership, including historical members and
   delisted securities where identity and bars are provable.
-- Modeling horizon: seven usable years: five years for fitting, one year for
-  validation, and one untouched test year. The preceding 250 trading sessions
-  are indicator warm-up only and are not training examples.
+- Decisions begin 2019-07-09. Earlier bars provide 250-session indicator warm-up
+  only, never training examples. The retained historical test year is exposed.
 - Decision frequency: one cross-section per exchange session.
 - Feature normalization: winsorization, z-scores, ranks, sector-relative values,
   imputation, and feature selection are fit or computed without future sessions.
-- Labels: exact next-open entry and preregistered target, stop, and timeout paths;
-  stock, SPY, and sector returns use the identical executable interval.
+- Forecast target: `future_excess_return_10d_vs_spy`, fixed next-open to tenth-close
+  stock net return minus SPY over that interval. Managed target/stop/timeout returns
+  remain separately named outcomes. Managed-exit-session-close benchmark excess is
+  approximate, not an exact intraday comparison or the new selection authority.
 - Data-quality tolerance: exclude the complete security, with an audited reason
   and affected dates, when its data is unavailable or unverifiable. Continue
   through a maximum 5% loss of the filtered point-in-time universe; refuse above
   5%. SPY, sector-benchmark, and market-wide session gaps cannot use this rule.
 
-The final evaluation uses one full validation year before one locked test year.
-This is the maximum complete train/validation/test design within the approved
-seven-year swing horizon. Dates are derived from XNYS sessions and frozen in the
-temporal manifest:
+The existing temporal config records these XNYS-verified historical partitions;
+they do not establish a fresh final test for the new campaign:
 
 | Fold | Fit window | Validation window |
 | --- | --- | --- |
-| 1 | May 2019-May 2024 | June 2024-June 2025 |
-| Final refit | June 2020-June 2025 | none |
-| Locked test | none | July 2025-June 2026 |
+| 1 | 2019-07-09 through 2024-05-28 (1,231 sessions) | 2024-06-12 through 2025-06-13 (252 sessions) |
+| Historical final refit | 2019-07-09 through 2025-06-13 (1,493 sessions) | none |
+| Exposed historical test | none | 2025-07-01 through 2026-06-30 (251 sessions) |
 
-The split generator must use actual session boundaries, group by decision date,
-and apply a purge plus embargo of at least the maximum ten-session swing label
-horizon. Validation may select hyperparameters and stopping rounds. The locked
-test is opened once after the model, feature profile, selection policy, costs,
-and thresholds are frozen.
+The embargoes are 2024-05-29 through 2024-06-11 and 2025-06-16 through 2025-06-30,
+ten sessions each. Development folds inside the permitted fit range must use
+actual session boundaries and purge by label availability, with at least ten
+exchange sessions of embargo. Fitted preprocessing and calibration precede scoring.
+Freeze the bounded settings before validation; reviewed validation is development
+evidence, not a renewed final test.
 
-The current 2019-07-09 through 2026-07-08 panel is valid for causal panel and
-feature diagnostics. It lacks the 250-session pre-fit warm-up and the first 29
-fit sessions required by the frozen schedule. It therefore cannot supply final
-promotion evidence until the exact 2018-05-29 through 2019-07-08 gap is filled.
+The panel request records retained input history beginning 2018-05-29. The old
+May-2019 fit requirement and claimed missing warm-up were stale; do not download
+that history again based on superseded prose. Metadata inspection is not full
+source replay or independent coverage verification.
+
+The August 9 technical evaluation exposed July-2025 through June-2026 outcomes.
+Later zero access counts are per-run facts, not project-wide freshness. Reject
+exposed intervals before protected outcome loading. Use a frozen prospective
+record; renamed artifacts and changed models cannot restore calendar independence.
 
 ## 3. Intraday Dataset And Splits
 
@@ -90,20 +101,18 @@ silently reused for intraday evidence or vice versa.
 The deterministic technical composite is a comparison baseline. It cannot veto
 all estimators. Its failure rejects that exact formula only.
 
-For each horizon, run this bounded sequence:
+For this swing campaign only, cross two return regressors (regularized linear and
+shallow boosted) with three profiles (existing technical, accepted technical
+relationships, and qualified issuer reaction added to those relationships).
+At most six learned specifications and two frozen exit policies produce twelve
+model/policy comparisons. Blocked profiles remain not trained. No inherited
+classifier/ranker/Random Forest sequence or post-result threshold grid is authorized.
 
-1. Deterministic comparator and logistic baseline.
-2. Gradient-boosted barrier classifier estimating target-before-stop probability.
-3. Grouped cross-sectional ranker, such as LightGBM LambdaMART, trained with
-   decision session as the query group.
-4. Random Forest or another preregistered nonlinear comparator only when it fits
-   within the experiment and memory budget.
-
-The classifier answers whether an opportunity clears its executable barrier
-outcome. The ranker answers which securities are strongest relative to peers on
-the same decision date. A selection policy may require both a high rank and an
-acceptable calibrated barrier probability, then apply sector, liquidity,
-turnover, and position-count constraints.
+SPY buy-and-hold, same-universe momentum and the existing technical formula are
+deterministic controls. Continuous return forecasts are not probabilities; binary
+views need separately named targets and calibration. AUC is diagnostic, not a
+universal veto on the new continuous-return objective. Sector constraints remain
+frozen, with no silent weakening to increase trade counts.
 
 Feature diagnostics, redundancy removal, and hyperparameter selection occur
 inside fitting data only. Catalyst features start as a causal confirmation,
@@ -123,7 +132,7 @@ the frozen global model on untouched, sector-specific evidence after costs.
 
 ## 6. Metrics And Statistical Unit
 
-Rows from one date are correlated; the independent unit is the decision session.
+Rows from one date are correlated, and overlapping holdings also correlate dates.
 Report at minimum:
 
 - daily Spearman rank information coefficient and its stability;
@@ -134,9 +143,25 @@ Report at minimum:
 - probability calibration and barrier-classification metrics;
 - performance by year, market regime, sector, capitalization, and catalyst state.
 
-Confidence intervals and significance use date-block bootstrap or Newey-West
-corrections appropriate to the holding horizon. Hundreds of securities on one
-date do not count as hundreds of independent observations.
+The research config governs the exact statistical procedure: mean daily portfolio
+return minus SPY, one-sided lower confidence bounds, moving-block bootstrap,
+20-session primary blocks, 40-session conjunctive sensitivity, and familywise
+Bonferroni adjustment over twelve model/policy comparisons. Use its frozen resample
+count and confidence settings, not twelve ordinary 95% intervals. Stock rows are
+not independent observations. Record every comparison; new selection trials are
+not covered merely by logging them. Positive estimates whose bounds span zero are
+inconclusive.
+
+Headline economics require funded daily NAV against buy-and-hold SPY on the same
+calendar, plus net CAGR difference, costs, cash/exposure, drawdown and attribution.
+Unit equity does not establish dollar capacity. Costs occur exactly once under the
+new contract's timing convention. Checkpoint 2 accounting remains pending.
+
+[Alpaca's bar documentation](https://docs.alpaca.markets/us/reference/stockbarsingle-1)
+declares that `all` adjusts splits, cash dividends and spin-offs. This is declared
+provider basis, not independent event-by-event reconciliation of retained price
+ratios as total returns. Inspect retained evidence first; do not invent dividends,
+double-credit distributions or require speculative bulk redownloads.
 
 ## 7. Acceptance And Audit Evidence
 
@@ -144,14 +169,27 @@ Every run must bind immutable hashes for source data, point-in-time membership,
 feature contract, label policy, split manifest, model configuration, costs, and
 selection policy. The audit must prove:
 
-- no feature, event, membership, normalizer, or label path exceeds its decision
-  cutoff;
+- feature, event and membership evidence is available by cutoff; outcome labels
+  mature afterward and are available before their use in fitting;
 - all members of a decision date have one fold assignment;
 - warm-up rows do not enter training counts or metrics;
 - validation and locked-test results are distinguishable and cannot be
   overwritten;
-- benchmark and sector comparisons use the stock's exact executable interval;
+- fixed-horizon benchmarks use the stock's exact interval; managed benchmark
+  approximations and unavailable exact timestamps are explicitly represented;
 - the reported policy is reproduced from row-level predictions after costs.
 
-Promotion still requires prospective shadow evidence. A retrospective locked
-test is necessary evidence, not authorization for live trading.
+The bounded `swing_research_evidence.toml` audit checks known manifest/config hashes,
+canonical feature order and disclosed historical access evidence. It never follows
+raw payload references or parses the exposed evaluation. Counts are metadata-only,
+not full replay. Five retained specialist manifests contain 60 recorded trials;
+duplicates are possible and unenumerated history remains uncovered. This is not
+complete lifetime trials or access history, and cannot authorize training/promotion.
+
+Freeze model, sources, feature order, selection, exits and costs before prospective
+predictions. The research contract requires one assessment after at least 252
+decision sessions and the ten-session maturation tail with no new entries. Future
+evidence does not delay historical engineering or training but does constrain
+promotion. Do not repeatedly assess until significance appears. Aggregate-only
+historical rejections cannot reproduce missing prediction rows; learned attribution
+requires immutable chronological out-of-fold predictions, never fitted-row replay.

@@ -1,8 +1,6 @@
 """Strict validation and normalization utilities for edge_rebuild."""
 from __future__ import annotations
 
-
-
 from collections.abc import Mapping
 from typing import Any, cast
 

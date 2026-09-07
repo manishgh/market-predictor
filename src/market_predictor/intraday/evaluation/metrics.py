@@ -1,7 +1,6 @@
 from __future__ import annotations
 
-"""Development-only, cost-aware intraday model training and evaluation."""
-
+# Development-only, cost-aware intraday model training and evaluation.
 import math
 from typing import Any, Final
 

@@ -1,8 +1,6 @@
 """KS4 intraday specialist research commands."""
 from __future__ import annotations
 
-
-
 from pathlib import Path
 
 import typer

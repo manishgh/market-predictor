@@ -11,11 +11,11 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, SecretStr, model_validator
 
+from market_predictor.core.errors import DataReadinessError
 from market_predictor.jwt_verification import (
     JwtVerificationError,
     LocalJwksVerifier,
 )
-from market_predictor.core.errors import DataReadinessError
 
 BUILD_ROLE = "promotion.build"
 APPROVER_ROLE = "promotion.approve"

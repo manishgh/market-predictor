@@ -3,6 +3,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
+from market_predictor.core.errors import DataReadinessError
 from market_predictor.label_paths import evaluate_swing_paths
 from market_predictor.swing.contracts import (
     SwingDatasetConfig,
@@ -10,7 +11,6 @@ from market_predictor.swing.contracts import (
     swing_net_return_column,
     swing_target_column,
 )
-from market_predictor.core.errors import DataReadinessError
 
 
 def add_exact_swing_labels(

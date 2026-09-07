@@ -1,8 +1,6 @@
 """Clock-grid feature and executable label construction for KS4."""
 from __future__ import annotations
 
-
-
 import hashlib
 import json
 import uuid
@@ -15,6 +13,7 @@ import numpy as np
 import pandas as pd
 
 from market_predictor.canonical.store import file_sha256
+from market_predictor.core.errors import DataReadinessError
 from market_predictor.intraday.contracts import IntradayDatasetConfig
 from market_predictor.intraday.dataset import _one_minute_ticker_features
 from market_predictor.intraday.labels import add_exact_one_minute_labels
@@ -34,7 +33,6 @@ from market_predictor.resources import (
     memory_audit,
     release_process_memory,
 )
-from market_predictor.core.errors import DataReadinessError
 
 SPECIALIST_TRAINING_DATASET_SCHEMA = "intraday.specialist_training_dataset.v1"
 SPECIALIST_TRAINING_ROW_SCHEMA = "intraday.specialist_training_row.v1"

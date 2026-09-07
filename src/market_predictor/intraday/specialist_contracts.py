@@ -1,8 +1,6 @@
 """Frozen research contracts for KS4 intraday specialists."""
 from __future__ import annotations
 
-
-
 import hashlib
 import json
 import tomllib

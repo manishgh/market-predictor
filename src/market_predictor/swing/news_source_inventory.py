@@ -1,8 +1,6 @@
 """Verified source-news shard inventory shared by sentiment and lineage."""
 from __future__ import annotations
 
-
-
 import hashlib
 import json
 from pathlib import Path

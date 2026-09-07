@@ -1,8 +1,6 @@
 """Atomic, lineage-bound publisher for the causal intraday training dataset."""
 from __future__ import annotations
 
-
-
 from collections.abc import Mapping, Sequence
 from datetime import date
 from pathlib import Path
@@ -16,13 +14,13 @@ from market_predictor.canonical.store import (
     file_sha256,
 )
 from market_predictor.core.errors import DataReadinessError
-from market_predictor.intraday.datasets.history import (
-    json_sha256,
-)
 from market_predictor.intraday.contracts.dataset_schemas import (
     _REQUIRED_BENCHMARKS,
     _SAFE_TICKER,
     _Artifact,
+)
+from market_predictor.intraday.datasets.history import (
+    json_sha256,
 )
 
 

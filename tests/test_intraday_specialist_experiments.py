@@ -12,6 +12,7 @@ import exchange_calendars as xcals
 import pandas as pd
 
 from market_predictor.canonical.store import file_sha256
+from market_predictor.core.errors import DataReadinessError
 from market_predictor.intraday import specialist_experiments
 from market_predictor.intraday.specialist_contracts import (
     INTRADAY_SPECIALIST_IDS,
@@ -30,7 +31,6 @@ from market_predictor.intraday.specialist_training_data import (
     SPECIALIST_TRAINING_DATASET_SCHEMA,
     SPECIALIST_TRAINING_ROW_SCHEMA,
 )
-from market_predictor.core.errors import DataReadinessError
 
 ROOT = Path(__file__).resolve().parents[1]
 STRATEGY_ID = "INTRADAY.OPENING_RANGE_BREAKOUT.60M.V1"

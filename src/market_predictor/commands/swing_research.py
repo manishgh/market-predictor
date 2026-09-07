@@ -23,6 +23,7 @@ from market_predictor.config import get_settings
 from market_predictor.heavy_jobs import serialized_heavy_job
 from market_predictor.sentiment import FinbertScorer
 from market_predictor.swing.catalyst_lineage import build_catalyst_lineage
+from market_predictor.swing.evaluation.research_evidence import audit_swing_research_evidence
 from market_predictor.swing.security_label_artifact import (
     build_security_label_artifact,
 )
@@ -30,6 +31,22 @@ from market_predictor.swing.sentiment_history import score_alpaca_news_history
 
 
 def register_swing_research_commands(app: typer.Typer, console: Console) -> None:
+    @app.command("audit-swing-research-evidence")
+    def audit_swing_research_evidence_command(
+        root: Path = typer.Option(Path(".")),
+        inventory: Path = typer.Option(Path("configs/swing_research_evidence.toml")),
+        research_contract: Path = typer.Option(Path("configs/swing_research.toml")),
+        strategy_contract: Path = typer.Option(Path("configs/edge_rebuild_strategy_contract.toml")),
+    ) -> None:
+        """Verify the frozen metadata inventory without fitting or opening outcome rows."""
+        report = audit_swing_research_evidence(
+            root=root,
+            inventory_path=root / inventory if not inventory.is_absolute() else inventory,
+            research_contract_path=root / research_contract if not research_contract.is_absolute() else research_contract,
+            strategy_contract_path=root / strategy_contract if not strategy_contract.is_absolute() else strategy_contract,
+        )
+        typer.echo(json.dumps(report, sort_keys=True, allow_nan=False))
+
     @app.command("attribute-alpaca-news-history")
     @serialized_heavy_job("attribute-alpaca-news-history")
     def attribute_alpaca_news_history_command(

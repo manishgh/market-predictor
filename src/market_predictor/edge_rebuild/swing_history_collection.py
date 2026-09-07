@@ -1,8 +1,6 @@
 """Exact, resumable Alpaca daily collection for swing acquisition-plan v2."""
 from __future__ import annotations
 
-
-
 import gzip
 import hashlib
 import json
@@ -20,6 +18,7 @@ from zoneinfo import ZoneInfo
 import pandas as pd
 
 from market_predictor.canonical.store import file_sha256
+from market_predictor.core.errors import DataReadinessError
 from market_predictor.edge_rebuild.swing_history_acquisition import (
     AUTHORITY_SCHEMA as PLAN_AUTHORITY_SCHEMA,
 )
@@ -34,7 +33,6 @@ from market_predictor.resources import (
     release_process_memory,
 )
 from market_predictor.sources.alpaca import AlpacaSource
-from market_predictor.core.errors import DataReadinessError
 
 COLLECTION_SCHEMA: Final = "edge_rebuild.swing_history_collection.v1"
 COLLECTION_AUTHORITY_SCHEMA: Final = "edge_rebuild.swing_history_collection_authority.v1"

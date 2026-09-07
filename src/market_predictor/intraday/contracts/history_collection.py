@@ -1,8 +1,6 @@
 """Frozen ER1A/ER1B historical intraday acquisition contracts."""
 from __future__ import annotations
 
-
-
 import hashlib
 import json
 import tomllib

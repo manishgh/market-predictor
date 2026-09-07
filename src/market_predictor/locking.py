@@ -1,8 +1,6 @@
 """Dependency-free, OS-released advisory file lock for atomic publish paths."""
 from __future__ import annotations
 
-
-
 import importlib
 import os
 import time

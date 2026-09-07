@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from market_predictor.intraday.training.config import IntradayDevelopmentConfig
 
-"""Development-only, cost-aware intraday model training and evaluation."""
+# Development-only, cost-aware intraday model training and evaluation.
 
 import hashlib
 from dataclasses import dataclass

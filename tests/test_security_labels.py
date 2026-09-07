@@ -6,6 +6,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import ClassVar
 
+from market_predictor.core.errors import DataReadinessError
 from market_predictor.security_labels import (
     CurrentProfileEvidence,
     MembershipEvidence,
@@ -16,7 +17,6 @@ from market_predictor.security_labels import (
     profile_terms_from_text,
     validate_business_label_ids,
 )
-from market_predictor.core.errors import DataReadinessError
 
 ROOT = Path(__file__).resolve().parents[1]
 POLICY_PATH = ROOT / "configs" / "security_business_labels.toml"

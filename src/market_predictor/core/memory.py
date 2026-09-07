@@ -1,8 +1,6 @@
 """Memory assertion utilities for edge_rebuild."""
 from __future__ import annotations
 
-
-
 from market_predictor.resources import (
     assert_memory_budget,
     assert_peak_memory_budget,

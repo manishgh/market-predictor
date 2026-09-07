@@ -14,6 +14,7 @@ import pandas as pd
 import pytest
 from pydantic import ValidationError
 
+from market_predictor.core.errors import DataReadinessError
 from market_predictor.edge_rebuild.setup_economics import (
     EVALUATION_SCOPES,
     UNSEEN_TICKER_SCOPE,
@@ -22,7 +23,6 @@ from market_predictor.edge_rebuild.setup_economics import (
     SetupEconomicsReport,
     evaluate_setup_economics,
 )
-from market_predictor.core.errors import DataReadinessError
 
 PHASES = 2
 SESSIONS_PER_PHASE = 60

@@ -14,13 +14,13 @@ import pandas as pd
 import pyarrow.parquet as pq
 from pydantic import Field, field_validator, model_validator
 
-from market_predictor.registry import file_sha256
 from market_predictor.core.errors import DataReadinessError
 from market_predictor.core.schema import FrozenContract
 from market_predictor.intraday.features.cross_sectional import (
     build_ticker_features,
     finalize_cross_sectional_features,
 )
+from market_predictor.registry import file_sha256
 from market_predictor.research.intraday_cross_sectional.opportunity_labels import (
     OpportunityLabelConfig,
     build_opportunity_labels,

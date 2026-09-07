@@ -17,13 +17,13 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import (
     Ed25519PublicKey,
 )
 
+from market_predictor.core.errors import DataReadinessError
 from market_predictor.locking import file_lock
 from market_predictor.promotion_identity import (
     APPROVER_ROLE,
     BUILD_ROLE,
     validate_promotion_principal,
 )
-from market_predictor.core.errors import DataReadinessError
 
 PROMOTION_ATTESTATION_SCHEMA = "market_predictor.promotion_attestation.v2"
 ATTESTATION_TRUST_STORE_SCHEMA = "market_predictor.attestation_trust_store.v1"

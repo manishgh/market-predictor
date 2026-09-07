@@ -3,11 +3,11 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
+from market_predictor.core.errors import DataReadinessError
 from market_predictor.edge_rebuild.outcome_diagnostics import (
     binary_outcome_diagnostic,
     label_permutation_control,
 )
-from market_predictor.core.errors import DataReadinessError
 
 
 def test_binary_outcome_diagnostic_names_the_measured_event() -> None:

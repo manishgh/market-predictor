@@ -7,13 +7,13 @@ from pathlib import Path
 
 from pydantic import ValidationError
 
-from market_predictor.strategy_governance import (
-    StrategyExecutionLedger,
-    validate_strategy_execution_ledger,
-)
 from market_predictor.core.errors import (
     ArtifactIntegrityError,
     DataReadinessError,
+)
+from market_predictor.strategy_governance import (
+    StrategyExecutionLedger,
+    validate_strategy_execution_ledger,
 )
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]

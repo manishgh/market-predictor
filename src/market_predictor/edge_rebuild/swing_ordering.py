@@ -1,8 +1,6 @@
 """Deterministic top-versus-bottom swing ordering gate before model fitting."""
 from __future__ import annotations
 
-
-
 import hashlib
 import json
 import shutil
@@ -17,6 +15,7 @@ import pandas as pd
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from market_predictor.canonical.store import file_sha256
+from market_predictor.core.errors import DataReadinessError
 from market_predictor.edge_rebuild.swing_materialization import (
     load_complete_swing_feature_panel,
 )
@@ -26,7 +25,6 @@ from market_predictor.resources import (
     memory_audit,
     release_process_memory,
 )
-from market_predictor.core.errors import DataReadinessError
 
 ORDERING_SCHEMA: Final = "edge_rebuild.swing_ordering_audit.v1"
 ORDERING_AUTHORITY_SCHEMA: Final = "edge_rebuild.swing_ordering_audit_authority.v1"

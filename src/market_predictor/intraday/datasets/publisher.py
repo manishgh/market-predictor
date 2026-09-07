@@ -1,23 +1,6 @@
 from __future__ import annotations
 
-import pyarrow.parquet as pq
-
-from market_predictor.intraday.datasets.audits import _pair_abstention, _pair_audit
-from market_predictor.intraday.datasets.io import _file_record
-from market_predictor.intraday.datasets.selection import load_complete_intraday_selection
-from market_predictor.intraday.datasets.validation import (
-    _membership_sector_exclusions,
-    _validate_monthly_partition_records,
-    _validate_no_leakage,
-    _verify_inputs,
-    _verify_monthly_partition_files,
-)
-from market_predictor.intraday.features.features import FEATURE_SCHEMA_VERSION
-from market_predictor.intraday.features.labels import LABEL_SCHEMA_VERSION
-
-"""Atomic, lineage-bound publisher for the causal intraday training dataset."""
-
-
+# Atomic, lineage-bound publisher for the causal intraday training dataset.
 import shutil
 import uuid
 from collections.abc import Mapping
@@ -42,12 +25,18 @@ from market_predictor.intraday.contracts.dataset_schemas import (
     MEMORY_HARD_BUDGET_GIB,
     MEMORY_HEADROOM_GIB,
     WORKING_SET_RELEASE_INTERVAL_SESSIONS,
-    _Artifact,
     _SessionResult,
-    _VerifiedInputs,
+)
+from market_predictor.intraday.contracts.dataset_schemas import (
+    _Artifact as _Artifact,
+)
+from market_predictor.intraday.contracts.dataset_schemas import (
+    _VerifiedInputs as _VerifiedInputs,
 )
 from market_predictor.intraday.datasets.audits import (
-    _activation_abstention_reason,
+    _activation_abstention_reason as _activation_abstention_reason,
+)
+from market_predictor.intraday.datasets.audits import (
     _expected_monthly_counts,
     _monthly_stock_session_counts,
     _pair_abstention,
@@ -66,21 +55,39 @@ from market_predictor.intraday.datasets.io import (
     _StreamingAuditWriter,
     _write_json,
 )
+from market_predictor.intraday.datasets.selection import (
+    load_complete_intraday_selection as load_complete_intraday_selection,
+)
 from market_predictor.intraday.datasets.transformations import (
-    _benchmark_artifact_index,
+    _benchmark_artifact_index as _benchmark_artifact_index,
+)
+from market_predictor.intraday.datasets.transformations import (
     _finalize_dataset_rows,
-    _load_benchmark_session,
-    _load_stock_session_batch,
-    _membership_for_pair,
     _resolve_inside,
     _split_decision_features,
-    _stock_artifact_index,
+)
+from market_predictor.intraday.datasets.transformations import (
+    _load_benchmark_session as _load_benchmark_session,
+)
+from market_predictor.intraday.datasets.transformations import (
+    _load_stock_session_batch as _load_stock_session_batch,
+)
+from market_predictor.intraday.datasets.transformations import (
+    _membership_for_pair as _membership_for_pair,
+)
+from market_predictor.intraday.datasets.transformations import (
+    _membership_sector_exclusions as _membership_sector_exclusions,
+)
+from market_predictor.intraday.datasets.transformations import (
+    _stock_artifact_index as _stock_artifact_index,
 )
 from market_predictor.intraday.datasets.validation import (
     _validate_monthly_partition_records,
     _validate_no_leakage,
-    _verify_inputs,
     _verify_monthly_partition_files,
+)
+from market_predictor.intraday.datasets.validation import (
+    _verify_inputs as _verify_inputs,
 )
 from market_predictor.intraday.datasets.volume_bars import build_causal_volume_bars
 from market_predictor.intraday.features.features import (

@@ -14,6 +14,14 @@ hash-verified promoted bundle.
 ## Verified State
 
 - Active development branch: `er-intraday-refactoring`.
+- Current research priority is long-only, ten-session swing selection against
+  buy-and-hold SPY. `configs/swing_research.toml` freezes the return objective,
+  six learned specifications, two exit policies, costs, funding and statistical
+  procedure. This is a new research contract, not a trained or promoted model.
+- The July 2025-June 2026 test period has already been viewed. The retained swing
+  trainer refuses to reuse it as a fresh final test before loading data or fitting.
+  Historical development research is still permitted; fresh final evidence must
+  be recorded prospectively. See the active plan for the implementation sequence.
 - **Swing baseline:** estimator inputs are `technical_market` only. Alpaca ticker
   news is a confirmation/explanation overlay and does not alter baseline probability.
 - **Swing event-driven:** Alpaca direct ticker news is the only currently permitted
@@ -37,9 +45,9 @@ hash-verified promoted bundle.
 - Sector allocation targets 20%; it adapts to 25% when only four sectors are
   represented and 33.3% when only three are represented. Sessions with fewer than
   three represented sectors are skipped.
-- Economic acceptance uses managed holding-aligned benchmarks, includes cash days
-  and overlapping positions in the portfolio bootstrap, applies doubled costs to
-  the full daily path, and rejects active sector exposure above 33.3%.
+- The retained evaluator uses approximate managed-exit-session-close benchmark
+  comparisons. These are not exact intraday exit comparisons and cannot establish
+  the new SPY objective. Funded daily NAV accounting is the next checkpoint.
 - Live inference excludes individual missing or cold securities through the governed
   5% ceiling. Cached models are bound to the active contract, trust store, promotion
   policy, and model-size limit.

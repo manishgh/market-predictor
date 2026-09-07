@@ -10,6 +10,7 @@ import pandas as pd
 import pytest
 
 from market_predictor.canonical.store import file_sha256
+from market_predictor.core.errors import DataReadinessError
 from market_predictor.edge_rebuild.swing_history_acquisition import (
     AUTHORITY_SCHEMA as PLAN_AUTHORITY_SCHEMA,
 )
@@ -20,7 +21,6 @@ from market_predictor.edge_rebuild.swing_history_collection import (
     collect_swing_history_plan,
     load_complete_swing_history_collection,
 )
-from market_predictor.core.errors import DataReadinessError
 
 
 def test_exact_plan_collection_publishes_verified_unit_authority(tmp_path: Path) -> None:

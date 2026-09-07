@@ -1,8 +1,6 @@
 """Shared binary-outcome and negative-control diagnostics."""
 from __future__ import annotations
 
-
-
 from collections.abc import Sequence
 from typing import Any, Final
 

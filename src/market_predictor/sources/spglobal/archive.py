@@ -8,7 +8,6 @@ replayed unit set for downstream lineage checks.
 
 from __future__ import annotations
 
-
 import hashlib
 import json
 import re
@@ -26,6 +25,7 @@ from zoneinfo import ZoneInfo
 
 from bs4 import BeautifulSoup
 
+from market_predictor.core.errors import DataReadinessError
 from market_predictor.locking import LockTimeout, file_lock
 from market_predictor.resources import (
     assert_memory_budget,
@@ -33,7 +33,6 @@ from market_predictor.resources import (
     memory_audit,
 )
 from market_predictor.sources.http import HttpClient
-from market_predictor.core.errors import DataReadinessError
 
 SP_GLOBAL_ARCHIVE_URL = "https://press.spglobal.com/index.php"
 ARCHIVE_QUERY = {"keywords": "s & p 500 index", "l": "100", "s": "2429"}

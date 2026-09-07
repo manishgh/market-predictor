@@ -1,10 +1,6 @@
 from __future__ import annotations
 
-from market_predictor.intraday.training.config import IntradayDevelopmentConfig
-from market_predictor.intraday.training.config import _CandidateSpec
-
-"""Development-only, cost-aware intraday model training and evaluation."""
-
+# Development-only, cost-aware intraday model training and evaluation.
 import math
 from dataclasses import dataclass
 from typing import Any, Final
@@ -17,6 +13,7 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 
 from market_predictor.core.errors import DataReadinessError
+from market_predictor.intraday.training.config import IntradayDevelopmentConfig, _CandidateSpec
 
 MODEL_SCHEMA_VERSION: Final = "edge_rebuild.intraday_bar_baseline_candidate.v1"
 EVALUATION_SCHEMA_VERSION: Final = "edge_rebuild.intraday_bar_baseline_evaluation.v1"

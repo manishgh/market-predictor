@@ -48,8 +48,6 @@ Fail-closed behavior:
 """
 from __future__ import annotations
 
-
-
 import hashlib
 import json
 import math
@@ -61,6 +59,7 @@ import numpy as np
 import pandas as pd
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from market_predictor.core.errors import DataReadinessError
 from market_predictor.execution_policy import (
     DEFAULT_EXECUTION_POLICY,
     execution_policy_identity,
@@ -72,7 +71,6 @@ from market_predictor.regime_evidence import (
     net_profit_factor,
     session_block_mean_interval,
 )
-from market_predictor.core.errors import DataReadinessError
 
 SETUP_ECONOMICS_SCHEMA = "edge_rebuild.setup_economics.v2"
 

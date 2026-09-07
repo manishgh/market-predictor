@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pandas as pd
 
+from market_predictor.core.errors import DataReadinessError
 from market_predictor.intraday.specialist_contracts import (
     IntradaySpecialistResearchConfig,
     load_intraday_specialist_research_config,
@@ -18,7 +19,6 @@ from market_predictor.intraday.specialist_dataset import (
     restrict_to_complete_benchmark_grid,
     specialist_source_projection,
 )
-from market_predictor.core.errors import DataReadinessError
 
 ROOT = Path(__file__).resolve().parents[1]
 

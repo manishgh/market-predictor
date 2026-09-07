@@ -11,12 +11,14 @@ import pandas as pd
 import pyarrow.parquet as pq
 import pytest
 
-from market_predictor.canonical.store import file_sha256
 import market_predictor.intraday.datasets.bar_dataset as intraday_bar_dataset
+from market_predictor.canonical.store import file_sha256
+from market_predictor.core.errors import DataReadinessError
 from market_predictor.intraday.datasets.bar_dataset import (
     INTRADAY_BAR_DATASET_AUTHORITY_SCHEMA,
     INTRADAY_BAR_DATASET_SCHEMA,
 )
+from market_predictor.intraday.datasets.history import json_sha256
 from market_predictor.intraday.features.bar_features import (
     INTRADAY_BAR_FEATURE_SCHEMA_VERSION,
     INTRADAY_BAR_MODEL_FEATURE_COLUMNS,
@@ -25,12 +27,10 @@ from market_predictor.intraday.features.bar_features import (
 from market_predictor.intraday.features.bar_labels import (
     INTRADAY_BAR_LABEL_SCHEMA_VERSION,
 )
-from market_predictor.intraday.datasets.history import json_sha256
 from market_predictor.intraday.training.training import (
     MODEL_FEATURE_COLUMNS,
     load_published_intraday_dataset,
 )
-from market_predictor.core.errors import DataReadinessError
 
 
 def test_loads_real_shape_a43_units_with_exact_projected_contract(tmp_path: Path) -> None:

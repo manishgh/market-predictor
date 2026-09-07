@@ -1,0 +1,51 @@
+schema_version = "market_predictor.swing_long_only_research.v1"
+side = "long_only"
+primary_benchmark = "SPY"
+comparison_benchmarks = ["QQQ", "point_in_time_sector_etf"]
+decision_start = "2019-07-09"
+horizon_sessions = 10
+entry = "next_session_open"
+forecast_target = "future_excess_return_10d_vs_spy"
+target_units = "decimal_net_return_difference"
+economic_target = "funded_daily_nav_excess_vs_buy_and_hold_spy"
+managed_benchmark_role = "approximate_diagnostic_only"
+binary_auc_role = "diagnostic_only"
+learner_families = ["regularized_linear_return", "shallow_boosted_return"]
+feature_profiles = ["existing_technical", "technical_relationships", "technical_relationships_issuer_reaction"]
+exit_policies = ["target_stop_ten_session_timeout", "stop_ten_session_timeout"]
+maximum_learned_specifications = 6
+maximum_model_policy_trials = 12
+base_round_trip_cost_bps = 20.0
+stress_cost_multiplier = 2.0
+# Preserve the published path convention: prepay both sides once, at entry.
+cost_timing = "round_trip_prepaid_at_entry"
+price_accounting = "verified_total_return_units_no_separate_distributions"
+# This is normalized accounting, not an assumed personal account balance.
+initial_equity_units = 1.0
+cash_yield = 0.0
+maximum_gross_exposure = 1.0
+cohort_allocation = "one_tenth_prior_close_nav_equal_weight"
+funding_policy = "pro_rata_cash_cap_including_prepaid_cost"
+entry_exit_order = "entries_before_exits_proceeds_next_session"
+repeated_security_policy = "separate_exit_lots_aggregate_exposure"
+# Existing SwingPromotionConfig drawdown ceiling, now explicit for this campaign.
+maximum_drawdown = 0.20
+capacity_claim = "unavailable_without_account_size_and_execution_evidence"
+bootstrap_samples = 20000
+bootstrap_block_sessions = 20
+sensitivity_block_sessions = 40
+confidence_level = 0.95
+confidence_sidedness = "one_sided_lower"
+bootstrap_method = "moving_block_percentile"
+tested_statistic = "mean_daily_portfolio_return_minus_spy_return"
+multiple_trial_control = "bonferroni_model_policy_family"
+sensitivity_role = "conjunctive_not_alternative_pass"
+random_seed = 42
+# One full session-year, assessed once after all its ten-session labels mature.
+# This does not delay historical feature engineering or development training.
+prospective_minimum_sessions = 252
+prospective_session_unit = "decision_sessions"
+terminal_policy = "ten_session_maturation_tail_no_new_entries"
+prospective_assessments = 1
+historical_test_status = "already_exposed_research_only"
+maximum_process_memory_gib = 5.0
