@@ -8,35 +8,79 @@ Repository: `C:\project\market-predictor`
 
 Branch: `er-intraday-refactoring`
 
-Last completed implementation commit: `e1e4803` (`Collect immutable official evidence for swing holding recovery`)
+Last completed implementation commit: `0c5f1f7` (`Verify bounded swing transfer prices and SEC stock-class evidence`)
 
 ## Current Session Work Tracking
 
-2026-09-07: source-document collection implementation `e1e4803` is verified and
-pushed. Historical bar/source authorities, selections and model files are unchanged.
-The pending changes at this boundary are this handoff and the active plan only;
-generated `.test-tmp` remains untracked and must not be staged.
+2026-09-07: transfer replay/class-fact implementation `0c5f1f7` is verified and
+pushed. New raw response archives are retained separately; historical bar/source
+authorities, selections and model files remain unchanged. This closure changes
+only the two continuity documents. Generated `.test-tmp` remains untracked and
+must not be staged. No real model was trained or admitted.
 
 | Owned work | Identifier | State and purpose |
 | --- | --- | --- |
-| Rawls review agent | `01a07c79-2c20-7de0-95c8-7a0aa6ba3880` | Complete and closed; retained identity input inventory assembled |
-| Pascal review agent | `01a07c79-2cb1-7461-b404-e04733af35e6` | Review complete; closed after recording policy boundaries |
+| Rawls review agent | `01a07c79-2c20-7de0-95c8-7a0aa6ba3880` | Discrepancy diagnosis complete and closed; mapping/adjustment hypotheses distinguished from proven factors |
+| Pascal review agent | `01a07c79-2cb1-7461-b404-e04733af35e6` | Consolidated review complete and closed; duplicate JSON/normalized-symbol collision finding fixed with regressions |
+| Dewey worker agent | `01a07dac-643e-7133-9412-af86d940cd5a` | Source-preparation tests complete and closed; malformed selected-ID finding fixed with regressions |
+| Current full pytest job | exec session `1367`, PID `12604` | Complete; PID exited; XML `.test-tmp/transfer-full-verified.xml` |
+| Transfer replay collection | PID `16496` | Complete; PID exited; eleven windows collected and replayed offline |
 | Full pytest job | exec session `98594` | Complete; Python worker `25936` and launcher `28424` exited |
 | Official source collection | exec session `32034` | Completed; no collection worker remains |
 
-Final verification command: `.venv\Scripts\python.exe -m pytest -q -x
--p no:cacheprovider --basetemp .test-tmp/official-documents-verified
---junitxml=.test-tmp/official-documents-verified.xml`. Result: **2,226 passed,
-three skipped, 133 warnings in 16m29s**. Ruff and strict mypy on 321 source files
-pass; focused sets overlap: 265 collector/HTTP/boundary and 45 CLI/collector tests.
-The initial full attempt found the new command missing from the CLI inventory;
-it was corrected before the final full run. Review fixes cover raw stream-error
-normalization, external attempt containment and relative-path offline replay.
-Observed peak working set during verification was 0.323 GiB, not a complete run
-memory trace. No owned worker or review agent remains at this checkpoint boundary.
-Maintain this table as work resumes; never kill unrelated user processes.
+Final suite: **2,369 passed, three skipped, 133 warnings in 16m19s**. Reproduce with
+`.venv\Scripts\python.exe -m pytest -q -x -p no:cacheprovider --basetemp
+.test-tmp/transfer-full-verified --junitxml=.test-tmp/transfer-full-verified.xml`.
+The actual launcher additionally printed its PID and final OS memory snapshot.
+Full Ruff and strict mypy on 324 source files pass; 167 focused tests pass.
+Independent review fixes: malformed selected-ID coercion, duplicate JSON keys and
+normalized-symbol collisions that could hide conflicting prices. All have poison
+regressions. The measured worker peak was 348,332,032 bytes (0.324 GiB); this is
+the Python process peak, not aggregate laptop/agent memory. Both known PIDs were
+checked after completion and were absent. All agents are closed. Maintain this
+table on continuation; never terminate unrelated user processes.
 
 ## Newly Retained Official Evidence
+
+The transfer evidence continuation acquired all eleven configured Alpaca daily
+windows at `data/raw/swing_transfer_history`; offline replay verifies the same
+results. Report SHA-256:
+`b8daebd9322da94bd10617d54a1a9cc4c9eb07baa4459f237d76300bc3797198`.
+All 140 required ticker-sessions have valid positive-volume observations. Eight
+tickers match retained OHLCV exactly: CPRI, DXC, KSS, NKTR, SEDG, SLG, WU and XRX
+(26 selected decisions, 101 ticker-sessions). ADS, GPS and PRGO retain all sessions
+and matching volume but differ in all OHLC values: 60, 40 and 56 price fields
+respectively. These twelve selected decisions remain unresolved; no prices are
+replaced and no tolerance was tuned. Acquisition does not admit any identity or
+accounting outcome. The separate retrospective relation is not yet published.
+
+The bounded independent source review found the old request recorded no `asof`;
+artifact creation is July 25, 2026, while the new raw responses were retrieved
+September 7. ADS retained history stops April 1, 2022 (ADS-to-BFH changed April 4);
+GPS stops August 21, 2024 (GPS-to-GAP changed August 22). PRGO has a later announced
+dividend. These support mapping/adjustment-vintage hypotheses but do not prove
+provider adjustment factors. The new bodies expose no resolved instrument ID or
+factor history. Median replay/retained price ratios are ADS 0.920688, GPS 0.941353,
+PRGO 0.984869; near-constant ratios are diagnostic, not an admission tolerance.
+Primary sources inspected online, not archived:
+[Alpaca symbol-date semantics](https://docs.alpaca.markets/us/reference/stockbars),
+[ADS issuer filing](https://investor.breadfinancial.com/node/18911/html),
+[GPS issuer rename](https://investors.gapinc.com/press-releases/news-details/2024/Gap-Inc.-To-Change-Ticker-Symbol-to-GAP-on-August-22-To-Report-Second-Quarter-Fiscal-2024-Results-on-August-29/default.aspx),
+[PRGO dividend](https://investor.perrigo.com/2026-07-30-Perrigo-Announces-Quarterly-Dividend).
+Smallest next diagnostic: separate immutable controls for those three same windows
+with `asof=2026-07-25`, all other query parameters unchanged. This varies symbol
+lookup only; it cannot reconstruct July's adjustment vintage. Only if it explains
+ADS/GPS discrepancies, compare raw bars under both symbol dates to isolate the
+mapping-dependent adjustment effect. Do not modify this completed request, replay
+or retained old bars, guess factors, tune tolerances or exclude selected holdings.
+
+`configs/swing_transfer_identity_documents.toml` acquired nine stock-class filings
+and the supplemental LB regular-way-rights announcement at
+`data/raw/swing_transfer_identity_documents`. Ten of ten responses verify offline;
+report SHA-256:
+`e09a8ee202c6a195f1c7d2c67b830c96e1efae31f16296b644d7b5f01e70e87a`.
+ADS/GPS filings were reused. The new class extractor successfully parsed all eleven
+target stock classes; it returns source facts, not validity/admission intervals.
 
 The source collector is `sources/official_documents.py`; command adapter is
 `commands/swing_collection.py`, exposed by the collection CLI. No compatibility
@@ -132,8 +176,8 @@ Preserve selected IDs, calendar, allocation and raw sources. Do not drop these
 observations, fabricate merger proceeds or credit a stock fill using an options
 reference price. `adjustment=all` still lacks independent total-return reconciliation.
 The frozen control therefore remains blocked on all 70 old outcomes until a new
-authority is built and replayed. No real model was trained, no provider data was
-downloaded, and no SPY outperformance or promotion was claimed. Feature expansion
+authority is built and replayed. No real model was trained and no SPY outperformance
+or promotion was claimed. The bounded new raw acquisitions are recorded above. Feature expansion
 and training remain pending source/label admission; intraday remains paused.
 
 ### Previously Verified Accounting
@@ -1722,37 +1766,42 @@ occurred.
 
 ## Exact Next Checkpoint
 
-Exact next checkpoint: **Bind retrospective index-transfer holding identities**.
+Exact next checkpoint: **Reconcile three price mismatches and bind transfer identities**.
 The objective is complete in `3b2bff5`; funded accounting is verified in `6758671`;
 holding-path code and cache invalidation are verified/pushed in `bc9dbd5`;
-official-source acquisition is verified/pushed in `e1e4803`.
+official-source acquisition is verified/pushed in `e1e4803`; transfer response
+replay and SEC stock-class extraction are verified/pushed in `0c5f1f7`.
 The frozen real-data control still has 70 unresolved old outcomes and an unverified
 price basis. The user authorizes continuing through training without another model,
 but not inventing data or skipping these admission gates.
 
-1. Build an evidence-bound retrospective identity relation for 38 explicit index-
-   transfer paths: ADS 6, CPRI 5, DXC 1, GPS 1, KSS 3, NKTR 3, PRGO 5, SEDG 1,
-   SLG 9, WU 1 and XRX 3. Reuse ten retained S&P transfer bodies and ADS/GPS SEC
-   stock-class filings. Nine other filing URLs are obtainable from the existing SEC
-   accession inventory (latest 10-K/10-Q on or before the first selected decision).
-   Rawls' closed review above contains the exact input table if resuming that agent.
-   Bound canonical security, issuer and specific class; do not transplant raw IDs.
-   Use eleven short `fetch_bars_page` requests with explicit membership-date `asof`,
-   then compare against retained observations; unexplained differences stay blocked.
-   This is positive-evidence retrospective attribution bounded to needed sessions,
-   not a lifetime mapping or a demand for daily absence-of-event certificates.
-2. AIV's two price-complete paths also require corporate-action treatment, as do
-   the 30 paths with zero-volume/missing observations. Use the eight newly retained
-   bodies and feature-audit supplemental references. Define entitlement, valuation,
+1. Do not repeat the eleven completed provider windows or nine completed filing
+   acquisitions. Reuse the source archives and hashes above. First add a separately
+   named, immutable comparison for ADS/GPS/PRGO with `asof=2026-07-25`, holding all
+   other bounded query parameters fixed. This tests symbol lookup, not adjustment
+   vintage. Only then use the conditional raw-price diagnostic described above.
+   Do not change the frozen replay request, tune a tolerance, guess factors or
+   overwrite either source. Unexplained differences remain explicit blockers.
+2. Publish the retrospective identity relation for 38 transfer paths: ADS 6,
+   CPRI 5, DXC 1, GPS 1, KSS 3, NKTR 3, PRGO 5, SEDG 1, SLG 9, WU 1 and XRX 3.
+   Eight exact-match tickers cover 26 paths; the twelve mismatched paths remain
+   unresolved, not silently excluded. Bind canonical security/issuer/class facts,
+   retained positive S&P transfer evidence, required sessions and provider receipts.
+   The class extractor and response archive exist; the combined identity relation
+   does not. This is session-bounded retrospective attribution, not lifetime
+   continuity or proof of total-return/fill treatment.
+3. AIV's two price-complete paths also require corporate-action treatment, as do
+   the 30 paths with zero-volume/missing observations. Use the retained official
+   bodies, including LB's rights announcement. Define entitlement, valuation,
    tradability and cash availability separately. Synthetic accounting conventions
    remain pending user approval; no holding/selection is dropped to force a pass.
-3. Thread verified independent outcome history into the materialization callers
+4. Thread verified independent outcome history into the materialization callers
    and bind it in a new immutable request/authority. Replay both fixed and managed
    outcomes and the unchanged selection/calendar. Never overwrite the old panel.
-4. Reconcile stock and benchmark total-return treatment with independently bound
+5. Reconcile stock and benchmark total-return treatment with independently bound
    corporate-action evidence. Rerun the control; an unsuccessful economic control
    is diagnostic, not a requirement that the untrained population must be profitable.
-5. Then continue causal feature completion and the six sequential return-model fits.
+6. Then continue causal feature completion and the six sequential return-model fits.
    The exposed July-2025 through June-2026 interval is not a fresh final test.
 
 Read `AGENTS.md`, the active plan's current section, this handoff's verified repair
@@ -1779,5 +1828,6 @@ Research artifacts to inspect without retraining:
 
 Use existing data first. Parallel reviewers and disjoint light implementation tasks
 are permitted; heavy tests and training remain sequential. Stop and close owned
-workers/reviewers when their bounded work is complete. No deployment, provider
-collection, real model training, or promotion occurred in the contract checkpoint.
+workers/reviewers when their bounded work is complete. The current source checkpoint
+collected only the documented small windows and filings; it did not deploy, train
+a real model or promote anything.

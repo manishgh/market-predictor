@@ -518,6 +518,38 @@ separate total-return/fill gate. AIV and other action-dependent cases are outsid
 this 38-path interpretation. Synthetic merger redemption/distribution conventions
 remain unapproved pending the asynchronous user decision; keep existing rules.
 
+**Verified source subcheckpoint `0c5f1f7`:** the bounded replay/class-fact code is
+complete and pushed; the combined retrospective identity relation is not yet
+published. Source preparation projects only selected initial-fit identities and
+required raw observations. The shared Alpaca decoder rejects duplicate JSON keys
+and normalized-symbol collisions. Per-ticker attempts preserve exact bytes and
+failures, resume verified successes and replay offline under the shared job lease.
+SEC class extraction keeps issuer/context associations explicit without inventing
+validity intervals. Full verification: 2,369 passed, three skipped, 133 warnings
+in 16m19s; 167 focused tests, full Ruff and strict mypy on 324 source files pass.
+All reviewers and owned workers are closed; measured test-process peak 0.324 GiB.
+
+Real acquisition retained all eleven windows / 140 required ticker-sessions, with
+no missing or zero-volume observation. Eight tickers match exactly (26 decisions,
+101 ticker-sessions). ADS, GPS and PRGO have matching volume but 60/40/56 different
+OHLC values (twelve decisions, 39 ticker-sessions). Retained sources, selected IDs,
+labels and model files were not replaced. Report SHA-256:
+`b8daebd9322da94bd10617d54a1a9cc4c9eb07baa4459f237d76300bc3797198`.
+Nine class filings plus the LB rights announcement were acquired separately and
+all ten replay offline; ADS/GPS filings were reused. All eleven classes extracted.
+The handoff records their immutable archive/report paths and source diagnosis.
+
+**Immediate bounded continuation:** independently compare those three same windows
+using an explicit July 25, 2026 symbol-lookup control date, with all other query
+parameters fixed. The old request did not record `asof`; the control is a hypothesis
+test, not a reconstruction of July adjustment vintage. A separate immutable request
+must preserve the completed replay. If the control explains ADS/GPS, compare raw
+bars under both lookup dates before attributing an adjustment effect. Require exact
+query/byte replay, no source mutation and explicit unresolved results; never tune
+price tolerances or exclude the twelve selected decisions. Then bind the positive
+S&P/class/identity evidence for the eligible paths. Identity admission cannot clear
+the independent total-return/tradability/settlement gates or authorize training.
+
 The bounded continuation of accounting repairs decision/outcome separation, not
 the selected population. The source audit reproduced 40 recoverable paths across
 12 tickers, requiring 91 retained sessions omitted from combined history. Thirty
