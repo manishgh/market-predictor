@@ -2,7 +2,7 @@
 
 Status: active
 
-Last updated: 2026-09-06
+Last updated: 2026-09-07
 
 Repository: `C:\project\market-predictor`
 
@@ -1791,6 +1791,22 @@ test, and task names.
    names rather than chronological labels such as `v3` or checkpoint labels. Delete
    `v3` and `edge_rebuild` only after every implementation and consumer has migrated
    and a repository scan finds zero imports of either namespace.
+   - **Outcome and drift governance ownership (`completed`).** Implementation
+     commit `880f2a8` moves prediction selection to `modeling`, horizon-specific
+     maturation to `swing/evaluation` and `intraday/evaluation`, and outcome,
+     performance, feature-drift, and drift-policy ownership to `governance`.
+     Removed top-level and duplicate swing policy modules have no aliases and are
+     guarded against reintroduction. Outcome observations and matured economics are
+     rebound to immutable intents on every read; swing and intraday maturation require
+     exact daily and one-minute bars; execution economics remain separate from label
+     economics; feature drift is bound to the promoted model's complete feature-name
+     set and reference profile; and serving pins the approved drift-policy hash.
+     Independent ML/governance and production-Python reviewers found seven P1 issues;
+     all were fixed and both reviewers confirmed closure. Verification passed 339
+     focused tests and the exact complete suite with 2,033 passed and three skipped.
+     Changed-file Ruff, strict mypy over 30 source files, compileall, diff checks, and
+     the final no-Python-process check passed. No provider call, data regeneration,
+     training, promotion, serving process, or locked-test access occurred.
 6. **Repository-wide static quality (`pending`).**
    Resolve all configured repository-wide Ruff and strict mypy findings, remove only
    reference-proven scratch or placeholder artifacts, and add architecture guards that
@@ -1802,12 +1818,22 @@ test, and task names.
    test suite under the configured writable runtime directory, `git diff --check`, and
    a process/memory check. Update the handoff with measured evidence only.
 
-The exact next checkpoint is governance outcome and drift ownership. Move drift policy,
-prediction policy, outcome contracts, outcome maturation, outcome persistence, and
-performance monitoring from top-level modules into behavior-named modules under
-`governance`. Keep serving dependent on governance, never the reverse; update commands
-as thin adapters; prohibit every removed import path without aliases; and preserve
-persisted evidence schemas and governed behavior.
+The exact next structural checkpoint is repository-wide static quality. Resolve the
+current configured Ruff and strict-mypy debt without changing features, labels,
+policies, datasets, model state, or artifact identities. The 2026-09-07 repository-wide
+Ruff scan reports 106 errors; the last verified strict-mypy baseline remains 14 findings
+in three intraday dataset files and must be remeasured before editing. Use independent
+reviewers, one constrained Python process at a time, and close every reviewer and test
+worker after the checkpoint.
+
+The clean Astra model-improvement checkpoint is implementation commit `880f2a8` plus
+its documentation closure. Astra may begin evidence review and freeze hypotheses at
+that point. Model training must still use the four explicit families, causal source
+authorities, purged walk-forward validation, untouched locked tests, realistic costs,
+and after-cost excess return versus SPY, QQQ, and the point-in-time sector ETF. The
+primary goal is positive, stable benchmark-relative economics; ROC-AUC is diagnostic,
+not the optimization target. No model may be promoted merely because its AUC reaches
+0.60.
 
 Rollback is the last pushed task commit. A task is not accepted until the same senior
 reviewer has inspected its bounded diff and all supported P0/P1 findings are fixed.

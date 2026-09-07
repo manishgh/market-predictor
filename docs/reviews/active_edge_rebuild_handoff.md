@@ -2,13 +2,13 @@
 
 Status: active
 
-Last updated: 2026-09-06
+Last updated: 2026-09-07
 
 Repository: `C:\project\market-predictor`
 
 Branch: `er-intraday-refactoring`
 
-Last completed implementation commit: `7419df8` (`Move and harden prospective analyst evidence`)
+Last completed implementation commit: `880f2a8` (`Consolidate outcome and drift governance`)
 
 ## Purpose
 
@@ -1372,11 +1372,61 @@ in `intraday/datasets/publisher.py`, `intraday/datasets/bar_dataset.py`, and
 `intraday/datasets/dataset_io.py`. No provider call, data regeneration, training,
 promotion, serving process, or locked-test access occurred.
 
-Exact next checkpoint: independently review and implement governance outcome and drift
-ownership. Move drift policy, prediction policy, outcome contracts, outcome maturation,
-outcome persistence, and performance monitoring from top-level modules into
-behavior-named modules under `governance`. Keep serving dependent on governance, never
-the reverse; keep commands thin; prohibit every removed import path without aliases;
-and preserve persisted evidence schemas and governed behavior. Do not run providers,
-regenerate data, train, promote, serve, or open a locked test. Rollback anchor is
-`fc2a32e`.
+Implementation commit `880f2a8` completes outcome and drift governance ownership.
+Prediction selection now belongs to `modeling`; swing and intraday maturation belong
+to their horizon evaluation packages; and outcome contracts, durable persistence,
+performance monitoring, feature drift, and drift policy belong to `governance`.
+Removed top-level modules and the duplicate swing policy module have no aliases and are
+blocked by architecture tests.
+
+The checkpoint also closes seven independently reproduced P1 failures. Stored
+observations and matured outcomes are rebound to their immutable intent every time
+they are read. Outcome evidence and storage identities are verified. Swing maturation
+accepts only canonical daily bars and intraday maturation only canonical one-minute
+bars. Label economics and dynamic execution-policy economics are separately retained.
+Feature drift requires the complete unique feature-name set and exact reference-profile
+identity from the active model. Drift assessment state/actionability pairs are strict,
+and serving accepts only the configured drift-policy SHA-256. Both independent
+reviewers confirmed their findings closed.
+
+Verification passed 339 focused tests and the exact full suite with 2,033 passed, three
+skipped, and 132 warnings in 27 minutes. Changed-file Ruff passed; strict mypy passed
+over 30 source files; compileall and diff checks passed. A sampled full-suite working
+set was approximately 0.13 GiB, and no Python process remained at closure. No provider
+request, data regeneration, training, promotion, serving process, or locked-test access
+occurred.
+
+## Exact Next Structural Checkpoint
+
+Exact next checkpoint: run repository-wide static quality as one bounded checkpoint.
+First remeasure both
+configured tools. The 2026-09-07 Ruff scan reports 106 errors, primarily import
+formatting; the last strict-mypy baseline is 14 findings in
+`intraday/datasets/publisher.py`, `intraday/datasets/bar_dataset.py`, and
+`intraday/datasets/dataset_io.py`. Fix only static/dependency defects, keep model and
+artifact semantics unchanged, use two independent reviewers, run one Python process at
+a time, then run the full suite and terminate all workers. Rollback anchor is
+`880f2a8`.
+
+## Astra Model-Improvement Pickup
+
+`880f2a8` plus this documentation closure is a clean handoff for model research. Read,
+in order: `AGENTS.md`, `docs/active_edge_rebuild_plan.md`, this handoff, and
+`docs/reviews/feature_engineering_audit_20260801.md`. Use Astra xhigh for hypothesis and
+evaluation design; high is sufficient after the design is frozen.
+
+The objective is not an arbitrary AUC increase. Improve four explicit families:
+swing technical, swing plus catalyst, intraday technical, and intraday plus catalyst.
+The primary acceptance evidence is positive and stable after-cost excess return versus
+SPY, QQQ, and the point-in-time sector ETF across purged walk-forward periods,
+unseen-security stress, regimes, turnover, capacity, and drawdown. ROC-AUC of at least
+0.60 is a diagnostic gate, not proof of deployable edge. Preserve untouched locked
+tests and never retune against them.
+
+Start with an evidence-only diagnosis using existing immutable data. Attribute failure
+separately to label noise, feature weakness, regime instability, calibration, ranking,
+costs, and capacity. Then freeze one hypothesis at a time with exact source authority,
+availability timestamp, feature formula, affected model family, ablation control,
+validation windows, economic gates, and rollback. Do not download data unless a named
+accepted hypothesis proves existing causal coverage insufficient. Do not train or
+promote during the diagnosis checkpoint.
