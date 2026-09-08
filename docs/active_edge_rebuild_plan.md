@@ -49,9 +49,11 @@ Immediate scope: freeze an evidence-bound whole-security research cohort, apply 
 before peer features/relative labels/selection, and report cumulative exclusions and
 sector/year effects. The parent modeled universe is 631 IDs: 27 are already excluded,
 leaving 604. The additional eighteen failures would yield 45/631 (7.1315%), leaving
-586; the 27 warm-up-only securities are not part of the denominator. The existing
-5% ceiling stays effective until the pending user decision approves a named 8%
-ceiling. No reset to 18/604 or silent increase is allowed.
+586; the 27 warm-up-only securities are not part of the denominator. The user
+explicitly approved a 10% ceiling on 2026-09-08 for this research dataset. This
+changes only the research restriction cap to 1,000 basis points, not the exclusion
+list, live-inference policy, original universe or model/economic contract.
+No reset to 18/604 or exclusion based on later performance is allowed.
 
 This is an explicitly retrospective development restriction, not a historically
 observable universe screen. Freeze all IDs and evidence before new fitting/results;
@@ -63,14 +65,80 @@ promotion or fresh prospective evidence. Full tests, independent review and a Gi
 checkpoint close this bounded change before dependent materialization/training.
 
 Cohort implementation is now verified and pushed in `771c7bd`. The real audit at
-`data/reports/swing_research_cohort/research_population_audit.json` verifies 85
+`data/reports/swing_research_cohort/approved_research_population_audit.json` verifies 85
 identity-only monthly projections: 853,417 parent rows, 10,971 proposed removals,
 842,446 retained rows and 586 retained securities. Audit hash:
-`da2e3b6e7bfc130d746fba960fa23517a7a4b5ba56eca787f1a34eddf719a200`.
-These are coverage counts, not a rebuilt or admitted feature authority. Its status
-is `blocked_exclusion_cap`; the numeric cap approval remains pending.
+`41de559dd1c415dab60771e10fd489150853a6c2fff07e387d1024b33961efe0`.
+The approved cohort hash is
+`794bcf834501cbaa8ec54716e8b561a5aaf0137610fe67587f4db69f9189fca6`.
+These are coverage counts, not a rebuilt feature authority. The new audit status is
+`accepted_research_restriction`; accounting and promotion eligibility remain false.
+The prior 5% blocked report is retained as historical evidence, not overwritten.
 
-Verification: 2,422 tests passed, three skipped, 133 warnings; full Ruff and strict
+The original long-only SPY-relative implementation plan below remains the guide.
+The retained-stock **holding-identity preflight** is verified and pushed in
+`307cffe`. Its bounded scope: hash-bound cohort/parent/membership sources,
+metadata-only monthly projections, exact ten-session XNYS windows, full membership
+authority (including excluded competing owners), and separate initial-fit versus
+full-history coverage. Exit: immutable coverage report, synthetic/tamper/lease tests,
+independent code/ML review and full verification. It must not inspect numeric
+outcomes, add exclusions or equate S&P removal with delisting. Missing ownership
+produces an uncovered report, never a fill or a training pass. Bar availability,
+stock/SPY/QQQ/sector numeric paths and total-return reconciliation remain distinct
+dependent checks. Only then rebuild labels/features and the six sequential fits.
+
+Real holding-identity preflight completed across all 85 months: 842,446 retained
+decisions, 836,638 covered mature windows, 947 uncovered mature windows across
+100 securities, and 4,861 terminal immature decisions. Initial fit contains
+581,455 mature decisions: 580,889 covered and 566 uncovered across 60 securities.
+The uncovered share is 0.1131% of mature decisions, not a whole-security exclusion
+rate or missing-price count. Report: `data/reports/swing_research_cohort/holding_identity_preflight.json`,
+audit SHA `8f8cdd60ca2f9c1372ceda20d04b7f90eefbfb2336a7f282f30aa97b8c7e723b`.
+Peak process memory was 0.231568 GiB. No numeric outcomes/features were read.
+The approved exclusion list remains fixed. Full verification: **2,502 passed,
+three skipped, 132 warnings in 17m19s**; 133 focused tests pass, full tracked-Python
+Ruff and strict mypy on 328 sources pass. Test peak: 351,141,888 bytes (0.327 GiB).
+Independent code/ML and test reviews fixed partial-session competing ownership,
+open-ended timestamp handling, continuous same-owner metadata changes and duplicate
+decision IDs across partitions. All owned agents and workers are closed/exited.
+This closes the preflight implementation, not the overall accounting/data step.
+
+The next dependent implementation uses a separate **holding-observation authority**
+under `swing/datasets`, bound to this cohort, original raw SIP artifacts and explicit
+security/class ownership evidence. Reuse the retained raw-reader semantics in
+`research/swing_transfer_sources.py`, not its frozen eleven-stock population.
+Read required sessions directly from raw artifacts and share
+`validate_outcome_observations()` / `outcome_bar_lookup()`. Keep
+`ownership_unresolved`, `observation_missing` and `observation_invalid` distinct.
+For the initial-fit diagnostic, push the required-session/date filter into the
+Parquet scan before returning numeric rows; do not reuse the transfer helper's
+decode-all-then-filter behavior to inspect validation/test prices. Full-history
+identity geometry remains separate from the authorized numeric diagnostic scope.
+Pass admitted independent observations to `build_swing_feature_rows(outcome_bars=...)`;
+do not alter decision membership, peer transforms or their feature-history loader.
+The raw request spans the full modeled horizon and previously examined cases had
+91 omitted combined-history sessions, but this does not prove these 100 securities'
+coverage. Do not infer post-removal ownership from CIK equality, a retained ticker
+or an SEC relation whose interval was copied from index membership. No broad
+download, new exclusion or accounting acceptance is authorized by this preflight.
+
+Source research checked September 8: Alpaca's
+[corporate-actions endpoint](https://docs.alpaca.markets/us/reference/corporateactions-1)
+provides split, dividend, spin-off, merger and name-change records, with pagination
+and process-date interval semantics. Its creation/availability timing is explicitly
+not guaranteed, so a historical response is not a causal announcement feature.
+Validate required record fields even with `data_quality=complete`; the documented
+response can still include incomplete records that have already been processed.
+`sources/alpaca.py::fetch_security_transitions()` already uses that endpoint but
+selects only name changes, mergers and reorganizations; it is not a distribution
+or adjustment-factor authority. Reuse its transport ownership while preserving raw
+response bytes and complete coverage receipts for the new accounting evidence.
+The [bar reference](https://docs.alpaca.markets/us/reference/stockbars) distinguishes
+split, cash-dividend and spin-off adjustments; `all` includes them, and `asof`
+is documented as symbol/entity mapping, not an adjustment-vintage selector. These
+documented semantics guide reconciliation; they are not per-stock price proof.
+
+Previous committed verification: 2,422 tests passed, three skipped, 133 warnings; full Ruff and strict
 mypy on 326 source files pass. Peak test-process memory was 348,155,904 bytes.
 Consolidated review fixed explicit retrospective scope propagation and relative CLI
 root handling. The first full run found a missing CLI inventory entry; that entry

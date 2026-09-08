@@ -8,14 +8,71 @@ Repository: `C:\project\market-predictor`
 
 Branch: `er-intraday-refactoring`
 
-Last completed implementation commit: `771c7bd` (`Add audited whole-security swing research cohorts`)
+Last completed implementation commit: `307cffe` (`Approve research cohort and audit swing holding identity`)
 
 ## Current Session Work Tracking
+
+2026-09-08 continuation verified and pushed in `307cffe`: the user approved **10%** for
+the same retrospective whole-security research restriction. The old request for
+8% and pending 5% discussion below are historical, not current blockers.
+`configs/swing_research_cohort.toml` now uses 1,000 basis points; no IDs changed.
+Accepted report: `data/reports/swing_research_cohort/approved_research_population_audit.json`.
+Audit SHA `41de559dd1c415dab60771e10fd489150853a6c2fff07e387d1024b33961efe0`;
+cohort SHA `794bcf834501cbaa8ec54716e8b561a5aaf0137610fe67587f4db69f9189fca6`.
+45/631 excluded, 586 retained. Accounting/promotion remain false.
+PID 25928 exited; peak 114,188,288 bytes. Initial focused tests: 53 passed.
+
+The original Astra plan remains authoritative. Completed bounded implementation:
+holding-window membership/identity preflight using metadata only, not returns.
+This distinguishes post-removal ownership gaps from terminal immature decisions;
+it does not yet establish bar coverage, total returns or benchmark accounting.
+Boyle ML/quant advisor `01a082b2-a70e-7c43-9786-17ca36d1829a` completed and closed.
+Harvey code reviewer `01a082b5-9e4b-7430-bc1d-6c358864b29e` completed cap admission
+and consolidated new-code review; findings fixed, agent closed.
+Test worker `01a082c0-d99e-7850-806f-77074a6ddfab` completed and closed. Supported
+findings fixed: partial-session competing ownership, all-null interval-end checks,
+same-owner metadata transitions and cross-partition duplicate decision IDs.
+Integrated focused tests: 133 passed in 16.62s. Full tracked-Python Ruff and strict
+mypy on 328 sources pass. Full suite: **2,502 passed, three skipped, 132 warnings
+in 1,039.81s (17m19s)**. Test peak: 351,141,888 bytes (0.327 GiB).
+Real metadata preflight: PID 23592, session 29653, completed and exited; peak
+0.231568 GiB. Full suite PID 27156, session 61096 completed and exited; XML
+`.test-tmp/holding-identity-full.xml`. All five tracked worker PIDs were checked
+after completion and absent. No test, training, collection or other heavy job remains.
+Boyle's next-source advisory completed and closed; all agents are now closed.
+
+Real report: `data/reports/swing_research_cohort/holding_identity_preflight.json`;
+SHA `8f8cdd60ca2f9c1372ceda20d04b7f90eefbfb2336a7f282f30aa97b8c7e723b`.
+842,446 decisions: 836,638 covered matured, 947 uncovered matured across 100 IDs,
+4,861 terminal immature. Initial fit: 581,455 matured, 580,889 covered, 566
+uncovered across 60 IDs. No numeric features/returns read. These are ownership
+coverage counts, not missing-bar counts or failed predictions. No new exclusions.
+Use independent raw observations for the next step, not a broader exclusion list.
+
+Next-source advisor: raw modeled source
+`data/raw/swing_daily_sip_sp500_pit_20190709_20260708_v3` is distinct from the
+membership-clipped combined data. `research/swing_transfer_sources.py::_retained_rows`
+shows required-session reads and shared observation validation, but its eleven-stock
+request must not be repurposed by overriding source pins. The new authority belongs
+under `swing/datasets`, with explicit security/class ownership and separate unresolved,
+missing and invalid states. Pass its observations through `outcome_bars`, without
+changing decision membership or peer-feature history. Full plan records this scope.
+The initial-fit source reader must filter required sessions before returning numeric
+rows, rather than copying the old transfer helper's decode-all-then-filter pattern.
+Alpaca's corporate-actions endpoint was checked in official documentation; the
+existing `fetch_security_transitions()` omits dividend/split accounting evidence.
+Historical corporate-action retrieval does not prove announcement availability.
+No additional provider data was collected during this continuation.
+Implementation/config/README/architecture/audit changes are committed and pushed.
+Only this handoff and the active plan change for documentation closure. Generated
+`.test-tmp` remains untracked and must not be staged. No new model was trained.
+
+### Previous Completed Cohort Checkpoint
 
 2026-09-08: whole-security cohort implementation `771c7bd` is verified and pushed.
 The user authorizes excluding whole problem securities rather than indefinitely
 repairing every old corporate action. The proposed population still exceeds the
-effective 5% cap; the requested 8% exception has no recorded approval. This is a
+then-effective 5% cap; 8% had not been approved at that point. This was a
 completed code checkpoint, not admitted data, trained models or completion of all
 six requested research steps.
 
@@ -40,8 +97,8 @@ six requested research steps.
 - Real identity-only audit: draft PID `18716` exited, peak 114,749,440 bytes;
   final CLI publication PID `17812` exited. Final report below replaces the draft
   after BIIB's reason was accurately named `unavailable_trading`.
-- Pending decision: 27 existing plus eighteen proposed exclusions = 45/631 (7.13%).
-  The configuration remains at 5%; a requested 8% exception is not yet approved.
+- Historical pending decision: 45/631 (7.13%) exceeded the then-configured 5%.
+  The later 10% approval and accepted report at the top supersede this blocker.
 - No raw data, training labels, fitted models or historical controls were changed.
 
 Current audit: `data/reports/swing_research_cohort/research_population_audit.json`.
@@ -1812,21 +1869,22 @@ occurred.
 
 ## Exact Next Checkpoint
 
-Exact next checkpoint: **Admit the approved research population and rebuild retained outcomes**.
-Cohort implementation, real identity/coverage audit, independent review and full
-verification are complete in `771c7bd`. No new feature authority was materialized,
-and no real model was trained. Continue from the recorded policy decision, not
-from the older requirement to repair all 70 historical selected holdings.
+Exact next checkpoint: **Build independent holding observations from retained raw bars**.
+Approved cohort and full-population holding-identity preflight are verified and
+pushed in `307cffe`. The report identifies 947 uncovered mature windows, including
+566 in initial fit. No new feature authority or model was built. Continue from
+the fixed 586-security cohort, not the old requirement to repair all 70 selected
+holdings or another request for the already-approved cap.
 
-1. Resolve the pending exclusion cap: original population 631, inherited exclusions
-   27, additional identities eighteen. Current configuration remains 500 basis points
-   (5%) and the published audit correctly reports 45/631 blocked. If the user approves
-   8%, record the approval in `configs/swing_research_cohort.toml` and publish a
-   separate immutable accepted audit, never overwrite the blocked report. Keeping
-   5% permits only 31 total excluded securities, requiring at least fourteen of the
-   current 45 to be independently repaired. Do not reset the denominator to 604.
-2. Once approved, publish a separate immutable cohort audit and rebuild all retained
-   stock feature/label rows under current holding-path semantics, before peer ranks.
+1. The user approved 10%; the separate accepted cohort audit is published (hashes
+   at the top). The list is unchanged: 45/631 excluded, 586 retained. Do not seek
+   another cap approval or use the historical blocked 5% report as current authority.
+2. Implement the bounded holding-observation authority under `swing/datasets`.
+   Use pinned raw SIP artifacts, required-session projections and explicit
+   security/class ownership. Keep unresolved ownership, missing observations and
+   invalid observations separate. First verify the initial-fit windows without
+   returning validation/test numeric rows. Then rebuild retained feature/label
+   rows through independent `outcome_bars`, before peer ranks.
    The excluded eighteen no longer need repair for this new restricted experiment.
    Preserve the old 70-path failure, raw archives and retrospective-bias disclosure.
 3. Recheck retained holding paths and stock/SPY/QQQ/sector return accounting. Do not
