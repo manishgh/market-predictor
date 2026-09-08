@@ -37,6 +37,7 @@ from market_predictor.resources import (
     release_process_memory,
 )
 from market_predictor.swing.contracts import MINIMUM_SWING_DECISION_DATE
+from market_predictor.swing.contracts.research_cohort import SwingResearchCohort
 from market_predictor.swing.features.panel import (
     MANAGED_PATH_COST_POLICY,
     SWING_FEATURE_PANEL_SCHEMA,
@@ -46,7 +47,7 @@ from market_predictor.swing.features.panel import (
 )
 
 SWING_MATERIALIZATION_REQUEST_SCHEMA: Final = (
-    "edge_rebuild.swing_panel_materialization_request.v11"
+    "market_predictor.swing_panel_materialization.research_population"
 )
 SWING_STAGE_ONE_SHARD_SCHEMA: Final = "edge_rebuild.swing_panel_stage_one_shard.v8"
 SWING_MATERIALIZATION_PROFILES: Final = (SWING_FEATURE_PROFILE,)
@@ -66,6 +67,7 @@ def materialize_swing_feature_panel(
     contract: StrategyContract,
     output_dir: Path,
     security_exclusions_path: Path | None = None,
+    research_cohort: SwingResearchCohort | None = None,
     securities_per_shard: int = 32,
     maximum_stage_one_shards_this_run: int | None = None,
     memory_budget_gib: float = 4.0,
@@ -99,6 +101,13 @@ def materialize_swing_feature_panel(
             model_decision_cutoff=CUTOFF_DATE,
         )
         memberships = verified.memberships
+        if research_cohort is not None:
+            research_cohort.assert_source_matches(
+                verified.request_payload,
+                tuple(sorted(memberships["security_id"].unique())),
+                verified.warmup_only_security_ids,
+            )
+            memberships = research_cohort.restrict_memberships(memberships, verified.request_payload)
         security_ids = sorted(memberships["security_id"].astype(str).unique())
         warmup_only_security_ids = list(verified.warmup_only_security_ids)
         if not security_ids:
@@ -111,6 +120,7 @@ def materialize_swing_feature_panel(
             securities_per_shard=securities_per_shard,
             memory_budget_gib=memory_budget_gib,
             memory_headroom_gib=memory_headroom_gib,
+            research_cohort=research_cohort,
         )
         request_sha256 = _json_sha256(request)
         _bind_request(output_dir, request, request_sha256)
@@ -225,6 +235,8 @@ def load_complete_swing_feature_panel(output_dir: Path) -> dict[str, Any]:
     }
     request_sha256 = _json_sha256(request_payload)
     source = manifest.get("source")
+    cohort_payload = request.get("research_cohort")
+    research_scope = cohort_payload.get("scope") if isinstance(cohort_payload, dict) else None
     combined_authority = output_dir / "combined_daily" / "_authority.json"
     if (
         request.get("schema") != SWING_MATERIALIZATION_REQUEST_SCHEMA
@@ -250,6 +262,10 @@ def load_complete_swing_feature_panel(output_dir: Path) -> dict[str, Any]:
         or manifest.get("strategy_contract_sha256")
         != request.get("strategy_contract_sha256")
         or manifest.get("request_sha256") != request_sha256
+        or "research_cohort_sha256" not in manifest
+        or "research_population_scope" not in manifest
+        or manifest.get("research_cohort_sha256") != request.get("research_cohort_sha256")
+        or manifest.get("research_population_scope") != research_scope
         or manifest.get("modeled_security_count")
         != request.get("modeled_security_count")
         or manifest.get("modeled_security_ids_sha256")
@@ -367,10 +383,13 @@ def _build_request(
     securities_per_shard: int,
     memory_budget_gib: float,
     memory_headroom_gib: float,
+    research_cohort: SwingResearchCohort | None = None,
 ) -> dict[str, Any]:
     return {
         "schema": SWING_MATERIALIZATION_REQUEST_SCHEMA,
         "combined_daily_inputs": verified.request_payload,
+        "research_cohort": research_cohort.model_dump(mode="json") if research_cohort else None,
+        "research_cohort_sha256": research_cohort.sha256() if research_cohort else None,
         "strategy_contract_sha256": contract.sha256(),
         "swing_feature_panel_schema": SWING_FEATURE_PANEL_SCHEMA,
         "holding_path_implementation": _holding_path_implementation(),
@@ -407,6 +426,7 @@ def _holding_path_implementation() -> dict[str, str]:
         "edge_rebuild/swing_materialization.py",
         "edge_rebuild/swing_setups.py", "edge_rebuild/swing_daily_combination.py",
         "swing/contracts/__init__.py", "execution_policy.py", "label_paths.py",
+        "swing/contracts/research_cohort.py",
         "modeling/label_outcomes.py",
     )
     return {owner: file_sha256(package / owner) for owner in owners}
@@ -418,6 +438,25 @@ def _population_audit_verifies(payload: Mapping[str, Any]) -> bool:
         not isinstance(value, str) or not value for value in warmup_only
     ):
         return False
+    if "research_cohort" not in payload or "research_cohort_sha256" not in payload:
+        return False
+    if payload["research_cohort"] is None:
+        if payload["research_cohort_sha256"] is not None:
+            return False
+    else:
+        try:
+            cohort = SwingResearchCohort.model_validate_json(json.dumps(payload["research_cohort"], allow_nan=False))
+            parent_ids = tuple(sorted(set(cohort.original_security_ids).difference(cohort.inherited_excluded_security_ids)))
+            cohort.assert_source_matches(payload["combined_daily_inputs"], parent_ids, tuple(warmup_only))
+            if (
+                not cohort.within_cap
+                or payload["research_cohort_sha256"] != cohort.sha256()
+                or payload.get("modeled_security_count") != len(cohort.retained_security_ids)
+                or payload.get("modeled_security_ids_sha256") != _json_sha256(list(cohort.retained_security_ids))
+            ):
+                return False
+        except (ValueError, TypeError, KeyError, DataReadinessError):
+            return False
     return bool(
         warmup_only == sorted(set(warmup_only))
         and payload.get("security_count") == payload.get("modeled_security_count")
@@ -753,6 +792,8 @@ def _finalize_and_publish_stage_one(
             "schema": swing_materialization_contracts.SWING_MATERIALIZATION_MANIFEST_SCHEMA,
             "created_at_utc": datetime.now(UTC).isoformat(),
             "request_sha256": request_sha256,
+            "research_cohort_sha256": request["research_cohort_sha256"],
+            "research_population_scope": request["research_cohort"]["scope"] if request["research_cohort"] else None,
             "strategy_contract_sha256": request["strategy_contract_sha256"],
             "swing_feature_panel_schema": SWING_FEATURE_PANEL_SCHEMA,
             "managed_path_cost_policy": MANAGED_PATH_COST_POLICY,

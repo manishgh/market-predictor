@@ -1,8 +1,21 @@
 # Current Feature Engineering Audit
 
-Last updated: 2026-09-07
+Last updated: 2026-09-08
 
 ## Current Long-Only Swing Campaign
+
+The September 8 user-approved direction permits a new retrospective whole-security
+restriction, rather than repairing every old holding before any new dataset.
+Its identity-only audit projects 85 monthly partitions: eighteen additional IDs
+would remove 10,971 of 853,417 retained-parent rows, leaving 842,446 rows across
+586 securities. These are proposed coverage counts, not newly built feature rows.
+Cumulative exclusions are 45/631 (7.13%), including 27 inherited failures. The
+configured 5% cap still blocks admission pending the requested 8% exception.
+No outcome column was read to choose exclusions or compute this coverage report.
+Raw sources and the original 70-path failed control remain unchanged. A frozen
+restricted universe must be rebuilt before peer transforms and labels; it cannot
+be retrospectively represented as a historical investable universe or a fresh test.
+Stock/benchmark price-basis acceptance remains independent and unresolved.
 
 `configs/swing_research.toml` governs two return regressors crossed with three
 profiles and two exit policies: at most six learned specifications and twelve

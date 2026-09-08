@@ -131,6 +131,7 @@ from market_predictor.sources.gdelt import (
     validate_gdelt_document_request,
 )
 from market_predictor.sources.sec import SecRequestGovernor, SecSource
+from market_predictor.swing.contracts.research_cohort import load_swing_research_cohort
 from market_predictor.swing.datasets.issuer_event_family_cohort import (
     publish_swing_issuer_family_cohort,
 )
@@ -1184,6 +1185,10 @@ def register_edge_rebuild_commands(app: typer.Typer, console: Any) -> None:
             None,
             help="Optional exclusions already bound by the membership authority.",
         ),
+        research_cohort: Path | None = typer.Option(
+            None,
+            help="Whole-security research cohort audit; source paths resolve from the working directory.",
+        ),
     ) -> None:
         """Publish the complete 2018-2026 causal swing ranking panel."""
 
@@ -1200,6 +1205,8 @@ def register_edge_rebuild_commands(app: typer.Typer, console: Any) -> None:
             contract=load_strategy_contract(contract),
             output_dir=out_dir,
             security_exclusions_path=security_exclusions,
+            research_cohort=(load_swing_research_cohort(research_cohort, source_root=Path.cwd())
+                             if research_cohort is not None else None),
             securities_per_shard=securities_per_shard,
             maximum_stage_one_shards_this_run=max_stage_one_shards,
         )

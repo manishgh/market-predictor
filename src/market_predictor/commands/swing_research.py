@@ -24,6 +24,7 @@ from market_predictor.catalysts.issuer_events.attribution_history import (
 from market_predictor.config import get_settings
 from market_predictor.heavy_jobs import HEAVY_JOB_BUSY_EXIT_CODE, HeavyJobBusyError, serialized_heavy_job
 from market_predictor.research.swing_accounting_control import run_swing_accounting_control_audit
+from market_predictor.research.swing_cohort import run_swing_research_cohort_audit
 from market_predictor.research.swing_transfer_replay import run_swing_transfer_replay
 from market_predictor.sentiment import FinbertScorer
 from market_predictor.sources.alpaca import AlpacaBarsPage, AlpacaSource
@@ -36,6 +37,24 @@ from market_predictor.swing.sentiment_history import score_alpaca_news_history
 
 
 def register_swing_research_commands(app: typer.Typer, console: Console) -> None:
+    @app.command("audit-swing-research-cohort")
+    def audit_swing_research_cohort_command(
+        root: Path = typer.Option(Path(".")),
+        config: Path = typer.Option(Path("configs/swing_research_cohort.toml")),
+        output: Path = typer.Option(..., help="New immutable whole-security cohort audit JSON."),
+    ) -> None:
+        """Freeze research exclusions and sector/year coverage without reading returns."""
+        try:
+            report = run_swing_research_cohort_audit(
+                root=root, config_path=config, output_path=output,
+            )
+        except HeavyJobBusyError as exc:
+            typer.echo(str(exc), err=True)
+            raise typer.Exit(code=HEAVY_JOB_BUSY_EXIT_CODE) from exc
+        typer.echo(json.dumps(report["summary"], sort_keys=True, allow_nan=False))
+        if report["summary"]["status"] == "blocked_exclusion_cap":
+            raise typer.Exit(code=2)
+
     @app.command("replay-swing-transfer-history")
     def replay_swing_transfer_history_command(
         root: Path = typer.Option(Path(".")),

@@ -74,6 +74,21 @@ The materialization request binds the named independent-holding panel schema and
 holding-path implementation hashes. Resume and completed-authority loading reject
 old or changed implementations before reusing their partitions.
 
+`swing/contracts/research_cohort.py` defines whole-security research restrictions.
+`research/swing_cohort.py` verifies pinned parent inputs and projects only security,
+session and sector columns to audit coverage. Cumulative exclusions use the original
+modeled population, including inherited coverage failures but excluding warm-up-only
+IDs. `commands/swing_research.py` exposes the bounded, serialized audit command.
+The materializer applies an accepted cohort to memberships before stock batches and
+cross-sectional transforms. The request binds the complete restriction and its hash;
+the manifest exposes its hash and retrospective scope. Resume and final loading
+reject a changed cohort. The retained classification/ranking training interface
+explicitly refuses this population; the development-only return-training consumer
+must be implemented before the new six-fit campaign. Benchmarks remain required.
+This is a disclosed retrospective development choice, not point-in-time selection,
+bar repair, total-return certification or a promotion decision. Original raw files
+and the original failed control remain unchanged.
+
 `sources/official_documents.py` acquires the exact official URLs configured in
 `configs/swing_holding_source_documents.toml`. It uses the existing bounded HTTP
 transport and SEC governor, rejects automatic redirects, and atomically publishes

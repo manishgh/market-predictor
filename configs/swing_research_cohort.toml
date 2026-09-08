@@ -1,0 +1,85 @@
+schema = "market_predictor.swing_research_cohort_request"
+parent_request_path = "data/features/edge_rebuild_swing_technical_panel_20190709_20260708_v1/_request.json"
+parent_request_sha256 = "d0e093ce2192f8511547b5c5466ac90b892fbd44d4939b002242555a8b19a4ed"
+parent_manifest_path = "data/features/edge_rebuild_swing_technical_panel_20190709_20260708_v1/final/_manifest.json"
+parent_manifest_sha256 = "891bb547cff304661153661b1c18acf57ec824e6c5c7ddd1eed7346a9a13886c"
+membership_path = "data/canonical/index_membership/sp500_memberships_20180529_20260708_v1/memberships.parquet"
+membership_sha256 = "c70b305cb64e54bda2c5664729bcb25ed766f6f7a56d3a57e3cf5875c06406c2"
+control_report_path = "data/reports/swing_accounting_control/_manifest.json"
+control_report_sha256 = "f4411da442dcce28c904050045371c3e1ee20e4e1f6e9f041686e7c4f385ee9e"
+# The proposed list exceeds 5%. Publication reports blocked until a new cap is approved.
+maximum_exclusion_bps = 500
+cap_approval_reference = "user_frozen_five_percent_whole_security_exclusion_limit"
+
+[[exclusions]]
+security_id = "cik:0000701985"
+tickers = ["LB"]
+reason = "unresolved_corporate_action"
+[[exclusions]]
+security_id = "cik:0000875045"
+tickers = ["BIIB"]
+reason = "unavailable_trading"
+[[exclusions]]
+security_id = "sp500-historical:0378a92d82b08bb9fef6d167"
+tickers = ["CTXS"]
+reason = "unresolved_corporate_action"
+[[exclusions]]
+security_id = "sp500-historical:18d05980c1c5de768e2264e3"
+tickers = ["GPS"]
+reason = "adjusted_price_mismatch"
+[[exclusions]]
+security_id = "sp500-historical:371a1b09e9fbefdee357f7e2"
+tickers = ["XRX"]
+reason = "unresolved_holding_identity"
+[[exclusions]]
+security_id = "sp500-historical:4318dca071906f96d8609214"
+tickers = ["KSS"]
+reason = "unresolved_holding_identity"
+[[exclusions]]
+security_id = "sp500-historical:49d1342f8d85a460c45735b0"
+tickers = ["NLSN"]
+reason = "unresolved_corporate_action"
+[[exclusions]]
+security_id = "sp500-historical:4c273e9e0f34f60b37445f04"
+tickers = ["DXC"]
+reason = "unresolved_holding_identity"
+[[exclusions]]
+security_id = "sp500-historical:65cd74f32260fdb5ed6a1784"
+tickers = ["NKTR"]
+reason = "unresolved_holding_identity"
+[[exclusions]]
+security_id = "sp500-historical:733eee55c895daa2697e2360"
+tickers = ["SEDG"]
+reason = "unresolved_holding_identity"
+[[exclusions]]
+security_id = "sp500-historical:945052b0136d8a941c2d0381"
+tickers = ["SLG"]
+reason = "unresolved_holding_identity"
+[[exclusions]]
+security_id = "sp500-historical:9c7f784178fafddc55a371c4"
+tickers = ["ADS"]
+reason = "adjusted_price_mismatch"
+[[exclusions]]
+security_id = "sp500-historical:ab041e093eb8caa445cd0350"
+tickers = ["CPRI"]
+reason = "unresolved_holding_identity"
+[[exclusions]]
+security_id = "sp500-historical:ada260a72ad7d00190c9eb4a"
+tickers = ["FRC"]
+reason = "unresolved_corporate_action"
+[[exclusions]]
+security_id = "sp500-historical:b63526c7c1b7dd29b2a55afb"
+tickers = ["WU"]
+reason = "unresolved_holding_identity"
+[[exclusions]]
+security_id = "sp500-historical:e813dfdd6e9f906a7249bfb9"
+tickers = ["PRGO"]
+reason = "adjusted_price_mismatch"
+[[exclusions]]
+security_id = "sp500-historical:ecbaf699e574046228ce12f9"
+tickers = ["XLNX"]
+reason = "unresolved_corporate_action"
+[[exclusions]]
+security_id = "sp500-historical:ed50a6879cae4accc01071fe"
+tickers = ["AIV"]
+reason = "unresolved_corporate_action"

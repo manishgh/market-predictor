@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -23,6 +24,7 @@ from market_predictor.edge_rebuild.swing_materialization import (
 )
 from market_predictor.modeling.strategy_contract import load_strategy_contract
 from market_predictor.swing.contracts import MINIMUM_SWING_DECISION_DATE
+from market_predictor.swing.contracts.research_cohort import SwingResearchCohort
 from market_predictor.swing.features.panel import SWING_FEATURE_PANEL_SCHEMA
 
 
@@ -705,6 +707,74 @@ def test_replay_rejects_decision_identity_and_record_bounds(
     authority_path.write_text(json.dumps(authority), encoding="utf-8")
 
     with pytest.raises(DataReadinessError, match="identity or bounds"):
+        load_complete_swing_feature_panel(output)
+
+
+def test_research_cohort_applies_before_bar_loading_labels_and_peer_transforms(
+    tmp_path: Path, materialization_inputs: tuple[Path, Path, dict[str, int]], monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source_root, _, _ = materialization_inputs
+    module = swing_materialization
+    verified = module.verify_combined_swing_inputs()
+    ids = sorted(verified.memberships.security_id.unique())
+    parent = {**verified.request_payload, "modeled_security_count": 4,
+              "modeled_security_ids_sha256": _json_sha256(ids), "excluded_security_ids": [],
+              "excluded_security_ids_sha256": _json_sha256([]), "excluded_security_count": 0,
+              "retained_security_count": 4}
+    verified = replace(verified, request_payload=parent)
+    monkeypatch.setattr(module, "verify_combined_swing_inputs", lambda **_kw: verified)
+    payload = {
+        "schema_version": "market_predictor.swing_research_cohort",
+        "scope": "retrospective_development_restriction", "price_basis_status": "not_certified_by_cohort",
+        "combined_daily_inputs_sha256": _json_sha256(parent), "original_security_ids": ids,
+        "inherited_excluded_security_ids": [], "warmup_only_security_ids": ["sec:warmup"],
+        "exclusions": [{"security_id": "sec:a", "tickers": ["AAA"], "reason": "adjusted_price_mismatch"}],
+        "maximum_exclusion_bps": 2500, "cap_approval_reference": "test-only-four-security-population",
+        "source_files": {"test-source.json": "a" * 64},
+    }
+    cohort = SwingResearchCohort.model_validate_json(json.dumps(payload))
+    stock_groups: list[set[str]] = []
+
+    def load(group: pd.DataFrame, _artifacts: Any) -> tuple[pd.DataFrame, int]:
+        assert "sec:a" not in set(group.security_id), "excluded source poison must not be read"
+        stock_groups.append(set(group.security_id))
+        return group[["ticker"]].copy(), 0
+
+    def finalize(rows: pd.DataFrame, **_kwargs: Any) -> pd.DataFrame:
+        assert set(rows.security_id) == {"sec:b", "sec:c", "sec:d"}
+        assert rows.groupby("session_date_et").security_id.nunique().eq(3).all()
+        return rows.assign(rank_label=1, cross_section_eligible=True)
+
+    monkeypatch.setattr(module, "load_security_batch_bars", load)
+    monkeypatch.setattr(module, "finalize_swing_feature_panel", finalize)
+    contract = load_strategy_contract(Path(__file__).resolve().parents[1] / "configs/edge_rebuild_strategy_contract.toml")
+    output = tmp_path / "restricted"
+    result = materialize_swing_feature_panel(
+        **_source_arguments(source_root), contract=contract, output_dir=output, research_cohort=cohort,
+    )
+    assert result["status"] == "complete"
+    assert result["securities"] == 3
+    assert result["research_cohort_sha256"] == cohort.sha256()
+    assert result["research_population_scope"] == "retrospective_development_restriction"
+    assert stock_groups == [{"sec:b", "sec:c", "sec:d"}]
+    assert load_complete_swing_feature_panel(output)["securities"] == 3
+    assert load_complete_swing_feature_panel(output)["research_cohort_sha256"] == cohort.sha256()
+    request = json.loads((output / "_request.json").read_text())
+    assert request["research_cohort_sha256"] == cohort.sha256()
+    assert module._population_audit_verifies(request)
+    request["research_cohort"]["maximum_exclusion_bps"] = 500
+    assert not module._population_audit_verifies(request)
+    with pytest.raises(DataReadinessError, match="resume request differs"):
+        materialize_swing_feature_panel(**_source_arguments(source_root), contract=contract, output_dir=output)
+    manifest_path = output / "final" / "_manifest.json"
+    tampered = json.loads(manifest_path.read_text())
+    tampered["research_population_scope"] = None
+    manifest_path.write_text(json.dumps(tampered))
+    authority_path = output / "final" / "_authority.json"
+    authority = json.loads(authority_path.read_text())
+    authority["artifact_sha256"] = file_sha256(manifest_path)
+    authority_path.write_text(json.dumps(authority))
+    with pytest.raises(DataReadinessError, match="authority does not verify"):
         load_complete_swing_feature_panel(output)
 
 

@@ -113,6 +113,11 @@ def load_swing_panel_binding(
 
     root = directory.resolve()
     manifest = load_complete_swing_feature_panel(root)
+    if manifest.get("research_cohort_sha256") is not None or manifest.get("research_population_scope") is not None:
+        raise DataReadinessError(
+            "retrospectively restricted swing panels require development-only return training; "
+            "the retained classification/ranking trainer cannot treat them as a protected evaluation"
+        )
     final = root / "final"
     manifest_path = final / _MANIFEST_NAME
     authority_path = final / _AUTHORITY_NAME

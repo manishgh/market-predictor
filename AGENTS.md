@@ -267,6 +267,13 @@ abstention.
 
 ### 4.4 Validation And Selection
 
+- User-approved research exclusions remove whole security identities consistently
+  before peer transforms, labels and selection in a new dataset. Preserve raw inputs
+  and historical blocked runs. Count the union of inherited and new exclusions
+  against the original modeled population, never a shrinking denominator. Freeze
+  the cap/list before new results; disclose retrospective selection bias. Exclusion
+  approval cannot certify unresolved accounting or authorize deleting losing trades.
+
 - Use purged, embargoed, time-ordered validation; random cross-validation is prohibited.
 - Ticker holdout and temporal holdout answer different questions and remain separate.
 - Calibration evidence must precede scored rows.

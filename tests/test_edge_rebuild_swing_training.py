@@ -180,6 +180,19 @@ def test_input_authority_rejects_pre_cutoff_decisions(
         )
 
 
+def test_restricted_population_requires_development_only_return_training(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "market_predictor.edge_rebuild.training.data_io.load_complete_swing_feature_panel",
+        lambda root: {"research_cohort_sha256": "a" * 64,
+                      "research_population_scope": "retrospective_development_restriction"},
+    )
+    with pytest.raises(DataReadinessError, match="require development-only return training"):
+        swing_training.load_swing_panel_binding(tmp_path, strategy_contract=_contract(), config=_config())
+    assert not list(tmp_path.iterdir())
+
+
 def test_development_partition_selection_physically_excludes_locked_test_months() -> None:
     records = [
         {

@@ -57,6 +57,19 @@ hash-verified promoted bundle.
 - The first retained-data accounting control is **blocked**: 70 of 30,525 selected
   stock-days lack complete fixed-horizon outcomes. No stock was dropped to produce
   a performance score, and no real-data ledger or SPY result was emitted.
+- A new, explicitly retrospective research population can exclude entire security
+  identities through `configs/swing_research_cohort.toml`. Run
+  `market-predictor-research audit-swing-research-cohort --root . --output
+  data/reports/swing_research_cohort/research_population_audit.json` to publish the cumulative
+  exclusion and sector/year row audit. The eighteen proposed exclusions plus 27
+  inherited exclusions total 45/631 (7.13%); the configured 5% cap rejects that
+  proposal until a higher cap is approved. No original data is deleted.
+  `materialize-edge-rebuild-swing-panel --research-cohort <audit.json>` applies an
+  accepted restriction before bar batches, labels and peer transforms, in a new
+  immutable output directory. It does not certify prices or make retrospective
+  results eligible for promotion. The retained classification/ranking trainer
+  rejects this restricted population; the planned development-only return trainer
+  remains to be implemented for the six new fits.
 - Swing labels now accept separate security-identified outcome bars, retain holding
   windows after index removal, and use exact XNYS sessions and daily timestamps.
   Missing sessions and zero-volume records cannot produce invented fills. This
