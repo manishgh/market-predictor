@@ -2,7 +2,7 @@
 
 Status: active
 
-Last updated: 2026-09-07
+Last updated: 2026-09-08
 
 Repository: `C:\project\market-predictor`
 
@@ -35,6 +35,47 @@ portfolio management: alerts, orders, final position sizing, and execution remai
 outside this repository.
 
 ## Long-Only Swing Research And Implementation Plan
+
+### Current User-Approved Dataset Direction
+
+2026-09-08: the user permits excluding a small number of unusable whole securities
+from a new research dataset instead of indefinitely repairing every corporate
+action before feature engineering. This supersedes the requirement to repair all
+70 old selected outcomes before any new cohort may be built. It does not permit
+selectively deleting losing trades, modifying raw archives or certifying unknown
+total returns. The original blocked control remains immutable historical evidence.
+
+Immediate scope: freeze an evidence-bound whole-security research cohort, apply it
+before peer features/relative labels/selection, and report cumulative exclusions and
+sector/year effects. The parent modeled universe is 631 IDs: 27 are already excluded,
+leaving 604. The additional eighteen failures would yield 45/631 (7.1315%), leaving
+586; the 27 warm-up-only securities are not part of the denominator. The existing
+5% ceiling stays effective until the pending user decision approves a named 8%
+ceiling. No reset to 18/604 or silent increase is allowed.
+
+This is an explicitly retrospective development restriction, not a historically
+observable universe screen. Freeze all IDs and evidence before new fitting/results;
+do not extend the list after seeing validation losses. Rebuild features rather than
+filtering already computed ranks. Reject unknown IDs, altered lineage, cumulative
+cap overflow, inconsistent split/profile cohorts and newly missing selected paths.
+Benchmarks remain mandatory. Cohort acceptance is not price-basis acceptance, model
+promotion or fresh prospective evidence. Full tests, independent review and a Git
+checkpoint close this bounded change before dependent materialization/training.
+
+Cohort implementation is now verified and pushed in `771c7bd`. The real audit at
+`data/reports/swing_research_cohort/research_population_audit.json` verifies 85
+identity-only monthly projections: 853,417 parent rows, 10,971 proposed removals,
+842,446 retained rows and 586 retained securities. Audit hash:
+`da2e3b6e7bfc130d746fba960fa23517a7a4b5ba56eca787f1a34eddf719a200`.
+These are coverage counts, not a rebuilt or admitted feature authority. Its status
+is `blocked_exclusion_cap`; the numeric cap approval remains pending.
+
+Verification: 2,422 tests passed, three skipped, 133 warnings; full Ruff and strict
+mypy on 326 source files pass. Peak test-process memory was 348,155,904 bytes.
+Consolidated review fixed explicit retrospective scope propagation and relative CLI
+root handling. The first full run found a missing CLI inventory entry; that entry
+was added and the final complete suite passed. All owned workers/agents are closed.
+No raw sources, original controls, training labels or fitted models changed.
 
 ### Decision And Scope
 
@@ -332,8 +373,10 @@ The user initially approved two checkpoints, then explicitly authorized continui
 the remaining work through model training on 2026-09-07. The objective/evidence
 checkpoint is complete. Accounting code is verified and pushed in `6758671`, but
 retained-data acceptance remains blocked by 70 incomplete selected outcomes and
-unverified price basis. Resolve these before the dependent feature/training steps;
-the expanded authorization does not waive causal, accounting or evidence gates.
+unverified price basis. The September 8 whole-security research restriction above
+replaces the requirement to repair all eighteen affected securities before a new
+cohort. Retained paths and price basis still require acceptance before dependent
+training; the expanded authorization does not waive causal or accounting gates.
 Names describe behavior rather than experiment serial numbers.
 
 1. **Define the SPY objective and reconcile evidence (`complete`).**

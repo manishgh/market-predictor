@@ -2,15 +2,61 @@
 
 Status: active
 
-Last updated: 2026-09-07
+Last updated: 2026-09-08
 
 Repository: `C:\project\market-predictor`
 
 Branch: `er-intraday-refactoring`
 
-Last completed implementation commit: `0c5f1f7` (`Verify bounded swing transfer prices and SEC stock-class evidence`)
+Last completed implementation commit: `771c7bd` (`Add audited whole-security swing research cohorts`)
 
 ## Current Session Work Tracking
+
+2026-09-08: whole-security cohort implementation `771c7bd` is verified and pushed.
+The user authorizes excluding whole problem securities rather than indefinitely
+repairing every old corporate action. The proposed population still exceeds the
+effective 5% cap; the requested 8% exception has no recorded approval. This is a
+completed code checkpoint, not admitted data, trained models or completion of all
+six requested research steps.
+
+- Russell `01a0827f-8fef-74e2-90b0-ac9635b086a9`: design review complete, closed.
+  Consolidated code review also complete and closed. Both P2 findings are fixed:
+  explicit retrospective scope at the training boundary and relative CLI paths.
+- Heisenberg `01a08280-2310-7001-97f4-31403cd8af8d`: six-model/feature inventory
+  complete, closed. Six new regression fits are not implemented by the old trainer.
+- Faraday `01a0828a-835d-73b1-9538-fede77066750`: bounded cohort auditor and its
+  35 focused tests complete, closed. No worker remains.
+- Final integrated focused tests: 96 passed, one skipped, 17 warnings in 129.71s;
+  CLI inventory/continuity tests: 14 passed. These sets overlap; do not sum them.
+  Full Ruff on tracked Python plus new files and strict mypy on 326 sources pass.
+- First full suite: PID `7100`, exited after 85 passes and one CLI inventory
+  failure. Added the new reviewed command to the inventory; no runtime behavior
+  was weakened. This failure is not the final verification result.
+- Final full suite: **2,422 passed, three skipped, 133 warnings in 994.12s**.
+  PID `23732`, session `87745`, exited; XML `.test-tmp/cohort-full-final.xml`.
+  Final process working set was 275,410,944 bytes; peak 348,155,904 bytes (0.324 GiB).
+  All four tracked main PIDs were checked after completion and were absent. All
+  agents are closed; no owned collection, test or training process remains.
+- Real identity-only audit: draft PID `18716` exited, peak 114,749,440 bytes;
+  final CLI publication PID `17812` exited. Final report below replaces the draft
+  after BIIB's reason was accurately named `unavailable_trading`.
+- Pending decision: 27 existing plus eighteen proposed exclusions = 45/631 (7.13%).
+  The configuration remains at 5%; a requested 8% exception is not yet approved.
+- No raw data, training labels, fitted models or historical controls were changed.
+
+Current audit: `data/reports/swing_research_cohort/research_population_audit.json`.
+Audit SHA-256 `da2e3b6e7bfc130d746fba960fa23517a7a4b5ba56eca787f1a34eddf719a200`;
+cohort SHA-256 `1167f381b8c68355570f7a79e821ac7efffb6b1452d5b6828d81066971709530`.
+It verified 85 monthly identity-only projections, 853,417 observed parent rows,
+10,971 proposed removals and 842,446 retained rows. Those counts describe the
+proposed cohort, not a newly rebuilt training panel. No outcomes or numeric features
+were read. The nonzero CLI result correctly reports the 5% cap failure. The draft
+`five_percent_audit.json` is superseded and must not be used as a current authority.
+
+The September 7 verification below describes the previous completed checkpoint,
+not the current cohort checkpoint. The new user-approved cohort direction
+supersedes older text requiring every old holding to be repaired first. It does
+not turn an old failed control into a passed control or establish total returns.
 
 2026-09-07: transfer replay/class-fact implementation `0c5f1f7` is verified and
 pushed. New raw response archives are retained separately; historical bar/source
@@ -1766,43 +1812,35 @@ occurred.
 
 ## Exact Next Checkpoint
 
-Exact next checkpoint: **Reconcile three price mismatches and bind transfer identities**.
-The objective is complete in `3b2bff5`; funded accounting is verified in `6758671`;
-holding-path code and cache invalidation are verified/pushed in `bc9dbd5`;
-official-source acquisition is verified/pushed in `e1e4803`; transfer response
-replay and SEC stock-class extraction are verified/pushed in `0c5f1f7`.
-The frozen real-data control still has 70 unresolved old outcomes and an unverified
-price basis. The user authorizes continuing through training without another model,
-but not inventing data or skipping these admission gates.
+Exact next checkpoint: **Admit the approved research population and rebuild retained outcomes**.
+Cohort implementation, real identity/coverage audit, independent review and full
+verification are complete in `771c7bd`. No new feature authority was materialized,
+and no real model was trained. Continue from the recorded policy decision, not
+from the older requirement to repair all 70 historical selected holdings.
 
-1. Do not repeat the eleven completed provider windows or nine completed filing
-   acquisitions. Reuse the source archives and hashes above. First add a separately
-   named, immutable comparison for ADS/GPS/PRGO with `asof=2026-07-25`, holding all
-   other bounded query parameters fixed. This tests symbol lookup, not adjustment
-   vintage. Only then use the conditional raw-price diagnostic described above.
-   Do not change the frozen replay request, tune a tolerance, guess factors or
-   overwrite either source. Unexplained differences remain explicit blockers.
-2. Publish the retrospective identity relation for 38 transfer paths: ADS 6,
-   CPRI 5, DXC 1, GPS 1, KSS 3, NKTR 3, PRGO 5, SEDG 1, SLG 9, WU 1 and XRX 3.
-   Eight exact-match tickers cover 26 paths; the twelve mismatched paths remain
-   unresolved, not silently excluded. Bind canonical security/issuer/class facts,
-   retained positive S&P transfer evidence, required sessions and provider receipts.
-   The class extractor and response archive exist; the combined identity relation
-   does not. This is session-bounded retrospective attribution, not lifetime
-   continuity or proof of total-return/fill treatment.
-3. AIV's two price-complete paths also require corporate-action treatment, as do
-   the 30 paths with zero-volume/missing observations. Use the retained official
-   bodies, including LB's rights announcement. Define entitlement, valuation,
-   tradability and cash availability separately. Synthetic accounting conventions
-   remain pending user approval; no holding/selection is dropped to force a pass.
-4. Thread verified independent outcome history into the materialization callers
-   and bind it in a new immutable request/authority. Replay both fixed and managed
-   outcomes and the unchanged selection/calendar. Never overwrite the old panel.
-5. Reconcile stock and benchmark total-return treatment with independently bound
-   corporate-action evidence. Rerun the control; an unsuccessful economic control
-   is diagnostic, not a requirement that the untrained population must be profitable.
-6. Then continue causal feature completion and the six sequential return-model fits.
-   The exposed July-2025 through June-2026 interval is not a fresh final test.
+1. Resolve the pending exclusion cap: original population 631, inherited exclusions
+   27, additional identities eighteen. Current configuration remains 500 basis points
+   (5%) and the published audit correctly reports 45/631 blocked. If the user approves
+   8%, record the approval in `configs/swing_research_cohort.toml` and publish a
+   separate immutable accepted audit, never overwrite the blocked report. Keeping
+   5% permits only 31 total excluded securities, requiring at least fourteen of the
+   current 45 to be independently repaired. Do not reset the denominator to 604.
+2. Once approved, publish a separate immutable cohort audit and rebuild all retained
+   stock feature/label rows under current holding-path semantics, before peer ranks.
+   The excluded eighteen no longer need repair for this new restricted experiment.
+   Preserve the old 70-path failure, raw archives and retrospective-bias disclosure.
+3. Recheck retained holding paths and stock/SPY/QQQ/sector return accounting. Do not
+   call exclusion approval a total-return certification or drop new losing outcomes.
+4. Freeze exact feature orders and regression hyperparameters. The six specifications
+   in the research contract do not yet have a matching training entrypoint. Reuse
+   the shared estimator/data/ledger owners; add the development-only, purged return
+   regression path, rather than invoking the old classifier/ranking trainer.
+5. Complete incremental technical features and issuer news/reaction source acceptance;
+   train the two learners across three profiles sequentially within 5 GiB. Required
+   missing source groups remain not trained, not zero-filled or silently technical.
+6. Evaluate funded after-cost returns against SPY. Historical exposed results are
+   research evidence only. Freeze candidates before genuinely new prospective data;
+   the configured 252 decision sessions plus maturation tail cannot be fabricated.
 
 Read `AGENTS.md`, the active plan's current section, this handoff's verified repair
 and remaining source sections, the current feature audit, and
