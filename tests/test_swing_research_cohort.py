@@ -64,6 +64,21 @@ def test_inherited_and_new_overlap_is_counted_once() -> None:
     assert cohort.summary()["additional_excluded_securities"] == 17
 
 
+@pytest.mark.parametrize("excluded_count,accepted", [(63, True), (64, False)])
+def test_ten_percent_cap_counts_whole_securities_without_rounding(excluded_count: int, accepted: bool) -> None:
+    payload, _ = _cohort_inputs()
+    payload["maximum_exclusion_bps"] = 1000
+    payload["exclusions"] = [
+        {"security_id": item, "tickers": ["AAA"], "reason": "unresolved_holding_identity"}
+        for item in payload["original_security_ids"][27:excluded_count]
+    ]
+    cohort = SwingResearchCohort.model_validate_json(json.dumps(payload))
+    assert cohort.within_cap is accepted
+    assert cohort.summary()["total_excluded_securities"] == excluded_count
+    assert cohort.summary()["accounting_eligible"] is False
+    assert cohort.summary()["promotion_eligible"] is False
+
+
 @pytest.mark.parametrize("mutation", ["unknown", "duplicate", "warmup", "reordered", "nonnumeric_cap", "extra"])
 def test_invalid_cohort_contract_rejected(mutation: str) -> None:
     payload, _ = _cohort_inputs()

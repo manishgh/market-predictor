@@ -7,9 +7,9 @@ membership_path = "data/canonical/index_membership/sp500_memberships_20180529_20
 membership_sha256 = "c70b305cb64e54bda2c5664729bcb25ed766f6f7a56d3a57e3cf5875c06406c2"
 control_report_path = "data/reports/swing_accounting_control/_manifest.json"
 control_report_sha256 = "f4411da442dcce28c904050045371c3e1ee20e4e1f6e9f041686e7c4f385ee9e"
-# The proposed list exceeds 5%. Publication reports blocked until a new cap is approved.
-maximum_exclusion_bps = 500
-cap_approval_reference = "user_frozen_five_percent_whole_security_exclusion_limit"
+# User approved 10% on 2026-09-08 for this retrospective research dataset only.
+maximum_exclusion_bps = 1000
+cap_approval_reference = "user_2026_09_08_ten_percent_research_dataset_approval"
 
 [[exclusions]]
 security_id = "cik:0000701985"

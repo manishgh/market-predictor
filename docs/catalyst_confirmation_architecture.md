@@ -89,6 +89,17 @@ This is a disclosed retrospective development choice, not point-in-time selectio
 bar repair, total-return certification or a promotion decision. Original raw files
 and the original failed control remain unchanged.
 
+`swing/labels/holding_identity.py` inspects exact ten-session ownership windows
+using the shared XNYS holding calendar. Decision-time identity/sector joins remain
+causal. Future membership intervals are used only as retrospective ownership
+evidence, never as features. Continuous same-owner intervals are merged despite
+metadata changes; competing owners, including excluded securities, remain visible.
+`research/swing_holding_identity_preflight.py` runs bounded monthly identity-only
+projections under the shared heavy-job lease and publishes an immutable report
+bound to the approved cohort and all input hashes. It separates initial-fit and
+full-history coverage, without reading numeric features or returns. This report
+cannot admit bar coverage, total-return accounting, model training or promotion.
+
 `sources/official_documents.py` acquires the exact official URLs configured in
 `configs/swing_holding_source_documents.toml`. It uses the existing bounded HTTP
 transport and SEC governor, rejects automatic redirects, and atomically publishes

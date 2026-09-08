@@ -1,0 +1,9 @@
+schema = "market_predictor.swing_holding_identity_preflight_request"
+cohort_path = "data/reports/swing_research_cohort/approved_research_population_audit.json"
+cohort_sha256 = "794bcf834501cbaa8ec54716e8b561a5aaf0137610fe67587f4db69f9189fca6"
+parent_manifest_path = "data/features/edge_rebuild_swing_technical_panel_20190709_20260708_v1/final/_manifest.json"
+membership_path = "data/canonical/index_membership/sp500_memberships_20180529_20260708_v1/memberships.parquet"
+decision_start = "2019-07-09"
+snapshot_end = "2026-07-08"
+initial_fit_end = "2024-05-28"
+horizon_sessions = 10

@@ -60,16 +60,27 @@ hash-verified promoted bundle.
 - A new, explicitly retrospective research population can exclude entire security
   identities through `configs/swing_research_cohort.toml`. Run
   `market-predictor-research audit-swing-research-cohort --root . --output
-  data/reports/swing_research_cohort/research_population_audit.json` to publish the cumulative
+  data/reports/swing_research_cohort/approved_research_population_audit.json` to publish the cumulative
   exclusion and sector/year row audit. The eighteen proposed exclusions plus 27
-  inherited exclusions total 45/631 (7.13%); the configured 5% cap rejects that
-  proposal until a higher cap is approved. No original data is deleted.
+  inherited exclusions total 45/631 (7.13%), within the user-approved 10% cap for
+  this research dataset. The admitted restriction retains 586 securities; no
+  original data is deleted. The former 5% blocked audit remains historical evidence.
   `materialize-edge-rebuild-swing-panel --research-cohort <audit.json>` applies an
   accepted restriction before bar batches, labels and peer transforms, in a new
   immutable output directory. It does not certify prices or make retrospective
   results eligible for promotion. The retained classification/ranking trainer
   rejects this restricted population; the planned development-only return trainer
   remains to be implemented for the six new fits.
+- `market-predictor-research audit-swing-holding-identity --root . --output
+  data/reports/swing_research_cohort/holding_identity_preflight.json` checks the
+  retained cohort's exact ten-session ownership windows using metadata only.
+  It separates terminal immature decisions from missing post-removal identity,
+  keeps excluded competing owners visible, and reports initial-fit coverage
+  separately. Exit code 2 means uncovered identity evidence, not failed model
+  performance. It does not certify bar availability, prices or benchmark returns.
+  The current report covers 842,446 retained decisions: 836,638 covered mature
+  windows, 947 requiring additional ownership evidence, and 4,861 terminal immature
+  decisions. These counts do not authorize additional stock exclusions or training.
 - Swing labels now accept separate security-identified outcome bars, retain holding
   windows after index removal, and use exact XNYS sessions and daily timestamps.
   Missing sessions and zero-volume records cannot produce invented fills. This

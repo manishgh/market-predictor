@@ -25,6 +25,7 @@ from market_predictor.config import get_settings
 from market_predictor.heavy_jobs import HEAVY_JOB_BUSY_EXIT_CODE, HeavyJobBusyError, serialized_heavy_job
 from market_predictor.research.swing_accounting_control import run_swing_accounting_control_audit
 from market_predictor.research.swing_cohort import run_swing_research_cohort_audit
+from market_predictor.research.swing_holding_identity_preflight import run_swing_holding_identity_preflight
 from market_predictor.research.swing_transfer_replay import run_swing_transfer_replay
 from market_predictor.sentiment import FinbertScorer
 from market_predictor.sources.alpaca import AlpacaBarsPage, AlpacaSource
@@ -37,6 +38,22 @@ from market_predictor.swing.sentiment_history import score_alpaca_news_history
 
 
 def register_swing_research_commands(app: typer.Typer, console: Console) -> None:
+    @app.command("audit-swing-holding-identity")
+    def audit_swing_holding_identity_command(
+        root: Path = typer.Option(Path(".")),
+        config: Path = typer.Option(Path("configs/swing_holding_identity_preflight.toml")),
+        output: Path = typer.Option(..., help="Immutable membership-only holding-window report."),
+    ) -> None:
+        """Check ten-session holding ownership without inspecting returns or features."""
+        try:
+            report = run_swing_holding_identity_preflight(root, config, output)
+        except HeavyJobBusyError as exc:
+            typer.echo(str(exc), err=True)
+            raise typer.Exit(code=HEAVY_JOB_BUSY_EXIT_CODE) from exc
+        typer.echo(json.dumps({key: report[key] for key in ("status", "all_history", "initial_fit")}, sort_keys=True))
+        if report["status"] == "uncovered_holding_identity":
+            raise typer.Exit(code=2)
+
     @app.command("audit-swing-research-cohort")
     def audit_swing_research_cohort_command(
         root: Path = typer.Option(Path(".")),

@@ -2,7 +2,7 @@
 
 Status: current edge-rebuild path
 
-Last updated: 2026-09-07
+Last updated: 2026-09-08
 
 Read `AGENTS.md`, `docs/active_edge_rebuild_plan.md`, and
 `docs/reviews/active_edge_rebuild_handoff.md` first. Command `--help` output and code
@@ -62,6 +62,26 @@ The command returns nonzero for a blocked report. Do not overwrite that receipt 
 drop incomplete outcomes and rerun the same control as if its population were unchanged.
 
 ## Source Roles
+
+### Retained Holding-Identity Preflight
+
+The user-approved research cohort excludes 45/631 security identities (7.13%)
+under a 10% cap. Raw data and old controls are unchanged. Before rebuilding
+features, inspect the retained 586 securities' membership-based holding windows:
+
+```powershell
+.\.venv\Scripts\market-predictor-research.exe audit-swing-holding-identity --root . --output data/reports/swing_research_cohort/holding_identity_preflight.json
+```
+
+`configs/swing_holding_identity_preflight.toml` pins the cohort, parent manifest,
+membership, dates and ten-session horizon. The command reads identity/clock
+columns only, one monthly partition at a time, under the shared workspace lease.
+It verifies source hashes before publication and refuses conflicting output.
+Exit code 2 reports uncovered ownership; terminal immature rows are separate.
+Covered ownership does not prove that bars exist or that prices represent verified
+total returns. No numeric held-out outcomes are inspected, and no model is fitted.
+
+### Estimator And Overlay Sources
 
 - Alpaca SIP/all bars: estimator market data.
 - Alpaca direct ticker news: the sole permitted ticker catalyst estimator source for

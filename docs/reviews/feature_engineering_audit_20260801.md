@@ -10,12 +10,33 @@ Its identity-only audit projects 85 monthly partitions: eighteen additional IDs
 would remove 10,971 of 853,417 retained-parent rows, leaving 842,446 rows across
 586 securities. These are proposed coverage counts, not newly built feature rows.
 Cumulative exclusions are 45/631 (7.13%), including 27 inherited failures. The
-configured 5% cap still blocks admission pending the requested 8% exception.
+user approved 10% on September 8; the new immutable audit accepts this research
+restriction. No changed stock list, original denominator or performance gate was
+authorized. Coverage acceptance is not feature/label or total-return acceptance.
 No outcome column was read to choose exclusions or compute this coverage report.
 Raw sources and the original 70-path failed control remain unchanged. A frozen
 restricted universe must be rebuilt before peer transforms and labels; it cannot
 be retrospectively represented as a historical investable universe or a fresh test.
 Stock/benchmark price-basis acceptance remains independent and unresolved.
+
+The retained-population holding-identity preflight now covers all 85 months:
+836,638 mature windows covered, 947 uncovered across 100 securities, 4,861 terminal
+immature decisions. Initial-fit coverage is 580,889 covered and 566 uncovered
+across 60 securities. This uses only membership/clock metadata: it is not proof of
+missing prices, delisting, losing outcomes or feature acceptance. The uncovered
+share is 0.1131% of mature decisions. No additional securities were excluded.
+Report: `data/reports/swing_research_cohort/holding_identity_preflight.json`, SHA
+`8f8cdd60ca2f9c1372ceda20d04b7f90eefbfb2336a7f282f30aa97b8c7e723b`.
+Required next data work: independent holding observations from existing raw SIP
+history, explicit post-removal security/class ownership, observation validation and
+the separate stock/benchmark total-return evidence. SEC relations copied from S&P
+membership intervals do not resolve post-removal ownership by themselves.
+Checkpoint verification: 2,502 tests passed, three skipped, 132 warnings; full Ruff
+and strict mypy on 328 sources pass. Focused tests passed 133 cases. Independent
+review/test findings were fixed for partial-session competing ownership,
+open-ended interval checks, same-owner metadata changes and duplicate decision IDs
+across monthly partitions. Test peak was 351,141,888 bytes (0.327 GiB); all owned
+workers and agents exited. No new model or economic result was produced.
 
 `configs/swing_research.toml` governs two return regressors crossed with three
 profiles and two exit policies: at most six learned specifications and twelve
