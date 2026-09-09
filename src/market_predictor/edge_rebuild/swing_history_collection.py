@@ -9,7 +9,7 @@ import threading
 import uuid
 from collections.abc import Callable, Mapping
 from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from datetime import UTC, date, datetime, time, timedelta
 from pathlib import Path
 from typing import Any, Final, Protocol, cast
@@ -32,14 +32,15 @@ from market_predictor.resources import (
     memory_audit,
     release_process_memory,
 )
-from market_predictor.sources.alpaca import AlpacaSource
+from market_predictor.sources.alpaca import AlpacaSource, decode_bars_page_response
+from market_predictor.sources.http import HttpByteResponse
 
 COLLECTION_SCHEMA: Final = "edge_rebuild.swing_history_collection.v1"
 COLLECTION_AUTHORITY_SCHEMA: Final = "edge_rebuild.swing_history_collection_authority.v1"
 UNIT_SCHEMA: Final = "edge_rebuild.swing_history_collection_unit.v1"
 TIMEFRAME: Final = "1Day"
 PRICE_FEED: Final = "sip"
-ADJUSTMENT: Final = "all"
+SUPPORTED_ADJUSTMENTS: Final = frozenset({"raw", "all"})
 MAXIMUM_WORKERS: Final = 2
 MAXIMUM_MEMORY_GIB: Final = 4.0
 MEMORY_HEADROOM_GIB: Final = 0.75
@@ -59,6 +60,7 @@ class SwingDailyPage:
     bars: tuple[dict[str, Any], ...]
     response_headers: dict[str, str]
     raw_payload: dict[str, Any] | None = None
+    transport_response: HttpByteResponse | None = None
 
 
 class SwingDailyPageSource(Protocol):
@@ -70,6 +72,7 @@ class SwingDailyPageSource(Protocol):
         *,
         page_token: str | None,
         asof: date,
+        adjustment: str,
     ) -> SwingDailyPage: ...
 
 
@@ -93,6 +96,7 @@ class AlpacaSwingDailyPageSource:
         *,
         page_token: str | None,
         asof: date,
+        adjustment: str,
     ) -> SwingDailyPage:
         page = self._source.fetch_bars_page(
             (symbol,),
@@ -103,6 +107,7 @@ class AlpacaSwingDailyPageSource:
             asof=asof,
             limit=10_000,
             retries=5,
+            adjustment=adjustment,
         )
         returned = tuple(page.bars)
         response_symbol = returned[0] if returned else symbol
@@ -112,10 +117,11 @@ class AlpacaSwingDailyPageSource:
             response_symbol=response_symbol,
             response_timeframe=TIMEFRAME,
             response_feed=PRICE_FEED,
-            response_adjustment=ADJUSTMENT,
+            response_adjustment=adjustment,
             bars=page.bars.get(symbol, ()),
             response_headers=page.response_headers,
             raw_payload=page.raw_payload,
+            transport_response=page.transport_response,
         )
 
 
@@ -124,6 +130,7 @@ class _VerifiedPlan:
     units: pd.DataFrame
     hashes: dict[str, str]
     universe_sha256: str
+    adjustment: str
 
 
 def collect_swing_history_plan(
@@ -157,7 +164,8 @@ def collect_swing_history_plan(
         "provider": "alpaca",
         "timeframe": TIMEFRAME,
         "price_feed": PRICE_FEED,
-        "adjustment": ADJUSTMENT,
+        "adjustment": plan.adjustment,
+        "transport_receipts_required": True,
         "workers": MAXIMUM_WORKERS,
         "maximum_memory_gib": MAXIMUM_MEMORY_GIB,
     }
@@ -176,6 +184,8 @@ def collect_swing_history_plan(
             output_directory,
             unit,
             request_sha256=request_sha256,
+            adjustment=plan.adjustment,
+            require_transport=True,
         )
         if existing is None:
             pending.append(unit)
@@ -198,6 +208,7 @@ def collect_swing_history_plan(
             unit,
             source=get_source(),
             request_sha256=request_sha256,
+            adjustment=plan.adjustment,
         )
 
     failures = _run_bounded(
@@ -286,6 +297,7 @@ def collect_swing_history_plan(
         return load_complete_swing_history_collection(
             output_directory,
             plan_directory=plan_directory,
+            expected_adjustment=plan.adjustment,
         )
     except Exception:
         (output_directory / "_authority.json").unlink(missing_ok=True)
@@ -305,10 +317,13 @@ def load_complete_swing_history_collection(
     directory: Path,
     *,
     plan_directory: Path,
+    expected_adjustment: str,
 ) -> dict[str, Any]:
     """Verify final authority, current plan identity, and every unit artifact."""
 
     plan = _load_verified_plan(plan_directory)
+    if expected_adjustment not in SUPPORTED_ADJUSTMENTS or plan.adjustment != expected_adjustment:
+        raise DataReadinessError("swing history consumer adjustment differs from plan")
     request = _load_json(directory / "_request.json")
     manifest = _load_json(directory / "_manifest.json")
     authority = _load_json(directory / "_authority.json")
@@ -322,7 +337,9 @@ def load_complete_swing_history_collection(
         or request.get("provider") != "alpaca"
         or request.get("timeframe") != TIMEFRAME
         or request.get("price_feed") != PRICE_FEED
-        or request.get("adjustment") != ADJUSTMENT
+        or request.get("adjustment") != plan.adjustment
+        or type(request.get("transport_receipts_required", False)) is not bool
+        or (plan.adjustment == "raw" and request.get("transport_receipts_required") is not True)
         or int(request.get("workers", -1)) != MAXIMUM_WORKERS
         or float(request.get("maximum_memory_gib", -1.0)) != MAXIMUM_MEMORY_GIB
         or manifest.get("schema") != COLLECTION_SCHEMA
@@ -361,7 +378,8 @@ def load_complete_swing_history_collection(
         expected = expected_units.get(unit_id)
         if expected is None:
             raise DataReadinessError(f"unexpected swing history unit: {unit_id}")
-        actual = _load_existing_unit(directory, expected, request_sha256=request_sha256)
+        actual = _load_existing_unit(directory, expected, request_sha256=request_sha256,
+            adjustment=plan.adjustment, require_transport=request.get("transport_receipts_required") is True)
         if actual is None or actual != dict(raw):
             raise DataReadinessError(f"swing history unit does not verify: {unit_id}")
         if actual["status"] == "unavailable" and not bool(actual["unavailable_allowed"]):
@@ -427,7 +445,7 @@ def _load_verified_plan(directory: Path) -> _VerifiedPlan:
         or units_record.get("source") != "alpaca"
         or units_record.get("timeframe") != TIMEFRAME
         or units_record.get("price_feed") != PRICE_FEED
-        or units_record.get("adjustment") != ADJUSTMENT
+        or units_record.get("adjustment") not in SUPPORTED_ADJUSTMENTS
         or artifact.get("path") != DAILY_BAR_UNITS_FILE
         or not units_path.is_file()
         or int(artifact.get("bytes", -1)) != units_path.stat().st_size
@@ -455,6 +473,7 @@ def _load_verified_plan(directory: Path) -> _VerifiedPlan:
             "units_sha256": units_sha256,
         },
         universe_sha256=universe_sha256,
+        adjustment=str(units_record["adjustment"]),
     )
 
 
@@ -578,6 +597,7 @@ def _collect_unit(
     *,
     source: SwingDailyPageSource,
     request_sha256: str,
+    adjustment: str,
 ) -> dict[str, Any]:
     unit_id = str(unit["unit_id"])
     unit_directory = root / "units" / unit_id
@@ -603,6 +623,7 @@ def _collect_unit(
                 end_exclusive,
                 page_token=page_token,
                 asof=end_date,
+                adjustment=adjustment,
             )
             page_number = len(pages) + 1
             raw_path = raw_directory / f"page-{page_number:05d}.json.gz"
@@ -630,7 +651,10 @@ def _collect_unit(
                     "raw_bytes": raw_path.stat().st_size,
                 }
             )
-            _validate_page_contract(page, provider_symbol=provider_symbol, page_token=page_token)
+            pages[-1]["transport"] = _retain_transport(root, raw_path, page)
+            _replay_transport(root, pages[-1], unit=unit, adjustment=adjustment, payload=page.raw_payload or {
+                "bars": {page.response_symbol: list(page.bars)}, "next_page_token": page.next_page_token})
+            _validate_page_contract(page, provider_symbol=provider_symbol, page_token=page_token, adjustment=adjustment)
             rows.extend(page.bars)
             if len(rows) > maximum_expected_rows:
                 raise DataReadinessError(f"Alpaca daily unit exceeds one row per calendar date: {unit_id}")
@@ -641,7 +665,7 @@ def _collect_unit(
                 raise DataReadinessError(f"invalid Alpaca pagination for {unit_id}")
             seen_tokens.add(next_token)
             page_token = next_token
-        bars = _validated_bars(rows, unit=unit, ingested_at=datetime.now(UTC))
+        bars = _validated_bars(rows, unit=unit, ingested_at=datetime.now(UTC), adjustment=adjustment)
         status = "unavailable" if bars.empty else "observed"
         unavailable_allowed = status != "unavailable" or str(unit["role"]) == "stock"
         if status == "unavailable" and not unavailable_allowed:
@@ -663,7 +687,7 @@ def _collect_unit(
             "unavailable_allowed": unavailable_allowed,
             "timeframe": TIMEFRAME,
             "price_feed": PRICE_FEED,
-            "adjustment": ADJUSTMENT,
+            "adjustment": adjustment,
             "bars_path": str(bars_path.relative_to(root)),
             "bars_sha256": file_sha256(bars_path),
             "bars_bytes": bars_path.stat().st_size,
@@ -685,7 +709,8 @@ def _collect_unit(
                 "rows": len(bars),
             },
         )
-        result = _load_existing_unit(root, unit, request_sha256=request_sha256)
+        result = _load_existing_unit(root, unit, request_sha256=request_sha256,
+            adjustment=adjustment, require_transport=True)
         if result is None:
             raise DataReadinessError(f"completed swing unit did not verify: {unit_id}")
         return result
@@ -711,13 +736,14 @@ def _validate_page_contract(
     *,
     provider_symbol: str,
     page_token: str | None,
+    adjustment: str,
 ) -> None:
     if (
         page.request_page_token != page_token
         or page.response_symbol != provider_symbol
         or page.response_timeframe != TIMEFRAME
         or page.response_feed.lower() != PRICE_FEED
-        or page.response_adjustment.lower() != ADJUSTMENT
+        or page.response_adjustment != adjustment
     ):
         raise DataReadinessError("Alpaca daily response contract differs from the exact unit request")
 
@@ -727,6 +753,7 @@ def _validated_bars(
     *,
     unit: Mapping[str, Any],
     ingested_at: datetime,
+    adjustment: str,
 ) -> pd.DataFrame:
     columns = [
         "security_id",
@@ -798,7 +825,7 @@ def _validated_bars(
                 "source": "alpaca",
                 "timeframe": TIMEFRAME,
                 "price_feed": PRICE_FEED,
-                "adjustment": ADJUSTMENT,
+                "adjustment": adjustment,
                 "ingested_at_utc": ingested_at,
             }
         )
@@ -813,6 +840,8 @@ def _load_existing_unit(
     unit: Mapping[str, Any],
     *,
     request_sha256: str,
+    adjustment: str,
+    require_transport: bool,
 ) -> dict[str, Any] | None:
     unit_id = str(unit["unit_id"])
     unit_directory = root / "units" / unit_id
@@ -837,13 +866,13 @@ def _load_existing_unit(
         or manifest.get("status") not in {"observed", "unavailable"}
         or manifest.get("timeframe") != TIMEFRAME
         or manifest.get("price_feed") != PRICE_FEED
-        or manifest.get("adjustment") != ADJUSTMENT
+        or manifest.get("adjustment") != adjustment
         or manifest.get("bars_path") != str(bars_path.relative_to(root))
         or manifest.get("bars_sha256") != file_sha256(bars_path)
         or int(manifest.get("bars_bytes", -1)) != bars_path.stat().st_size
     ):
         raise DataReadinessError(f"swing history unit resume identity differs: {unit_id}")
-    _verify_pages(root, manifest)
+    response_rows = _verify_pages(root, manifest, adjustment=adjustment, require_transport=require_transport)
     frame = pd.read_parquet(bars_path)
     if len(frame) != int(manifest.get("rows", -1)):
         raise DataReadinessError(f"swing history unit row count differs: {unit_id}")
@@ -852,19 +881,10 @@ def _load_existing_unit(
             raise DataReadinessError(f"empty swing history unit is not unavailable: {unit_id}")
     else:
         expected = _validated_bars(
-            [
-                {
-                    "t": row["bar_start_utc"],
-                    "o": row["open"],
-                    "h": row["high"],
-                    "l": row["low"],
-                    "c": row["close"],
-                    "v": row["volume"],
-                }
-                for row in frame.to_dict(orient="records")
-            ],
+            response_rows,
             unit=unit,
             ingested_at=datetime.now(UTC),
+            adjustment=adjustment,
         )
         if len(expected) != len(frame) or manifest.get("status") != "observed":
             raise DataReadinessError(f"swing history unit content differs: {unit_id}")
@@ -875,10 +895,18 @@ def _load_existing_unit(
             ("source", "alpaca"),
             ("timeframe", TIMEFRAME),
             ("price_feed", PRICE_FEED),
-            ("adjustment", ADJUSTMENT),
+            ("adjustment", adjustment),
         ):
             if bool(frame[column].astype(str).ne(expected_value).any()):
                 raise DataReadinessError(f"swing history unit {column} differs: {unit_id}")
+        compare_columns = [column for column in expected.columns if column != "ingested_at_utc"]
+        try:
+            pd.testing.assert_frame_equal(frame[compare_columns].reset_index(drop=True),
+                expected[compare_columns].reset_index(drop=True), check_dtype=False, check_exact=True)
+        except AssertionError as exc:
+            raise DataReadinessError(f"swing history Parquet differs from response replay: {unit_id}") from exc
+    if len(response_rows) != len(frame):
+        raise DataReadinessError(f"swing history response row count differs: {unit_id}")
     unavailable_allowed = manifest.get("status") != "unavailable" or unit["role"] == "stock"
     if bool(manifest.get("unavailable_allowed")) != unavailable_allowed:
         raise DataReadinessError(f"swing history unavailable policy differs: {unit_id}")
@@ -901,12 +929,71 @@ def _load_existing_unit(
     }
 
 
-def _verify_pages(root: Path, manifest: Mapping[str, Any]) -> None:
+def _transport_params(unit: Mapping[str, Any], adjustment: str, token: str | None) -> dict[str, Any]:
+    end = date.fromisoformat(str(unit["end_date"]))
+    params: dict[str, Any] = {
+        "symbols": str(unit["provider_symbol"]), "timeframe": TIMEFRAME,
+        "start": _session_midnight_utc(date.fromisoformat(str(unit["start_date"]))).isoformat(),
+        "end": (_session_midnight_utc(end + timedelta(days=1)) - timedelta(microseconds=1)).isoformat(),
+        "feed": PRICE_FEED, "limit": 10_000, "adjustment": adjustment,
+        "sort": "asc", "asof": end.isoformat(),
+    }
+    if token is not None:
+        params["page_token"] = token
+    return params
+
+
+def _retain_transport(root: Path, raw_path: Path, page: SwingDailyPage) -> dict[str, Any]:
+    response = page.transport_response
+    if response is None or len(response.body) > 32 * 1024**2:
+        raise DataReadinessError("swing history requires bounded original transport evidence")
+    body_path = raw_path.with_suffix(".bin")
+    body_path.write_bytes(response.body)
+    metadata = asdict(response)
+    del metadata["body"]
+    metadata["retrieved_at_utc"] = response.retrieved_at_utc.isoformat()
+    return {"body_path": str(body_path.relative_to(root)), "metadata": metadata}
+
+
+def _replay_transport(root: Path, page: Mapping[str, Any], *, unit: Mapping[str, Any],
+    adjustment: str, payload: Mapping[str, Any]) -> None:
+    receipt = page.get("transport")
+    if not isinstance(receipt, Mapping) or not isinstance(receipt.get("metadata"), Mapping):
+        raise DataReadinessError("swing history lacks original transport receipt")
+    metadata = dict(receipt["metadata"])
+    body_path = _resolve_inside(root, str(receipt.get("body_path", "")))
+    if not body_path.is_file() or body_path.stat().st_size > 32 * 1024**2:
+        raise DataReadinessError("swing history transport body missing or oversized")
+    with body_path.open("rb") as stream:
+        body = stream.read(32 * 1024**2 + 1)
+    if len(body) > 32 * 1024**2:
+        raise DataReadinessError("swing history transport body exceeds bound")
+    try:
+        response = HttpByteResponse(**{**metadata, "body": body,
+            "retrieved_at_utc": datetime.fromisoformat(metadata["retrieved_at_utc"]),
+            "redirect_chain": tuple(metadata["redirect_chain"]),
+            "safe_headers": tuple(tuple(row) for row in metadata["safe_headers"])})
+        if response.retrieved_at_utc.tzinfo is None or response.retrieved_at_utc > datetime.now(UTC):
+            raise ValueError("invalid retrieval time")
+        decoded = decode_bars_page_response(response, expected_params=_transport_params(
+            unit, adjustment, page.get("request_page_token")))
+        if decoded.raw_payload != payload:
+            raise ValueError("parsed payload differs from original bytes")
+    except (TypeError, ValueError, KeyError, RuntimeError) as exc:
+        raise DataReadinessError("swing history original transport replay differs") from exc
+
+
+def _verify_pages(root: Path, manifest: Mapping[str, Any], *, adjustment: str,
+    require_transport: bool) -> list[dict[str, Any]]:
     pages = manifest.get("pages")
-    if not isinstance(pages, list) or not pages:
+    if not isinstance(pages, list) or not pages or len(pages) > MAXIMUM_PAGES_PER_UNIT:
         raise DataReadinessError("swing history unit has no raw response pages")
     expected_page_token: str | None = None
+    all_rows: list[dict[str, Any]] = []
+    seen_tokens: set[str] = set()
     for page_number, raw in enumerate(pages, start=1):
+        if page_number > 1 and expected_page_token is None:
+            raise DataReadinessError("swing history response follows a terminal page")
         if not isinstance(raw, Mapping):
             raise DataReadinessError("swing history raw-page record is invalid")
         if (
@@ -915,7 +1002,7 @@ def _verify_pages(root: Path, manifest: Mapping[str, Any]) -> None:
             or raw.get("response_symbol") != manifest.get("provider_symbol")
             or raw.get("response_timeframe") != TIMEFRAME
             or raw.get("response_feed") != PRICE_FEED
-            or raw.get("response_adjustment") != ADJUSTMENT
+            or raw.get("response_adjustment") != adjustment
         ):
             raise DataReadinessError("swing history raw-page contract is invalid")
         path = _resolve_inside(root, str(raw.get("raw_path", "")))
@@ -939,6 +1026,9 @@ def _verify_pages(root: Path, manifest: Mapping[str, Any]) -> None:
             or len(response_rows) != int(raw.get("rows", -1))
         ):
             raise DataReadinessError(f"swing history raw page row inventory is invalid: {path}")
+        if require_transport:
+            _replay_transport(root, raw, unit=manifest, adjustment=adjustment, payload=payload)
+        all_rows.extend(response_rows)
         replay_sha256 = _json_sha256(
             {
                 "request_page_token": raw.get("request_page_token"),
@@ -955,9 +1045,14 @@ def _verify_pages(root: Path, manifest: Mapping[str, Any]) -> None:
         if raw.get("next_page_token") != payload.get("next_page_token"):
             raise DataReadinessError(f"swing history raw page pagination identity is invalid: {path}")
         next_token = raw.get("next_page_token")
+        if next_token is not None and (str(next_token) in seen_tokens or len(pages) > MAXIMUM_PAGES_PER_UNIT):
+            raise DataReadinessError("swing history repeated or unbounded pagination")
+        if next_token is not None:
+            seen_tokens.add(str(next_token))
         expected_page_token = str(next_token) if next_token is not None else None
     if expected_page_token is not None:
         raise DataReadinessError("swing history raw-page sequence is incomplete")
+    return all_rows
 
 
 def _run_bounded(

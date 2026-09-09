@@ -216,6 +216,11 @@ estimator without the same governance.
   fail closed, and all poll/generation children remain research-only and ineligible for
   training or serving.
 - `swing_history_collection.py`, `swing_daily_combination.py`: swing daily history.
+  Exact-unit collection derives `raw`/`all` from its verified acquisition plan;
+  `load_complete_swing_history_collection` requires `expected_adjustment` from the
+  consumer. New acquisitions retain original transport bytes and metadata and
+  reconstruct Parquet values during replay. Combination explicitly requires `all`.
+  Neither an observed unit nor a raw request certifies ownership or cash entitlements.
 - `corpus_integrity.py`, `readiness.py`: corpus admission checks.
 
 ### Swing path

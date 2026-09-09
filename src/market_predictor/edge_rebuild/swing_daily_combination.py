@@ -153,6 +153,7 @@ def verify_combined_swing_inputs(
     pre_manifest = load_complete_swing_history_collection(
         pre_collection_directory,
         plan_directory=pre_plan_directory,
+        expected_adjustment="all",
     )
     pre_request = _load_json(pre_collection_directory / "_request.json")
     pre_authority = _load_json(pre_collection_directory / "_authority.json")

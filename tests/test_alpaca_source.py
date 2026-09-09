@@ -19,6 +19,7 @@ def _bars_url(
     start: datetime,
     end: datetime,
     asof: date | None,
+    adjustment: str = "all",
 ) -> str:
     params: dict[str, object] = {
         "symbols": symbols,
@@ -27,7 +28,7 @@ def _bars_url(
         "end": end.isoformat(),
         "feed": "sip",
         "limit": 10_000,
-        "adjustment": "all",
+        "adjustment": adjustment,
         "sort": "asc",
     }
     if asof is not None:
@@ -197,6 +198,65 @@ class AlpacaSourceTests(unittest.TestCase):
         self.assertFalse(
             client.get_bytes_with_metadata.call_args.kwargs["allow_redirects"]
         )
+
+    def test_bar_page_explicit_adjustment_preserves_exact_transport(self) -> None:
+        start = datetime(2020, 1, 2, 5, tzinfo=UTC)
+        end = datetime(2020, 1, 3, 4, 59, 59, 999999, tzinfo=UTC)
+        asof = date(2020, 1, 2)
+        body = json.dumps({"bars": {"AAPL": []}, "next_page_token": None}).encode()
+        for adjustment in ("raw", "all"):
+            with self.subTest(adjustment=adjustment):
+                source = AlpacaSource(Settings(ALPACA_API_KEY_ID="key", ALPACA_API_SECRET_KEY="secret"))
+                url = _bars_url("AAPL", start=start, end=end, asof=asof, adjustment=adjustment)
+                response = replace(_byte_response(body, url), sha256=sha256(body).hexdigest())
+                client = Mock()
+                client.get_bytes_with_metadata.return_value = response
+                source.client = client
+                page = source.fetch_bars_page(
+                    ("AAPL",), start, end, timeframe="1Min", asof=asof, adjustment=adjustment,
+                )
+                self.assertIs(page.transport_response, response)
+                self.assertEqual(page.raw_body, body)
+                self.assertEqual(client.get_bytes_with_metadata.call_args.kwargs["params"], {
+                    "symbols": "AAPL", "timeframe": "1Min", "start": start.isoformat(), "end": end.isoformat(),
+                    "feed": "sip", "limit": 10_000, "adjustment": adjustment, "sort": "asc", "asof": asof.isoformat(),
+                })
+                client.get_bytes_with_metadata.assert_called_once()
+
+    def test_bar_page_rejects_invalid_adjustment_before_http(self) -> None:
+        source = AlpacaSource(Settings(ALPACA_API_KEY_ID="key", ALPACA_API_SECRET_KEY="secret"))
+        client = Mock()
+        source.client = client
+        for adjustment in ("", "split", "dividend", "RAW", "ALL", " raw", "all ", "none"):
+            with self.subTest(adjustment=adjustment):
+                with self.assertRaisesRegex(ValueError, "adjustment"):
+                    source.fetch_bars_page(
+                        ("AAPL",), datetime(2020, 1, 2, 5, tzinfo=UTC), datetime(2020, 1, 3, 5, tzinfo=UTC),
+                        timeframe="1Day", asof=date(2020, 1, 2), adjustment=adjustment,
+                    )
+                self.assertEqual(client.mock_calls, [])
+
+    def test_bar_page_rejects_transport_query_with_opposite_adjustment(self) -> None:
+        start = datetime(2020, 1, 2, 5, tzinfo=UTC)
+        end = datetime(2020, 1, 3, 5, tzinfo=UTC)
+        asof = date(2020, 1, 2)
+        body = json.dumps({"bars": {"AAPL": []}, "next_page_token": None}).encode()
+        for adjustment in ("raw", "all"):
+            with self.subTest(adjustment=adjustment):
+                source = AlpacaSource(Settings(ALPACA_API_KEY_ID="key", ALPACA_API_SECRET_KEY="secret"))
+                url = _bars_url(
+                    "AAPL", start=start, end=end, asof=asof,
+                    adjustment="all" if adjustment == "raw" else "raw",
+                )
+                client = Mock()
+                client.get_bytes_with_metadata.return_value = replace(
+                    _byte_response(body, url), sha256=sha256(body).hexdigest(),
+                )
+                source.client = client
+                with self.assertRaisesRegex(RuntimeError, "query"):
+                    source.fetch_bars_page(
+                        ("AAPL",), start, end, timeframe="1Min", asof=asof, adjustment=adjustment,
+                    )
 
     def test_multi_symbol_bar_page_rejects_unexpected_symbol(self) -> None:
         source = AlpacaSource(

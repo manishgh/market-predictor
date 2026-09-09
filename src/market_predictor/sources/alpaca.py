@@ -55,6 +55,7 @@ class AlpacaBarsPage:
     retrieved_at_utc: datetime | None = None
     final_url: str | None = None
     redirect_chain: tuple[str, ...] = ()
+    transport_response: HttpByteResponse | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -503,8 +504,12 @@ class AlpacaSource:
         asof: date | None = None,
         limit: int = 10_000,
         retries: int = 5,
+        adjustment: str = "all",
     ) -> AlpacaBarsPage:
         """Fetch one auditable multi-symbol historical-bars page."""
+
+        if adjustment not in {"raw", "all"}:
+            raise ValueError("Alpaca bars adjustment must be raw or all")
 
         normalized = tuple(
             dict.fromkeys(
@@ -534,7 +539,7 @@ class AlpacaSource:
             "end": end.isoformat(),
             "feed": self.settings.alpaca_stock_feed,
             "limit": limit,
-            "adjustment": "all",
+            "adjustment": adjustment,
             "sort": "asc",
         }
         if page_token:
@@ -796,4 +801,5 @@ def decode_bars_page_response(
         retrieved_at_utc=response.retrieved_at_utc,
         final_url=response.final_url,
         redirect_chain=response.redirect_chain,
+        transport_response=response,
     )

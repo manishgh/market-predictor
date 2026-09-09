@@ -62,6 +62,15 @@ funding loop, not a fallback for event-aware production inputs. Historical sourc
 interpretation, feature/label materialization and candidate training remain separate
 dependent work; the new calculation APIs do not claim those steps are complete.
 
+The exact-unit daily collector gets its price basis from the verified plan, not a
+runtime override. New raw/all acquisitions retain original HTTP bytes and metadata;
+the shared Alpaca decoder re-verifies symbol, dates, asof, pagination and adjustment.
+Replay reconstructs normalized OHLCV and compares it against persisted Parquet.
+Historical adjusted-only archives without transport receipts remain historical
+evidence; they cannot qualify as raw-share inputs. Consumers declare their required
+basis explicitly, and the adjusted feature-history combination rejects raw input.
+The new initial-fit raw-share planning and source-to-target admission remain pending.
+
 ### Swing
 
 - New long-only research is governed by `configs/swing_research.toml`, separately

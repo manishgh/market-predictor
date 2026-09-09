@@ -75,6 +75,26 @@ verification passed 213 tests; full Ruff and strict mypy on 333 sources pass.
 The complete suite passed 2,799 tests, three skipped, 133 warnings in 1,088.81
 seconds (18m08s), peak 0.326954 GiB. Test PID 35496 exited. No model was trained.
 
+### Raw-Share Collection Dependency
+
+The existing exact-unit collector now derives `raw`/`all` from its verified plan,
+retains original transport bytes and query receipts for new acquisitions, and
+reconstructs normalized Parquet values from those responses during replay. Consumers
+declare their required price basis; adjusted feature-history combination requires
+`all`. Historical adjusted archives lacking receipts remain historical evidence,
+never raw-share authority. Rejected-query receipt retention is regression-tested.
+
+Focused source/collector tests: 53 passed; combination tests: 14 passed; full
+tracked-Python Ruff and strict mypy on 336 sources pass. Retained adjusted warm-up
+replay passed for 549 units / 140,383 rows, peak 0.132084 GiB, PID12624 exited.
+The full suite passed 2,999 tests, three skipped, 134 warnings in 1,181.30 seconds
+(19m41s), peak 0.329193 GiB. PID25540 exited; XML
+`.test-tmp/price-basis-full.xml`. Both agents are closed. Initial-fit raw-plan
+publication, acquisition, source/ownership/action admission and actual target
+materialization remain pending. No additional cohort exclusion or model fit occurred.
+
+### Event-Aware Accounting
+
 The user approved replacing price-only accounting with event-aware accounting on
 September 9. Its calculation/target/funding code is implemented and fully verified;
 it is not yet a real-data feature/label authority. It must

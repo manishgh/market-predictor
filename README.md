@@ -57,6 +57,12 @@ hash-verified promoted bundle.
   residual claims are not forcibly sold at the ten-session horizon. These calculations
   are implemented, but real source admission/materialization and new training remain
   pending. Historical price-ratio diagnostics cannot substitute for this input contract.
+- Exact-unit SIP collection now takes its `raw` or `all` price basis from the
+  verified acquisition plan. New responses retain original HTTP bytes and query
+  receipts; replay compares those responses with normalized Parquet values.
+  Raw and adjusted collections cannot be resumed or consumed interchangeably.
+  The complete initial-fit raw-share acquisition plan and source-to-label admission
+  are still pending; this change alone does not provide training-ready prices.
 - `market-predictor-research audit-swing-accounting-control --root .
   --output-directory data/reports/swing_accounting_control` replays a frozen
   initial-fit momentum control from retained files. It neither trains a model nor
