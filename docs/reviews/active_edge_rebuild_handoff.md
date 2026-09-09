@@ -5,8 +5,63 @@ Last updated: 2026-09-09
 Repository: `C:\project\market-predictor`
 Branch: `er-intraday-refactoring`
 Last completed implementation commit: `07d37e6` (pushed).
+Last completed source-collection checkpoint: `2df0183` (pushed).
 
 ## Current State
+
+### Current Continuation: Evidence Collected, Policy Decision Pending
+
+User requested source evidence, outcomes and news/reaction features as one continuous
+delivery, with no pauses for another "next" at Git boundaries. That delivery remains
+incomplete. In this continuation no Python implementation, price observation,
+label, feature row, research contract or model was changed.
+
+Collected 21 missing SEC completion documents through the unchanged official-byte
+collector; all 21 independently replay offline. New inventories and matching
+`data/raw/` archive stems:
+
+- `swing_cash_merger_completion_documents`: three documents; replay hash
+  `29ee1cb81230136d7c77dccf81a9a418a58dfe2ab60dd74aec99212cb8160495`.
+- `swing_share_transition_completion_documents`: seven documents; replay hash
+  `680686010346616e0e433681360519f2b69665a062f242c0ac50d83c526d9bc8`.
+- `swing_remaining_merger_completion_documents`: eleven documents; replay hash
+  `194ee145ded436211a3a0a3edbd10629ac7de903edcc31ea2d46e8c28adaab30`.
+
+These are `json_sha256(verify_official_document_collection(...))`, not raw inventory
+file hashes. The current feature audit records document IDs, section locators and
+reviewed terms. ABMD now has a completed-merger document, not just the old proposal;
+its CVR value remains unknown. PBCT's actual reported closing is April 1 2022,
+not the April 4 trading suspension. SATS BSS due-bill/regular-way rights, CBS versus
+VIAB ratios, DISCA versus AT&T Spinco ratios, and acquisition-filer versus affected
+issuer distinctions must survive source interpretation.
+
+**Decision requested, not yet approved:** permit explicitly research-only hypothetical
+sale proceeds reuse next session; fixed contractual cash-claim valuation without
+inventing spendability; unknown contingent rights stay unvalued; separately flagged
+retrospective label maturation after the holding window. This is not settled-cash or
+historical first-observed evidence and cannot authorize live promotion. The frozen
+contract currently disallows these interpretations. Do not infer approval from the
+instruction to finish the work. Full-cohort/ETF action coverage, some class/delivery
+facts and bank-halt valuations also remain unresolved.
+
+Independent news inventory found absent direct SATS initial-fit requests and
+unproven pre-transition FISV coverage. Existing early/later Alpaca and SEC archives
+remain reusable; source families and historical publication proxies are unchanged.
+Do not reuse ECHO aggregates as EchoStar news. All nine current relationship inputs
+already occur in the 120-column baseline; the second profile needs distinct frozen
+additional columns. No feature rebuild ran.
+
+Verification so far: 35 collector/continuity tests passed in 5.31s, all three new
+inventories replayed offline, and `git diff --check` passed. No full-suite or new
+model run is claimed for this config/source-only continuation. The first collection
+invocation used the research executable, which has no such command; it made no
+request. Correct executable: `market-predictor-collect`.
+All five research/review agents are closed. The final source reviewer
+`01a08827-1919-7ae0-ae14-190aef745410` reproduced all three replay pins and the five
+high-risk interpretations with no P1/P2 findings. Source checkpoint `2df0183` is
+pushed. All collection and focused-test processes have exited.
+
+### Previously Closed Implementation
 
 Current bounded checkpoint is completed: fixed-horizon source compilation, not
 managed exits or source admission (`07d37e6`). New owners are
@@ -171,6 +226,10 @@ the latest full suite above covers them. Do not reopen without concrete new evid
 **Complete source admission and corrected stock/benchmark outcomes.** Reuse the
 completed fixed-horizon compiler, following the original Astra plan. Freeze the next
 bounded source-fact/managed-outcome scope with an independent reviewer before coding.
+First record the user's response to the research-only cash/valuation/maturation
+question above. Do not start another generic audit or re-collect the 21 verified
+completion documents. This missing policy decision is not approval to exclude more
+securities or declare unknown corporate facts resolved.
 
 1. Consume the corrected source-segment authority above, not the original ECHO
    bars or any old ECHO-derived feature/label/news join. Historical SATS and FI
@@ -183,7 +242,8 @@ bounded source-fact/managed-outcome scope with an independent reviewer before co
    The existing archive proves process-date queries, not complete effective-date
    accounting coverage. Never rewrite the completed raw-price plan or observations.
    TWTR's primary October 27, 2022 date conflicts with the provider's October 28;
-   ABMD's retained filing describes a proposal, not completed CVR settlement.
+   ABMD now has a separately collected completion filing, but still no CVR valuation
+   or holder-level cash availability. Reuse the 21 newly archived documents above.
    `data/raw/sec_identity_evidence_20260802/SBNY_0001380846-22-000022_targeted_tsc-20211231.htm`
    is TriState Capital, not Signature Bank evidence. See the current feature audit.
 3. Use `materialize-swing-fixed-holdings` for actual fixed-horizon specifications.

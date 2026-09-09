@@ -36,6 +36,40 @@ outside this repository.
 
 ## Long-Only Swing Research And Implementation Plan
 
+### Combined Evidence, Outcomes And Features Delivery
+
+2026-09-09 user direction: continue through source evidence, rebuilt stock/benchmark
+outcomes and verified news/reaction features without waiting at each Git checkpoint.
+Current step: **source admission and missing completion evidence (in_progress)**.
+Source-collection subcheckpoint `2df0183` is pushed: 21 completion documents across
+three immutable archives pass offline replay. The bounded independent review found
+no P1/P2 issue; 35 focused collector/continuity tests passed. No Python code changed;
+the prior full-suite result remains historical, not rerun verification for this work.
+The subsequent outcomes and feature checkpoints remain pending, not completed by
+diagnostic compilation. Keep the 586 retained identities, existing initial-fit
+numeric boundary and 10% cumulative exclusion ceiling unchanged.
+
+Bounded source work: retain missing official completion documents through the
+existing receipt collector, distinguish proposed terms from completed entitlements,
+and reconcile historical issuer/symbol intervals. Do not reinterpret a successful
+HTTP response, contractual payable date or merger amount as broker cash availability.
+Exit gates are pinned/replayed source receipts, reviewed class/action intervals and
+explicit unresolved fields. Unknown facts remain unavailable; original authorities
+are not overwritten. Verify inventory schemas and offline byte replay before closing.
+
+Independent feasibility review found a consumer-policy conflict: hypothetical sales
+cannot have observed historical broker receipts. Actual capture timestamps also do
+not establish when retrospective labels were historically available. A user decision
+is pending on a separately identified research-only simulation/maturation policy;
+the current evidence-only accounting contract is unchanged until approved. Source
+collection and label-independent news work may proceed while that decision is pending.
+
+The feature inventory additionally requires corrected SATS/EchoStar and FISV/FI
+news query windows. Existing relationship features already belong to the 120-column
+technical comparator; profile two must contain genuinely additional, preregistered
+relationships, not duplicate the comparator under another name. These are concrete
+remaining integration requirements, not grounds to reopen completed collectors.
+
 ### Current User-Approved Dataset Direction
 
 2026-09-08: the user permits excluding a small number of unusable whole securities
