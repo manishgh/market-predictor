@@ -1,0 +1,13 @@
+{
+  "scope": "initial_fit_fixed_horizon_source_compiler_demonstration",
+  "numeric_start": "2019-07-09",
+  "numeric_end": "2024-05-28",
+  "entry": "next_exchange_session_raw_open",
+  "marks": "ten_exact_exchange_session_raw_closes",
+  "price_basis": "raw_with_no_adjustment",
+  "ownership_interpretation": "Use the already reviewed SATS and FI symbol/class evidence only for the two explicit diagnostic requests. Dated source instructions are not independent accounting admission.",
+  "actions": "No complete corporate-action coverage is claimed for either window. Empty events mean unknown coverage, not no events.",
+  "clock_interpretation": "Retained raw bars and primary documents were acquired in 2026. Historical first-observed availability remains unknown.",
+  "settlement": "Do not infer sales, payment, cash availability or claim values.",
+  "eligibility": "Diagnostic specifications and kernel replay only; all reportable returns and training eligibility remain unavailable."
+}

@@ -299,6 +299,23 @@ sources and independently interpreted actions, then corrected targets. SATS's BS
 distribution and the remaining unavailable holding tails still need accounting.
 Do not train from old ECHO-derived labels, technical features or ticker-news joins.
 
+September 9 bounded compiler work within the accounting step is **in_progress**.
+Independent design review accepted a fixed-horizon raw-mark compiler: pinned selected
+segments plus dated, evidenced position bindings and typed corporate-action facts
+produce actual serialized `HoldingSpecification` objects and canonical kernel replay.
+Entry is the next XNYS open; marks use the ten exact following closes. Missing initial
+ownership/entry yields no specification. Missing later marks remain unavailable.
+Incomplete action/ownership evidence suppresses reportable economics even when a
+diagnostic replay has numbers. Never infer liquidation, claim marks, payment or cash
+availability; capture time is not historical availability. Scope remains initial-fit
+2019-07-09..2024-05-28, no additional exclusion and no kernel/correction changes.
+Exit tests: source/selection tamper, wrong class and parent fallback, missing sessions,
+successor bindings, claims, unknown clocks, cost-once, exact horizon, bounded memory,
+lease and immutable output; one code/ML review and the full verification battery.
+A real pinned-source compile must persist specifications and replay, not just counts.
+Managed exits, complete action coverage, benchmark-relative targets and training
+admission are not claims of this bounded compiler checkpoint.
+
 Read required sessions directly from raw artifacts and share
 `validate_outcome_observations()` / `outcome_bar_lookup()`. Keep
 `ownership_unresolved`, `observation_missing` and `observation_invalid` distinct.

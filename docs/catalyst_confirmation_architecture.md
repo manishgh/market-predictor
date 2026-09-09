@@ -79,6 +79,19 @@ provider-symbol mapping; an independently retained authority hash is mandatory.
 Neither planning nor collection establishes ownership or accounting eligibility.
 Source-to-target admission remains pending.
 
+Fixed-horizon source compilation is owned by `swing/datasets/holding_materialization.py`,
+with strict request types in `swing/contracts/holding_materialization.py` and bounded
+Parquet reads in `swing/datasets/holding_raw_sources.py`. Its command adapter enters
+the existing initial-fit plan verifier's lease before source reconstruction, holding
+that lease through immutable output publication. The compiler derives the next-session
+raw open and ten exact close marks, supplies reviewed events to the unchanged kernel,
+and persists the actual specification and diagnostic replay. Hash-valid interpretations
+are not independent ownership, action-coverage or valuation admission: reportable
+returns remain null. Missing initial evidence prevents constructing a lot; subsequent
+missing marks preserve session-addressed gaps, including successor-class ownership.
+No execution, claim value, payment or cash availability is synthesized. This path is
+fixed-horizon research infrastructure, not managed-exit targets or a training authority.
+
 Historical-symbol corrections have their own dataset owner, `symbol_corrections.py`.
 Reviewed primary-document facts, the original plan/archive and an independent policy
 pin determine exact replacement intervals. The collector's explicit correction scope

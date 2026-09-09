@@ -4,6 +4,29 @@ Last updated: 2026-09-09
 
 ## Current Long-Only Swing Campaign
 
+The current fixed-horizon compiler has produced two actual holding specifications
+and canonical kernel replays from the corrected SATS and FI archives. Output:
+`data/reports/swing_fixed_holding_demonstration.json`; file SHA256
+`92c288af8ba12d0dd0b84fdc28a75bc4df1f924e3a2adc7f50d616858c70cbd6`,
+semantic audit `84c032008674fef70ebcef475b37925ea918c8bc1ce9297d2b3195209f791fa8`.
+Both lots have ten raw closing observations and no materialization gaps, but
+`independent_source_admission_required` and `action_coverage_unproven` remain.
+Reportable returns are null and all eligibility flags are false. This verifies
+source-to-kernel compilation, not complete distributions, managed exits, benchmark
+targets, feature acceptance or model training. Real-run peak memory: 0.398182 GiB.
+The original raw/corrected archives are unchanged; no additional downloads/exclusions.
+
+Independent source inventory also identified specific evidence limits: the retained
+TWTR closing 8-K states October 27, 2022 effectiveness while the provider record says
+October 28; neither is cash availability. The retained ABMD filing describes a
+proposed transaction and cannot prove closing or a CVR value. The SBNY-named file
+`data/raw/sec_identity_evidence_20260802/SBNY_0001380846-22-000022_targeted_tsc-20211231.htm`
+is actually TriState Capital's filing (CIK 1380846), not Signature Bank evidence.
+None was admitted by this compiler. Full-cohort/ETF action coverage, SATS's BSS
+distribution, successor delivery and the remaining holding-tail facts are unresolved.
+Do not treat a provider payable date, options notice or contractual face/cap as
+spendable cash, an executable share price or an independent claim mark.
+
 The September 8 user-approved direction permits a new retrospective whole-security
 restriction, rather than repairing every old holding before any new dataset.
 Its identity-only audit projects 85 monthly partitions: eighteen additional IDs

@@ -91,6 +91,7 @@
     "freeze-edge-rebuild-temporal-manifest",
     "materialize-edge-rebuild-intraday-history",
     "materialize-edge-rebuild-swing-panel",
+    "materialize-swing-fixed-holdings",
     "partition-v3-data",
     "plan-edge-intraday-microstructure-history",
     "plan-edge-rebuild-broad-intraday-history",

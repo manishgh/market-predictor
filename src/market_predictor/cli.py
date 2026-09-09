@@ -29,6 +29,7 @@ from market_predictor.commands.strategy_governance import (
     register_strategy_governance_commands,
 )
 from market_predictor.commands.swing_collection import register_swing_collection_commands
+from market_predictor.commands.swing_holding_materialization import register_holding_materialization_commands
 from market_predictor.commands.swing_research import register_swing_research_commands
 from market_predictor.commands.v3_data import register_v3_data_commands
 from market_predictor.commands.v3_evaluation import register_v3_evaluation_commands
@@ -62,6 +63,7 @@ register_strategy_governance_commands(app, console)
 register_canonical_data_commands(app, console)
 register_edge_rebuild_commands(app, console)
 register_swing_collection_commands(app, console)
+register_holding_materialization_commands(app, console)
 register_swing_research_commands(app, console)
 register_intraday_model_commands(app, console)
 register_intraday_specialist_commands(app, console)

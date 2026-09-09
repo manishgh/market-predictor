@@ -55,7 +55,7 @@ hash-verified promoted bundle.
   and the same portfolio funding loop. Unknown valuations produce unavailable NAV
   and returns, not zero or a maximum payout. Payments require evidenced availability;
   residual claims are not forcibly sold at the ten-session horizon. These calculations
-  are implemented, but real source admission/materialization and new training remain
+  are implemented, but real source admission, full-cohort materialization and new training remain
   pending. Historical price-ratio diagnostics cannot substitute for this input contract.
 - Exact-unit SIP collection now takes its `raw` or `all` price basis from the
   verified acquisition plan. New responses retain original HTTP bytes and query
@@ -76,6 +76,17 @@ hash-verified promoted bundle.
   The first corrected source inventory has 602,709 observations after replacing
   601 wrong-issuer rows. It retains 259 missing sessions and 21 zero-volume
   observations as explicit gaps; it is not an admitted training-label dataset.
+- `materialize-swing-fixed-holdings` compiles bounded, reviewed JSON requests into
+  actual fixed-horizon holding specifications and replay from the existing accounting
+  kernel. It reads only pinned raw source segments under the shared workspace lease.
+  Missing entry/ownership prevents specification creation; missing later observations
+  remain unavailable without shifting sessions. Typed action facts and claim marks
+  remain diagnostic interpretations: reportable returns are always null until
+  independent source admission. No sale, cash payment or managed exit is inferred.
+  `configs/swing_fixed_holding_demonstration.json` describes two real-source diagnostic
+  lots, not a training dataset. Use `--request-file`, its independently retained
+  `--expected-request-sha256`, and a new immutable `--output`; replay of an existing
+  output also requires `--expected-output-sha256`. The current handoff records pins.
 - `market-predictor-research audit-swing-accounting-control --root .
   --output-directory data/reports/swing_accounting_control` replays a frozen
   initial-fit momentum control from retained files. It neither trains a model nor
