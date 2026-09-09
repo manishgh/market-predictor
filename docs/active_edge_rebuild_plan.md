@@ -222,20 +222,38 @@ GiB. Both agents and process PIDs25540/12624 exited. No new source collection or
 ran. The initial-fit raw-plan and source-to-target materializer are not completed by
 this transport checkpoint; they are the next bounded dependency below.
 
-The raw-plan publication substep will bind the existing accepted cohort and full
-membership provenance, project identity columns only from the parent partitions,
-and reconstruct decision sessions plus the exact ten-session paths for mature
-initial-fit decisions. Merge contiguous required sessions per security/ticker;
-do not clip them at S&P removal. Include SPY, QQQ and the complete point-in-time
-sector benchmark set across the full permitted initial-fit interval. Bind all 586
-retained IDs, including the 41 with no in-window membership, without treating those
-41 as exclusions. A metadata-only advisory found 545 in-window IDs, 551 stock runs
-and 13 benchmark units (564 total) before independently evidenced successor needs.
-These are expected reconstruction counts, not an already published authority.
-Reuse the acquisition writer and collector, preserving their exact hash serialization.
-Exit: pinned immutable plan, independent reconstruction and source-tamper tests,
-scope/benchmark/session checks and no numeric held-out reads. Source presence after
-collection still does not establish ownership or cash availability.
+Raw-plan publication and acquisition are completed/pushed in `d49c6a4`. The plan
+binds the accepted cohort, membership provenance, projected decision identities,
+exact ten-session holding paths and all in-window decision sessions. Contiguous
+security/ticker runs are not clipped at S&P removal. All 586 IDs remain bound;
+545 occur in the initial-fit window and the 41 later entrants are not exclusions.
+Published `data/reports/swing_initial_fit_raw_share_plan` has 551 stock runs plus
+13 SPY/QQQ/sector ETF units covering 2019-07-09..2024-05-28, before independently
+evidenced successor needs. Authority-file pin:
+`d912a997af361c820745e8c850f0fd455ee068397c6d034d2b54c00a475dc22e`.
+
+Collection and fresh offline replay completed: all 564 units returned observations,
+601,834 rows, no failed/empty requests. Immutable archive:
+`data/raw/swing_initial_fit_raw_share_daily`; authority-file pin:
+`144cab43741f3c74308b53e9322c84ac7eeaca158d3cbd6a1ddb0d7c0fa8d244`.
+Do not redownload or mutate these archives. The implementation retains the caller's
+pin, parses hash-matched byte snapshots, rejects scope downgrade, and reconstructs
+each unit's decision/holding/union counts and required-session digest.
+358 focused tests, full tracked-Python Ruff and strict mypy 338 sources pass. Full
+suite: 3,082 passed, three skipped, 134 warnings, 1,266.62s, peak 0.329632 GiB;
+XML `.test-tmp/raw-plan-full.xml`. Plan peak 0.396503 GiB; collection peak 0.395340
+GiB. All owned agents/processes exited. No additional security exclusion or fit ran.
+
+Next within the accounting step: source-to-target admission and materialization.
+Counts alone find 1,134 fewer rows than 602,968 required stock/ETF sessions across
+28 ticker ranges: ECHO 630, FISV 245, the other 26 ranges nine or ten each. Resolve
+exact session sets, dated ticker/class ownership and corporate-action effects rather
+than filling missing prices or enlarging exclusions. Collection success is not proof
+of security identity, full paths, cash availability or training-ready outcomes.
+Join independently interpreted cohort/benchmark actions and genuine missing successor
+evidence into actual holding specifications and targets under `swing/datasets`.
+Preserve the initial-fit numeric boundary, existing accounting kernel and six-candidate
+research design. Do not substitute another metadata-only report for materialization.
 
 Read required sessions directly from raw artifacts and share
 `validate_outcome_observations()` / `outcome_bar_lookup()`. Keep

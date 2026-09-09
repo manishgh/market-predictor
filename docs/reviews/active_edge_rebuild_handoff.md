@@ -4,29 +4,49 @@ Status: active
 Last updated: 2026-09-09
 Repository: `C:\project\market-predictor`
 Branch: `er-intraday-refactoring`
-Last completed implementation commit: `46ab0f8` (pushed).
+Last completed implementation commit: `d49c6a4` (pushed).
 
 ## Current State
 
-Price-basis-aware collection and original-response replay are verified and pushed
-in `46ab0f8`. New acquisitions derive raw/all from their plan, retain original HTTP
-bytes/query receipts and reconcile normalized Parquet with decoded source rows.
-The consumer must supply `expected_adjustment`; adjusted combination requires all.
-Historical adjusted evidence without receipts is not fabricated into raw evidence.
-Cross-basis resume fails before calls/writes. No new raw data or model was created.
+Initial-fit raw-share planning, collection and offline replay are complete in
+`d49c6a4`. One immutable plan reconstructs exact decision/holding sessions, complete
+SPY/QQQ/sector ETF ranges, provider mapping and per-unit counts/digests from pinned
+cohort/identity evidence. Replay requires an independently retained authority-file
+hash. The shared collector retains original response bytes and reconstructs Parquet
+from them; collection is not ownership, exact-session coverage or accounting admission.
 
-Both agents completed and closed: Volta `01a0861c-bd36-73f0-bdec-f29e2742be27`
-(source advisory/tests), Hilbert `01a0861c-bcac-7f40-a20c-9e83110e2618` (design and
-consolidated review). One P2 rejected-receipt loss was fixed and regression-tested.
-53 source/collector plus 14 combination tests pass; full tracked-Python Ruff and
-strict mypy (336 sources) pass. Full suite: **2,999 passed, three skipped, 134
-warnings**, 1,181.30s (19m41s), peak **0.329193 GiB**. PID25540/session97992 exited;
-XML `.test-tmp/price-basis-full.xml`. Retained adjusted warm-up replay passed for
-549 units / 140,383 rows, peak 0.132084 GiB, PID12624 exited. No owned job remains.
+Plan: `data/reports/swing_initial_fit_raw_share_plan`.
+Authority-file pin: `d912a997af361c820745e8c850f0fd455ee068397c6d034d2b54c00a475dc22e`.
+Archive: `data/raw/swing_initial_fit_raw_share_daily`.
+Authority-file pin: `144cab43741f3c74308b53e9322c84ac7eeaca158d3cbd6a1ddb0d7c0fa8d244`.
+Manifest-file hash: `a96c70eee46e0a4b4d0ee3c1a7d47cea40dfc7a4ec2e14903f03e786bd0ced52`.
+Use those independently saved pins, never a freshly recomputed replacement after a
+verification failure. These completed archives are immutable and must not be redownloaded.
 
-Event-aware accounting is implemented and verified. Untracked `.test-tmp/` contains
-generated evidence and is not committed.
-Historical narration remains in Git; this is the only current handoff.
+564/564 units returned observations, no failed/empty units, **601,834 raw SIP daily
+rows**. Separate offline CLI replay passed. Scope: 2019-07-09..2024-05-28 only,
+545 in-window security IDs, 551 stock ranges and 13 benchmark ranges. The other
+41 retained IDs enter later; they are not exclusions. Requirements: 586,305 decision
+sessions, 586,414 holding sessions, 551 decision-only sessions, 586,965 stock union
+sessions, plus 16,003 benchmark sessions. All 586 retained IDs remain bound.
+
+**Known unresolved count differences:** 602,968 required versus 601,834 returned
+rows, short by 1,134 across 28 ranges. ECHO is short 630, FISV 245; 26 other ranges
+are short nine or ten. This count check does not identify exact missing dates or
+prove the returned bars belong to the intended security. Investigate date-specific
+symbol mapping and corporate actions before interpreting these as missing trading.
+No source was imputed, no additional stock excluded and no label admitted.
+
+Verification: 358 focused tests, full tracked-Python Ruff, strict mypy 338 sources;
+full suite **3,082 passed, three skipped, 134 warnings**, 1,266.62s (21m06s), peak
+0.329632 GiB. XML `.test-tmp/raw-plan-full.xml`; PID13376/session99832 exited.
+Plan peak 0.396503 GiB; collection peak 0.395340 GiB. Plan PID35088/session19227,
+collection PID20404/session76880 and offline replay PID31288/session69985 exited.
+Consolidated review fixed pin-replacement races, scope downgrade and per-unit audits.
+Review/test agents Lovelace `01a0865e-9703-7c81-b892-3e0c3b8de9ba` and Leibniz
+`01a08660-3dbc-77e1-b8b2-253bdba74f4e` are closed. No owned process remains.
+Untracked `.test-tmp/` is generated test evidence, not committed. Historical
+checkpoint narration is retained in Git; this is the only current handoff.
 
 The user approved separating tradable shares, available cash, unpaid proceeds and
 contingent rights. Unknown marks/timing remain unavailable, never zero or a payout
@@ -61,58 +81,40 @@ Residual claims need evidenced marks; unknown NAV stops NAV-dependent allocation
 Benchmark distributions are retained as cash, not fictitiously reinvested.
 Targets remain ineligible until independent source admission; no real data was rewritten.
 
-Consolidated review fixed entry-tied event ambiguity, prior-session cash release,
-irrelevant post-exit events and premature successor lifecycle references.
-Verification after final code: **309 focused tests; full suite 2,974 passed, three
-skipped, 133 warnings, 1,096.07s; full tracked-Python Ruff; strict mypy 336 files**.
-Peak 0.328899 GiB. PID23576/session58923 exited; XML
-`.test-tmp/event-accounting-full.xml`. All agents closed. No repeat full suite is
-needed for documentation closure alone.
+Accounting kernel checkpoint `b7cdb4e` and transport checkpoint `46ab0f8` are closed;
+the latest full suite above covers them. Do not reopen without concrete new evidence.
 
 ## Exact next checkpoint:
 
-**Publish the pinned initial-fit raw-share acquisition plan, then collect it.**
-The existing exact-unit collector's price-basis work is complete. Reuse that path;
-do not create a duplicate collector or relabel adjusted prices as raw fills when
-dividends are separately credited.
+**Admit security-owned raw observations and corporate actions into actual holding
+specifications, then materialize corrected targets.** The original Astra plan remains
+the guide. Freeze this bounded design with an independent reviewer before coding.
 
-Read `edge_rebuild/swing_history_collection.py`,
-`edge_rebuild/swing_history_acquisition.py`, `sources/alpaca.py::fetch_bars_page`.
-The bounded metadata inspection found `adjustment=all` in modeled, warm-up, candidate
-and transfer requests, not a complete raw or adjustment-factor authority.
-This is not a claim that every file on disk was inspected.
+1. Replay the saved plan/archive, compare exact session sets (not counts alone),
+   and resolve date-specific symbol/class ownership, especially ECHO/FISV and
+   holding tails after removal. `asof=unit_end` is a provider mapping parameter,
+   not independent ownership evidence. Unchanged row counts do not prove identity.
+2. Reuse the 60-name action archive and official documents; extend only genuinely
+   missing cohort/ETF action and successor evidence in separate pinned archives.
+   Never rewrite the completed raw-price plan or replace original observations.
+3. Build actual `HoldingSpecification` and target rows under `swing/datasets`, using
+   the shared accounting kernel. Match stock/SPY/QQQ/sector executable intervals,
+   entitlements, payable/availability times and costs once. Unsupported delivery,
+   fractions, currency, payment dates and marks remain explicit gaps, not zero.
+4. Verify immutable source-to-target replay, ownership and missing-session failures,
+   no held-out numeric reads, stock/benchmark accounting and bounded memory. Push
+   implementation and the two-document closure before dependent feature/training work.
 
-Bind a fresh initial-fit plan/output `data/raw/swing_initial_fit_raw_share_daily`
-for the fixed retained cohort, required holding sessions, SPY, QQQ and point-in-time
-sector benchmarks. Numeric scope **2019-07-09 through 2024-05-28 only**. Earlier bars
-are warm-up only. Do not extend the cutoff or inspect held-out numeric observations.
-Use `1Day`, SIP, raw, bounded pages and explicit identity-unit `asof`. That field
-maps symbols/entities, not price vintage or ownership.
+Numeric scope stays **2019-07-09..2024-05-28**; do not inspect held-out prices or
+broaden exclusions. Last mature decision is 2024-05-13. Raw collection is complete,
+not a reason to repeat downloads or produce another metadata-only substitute for
+the materializer. After admission, rebuild news/reaction features, run the six
+candidates sequentially, evaluate against SPY and collect fresh prospective evidence.
 
-Volta's metadata-only source advisory reproduced 581,455 mature initial-fit
-decisions from 59 monthly partitions, 545 initial-fit security IDs / 551 ticker
-pairs and 586,414 unique holding sessions. The other 41 retained IDs have no
-in-window membership; they are not exclusions. The 1,231-session range requires
-13 benchmarks: SPY, QQQ, XLB, XLC, XLE, XLF, XLI, XLK, XLP, XLRE, XLU, XLV, XLY.
-The basic representation is 551 stock runs plus 13 benchmark units before any
-independently evidenced successor requirements; last mature decision 2024-05-13.
-These advisory counts are not a published acquisition authority. Extract the existing
-acquisition publisher's staging/writer once for both planners; do not call its
-warm-up-gap entry point or membership-clipping unit builder for holding tails.
-
-Then independently interpret ownership/actions and materialize actual
-`HoldingSpecification` and target rows under `swing/datasets`. Do not replace this
-with another metadata-only report. The existing 60-name corporate-action collection
-is not cohort/benchmark-wide coverage. Acquire only genuinely missing evidence into
-new request-bound archives. Unsupported currency, fractions, delivery, payment or
-valuation remains a gap. Existing adjusted sources and blocked controls stay immutable.
-
-Next-plan exit: design review, exact cohort/session/benchmark reconstruction,
-source-tamper and future-poison tests, initial-fit numeric boundary, immutable
-publication/replay, focused/full tests, lint/types and real plan evidence. Collector
-raw-request/basis/receipt tests are already closed; do not reopen them without new
-evidence. Push implementation, then close/push both continuity documents before
-dependent source-to-target code. The original Astra plan remains the guide.
+Read `swing/datasets/initial_fit_raw_share_plan.py`,
+`edge_rebuild/swing_history_collection.py`, `swing/labels/holding_paths.py`,
+`swing/contracts/holding_accounting.py`, `swing/evaluation/holding_accounting.py`,
+`swing/labels/holding_accounting.py`, and `swing/datasets/corporate_action_collection.py`.
 
 ## Source Authorities
 
