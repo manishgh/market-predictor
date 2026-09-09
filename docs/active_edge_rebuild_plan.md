@@ -299,7 +299,8 @@ sources and independently interpreted actions, then corrected targets. SATS's BS
 distribution and the remaining unavailable holding tails still need accounting.
 Do not train from old ECHO-derived labels, technical features or ticker-news joins.
 
-September 9 bounded compiler work within the accounting step is **in_progress**.
+September 9 bounded compiler work within the accounting step is **completed** in
+`07d37e6` (pushed).
 Independent design review accepted a fixed-horizon raw-mark compiler: pinned selected
 segments plus dated, evidenced position bindings and typed corporate-action facts
 produce actual serialized `HoldingSpecification` objects and canonical kernel replay.
@@ -315,6 +316,22 @@ lease and immutable output; one code/ML review and the full verification battery
 A real pinned-source compile must persist specifications and replay, not just counts.
 Managed exits, complete action coverage, benchmark-relative targets and training
 admission are not claims of this bounded compiler checkpoint.
+Verification: 29 focused and 47 integrated tests pass; full tracked-Python Ruff
+(557 files) and strict mypy (345 sources) pass. Final full suite: **3,220 passed,
+three skipped, 132 warnings**, 1,811.42s (30m11s), peak 0.332027 GiB. XML:
+`.test-tmp/holding-materialization-full.xml`; PID34188/session7134 exited.
+Consolidated review is closed: unconditionally null reportable returns, persistent
+gaps for actually held positions, deterministic ordering and adapter lease/mutation
+tests are verified. Both reviewers are closed; no Python process remained.
+Real offline compilation produced two actual SATS/FI specifications and exact kernel
+replays, no materialization gaps, peak 0.398182 GiB. Source/action admission remains
+unproven, not silently passed. Output `data/reports/swing_fixed_holding_demonstration.json`,
+independent file SHA256 `92c288af8ba12d0dd0b84fdc28a75bc4df1f924e3a2adc7f50d616858c70cbd6`.
+No source was downloaded or rewritten and no extra security was excluded. Next within
+the accounting step: complete/reconcile action and class-ownership evidence, admit
+source facts and integrate managed/fixed stock and benchmark outcomes. Reuse this
+compiler; do not replace that work with another metadata-only inventory or a repeated
+generic review of this closed implementation.
 
 Read required sessions directly from raw artifacts and share
 `validate_outcome_observations()` / `outcome_bar_lookup()`. Keep

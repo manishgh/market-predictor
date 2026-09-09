@@ -4,9 +4,43 @@ Status: active
 Last updated: 2026-09-09
 Repository: `C:\project\market-predictor`
 Branch: `er-intraday-refactoring`
-Last completed implementation commit: `2bce3d7` (pushed).
+Last completed implementation commit: `07d37e6` (pushed).
 
 ## Current State
+
+Current bounded checkpoint is completed: fixed-horizon source compilation, not
+managed exits or source admission (`07d37e6`). New owners are
+`swing/contracts/holding_materialization.py`, `swing/datasets/holding_raw_sources.py`,
+`swing/datasets/holding_materialization.py` and
+`commands/swing_holding_materialization.py`, plus their focused tests and two
+`configs/swing_fixed_holding_*.json` files. CLI, README, architecture and feature audit
+describe the actual diagnostic-only boundary. No closed kernel/correction file changed.
+Independent source reviewer `01a0879b-14f6-70d0-bfea-f08c8228d03a` and design/code/ML
+reviewer Euler `01a0872b-db59-7962-9c7a-bd70be47238e` are both closed. All three
+supported compiler findings are fixed: diagnostic-only reportability, persistent
+session-addressed gaps for actually held positions, and deterministic gap ordering.
+29 focused tests and 47 integrated tests pass; Ruff passes on 557 Python files and
+strict mypy on 345 sources. Final full verification: **3,220 passed, three skipped,
+132 warnings**, 1,811.42s (30m11s), peak **0.332027 GiB**. XML:
+`.test-tmp/holding-materialization-full.xml`; PID34188/session7134 exited successfully.
+No code changed after suite start. Both review agents and all owned Python workers
+are closed; the final process inspection found no Python process.
+
+Real compilation completed, PID36168/session49885 exited, peak 0.398182 GiB.
+It reconstructed pinned sources and created two actual fixed-horizon specifications
+and canonical replays (SATS and FI), with no materialization gaps. Source/action
+coverage admission remains unproven; reportable returns are null. Retained output:
+`data/reports/swing_fixed_holding_demonstration.json`, file SHA256
+`92c288af8ba12d0dd0b84fdc28a75bc4df1f924e3a2adc7f50d616858c70cbd6`,
+semantic audit `84c032008674fef70ebcef475b37925ea918c8bc1ce9297d2b3195209f791fa8`.
+Request `configs/swing_fixed_holding_demonstration.json` file SHA256
+`989102283257b2bf057d5826f310c56add1d499cf0a5939fb3f0991371582635`.
+Interpretation `configs/swing_fixed_holding_interpretation.json` file SHA256
+`9e3a91f76886434607eb6422b17b5af744847e18109c082d6cb89ec9c6f11cc3`.
+Serialized kernel replay equality was checked independently after compilation.
+No download, original artifact rewrite, extra exclusion or candidate training occurred.
+Do not reopen this compiler without concrete new evidence. Remaining work is source
+admission, complete outcomes and dependent features/training, not another compiler audit.
 
 Completed checkpoint: bounded historical-symbol correction (`2bce3d7`). New owners
 `swing/datasets/symbol_corrections.py` and `symbol_corrected_sources.py` bind reviewed
@@ -59,8 +93,8 @@ and a stale fixture pin were corrected before the final suite. A first launcher
 exited before pytest because psutil is absent; the repository monitor was used instead,
 without adding a dependency. PID29720/session64200 exited. Both agents and all owned
 collection/test processes are closed; no Python process remained at final inspection.
-Do not reopen this checkpoint without concrete new evidence. Next is actual
-source-to-holding-specification materialization, not another correction audit.
+Do not reopen this checkpoint without concrete new evidence. The bounded fixed-horizon
+compiler above now consumes these sources; complete action/ownership admission remains.
 
 Initial-fit raw-share planning, collection and offline replay are complete in
 `d49c6a4`. One immutable plan reconstructs exact decision/holding sessions, complete
@@ -134,9 +168,9 @@ the latest full suite above covers them. Do not reopen without concrete new evid
 
 ## Exact next checkpoint:
 
-**Admit security-owned raw observations and corporate actions into actual holding
-specifications, then materialize corrected targets.** The original Astra plan remains
-the guide. Freeze this bounded design with an independent reviewer before coding.
+**Complete source admission and corrected stock/benchmark outcomes.** Reuse the
+completed fixed-horizon compiler, following the original Astra plan. Freeze the next
+bounded source-fact/managed-outcome scope with an independent reviewer before coding.
 
 1. Consume the corrected source-segment authority above, not the original ECHO
    bars or any old ECHO-derived feature/label/news join. Historical SATS and FI
@@ -146,11 +180,19 @@ the guide. Freeze this bounded design with an independent reviewer before coding
    entitlements; a symbol correction is not a total-return adjustment.
 2. Reuse the 60-name action archive and official documents; extend only genuinely
    missing cohort/ETF action and successor evidence in separate pinned archives.
-   Never rewrite the completed raw-price plan or replace original observations.
-3. Build actual `HoldingSpecification` and target rows under `swing/datasets`, using
-   the shared accounting kernel. Match stock/SPY/QQQ/sector executable intervals,
-   entitlements, payable/availability times and costs once. Unsupported delivery,
-   fractions, currency, payment dates and marks remain explicit gaps, not zero.
+   The existing archive proves process-date queries, not complete effective-date
+   accounting coverage. Never rewrite the completed raw-price plan or observations.
+   TWTR's primary October 27, 2022 date conflicts with the provider's October 28;
+   ABMD's retained filing describes a proposal, not completed CVR settlement.
+   `data/raw/sec_identity_evidence_20260802/SBNY_0001380846-22-000022_targeted_tsc-20211231.htm`
+   is TriState Capital, not Signature Bank evidence. See the current feature audit.
+3. Use `materialize-swing-fixed-holdings` for actual fixed-horizon specifications.
+   Its pinned requests and typed events remain interpretations, never independent
+   admission: reportable returns are always null. Add independently replayed source
+   facts and canonical managed-exit outcomes, then use the existing target projector.
+   Match stock/SPY/QQQ/sector executable intervals, entitlements, actual availability
+   and costs once. Unsupported delivery, fractions, currency, payment dates and
+   marks remain explicit gaps, not zero, face values or fabricated sale/cash events.
 4. Verify immutable source-to-target replay, ownership and missing-session failures,
    no held-out numeric reads, stock/benchmark accounting and bounded memory. Push
    implementation and the two-document closure before dependent feature/training work.
@@ -161,7 +203,9 @@ not a reason to repeat downloads or produce another metadata-only substitute for
 the materializer. After admission, rebuild news/reaction features, run the six
 candidates sequentially, evaluate against SPY and collect fresh prospective evidence.
 
-Read `swing/datasets/initial_fit_raw_share_plan.py`,
+Read `swing/datasets/holding_materialization.py`, `swing/datasets/holding_raw_sources.py`,
+`swing/contracts/holding_materialization.py`, `commands/swing_holding_materialization.py`,
+`configs/swing_fixed_holding_demonstration.json`, `swing/datasets/initial_fit_raw_share_plan.py`,
 `swing/datasets/symbol_corrections.py`, `swing/datasets/symbol_corrected_sources.py`,
 `edge_rebuild/swing_history_collection.py`, `swing/labels/holding_paths.py`,
 `swing/contracts/holding_accounting.py`, `swing/evaluation/holding_accounting.py`,
