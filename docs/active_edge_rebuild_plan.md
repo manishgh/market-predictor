@@ -170,7 +170,7 @@ funding order, 10% exclusion cap or fixed 45/631 list. The ABMD completion filin
 establishes cash plus a nontradeable contingent right: its payout cap is neither a
 valuation nor immediately reusable cash. No unsupported fact is assigned zero.
 
-Bounded next scope: strict typed holding/evidence contracts and one canonical lot
+Completed code scope (`b7cdb4e`): strict typed holding/evidence contracts and one canonical lot
 transition/valuation kernel consumed by labels and the existing funded ledger.
 Replace terminal-mark liquidation with component reconciliation. Payment must
 extinguish its matching claim exactly once; only evidenced available cash funds
@@ -190,6 +190,27 @@ previously earned surviving claims; duplicate payments; unknown timing/valuation
 double-counted distributions; identical lot economics through label and portfolio
 consumers. Consolidated code/ML review, full verification and Git closure are required.
 Real source interpretation/materialization follows this shared implementation.
+
+Verification closed September 9: 309 focused tests; full tracked-Python Ruff and
+strict mypy on 336 source files; full suite 2,974 passed, three skipped, 133 warnings
+in 18m16s, peak 0.329 GiB. Consolidated review fixes cover entry-tied event ambiguity,
+prior-session sale cash availability, unearned post-exit events and premature
+successor references. All owned agents/processes exited. Target projection and
+funded accounting share the kernel; source admission remains false. No new fit ran.
+
+Next bounded dependency: make the existing exact-unit daily collector explicitly
+price-basis aware, from transport through immutable request, receipts and replay.
+Reuse its collection path; accept only supported adjustment choices and reject
+cross-basis resumes. Existing adjusted archives remain unchanged. Bind a fresh
+initial-fit raw-share SIP acquisition plan for the fixed cohort, SPY, QQQ and required
+sector benchmarks, ending 2024-05-28. No held-out numeric observations may enter it.
+This collection establishes raw price evidence, not ownership or distribution
+admission. Then join independently interpreted actions/ownership into the actual
+holding-specification and target materializer. Do not substitute another diagnostic
+inventory for that materializer. Required tests: transport query, request identity,
+wrong-basis response/resume rejection, bounded date/unit scope, offline tamper replay,
+failure isolation and existing adjusted collection behavior. Fail closed on missing
+evidence; do not expand the frozen exclusion list or fabricate cash/marks.
 
 Read required sessions directly from raw artifacts and share
 `validate_outcome_observations()` / `outcome_bar_lookup()`. Keep
