@@ -198,7 +198,7 @@ prior-session sale cash availability, unearned post-exit events and premature
 successor references. All owned agents/processes exited. Target projection and
 funded accounting share the kernel; source admission remains false. No new fit ran.
 
-Next bounded dependency: make the existing exact-unit daily collector explicitly
+Completed collector dependency (`46ab0f8`): make the existing exact-unit daily collector explicitly
 price-basis aware, from transport through immutable request, receipts and replay.
 Reuse its collection path; accept only supported adjustment choices and reject
 cross-basis resumes. Existing adjusted archives remain unchanged. Bind a fresh
@@ -211,6 +211,31 @@ inventory for that materializer. Required tests: transport query, request identi
 wrong-basis response/resume rejection, bounded date/unit scope, offline tamper replay,
 failure isolation and existing adjusted collection behavior. Fail closed on missing
 evidence; do not expand the frozen exclusion list or fabricate cash/marks.
+
+Collector verification: 53 source/collector tests plus 14 combination tests pass;
+full tracked-Python Ruff and strict mypy on 336 sources pass. The complete suite
+passed 2,999 tests, three skipped, 134 warnings in 19m41s, peak 0.329193 GiB.
+Consolidated review found and fixed rejected transport receipt loss; the regression
+replays the rejected query from retained bytes and verifies sibling resume. Retained
+adjusted warm-up source replay passed for 549 units and 140,383 rows, peak 0.132084
+GiB. Both agents and process PIDs25540/12624 exited. No new source collection or fit
+ran. The initial-fit raw-plan and source-to-target materializer are not completed by
+this transport checkpoint; they are the next bounded dependency below.
+
+The raw-plan publication substep will bind the existing accepted cohort and full
+membership provenance, project identity columns only from the parent partitions,
+and reconstruct decision sessions plus the exact ten-session paths for mature
+initial-fit decisions. Merge contiguous required sessions per security/ticker;
+do not clip them at S&P removal. Include SPY, QQQ and the complete point-in-time
+sector benchmark set across the full permitted initial-fit interval. Bind all 586
+retained IDs, including the 41 with no in-window membership, without treating those
+41 as exclusions. A metadata-only advisory found 545 in-window IDs, 551 stock runs
+and 13 benchmark units (564 total) before independently evidenced successor needs.
+These are expected reconstruction counts, not an already published authority.
+Reuse the acquisition writer and collector, preserving their exact hash serialization.
+Exit: pinned immutable plan, independent reconstruction and source-tamper tests,
+scope/benchmark/session checks and no numeric held-out reads. Source presence after
+collection still does not establish ownership or cash availability.
 
 Read required sessions directly from raw artifacts and share
 `validate_outcome_observations()` / `outcome_bar_lookup()`. Keep

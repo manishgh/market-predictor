@@ -4,12 +4,28 @@ Status: active
 Last updated: 2026-09-09
 Repository: `C:\project\market-predictor`
 Branch: `er-intraday-refactoring`
-Last completed implementation commit: `b7cdb4e` (pushed).
+Last completed implementation commit: `46ab0f8` (pushed).
 
 ## Current State
 
-Event-aware accounting is implemented and verified. No owned agent or heavy process
-is running. Untracked `.test-tmp/` contains generated evidence and is not committed.
+Price-basis-aware collection and original-response replay are verified and pushed
+in `46ab0f8`. New acquisitions derive raw/all from their plan, retain original HTTP
+bytes/query receipts and reconcile normalized Parquet with decoded source rows.
+The consumer must supply `expected_adjustment`; adjusted combination requires all.
+Historical adjusted evidence without receipts is not fabricated into raw evidence.
+Cross-basis resume fails before calls/writes. No new raw data or model was created.
+
+Both agents completed and closed: Volta `01a0861c-bd36-73f0-bdec-f29e2742be27`
+(source advisory/tests), Hilbert `01a0861c-bcac-7f40-a20c-9e83110e2618` (design and
+consolidated review). One P2 rejected-receipt loss was fixed and regression-tested.
+53 source/collector plus 14 combination tests pass; full tracked-Python Ruff and
+strict mypy (336 sources) pass. Full suite: **2,999 passed, three skipped, 134
+warnings**, 1,181.30s (19m41s), peak **0.329193 GiB**. PID25540/session97992 exited;
+XML `.test-tmp/price-basis-full.xml`. Retained adjusted warm-up replay passed for
+549 units / 140,383 rows, peak 0.132084 GiB, PID12624 exited. No owned job remains.
+
+Event-aware accounting is implemented and verified. Untracked `.test-tmp/` contains
+generated evidence and is not committed.
 Historical narration remains in Git; this is the only current handoff.
 
 The user approved separating tradable shares, available cash, unpaid proceeds and
@@ -55,10 +71,10 @@ needed for documentation closure alone.
 
 ## Exact next checkpoint:
 
-**Connect raw-share evidence to event-aware outcomes.** Parameterize the existing
-exact-unit daily collector through transport, request identity, receipts and replay;
-do not create a duplicate collector. Its hard-coded `all` cannot supply raw fills
-when dividends are separately credited.
+**Publish the pinned initial-fit raw-share acquisition plan, then collect it.**
+The existing exact-unit collector's price-basis work is complete. Reuse that path;
+do not create a duplicate collector or relabel adjusted prices as raw fills when
+dividends are separately credited.
 
 Read `edge_rebuild/swing_history_collection.py`,
 `edge_rebuild/swing_history_acquisition.py`, `sources/alpaca.py::fetch_bars_page`.
@@ -73,6 +89,17 @@ are warm-up only. Do not extend the cutoff or inspect held-out numeric observati
 Use `1Day`, SIP, raw, bounded pages and explicit identity-unit `asof`. That field
 maps symbols/entities, not price vintage or ownership.
 
+Volta's metadata-only source advisory reproduced 581,455 mature initial-fit
+decisions from 59 monthly partitions, 545 initial-fit security IDs / 551 ticker
+pairs and 586,414 unique holding sessions. The other 41 retained IDs have no
+in-window membership; they are not exclusions. The 1,231-session range requires
+13 benchmarks: SPY, QQQ, XLB, XLC, XLE, XLF, XLI, XLK, XLP, XLRE, XLU, XLV, XLY.
+The basic representation is 551 stock runs plus 13 benchmark units before any
+independently evidenced successor requirements; last mature decision 2024-05-13.
+These advisory counts are not a published acquisition authority. Extract the existing
+acquisition publisher's staging/writer once for both planners; do not call its
+warm-up-gap entry point or membership-clipping unit builder for holding tails.
+
 Then independently interpret ownership/actions and materialize actual
 `HoldingSpecification` and target rows under `swing/datasets`. Do not replace this
 with another metadata-only report. The existing 60-name corporate-action collection
@@ -80,10 +107,12 @@ is not cohort/benchmark-wide coverage. Acquire only genuinely missing evidence i
 new request-bound archives. Unsupported currency, fractions, delivery, payment or
 valuation remains a gap. Existing adjusted sources and blocked controls stay immutable.
 
-Exit: design review, raw request and wrong-basis response/resume tests, scoped units
-and dates, offline replay/tamper, failure isolation, focused/full tests, lint/types
-and source evidence. Push implementation, then close/push the two continuity docs
-before dependent code. The original Astra plan remains the guide.
+Next-plan exit: design review, exact cohort/session/benchmark reconstruction,
+source-tamper and future-poison tests, initial-fit numeric boundary, immutable
+publication/replay, focused/full tests, lint/types and real plan evidence. Collector
+raw-request/basis/receipt tests are already closed; do not reopen them without new
+evidence. Push implementation, then close/push both continuity documents before
+dependent source-to-target code. The original Astra plan remains the guide.
 
 ## Source Authorities
 
