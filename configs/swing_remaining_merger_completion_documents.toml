@@ -1,0 +1,69 @@
+schema_version = "market_predictor.official_document_inventory"
+maximum_response_bytes = 16777216
+attempts_per_document_per_run = 1
+
+[[documents]]
+document_id = "cerner_merger_completion"
+url = "https://www.sec.gov/Archives/edgar/data/804753/000119312522169841/d223229d8k.htm"
+purpose = "Cerner completed merger and common-share cash entitlement; acceptance for payment does not establish payment."
+expected_media = "html"
+
+[[documents]]
+document_id = "alexion_merger_completion"
+url = "https://www.sec.gov/Archives/edgar/data/899866/000110465921094624/tm2122733d25_8k.htm"
+purpose = "Alexion July 21 2021 shareholder conversion, ADS election and cash consideration, distinct from the later internal merger."
+expected_media = "html"
+
+[[documents]]
+document_id = "kansas_city_merger_completion"
+url = "https://www.sec.gov/Archives/edgar/data/54480/000119312521356252/d25745d8k.htm"
+purpose = "Kansas City Southern completed common-share conversion, distinct from subsequent voting trust and operating-control approval."
+expected_media = "html"
+
+[[documents]]
+document_id = "flir_merger_completion"
+url = "https://www.sec.gov/Archives/edgar/data/354908/000119312521161540/d127190d8k.htm"
+purpose = "FLIR cash and Teledyne share conversion with approximately stated effective time; preserve the timing qualifier."
+expected_media = "html"
+
+[[documents]]
+document_id = "maxim_merger_completion"
+url = "https://www.sec.gov/Archives/edgar/data/743316/000119312521257603/d203144d8k.htm"
+purpose = "Maxim completed conversion into Analog Devices shares and fractional-cash entitlement; halt and delivery remain distinct."
+expected_media = "html"
+
+[[documents]]
+document_id = "concho_merger_completion"
+url = "https://www.sec.gov/Archives/edgar/data/1358071/000110465921004795/tm213218d6_8k.htm"
+purpose = "Concho completed January 15 2021 merger. Review apparent year error in trading cessation text without silently correcting source evidence."
+expected_media = "html"
+
+[[documents]]
+document_id = "varian_merger_completion"
+url = "https://www.sec.gov/Archives/edgar/data/203527/000119312521117256/d171798d8k.htm"
+purpose = "Varian completed April 15 2021 merger and fixed cash entitlement; acquisition funding is not proof of shareholder receipt."
+expected_media = "html"
+
+[[documents]]
+document_id = "duke_merger_completion"
+url = "https://www.sec.gov/Archives/edgar/data/1045609/000110465922105238/tm2227221d1_8k.htm"
+purpose = "Prologis completion filing for DRE common-share exchange, distinct from partnership-unit exchange and filer identity."
+expected_media = "html"
+
+[[documents]]
+document_id = "mylan_combination_completion"
+url = "https://www.sec.gov/Archives/edgar/data/78003/000119312520298356/d72492d8k.htm"
+purpose = "Pfizer reports completed Mylan to Viatris combination; separation/distribution clock does not automatically timestamp the Mylan conversion."
+expected_media = "html"
+
+[[documents]]
+document_id = "ihs_markit_merger_completion"
+url = "https://www.sec.gov/Archives/edgar/data/1598014/000119312522056012/d315930d8k.htm"
+purpose = "IHS Markit completed conversion into S&P Global common shares with fractional cash; pre-open suspension is distinct from share delivery."
+expected_media = "html"
+
+[[documents]]
+document_id = "peoples_united_merger_completion"
+url = "https://www.sec.gov/Archives/edgar/data/1378946/000119312522094315/d304251d8k.htm"
+purpose = "People's United April 1 2022 common-share conversion; April 4 trading suspension and report signature are not the merger closing date."
+expected_media = "html"

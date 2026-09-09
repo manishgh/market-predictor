@@ -4,6 +4,78 @@ Last updated: 2026-09-09
 
 ## Current Long-Only Swing Campaign
 
+### Completion Evidence Collected, Accounting Decision Pending
+
+September 9 continuation retained 21 missing official SEC HTML documents using the
+unchanged original-byte collector. All 21 pass offline receipt/body replay. These
+are source collections, not admitted accounting authorities. The active plan's
+combined source/outcome/feature delivery is still incomplete. No return, exclusion,
+feature row or model changed in this source-only checkpoint.
+
+Inventory files are `configs/swing_cash_merger_completion_documents.toml`,
+`configs/swing_share_transition_completion_documents.toml` and
+`configs/swing_remaining_merger_completion_documents.toml`. Each has an identically
+named archive under `data/raw/`. Independent collection replay hashes, calculated
+with `json_sha256(verify_official_document_collection(...))`:
+
+| Inventory/archive stem | Documents | Replay hash |
+| --- | ---: | --- |
+| swing_cash_merger_completion_documents | 3 | `29ee1cb81230136d7c77dccf81a9a418a58dfe2ab60dd74aec99212cb8160495` |
+| swing_share_transition_completion_documents | 7 | `680686010346616e0e433681360519f2b69665a062f242c0ac50d83c526d9bc8` |
+| swing_remaining_merger_completion_documents | 11 | `194ee145ded436211a3a0a3edbd10629ac7de903edcc31ea2d46e8c28adaab30` |
+
+Reviewed completion terms below are factual interpretation notes, not executable
+event instructions. Document IDs resolve through the pinned receipts above. Legal
+conversion, trading transition, source acceptance, claim valuation and cash/share
+delivery are separate facts. Ordinary common shares are intended, subject to each
+filing's exclusions; employee awards, preferred shares and partnership units must
+not supply their exchange ratio. Cash amounts are USD contractual amounts, not marks.
+
+| Affected shares | Completion document ID / section | Reported conversion or distribution |
+| --- | --- | --- |
+| ABMD | abiomed_merger_completion, Item 2.01 | Dec 22 2022: $380 plus one non-tradeable CVR; $35 is its contingent cap, not value. |
+| ATVI | activision_merger_completion, Item 2.01 | Oct 13 2023: right to $95. |
+| TIF | tiffany_merger_completion, introduction / Item 3.01 | Jan 7 2021: right to $131.50; suspension before that day's open. |
+| SATS | echostar_bss_completion, transaction / Two-Way trading | Sep 10 2019: retains SATS, distribution leads to 0.23523769 DISH Class A; regular-way SATS carries rights through that close. Subsidiary filer CIK 1533758 is not SATS issuer CIK 1415404. |
+| APC | anadarko_merger_completion, Item 2.01 | Aug 8 2019 at 10:41 a.m. Eastern: $59 plus 0.2934 OXY; fractional cash separate. |
+| RTN | raytheon_merger_completion, Item 2.01; completion release | Apr 3 2020: 2.3348 UTC shares, renamed RTX; RTN stopped before open. Earlier UTC spin-offs do not belong to this RTN conversion. |
+| CBS / VIAB | viacom_cbs_merger_completion, Item 2.01 | Dec 4 2019: CBS Class B remains 1:1; VIAB converts at 0.59625 into corresponding Class B. Do not apply VIAB ratio to CBS. |
+| DISCA | discovery_warner_completion, Item 3.03 / Item 8.01 | Apr 8 2022: 1:1 WBD; WBD trading begins Apr 11. Spinco's 0.241917 ratio is not DISCA's. |
+| CERN | cerner_merger_completion, Item 2.01 / Item 5.01 | Jun 8 2022: $95; tender acceptance is not payment proof. |
+| ALXN | alexion_merger_completion, Item 2.01 | Jul 21 2021: $60 plus 2.1243 AstraZeneca ADSs, with holder ordinary-share election; Jul 22 internal merger is not conversion. |
+| KSU | kansas_city_merger_completion, Item 2.01 | Dec 14 2021: $90 plus 2.884 CP common shares; voting trust is a separate step. |
+| FLIR | flir_merger_completion, introduction / Item 2.01 | May 14 2021, approximately 9 a.m. Eastern: $28 plus 0.0718 TDY; preserve approximate clock. |
+| MXIM | maxim_merger_completion, Item 2.01 | Aug 26 2021: 0.63 ADI plus applicable fractional cash. |
+| CXO | concho_merger_completion, Item 2.01 | Jan 15 2021: 1.46 COP. Item 3.01's January 19, 2020 year conflicts with completion chronology; do not silently repair source text. |
+| VAR | varian_merger_completion, Item 2.01 | Apr 15 2021: right to $177.50. |
+| DRE | duke_merger_completion, Item 2.01 | Oct 3 2022: 0.475 PLD plus fractional cash; Prologis is the filer. |
+| MYL | mylan_combination_completion, Item 2.01 | Nov 16 2020: one Viatris share per Mylan ordinary share; Pfizer distribution terms and timestamp are separate. |
+| INFO | ihs_markit_merger_completion, introduction | Feb 28 2022: 0.2838 SPGI plus fractional cash. |
+| PBCT | peoples_united_merger_completion, introduction / Item 2.01 | Apr 1 2022: 0.118 MTB plus fractional cash; Apr 4 suspension/report date is not closing. |
+
+No entry above establishes holder-level delivery, fractional-sale proceeds or cash
+spendability. The ABMD completion evidence now resolves the earlier proposed-only
+limitation; it does not resolve the CVR valuation. Bank halt/recovery cases, full
+cohort/ETF action completeness and post-removal class ownership remain unresolved.
+
+The independent feasibility review identified a real contract conflict: hypothetical
+sales cannot have observed broker receipts. The user was asked to approve a separate
+research-only ordinary-sale funding, fixed-claim valuation and retrospective label
+maturation convention. No answer is recorded yet and no frozen policy was changed.
+Next-session reuse is not historical settled cash: the US settlement transition to
+T+1 was May 28 2024 ([SEC](https://www.sec.gov/newsroom/press-releases/2024-62)).
+Provider pay dates do not guarantee account credits
+([Alpaca](https://docs.alpaca.markets/us/docs/daily-processes-and-reconcilations)).
+
+News inventory confirms missing direct SATS initial-fit query windows and unproven
+FISV-before-FI coverage. Existing Alpaca/SEC archives remain reusable, but old aggregate
+rows cannot certify the corrected issuer bridge. All nine existing technical
+relationship outputs already occur in the 120-column comparator; adding them again
+would not create an incremental feature profile. These findings are prerequisites
+for the feature rebuild, not evidence that it has run.
+
+### Previously Closed Compiler
+
 The current fixed-horizon compiler has produced two actual holding specifications
 and canonical kernel replays from the corrected SATS and FI archives. Output:
 `data/reports/swing_fixed_holding_demonstration.json`; file SHA256

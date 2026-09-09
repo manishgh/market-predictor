@@ -1,0 +1,21 @@
+schema_version = "market_predictor.official_document_inventory"
+maximum_response_bytes = 16777216
+attempts_per_document_per_run = 1
+
+[[documents]]
+document_id = "abiomed_merger_completion"
+url = "https://www.sec.gov/Archives/edgar/data/815094/000119312522311074/d353287d8k.htm"
+purpose = "ABIOMED December 22 2022 completed merger, cash entitlement and non-tradeable contingent right. CVR maximum is not its valuation; aggregate payment does not prove lot cash availability."
+expected_media = "html"
+
+[[documents]]
+document_id = "activision_merger_completion"
+url = "https://www.sec.gov/Archives/edgar/data/718877/000110465923108985/tm2328253d1_8k.htm"
+purpose = "Activision October 13 2023 completed merger, conversion consideration and trading suspension. Contractual cash consideration does not establish spendable cash."
+expected_media = "html"
+
+[[documents]]
+document_id = "tiffany_merger_completion"
+url = "https://www.sec.gov/Archives/edgar/data/98246/000119312521004213/d301758d8k.htm"
+purpose = "Tiffany January 7 2021 completed merger and conversion into a cash entitlement. Review effective trading boundary independently from cash payment."
+expected_media = "html"

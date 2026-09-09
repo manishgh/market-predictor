@@ -1,0 +1,45 @@
+schema_version = "market_predictor.official_document_inventory"
+maximum_response_bytes = 16777216
+attempts_per_document_per_run = 1
+
+[[documents]]
+document_id = "echostar_bss_completion"
+url = "https://www.sec.gov/Archives/edgar/data/1533758/000153375819000030/ex991hsspressrelease.htm"
+purpose = "Subsidiary Hughes Satellite Systems furnishes EchoStar BSS completion, regular-way distribution rights and fractional cash terms. Filer CIK is not the SATS issuer CIK."
+expected_media = "html"
+
+[[documents]]
+document_id = "anadarko_merger_completion"
+url = "https://www.sec.gov/Archives/edgar/data/797468/000095015719000864/form8-k.htm"
+purpose = "Occidental completion filing establishes APC exchange consideration and August 8 2019 legal effective time. Delivery and fractional proceeds remain separate facts."
+expected_media = "html"
+
+[[documents]]
+document_id = "raytheon_merger_completion"
+url = "https://www.sec.gov/Archives/edgar/data/1047122/000119312520097237/d827106d8k.htm"
+purpose = "Raytheon April 3 2020 completed exchange into UTC shares, renamed Raytheon Technologies. Do not assign pre-merger UTC spinoff rights to RTN holders."
+expected_media = "html"
+
+[[documents]]
+document_id = "raytheon_completion_release"
+url = "https://www.sec.gov/Archives/edgar/data/1047122/000119312520097237/d827106dex991.htm"
+purpose = "Completed merger release supplies RTN pre-open trading cessation and sequencing after UTC spinoffs; it is not broker delivery evidence."
+expected_media = "html"
+
+[[documents]]
+document_id = "viacom_cbs_merger_completion"
+url = "https://www.sec.gov/Archives/edgar/data/813828/000119312519306334/d842322d8k.htm"
+purpose = "Completed December 4 2019 merger distinguishes VIAB Class B exchange from unchanged CBS Class B shares and Nasdaq transition."
+expected_media = "html"
+
+[[documents]]
+document_id = "viacom_cbs_completion_release"
+url = "https://www.sec.gov/Archives/edgar/data/813828/000119312519306334/d842322dex991.htm"
+purpose = "ViacomCBS completion release corroborates December 4 merger and December 5 listing transition, not cash-in-lieu payment."
+expected_media = "html"
+
+[[documents]]
+document_id = "discovery_warner_completion"
+url = "https://www.sec.gov/Archives/edgar/data/1437107/000119312522103051/d328161d8k.htm"
+purpose = "Completed April 8 2022 Discovery reclassification and April 11 WBD trading. DISCA exchange is distinct from AT&T Spinco distribution; report date is not acceptance time."
+expected_media = "html"
