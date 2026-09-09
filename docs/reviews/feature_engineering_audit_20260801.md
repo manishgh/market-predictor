@@ -1,10 +1,10 @@
 # Current Feature Engineering Audit
 
-Last updated: 2026-09-09
+Last updated: 2026-09-10
 
 ## Current Long-Only Swing Campaign
 
-### Completion Evidence Collected, Accounting Decision Pending
+### Completion Evidence And Approved Research Simulation
 
 September 9 continuation retained 21 missing official SEC HTML documents using the
 unchanged original-byte collector. All 21 pass offline receipt/body replay. These
@@ -59,9 +59,17 @@ limitation; it does not resolve the CVR valuation. Bank halt/recovery cases, ful
 cohort/ETF action completeness and post-removal class ownership remain unresolved.
 
 The independent feasibility review identified a real contract conflict: hypothetical
-sales cannot have observed broker receipts. The user was asked to approve a separate
-research-only ordinary-sale funding, fixed-claim valuation and retrospective label
-maturation convention. No answer is recorded yet and no frozen policy was changed.
+sales cannot have observed broker receipts. The user subsequently approved explicit
+simulation of hypothetical fills, costs and funding with real historical inputs.
+The implementation now separates ordinary-sale assumptions from observed evidence;
+unknown corporate payouts and contingent valuations remain unavailable. Verification
+completed September 10: 140 focused tests; repository-wide Ruff; strict mypy on 347
+sources; full suite 3,260 passed, three skipped, 133 warnings in 1,536.28 seconds.
+Peak test-process memory was 0.331982 GiB. No code changed after full-suite start.
+The independent reviewer closed all three supported findings: payment-assumption
+provenance through cash release, consumed-only research maturity clocks, and retained
+per-lot settlement/replay metadata. Both agents are closed. No source-admitted
+full-cohort rebuild or new candidate is asserted.
 Next-session reuse is not historical settled cash: the US settlement transition to
 T+1 was May 28 2024 ([SEC](https://www.sec.gov/newsroom/press-releases/2024-62)).
 Provider pay dates do not guarantee account credits

@@ -15,9 +15,11 @@ from market_predictor.modeling import resampling
 from market_predictor.modeling.strategy_contract import StrategyContract
 from market_predictor.swing.contracts.holding_accounting import ExecutionEvent, HoldingSpecification
 from market_predictor.swing.contracts.research import SwingResearchContract
+from market_predictor.swing.contracts.trade_simulation import TradeSimulationContext
 from market_predictor.swing.evaluation import ledger as funded_ledger
 from market_predictor.swing.evaluation.holding_accounting import replay_holding
 from market_predictor.swing.evaluation.ledger import SwingLedgerConfig
+from market_predictor.swing.evaluation.trade_simulation import simulate_ordinary_sales, simulation_metadata, simulation_replay_metadata
 
 
 def _valuation_calendar(decisions: tuple[str, ...], horizon: int) -> tuple[list[str], float]:
@@ -203,6 +205,7 @@ def evaluate_event_aware_swing_accounting(
     benchmark_holdings: Mapping[str, HoldingSpecification], *, config: SwingLedgerConfig,
     strategy_contract: StrategyContract, research_contract: SwingResearchContract,
     session_calendar: tuple[str, ...],
+    simulation: TradeSimulationContext | None = None,
 ) -> dict[str, Any]:
     """Compare event-aware NAV without treating claims as cash or admitting raw sources."""
     research_contract.assert_strategy_matches(strategy_contract)
@@ -228,7 +231,8 @@ def evaluate_event_aware_swing_accounting(
                 or spec.initial_entry_timestamp != first_open or spec.session_end_timestamps != closes
                 or any(isinstance(event, ExecutionEvent) for event in spec.events)):
             raise DataReadinessError("benchmark must be a same-calendar, contract-bound buy-and-hold lot")
-        outcome = replay_holding(spec)
+        simulated = simulate_ordinary_sales(spec, simulation) if simulation else None
+        outcome = simulated.outcome if simulated else replay_holding(spec)
         values = [snapshot.total_value for snapshot in outcome.snapshots]
         if any(value is None for value in values) or any(snapshot.gaps for snapshot in outcome.snapshots):
             missing.append(ticker)
@@ -244,33 +248,40 @@ def evaluate_event_aware_swing_accounting(
             "price_basis": "raw_share_entitlements", "separate_distributions_added": True,
             "distribution_policy": "retain_cash_no_automatic_reinvestment",
             "fully_settled": outcome.fully_settled,
+            "simulation_replay": simulation_replay_metadata(simulated) if simulated else None,
         }
     if missing:
         return {"status": "valuation_unavailable", "eligible": False, "accounting_eligible": False,
+            "trade_simulation": simulation_metadata(simulation) if simulation else None,
             "missing_benchmark_valuations": missing, "comparisons": None,
             "summary": {"economic_conditions_passed": False, "eligible": False,
                 "net_cagr_difference_vs_spy": None}, "session_dates": sessions}
     base = funded_ledger.build_event_aware_funded_swing_ledger(
         selected, holdings, config, session_calendar=session_calendar,
         research_contract_sha256=research_contract.sha256(), execution_policy="managed",
+        simulation=simulation,
     )
     stress = funded_ledger.build_event_aware_funded_swing_ledger(
         selected, holdings, config, session_calendar=session_calendar,
         research_contract_sha256=research_contract.sha256(), execution_policy="managed",
+        simulation=simulation,
         additional_round_trip_cost=(research_contract.stress_cost_multiplier - 1)
         * research_contract.base_round_trip_cost_bps / 10_000,
     )
     if base["status"] != "computed" or stress["status"] != "computed":
         return {"status": "valuation_unavailable", "eligible": False, "accounting_eligible": False,
             "base_ledger": base, "stress_ledger": stress, "benchmarks": benchmarks,
+            "trade_simulation": simulation_metadata(simulation) if simulation else None,
             "comparisons": None, "session_dates": sessions,
             "summary": {"economic_conditions_passed": False, "eligible": False,
                 "net_cagr_difference_vs_spy": None}}
-    return _compare_funded_accounts(
+    result = _compare_funded_accounts(
         selected, base, stress, benchmarks, sessions, years,
         strategy_contract=strategy_contract, research_contract=research_contract,
         basis_status="event_source_admission_pending",
     )
+    result["trade_simulation"] = simulation_metadata(simulation) if simulation else None
+    return result
 
 
 def _compare_funded_accounts(

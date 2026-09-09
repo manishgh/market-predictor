@@ -53,6 +53,22 @@ forward-filled merely because the forecast horizon ended. Unknown marks stop
 NAV-dependent allocation/scoring and preserve a known cash subtotal and the gaps.
 Claim value, contractual face amount and contingent payout cap are never interchangeable.
 
+Research may explicitly opt into `swing/evaluation/trade_simulation.py` with the
+file-pinned policy in `configs/swing_trade_simulation.toml`. The typed simulation
+result binds the original specification, policy and generated events/marks. Ordinary
+sales already supplied by the canonical fill evaluator produce modeled dollar
+receivables and cash reuse at next XNYS open. A simulation-only opening phase makes
+that cash available before purchases; real-source cash timing behavior is unchanged.
+Generated evidence carries `research_assumption`, not a broker-receipt claim. Removing
+the context fails replay. No corporate action, share-price mark, payment or CVR value
+is supplied by this policy. Prices, news and action terms remain real source inputs.
+
+The simulator invokes the existing transition kernel, not a second accounting engine.
+It reports next-open cash/units separately after the tenth close, without an eleventh
+price, extended benchmark interval or extra investment return. Historical availability
+is preserved; retrospective research maturity is a separately named, non-production
+clock. Labels, base/stress accounting and funding consume the same explicit context.
+
 `swing/evaluation/accounting.py` compares component NAV with equally dated benchmark
 holdings. Explicit-distribution benchmark diagnostics retain cash rather than
 inventing reinvestment trades; this policy is reported. Mathematical verification

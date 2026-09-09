@@ -28,7 +28,17 @@ class EvidenceReference(HoldingContract):
     available_at: Timestamp | None
 
 
-Evidence = Annotated[tuple[EvidenceReference, ...], Field(min_length=1)]
+class SimulationReference(EvidenceReference):
+    basis: Literal["research_assumption"]
+
+    @model_validator(mode="after")
+    def no_observed_clock(self) -> Self:
+        if self.available_at is not None:
+            raise ValueError("research assumptions cannot claim observed historical availability")
+        return self
+
+
+Evidence = Annotated[tuple[SimulationReference | EvidenceReference, ...], Field(min_length=1)]
 
 
 class KnownMark(HoldingContract):
@@ -224,6 +234,7 @@ class SessionSnapshot(HoldingContract):
     gaps: tuple[AccountingGap, ...]
     source_available_at: Timestamp | None
     label_available_at: Timestamp | None
+    latest_known_source_available_at: Timestamp | None = None
 
 
 class CashRelease(HoldingContract):
@@ -233,6 +244,7 @@ class CashRelease(HoldingContract):
     evidence_available_at: Timestamp | None
     amount: Nonnegative
     source_kind: Literal["sale_proceeds", "corporate_payment"]
+    basis: Literal["source_interpretation", "research_assumption"] = "source_interpretation"
 
 
 class ExecutedSale(HoldingContract):
@@ -259,7 +271,18 @@ class LotOutcome(HoldingContract):
     residual_positions: tuple[ResidualPosition, ...]
     fully_settled: bool
     label_available_at: Timestamp | None
+    simulation_policy_sha256: Sha256 | None = None
     production_eligible: Literal[False] = False
+
+
+class SettlementSnapshot(HoldingContract):
+    """Cash/units only; no new price observation or extended investment return."""
+
+    cutoff: Timestamp
+    available_cash: Nonnegative
+    residual_positions: tuple[ResidualPosition, ...]
+    gaps: tuple[AccountingGap, ...]
+    fully_settled: bool
 
 
 class BenchmarkTarget(HoldingContract):

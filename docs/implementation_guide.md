@@ -2,7 +2,7 @@
 
 Status: current edge-rebuild path
 
-Last updated: 2026-09-08
+Last updated: 2026-09-10
 
 Read `AGENTS.md`, `docs/active_edge_rebuild_plan.md`, and
 `docs/reviews/active_edge_rebuild_handoff.md` first. Command `--help` output and code
@@ -20,6 +20,23 @@ No edge model is active. Production scoring must fail closed until a compatible
 promoted atomic bundle exists.
 
 ### Long-Only Swing Research
+
+Ordinary-sale simulation is owned by `swing/contracts/trade_simulation.py` and
+`swing/evaluation/trade_simulation.py`. Load the hash-pinned
+`configs/swing_trade_simulation.toml` through `load_trade_simulation_context`, then
+pass its explicit context to the holding-label or event-aware accounting API.
+The simulator accepts existing canonical execution events; it does not choose fills.
+It uses the same holding kernel to value executed-dollar claims and model reuse at
+the next XNYS session open, preserving prepaid costs. This is a research funding
+assumption, not historical broker settlement evidence. No CLI implicitly enables it.
+Corporate claims do not inherit ordinary-sale payments or valuations.
+
+Consumer reports retain per-lot input/policy hashes, generated event/mark identities
+and next-open settlement snapshots. Settlement amounts are normalized to unit entry
+notional, not funded account cash. A tenth-close sale remains unpaid at that close;
+the separately reported next-open settlement adds no performance session. Observed
+availability, retrospective research maturity and production eligibility stay
+separate. This feature does not certify source completeness or promote a model.
 
 `configs/swing_research.toml` and `swing/contracts/research.py` define the new
 ten-session SPY-excess research objective. Their separate identity preserves the

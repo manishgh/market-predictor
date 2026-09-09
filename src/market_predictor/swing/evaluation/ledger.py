@@ -13,7 +13,9 @@ import pandas as pd
 from market_predictor.core.errors import DataReadinessError
 from market_predictor.resources import assert_memory_budget
 from market_predictor.swing.contracts.holding_accounting import ExecutionEvent, HoldingSpecification, PaymentEvent
+from market_predictor.swing.contracts.trade_simulation import TradeSimulationContext
 from market_predictor.swing.evaluation.holding_accounting import replay_holding
+from market_predictor.swing.evaluation.trade_simulation import simulate_ordinary_sales, simulation_metadata, simulation_replay_metadata
 from market_predictor.swing.features.panel import MANAGED_PATH_NET_RETURN_COLUMNS, MANAGED_PATH_SESSION_ORDINAL_COLUMNS
 
 
@@ -181,6 +183,7 @@ def build_event_aware_funded_swing_ledger(
     selected: pd.DataFrame, holdings: Iterable[HoldingSpecification], config: SwingLedgerConfig, *,
     session_calendar: tuple[str, ...], research_contract_sha256: str,
     execution_policy: Literal["fixed_horizon", "managed"], additional_round_trip_cost: float = 0.0,
+    simulation: TradeSimulationContext | None = None,
 ) -> dict[str, Any]:
     """Replay exact selected lots through the shared holding kernel and funding loop.
 
@@ -205,6 +208,7 @@ def build_event_aware_funded_swing_ledger(
     if any(size > config.maximum_trades_per_decision for size in sizes.values()):
         raise DataReadinessError("event ledger exceeds the frozen trade cap")
     selected_by_id = {row["decision_id"]: row for row in selected.loc[:, list(names)].to_dict(orient="records")}
+    simulation_replays: dict[str, dict[str, object]] = {}
     dates = swing_valuation_sessions(session_calendar, config.horizon_sessions)
     calendar = xcals.get_calendar("XNYS")
     closes = tuple(calendar.session_close(session).to_pydatetime() for session in dates)
@@ -232,7 +236,14 @@ def build_event_aware_funded_swing_ledger(
         ends = spec.session_end_timestamps
         if ends != closes[offset:offset + len(ends)]:
             raise DataReadinessError("event ledger snapshots differ from exact portfolio sessions")
-        outcome = replay_holding(spec)
+        generated_ids: set[str] = set()
+        if simulation is not None:
+            simulated = simulate_ordinary_sales(spec, simulation)
+            spec, outcome = simulated.specification, simulated.outcome
+            simulation_replays[spec.decision_id] = simulation_replay_metadata(simulated)
+            generated_ids = set(simulated.generated_event_ids)
+        else:
+            outcome = replay_holding(spec)
         sale_by_claim = {event.proceeds_id: event.event_id for event in spec.events if isinstance(event, ExecutionEvent)}
         sale_by_payment = {event.event_id: sale_by_claim.get(event.claim_id)
             for event in spec.events if isinstance(event, PaymentEvent)}
@@ -247,7 +258,10 @@ def build_event_aware_funded_swing_ledger(
             if not math.isclose(snapshot.cumulative_cash_released - previous_cash, released, abs_tol=1e-10):
                 raise DataReadinessError("cash release receipts do not reconcile with holding snapshots")
             before_open = math.fsum(item.amount for item in releases
-                if item.available_at < opens[offset + index] and (
+                if (item.available_at < opens[offset + index] or (
+                    item.available_at == opens[offset + index] and item.availability_event_id in generated_ids
+                    and item.basis == "research_assumption" and item.source_kind == "sale_proceeds"
+                )) and (
                     item.source_kind == "corporate_payment"
                     or sale_times.get(sale_by_payment.get(item.payment_event_id) or "", end) <= previous_close
                 ))
@@ -279,11 +293,14 @@ def build_event_aware_funded_swing_ledger(
         raise DataReadinessError("selected decisions are missing event-aware holding specifications")
     for entry_group in entries.values():
         entry_group.sort(key=lambda item: (item["security"], item["id"]))
-    return _replay_funded_entries(
+    result = _replay_funded_entries(
         entries, session_dates=dates, selected_trades=len(selected),
         units="raw_share_entitlements_per_entry_notional",
         distribution_policy="cash_only_on_evidenced_availability_residual_claims_retained",
     )
+    result["trade_simulation"] = simulation_metadata(simulation) if simulation else None
+    result["simulation_replays"] = simulation_replays
+    return result
 
 
 def _replay_funded_entries(

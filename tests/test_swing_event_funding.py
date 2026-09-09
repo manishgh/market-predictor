@@ -7,6 +7,7 @@ import exchange_calendars as xcals
 import pandas as pd
 import pytest
 
+from market_predictor.canonical.store import file_sha256
 from market_predictor.core.errors import DataReadinessError
 from market_predictor.edge_rebuild.training.swing_types import SwingTrainingConfig
 from market_predictor.modeling.strategy_contract import load_strategy_contract
@@ -24,12 +25,89 @@ from market_predictor.swing.contracts.research import load_swing_research_contra
 from market_predictor.swing.evaluation.accounting import evaluate_event_aware_swing_accounting
 from market_predictor.swing.evaluation.holding_accounting import replay_holding
 from market_predictor.swing.evaluation.ledger import build_event_aware_funded_swing_ledger
+from market_predictor.swing.evaluation.trade_simulation import load_trade_simulation_context
 from market_predictor.swing.labels.holding_accounting import build_event_aware_swing_target_row
 
 ROOT = Path(__file__).resolve().parents[1]
 RESEARCH = load_swing_research_contract(ROOT / "configs/swing_research.toml")
 CALENDAR = xcals.get_calendar("XNYS")
 DAYS = tuple(CALENDAR.sessions_in_range("2024-01-02", "2024-03-01"))
+
+
+def _simulation():
+    path = ROOT / "configs/swing_trade_simulation.toml"
+    return load_trade_simulation_context(path, expected_sha256=file_sha256(path))
+
+
+def _unpaid_sale_spec(**kwargs):
+    spec = _spec(**kwargs)
+    return spec.model_copy(update={"events": tuple(e for e in spec.events if isinstance(e, ExecutionEvent))})
+
+
+def test_simulated_labels_and_ledger_share_returns_without_broker_receipts():
+    simulation = _simulation()
+    fixed, managed = _unpaid_sale_spec(policy="fixed_horizon"), _unpaid_sale_spec()
+    benchmarks = {role: _spec(case="benchmark", security=ticker, policy="fixed_horizon")
+        for role, ticker in (("spy", "SPY"), ("qqq", "QQQ"), ("sector", "XLK"))}
+    row = build_event_aware_swing_target_row(fixed, managed, benchmarks=benchmarks,
+        research_contract_sha256=RESEARCH.sha256(), simulation=simulation)
+    report = build_event_aware_funded_swing_ledger(_selected(managed), [managed], SwingTrainingConfig(),
+        session_calendar=(DAYS[0].date().isoformat(),), research_contract_sha256=RESEARCH.sha256(),
+        execution_policy="managed", simulation=simulation)
+    assert row["future_net_return_10d"] == pytest.approx(0.098)
+    assert report["compounded_return"] == pytest.approx(0.1 * row["future_net_return_10d"])
+    assert report["final_unpaid_proceeds"] == pytest.approx(0.11)
+    assert report["final_cash"] == pytest.approx(0.8998)
+    assert report["fully_settled"] is False
+    assert report["total_cost"] == pytest.approx(0.0002)
+    assert row["trade_simulation"] == report["trade_simulation"]
+    assert row["label_available_at_utc"] is None
+    assert row["research_label_mature_at_utc"] == fixed.session_end_timestamps[9]
+    assert row["label_eligible"] is False
+    assert report["accounting_eligible"] is False
+
+
+def test_simulation_consumers_retain_unit_settlement_without_extending_performance():
+    simulation = _simulation()
+    fixed, managed = _unpaid_sale_spec(policy="fixed_horizon"), _unpaid_sale_spec()
+    benchmarks = {role: _spec(case="benchmark", security=ticker, policy="fixed_horizon")
+        for role, ticker in (("spy", "SPY"), ("qqq", "QQQ"), ("sector", "XLK"))}
+    row = build_event_aware_swing_target_row(fixed, managed, benchmarks=benchmarks,
+        research_contract_sha256=RESEARCH.sha256(), simulation=simulation)
+    report = build_event_aware_funded_swing_ledger(_selected(managed), [managed], SwingTrainingConfig(),
+        session_calendar=(DAYS[0].date().isoformat(),), research_contract_sha256=RESEARCH.sha256(),
+        execution_policy="managed", simulation=simulation)
+    metadata = report["simulation_replays"][managed.decision_id]
+    assert metadata == row["simulation_replays"]["managed"]
+    assert metadata["input_specification_sha256"]
+    assert len(metadata["generated_event_ids"]) == 2
+    assert len(metadata["generated_mark_keys"]) == 1
+    assert metadata["next_open_settlement"]["available_cash"] == pytest.approx(1.1)
+    assert metadata["next_open_settlement"]["fully_settled"] is True
+    assert metadata["settlement_amount_basis"] == "per_unit_initial_entry_notional_not_account_cash"
+    assert len(report["daily_records"]) == 10
+    assert report["final_cash"] == pytest.approx(0.8998)
+    assert report["compounded_return"] == pytest.approx(0.0098)
+
+
+def test_simulated_prior_sale_funds_exact_next_open_not_current_session_open():
+    simulation = _simulation()
+    reports = []
+    for same_session in (False, True):
+        first = _unpaid_sale_spec(length=19)
+        at = CALENDAR.session_open(DAYS[10]).to_pydatetime() if same_session else first.session_end_timestamps[8]
+        sale = first.events[0].model_copy(update={"effective_at": at})
+        first = first.model_copy(update={"events": (sale,)})
+        specs = [first, *(_unpaid_sale_spec(decision_index=index, length=19-index) for index in range(1, 10))]
+        reports.append(build_event_aware_funded_swing_ledger(_selected(*specs), specs, SwingTrainingConfig(),
+            session_calendar=tuple(day.date().isoformat() for day in DAYS[:10]),
+            research_contract_sha256=RESEARCH.sha256(), execution_policy="managed", simulation=simulation))
+    assert reports[0]["daily_records"][9]["funding_scale"] == 1.0
+    assert reports[1]["daily_records"][9]["funding_scale"] < 1.0
+    for report in reports:
+        assert report["status"] == "computed"
+        for row in report["daily_records"]:
+            assert row["equity"] == pytest.approx(row["cash"] + row["holdings"])
 
 
 def _spec(*, case="ordinary", security="issuer", decision_index=0, length=10, policy="managed"):
@@ -259,3 +337,23 @@ def test_event_accounting_does_not_score_unknown_right():
     assert report["status"] == "valuation_unavailable"
     assert report["comparisons"] is None
     assert report["summary"]["economic_conditions_passed"] is False
+
+
+@pytest.mark.parametrize("unknown_right", [False, True])
+def test_simulation_context_reaches_base_stress_and_unavailable_accounting(unknown_right):
+    simulation = _simulation()
+    spec = _spec(case="cvr") if unknown_right else _unpaid_sale_spec()
+    report = evaluate_event_aware_swing_accounting(_selected(spec), (spec,),
+        {ticker: _spec(case="benchmark", security=ticker, policy="fixed_horizon") for ticker in ("SPY", "QQQ", "XLK")},
+        config=SwingTrainingConfig(), simulation=simulation,
+        strategy_contract=load_strategy_contract(ROOT / "configs/edge_rebuild_strategy_contract.toml"),
+        research_contract=RESEARCH, session_calendar=(DAYS[0].date().isoformat(),))
+    assert report["trade_simulation"]["policy_sha256"] == simulation.policy.sha256()
+    assert report["eligible"] is False
+    if unknown_right:
+        assert report["status"] == "valuation_unavailable"
+        assert report["comparisons"] is None
+    else:
+        assert report["base_ledger"]["compounded_return"] == pytest.approx(0.0098)
+        assert report["stress_ledger"]["compounded_return"] == pytest.approx(0.0096)
+        assert report["base_ledger"]["trade_simulation"] == report["stress_ledger"]["trade_simulation"]

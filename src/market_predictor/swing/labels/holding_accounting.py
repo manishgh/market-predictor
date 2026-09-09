@@ -6,12 +6,15 @@ from typing import Any
 
 from market_predictor.core.errors import DataReadinessError
 from market_predictor.swing.contracts.holding_accounting import HoldingSpecification
+from market_predictor.swing.contracts.trade_simulation import TradeSimulationContext
 from market_predictor.swing.evaluation.holding_accounting import project_holding_targets, replay_holding
+from market_predictor.swing.evaluation.trade_simulation import simulate_ordinary_sales, simulation_metadata, simulation_replay_metadata
 
 
 def build_event_aware_swing_target_row(
     fixed: HoldingSpecification, managed: HoldingSpecification, *,
     benchmarks: Mapping[str, HoldingSpecification], research_contract_sha256: str,
+    simulation: TradeSimulationContext | None = None,
 ) -> dict[str, Any]:
     """Emit nullable ten-session targets; arithmetic does not admit source evidence."""
     if set(benchmarks) != {"spy", "qqq", "sector"}:
@@ -21,7 +24,10 @@ def build_event_aware_swing_target_row(
     specifications = (fixed, managed, *(benchmarks[name] for name in ("spy", "qqq", "sector")))
     if any(spec.research_contract_sha256 != research_contract_sha256 for spec in specifications):
         raise DataReadinessError("event-aware target research identities differ")
-    fixed_outcome, managed_outcome, *benchmark_outcomes = tuple(replay_holding(spec) for spec in specifications)
+    simulated = tuple(simulate_ordinary_sales(spec, simulation) for spec in specifications) if simulation else ()
+    fixed_outcome, managed_outcome, *benchmark_outcomes = (
+        tuple(item.outcome for item in simulated) if simulation else tuple(replay_holding(spec) for spec in specifications)
+    )
     target = project_holding_targets(fixed_outcome, managed_outcome, benchmarks=tuple(benchmark_outcomes))
     row: dict[str, Any] = {
         "decision_id": fixed.decision_id, "security_id": fixed.security_id,
@@ -29,6 +35,12 @@ def build_event_aware_swing_target_row(
         "exit_time_utc": target.horizon_end_timestamp,
         "managed_exit_time_utc": target.managed_exit_timestamp,
         "label_available_at_utc": target.label_available_at,
+        "trade_simulation": simulation_metadata(simulation) if simulation else None,
+        "simulation_replays": {name: simulation_replay_metadata(item)
+            for name, item in zip(("fixed", "managed", "spy", "qqq", "sector"), simulated, strict=True)} if simulated else {},
+        "research_label_mature_at_utc": max(item.research_label_mature_at for item in simulated
+            if item.research_label_mature_at is not None)
+        if simulated and all(item.research_label_mature_at is not None for item in simulated) else None,
         "future_gross_return_10d": target.fixed_horizon_gross_return,
         "future_net_return_10d": target.fixed_horizon_net_return,
         "managed_horizon_gross_return_10d": target.managed_horizon_gross_return,

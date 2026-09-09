@@ -1,0 +1,9 @@
+schema_version = "market_predictor.ordinary_trade_simulation"
+scope = "retrospective_research_only"
+fill_source = "canonical_execution_events_only"
+sale_proceeds_valuation = "one_usd_per_executed_dollar"
+sale_proceeds_reuse = "next_xnys_session_open"
+corporate_claims = "no_inferred_payment_or_valuation"
+cost_policy = "preserve_existing_prepaid_cost"
+label_clock = "separate_retrospective_maturity_not_observed_availability"
+production_eligible = false

@@ -91,6 +91,14 @@ hash-verified promoted bundle.
   --output-directory data/reports/swing_accounting_control` replays a frozen
   initial-fit momentum control from retained files. It neither trains a model nor
   opens validation/test outcomes. Output is immutable and research-only.
+- Event-aware Python target and funded-accounting APIs accept an explicit `simulation`
+  context loaded by `load_trade_simulation_context` from the independently file-hashed
+  `configs/swing_trade_simulation.toml`. Canonical ordinary-sale executions generate
+  modeled dollar receivables and next-XNYS-open reuse, not historical broker receipts.
+  The shared simulator records policy/input hashes and generated identities, preserves
+  observed availability, and reports retrospective label maturity separately. A final
+  sale's next-open cash settlement does not extend the ten-session return. No corporate
+  payment/mark or fill is inferred; source admission and live promotion stay separate.
 - The first retained-data accounting control is **blocked**: 70 of 30,525 selected
   stock-days lack complete fixed-horizon outcomes. No stock was dropped to produce
   a performance score, and no real-data ledger or SPY result was emitted.

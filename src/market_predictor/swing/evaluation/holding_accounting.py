@@ -30,6 +30,8 @@ from market_predictor.swing.contracts.holding_accounting import (
     PositionKind,
     ResidualPosition,
     SessionSnapshot,
+    SettlementSnapshot,
+    SimulationReference,
     UnavailableMark,
 )
 
@@ -48,7 +50,7 @@ class _Position:
 @dataclass
 class _State:
     positions: dict[str, _Position]
-    pending: dict[str, tuple[str, float, datetime | None, bool]] = field(default_factory=dict)
+    pending: dict[str, tuple[str, float, datetime | None, bool, bool]] = field(default_factory=dict)
     skipped: set[str] = field(default_factory=set)
     disposed: set[str] = field(default_factory=set)
     skipped_payments: set[str] = field(default_factory=set)
@@ -171,7 +173,8 @@ def _pay(state: _State, event: PaymentEvent) -> bool:
             event.pending_proceeds_id, claim.security_id, "unpaid_proceeds", amount,
             event.currency, evidence_at, claim.sale_proceeds,
         )
-    state.pending[event.event_id] = (event.pending_proceeds_id, amount, evidence_at, claim.sale_proceeds)
+    assumed = any(isinstance(ref, SimulationReference) for ref in event.evidence)
+    state.pending[event.event_id] = (event.pending_proceeds_id, amount, evidence_at, claim.sale_proceeds, assumed)
     return True
 
 
@@ -184,7 +187,7 @@ def _release(state: _State, event: CashAvailabilityEvent) -> bool:
     if event.currency is None:
         state.gap("currency_unavailable", event.event_id)
         return False
-    position_id, amount, evidence_at, sale = state.pending.pop(event.payment_event_id)
+    position_id, amount, evidence_at, sale, assumed = state.pending.pop(event.payment_event_id)
     state.positions.pop(position_id, None)
     known = _evidence_at(event.evidence)
     assert event.effective_at is not None
@@ -192,6 +195,8 @@ def _release(state: _State, event: CashAvailabilityEvent) -> bool:
         availability_event_id=event.event_id, payment_event_id=event.payment_event_id,
         available_at=event.effective_at, evidence_available_at=_latest([evidence_at, known]),
         amount=amount, source_kind="sale_proceeds" if sale else "corporate_payment",
+        basis="research_assumption" if assumed or any(isinstance(ref, SimulationReference) for ref in event.evidence)
+        else "source_interpretation",
     ))
     return True
 
@@ -231,7 +236,7 @@ def _state_at(spec: HoldingSpecification, cutoff: datetime) -> _State:
         spec.initial_position_id, spec.security_id, "tradable_shares",
         _number(1.0 / spec.initial_entry_price), spec.currency, entry_known,
     )})
-    state.source_times.append(entry_known)
+    state.source_times.extend(ref.available_at for ref in spec.entry_evidence)
     if spec.currency is None:
         state.gap("currency_unavailable", spec.initial_position_id)
     if state.gaps:
@@ -251,7 +256,7 @@ def _state_at(spec: HoldingSpecification, cutoff: datetime) -> _State:
         if event.order is None or any(other.order == event.order and other.event_id != event.event_id for other in same_time):
             state.gap("event_order_unavailable", event.event_id)
             break
-        state.source_times.append(_evidence_at(event.evidence))
+        state.source_times.extend(ref.available_at for ref in event.evidence)
         if isinstance(event, CorporateActionEvent):
             applied = _corporate(state, event)
         elif isinstance(event, ExecutionEvent):
@@ -287,7 +292,7 @@ def _snapshot(spec: HoldingSpecification, cutoff: datetime, state: _State) -> Se
         elif mark.currency is None or position.currency is None:
             state.gap("currency_unavailable", position.position_id)
         elif isinstance(mark, KnownMark) and not structural_gap:
-            state.source_times.append(_evidence_at(mark.evidence))
+            state.source_times.extend(ref.available_at for ref in mark.evidence)
             value = _number(position.units * mark.value_per_unit)
         components[position.kind].append(value)
         positions.append(ResidualPosition(
@@ -313,10 +318,41 @@ def _snapshot(spec: HoldingSpecification, cutoff: datetime, state: _State) -> Se
         gaps=tuple(AccountingGap(code=code, reference_id=reference) for code, reference in gaps),
         source_available_at=source_available,
         label_available_at=None if total is None or source_available is None else max(cutoff, source_available),
+        latest_known_source_available_at=max((t for t in state.source_times if t is not None), default=None),
     )
 
 
-def replay_holding(spec: HoldingSpecification) -> LotOutcome:
+def _validate_simulation_context(spec: HoldingSpecification, policy_sha256: str | None) -> None:
+    references = [*spec.entry_evidence]
+    if any(isinstance(ref, SimulationReference) for ref in spec.entry_evidence):
+        raise ValueError("ordinary-sale simulation cannot manufacture entry evidence")
+    claims = {event.proceeds_id for event in spec.events if isinstance(event, ExecutionEvent)}
+    payments = {event.event_id for event in spec.events if isinstance(event, PaymentEvent) and event.claim_id in claims}
+    for event in spec.events:
+        references.extend(event.evidence)
+        assumed = any(isinstance(ref, SimulationReference) for ref in event.evidence)
+        if event.event_id.startswith("simulated-sale:") and (policy_sha256 is None or not assumed):
+            raise ValueError("simulated events require explicit research context")
+        if assumed and not (
+            isinstance(event, PaymentEvent) and event.claim_id in claims
+            or isinstance(event, CashAvailabilityEvent) and event.payment_event_id in payments
+        ):
+            raise ValueError("ordinary-sale assumptions cannot support corporate events or execution prices")
+    for mark in spec.marks:
+        if isinstance(mark, KnownMark):
+            references.extend(mark.evidence)
+            if any(isinstance(ref, SimulationReference) for ref in mark.evidence) and (
+                mark.position_id not in claims or mark.value_per_unit != 1.0 or mark.currency != "USD"
+            ):
+                raise ValueError("simulated marks apply only to executed dollar proceeds")
+    for reference in references:
+        if isinstance(reference, SimulationReference) and (
+            policy_sha256 is None or reference.interpretation_policy_sha256 != policy_sha256
+        ):
+            raise ValueError("research assumption policy differs or context is absent")
+
+
+def replay_holding(spec: HoldingSpecification, *, simulation_policy_sha256: str | None = None) -> LotOutcome:
     """Replay supplied closes, including residuals beyond the fixed day-ten target.
 
     Each close uses economic timestamps, never later marks or payments. Delayed
@@ -327,6 +363,7 @@ def replay_holding(spec: HoldingSpecification) -> LotOutcome:
     if not isinstance(spec, HoldingSpecification):
         raise TypeError("replay_holding requires a HoldingSpecification")
     spec = HoldingSpecification.model_validate(spec.model_dump())
+    _validate_simulation_context(spec, simulation_policy_sha256)
     _validate_calendar(spec)
     snapshots: list[SessionSnapshot] = []
     for cutoff in spec.session_end_timestamps:
@@ -341,7 +378,24 @@ def replay_holding(spec: HoldingSpecification) -> LotOutcome:
         managed_exit_timestamp=state.managed_exit_at, cash_releases=tuple(state.released), executed_sales=tuple(state.sales),
         residual_positions=final.residual_positions, fully_settled=final.fully_settled,
         label_available_at=snapshots[9].label_available_at,
+        simulation_policy_sha256=simulation_policy_sha256,
     )
+
+
+def replay_next_open_settlement(spec: HoldingSpecification, *, simulation_policy_sha256: str) -> SettlementSnapshot:
+    """Use the same transitions at next open, without inventing tail prices or returns."""
+    spec = HoldingSpecification.model_validate_json(spec.model_dump_json())
+    _validate_calendar(spec)
+    _validate_simulation_context(spec, simulation_policy_sha256)
+    calendar = xcals.get_calendar("XNYS")
+    session = spec.session_end_timestamps[9].astimezone(UTC).date().isoformat()
+    cutoff = calendar.session_open(calendar.next_session(session)).to_pydatetime()
+    state = _state_at(spec, cutoff)
+    positions = tuple(ResidualPosition(position_id=p.position_id, kind=p.kind, security_id=p.security_id,
+        units=p.units, currency=p.currency, value=None) for p in sorted(state.positions.values(), key=lambda p: p.position_id))
+    return SettlementSnapshot(cutoff=cutoff, available_cash=_number(math.fsum(r.amount for r in state.released)),
+        residual_positions=positions, gaps=tuple(state.gaps),
+        fully_settled=not positions and not state.pending and not state.gaps)
 
 
 def project_holding_targets(
@@ -357,6 +411,8 @@ def project_holding_targets(
         raise ValueError("fixed and managed outcomes must describe the same entry lot")
     horizon = tuple(s.session_end_timestamp for s in fixed.snapshots[:10])
     for outcome in (managed, *benchmarks):
+        if outcome.simulation_policy_sha256 != fixed.simulation_policy_sha256:
+            raise ValueError("target outcomes must share the same explicit simulation policy")
         if outcome.research_contract_sha256 != fixed.research_contract_sha256:
             raise ValueError("target outcomes must share the same research contract")
         if outcome.initial_entry_timestamp != fixed.initial_entry_timestamp or tuple(

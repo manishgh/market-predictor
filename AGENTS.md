@@ -258,6 +258,12 @@ abstention.
 
 ### 4.3 Labels And Economics
 
+- Historical backtests use observed market data with explicitly documented simulated
+  fills, costs and funding rules. Never require actual broker receipts for trades
+  that were not placed. Simulation provenance must remain separate from observed
+  evidence and cannot authorize production. Ordinary-sale assumptions cannot supply
+  missing merger payouts, contingent-right valuations or historical first-seen clocks.
+
 - Labels must be reproduced from immutable source bars through the shared evaluator.
 - Swing entry/exit and intraday target/stop/timeout semantics must remain exact.
 - Benchmark returns must use the same executable interval as stock returns.
