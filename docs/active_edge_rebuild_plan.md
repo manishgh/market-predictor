@@ -2,7 +2,7 @@
 
 Status: active
 
-Last updated: 2026-09-08
+Last updated: 2026-09-09
 
 Repository: `C:\project\market-predictor`
 
@@ -107,6 +107,35 @@ The next dependent implementation uses a separate **holding-observation authorit
 under `swing/datasets`, bound to this cohort, original raw SIP artifacts and explicit
 security/class ownership evidence. Reuse the retained raw-reader semantics in
 `research/swing_transfer_sources.py`, not its frozen eleven-stock population.
+
+September 9 bounded implementation, completed/pushed in `89d1aee`: the source-backed initial-fit holding
+observation inventory for the 566 flagged decisions across 60 securities. Reproduce
+the exact decision/session requirements from pinned parent identity columns before
+opening numeric data. Filter raw Parquet at scan time to those required sessions;
+validate using the shared outcome checker, retain missing/invalid observations,
+and keep source presence, observation validity and ownership as separate fields.
+No post-removal ownership authority currently exists: SEC relations inherit index
+boundaries and cover-page stock facts are not validity intervals. Therefore these
+observations remain diagnostic until independently effective-dated class ownership
+is established; do not wire a partial repair inventory as a complete shard source.
+Exit: immutable reproducible inventory, independent review, projection/future-poison,
+duplicate/clock/missingness/tamper tests, full verification and real-data counts.
+No new exclusions, raw modifications, model fitting or unknown-identity fills.
+
+Observed September 9: the initial-fit inventory and independently pinned replay
+reproduced 566 decisions / 60 IDs. The 1,106 unique security/ticker sessions contain
+876 valid, 209 missing and 21 invalid observations; 574 sessions separately lack
+ownership proof. Missing/invalid bars affect 23 IDs; 37 have valid raw bars for all
+requirements. The report is `data/reports/swing_holding_observations/_manifest.json`,
+audit SHA `b87e18fc2c706600c0063c606c2dd40dbba0422cfad6b6c8c1e4817242714a8a`.
+Peak real-run memory 0.342045 GiB. No source download, raw change, extra exclusion,
+admitted label or model fit occurred. Full suite: 2,625 passed, three skipped,
+133 warnings in 22m09s; full Ruff and strict mypy on 331 sources pass. Independent
+review findings were fixed and verified. All agents and worker PIDs are closed.
+This inventory narrows the remaining work to effective-dated ownership and explicit
+corporate-action/unavailable-trading treatment, followed by verified total-return
+accounting. Valid observations alone do not close those gates.
+
 Read required sessions directly from raw artifacts and share
 `validate_outcome_observations()` / `outcome_bar_lookup()`. Keep
 `ownership_unresolved`, `observation_missing` and `observation_invalid` distinct.

@@ -2,15 +2,63 @@
 
 Status: active
 
-Last updated: 2026-09-08
+Last updated: 2026-09-09
 
 Repository: `C:\project\market-predictor`
 
 Branch: `er-intraday-refactoring`
 
-Last completed implementation commit: `307cffe` (`Approve research cohort and audit swing holding identity`)
+Last completed implementation commit: `89d1aee` (`Audit initial-fit swing holding observations from raw history`)
 
 ## Current Session Work Tracking
+
+2026-09-09 completed and pushed in `89d1aee`: initial-fit holding-observation
+inventory. Starting tracked tree was clean at `36d177c`. Avicenna design/ML advisor
+`01a08465-c2d4-7e51-bb55-63638a0c5d79` completed and closed. No existing inspected
+authority proves post-removal class ownership. Current scope is exact required-session
+raw-bar recovery/validation with unresolved ownership preserved, not a fabricated
+admitted dataset. The active plan records the bounded exit gates.
+Dirac `01a0846b-5554-7f51-9e14-c14476d67c98` completed reader tests and closed;
+requirements worker `01a0846e-6c56-7be1-a38d-4a7cabb1ae8a` completed and closed.
+Sartre `01a08479-26a2-7db1-b0dc-4ba9c548543c` completed consolidated code/ML review
+and closed. Fixed both findings: independently pinned inventory replay and null
+start-time detection. All agents are closed. Focused/CLI/continuity tests passed
+214 cases before source-format correction. The first real invocation failed before
+numeric reads because the new adapter incorrectly used compact hashing for the raw
+daily request. Fixed it to match the existing collection's standard JSON serializer;
+57 affected tests and strict mypy on 331 sources now pass. No source bytes changed.
+Real CLI inventory completed: session `3918`, Python PID `32616` exited; peak
+0.342045 GiB. Reproduced 566 decisions / 60 IDs and 1,106 unique required
+security/ticker sessions: 876 valid, 209 missing, 21 invalid; 574 have independently
+unresolved ownership. The 23 IDs with missing/invalid observations remain in the
+frozen cohort. The other 37 have valid bars for all requirements, not ownership proof.
+Report `data/reports/swing_holding_observations/_manifest.json`, audit SHA
+`b87e18fc2c706600c0063c606c2dd40dbba0422cfad6b6c8c1e4817242714a8a`.
+Pinned replay succeeded (PID `25612`, exited). No sources were downloaded or edited;
+no model ran. Full suite passed **2,625 tests, three skipped, 133 warnings in
+1,329.16 seconds (22m09s)**. Session `39217`, Python PID `34936` exited; peak
+0.326073 GiB. XML `.test-tmp/holding-observation-full.xml`. Repository-wide Ruff
+and strict mypy on 331 source files pass. All tracked worker PIDs were checked and
+absent after completion. No owned heavy job, test server or agent remains.
+Implementation, tests, config and behavior docs are pushed; only the two current
+continuity docs change for closure. Untracked `.test-tmp` is not committed.
+
+Exact next step: establish independently effective-dated security/class ownership
+for the required holding sessions, and explicit corporate-action/unavailable-trading
+outcomes for the 23 affected IDs. Do not convert membership removal into a delisting,
+assign requested identity without evidence, or treat valid raw prices as verified
+total returns. The 10% cap and fixed 45/631 exclusions remain unchanged.
+Then build complete admitted per-shard `outcome_bars`, verify stock/SPY return and
+funded-accounting semantics, finish feature acceptance and train the six candidates
+sequentially. This diagnostic cannot replace the complete materializer outcome source.
+Read `src/market_predictor/swing/datasets/holding_observation_requirements.py`,
+`src/market_predictor/swing/datasets/holding_observation_inventory.py`,
+`src/market_predictor/swing/datasets/holding_observations.py` and the report before selecting further work.
+The replay command is `market-predictor-research audit-swing-holding-observations
+--root . --output-directory data/reports/swing_holding_observations
+--expected-audit-sha256 b87e18fc2c706600c0063c606c2dd40dbba0422cfad6b6c8c1e4817242714a8a`.
+
+### Previous Membership-Identity Checkpoint
 
 2026-09-08 continuation verified and pushed in `307cffe`: the user approved **10%** for
 the same retrospective whole-security research restriction. The old request for
