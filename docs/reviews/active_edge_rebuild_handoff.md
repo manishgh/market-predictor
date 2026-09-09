@@ -8,9 +8,66 @@ Repository: `C:\project\market-predictor`
 
 Branch: `er-intraday-refactoring`
 
-Last completed implementation commit: `89d1aee` (`Audit initial-fit swing holding observations from raw history`)
+Last completed implementation commit: `58468fb` (`Collect replayable Alpaca holding corporate-action evidence`)
 
 ## Current Session Work Tracking
+
+Initial-fit Alpaca corporate-action collection/replay is completed and pushed in
+`58468fb`. Full suite: 2,799 passed, three skipped, 133 warnings in 1,088.81 seconds
+(18m08s), peak 0.326954 GiB. Exec session `2107`, Python PID `35496` exited; XML
+`.test-tmp/corporate-action-full.xml`. Integrated focused tests: 213 passed; full
+Ruff and strict mypy on 333 sources pass. Collection, replay and full-suite PIDs
+were checked and absent. No training has started; no owned heavy job remains.
+
+Real collection and offline replay both succeeded with the same audit SHA:
+`82dafea3055db20db9ee483800a7a22c508dbb325418b979a1cd23974a244c91`.
+Report: `data/raw/swing_holding_corporate_actions/reports/82dafea3055db20db9ee483800a7a22c508dbb325418b979a1cd23974a244c91.json`.
+All 60 tickers acquired, 649 distinct actions: 621 dividends, 21 mergers, five name
+changes, two spin-offs. Status `collected_unreviewed`. Query interval is process
+dates 2019-07-09 through 2024-05-28; effective dates and retrieval clocks remain
+separate. No ownership, cash availability, total returns or model eligibility admitted.
+Collection PID `29764` exited, peak 0.237537 GiB; replay PID `22964` exited, peak
+0.233650 GiB. Existing directories require the independent audit pin for both
+online resume and offline replay. Interrupted first batches without a published
+report need explicit recovery; do not claim unrestricted crash recovery.
+
+All four agents completed and closed: Mill design/data advisor
+`01a085be-c1ad-7c80-8a20-37371df72c4a`, Ramanujan transport worker
+`01a085c0-a7f6-7460-8deb-9cda613b3ff9`, Noether test worker
+`01a085c5-1a2e-7930-a0f1-6f1f7880ccb7`, Ohm consolidated code/ML reviewer
+`01a085c7-7855-7500-8737-d36cf2a51008`. Supported findings fixed: prior-attempt
+mutation on resume, malformed metadata failure isolation, retaining bounded HTTP
+error bodies, global memory-budget propagation and future receipt-clock rejection.
+
+Mill's real-data interpretation: 16/21 mergers are inside affected holding windows;
+14/16 lack payable dates. All five name changes lack effective dates. The MBC
+response contains the FBIN/FBHS spin-off and must be matched across query tickers.
+Nineteen of 37 all-valid cases have same-CUSIP dividend anchors bracketing the
+window, not proof of continuous ownership. Reconcile NOV/HFC CUSIPs, MYL/VTRSV/VTRS
+dates, and FLIR's post-merger dividend. VIAB, RTN, APC, ABMD, SIVB and SBNY have no
+resolving in-window merger here. Positive class/date anchors, payment/delivery and
+currency/unit facts require targeted corroboration, not broader numeric downloads.
+Next bounded contract should index provider action ID plus evidence hash, all
+participants and their roles, separate date semantics and required-window relevance.
+It must distinguish candidate evidence from ownership/accounting approval.
+
+The user subsequently approved event-aware accounting: separate tradable shares,
+available cash, unpaid proceeds and contingent rights. The 10% ceiling and 45/631
+list stay unchanged. McClintock `01a085d9-e68c-7ec2-acda-085d48f49f49` reviewed this
+bounded dependent design and closed. All agents are closed. The approved change
+must retain unsupported valuations/dates as gaps, not zero, a payout cap or
+immediately reusable cash. ABMD's $380 plus a nontradeable CVR is a concrete
+counterexample to the existing terminal-mark-to-cash assumption, supported by its
+[completion filing](https://www.sec.gov/Archives/edgar/data/815094/000119312522311074/d353287d8k.htm).
+Next implement one typed lot-accounting kernel shared by target projection and the
+canonical funded ledger. Preserve ten-session horizon, stop/target execution,
+once-only costs and the existing funding order. Value residual claims only from
+supported marks; payment after horizon cannot extend it or make earlier cash.
+An unknown component mark makes total NAV/return unavailable and prevents further
+NAV-dependent allocations. Ordinary stock parity, ABMD-shaped unknown CVR, payment
+after horizon, event after stop, duplicate payment and double-counting tests close
+the implementation. Source ownership/action admission and materialization remain
+dependent steps. No raw source or old blocked control is rewritten.
 
 2026-09-09 completed and pushed in `89d1aee`: initial-fit holding-observation
 inventory. Starting tracked tree was clean at `36d177c`. Avicenna design/ML advisor
@@ -1917,24 +1974,23 @@ occurred.
 
 ## Exact Next Checkpoint
 
-Exact next checkpoint: **Build independent holding observations from retained raw bars**.
-Approved cohort and full-population holding-identity preflight are verified and
-pushed in `307cffe`. The report identifies 947 uncovered mature windows, including
-566 in initial fit. No new feature authority or model was built. Continue from
-the fixed 586-security cohort, not the old requirement to repair all 70 selected
-holdings or another request for the already-approved cap.
+Exact next checkpoint: **Implement event-aware holding and funded accounting**.
+Holding observations (`89d1aee`) and corporate-action collection (`58468fb`) are
+verified and pushed. The user approved the event-aware replacement on September 9;
+read the bounded design at the top and the active plan. No new feature authority
+or model was built. Continue from the fixed 586-security cohort.
 
 1. The user approved 10%; the separate accepted cohort audit is published (hashes
    at the top). The list is unchanged: 45/631 excluded, 586 retained. Do not seek
    another cap approval or use the historical blocked 5% report as current authority.
-2. Implement the bounded holding-observation authority under `swing/datasets`.
-   Use pinned raw SIP artifacts, required-session projections and explicit
-   security/class ownership. Keep unresolved ownership, missing observations and
-   invalid observations separate. First verify the initial-fit windows without
-   returning validation/test numeric rows. Then rebuild retained feature/label
-   rows through independent `outcome_bars`, before peer ranks.
-   The excluded eighteen no longer need repair for this new restricted experiment.
-   Preserve the old 70-path failure, raw archives and retrospective-bias disclosure.
+2. Implement strict holding contracts and one lot-transition kernel shared by
+   targets and the canonical portfolio ledger. Unknown marks are unavailable;
+   receivables and contingent rights cannot fund purchases. Preserve horizon and
+   once-only costs. Close synthetic parity/poison and full verification first.
+   Then admit supported class ownership and corporate-action paths from retained
+   sources, keeping unsupported states explicit. Rebuild through independent
+   outcome observations before peer transforms; do not reuse diagnostic rows as
+   the complete materializer source. Preserve raw archives and blocked controls.
 3. Recheck retained holding paths and stock/SPY/QQQ/sector return accounting. Do not
    call exclusion approval a total-return certification or drop new losing outcomes.
 4. Freeze exact feature orders and regression hyperparameters. The six specifications

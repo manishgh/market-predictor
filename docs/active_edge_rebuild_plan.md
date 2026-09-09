@@ -136,6 +136,61 @@ This inventory narrows the remaining work to effective-dated ownership and expli
 corporate-action/unavailable-trading treatment, followed by verified total-return
 accounting. Valid observations alone do not close those gates.
 
+Completed dependent scope (`58468fb`): collect and replay Alpaca corporate-action response evidence
+for the initial-fit flagged ticker inventory, using the pinned holding-observation
+report. Freeze process-date coverage to 2019-07-09 through 2024-05-28, all action
+families, `data_quality=all`, exact symbols and bounded pagination. Keep process date,
+effective/ex/payable dates and retrieval time distinct. A terminal empty response
+means no provider records returned for that query, not proof of no corporate actions.
+No announcement-time feature, ownership interval, cash availability, adjusted-price
+conversion or model eligibility is inferred by collection. Retain encoded response
+bytes, exact non-secret query, page tokens, hashes and independent failure receipts;
+resume completed tickers without refetching, and verify offline. Exit gates: schema,
+URL/body/token/tamper/failure-isolation tests, independent review, full verification,
+real acquisition summary and pushed implementation/documentation checkpoints.
+Then interpret supported events against exact required sessions through the existing
+holding/outcome contracts; unsupported records remain explicit evidence gaps.
+
+Real acquisition and pinned offline replay succeeded for all 60 tickers: 649
+distinct records (621 cash dividends, 21 mergers, five name changes, two spin-offs).
+Audit SHA `82dafea3055db20db9ee483800a7a22c508dbb325418b979a1cd23974a244c91`.
+Sixteen mergers fall inside the affected holding windows; fourteen lack payable
+dates. Collection is not ownership/accounting admission. Full suite: 2,799 passed,
+three skipped, 133 warnings in 18m08s; 213 focused tests, Ruff and strict mypy on
+333 source files pass. Peak collection/test memory: 0.238/0.327 GiB. All workers
+exited and agents closed. No new model was fitted.
+
+### Approved Event-Aware Accounting Change
+
+On September 9 the user explicitly approved replacing price-only accounting with
+separate tradable shares, available cash, unpaid proceeds and contingent rights.
+This supersedes `verified_total_return_units_no_separate_distributions` for the
+next implementation. It does not change the ten-session forecast horizon, costs,
+funding order, 10% exclusion cap or fixed 45/631 list. The ABMD completion filing
+establishes cash plus a nontradeable contingent right: its payout cap is neither a
+valuation nor immediately reusable cash. No unsupported fact is assigned zero.
+
+Bounded next scope: strict typed holding/evidence contracts and one canonical lot
+transition/valuation kernel consumed by labels and the existing funded ledger.
+Replace terminal-mark liquidation with component reconciliation. Payment must
+extinguish its matching claim exactly once; only evidenced available cash funds
+purchases. Residual claims may survive horizon without being sold or extending the
+forecast. Missing valuation makes NAV/return unavailable and blocks NAV-dependent
+allocations. Report tradable, unpaid and contingent exposure separately; do not
+invent risk weights. Unsupported event ordering, delivery, currency conversion or
+fractional treatment remains a gap. Existing adjusted-price diagnostics cannot be
+silently converted to admitted explicit-distribution accounting.
+
+In scope: research/holding contracts, lot kernel, label target projection, canonical
+ledger/accounting consumers and focused synthetic parity/poison tests. Out of scope:
+new universe restrictions, intraday, fake real-data admission, feature materialization
+or six-model fitting before the dependent evidence gates pass. Exit tests: ordinary
+stock parity; cash plus unvalued CVR; payment after horizon; event after stop and
+previously earned surviving claims; duplicate payments; unknown timing/valuation;
+double-counted distributions; identical lot economics through label and portfolio
+consumers. Consolidated code/ML review, full verification and Git closure are required.
+Real source interpretation/materialization follows this shared implementation.
+
 Read required sessions directly from raw artifacts and share
 `validate_outcome_observations()` / `outcome_bar_lookup()`. Keep
 `ownership_unresolved`, `observation_missing` and `observation_invalid` distinct.
