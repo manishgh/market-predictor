@@ -50,6 +50,13 @@ hash-verified promoted bundle.
   SPY buy-and-hold. Approximate managed-exit-close comparisons cannot qualify or
   rank candidates. Price-basis admission remains blocked: declared adjusted prices
   are not independently verified total-return evidence. No outperformance is claimed.
+- The approved event-aware replacement separates tradable shares, spendable cash,
+  unpaid proceeds and contingent rights. One lot calculator feeds model targets
+  and the same portfolio funding loop. Unknown valuations produce unavailable NAV
+  and returns, not zero or a maximum payout. Payments require evidenced availability;
+  residual claims are not forcibly sold at the ten-session horizon. These calculations
+  are implemented, but real source admission/materialization and new training remain
+  pending. Historical price-ratio diagnostics cannot substitute for this input contract.
 - `market-predictor-research audit-swing-accounting-control --root .
   --output-directory data/reports/swing_accounting_control` replays a frozen
   initial-fit momentum control from retained files. It neither trains a model nor

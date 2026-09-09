@@ -82,6 +82,9 @@ def apply_triple_barrier(
     each subsequent session's high and low. A session whose range spans both
     barriers is resolved to the stop, because the bar records that both prices
     traded without recording their order.
+
+    Evidence must be valid through the actual exit, not beyond it. An incomplete
+    path without a verified barrier fill remains unresolved, never a timeout.
     """
 
     _require(bars, ("session", "open", "high", "low", "close"), "bars")
@@ -106,11 +109,14 @@ def apply_triple_barrier(
     slots = [day.isoformat() for day in dates] if string_sessions else list(dates)
     ordered = ordered.set_index("session").reindex(pd.Index(slots, name="session")).reset_index()
     sessions = ordered["session"].to_numpy()
-    opens = ordered["open"].to_numpy(dtype=float)
-    highs = ordered["high"].to_numpy(dtype=float)
-    lows = ordered["low"].to_numpy(dtype=float)
-    closes = ordered["close"].to_numpy(dtype=float)
-    price_rows = np.column_stack((opens, highs, lows, closes))
+    price_rows = ordered[["open", "high", "low", "close"]].apply(pd.to_numeric, errors="coerce").to_numpy(dtype=float)
+    opens, highs, lows, closes = price_rows.T
+    valid_rows = (
+        np.isfinite(price_rows).all(axis=1)
+        & (price_rows > 0).all(axis=1)
+        & (highs >= price_rows.max(axis=1))
+        & (lows <= price_rows.min(axis=1))
+    )
     position_of = {pd.Timestamp(session).date(): index for index, session in enumerate(sessions)}
 
     records: list[dict[str, object]] = []
@@ -123,54 +129,32 @@ def apply_triple_barrier(
             continue
         entry_index = decision_index + 1
         last_index = entry_index + spec.horizon_sessions - 1
-        if entry_index >= len(sessions) or last_index >= len(sessions):
-            # The horizon runs past the data, so the outcome is unknown rather
-            # than a timeout. Labelling it zero would invent an observation.
+        if entry_index >= len(sessions) or not valid_rows[entry_index]:
             records.append(_unresolved_record(decision_session))
             continue
 
         entry_price = float(opens[entry_index])
-        prices = price_rows[entry_index : last_index + 1]
-        if not np.isfinite(prices).all() or (prices <= 0).any():
-            records.append(_unresolved_record(decision_session))
-            continue
         target = entry_price + spec.target_atr_multiple * float(atr)
         stop = entry_price - spec.stop_atr_multiple * float(atr)
         window = slice(entry_index, last_index + 1)
         touched_stop = lows[window] <= stop
         touched_target = highs[window] >= target
 
-        label = label_outcomes.TIMEOUT
-        offset = spec.horizon_sessions - 1
-        exit_price = float(closes[last_index])
-        first_stop = int(np.argmax(touched_stop)) if touched_stop.any() else -1
-        first_target = int(np.argmax(touched_target)) if touched_target.any() else -1
-        if first_stop >= 0 or first_target >= 0:
-            if first_stop < 0:
-                label, offset, exit_price = (
-                    label_outcomes.TARGET_HIT,
-                    first_target,
-                    target,
-                )
-            elif first_target < 0:
-                label, offset, exit_price = (
-                    label_outcomes.STOP_HIT,
-                    first_stop,
-                    stop,
-                )
-            elif first_stop <= first_target:
-                # Ties included: the same bar touching both resolves to the stop.
-                label, offset, exit_price = (
-                    label_outcomes.STOP_HIT,
-                    first_stop,
-                    stop,
-                )
-            else:
-                label, offset, exit_price = (
-                    label_outcomes.TARGET_HIT,
-                    first_target,
-                    target,
-                )
+        touches = np.flatnonzero(touched_stop | touched_target)
+        if touches.size:
+            offset = int(touches[0])
+            # Ties included: the same bar touching both resolves to the stop.
+            label = label_outcomes.STOP_HIT if touched_stop[offset] else label_outcomes.TARGET_HIT
+        elif last_index < len(sessions):
+            label, offset = label_outcomes.TIMEOUT, spec.horizon_sessions - 1
+        else:
+            records.append(_unresolved_record(decision_session))
+            continue
+        # Missing or invalid evidence before or on the fill blocks resolution;
+        # observations after a verified fill cannot erase it.
+        if not valid_rows[entry_index : entry_index + offset + 1].all():
+            records.append(_unresolved_record(decision_session))
+            continue
         trigger_open = float(opens[entry_index + offset])
         exit_price = executable_fill_price(
             outcome=(
@@ -183,7 +167,7 @@ def apply_triple_barrier(
             target_price=target,
             stop_price=stop,
             trigger_open=trigger_open,
-            final_price=exit_price,
+            final_price=float(closes[entry_index + offset]),
         )
 
         records.append(

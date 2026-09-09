@@ -76,13 +76,38 @@ The complete suite passed 2,799 tests, three skipped, 133 warnings in 1,088.81
 seconds (18m08s), peak 0.326954 GiB. Test PID 35496 exited. No model was trained.
 
 The user approved replacing price-only accounting with event-aware accounting on
-September 9. This is the next implementation, not an implemented feature. It must
+September 9. Its calculation/target/funding code is implemented and fully verified;
+it is not yet a real-data feature/label authority. It must
 separate tradable shares, available cash, unpaid proceeds and contingent rights,
 keeping unsupported dates/valuations unavailable and preserving the ten-session
 forecast horizon and 10% exclusion cap. The [ABMD completion filing](https://www.sec.gov/Archives/edgar/data/815094/000119312522311074/d353287d8k.htm)
 describes $380 cash plus a nontradeable contingent value right, capped at $35.
 That cap is not its valuation or cash available to reinvest. The current diagnostic
-ledger cannot represent this entitlement independently of terminal spendable cash.
+ledger could not represent this entitlement independently of terminal spendable cash.
+
+The replacement uses strict raw-share specifications with class-owned events,
+explicit marks, payment/availability evidence and a research-contract hash. One
+lot calculator feeds nullable fixed/managed stock and benchmark target fields and
+the existing single funding loop. Component NAV includes known tradable, unpaid
+and contingent values; only actual available cash funds purchases. Unknown marks
+stop NAV-dependent allocations without deleting the affected decision. Residual
+marks can continue through a portfolio endpoint while the model target remains
+ten sessions. Benchmarks retain cash distributions without inventing reinvestment.
+All source/production eligibility flags remain false pending independent admission.
+
+Consolidated review findings have regression tests: ambiguous entry-time actions,
+prior-session sale proceeds available before an opening purchase, unearned post-sale
+event metadata poisoning labels, and prematurely referenced successor positions.
+Managed exits can resolve on verified bars before a later missing bar; fixed-horizon
+coverage remains independent. Unsupported post-horizon managed exits are rejected.
+Integrated verification passed 309 tests; full tracked-Python Ruff and strict mypy
+on 336 sources pass. The complete suite passed 2,974 tests, three skipped, 133
+warnings in 1,096.07 seconds (18m16s), peak 0.328899 GiB. PID 23576 exited; XML
+`.test-tmp/event-accounting-full.xml`. All implementation/review/source-advisor agents
+are closed. The next raw-source work must not represent this mathematical verification
+as completed independent evidence admission.
+No real raw/adjusted source was rewritten, no new whole-security exclusion was made,
+and none of the six new return regressors has been fitted.
 
 Previous membership-preflight checkpoint: 2,502 tests passed, three skipped, 132 warnings; full Ruff
 and strict mypy on 328 sources pass. Focused tests passed 133 cases. Independent

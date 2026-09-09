@@ -128,6 +128,36 @@ not prove the absence of other actions, historical announcement availability or
 settlement eligibility. These response archives require separate ownership and
 economic interpretation before they can support corrected training labels.
 
+### Event-Aware Targets And Funding
+
+The active `configs/swing_research.toml` rejects the superseded price-only schema.
+It requires raw-price/explicit-entitlement accounting, evidenced marks and cash
+availability, and residual claims retained at the forecast horizon.
+
+| Owner | Responsibility |
+| --- | --- |
+| `swing/contracts/holding_accounting.py` | Strict holding, event, mark, evidence and output types; raw basis and ten-session policy |
+| `swing/evaluation/holding_accounting.py` | Canonical lot transitions and valuation; fixed/managed target projection |
+| `swing/labels/holding_accounting.py` | `build_event_aware_swing_target_row`: nullable stock/SPY/QQQ/sector model fields |
+| `swing/evaluation/ledger.py` | `build_event_aware_funded_swing_ledger`: selected lots, cash caps, component NAV and source-timed proceeds |
+| `swing/evaluation/accounting.py` | `evaluate_event_aware_swing_accounting`: base/stress funded economics and matched benchmark components |
+
+The entrypoints accept typed evidence-bearing specifications, not arbitrary terminal
+returns. A fill creates sale proceeds; a matching payment and separate availability
+event establish spendable cash. Claim face amounts and CVR caps do not supply marks.
+Use additional exact valuation sessions to follow residual claims through a portfolio
+endpoint; the model target still uses the first ten sessions. A managed exit cannot
+extend that forecast horizon. Source publication delays propagate into label
+availability rather than changing an economic event date.
+
+`label_values_available` means the numerical projection is available, not that source
+evidence passed admission. `label_eligible`, `production_eligible` and accounting
+admission remain false until independent source replay and the downstream authority
+are implemented and verified. `valuation_unavailable` returns null performance rather
+than dropping affected decisions. Do not replace those nulls with zero or send the
+retained price-ratio diagnostic through the event-aware API as if it were raw shares.
+No real-data collection, materialization or training is triggered by these library calls.
+
 ### Estimator And Overlay Sources
 
 - Alpaca SIP/all bars: estimator market data.

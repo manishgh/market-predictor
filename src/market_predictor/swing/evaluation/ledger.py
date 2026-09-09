@@ -2,15 +2,18 @@
 from __future__ import annotations
 
 import math
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from datetime import date
-from typing import Any, Protocol
+from typing import Any, Literal, Protocol
 
 import exchange_calendars as xcals
 import numpy as np
 import pandas as pd
 
 from market_predictor.core.errors import DataReadinessError
+from market_predictor.resources import assert_memory_budget
+from market_predictor.swing.contracts.holding_accounting import ExecutionEvent, HoldingSpecification, PaymentEvent
+from market_predictor.swing.evaluation.holding_accounting import replay_holding
 from market_predictor.swing.features.panel import MANAGED_PATH_NET_RETURN_COLUMNS, MANAGED_PATH_SESSION_ORDINAL_COLUMNS
 
 
@@ -66,28 +69,12 @@ def build_funded_swing_ledger(
     session_calendar: tuple[str, ...],
     additional_round_trip_cost: float = 0.0,
 ) -> dict[str, Any]:
-    """Replay one funded account in price-ratio units; never infer raw shares or dividends."""
-    if (
-        not isinstance(config.horizon_sessions, int)
-        or isinstance(config.horizon_sessions, bool)
-        or config.horizon_sessions != len(MANAGED_PATH_NET_RETURN_COLUMNS)
-        or not isinstance(config.maximum_trades_per_decision, int)
-        or isinstance(config.maximum_trades_per_decision, bool)
-        or not 1 <= config.maximum_trades_per_decision <= 50
-        or isinstance(config.expected_round_trip_cost_bps, (bool, np.bool_, str))
-        or not math.isfinite(config.expected_round_trip_cost_bps)
-        or config.expected_round_trip_cost_bps < 0
-    ):
-        raise DataReadinessError("ledger requires a ten-session horizon, bounded trade cap and finite nonnegative costs")
+    """Explicitly unadmitted price-ratio diagnostic using the shared funding loop."""
+    _validate_ledger_config(config, additional_round_trip_cost)
     session_dates = swing_valuation_sessions(session_calendar, config.horizon_sessions)
     ordinals = tuple(date.fromisoformat(value).toordinal() for value in session_dates)
     decision_ordinals = {date.fromisoformat(value).toordinal() for value in session_calendar}
     position_by_ordinal = {ordinal: index for index, ordinal in enumerate(ordinals)}
-    if (
-        isinstance(additional_round_trip_cost, (bool, np.bool_))
-        or not math.isfinite(additional_round_trip_cost) or additional_round_trip_cost < 0.0
-    ):
-        raise DataReadinessError("additional ledger cost must be finite and non-negative")
     required = {
         "decision_id", "decision_group_id", "security_id", "sector", "session_date_et",
         "barrier_holding_sessions", "barrier_exit_session_date_et", "barrier_cost",
@@ -151,9 +138,160 @@ def build_funded_swing_ledger(
             entries.setdefault(entry, []).append({
                 "id": row["decision_id"], "security": row["security_id"], "sector": row["sector"],
                 "weight": 1.0 / config.horizon_sessions / len(group),
-                "ordinals": tuple(map(int, path_ordinals)), "gross_path": gross_path,
+                "ordinals": tuple(map(int, path_ordinals)),
+                "steps": tuple({
+                    "tradable": max(0.0, value + 1.0) if index < holding - 1 else 0.0,
+                    "unpaid": 0.0, "contingent": 0.0,
+                    "cash_before_open": 0.0,
+                    "released_cash": max(0.0, value + 1.0) if index == holding - 1 else 0.0,
+                    "sale_proceeds": max(0.0, value + 1.0) if index == holding - 1 else 0.0,
+                    "sale_cash_at_exit": max(0.0, value + 1.0) if index == holding - 1 else 0.0,
+                    "fully_settled": index == holding - 1, "gaps": (),
+                } for index, value in enumerate(gross_path)),
                 "cost_rate": cost + additional_round_trip_cost,
             })
+    return _replay_funded_entries(
+        entries, session_dates=session_dates, selected_trades=len(selected),
+        units="adjusted_price_ratio_units_not_raw_executable_shares",
+        distribution_policy="no_separate_cash_distribution_credit",
+    )
+
+
+def _validate_ledger_config(config: SwingLedgerConfig, additional_round_trip_cost: float) -> None:
+    if (
+        not isinstance(config.horizon_sessions, int)
+        or isinstance(config.horizon_sessions, bool)
+        or config.horizon_sessions != len(MANAGED_PATH_NET_RETURN_COLUMNS)
+        or not isinstance(config.maximum_trades_per_decision, int)
+        or isinstance(config.maximum_trades_per_decision, bool)
+        or not 1 <= config.maximum_trades_per_decision <= 50
+        or isinstance(config.expected_round_trip_cost_bps, (bool, np.bool_, str))
+        or not math.isfinite(config.expected_round_trip_cost_bps)
+        or config.expected_round_trip_cost_bps < 0
+    ):
+        raise DataReadinessError("ledger requires a ten-session horizon, bounded trade cap and finite nonnegative costs")
+    if (
+        isinstance(additional_round_trip_cost, (bool, np.bool_))
+        or not math.isfinite(additional_round_trip_cost) or additional_round_trip_cost < 0.0
+    ):
+        raise DataReadinessError("additional ledger cost must be finite and non-negative")
+
+
+def build_event_aware_funded_swing_ledger(
+    selected: pd.DataFrame, holdings: Iterable[HoldingSpecification], config: SwingLedgerConfig, *,
+    session_calendar: tuple[str, ...], research_contract_sha256: str,
+    execution_policy: Literal["fixed_horizon", "managed"], additional_round_trip_cost: float = 0.0,
+) -> dict[str, Any]:
+    """Replay exact selected lots through the shared holding kernel and funding loop.
+
+    This is arithmetic verification, not source or promotion admission. Missing
+    component marks stop NAV-dependent allocations instead of silently dropping lots.
+    """
+    _validate_ledger_config(config, additional_round_trip_cost)
+    if execution_policy not in {"fixed_horizon", "managed"}:
+        raise DataReadinessError("unsupported event-aware execution policy")
+    names = ("decision_id", "security_id", "sector", "session_date_et", "decision_group_id")
+    if not selected.columns.is_unique or not set(names).issubset(selected.columns):
+        raise DataReadinessError("event ledger requires unique selection identity columns")
+    for name in names:
+        if not selected[name].map(lambda value: isinstance(value, str) and bool(value.strip())).all():
+            raise DataReadinessError("event ledger selection identities must be complete")
+    if selected.decision_id.duplicated().any() or selected.duplicated(["security_id", "session_date_et"]).any():
+        raise DataReadinessError("event ledger contains duplicate selections")
+    for group, other in (("decision_group_id", "session_date_et"), ("session_date_et", "decision_group_id")):
+        if selected.groupby(group, observed=True)[other].nunique().gt(1).any():
+            raise DataReadinessError("event ledger requires one cohort per session")
+    sizes = selected.groupby("session_date_et", observed=True).size().to_dict()
+    if any(size > config.maximum_trades_per_decision for size in sizes.values()):
+        raise DataReadinessError("event ledger exceeds the frozen trade cap")
+    selected_by_id = {row["decision_id"]: row for row in selected.loc[:, list(names)].to_dict(orient="records")}
+    dates = swing_valuation_sessions(session_calendar, config.horizon_sessions)
+    calendar = xcals.get_calendar("XNYS")
+    closes = tuple(calendar.session_close(session).to_pydatetime() for session in dates)
+    opens = tuple(calendar.session_open(session).to_pydatetime() for session in dates)
+    ordinals = tuple(date.fromisoformat(session).toordinal() for session in dates)
+    entries: dict[int, list[dict[str, Any]]] = {}
+    seen: set[str] = set()
+    for spec in holdings:
+        assert_memory_budget(stage="event-aware lot replay", hard_budget_gib=5.0, headroom_gib=0.75)
+        # Revalidate even instances built through unchecked model construction.
+        spec = HoldingSpecification.model_validate_json(spec.model_dump_json())
+        row = selected_by_id.get(spec.decision_id)
+        if (row is None or spec.decision_id in seen or spec.security_id != row["security_id"]
+                or spec.sector != row["sector"] or spec.policy != execution_policy
+                or spec.research_contract_sha256 != research_contract_sha256
+                or spec.cost_prepaid_fraction != config.expected_round_trip_cost_bps / 10_000):
+            raise DataReadinessError("holding and selected decision/policy identities differ")
+        seen.add(spec.decision_id)
+        if row["session_date_et"] not in session_calendar:
+            raise DataReadinessError("event selection lies outside the decision calendar")
+        entry_date = calendar.session_offset(row["session_date_et"], 1).date().isoformat()
+        offset = dates.index(entry_date)
+        if spec.initial_entry_timestamp != opens[offset]:
+            raise DataReadinessError("event ledger entry is not next-session open")
+        ends = spec.session_end_timestamps
+        if ends != closes[offset:offset + len(ends)]:
+            raise DataReadinessError("event ledger snapshots differ from exact portfolio sessions")
+        outcome = replay_holding(spec)
+        sale_by_claim = {event.proceeds_id: event.event_id for event in spec.events if isinstance(event, ExecutionEvent)}
+        sale_by_payment = {event.event_id: sale_by_claim.get(event.claim_id)
+            for event in spec.events if isinstance(event, PaymentEvent)}
+        sale_times = {item.source_event_id: item.executed_at for item in outcome.executed_sales}
+        previous_cash = 0.0
+        previous_close = spec.initial_entry_timestamp
+        steps = []
+        for index, snapshot in enumerate(outcome.snapshots):
+            end = snapshot.session_end_timestamp
+            releases = tuple(item for item in outcome.cash_releases if previous_close < item.available_at <= end)
+            released = math.fsum(item.amount for item in releases)
+            if not math.isclose(snapshot.cumulative_cash_released - previous_cash, released, abs_tol=1e-10):
+                raise DataReadinessError("cash release receipts do not reconcile with holding snapshots")
+            before_open = math.fsum(item.amount for item in releases
+                if item.available_at < opens[offset + index] and (
+                    item.source_kind == "corporate_payment"
+                    or sale_times.get(sale_by_payment.get(item.payment_event_id) or "", end) <= previous_close
+                ))
+            sale_proceeds = math.fsum(item.normalized_proceeds for item in outcome.executed_sales
+                if previous_close < item.executed_at <= end)
+            sale_ids = {item.source_event_id for item in outcome.executed_sales
+                if previous_close < item.executed_at <= end}
+            sale_cash = math.fsum(item.amount for item in releases
+                if item.source_kind == "sale_proceeds" and sale_by_payment.get(item.payment_event_id) in sale_ids)
+            steps.append({
+                "tradable": snapshot.tradable_value, "unpaid": snapshot.unpaid_proceeds_value,
+                "contingent": snapshot.contingent_right_value, "cash_before_open": before_open,
+                "released_cash": released, "sale_proceeds": sale_proceeds,
+                "sale_cash_at_exit": sale_cash,
+                "fully_settled": snapshot.fully_settled,
+                "gaps": tuple(item.model_dump(mode="json") for item in snapshot.gaps),
+            })
+            previous_cash = snapshot.cumulative_cash_released
+            previous_close = end
+        if not outcome.fully_settled and len(ends) != len(closes) - offset:
+            raise DataReadinessError("residual claims require observations through the portfolio endpoint")
+        entries.setdefault(ordinals[offset], []).append({
+            "id": spec.decision_id, "security": spec.security_id, "sector": spec.sector,
+            "weight": 1.0 / config.horizon_sessions / sizes[row["session_date_et"]],
+            "ordinals": ordinals[offset:offset + len(steps)], "steps": tuple(steps),
+            "cost_rate": spec.cost_prepaid_fraction + additional_round_trip_cost,
+        })
+    if seen != set(selected_by_id):
+        raise DataReadinessError("selected decisions are missing event-aware holding specifications")
+    for entry_group in entries.values():
+        entry_group.sort(key=lambda item: (item["security"], item["id"]))
+    return _replay_funded_entries(
+        entries, session_dates=dates, selected_trades=len(selected),
+        units="raw_share_entitlements_per_entry_notional",
+        distribution_policy="cash_only_on_evidenced_availability_residual_claims_retained",
+    )
+
+
+def _replay_funded_entries(
+    entries: dict[int, list[dict[str, Any]]], *, session_dates: tuple[str, ...],
+    selected_trades: int, units: str, distribution_policy: str,
+) -> dict[str, Any]:
+    """One funding loop for explicit event paths and retained price-ratio diagnostics."""
+    ordinals = tuple(date.fromisoformat(value).toordinal() for value in session_dates)
     cash = equity = peak = 1.0
     holdings = 0.0
     cumulative_cost = realized_gross = realized_cost = 0.0
@@ -163,6 +301,10 @@ def build_funded_swing_ledger(
     funded_trades = 0
     for ordinal, session in zip(ordinals, session_dates, strict=True):
         before = equity
+        # Only independently timed corporate releases may fund this open.
+        cash += math.fsum(
+            trade["notional"] * trade["steps"][trade["step"]]["cash_before_open"] for trade in active
+        )
         templates = entries.get(ordinal, [])
         requested = math.fsum(before * trade["weight"] * (1.0 + trade["cost_rate"]) for trade in templates)
         scale = min(1.0, cash / requested) if requested > 0 else 0.0
@@ -189,29 +331,59 @@ def build_funded_swing_ledger(
         sector_values: dict[str, float] = {}
         security_values: dict[str, float] = {}
         remaining: list[dict[str, Any]] = []
+        component_values = {"tradable": 0.0, "unpaid": 0.0, "contingent": 0.0}
+        unavailable: list[dict[str, Any]] = []
         for trade in active:
             step = trade["step"]
             if trade["ordinals"][step] != ordinal:
                 raise DataReadinessError("active holding lacks an exact daily mark")
-            value = trade["notional"] * max(0.0, 1.0 + trade["gross_path"][step])
+            observation = trade["steps"][step]
+            released = trade["notional"] * observation["released_cash"]
+            cash += released - trade["notional"] * observation["cash_before_open"]
+            exit_value += trade["notional"] * observation["sale_proceeds"]
+            if observation["gaps"] or any(observation[name] is None for name in component_values):
+                unavailable.append({"decision_id": trade["id"], "gaps": observation["gaps"],
+                    "component_marks_per_entry_unit": {name: observation[name] for name in component_values}})
+                continue
+            components = {name: trade["notional"] * observation[name] for name in component_values}
+            for name, amount in components.items():
+                if not math.isfinite(amount) or amount < 0:
+                    raise DataReadinessError("holding component is negative or non-finite")
+                component_values[name] += amount
+            value = math.fsum(components.values())
             sector = trade["sector"]
             security = trade["security"]
-            sector_pnl[sector] = sector_pnl.get(sector, 0.0) + value - trade["value"]
-            sector_values[sector] = sector_values.get(sector, 0.0) + value
-            security_values[security] = security_values.get(security, 0.0) + value
+            sector_pnl[sector] = sector_pnl.get(sector, 0.0) + value + released - trade["value"]
+            before_exit_value = value + trade["notional"] * observation["sale_cash_at_exit"]
+            sector_values[sector] = sector_values.get(sector, 0.0) + before_exit_value
+            security_values[security] = security_values.get(security, 0.0) + before_exit_value
             trade["value"] = value
+            trade["released"] = trade.get("released", 0.0) + released
             trade["step"] = step + 1
-            if trade["step"] == len(trade["ordinals"]):
-                exit_value += value
-                realized_gross += value - trade["notional"]
+            if observation["fully_settled"]:
+                if value != 0.0:
+                    raise DataReadinessError("fully settled lot still contains noncash value")
+                realized_gross += trade["released"] - trade["notional"]
                 realized_cost += trade["paid_cost"]
             else:
+                if trade["step"] == len(trade["ordinals"]) and ordinal != ordinals[-1]:
+                    raise DataReadinessError("residual claims lack marks through the portfolio endpoint")
                 remaining.append(trade)
-        # Exit proceeds cannot fund this session's earlier entries.
-        cash += exit_value
+        if unavailable:
+            return {
+                "status": "valuation_unavailable", "accounting_eligible": False,
+                "blocked_session": session, "gaps": unavailable,
+                "sessions": len(session_dates), "session_dates": list(session_dates),
+                "daily_records": daily_records, "daily_returns": None,
+                "compounded_return": None, "max_drawdown": None,
+                "final_cash": None, "final_holdings": None, "known_cash_at_block": cash,
+                "total_cost": cumulative_cost, "selected_trades": selected_trades,
+                "funded_trades": funded_trades, "fully_settled": False,
+                "units": units, "distribution_policy": distribution_policy,
+            }
         active = remaining
         holdings = math.fsum(trade["value"] for trade in active)
-        unrealized_gross = math.fsum(trade["value"] - trade["notional"] for trade in active)
+        unrealized_gross = math.fsum(trade["value"] + trade.get("released", 0.0) - trade["notional"] for trade in active)
         equity = cash + holdings
         if not math.isfinite(equity) or equity <= 0 or cash < 0:
             raise DataReadinessError("funded ledger produced invalid cash/equity")
@@ -238,18 +410,25 @@ def build_funded_swing_ledger(
             "cumulative_cost": cumulative_cost, "sector_pnl": sector_pnl,
             "marked_sector_values_before_exits": sector_values,
             "marked_security_values_before_exits": security_values,
+            "tradable_holdings": component_values["tradable"],
+            "unpaid_proceeds": component_values["unpaid"],
+            "contingent_rights": component_values["contingent"],
+            "component_exposure_at_close": {name: value / equity for name, value in component_values.items()},
         })
-    if active or holdings != 0.0:
-        raise DataReadinessError("fixed maturation tail did not close every selected lot")
     return {
+        "status": "computed", "accounting_eligible": False, "fully_settled": not active,
         "sessions": len(session_dates), "session_dates": list(session_dates),
         "compounded_return": equity - 1.0, "max_drawdown": max_drawdown,
         "average_daily_turnover": turnover_sum / len(session_dates),
         "maximum_sector_weight": maximum_sector, "maximum_gross_exposure": maximum_gross,
         "daily_returns": [record["net_return"] for record in daily_records],
         "daily_records": daily_records, "final_cash": cash, "final_holdings": holdings,
-        "total_cost": cumulative_cost, "selected_trades": len(selected), "funded_trades": funded_trades,
-        "units": "adjusted_price_ratio_units_not_raw_executable_shares",
-        "distribution_policy": "no_separate_cash_distribution_credit",
+        "total_cost": cumulative_cost, "selected_trades": selected_trades, "funded_trades": funded_trades,
+        "final_tradable_holdings": component_values["tradable"],
+        "final_unpaid_proceeds": component_values["unpaid"],
+        "final_contingent_rights": component_values["contingent"],
+        "residual_decision_ids": [trade["id"] for trade in active],
+        "units": units,
+        "distribution_policy": distribution_policy,
         "sector_attribution_basis": "sector_known_at_each_lot_decision",
     }

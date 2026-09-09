@@ -25,6 +25,8 @@ def test_research_contract_is_explicit_and_preserves_historical_strategy() -> No
     assert contract.maximum_model_policy_trials == 12
     assert contract.initial_equity_units == 1.0
     assert contract.binary_auc_role == "diagnostic_only"
+    assert contract.price_accounting == "raw_prices_with_explicit_entitlements"
+    assert contract.residual_claims == "retain_at_horizon_without_forced_liquidation"
     assert contract.sha256() == load_swing_research_contract(ROOT / "configs/swing_research.toml").sha256()
 
 
@@ -35,6 +37,11 @@ def test_research_contract_is_explicit_and_preserves_historical_strategy() -> No
     ("managed_benchmark_role", "selection_gate"), ("primary_benchmark", "QQQ"),
     ("maximum_gross_exposure", 1.1), ("historical_test_status", "untouched"),
     ("unrecognized", 1),
+    ("schema_version", "market_predictor.swing_long_only_research.v1"),
+    ("price_accounting", "verified_total_return_units_no_separate_distributions"),
+    ("entitlement_valuation", "use_payout_cap"),
+    ("corporate_cash_release", "payable_date"),
+    ("residual_claims", "force_cash_at_timeout"),
 ])
 def test_research_contract_rejects_semantic_or_type_drift(field: str, value: object) -> None:
     payload = load_swing_research_contract(ROOT / "configs/swing_research.toml").model_dump(mode="json")

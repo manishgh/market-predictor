@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+from collections.abc import Mapping, Sequence
 from typing import Any
 
 import exchange_calendars as xcals
@@ -12,8 +13,10 @@ import pandas as pd
 from market_predictor.core.errors import DataReadinessError
 from market_predictor.modeling import resampling
 from market_predictor.modeling.strategy_contract import StrategyContract
+from market_predictor.swing.contracts.holding_accounting import ExecutionEvent, HoldingSpecification
 from market_predictor.swing.contracts.research import SwingResearchContract
 from market_predictor.swing.evaluation import ledger as funded_ledger
+from market_predictor.swing.evaluation.holding_accounting import replay_holding
 from market_predictor.swing.evaluation.ledger import SwingLedgerConfig
 
 
@@ -188,6 +191,93 @@ def evaluate_funded_swing_accounting(
         additional_round_trip_cost=(research_contract.stress_cost_multiplier - 1)
         * research_contract.base_round_trip_cost_bps / 10_000,
     )
+    return _compare_funded_accounts(
+        selected, base, stress, benchmarks, sessions, years,
+        strategy_contract=strategy_contract, research_contract=research_contract,
+        basis_status="price_basis_pending",
+    )
+
+
+def evaluate_event_aware_swing_accounting(
+    selected: pd.DataFrame, holdings: Sequence[HoldingSpecification],
+    benchmark_holdings: Mapping[str, HoldingSpecification], *, config: SwingLedgerConfig,
+    strategy_contract: StrategyContract, research_contract: SwingResearchContract,
+    session_calendar: tuple[str, ...],
+) -> dict[str, Any]:
+    """Compare event-aware NAV without treating claims as cash or admitting raw sources."""
+    research_contract.assert_strategy_matches(strategy_contract)
+    if (config.horizon_sessions != research_contract.horizon_sessions
+            or config.expected_round_trip_cost_bps != research_contract.base_round_trip_cost_bps):
+        raise DataReadinessError("event accounting config differs from the research contract")
+    sessions, years = _valuation_calendar(session_calendar, config.horizon_sessions)
+    expected_benchmarks = {"SPY", "QQQ"}
+    if not selected.empty:
+        if "primary_benchmark" not in selected or selected.primary_benchmark.isna().any():
+            raise DataReadinessError("selected rows require a point-in-time sector benchmark")
+        expected_benchmarks.update(selected.primary_benchmark.astype(str))
+    if set(benchmark_holdings) != expected_benchmarks:
+        raise DataReadinessError("event benchmarks differ from SPY/QQQ/selected sector identities")
+    calendar = xcals.get_calendar("XNYS")
+    closes = tuple(calendar.session_close(day).to_pydatetime() for day in sessions)
+    first_open = calendar.session_open(sessions[0]).to_pydatetime()
+    benchmarks: dict[str, dict[str, Any]] = {}
+    missing: list[str] = []
+    for ticker, spec in sorted(benchmark_holdings.items()):
+        if (spec.security_id != ticker or spec.policy != "fixed_horizon"
+                or spec.research_contract_sha256 != research_contract.sha256()
+                or spec.initial_entry_timestamp != first_open or spec.session_end_timestamps != closes
+                or any(isinstance(event, ExecutionEvent) for event in spec.events)):
+            raise DataReadinessError("benchmark must be a same-calendar, contract-bound buy-and-hold lot")
+        outcome = replay_holding(spec)
+        values = [snapshot.total_value for snapshot in outcome.snapshots]
+        if any(value is None for value in values) or any(snapshot.gaps for snapshot in outcome.snapshots):
+            missing.append(ticker)
+            continue
+        equity = np.asarray(values, dtype="float64")
+        if not np.isfinite(equity).all() or (equity <= 0).any():
+            raise DataReadinessError("event benchmark equity must be positive and finite")
+        daily = equity / np.concatenate(([1.0], equity[:-1])) - 1.0
+        benchmarks[ticker] = {
+            "session_dates": sessions, "equity": equity.tolist(), "daily_returns": daily.tolist(),
+            "compounded_return": float(equity[-1] - 1), "cagr": _cagr(float(equity[-1]), years),
+            "entry_reference": "first_valuation_session_open", "transaction_cost_bps": 0.0,
+            "price_basis": "raw_share_entitlements", "separate_distributions_added": True,
+            "distribution_policy": "retain_cash_no_automatic_reinvestment",
+            "fully_settled": outcome.fully_settled,
+        }
+    if missing:
+        return {"status": "valuation_unavailable", "eligible": False, "accounting_eligible": False,
+            "missing_benchmark_valuations": missing, "comparisons": None,
+            "summary": {"economic_conditions_passed": False, "eligible": False,
+                "net_cagr_difference_vs_spy": None}, "session_dates": sessions}
+    base = funded_ledger.build_event_aware_funded_swing_ledger(
+        selected, holdings, config, session_calendar=session_calendar,
+        research_contract_sha256=research_contract.sha256(), execution_policy="managed",
+    )
+    stress = funded_ledger.build_event_aware_funded_swing_ledger(
+        selected, holdings, config, session_calendar=session_calendar,
+        research_contract_sha256=research_contract.sha256(), execution_policy="managed",
+        additional_round_trip_cost=(research_contract.stress_cost_multiplier - 1)
+        * research_contract.base_round_trip_cost_bps / 10_000,
+    )
+    if base["status"] != "computed" or stress["status"] != "computed":
+        return {"status": "valuation_unavailable", "eligible": False, "accounting_eligible": False,
+            "base_ledger": base, "stress_ledger": stress, "benchmarks": benchmarks,
+            "comparisons": None, "session_dates": sessions,
+            "summary": {"economic_conditions_passed": False, "eligible": False,
+                "net_cagr_difference_vs_spy": None}}
+    return _compare_funded_accounts(
+        selected, base, stress, benchmarks, sessions, years,
+        strategy_contract=strategy_contract, research_contract=research_contract,
+        basis_status="event_source_admission_pending",
+    )
+
+
+def _compare_funded_accounts(
+    selected: pd.DataFrame, base: dict[str, Any], stress: dict[str, Any],
+    benchmarks: dict[str, dict[str, Any]], sessions: list[str], years: float, *,
+    strategy_contract: StrategyContract, research_contract: SwingResearchContract, basis_status: str,
+) -> dict[str, Any]:
     spy_daily = np.asarray(benchmarks["SPY"]["daily_returns"], dtype="float64")
     comparisons: dict[str, dict[str, Any]] = {}
     checks: dict[str, bool] = {}
@@ -230,20 +320,22 @@ def evaluate_funded_swing_accounting(
         "stress_net_cagr_difference_vs_spy": comparisons["stress"]["net_cagr_difference_vs_spy"],
         "active_return_ci": {name: item["active_return_ci"] for name, item in comparisons.items()},
         "condition_checks": checks, "economic_conditions_passed": all(checks.values()),
-        "eligible": False, "price_basis_status": "price_basis_pending",
+        "eligible": False, "price_basis_status": basis_status,
         "research_contract_sha256": research_contract.sha256(),
     }
     return {
         "schema_version": "market_predictor.swing_funded_accounting.v1",
-        "status": "price_ratio_diagnostics", "eligible": False,
-        "price_basis_status": "price_basis_pending", "eligibility_blockers": ["price_basis_pending"],
-        "basis_explanation": "Price ratios lack independently bound total-return reconciliation; metadata flags cannot admit proof.",
+        "status": "price_ratio_diagnostics" if basis_status == "price_basis_pending" else "event_accounting_diagnostics",
+        "eligible": False,
+        "price_basis_status": basis_status, "eligibility_blockers": [basis_status],
+        "basis_explanation": "Arithmetic and metadata references do not replace independently replayed source admission.",
         "base_ledger": base, "stress_ledger": stress, "benchmarks": benchmarks,
         "comparisons": comparisons, "summary": summary,
         "fixed_horizon_selected_excess": _fixed_horizon_diagnostics(selected),
         "session_dates": sessions, "elapsed_years": years,
         "annualization": "XNYS_first_open_to_last_close_elapsed_seconds_over_365.2425_days",
-        "benchmark_cost_policy": "frictionless_buy_and_hold_price_ratio_comparator",
+        "benchmark_cost_policy": "frictionless_buy_and_hold_price_ratio_comparator" if basis_status == "price_basis_pending"
+        else "frictionless_buy_and_hold_explicit_entitlements_no_automatic_reinvestment",
         "managed_benchmark_role": "approximate_diagnostic_only_not_used",
         "strategy_contract_sha256": strategy_contract.sha256(),
         "research_contract_sha256": research_contract.sha256(),

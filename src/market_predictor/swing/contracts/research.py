@@ -25,7 +25,7 @@ class SwingResearchContract(BaseModel):
 
     model_config = ConfigDict(extra="forbid", frozen=True, strict=True, allow_inf_nan=False)
 
-    schema_version: Literal["market_predictor.swing_long_only_research.v1"]
+    schema_version: Literal["market_predictor.swing_event_aware_research"]
     side: Literal["long_only"]
     primary_benchmark: Literal["SPY"]
     comparison_benchmarks: tuple[Literal["QQQ", "point_in_time_sector_etf"], ...]
@@ -45,7 +45,10 @@ class SwingResearchContract(BaseModel):
     base_round_trip_cost_bps: float = Field(gt=0, le=100)
     stress_cost_multiplier: float = Field(ge=2, le=2)
     cost_timing: Literal["round_trip_prepaid_at_entry"]
-    price_accounting: Literal["verified_total_return_units_no_separate_distributions"]
+    price_accounting: Literal["raw_prices_with_explicit_entitlements"]
+    entitlement_valuation: Literal["evidenced_marks_only_unknown_is_unavailable"]
+    corporate_cash_release: Literal["evidenced_availability_not_payable_date"]
+    residual_claims: Literal["retain_at_horizon_without_forced_liquidation"]
     initial_equity_units: float = Field(ge=1, le=1)
     cash_yield: float = Field(ge=0, le=0)
     maximum_gross_exposure: float = Field(ge=1, le=1)

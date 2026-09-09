@@ -1,7 +1,7 @@
 # Catalyst-Confirmation Prediction Architecture
 
 Status: design authority
-Last updated: 2026-09-07
+Last updated: 2026-09-09
 
 This document defines stable component boundaries. Current progress and blockers are
 in `active_edge_rebuild_plan.md` and `reviews/active_edge_rebuild_handoff.md`.
@@ -30,6 +30,37 @@ flowchart LR
 There is no fallback from the active path to legacy models or schemas.
 
 ## Prediction Views
+
+### Event-Aware Outcome Accounting
+
+The current long-only research contract uses raw prices with explicit entitlements,
+not an adjusted-price ratio plus another distribution credit. Strict holding types
+live in `swing/contracts/holding_accounting.py`. The canonical lot kernel in
+`swing/evaluation/holding_accounting.py` applies class-owned transitions, fills,
+claim payments and separately evidenced cash availability. Source references retain
+artifact/interpretation hashes and distinct retrieval/availability clocks; references
+alone are not source admission. Valuation timestamps, cash availability and source
+publication are different facts. Delayed publication affects label availability,
+not the historical payment date.
+
+`swing/labels/holding_accounting.py` projects fixed and managed ten-session targets
+from that kernel. `swing/evaluation/ledger.py` uses the same normalized lot economics
+in its single funding loop, separating tradable, unpaid and contingent values.
+Only available cash funds entries; earlier-session sale proceeds available before
+open can fund that open, while same-session sale proceeds cannot. Residual claims
+need explicit marks through the portfolio endpoint; they cannot be liquidated or
+forward-filled merely because the forecast horizon ended. Unknown marks stop
+NAV-dependent allocation/scoring and preserve a known cash subtotal and the gaps.
+Claim value, contractual face amount and contingent payout cap are never interchangeable.
+
+`swing/evaluation/accounting.py` compares component NAV with equally dated benchmark
+holdings. Explicit-distribution benchmark diagnostics retain cash rather than
+inventing reinvestment trades; this policy is reported. Mathematical verification
+remains separate from independent source admission and model eligibility. Retained
+price-ratio controls are explicitly unadmitted research adapters into the same
+funding loop, not a fallback for event-aware production inputs. Historical source
+interpretation, feature/label materialization and candidate training remain separate
+dependent work; the new calculation APIs do not claim those steps are complete.
 
 ### Swing
 

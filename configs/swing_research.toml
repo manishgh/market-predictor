@@ -1,4 +1,4 @@
-schema_version = "market_predictor.swing_long_only_research.v1"
+schema_version = "market_predictor.swing_event_aware_research"
 side = "long_only"
 primary_benchmark = "SPY"
 comparison_benchmarks = ["QQQ", "point_in_time_sector_etf"]
@@ -19,7 +19,10 @@ base_round_trip_cost_bps = 20.0
 stress_cost_multiplier = 2.0
 # Preserve the published path convention: prepay both sides once, at entry.
 cost_timing = "round_trip_prepaid_at_entry"
-price_accounting = "verified_total_return_units_no_separate_distributions"
+price_accounting = "raw_prices_with_explicit_entitlements"
+entitlement_valuation = "evidenced_marks_only_unknown_is_unavailable"
+corporate_cash_release = "evidenced_availability_not_payable_date"
+residual_claims = "retain_at_horizon_without_forced_liquidation"
 # This is normalized accounting, not an assumed personal account balance.
 initial_equity_units = 1.0
 cash_yield = 0.0
