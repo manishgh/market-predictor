@@ -30,7 +30,7 @@ from market_predictor.sources.http import HttpByteResponse, HttpClient
 from market_predictor.sources.sec import SecSource
 
 _HOSTS = frozenset({
-    "www.sec.gov", "data.sec.gov", "ir.amd.com", "investors.bbwinc.com",
+    "www.sec.gov", "data.sec.gov", "ir.amd.com", "investors.bbwinc.com", "investors.fiserv.com",
     "www.nasdaqtrader.com", "infomemo.theocc.com", "www.fdic.gov",
 })
 _SHA = r"^[0-9a-f]{64}$"
@@ -119,7 +119,7 @@ class OfficialDocumentSource:
 
     def __init__(self, settings: Settings) -> None:
         self.sec_client = SecSource(settings).client
-        self.other_client = HttpClient(user_agent="market-predictor official evidence collection")
+        self.other_client = HttpClient(user_agent=requests.utils.default_user_agent())
 
     def fetch(self, document: OfficialDocument, maximum_bytes: int) -> HttpByteResponse:
         client = self.sec_client if urlsplit(document.url).hostname in {"www.sec.gov", "data.sec.gov"} else self.other_client

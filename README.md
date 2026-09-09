@@ -69,6 +69,13 @@ hash-verified promoted bundle.
   The first raw archive contains 601,834 daily bars across 564 verified requests;
   offline replay passes. A count audit finds 1,134 fewer rows than requested across
   28 ticker ranges, so it is not yet a complete admitted holding-path dataset.
+  `collect-swing-symbol-corrections` supports a separately reviewed, pinned
+  historical-symbol correction plan. It reuses existing benchmark evidence and
+  downloads only the replacement intervals. Source selection never falls back to
+  the replaced ticker; labels, news joins and features must be rebuilt afterward.
+  The first corrected source inventory has 602,709 observations after replacing
+  601 wrong-issuer rows. It retains 259 missing sessions and 21 zero-volume
+  observations as explicit gaps; it is not an admitted training-label dataset.
 - `market-predictor-research audit-swing-accounting-control --root .
   --output-directory data/reports/swing_accounting_control` replays a frozen
   initial-fit momentum control from retained files. It neither trains a model nor

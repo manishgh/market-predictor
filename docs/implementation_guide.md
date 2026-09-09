@@ -241,6 +241,25 @@ estimator without the same governance.
   `--offline` verifies an already completed collection without network access.
   A completed archive is immutable. Missing provider evidence is reported, not an
   additional cohort exclusion or proof of a valid holding outcome.
+- `swing/datasets/symbol_corrections.py`: reviewed dated-symbol policy, pinned
+  parent/document replay and exact correction-plan construction. Publish with
+  `market-predictor-collect collect-swing-symbol-corrections --publish-plan
+  --expected-policy-sha256 <reviewed-policy-file-hash> --plan-dir <new-plan>`.
+  Collect using the same policy pin, `--plan-dir <plan> --expected-plan-sha256
+  <saved-plan-authority-hash> --out-dir <new-or-resumable-archive>`; omit
+  `--publish-plan`. Only reviewed replacement units are requested. For a completed
+  archive use `--offline`, not another live collection.
+- `swing/datasets/symbol_corrected_sources.py`: exact calendar/observation validation
+  and immutable source-segment selection. Add `--offline --selection-file <new-file>
+  --expected-archive-sha256 <saved-archive-authority-hash>` to the collection command.
+  Replay an existing selection with its independently retained file pin through
+  `--expected-selection-sha256`. The command holds the original planner's shared
+  workspace lease. Missing corrected rows cannot use parent fallback; unresolved
+  original rows remain gaps. Neither output is a training-label authority.
+  The only pre-lease read is the bounded, independently pinned policy bootstrap
+  needed to locate the unchanged parent verifier. It is rechecked inside the lease;
+  parent artifacts, document archives, settings and providers are never loaded by
+  the correction command before lease acquisition.
 - `labeling.py`: next-open ten-session managed and rank outcomes.
 - `technical_relationships.py`, `cross_sectional.py`: causal technical and
   cross-sectional relationships.

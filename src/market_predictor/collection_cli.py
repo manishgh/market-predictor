@@ -24,6 +24,7 @@ COLLECTION_COMMANDS = frozenset(
         "collect-swing-holding-corporate-actions",
         "collect-swing-holding-source-documents",
         "collect-swing-initial-fit-raw-prices",
+        "collect-swing-symbol-corrections",
         "download-finviz",
         "download-finviz-screeners",
         "download-model",

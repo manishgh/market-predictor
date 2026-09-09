@@ -9,6 +9,7 @@ import typer
 from market_predictor.catalysts.issuer_events.alpaca_news_collection import (
     collect_alpaca_news_history,
 )
+from market_predictor.commands.swing_symbol_corrections import register_symbol_correction_commands
 from market_predictor.config import get_settings
 from market_predictor.core.errors import DataReadinessError
 from market_predictor.edge_rebuild.swing_history_collection import (
@@ -32,6 +33,8 @@ from market_predictor.swing.datasets.initial_fit_raw_share_plan import verified_
 
 
 def register_swing_collection_commands(app: typer.Typer, console: Any) -> None:
+    register_symbol_correction_commands(app, console)
+
     @app.command("collect-swing-initial-fit-raw-prices")
     def collect_swing_initial_fit_raw_prices_command(
         root: Path = typer.Option(Path(".")),

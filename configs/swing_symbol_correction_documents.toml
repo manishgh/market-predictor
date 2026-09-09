@@ -1,0 +1,45 @@
+schema_version = "market_predictor.official_document_inventory"
+maximum_response_bytes = 16777216
+attempts_per_document_per_run = 1
+
+[[documents]]
+document_id = "echostar_pre_window_symbol"
+url = "https://www.sec.gov/Archives/edgar/data/1001082/000104746919003524/a2238961zs-4.htm"
+purpose = "DISH June 2019 S-4, Summary parties section, identifies EchoStar Class A common stock as SATS; filer is DISH."
+expected_media = "html"
+
+[[documents]]
+document_id = "echostar_end_window_symbol"
+url = "https://www.sec.gov/Archives/edgar/data/1415404/000155837024007171/tmb-20240331x10q.htm"
+purpose = "EchoStar May 2024 10-Q cover identifies Class A common stock, SATS and Nasdaq for CIK 1415404."
+expected_media = "html"
+
+[[documents]]
+document_id = "echo_global_competing_owner"
+url = "https://www.sec.gov/Archives/edgar/data/1426945/000142694519000020/echo-20190630x10q.htm"
+purpose = "Echo Global Logistics 2019 10-Q cover identifies the different CIK 1426945 owner of historical ECHO common stock."
+expected_media = "html"
+
+[[documents]]
+document_id = "fiserv_pre_window_symbol"
+url = "https://www.sec.gov/Archives/edgar/data/798354/000119312519186646/d15278d8k.htm"
+purpose = "Fiserv July 1 2019 8-K cover identifies common stock, FISV and Nasdaq for CIK 798354."
+expected_media = "html"
+
+[[documents]]
+document_id = "fiserv_transfer_announcement"
+url = "https://www.sec.gov/Archives/edgar/data/798354/000119312523154199/d470900d8k.htm"
+purpose = "Fiserv May 25 2023 8-K Item 3.01 specifies Nasdaq cessation June 6 close and expected FI NYSE start June 7 open."
+expected_media = "html"
+
+[[documents]]
+document_id = "fiserv_transfer_completion"
+url = "https://investors.fiserv.com/news-releases/news-release-details/fiserv-completes-listing-transfer-new-york-stock-exchange"
+purpose = "Fiserv June 7 2023 issuer announcement confirms actual completion of the listing transfer and commencement as FI."
+expected_media = "html"
+
+[[documents]]
+document_id = "fiserv_post_transfer_symbol"
+url = "https://www.sec.gov/Archives/edgar/data/798354/000079835423000014/fisv-20230630.htm"
+purpose = "Fiserv July 2023 10-Q securities registration common-stock row confirms FI on NYSE, distinct from adjacent debt rows."
+expected_media = "html"

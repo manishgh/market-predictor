@@ -1,0 +1,30 @@
+schema_version = "market_predictor.swing_symbol_correction_policy"
+parent_plan = "data/reports/swing_initial_fit_raw_share_plan"
+parent_plan_sha256 = "d912a997af361c820745e8c850f0fd455ee068397c6d034d2b54c00a475dc22e"
+parent_archive = "data/raw/swing_initial_fit_raw_share_daily"
+parent_archive_sha256 = "144cab43741f3c74308b53e9322c84ac7eeaca158d3cbd6a1ddb0d7c0fa8d244"
+document_inventory = "configs/swing_symbol_correction_documents.toml"
+document_archive = "data/raw/swing_symbol_correction_documents"
+document_report_sha256 = "a687402063d6539e524efcdcd88e897a341f6e37adb51451911cfad8d5b44509"
+
+[[corrections]]
+security_id = "cik:0001415404"
+ticker = "ECHO"
+provider_symbol = "SATS"
+parent_unit_id = "swing-daily-1eb3a6ab1c2a0578fd87f267"
+start_date = "2019-07-09"
+end_date = "2024-05-28"
+document_ids = ["echostar_pre_window_symbol", "echostar_end_window_symbol", "echo_global_competing_owner"]
+record_locators = ["S-4 Summary: Parties to the Transaction, EchoStar Class A common stock (filer is DISH)", "10-Q cover: registrant CIK 1415404 and Class A common stock trading-symbol row", "10-Q cover: registrant CIK 1426945 and common stock trading-symbol row"]
+interpretation = "EchoStar Class A shares traded as SATS throughout this initial-fit interval. Historical ECHO belongs to the separate Echo Global Logistics issuer, not an alternative EchoStar source. Replace all parent ECHO observations, including the 601 existing rows. This establishes a source correction only; the 2019 BSS distribution still requires event-aware accounting."
+
+[[corrections]]
+security_id = "cik:0000798354"
+ticker = "FISV"
+provider_symbol = "FI"
+parent_unit_id = "swing-daily-af9b3f6f66d786d61a2fc3de"
+start_date = "2023-06-07"
+end_date = "2024-05-28"
+document_ids = ["fiserv_pre_window_symbol", "fiserv_transfer_announcement", "fiserv_transfer_completion", "fiserv_post_transfer_symbol"]
+record_locators = ["8-K cover: common stock registration row, FISV Nasdaq", "8-K Item 3.01: June 6 close and June 7 open listing transfer", "June 7, 2023 release, first paragraph: completed transfer, effective today begins FI trading", "10-Q cover: common stock FI NYSE row, not adjacent debt securities"]
+interpretation = "Fiserv common shares remained FISV through June 6, 2023 close and began trading on NYSE as FI at June 7 open. The completed issuer announcement confirms the effective date; the earlier 8-K alone is only a planned transition. Preserve parent FISV before this interval and use FI exclusively inside it. No later FISV symbol reversion is backdated."

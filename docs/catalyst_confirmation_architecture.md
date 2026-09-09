@@ -79,6 +79,18 @@ provider-symbol mapping; an independently retained authority hash is mandatory.
 Neither planning nor collection establishes ownership or accounting eligibility.
 Source-to-target admission remains pending.
 
+Historical-symbol corrections have their own dataset owner, `symbol_corrections.py`.
+Reviewed primary-document facts, the original plan/archive and an independent policy
+pin determine exact replacement intervals. The collector's explicit correction scope
+replays inherited benchmark artifacts instead of requesting duplicate ETF bars.
+`symbol_corrected_sources.py` publishes deterministic source segments: corrected bars
+exclusively within the replacement interval and original bars outside it. Missing
+corrected sessions fail, while unresolved unrelated parent tails remain explicit.
+Provider-midnight timestamps and actual retrieval clocks remain in immutable raw
+evidence. Calendar coordinates used for observation validation do not establish an
+execution time or historical first observation. This is source selection, not label
+admission; derived features, labels and news joins cannot fall back to old results.
+
 ### Swing
 
 - New long-only research is governed by `configs/swing_research.toml`, separately

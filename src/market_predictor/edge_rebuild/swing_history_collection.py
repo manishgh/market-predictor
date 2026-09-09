@@ -442,10 +442,12 @@ def _load_verified_plan(directory: Path, *, expected_plan_authority_sha256: str 
     request = parse_strict_json_object(request_bytes, label=str(request_path))
     manifest = parse_strict_json_object(manifest_bytes, label=str(manifest_path))
     scope = request.get("scope")
-    if scope != manifest.get("scope") or scope not in {None, "initial_fit_raw_share_acquisition"}:
+    if scope != manifest.get("scope") or scope not in {
+        None, "initial_fit_raw_share_acquisition", "historical_symbol_correction",
+    }:
         raise DataReadinessError("swing acquisition request/manifest scope differs or is unsupported")
-    if scope == "initial_fit_raw_share_acquisition" and expected_plan_authority_sha256 is None:
-        raise DataReadinessError("initial-fit acquisition requires its independent plan authority pin")
+    if scope in {"initial_fit_raw_share_acquisition", "historical_symbol_correction"} and expected_plan_authority_sha256 is None:
+        raise DataReadinessError("scoped acquisition requires its independent plan authority pin")
     units_record = manifest.get("daily_bars")
     if not isinstance(units_record, Mapping):
         raise DataReadinessError("swing history plan daily-bar inventory is invalid")
@@ -490,9 +492,8 @@ def _load_verified_plan(directory: Path, *, expected_plan_authority_sha256: str 
     ):
         raise DataReadinessError("swing history acquisition plan authority is invalid")
     units = _load_plan_units(units_path, payload=units_bytes)
-    _validate_plan_unit_coverage(units, manifest=manifest, daily_bars=units_record)
     provider_symbols: dict[str, str] | None = None
-    if request.get("scope") == "initial_fit_raw_share_acquisition":
+    if scope in {"initial_fit_raw_share_acquisition", "historical_symbol_correction"}:
         raw_symbols = request.get("provider_symbols")
         if (not isinstance(raw_symbols, dict) or set(raw_symbols) != set(units.ticker)
                 or any(not isinstance(value, str) or not value.strip() for value in raw_symbols.values())
@@ -500,6 +501,14 @@ def _load_verified_plan(directory: Path, *, expected_plan_authority_sha256: str 
                 or units_record["adjustment"] != "raw"):
             raise DataReadinessError("initial-fit acquisition provider identity policy differs")
         provider_symbols = {str(key): str(value) for key, value in raw_symbols.items()}
+    if scope == "historical_symbol_correction":
+        from market_predictor.swing.datasets.symbol_corrections import validate_symbol_correction_collection_plan
+
+        validate_symbol_correction_collection_plan(
+            directory=directory, request=request, manifest=manifest, units=units,
+            parent_archive_loader=load_complete_swing_history_collection,
+        )
+    _validate_plan_unit_coverage(units, manifest=manifest, daily_bars=units_record)
     hashes = {"request_sha256": request_sha256, "manifest_sha256": manifest_sha256,
         "authority_sha256": authority_sha256, "units_sha256": units_sha256}
     _assert_plan_files_unchanged(directory, hashes)
@@ -588,6 +597,9 @@ def _validate_plan_unit_coverage(
         end = date.fromisoformat(str(row["end_date"]))
         if not any(range_start <= start <= end <= range_end for range_start, range_end in ranges):
             raise DataReadinessError("swing history unit escapes every missing-session range")
+    if manifest.get("scope") == "historical_symbol_correction":
+        # The owner validator has already replayed the inherited benchmark archive.
+        return
     benchmark_units = units[units["role"].eq("benchmark")]
     benchmark_tickers = set(benchmark_units["ticker"].astype(str))
     if not {"SPY", "QQQ"}.issubset(benchmark_tickers):
