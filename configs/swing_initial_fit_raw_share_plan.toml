@@ -1,0 +1,4 @@
+schema = "market_predictor.swing_initial_fit_raw_share_plan_request"
+preflight_path = "data/reports/swing_research_cohort/holding_identity_preflight.json"
+preflight_sha256 = "8f8cdd60ca2f9c1372ceda20d04b7f90eefbfb2336a7f282f30aa97b8c7e723b"
+parent_request_path = "data/features/edge_rebuild_swing_technical_panel_20190709_20260708_v1/_request.json"

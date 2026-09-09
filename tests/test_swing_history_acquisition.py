@@ -14,10 +14,12 @@ import market_predictor.universe.sp500.membership_authority as membership_module
 from market_predictor.canonical.store import file_sha256
 from market_predictor.core.errors import DataReadinessError
 from market_predictor.edge_rebuild.swing_history_acquisition import (
+    publish_swing_history_acquisition_plan,
+)
+from market_predictor.swing.datasets.history_plan_publication import (
     AUTHORITY_SCHEMA,
     DAILY_BAR_UNITS_FILE,
     PLAN_SCHEMA,
-    publish_swing_history_acquisition_plan,
 )
 from market_predictor.universe.sp500.membership_history import VerifiedIndexChanges
 

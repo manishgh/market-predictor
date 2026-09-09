@@ -15,10 +15,6 @@ import pytest
 from market_predictor.canonical.store import file_sha256
 from market_predictor.config import Settings
 from market_predictor.core.errors import DataReadinessError
-from market_predictor.edge_rebuild.swing_history_acquisition import (
-    AUTHORITY_SCHEMA as PLAN_AUTHORITY_SCHEMA,
-)
-from market_predictor.edge_rebuild.swing_history_acquisition import PLAN_SCHEMA
 from market_predictor.edge_rebuild.swing_history_collection import (
     COLLECTION_AUTHORITY_SCHEMA,
     AlpacaSwingDailyPageSource,
@@ -28,6 +24,10 @@ from market_predictor.edge_rebuild.swing_history_collection import (
 )
 from market_predictor.sources.alpaca import AlpacaSource, decode_bars_page_response
 from market_predictor.sources.http import HttpByteResponse
+from market_predictor.swing.datasets.history_plan_publication import (
+    AUTHORITY_SCHEMA as PLAN_AUTHORITY_SCHEMA,
+)
+from market_predictor.swing.datasets.history_plan_publication import PLAN_SCHEMA
 
 
 @pytest.mark.parametrize("adjustment", ["all", "raw"])

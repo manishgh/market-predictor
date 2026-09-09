@@ -61,8 +61,14 @@ hash-verified promoted bundle.
   verified acquisition plan. New responses retain original HTTP bytes and query
   receipts; replay compares those responses with normalized Parquet values.
   Raw and adjusted collections cannot be resumed or consumed interchangeably.
-  The complete initial-fit raw-share acquisition plan and source-to-label admission
-  are still pending; this change alone does not provide training-ready prices.
+  `plan-swing-initial-fit-raw-prices` reconstructs stock decision/holding sessions
+  and complete SPY/QQQ/sector benchmark ranges from pinned identity evidence.
+  `collect-swing-initial-fit-raw-prices` requires that plan's independently saved
+  authority hash and verifies its reconstruction before collection or offline replay.
+  Collection alone does not admit ownership, corporate actions or training labels.
+  The first raw archive contains 601,834 daily bars across 564 verified requests;
+  offline replay passes. A count audit finds 1,134 fewer rows than requested across
+  28 ticker ranges, so it is not yet a complete admitted holding-path dataset.
 - `market-predictor-research audit-swing-accounting-control --root .
   --output-directory data/reports/swing_accounting_control` replays a frozen
   initial-fit momentum control from retained files. It neither trains a model nor

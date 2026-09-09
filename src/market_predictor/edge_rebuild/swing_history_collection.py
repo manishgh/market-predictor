@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import gzip
 import hashlib
+import io
 import json
 import math
 import threading
@@ -19,13 +20,7 @@ import pandas as pd
 
 from market_predictor.canonical.store import file_sha256
 from market_predictor.core.errors import DataReadinessError
-from market_predictor.edge_rebuild.swing_history_acquisition import (
-    AUTHORITY_SCHEMA as PLAN_AUTHORITY_SCHEMA,
-)
-from market_predictor.edge_rebuild.swing_history_acquisition import (
-    DAILY_BAR_UNITS_FILE,
-    PLAN_SCHEMA,
-)
+from market_predictor.core.json_integrity import parse_strict_json_object
 from market_predictor.resources import (
     assert_memory_budget,
     assert_peak_memory_budget,
@@ -34,6 +29,13 @@ from market_predictor.resources import (
 )
 from market_predictor.sources.alpaca import AlpacaSource, decode_bars_page_response
 from market_predictor.sources.http import HttpByteResponse
+from market_predictor.swing.datasets.history_plan_publication import (
+    AUTHORITY_SCHEMA as PLAN_AUTHORITY_SCHEMA,
+)
+from market_predictor.swing.datasets.history_plan_publication import (
+    DAILY_BAR_UNITS_FILE,
+    PLAN_SCHEMA,
+)
 
 COLLECTION_SCHEMA: Final = "edge_rebuild.swing_history_collection.v1"
 COLLECTION_AUTHORITY_SCHEMA: Final = "edge_rebuild.swing_history_collection_authority.v1"
@@ -131,6 +133,7 @@ class _VerifiedPlan:
     hashes: dict[str, str]
     universe_sha256: str
     adjustment: str
+    provider_symbols: dict[str, str] | None
 
 
 def collect_swing_history_plan(
@@ -140,13 +143,19 @@ def collect_swing_history_plan(
     source_factory: SourceFactory,
     provider_symbol_for: ProviderSymbol,
     maximum_units_this_run: int | None = None,
+    expected_plan_authority_sha256: str | None = None,
 ) -> dict[str, Any]:
     """Collect every exact v2 plan unit with immutable per-unit resume."""
 
     if maximum_units_this_run is not None and maximum_units_this_run < 1:
         raise ValueError("maximum_units_this_run must be positive")
-    plan = _load_verified_plan(plan_directory)
+    plan = _load_verified_plan(plan_directory, expected_plan_authority_sha256=expected_plan_authority_sha256)
     units = _bind_provider_symbols(plan.units, provider_symbol_for)
+    if plan.provider_symbols is not None and any(
+        row.provider_symbol != plan.provider_symbols[row.ticker] for row in units.itertuples(index=False)
+    ):
+        raise DataReadinessError("collection provider symbols differ from pinned acquisition plan")
+    _assert_plan_files_unchanged(plan_directory, plan.hashes)
     if (output_directory / "_authority.json").exists():
         raise DataReadinessError("completed swing history collection is immutable")
     if (output_directory / "_manifest.json").exists():
@@ -216,6 +225,8 @@ def collect_swing_history_plan(
         collect_unit=collect_unit,
         completed=completed,
     )
+    if file_sha256(plan_directory / "_authority.json") != plan.hashes["authority_sha256"]:
+        raise DataReadinessError("acquisition plan changed during collection")
     terminal_ids = set(completed)
     failed_ids = set(failures)
     unattempted = [
@@ -298,6 +309,7 @@ def collect_swing_history_plan(
             output_directory,
             plan_directory=plan_directory,
             expected_adjustment=plan.adjustment,
+            expected_plan_authority_sha256=expected_plan_authority_sha256,
         )
     except Exception:
         (output_directory / "_authority.json").unlink(missing_ok=True)
@@ -318,10 +330,11 @@ def load_complete_swing_history_collection(
     *,
     plan_directory: Path,
     expected_adjustment: str,
+    expected_plan_authority_sha256: str | None = None,
 ) -> dict[str, Any]:
     """Verify final authority, current plan identity, and every unit artifact."""
 
-    plan = _load_verified_plan(plan_directory)
+    plan = _load_verified_plan(plan_directory, expected_plan_authority_sha256=expected_plan_authority_sha256)
     if expected_adjustment not in SUPPORTED_ADJUSTMENTS or plan.adjustment != expected_adjustment:
         raise DataReadinessError("swing history consumer adjustment differs from plan")
     request = _load_json(directory / "_request.json")
@@ -329,6 +342,8 @@ def load_complete_swing_history_collection(
     authority = _load_json(directory / "_authority.json")
     request_sha256 = str(request.get("request_sha256", ""))
     request_payload = {key: value for key, value in request.items() if key != "request_sha256"}
+    if plan.provider_symbols is not None and request.get("provider_symbols") != plan.provider_symbols:
+        raise DataReadinessError("replayed provider symbols differ from pinned acquisition plan")
     if (
         _json_sha256(request_payload) != request_sha256
         or request.get("schema") != COLLECTION_SCHEMA
@@ -411,17 +426,27 @@ def load_complete_swing_history_collection(
     return manifest
 
 
-def _load_verified_plan(directory: Path) -> _VerifiedPlan:
+def _load_verified_plan(directory: Path, *, expected_plan_authority_sha256: str | None = None) -> _VerifiedPlan:
     request_path = directory / "_request.json"
     manifest_path = directory / "_manifest.json"
     authority_path = directory / "_authority.json"
     for path in (request_path, manifest_path, authority_path):
         if not path.is_file():
             raise DataReadinessError(f"swing history plan file is missing: {path}")
-    request = _load_json(request_path)
-    manifest = _load_json(manifest_path)
-    authority = _load_json(authority_path)
-    units_record = cast(object, manifest.get("daily_bars"))
+    authority_bytes = authority_path.read_bytes()
+    authority_sha256 = hashlib.sha256(authority_bytes).hexdigest()
+    if expected_plan_authority_sha256 is not None and authority_sha256 != expected_plan_authority_sha256:
+        raise DataReadinessError("initial-fit acquisition requires its independent plan authority pin")
+    authority = parse_strict_json_object(authority_bytes, label=str(authority_path))
+    request_bytes, manifest_bytes = request_path.read_bytes(), manifest_path.read_bytes()
+    request = parse_strict_json_object(request_bytes, label=str(request_path))
+    manifest = parse_strict_json_object(manifest_bytes, label=str(manifest_path))
+    scope = request.get("scope")
+    if scope != manifest.get("scope") or scope not in {None, "initial_fit_raw_share_acquisition"}:
+        raise DataReadinessError("swing acquisition request/manifest scope differs or is unsupported")
+    if scope == "initial_fit_raw_share_acquisition" and expected_plan_authority_sha256 is None:
+        raise DataReadinessError("initial-fit acquisition requires its independent plan authority pin")
+    units_record = manifest.get("daily_bars")
     if not isinstance(units_record, Mapping):
         raise DataReadinessError("swing history plan daily-bar inventory is invalid")
     artifact = units_record.get("units_artifact")
@@ -432,8 +457,10 @@ def _load_verified_plan(directory: Path) -> _VerifiedPlan:
     units_path = _resolve_inside(directory, str(artifact.get("path", "")))
     if not units_path.is_file():
         raise DataReadinessError(f"swing history plan units are missing: {units_path}")
-    request_sha256 = file_sha256(request_path)
-    units_sha256 = file_sha256(units_path)
+    request_sha256 = hashlib.sha256(request_bytes).hexdigest()
+    manifest_sha256 = hashlib.sha256(manifest_bytes).hexdigest()
+    units_bytes = units_path.read_bytes()
+    units_sha256 = hashlib.sha256(units_bytes).hexdigest()
     universe_sha256 = str(membership.get("universe_sha256", ""))
     if (
         request.get("schema") != PLAN_SCHEMA
@@ -453,7 +480,7 @@ def _load_verified_plan(directory: Path) -> _VerifiedPlan:
         or authority.get("schema") != PLAN_AUTHORITY_SCHEMA
         or authority.get("state") != "complete"
         or authority.get("artifact") != "_manifest.json"
-        or authority.get("artifact_sha256") != file_sha256(manifest_path)
+        or authority.get("artifact_sha256") != manifest_sha256
         or authority.get("request_sha256") != request_sha256
         or authority.get("units_sha256") != units_sha256
         or authority.get("universe_sha256") != universe_sha256
@@ -462,23 +489,38 @@ def _load_verified_plan(directory: Path) -> _VerifiedPlan:
         or len(universe_sha256) != 64
     ):
         raise DataReadinessError("swing history acquisition plan authority is invalid")
-    units = _load_plan_units(units_path)
+    units = _load_plan_units(units_path, payload=units_bytes)
     _validate_plan_unit_coverage(units, manifest=manifest, daily_bars=units_record)
+    provider_symbols: dict[str, str] | None = None
+    if request.get("scope") == "initial_fit_raw_share_acquisition":
+        raw_symbols = request.get("provider_symbols")
+        if (not isinstance(raw_symbols, dict) or set(raw_symbols) != set(units.ticker)
+                or any(not isinstance(value, str) or not value.strip() for value in raw_symbols.values())
+                or request.get("asof_policy") != "inclusive_unit_end_date_entity_mapping_not_ownership"
+                or units_record["adjustment"] != "raw"):
+            raise DataReadinessError("initial-fit acquisition provider identity policy differs")
+        provider_symbols = {str(key): str(value) for key, value in raw_symbols.items()}
+    hashes = {"request_sha256": request_sha256, "manifest_sha256": manifest_sha256,
+        "authority_sha256": authority_sha256, "units_sha256": units_sha256}
+    _assert_plan_files_unchanged(directory, hashes)
     return _VerifiedPlan(
         units=units,
-        hashes={
-            "request_sha256": request_sha256,
-            "manifest_sha256": file_sha256(manifest_path),
-            "authority_sha256": file_sha256(authority_path),
-            "units_sha256": units_sha256,
-        },
+        hashes=hashes,
         universe_sha256=universe_sha256,
         adjustment=str(units_record["adjustment"]),
+        provider_symbols=provider_symbols,
     )
 
 
-def _load_plan_units(path: Path) -> pd.DataFrame:
-    frame = pd.read_csv(path, dtype=str, keep_default_na=False)
+def _assert_plan_files_unchanged(directory: Path, hashes: Mapping[str, str]) -> None:
+    for name, key in (("_request.json", "request_sha256"), ("_manifest.json", "manifest_sha256"),
+            ("_authority.json", "authority_sha256"), (DAILY_BAR_UNITS_FILE, "units_sha256")):
+        if file_sha256(directory / name) != hashes[key]:
+            raise DataReadinessError("swing acquisition plan changed during verification")
+
+
+def _load_plan_units(path: Path, *, payload: bytes | None = None) -> pd.DataFrame:
+    frame = pd.read_csv(path if payload is None else io.BytesIO(payload), dtype=str, keep_default_na=False)
     columns = ["security_id", "ticker", "start_date", "end_date", "role"]
     if list(frame.columns) != columns or frame.empty:
         raise DataReadinessError("swing history plan unit schema is invalid")
@@ -498,11 +540,11 @@ def _load_plan_units(path: Path) -> pd.DataFrame:
             raise DataReadinessError("swing history plan unit date is invalid") from exc
         if start > end:
             raise DataReadinessError("swing history plan unit date range is reversed")
-        payload = {column: record[column] for column in columns}
-        unit_sha256 = _json_sha256(payload)
+        identity_payload = {column: record[column] for column in columns}
+        unit_sha256 = _json_sha256(identity_payload)
         records.append(
             {
-                **payload,
+                **identity_payload,
                 "unit_id": f"swing-daily-{unit_sha256[:24]}",
                 "plan_unit_sha256": unit_sha256,
             }

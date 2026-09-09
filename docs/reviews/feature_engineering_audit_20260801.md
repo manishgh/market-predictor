@@ -77,6 +77,32 @@ seconds (18m08s), peak 0.326954 GiB. Test PID 35496 exited. No model was trained
 
 ### Raw-Share Collection Dependency
 
+Initial-fit planning implementation now reconstructs exact decision/holding session
+unions and complete benchmark ranges with a per-unit count/digest audit. The collection
+CLI replays those requirements under the workspace lease using an independently saved
+authority-file hash and frozen provider mapping. It rejects scope downgrade and
+authority replacement before writes/dispatch. Shared publication remains one owner.
+No ownership, cash availability or accounting eligibility is inferred from this plan.
+Verification: 358 focused tests; full tracked-Python Ruff; strict mypy 338 sources;
+full suite 3,082 passed, three skipped, 134 warnings, 1,266.62s, peak 0.329632 GiB.
+PID13376 exited; XML `.test-tmp/raw-plan-full.xml`. Both agents are closed.
+Real identity-only reconstruction: 545 in-window IDs, 551 stock plus 13 benchmark
+units, 586,305 decision sessions, 586,414 holding sessions, 551 decision-only sessions,
+586,965 required stock sessions. Published plan:
+`data/reports/swing_initial_fit_raw_share_plan`; independently saved authority-file
+SHA `d912a997af361c820745e8c850f0fd455ee068397c6d034d2b54c00a475dc22e`.
+Collection and fresh offline replay both completed for all 564 units / 601,834 rows
+at `data/raw/swing_initial_fit_raw_share_daily`, with no failed/empty units. Collection
+authority-file SHA `144cab43741f3c74308b53e9322c84ac7eeaca158d3cbd6a1ddb0d7c0fa8d244`;
+manifest-file SHA `a96c70eee46e0a4b4d0ee3c1a7d47cea40dfc7a4ec2e14903f03e786bd0ced52`.
+Plan peak 0.396503 GiB; collection peak 0.395340 GiB. PIDs35088,20404,31288 exited.
+The row-count check is separate from admission: 602,968 required stock/ETF sessions
+versus 601,834 returned rows, a shortfall of 1,134 across 28 ticker ranges. ECHO has
+630 fewer rows, FISV 245; 26 other ranges have nine or ten fewer. This is not yet an
+exact missing-session, effective-dated symbol, ownership or corporate-action audit.
+No new security was excluded, no return was fabricated and no candidate was fitted.
+The following transport evidence remains the preceding checkpoint.
+
 The existing exact-unit collector now derives `raw`/`all` from its verified plan,
 retains original transport bytes and query receipts for new acquisitions, and
 reconstructs normalized Parquet values from those responses during replay. Consumers
@@ -89,9 +115,9 @@ tracked-Python Ruff and strict mypy on 336 sources pass. Retained adjusted warm-
 replay passed for 549 units / 140,383 rows, peak 0.132084 GiB, PID12624 exited.
 The full suite passed 2,999 tests, three skipped, 134 warnings in 1,181.30 seconds
 (19m41s), peak 0.329193 GiB. PID25540 exited; XML
-`.test-tmp/price-basis-full.xml`. Both agents are closed. Initial-fit raw-plan
-publication, acquisition, source/ownership/action admission and actual target
-materialization remain pending. No additional cohort exclusion or model fit occurred.
+`.test-tmp/price-basis-full.xml`. Both preceding agents are closed. Initial-fit plan
+publication and acquisition are now complete as described above; source/ownership/
+action admission and actual target materialization remain pending.
 
 ### Event-Aware Accounting
 

@@ -225,6 +225,22 @@ estimator without the same governance.
 
 ### Swing path
 
+- `swing/datasets/initial_fit_raw_share_plan.py`: identity-only initial-fit raw SIP
+  acquisition requirements and independent pinned replay. The next-ten-session
+  paths remain intact after index removal; all in-window decision sessions are also
+  included. No held-out numeric features or returns are decoded.
+- `swing/datasets/history_plan_publication.py`: the shared atomic exact-unit plan
+  writer used by both warm-up and raw-share acquisition, not a second collector.
+  Run `market-predictor-research plan-swing-initial-fit-raw-prices --root .
+  --output-directory data/reports/swing_initial_fit_raw_share_plan` and retain the
+  returned `plan_sha256` independently. Then use
+  `market-predictor-collect collect-swing-initial-fit-raw-prices --root .
+  --plan-dir data/reports/swing_initial_fit_raw_share_plan
+  --out-dir data/raw/swing_initial_fit_raw_share_daily
+  --expected-plan-sha256 <saved-hash>`. `--max-units` bounds a resumable batch;
+  `--offline` verifies an already completed collection without network access.
+  A completed archive is immutable. Missing provider evidence is reported, not an
+  additional cohort exclusion or proof of a valid holding outcome.
 - `labeling.py`: next-open ten-session managed and rank outcomes.
 - `technical_relationships.py`, `cross_sectional.py`: causal technical and
   cross-sectional relationships.

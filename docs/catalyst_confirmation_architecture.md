@@ -69,7 +69,15 @@ Replay reconstructs normalized OHLCV and compares it against persisted Parquet.
 Historical adjusted-only archives without transport receipts remain historical
 evidence; they cannot qualify as raw-share inputs. Consumers declare their required
 basis explicitly, and the adjusted feature-history combination rejects raw input.
-The new initial-fit raw-share planning and source-to-target admission remain pending.
+Initial-fit raw-share planning reconstructs the union of all retained in-window
+decision sessions and mature decisions' next ten exchange sessions. Holding tails
+are not clipped at index removal. SPY, QQQ and every represented point-in-time sector
+benchmark cover the entire initial-fit window. Zero-requirement later entrants stay
+in the cohort. Shared immutable publication has one owner under `swing/datasets`.
+Collection holds the workspace lease while replaying the pinned plan and using its
+provider-symbol mapping; an independently retained authority hash is mandatory.
+Neither planning nor collection establishes ownership or accounting eligibility.
+Source-to-target admission remains pending.
 
 ### Swing
 

@@ -10,10 +10,12 @@ from market_predictor.catalysts.issuer_events.alpaca_news_collection import (
     collect_alpaca_news_history,
 )
 from market_predictor.config import get_settings
+from market_predictor.core.errors import DataReadinessError
 from market_predictor.edge_rebuild.swing_history_collection import (
     AlpacaSwingDailyPageSource,
     SwingDailyPageSource,
     collect_swing_history_plan,
+    load_complete_swing_history_collection,
 )
 from market_predictor.heavy_jobs import HEAVY_JOB_BUSY_EXIT_CODE, HeavyJobBusyError, serialized_heavy_job
 from market_predictor.sources.alpaca import AlpacaNewsPage, AlpacaSource
@@ -26,9 +28,58 @@ from market_predictor.sources.official_documents import (
 )
 from market_predictor.sources.provider_symbols import PROVIDER_ALPACA, provider_symbol
 from market_predictor.swing.datasets.corporate_action_collection import collect_holding_corporate_actions
+from market_predictor.swing.datasets.initial_fit_raw_share_plan import verified_initial_fit_raw_share_plan
 
 
 def register_swing_collection_commands(app: typer.Typer, console: Any) -> None:
+    @app.command("collect-swing-initial-fit-raw-prices")
+    def collect_swing_initial_fit_raw_prices_command(
+        root: Path = typer.Option(Path(".")),
+        config: Path = typer.Option(Path("configs/swing_initial_fit_raw_share_plan.toml")),
+        plan_dir: Path = typer.Option(...),
+        out_dir: Path = typer.Option(...),
+        expected_plan_sha256: str = typer.Option(..., help="Independently saved acquisition authority-file hash."),
+        max_units: int | None = typer.Option(None, min=1),
+        offline: bool = typer.Option(False, help="Replay a completed archive without network calls."),
+    ) -> None:
+        """Verify exact cohort/session requirements, then collect raw SIP prices."""
+        root = root.resolve()
+        output = (root / out_dir).resolve()
+        plan_path = (root / plan_dir).resolve()
+        sources: list[AlpacaSource] = []
+        try:
+            with verified_initial_fit_raw_share_plan(root, config, plan_path, expected_plan_sha256=expected_plan_sha256) as plan:
+                if (output == root or not output.is_relative_to(root) or output.is_relative_to(plan_path)
+                        or plan_path.is_relative_to(output)):
+                    raise DataReadinessError("raw collection output must be separate from its plan and inside repository")
+                if offline:
+                    result = load_complete_swing_history_collection(output, plan_directory=plan_path,
+                        expected_adjustment="raw", expected_plan_authority_sha256=expected_plan_sha256)
+                else:
+                    settings = get_settings()
+                    if not settings.has_alpaca or settings.alpaca_stock_feed.strip().lower() != "sip":
+                        raise typer.BadParameter("Configured Alpaca credentials and SIP are required")
+
+                    def source_factory() -> SwingDailyPageSource:
+                        source = AlpacaSource(settings)
+                        sources.append(source)
+                        return AlpacaSwingDailyPageSource(source)
+
+                    result = collect_swing_history_plan(plan_directory=plan_path, output_directory=output,
+                        source_factory=source_factory, provider_symbol_for=lambda ticker: str(plan["provider_symbols"][ticker]),
+                        maximum_units_this_run=max_units, expected_plan_authority_sha256=expected_plan_sha256)
+        except HeavyJobBusyError as exc:
+            typer.echo(str(exc), err=True)
+            raise typer.Exit(code=HEAVY_JOB_BUSY_EXIT_CODE) from exc
+        finally:
+            for source in sources:
+                source.client.session.close()
+        console.print({key: result[key] for key in (
+            "status", "requested_units", "terminal_units", "observed_units", "unavailable_units", "failed_units", "stop_reason",
+        )})
+        if result["status"] not in {"complete", "complete_with_unavailable"}:
+            raise typer.Exit(code=2)
+
     @app.command("collect-swing-holding-corporate-actions")
     def collect_swing_holding_corporate_actions_command(
         root: Path = typer.Option(Path(".")),

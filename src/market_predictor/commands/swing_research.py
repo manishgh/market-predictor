@@ -31,6 +31,7 @@ from market_predictor.sentiment import FinbertScorer
 from market_predictor.sources.alpaca import AlpacaBarsPage, AlpacaSource
 from market_predictor.swing.catalyst_lineage import build_catalyst_lineage
 from market_predictor.swing.datasets.holding_observation_inventory import run_holding_observation_inventory
+from market_predictor.swing.datasets.initial_fit_raw_share_plan import run_initial_fit_raw_share_plan
 from market_predictor.swing.evaluation.research_evidence import audit_swing_research_evidence
 from market_predictor.swing.security_label_artifact import (
     build_security_label_artifact,
@@ -39,6 +40,21 @@ from market_predictor.swing.sentiment_history import score_alpaca_news_history
 
 
 def register_swing_research_commands(app: typer.Typer, console: Console) -> None:
+    @app.command("plan-swing-initial-fit-raw-prices")
+    def plan_swing_initial_fit_raw_prices_command(
+        root: Path = typer.Option(Path(".")),
+        config: Path = typer.Option(Path("configs/swing_initial_fit_raw_share_plan.toml")),
+        output_directory: Path = typer.Option(..., help="Immutable exact-session acquisition plan."),
+        expected_plan_sha256: str | None = typer.Option(None, help="Previously saved authority-file hash; required for replay."),
+    ) -> None:
+        """Reconstruct raw-price requirements without reading features or returns."""
+        try:
+            result = run_initial_fit_raw_share_plan(root, config, output_directory, expected_plan_sha256=expected_plan_sha256)
+        except HeavyJobBusyError as exc:
+            typer.echo(str(exc), err=True)
+            raise typer.Exit(code=HEAVY_JOB_BUSY_EXIT_CODE) from exc
+        console.print({key: result[key] for key in ("status", "plan_sha256", "daily_bars", "requirements")})
+
     @app.command("audit-swing-holding-observations")
     def audit_swing_holding_observations_command(
         root: Path = typer.Option(Path(".")),

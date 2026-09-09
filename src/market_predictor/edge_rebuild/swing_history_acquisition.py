@@ -3,8 +3,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import shutil
-import uuid
 from datetime import date, timedelta
 from pathlib import Path
 from typing import Any
@@ -16,21 +14,17 @@ from market_predictor.canonical.store import file_sha256
 from market_predictor.core.errors import DataReadinessError
 from market_predictor.resources import (
     assert_memory_budget,
-    assert_peak_memory_budget,
-    memory_audit,
 )
+from market_predictor.swing.datasets.history_plan_publication import PLAN_SCHEMA, publish_daily_history_plan
 from market_predictor.universe.sp500.membership_authority import (
     MEMBERSHIP_REQUEST_SCHEMA,
     require_sp500_membership_authority,
 )
 
-PLAN_SCHEMA = "edge_rebuild.swing_history_acquisition_plan.v2"
-AUTHORITY_SCHEMA = "edge_rebuild.swing_history_acquisition_plan_authority.v2"
 TEMPORAL_SCHEMA = "edge_rebuild.temporal_manifest.v2"
 TEMPORAL_AUTHORITY_SCHEMA = "edge_rebuild.temporal_manifest_authority.v2"
 DAILY_REQUEST_SCHEMA = "swing.daily_history_collection.v1"
 DAILY_MANIFEST_SCHEMA = "swing.daily_history_manifest.v1"
-DAILY_BAR_UNITS_FILE = "daily_bar_units.csv"
 MAX_MEMORY_GIB = 4.0
 MEMORY_HEADROOM_GIB = 0.75
 ANNOUNCEMENT_LEAD_DAYS = 45
@@ -146,46 +140,7 @@ def publish_swing_history_acquisition_plan(
         ],
     }
 
-    staging = output.with_name(f".{output.name}.{uuid.uuid4().hex}.tmp")
-    try:
-        staging.mkdir(parents=True)
-        units_path = staging / DAILY_BAR_UNITS_FILE
-        units.to_csv(units_path, index=False, lineterminator="\n")
-        manifest["daily_bars"]["units_artifact"] = {
-            "path": DAILY_BAR_UNITS_FILE,
-            "bytes": units_path.stat().st_size,
-            "sha256": file_sha256(units_path),
-        }
-        _write_json(staging / "_request.json", request)
-        manifest["request_sha256"] = file_sha256(staging / "_request.json")
-        assert_peak_memory_budget(
-            hard_budget_gib=MAX_MEMORY_GIB,
-            headroom_gib=MEMORY_HEADROOM_GIB,
-            stage="swing acquisition-plan publication",
-        )
-        manifest["resources"] = memory_audit(
-            hard_budget_gib=MAX_MEMORY_GIB,
-            headroom_gib=MEMORY_HEADROOM_GIB,
-        ).to_record()
-        _write_json(staging / "_manifest.json", manifest)
-        _write_json(
-            staging / "_authority.json",
-            {
-                "schema": AUTHORITY_SCHEMA,
-                "state": "complete",
-                "artifact": "_manifest.json",
-                "artifact_sha256": file_sha256(staging / "_manifest.json"),
-                "request_sha256": manifest["request_sha256"],
-                "units_sha256": manifest["daily_bars"]["units_artifact"]["sha256"],
-                "universe_sha256": membership["universe_sha256"],
-            },
-        )
-        output.parent.mkdir(parents=True, exist_ok=True)
-        staging.replace(output)
-        return manifest
-    finally:
-        shutil.rmtree(staging, ignore_errors=True)
-
+    return publish_daily_history_plan(output=output, request=request, manifest=manifest, units=units)
 
 def _load_temporal(directory: Path) -> tuple[dict[str, Any], dict[str, str]]:
     authority_path = directory / "_authority.json"
@@ -472,13 +427,6 @@ def _read_json(path: Path) -> dict[str, Any]:
     if not isinstance(payload, dict):
         raise DataReadinessError(f"JSON artifact must be an object: {path}")
     return payload
-
-
-def _write_json(path: Path, payload: dict[str, Any]) -> None:
-    path.write_text(
-        json.dumps(payload, indent=2, sort_keys=True) + "\n",
-        encoding="utf-8",
-    )
 
 
 def _guard(stage: str) -> None:
