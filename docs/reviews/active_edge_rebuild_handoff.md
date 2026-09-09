@@ -4,9 +4,63 @@ Status: active
 Last updated: 2026-09-09
 Repository: `C:\project\market-predictor`
 Branch: `er-intraday-refactoring`
-Last completed implementation commit: `d49c6a4` (pushed).
+Last completed implementation commit: `2bce3d7` (pushed).
 
 ## Current State
+
+Completed checkpoint: bounded historical-symbol correction (`2bce3d7`). New owners
+`swing/datasets/symbol_corrections.py` and `symbol_corrected_sources.py` bind reviewed
+documents, the original plan/archive, exact replacement intervals and source-only
+selection. The existing collector has one explicit two-unit correction scope, with
+inherited benchmark replay, never a general benchmark bypass. New CLI:
+`collect-swing-symbol-corrections`. No original plan implementation-hashed file changed.
+Locke `01a0872b-20c6-7410-b3d5-f072bab844eb` completed collector/owner tests and is
+closed. Euler `01a0872b-db59-7962-9c7a-bd70be47238e` completed the consolidated
+code/ML review and is closed. Three supported findings were fixed: request snapshot
+pinning during selection, CLI-to-plan policy binding and offline archive-pin handling.
+Bounded config bootstrap before the unchanged parent verifier is allowed, with
+under-lease revalidation. No original review finding remains open.
+
+The exact-session check finished (PID36156/session47736): 1,134 missing, zero extra,
+all gaps at ticker-history ends. ECHO has 601 wrong-issuer observations to replace
+as well as 630 missing sessions; FISV needs the 245-session FI suffix. The other
+26 holding tails remain unresolved (259 sessions), not new exclusions.
+All seven primary records are retained in `data/raw/swing_symbol_correction_documents`;
+semantic replay pin `a687402063d6539e524efcdcd88e897a341f6e37adb51451911cfad8d5b44509`.
+Fiserv HTML acquisition initially timed out with the custom user-agent; the ordinary
+requests-library user-agent succeeded through the same bounded byte/receipt collector.
+That identity is now used by the non-SEC official-document client; SEC contact
+handling is unchanged. Failed attempts remain recorded. Retrieval is not historical availability.
+Reviewed policy: `configs/swing_symbol_corrections.toml`, file pin
+`be63ad9460f80cf87a377b903971c5415bcfefdf5d457308a9a9028d2b5488e3`.
+Plan publication completed (PID31596/session3876), output
+`data/reports/swing_symbol_correction_plan`, authority-file pin
+`da98c09a026dd1b2a5a3357a4d9b548533fda8cb77987b49830ff817dbca5e58`.
+Collection completed (PID13928/session97518), output
+`data/raw/swing_symbol_corrected_daily`, authority-file pin
+`fb92efc1df48adc8f03d8bfff47d9c811975428b5a5903fdc03f2567c5b47970`, manifest-file hash
+`113389848f84bd46bfbd4782134edf473dc95a26b079488365763e9ac80363c1`.
+Exactly 1,231 SATS and 245 FI raw SIP observations, two successful units, zero
+failures. Collection peak 0.395691 GiB. Offline reconstruction completed
+(PID26324/session12537), output `data/reports/swing_symbol_corrected_sources.json`.
+Selection-file pin: `01153e33e8b6a161c04fde2dbea8021eeea369fef6988868c38b49f0e0c065ee`;
+semantic audit pin: `0b502c8edae9896298b63aaa49cf46b4fef1226f27565a70b2ea592343fd5a92`.
+602,709 selected observations; all 601 wrong-issuer parent ECHO rows discarded.
+No missing or invalid corrected observations. The retained parent evidence still
+has 259 missing sessions across 26 tails and 21 zero-volume observations: SBNY
+2023-03-13..24 (10), ATVI 2023-10-13 (one), INFO 2022-02-28..03-11 (10).
+These are unavailable observations, never tradable fills. No label is admitted.
+Full verification after final code: **3,191 passed, three skipped, 132 warnings**,
+1,496.93s (24m56s); peak working set **0.332546 GiB**. XML:
+`.test-tmp/symbol-correction-full.xml`. Full tracked-Python Ruff passes (552 files),
+strict mypy passes (341 source files). Focused tests covered collector/owner,
+selection, CLI, parent-plan and architecture behavior. The command-inventory mismatch
+and a stale fixture pin were corrected before the final suite. A first launcher
+exited before pytest because psutil is absent; the repository monitor was used instead,
+without adding a dependency. PID29720/session64200 exited. Both agents and all owned
+collection/test processes are closed; no Python process remained at final inspection.
+Do not reopen this checkpoint without concrete new evidence. Next is actual
+source-to-holding-specification materialization, not another correction audit.
 
 Initial-fit raw-share planning, collection and offline replay are complete in
 `d49c6a4`. One immutable plan reconstructs exact decision/holding sessions, complete
@@ -30,21 +84,15 @@ rows**. Separate offline CLI replay passed. Scope: 2019-07-09..2024-05-28 only,
 sessions, 586,414 holding sessions, 551 decision-only sessions, 586,965 stock union
 sessions, plus 16,003 benchmark sessions. All 586 retained IDs remain bound.
 
-**Known unresolved count differences:** 602,968 required versus 601,834 returned
+**Historical parent count differences:** 602,968 required versus 601,834 returned
 rows, short by 1,134 across 28 ranges. ECHO is short 630, FISV 245; 26 other ranges
-are short nine or ten. This count check does not identify exact missing dates or
-prove the returned bars belong to the intended security. Investigate date-specific
-symbol mapping and corporate actions before interpreting these as missing trading.
+are short nine or ten. The exact-date follow-up and proven wrong-issuer correction
+are recorded above; count-only collection never proved security ownership.
 No source was imputed, no additional stock excluded and no label admitted.
 
-Verification: 358 focused tests, full tracked-Python Ruff, strict mypy 338 sources;
-full suite **3,082 passed, three skipped, 134 warnings**, 1,266.62s (21m06s), peak
-0.329632 GiB. XML `.test-tmp/raw-plan-full.xml`; PID13376/session99832 exited.
-Plan peak 0.396503 GiB; collection peak 0.395340 GiB. Plan PID35088/session19227,
-collection PID20404/session76880 and offline replay PID31288/session69985 exited.
-Consolidated review fixed pin-replacement races, scope downgrade and per-unit audits.
-Review/test agents Lovelace `01a0865e-9703-7c81-b892-3e0c3b8de9ba` and Leibniz
-`01a08660-3dbc-77e1-b8b2-253bdba74f4e` are closed. No owned process remains.
+The original raw-plan checkpoint was verified in `d49c6a4`; it is covered by the
+latest full suite above. Its six implementation hashes and original plan/archive
+authority pins remain unchanged. Historical processes and review agents are closed.
 Untracked `.test-tmp/` is generated test evidence, not committed. Historical
 checkpoint narration is retained in Git; this is the only current handoff.
 
@@ -90,10 +138,12 @@ the latest full suite above covers them. Do not reopen without concrete new evid
 specifications, then materialize corrected targets.** The original Astra plan remains
 the guide. Freeze this bounded design with an independent reviewer before coding.
 
-1. Replay the saved plan/archive, compare exact session sets (not counts alone),
-   and resolve date-specific symbol/class ownership, especially ECHO/FISV and
-   holding tails after removal. `asof=unit_end` is a provider mapping parameter,
-   not independent ownership evidence. Unchanged row counts do not prove identity.
+1. Consume the corrected source-segment authority above, not the original ECHO
+   bars or any old ECHO-derived feature/label/news join. Historical SATS and FI
+   source selection is resolved; do not repeat those downloads. Resolve remaining
+   class-owned holding tails, unavailable trading and corporate-action accounting.
+   In particular, SATS's September 2019 BSS distribution still needs explicit
+   entitlements; a symbol correction is not a total-return adjustment.
 2. Reuse the 60-name action archive and official documents; extend only genuinely
    missing cohort/ETF action and successor evidence in separate pinned archives.
    Never rewrite the completed raw-price plan or replace original observations.
@@ -112,6 +162,7 @@ the materializer. After admission, rebuild news/reaction features, run the six
 candidates sequentially, evaluate against SPY and collect fresh prospective evidence.
 
 Read `swing/datasets/initial_fit_raw_share_plan.py`,
+`swing/datasets/symbol_corrections.py`, `swing/datasets/symbol_corrected_sources.py`,
 `edge_rebuild/swing_history_collection.py`, `swing/labels/holding_paths.py`,
 `swing/contracts/holding_accounting.py`, `swing/evaluation/holding_accounting.py`,
 `swing/labels/holding_accounting.py`, and `swing/datasets/corporate_action_collection.py`.

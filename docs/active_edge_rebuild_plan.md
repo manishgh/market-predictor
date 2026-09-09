@@ -245,8 +245,9 @@ XML `.test-tmp/raw-plan-full.xml`. Plan peak 0.396503 GiB; collection peak 0.395
 GiB. All owned agents/processes exited. No additional security exclusion or fit ran.
 
 Next within the accounting step: source-to-target admission and materialization.
-Counts alone find 1,134 fewer rows than 602,968 required stock/ETF sessions across
-28 ticker ranges: ECHO 630, FISV 245, the other 26 ranges nine or ten each. Resolve
+The original parent archive had 1,134 fewer rows than 602,968 required stock/ETF sessions across
+28 ticker ranges: ECHO 630, FISV 245, the other 26 ranges nine or ten each. The
+correction checkpoint below replaces the two incorrect symbol selections. Resolve
 exact session sets, dated ticker/class ownership and corporate-action effects rather
 than filling missing prices or enlarging exclusions. Collection success is not proof
 of security identity, full paths, cash availability or training-ready outcomes.
@@ -254,6 +255,49 @@ Join independently interpreted cohort/benchmark actions and genuine missing succ
 evidence into actual holding specifications and targets under `swing/datasets`.
 Preserve the initial-fit numeric boundary, existing accounting kernel and six-candidate
 research design. Do not substitute another metadata-only report for materialization.
+
+September 9 source-admission investigation found a concrete prerequisite: the
+retained EchoStar identity (`cik:0001415404`) was queried under its 2026 ECHO symbol
+for 2019-2024, when EchoStar traded as SATS and ECHO denoted Echo Global Logistics
+(`cik:0001426945`). Fiserv (`cik:0000798354`) changed from FISV to FI at the June 7,
+2023 open. Primary issuer/SEC records establish these dated symbol distinctions;
+the existing raw archive is preserved as returned provider evidence, not relabelled.
+The bounded historical-symbol correction substep before target materialization is
+completed and pushed in `2bce3d7`. Frozen scope:
+retain official documents, bind reviewed mapping facts and both parent authority
+pins, collect only SATS for 2019-07-09..2024-05-28 and FI for 2023-06-07..2024-05-28,
+then publish independently replayable correction/source references. Reuse transport
+and exact-unit collection rather than downloading the unaffected stock/ETF units.
+Do not alter the original plan's implementation/hash bindings, invent prices,
+extend numeric scope, exclude another security or admit corporate-action accounting.
+Exit: independent design/code review; exact symbol/date/source/parent scope and
+tamper tests; raw source replay; full verification; real correction data and coverage
+evidence; implementation push and two-document closure. Ownership of returned
+classes, entitlements and target materialization remain subsequent admission work.
+
+Observed result: exactly 1,231 SATS and 245 FI raw SIP daily observations acquired,
+two successful units and no failure. The source-selection authority discards all
+601 wrong-issuer parent ECHO rows and selects 602,709 observations. All 13 benchmark
+artifacts are inherited and replayed without new ETF requests. Remaining original
+gaps are 259 missing sessions across 26 holding tails and 21 zero-volume observations
+(SBNY 10, ATVI one, INFO 10). No corrected observation is missing/invalid, no extra
+security is excluded and no label/accounting/promotion eligibility is asserted.
+Plan `data/reports/swing_symbol_correction_plan`, independent authority-file pin:
+`da98c09a026dd1b2a5a3357a4d9b548533fda8cb77987b49830ff817dbca5e58`.
+Archive `data/raw/swing_symbol_corrected_daily`, independent authority-file pin:
+`fb92efc1df48adc8f03d8bfff47d9c811975428b5a5903fdc03f2567c5b47970`.
+Selection `data/reports/swing_symbol_corrected_sources.json`, independent file pin:
+`01153e33e8b6a161c04fde2dbea8021eeea369fef6988868c38b49f0e0c065ee`.
+Primary documents and reviewed policy pins are recorded in the active handoff.
+Independent design/code review is closed. Supported findings fixed request-snapshot
+pinning, CLI policy/plan matching and supplied offline archive pins. Full tracked
+Ruff (552 Python files), strict mypy (341 sources), and **3,191 passed / three skipped**
+verify the implementation; 132 warnings, 24m56s, peak 0.332546 GiB. XML:
+`.test-tmp/symbol-correction-full.xml`. All owned agents/processes are closed.
+Next: construct actual event-aware holding specifications from these selected raw
+sources and independently interpreted actions, then corrected targets. SATS's BSS
+distribution and the remaining unavailable holding tails still need accounting.
+Do not train from old ECHO-derived labels, technical features or ticker-news joins.
 
 Read required sessions directly from raw artifacts and share
 `validate_outcome_observations()` / `outcome_bar_lookup()`. Keep
