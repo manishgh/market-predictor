@@ -41,10 +41,48 @@ Remaining: independently effective-dated security/class ownership, unavailable
 trading/corporate actions and verified stock/benchmark total-return accounting.
 The diagnostic is not a complete shard outcome authority and cannot train a model.
 SEC relations copied from S&P membership intervals do not prove post-removal ownership.
-Current code verification: full Ruff and strict mypy on 331 sources pass; full suite
+Holding-observation checkpoint verification: full Ruff and strict mypy on 331 sources pass; full suite
 passed 2,625 tests, three skipped, 133 warnings in 1,329.16 seconds (22m09s), with
 0.326073 GiB peak memory. Consolidated review findings have regression tests for externally pinned
 replay and null start-time corruption. No feature admission or promotion changed.
+
+The dependent initial-fit corporate-action collection now acquired all 60 queried
+tickers, and independently pinned offline replay reproduces audit SHA
+`82dafea3055db20db9ee483800a7a22c508dbb325418b979a1cd23974a244c91` under
+`data/raw/swing_holding_corporate_actions/reports/`. Status is
+`collected_unreviewed`, not accounting or feature acceptance. Its 649 distinct
+provider records comprise 621 cash dividends, 21 mergers, five name changes and
+two spin-offs. Query coverage is process-date 2019-07-09 through 2024-05-28, not
+announcement or effective-date completeness. Collection peak was 0.237537 GiB;
+offline replay peak was 0.233650 GiB. Both workers exited.
+
+Read-only event review found 16 mergers within the affected holding windows;
+14 lack payable dates. Five other mergers are outside those windows. The five
+name changes lack effective dates. Cross-query participant matching is necessary:
+the MBC response includes the FBIN/FBHS spin-off, whereas an acquirer's historical
+purchase does not terminate the acquirer. Among 37 all-valid observation cases,
+19 have same-CUSIP dividend anchors on both sides of their windows; these do not
+prove uninterrupted class ownership. NOV/HFC CUSIP differences, MYL's VTRSV versus
+VTRS trading boundary, and a FLIR dividend after its merger need corroboration.
+VIAB, RTN, APC, ABMD, SIVB and SBNY lack a resolving in-window merger in this
+collection. Missing payment/delivery, currency/unit and unavailable-trading facts
+remain unavailable, not invented fills. No exclusion or feature-source set changed.
+
+Collector review fixes are covered by tests: independently pinned online resume,
+replayable malformed provider metadata and HTTP error bytes, future-clock rejection,
+and propagation of the global typed memory-budget exception. Integrated focused
+verification passed 213 tests; full Ruff and strict mypy on 333 sources pass.
+The complete suite passed 2,799 tests, three skipped, 133 warnings in 1,088.81
+seconds (18m08s), peak 0.326954 GiB. Test PID 35496 exited. No model was trained.
+
+The user approved replacing price-only accounting with event-aware accounting on
+September 9. This is the next implementation, not an implemented feature. It must
+separate tradable shares, available cash, unpaid proceeds and contingent rights,
+keeping unsupported dates/valuations unavailable and preserving the ten-session
+forecast horizon and 10% exclusion cap. The [ABMD completion filing](https://www.sec.gov/Archives/edgar/data/815094/000119312522311074/d353287d8k.htm)
+describes $380 cash plus a nontradeable contingent value right, capped at $35.
+That cap is not its valuation or cash available to reinvest. The current diagnostic
+ledger cannot represent this entitlement independently of terminal spendable cash.
 
 Previous membership-preflight checkpoint: 2,502 tests passed, three skipped, 132 warnings; full Ruff
 and strict mypy on 328 sources pass. Focused tests passed 133 cases. Independent

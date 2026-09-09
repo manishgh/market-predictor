@@ -1,0 +1,9 @@
+schema_version = "market_predictor.swing_corporate_action_collection"
+observation_inventory = "data/reports/swing_holding_observations/_manifest.json"
+observation_audit_sha256 = "b87e18fc2c706600c0063c606c2dd40dbba0422cfad6b6c8c1e4817242714a8a"
+process_start = "2019-07-09"
+process_end = "2024-05-28"
+expected_securities = 60
+maximum_pages_per_ticker = 10
+page_limit = 1000
+maximum_response_bytes = 4194304

@@ -112,6 +112,17 @@ Missing observations, invalid OHLCV, malformed sources and unresolved ownership 
 independent facts. This partial repair inventory must not replace a complete shard's
 `outcome_bars`; it is not an admitted holding authority or a training dataset.
 
+`sources/alpaca_corporate_actions.py` owns the exact single-ticker query and strict
+one-page raw response decoder. It preserves unknown families and incomplete action
+records for later interpretation. `swing/datasets/corporate_action_collection.py`
+binds the initial-fit observation inventory, then archives bounded provider pages
+and immutable per-ticker attempt receipts under the shared workspace lease.
+Successful tickers are not requested again; failures remain independent. Offline
+replay reconstructs counts from raw pages and checks an independently retained report
+hash. Provider process dates, action-effective/ex/payable dates and retrieval clocks
+remain distinct. No historical announcement availability, universal action coverage,
+stock ownership or settlement accounting is inferred from successful collection.
+
 `sources/official_documents.py` acquires the exact official URLs configured in
 `configs/swing_holding_source_documents.toml`. It uses the existing bounded HTTP
 transport and SEC governor, rejects automatic redirects, and atomically publishes

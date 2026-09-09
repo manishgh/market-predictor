@@ -15,8 +15,9 @@ from market_predictor.edge_rebuild.swing_history_collection import (
     SwingDailyPageSource,
     collect_swing_history_plan,
 )
-from market_predictor.heavy_jobs import serialized_heavy_job
+from market_predictor.heavy_jobs import HEAVY_JOB_BUSY_EXIT_CODE, HeavyJobBusyError, serialized_heavy_job
 from market_predictor.sources.alpaca import AlpacaNewsPage, AlpacaSource
+from market_predictor.sources.alpaca_corporate_actions import fetch_corporate_actions_page
 from market_predictor.sources.official_documents import (
     OfficialDocumentSource,
     collect_official_documents,
@@ -24,9 +25,44 @@ from market_predictor.sources.official_documents import (
     verify_official_document_collection,
 )
 from market_predictor.sources.provider_symbols import PROVIDER_ALPACA, provider_symbol
+from market_predictor.swing.datasets.corporate_action_collection import collect_holding_corporate_actions
 
 
 def register_swing_collection_commands(app: typer.Typer, console: Any) -> None:
+    @app.command("collect-swing-holding-corporate-actions")
+    def collect_swing_holding_corporate_actions_command(
+        root: Path = typer.Option(Path(".")),
+        config: Path = typer.Option(Path("configs/swing_holding_corporate_actions.toml")),
+        out_dir: Path = typer.Option(..., help="New or matching resumable corporate-action response archive."),
+        offline: bool = typer.Option(False),
+        expected_audit_sha256: str | None = typer.Option(None, help="Independent report hash, required for offline replay."),
+    ) -> None:
+        """Collect historical accounting evidence without treating retrieval as announcement time."""
+        source: AlpacaSource | None = None
+
+        def fetch(params: dict[str, Any], maximum_bytes: int) -> Any:
+            nonlocal source
+            if source is None:
+                source = AlpacaSource(get_settings())
+            return fetch_corporate_actions_page(source, ticker=params["symbols"],
+                start=date.fromisoformat(params["start"]), end=date.fromisoformat(params["end"]),
+                page_token=params.get("page_token"), limit=params["limit"], maximum_body_bytes=maximum_bytes)
+
+        try:
+            result = collect_holding_corporate_actions(root, config, out_dir,
+                fetch=None if offline else fetch, expected_audit_sha256=expected_audit_sha256)
+        except HeavyJobBusyError as exc:
+            typer.echo(str(exc), err=True)
+            raise typer.Exit(code=HEAVY_JOB_BUSY_EXIT_CODE) from exc
+        finally:
+            if source is not None:
+                source.client.session.close()
+        console.print({key: result[key] for key in (
+            "status", "requested_tickers", "acquired_tickers", "action_counts", "audit_sha256", "accounting_eligible",
+        )})
+        if result["status"] != "collected_unreviewed":
+            raise typer.Exit(code=2)
+
     @app.command("collect-swing-holding-source-documents")
     def collect_swing_holding_source_documents_command(
         inventory: Path = typer.Option(Path("configs/swing_holding_source_documents.toml")),

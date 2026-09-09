@@ -154,6 +154,7 @@ class HttpClient:
         pause: float = 1.0,
         maximum_body_bytes: int = _DEFAULT_MAXIMUM_BODY_BYTES,
         allow_redirects: bool = True,
+        raise_for_status: bool = True,
     ) -> HttpByteResponse:
         if maximum_body_bytes < 1:
             raise ValueError("maximum_body_bytes must be positive")
@@ -181,7 +182,8 @@ class HttpClient:
                         )
                     )
                     continue
-                response.raise_for_status()
+                if raise_for_status:
+                    response.raise_for_status()
                 body = _read_bounded_http_entity(
                     response,
                     maximum_body_bytes=maximum_body_bytes,

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from market_predictor.core.errors import DataReadinessError
+from market_predictor.core.errors import MemoryBudgetError
 from market_predictor.process_memory import (
     process_memory_snapshot as process_memory_snapshot,
 )
@@ -37,12 +37,12 @@ def assert_memory_budget(
         raise ValueError("memory budget and headroom are invalid")
     snapshot = process_memory_snapshot()
     if snapshot is None:
-        raise DataReadinessError(
+        raise MemoryBudgetError(
             f"memory guard stopped {stage}: process memory accounting is unavailable"
         )
     threshold = int((hard_budget_gib - headroom_gib) * 1024**3)
     if snapshot[0] > threshold:
-        raise DataReadinessError(
+        raise MemoryBudgetError(
             f"memory guard stopped {stage}: RSS {_gib(snapshot[0]):.2f} GiB exceeds "
             f"the {_gib(threshold):.2f} GiB safety threshold for the {hard_budget_gib:.2f} GiB hard budget"
         )
@@ -58,12 +58,12 @@ def assert_peak_memory_budget(
         raise ValueError("memory budget and headroom are invalid")
     snapshot = process_memory_snapshot()
     if snapshot is None:
-        raise DataReadinessError(
+        raise MemoryBudgetError(
             f"peak memory guard stopped {stage}: process memory accounting is unavailable"
         )
     threshold = int((hard_budget_gib - headroom_gib) * 1024**3)
     if snapshot[1] > threshold:
-        raise DataReadinessError(
+        raise MemoryBudgetError(
             f"peak memory guard stopped {stage}: peak RSS {_gib(snapshot[1]):.2f} GiB exceeds "
             f"the {_gib(threshold):.2f} GiB safety threshold for the {hard_budget_gib:.2f} GiB hard budget"
         )

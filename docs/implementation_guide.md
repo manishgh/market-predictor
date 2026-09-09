@@ -103,6 +103,31 @@ command continues other cases and exits 2 when any source error exists. Replay r
 manifest, and verifies source, implementation and output hashes. Do not pass these partial diagnostics as
 the materializer's complete outcome source.
 
+### Holding Corporate-Action Evidence
+
+```powershell
+.\.venv\Scripts\market-predictor-collect.exe collect-swing-holding-corporate-actions --root . --out-dir data/raw/swing_holding_corporate_actions
+```
+
+`configs/swing_holding_corporate_actions.toml` binds the observation inventory and
+freezes the provider process-date range, page limit, response byte cap and expected
+security count. The collector requests all action families with `data_quality=all`;
+incomplete fields remain incomplete. Credentials come from the existing Alpaca
+configuration and are not written to evidence. Each ticker has immutable attempts
+with raw `.bin` bodies, response metadata and a hashed `receipt.json`. Collection
+summaries are retained under `reports/` using their audit hash as the filename.
+The returned hash must be retained independently for both online resume and offline
+verification; missing or altered prior attempts are rejected before new requests:
+
+```powershell
+.\.venv\Scripts\market-predictor-collect.exe collect-swing-holding-corporate-actions --root . --out-dir data/raw/swing_holding_corporate_actions --offline --expected-audit-sha256 <original-report-hash>
+```
+
+Complete pagination proves only what this provider returned for this query. It does
+not prove the absence of other actions, historical announcement availability or
+settlement eligibility. These response archives require separate ownership and
+economic interpretation before they can support corrected training labels.
+
 ### Estimator And Overlay Sources
 
 - Alpaca SIP/all bars: estimator market data.

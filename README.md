@@ -96,6 +96,15 @@ hash-verified promoted bundle.
   209 missing and 21 invalid. Ownership is independently unresolved for 574
   sessions; these counts overlap. The 23 securities with missing/invalid bars
   are not automatically excluded. No repaired labels or model result is claimed.
+- `market-predictor-collect collect-swing-holding-corporate-actions --root .
+  --out-dir data/raw/swing_holding_corporate_actions` collects all Alpaca action
+  families for the pinned initial-fit ticker inventory. Raw response bytes and
+  pagination receipts are retained; successful tickers resume without refetching.
+  Resume requires `--expected-audit-sha256 <retained-report-hash>`; add `--offline`
+  to verify without fetching. The pin protects prior successes and failure history.
+  The process-date query is not an announcement-time or effective-date filter.
+  Empty responses, incomplete fields and failures do not prove that no action
+  occurred, and collection does not authorize ownership or return accounting.
 - Swing labels now accept separate security-identified outcome bars, retain holding
   windows after index removal, and use exact XNYS sessions and daily timestamps.
   Missing sessions and zero-volume records cannot produce invented fills. This

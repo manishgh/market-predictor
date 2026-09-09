@@ -16,6 +16,7 @@
     "collect-market-context",
     "collect-sp500-official-source-archive",
     "collect-swing",
+    "collect-swing-holding-corporate-actions",
     "collect-swing-holding-source-documents",
     "download-finviz",
     "download-finviz-screeners",

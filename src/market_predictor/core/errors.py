@@ -7,6 +7,9 @@ class MarketPredictorError(Exception):
 class DataReadinessError(MarketPredictorError):
     """Input data is incomplete, stale, or unsuitable for the requested operation."""
 
+class MemoryBudgetError(DataReadinessError):
+    """A process-wide memory guard failed; never downgrade to a per-source failure."""
+
 class SchemaMismatchError(MarketPredictorError):
     """A dataset, feature, model, or API schema is incompatible."""
 
