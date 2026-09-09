@@ -81,6 +81,28 @@ Exit code 2 reports uncovered ownership; terminal immature rows are separate.
 Covered ownership does not prove that bars exist or that prices represent verified
 total returns. No numeric held-out outcomes are inspected, and no model is fitted.
 
+### Initial-Fit Holding Observations
+
+```powershell
+.\.venv\Scripts\market-predictor-research.exe audit-swing-holding-observations --root . --output-directory data/reports/swing_holding_observations
+```
+
+`configs/swing_holding_observations.toml` pins the preceding report and the expected
+566 initial-fit decisions across 60 securities. All ten required future sessions
+must end by the report's initial-fit cutoff; numeric validation/test rows are not
+returned. Existing raw data is reused without downloads or edits. The output directory
+contains `decisions.parquet`, one required-session observation file per security/ticker,
+and `_manifest.json`. Sessions are deduplicated within each security/ticker, not across
+decisions; the manifest names the counting unit explicitly.
+
+`observation_valid` means OHLCV and exchange clocks passed, not ownership or verified
+total-return accounting. `ownership_unresolved` keeps observed `security_id` null.
+Malformed source data is `source_error`, never a missing or zero-price fill. The
+command continues other cases and exits 2 when any source error exists. Replay requires
+`--expected-audit-sha256 <original-run-audit-hash>` retained independently of the output
+manifest, and verifies source, implementation and output hashes. Do not pass these partial diagnostics as
+the materializer's complete outcome source.
+
 ### Estimator And Overlay Sources
 
 - Alpaca SIP/all bars: estimator market data.

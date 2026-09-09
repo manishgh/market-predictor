@@ -33,6 +33,58 @@ def _continuous_owner_intervals(records: pd.DataFrame) -> list[tuple[str, pd.Tim
     return merged
 
 
+def membership_session_coverage(
+    memberships: pd.DataFrame, *, sessions: tuple[date, ...], security_ids: tuple[str, ...],
+) -> pd.DataFrame:
+    """Shared full-session ownership coverage; callers retain all competing owners."""
+    required = {"ticker", "security_id", "effective_from_utc", "effective_to_utc"}
+    if (not sessions or tuple(sorted(set(sessions))) != sessions
+            or sessions != holding_calendar(sessions[0], sessions[-1]) or not security_ids
+            or len(set(security_ids)) != len(security_ids) or not required.issubset(memberships.columns)
+            or not memberships.columns.is_unique
+            or any(not isinstance(value, str) or not value.strip() for value in security_ids)
+            or any(not memberships[name].map(lambda value: isinstance(value, str) and bool(value.strip())).all()
+                   for name in ("ticker", "security_id"))):
+        raise DataReadinessError("holding membership coverage requires explicit identities and an exact calendar")
+    schedule = xcals.get_calendar("XNYS").schedule.reindex(pd.DatetimeIndex(sessions))
+    opens, closes = schedule["open"], schedule["close"]
+    intervals = memberships.copy()
+    for name in ("effective_from_utc", "effective_to_utc"):
+        non_null = intervals[name].dropna()
+        if not all(pd.Timestamp(value).tzinfo is not None for value in non_null):
+            raise DataReadinessError("holding identity intervals require timezone-aware timestamps")
+        intervals[name] = pd.to_datetime(intervals[name], utc=True)
+    ended = intervals.loc[intervals["effective_to_utc"].notna()]
+    if intervals["effective_from_utc"].isna().any() or (not ended.empty and
+            ended["effective_to_utc"].le(ended["effective_from_utc"]).any()):
+        raise DataReadinessError("holding identity interval bounds are invalid")
+
+    # Compute calendar coverage per ticker once. Competing identities remain visible.
+    tickers = set(intervals.loc[intervals.security_id.isin(security_ids), "ticker"])
+    coverage: dict[str, NDArray[np.bool_]] = {
+        identity: np.zeros(len(sessions), dtype=bool) for identity in security_ids
+    }
+    for ticker in sorted(tickers):
+        records = intervals.loc[intervals.ticker.eq(ticker)]
+        masks = []
+        overlaps = np.zeros(len(sessions), dtype=np.int64)
+        for identity, start, end in _continuous_owner_intervals(records):
+            mask = opens.ge(start)
+            overlap = closes.ge(start)
+            if end is not None:
+                mask &= closes.lt(end)
+                overlap &= opens.lt(end)
+            overlaps += overlap.to_numpy(dtype=np.int64)
+            masks.append((identity, mask.to_numpy(dtype=bool)))
+        for identity, mask in masks:
+            if identity in coverage:
+                coverage[identity] |= mask & (overlaps == 1)
+    return pd.concat([
+        pd.DataFrame({"security_id": identity, "session_date_et": sessions, "membership_covered": mask})
+        for identity, mask in coverage.items()
+    ], ignore_index=True).set_index(["security_id", "session_date_et"])
+
+
 def inspect_holding_membership_windows(
     decisions: pd.DataFrame, memberships: pd.DataFrame, *, sessions: tuple[date, ...],
     horizon_sessions: int, initial_fit_end: date,
@@ -64,44 +116,7 @@ def inspect_holding_membership_windows(
     for column in ("security_id", "sector", "primary_benchmark"):
         if not joined[column].reindex(expected.index).eq(expected[column]).all():
             raise DataReadinessError(f"holding identity parent decision {column} differs from membership")
-
-    schedule = xcals.get_calendar("XNYS").schedule.reindex(pd.DatetimeIndex(sessions))
-    opens, closes = schedule["open"], schedule["close"]
-    intervals = memberships.copy()
-    for name in ("effective_from_utc", "effective_to_utc"):
-        non_null = intervals[name].dropna()
-        if not all(pd.Timestamp(value).tzinfo is not None for value in non_null):
-            raise DataReadinessError("holding identity intervals require timezone-aware timestamps")
-        intervals[name] = pd.to_datetime(intervals[name], utc=True)
-    ended = intervals.loc[intervals["effective_to_utc"].notna()]
-    if intervals["effective_from_utc"].isna().any() or (not ended.empty and
-            ended["effective_to_utc"].le(ended["effective_from_utc"]).any()):
-        raise DataReadinessError("holding identity interval bounds are invalid")
-
-    # Compute calendar coverage per ticker once. Competing identities remain visible.
-    tickers = set(intervals.loc[intervals.security_id.isin(rows.security_id), "ticker"])
-    coverage: dict[str, NDArray[np.bool_]] = {
-        str(identity): np.zeros(len(sessions), dtype=bool) for identity in rows.security_id.unique()
-    }
-    for ticker in sorted(tickers):
-        records = intervals.loc[intervals.ticker.eq(ticker)]
-        masks = []
-        overlaps = np.zeros(len(sessions), dtype=np.int64)
-        for identity, start, end in _continuous_owner_intervals(records):
-            mask = opens.ge(start)
-            overlap = closes.ge(start)
-            if end is not None:
-                mask &= closes.lt(end)
-                overlap &= opens.lt(end)
-            overlaps += overlap.to_numpy(dtype=np.int64)
-            masks.append((identity, mask.to_numpy(dtype=bool)))
-        for identity, mask in masks:
-            if identity in coverage:
-                coverage[identity] |= mask & (overlaps == 1)
-    lookup = pd.concat([
-        pd.DataFrame({"security_id": identity, "session_date_et": sessions, "membership_covered": mask})
-        for identity, mask in coverage.items()
-    ], ignore_index=True).set_index(["security_id", "session_date_et"])
+    lookup = membership_session_coverage(memberships, sessions=sessions, security_ids=tuple(rows.security_id.unique()))
     ordinal = {day: index for index, day in enumerate(sessions)}
     starts = rows.session_date_et.map(ordinal)
     if starts.isna().any():

@@ -100,6 +100,18 @@ bound to the approved cohort and all input hashes. It separates initial-fit and
 full-history coverage, without reading numeric features or returns. This report
 cannot admit bar coverage, total-return accounting, model training or promotion.
 
+`swing/datasets/holding_observation_requirements.py` reproduces the frozen initial-fit
+flagged decisions from identity-only parent projections before any numeric read.
+`holding_observations.py` projects raw SIP/all daily bars through an exact required-date
+Arrow predicate and the shared outcome-clock/price validator. It uses the shared
+membership coverage implementation, retaining excluded competing owners. Requested
+identity is metadata; unresolved observations have null observed `security_id`.
+`holding_observation_inventory.py` runs the bounded, serialized diagnostic and publishes
+decisions, observations and a source/implementation/output-hash-bound manifest atomically.
+Missing observations, invalid OHLCV, malformed sources and unresolved ownership remain
+independent facts. This partial repair inventory must not replace a complete shard's
+`outcome_bars`; it is not an admitted holding authority or a training dataset.
+
 `sources/official_documents.py` acquires the exact official URLs configured in
 `configs/swing_holding_source_documents.toml`. It uses the existing bounded HTTP
 transport and SEC governor, rejects automatic redirects, and atomically publishes

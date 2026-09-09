@@ -30,6 +30,7 @@ from market_predictor.research.swing_transfer_replay import run_swing_transfer_r
 from market_predictor.sentiment import FinbertScorer
 from market_predictor.sources.alpaca import AlpacaBarsPage, AlpacaSource
 from market_predictor.swing.catalyst_lineage import build_catalyst_lineage
+from market_predictor.swing.datasets.holding_observation_inventory import run_holding_observation_inventory
 from market_predictor.swing.evaluation.research_evidence import audit_swing_research_evidence
 from market_predictor.swing.security_label_artifact import (
     build_security_label_artifact,
@@ -38,6 +39,28 @@ from market_predictor.swing.sentiment_history import score_alpaca_news_history
 
 
 def register_swing_research_commands(app: typer.Typer, console: Console) -> None:
+    @app.command("audit-swing-holding-observations")
+    def audit_swing_holding_observations_command(
+        root: Path = typer.Option(Path(".")),
+        config: Path = typer.Option(Path("configs/swing_holding_observations.toml")),
+        output_directory: Path = typer.Option(..., help="New immutable initial-fit raw observation diagnostic directory."),
+        expected_audit_sha256: str | None = typer.Option(None, help="Independently retained audit hash, required for replay."),
+    ) -> None:
+        """Separate raw bar presence/validity from unresolved holding ownership."""
+        try:
+            report = run_holding_observation_inventory(
+                root, config, output_directory, expected_audit_sha256=expected_audit_sha256,
+            )
+        except HeavyJobBusyError as exc:
+            typer.echo(str(exc), err=True)
+            raise typer.Exit(code=HEAVY_JOB_BUSY_EXIT_CODE) from exc
+        typer.echo(json.dumps({key: report[key] for key in (
+            "status", "decisions", "securities", "required_security_ticker_sessions", "counts",
+            "materialization_eligible", "accounting_eligible", "audit_sha256",
+        )}, sort_keys=True))
+        if report["status"] == "diagnostic_complete_with_source_errors":
+            raise typer.Exit(code=2)
+
     @app.command("audit-swing-holding-identity")
     def audit_swing_holding_identity_command(
         root: Path = typer.Option(Path(".")),

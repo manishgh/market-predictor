@@ -81,6 +81,21 @@ hash-verified promoted bundle.
   The current report covers 842,446 retained decisions: 836,638 covered mature
   windows, 947 requiring additional ownership evidence, and 4,861 terminal immature
   decisions. These counts do not authorize additional stock exclusions or training.
+- `market-predictor-research audit-swing-holding-observations --root .
+  --output-directory data/reports/swing_holding_observations` reuses the raw SIP
+  archive for the frozen initial-fit holding requirements. It reports bar presence,
+  price validity and ownership separately; a valid bar never proves the requested
+  security owns it. Numeric reads are limited to exact required sessions ending
+  within the initial-fit period. Outputs are immutable diagnostics, not an outcome
+  source for training. Replay requires `--expected-audit-sha256` with the independently
+  retained hash printed by the original run; it verifies the report and source/output hashes.
+  Exit code 2 indicates corrupt source observations; ordinary missing observations
+  and unresolved ownership are explicit report fields, not silent passes.
+  The initial-fit inventory reproduced 566 decisions across 60 securities:
+  1,106 distinct required security/ticker sessions, 876 valid observations,
+  209 missing and 21 invalid. Ownership is independently unresolved for 574
+  sessions; these counts overlap. The 23 securities with missing/invalid bars
+  are not automatically excluded. No repaired labels or model result is claimed.
 - Swing labels now accept separate security-identified outcome bars, retain holding
   windows after index removal, and use exact XNYS sessions and daily timestamps.
   Missing sessions and zero-volume records cannot produce invented fills. This

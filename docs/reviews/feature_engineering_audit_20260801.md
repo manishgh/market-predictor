@@ -1,6 +1,6 @@
 # Current Feature Engineering Audit
 
-Last updated: 2026-09-08
+Last updated: 2026-09-09
 
 ## Current Long-Only Swing Campaign
 
@@ -27,11 +27,26 @@ missing prices, delisting, losing outcomes or feature acceptance. The uncovered
 share is 0.1131% of mature decisions. No additional securities were excluded.
 Report: `data/reports/swing_research_cohort/holding_identity_preflight.json`, SHA
 `8f8cdd60ca2f9c1372ceda20d04b7f90eefbfb2336a7f282f30aa97b8c7e723b`.
-Required next data work: independent holding observations from existing raw SIP
-history, explicit post-removal security/class ownership, observation validation and
-the separate stock/benchmark total-return evidence. SEC relations copied from S&P
-membership intervals do not resolve post-removal ownership by themselves.
-Checkpoint verification: 2,502 tests passed, three skipped, 132 warnings; full Ruff
+The initial-fit raw-observation inventory now reproduces those 566 decisions / 60
+securities using identity-only parent projections and exact required-date Arrow scans.
+Report: `data/reports/swing_holding_observations/_manifest.json`; independently retained
+audit SHA `b87e18fc2c706600c0063c606c2dd40dbba0422cfad6b6c8c1e4817242714a8a`.
+Of 1,106 distinct security/ticker sessions, 876 observations are valid, 209 missing
+and 21 invalid. Ownership is unresolved for 574 sessions, independently of validity.
+Missing/invalid observations affect 23 IDs; 37 have valid observations for all
+requirements. These are not new exclusion decisions. Numeric held-out rows were
+not returned. The original collection JSON hash format is verified without rewriting
+the source. Immutable replay passed; peak inventory memory was 0.342045 GiB.
+Remaining: independently effective-dated security/class ownership, unavailable
+trading/corporate actions and verified stock/benchmark total-return accounting.
+The diagnostic is not a complete shard outcome authority and cannot train a model.
+SEC relations copied from S&P membership intervals do not prove post-removal ownership.
+Current code verification: full Ruff and strict mypy on 331 sources pass; full suite
+passed 2,625 tests, three skipped, 133 warnings in 1,329.16 seconds (22m09s), with
+0.326073 GiB peak memory. Consolidated review findings have regression tests for externally pinned
+replay and null start-time corruption. No feature admission or promotion changed.
+
+Previous membership-preflight checkpoint: 2,502 tests passed, three skipped, 132 warnings; full Ruff
 and strict mypy on 328 sources pass. Focused tests passed 133 cases. Independent
 review/test findings were fixed for partial-session competing ownership,
 open-ended interval checks, same-owner metadata changes and duplicate decision IDs
