@@ -2,7 +2,7 @@
 
 Status: active
 
-Last updated: 2026-09-09
+Last updated: 2026-09-10
 
 Repository: `C:\project\market-predictor`
 
@@ -40,11 +40,18 @@ outside this repository.
 
 2026-09-09 user direction: continue through source evidence, rebuilt stock/benchmark
 outcomes and verified news/reaction features without waiting at each Git checkpoint.
-Current step: **source admission and missing completion evidence (in_progress)**.
+Current step: **source admission and corrected outcomes (in_progress)**.
+Ordinary-sale research simulation is closed in `3a864e5` (pushed). The one canonical
+holding kernel is shared by explicit simulation, labels and funded accounting.
+140 focused tests pass; repository-wide Ruff and strict mypy (347 sources) pass.
+Full suite: 3,260 passed, three skipped, 133 warnings in 1,536.28 seconds; peak
+test-process memory 0.331982 GiB. No code changed after the suite started. The bounded
+review's three findings are fixed and verified; both agents and all owned Python
+processes are closed. No full-cohort labels, features or models were rebuilt.
 Source-collection subcheckpoint `2df0183` is pushed: 21 completion documents across
-three immutable archives pass offline replay. The bounded independent review found
-no P1/P2 issue; 35 focused collector/continuity tests passed. No Python code changed;
-the prior full-suite result remains historical, not rerun verification for this work.
+three immutable archives pass offline replay. That source checkpoint's bounded
+independent review found no P1/P2 issue; 35 collector/continuity tests passed. Its
+source-only verification is distinct from the simulation suite recorded above.
 The subsequent outcomes and feature checkpoints remain pending, not completed by
 diagnostic compilation. Keep the 586 retained identities, existing initial-fit
 numeric boundary and 10% cumulative exclusion ceiling unchanged.
@@ -60,9 +67,22 @@ are not overwritten. Verify inventory schemas and offline byte replay before clo
 Independent feasibility review found a consumer-policy conflict: hypothetical sales
 cannot have observed historical broker receipts. Actual capture timestamps also do
 not establish when retrospective labels were historically available. A user decision
-is pending on a separately identified research-only simulation/maturation policy;
-the current evidence-only accounting contract is unchanged until approved. Source
-collection and label-independent news work may proceed while that decision is pending.
+was resolved by the user's September 9 approval: use real historical inputs and
+explicitly model hypothetical fills, costs and proceeds reuse. Genuinely unknown
+corporate payouts and contingent rights remain unavailable.
+
+Frozen implementation scope: add an explicit, pinned research simulation context
+around the existing lot kernel. Only canonical ordinary-sale executions generate
+dollar-proceeds marks and modeled payment/reuse at the next exact XNYS open. Reject
+conflicting supplied sale payments/marks, invalid session execution times and policy
+tampering. Do not infer a fill from a closing mark, add corporate face-value marks,
+or change costs. Generated IDs and policy references distinguish assumptions from
+observed facts. Preserve historical availability; report any retrospective research
+maturation clock separately. Connect the same simulator to labels and funded
+accounting with explicit opt-in; all production/source-admission gates remain intact.
+Exit tests: partial sales, weekends/holidays, final-horizon receivables, funding at
+next open but never same-session open, no double costs/payments, unknown corporate
+claims unchanged, label/ledger parity, immutable replay and policy mutation rejection.
 
 The feature inventory additionally requires corrected SATS/EchoStar and FISV/FI
 news query windows. Existing relationship features already belong to the 120-column

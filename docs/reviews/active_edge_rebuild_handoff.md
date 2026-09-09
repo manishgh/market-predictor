@@ -1,20 +1,27 @@
 # Active Edge Rebuild Handoff
 
 Status: active
-Last updated: 2026-09-09
+Last updated: 2026-09-10
 Repository: `C:\project\market-predictor`
 Branch: `er-intraday-refactoring`
-Last completed implementation commit: `07d37e6` (pushed).
+Last completed implementation commit: `3a864e5` (pushed).
 Last completed source-collection checkpoint: `2df0183` (pushed).
 
 ## Current State
 
-### Current Continuation: Evidence Collected, Policy Decision Pending
+### Current Continuation: Corrected Outcomes After Research Simulation
 
 User requested source evidence, outcomes and news/reaction features as one continuous
 delivery, with no pauses for another "next" at Git boundaries. That delivery remains
-incomplete. In this continuation no Python implementation, price observation,
-label, feature row, research contract or model was changed.
+incomplete. The user has now approved real historical inputs with explicitly modeled
+hypothetical fills, costs and proceeds reuse, while keeping unknown corporate payouts
+unavailable. The former approval blocker is resolved; do not ask for it again.
+
+Implementation is closed in `swing/contracts/trade_simulation.py` and
+`swing/evaluation/trade_simulation.py`, with `configs/swing_trade_simulation.toml`.
+The existing holding types/kernel and label/funding/accounting consumers gain explicit
+simulation provenance and opt-in context (`3a864e5`). No raw observation, full-cohort label,
+feature row or model has been rebuilt yet. Source admission still needs real facts.
 
 Collected 21 missing SEC completion documents through the unchanged official-byte
 collector; all 21 independently replay offline. New inventories and matching
@@ -35,14 +42,14 @@ not the April 4 trading suspension. SATS BSS due-bill/regular-way rights, CBS ve
 VIAB ratios, DISCA versus AT&T Spinco ratios, and acquisition-filer versus affected
 issuer distinctions must survive source interpretation.
 
-**Decision requested, not yet approved:** permit explicitly research-only hypothetical
-sale proceeds reuse next session; fixed contractual cash-claim valuation without
-inventing spendability; unknown contingent rights stay unvalued; separately flagged
-retrospective label maturation after the holding window. This is not settled-cash or
-historical first-observed evidence and cannot authorize live promotion. The frozen
-contract currently disallows these interpretations. Do not infer approval from the
-instruction to finish the work. Full-cohort/ETF action coverage, some class/delivery
-facts and bank-halt valuations also remain unresolved.
+**Approved implementation scope:** ordinary-sale proceeds are valued at one USD per
+executed dollar and reusable at next exact XNYS open, explicitly as research
+assumptions rather than settled-cash evidence. Canonical fills and prepaid costs are
+preserved. Unknown corporate cash/contingent values are not synthesized. Retrospective
+label maturity stays separate from observed availability and production eligibility.
+The typed simulator also exposes next-open cash/units after the tenth close without
+an eleventh-session price or extra investment return. Full-cohort/ETF action coverage,
+some class/delivery facts and bank-halt valuations also remain unresolved.
 
 Independent news inventory found absent direct SATS initial-fit requests and
 unproven pre-transition FISV coverage. Existing early/later Alpaca and SEC archives
@@ -51,19 +58,23 @@ Do not reuse ECHO aggregates as EchoStar news. All nine current relationship inp
 already occur in the 120-column baseline; the second profile needs distinct frozen
 additional columns. No feature rebuild ran.
 
-Verification so far: 35 collector/continuity tests passed in 5.31s, all three new
-inventories replayed offline, and `git diff --check` passed. No full-suite or new
-model run is claimed for this config/source-only continuation. The first collection
-invocation used the research executable, which has no such command; it made no
-request. Correct executable: `market-predictor-collect`.
-All five research/review agents are closed. The final source reviewer
-`01a08827-1919-7ae0-ae14-190aef745410` reproduced all three replay pins and the five
-high-risk interpretations with no P1/P2 findings. Source checkpoint `2df0183` is
-pushed. All collection and focused-test processes have exited.
+Current implementation verification: 140 focused tests passed in 10.17s;
+repository-wide Ruff and strict mypy on 347 sources passed. Full suite: **3,260
+passed, three skipped, 133 warnings**, 1,536.28s, peak **0.331982 GiB**. XML:
+`.test-tmp/trade-simulation-full.xml`; PID35328/session82286 exited successfully.
+No code changed after suite start. `git diff --check` passed. The final process
+inspection found no Python process.
+
+Reviewer Confucius (`01a0882d-c043-73f3-92c8-dcec080456e6`) closed all three supported
+findings: assumed-payment provenance through release, consumed-only maturity clocks,
+and retained per-lot replay/settlement metadata. Test worker Nietzsche
+(`01a08833-6475-70e0-aaf4-d4bed4e2c3af`) and Confucius are both closed.
+Source checkpoint `2df0183` previously passed 35 collector/continuity tests and offline
+replay of all three archives; its reviewers and collectors are also closed.
 
 ### Previously Closed Implementation
 
-Current bounded checkpoint is completed: fixed-horizon source compilation, not
+Earlier bounded checkpoint is completed: fixed-horizon source compilation, not
 managed exits or source admission (`07d37e6`). New owners are
 `swing/contracts/holding_materialization.py`, `swing/datasets/holding_raw_sources.py`,
 `swing/datasets/holding_materialization.py` and
@@ -226,10 +237,11 @@ the latest full suite above covers them. Do not reopen without concrete new evid
 **Complete source admission and corrected stock/benchmark outcomes.** Reuse the
 completed fixed-horizon compiler, following the original Astra plan. Freeze the next
 bounded source-fact/managed-outcome scope with an independent reviewer before coding.
-First record the user's response to the research-only cash/valuation/maturation
-question above. Do not start another generic audit or re-collect the 21 verified
-completion documents. This missing policy decision is not approval to exclude more
-securities or declare unknown corporate facts resolved.
+The approved ordinary-sale simulation is implemented and verified in `3a864e5`.
+Use its explicit context for source-to-outcome integration. Do not re-ask approval,
+start another generic audit or re-collect the 21 verified
+completion documents. Simulation approval does not permit excluding more
+securities or declaring unknown corporate facts resolved.
 
 1. Consume the corrected source-segment authority above, not the original ECHO
    bars or any old ECHO-derived feature/label/news join. Historical SATS and FI
