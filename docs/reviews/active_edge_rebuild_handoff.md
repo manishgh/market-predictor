@@ -4,10 +4,60 @@ Status: active
 Last updated: 2026-09-10
 Repository: `C:\project\market-predictor`
 Branch: `er-intraday-refactoring`
-Last completed implementation commit: `3a864e5` (pushed).
-Last completed source-collection checkpoint: `2df0183` (pushed).
+Last completed implementation commit: `795a228` (pushed).
+Last completed source-collection checkpoint: `795a228` (pushed).
 
 ## Current State
+
+### Closed Issuer Query Correction And Laptop Memory Control
+
+September 10: tracked state started clean at `3c5fe27`. Bounded source work `795a228`
+implements explicit issuer query intervals, without fabricating index membership,
+and cooperative laptop-memory checks for news collection. The exact scope is
+`configs/swing_issuer_news_corrections.json` (SHA256
+`2e0cd0279dbeb1ac5a3c4224bdd4a8de78c0c5b603d08f14a0da2f86f1c1e3ed`):
+58 SATS chunks and 47 pre-transfer FISV chunks at 31 days, one worker. Source pins
+replay locally. Real collection and offline integrity audit are complete. No feature
+rebuild or training ran.
+
+Implemented code owners: `core/system_memory.py`,
+`catalysts/issuer_events/news_query_scope.py`, existing Alpaca collector/auditor and
+`commands/swing_collection.py`. Shared `resources.py` and hash-bound original raw
+authorities are untouched. The scope is not article attribution or issuer admission.
+System checks require at least 2 GiB physical RAM available and less than 85% used;
+process RSS retains the existing 3.25 GiB safety threshold. No unrelated apps are
+terminated. These checks do not constitute a hard allocation or whole-laptop cap.
+
+32 focused tests and 227 dependency/sentiment tests passed. Repository-wide Ruff
+and strict mypy on 349 sources passed. Reviewer Noether
+`01a08a76-5429-7121-bb3c-feb955f16434` closed one supported P2: validate request
+identity and integer chunk-size bounds before reconstruction to prevent zero-step
+loops. Worker Ohm `01a08a7d-69f0-7ae3-8697-ae3c412f95e8` supplied query tests.
+Both agents are closed. Full suite passed: **3,289 passed, three skipped, 133
+warnings**, 1,274.91s; peak 0.331150 GiB. PID14204/session23512 exited; XML
+`.test-tmp/news-query-full.xml`. No code changed after suite start.
+
+Collection PID10768/session57884 completed all 105 chunks: 92 observed, 13 empty,
+no failed requests. **661 unique news events**, FISV 456 and SATS 205. Collection
+peak 0.245560 GiB; sequential offline audit session37092 peak 0.244118 GiB. All
+105 saved pages and scope/source pins passed replay. No old raw archive changed.
+Retained archive `data/raw/swing_issuer_news_corrections`, manifest file SHA256
+`4da07ce57bf864845b79b0043816e49c104dc047eb81a30372ad952519f855d8`.
+Audit `data/reports/swing_issuer_news_corrections_audit.json`, file SHA256
+`b4875e7cbf3334a346fff3047b5202c0c21a0801c473e01fcd9d7110bd202ecb`.
+The 105-row companion CSV has SHA256
+`03a612d136cfd58d8cb35efb640f91d368a683eee9018113a84ddfbbb6015851`.
+
+The inherited auditor's empty-chunk heuristic flags both issuers as coverage
+blindspots and suggests excluding them. This is diagnostic wording, not approval
+to alter the frozen cohort: no exclusions were made. Neither complete pagination
+nor an empty response establishes complete issuer-news history. Raw provider tags
+do not prove relevance or reconcile CIK/CUSIP identities. Attribution and feature
+joins remain pending; never reuse the historical ECHO issuer aggregates.
+System memory was sampled each minute during tests, around 65-67% used and above
+5 GiB available. No owned Python process remained after collection/audit. System
+guards are wired to the news collection CLI, not a blanket guarantee for all tools;
+continue checking headroom before other heavy commands and run those sequentially.
 
 ### Current Continuation: Corrected Outcomes After Research Simulation
 
@@ -51,8 +101,8 @@ The typed simulator also exposes next-open cash/units after the tenth close with
 an eleventh-session price or extra investment return. Full-cohort/ETF action coverage,
 some class/delivery facts and bank-halt valuations also remain unresolved.
 
-Independent news inventory found absent direct SATS initial-fit requests and
-unproven pre-transition FISV coverage. Existing early/later Alpaca and SEC archives
+The earlier news inventory found absent direct SATS and pre-transition FISV requests,
+now collected in `795a228` above. Existing early/later Alpaca and SEC archives
 remain reusable; source families and historical publication proxies are unchanged.
 Do not reuse ECHO aggregates as EchoStar news. All nine current relationship inputs
 already occur in the 120-column baseline; the second profile needs distinct frozen

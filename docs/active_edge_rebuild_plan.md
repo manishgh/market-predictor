@@ -41,6 +41,27 @@ outside this repository.
 2026-09-09 user direction: continue through source evidence, rebuilt stock/benchmark
 outcomes and verified news/reaction features without waiting at each Git checkpoint.
 Current step: **source admission and corrected outcomes (in_progress)**.
+Closed source prerequisite `795a228` (pushed): explicit dated issuer-news query scopes and
+collection-time laptop-memory checks. Existing index-membership intervals must not
+be fabricated to request earlier issuer news. Reuse the same Alpaca page collector,
+with a mutually exclusive hash-bound query-scope input; retain original archives.
+Collect SATS initial-fit history and pre-transfer FISV only, one worker, 31-day
+chunks, without widening the numeric boundary. Query scope is not index membership
+or proof of article attribution. All output remains publication-proxy research data.
+Check system-wide available memory before each page as well as process RSS; refuse
+new requests below 2 GiB available or at 85% physical-memory use. Unknown system
+memory fails the guarded collection. No unrelated applications are terminated.
+Verified exit gates: interval/identity/source-pin rejection tests, identical page processing
+for either request scope, resumable pressure failures, bounded real collection,
+offline audit and independent review. This does not close outcome/source admission.
+Real collection: 105/105 chunks, 661 unique news records (FISV 456, SATS 205),
+92 observed and 13 empty chunks, no failed requests. Offline audit passed. Empty
+responses do not prove source completeness; no additional stocks were excluded.
+32 focused tests and 227 dependency/sentiment tests pass; full suite 3,289 passed,
+three skipped, 133 warnings in 1,274.91s. Ruff and strict mypy (349 sources) pass.
+Peaks: tests 0.331150 GiB, collection 0.245560 GiB, audit 0.244118 GiB. Sampled
+system usage stayed around 65-67%, with over 5 GiB available. Both agents and all
+owned jobs are closed. No new model or full-cohort outcome build ran.
 Ordinary-sale research simulation is closed in `3a864e5` (pushed). The one canonical
 holding kernel is shared by explicit simulation, labels and funded accounting.
 140 focused tests pass; repository-wide Ruff and strict mypy (347 sources) pass.
@@ -84,8 +105,9 @@ Exit tests: partial sales, weekends/holidays, final-horizon receivables, funding
 next open but never same-session open, no double costs/payments, unknown corporate
 claims unchanged, label/ledger parity, immutable replay and policy mutation rejection.
 
-The feature inventory additionally requires corrected SATS/EchoStar and FISV/FI
-news query windows. Existing relationship features already belong to the 120-column
+Corrected SATS/EchoStar and pre-transfer FISV news query windows are now collected;
+issuer attribution, namespace reconciliation and feature joins remain pending.
+Existing relationship features already belong to the 120-column
 technical comparator; profile two must contain genuinely additional, preregistered
 relationships, not duplicate the comparator under another name. These are concrete
 remaining integration requirements, not grounds to reopen completed collectors.
