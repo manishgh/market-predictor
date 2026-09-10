@@ -4,10 +4,11 @@ import hashlib
 import json
 import os
 from collections.abc import Callable
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, time, timedelta
 from pathlib import Path
+from threading import Event
 from typing import Any
 from uuid import uuid4
 
@@ -31,7 +32,8 @@ from market_predictor.catalysts.issuer_events.news_history_contracts import (
     NEWS_HISTORY_REQUEST_SCHEMA,
     NEWS_PAGE_SCHEMA,
 )
-from market_predictor.core.errors import DataReadinessError
+from market_predictor.catalysts.issuer_events.news_query_scope import load_news_query_scope
+from market_predictor.core.errors import DataReadinessError, MemoryBudgetError
 from market_predictor.core.symbols import canonical_symbol
 from market_predictor.resources import (
     assert_memory_budget,
@@ -70,7 +72,9 @@ class _WorkUnit:
 
 def collect_alpaca_news_history(
     *,
-    memberships_path: Path,
+    memberships_path: Path | None = None,
+    query_scope_path: Path | None = None,
+    query_scope_root: Path = Path("."),
     start_date: date,
     end_date: date,
     out_dir: Path,
@@ -80,6 +84,7 @@ def collect_alpaca_news_history(
     chunk_days: int = 92,
     memory_budget_gib: float = 4.0,
     memory_headroom_gib: float = 0.75,
+    system_memory_guard: Callable[[], object] | None = None,
 ) -> NewsHistoryCollectionResult:
     """Collect immutable, publication-time-proxy Alpaca news by security interval."""
 
@@ -89,11 +94,32 @@ def collect_alpaca_news_history(
         raise ValueError("workers must be between 1 and 4")
     if chunk_days < 7 or chunk_days > 366:
         raise ValueError("chunk_days must be between 7 and 366")
-    memberships, membership_manifest = load_canonical_artifact(
-        memberships_path,
-        expected_type="memberships",
-        allow_research=True,
-    )
+    if (memberships_path is None) == (query_scope_path is None):
+        raise DataReadinessError("provide exactly one membership artifact or issuer query scope")
+    stopped = Event()
+
+    def memory_check() -> None:
+        if stopped.is_set():
+            raise MemoryBudgetError("news collection stopped after memory pressure")
+        try:
+            if system_memory_guard is not None:
+                system_memory_guard()
+            assert_memory_budget(hard_budget_gib=memory_budget_gib, headroom_gib=memory_headroom_gib,
+                stage="issuer news collection")
+        except MemoryBudgetError:
+            stopped.set()
+            raise
+
+    memory_check()
+    scope_identity: dict[str, Any]
+    if query_scope_path is not None:
+        memberships, scope_identity = load_news_query_scope(query_scope_path, root=query_scope_root)
+    else:
+        assert memberships_path is not None
+        memberships, membership_manifest = load_canonical_artifact(
+            memberships_path, expected_type="memberships", allow_research=True)
+        scope_identity = {"memberships_path": str(memberships_path.resolve()),
+            "memberships_sha256": str(membership_manifest["artifact_sha256"])}
     required = {
         "ticker",
         "security_id",
@@ -112,6 +138,11 @@ def collect_alpaca_news_history(
         time.min,
         tzinfo=UTC,
     )
+    if query_scope_path is not None and any(
+        row.effective_from_utc < start_utc or row.effective_to_utc > end_exclusive_utc
+        for row in memberships.itertuples(index=False)
+    ):
+        raise DataReadinessError("date envelope must contain every exact issuer query interval")
     work_units = _build_work_units(
         memberships,
         start_utc=start_utc,
@@ -124,8 +155,7 @@ def collect_alpaca_news_history(
 
     request = {
         "schema": NEWS_HISTORY_REQUEST_SCHEMA,
-        "memberships_path": str(memberships_path.resolve()),
-        "memberships_sha256": str(membership_manifest["artifact_sha256"]),
+        **scope_identity,
         "start_utc": start_utc.isoformat(),
         "end_exclusive_utc": end_exclusive_utc.isoformat(),
         "source": "alpaca:benzinga",
@@ -163,6 +193,7 @@ def collect_alpaca_news_history(
     pending: list[_WorkUnit] = []
     skipped = 0
     for unit in work_units:
+        memory_check()
         previous = latest_attempts.get(unit.chunk_id)
         if previous is not None and previous["collection"].status == "observed_empty":
             empty.add(unit.chunk_id)
@@ -196,6 +227,7 @@ def collect_alpaca_news_history(
             "pages": 0,
         }
         try:
+            memory_check()
             page_payloads = _collect_pages(
                 unit=unit,
                 page_dir=pages_dir / unit.chunk_id,
@@ -203,8 +235,10 @@ def collect_alpaca_news_history(
                 fetch_page=fetch_page,
                 memory_budget_gib=memory_budget_gib,
                 memory_headroom_gib=memory_headroom_gib,
+                memory_check=memory_check,
             )
             stats["pages"] = len(page_payloads)
+            memory_check()
             raw, page_inputs, normalized_stats = _normalize_pages(
                 unit,
                 page_payloads,
@@ -264,6 +298,8 @@ def collect_alpaca_news_history(
                 stats,
             )
         except Exception as exc:
+            if isinstance(exc, MemoryBudgetError):
+                stopped.set()
             collection = SourceCollection(
                 collection_id=collection_id,
                 ticker=unit.ticker,
@@ -286,34 +322,36 @@ def collect_alpaca_news_history(
             release_process_memory()
 
     with ThreadPoolExecutor(max_workers=min(workers, len(pending) or 1)) as executor:
-        futures = {
-            executor.submit(collect_unit, unit): unit.chunk_id for unit in pending
-        }
-        for future in as_completed(futures):
-            unit, artifact, collection, stats = future.result()
-            _write_attempt(
-                attempts_dir,
-                request_hash=request_hash,
-                unit=unit,
-                collection=collection,
-                artifact=artifact,
-                stats=stats,
-            )
-            if artifact is not None and "error" not in artifact:
-                observed[unit.chunk_id] = artifact
-            elif collection.status == "observed_empty":
-                empty.add(unit.chunk_id)
-            else:
-                failures[unit.chunk_id] = (
-                    str(artifact["error"])
-                    if artifact is not None
-                    else "DataReadinessError: Alpaca news chunk failed"
-                )
-            assert_memory_budget(
-                hard_budget_gib=memory_budget_gib,
-                headroom_gib=memory_headroom_gib,
-                stage=f"Alpaca news persist {unit.chunk_id}",
-            )
+        units = iter(pending)
+        futures = {executor.submit(collect_unit, unit) for unit in
+            [next(units, None) for _ in range(workers)] if unit is not None}
+        while futures:
+            done, futures = wait(futures, return_when=FIRST_COMPLETED)
+            for future in done:
+                unit, artifact, collection, stats = future.result()
+                _write_attempt(attempts_dir, request_hash=request_hash, unit=unit,
+                    collection=collection, artifact=artifact, stats=stats)
+                if artifact is not None and "error" not in artifact:
+                    observed[unit.chunk_id] = artifact
+                elif collection.status == "observed_empty":
+                    empty.add(unit.chunk_id)
+                else:
+                    failures[unit.chunk_id] = str(artifact["error"]) if artifact is not None else "chunk failed"
+                if not stopped.is_set():
+                    try:
+                        memory_check()
+                    except MemoryBudgetError:
+                        stopped.set()
+                if not stopped.is_set():
+                    next_unit = next(units, None)
+                    if next_unit is not None:
+                        futures.add(executor.submit(collect_unit, next_unit))
+    if stopped.is_set():
+        raise MemoryBudgetError("news collection stopped; persisted pages/attempts can be resumed")
+    if query_scope_path is not None:
+        _, checked_scope = load_news_query_scope(query_scope_path, root=query_scope_root)
+        if checked_scope != scope_identity:
+            raise DataReadinessError("issuer query scope changed during collection")
 
     ledger = _latest_collection_ledger(
         attempts_dir,
@@ -412,6 +450,8 @@ def _build_work_units(
     chunk_days: int,
     provider_symbol_for: Callable[[str], str],
 ) -> list[_WorkUnit]:
+    if type(chunk_days) is not int or not 7 <= chunk_days <= 366:
+        raise DataReadinessError("news chunk_days must be an integer in 7..366")
     units: list[_WorkUnit] = []
     ordered = memberships.sort_values(
         ["security_id", "effective_from_utc", "ticker"],
@@ -473,7 +513,9 @@ def _collect_pages(
     fetch_page: NewsPageFetcher,
     memory_budget_gib: float,
     memory_headroom_gib: float,
+    memory_check: Callable[[], None],
 ) -> list[dict[str, Any]]:
+    memory_check()
     page_dir.mkdir(parents=True, exist_ok=True)
     pages = _load_pages(page_dir, unit=unit, request_hash=request_hash)
     if pages and pages[-1]["next_page_token"] is None:
@@ -486,6 +528,7 @@ def _collect_pages(
     }
     index = len(pages)
     while True:
+        memory_check()
         assert_memory_budget(
             hard_budget_gib=memory_budget_gib,
             headroom_gib=memory_headroom_gib,

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -16,17 +17,20 @@ from market_predictor.canonical.store import (
     load_canonical_artifact,
     manifest_path_for,
 )
+from market_predictor.catalysts.issuer_events.alpaca_news_collection import _build_work_units, _work_unit_record
 from market_predictor.catalysts.issuer_events.news_history_contracts import (
     NEWS_HISTORY_MANIFEST_SCHEMA,
     NEWS_HISTORY_REQUEST_SCHEMA,
     NEWS_PAGE_SCHEMA,
 )
+from market_predictor.catalysts.issuer_events.news_query_scope import load_news_query_scope
 from market_predictor.core.errors import DataReadinessError
 from market_predictor.resources import (
     assert_memory_budget,
     memory_audit,
     release_process_memory,
 )
+from market_predictor.sources.provider_symbols import PROVIDER_ALPACA, provider_symbol
 
 
 def audit_alpaca_news_history(
@@ -56,11 +60,24 @@ def audit_alpaca_news_history(
         key: value for key, value in request.items() if key != "request_sha256"
     }
     errors: list[str] = []
-    if (
-        request.get("schema") != NEWS_HISTORY_REQUEST_SCHEMA
-        or request_identity != _sha256_json(request_payload)
-    ):
-        errors.append("request identity is invalid")
+    if request.get("schema") != NEWS_HISTORY_REQUEST_SCHEMA or request_identity != _sha256_json(request_payload):
+        raise DataReadinessError("request identity is invalid")
+    if type(request.get("chunk_days")) is not int or not 7 <= request["chunk_days"] <= 366:
+        raise DataReadinessError("news chunk_days must be an integer in 7..366")
+    if "query_scope_path" in request:
+        scope, metadata = load_news_query_scope(Path(request["query_scope_path"]),
+            root=Path(request["query_scope_root"]))
+        if any(request.get(key) != value for key, value in metadata.items()) or "memberships_path" in request:
+            raise DataReadinessError("issuer query scope identity differs")
+        start, end = datetime.fromisoformat(request["start_utc"]), datetime.fromisoformat(request["end_exclusive_utc"])
+        if any(row.effective_from_utc < start or row.effective_to_utc > end for row in scope.itertuples(index=False)):
+            raise DataReadinessError("query request clips declared source intervals")
+        units = _build_work_units(scope, start_utc=datetime.fromisoformat(request["start_utc"]),
+            end_exclusive_utc=datetime.fromisoformat(request["end_exclusive_utc"]),
+            chunk_days=request["chunk_days"],
+            provider_symbol_for=lambda ticker: provider_symbol(ticker, PROVIDER_ALPACA))
+        if request.get("work_units") != [_work_unit_record(unit) for unit in units]:
+            raise DataReadinessError("issuer query work units differ from source scope")
     if (
         final.get("schema") != NEWS_HISTORY_MANIFEST_SCHEMA
         or final.get("status") != "complete"

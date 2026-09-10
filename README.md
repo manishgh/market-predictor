@@ -264,6 +264,16 @@ Read these documents in order:
 Unknown coverage is not converted to zero. Historical publication-time backfills are
 research evidence and cannot be represented as prospectively observed events.
 
+Issuer history outside index-membership dates can be requested with
+`market-predictor-collect collect-alpaca-news-history --query-scope configs/swing_issuer_news_corrections.json --start-date 2019-07-09 --end-date 2024-05-28 --out-dir data/raw/swing_issuer_news_corrections --workers 1 --chunk-days 31`.
+Use either `--query-scope` or `--memberships`, never both. Scope files bind historical
+symbol intervals and source-document hashes; they do not certify article attribution.
+The collector checks laptop RAM as well as process RSS. Defaults stop new requests
+at 85% physical-memory use or below 2 GiB available; flags
+`--maximum-system-used-percent` and `--minimum-system-free-gib` configure these checks.
+Pressure stops leave pages resumable and never publish a completed collection.
+These are cooperative checks, not a hard limit on allocation spikes or other apps.
+
 ## Setup
 
 Requires Python 3.11 or newer. The verified local environment currently uses Python

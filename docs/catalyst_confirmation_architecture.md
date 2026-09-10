@@ -309,6 +309,15 @@ deployment approval or dollar-capacity claim is inferred from this offline accou
 
 ### Ticker catalyst
 
+Provider query scope is distinct from index membership. A hash-bound issuer query
+interval may request history before index entry without changing membership facts.
+It retains exact historical ticker windows and source-document pins, and the offline
+auditor reconstructs the requested chunks. The same Alpaca transport, raw pages and
+normalizer serve both explicit intervals and genuine membership requests. Neither
+request mode proves article-level issuer relevance. Collection is resumable, uses
+bounded worker scheduling, and stops new requests on laptop or process memory
+pressure; it does not terminate unrelated applications.
+
 Each event records provider publication/update time, first-observed or explicit
 historical-proxy policy, sentiment scoring time, final feature availability, direct
 issuer/business attribution, source coverage, and immutable lineage.

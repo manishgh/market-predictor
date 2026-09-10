@@ -4,6 +4,43 @@ Last updated: 2026-09-10
 
 ## Current Long-Only Swing Campaign
 
+### Dated Issuer-News Correction And System Memory
+
+September 10 collection fills the missing direct SATS and pre-transfer FISV request
+intervals without inventing historical index membership. New scope:
+`configs/swing_issuer_news_corrections.json`, SHA256
+`2e0cd0279dbeb1ac5a3c4224bdd4a8de78c0c5b603d08f14a0da2f86f1c1e3ed`.
+Its official-source byte pins were verified before collection and in offline replay.
+The separate raw archive is `data/raw/swing_issuer_news_corrections`.
+
+All 105 chunks completed, 92 with events and 13 observed-empty, with no failed
+requests. Offline audit passed all 105 pages: **661 unique events**, FISV 456 and
+SATS 205, no duplicate event IDs. Publication range: July 15 2019 through May 28
+2024. Manifest file SHA256:
+`4da07ce57bf864845b79b0043816e49c104dc047eb81a30372ad952519f855d8`.
+Audit `data/reports/swing_issuer_news_corrections_audit.json`, SHA256
+`b4875e7cbf3334a346fff3047b5202c0c21a0801c473e01fcd9d7110bd202ecb`;
+matching CSV SHA256 `03a612d136cfd58d8cb35efb640f91d368a683eee9018113a84ddfbbb6015851`.
+
+Integrity passed is not catalyst admission. The existing auditor's empty-chunk
+heuristic marks both issuers as coverage blindspots; its proposed exclusion wording
+does not authorize changing the frozen cohort. An empty provider response alone
+does not prove missing history or that no real-world articles existed. No new
+exclusions were made. CIK/CUSIP reconciliation, article-level relevance and causal
+feature attachment remain unadmitted. Existing ECHO aggregates are not reused.
+
+One worker and 31-day chunks were used. Collector peak memory was 0.245560 GiB;
+offline audit peak was 0.244118 GiB. The news CLI now checks system-wide available
+physical memory at startup and cooperative collection boundaries: stop below 2 GiB
+free or at 85% use, preserve saved pages, and cease new scheduling. Existing process
+RSS protection remains unchanged. These are sampled guards, not hard allocation caps.
+
+Verification: 32 focused tests, 227 dependency/sentiment tests; repository-wide Ruff;
+strict mypy on 349 sources; full suite **3,289 passed, three skipped, 133 warnings**,
+1,274.91 seconds, peak 0.331150 GiB. No code changed after the suite started.
+The independent review's one supported replay-loop finding was fixed and tested.
+Both agents and all test/collection/audit processes are closed. No new model trained.
+
 ### Completion Evidence And Approved Research Simulation
 
 September 9 continuation retained 21 missing official SEC HTML documents using the
@@ -75,8 +112,8 @@ T+1 was May 28 2024 ([SEC](https://www.sec.gov/newsroom/press-releases/2024-62))
 Provider pay dates do not guarantee account credits
 ([Alpaca](https://docs.alpaca.markets/us/docs/daily-processes-and-reconcilations)).
 
-News inventory confirms missing direct SATS initial-fit query windows and unproven
-FISV-before-FI coverage. Existing Alpaca/SEC archives remain reusable, but old aggregate
+The earlier inventory identified missing SATS/FISV request windows, now collected
+as described above. Existing Alpaca/SEC archives remain reusable, but old aggregate
 rows cannot certify the corrected issuer bridge. All nine existing technical
 relationship outputs already occur in the 120-column comparator; adding them again
 would not create an incremental feature profile. These findings are prerequisites

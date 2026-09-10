@@ -12,6 +12,7 @@ from market_predictor.catalysts.issuer_events.alpaca_news_collection import (
 from market_predictor.commands.swing_symbol_corrections import register_symbol_correction_commands
 from market_predictor.config import get_settings
 from market_predictor.core.errors import DataReadinessError
+from market_predictor.core.system_memory import assert_system_memory_available
 from market_predictor.edge_rebuild.swing_history_collection import (
     AlpacaSwingDailyPageSource,
     SwingDailyPageSource,
@@ -201,10 +202,13 @@ def register_swing_collection_commands(app: typer.Typer, console: Any) -> None:
     @app.command("collect-alpaca-news-history")
     @serialized_heavy_job("collect-alpaca-news-history")
     def collect_alpaca_news_history_command(
-        memberships: Path = typer.Option(
-            ...,
+        memberships: Path | None = typer.Option(
+            None,
             help="Hash-verified point-in-time membership artifact with security IDs.",
         ),
+        query_scope: Path | None = typer.Option(None, help="Evidence-pinned issuer query intervals; not membership."),
+        minimum_system_free_gib: float = typer.Option(2.0, min=0.1),
+        maximum_system_used_percent: float = typer.Option(85.0, min=1.0, max=99.0),
         start_date: str = typer.Option(
             ...,
             help="Inclusive first publication date YYYY-MM-DD.",
@@ -232,6 +236,14 @@ def register_swing_collection_commands(app: typer.Typer, console: Any) -> None:
     ) -> None:
         """Collect publication-time-proxy Alpaca/Benzinga history immutably."""
 
+        if (memberships is None) == (query_scope is None):
+            raise typer.BadParameter("provide exactly one of --memberships or --query-scope")
+
+        def system_guard() -> object:
+            return assert_system_memory_available(minimum_available_gib=minimum_system_free_gib,
+                maximum_used_percent=maximum_system_used_percent)
+
+        system_guard()
         settings = get_settings()
         if not settings.has_alpaca:
             raise typer.BadParameter(
@@ -263,6 +275,8 @@ def register_swing_collection_commands(app: typer.Typer, console: Any) -> None:
 
         result = collect_alpaca_news_history(
             memberships_path=memberships,
+            query_scope_path=query_scope,
+            system_memory_guard=system_guard,
             start_date=start,
             end_date=end,
             out_dir=out_dir,

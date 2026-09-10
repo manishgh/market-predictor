@@ -1,0 +1,32 @@
+{
+  "schema": "market_predictor.issuer_news_query_scope",
+  "purpose": "historical_source_collection_only",
+  "production_ready": false,
+  "intervals": [
+    {
+      "ticker": "SATS",
+      "security_id": "cik:0001415404",
+      "start_utc": "2019-07-09T00:00:00Z",
+      "end_exclusive_utc": "2024-05-29T00:00:00Z",
+      "interpretation": "Request EchoStar Class A history under SATS, not historical ECHO (Echo Global Logistics CIK 1426945). Source locators: June 2019 S-4 Summary parties section; May 2024 EchoStar 10-Q cover. This is a provider query scope, not S&P membership or proof that every returned article is issuer-relevant.",
+      "source_files": [
+        {"path": "configs/swing_symbol_corrections.toml", "sha256": "be63ad9460f80cf87a377b903971c5415bcfefdf5d457308a9a9028d2b5488e3"},
+        {"path": "data/raw/swing_symbol_correction_documents/documents/echostar_pre_window_symbol/a4fa1a50657a40cfbf23d0f3909da006/body-b28b2b60fa9af84a7eda51297287400368f57281165c61a2ca6c1d48c4c61c58.bin", "sha256": "b28b2b60fa9af84a7eda51297287400368f57281165c61a2ca6c1d48c4c61c58"},
+        {"path": "data/raw/swing_symbol_correction_documents/documents/echostar_end_window_symbol/313f7fb70df14e78a71772bd12a5374f/body-0e7c3480c95c22b12dffe5e1b85df7572232b44c8e03704fc618bf19b2feaec6.bin", "sha256": "0e7c3480c95c22b12dffe5e1b85df7572232b44c8e03704fc618bf19b2feaec6"}
+      ]
+    },
+    {
+      "ticker": "FISV",
+      "security_id": "cik:0000798354",
+      "start_utc": "2019-07-09T00:00:00Z",
+      "end_exclusive_utc": "2023-06-07T13:30:00Z",
+      "interpretation": "Request Fiserv common-stock news before its FI transfer. Source locators: July 2019 8-K cover FISV registration; May 2023 8-K Item 3.01; June 7 completion release first paragraph. June 7 exchange open is represented as 09:30 America/New_York = 13:30 UTC by calendar convention, not a quoted filing timestamp. Later FI collection is retained separately. Query metadata does not certify issuer attribution or reconcile a different security namespace.",
+      "source_files": [
+        {"path": "configs/swing_symbol_corrections.toml", "sha256": "be63ad9460f80cf87a377b903971c5415bcfefdf5d457308a9a9028d2b5488e3"},
+        {"path": "data/raw/swing_symbol_correction_documents/documents/fiserv_pre_window_symbol/24bb91889db7425c84e7dbd1b660e2ae/body-ab81468ecece42142ae46dfe58be6859c0905735baac6340a90974f4a4b43217.bin", "sha256": "ab81468ecece42142ae46dfe58be6859c0905735baac6340a90974f4a4b43217"},
+        {"path": "data/raw/swing_symbol_correction_documents/documents/fiserv_transfer_announcement/32c68c7570bf4d7a8a16b4606b232fac/body-05ee6d8367954c69339401ca70eded4439f04340178d3569e934bcaeda5b5d53.bin", "sha256": "05ee6d8367954c69339401ca70eded4439f04340178d3569e934bcaeda5b5d53"},
+        {"path": "data/raw/swing_symbol_correction_documents/documents/fiserv_transfer_completion/f8f374b17f0d4d04930dbf393987d220/body-46782d9966fc18a4104696506c724867fd0fe810859bb0f25480504dcbe3779c.bin", "sha256": "46782d9966fc18a4104696506c724867fd0fe810859bb0f25480504dcbe3779c"}
+      ]
+    }
+  ]
+}

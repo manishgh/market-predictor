@@ -177,6 +177,22 @@ No real-data collection, materialization or training is triggered by these libra
 
 ### Estimator And Overlay Sources
 
+`catalysts/issuer_events/news_query_scope.py` validates explicit historical provider
+query intervals and pinned source files independently of index membership. The
+Alpaca collector and auditor share the existing page/normalization path; the auditor
+reconstructs scoped work units and verifies source pins. `--query-scope` and
+`--memberships` are mutually exclusive. The date envelope must contain the exact
+scope, including intraday symbol-transition timestamps. Query identity is not
+article relevance or security-namespace admission.
+
+`core/system_memory.py` reads Windows available physical RAM or Linux MemAvailable.
+The news CLI checks it at startup and collection boundaries, including pages and
+normalization, alongside process RSS. A pressure failure stops scheduling, preserves
+raw pages for resume, and cannot produce a complete manifest. Other apps are never
+terminated; allocation spikes between checks are not hard-capped. The frozen
+correction run uses one worker and 31-day chunks. The raw archives remain separate
+from attribution/features and historical archives are never rewritten.
+
 - Alpaca SIP/all bars: estimator market data.
 - Alpaca direct ticker news: the sole permitted ticker catalyst estimator source for
   the separate event-driven family. The swing baseline is technical-only.
