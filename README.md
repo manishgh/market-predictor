@@ -43,13 +43,17 @@ September 10 added 26,638 daily bars per raw/adjusted format and 23,025 stored n
 records, with zero failures and successful offline replay. September 11 observations
 are separate partial snapshots. SEC catch-up added 20,723 filing metadata records
 across 624 issuers through September 10; offline replay passed with zero failed
-issuers. Complete repository verification is in progress. Cloud deployment is out of
+issuers. Collection checkpoint `19698d6` passed 3,360 tests (five skips), Ruff and
+strict mypy against its isolated commit tree. The unfinished historical feature
+work has a separate dependency/lineage blocker; the mixed worktree is not certified.
+Cloud deployment is out of
 scope until training and evaluation are complete. Research results do not
 guarantee outperformance of SPY.
 
 ### Source Collection
 
-Portable Python entry points (run from the repository root):
+Portable Python entry points (run from the repository root). The provided configs
+extend the pinned local archives; they are not a cold-start seven-year downloader:
 
 ```powershell
 .venv\Scripts\python.exe -B -m market_predictor.swing.datasets.alpaca_incremental --config configs/swing_incremental_collection.toml --through 2026-09-11

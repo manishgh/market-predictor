@@ -1,8 +1,45 @@
 # Current Feature Engineering Audit
 
-Last updated: 2026-09-10
+Last updated: 2026-09-11
 
 ## Current Long-Only Swing Campaign
+
+### Corrected Initial-Fit Rebuild In Progress
+
+This section supersedes the historical checkpoint statuses below. The frozen
+population remains 586 identities and 586,305 decisions; no new exclusions.
+
+Source-only catch-up is closed in `19698d6`: Alpaca and SEC evidence extends
+through September 10, 2026 with separate partial September 11 captures. Raw
+replay and the isolated source commit's full suite pass. This does not admit
+the historical feature delivery: four uncommitted swing modules still import
+the retired edge layer, and changing their imports requires an explicit
+publication-lineage migration. The mixed-worktree dependency test is failing;
+no new model training or whole-repository pass is claimed.
+
+| Component | Observed evidence | Remaining gate |
+| --- | --- | --- |
+| Corrected issuer attribution | 643 direct-issuer relations from 661 SATS/FISV events; 18 unmatched | Full monthly source/decision join |
+| Corrected sentiment | All 661 events scored with pinned FinBERT revision; zero failures; 1.622 GiB peak | Merge with bounded saved early/later scores |
+| Technical predictors | 586,305 published rows; 563,326 feature-eligible; 2,048 earlier ATVI/INFO/SBNY decisions recovered; WTW remains unverified | Complete monthly news/decision join |
+| Corrected outcomes | 586,305 decisions; 450,273 stock-source-admitted and 378,037 complete stock/SPY/QQQ/sector comparisons; 0.409 GiB peak | Independent full replay; unknown economic outcomes remain null |
+| Saved news derivations | Early 148,784 scored rows / 364,564 relations; later 319,787 rows / 550,421 relations | Monthly publication with 29 early and six later unavailable chunks explicit |
+| Final feature join | Exact population, causal clocks, nullable targets and peer transforms tested | Real monthly join after upstream artifacts finish |
+
+WTW warm-up contains an unverified issuer stream and 54 zero-volume observations.
+ATVI, INFO and SBNY also contain zero-volume terminal observations. No placeholder
+prices are admitted and no losing or unavailable rows are silently deleted. A
+population-complete artifact is not equivalent to feature completeness or training
+eligibility. Whole-group missingness must not be mistaken for a causal live filter.
+
+The old-news path and relevance-range defects were fixed before successful saved
+derivations. Predictor recovery preserves only independently verified earlier
+prefixes; future invalid observations do not erase earlier usable features.
+Monthly preparation stopped at its memory guard. Historical integration is paused
+pending canonical archive ownership and publication replay; source catch-up is complete.
+Those new observations are not yet model inputs; acquisition is not attribution.
+Exact pins, commands and process state are in the single current handoff. No new
+model trained; full-suite verification of this uncommitted delivery is pending.
 
 ### Dated Issuer-News Correction And System Memory
 

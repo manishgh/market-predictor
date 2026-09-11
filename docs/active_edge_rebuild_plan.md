@@ -2,7 +2,7 @@
 
 Status: active
 
-Last updated: 2026-09-10
+Last updated: 2026-09-11
 
 Repository: `C:\project\market-predictor`
 
@@ -40,7 +40,75 @@ outside this repository.
 
 2026-09-09 user direction: continue through source evidence, rebuilt stock/benchmark
 outcomes and verified news/reaction features without waiting at each Git checkpoint.
-Current step: **source admission and corrected outcomes (in_progress)**.
+Current step: **canonical swing archive ownership and publication replay (`in progress`)**.
+Design is reviewed; implementation has not started. Source collection is closed
+in pushed commit `19698d6`. The historical feature delivery is still uncommitted.
+September 11 expanded user direction: retain July 9, 2019 through the latest
+available candles, news and SEC filing evidence; reuse verified archives, repair
+collection entry points, and keep cloud deployment out of scope until research
+training/evaluation. The prior outcome/feature integration is paused at its actual
+published artifacts, not restarted or declared complete.
+
+Completed collection checkpoint (`19698d6`):
+1. Verify saved coverage and preserve chronological fit/validation/test boundaries.
+2. Add a resumable source-only extension using existing Alpaca/SEC transports,
+   immutable receipts and source-specific per-unit failures. Do not infer current
+   issuer ownership or index membership from old query symbols/CIKs.
+3. Replace broken Windows entry points with thin wrappers over portable Python,
+   one workspace lease, bounded memory, explicit failures and no automatic trainer.
+4. Run injected-transport/tamper/resume tests, a real collection and offline replay,
+   independent review and repository verification. Inventory gaps remain explicit.
+5. Report actual source ranges, training split rationale and script retirement
+   recommendations in the existing continuity documents. No cloud deployment.
+
+Actual completion: 26,638 new daily bars per raw/adjusted format, 23,025 stored
+Alpaca news records and 20,723 SEC filing metadata records through September 10;
+September 11 snapshots remain partial. Both offline replays and real scheduled
+execution passed. Exact source-only Git tree passed 3,360 tests (five skips),
+Ruff and strict mypy; nine real canonical-data hash checks also passed. The mixed
+worktree is not green: four uncommitted swing files import the retired edge layer.
+
+Next bounded gate, reviewed independently:
+1. Preserve exact implementation bytes and hashes bound by existing outcome and
+   predictor publications before changing their imports.
+2. Move the archive reader dependency closure and session-requirement helpers into
+   genuine swing dataset owners. Update consumers without duplicates or aliases.
+3. Run dependency boundary tests first; prove unchanged source/session/numerical
+   behavior and explicit publication derivation/replay. Do not rewrite old pins.
+4. Resume monthly news preparation and the final feature join only after this gate.
+The current handoff identifies the four files, artifact pins and exact command.
+This is an architecture/lineage repair, not a new data download or an AUC result.
+The July 2025-June 2026 historical test has already been exposed; fresh raw
+collection does not retroactively make that test untouched. Current-day responses
+are partial observations, never completed daily bars or complete-day coverage.
+September 11 user direction: finish issuer attribution, corrected stock/benchmark
+outcomes and feature joins in one continuous delivery. Ordered implementation:
+1. Attribute the corrected SATS/FISV archive through the existing strict issuer
+   path, preserving exact query intervals, aliases and unresolved namespace joins.
+2. Extend corporate-action source queries to the corrected initial-fit stock/ETF
+   segments and source-only successor classes. Preserve old receipts; distinguish
+   acquisition implementation identity from current offline replay implementation.
+3. Publish source-bounded research admission and construct fixed/managed stock plus
+   SPY/QQQ/sector outcomes through the existing lot kernel and ordinary-sale simulator.
+   Every frozen decision must have an outcome or an explicit unavailable reason;
+   unresolved claims cannot disappear from selected portfolio accounting.
+4. Attach targets and causal issuer/reaction features by canonical decision identity,
+   rebuild peer transforms after the approved cohort restriction, and audit joins.
+No new exclusion or held-out numerical read is authorized. Provider-scoped negative
+evidence is not a claim of universal absence. Existing contradictory action evidence
+must be reconciled before admitting affected holdings. No broker receipts are
+required for hypothetical ordinary trades. Unknown corporate components remain null.
+Verification requires source/policy tamper rejection, exact ownership/session/fill
+and benchmark matching, future-poison tests, cost reconciliation, bounded memory,
+one consolidated independent review and full static/test verification before closure.
+Training is downstream of these acceptance gates, not part of a false completion
+claim. Heavy jobs remain sequential with system headroom checked before each run.
+September 11 integration: corrected adjusted FI/SATS histories, saved-news derivations,
+verified-prefix predictors and nullable corrected outcomes are published. The QQQ
+distribution scope defect was fixed before the full 586,305-decision outcome run;
+378,037 rows have complete stock/SPY/QQQ/sector comparisons. Monthly news preparation
+stopped at its memory guard and is paused during source catch-up. No complete joined
+feature dataset or new trained model is claimed. Current pins are in the handoff.
 Closed source prerequisite `795a228` (pushed): explicit dated issuer-news query scopes and
 collection-time laptop-memory checks. Existing index-membership intervals must not
 be fabricated to request earlier issuer news. Reuse the same Alpaca page collector,
@@ -760,7 +828,7 @@ Names describe behavior rather than experiment serial numbers.
    Exit: one reproducible contract and no contradictory current instructions; no
    training or locked-outcome access. Review: independent ML/economics reviewer.
 
-2. **Reconcile returns, capital and SPY accounting (`in progress`).**
+2. **Reconcile returns, capital and SPY accounting (`paused pending canonical replay`).**
    Implementation is verified/pushed (`6758671`); real-data acceptance is blocked,
    not complete. The frozen control selected 30,525 stock-days before loading
    outcomes; 70 have incomplete fixed-horizon labels. No filtered replacement
