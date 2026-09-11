@@ -1,0 +1,11 @@
+blocker_code,scope,blocks_er2,required_action,detail
+intraday_session_history_below_gate,INTRADAY.VWAP_EXHAUSTION_REVERSAL.30M.V1,True,collect Alpaca SIP 1Min adjustment=all for the existing ticker/benchmark universe before the first usable session,valid_sessions=476; required=750; missing_at_least=274
+intraday_dense_clock_grid_incomplete,INTRADAY.VWAP_EXHAUSTION_REVERSAL.30M.V1,False,"retain the verified causal sparse-clock policy and require observed trigger, entry, benchmark, and exit bars in ER3",the older all-minutes-exact gate is false; requirement_exact_rate=0.8835692063992805; new setup rows must not impute missing trades
+adverse_fill_stress_missing,SWING.SECTOR_RESIDUAL_MOMENTUM.10D.V1,False,freeze and build adverse-fill stress labels in ER2/ER3,exact stamped base costs exist; adverse-fill stress does not
+adverse_fill_stress_missing,INTRADAY.VWAP_EXHAUSTION_REVERSAL.30M.V1,False,freeze and build adverse-fill stress labels in ER2/ER3,exact stamped base costs exist; adverse-fill stress does not
+catalyst_research_evidence_missing,business_exposure,False,build the missing causal catalyst relation or decision join in ER4,relation_channel: causal relation rows in verified catalyst lineage
+catalyst_research_evidence_missing,global_context,False,build the missing causal catalyst relation or decision join in ER4,relation_channel: causal relation rows in verified catalyst lineage
+catalyst_research_evidence_missing,INTRADAY.VWAP_EXHAUSTION_REVERSAL.30M.V1,False,build the missing causal catalyst relation or decision join in ER4,decision_join: verified intraday training rows contain no catalyst identity or availability columns
+catalyst_not_promotion_ready,CATALYST.OVERLAY,False,collect prospective first-observed timestamps before promotion,provider publication proxies are research-only
+new_strategy_setup_not_built,SWING.SECTOR_RESIDUAL_MOMENTUM.10D.V1,False,freeze ER2 setup then build deterministic ER3 rows and exact ten-session labels,V1 proxy opportunities are reported but are not ER setup opportunities
+new_strategy_setup_not_built,INTRADAY.VWAP_EXHAUSTION_REVERSAL.30M.V1,False,freeze ER2 exhaustion/reclaim setup then build exact ER3 rows,VWAP Reversion V1 is only a source-capacity proxy

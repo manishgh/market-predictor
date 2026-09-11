@@ -19,7 +19,9 @@ docs/evidence/** -text
 docs/strategy_hypothesis_registry.json -text
 docs/strategy_execution_ledger.json -text
 docs/reference_model_inventory.json -text
+tests/fixtures/historical_readiness_authority/** -text
 
 # Whitespace checks for the hash-bound Windows artifacts that must keep CRLF.
 configs/sec_identity_reviewed_overrides.csv whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
+tests/fixtures/historical_readiness_authority/** whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
 docs/evidence/edge_rebuild_intraday_candidate_20260802_v1_rejection/*.json whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol

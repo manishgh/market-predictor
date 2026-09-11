@@ -29,6 +29,27 @@ flowchart LR
 
 There is no fallback from the active path to legacy models or schemas.
 
+## Incremental Source Acquisition
+
+`swing/datasets/alpaca_incremental/` coordinates bounded daily provider queries, raw
+receipt validation and resumable publication. Config, page contracts, storage and
+collection are separate modules. `swing/datasets/sec_incremental.py` delegates issuer
+collections to the existing SEC filing collector rather than introducing a second
+filing parser. Historical archives remain immutable; extensions and partial
+current-day observations have separate requests and capture clocks.
+
+Both commands acquire the shared workspace lease before loading inputs, check
+system/process memory before network work, retain failures independently and
+verify successful artifacts before reusing them. They are portable Python modules.
+The PowerShell runner is a local scheduling adapter only. It sequences providers,
+propagates failures and never starts sentiment inference or model training.
+
+An Alpaca news request is an update-time query. Its raw body preserves original
+publication, provider revision and actual retrieval clocks. Revised content must
+not be backdated to publication. Neither archival provider symbols nor old SEC
+relations certify present issuer ownership or current index membership. Acquisition
+status is not feature, trading or promotion admission.
+
 ## Prediction Views
 
 ### Event-Aware Outcome Accounting

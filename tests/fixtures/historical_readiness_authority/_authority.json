@@ -1,0 +1,7 @@
+{
+  "artifact": "_manifest.json",
+  "artifact_sha256": "e6902372496fc37067148a1814fa4c0e04f550615f38add85ff511d0fb939eb7",
+  "request_sha256": "f80f70ae299bd5e5a6aeae6aeaa503ef4775573696b7d88856d539dbd1355080",
+  "schema": "edge_rebuild.readiness.authority.v1",
+  "state": "complete"
+}

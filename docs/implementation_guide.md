@@ -2,7 +2,7 @@
 
 Status: current edge-rebuild path
 
-Last updated: 2026-09-10
+Last updated: 2026-09-11
 
 Read `AGENTS.md`, `docs/active_edge_rebuild_plan.md`, and
 `docs/reviews/active_edge_rebuild_handoff.md` first. Command `--help` output and code
@@ -18,6 +18,30 @@ contracts are authoritative.
 
 No edge model is active. Production scoring must fail closed until a compatible
 promoted atomic bundle exists.
+
+### Incremental Source Collection
+
+Run `python -m market_predictor.swing.datasets.alpaca_incremental --config
+configs/swing_incremental_collection.toml` or `python -m
+market_predictor.swing.datasets.sec_incremental --config configs/swing_incremental_sec.toml`
+from the repository root using the project environment. Both acquire the shared
+heavy-job lease. `--through` defaults to yesterday UTC; today requests a separate
+partial snapshot. `--offline` replays saved evidence without network requests.
+
+Alpaca's package separates `config.py` (pinned query universe), `pages.py` (provider
+response contracts), `storage.py` (immutable bytes and replay) and `collector.py`
+(bounded orchestration). Its configuration paths resolve against the config file.
+The SEC coordinator reuses the canonical filing collector and parser; its paths
+resolve against `--root` or the working directory. It verifies the old archive's
+bytes without loading all historical filing rows. CIKs and provider symbols are
+query hints, not current issuer or membership authorities.
+
+Windows wrappers in `scripts/run_swing_data_collection.ps1` and
+`scripts/install_swing_collection_task.ps1` schedule collection only. Alpaca and
+SEC run sequentially; failures propagate and memory pressure returns 75. There is
+no automatic training after download. Source results require separate attribution,
+feature construction and readiness verification. See README's Source Collection
+section for commands, current-day limitations and storage paths.
 
 ### Long-Only Swing Research
 

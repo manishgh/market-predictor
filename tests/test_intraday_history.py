@@ -195,7 +195,7 @@ def test_plan_rejects_static_membership(tmp_path: Path) -> None:
 
 
 def test_historical_readiness_cannot_authorize_a_new_history_plan() -> None:
-    retained = Path(__file__).parents[1] / "data" / "research" / "edge_rebuild_readiness_er1_20260728"
+    retained = Path(__file__).parent / "fixtures" / "historical_readiness_authority"
 
     with pytest.raises(DataReadinessError, match="cannot authorize current planning"):
         _verify_readiness_audit(retained)

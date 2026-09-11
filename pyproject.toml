@@ -73,6 +73,7 @@ packages = ["src/market_predictor"]
 [tool.ruff]
 line-length = 140
 target-version = "py311"
+extend-exclude = [".test-tmp", ".pytest-*"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]

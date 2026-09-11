@@ -13,6 +13,92 @@ hash-verified promoted bundle.
 
 ## Verified State
 
+### Saved History And Training Dates
+
+September 11 archive inspection confirms the saved source ranges below. Counts
+match the inspected Parquet footers for all 670 daily-bar and 6,661 news files.
+This is not a claim that every symbol has every session or that all rows are
+already joined into an accepted model dataset.
+
+| Source | Saved range | Records |
+| --- | --- | --- |
+| Alpaca SIP daily bars, adjusted | July 9, 2019-July 8, 2026 | 1,088,146 across 670 symbols |
+| Alpaca news | July 9, 2019-July 8, 2026 | 714,126 stored records; repeated stories across queries possible |
+| SEC filings | July 9, 2019-July 8, 2026 | 689,467 filings across 624 CIKs; zero failed issuer requests in the archive |
+| Corporate-action responses | May 29, 2018-September 11, 2026 process-date scope | 570 queried symbols; terms still require accounting admission |
+
+The initial fitting subset ends May 28, 2024, not the saved archive. Validation
+is June 12, 2024-June 13, 2025. The configured final refit extends fitting through
+June 13, 2025; the historical test is July 1, 2025-June 30, 2026. Ten-session
+embargoes separate the splits, and labels must mature before fitting. The test
+has already been examined, so it is retrospective research evidence, not a new
+independent proof of performance. Fresh prospective evidence must remain separate.
+See [the training protocol](docs/model_training_validation_protocol.md).
+
+The historical archive is distinct from the new source-only catch-up collectors.
+The old midnight collector and automatic trainer referenced deleted scripts; they
+have been replaced by `MarketPredictorSwingCollectionMidnight`; a real scheduled
+offline run passed and its normal action was restored. Alpaca extension through
+September 10 added 26,638 daily bars per raw/adjusted format and 23,025 stored news
+records, with zero failures and successful offline replay. September 11 observations
+are separate partial snapshots. SEC catch-up added 20,723 filing metadata records
+across 624 issuers through September 10; offline replay passed with zero failed
+issuers. Complete repository verification is in progress. Cloud deployment is out of
+scope until training and evaluation are complete. Research results do not
+guarantee outperformance of SPY.
+
+### Source Collection
+
+Portable Python entry points (run from the repository root):
+
+```powershell
+.venv\Scripts\python.exe -B -m market_predictor.swing.datasets.alpaca_incremental --config configs/swing_incremental_collection.toml --through 2026-09-11
+.venv\Scripts\python.exe -B -m market_predictor.swing.datasets.sec_incremental --config configs/swing_incremental_sec.toml --through 2026-09-11
+```
+
+`--through` is an inclusive UTC date. Omitting it collects completed UTC days
+through yesterday. Asking for today also records a separately identified partial
+snapshot, never complete-day coverage. Use `--offline` to verify existing
+receipts without HTTP. `--max-units` (Alpaca) and `--max-issuers` (SEC) bound new
+attempts without counting verified skips. A bounded incomplete run is not success.
+
+Windows adapter and scheduler installation:
+
+```powershell
+powershell.exe -NoProfile -File scripts/run_swing_data_collection.ps1
+powershell.exe -NoProfile -File scripts/install_swing_collection_task.ps1 -WhatIf
+powershell.exe -NoProfile -File scripts/install_swing_collection_task.ps1
+```
+
+The adapter requests today's UTC date and runs Alpaca then SEC sequentially. It
+loads credentials from the existing environment/`.env`, does not score sentiment
+or train models, and preserves nonzero child exit codes. Busy/memory pressure
+returns 75. The local task runs at midnight local time while the user is signed
+in and AC power is available; missed runs catch up when possible. Old task XML
+is exported before migration. The Python collectors do not depend on Windows.
+
+Alpaca retains exact response bytes for SIP raw/adjusted daily bars and news.
+News windows use provider update time; publication, revision and observed times
+remain separate. An article revised today is not evidence that its revised text
+was available when originally published. Three-day overlapping observations
+capture recent revisions without replacing earlier receipts. Older revision
+completeness is not claimed. Adjusted-bar retrieval vintages must not be spliced
+into one supposedly unchanged price series.
+
+SEC reuses the old archive and collects issuer CIKs one at a time through the
+existing canonical filing collector. It retains failed attempts and resumes only
+after checking hashes and exact request bindings. SEC data here means submissions
+and filing metadata, not a downloaded body/exhibit for every filing. Historical
+identity relations are query hints, not proof of current ticker ownership.
+
+Progress and results live under `data/raw/swing_incremental_alpaca/` and
+`data/raw/swing_incremental_sec/`; wrapper logs are in
+`data/runtime/collection_logs/`. Successful acquisition does not establish issuer
+attribution, model-ready features, or promotion. Source failures are independent,
+and no missing observation becomes a neutral sentiment or zero return.
+
+### Research Status
+
 - Active development branch: `er-intraday-refactoring`.
 - Current research priority is long-only, ten-session swing selection against
   buy-and-hold SPY. `configs/swing_research.toml` freezes the return objective,

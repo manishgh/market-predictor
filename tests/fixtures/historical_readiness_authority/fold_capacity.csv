@@ -1,0 +1,5 @@
+strategy_id,fold,capacity_type,first_test_session,last_test_session,test_sessions,minimum_test_sessions_required,status
+INTRADAY.VWAP_EXHAUSTION_REVERSAL.30M.V1,0,chronological_test_capacity_before_ER2_purge_freeze,2024-08-09,2025-01-30,119,60,pass
+INTRADAY.VWAP_EXHAUSTION_REVERSAL.30M.V1,1,chronological_test_capacity_before_ER2_purge_freeze,2025-01-31,2025-07-24,119,60,pass
+INTRADAY.VWAP_EXHAUSTION_REVERSAL.30M.V1,2,chronological_test_capacity_before_ER2_purge_freeze,2025-07-25,2026-01-14,119,60,pass
+INTRADAY.VWAP_EXHAUSTION_REVERSAL.30M.V1,3,chronological_test_capacity_before_ER2_purge_freeze,2026-01-15,2026-07-08,119,60,pass

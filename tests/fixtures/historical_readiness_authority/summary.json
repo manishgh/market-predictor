@@ -1,0 +1,29 @@
+{
+  "acquisition_plan": {
+    "adjustment": "all",
+    "authorized_by_audit": true,
+    "end_before": "2024-08-09T15:36:00+00:00",
+    "feed": "sip",
+    "minimum_additional_sessions": 274,
+    "provider": "alpaca",
+    "reuse_existing_daily_and_catalyst_sources": true,
+    "scope": "intraday_only",
+    "target_history_sessions": 1250,
+    "timeframe": "1Min"
+  },
+  "blocking_findings": 1,
+  "download_performed": false,
+  "er2_authorized": false,
+  "memory": {
+    "current_working_set_gib": 0.7663040161132812,
+    "hard_budget_gib": 4.0,
+    "peak_working_set_gib": 0.9233970642089844,
+    "safety_threshold_gib": 3.25
+  },
+  "models_created": 0,
+  "nonblocking_required_work": 9,
+  "request_sha256": "f80f70ae299bd5e5a6aeae6aeaa503ef4775573696b7d88856d539dbd1355080",
+  "schema": "edge_rebuild.readiness.v1",
+  "status": "blocked_pending_targeted_acquisition",
+  "training_performed": false
+}

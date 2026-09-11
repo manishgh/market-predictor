@@ -19,7 +19,7 @@ from market_predictor.evidence.readiness_authority import (
 )
 
 ROOT = Path(__file__).parents[1]
-HISTORICAL = ROOT / "data" / "research" / "edge_rebuild_readiness_er1_20260728"
+HISTORICAL = ROOT / "tests" / "fixtures" / "historical_readiness_authority"
 
 
 def test_retained_historical_v1_replays_strictly() -> None:

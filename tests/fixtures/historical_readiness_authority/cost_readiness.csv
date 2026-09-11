@@ -1,0 +1,3 @@
+strategy_id,rows,minimum_cost_bps,median_cost_bps,mean_cost_bps,maximum_cost_bps,exact_cost_available,adverse_fill_stress_available
+SWING.SECTOR_RESIDUAL_MOMENTUM.10D.V1,103837,7.885160098522165,19.95188039661684,21.023816664519103,61.98915995761421,True,False
+INTRADAY.VWAP_EXHAUSTION_REVERSAL.30M.V1,65344,10.0,10.0,10.0,10.000000000000009,True,False

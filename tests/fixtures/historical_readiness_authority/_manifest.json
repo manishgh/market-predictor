@@ -1,0 +1,63 @@
+{
+  "artifacts": [
+    {
+      "bytes": 2947,
+      "path": "_request.json",
+      "sha256": "39b356322a116b611fb1155920353c1e1b8db332eff23d5f8375b64266b3aab2"
+    },
+    {
+      "bytes": 2236,
+      "path": "blockers.csv",
+      "sha256": "e54641028c5b6d83dea3e17ca01fca897826295408cba3a7a8d46d4f43ee37df"
+    },
+    {
+      "bytes": 1116,
+      "path": "catalyst_readiness.csv",
+      "sha256": "c529a7803e07e7e4087872838d6c5231bd608fc95b080c611353346dc13c3f3b"
+    },
+    {
+      "bytes": 356,
+      "path": "cost_readiness.csv",
+      "sha256": "cf14380bf6215af04d04e7d22e46e66944e17bb8ceb5618bafee976824a35e7e"
+    },
+    {
+      "bytes": 3423,
+      "path": "dimension_coverage.csv",
+      "sha256": "fd0929d7fd07eb09da38e13beb0516b024c79909e390506033fc9a3869b046e9"
+    },
+    {
+      "bytes": 1750,
+      "path": "exclusion_reasons.csv",
+      "sha256": "37d0d411e1e4fe5fe5d8ebb291a7232550792f81b1ed3319486cdb4c040df806"
+    },
+    {
+      "bytes": 641,
+      "path": "fold_capacity.csv",
+      "sha256": "664e5226248312f9ffbc42ed2f355d84a6c57b4bf663239f05189bffcb94db08"
+    },
+    {
+      "bytes": 781,
+      "path": "phase_capacity.csv",
+      "sha256": "3a2cfad3afe2c42aec616a229745e0f638cd4cbbebe8881dc3511c280277d604"
+    },
+    {
+      "bytes": 215986,
+      "path": "session_calendar.csv",
+      "sha256": "ec44b550417dce5444d7d443ea5269854b05f24a8f8be8320620daa6c6c80e88"
+    },
+    {
+      "bytes": 1348,
+      "path": "source_inventory.csv",
+      "sha256": "ab8170003482d3ccf62caf6ec8e638031d75894ce828c7e3454fe9d6904b795b"
+    },
+    {
+      "bytes": 927,
+      "path": "summary.json",
+      "sha256": "da40ca8a526039e65be3330cc726b9f5fc07d605761bbd867437a7d13512141e"
+    }
+  ],
+  "created_at_utc": "2026-07-28T18:36:29.463357+00:00",
+  "request_sha256": "f80f70ae299bd5e5a6aeae6aeaa503ef4775573696b7d88856d539dbd1355080",
+  "schema": "edge_rebuild.readiness.run.v1",
+  "status": "blocked_pending_targeted_acquisition"
+}

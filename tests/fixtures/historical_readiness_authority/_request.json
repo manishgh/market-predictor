@@ -1,0 +1,52 @@
+{
+  "download_performed": false,
+  "implementation": {
+    "contracts": {
+      "path": "contracts.py",
+      "sha256": "14d0d3085b06394cf706f66f379accead46c5d9d1236229f82c5a57a473a8ba6"
+    },
+    "readiness": {
+      "path": "readiness.py",
+      "sha256": "78671dfc61bdecc3c7c50f7f032afed8fb5160c7e2330c03b544f32aff328a95"
+    }
+  },
+  "intraday_policy_file_sha256": "e0793ac190367ee675f642a20cd33682e06f6c656956d8955a9a489d79d47c8e",
+  "policy_file_sha256": "8b7a51aa6bae2c0cd9f92ca5cbea42224d07ed427e2e13261f4f978a03163782",
+  "policy_sha256": "71e6def22d3070bf68aa03d4270463145c9b1acc953587e16afed37337b932b3",
+  "schema": "edge_rebuild.readiness.run.v1",
+  "sources": {
+    "catalyst": {
+      "coverage_sha256": "8ec5aae74141da5d188ebb628013b2818c709e7c1fcf89be8649f077adf6e3b8",
+      "lineage_manifest_sha256": "edb96eec61c19e1b0ac6eb1fd893618fab9c37dbd86797ab36455434fc43ac18",
+      "lineage_request_sha256": "e4e15c0f5f6fa7366e8d0dd17b45609d96b58582828e51683fbb3e966a10956a",
+      "news_manifest_sha256": "e55bad121076023e79b3813d5500bee12ceca2eee7c4965baca9e2de682a6c70",
+      "news_request_sha256": "1e3a28969e2a2a7c88eabe36e777697f8055e55ca9d1895b1081ae040e41c82f",
+      "source_event_rows": 564916,
+      "type": "verified_catalyst_lineage_sources"
+    },
+    "intraday": {
+      "collection_manifest_sha256": "3da0bcd5774ac9afe4093b1d5823f75a595b544cac783346c071e2e7ffd82e38",
+      "collection_request_sha256": "e2fa15ce2bb1dc87e20f49e3ab46529628655a36f3521bb2dc867081eea8da20",
+      "collection_rows": 81349171,
+      "coverage_fingerprint": "9581fae96e65030d63668df152163d326b960150673bac1c2321bcec5143c097",
+      "coverage_manifest_sha256": "9850f3488e45b876b7217ca027d62d8b5d6f27de51cf2ee5506cd8c482ef0ed9",
+      "dataset_fingerprint": "ea5150e55c2cfb0ab808ef6a102b1b604e841be13d5534eb58ecafb3c55207f5",
+      "proxy_dataset_sha256": "56bb8b478561d4a5eebc57d689bc4431fc397b089bdf0eb1b2c105c37c0e2321",
+      "proxy_rows": 70839,
+      "training_manifest_sha256": "77f5699d02fbac9da5c88e970f1dcc93abd5d77867eeda4ef735e05b0a8ba184",
+      "type": "verified_intraday_specialist_training_sources"
+    },
+    "swing": {
+      "bundle_manifest_sha256": "224a71dd2f4658d5d7579f2dae9191d56fe08f758ba936850f55ee159d4fa868",
+      "bundle_request_sha256": "e667ac13580e46b90aa4c955b209c77399b4cc73700a21f256fb7da48c62ce51",
+      "proxy_artifact_sha256": "1e2e7d199b033c2f15227d99f7dce41ba06721d612119de6991296535154a08f",
+      "proxy_rows": 103837,
+      "technical_artifact_sha256": "d97c8aaddb7357177c7bfcaab59fcb50b2c08b20c4673bd081cf4684e50c42f9",
+      "technical_manifest_sha256": "c0503e5eb53832f11c487f912e0cfabab760a603e09244506c26976179c1ca33",
+      "technical_rows": 630978,
+      "type": "verified_swing_research_sources"
+    }
+  },
+  "swing_policy_file_sha256": "c35ed48353f22f2b8131bec43d867203ea77feb8e932b0d3abc2f1195dbc00cb",
+  "training_performed": false
+}

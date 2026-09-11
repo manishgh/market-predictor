@@ -1,0 +1,10 @@
+evidence_type,evidence_value,observed_count,research_status,promotion_status,detail
+source_family,alpaca,2619,pass,pass,"coverage states={'coverage_blindspot': 10, 'observed_complete': 2608, 'observed_empty': 1}"
+relation_channel,direct_issuer,489088,pass,pass,causal relation rows in verified catalyst lineage
+relation_channel,business_exposure,0,blocked,blocked,causal relation rows in verified catalyst lineage
+relation_channel,sector_context,490946,pass,pass,causal relation rows in verified catalyst lineage
+relation_channel,global_context,0,blocked,blocked,causal relation rows in verified catalyst lineage
+availability,provider_publication_proxy,564916,pass,blocked,provider publication is a research proxy; promotion requires observed ingestion time
+field,sentiment,489088,pass,pass,sentiment lineage is hash-bound by catalyst request
+decision_join,SWING.SECTOR_RESIDUAL_MOMENTUM.10D.V1,54622,pass,blocked,event-time causality violations=0
+decision_join,INTRADAY.VWAP_EXHAUSTION_REVERSAL.30M.V1,0,blocked,blocked,verified intraday training rows contain no catalyst identity or availability columns

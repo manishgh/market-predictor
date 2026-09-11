@@ -1,0 +1,7 @@
+[sec_incremental]
+archive_directory = "data/external/sec_filings_20190709_20260708_v1"
+archive_manifest_sha256 = "e75f6c4dd0b4a392e35ba7033c581c5f8b748a7fbbfc5bb847b4e76b6863cd35"
+identity_relations = "data/canonical/sec_identity/sec_identity_20190709_20260708_v2/sec_identity_relations.parquet"
+identity_relations_sha256 = "507043d1d60d9b17db26727a5aeff9bfa23ae2962cc9d80d5637a1ba000a9720"
+output_root = "data/raw/swing_incremental_sec"
+extension_start = "2026-07-09"

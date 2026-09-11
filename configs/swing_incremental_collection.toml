@@ -1,0 +1,14 @@
+# Raw acquisition only. This query inventory is not current S&P membership or
+# proof that a ticker still represents its old issuer. Original archives stay intact.
+start = 2026-07-09
+output = "../data/raw/swing_incremental_alpaca"
+additional_symbols = ["RHT"]
+batch_size = 50
+bars_limit = 10000
+news_limit = 50
+max_pages_per_unit = 10000
+revision_overlap_days = 3
+
+[[source_manifests]]
+path = "../data/raw/swing_daily_sip_sp500_pit_20190709_20260708_v3/_manifest.json"
+sha256 = "b99a1d13d9075220db30c3870bc0796b3631bf4ec0bf6424469feeeec9115d93"
