@@ -46,7 +46,7 @@ def publication(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict[str, An
     monkeypatch.setattr(owner, "__file__", str(package / "research/swing_training_readiness.py"))
     config = root / "configs/readiness.json"
     policy: dict[str, Any] = dict(schema_version="market_predictor.swing_training_readiness",
-        scope="initial_fit_fixed_horizon_diagnostics")
+        scope="initial_fit_fixed_horizon_diagnostics", maximum_system_used_percent=90.0)
     for key, name in (("research_contract", "swing_research.toml"),
             ("strategy_contract", "edge_rebuild_strategy_contract.toml"),
             ("temporal_contract", "edge_rebuild_temporal_manifest.toml")):
@@ -76,7 +76,7 @@ def publication(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict[str, An
         calendar="XNYS", initial_fit_expected_sessions=3, label_horizon_sessions=10, warmup_sessions=250))
     monkeypatch.setattr(owner, "build_temporal_schedule", lambda _: SimpleNamespace(
         folds=(SimpleNamespace(train_sessions=days),)))
-    monkeypatch.setattr(owner, "_guard", lambda: None)
+    monkeypatch.setattr(owner, "_guard", lambda policy: None)
     monkeypatch.setattr(owner, "release_process_memory", lambda: None)
     directory = root / "data/features/join"
     request = dict(schema="market_predictor.research_join_request", rows=3,
@@ -138,6 +138,8 @@ def test_real_artifact_audit_preserves_populations_and_denies_training(publicati
     assert report["training_eligible"] is False
     assert report["promotion_eligible"] is False
     assert report["managed_evaluation_eligible"] is False
+    assert report["memory_policy"] == {"maximum_system_used_percent": 90.0,
+        "minimum_system_free_gib": None, "maximum_process_memory_gib": 5.0, "process_headroom_gib": 0.75}
     assert report["profiles"]["technical_market"]["complete_case_supervision"] == 2
     assert report["months"]["2019-07"]["paired_complete_case_supervision"] == 2
     assert len(report["missing_model_values"]["technical_market"]) == 120
@@ -194,12 +196,20 @@ def test_busy_lease_rejects_before_reading_config(publication: dict[str, Any]) -
 
 
 def test_memory_guard_aborts_without_report(publication: dict[str, Any], monkeypatch: pytest.MonkeyPatch) -> None:
-    def refuse() -> None:
+    def refuse(policy: object) -> None:
         raise MemoryBudgetError("fixture memory limit")
     monkeypatch.setattr(owner, "_guard", refuse)
     with pytest.raises(MemoryBudgetError):
         _run(publication)
     assert not publication["output"].exists()
+
+
+def test_configured_guard_runs_before_data_month_and_publication(publication: dict[str, Any],
+    monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[float] = []
+    monkeypatch.setattr(owner, "_guard", lambda policy: calls.append(policy.maximum_system_used_percent))
+    _run(publication)
+    assert calls == [90.0, 90.0, 90.0]
 
 
 def test_immutable_output_not_overwritten(publication: dict[str, Any]) -> None:

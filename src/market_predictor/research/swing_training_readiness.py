@@ -9,8 +9,8 @@ import exchange_calendars as xcals
 import pandas as pd
 
 from market_predictor.canonical.store import file_sha256, load_canonical_artifact, manifest_path_for
-from market_predictor.core.errors import DataReadinessError
-from market_predictor.core.system_memory import assert_system_memory_available
+from market_predictor.core.errors import DataReadinessError, MemoryBudgetError
+from market_predictor.core.system_memory import assert_system_memory_available, system_memory_snapshot
 from market_predictor.edge_rebuild.temporal_manifest import build_temporal_schedule, load_temporal_manifest_config
 from market_predictor.evidence.hashing import json_sha256
 from market_predictor.evidence.io import inside, write_json_object
@@ -31,9 +31,17 @@ IMPLEMENTATION_PATHS = (
 )
 
 
-def _guard() -> None:
+def _guard(policy: TrainingReadinessPolicy) -> None:
     assert_memory_budget(stage="swing training readiness", hard_budget_gib=5.0, headroom_gib=0.75)
-    assert_system_memory_available(minimum_available_gib=2.0)
+    snapshot = system_memory_snapshot()
+    if snapshot is None:
+        raise MemoryBudgetError("system memory measurement unavailable")
+    # Express the same percentage as free bytes, not an additional absolute floor.
+    free_gib = snapshot.total_bytes * ((100.0 - policy.maximum_system_used_percent) / 100.0) / 1024**3
+    checked = assert_system_memory_available(minimum_available_gib=free_gib,
+        maximum_used_percent=policy.maximum_system_used_percent)
+    if checked.total_bytes != snapshot.total_bytes:
+        raise MemoryBudgetError("physical memory capacity changed during measurement")
 
 
 def _verify(root: Path, pins: dict[str, str]) -> None:
@@ -51,8 +59,8 @@ def audit_swing_training_readiness(*, root: Path, config: Path, config_sha256: s
     if output.exists():
         raise FileExistsError(f"immutable report already exists: {output}")
     with heavy_job_lease("audit-swing-training-readiness", runtime_dir=root / "data/runtime", config_path=config):
-        _guard()
         policy = TrainingReadinessPolicy.model_validate(pinned_object(config, config_sha256))
+        _guard(policy)
         return _audit(root, policy, config, config_sha256, output)
 
 
@@ -119,7 +127,7 @@ def _audit(root: Path, policy: TrainingReadinessPolicy, config: Path, config_sha
     observed: set[Any] = set()
     securities: set[str] = set()
     for month in months:
-        _guard()
+        _guard(policy)
         record = manifest["months"][month]
         if set(record["profiles"]) != {"technical_market", "catalyst_full"}:
             raise DataReadinessError("profile inventory differs")
@@ -184,9 +192,11 @@ def _audit(root: Path, policy: TrainingReadinessPolicy, config: Path, config_sha
         if (prior["rows"] != total["rows"] or prior["feature_eligible"] != total["feature_eligible"]
                 or prior["complete_model_rows"] != total["model_inputs_complete"] or prior["clock_violations"] != 0):
             raise DataReadinessError("independent saved-row receipt disagrees with readiness audit")
-    _guard()
+    _guard(policy)
     _verify(root, pins)
     report = {"schema": "market_predictor.swing_training_readiness", "status": "diagnostic_complete",
+        "memory_policy": {"maximum_system_used_percent": policy.maximum_system_used_percent,
+            "minimum_system_free_gib": None, "maximum_process_memory_gib": 5.0, "process_headroom_gib": 0.75},
         "scope": policy.scope, "source_files": pins, "cohort_sha256": request["cohort_sha256"],
         "decision_start": sessions[0].isoformat(), "decision_end": sessions[-1].isoformat(),
         "sessions": len(sessions), "securities": len(securities), "publication_sha256": policy.publication.sha256,

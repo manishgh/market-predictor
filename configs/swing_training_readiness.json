@@ -1,6 +1,7 @@
 {
   "schema_version": "market_predictor.swing_training_readiness",
   "scope": "initial_fit_fixed_horizon_diagnostics",
+  "maximum_system_used_percent": 90.0,
   "publication": {
     "path": "data/features/swing_corrected_initial_fit_research/_manifest.json",
     "sha256": "63574b3b55cd30adaebf62b4040f92a2030e6dbb17772014afb3e3c168158256"
