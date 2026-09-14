@@ -72,6 +72,56 @@ reported explicitly. Validation/test publications and actual fitting remain
 uncompleted; ready technical profiles must not wait for blocked catalyst features
 once their objective-specific training consumer and acceptance gates exist.
 
+### Prepared Next Step: Swing Return Models
+
+Status: design reviewed; implementation has not started. Bernoulli
+(`01a0a07e-fb40-7031-b2d7-a9166dd328c9`) reviewed the training design read-only and
+is closed. This preparation does not close the RAM-blocked audit or authorize a
+fit. Freeze the following choices in the new strict research-fit contract before
+reading validation outcomes; the exact code-generated fold dates must be verified.
+
+- Start with existing_technical only: the published technical_market profile's
+  exact 120 inputs and clocks. Do not rename aggregate catalyst features as the
+  still-unimplemented qualified issuer/SEC reaction profile.
+- Use four expanding inner-development folds on the complete 1,231-session
+  initial-fit calendar, with at least 503 training sessions and ten intervening
+  embargo sessions. Proposed scoring blocks are 179/179/179/181 sessions. Purge
+  training rows by actual label maturity as well as session separation; freeze
+  dates before inspecting target availability.
+- Fit two independent scopes per learner/fold: full-universe temporal prediction,
+  and security-transfer prediction with the stable 20% security holdout removed
+  from both preprocessing and learner fit. Preserve the existing unseeded SHA256
+  security-ID threshold assignment; the estimator seed 42 is a separate fact.
+  Pin actual holdout IDs. Scope/fold refits are not extra specification searches.
+- Train only on feature-eligible rows with available matured fixed-horizon
+  supervision and required comparisons. Score feature-eligible rows regardless
+  of outcome availability. Do not require complete model inputs or delete any
+  published decision. Missing scored outcomes remain explicit in evaluation.
+- Proposed estimator encoding: fit medians on each training partition, retain
+  all-empty columns using an explicit zero encoding, and append one missingness
+  indicator per input. Zero does not assert observed neutrality or source coverage.
+  Fit linear scaling only on training rows. Use equal total weight per fit session,
+  normalized to mean row weight one, including weighted scaler statistics.
+- Proposed fixed learners: Ridge (alpha 1, intercept, lsqr, tolerance 1e-6,
+  maximum 10,000 iterations) and squared-error XGBoost (hist, depth 3, 200 trees,
+  learning rate 0.05, lambda 10, alpha 0, minimum child weight 1, full row/column
+  sampling, one thread, seed 42). No parameter grid, early-stopping search,
+  probability conversion or calibration. These are design recommendations, not
+  settings of an already fitted model.
+- Bind input/code/config pins, feature order, learned preprocessing, weights,
+  exact folds, holdout IDs, library versions and row-level predictions in a
+  distinct immutable research artifact. Reuse the pure fixed-horizon checks,
+  canonical projected reads and shared lease; do not reuse the old binary/ranker
+  fitter or disable its exposed-test protection. Serving/promotion remain false.
+
+Required exit tests: future/validation/held-out poisoning leaves fit transforms
+unchanged; missing inputs retain dimensions and rows; absent labels never change
+input eligibility; holiday/maturity boundaries purge correctly; identity-based
+holdout is stable; both scopes refit independently; costs are applied once;
+tampered artifacts and out-of-range reads fail; research models cannot serve.
+One consolidated independent diff review, full tests, bounded sequential real fits
+when admitted, updated acceptance matrix and pushed checkpoints remain required.
+
 ### Combined Evidence, Outcomes And Features Delivery
 
 Status: completed; implementation `7b5d834` is pushed to `er-intraday-refactoring`.

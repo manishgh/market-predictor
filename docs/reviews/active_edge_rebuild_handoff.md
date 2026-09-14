@@ -36,8 +36,9 @@ The only subsequent source edit removed a trailing blank line from
 the audit pins source bytes, its earlier receipt is historical, not current-code
 admission. A fresh receipt is still required before closing this checkpoint.
 
-Three refresh attempts stopped at the existing system-memory guard. Latest session
-82200 exited 1 at 85.0% used / 2.35 GiB free; no Python worker remains. The earlier
+Four refresh attempts stopped at the existing system-memory guard. Latest session
+95467 started at 80.2% used / 3.11 GiB free and exited 1 at 85.1% used / 2.34 GiB
+free; no Python worker remains. The earlier
 attempt reached 90.6% system use. Do not weaken the below-85% / minimum-2-GiB guard
 or terminate unrelated apps. The user has been asked to free memory.
 Resume when memory permits, without rebuilding data:
@@ -47,13 +48,21 @@ Resume when memory permits, without rebuilding data:
 ```
 
 The output must not already exist. Latest failed refresh log:
-`data/runtime/swing_training_readiness_verified_retry_audit.log`. Preserve the
+`data/runtime/swing_training_readiness_final_audit.log`. Preserve the
 original successful receipt unchanged. Post-format verification passed all 58
 readiness/continuity tests in 11.01 seconds; JUnit:
 `.test-tmp/training-readiness-post-format.xml`. Repository Ruff and strict mypy
 also passed again. No functional code changed after the full suite. Do not mark
 this environment-pending refresh as a passed run or repeatedly retry while RAM
 is unstable near the threshold.
+
+Next-consumer design review completed read-only with Bernoulli
+(`01a0a07e-fb40-7031-b2d7-a9166dd328c9`), now closed. Its concrete proposed folds,
+learner settings, missingness policy, separate temporal/transfer fits, artifact
+contract and risk tests are recorded under "Prepared Next Step: Swing Return
+Models" in the active plan. They are not implemented or fitted. The existing
+security holdout is an unseeded SHA256 security-ID threshold; keep that assignment
+distinct from estimator seed 42. Do not reuse the retained classifier/ranker.
 
 The user's three requested stages are complete:
 1. News rebuild: complete, including 59 monthly catalyst authorities.
