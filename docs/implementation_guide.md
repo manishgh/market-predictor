@@ -2,7 +2,7 @@
 
 Status: current edge-rebuild path
 
-Last updated: 2026-09-11
+Last updated: 2026-09-14
 
 Read `AGENTS.md`, `docs/active_edge_rebuild_plan.md`, and
 `docs/reviews/active_edge_rebuild_handoff.md` first. Command `--help` output and code
@@ -348,6 +348,28 @@ estimator without the same governance.
   derives an equivalent percentage-based free-byte threshold for the existing
   shared guard, avoiding edits to historical replay dependencies. Missing or
   inconsistent OS measurements abort. Other collectors retain their own policies.
+- `swing/contracts/return_training.py`: strict frozen two-learner research request,
+  including folds, holdout, weights, missingness and estimator settings.
+- `research/swing_return_inputs.py`: bounded monthly initial-fit-only admission
+  and loading against the independently pinned readiness receipt. Never downloads.
+- `swing/training/return_estimators.py`: train-only median/missingness encoding,
+  weighted linear scaling, Ridge and shallow squared-error XGBoost; shared prediction path.
+- `swing/training/return_validation.py`: full-calendar folds, maturity-purged fitting,
+  stable security transfer, date-balanced weights and non-portfolio diagnostics.
+- `swing/training/return_artifacts.py`: atomic research-model/prediction publishing,
+  exact-byte verified loading and rejection of serving/promotion purposes.
+- `research/swing_return_training.py`: leased sequential orchestration, pinned
+  resumable checkpoints, separate temporal/transfer fits and final research refits.
+  `commands/swing_return_training.py` exposes `train-swing-returns` without owning ML logic.
+  The completed first experiment is
+  `data/research/swing_technical_return_models_initial_fit`. `_request.json` binds
+  266 source/config/code pins, folds, feature order and runtime versions;
+  `_checkpoint.json` binds every completed unit; `_manifest.json` records all 18
+  completed fits. Each unit has a model and manifest, plus validation predictions
+  where applicable. Final models live in each learner's `final_refit` directory.
+  Resuming requires the independent checkpoint SHA256 and identical inputs/code/
+  runtime. Reuse completed evidence instead of repeating fits; current results and
+  exact hashes are in the active handoff, not in this component guide.
 - `swing/datasets/initial_fit_raw_share_plan.py`: identity-only initial-fit raw SIP
   acquisition requirements and independent pinned replay. The next-ten-session
   paths remain intact after index removal; all in-window decision sessions are also

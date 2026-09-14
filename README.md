@@ -59,19 +59,19 @@ the verified counts and limitations are in the
 [current feature audit](docs/reviews/feature_engineering_audit_20260801.md).
 
 Final repository Ruff and strict type checks pass. The complete regression suite
-passed 4,224 tests with 10 skips after the percentage-only memory policy. These are
-research-only datasets, not
-promoted models. Historical news reception is not proven, unsupported outcomes
-remain null, and SEC/Finviz are not silently included in this Alpaca-only monthly
-news feature contract. No model training has started.
+passed 4,329 tests with 10 skips after the return-training implementation. These
+are research-only datasets and models, not promoted models. Historical news
+reception is not proven, unsupported outcomes remain null, and SEC/Finviz are not
+silently included in this Alpaca-only monthly news feature contract.
 
 The fixed-horizon training-input audit now verifies all 1,231 initial-fit sessions
 and 545 securities appearing in that period (586 is the campaign-wide retained
 list). There are 378,037 usable stock/SPY/QQQ/sector outcome rows; complete-case
 input/outcome intersections are 194,679 technical and 193,125 catalyst rows.
 These are diagnostic counts, not a rule deleting incomplete rows. The audit
-does not authorize fitting: the approved return-regression consumer and distinct
-new relationship/reaction profiles still require implementation. See the current
+does not itself authorize fitting. The objective-specific return trainer is
+implemented, independently reviewed and trained; new relationship/reaction profiles
+still require implementation. See the current
 feature audit for precise requirements. Run the immutable saved-data diagnostic:
 
 Implementation `b3b2372` is pushed. The fresh hash-bound receipt passed after RAM
@@ -94,6 +94,52 @@ rerun. The command verifies pins and fails rather than overwrite existing eviden
 Cloud deployment is out of
 scope until training and evaluation are complete. Research results do not
 guarantee outperformance of SPY.
+
+### Trained Swing Return Models
+
+Implementation `07963cc` is pushed. Regularized linear regression and shallow
+boosted trees now predict ten-session stock return above SPY after stock costs.
+Both use the existing 120 technical inputs, not the unfinished issuer/SEC reaction
+profile. Saved initial-fit history spans July 9, 2019-May 28, 2024: 586,305
+published decisions across 545 securities, with 314,167 eligible matured rows
+used by each final fit. No outer-validation or historical-test data was opened.
+
+All 16 validation fits and two final research fits completed sequentially, with
+peak process memory of 2.406 GiB. Four chronological folds use ten-session
+embargoes and actual label-maturity purging. Missing-value handling and weighted
+linear scaling fit only on training rows; session weights are balanced. Separate
+transfer fits exclude all 101 held-out security identities from preprocessing and
+training. All 18 artifacts and 266 source/config/code hashes verified afterward.
+
+Results below combine saved out-of-fold predictions, weighting each observed date
+equally. Positive error change means worse than predicting zero excess return.
+
+| Model and evaluation | Mean daily rank correlation | Squared-error change versus zero excess |
+| --- | ---: | ---: |
+| Linear, later dates | 0.0045 | +1.77% |
+| Boosted trees, later dates | 0.0147 | +1.99% |
+| Linear, unseen securities on later dates | 0.0070 | +1.28% |
+| Boosted trees, unseen securities on later dates | 0.0003 | +2.14% |
+
+The predictive signal is weak. Only 187,432 of 289,802 temporal predictions have
+admitted comparison outcomes (64.68%); unknown outcomes remain recorded, not zeroed
+or silently removed from a portfolio. No funded portfolio, SPY outperformance,
+promotion or live readiness is established by these regression diagnostics.
+
+Artifact directory: `data/research/swing_technical_return_models_initial_fit`.
+Each learner's `final_refit/model.joblib` is a research model; row-level validation
+predictions, preprocessing, runtime versions, source pins and metrics are retained.
+The [active handoff](docs/reviews/active_edge_rebuild_handoff.md) records manifest
+hashes and exact resume instructions. The completed output is immutable.
+
+```powershell
+.venv\Scripts\python.exe -B -u -m market_predictor.research_cli train-swing-returns --root . --config configs/swing_return_training.json --config-sha256 47155e2d6ef43e9efb6bb54621913e3df5ee0f66797153c30f71d8f69e5593cc --output data/research/swing_technical_return_models_initial_fit
+```
+
+This command requires a new output directory for a new run. To resume an existing
+run, supply `--resume-checkpoint-sha256` with an independently verified checkpoint
+hash. Inputs, implementation, configuration and runtime must still match; completed
+fits are verified, not overwritten. Do not rerun the completed experiment by default.
 
 ### Source Collection
 

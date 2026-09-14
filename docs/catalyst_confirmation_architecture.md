@@ -1,7 +1,7 @@
 # Catalyst-Confirmation Prediction Architecture
 
 Status: design authority
-Last updated: 2026-09-11
+Last updated: 2026-09-14
 
 This document defines stable component boundaries. Current progress and blockers are
 in `active_edge_rebuild_plan.md` and `reviews/active_edge_rebuild_handoff.md`.
@@ -212,6 +212,28 @@ changed physical capacity between probes, and checks before loading data, each
 month, and report publication. The existing shared guard receives a free-byte
 threshold equivalent to the configured percentage, not a second restriction.
 Shared source-collection defaults and hash-bound replay dependencies are unchanged.
+
+`research/swing_return_inputs.py` admits only the verified initial-fit technical
+publication for the strict return-training contract. `swing/training` owns the
+two return estimators, training-only missingness encoding, weighted transforms,
+calendar-fold masks and research artifact verification. `research/swing_return_training.py`
+orchestrates sequential fits under the shared lease and percentage/peak-memory
+guards. Full temporal and unseen-security scopes fit independently. The latter
+uses stable unseeded security-ID hashes, not ticker text or a new seed assignment.
+Each completed unit binds request, runtime, preprocessing and source-row identities.
+Resuming requires a caller-pinned checkpoint; files are published atomically and
+deserialization uses exact hash-verified bytes. Research output is outside the
+serving registry and cannot authorize orders, serving or promotion.
+
+The return experiment contains two fixed learner specifications, each with four
+calendar folds in two separately fitted scopes and one final research refit.
+The latter includes all eligible initial-fit securities and is not the transfer
+test model. All-empty training columns have an explicit encoding; every input
+gets a missingness flag, preserving 240 encoded columns from 120 original inputs.
+Regression outputs are decimal expected excess returns, not probabilities or
+trade recommendations. Scored rows without admitted outcomes remain in coverage
+reports. Date-weighted prediction errors and rank correlations do not replace the
+funded portfolio evaluator or authorize claims of SPY outperformance.
 
 Numeric initial-fit reads end on 2024-05-28; pre-2019-07-09 bars are warm-up only.
 Technical features use a coherent adjusted provider stream; dollar volume uses raw

@@ -14,7 +14,7 @@ causal inputs and an explicit research-only training contract.
 
 | Planned profile | Source, batch and feature order | Fixed-horizon labels | Training consumer and experiment | Live, promotion and API |
 | --- | --- | --- | --- | --- |
-| existing_technical | Verified corrected publication: technical_market, 120 ordered inputs and availability clocks | Original outcomes replayed; new audit checks exact costs, comparisons and maturity separately from input eligibility | Blocked: the existing trainer is the older classifier/ranker, not the two approved return regressors | Not authorized; no new fitted artifact or return-model serving contract |
+| existing_technical | Verified corrected publication: technical_market, 120 ordered inputs and availability clocks | Original outcomes replayed; exact costs/comparisons/global maturity audited; inner fitting purges actual maturity independently | Verified implementation 07963cc: 16 real temporal/transfer fits and two final models completed; 4,329 full tests passed, 10 skipped | Not applicable to this offline research experiment; artifact loader explicitly rejects serving/promotion purpose |
 | technical_relationships | Blocked: the distinct additional momentum/regime relationships are not a published profile; existing RSI/OBV relationships must not be counted again | Must reuse matched independently admitted labels | Not trained; cannot duplicate existing_technical under another name | Not authorized |
 | technical_relationships_issuer_reaction | Blocked: catalyst_full has aggregate news features, not qualified issuer/SEC event-reaction inputs; SEC/Finviz coverage is unknown here | Must reuse matched independently admitted labels | Not trained; counts and sentiment cannot substitute for the promised reaction feature contract | Not authorized |
 
@@ -28,11 +28,65 @@ facts separate:
 - available fixed-horizon supervision, with all required comparison evidence;
 - their intersection, not a historical opportunity-selection mask.
 
-The next training consumer must bind exact learner settings, missing-feature and
-missing-label policy, purged session folds, weights and separate security holdout
-before fitting. Ready technical specifications need not wait for the blocked
+The return consumer binds exact learner settings, missing-feature and missing-label
+policy, purged session folds, weights and separate security holdout before fitting.
+Ready technical specifications need not wait for the blocked
 reaction profile or later outer-validation publication to run bounded inner
 development. Missing selected outcomes cannot be removed from economic evaluation.
+
+### Technical Return Experiment Acceptance
+
+The research-only scope was frozen before fitting and verified on the real run:
+
+| Layer | State and evidence |
+| --- | --- |
+| Source and historical availability | Verified research inputs in the pinned percentage-only readiness report; no prospective first-receipt claim |
+| Historical feature construction and order | Verified 120 technical inputs; return input loader checks exact file/sidecar pins, column clocks, population and date limits |
+| Labels and costs | Verified by shared fixed-horizon checks; original net excess target is not recosted or replaced by managed outcomes |
+| Fitted preprocessing | Verified focused tests: training-only medians, 240 stable encoded columns, weighted scaling, separate fold/scope fits |
+| Training and validation | Verified fixed Ridge/XGBoost, four calendar folds, actual-maturity purge, date weights and separate identity-based holdout; all 18 real fits completed; 314,167 rows in each final fit |
+| Persistence and inference parity | Verified synthetic and real-estimator serialization/reload, pinned exact-byte loading, request-bound resumable units and prediction parity; all 18 unit manifests and 266 request source pins independently rechecked |
+| Live feature construction, API and promotion | Not applicable to initial-fit offline research; existing live model admission remains separate; research artifacts reject serving purpose |
+
+Configuration: `configs/swing_return_training.json`, SHA256
+`47155e2d6ef43e9efb6bb54621913e3df5ee0f66797153c30f71d8f69e5593cc`.
+No source family, exclusion list or sector threshold changed. Unknown outcome rows
+remain in scored-population coverage, not silently removed from a portfolio result.
+Regression and per-date rank diagnostics are not evidence of funded SPY outperformance.
+
+Completed real fit: `data/research/swing_technical_return_models_initial_fit/_manifest.json`,
+SHA256 `0a30ef2f8e3b95cee252f8c1d1bb5be3c6b98cddda4e47d68e835ad5c1892551`.
+Initial-fit inputs remain 586,305 decisions / 545 securities / 1,231 sessions.
+There are 101 held-out security identities. Each final model trains on 314,167
+eligible rows with matured supervision over 1,022 observed training sessions;
+these are not 314,167 independent market episodes. Full calendar folds remain
+503/682/861/1,040 training sessions before eligibility, with 179/179/179/181 scored
+sessions and ten intervening sessions in each fold. No calendar is shortened
+using outcome availability. No outer-validation or historical-test read occurred.
+
+Sequential training peaked at 2.406 GiB. Independent review is closed; 105 focused
+tests, 240 CLI/boundary tests, the full 4,329-test suite (10 skips), Ruff and strict
+mypy passed. Code and scripts together pass strict typing across 409 files.
+
+Recomputed from concatenated nonduplicate out-of-fold predictions, with equal
+total weight for each date having an observed scored outcome:
+
+| Learner / scope | Date-weighted MSE | Zero-excess MSE | Mean daily rank correlation |
+| --- | ---: | ---: | ---: |
+| Linear / temporal | 0.00260415 | 0.00255894 | 0.00449 |
+| Boosted / temporal | 0.00260998 | 0.00255894 | 0.01467 |
+| Linear / security transfer | 0.00290470 | 0.00286810 | 0.00696 |
+| Boosted / security transfer | 0.00292961 | 0.00286810 | 0.00029 |
+
+Temporal scores: 289,802; known outcomes: 187,432; unknown: 102,370.
+Transfer scores: 54,964; known outcomes: 35,548; unknown: 19,416.
+Both scopes have 592 dates supporting rank correlation. Coverage is about 64.68%,
+so these conditional diagnostics cannot stand in for full-population economics.
+Both learners have higher aggregate squared error than predicting zero excess,
+and the ranking signal is weak. This is a measured research result, not a runtime
+failure or a promotion result. Do not invert scores, tune thresholds or exclude
+losers after viewing it. The four remaining planned specifications need their
+distinct feature profiles; these models do not silently include news/SEC.
 
 Real audit completed successfully on September 14:
 `data/reports/swing_initial_fit_training_readiness_percentage_only.json`, SHA256
@@ -58,8 +112,9 @@ sector-normalized inputs: for example return_5d_sector_z is missing on 258,190
 published rows, and rsi_bullish_divergence_strength_sector_z on 278,833. The existing
 scaler intentionally emits missing sector values for undersized peer groups or
 unavailable inputs; the audit does not lower the frozen 30-peer threshold or
-silently drop those decisions. A training missingness policy is still required.
-No outcome means, AUC, fitted predictions or portfolio profits were evaluated.
+silently drop those decisions. The return consumer now fits its missingness
+encoding separately within each training partition. The readiness audit itself
+did not evaluate outcomes or fit models; real model diagnostics are reported above.
 
 Independent reviewer Beauvoir closed two supported P2 findings after failing
 regression tests: changed transformation policies must match publication provenance,

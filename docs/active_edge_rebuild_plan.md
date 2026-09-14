@@ -36,10 +36,13 @@ outside this repository.
 
 ## Long-Only Swing Research And Implementation Plan
 
-Current step: **implement swing return-regression training** (`in progress`).
-Design is reviewed below; implementation and fitting have not started. Use the
-verified percentage-only audit receipt from the handoff. Preserve the user-approved
-90% system-memory ceiling without an independent absolute free-RAM floor.
+Current step: **complete the bounded swing return-model comparisons** (`in progress`).
+The user's combined implement/verify/train checkpoint is complete in `07963cc`
+(pushed): two existing-technical specifications, 16 independent fold/scope fits
+and two final research models. Four specifications still need the distinct
+relationship/reaction profiles described below; they are not part of the completed
+two-model delivery. Preserve the verified inputs and the approved 90% system-memory
+ceiling without an independent absolute free-RAM floor.
 
 ### Completed Percentage-Only Memory Policy
 
@@ -87,20 +90,20 @@ reported explicitly. Validation/test publications and actual fitting remain
 uncompleted; ready technical profiles must not wait for blocked catalyst features
 once their objective-specific training consumer and acceptance gates exist.
 
-### Prepared Next Step: Swing Return Models
+### Completed Technical Swing Return Models
 
-Status: current, design reviewed; implementation has not started. Bernoulli
+Status: complete in `07963cc` (pushed), including real historical fitting. Bernoulli
 (`01a0a07e-fb40-7031-b2d7-a9166dd328c9`) reviewed the training design read-only and
-is closed. The audit and memory-policy checkpoints are closed; this design alone
-does not authorize a fit. Freeze these choices in the strict research-fit contract before
-reading validation outcomes; the exact code-generated fold dates must be verified.
+is closed. Leibniz independently closed the implementation review after all three
+supported findings were fixed and tested. The choices below were frozen before
+the first two technical specifications were fitted; preserve them in comparisons.
 
 - Start with existing_technical only: the published technical_market profile's
   exact 120 inputs and clocks. Do not rename aggregate catalyst features as the
   still-unimplemented qualified issuer/SEC reaction profile.
 - Use four expanding inner-development folds on the complete 1,231-session
   initial-fit calendar, with at least 503 training sessions and ten intervening
-  embargo sessions. Proposed scoring blocks are 179/179/179/181 sessions. Purge
+  embargo sessions. Scoring blocks are 179/179/179/181 sessions. Purge
   training rows by actual label maturity as well as session separation; freeze
   dates before inspecting target availability.
 - Fit two independent scopes per learner/fold: full-universe temporal prediction,
@@ -112,17 +115,17 @@ reading validation outcomes; the exact code-generated fold dates must be verifie
   supervision and required comparisons. Score feature-eligible rows regardless
   of outcome availability. Do not require complete model inputs or delete any
   published decision. Missing scored outcomes remain explicit in evaluation.
-- Proposed estimator encoding: fit medians on each training partition, retain
+- Estimator encoding: fit medians on each training partition, retain
   all-empty columns using an explicit zero encoding, and append one missingness
   indicator per input. Zero does not assert observed neutrality or source coverage.
   Fit linear scaling only on training rows. Use equal total weight per fit session,
   normalized to mean row weight one, including weighted scaler statistics.
-- Proposed fixed learners: Ridge (alpha 1, intercept, lsqr, tolerance 1e-6,
+- Fixed learners: Ridge (alpha 1, intercept, lsqr, tolerance 1e-6,
   maximum 10,000 iterations) and squared-error XGBoost (hist, depth 3, 200 trees,
   learning rate 0.05, lambda 10, alpha 0, minimum child weight 1, full row/column
   sampling, one thread, seed 42). No parameter grid, early-stopping search,
-  probability conversion or calibration. These are design recommendations, not
-  settings of an already fitted model.
+  probability conversion or calibration. These frozen settings were used in every
+  completed fit; no post-result parameter search was performed.
 - Bind input/code/config pins, feature order, learned preprocessing, weights,
   exact folds, holdout IDs, library versions and row-level predictions in a
   distinct immutable research artifact. Reuse the pure fixed-horizon checks,
@@ -134,8 +137,34 @@ unchanged; missing inputs retain dimensions and rows; absent labels never change
 input eligibility; holiday/maturity boundaries purge correctly; identity-based
 holdout is stable; both scopes refit independently; costs are applied once;
 tampered artifacts and out-of-range reads fail; research models cannot serve.
-One consolidated independent diff review, full tests, bounded sequential real fits
-when admitted, updated acceptance matrix and pushed checkpoints remain required.
+All scoped tests, the consolidated independent review and bounded sequential
+historical fits passed. Full verification: 4,329 passed, 10 skipped; Ruff and
+strict mypy passed (409 code/script files). Serialization/reload parity passed
+for every real fit, followed by verification of all 18 units and 266 request pins.
+
+Delivery scope: four folds times two independently fitted scopes times two
+specifications, followed by two all-initial-fit research models. Each completed
+unit is immutable and resumable with exact input/config/code/version pins and
+row-level out-of-sample predictions. Regression/ranking diagnostics may use known
+labels with explicit coverage; they are not funded-portfolio SPY outperformance
+or promotion evidence. No outer-validation/test reads, downloads, new features,
+source admission flag changes or serving integration belong to this checkpoint.
+
+Completed artifact: `data/research/swing_technical_return_models_initial_fit`;
+manifest SHA256 `0a30ef2f8e3b95cee252f8c1d1bb5be3c6b98cddda4e47d68e835ad5c1892551`.
+Each final model used 314,167 eligible matured rows from 2019-07-09 through
+2024-05-28. Initial-fit inputs retain all 586,305 decisions / 545 securities;
+101 identities are held out only in the separate transfer fits. Peak memory was
+2.406 GiB. No heavy process or reviewer remains active.
+
+The measured result is weak, not a fit failure: temporal daily rank correlation
+is 0.00449 linear / 0.01467 boosted; aggregate squared error is 1.77% / 1.99%
+worse than predicting zero excess. Transfer error is also worse. Only 64.68% of
+scored decisions have admitted comparison outcomes; no unavailable outcome is
+filled or removed from a claimed portfolio. See the feature audit for all metrics.
+No SPY outperformance, funded-policy evaluation, promotion or live readiness is
+asserted. Next: finish the distinct feature profiles for the four remaining
+specifications, using the original feature design and frozen experiment budget.
 
 ### Combined Evidence, Outcomes And Features Delivery
 
@@ -815,15 +844,14 @@ eligibility or hard sector allocation is a separately named contract decision.
 
 ### Ordered Checkpoints
 
-The user initially approved two checkpoints, then explicitly authorized continuing
-the remaining work through model training on 2026-09-07. The objective/evidence
-checkpoint is complete. Accounting code is verified and pushed in `6758671`, but
-retained-data acceptance remains blocked by 70 incomplete selected outcomes and
-unverified price basis. The September 8 whole-security research restriction above
-replaces the requirement to repair all eighteen affected securities before a new
-cohort. Retained paths and price basis still require acceptance before dependent
-training; the expanded authorization does not waive causal or accounting gates.
-Names describe behavior rather than experiment serial numbers.
+The user initially approved two checkpoints, then authorized continuing through
+model training. The objective/evidence checkpoint is complete. The old accounting
+control in `6758671` remains historical blocked evidence; it is not the current
+training dataset. Corrected initial-fit outcomes and predictors were subsequently
+replayed and audited, and `07963cc` completed the two technical return specifications.
+Funded policy evaluation and the four additional feature-profile specifications
+remain incomplete. The user-approved whole-security restriction does not waive
+causal, price-basis or accounting gates. Names describe behavior, not serial numbers.
 
 1. **Define the SPY objective and reconcile evidence (`complete`).**
    Freeze the new research objective, exact candidate/policy budget, chronological
@@ -836,12 +864,13 @@ Names describe behavior rather than experiment serial numbers.
    Exit: one reproducible contract and no contradictory current instructions; no
    training or locked-outcome access. Review: independent ML/economics reviewer.
 
-2. **Reconcile returns, capital and SPY accounting (`paused pending canonical replay`).**
-   Implementation is verified/pushed (`6758671`); real-data acceptance is blocked,
-   not complete. The frozen control selected 30,525 stock-days before loading
-   outcomes; 70 have incomplete fixed-horizon labels. No filtered replacement
-   population or real-data accounting result was produced. Exact evidence follows
-   under Research Checkpoint Status and in the current feature audit.
+2. **Reconcile returns, capital and SPY accounting (`labels verified; funded evaluation pending`).**
+   Accounting code is verified/pushed (`6758671`). Its historical frozen control
+   selected 30,525 stock-days and encountered 70 incomplete labels; that run remains
+   blocked, not rewritten as a pass. The newer corrected initial-fit dataset has
+   passed outcome/predictor replay and supervision checks. Its admitted labels
+   support the completed research fits, but no complete funded portfolio result
+   has been produced. Unknown selected outcomes still cannot be filtered away.
    Extend the existing label/evaluation owners with named fixed-horizon return
    evidence and a funded daily ledger. Replay retained development predictions only
    if immutable row-level prediction evidence actually exists. The inspected
@@ -868,7 +897,10 @@ Names describe behavior rather than experiment serial numbers.
    with economic eligibility false. Do not accept a caller's `passed=true` assertion
    as proof. No speculative bulk collection is required for this code checkpoint.
 
-3. **Complete causal news and reaction features (`pending`).**
+3. **Complete causal news and reaction features (`aggregate joins complete; distinct reaction profiles pending`).**
+   The saved monthly Alpaca attribution and aggregate joins are complete. They
+   do not replace the distinct technical-relationship and qualified issuer/SEC
+   reaction profiles required by the remaining four specifications.
    Audit existing Alpaca/SEC artifacts, broaden eligible issuer categories only after
    development precision/recall evidence, and backfill the accepted feature profiles
    across the existing horizon. Expose the same transforms in batch and inference.
@@ -881,12 +913,18 @@ Names describe behavior rather than experiment serial numbers.
    known-zero versus unknown, SEC acceptance timing, future-poison and batch/live
    parity. No new feature is "done" with batch-only implementation.
 
-4. **Train the six bounded return-model comparisons (`pending`).**
+4. **Train the six bounded return-model comparisons (`partially complete: two of six specifications`).**
+   Existing-technical linear and boosted specifications completed in `07963cc`,
+   including four chronological folds, independent transfer fits and final models.
+   The four relationship/reaction specifications await their distinct profiles.
    Use the existing Python stack and shared data IO. Fit models sequentially with a
    workspace lease, bounded projected batches and a 5 GiB process-memory limit.
    Store every development prediction with source/feature/split/model identity.
-   Owners: `edge_rebuild/swing_training.py`, `edge_rebuild/training`, `modeling`,
-   `swing/contracts/model_artifact.py`, and thin research CLI adapters.
+   Owners: `swing/training/return_estimators.py`, `return_validation.py`,
+   `return_artifacts.py`, `swing/contracts/return_training.py`,
+   `research/swing_return_inputs.py`, `research/swing_return_training.py`, and
+   the thin `commands/swing_return_training.py` adapter. Do not route continuous
+   return fitting through the retained classifier/ranker.
    Exit: reproducible fits, chronological calibration, matched-profile comparisons,
    date-weighted metrics, complete failure records, and no held-out data reads.
    No more feature changes are permitted after this checkpoint's validation starts.

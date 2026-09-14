@@ -4,11 +4,89 @@ Status: active
 Last updated: 2026-09-14
 Repository: `C:\project\market-predictor`
 Branch: `er-intraday-refactoring`
-Last completed implementation checkpoint: `7bb805b` (pushed).
+Last completed implementation checkpoint: `07963cc` (pushed).
 Source-collection checkpoint: `19698d6` (pushed).
 The combined historical outcome/features delivery is verified and committed.
 
 ## Current State
+
+The requested implement/verify/train checkpoint is complete in `07963cc`.
+Regularized linear regression and shallow boosted trees predict ten-session net
+stock return above SPY using the existing 120 technical inputs. All 16 independent
+fold/scope fits and two final research models completed sequentially in session
+16163, exit zero. Each final model used 314,167 eligible matured rows over 1,022
+observed training sessions. The published input still contains 586,305 decisions,
+545 securities and all 1,231 sessions from July 9, 2019-May 28, 2024.
+No source data was downloaded, rebuilt, removed or read from later outer splits.
+
+Four full-calendar expanding folds use 503/682/861/1,040 training sessions before
+eligibility, ten intervening sessions, and 179/179/179/181 scoring sessions.
+Actual label maturity is purged independently. Preprocessing fits only on training
+rows; dates receive equal total weight. Separate transfer fits exclude all 101
+held-out security identities from both preprocessing and training. Final research
+refits use all eligible initial-fit securities; they are not unseen-stock tests.
+
+Completed artifact: `data/research/swing_technical_return_models_initial_fit`.
+Root manifest SHA256:
+`0a30ef2f8e3b95cee252f8c1d1bb5be3c6b98cddda4e47d68e835ad5c1892551`.
+Request SHA256:
+`ebfb9de68e24cdb8bece4b5e8581174234f6c22e0521284e5c4a3cfdf2392347`.
+Checkpoint SHA256:
+`fecd8733f9d812a5060ee098ab11e4e611b57d7043f66d68803e403e123ef598`.
+Final model files are under each named learner's `final_refit/model.joblib`.
+Every validation fit retains its own `predictions.parquet` and manifest. All 18
+unit hashes, 266 source/config/code pins, maturity boundaries and transfer training
+identities were independently rechecked after fitting. Serialization/reload
+prediction parity passed for each real model. Peak process memory: 2.406 GiB.
+Log: `data/runtime/swing_technical_return_models_initial_fit.log`.
+
+The models trained successfully but show weak predictive signal. Aggregating
+nonduplicate out-of-fold predictions with equal date weight, temporal rank
+correlation is 0.00449 linear / 0.01467 boosted; squared error is 1.77% / 1.99%
+worse than predicting zero excess. Transfer correlations are 0.00696 / 0.00029;
+errors are 1.28% / 2.14% worse. Temporal known outcomes are 187,432 of 289,802
+predictions; transfer known outcomes are 35,548 of 54,964. Unknown outcomes are
+retained. These roughly 64.68%-coverage diagnostics are not a complete funded
+portfolio, not proof of SPY outperformance and not grounds for promotion.
+Exact metrics and remaining profile gaps are in the current feature audit.
+
+Verification: 105 focused/integration tests, 240 CLI/package/dependency tests,
+4,329 full-suite tests passed with 10 skips and 271 warnings in 1,790.40 seconds.
+Full-suite log: `data/runtime/swing_return_models_full_tests.log`; JUnit:
+`.test-tmp/swing-return-models-full.xml`. Ruff and strict mypy passed again after
+fitting, including scripts (409 files). No source/config/test edits followed the
+full suite or occurred during fitting. No training/test worker remains active.
+Documentation closure also passed 242 continuity/CLI/package/architecture tests
+in 17.23 seconds; JUnit `.test-tmp/swing-return-doc-closure.xml`. Closing memory
+sample: 70.97% physical use, 4.55 GiB available. All owned workers and agents are
+closed; the next checkpoint must not resume a nonexistent background job.
+
+Aristotle (`01a0a0eb-4e0f-7b43-af5d-cd1ae52b8703`) implemented the isolated
+estimator module and validation tests and is closed. Independent reviewer Leibniz
+(`01a0a0eb-4e99-7933-9c75-0eb0fa024011`) closed design and consolidated code review.
+Three supported issues were fixed and tested: pinned exact-byte artifact loading,
+Python/SciPy/calendar runtime identity, and peak-memory enforcement before success.
+No review agent remains active. The full-suite session 89517 exited zero before
+the historical run. All three requested stages are finished, not waiting for
+another training approval.
+
+Completed run command (record of execution, not an instruction to retrain):
+
+```powershell
+.venv\Scripts\python.exe -B -u -m market_predictor.research_cli train-swing-returns --root . --config configs/swing_return_training.json --config-sha256 47155e2d6ef43e9efb6bb54621913e3df5ee0f66797153c30f71d8f69e5593cc --output data/research/swing_technical_return_models_initial_fit
+```
+
+The output is complete and immutable. Resume only
+with an independently verified `_checkpoint.json` SHA256 supplied through
+`--resume-checkpoint-sha256`; never overwrite artifacts or accept unpinned units.
+The acceptance matrix records offline-only layers explicitly. No outer-validation,
+exposed-test, live-serving or portfolio-profitability claim is authorized. Existing
+raw source reception limitations remain; neither model is a news/SEC reaction model.
+
+## Historical Checkpoint Receipts
+
+The following completed audit/source receipts remain input provenance. Their old
+test counts are historical, not the latest repository verification result.
 
 Completed checkpoint: fixed-horizon training-input diagnostics. Implementation
 `b3b2372` is pushed and the final receipt refresh passed. It binds the publication and
@@ -71,8 +149,8 @@ Earlier 85% failures are historical, not the requested policy.
 Next-consumer design review completed read-only with Bernoulli
 (`01a0a07e-fb40-7031-b2d7-a9166dd328c9`), now closed. Its concrete proposed folds,
 learner settings, missingness policy, separate temporal/transfer fits, artifact
-contract and risk tests are recorded under "Prepared Next Step: Swing Return
-Models" in the active plan. They are not implemented or fitted. The existing
+contract and risk tests are recorded under "Completed Technical Swing Return
+Models" in the active plan. Implementation and fitting are now complete above. The existing
 security holdout is an unseeded SHA256 security-ID threshold; keep that assignment
 distinct from estimator seed 42. Do not reuse the retained classifier/ranker.
 
@@ -83,7 +161,8 @@ The user's three requested stages are complete:
    status-marker failure, 4,145 passed and 10 skipped. The documentation-only
    correction passed both continuity tests; no source code changed afterward.
 
-No model training, promotion, or SPY outperformance is claimed. Current scope is
+Those source/audit stages did not fit models. The completed return fit above is
+separate and does not claim promotion or SPY outperformance. Current scope is
 the initial-fit period July 9, 2019-May 28, 2024, not the entire raw archive.
 Every frozen decision is retained; unknown coverage and outcomes remain explicit.
 
@@ -234,17 +313,24 @@ the frozen numeric training boundary or authorize promotion.
 
 ## Next Actions
 
-Exact next checkpoint: implement the objective-specific swing return-training consumer.
+Exact next checkpoint: complete the distinct technical-relationship and qualified issuer/SEC reaction feature profiles for the four remaining bounded return specifications.
 
-1. Audit and percentage-only memory policy are complete. Use the current receipt
-   above; do not rerun numerical replays or rebuild the saved dataset.
-2. Implement the objective-specific research training consumer, including frozen
-   preprocessing, label policy and purged inner-development folds, before fitting
-   the existing technical comparison. The retained trainer is not this consumer.
-   Distinct technical-relationship and issuer/SEC reaction profiles remain absent;
-   do not relabel catalyst_full as a completed reaction model. Validation/test
-   publications are needed for their later evaluations, not as a blanket blocker
-   on inner-development training. No fitting or economic evaluation has run here.
+1. Existing technical training is complete: preserve its immutable artifacts as
+   the two baseline specifications. Do not retrain them or tune settings after
+   inspecting these results. Keep the approved six-specification experiment cap.
+2. Follow the original active plan's feature design and acceptance matrix. Map
+   genuinely distinct price/volume/regime relationships to current owners; audit
+   issuer/SEC causal event and reaction availability. Freeze exact columns and
+   source semantics before constructing matched histories. Reuse saved evidence;
+   aggregate catalyst_full is not the completed reaction profile.
+3. Reuse the verified return estimator/validation/artifact modules for the four
+   remaining profile/learner comparisons once their acceptance gates pass. Keep
+   chronological masks, dates, holdout assignment, costs and date weights matched.
+   No new exclusions or reaction-source claims can be inferred from this fit.
+4. Funded evaluation of the preregistered long-only policies remains unrun. Unknown
+   selected outcomes must not disappear from that evaluation. The raw archives
+   cover later dates, but outer-validation/test publications are still separate
+   work; the exposed historical test must never be called untouched.
 
 Decision config: `configs/swing_corrected_outcomes.toml`,
 `ded3b30af1185c7ab0759fa5f81c559c37c590419751c942b61ab479e67c2348`.
@@ -316,4 +402,4 @@ Use the project `.venv/Scripts/python.exe`; pytest needs a unique
 Heavy jobs use one shared lease, system-memory guards and sequential execution.
 Track and close owned agents/processes; never kill unrelated applications.
 No cloud/security deployment work, intraday development, alerts or broker orders.
-No new model has been fitted or proven profitable by this delivery.
+Two technical return models are fitted; neither is promoted or proven profitable.
