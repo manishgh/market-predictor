@@ -135,6 +135,7 @@
     "train-edge-swing-broker-specialists",
     "train-intraday-model",
     "train-intraday-specialists",
+    "train-swing-returns",
     "train-v3-models",
     "validate-strategy-execution-ledger",
     "validate-strategy-research-contracts",
