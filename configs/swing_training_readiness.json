@@ -1,0 +1,24 @@
+{
+  "schema_version": "market_predictor.swing_training_readiness",
+  "scope": "initial_fit_fixed_horizon_diagnostics",
+  "publication": {
+    "path": "data/features/swing_corrected_initial_fit_research/_manifest.json",
+    "sha256": "63574b3b55cd30adaebf62b4040f92a2030e6dbb17772014afb3e3c168158256"
+  },
+  "saved_row_verification": {
+    "path": "data/reports/swing_initial_fit_join_verification.json",
+    "sha256": "3e4a3c9dd241b9776fc368e7856e45d4bff0ed3cd0ef1431750fa94b16ce53b0"
+  },
+  "research_contract": {
+    "path": "configs/swing_research.toml",
+    "sha256": "411d1d5e745a038fb1e4f16433eb7df6411f4c74c95264d9878ec64b9d0e42d9"
+  },
+  "strategy_contract": {
+    "path": "configs/edge_rebuild_strategy_contract.toml",
+    "sha256": "02a087be6b9eff4971770026ca75dce3978f8f9e2028c1f21d027daefec9c0e7"
+  },
+  "temporal_contract": {
+    "path": "configs/edge_rebuild_temporal_manifest.toml",
+    "sha256": "eb6365e78e75599e170c78dc08805eae45744c88f7def21ea4d6a9436e12b95b"
+  }
+}
