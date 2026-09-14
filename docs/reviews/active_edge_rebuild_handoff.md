@@ -1,96 +1,125 @@
 # Active Edge Rebuild Handoff
 
 Status: active
-Last updated: 2026-09-11
+Last updated: 2026-09-14
 Repository: `C:\project\market-predictor`
 Branch: `er-intraday-refactoring`
-Last completed implementation commit: `19698d6` (pushed).
-Last completed source-collection checkpoint: `19698d6` (pushed).
+Last completed implementation checkpoint: `7b5d834` (pushed).
+Source-collection checkpoint: `19698d6` (pushed).
+The combined historical outcome/features delivery is verified and committed.
 
 ## Current State
 
-The source-collection checkpoint is committed and pushed. The September 11
-historical outcome/feature delivery remains uncommitted. Do not describe component completion as a trained
-model, full dataset admission, or SPY outperformance. The only active execution
-plan is `docs/active_edge_rebuild_plan.md`.
+The user's three requested stages are complete:
+1. News rebuild: complete, including 59 monthly catalyst authorities.
+2. Technical and catalyst feature joins: complete, 59 months / 586,305 rows each.
+3. Saved-row audit: passed; final regression run completed with one documentation
+   status-marker failure, 4,145 passed and 10 skipped. The documentation-only
+   correction passed both continuity tests; no source code changed afterward.
 
-The user redirected the immediate checkpoint to extending retained sources through
-today, repairing broken scheduled collection, and preserving chronological splits.
-Historical monthly feature preparation is paused, not restarted or completed.
+No model training, promotion, or SPY outperformance is claimed. Current scope is
+the initial-fit period July 9, 2019-May 28, 2024, not the entire raw archive.
+Every frozen decision is retained; unknown coverage and outcomes remain explicit.
 
-### Source Collection (Closed)
+The original feature-join worker disappeared after 25 completed months through
+July 2021. Its termination cause was not retained. Request and implementation
+pins were independently rechecked unchanged. Resume session **41926** uses
+checkpoint SHA256
+`fe70529c1d8372907e01c1f72337a3f54ffbeb0c29a7b64bfac48bed28ac1474`.
+The resumed join exited zero and published its final manifest. Its durable process
+log is `data/runtime/swing_research_join_resume.log`.
+Output: `data/features/swing_corrected_initial_fit_research`.
+Full pytest session **41537** finished with exit code 1 after 2,376.03 seconds.
+Log: `data/runtime/completed_news_join_full_tests.log`; JUnit:
+`.test-tmp/completed-news-join-full.xml`. The sole failure was the continuity
+document status marker, not source code or numerical behavior. No data worker
+or reviewer remains active.
 
-Implementation `19698d6` is pushed. Coordinators are
-`swing/datasets/alpaca_incremental/` and `swing/datasets/sec_incremental.py`;
-HTTP transports stay in `sources`, and the canonical SEC parser stays in
-`catalysts/sec_filings/collection.py`. No aliases or alternate data format.
+## Completed Evidence
 
-- Alpaca: July 9-September 10, 2026, 26,638 raw and 26,638 adjusted daily bars,
-  23,025 stored news records; zero failed/pending units. All 2,856 units,
-  including revision and partial captures, replayed without HTTP after relocation.
-  Status: `data/raw/swing_incremental_alpaca/status.json`.
-- September 11 Alpaca capture: 589 bars per format and 112 news records, partial
-  only. Publication, update and retrieval clocks stay distinct; revised text is
-  not backdated. Original closed-day bytes and three-day revision captures remain
-  separate. Query symbols are 670 old codes plus RHT, not current membership.
-- SEC: 20,723 new filing metadata records across all 624 CIKs, zero failed issuers;
-  closed-day checkpoints through September 10. Today's partial capture is frozen
-  at September 11 14:52:22.734419 UTC. This is submissions metadata, not every
-  filing body/exhibit. Old identity relations are query hints, not ownership.
-- SEC online report: `data/raw/swing_incremental_sec/_runs/df17090af13b459fb1841e7d67356bcc.json`.
-  Latest relocated offline replay:
-  `data/raw/swing_incremental_sec/_runs/9f950225d2474fc78af483263e8fe19a.json`.
-  No original seven-year archive was redownloaded or overwritten.
-- Midnight task `MarketPredictorSwingCollectionMidnight` is installed.
-  It runs Alpaca then SEC while signed in/on AC power; no automatic training.
-  Latest real offline scheduled execution passed at 18:27:24 local, exit zero;
-  normal action restored. Evidence:
-  `data/runtime/scheduler_migrations/20260911T165348/execution_verification_after_owner_move.json`.
-  The two broken tasks were exported before retirement.
-- Obsolete, reference-free scripts removed: `scripts/build_intraday_v3.py`,
-  `scripts/collect_1m_intraday.ps1`. Raw evidence was not deleted.
-- Reviewed portability fix: 13 unchanged readiness-audit files (233,806 bytes)
-  are a checked-in test fixture. Both test paths use it; Git preserves exact
-  hash-bound bytes, including with autocrlf enabled. No assertion was weakened.
-- Verification: 299 focused source/boundary tests; 27 readiness tests; Ruff;
-  strict mypy on 360 source files; isolated complete suite **3,360 passed,
-  five skipped, 133 warnings**, 1,347.84 seconds. XML:
-  `.test-tmp/source-owner-full.xml`. Exact verified Git tree:
-  `c57e401ab7c46539caa828e94dbb62bb46753613`.
-- Isolated skips: two canonical-data checks (no copied market data), two opt-in
-  production-scale memory tests, one Windows symlink-privilege test.
-  The real main-workspace canonical hash checks separately passed: **nine tests**.
-  Full production-scale RSS and privileged symlink evidence are not claimed.
-- The complete suite was verified against the exact source-only commit tree,
-  not the mixed worktree. The latter has the historical dependency failure below.
-  Source-layer orchestration violations found during verification were fixed;
-  historical hash-bound modules were not edited to fake a pass.
-- All collection, replay, test sessions and review agents are closed. Source
-  collection used about 115-175 MB; observed test working sets stayed below
-  350 MB. System-memory guards remain enabled; heavy jobs stay sequential.
-
-### Verified Saved History
-
-Parquet footers were checked for all 7,331 saved bar/news files; row counts matched
-their manifests. This is a byte/row inventory, not semantic issuer attribution.
-
-| Source | Directory under data | Saved observations |
+| Component | Manifest | SHA256 |
 | --- | --- | --- |
-| SIP adjusted daily bars | raw/swing_daily_sip_sp500_pit_20190709_20260708_v3 | 1,088,146 rows, 670 files/symbols |
-| Early Alpaca news | raw/alpaca_news_20190709_20210708_v1 | 149,140 rows, 4,047 files |
-| Later Alpaca news | raw/alpaca_news_20210709_20260708_v1 | 564,986 rows, 2,614 files |
-| SEC submissions metadata | external/sec_filings_20190709_20260708_v1 | 689,467 filings, 624 CIKs, zero failed issuer requests |
+| Outcome replay | data/reports/swing_outcome_owner_replay_complete/_manifest.json | 0d7628ccffaf6f5d2a057f452ecfb02fc4feb3963aaf189ee3436802128a4727 |
+| Predictor replay | data/reports/swing_predictor_owner_replay_storage_verified/_manifest.json | 0871201090732a30b789c80079a19718d67e8176a6a2a0f843880884a77d0a98 |
+| Compact news preparation | data/research/swing_initial_fit_monthly_news_inputs/_manifest.json | a97a981ddaf42e1fceb8def06c17d35bc45915417e61d05cade9a90f40719197 |
+| Source-proven news identities | data/research/swing_initial_fit_source_proven_news/_manifest.json | e150475190fe0efbafecb115cd5f08bb7acb58576b2661b680fad832ffc00d98 |
+| Corrected monthly catalysts | data/research/swing_initial_fit_verified_catalysts/_manifest.json | 8988773e455eb702a7b1494ed0d1e7f000c4b5a9ff64018fb695798b5e117853 |
+| Joined feature profiles | data/features/swing_corrected_initial_fit_research/_manifest.json | 63574b3b55cd30adaebf62b4040f92a2030e6dbb17772014afb3e3c168158256 |
+| Independent saved-row audit | data/reports/swing_initial_fit_join_verification.json | 3e4a3c9dd241b9776fc368e7856e45d4bff0ed3cd0ef1431750fa94b16ce53b0 |
 
-The 714,126 saved news records are not globally unique articles or proof of
-every ticker's complete coverage. Actual news publication range is July 9, 2019
-through July 8, 2026. Empty provider responses remain distinct from failed requests.
-The SEC archive is pinned and checked without loading all filing rows at once.
+Both numerical replays cover 59 months and 586,305 decisions exactly. Outcome
+replay additionally verified 20 historical code files and 2,588 live evidence pins;
+predictor replay verified 27 historical code files and 5,968 live evidence pins.
+These complete receipts are reused unchanged by the feature join.
 
-The old `data/external/market_context` summary is stale. Its Parquet has 31,539
-records over June 2024-June 2026, including ETF-tagged news; it is not a verified
-seven-year global-news authority and is not an input to this new collector.
-GDELT's saved failed/rate-limited query is not completed historical coverage.
-Reddit and Seeking Alpha remain retired. Do not add them back.
+The corrected monthly catalysts cover all 586,305 canonical decisions, with
+224,709 decisions having attributed news. Before the identity repair, a
+semantically incomplete generation had only 7,521 such decisions. Keep that
+generation as failed diagnostic evidence, not an accepted training input.
+
+News identity alignment translated 854,541 of 957,261 relation rows using 445
+proven interval mappings; 102,720 relation rows retained original identities.
+These are stored relation counts, not unique news articles or extra stock
+exclusions. Separate corrected SATS/FISV collections remain unchanged.
+Publication config: `data/research/swing_initial_fit_source_proven_news/monthly-publication.json`,
+SHA256 `cf6f9c97737cbf6e3ba0da6fa51c9de6d88ce44461c45c999a0d61df2c2588be`.
+
+## Repairs And Review
+
+- Identity mapping requires exact event-time ticker, positive CIK and overlapping
+  pinned source/target intervals. No suffix stripping, bare-CIK matching or new
+  stock exclusions. Original events and FinBERT scores are reused.
+- The compact writer inferred a naive Arrow clock schema from a null-only first
+  slice and stripped later timezone metadata. Original UTC records remained
+  intact. Source-proven recovery restored 2,120 identity-clock values exactly.
+  All 136 compact batches / 957,261 relation rows passed a full clock/mapping
+  preflight. The writer now validates every nonnull UTC representation before
+  fixing UTC nanosecond schemas. Original compact values and source hashes remain
+  explicit provenance. No assumed localization or precision tolerance.
+- Distinct published stories sharing model-input text had 26 decision/window
+  groups with different sentiment values and four with different relevance.
+  Their numeric difference cause is not established. Exact copies of the same
+  durable event/source event still must agree. Separate publications use the
+  existing earliest-available representative with its original values intact.
+  Named request policy: `exact_event_integrity_earliest_available_text_instance`.
+  No averaging, rounding, rescore or numeric tolerance. Request v3 / authority v7
+  loaders reject old schemas or missing/wrong policy; no compatibility path.
+- Boole `01a09f47-b22a-7162-b67d-a004ad53589d` independently reviewed the clock
+  and separate-publication fixes, closed all supported findings, and is closed.
+  Earlier identity/replay reviewers are also closed. Do not restart broad reviews.
+
+Verification after clock repairs: 96 focused tests passed; Ruff and strict mypy
+passed on 393 source files. After the final story-policy change, 134 integration
+tests and 27 final authority tests passed. Final repository Ruff and strict mypy
+passed after the last source change. The complete run recorded 4,145 passed,
+one documentation failure, 10 skipped and 132 warnings; preserve its actual result
+rather than describing it as an all-green run. Only documentation changed afterward.
+Both continuity tests then passed in 0.09 seconds; receipt
+`.test-tmp/completed-news-doc-fix.xml`. Eight skips require Windows symlink
+privileges and two require opt-in memory stress execution. No new passing claim
+is made for those skipped cases.
+Final continuity and package-boundary verification passed 221 tests in 11.17
+seconds (`.test-tmp/completed-news-doc-closure.xml`); all eight local Markdown
+links in the six updated documents resolved. No Python workers remained at
+closeout. System memory was 73.98% used, with 4.08 GiB available.
+
+## Protected Historical Evidence
+
+Never resume failed generations under changed implementation or rewrite their
+hashes. No raw/canonical/provider evidence was deleted.
+
+| Nonexecuted implementation snapshot | Manifest SHA256 |
+| --- | --- |
+| data/evidence/issuer_news_alignment_nullable_clock/implementation/_manifest.json | 85bf3ab87e5744eb82f23832cf0dc68b0bc05d473e3a243bf6e1bdbe3599422c |
+| data/evidence/issuer_news_compact_timezone/implementation/_manifest.json | 45b6c20d633319a20ceb9976ca12535243f276a2d99e5ccc31a4b228b95310c9 |
+| data/evidence/issuer_news_compaction_schema/implementation/_manifest.json | 8e82b2bfd959312aed0a3b71080dc72afb4a28fd7db4a46a9622805f22a64b9d |
+| data/evidence/catalyst_separate_story_scores/implementation/_manifest.json | 45a2284d768a65d2f4e662ca805a43809467048873bdcb6c046ade2ba808b98c |
+
+Earlier snapshots remain protected by the replay/lineage manifests and feature
+audit. Superseded run-by-run instructions were removed from this handoff.
+The source archives extend through July 8, 2026, with separate Alpaca/SEC catch-up
+through September 10 and partial September 11 snapshots; source collection is
+closed in `19698d6`. Do not redownload or include held-out dates in initial fit.
 
 ### Completed Historical Components
 
@@ -109,7 +138,8 @@ the frozen numeric training boundary or authorize promotion.
 - Outcomes: 586,305 decisions, 450,273 stock-source-admitted outcomes, 378,037
   complete stock/SPY/QQQ/sector comparisons; peak process working set 0.409 GiB.
   Unknown outcomes are nullable. Managed, training and promotion admission are
-  false. The complete independent outcome `--replay` has not yet run.
+  false. Full independent outcome replay and receipt verification passed as
+  recorded above; replay parity does not turn unavailable outcomes into labels.
 - Predictors: 586,305 rows, 563,326 eligible. Recovered 2,048 earlier ATVI/INFO/SBNY
   decisions without using later bad bars; 1,231 WTW decisions remain unavailable
   because historical bars cannot establish the intended issuer. The 547 good
@@ -136,57 +166,27 @@ the frozen numeric training boundary or authorize promotion.
   `04553f69998bd4a6034c04ffef95238aad9b516eaa0cf0ad6849dc034fedf40c`.
   Acquisition/replay is not ownership, payment-date or historical-availability proof.
 
-All prior historical collection, derivation and predictor sessions are finished.
-Monthly preparation session 40768 stopped at its memory guard (84.2% used,
-2.49 GiB free against this command's 82% / 3 GiB requirement); no monthly authority
-was published. Do not repeat completed source downloads.
+## Next Actions
 
-## Exact next checkpoint:
+Exact next checkpoint: admit the long-only swing experiment from verified inputs.
 
-**Canonical swing archive ownership and publication replay.** The design is
-reviewed; implementation has not started. No data recollection is needed.
-Fix this before resuming monthly joins or model training.
+1. Read the active feature acceptance matrix and training protocol. Verify the
+   exact feature/source/label contract for technical_market and catalyst_full;
+   publication completion does not override false training admission flags.
+2. Establish the remaining validation/test publication and fitting requirements
+   against the frozen dates below, preserving unknown sources/outcomes and matched
+   profile populations. Do not rerun the completed initial-fit data build.
+3. Train only after applicable admission gates pass, sequentially within 5 GiB.
+   No training or new evaluation has run in this delivery. Do not claim
+   profitability from successful collection, replay or feature materialization.
 
-The mixed-worktree suite stopped after 1,537 passes and two skips on
-`test_package_dependency_boundaries.py`'s swing dependency direction assertion.
-Four uncommitted files import `edge_rebuild`:
-`swing/datasets/corrected_outcomes.py`, `research_features.py`,
-`predictor_abstention_derivation.py`, and `swing/features/adjusted_source.py`.
-They consume the complete history archive reader and two session helpers.
-
-These four files are directly pinned by completed publications. Even import-only
-edits invalidate resume/replay identity. The failure is architectural, not proof
-of wrong numerical results. Do not weaken the test, hide imports, duplicate code,
-add forwarding aliases, or silently replace artifact pins.
-
-1. Preserve the exact implementation bytes required by existing publications
-   before editing. Record their independent hashes and current artifact bindings.
-2. Move the archive reader's real dependency closure and session-requirement helpers
-   into genuine `swing/datasets` owners. Update all actual consumers. Keep one
-   implementation and the existing semantics.
-3. Run dependency boundary tests before any expensive artifact build. Verify
-   unchanged session sets, source checks, future-poison behavior and numerical
-   outputs, then publish an explicit derivation/replay path for existing artifacts.
-4. After that gate passes, resume monthly preparation estimate:
-   `.venv/Scripts/python.exe -B -m market_predictor.catalysts.issuer_events.monthly_preparation --root C:/project/market-predictor --config configs/swing_initial_fit_monthly_news.json --expected-config-sha256 2a9ac2ae30bcddc75b89ce713d811a8d8fe59e3ed186d5e90f81115df901b2b1 --out-dir data/research/swing_initial_fit_monthly_lineage_inputs --estimate-only`.
-   Run actual preparation, publish through `monthly_authority` using its returned
-   config/pin, and join the final research dataset.
-5. Independently replay outcomes and joined features. Review the feature acceptance
-   matrix before six sequential candidate fits. No new model has been trained.
-
-Independent reviewer Planck approved this bounded sequence and is closed.
-The original source archives and published rows must remain intact.
-
-Primary integration configs: `configs/swing_corrected_outcomes.toml` (pin
-`ded3b30af1185c7ab0759fa5f81c559c37c590419751c942b61ab479e67c2348`),
-`configs/swing_corrected_research_features.toml`,
-`configs/swing_initial_fit_issuer_derivation.toml`,
-`configs/swing_issuer_feature_rebuild_inventory.toml`.
-Relevant owners: `catalysts/issuer_events/monthly_preparation.py`,
-`monthly_authority.py`, `swing/datasets/research_dataset.py`,
-`research_features.py`, `corrected_outcomes.py`,
-`swing/features/research_join.py`, `predictors.py`.
-Keep hash-bound implementation files unchanged while their job is running.
+Decision config: `configs/swing_corrected_outcomes.toml`,
+`ded3b30af1185c7ab0759fa5f81c559c37c590419751c942b61ab479e67c2348`.
+Strategy config: `configs/edge_rebuild_strategy_contract.toml`,
+`02a087be6b9eff4971770026ca75dce3978f8f9e2028c1f21d027daefec9c0e7`.
+Use the existing `materialize-swing-research-dataset` command and explicit
+predictor/outcome replay pins above. Resume only with an independently checked
+current checkpoint SHA256.
 
 ## Splits And Research Rules
 

@@ -272,7 +272,7 @@ estimator without the same governance.
   commits follow strict replay, generation publication is atomic, Windows reparse paths
   fail closed, and all poll/generation children remain research-only and ineligible for
   training or serving.
-- `swing_history_collection.py`, `swing_daily_combination.py`: swing daily history.
+- `swing/datasets/history_archive.py`, `edge_rebuild/swing_daily_combination.py`: swing daily history.
   Exact-unit collection derives `raw`/`all` from its verified acquisition plan;
   `load_complete_swing_history_collection` requires `expected_adjustment` from the
   consumer. New acquisitions retain original transport bytes and metadata and
@@ -282,6 +282,57 @@ estimator without the same governance.
 
 ### Swing path
 
+- `swing/datasets/session_requirements.py`: shared membership-session and sparse-gap
+  rules for the frozen combined archive, including benchmark inception boundaries.
+- `swing/datasets/initial_fit_issuer_news.py`: saved-news derivation and swing
+  initial-fit lineage/family orchestration; no new provider requests.
+- `swing/datasets/issuer_news_preparation.py` and `issuer_news_publication.py`:
+  monthly swing decision/news joins and their source-bound publications. The compact
+  writer fixes timestamp schemas to UTC nanoseconds after validating every nonnull
+  input; null-only first slices cannot strip later timezone metadata.
+- `universe/issuer_news_identity.py`: bounded research identity conversion from
+  pinned source and target identity intervals, exact tickers and positive CIK proof.
+  Ambiguous/unproved conversions stay unavailable; source identities are preserved.
+- `swing/datasets/issuer_news_identity_alignment.py`: resumable compact news and
+  coverage translation into the candle population, reusing original events and
+  FinBERT scores. Publishes new source-bound monthly lineage inputs without changing
+  older artifacts. Separately corrected issuer collections remain separate.
+- `swing/datasets/issuer_news_source_clocks.py`: exact recovery of damaged compact
+  identity-clock timezone metadata from pinned original relation rows. Original
+  compact values and restoration hashes remain explicit; unproved clocks fail.
+- `universe/symbol_correction_policy.py`: the single reviewed policy parser used by
+  issuer proof and swing archive correction. Archive reconstruction remains in swing.
+- `catalysts/issuer_events/identity_publication.py`: official-document identity
+  reconstruction, verification and event-scope checks; it does not import swing.
+  Its leased CLI is `python -m market_predictor.commands.issuer_identity_publication`.
+- `evidence/io.py`: shared repository-child path confinement, including directories.
+- `evidence/implementation_snapshot.py`: exact nonexecuted source-byte evidence.
+  Preserving old code is provenance, not permission to resume under changed code.
+- `swing/datasets/outcome_replay.py`: current-code reconstruction and exact comparison
+  against old targets/specifications, with a separate report and no changes to the
+  original publication. `replay-swing-corrected-outcomes` returns exit 2 for partial
+  comparisons; a completed comparison still does not authorize training/promotion.
+  Resume with `--expected-checkpoint-sha256` using the independently retained
+  finalized `_checkpoint.json` hash. `_progress.json` is telemetry, not authority.
+  `verify_outcome_replay` validates complete evidence for a downstream research join.
+- `swing/datasets/predictor_replay.py`: reconstructs ordinary, recovered-prefix and
+  unavailable predictor groups and compares all columns plus monthly assembly.
+  `market-predictor-research replay-swing-research-predictors` requires publication,
+  migration-binding and implementation-snapshot pins and a new report directory.
+  A bounded `--maximum-groups` run is incomplete, not a resumable numerical pass.
+  Rebuilt frames pass through the canonical pandas Parquet writer/reader before
+  exact comparison, so transient object/string containers are compared in their
+  stored representation. Values, nulls, numeric widths, clock types and column
+  ordering remain exact; neither original frames nor stored artifacts are altered.
+  When the corrected FI/SATS acquisition plan predates a producer refactor, provide
+  `--feature-plan-snapshot` with `--feature-plan-snapshot-sha256`. This verifies
+  archived producer bytes and reconstructs the exact original plan requirements;
+  it does not rewrite pins or waive symbol/date/session checks. Complete replay
+  receipts bind and reverify this additional evidence.
+- `swing/datasets/research_dataset.py`: optional explicit `predictor_replay` and
+  `outcome_replay` pins allow only complete, current-code-verified historical inputs.
+  The dataset CLI requires each `--predictor-replay` / `--outcome-replay` path with
+  its corresponding `-sha256` option. Source checks remain mandatory without them.
 - `swing/datasets/initial_fit_raw_share_plan.py`: identity-only initial-fit raw SIP
   acquisition requirements and independent pinned replay. The next-ten-session
   paths remain intact after index removal; all in-window decision sessions are also

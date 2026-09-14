@@ -1,7 +1,7 @@
 # Catalyst-Confirmation Prediction Architecture
 
 Status: design authority
-Last updated: 2026-09-09
+Last updated: 2026-09-11
 
 This document defines stable component boundaries. Current progress and blockers are
 in `active_edge_rebuild_plan.md` and `reviews/active_edge_rebuild_handoff.md`.
@@ -49,6 +49,48 @@ publication, provider revision and actual retrieval clocks. Revised content must
 not be backdated to publication. Neither archival provider symbols nor old SEC
 relations certify present issuer ownership or current index membership. Acquisition
 status is not feature, trading or promotion admission.
+
+### Historical Source Ownership
+
+Planned daily collection and strict archive replay live in
+`swing/datasets/history_archive.py`. Membership-session requirements live in
+`swing/datasets/session_requirements.py`; neither requires the retired experiment
+layer. Swing initial-fit and monthly news orchestration belongs to `swing/datasets`,
+while generic issuer attribution and source-evidence validation remain in catalysts.
+Reviewed symbol-correction policy parsing is shared through
+`universe/symbol_correction_policy.py`; swing retains archive planning/reconstruction.
+Issuer identity proof is still independently replayed in catalysts, not passed as an
+optional "already verified" callback. Only its leased CLI belongs to `commands`.
+
+Previously published implementation hashes describe historical evidence. They are
+preserved as explicit nonexecuted binary snapshots, never rewritten to current hashes
+and never loaded as fallback code. Numerical replay must use current owners, compare
+the original output inventory and values, and bind a separate result to both old
+provenance and current implementation. A snapshot or an ordinary cache hit is not
+numerical replay. Success is published only after source-context exit checks and a
+final source/implementation recheck under the workspace lease.
+
+Outcome replay can resume only from an independently pinned finalized partial
+checkpoint with unchanged source, request and executable-code identities. In-run
+progress is not resumable evidence. A failed completion write preserves the prior
+checkpoint. Predictor replay reconstructs each ordinary or approved-prefix group,
+then compares every monthly feature frame, including values, dtypes, nulls and
+availability clocks; a partial comparison cannot authorize a join.
+Comparison uses the canonical Parquet representation on both sides, with exact
+values and persisted dtypes. It does not compare a transient pandas object column
+against a decoded string column or disable numeric/clock dtype checks.
+Corrected adjusted-history plans may carry an explicitly pinned implementation
+snapshot during predictor replay. This exception is limited to historical code
+identity: all non-code collection requirements must reconstruct exactly, and the
+snapshot is checked both before numerical work and when consuming its receipt.
+Ordinary archive validation does not implicitly discover or accept snapshots.
+
+The research join accepts explicit outcome/predictor replay receipts. Their
+validators retain exact historical implementation declarations separately from
+current executable and immutable snapshot pins. Only those verified name/hash
+pairs may be replaced in the live dependency inventory. There is no general
+source-code-path exemption, verification-disable flag or fallback implementation.
+Missing receipts keep the ordinary strict checks; stale or partial receipts fail.
 
 ## Prediction Views
 
@@ -142,6 +184,50 @@ execution time or historical first observation. This is source selection, not la
 admission; derived features, labels and news joins cannot fall back to old results.
 
 ### Swing
+
+The initial-fit rebuild separates three publication owners:
+`swing/datasets/corrected_outcomes.py` owns raw-price holding outcomes;
+`swing/datasets/research_features.py` owns source-bound technical histories;
+`swing/datasets/research_dataset.py` owns exact monthly joins and matched ablations.
+Their independently pinned inputs and checkpoints cannot be interchanged. Every
+frozen decision is retained, including terminal immature rows and explicit gaps.
+An individual source failure does not abort unrelated stock feature work, but a
+complete feature manifest is withheld until the full expected population is accounted
+for. A memory-pressure failure stops the process, not merely the current stock.
+
+Numeric initial-fit reads end on 2024-05-28; pre-2019-07-09 bars are warm-up only.
+Technical features use a coherent adjusted provider stream; dollar volume uses raw
+close times raw volume. Separate symbol streams are never price-spliced. The existing
+250-session sparse-gap recovery policy applies to predictor availability. Peer
+transforms run only after assembling the complete retained population for a session.
+
+Issuer evidence is attributed before aggregation. Sparse event authorities are not
+the full stock universe: observed-empty versus unknown news windows are resolved from
+coverage evidence when attaching them to every canonical decision. Historical
+publication proxies and aggregate as-of clocks never claim historical first receipt.
+Saved-news identities and candle identities are joined through a separate research
+bridge, not by stripping identifier suffixes. The bridge intersects verified source
+registry/membership and global target membership/SEC intervals, requiring a positive
+CIK and exact event-time ticker. Ambiguous identities remain unavailable; corrected
+symbol collections are not replaced by legacy aliases. Original IDs, scores and
+source evidence remain immutable.
+
+Compact news writers validate every nonnull clock as aware UTC before declaring a
+nanosecond UTC schema, including null-only slices. A first empty slice must not
+determine a timezone-less schema for later rows. Historical compact identity-clock
+damage is repaired only from the exact hash-pinned original relation: source keys
+and clock values must agree exactly, with the compact representation retained as
+provenance. No timezone guessing, rounding, or publication-time substitution is
+permitted. These transformations do not establish historical first-observed clocks.
+Duplicate ingestion of one durable event/source event requires exact score and
+identity agreement. Distinct published events sharing model-input text instead
+select the earliest available instance within each decision/window, then source
+priority and event ID for ties. Its original relevance, score and clock are retained;
+no scores are averaged or rewritten. This named policy is part of the hashed
+publication request and loader contract, not a numeric comparison tolerance.
+Feature eligibility, economic outcome availability, training admission and promotion
+remain separate states. The current build is research-only and does not claim new
+trained models or completed corporate-action accounting.
 
 - New long-only research is governed by `configs/swing_research.toml`, separately
   hashed from immutable historical strategy/feature contracts. It targets fixed

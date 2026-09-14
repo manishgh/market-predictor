@@ -44,8 +44,27 @@ records, with zero failures and successful offline replay. September 11 observat
 are separate partial snapshots. SEC catch-up added 20,723 filing metadata records
 across 624 issuers through September 10; offline replay passed with zero failed
 issuers. Collection checkpoint `19698d6` passed 3,360 tests (five skips), Ruff and
-strict mypy against its isolated commit tree. The unfinished historical feature
-work has a separate dependency/lineage blocker; the mixed worktree is not certified.
+strict mypy against its isolated commit tree. The historical feature delivery
+passed its separate publication-replay gate. Predictor replay matched all 586,305
+rows across 551 groups and 59 months; outcome replay also matched every decision
+exactly. Independent receipt checks passed for both.
+
+Corrected monthly news publication and both feature joins are complete for the
+59-month initial-fit period. News is attributed to 224,709 decisions. Technical
+and technical-plus-catalyst profiles each preserve all 586,305 rows, with 479,709
+feature-eligible rows. Separate saved-data verification found zero future feature
+clocks, exact original outcomes and no rows filtered by their returns. The data
+manifest is `data/features/swing_corrected_initial_fit_research/_manifest.json`;
+the verified counts and limitations are in the
+[current feature audit](docs/reviews/feature_engineering_audit_20260801.md).
+
+Final repository Ruff and strict type checks pass. The full regression run had
+4,145 passes, 10 skips and one documentation-marker failure; after correcting
+only the documents, both continuity tests passed. No source code changed after
+the full run. These are research-only datasets, not
+promoted models. Historical news reception is not proven, unsupported outcomes
+remain null, and SEC/Finviz are not silently included in this Alpaca-only monthly
+news feature contract. No model training has started.
 Cloud deployment is out of
 scope until training and evaluation are complete. Research results do not
 guarantee outperformance of SPY.
@@ -386,6 +405,24 @@ market-predictor-prod --help
 ```
 
 ### Research Workbench
+
+The corrected initial-fit rebuild is still in progress. Its separate stages are:
+
+- `market-predictor-collect materialize-swing-corrected-outcomes`: reconstruct
+  hypothetical fixed holdings from verified raw prices and corporate-action scope.
+  Unknown payments, rights and managed exits remain unavailable.
+- `market-predictor-research materialize-swing-research-predictors`: rebuild
+  technical indicators from saved adjusted histories, with independently bound
+  raw dollar volume. Completed stock groups have hash-checked resume checkpoints.
+- `market-predictor-research materialize-swing-research-dataset`: join the complete
+  monthly decision population, corrected outcomes and causal issuer-news evidence.
+  Technical/news ablations share a comparable population without deleting rows
+  with unknown evidence. These artifacts do not themselves authorize training.
+
+Use each command's `--help` for required independent source hashes. Exact current
+artifact paths, pins, pending source issues and verification results are maintained
+in `docs/reviews/active_edge_rebuild_handoff.md`. Do not substitute a current file's
+hash for an independently reviewed source identity just to make a resume succeed.
 
 The local research workbench inventories four configured experiments: baseline and
 event-driven variants for swing and intraday. It reports the real training

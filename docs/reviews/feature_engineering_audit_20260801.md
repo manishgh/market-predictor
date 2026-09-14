@@ -1,45 +1,82 @@
 # Current Feature Engineering Audit
 
-Last updated: 2026-09-11
+Last updated: 2026-09-14
 
 ## Current Long-Only Swing Campaign
 
-### Corrected Initial-Fit Rebuild In Progress
+### Corrected Initial-Fit Data Verified
 
-This section supersedes the historical checkpoint statuses below. The frozen
-population remains 586 identities and 586,305 decisions; no new exclusions.
+Implementation checkpoint: `7b5d834`, pushed to `er-intraday-refactoring`.
 
-Source-only catch-up is closed in `19698d6`: Alpaca and SEC evidence extends
-through September 10, 2026 with separate partial September 11 captures. Raw
-replay and the isolated source commit's full suite pass. This does not admit
-the historical feature delivery: four uncommitted swing modules still import
-the retired edge layer, and changing their imports requires an explicit
-publication-lineage migration. The mixed-worktree dependency test is failing;
-no new model training or whole-repository pass is claimed.
+This section supersedes historical run statuses below. The frozen population
+remains 586 identities and 586,305 decisions; no new exclusions.
 
-| Component | Observed evidence | Remaining gate |
-| --- | --- | --- |
-| Corrected issuer attribution | 643 direct-issuer relations from 661 SATS/FISV events; 18 unmatched | Full monthly source/decision join |
-| Corrected sentiment | All 661 events scored with pinned FinBERT revision; zero failures; 1.622 GiB peak | Merge with bounded saved early/later scores |
-| Technical predictors | 586,305 published rows; 563,326 feature-eligible; 2,048 earlier ATVI/INFO/SBNY decisions recovered; WTW remains unverified | Complete monthly news/decision join |
-| Corrected outcomes | 586,305 decisions; 450,273 stock-source-admitted and 378,037 complete stock/SPY/QQQ/sector comparisons; 0.409 GiB peak | Independent full replay; unknown economic outcomes remain null |
-| Saved news derivations | Early 148,784 scored rows / 364,564 relations; later 319,787 rows / 550,421 relations | Monthly publication with 29 early and six later unavailable chunks explicit |
-| Final feature join | Exact population, causal clocks, nullable targets and peer transforms tested | Real monthly join after upstream artifacts finish |
+| Component | Verified result |
+| --- | --- |
+| Predictor replay | All 551 groups / 59 months / 586,305 rows matched exactly; independent receipt verification passed |
+| Outcome replay | All 59 months / 586,305 decisions matched original targets and specifications exactly |
+| Monthly news preparation | 59 months / 119 source-month lineages; original events and scores preserved |
+| Identity alignment | 445 proven interval mappings; 854,541 translated and 102,720 unchanged relation rows |
+| Source-clock recovery | All 136 compact batches checked; 2,120 identity clocks restored exactly from pinned original UTC records |
+| Monthly news authority | All 59 months published; 224,709 canonical decisions have attributed news |
+| Technical feature join | 586,305 rows; 479,709 feature-eligible; 298,446 complete model-input rows |
+| Catalyst feature join | 586,305 rows; 479,709 feature-eligible; 296,137 complete model-input rows |
+| Saved-row verification | Zero feature-clock violations; exact original outcome values; matching profile populations; zero outcome-filtered rows |
 
-WTW warm-up contains an unverified issuer stream and 54 zero-volume observations.
-ATVI, INFO and SBNY also contain zero-volume terminal observations. No placeholder
-prices are admitted and no losing or unavailable rows are silently deleted. A
-population-complete artifact is not equivalent to feature completeness or training
-eligibility. Whole-group missingness must not be mistaken for a causal live filter.
+Completed joined manifest:
+`data/features/swing_corrected_initial_fit_research/_manifest.json`,
+SHA256 `63574b3b55cd30adaebf62b4040f92a2030e6dbb17772014afb3e3c168158256`.
+Separate audit:
+`data/reports/swing_initial_fit_join_verification.json`,
+SHA256 `3e4a3c9dd241b9776fc368e7856e45d4bff0ed3cd0ef1431750fa94b16ce53b0`.
 
-The old-news path and relevance-range defects were fixed before successful saved
-derivations. Predictor recovery preserves only independently verified earlier
-prefixes; future invalid observations do not erase earlier usable features.
-Monthly preparation stopped at its memory guard. Historical integration is paused
-pending canonical archive ownership and publication replay; source catch-up is complete.
-Those new observations are not yet model inputs; acquisition is not attribution.
-Exact pins, commands and process state are in the single current handoff. No new
-model trained; full-suite verification of this uncommitted delivery is pending.
+Each profile has 378,037 complete stock/SPY/QQQ/sector comparisons. The intersection
+of feature eligibility, complete model inputs and complete comparisons is 194,679
+technical rows and 193,125 catalyst rows. These counts do not constitute a new
+training-row selection rule: source, feature, label and training admission remain
+separate, and no rows were deleted from the publication.
+
+Alpaca coverage is known for 497,805 one-day and 496,536 three-day windows.
+SEC and Finviz coverage flags are unknown throughout this specific monthly news
+authority. They are not silently added as model inputs. The SEC metadata archive
+exists separately; this publication is not proof of historical causal SEC features.
+Historical backfilled news uses publication-proxy availability with fixed inference
+latency, not proven historical first receipt. Training/promotion flags remain false.
+
+The rejected 7,521-catalyst-decision generation used mismatched news/candle
+identifiers and is superseded. Exact interval/ticker/CIK proof repairs those joins
+without guessing historical hash/CUSIP identities or reinstating excluded FI queries.
+A separate compaction defect stripped timezone metadata after a null-only first
+slice; the writer now validates every nonnull UTC representation before choosing
+UTC nanosecond schemas. Original compact values and recovery source hashes remain
+explicit evidence.
+
+Distinct publications sharing model-input text no longer require identical
+per-event score/relevance values. The frozen named policy selects the existing
+earliest-available original instance, then source priority and event ID for ties.
+Exact durable-event/source-event conflicts still fail. There is no rounding,
+averaging or numeric tolerance. Full inspection found 26 distinct-publication
+decision/window groups with different sentiment values and four with different
+relevance; the cause of the numeric differences is not established.
+
+Independent review closed all supported repairs; reviewer processes are closed.
+Focused verification passed 96 clock/identity tests, 134 integration tests and
+27 final authority tests. Final repository Ruff and strict mypy pass on 393 source
+files. The complete run finished in 2,376.03 seconds: 4,145 passed, one failed,
+10 skipped and 132 warnings. The failure was a required continuity-document
+status marker removed during consolidation, not source or numerical behavior.
+After correcting only documentation, both continuity tests passed in 0.09 seconds
+(`.test-tmp/completed-news-doc-fix.xml`). The original full-run evidence remains
+`.test-tmp/completed-news-join-full.xml`; it is not relabeled as all-green.
+Skips cover eight unavailable Windows symlink cases and two opt-in memory stress
+tests. No source code changed after the complete run.
+Final documentation and package-boundary checks passed 221 tests in 11.17 seconds
+(`.test-tmp/completed-news-doc-closure.xml`); local Markdown links also resolved.
+
+Population completion does not certify managed-exit readiness, training admission,
+historical first receipt, held-out evaluation or profitability. Unavailable
+corporate payouts, unsupported issuer bars and other unresolved observations remain
+explicit rather than fabricated. No model has been trained by this delivery.
 
 ### Dated Issuer-News Correction And System Memory
 

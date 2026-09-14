@@ -2,7 +2,7 @@
 
 Status: active
 
-Last updated: 2026-09-11
+Last updated: 2026-09-14
 
 Repository: `C:\project\market-predictor`
 
@@ -36,149 +36,62 @@ outside this repository.
 
 ## Long-Only Swing Research And Implementation Plan
 
+Current step: **long-only swing experiment preparation** (`in progress`).
+The historical data delivery below is verified and pushed. The next operation is
+explicit training admission against the feature acceptance matrix and frozen
+splits; no estimator is running and no training permission is implied by a data
+publication. Validation/test publications and actual fitting remain uncompleted.
+
 ### Combined Evidence, Outcomes And Features Delivery
 
-2026-09-09 user direction: continue through source evidence, rebuilt stock/benchmark
-outcomes and verified news/reaction features without waiting at each Git checkpoint.
-Current step: **canonical swing archive ownership and publication replay (`in progress`)**.
-Design is reviewed; implementation has not started. Source collection is closed
-in pushed commit `19698d6`. The historical feature delivery is still uncommitted.
-September 11 expanded user direction: retain July 9, 2019 through the latest
-available candles, news and SEC filing evidence; reuse verified archives, repair
-collection entry points, and keep cloud deployment out of scope until research
-training/evaluation. The prior outcome/feature integration is paused at its actual
-published artifacts, not restarted or declared complete.
+Status: completed; implementation `7b5d834` is pushed to `er-intraday-refactoring`.
+September 14 user direction: finish news rebuilding, feature joins and full
+verification without stopping between stages. No new downloads, exclusions,
+strategy optimization, model fitting or promotion claims belong to this checkpoint.
 
-Completed collection checkpoint (`19698d6`):
-1. Verify saved coverage and preserve chronological fit/validation/test boundaries.
-2. Add a resumable source-only extension using existing Alpaca/SEC transports,
-   immutable receipts and source-specific per-unit failures. Do not infer current
-   issuer ownership or index membership from old query symbols/CIKs.
-3. Replace broken Windows entry points with thin wrappers over portable Python,
-   one workspace lease, bounded memory, explicit failures and no automatic trainer.
-4. Run injected-transport/tamper/resume tests, a real collection and offline replay,
-   independent review and repository verification. Inventory gaps remain explicit.
-5. Report actual source ranges, training split rationale and script retirement
-   recommendations in the existing continuity documents. No cloud deployment.
+Frozen exit gates:
+- Exact replay of all 59 outcome months and 586,305 decisions.
+- Complete monthly issuer-news publication, retaining explicit source gaps.
+- Two joined profiles preserving all 586,305 initial-fit decisions each.
+- Independently reviewed supported repairs, exact clock/outcome checks, repository
+  Ruff, strict mypy and the complete test suite.
+- Updated continuity documents and a scoped pushed checkpoint.
 
-Actual completion: 26,638 new daily bars per raw/adjusted format, 23,025 stored
-Alpaca news records and 20,723 SEC filing metadata records through September 10;
-September 11 snapshots remain partial. Both offline replays and real scheduled
-execution passed. Exact source-only Git tree passed 3,360 tests (five skips),
-Ruff and strict mypy; nine real canonical-data hash checks also passed. The mixed
-worktree is not green: four uncommitted swing files import the retired edge layer.
+Completed:
+- Predictor and outcome replay matched all rows, with independently verified
+  receipts. Earlier implementation provenance stays immutable and is not executed.
+- Compact news preparation covers 59 months / 119 source-month lineages. A
+  namespace mismatch was repaired using 445 positive, interval/ticker-aware
+  identity bridges, never guessed aliases or additional stock exclusions.
+- Source-proven news alignment passed all 136 compact batches / 957,261 relation
+  rows. It translated 854,541 relations and retained 102,720 original identities.
+  These counts include repeated relation rows, not globally unique stories.
+- A writer schema bug stripped UTC metadata from 2,120 compact identity clocks.
+  Exact original pinned rows restored them; new writers validate all nonnull
+  clocks and use UTC nanosecond schemas even for empty first slices.
+- Monthly catalyst publication is complete. News is attached to 224,709 decisions,
+  compared with 7,521 in the rejected mismatched generation.
+- Distinct publications sharing model-input text retain the earliest available
+  original instance. Same-event/source-event conflicts still fail exactly.
+  This supersedes cross-publication score/relevance equality, not source integrity.
+  No numeric tolerance, averaging, score rewriting or rescoring was introduced.
+  The named policy is hashed and loader-enforced with no older-schema fallback.
+- Both joined profiles, technical_market and catalyst_full, completed all 59
+  months and 586,305 rows each; 479,709 rows are feature-eligible in each profile.
+  No row was removed based on its outcome. Unknown coverage and outcomes stay null.
+- Independent targeted reviews closed all supported clock and duplicate-policy
+  findings. All reviewers are closed. Final Ruff and strict mypy passed. The full
+  run had 4,145 passes, 10 skips and one documentation-marker failure. After a
+  documentation-only correction both continuity tests passed. No source changed
+  after the full run; its original failure receipt is preserved in the handoff.
 
-Next bounded gate, reviewed independently:
-1. Preserve exact implementation bytes and hashes bound by existing outcome and
-   predictor publications before changing their imports.
-2. Move the archive reader dependency closure and session-requirement helpers into
-   genuine swing dataset owners. Update consumers without duplicates or aliases.
-3. Run dependency boundary tests first; prove unchanged source/session/numerical
-   behavior and explicit publication derivation/replay. Do not rewrite old pins.
-4. Resume monthly news preparation and the final feature join only after this gate.
-The current handoff identifies the four files, artifact pins and exact command.
-This is an architecture/lineage repair, not a new data download or an AUC result.
-The July 2025-June 2026 historical test has already been exposed; fresh raw
-collection does not retroactively make that test untouched. Current-day responses
-are partial observations, never completed daily bars or complete-day coverage.
-September 11 user direction: finish issuer attribution, corrected stock/benchmark
-outcomes and feature joins in one continuous delivery. Ordered implementation:
-1. Attribute the corrected SATS/FISV archive through the existing strict issuer
-   path, preserving exact query intervals, aliases and unresolved namespace joins.
-2. Extend corporate-action source queries to the corrected initial-fit stock/ETF
-   segments and source-only successor classes. Preserve old receipts; distinguish
-   acquisition implementation identity from current offline replay implementation.
-3. Publish source-bounded research admission and construct fixed/managed stock plus
-   SPY/QQQ/sector outcomes through the existing lot kernel and ordinary-sale simulator.
-   Every frozen decision must have an outcome or an explicit unavailable reason;
-   unresolved claims cannot disappear from selected portfolio accounting.
-4. Attach targets and causal issuer/reaction features by canonical decision identity,
-   rebuild peer transforms after the approved cohort restriction, and audit joins.
-No new exclusion or held-out numerical read is authorized. Provider-scoped negative
-evidence is not a claim of universal absence. Existing contradictory action evidence
-must be reconciled before admitting affected holdings. No broker receipts are
-required for hypothetical ordinary trades. Unknown corporate components remain null.
-Verification requires source/policy tamper rejection, exact ownership/session/fill
-and benchmark matching, future-poison tests, cost reconciliation, bounded memory,
-one consolidated independent review and full static/test verification before closure.
-Training is downstream of these acceptance gates, not part of a false completion
-claim. Heavy jobs remain sequential with system headroom checked before each run.
-September 11 integration: corrected adjusted FI/SATS histories, saved-news derivations,
-verified-prefix predictors and nullable corrected outcomes are published. The QQQ
-distribution scope defect was fixed before the full 586,305-decision outcome run;
-378,037 rows have complete stock/SPY/QQQ/sector comparisons. Monthly news preparation
-stopped at its memory guard and is paused during source catch-up. No complete joined
-feature dataset or new trained model is claimed. Current pins are in the handoff.
-Closed source prerequisite `795a228` (pushed): explicit dated issuer-news query scopes and
-collection-time laptop-memory checks. Existing index-membership intervals must not
-be fabricated to request earlier issuer news. Reuse the same Alpaca page collector,
-with a mutually exclusive hash-bound query-scope input; retain original archives.
-Collect SATS initial-fit history and pre-transfer FISV only, one worker, 31-day
-chunks, without widening the numeric boundary. Query scope is not index membership
-or proof of article attribution. All output remains publication-proxy research data.
-Check system-wide available memory before each page as well as process RSS; refuse
-new requests below 2 GiB available or at 85% physical-memory use. Unknown system
-memory fails the guarded collection. No unrelated applications are terminated.
-Verified exit gates: interval/identity/source-pin rejection tests, identical page processing
-for either request scope, resumable pressure failures, bounded real collection,
-offline audit and independent review. This does not close outcome/source admission.
-Real collection: 105/105 chunks, 661 unique news records (FISV 456, SATS 205),
-92 observed and 13 empty chunks, no failed requests. Offline audit passed. Empty
-responses do not prove source completeness; no additional stocks were excluded.
-32 focused tests and 227 dependency/sentiment tests pass; full suite 3,289 passed,
-three skipped, 133 warnings in 1,274.91s. Ruff and strict mypy (349 sources) pass.
-Peaks: tests 0.331150 GiB, collection 0.245560 GiB, audit 0.244118 GiB. Sampled
-system usage stayed around 65-67%, with over 5 GiB available. Both agents and all
-owned jobs are closed. No new model or full-cohort outcome build ran.
-Ordinary-sale research simulation is closed in `3a864e5` (pushed). The one canonical
-holding kernel is shared by explicit simulation, labels and funded accounting.
-140 focused tests pass; repository-wide Ruff and strict mypy (347 sources) pass.
-Full suite: 3,260 passed, three skipped, 133 warnings in 1,536.28 seconds; peak
-test-process memory 0.331982 GiB. No code changed after the suite started. The bounded
-review's three findings are fixed and verified; both agents and all owned Python
-processes are closed. No full-cohort labels, features or models were rebuilt.
-Source-collection subcheckpoint `2df0183` is pushed: 21 completion documents across
-three immutable archives pass offline replay. That source checkpoint's bounded
-independent review found no P1/P2 issue; 35 collector/continuity tests passed. Its
-source-only verification is distinct from the simulation suite recorded above.
-The subsequent outcomes and feature checkpoints remain pending, not completed by
-diagnostic compilation. Keep the 586 retained identities, existing initial-fit
-numeric boundary and 10% cumulative exclusion ceiling unchanged.
+Completed artifact pins and the exact final verification results are maintained
+only in the active handoff. Failed generations remain protected historical evidence,
+not active inputs. Do not rerun completed numerical replays or source collection.
 
-Bounded source work: retain missing official completion documents through the
-existing receipt collector, distinguish proposed terms from completed entitlements,
-and reconcile historical issuer/symbol intervals. Do not reinterpret a successful
-HTTP response, contractual payable date or merger amount as broker cash availability.
-Exit gates are pinned/replayed source receipts, reviewed class/action intervals and
-explicit unresolved fields. Unknown facts remain unavailable; original authorities
-are not overwritten. Verify inventory schemas and offline byte replay before closing.
-
-Independent feasibility review found a consumer-policy conflict: hypothetical sales
-cannot have observed historical broker receipts. Actual capture timestamps also do
-not establish when retrospective labels were historically available. A user decision
-was resolved by the user's September 9 approval: use real historical inputs and
-explicitly model hypothetical fills, costs and proceeds reuse. Genuinely unknown
-corporate payouts and contingent rights remain unavailable.
-
-Frozen implementation scope: add an explicit, pinned research simulation context
-around the existing lot kernel. Only canonical ordinary-sale executions generate
-dollar-proceeds marks and modeled payment/reuse at the next exact XNYS open. Reject
-conflicting supplied sale payments/marks, invalid session execution times and policy
-tampering. Do not infer a fill from a closing mark, add corporate face-value marks,
-or change costs. Generated IDs and policy references distinguish assumptions from
-observed facts. Preserve historical availability; report any retrospective research
-maturation clock separately. Connect the same simulator to labels and funded
-accounting with explicit opt-in; all production/source-admission gates remain intact.
-Exit tests: partial sales, weekends/holidays, final-horizon receivables, funding at
-next open but never same-session open, no double costs/payments, unknown corporate
-claims unchanged, label/ledger parity, immutable replay and policy mutation rejection.
-
-Corrected SATS/EchoStar and pre-transfer FISV news query windows are now collected;
-issuer attribution, namespace reconciliation and feature joins remain pending.
-Existing relationship features already belong to the 120-column
-technical comparator; profile two must contain genuinely additional, preregistered
-relationships, not duplicate the comparator under another name. These are concrete
-remaining integration requirements, not grounds to reopen completed collectors.
+The current artifacts are research-only initial-fit evidence. They do not certify
+historical first receipt, managed-exit readiness, training admission, validation/test
+publication, prospective performance or outperformance of SPY.
 
 ### Current User-Approved Dataset Direction
 
