@@ -59,7 +59,7 @@ the verified counts and limitations are in the
 [current feature audit](docs/reviews/feature_engineering_audit_20260801.md).
 
 Final repository Ruff and strict type checks pass. The complete regression suite
-passed 4,202 tests with 10 skips for the training-readiness implementation. These are
+passed 4,224 tests with 10 skips after the percentage-only memory policy. These are
 research-only datasets, not
 promoted models. Historical news reception is not proven, unsupported outcomes
 remain null, and SEC/Finviz are not silently included in this Alpaca-only monthly
@@ -78,9 +78,15 @@ Implementation `b3b2372` is pushed. The fresh hash-bound receipt passed after RA
 recovered, with diagnostics identical to the original audit; all 58 post-format
 focused tests passed. The [active handoff](docs/reviews/active_edge_rebuild_handoff.md)
 records its exact pin and the newly approved percentage-only memory policy.
+The swing audit request now sets `maximum_system_used_percent = 90.0`: it stops
+at 90% physical-memory use, without a separate 2 GiB free-RAM floor. Its 5 GiB
+process budget and 0.75 GiB process headroom remain. Source collectors keep their
+own limits; the shared guards bound into historical replay evidence are unchanged.
+The configured audit passed with all diagnostics unchanged; policy implementation
+`7bb805b` is pushed and independently reviewed.
 
 ```powershell
-.venv\Scripts\python.exe -B -m market_predictor.research_cli audit-swing-training-readiness --root . --config configs/swing_training_readiness.json --config-sha256 c0964a85a2eeaab1832a8bc1f9dd1f5b155f246f25d19786d62083ab0f31167e --output data/reports/swing_initial_fit_training_readiness.json
+.venv\Scripts\python.exe -B -m market_predictor.research_cli audit-swing-training-readiness --root . --config configs/swing_training_readiness.json --config-sha256 8d1e2870eac8f7406376eca1af202dbc5a710d344c1e953fce80faa9a58173e4 --output data/reports/swing_initial_fit_training_readiness_percentage_only.json
 ```
 
 The output already exists locally; choose a new report filename for an explicit

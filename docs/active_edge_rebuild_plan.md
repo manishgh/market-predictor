@@ -36,15 +36,24 @@ outside this repository.
 
 ## Long-Only Swing Research And Implementation Plan
 
-Current step: **configure percentage-only swing research memory ceiling** (`in progress`).
+Current step: **implement swing return-regression training** (`in progress`).
+Design is reviewed below; implementation and fitting have not started. Use the
+verified percentage-only audit receipt from the handoff. Preserve the user-approved
+90% system-memory ceiling without an independent absolute free-RAM floor.
+
+### Completed Percentage-Only Memory Policy
+
+Implementation `7bb805b` is pushed. Independent design/diff review is closed;
+Ruff and strict mypy passed. Full verification passed 4,224 tests, with 10 skips
+and 133 warnings in 1,755.08 seconds. The configured real audit passed and all
+data diagnostics are unchanged. Its new pin is recorded in the handoff.
 The user approved a 90% total physical-memory ceiling with no separate 2 GiB
 free-RAM floor. Preserve the swing process budget of 5 GiB and unavailable-memory
 measurement failures. Scope: the current readiness audit and the forthcoming
 return consumer, not unrelated source collectors. Bind the percentage in the
 strict request configuration. Do not modify hash-bound replay dependencies.
-Verify below/at/above 90%, less than 2 GiB free while below 90%, invalid settings,
-unknown measurements, process limits and source pins. Preserve all prior receipts;
-publish a new configured audit and compare diagnostics before closure.
+Verified below/at/above 90%, less than 2 GiB free while below 90%, invalid settings,
+unknown measurements, process limits and source pins. Prior receipts are preserved.
 
 ### Completed Training-Input Audit
 
@@ -80,10 +89,10 @@ once their objective-specific training consumer and acceptance gates exist.
 
 ### Prepared Next Step: Swing Return Models
 
-Status: design reviewed; implementation has not started. Bernoulli
+Status: current, design reviewed; implementation has not started. Bernoulli
 (`01a0a07e-fb40-7031-b2d7-a9166dd328c9`) reviewed the training design read-only and
-is closed. This preparation does not close the RAM-blocked audit or authorize a
-fit. Freeze the following choices in the new strict research-fit contract before
+is closed. The audit and memory-policy checkpoints are closed; this design alone
+does not authorize a fit. Freeze these choices in the strict research-fit contract before
 reading validation outcomes; the exact code-generated fold dates must be verified.
 
 - Start with existing_technical only: the published technical_market profile's

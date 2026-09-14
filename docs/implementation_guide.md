@@ -343,6 +343,11 @@ estimator without the same governance.
 - `swing/contracts/training_readiness.py`: strict pinned diagnostic request.
   `commands/swing_training_readiness.py` is the CLI-only adapter. The report remains
   training-, managed-evaluation- and promotion-ineligible by scope.
+  Its mandatory `maximum_system_used_percent` field is configured to 90.0, with
+  no separate 2 GiB free-RAM floor. The auditor preserves the process budget and
+  derives an equivalent percentage-based free-byte threshold for the existing
+  shared guard, avoiding edits to historical replay dependencies. Missing or
+  inconsistent OS measurements abort. Other collectors retain their own policies.
 - `swing/datasets/initial_fit_raw_share_plan.py`: identity-only initial-fit raw SIP
   acquisition requirements and independent pinned replay. The next-ten-session
   paths remain intact after index removal; all in-window decision sessions are also

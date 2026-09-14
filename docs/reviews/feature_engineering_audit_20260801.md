@@ -35,11 +35,12 @@ reaction profile or later outer-validation publication to run bounded inner
 development. Missing selected outcomes cannot be removed from economic evaluation.
 
 Real audit completed successfully on September 14:
-`data/reports/swing_initial_fit_training_readiness_verified.json`, SHA256
-`84a56de74eb09b5e1126e6a0ba4aee802d82cf3e0707b9aee3460006d916a824`.
-The current-byte refresh passed in session 56011 after RAM recovered. Diagnostics
-equal the original report exactly; only the whitespace-cleaned source pin differs.
-Both receipts remain immutable. Successful diagnostics do not authorize fitting.
+`data/reports/swing_initial_fit_training_readiness_percentage_only.json`, SHA256
+`7a468ed3e0662d8d6390ae575bee700cdd7da4ef8bb7c8ae921aed6b8eead39f`.
+The percentage-only policy audit passed in session 40719. All data diagnostics
+equal the prior verified report; only expected config/code pins and the explicit
+memory-policy record changed. Earlier receipts remain immutable historical
+evidence. Successful diagnostics do not authorize fitting.
 It covers 59 months, 1,231 sessions and 545 distinct initial-fit securities. The
 586-member retained campaign population is not the distinct-security count of
 this earlier fitting interval. Every one of the 586,305 published decisions per
@@ -73,6 +74,14 @@ Implementation `b3b2372` is pushed with the final receipt refresh passed.
 The 58 post-format readiness/continuity tests passed in
 11.01 seconds; Ruff and strict mypy passed again. This does not replace the
 objective-specific training contract or authorize fitting.
+
+The subsequent memory-policy implementation `7bb805b` is pushed and independently
+reviewed. It applies the approved 90% ceiling without a separate absolute free-RAM
+floor, while retaining 5 GiB process budget and 0.75 GiB process headroom.
+Shared replay dependencies and source-collection limits were not changed.
+Final full verification passed 4,224 tests, 10 skipped, 133 warnings, in 1,755.08
+seconds. Log: `data/runtime/swing_percentage_memory_full_tests.log`; JUnit:
+`.test-tmp/swing-percentage-memory-full.xml`. Ruff and strict mypy passed.
 
 ### Corrected Initial-Fit Data Verified
 

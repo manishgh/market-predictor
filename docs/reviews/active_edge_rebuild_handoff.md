@@ -4,7 +4,7 @@ Status: active
 Last updated: 2026-09-14
 Repository: `C:\project\market-predictor`
 Branch: `er-intraday-refactoring`
-Last completed implementation checkpoint: `b3b2372` (pushed).
+Last completed implementation checkpoint: `7bb805b` (pushed).
 Source-collection checkpoint: `19698d6` (pushed).
 The combined historical outcome/features delivery is verified and committed.
 
@@ -19,8 +19,8 @@ reviewer Beauvoir (`01a0a03a-327a-7eb1-828f-93b88aaab260`) closed design/diff re
 after both supported P2 findings were reproduced and fixed; the reviewer is closed.
 Consolidated focused verification passed 289 tests. Ruff and strict mypy passed
 on 397 sources. The real audit exited zero and published
-`data/reports/swing_initial_fit_training_readiness_verified.json`, SHA256
-`84a56de74eb09b5e1126e6a0ba4aee802d82cf3e0707b9aee3460006d916a824`.
+`data/reports/swing_initial_fit_training_readiness_percentage_only.json`, SHA256
+`7a468ed3e0662d8d6390ae575bee700cdd7da4ef8bb7c8ae921aed6b8eead39f`.
 It found 378,037 usable fixed-horizon comparison labels and complete-case
 intersections of 194,679 technical / 193,125 catalyst rows, with no row removals.
 545 securities appear in the initial-fit interval; 586 is the retained full
@@ -42,12 +42,31 @@ readiness/continuity tests in 11.01 seconds; JUnit:
 `.test-tmp/training-readiness-post-format.xml`. Repository Ruff and strict mypy
 also passed again. No functional code changed after the full suite.
 
-Current checkpoint: the user now explicitly approves a 90% physical-memory ceiling
+Completed policy checkpoint: the user explicitly approved a 90% physical-memory ceiling
 without an independent 2 GiB free-RAM floor for swing research. Keep the 5 GiB
 process budget and unknown-measurement failure. Configure the audit policy without
 editing shared measurement/guard files bound into historical replay evidence.
-This change requires its own tests and new immutable audit receipt; it is not
-implemented yet. Earlier 85% failures are historical, not the requested policy.
+Implementation `7bb805b` is pushed: config, strict request contract, auditor and
+focused tests. The configuration SHA256 is
+`8d1e2870eac8f7406376eca1af202dbc5a710d344c1e953fce80faa9a58173e4`.
+Shared guard and replay dependency files are unchanged. Independent reviewer
+Linnaeus (`01a0a089-93ca-75f1-b1fb-34b39bee7495`) closed design/diff review with no
+outstanding findings; its suggested report/config assertions are covered.
+Focused verification passed 96 tests, followed by all 46 policy/auditor tests
+after the last assertion was added. Ruff and strict mypy passed on 397 sources.
+The configured audit completed successfully in session 40719; log:
+`data/runtime/swing_training_readiness_percentage_only.log`. New receipt:
+`data/reports/swing_initial_fit_training_readiness_percentage_only.json`, SHA256
+`7a468ed3e0662d8d6390ae575bee700cdd7da4ef8bb7c8ae921aed6b8eead39f`.
+All diagnostics equal the prior verified report; only the three expected
+config/implementation pins and explicit memory-policy record changed. The report
+records 90.0%, a null absolute free-RAM floor, 5 GiB process budget and 0.75 GiB
+process headroom. Prior receipts remain historical, not current-policy inputs.
+Full regression session 7250 exited zero: 4,224 passed, 10 skipped and 133 warnings
+in 1,755.08 seconds. No source changes followed the run. Log:
+`data/runtime/swing_percentage_memory_full_tests.log`, JUnit:
+`.test-tmp/swing-percentage-memory-full.xml`. No worker or reviewer remains active.
+Earlier 85% failures are historical, not the requested policy.
 
 Next-consumer design review completed read-only with Bernoulli
 (`01a0a07e-fb40-7031-b2d7-a9166dd328c9`), now closed. Its concrete proposed folds,
@@ -215,13 +234,11 @@ the frozen numeric training boundary or authorize promotion.
 
 ## Next Actions
 
-Exact next checkpoint: implement the configured percentage-only swing memory ceiling.
+Exact next checkpoint: implement the objective-specific swing return-training consumer.
 
-1. The earlier audit is complete. Implement the approved 90% policy and verify
-   boundaries, no absolute free-RAM floor, unknown measurements and process guards.
-2. Publish a new pinned receipt, compare diagnostics, test/review and checkpoint
-   the policy change. Preserve the verified receipt above; do not rebuild data.
-3. Implement the objective-specific research training consumer, including frozen
+1. Audit and percentage-only memory policy are complete. Use the current receipt
+   above; do not rerun numerical replays or rebuild the saved dataset.
+2. Implement the objective-specific research training consumer, including frozen
    preprocessing, label policy and purged inner-development folds, before fitting
    the existing technical comparison. The retained trainer is not this consumer.
    Distinct technical-relationship and issuer/SEC reaction profiles remain absent;

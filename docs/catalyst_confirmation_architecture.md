@@ -205,6 +205,14 @@ Neither a complete-case intersection nor a successful audit is a tradability rul
 or permission to fit/serve a model. Objective-specific training admission and
 managed-policy evaluation remain separate consumers.
 
+The swing audit's pinned `maximum_system_used_percent` is explicitly 90.0 after
+user approval. It has no independent absolute free-memory floor. It retains the
+5 GiB process budget with 0.75 GiB headroom, rejects unknown OS measurements and
+changed physical capacity between probes, and checks before loading data, each
+month, and report publication. The existing shared guard receives a free-byte
+threshold equivalent to the configured percentage, not a second restriction.
+Shared source-collection defaults and hash-bound replay dependencies are unchanged.
+
 Numeric initial-fit reads end on 2024-05-28; pre-2019-07-09 bars are warm-up only.
 Technical features use a coherent adjusted provider stream; dollar volume uses raw
 close times raw volume. Separate symbol streams are never price-spliced. The existing
