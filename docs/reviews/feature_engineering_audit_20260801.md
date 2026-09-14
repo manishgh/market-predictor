@@ -35,12 +35,11 @@ reaction profile or later outer-validation publication to run bounded inner
 development. Missing selected outcomes cannot be removed from economic evaluation.
 
 Real audit completed successfully on September 14:
-`data/reports/swing_initial_fit_training_readiness.json`, SHA256
-`ed56e99722fdb85ecf1b1d76e22c06350766821cb6ed8526df7f582ce30f399f`.
-This is the successful pre-format receipt. A subsequent trailing-blank-line
-removal changed one implementation hash without changing Python statements.
-The current-byte refresh remains environment-pending after the system-memory
-guard stopped it. Do not rewrite the original receipt or claim current admission.
+`data/reports/swing_initial_fit_training_readiness_verified.json`, SHA256
+`84a56de74eb09b5e1126e6a0ba4aee802d82cf3e0707b9aee3460006d916a824`.
+The current-byte refresh passed in session 56011 after RAM recovered. Diagnostics
+equal the original report exactly; only the whitespace-cleaned source pin differs.
+Both receipts remain immutable. Successful diagnostics do not authorize fitting.
 It covers 59 months, 1,231 sessions and 545 distinct initial-fit securities. The
 586-member retained campaign population is not the distinct-security count of
 this earlier fitting interval. Every one of the 586,305 published decisions per
@@ -70,10 +69,10 @@ in 1,775.89 seconds. Durable log: `data/runtime/swing_training_readiness_full_te
 JUnit: `.test-tmp/swing-training-readiness-full.xml`. Eight skips require Windows
 symlink privileges and two are opt-in memory stress tests, not passing evidence.
 Reviewer closed; no data, training or test workers remain.
-Implementation `b3b2372` is pushed with the final receipt refresh explicitly
-environment-pending. The 58 post-format readiness/continuity tests passed in
+Implementation `b3b2372` is pushed with the final receipt refresh passed.
+The 58 post-format readiness/continuity tests passed in
 11.01 seconds; Ruff and strict mypy passed again. This does not replace the
-pending real-data receipt or authorize fitting.
+objective-specific training contract or authorize fitting.
 
 ### Corrected Initial-Fit Data Verified
 

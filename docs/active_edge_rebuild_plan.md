@@ -36,18 +36,24 @@ outside this repository.
 
 ## Long-Only Swing Research And Implementation Plan
 
-Current step: **audit fixed-horizon training inputs and missing requirements** (`in progress`).
-The historical data delivery below is verified and pushed. This checkpoint checks
-its exact published rows before introducing a new return-regression consumer.
+Current step: **configure percentage-only swing research memory ceiling** (`in progress`).
+The user approved a 90% total physical-memory ceiling with no separate 2 GiB
+free-RAM floor. Preserve the swing process budget of 5 GiB and unavailable-memory
+measurement failures. Scope: the current readiness audit and the forthcoming
+return consumer, not unrelated source collectors. Bind the percentage in the
+strict request configuration. Do not modify hash-bound replay dependencies.
+Verify below/at/above 90%, less than 2 GiB free while below 90%, invalid settings,
+unknown measurements, process limits and source pins. Preserve all prior receipts;
+publish a new configured audit and compare diagnostics before closure.
 
-Implementation `b3b2372` is pushed as a paused checkpoint. Scoped independent
-review and real-data diagnostics passed.
-Verification: 4,202 tests passed, 10 skipped; Ruff and strict mypy passed.
-Final receipt refresh is environment-pending after a whitespace-only source edit:
-system memory crossed the unchanged 85% guard. The original successful audit
-is preserved. Post-format focused verification passed 58 tests; Ruff/mypy passed
-again. Exact resume command and evidence are in the handoff; no model fit or
-closed checkpoint is claimed yet.
+### Completed Training-Input Audit
+
+Implementation `b3b2372` is pushed. Scoped independent review, real-data
+diagnostics, 4,202 full tests (10 skips), Ruff and strict mypy passed. All 58
+post-format focused tests passed. The final receipt refresh completed in session
+56011 after memory recovered to 66.5%; every diagnostic equals the earlier
+successful report. Only the expected whitespace-only implementation pin differs.
+Current verified receipt and SHA256 are in the handoff. No model fit is claimed.
 
 Bounded scope and exit gates:
 - Add one reproducible, pinned-input readiness command with monthly bounded reads,

@@ -74,11 +74,10 @@ does not authorize fitting: the approved return-regression consumer and distinct
 new relationship/reaction profiles still require implementation. See the current
 feature audit for precise requirements. Run the immutable saved-data diagnostic:
 
-Implementation `b3b2372` is pushed. A whitespace-only source cleanup requires a
-fresh hash-bound receipt; that refresh stopped safely at the system-memory limit.
-The prior successful audit remains saved, and all 58 post-format focused tests
-passed. The [active handoff](docs/reviews/active_edge_rebuild_handoff.md) records
-the exact remaining command; the checkpoint is not yet closed.
+Implementation `b3b2372` is pushed. The fresh hash-bound receipt passed after RAM
+recovered, with diagnostics identical to the original audit; all 58 post-format
+focused tests passed. The [active handoff](docs/reviews/active_edge_rebuild_handoff.md)
+records its exact pin and the newly approved percentage-only memory policy.
 
 ```powershell
 .venv\Scripts\python.exe -B -m market_predictor.research_cli audit-swing-training-readiness --root . --config configs/swing_training_readiness.json --config-sha256 c0964a85a2eeaab1832a8bc1f9dd1f5b155f246f25d19786d62083ab0f31167e --output data/reports/swing_initial_fit_training_readiness.json

@@ -4,15 +4,14 @@ Status: active
 Last updated: 2026-09-14
 Repository: `C:\project\market-predictor`
 Branch: `er-intraday-refactoring`
-Last completed implementation checkpoint: `7b5d834` (pushed).
+Last completed implementation checkpoint: `b3b2372` (pushed).
 Source-collection checkpoint: `19698d6` (pushed).
 The combined historical outcome/features delivery is verified and committed.
 
 ## Current State
 
-Current checkpoint: fixed-horizon training-input diagnostics. Implementation
-`b3b2372` is pushed; final receipt refresh is environment-pending, so the
-checkpoint is not closed. It binds the completed publication and
+Completed checkpoint: fixed-horizon training-input diagnostics. Implementation
+`b3b2372` is pushed and the final receipt refresh passed. It binds the publication and
 saved-row receipt, verifies model order, decision clocks, return arithmetic and
 exact ten-session maturity, and reports separate input/supervision availability.
 It does not flip any training/production flags or fit an estimator. Independent
@@ -20,8 +19,8 @@ reviewer Beauvoir (`01a0a03a-327a-7eb1-828f-93b88aaab260`) closed design/diff re
 after both supported P2 findings were reproduced and fixed; the reviewer is closed.
 Consolidated focused verification passed 289 tests. Ruff and strict mypy passed
 on 397 sources. The real audit exited zero and published
-`data/reports/swing_initial_fit_training_readiness.json`, SHA256
-`ed56e99722fdb85ecf1b1d76e22c06350766821cb6ed8526df7f582ce30f399f`.
+`data/reports/swing_initial_fit_training_readiness_verified.json`, SHA256
+`84a56de74eb09b5e1126e6a0ba4aee802d82cf3e0707b9aee3460006d916a824`.
 It found 378,037 usable fixed-horizon comparison labels and complete-case
 intersections of 194,679 technical / 193,125 catalyst rows, with no row removals.
 545 securities appear in the initial-fit interval; 586 is the retained full
@@ -31,30 +30,24 @@ Full regression session **42125** completed with exit zero: 4,202 passed,
 10 skipped and 132 warnings in 1,775.89 seconds. Log:
 `data/runtime/swing_training_readiness_full_tests.log`, JUnit
 `.test-tmp/swing-training-readiness-full.xml`. No workers or review agents remain.
-The only subsequent source edit removed a trailing blank line from
-`swing/contracts/training_readiness.py`; no Python statements changed. Because
-the audit pins source bytes, its earlier receipt is historical, not current-code
-admission. A fresh receipt is still required before closing this checkpoint.
-
-Four refresh attempts stopped at the existing system-memory guard. Latest session
-95467 started at 80.2% used / 3.11 GiB free and exited 1 at 85.1% used / 2.34 GiB
-free; no Python worker remains. The earlier
-attempt reached 90.6% system use. Do not weaken the below-85% / minimum-2-GiB guard
-or terminate unrelated apps. The user has been asked to free memory.
-Resume when memory permits, without rebuilding data:
-
-```powershell
-.venv\Scripts\python.exe -B -u -m market_predictor.research_cli audit-swing-training-readiness --root . --config configs/swing_training_readiness.json --config-sha256 c0964a85a2eeaab1832a8bc1f9dd1f5b155f246f25d19786d62083ab0f31167e --output data/reports/swing_initial_fit_training_readiness_verified.json
-```
-
-The output must not already exist. Latest failed refresh log:
-`data/runtime/swing_training_readiness_final_audit.log`. Preserve the
-original successful receipt unchanged. Post-format verification passed all 58
+The only source edit after the full suite removed a trailing blank line from
+`swing/contracts/training_readiness.py`; no Python statements changed. Session
+56011 completed the required current-byte refresh after RAM recovered to 66.5%
+(5.25 GiB free). All diagnostic values equal the original receipt; only the
+expected implementation pin changed. Log:
+`data/runtime/swing_training_readiness_recovered_memory.log`.
+The original pre-format report remains immutable historical evidence.
+Post-format verification passed all 58
 readiness/continuity tests in 11.01 seconds; JUnit:
 `.test-tmp/training-readiness-post-format.xml`. Repository Ruff and strict mypy
-also passed again. No functional code changed after the full suite. Do not mark
-this environment-pending refresh as a passed run or repeatedly retry while RAM
-is unstable near the threshold.
+also passed again. No functional code changed after the full suite.
+
+Current checkpoint: the user now explicitly approves a 90% physical-memory ceiling
+without an independent 2 GiB free-RAM floor for swing research. Keep the 5 GiB
+process budget and unknown-measurement failure. Configure the audit policy without
+editing shared measurement/guard files bound into historical replay evidence.
+This change requires its own tests and new immutable audit receipt; it is not
+implemented yet. Earlier 85% failures are historical, not the requested policy.
 
 Next-consumer design review completed read-only with Bernoulli
 (`01a0a07e-fb40-7031-b2d7-a9166dd328c9`), now closed. Its concrete proposed folds,
@@ -222,14 +215,12 @@ the frozen numeric training boundary or authorize promotion.
 
 ## Next Actions
 
-Exact next checkpoint: finish and publish the fixed-horizon training-readiness audit.
+Exact next checkpoint: implement the configured percentage-only swing memory ceiling.
 
-1. Review, real-data diagnostics and full regression verification are complete.
-   Refresh the receipt after the whitespace-only source edit when system memory
-   permits; compare all diagnostics with the original receipt. Post-format
-   readiness/continuity tests already passed. Do not repeat the full data rebuild.
-2. Publish the new receipt pin, update this handoff, and push documentation
-   closure. The implementation is already pushed in `b3b2372`.
+1. The earlier audit is complete. Implement the approved 90% policy and verify
+   boundaries, no absolute free-RAM floor, unknown measurements and process guards.
+2. Publish a new pinned receipt, compare diagnostics, test/review and checkpoint
+   the policy change. Preserve the verified receipt above; do not rebuild data.
 3. Implement the objective-specific research training consumer, including frozen
    preprocessing, label policy and purged inner-development folds, before fitting
    the existing technical comparison. The retained trainer is not this consumer.
