@@ -333,6 +333,16 @@ estimator without the same governance.
   `outcome_replay` pins allow only complete, current-code-verified historical inputs.
   The dataset CLI requires each `--predictor-replay` / `--outcome-replay` path with
   its corresponding `-sha256` option. Source checks remain mandatory without them.
+- `research/swing_training_readiness.py`: monthly, pinned-publication input audit
+  behind `audit-swing-training-readiness`. It checks the original saved-row receipt,
+  ordered inputs, matching profile populations and research/strategy provenance;
+  acquires the shared heavy-job lease and never modifies source publications.
+- `swing/labels/fixed_horizon_readiness.py`: pure checks for causal input clocks,
+  warm-up, exact stock costs/benchmark excess and tenth-close maturity. Returns
+  separate input and supervision diagnostics; never selects trades or fits models.
+- `swing/contracts/training_readiness.py`: strict pinned diagnostic request.
+  `commands/swing_training_readiness.py` is the CLI-only adapter. The report remains
+  training-, managed-evaluation- and promotion-ineligible by scope.
 - `swing/datasets/initial_fit_raw_share_plan.py`: identity-only initial-fit raw SIP
   acquisition requirements and independent pinned replay. The next-ten-session
   paths remain intact after index removal; all in-window decision sessions are also

@@ -4,6 +4,77 @@ Last updated: 2026-09-14
 
 ## Current Long-Only Swing Campaign
 
+### Fixed-Horizon Training Requirements
+
+This is the current campaign's acceptance matrix; historical A2/A3 rows below
+do not certify the new return-regression consumer. Technical fixed-horizon
+fitting does not require a managed-exit timestamp or proof of historical news
+receipt. It does require independently usable, matured fixed-horizon labels,
+causal inputs and an explicit research-only training contract.
+
+| Planned profile | Source, batch and feature order | Fixed-horizon labels | Training consumer and experiment | Live, promotion and API |
+| --- | --- | --- | --- | --- |
+| existing_technical | Verified corrected publication: technical_market, 120 ordered inputs and availability clocks | Original outcomes replayed; new audit checks exact costs, comparisons and maturity separately from input eligibility | Blocked: the existing trainer is the older classifier/ranker, not the two approved return regressors | Not authorized; no new fitted artifact or return-model serving contract |
+| technical_relationships | Blocked: the distinct additional momentum/regime relationships are not a published profile; existing RSI/OBV relationships must not be counted again | Must reuse matched independently admitted labels | Not trained; cannot duplicate existing_technical under another name | Not authorized |
+| technical_relationships_issuer_reaction | Blocked: catalyst_full has aggregate news features, not qualified issuer/SEC event-reaction inputs; SEC/Finviz coverage is unknown here | Must reuse matched independently admitted labels | Not trained; counts and sentiment cannot substitute for the promised reaction feature contract | Not authorized |
+
+Readiness command: `audit-swing-training-readiness`, configuration
+`configs/swing_training_readiness.json`. Its scope is bounded initial-fit
+diagnostics, not permission to fit or trade. It preserves source publications,
+reports every month/sector/year and all missing model values, and keeps these
+facts separate:
+- feature eligibility, derived without future returns;
+- complete model inputs, a diagnostic rather than an imputation decision;
+- available fixed-horizon supervision, with all required comparison evidence;
+- their intersection, not a historical opportunity-selection mask.
+
+The next training consumer must bind exact learner settings, missing-feature and
+missing-label policy, purged session folds, weights and separate security holdout
+before fitting. Ready technical specifications need not wait for the blocked
+reaction profile or later outer-validation publication to run bounded inner
+development. Missing selected outcomes cannot be removed from economic evaluation.
+
+Real audit completed successfully on September 14:
+`data/reports/swing_initial_fit_training_readiness.json`, SHA256
+`ed56e99722fdb85ecf1b1d76e22c06350766821cb6ed8526df7f582ce30f399f`.
+This is the successful pre-format receipt. A subsequent trailing-blank-line
+removal changed one implementation hash without changing Python statements.
+The current-byte refresh remains environment-pending after the system-memory
+guard stopped it. Do not rewrite the original receipt or claim current admission.
+It covers 59 months, 1,231 sessions and 545 distinct initial-fit securities. The
+586-member retained campaign population is not the distinct-security count of
+this earlier fitting interval. Every one of the 586,305 published decisions per
+profile remains present; no new exclusions.
+
+| Diagnostic | Technical | Aggregate catalyst |
+| --- | --- | --- |
+| Feature-eligible rows | 479,709 | 479,709 |
+| Complete model-input rows | 298,446 | 296,137 |
+| Usable fixed-horizon labels with required comparisons | 378,037 | 378,037 |
+| Complete-case input/label intersection | 194,679 | 193,125 |
+
+The matched complete-case intersection is 193,125. Many missing values are
+sector-normalized inputs: for example return_5d_sector_z is missing on 258,190
+published rows, and rsi_bullish_divergence_strength_sector_z on 278,833. The existing
+scaler intentionally emits missing sector values for undersized peer groups or
+unavailable inputs; the audit does not lower the frozen 30-peer threshold or
+silently drop those decisions. A training missingness policy is still required.
+No outcome means, AUC, fitted predictions or portfolio profits were evaluated.
+
+Independent reviewer Beauvoir closed two supported P2 findings after failing
+regression tests: changed transformation policies must match publication provenance,
+and benchmark-only outcomes must also mature before the numerical fitting boundary.
+Consolidated verification passed 289 tests; Ruff and strict mypy passed on 397
+source files. The complete suite passed 4,202 tests, with 10 skips and 132 warnings
+in 1,775.89 seconds. Durable log: `data/runtime/swing_training_readiness_full_tests.log`;
+JUnit: `.test-tmp/swing-training-readiness-full.xml`. Eight skips require Windows
+symlink privileges and two are opt-in memory stress tests, not passing evidence.
+Reviewer closed; no data, training or test workers remain.
+Implementation `b3b2372` is pushed with the final receipt refresh explicitly
+environment-pending. The 58 post-format readiness/continuity tests passed in
+11.01 seconds; Ruff and strict mypy passed again. This does not replace the
+pending real-data receipt or authorize fitting.
+
 ### Corrected Initial-Fit Data Verified
 
 Implementation checkpoint: `7b5d834`, pushed to `er-intraday-refactoring`.

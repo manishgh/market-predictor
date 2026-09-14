@@ -10,6 +10,51 @@ The combined historical outcome/features delivery is verified and committed.
 
 ## Current State
 
+Current checkpoint: fixed-horizon training-input diagnostics. Implementation
+`b3b2372` is pushed; final receipt refresh is environment-pending, so the
+checkpoint is not closed. It binds the completed publication and
+saved-row receipt, verifies model order, decision clocks, return arithmetic and
+exact ten-session maturity, and reports separate input/supervision availability.
+It does not flip any training/production flags or fit an estimator. Independent
+reviewer Beauvoir (`01a0a03a-327a-7eb1-828f-93b88aaab260`) closed design/diff review
+after both supported P2 findings were reproduced and fixed; the reviewer is closed.
+Consolidated focused verification passed 289 tests. Ruff and strict mypy passed
+on 397 sources. The real audit exited zero and published
+`data/reports/swing_initial_fit_training_readiness.json`, SHA256
+`ed56e99722fdb85ecf1b1d76e22c06350766821cb6ed8526df7f582ce30f399f`.
+It found 378,037 usable fixed-horizon comparison labels and complete-case
+intersections of 194,679 technical / 193,125 catalyst rows, with no row removals.
+545 securities appear in the initial-fit interval; 586 is the retained full
+campaign list. The current feature audit records exact consumer gaps.
+
+Full regression session **42125** completed with exit zero: 4,202 passed,
+10 skipped and 132 warnings in 1,775.89 seconds. Log:
+`data/runtime/swing_training_readiness_full_tests.log`, JUnit
+`.test-tmp/swing-training-readiness-full.xml`. No workers or review agents remain.
+The only subsequent source edit removed a trailing blank line from
+`swing/contracts/training_readiness.py`; no Python statements changed. Because
+the audit pins source bytes, its earlier receipt is historical, not current-code
+admission. A fresh receipt is still required before closing this checkpoint.
+
+Three refresh attempts stopped at the existing system-memory guard. Latest session
+82200 exited 1 at 85.0% used / 2.35 GiB free; no Python worker remains. The earlier
+attempt reached 90.6% system use. Do not weaken the below-85% / minimum-2-GiB guard
+or terminate unrelated apps. The user has been asked to free memory.
+Resume when memory permits, without rebuilding data:
+
+```powershell
+.venv\Scripts\python.exe -B -u -m market_predictor.research_cli audit-swing-training-readiness --root . --config configs/swing_training_readiness.json --config-sha256 c0964a85a2eeaab1832a8bc1f9dd1f5b155f246f25d19786d62083ab0f31167e --output data/reports/swing_initial_fit_training_readiness_verified.json
+```
+
+The output must not already exist. Latest failed refresh log:
+`data/runtime/swing_training_readiness_verified_retry_audit.log`. Preserve the
+original successful receipt unchanged. Post-format verification passed all 58
+readiness/continuity tests in 11.01 seconds; JUnit:
+`.test-tmp/training-readiness-post-format.xml`. Repository Ruff and strict mypy
+also passed again. No functional code changed after the full suite. Do not mark
+this environment-pending refresh as a passed run or repeatedly retry while RAM
+is unstable near the threshold.
+
 The user's three requested stages are complete:
 1. News rebuild: complete, including 59 monthly catalyst authorities.
 2. Technical and catalyst feature joins: complete, 59 months / 586,305 rows each.
@@ -168,17 +213,21 @@ the frozen numeric training boundary or authorize promotion.
 
 ## Next Actions
 
-Exact next checkpoint: admit the long-only swing experiment from verified inputs.
+Exact next checkpoint: finish and publish the fixed-horizon training-readiness audit.
 
-1. Read the active feature acceptance matrix and training protocol. Verify the
-   exact feature/source/label contract for technical_market and catalyst_full;
-   publication completion does not override false training admission flags.
-2. Establish the remaining validation/test publication and fitting requirements
-   against the frozen dates below, preserving unknown sources/outcomes and matched
-   profile populations. Do not rerun the completed initial-fit data build.
-3. Train only after applicable admission gates pass, sequentially within 5 GiB.
-   No training or new evaluation has run in this delivery. Do not claim
-   profitability from successful collection, replay or feature materialization.
+1. Review, real-data diagnostics and full regression verification are complete.
+   Refresh the receipt after the whitespace-only source edit when system memory
+   permits; compare all diagnostics with the original receipt. Post-format
+   readiness/continuity tests already passed. Do not repeat the full data rebuild.
+2. Publish the new receipt pin, update this handoff, and push documentation
+   closure. The implementation is already pushed in `b3b2372`.
+3. Implement the objective-specific research training consumer, including frozen
+   preprocessing, label policy and purged inner-development folds, before fitting
+   the existing technical comparison. The retained trainer is not this consumer.
+   Distinct technical-relationship and issuer/SEC reaction profiles remain absent;
+   do not relabel catalyst_full as a completed reaction model. Validation/test
+   publications are needed for their later evaluations, not as a blanket blocker
+   on inner-development training. No fitting or economic evaluation has run here.
 
 Decision config: `configs/swing_corrected_outcomes.toml`,
 `ded3b30af1185c7ab0759fa5f81c559c37c590419751c942b61ab479e67c2348`.

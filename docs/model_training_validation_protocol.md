@@ -47,10 +47,12 @@ that transfer stress test is not a substitute for future-session evaluation.
   stock net return minus SPY over that interval. Managed target/stop/timeout returns
   remain separately named outcomes. Managed-exit-session-close benchmark excess is
   approximate, not an exact intraday comparison or the new selection authority.
-- Data-quality tolerance: exclude the complete security, with an audited reason
-  and affected dates, when its data is unavailable or unverifiable. Continue
-  through a maximum 5% loss of the filtered point-in-time universe; refuse above
-  5%. SPY, sector-benchmark, and market-wide session gaps cannot use this rule.
+- Data-quality tolerance for the current campaign: the approved cumulative cap
+  is 10% of the original 631 modeled identities. The frozen list excludes 45 and
+  retains 586; this supersedes the older 5% rule, not the exclusion list itself.
+  Report retrospective restriction bias. No additional exclusions or deletion of
+  losing outcomes is authorized. Benchmark and market-wide session gaps cannot
+  be waived through stock exclusions.
 
 The existing temporal config records these XNYS-verified historical partitions;
 they do not establish a fresh final test for the new campaign:

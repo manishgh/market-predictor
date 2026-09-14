@@ -36,11 +36,41 @@ outside this repository.
 
 ## Long-Only Swing Research And Implementation Plan
 
-Current step: **long-only swing experiment preparation** (`in progress`).
-The historical data delivery below is verified and pushed. The next operation is
-explicit training admission against the feature acceptance matrix and frozen
-splits; no estimator is running and no training permission is implied by a data
-publication. Validation/test publications and actual fitting remain uncompleted.
+Current step: **audit fixed-horizon training inputs and missing requirements** (`in progress`).
+The historical data delivery below is verified and pushed. This checkpoint checks
+its exact published rows before introducing a new return-regression consumer.
+
+Implementation `b3b2372` is pushed as a paused checkpoint. Scoped independent
+review and real-data diagnostics passed.
+Verification: 4,202 tests passed, 10 skipped; Ruff and strict mypy passed.
+Final receipt refresh is environment-pending after a whitespace-only source edit:
+system memory crossed the unchanged 85% guard. The original successful audit
+is preserved. Post-format focused verification passed 58 tests; Ruff/mypy passed
+again. Exact resume command and evidence are in the handoff; no model fit or
+closed checkpoint is claimed yet.
+
+Bounded scope and exit gates:
+- Add one reproducible, pinned-input readiness command with monthly bounded reads,
+  the workspace heavy-job lease and existing 5 GiB/system-memory guards.
+- Verify frozen initial-fit sessions, exact profile populations, ordered model
+  columns, feature clocks and exact ten-session label maturity. Reconcile stock
+  net returns and benchmark excess without changing values or adding costs twice.
+- Report feature availability separately from usable supervised labels, by month,
+  year and sector. Preserve every published decision and missingness; a future
+  outcome cannot change predictor eligibility. No imputation or new exclusions.
+- Record the three planned research profiles separately from the two published
+  datasets. News counts/sentiment are not qualified issuer/SEC reaction features.
+- Update the current acceptance matrix with actual training-consumer, live and
+  source gaps. A report is diagnostic, not a training/production admission token.
+- Focused poison tests, independent design/diff review, Ruff, strict mypy, full
+  suite, real saved-data audit and pushed implementation/documentation closure.
+
+Out of scope: repeat source collection/replays, change immutable publications,
+relax eligibility flags, fit the retired classifier/ranker or claim profitability.
+Malformed/tampered data aborts without a success report. Unavailable inputs are
+reported explicitly. Validation/test publications and actual fitting remain
+uncompleted; ready technical profiles must not wait for blocked catalyst features
+once their objective-specific training consumer and acceptance gates exist.
 
 ### Combined Evidence, Outcomes And Features Delivery
 
@@ -639,8 +669,8 @@ the complete permitted history. Download only an enumerated, genuinely missing
 source/date range after checking raw archives and permissions. Missing SEC or news
 coverage must be reported by ticker/year and source; it cannot be replaced with zero.
 The first decision date remains 2019-07-09; source coverage before then is irrelevant
-to modeled decisions. Retain the 5% whole-security exclusion rule and affected-window
-handling, and show whether exclusions distort the universe.
+to modeled decisions. Preserve the approved 45/631 exclusion list under the cumulative
+10% ceiling, affected-window handling, and disclosure of retrospective universe bias.
 
 ### Bounded Experiment
 

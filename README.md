@@ -58,13 +58,34 @@ manifest is `data/features/swing_corrected_initial_fit_research/_manifest.json`;
 the verified counts and limitations are in the
 [current feature audit](docs/reviews/feature_engineering_audit_20260801.md).
 
-Final repository Ruff and strict type checks pass. The full regression run had
-4,145 passes, 10 skips and one documentation-marker failure; after correcting
-only the documents, both continuity tests passed. No source code changed after
-the full run. These are research-only datasets, not
+Final repository Ruff and strict type checks pass. The complete regression suite
+passed 4,202 tests with 10 skips for the training-readiness implementation. These are
+research-only datasets, not
 promoted models. Historical news reception is not proven, unsupported outcomes
 remain null, and SEC/Finviz are not silently included in this Alpaca-only monthly
 news feature contract. No model training has started.
+
+The fixed-horizon training-input audit now verifies all 1,231 initial-fit sessions
+and 545 securities appearing in that period (586 is the campaign-wide retained
+list). There are 378,037 usable stock/SPY/QQQ/sector outcome rows; complete-case
+input/outcome intersections are 194,679 technical and 193,125 catalyst rows.
+These are diagnostic counts, not a rule deleting incomplete rows. The audit
+does not authorize fitting: the approved return-regression consumer and distinct
+new relationship/reaction profiles still require implementation. See the current
+feature audit for precise requirements. Run the immutable saved-data diagnostic:
+
+Implementation `b3b2372` is pushed. A whitespace-only source cleanup requires a
+fresh hash-bound receipt; that refresh stopped safely at the system-memory limit.
+The prior successful audit remains saved, and all 58 post-format focused tests
+passed. The [active handoff](docs/reviews/active_edge_rebuild_handoff.md) records
+the exact remaining command; the checkpoint is not yet closed.
+
+```powershell
+.venv\Scripts\python.exe -B -m market_predictor.research_cli audit-swing-training-readiness --root . --config configs/swing_training_readiness.json --config-sha256 c0964a85a2eeaab1832a8bc1f9dd1f5b155f246f25d19786d62083ab0f31167e --output data/reports/swing_initial_fit_training_readiness.json
+```
+
+The output already exists locally; choose a new report filename for an explicit
+rerun. The command verifies pins and fails rather than overwrite existing evidence.
 Cloud deployment is out of
 scope until training and evaluation are complete. Research results do not
 guarantee outperformance of SPY.

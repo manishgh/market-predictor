@@ -195,6 +195,16 @@ An individual source failure does not abort unrelated stock feature work, but a
 complete feature manifest is withheld until the full expected population is accounted
 for. A memory-pressure failure stops the process, not merely the current stock.
 
+`research/swing_training_readiness.py` audits the published joins without rerunning
+collection or changing their permissions. Its pinned configuration must agree with
+the publication's research/strategy provenance, not merely its column names.
+`swing/labels/fixed_horizon_readiness.py` checks exact cost/excess arithmetic and
+tenth-close maturity, including benchmark-only outcomes. Decision-time input
+completeness and later supervised-label availability are separate diagnostic masks.
+Neither a complete-case intersection nor a successful audit is a tradability rule
+or permission to fit/serve a model. Objective-specific training admission and
+managed-policy evaluation remain separate consumers.
+
 Numeric initial-fit reads end on 2024-05-28; pre-2019-07-09 bars are warm-up only.
 Technical features use a coherent adjusted provider stream; dollar volume uses raw
 close times raw volume. Separate symbol streams are never price-spliced. The existing
