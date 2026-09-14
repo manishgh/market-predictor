@@ -1,0 +1,9 @@
+schema_version = "market_predictor.corrected_research_features"
+outcome_source_config = { path = "configs/swing_corrected_outcomes.toml", sha256 = "ded3b30af1185c7ab0759fa5f81c559c37c590419751c942b61ab479e67c2348" }
+strategy_contract = { path = "configs/edge_rebuild_strategy_contract.toml", sha256 = "02a087be6b9eff4971770026ca75dce3978f8f9e2028c1f21d027daefec9c0e7" }
+parent_request = { path = "data/features/edge_rebuild_swing_technical_panel_20190709_20260708_v1/_request.json", sha256 = "d0e093ce2192f8511547b5c5466ac90b892fbd44d4939b002242555a8b19a4ed" }
+parent_manifest = { path = "data/features/edge_rebuild_swing_technical_panel_20190709_20260708_v1/final/_manifest.json", sha256 = "891bb547cff304661153661b1c18acf57ec824e6c5c7ddd1eed7346a9a13886c" }
+parent_authority = { path = "data/features/edge_rebuild_swing_technical_panel_20190709_20260708_v1/final/_authority.json", sha256 = "68f01408550f186dc397840459477fcc6a57e946e54473e4e542a708421ba2c4" }
+combined_manifest = { path = "data/features/edge_rebuild_swing_technical_panel_20190709_20260708_v1/combined_daily/_manifest.json", sha256 = "c5780d2f406531ec2f6d98372577c105a60687ea72c57a7b6c739515934a7e34" }
+adjusted_plan_authority = { path = "data/research/swing_corrected_feature_history_plan/_authority.json", sha256 = "6cfc31e93f722e4c1d7fc077fdc3d7f31aaa69a1d0ffd76bb2d8e9854f6497a8" }
+adjusted_archive_authority = { path = "data/raw/swing_corrected_feature_history/_authority.json", sha256 = "5d380083e7387bdc6f93a399eca977d9706a0e3ea4bbadc479e200807f635ebf" }

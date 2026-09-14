@@ -25,14 +25,21 @@ from market_predictor.canonical.store import (
     write_canonical_artifact,
 )
 from market_predictor.core.errors import DataReadinessError
-from market_predictor.edge_rebuild.swing_history_collection import (
-    load_complete_swing_history_collection,
-)
 from market_predictor.resources import (
     assert_memory_budget,
     assert_peak_memory_budget,
     memory_audit,
     release_process_memory,
+)
+from market_predictor.swing.datasets.history_archive import (
+    load_complete_swing_history_collection,
+)
+from market_predictor.swing.datasets.session_requirements import (
+    CUTOFF_DATE,
+    START_DATE,
+    eastern_date,
+    expected_ticker_sessions,
+    session_abstentions_by_ticker,
 )
 from market_predictor.universe.sp500.membership_authority import (
     MEMBERSHIP_REQUEST_SCHEMA,
@@ -47,10 +54,8 @@ COVERAGE_AUDIT_SCHEMA: Final = "edge_rebuild.swing_combined_daily_coverage.v4"
 SESSION_GAP_AUDIT_SCHEMA: Final = "edge_rebuild.swing_session_gap_audit.v1"
 POST_REQUEST_SCHEMA: Final = "swing.daily_history_collection.v1"
 POST_MANIFEST_SCHEMA: Final = "swing.daily_history_manifest.v1"
-START_DATE: Final = date(2018, 5, 29)
 PRE_END_DATE: Final = date(2019, 7, 8)
 POST_START_DATE: Final = date(2019, 7, 9)
-CUTOFF_DATE: Final = date(2026, 7, 8)
 MAXIMUM_EXCLUSION_FRACTION: Final = 0.05
 # A sparse source defect must be both rare over the security's membership lifetime
 # and short in exchange-session time. Larger gaps remove the whole security.
@@ -472,7 +477,7 @@ def prepare_combined_daily_store(
         verified.coverage_audit,
         expected_tickers=verified.benchmark_tickers,
     )
-    session_abstentions = _session_abstentions_by_ticker(session_gap_audit)
+    session_abstentions = session_abstentions_by_ticker(session_gap_audit)
     unknown_gap_tickers = sorted(set(session_abstentions).difference(tickers))
     if unknown_gap_tickers:
         raise DataReadinessError(
@@ -482,7 +487,7 @@ def prepare_combined_daily_store(
     records: list[dict[str, Any]] = []
     for ticker in tickers:
         abstained_sessions = session_abstentions.get(ticker, set())
-        expected_sessions = _expected_ticker_sessions(
+        expected_sessions = expected_ticker_sessions(
             ticker,
             memberships=verified.memberships,
             benchmark_tickers=verified.benchmark_tickers,
@@ -896,11 +901,11 @@ def _security_ids_for_unavailable_tickers(
         rows = memberships.loc[memberships["ticker"].astype(str).str.upper().eq(ticker)]
         matched = False
         for row in rows.itertuples(index=False):
-            interval_start = _eastern_date(row.effective_from_utc)
+            interval_start = eastern_date(row.effective_from_utc)
             interval_end = (
                 end
                 if pd.isna(row.effective_to_utc)
-                else _eastern_date(row.effective_to_utc) - timedelta(days=1)
+                else eastern_date(row.effective_to_utc) - timedelta(days=1)
             )
             if max(start, interval_start) <= min(end, interval_end):
                 result.add(str(row.security_id))
@@ -968,13 +973,13 @@ def _preflight_exact_coverage(
         session_owner: dict[date, str] = {}
         for row in rows.itertuples(index=False):
             security_id = str(row.security_id)
-            start = max(START_DATE, _eastern_date(row.effective_from_utc))
+            start = max(START_DATE, eastern_date(row.effective_from_utc))
             end = (
                 CUTOFF_DATE
                 if pd.isna(row.effective_to_utc)
                 else min(
                     CUTOFF_DATE,
-                    _eastern_date(row.effective_to_utc) - timedelta(days=1),
+                    eastern_date(row.effective_to_utc) - timedelta(days=1),
                 )
             )
             expected = {value for value in all_sessions if start <= value <= end}
@@ -1253,50 +1258,6 @@ def _load_observed_ticker_sessions(
     return set(sessions)
 
 
-def _expected_ticker_sessions(
-    ticker: str,
-    *,
-    memberships: pd.DataFrame,
-    benchmark_tickers: tuple[str, ...],
-    benchmark_start_sessions: Mapping[str, date],
-    all_sessions: tuple[date, ...],
-    session_abstentions: set[date] | None = None,
-) -> set[date]:
-    abstentions = session_abstentions or set()
-    if ticker in benchmark_tickers:
-        if abstentions:
-            raise DataReadinessError(
-                f"benchmark cannot have stock session abstentions: {ticker}"
-            )
-        start = benchmark_start_sessions.get(ticker)
-        if start is None:
-            raise DataReadinessError(
-                f"benchmark coverage audit is absent for {ticker}"
-            )
-        return {session for session in all_sessions if session >= start}
-    rows = memberships.loc[memberships["ticker"].astype(str).str.upper().eq(ticker)]
-    expected: dict[date, str] = {}
-    for row in rows.itertuples(index=False):
-        start = max(START_DATE, _eastern_date(row.effective_from_utc))
-        end = (
-            CUTOFF_DATE
-            if pd.isna(row.effective_to_utc)
-            else min(CUTOFF_DATE, _eastern_date(row.effective_to_utc) - timedelta(days=1))
-        )
-        for session in all_sessions:
-            if start <= session <= end:
-                prior = expected.setdefault(session, str(row.security_id))
-                if prior != str(row.security_id):
-                    raise DataReadinessError(
-                        f"ticker {ticker} maps to multiple securities on {session}"
-                    )
-    unknown = abstentions.difference(expected)
-    if unknown:
-        raise DataReadinessError(
-            f"session abstention is outside ticker membership: {ticker}; "
-            f"first={min(unknown)}"
-        )
-    return set(expected).difference(abstentions)
 
 
 def _benchmark_start_sessions(
@@ -1449,21 +1410,6 @@ def _require_session_gap_audit(
     return dict(raw)
 
 
-def _session_abstentions_by_ticker(
-    session_gap_audit: Mapping[str, Any],
-) -> dict[str, set[date]]:
-    result: dict[str, set[date]] = defaultdict(set)
-    gaps = session_gap_audit.get("gaps")
-    if not isinstance(gaps, list):
-        raise DataReadinessError("combined daily session-gap records are absent")
-    for item in gaps:
-        if not isinstance(item, Mapping):
-            raise DataReadinessError("combined daily session-gap record is invalid")
-        ticker = str(item["ticker"]).strip().upper()
-        result[ticker].update(
-            date.fromisoformat(str(value)) for value in item["missing_sessions"]
-        )
-    return dict(result)
 
 
 def _combine_ticker(
@@ -1774,11 +1720,6 @@ def _session_dates(values: pd.Series | pd.DatetimeIndex) -> list[date]:
     return list(series.dt.tz_convert(EASTERN).dt.date)
 
 
-def _eastern_date(value: object) -> date:
-    timestamp = pd.Timestamp(value)
-    if timestamp.tzinfo is None:
-        raise DataReadinessError("membership timestamp is not timezone-aware")
-    return cast(date, timestamp.tz_convert(EASTERN).date())
 
 
 def _session_set_sha256(sessions: set[date]) -> str:

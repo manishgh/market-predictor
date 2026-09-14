@@ -782,6 +782,17 @@ def test_proxy_evidence_is_never_production_eligible(tmp_path: Path) -> None:
     assert "proxy" in str(authority.manifest["promotion_blocker"])
 
 
+def test_blindspot_articles_are_attributed_without_certifying_source_coverage(tmp_path: Path) -> None:
+    authority = _publish(_write_inputs(tmp_path, blindspots=["security:acme"]))
+    assert not authority.events.empty
+    assert authority.coverage["coverage_state"].eq("coverage_blindspot").all()
+    assert not authority.coverage["missingness_known"].astype(bool).any()
+    assert not authority.coverage["research_eligible"].astype(bool).any()
+    assert not authority.events["research_eligible"].astype(bool).any()
+    assert authority.events["exclusion_reason"].eq("unknown_source_coverage").all()
+    assert not authority.coverage["production_eligible"].astype(bool).any()
+
+
 def _publish(inputs: _Inputs) -> SwingIssuerFamilyCohort:
     return publish_swing_issuer_family_cohort(
         collection_dir=inputs.collection_dir,
@@ -799,6 +810,7 @@ def _write_inputs(
     events: pd.DataFrame | None = None,
     coverage: pd.DataFrame | None = None,
     poison_source_identity: bool = False,
+    blindspots: list[str] | None = None,
 ) -> _Inputs:
     root.mkdir(parents=True, exist_ok=True)
     collection_dir = root / "collection"
@@ -912,7 +924,7 @@ def _write_inputs(
         {
             "passed": True,
             "request_sha256": request_sha256,
-            "coverage_blindspot_security_ids": [],
+            "coverage_blindspot_security_ids": blindspots or [],
         },
     )
     attribution_result = attribute_alpaca_news_history(

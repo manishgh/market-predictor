@@ -11,9 +11,9 @@ import pytest
 
 from market_predictor.canonical.store import file_sha256
 from market_predictor.core.errors import DataReadinessError
-from market_predictor.edge_rebuild import swing_history_collection as collector
 from market_predictor.evidence.hashing import json_sha256
 from market_predictor.sources.official_documents import collect_official_documents, verify_official_document_collection
+from market_predictor.swing.datasets import history_archive as collector
 from market_predictor.swing.datasets import symbol_corrections as owner
 from market_predictor.swing.datasets.history_plan_publication import UNIT_COLUMNS
 from market_predictor.swing.datasets.symbol_corrected_sources import (

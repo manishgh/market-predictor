@@ -1,4 +1,4 @@
-"""Exact, resumable Alpaca daily collection for swing acquisition-plan v2."""
+"""Exact, resumable collection and verification of planned swing daily archives."""
 from __future__ import annotations
 
 import gzip
@@ -29,6 +29,7 @@ from market_predictor.resources import (
 )
 from market_predictor.sources.alpaca import AlpacaSource, decode_bars_page_response
 from market_predictor.sources.http import HttpByteResponse
+from market_predictor.swing.contracts.holding_materialization import SourcePin
 from market_predictor.swing.datasets.history_plan_publication import (
     AUTHORITY_SCHEMA as PLAN_AUTHORITY_SCHEMA,
 )
@@ -331,10 +332,12 @@ def load_complete_swing_history_collection(
     plan_directory: Path,
     expected_adjustment: str,
     expected_plan_authority_sha256: str | None = None,
+    feature_plan_snapshot: SourcePin | None = None,
 ) -> dict[str, Any]:
     """Verify final authority, current plan identity, and every unit artifact."""
 
-    plan = _load_verified_plan(plan_directory, expected_plan_authority_sha256=expected_plan_authority_sha256)
+    plan = _load_verified_plan(plan_directory, expected_plan_authority_sha256=expected_plan_authority_sha256,
+        feature_plan_snapshot=feature_plan_snapshot)
     if expected_adjustment not in SUPPORTED_ADJUSTMENTS or plan.adjustment != expected_adjustment:
         raise DataReadinessError("swing history consumer adjustment differs from plan")
     request = _load_json(directory / "_request.json")
@@ -426,7 +429,9 @@ def load_complete_swing_history_collection(
     return manifest
 
 
-def _load_verified_plan(directory: Path, *, expected_plan_authority_sha256: str | None = None) -> _VerifiedPlan:
+def _load_verified_plan(directory: Path, *, expected_plan_authority_sha256: str | None = None,
+    feature_plan_snapshot: SourcePin | None = None,
+) -> _VerifiedPlan:
     request_path = directory / "_request.json"
     manifest_path = directory / "_manifest.json"
     authority_path = directory / "_authority.json"
@@ -442,11 +447,13 @@ def _load_verified_plan(directory: Path, *, expected_plan_authority_sha256: str 
     request = parse_strict_json_object(request_bytes, label=str(request_path))
     manifest = parse_strict_json_object(manifest_bytes, label=str(manifest_path))
     scope = request.get("scope")
+    if feature_plan_snapshot is not None and scope != "corrected_adjusted_feature_history":
+        raise DataReadinessError("feature plan snapshot cannot authorize another acquisition scope")
     if scope != manifest.get("scope") or scope not in {
-        None, "initial_fit_raw_share_acquisition", "historical_symbol_correction",
+        None, "initial_fit_raw_share_acquisition", "historical_symbol_correction", "corrected_adjusted_feature_history",
     }:
         raise DataReadinessError("swing acquisition request/manifest scope differs or is unsupported")
-    if scope in {"initial_fit_raw_share_acquisition", "historical_symbol_correction"} and expected_plan_authority_sha256 is None:
+    if scope is not None and expected_plan_authority_sha256 is None:
         raise DataReadinessError("scoped acquisition requires its independent plan authority pin")
     units_record = manifest.get("daily_bars")
     if not isinstance(units_record, Mapping):
@@ -508,6 +515,12 @@ def _load_verified_plan(directory: Path, *, expected_plan_authority_sha256: str 
             directory=directory, request=request, manifest=manifest, units=units,
             parent_archive_loader=load_complete_swing_history_collection,
         )
+    if scope == "corrected_adjusted_feature_history":
+        from market_predictor.swing.datasets.feature_history_plan import validate_feature_history_collection_plan
+
+        validate_feature_history_collection_plan(directory=directory, request=request, manifest=manifest, units=units,
+            implementation_snapshot=feature_plan_snapshot)
+        provider_symbols = dict(cast(dict[str, str], request["provider_symbols"]))
     _validate_plan_unit_coverage(units, manifest=manifest, daily_bars=units_record)
     hashes = {"request_sha256": request_sha256, "manifest_sha256": manifest_sha256,
         "authority_sha256": authority_sha256, "units_sha256": units_sha256}
@@ -599,6 +612,9 @@ def _validate_plan_unit_coverage(
             raise DataReadinessError("swing history unit escapes every missing-session range")
     if manifest.get("scope") == "historical_symbol_correction":
         # The owner validator has already replayed the inherited benchmark archive.
+        return
+    if manifest.get("scope") == "corrected_adjusted_feature_history":
+        # The owner replay permits exactly two adjusted stock streams, not a panel.
         return
     benchmark_units = units[units["role"].eq("benchmark")]
     benchmark_tickers = set(benchmark_units["ticker"].astype(str))

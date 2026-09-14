@@ -13,12 +13,6 @@ from market_predictor.commands.swing_symbol_corrections import register_symbol_c
 from market_predictor.config import get_settings
 from market_predictor.core.errors import DataReadinessError
 from market_predictor.core.system_memory import assert_system_memory_available
-from market_predictor.edge_rebuild.swing_history_collection import (
-    AlpacaSwingDailyPageSource,
-    SwingDailyPageSource,
-    collect_swing_history_plan,
-    load_complete_swing_history_collection,
-)
 from market_predictor.heavy_jobs import HEAVY_JOB_BUSY_EXIT_CODE, HeavyJobBusyError, serialized_heavy_job
 from market_predictor.sources.alpaca import AlpacaNewsPage, AlpacaSource
 from market_predictor.sources.alpaca_corporate_actions import fetch_corporate_actions_page
@@ -30,6 +24,12 @@ from market_predictor.sources.official_documents import (
 )
 from market_predictor.sources.provider_symbols import PROVIDER_ALPACA, provider_symbol
 from market_predictor.swing.datasets.corporate_action_collection import collect_holding_corporate_actions
+from market_predictor.swing.datasets.history_archive import (
+    AlpacaSwingDailyPageSource,
+    SwingDailyPageSource,
+    collect_swing_history_plan,
+    load_complete_swing_history_collection,
+)
 from market_predictor.swing.datasets.initial_fit_raw_share_plan import verified_initial_fit_raw_share_plan
 
 

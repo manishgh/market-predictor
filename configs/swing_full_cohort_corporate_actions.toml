@@ -1,0 +1,48 @@
+schema_version = "market_predictor.swing_corporate_action_scope"
+process_start = "2018-05-29"
+process_end = "2026-09-11"
+numeric_end = "2024-05-28"
+maximum_pages_per_ticker = 10
+page_limit = 1000
+maximum_response_bytes = 4194304
+
+[source_selection]
+path = "data/reports/swing_symbol_corrected_sources.json"
+sha256 = "01153e33e8b6a161c04fde2dbea8021eeea369fef6988868c38b49f0e0c065ee"
+
+[cohort]
+path = "data/reports/swing_research_cohort/approved_research_population_audit.json"
+# File pin retained in initial-fit raw-plan request 0ac71878...; 41de559d...
+# is the cohort report's semantic audit, not its serialized file SHA256.
+sha256 = "c2a7e89b6c360f7ddd704dcd41d4fd8fd6b1b698f1bf7caab9d0de72042d410f"
+
+[[successors]]
+symbol = "DISH"
+document_id = "echostar_bss_completion"
+record_locator = "Transaction and Two-Way Trading: completed BSS distribution and DISH Class A rights. Query only; delivery and due bills remain unadmitted."
+inventory = { path = "configs/swing_share_transition_completion_documents.toml", sha256 = "0b9d29bb4576751ea38eaf8ec936d5e7af52ffe5b80d9579fe2e75336313b194" }
+
+[[successors]]
+symbol = "RTX"
+document_id = "raytheon_merger_completion"
+record_locator = "Item 2.01: completed RTN conversion into UTC shares, renamed Raytheon Technologies. Query only; delivery remains unadmitted."
+inventory = { path = "configs/swing_share_transition_completion_documents.toml", sha256 = "0b9d29bb4576751ea38eaf8ec936d5e7af52ffe5b80d9579fe2e75336313b194" }
+
+[[successors]]
+symbol = "AZN"
+document_id = "alexion_merger_completion"
+record_locator = "Item 2.01: Alexion consideration includes AstraZeneca ADSs. Query only; class election, delivery and cash remain unadmitted."
+inventory = { path = "configs/swing_remaining_merger_completion_documents.toml", sha256 = "01fbb229c58432a1895bb0d13b18367adf9694b1ea2b305196cd4d777371f64a" }
+
+[[successors]]
+symbol = "CP"
+document_id = "kansas_city_merger_completion"
+record_locator = "Item 2.01: KSU consideration includes CP common shares. Query only; delivery and cash remain unadmitted."
+inventory = { path = "configs/swing_remaining_merger_completion_documents.toml", sha256 = "01fbb229c58432a1895bb0d13b18367adf9694b1ea2b305196cd4d777371f64a" }
+
+[[successors]]
+symbol = "FBIN"
+document_id = "fortune_brands_separation_completion"
+record_locator = "CIK 1519751; Items 1.01/2.01: MasterBrand distribution completed December 14 2022; Item 5.03: FBIN common stock trading from December 15 open. Query only."
+inventory = { path = "configs/swing_fbin_completion_documents.toml", sha256 = "1997e5ba571a532914b742dc4c75bc6f3f0f341759ef07b7041d246de23c1d64" }
+retained_document = { path = "data/raw/sec_identity_evidence_20260802/FBHS_0001193125-22-306146_d420098d8k.htm", sha256 = "6e1da8ad04373a9f97c4106c6c7695538a8b79cac7c1a4625e92afc8e011478a" }

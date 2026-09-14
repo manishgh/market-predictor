@@ -2,23 +2,21 @@
 from __future__ import annotations
 
 import hashlib
-import tomllib
 from datetime import date
 from pathlib import Path
-from typing import Any, Literal, Protocol
+from typing import Any, Protocol
 
 import pandas as pd
-from pydantic import BaseModel, ConfigDict, Field
 
 from market_predictor.canonical.store import file_sha256
 from market_predictor.core.errors import DataReadinessError
 from market_predictor.core.json_integrity import parse_strict_json_object
 from market_predictor.evidence.hashing import json_sha256
-from market_predictor.evidence.io import resolve_inside_authority
+from market_predictor.evidence.io import inside, resolve_inside_authority
 from market_predictor.sources.official_documents import load_official_document_inventory, verify_official_document_collection
-from market_predictor.swing.contracts.research_cohort import Sha256
 from market_predictor.swing.datasets.history_plan_publication import PLAN_SCHEMA, UNIT_COLUMNS, publish_daily_history_plan
 from market_predictor.swing.labels.holding_paths import holding_calendar
+from market_predictor.universe.symbol_correction_policy import SymbolCorrectionPolicy, load_symbol_correction_policy
 
 CORRECTION_SCOPE = "historical_symbol_correction"
 
@@ -28,34 +26,6 @@ class ArchiveLoader(Protocol):
         expected_plan_authority_sha256: str | None = None) -> dict[str, Any]: ...
 
 
-class _Strict(BaseModel):
-    model_config = ConfigDict(extra="forbid", frozen=True)
-
-
-class SymbolCorrection(_Strict):
-    security_id: str = Field(pattern=r"^cik:\d{10}$")
-    ticker: str = Field(pattern=r"^[A-Z][A-Z.]{0,9}$")
-    provider_symbol: str = Field(pattern=r"^[A-Z][A-Z.]{0,9}$")
-    parent_unit_id: str = Field(pattern=r"^swing-daily-[0-9a-f]{24}$")
-    start_date: date
-    end_date: date
-    document_ids: list[str] = Field(min_length=2)
-    interpretation: str = Field(min_length=40)
-    record_locators: list[str] = Field(min_length=2)
-
-
-class SymbolCorrectionPolicy(_Strict):
-    schema_version: Literal["market_predictor.swing_symbol_correction_policy"]
-    parent_plan: str
-    parent_plan_sha256: Sha256
-    parent_archive: str
-    parent_archive_sha256: Sha256
-    document_inventory: str
-    document_archive: str
-    document_report_sha256: Sha256
-    corrections: list[SymbolCorrection] = Field(min_length=2, max_length=2)
-
-
 def pinned_object(path: Path, expected_sha256: str | None = None) -> dict[str, Any]:
     if path.stat().st_size > 8 * 1024**2:
         raise DataReadinessError("symbol correction metadata exceeds bound")
@@ -63,23 +33,6 @@ def pinned_object(path: Path, expected_sha256: str | None = None) -> dict[str, A
     if expected_sha256 is not None and hashlib.sha256(payload).hexdigest() != expected_sha256:
         raise DataReadinessError("symbol correction independent file pin differs")
     return parse_strict_json_object(payload, label=str(path))
-
-
-def inside(root: Path, relative: str | Path) -> Path:
-    result = (root / relative).resolve()
-    if result == root.resolve() or not result.is_relative_to(root.resolve()):
-        raise DataReadinessError("symbol correction path escapes repository or targets root")
-    return result
-
-
-def load_symbol_correction_policy(root: Path, config: Path, expected_sha256: str) -> SymbolCorrectionPolicy:
-    path = resolve_inside_authority(root, str(config))
-    if path.stat().st_size > 1024**2:
-        raise DataReadinessError("symbol correction policy exceeds bound")
-    payload = path.read_bytes()
-    if hashlib.sha256(payload).hexdigest() != expected_sha256:
-        raise DataReadinessError("symbol correction requires its independent reviewed policy pin")
-    return SymbolCorrectionPolicy.model_validate(tomllib.loads(payload.decode("utf-8")))
 
 
 def _parent(root: Path, policy: SymbolCorrectionPolicy, loader: ArchiveLoader) -> dict[str, Any]:

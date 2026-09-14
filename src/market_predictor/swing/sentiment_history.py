@@ -22,6 +22,11 @@ from market_predictor.canonical.store import (
     manifest_path_for,
     write_canonical_artifact,
 )
+from market_predictor.catalysts.issuer_events.attribution_history import ATTRIBUTION_SCOPE_POLICY
+from market_predictor.catalysts.issuer_events.identity_publication import (
+    validate_issuer_event_scope,
+    verify_issuer_identity_inputs,
+)
 from market_predictor.catalysts.issuer_events.relevance import (
     RELEVANCE_POLICY_VERSION,
     SecurityMetadata,
@@ -109,14 +114,16 @@ def score_alpaca_news_history(
         raise DataReadinessError(
             "sentiment scoring requires a passed research-only collection audit"
         )
-    excluded_security_ids = tuple(
+    coverage_blindspot_security_ids = tuple(
         sorted(
             str(value)
             for value in audit.get("coverage_blindspot_security_ids", [])
         )
     )
+    excluded_security_ids: tuple[str, ...] = ()
     universe = _read_universe(universe_path)
-    metadata = _metadata_by_security_and_ticker(universe)
+    identity_manifest = universe.attrs.get("issuer_identity_manifest")
+    metadata = _metadata_by_security_and_ticker(universe, identity_only=identity_manifest is not None)
     artifacts = build_source_news_shard_inventory(collection_dir, collection)
 
     request = {
@@ -128,6 +135,14 @@ def score_alpaca_news_history(
         "collection_audit_sha256": file_sha256(collection_audit_path),
         "universe_path": str(universe_path.resolve()),
         "universe_sha256": file_sha256(universe_path),
+        "universe_manifest_sha256": (
+            file_sha256(manifest_path_for(universe_path))
+            if manifest_path_for(universe_path).exists() else None
+        ),
+        "metadata_policy": "verified_issuer_identity_only" if identity_manifest is not None else "universe_metadata",
+        "scope_policy": ATTRIBUTION_SCOPE_POLICY,
+        "coverage_blindspot_security_ids": list(coverage_blindspot_security_ids),
+        "source_coverage_admitted": False,
         "model_name": model_name,
         "model_revision": model_revision,
         "execution_device": execution_device,
@@ -275,6 +290,8 @@ def score_alpaca_news_history(
                 raise DataReadinessError(
                     f"source event hash mismatch for {chunk_id}"
                 )
+            if identity_manifest is not None:
+                validate_issuer_event_scope(events, universe, identity_manifest)
             security_metadata = metadata.get((security_id, ticker))
             if security_metadata is None:
                 raise DataReadinessError(
@@ -384,6 +401,9 @@ def score_alpaca_news_history(
         "max_batch_events": max_batch_events,
         "max_batch_shards": max_batch_shards,
         "excluded_security_ids": list(excluded_security_ids),
+        "scope_policy": ATTRIBUTION_SCOPE_POLICY,
+        "coverage_blindspot_security_ids": list(coverage_blindspot_security_ids),
+        "source_coverage_admitted": False,
         "excluded_chunks": len(artifacts) - len(eligible_artifacts),
         "total_rows": sum(int(record["rows"]) for record in observed.values()),
         "memory": memory,
@@ -849,6 +869,8 @@ def _empty_sentiment_inputs(
 
 def _metadata_by_security_and_ticker(
     universe: pd.DataFrame,
+    *,
+    identity_only: bool = False,
 ) -> dict[tuple[str, str], SecurityMetadata]:
     result: dict[tuple[str, str], SecurityMetadata] = {}
     for (security_id, ticker), part in universe.groupby(
@@ -862,7 +884,10 @@ def _metadata_by_security_and_ticker(
             )
             for column in ("company", "sector", "industry")
         }
-        if any(len(items) != 1 for items in values.values()):
+        if len(values["company"]) != 1 or any(
+            len(values[column]) != 1 and not (identity_only and not values[column])
+            for column in ("sector", "industry")
+        ):
             raise DataReadinessError(
                 f"ambiguous company metadata for {security_id}/{ticker}"
             )
@@ -870,13 +895,29 @@ def _metadata_by_security_and_ticker(
             security_id=str(security_id),
             ticker=str(ticker),
             company=values["company"][0],
-            sector=values["sector"][0],
-            industry=values["industry"][0],
+            sector=next(iter(values["sector"]), ""),
+            industry=next(iter(values["industry"]), ""),
         )
     return result
 
 
 def _read_universe(path: Path) -> pd.DataFrame:
+    child_path = manifest_path_for(path)
+    if child_path.exists() and _json_object(child_path).get("artifact_type") == "security_business_label_coverage":
+        identities, identity_manifest = load_canonical_artifact(
+            path, expected_type="security_business_label_coverage", allow_research=True,
+        )
+        inputs = identity_manifest.get("inputs")
+        if not isinstance(inputs, dict) or "issuer_identity_policy_sha256" not in inputs:
+            raise DataReadinessError("identity-only sentiment requires the verified issuer identity publisher")
+        labels, label_manifest = load_canonical_artifact(
+            path.parent / "business_labels.parquet", expected_type="security_business_labels", allow_research=True,
+        )
+        verify_issuer_identity_inputs(labels, identities, label_manifest, identity_manifest)
+        identities["sector"] = ""
+        identities["industry"] = ""
+        identities.attrs["issuer_identity_manifest"] = identity_manifest
+        return identities
     if path.suffix.lower() == ".parquet":
         frame = pd.read_parquet(
             path,

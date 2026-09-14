@@ -1,0 +1,8 @@
+schema_version = "market_predictor.corrected_feature_history_policy"
+correction_policy = "configs/swing_symbol_corrections.toml"
+correction_policy_sha256 = "be63ad9460f80cf87a377b903971c5415bcfefdf5d457308a9a9028d2b5488e3"
+warmup_start = "2018-05-29"
+decision_start = "2019-07-09"
+numeric_end = "2024-05-28"
+adjustment = "all"
+purpose = "source_query_only_not_membership_or_historical_first_seen"

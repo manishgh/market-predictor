@@ -32,6 +32,7 @@ from market_predictor.canonical.store import (
     manifest_path_for,
     write_canonical_artifact,
 )
+from market_predictor.catalysts.issuer_events.attribution_history import ATTRIBUTION_SCOPE_POLICY
 from market_predictor.core import path_integrity
 from market_predictor.core.errors import DataReadinessError
 from market_predictor.resources import (
@@ -136,6 +137,9 @@ _REQUEST_KEYS = frozenset(
         "source_collections_sha256",
         "policy_sha256",
         "excluded_security_ids",
+        "scope_policy",
+        "coverage_blindspot_security_ids",
+        "source_coverage_admitted",
         "production_ready",
         "request_sha256",
     }
@@ -150,6 +154,9 @@ _MANIFEST_KEYS = frozenset(
         "skipped_chunks",
         "failed_chunks",
         "excluded_security_ids",
+        "scope_policy",
+        "coverage_blindspot_security_ids",
+        "source_coverage_admitted",
         "source_event_rows",
         "related_source_events",
         "relation_rows",
@@ -326,6 +333,7 @@ def verify_completed_catalyst_lineage(directory: Path) -> VerifiedCatalystLineag
     if set(request) != _REQUEST_KEYS:
         raise DataReadinessError("catalyst lineage request fields do not match the contract")
     request_material = dict(request)
+    blindspots = validate_observed_article_scope(request, request, manifest)
     embedded_request_sha256 = _verified_sha256(
         request_material.pop("request_sha256", None),
         "request_sha256",
@@ -426,6 +434,7 @@ def verify_completed_catalyst_lineage(directory: Path) -> VerifiedCatalystLineag
     if projected_coverage_manifest != coverage_manifest:
         raise DataReadinessError("catalyst coverage sidecar changed during projected load")
     _verify_coverage_semantics(coverage, manifest=manifest)
+    validate_observed_article_coverage(coverage, blindspots)
     event_rows = 0
     eligible_rows = 0
     assignment_rows = 0
@@ -586,6 +595,7 @@ def build_catalyst_lineage(
     policy_path: Path,
     out_dir: Path,
     progress: Callable[[dict[str, object]], None] | None = None,
+    _verified_derived_source_inventory: dict[str, dict[str, object]] | None = None,
 ) -> dict[str, object]:
     """Join relation and sentiment evidence, then assign eligible rows to decisions."""
 
@@ -599,8 +609,14 @@ def build_catalyst_lineage(
     collection_audit = _json_object(collection_audit_path)
     if not bool(collection_audit.get("passed")) or collection_audit.get("request_sha256") != collection.get("request_sha256"):
         raise DataReadinessError("catalyst lineage requires a passed collection audit")
-    excluded = _validated_exclusions(collection_audit, attribution, sentiment)
-    source_inventory = {str(record["chunk_id"]): record for record in build_source_news_shard_inventory(collection_dir, collection)}
+    blindspots = validate_observed_article_scope(collection_audit, attribution, sentiment)
+    excluded: set[str] = set()
+    if _verified_derived_source_inventory is not None:
+        if collection.get("derivation_only") is not True:
+            raise DataReadinessError("derived source inventory requires an explicitly verified derivation")
+        source_inventory = _verified_derived_source_inventory
+    else:
+        source_inventory = {str(record["chunk_id"]): record for record in build_source_news_shard_inventory(collection_dir, collection)}
     source_records = _records_by_chunk(collection, "news collection")
     relation_records = _records_by_chunk(attribution, "event attribution")
     sentiment_records = _records_by_chunk(sentiment, "event sentiment")
@@ -647,6 +663,9 @@ def build_catalyst_lineage(
         "source_collections_sha256": str(source_collection_manifest["artifact_sha256"]),
         "policy_sha256": file_sha256(policy_path),
         "excluded_security_ids": sorted(excluded),
+        "scope_policy": ATTRIBUTION_SCOPE_POLICY,
+        "coverage_blindspot_security_ids": sorted(blindspots),
+        "source_coverage_admitted": False,
         "production_ready": False,
     }
     request_sha256 = _json_sha256(request)
@@ -662,7 +681,7 @@ def build_catalyst_lineage(
 
     coverage = _coverage_frame(
         source_collections,
-        excluded_security_ids=excluded,
+        excluded_security_ids=blindspots,
         relation_chunk_ids=set(relation_records),
         sentiment_chunk_ids=set(sentiment_records),
     )
@@ -877,6 +896,9 @@ def build_catalyst_lineage(
         "skipped_chunks": skipped,
         "failed_chunks": failures,
         "excluded_security_ids": sorted(excluded),
+        "scope_policy": ATTRIBUTION_SCOPE_POLICY,
+        "coverage_blindspot_security_ids": sorted(blindspots),
+        "source_coverage_admitted": False,
         "source_event_rows": _required_int(sentiment, "total_rows"),
         "related_source_events": len(source_event_ids),
         "relation_rows": sum(_required_int(record, "event_rows") for record in observed),
@@ -1349,24 +1371,44 @@ def _lineage_sha256(
     return _json_sha256(material)
 
 
-def _validated_exclusions(
+def validate_observed_article_scope(
     collection_audit: Mapping[str, object],
     attribution: Mapping[str, object],
     sentiment: Mapping[str, object],
 ) -> set[str]:
+    """Reconcile coverage diagnostics without admitting or excluding securities."""
     values: list[set[str]] = []
     for payload, key in (
         (collection_audit, "coverage_blindspot_security_ids"),
-        (attribution, "excluded_security_ids"),
-        (sentiment, "excluded_security_ids"),
+        (attribution, "coverage_blindspot_security_ids"),
+        (sentiment, "coverage_blindspot_security_ids"),
     ):
         raw = payload.get(key)
-        if not isinstance(raw, list):
-            raise DataReadinessError(f"malformed catalyst exclusion inventory: {key}")
+        if not isinstance(raw, list) or any(not isinstance(value, str) or not value.strip() for value in raw):
+            raise DataReadinessError(f"malformed catalyst coverage inventory: {key}")
         values.append({str(value) for value in raw})
     if values[0] != values[1] or values[0] != values[2]:
-        raise DataReadinessError("catalyst exclusion inventories do not reconcile")
+        raise DataReadinessError("catalyst coverage inventories do not reconcile")
+    for payload in (attribution, sentiment):
+        if (payload.get("scope_policy") != ATTRIBUTION_SCOPE_POLICY
+                or payload.get("source_coverage_admitted") is not False
+                or payload.get("excluded_security_ids") != []):
+            raise DataReadinessError("catalyst observed-article scope policy does not verify")
     return values[0]
+
+
+def validate_observed_article_coverage(coverage: pd.DataFrame, blindspots: set[str]) -> None:
+    """A retained observed article cannot certify its issuer's unknown history."""
+    required = {"security_id", "coverage_state", "missingness_known", "training_eligible"}
+    if not required.issubset(coverage.columns):
+        raise DataReadinessError("catalyst coverage lacks observed-scope evidence fields")
+    blind = coverage["security_id"].astype(str).isin(blindspots)
+    if bool((blind & (
+        coverage["coverage_state"].ne("coverage_blindspot")
+        | ~coverage["missingness_known"].eq(False).fillna(False)
+        | ~coverage["training_eligible"].eq(False).fillna(False)
+    )).any()):
+        raise DataReadinessError("catalyst coverage certifies a declared blindspot")
 
 
 def _records_by_chunk(

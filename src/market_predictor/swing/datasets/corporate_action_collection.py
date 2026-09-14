@@ -20,6 +20,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from market_predictor.canonical.store import file_sha256
 from market_predictor.core.errors import DataReadinessError, MemoryBudgetError
 from market_predictor.core.json_integrity import parse_strict_json_object
+from market_predictor.core.system_memory import assert_system_memory_available
 from market_predictor.evidence.hashing import json_sha256
 from market_predictor.evidence.io import resolve_inside_authority, write_json_object
 from market_predictor.heavy_jobs import heavy_job_lease, heavy_job_runtime_dir
@@ -28,6 +29,7 @@ from market_predictor.resources import assert_memory_budget, assert_peak_memory_
 from market_predictor.sources.alpaca_corporate_actions import corporate_action_parameters, decode_corporate_actions_page
 from market_predictor.sources.http import HttpByteResponse
 from market_predictor.swing.contracts.research_cohort import Sha256
+from market_predictor.swing.datasets.corporate_action_scope import prepare_corporate_action_scope
 
 ActionFetcher = Callable[[dict[str, Any], int], HttpByteResponse]
 
@@ -60,7 +62,11 @@ def _verify_sources(root: Path, files: dict[str, str]) -> None:
 def _prepare(root: Path, config: Path) -> dict[str, Any]:
     if config.stat().st_size > 1024**2:
         raise DataReadinessError("corporate-action configuration exceeds size limit")
-    policy = _Policy.model_validate_json(json.dumps(tomllib.loads(config.read_text(encoding="utf-8"))))
+    raw = tomllib.loads(config.read_text(encoding="utf-8"))
+    if raw.get("schema_version") == "market_predictor.swing_corporate_action_scope":
+        request = {**prepare_corporate_action_scope(root, config, raw), "implementation_files": _implementation()}
+        return {**request, "request_sha256": json_sha256(request)}
+    policy = _Policy.model_validate_json(json.dumps(raw))
     path = resolve_inside_authority(root, policy.observation_inventory)
     report = _object(path)
     if (report.get("audit_sha256") != policy.observation_audit_sha256
@@ -82,14 +88,38 @@ def _prepare(root: Path, config: Path) -> dict[str, Any]:
     if (not tickers or len(tickers) > 2000 or len({row["security_id"] for row in cases}) != policy.expected_securities
             or any(not re.fullmatch(r"[A-Z0-9][A-Z0-9.-]{0,14}", ticker) for ticker in tickers)):
         raise DataReadinessError("corporate-action ticker inventory differs")
-    package = Path(__file__).resolve().parents[2]
-    implementation = {name: file_sha256(package / name) for name in (
-        "swing/datasets/corporate_action_collection.py", "sources/alpaca_corporate_actions.py", "sources/http.py",
-        "core/errors.py", "resources.py",
-    )}
     request = {"policy": policy.model_dump(mode="json"), "tickers": tickers, "bound_files": bound,
-        "implementation_files": implementation, "scope": "initial_fit_provider_process_date_evidence_only"}
+        "implementation_files": _implementation(), "scope": "initial_fit_provider_process_date_evidence_only"}
     return {**request, "request_sha256": json_sha256(request)}
+
+
+def _implementation() -> dict[str, str]:
+    package = Path(__file__).resolve().parents[2]
+    return {name: file_sha256(package / name) for name in (
+        "swing/datasets/corporate_action_collection.py", "sources/alpaca_corporate_actions.py", "sources/http.py",
+        "core/errors.py", "resources.py", "swing/datasets/corporate_action_scope.py", "core/system_memory.py",
+    )}
+
+
+def _archived_request(output: Path, prepared: dict[str, Any]) -> dict[str, Any]:
+    archived = _object(resolve_inside_authority(output, "_request.json"))
+    unsigned = {key: value for key, value in archived.items() if key != "request_sha256"}
+    identity = archived.get("implementation_files")
+    if (archived.get("request_sha256") != json_sha256(unsigned) or not isinstance(identity, dict)
+            or not identity or any(not isinstance(value, str) or not re.fullmatch(r"[0-9a-f]{64}", value)
+                or not isinstance(name, str) or name not in prepared["implementation_files"] for name, value in identity.items())):
+        raise DataReadinessError("corporate-action archived acquisition identity differs")
+    original_files = {"swing/datasets/corporate_action_collection.py", "sources/alpaca_corporate_actions.py",
+        "sources/http.py", "core/errors.py", "resources.py"}
+    if not original_files.issubset(identity):
+        raise DataReadinessError("corporate-action archived implementation identity is incomplete")
+    # The external audit pins the original request transitively. Only acquisition
+    # code may differ; source bytes, scope and every query parameter must still replay.
+    ignored = {"request_sha256", "implementation_files"}
+    if ({k: v for k, v in archived.items() if k not in ignored}
+            != {k: v for k, v in prepared.items() if k not in ignored}):
+        raise DataReadinessError("corporate-action collection request differs; use a new directory")
+    return archived
 
 
 def _params(request: dict[str, Any], ticker: str, token: str | None) -> dict[str, Any]:
@@ -167,7 +197,7 @@ def _check_attempt(attempt: Path, request: dict[str, Any], ticker: str) -> dict[
         "state": receipt["state"], "error_type": receipt["error_type"], "counts": dict(counts)}
 
 
-def _collect(output: Path, request: dict[str, Any], ticker: str, fetch: ActionFetcher) -> None:
+def _collect(output: Path, request: dict[str, Any], ticker: str, fetch: ActionFetcher) -> MemoryBudgetError | None:
     attempt = output / ".pending" / uuid4().hex
     attempt.mkdir(parents=True)
     started = datetime.now(UTC)
@@ -176,7 +206,13 @@ def _collect(output: Path, request: dict[str, Any], ticker: str, fetch: ActionFe
     seen_tokens: set[str] = set()
     seen_ids: set[str] = set()
     error = None
+    pressure = None
     for ordinal in range(request["policy"]["maximum_pages_per_ticker"]):
+        try:
+            assert_system_memory_available()
+        except MemoryBudgetError as exc:
+            pressure, error = exc, type(exc).__name__
+            break
         if token is not None:
             if token in seen_tokens:
                 error = "RepeatedPaginationToken"
@@ -224,6 +260,7 @@ def _collect(output: Path, request: dict[str, Any], ticker: str, fetch: ActionFe
     parent = output / "tickers" / ticker
     parent.mkdir(parents=True, exist_ok=True)
     os.rename(attempt, parent / attempt.name)
+    return pressure
 
 
 def _report(output: Path, request: dict[str, Any]) -> dict[str, Any]:
@@ -252,8 +289,13 @@ def _report(output: Path, request: dict[str, Any]) -> dict[str, Any]:
 def collect_holding_corporate_actions(
     root: Path, config_path: Path, output_directory: Path, *, fetch: ActionFetcher | None = None,
     expected_audit_sha256: str | None = None,
+    replay_metadata: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Serialize acquisition; offline mode reconstructs receipts and checks an external pin."""
+    """Replay original acquisition with an external audit pin.
+
+    ``replay_metadata`` receives current validator identity separately; it is not
+    inserted into the immutable acquisition report or its historical audit hash.
+    """
     root = root.resolve()
     config = resolve_inside_authority(root, str(config_path))
     output = (root / output_directory).resolve()
@@ -263,7 +305,10 @@ def collect_holding_corporate_actions(
     with heavy_job_lease("collect-swing-holding-corporate-actions", runtime_dir=runtime):
         with file_lock(output.parent / f".{output.name}.collection", timeout=0):
             assert_memory_budget(stage="corporate-action input loading", hard_budget_gib=5.0, headroom_gib=0.75)
+            if fetch is not None:
+                assert_system_memory_available()
             request = _prepare(root, config)
+            replay_implementation = request["implementation_files"]
             if output.exists() and expected_audit_sha256 is None:
                 raise DataReadinessError("corporate-action resume requires an independent audit pin")
             if not output.exists():
@@ -273,21 +318,26 @@ def collect_holding_corporate_actions(
                 staging.mkdir(parents=True)
                 write_json_object(staging / "_request.json", request)
                 os.rename(staging, output)
-            if _object(output / "_request.json") != request:
-                raise DataReadinessError("corporate-action collection request differs; use a new directory")
+            request = _archived_request(output, request)
             report = _report(output, request)
+            _verify_sources(root, request["bound_files"])
+            _verify_sources(Path(__file__).resolve().parents[2], replay_implementation)
             if expected_audit_sha256 is not None and report["audit_sha256"] != expected_audit_sha256:
                 raise DataReadinessError("corporate-action independent audit pin differs")
             if fetch is None:
                 if expected_audit_sha256 is None:
                     raise DataReadinessError("offline corporate-action replay requires an independent audit pin")
+                _replay_metadata(replay_metadata, request, report, replay_implementation)
                 return report
             completed = {row["ticker"] for row in report["tickers"] if row["acquired"]}
+            pressure = None
             for ticker in request["tickers"]:
                 if ticker not in completed:
-                    _collect(output, request, ticker, fetch)
+                    pressure = _collect(output, request, ticker, fetch)
+                    if pressure is not None:
+                        break
             _verify_sources(root, request["bound_files"])
-            _verify_sources(Path(__file__).resolve().parents[2], request["implementation_files"])
+            _verify_sources(Path(__file__).resolve().parents[2], replay_implementation)
             report = _report(output, request)
             assert_peak_memory_budget(stage="corporate-action report", hard_budget_gib=5.0, headroom_gib=0.75)
             reports = output / "reports"
@@ -299,4 +349,16 @@ def collect_holding_corporate_actions(
                 temporary = reports / f".{uuid4().hex}.pending"
                 write_json_object(temporary, report)
                 os.rename(temporary, path)
+            _replay_metadata(replay_metadata, request, report, replay_implementation)
+            if pressure is not None:
+                raise pressure
             return report
+
+
+def _replay_metadata(target: dict[str, Any] | None, request: dict[str, Any], report: dict[str, Any],
+    implementation: dict[str, str]) -> None:
+    if target is not None:
+        target.clear()
+        target.update(schema="market_predictor.corporate_action_replay", request_sha256=request["request_sha256"],
+            audit_sha256=report["audit_sha256"], acquisition_implementation_files=request["implementation_files"],
+            replay_implementation_files=implementation, replay_implementation_sha256=json_sha256(implementation))

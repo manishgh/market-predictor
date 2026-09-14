@@ -512,12 +512,14 @@ def register_swing_research_commands(app: typer.Typer, console: Console) -> None
         ),
         torch_threads: int = typer.Option(4, min=1, max=32),
         fixed_latency_minutes: int = typer.Option(5, min=0, max=60),
+        model_revision: str | None = typer.Option(None, help="Exact cached model commit required for reproducible scoring."),
     ) -> None:
         """Score audited history in bounded batches with explicit proxy timing."""
 
         settings = get_settings()
         scorer = FinbertScorer(
             settings.finbert_model,
+            revision=model_revision,
             torch_num_threads=torch_threads,
             max_length=max_length,
         )

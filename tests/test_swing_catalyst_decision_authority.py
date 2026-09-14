@@ -31,9 +31,9 @@ DECISION_TIME = pd.Timestamp("2025-01-10T21:00:00Z")
 
 def test_persisted_catalyst_decision_authority_identities_are_frozen() -> None:
     assert LINEAGE_MANIFEST_SCHEMA == "swing.catalyst_lineage_manifest.v2"
-    assert DECISION_REQUEST_SCHEMA == "edge_rebuild.catalyst_decision_request.v1"
-    assert DECISION_AUTHORITY_SCHEMA == "edge_rebuild.catalyst_decision_authority.v5"
-    assert DECISION_MANIFEST_SCHEMA == "edge_rebuild.catalyst_decision_manifest.v5"
+    assert DECISION_REQUEST_SCHEMA == "edge_rebuild.catalyst_decision_request.v3"
+    assert DECISION_AUTHORITY_SCHEMA == "edge_rebuild.catalyst_decision_authority.v7"
+    assert DECISION_MANIFEST_SCHEMA == "edge_rebuild.catalyst_decision_manifest.v7"
     assert DECISION_ARTIFACT_TYPE == "edge_rebuild_catalyst_decisions"
     assert COVERAGE_ARTIFACT_TYPE == "edge_rebuild_catalyst_coverage"
 
@@ -90,6 +90,85 @@ def test_same_issuer_and_content_identity_is_deduplicated() -> None:
     retained = _deduplicate_verified_events(pd.DataFrame.from_records([first, second]))
 
     assert retained["event_id"].tolist() == ["event-a"]
+
+
+def test_content_scores_from_separate_decisions_are_not_conflicting_duplicates() -> None:
+    first = _deduplication_row(event_id="event-a", source_event_id="source-a", decision_id="decision-a",
+        security_id="security-a", ticker="AAA", source_family="alpaca",
+        available_at=DECISION_TIME - pd.Timedelta(days=12), content="same-content")
+    second = {**first, "event_id": "event-b", "source_event_id": "source-b", "decision_id": "decision-b",
+        "feature_available_at_utc": DECISION_TIME - pd.Timedelta(days=2),
+        "sentiment_numeric": first["sentiment_numeric"] + 5.960464477539063e-08}
+    retained = _deduplicate_verified_events(pd.DataFrame([first, second]))
+    assert set(retained.event_id) == {"event-a", "event-b"}
+    assert retained.set_index("event_id").loc["event-b", "sentiment_numeric"] == second["sentiment_numeric"]
+    same_decision = _deduplicate_verified_events(pd.DataFrame([first, {**second, "decision_id": "decision-a"}]))
+    assert same_decision.event_id.tolist() == ["event-a"]
+    assert same_decision.sentiment_numeric.iloc[0] == first["sentiment_numeric"]
+
+
+def test_separate_same_text_publications_keep_earliest_original_relevance_and_score() -> None:
+    first = _deduplication_row(event_id="event-a", source_event_id="source-a", decision_id="decision-a",
+        security_id="security-a", ticker="AAA", source_family="alpaca",
+        available_at=DECISION_TIME - pd.Timedelta(hours=3), content="same-content")
+    second = {**first, "event_id": "event-b", "source_event_id": "source-b",
+        "feature_available_at_utc": DECISION_TIME - pd.Timedelta(hours=1),
+        "sentiment_numeric": -0.5, "relevance": 0.96}
+    for rows in ([first, second], [second, first]):
+        retained = _deduplicate_verified_events(pd.DataFrame(rows))
+        assert retained.event_id.tolist() == ["event-a"]
+        assert retained.sentiment_numeric.iloc[0] == first["sentiment_numeric"]
+        assert retained.relevance.iloc[0] == first["relevance"]
+        assert retained.feature_available_at_utc.iloc[0] == first["feature_available_at_utc"]
+
+
+@pytest.mark.parametrize("column", ["sentiment_numeric", "relevance"])
+def test_same_provider_event_still_rejects_conflicting_scores(column: str) -> None:
+    first = _deduplication_row(event_id="event-a", source_event_id="source-a", decision_id="decision-a",
+        security_id="security-a", ticker="AAA", source_family="alpaca",
+        available_at=DECISION_TIME - pd.Timedelta(hours=3), content="same-content")
+    for event in ("event-a", "another-relation"):
+        second = {**first, "event_id": event, column: first[column] + 0.01}
+        with pytest.raises(DataReadinessError, match="durable catalyst"):
+            _deduplicate_verified_events(pd.DataFrame([first, second]))
+
+
+def test_same_text_ties_keep_source_priority_then_event_identity() -> None:
+    first = _deduplication_row(event_id="event-a", source_event_id="source-a", decision_id="decision-a",
+        security_id="security-a", ticker="AAA", source_family="alpaca",
+        available_at=DECISION_TIME - pd.Timedelta(hours=1), content="same-content")
+    second = {**first, "event_id": "event-b", "source_event_id": "source-b", "sentiment_numeric": -0.5}
+    external = {**second, "event_id": "event-0", "source_event_id": "source-0", "source_family": "finviz"}
+    for rows in ([first, second, external], [external, second, first]):
+        retained = _deduplicate_verified_events(pd.DataFrame(rows))
+        assert retained.event_id.tolist() == ["event-a"]
+        assert retained.sentiment_numeric.iloc[0] == first["sentiment_numeric"]
+
+
+@pytest.mark.parametrize("mutation", ["missing_policy", "wrong_policy", "old_request", "old_authority"])
+def test_loader_rejects_rehashed_wrong_duplicate_policy(tmp_path: Path, mutation: str) -> None:
+    lineage = _lineage(tmp_path / "lineage", generation="1")
+    output = tmp_path / "published"
+    publish_catalyst_decision_authority([lineage], output)
+    manifest_path = output / "_manifest.json"
+    authority_path = output / "_authority.json"
+    manifest = json.loads(manifest_path.read_text())
+    authority = json.loads(authority_path.read_text())
+    if mutation == "missing_policy":
+        manifest["request"].pop("text_duplicate_policy")
+    elif mutation == "wrong_policy":
+        manifest["request"]["text_duplicate_policy"] = "average_scores"
+    elif mutation == "old_request":
+        manifest["request"]["schema"] = "edge_rebuild.catalyst_decision_request.v2"
+    else:
+        authority["schema"] = "edge_rebuild.catalyst_decision_authority.v6"
+    manifest["request_sha256"] = _json_sha256(manifest["request"])
+    authority["request_sha256"] = manifest["request_sha256"]
+    _write_json(manifest_path, manifest)
+    authority["artifact_sha256"] = file_sha256(manifest_path)
+    _write_json(authority_path, authority)
+    with pytest.raises(DataReadinessError, match="policy differs|authority does not verify"):
+        load_catalyst_decision_authority(output)
 
 
 def test_conflicting_durable_event_identity_fails_closed() -> None:
@@ -354,6 +433,20 @@ def test_production_authority_requires_production_lineage_and_load_mode(
         )
 
 
+@pytest.mark.parametrize("field,value", [
+    ("scope_policy", "legacy"), ("source_coverage_admitted", True),
+    ("excluded_security_ids", ["security-a"]),
+])
+def test_feature_publication_rejects_obsolete_or_certified_scope(tmp_path: Path, field: str, value: object) -> None:
+    lineage = _lineage(tmp_path / "lineage", generation="observed-policy")
+    path = lineage / "_manifest.json"
+    manifest = json.loads(path.read_text(encoding="utf-8"))
+    manifest[field] = value
+    _write_json(path, manifest)
+    with pytest.raises(DataReadinessError, match="scope policy"):
+        publish_catalyst_decision_authority([lineage], tmp_path / "authority")
+
+
 def _lineage(
     root: Path,
     *,
@@ -372,6 +465,10 @@ def _lineage(
     request = {
         "schema": "swing.catalyst_lineage_request.v2",
         "generation": generation,
+        "scope_policy": "observed_articles_not_coverage_admission",
+        "coverage_blindspot_security_ids": [],
+        "source_coverage_admitted": False,
+        "excluded_security_ids": [],
         "decisions_sha256": "1" * 64,
         "production_ready": production_ready,
     }
@@ -491,6 +588,10 @@ def _lineage(
     }
     manifest = {
         "schema": "swing.catalyst_lineage_manifest.v2",
+        "scope_policy": "observed_articles_not_coverage_admission",
+        "coverage_blindspot_security_ids": [],
+        "source_coverage_admitted": False,
+        "excluded_security_ids": [],
         "request_sha256": request_sha256,
         "status": "complete",
         "requested_chunks": 1,
@@ -562,6 +663,7 @@ def _deduplication_row(
     return {
         "event_id": event_id,
         "ticker": ticker,
+        "event_ticker": ticker,
         "security_id": security_id,
         "source_family": source_family,
         "feature_available_at_utc": available_at,

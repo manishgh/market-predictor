@@ -1,0 +1,388 @@
+schema = "market_predictor.issuer_feature_rebuild_inventory.v1"
+purpose = "execution_inventory_not_feature_authority"
+scope_policy = "observed_articles_not_coverage_admission"
+production_ready = false
+source_coverage_admitted = false
+heavy_launch_authorized = false
+initial_fit_last_session = "2024-05-28"
+historical_first_seen_proven = false
+training_requested = false
+cohort_policy = "preserve_frozen_586_retained_of_631_no_new_exclusions"
+coverage_policy = "retain_observed_evidence_unknown_window_features_remain_nullable"
+
+[corrected]
+collection = "data/raw/swing_issuer_news_corrections"
+collection_manifest_sha256 = "4da07ce57bf864845b79b0043816e49c104dc047eb81a30372ad952519f855d8"
+audit = "data/reports/swing_issuer_news_corrections_audit.json"
+audit_sha256 = "b4875e7cbf3334a346fff3047b5202c0c21a0801c473e01fcd9d7110bd202ecb"
+attribution = "data/research/swing_issuer_news_corrections_attribution_v1"
+attribution_manifest_sha256 = "ccf3a5ea9a8c057672579be230ece1a7aabac7f4067f12beba3c98d411cbf93e"
+identity_authority = "data/research/swing_issuer_identity_cik_v1"
+identity_policy = "configs/swing_issuer_identity_authority.toml"
+identity_policy_sha256 = "4d6ce21c88a2ad9acd321291d71884ab83858575979e96c638751c3cd74bf9d1"
+identities_sha256 = "f8945cd82bdf9755db65d908c889fed9893329e5f39dfe3fd465338f6bdb08a1"
+identities_manifest_sha256 = "3a37ae25d6f1af054e67713bd6afc242014b9565f25a6389a530f75ce6a9a022"
+business_labels_sha256 = "2223ab2969828ef9a0db16be1e56ccfb747a1a6a480f7ca2f2b0d17e2790b363"
+business_labels_manifest_sha256 = "e4bf08464be53a5e69f1960ed30e1d030184e448ea4728f4bb9f279116333ea7"
+raw_events = 661
+direct_relations = 643
+unrelated_events = 18
+business_label_rows = 0
+role = "supplement_not_replacement_for_full_cohort_sources"
+
+[classification_diagnostic]
+status = "executed_existing_classifier_not_published_authority"
+classifier_policy_sha256 = "fa43938d4dc7cb07d62b2e1e24a40cbe004d9d76cc8c7bf21b7c3cd8ef366d7d"
+family_policy = "configs/swing_event_family_policy.toml"
+family_policy_sha256 = "333b2c0e72be767c93129fe5dd15f5350afc8b492efef829010caf16f6f1863c"
+unique_classified_source_events = 81
+unique_unclassified_source_events = 562
+family_rows = 82
+research_eligible_rows = 0
+family_counts = { guidance = 10, earnings = 19, product_event = 4, analyst_revision = 38, regulatory_decision = 1, offering = 4, merger_acquisition = 6 }
+
+[sentiment]
+status = "complete_661_rows_zero_failed_chunks_reuse_existing_scored_authority"
+hf_home = "C:/project/market-predictor/data/cache/huggingface"
+model = "ProsusAI/finbert"
+retained_old_score_model_revision = "4556d13015211d73dccd3fdd39d39232506f3e43"
+download_authorized = true
+expected_scored_raw_events = 661
+expected_attributed_sentiment_events = 643
+actual_new_scored_events = 661
+manifest_sha256 = "be8cc77ca15fb79555d11ffd36f3737a0a1142a81fa987a7c6465821cb1aad6f"
+planned_output = "data/research/swing_issuer_news_corrections_sentiment_finbert_v1"
+# Existing CLI; --universe accepts the verified identity-only canonical input.
+# Historical completed command; do not rescore. Reuse the actual manifest pin above.
+command = '''
+$env:HF_HOME = 'C:/project/market-predictor/data/cache/huggingface'
+$env:HF_HUB_OFFLINE = '1'
+$env:TRANSFORMERS_OFFLINE = '1'
+& .venv\Scripts\python.exe -B -m market_predictor.research_cli score-alpaca-news-history --collection-dir data/raw/swing_issuer_news_corrections --collection-audit data/reports/swing_issuer_news_corrections_audit.json --universe data/research/swing_issuer_identity_cik_v1/security_identities.parquet --out-dir data/research/swing_issuer_news_corrections_sentiment_finbert_v1 --model-revision 4556d13015211d73dccd3fdd39d39232506f3e43 --batch-size 4 --max-batch-events 64 --max-batch-shards 4 --torch-threads 1 --text-mode title_summary --max-length 128 --fixed-latency-minutes 5
+'''
+
+[decision_inputs]
+status = "verified_corrected_decision_projection_API_available_monthly_preparation_not_run"
+projection_api = "market_predictor.swing.datasets.corrected_decisions.verified_corrected_decision_partitions"
+projection_config = "configs/swing_corrected_outcomes.toml"
+projection_config_sha256 = "ded3b30af1185c7ab0759fa5f81c559c37c590419751c942b61ab479e67c2348"
+projection_rule = "consume_full_corrected_identity_projection_from_config_not_outcome_values_or_old_decisions"
+parent_manifest = "data/features/edge_rebuild_swing_technical_panel_20190709_20260708_v1/final/_manifest.json"
+parent_manifest_sha256 = "891bb547cff304661153661b1c18acf57ec824e6c5c7ddd1eed7346a9a13886c"
+required_columns = ["decision_id", "security_id", "ticker", "decision_time_utc", "prediction_cutoff_policy_id", "timeframe", "bar_start_utc"]
+identity_rule = "preserve_original_parent_keys_never_invent_ECHO_as_EchoStar_alias"
+excluded_inputs = ["targets", "outcomes", "held_out_numeric_features"]
+old_canonical_decisions = "data/canonical/swing_technical_decisions_20190709_20260708_v1.parquet"
+old_canonical_decisions_sha256 = "8b14bdec2c2ae4f46fbff058b4a1cdeb2d7700eb42d02f1bb2a0eca344bd3533"
+old_decisions_admitted_to_new_join = false
+
+[[historical_sources]]
+period = "early"
+collection = "data/raw/alpaca_news_20190709_20210708_v1"
+collection_manifest_sha256 = "2289abcb4a2cf770557d06e6b69a7f7395e02c0c386f67660ed392afc838e0c6"
+audit = "data/reports/alpaca_news_20190709_20210708_v1_audit.json"
+audit_sha256 = "5c2bd4eb3c7f040b80bf875880f4f12e0e6cdf16584c805ede3135fde266f8bc"
+raw_rows = 149140
+observed_chunks = 4047
+prior_sentiment_rows = 148784
+rebuild_status = "cached_bounded_derivation_implemented_tested_not_run_wait_main_reservation"
+strict_attribution = "data/research/alpaca_news_20190709_20210708_v1_attribution_v2_strict"
+strict_attribution_manifest_sha256 = "66c881906b8e0188f165d1833b994e8d94903874e1d99692ae0467bc88c101f6"
+family = "data/research/issuer_event_family_20190709_20210708_v2"
+family_manifest_sha256 = "fcbff3d109c33cbc9b99a27958dbd23c89fd172936ed0d4a8366784c0e4dcc3c"
+sentiment = "data/research/alpaca_news_20190709_20210708_v1_sentiment_finbert_cuda_v1"
+sentiment_manifest_sha256 = "24128683e2adaf2e0b0bbf10c268767ceb4e2b9127a05e88650450b51debc1de"
+lineage = "data/research/alpaca_news_20190709_20210708_v1_catalyst_lineage_v2"
+lineage_manifest_sha256 = "e624da3d45dd4374e9ba12454f8f2c0572323ee7c5f143f56cd54dd77d1aee67"
+derivation_config = "configs/swing_initial_fit_issuer_derivation.toml"
+derivation_generation = "early"
+
+[[historical_sources]]
+period = "later"
+collection = "data/raw/alpaca_news_20210709_20260708_v1"
+collection_manifest_sha256 = "e55bad121076023e79b3813d5500bee12ceca2eee7c4965baca9e2de682a6c70"
+audit = "data/reports/alpaca_news_20210709_20260708_v1_audit.json"
+audit_sha256 = "7057ffb9a4748bac5eaaad0b03b79fe6592b24cad1215f4d5821132cf6f06cdb"
+raw_rows = 564986
+observed_chunks = 2614
+prior_sentiment_rows = 564916
+rebuild_status = "cached_bounded_derivation_implemented_tested_not_run_wait_main_reservation"
+strict_attribution = "data/research/alpaca_news_20210709_20260708_v1_attribution_v2_strict"
+strict_attribution_manifest_sha256 = "c100dc102936bc8bccae95b83569e3ef30bf4542ccd12e3a1d37dbbc763f781d"
+family = "data/research/issuer_event_family_20210709_20260708_v2"
+family_manifest_sha256 = "aea5bcd6392a83204fe23bf6bb7bd1ef9b32557d12a421a8c6f81ef347725296"
+sentiment = "data/research/alpaca_news_20210709_20260708_v1_sentiment_finbert_cuda_v1"
+sentiment_manifest_sha256 = "a2b1d2aefa8f80c87de32d7522abaddc49d981579e978fd6cec459299a632b53"
+lineage = "data/research/alpaca_news_20210709_20260708_v1_catalyst_lineage_v2"
+lineage_manifest_sha256 = "df799ce8511b6f4239e9455cb8ce0853a18fa038b239340ec5f403f5578231fb"
+saved_raw_action = "use_explicit_verified_saved_derivation_no_redownload_no_rescore"
+derivation_config = "configs/swing_initial_fit_issuer_derivation.toml"
+derivation_generation = "later"
+
+[old_combined_authority]
+directory = "data/research/edge_rebuild_catalyst_authority_20190709_20260708_v5"
+manifest_sha256 = "68e1f8f910bbe5b35bba0e8965c5a8ff9a766430959a42ab55876b6a78c56322"
+actual_manifest_schema = "edge_rebuild.catalyst_decision_manifest.v4"
+current_required_manifest_schema = "edge_rebuild.catalyst_decision_manifest.v5"
+status = "not_admitted_rebuild_from_all_verified_initial_fit_lineages"
+
+[bounded_derivation]
+status = "early_request_only_retry_relevance_range_bug_fixed_ready_wait_main_heavy_slot"
+path_resolution = "explicit_CLI_root_for_saved_repo_relative_paths_each_child_still_contained_in_its_declared_authority_no_CWD_or_basename_fallback"
+path_fix_verification = "39_focused_path_resume_and_causal_tests_passed_Ruff_pass_mypy_2_owned_modules_pass"
+relevance_contract = "committed_relevance.py_swing.event_relevance.v1_additive_heuristic_0.1_through_2.0_not_probability_no_clipping_normalization_or_imputation"
+relevance_fix_verification = "53_focused_derivation_relevance_owner_and_causal_tests_passed_Ruff_and_mypy_pass"
+bounded_real_relevance_check = "chunk_f91f0fa1d3de638169abab12_18_rows_relevance_0.20000000000000007_through_1.15_fixed_validation_passed_values_unchanged"
+early_interrupted_output = "data/research/issuer_initial_fit_early_saved_v1"
+early_interrupted_inventory = ["_request.json"]
+early_interrupted_request_sha256 = "2ad0b7de34b95fe256fffe038e6cb242272c3145f8d1ad96a39da59c3e5d3a0c"
+resume_policy = "external_request_pin_exact_request_equality_request_only_directory_no_rewrite_no_delete_refuse_existing_children_or_completed_authority"
+saved_header_preflight = "early_and_later_real_pins_verified_no_numeric_score_projection"
+derivation_requires_canonical_decisions = false
+family_and_lineage_require_canonical_decisions = true
+module = "market_predictor.swing.datasets.initial_fit_issuer_news"
+config = "configs/swing_initial_fit_issuer_derivation.toml"
+config_sha256 = "ca80c17df4ce8a2a1ff5fae7c38acef22183160de4ea4ad3770878b377679142"
+cutoff_utc = "2024-05-28T22:00:00Z"
+numeric_policy = "metadata_selection_then_arrow_predicate_before_numeric_projection"
+saved_evidence_policy = "original_source_pins_retained_no_redownload_no_rescore_no_legacy_loader_fallback"
+missing_evidence_policy = "unavailable_saved_evidence_not_new_whole_security_exclusion"
+apis = ["derive_initial_fit_issuer_inputs", "load_initial_fit_issuer_inputs", "build_initial_fit_catalyst_lineage", "publish_initial_fit_issuer_family"]
+# Each real command requires main's sequential heavy-job reservation.
+# early_command is for a fresh output only. The current request-only interrupted
+# early directory must use early_resume_command below. No real retry until main
+# releases the active prefix-recovery/heavy-job slot.
+early_command = '''
+& .venv\Scripts\python.exe -B -m market_predictor.swing.datasets.initial_fit_issuer_news derive --root C:/project/market-predictor --config configs/swing_initial_fit_issuer_derivation.toml --expected-config-sha256 ca80c17df4ce8a2a1ff5fae7c38acef22183160de4ea4ad3770878b377679142 --generation early --out-dir data/research/issuer_initial_fit_early_saved_v1
+'''
+early_resume_command = '''
+Set-Location C:/project/market-predictor
+& .venv\Scripts\python.exe -B -m market_predictor.swing.datasets.initial_fit_issuer_news derive --root C:/project/market-predictor --config configs/swing_initial_fit_issuer_derivation.toml --expected-config-sha256 ca80c17df4ce8a2a1ff5fae7c38acef22183160de4ea4ad3770878b377679142 --generation early --out-dir data/research/issuer_initial_fit_early_saved_v1 --expected-existing-request-sha256 2ad0b7de34b95fe256fffe038e6cb242272c3145f8d1ad96a39da59c3e5d3a0c
+if ($LASTEXITCODE -ne 0) { throw 'Pinned early derivation retry failed; preserve output and stop' }
+'''
+later_command = '''
+& .venv\Scripts\python.exe -B -m market_predictor.swing.datasets.initial_fit_issuer_news derive --root C:/project/market-predictor --config configs/swing_initial_fit_issuer_derivation.toml --expected-config-sha256 ca80c17df4ce8a2a1ff5fae7c38acef22183160de4ea4ad3770878b377679142 --generation later --out-dir data/research/issuer_initial_fit_later_saved_v1
+'''
+# Use each completed derivation's printed manifest pin; do not self-admit an unverified directory.
+lineage_command = '''
+if (-not $decisions -or -not $derivedDir -or -not $derivedManifestSha -or -not $lineageOut) { throw 'Verified decisions, derivation path/pin and new lineage output are required' }
+& .venv\Scripts\python.exe -B -m market_predictor.swing.datasets.initial_fit_issuer_news lineage --derived-dir $derivedDir --expected-manifest-sha256 $derivedManifestSha --decisions $decisions --policy configs/catalyst_lineage.toml --out-dir $lineageOut
+'''
+family_command = '''
+if (-not $decisions -or -not $derivedDir -or -not $derivedManifestSha -or -not $familyOut) { throw 'Verified decisions, derivation path/pin and new family output are required' }
+& .venv\Scripts\python.exe -B -m market_predictor.swing.datasets.initial_fit_issuer_news family --derived-dir $derivedDir --expected-manifest-sha256 $derivedManifestSha --decisions $decisions --policy configs/swing_event_family_policy.toml --out-dir $familyOut
+'''
+
+[consumer_inventory]
+strict_loader = ["attribution_history.load_event_attribution_history", "issuer_event_family_cohort.publish_swing_issuer_family_cohort", "issuer_event_precision.sample_authority._strict_attribution_context"]
+new_scope_required = ["swing.sentiment_history.score_alpaca_news_history", "swing.catalyst_lineage.build_catalyst_lineage", "swing.catalyst_lineage.verify_completed_catalyst_lineage", "swing.features.catalyst_decision_authority._verify_lineage", "governance.readiness.audit"]
+historical_structural_replay_not_strict_attribution_replay = ["evidence.issuer_family_combined_envelope", "catalysts.issuer_events.family_evidence", "intraday.datasets.event_preflight"]
+retained_config_not_repointed = "configs/swing_research_evidence.toml"
+new_join_owner = "main:swing.features.research_join"
+optional_source_families = ["sec", "finviz"]
+optional_source_rule = "no_new_authority_published_no_completeness_inferred"
+
+[monthly_publication]
+status = "implemented_review_fixed_in_39_focused_tests_real_inputs_and_heavy_reservation_pending"
+module = "market_predictor.swing.datasets.issuer_news_publication"
+api = "publish_monthly_catalyst_authorities"
+index_loader = "load_monthly_catalyst_index"
+index_schema = "market_predictor.initial_fit_catalyst_months"
+index_status = "complete_research_only"
+expected_canonical_rows = 586305
+rows_policy = "all_canonical_monthly_rows_not_sparse_catalyst_rows"
+required_index_fields = ["schema", "status", "cohort_sha256", "rows", "source_files", "months"]
+required_month_fields = ["directory", "authority_sha256", "manifest_sha256", "decisions", "rows", "decision_ids_sha256", "catalyst_decision_rows", "lineages"]
+decision_ids_hash_policy = "json_sha256(sorted_canonical_decision_ids)"
+source_path_policy = "repo_relative_independent_pins"
+authority_path_policy = "relative_to_index_directory"
+lineage_requirement = "each_lineage_request_decisions_sha256_equals_that_corrected_canonical_month"
+final_consumer = "existing_build_swing_ablation_rows_preserves_all_rows_and_unknown_coverage"
+production_import_regression = "bs4_lazy_in_identity_HTML_parser_13_focused_tests_passed"
+command = '''
+if (-not $monthlyConfig -or -not $monthlyConfigSha) { throw 'Externally pinned monthly decisions, lineages and source-file inventory are required' }
+& .venv\Scripts\python.exe -B -m market_predictor.swing.datasets.issuer_news_publication --root C:/project/market-predictor --config $monthlyConfig --expected-config-sha256 $monthlyConfigSha --out-dir data/research/swing_initial_fit_catalyst_months_v1
+'''
+
+[pending_publication_commands]
+status = "standalone_family_diagnostics_only_not_required_by_reviewed_monthly_aggregate_path"
+execution_rule = "use_monthly_preparation_below_for_final_join_do_not_run_standalone_whole_history_lineage_commands"
+decisions_parameter = "$decisions must name the published canonical initial-fit projection; do not use a fabricated or two-issuer-only training population"
+family_command = '''
+if (-not $decisions) { throw 'Verified initial-fit canonical decisions are required' }
+& .venv\Scripts\python.exe -B -m market_predictor.research_cli publish-swing-issuer-family-cohort --collection-dir data/raw/swing_issuer_news_corrections --collection-audit data/reports/swing_issuer_news_corrections_audit.json --attribution-dir data/research/swing_issuer_news_corrections_attribution_v1 --decisions $decisions --policy configs/swing_event_family_policy.toml --out-dir data/research/swing_issuer_news_corrections_family_v1
+'''
+lineage_command = '''
+if (-not $decisions) { throw 'Verified initial-fit canonical decisions are required' }
+& .venv\Scripts\python.exe -B -m market_predictor.research_cli build-catalyst-lineage --collection-dir data/raw/swing_issuer_news_corrections --collection-audit data/reports/swing_issuer_news_corrections_audit.json --attribution-dir data/research/swing_issuer_news_corrections_attribution_v1 --sentiment-dir data/research/swing_issuer_news_corrections_sentiment_finbert_v1 --decisions $decisions --policy configs/catalyst_lineage.toml --out-dir data/research/swing_issuer_news_corrections_catalyst_lineage_v1
+'''
+combined_authority_policy = "superseded_by_monthly_publication_no_whole_history_authority_build"
+
+[monthly_preparation]
+status = "implemented_reviewed_not_executed_on_real_sources"
+instructions_only = true
+module = "market_predictor.swing.datasets.issuer_news_preparation"
+api = "prepare_initial_fit_monthly_lineages(*, root, config_path, expected_config_sha256, output_directory, expected_existing_manifest_sha256=None, estimate_only=False)"
+input_schema = "swing.initial_fit_monthly_lineage_preparation.v1"
+input_keys = ["schema", "decisions", "policy", "sources"]
+publication_config_schema = "swing.monthly_catalyst_publication.v1"
+planned_config = "data/research/swing_initial_fit_monthly_lineage_preparation_v1.json"
+planned_output = "data/research/swing_initial_fit_monthly_lineage_inputs_v1"
+planned_index = "data/research/swing_initial_fit_catalyst_months_v1"
+execution_order = ["wait_for_main_heavy_job_and_explicit_slot", "reuse_completed_corrected_661_score_pin", "resume_pinned_request_only_early_derivation_once", "derive_later_once", "construct_pinned_config", "estimate_only", "prepare_once", "publish_monthly_index", "main_final_join"]
+source_policy = "all_three_generations_required_for_this_delivery_never_train_or_publish_only_two_corrected_issuers"
+decision_dependency = "Darwin_full_corrected_projection_from_ded3b30_config_no_separate_decisions_argument_or_materialized_outcome_dependency"
+date_policy = "news_and_numeric_scores_2019-07-09T00:00:00Z_through_2024-05-28T22:00:00Z_filter_source_event_IDs_before_score_projection"
+coverage_policy = "original_unknowns_retained_pending_score_intervals_unknown_no_new_whole_ID_exclusions_no_business_labels_invented"
+classification_boundary = "existing_catalyst_lineage_join_and_assignment_algorithms_existing_aggregate_contract_not_new_family_training_or_family_authority_publication"
+physical_policy = "stream_source_chunks_once_to_max_5000_event_64MiB_batches_original_chunk_and_child_hash_bindings_retained_no_event_Parquets_for_coverage_only"
+replay_policy = "source_generations_and_monthly_lineages_reused_only_after_external_checkpoint_or_manifest_pin_verification"
+failure_policy = "stop_on_nonzero_exit_no_automatic_new_output_or_repin_completion_only_after_context_exit_verification"
+estimated_old_projection_files = 6154
+previous_old_chunk_month_projection_files = 208938
+estimated_corrected_projection_files = 710
+estimated_all_lineage_files = 4810
+estimate_caveat = "metadata_only_overlapping_ledger_row_upper_estimate_before_clock_filters_each_byte_cap_split_adds_6_projection_and_4_lineage_files_canonical_decision_and_final_authority_files_extra"
+completed_verification = "39_focused_tests_including_7_Copernicus_regressions_and_production_import_isolation_Ruff_pass_mypy_3_owned_modules_pass"
+owned_running_pids = []
+
+# Instructions only. Run in one PowerShell session from the repository root AFTER
+# main confirms the active heavy job is finished and grants the sequential slot.
+# Do not execute this inventory with Invoke-Expression or start another worker.
+# Scoring completed at its recorded be8cc77c pin. Do not rerun [sentiment].command.
+# [bounded_derivation].early_resume_command/later_command are the remaining
+# preceding commands; check $LASTEXITCODE after each one.
+# Both old generations are derived ONCE, never again for each month. Their CLI
+# final JSON provides manifest_sha256. The score CLI publishes a completed
+# _manifest.json rather than returning its external file hash; after its successful
+# 661-row, zero-failure completion, record that file's Get-FileHash SHA256 once.
+# Supply the two completed derivation hashes as variables below; the accepted
+# corrected scoring hash is fixed explicitly. Never obtain
+# a replacement expected hash merely because replay of an existing input failed.
+construct_config_powershell = '''
+Set-Location C:/project/market-predictor
+$ErrorActionPreference = 'Stop'
+# Required inputs from successful completed derivations:
+# $earlyManifestSha, $laterManifestSha
+$correctedSentimentManifestSha = 'be8cc77ca15fb79555d11ffd36f3737a0a1142a81fa987a7c6465821cb1aad6f'
+function Assert-IssuerInputPin([string]$Path, [string]$Expected) {
+    if ($Expected -notmatch '^[0-9a-fA-F]{64}$') { throw "Missing recorded SHA256: $Path" }
+    $actual = (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLowerInvariant()
+    if ($actual -ne $Expected.ToLowerInvariant()) { throw "Recorded source pin differs: $Path" }
+}
+$outcomeConfigSha = 'ded3b30af1185c7ab0759fa5f81c559c37c590419751c942b61ab479e67c2348'
+$lineagePolicySha = 'b9d5d25b9b5dcd453a3b014e4946d6b29a3cf85dea75333b997cf95eb51466a0'
+Assert-IssuerInputPin 'configs/swing_corrected_outcomes.toml' $outcomeConfigSha
+Assert-IssuerInputPin 'configs/catalyst_lineage.toml' $lineagePolicySha
+Assert-IssuerInputPin 'data/research/issuer_initial_fit_early_saved_v1/_manifest.json' $earlyManifestSha
+Assert-IssuerInputPin 'data/research/issuer_initial_fit_later_saved_v1/_manifest.json' $laterManifestSha
+Assert-IssuerInputPin 'data/research/swing_issuer_news_corrections_sentiment_finbert_v1/_manifest.json' $correctedSentimentManifestSha
+$prepConfig = 'data/research/swing_initial_fit_monthly_lineage_preparation_v1.json'
+$prepOut = 'data/research/swing_initial_fit_monthly_lineage_inputs_v1'
+$indexOut = 'data/research/swing_initial_fit_catalyst_months_v1'
+# This object is the exact reviewed JSON configuration shape. No extra keys.
+$prepInput = [ordered]@{
+    schema = 'swing.initial_fit_monthly_lineage_preparation.v1'
+    decisions = @{ path = 'configs/swing_corrected_outcomes.toml'; sha256 = $outcomeConfigSha }
+    policy = @{ path = 'configs/catalyst_lineage.toml'; sha256 = $lineagePolicySha }
+    sources = [ordered]@{
+        early = @{
+            kind = 'derived'
+            directory = 'data/research/issuer_initial_fit_early_saved_v1'
+            manifest_sha256 = $earlyManifestSha.ToLowerInvariant()
+        }
+        later = @{
+            kind = 'derived'
+            directory = 'data/research/issuer_initial_fit_later_saved_v1'
+            manifest_sha256 = $laterManifestSha.ToLowerInvariant()
+        }
+        corrected = @{
+            kind = 'corrected'
+            collection = @{
+                directory = 'data/raw/swing_issuer_news_corrections'
+                manifest_sha256 = '4da07ce57bf864845b79b0043816e49c104dc047eb81a30372ad952519f855d8'
+            }
+            attribution = @{
+                directory = 'data/research/swing_issuer_news_corrections_attribution_v1'
+                manifest_sha256 = 'ccf3a5ea9a8c057672579be230ece1a7aabac7f4067f12beba3c98d411cbf93e'
+            }
+            sentiment = @{
+                directory = 'data/research/swing_issuer_news_corrections_sentiment_finbert_v1'
+                manifest_sha256 = $correctedSentimentManifestSha.ToLowerInvariant()
+            }
+            audit = @{
+                path = 'data/reports/swing_issuer_news_corrections_audit.json'
+                sha256 = 'b4875e7cbf3334a346fff3047b5202c0c21a0801c473e01fcd9d7110bd202ecb'
+            }
+        }
+    }
+}
+$json = $prepInput | ConvertTo-Json -Depth 10
+# CreateNew prevents accidental overwrite; write UTF-8 without BOM for json.load.
+$absolutePrepConfig = Join-Path (Get-Location).Path $prepConfig
+$stream = [System.IO.File]::Open($absolutePrepConfig, [System.IO.FileMode]::CreateNew)
+try {
+    $bytes = [System.Text.UTF8Encoding]::new($false).GetBytes($json)
+    $stream.Write($bytes, 0, $bytes.Length)
+} finally {
+    $stream.Dispose()
+}
+$prepConfigSha = (Get-FileHash -LiteralPath $prepConfig -Algorithm SHA256).Hash.ToLowerInvariant()
+Write-Output "Preparation config SHA256: $prepConfigSha"
+'''
+
+# Even the estimator enters Darwin's root/data/runtime heavy lease. Wait for main's
+# slot; it reads decision/source metadata, not numeric sentiment, and writes no output.
+estimate_command = '''
+& .venv\Scripts\python.exe -B -m market_predictor.swing.datasets.issuer_news_preparation --root C:/project/market-predictor --config $prepConfig --expected-config-sha256 $prepConfigSha --out-dir $prepOut --estimate-only
+if ($LASTEXITCODE -ne 0) { throw 'Monthly preparation estimate failed; do not continue' }
+'''
+
+prepare_command = '''
+& .venv\Scripts\python.exe -B -m market_predictor.swing.datasets.issuer_news_preparation --root C:/project/market-predictor --config $prepConfig --expected-config-sha256 $prepConfigSha --out-dir $prepOut | Tee-Object -Variable prepLines
+if ($LASTEXITCODE -ne 0) { throw 'Monthly preparation failed; retain its recorded checkpoint pin' }
+$prepResult = @($prepLines)[-1] | ConvertFrom-Json
+Assert-IssuerInputPin (Join-Path $prepOut '_manifest.json') $prepResult.manifest_sha256
+$monthlyConfig = $prepResult.publication_config
+$monthlyConfigSha = $prepResult.publication_config_sha256
+Assert-IssuerInputPin $monthlyConfig $monthlyConfigSha
+if ($prepResult.rows -ne 586305) { throw 'Full corrected canonical population differs' }
+# Record prepResult.manifest_sha256 and monthlyConfigSha externally. Do not rebuild
+# or hand-edit monthly-publication.json: it already binds actual child source paths,
+# policy hashes, full monthly canonical IDs, and verified compact monthly lineages.
+'''
+
+publish_index_command = '''
+& .venv\Scripts\python.exe -B -m market_predictor.swing.datasets.issuer_news_publication --root C:/project/market-predictor --config $monthlyConfig --expected-config-sha256 $monthlyConfigSha --out-dir $indexOut | Tee-Object -Variable indexLines
+if ($LASTEXITCODE -ne 0) { throw 'Monthly index publication failed; retain its recorded checkpoint pin' }
+$indexResult = @($indexLines)[-1] | ConvertFrom-Json
+Assert-IssuerInputPin (Join-Path $indexOut '_manifest.json') $indexResult.manifest_sha256
+# Hand main indexOut plus indexResult.manifest_sha256, not an unpinned directory.
+'''
+
+# These are alternatives to their corresponding fresh command, not extra jobs.
+# Supply the checkpoint SHA256 printed before interruption, or the already recorded
+# completed manifest SHA256 for immutable replay. Keep every original config/source
+# pin unchanged; do not blindly hash a damaged checkpoint to manufacture acceptance.
+prepare_resume_command = '''
+if ($prepCheckpointSha -notmatch '^[0-9a-fA-F]{64}$') { throw 'Recorded preparation checkpoint/manifest pin required' }
+& .venv\Scripts\python.exe -B -m market_predictor.swing.datasets.issuer_news_preparation --root C:/project/market-predictor --config $prepConfig --expected-config-sha256 $prepConfigSha --out-dir $prepOut --expected-existing-manifest-sha256 $prepCheckpointSha | Tee-Object -Variable prepLines
+if ($LASTEXITCODE -ne 0) { throw 'Monthly preparation resume failed' }
+# Run the result extraction/pin checks from prepare_command, then publish_index_command.
+'''
+index_resume_command = '''
+if ($indexCheckpointSha -notmatch '^[0-9a-fA-F]{64}$') { throw 'Recorded index checkpoint/manifest pin required' }
+& .venv\Scripts\python.exe -B -m market_predictor.swing.datasets.issuer_news_publication --root C:/project/market-predictor --config $monthlyConfig --expected-config-sha256 $monthlyConfigSha --out-dir $indexOut --expected-existing-manifest-sha256 $indexCheckpointSha | Tee-Object -Variable indexLines
+if ($LASTEXITCODE -ne 0) { throw 'Monthly index resume failed' }
+# Run the result extraction/pin checks from publish_index_command.
+'''
+
+[monthly_preparation.final_join_interface]
+index_api = "load_monthly_catalyst_index(Path(indexOut), expected_manifest_sha256=indexResult.manifest_sha256)"
+index_immutable_file = "data/research/swing_initial_fit_catalyst_months_v1/_manifest.json"
+full_population = "index.rows=586305; each month.rows and decision_ids_sha256 bind all canonical decisions, not event-assigned rows"
+sparse_authority = "month.catalyst_decision_rows may be smaller; require unique subset IDs with no foreign IDs, not full equality"
+authority_pin = "month.authority_sha256 hashes the actual month/_authority.json; month.manifest_sha256 separately hashes month/_manifest.json"
+path_resolution = "month.directory relative to index directory; source_files and decision paths repo-relative"
+consumer = "load each month authority then existing build_swing_ablation_rows over the full canonical month; preserve nullable unknowns and existing known-zero semantics"
+excluded_contracts = "no old combined authority, no old canonical decisions, no outcomes as features, no implicit SEC/Finviz completeness, no new family features or model training"

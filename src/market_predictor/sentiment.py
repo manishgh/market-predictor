@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib
+import re
 from types import ModuleType
 from typing import Any
 
@@ -38,9 +39,12 @@ class FinbertScorer:
         self,
         model_name: str = "ProsusAI/finbert",
         *,
+        revision: str | None = None,
         torch_num_threads: int = 0,
         max_length: int = 512,
     ) -> None:
+        if revision is not None and re.fullmatch(r"[0-9a-f]{40}", revision) is None:
+            raise ValueError("FinBERT revision must be a full immutable model commit hash")
         torch = _load_optional_dependency("torch", extra="training")
         transformers = _load_optional_dependency("transformers", extra="training")
 
@@ -50,10 +54,12 @@ class FinbertScorer:
             torch.set_num_threads(torch_num_threads)
         device = 0 if torch.cuda.is_available() else -1
         try:
-            tokenizer = transformers.AutoTokenizer.from_pretrained(model_name, local_files_only=True)
+            revision_options = {"revision": revision} if revision is not None else {}
+            tokenizer = transformers.AutoTokenizer.from_pretrained(model_name, local_files_only=True, **revision_options)
             model = transformers.AutoModelForSequenceClassification.from_pretrained(
                 model_name,
                 local_files_only=True,
+                **revision_options,
             )
         except OSError as exc:
             raise RuntimeError(
@@ -63,6 +69,8 @@ class FinbertScorer:
         self.model_revision = str(
             getattr(model.config, "_commit_hash", "") or "unversioned-local-cache"
         )
+        if revision is not None and self.model_revision != revision:
+            raise RuntimeError("Cached FinBERT weights do not match the requested immutable revision")
         self.device = "cuda:0" if device == 0 else "cpu"
         self.classifier: Any = transformers.pipeline(
             "text-classification",

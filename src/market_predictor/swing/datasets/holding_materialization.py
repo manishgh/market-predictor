@@ -14,7 +14,7 @@ import pandas as pd
 from market_predictor.canonical.store import file_sha256
 from market_predictor.core.errors import DataReadinessError
 from market_predictor.evidence.hashing import json_sha256
-from market_predictor.evidence.io import resolve_inside_authority
+from market_predictor.evidence.io import inside, resolve_inside_authority
 from market_predictor.resources import assert_memory_budget
 from market_predictor.swing.contracts.holding_accounting import (
     CorporateActionEvent,
@@ -29,7 +29,7 @@ from market_predictor.swing.contracts.holding_materialization import FixedHoldin
 from market_predictor.swing.contracts.research import load_swing_research_contract
 from market_predictor.swing.datasets.holding_raw_sources import read_bound_observations
 from market_predictor.swing.datasets.symbol_corrected_sources import publish_or_verify_symbol_corrected_sources
-from market_predictor.swing.datasets.symbol_corrections import inside, pinned_object
+from market_predictor.swing.datasets.symbol_corrections import pinned_object
 from market_predictor.swing.evaluation.holding_accounting import replay_holding
 
 SelectionContext = Callable[[], AbstractContextManager[dict[str, Any]]]

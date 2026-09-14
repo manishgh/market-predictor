@@ -399,18 +399,19 @@ def replay_next_open_settlement(spec: HoldingSpecification, *, simulation_policy
 
 
 def project_holding_targets(
-    fixed: LotOutcome, managed: LotOutcome, *, benchmarks: tuple[LotOutcome, ...] = (),
+    fixed: LotOutcome, managed: LotOutcome | None, *, benchmarks: tuple[LotOutcome, ...] = (),
 ) -> HoldingTargets:
     """Compare the first ten sessions only, including claims earned before exits."""
-    if fixed.policy != "fixed_horizon" or managed.policy != "managed":
+    if fixed.policy != "fixed_horizon" or managed is not None and managed.policy != "managed":
         raise ValueError("target projection needs explicitly fixed and managed outcomes")
-    if (
+    if managed is not None and (
         (fixed.decision_id, fixed.security_id, fixed.sector, fixed.initial_entry_price, fixed.cost_prepaid_fraction)
         != (managed.decision_id, managed.security_id, managed.sector, managed.initial_entry_price, managed.cost_prepaid_fraction)
     ):
         raise ValueError("fixed and managed outcomes must describe the same entry lot")
     horizon = tuple(s.session_end_timestamp for s in fixed.snapshots[:10])
-    for outcome in (managed, *benchmarks):
+    comparisons_to_check = (*((managed,) if managed is not None else ()), *benchmarks)
+    for outcome in comparisons_to_check:
         if outcome.simulation_policy_sha256 != fixed.simulation_policy_sha256:
             raise ValueError("target outcomes must share the same explicit simulation policy")
         if outcome.research_contract_sha256 != fixed.research_contract_sha256:
@@ -421,21 +422,24 @@ def project_holding_targets(
             raise ValueError("stock and benchmark executable entry/horizon timestamps must match")
     if any(b.policy != "fixed_horizon" for b in benchmarks) or len({b.security_id for b in benchmarks}) != len(benchmarks):
         raise ValueError("benchmarks must be unique fixed-horizon outcomes")
-    fixed_end, managed_end = fixed.snapshots[9], managed.snapshots[9]
+    fixed_end = fixed.snapshots[9]
+    managed_end = managed.snapshots[9] if managed is not None else None
     comparisons = []
     for benchmark in benchmarks:
         gross = benchmark.snapshots[9].gross_return
         comparisons.append(BenchmarkTarget(
             benchmark_security_id=benchmark.security_id, horizon_gross_return=gross,
             fixed_horizon_excess_return=None if gross is None or fixed_end.net_return is None else fixed_end.net_return - gross,
-            managed_horizon_excess_return=None if gross is None or managed_end.net_return is None else managed_end.net_return - gross,
+            managed_horizon_excess_return=None if gross is None or managed_end is None or managed_end.net_return is None
+                else managed_end.net_return - gross,
         ))
     return HoldingTargets(
         research_contract_sha256=fixed.research_contract_sha256,
         decision_id=fixed.decision_id, initial_entry_timestamp=fixed.initial_entry_timestamp,
-        horizon_end_timestamp=horizon[-1], managed_exit_timestamp=managed.managed_exit_timestamp,
+        horizon_end_timestamp=horizon[-1], managed_exit_timestamp=managed.managed_exit_timestamp if managed is not None else None,
         fixed_horizon_gross_return=fixed_end.gross_return, fixed_horizon_net_return=fixed_end.net_return,
-        managed_horizon_gross_return=managed_end.gross_return, managed_horizon_net_return=managed_end.net_return,
+        managed_horizon_gross_return=managed_end.gross_return if managed_end is not None else None,
+        managed_horizon_net_return=managed_end.net_return if managed_end is not None else None,
         benchmarks=tuple(comparisons),
-        label_available_at=_latest([o.snapshots[9].label_available_at for o in (fixed, managed, *benchmarks)]),
+        label_available_at=_latest([o.snapshots[9].label_available_at for o in (fixed, *comparisons_to_check)]),
     )

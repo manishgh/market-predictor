@@ -64,6 +64,10 @@ CATALYSTS_ALLOWED_DEPENDENCIES = (
     "market_predictor.universe",
 )
 REMOVED_PRODUCTION_MODULES = (
+    "market_predictor.catalysts.issuer_events.initial_fit_derivation",
+    "market_predictor.catalysts.issuer_events.monthly_authority",
+    "market_predictor.catalysts.issuer_events.monthly_preparation",
+    "market_predictor.edge_rebuild.swing_history_collection",
     "market_predictor.edge_rebuild.serving",
     "market_predictor.edge_rebuild.swing_live",
     "market_predictor.edge_rebuild.policy",

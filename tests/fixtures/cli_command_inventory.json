@@ -16,6 +16,7 @@
     "collect-market-context",
     "collect-sp500-official-source-archive",
     "collect-swing",
+    "collect-swing-corrected-feature-history",
     "collect-swing-holding-corporate-actions",
     "collect-swing-holding-source-documents",
     "collect-swing-initial-fit-raw-prices",
@@ -25,6 +26,8 @@
     "download-model",
     "export-ohlcv-artifacts",
     "import-finviz",
+    "materialize-swing-corrected-outcomes",
+    "replay-swing-corrected-outcomes",
     "swing-universe"
   ],
   "production": [
@@ -92,6 +95,8 @@
     "materialize-edge-rebuild-intraday-history",
     "materialize-edge-rebuild-swing-panel",
     "materialize-swing-fixed-holdings",
+    "materialize-swing-research-dataset",
+    "materialize-swing-research-predictors",
     "partition-v3-data",
     "plan-edge-intraday-microstructure-history",
     "plan-edge-rebuild-broad-intraday-history",
@@ -119,6 +124,7 @@
     "publish-edge-swing-analyst-revision-ablation",
     "publish-swing-issuer-family-cohort",
     "publish-verified-universe",
+    "replay-swing-research-predictors",
     "replay-swing-transfer-history",
     "score-alpaca-news-history",
     "score-flashpoints",

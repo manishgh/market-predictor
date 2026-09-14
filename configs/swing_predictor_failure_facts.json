@@ -1,0 +1,102 @@
+{
+  "schema_version": "market_predictor.predictor_failure_facts.v1",
+  "parent_checkpoint_sha256": "ea89823d27d323b46cf38d060c313c54d75f480a791c71c936a91b736e3edf45",
+  "parent_request_sha256": "be8a6236b162aa0bff0d0ebeb1dff1974e0cccfe4863b56aaf51edf6ccd4204a",
+  "decision_config": {
+    "path": "configs/swing_corrected_outcomes.toml",
+    "sha256": "ded3b30af1185c7ab0759fa5f81c559c37c590419751c942b61ab479e67c2348"
+  },
+  "feature_config": {
+    "path": "configs/swing_corrected_research_features.toml",
+    "sha256": "ec5b806f9555397fc3a55b8fcdbc0bf5cbbba4bf0b42b72b8ae4ebf66194e0b7"
+  },
+  "observations": {
+    "path": "data/reports/swing_predictor_source_failure_observations.json",
+    "sha256": "70c6f85029e64ba3354ba04b5aa936c2147272f2f527ca9757517b3d31178060"
+  },
+  "parent_run_finished": true,
+  "approval_scope": "causal_prefix_replay_and_nullable_completion_only",
+  "reviewed_by": "main Codex; user-authorized internal research review only, not production approval",
+  "failures": [
+    {
+      "group_key": "076ea2159d8d2a552cf490c3f82dfe6a7240f8345bb8db397deab8351d04a3bb",
+      "security_id": "cik:0001140536",
+      "symbol": "WTW",
+      "rows": 1231,
+      "parent_failure_sha256": "af9e52826a22adae5fec010a7f786317e7f89bc6a7f3a2dd022d891dfcc20b5b",
+      "reason_code": "unverified_issuer_history",
+      "quarantine": "entire_failed_group",
+      "first_invalid_session": null,
+      "boundary_observation_sha256": null,
+      "source_artifacts": [{
+        "path": "data/features/edge_rebuild_swing_technical_panel_20190709_20260708_v1/combined_daily/bars/4918a1f02e5fba34.parquet",
+        "sha256": "e5ee3ab6fe833e8d1cd28ff4fe22c1bfeb3fef72c98e94da3ec8a01aef7ebe61"
+      }],
+      "reviewed_evidence": [{
+        "path": "data/reports/swing_predictor_source_failure_observations.json",
+        "sha256": "70c6f85029e64ba3354ba04b5aa936c2147272f2f527ca9757517b3d31178060"
+      }],
+      "detail": "Entire unverified Willis warmup is quarantined, not just 54 zero-volume constant-17.38 rows from 2019-04-22 through 2019-07-08. Main reviewed the issuer collision: Weight Watchers changed WTW to WW on 2019-04-22, while Willis used WLTW until 2022-01-10. No independently proven clean replacement history is supplied. All 1231 decisions remain as unavailable technical inputs; this is not an identity exclusion or source admission."
+    },
+    {
+      "group_key": "4028259b02b8104db4e53d2b37c4ea70d006b533600c8ff1fb579758d0bb97a6",
+      "security_id": "sp500-historical:089a869095e510fa466d0746",
+      "symbol": "ATVI",
+      "rows": 1075,
+      "parent_failure_sha256": "7cdc50e066670076f043a94add2f3897f941808b17436d237387f1a1afb88125",
+      "reason_code": "invalid_observation_stream",
+      "quarantine": "suffix_from_first_invalid",
+      "first_invalid_session": "2023-10-13",
+      "boundary_observation_sha256": "0469711e61ce64112ab43c04277ab61804bee9e2c872caa52938347df4a9f5a3",
+      "source_artifacts": [{
+        "path": "data/features/edge_rebuild_swing_technical_panel_20190709_20260708_v1/combined_daily/bars/2ad1610924ee1939.parquet",
+        "sha256": "ed56955a679a6ac3918269414fb88a90684010aae574d4f6dca40ff21a3ea86b"
+      }],
+      "reviewed_evidence": [{
+        "path": "data/reports/swing_predictor_source_failure_observations.json",
+        "sha256": "70c6f85029e64ba3354ba04b5aa936c2147272f2f527ca9757517b3d31178060"
+      }],
+      "detail": "The bounded 1355-row stream reports volume=0 and OHLC=94.42 on 2023-10-13. Replay must validate the entire earlier prefix and reproduce the pinned first-invalid row. Rebuild only earlier decisions with canonical feature and raw dollar-volume owners; preserve every decision on/after the boundary as unavailable. No bar deletion, imputation, source admission or additional exclusion is approved."
+    },
+    {
+      "group_key": "7d4eba59d6255578d5b908dfbee3d602fc21d0a5bf5c99ccfe8b0770ad1e1ce7",
+      "security_id": "sp500-historical:183d197c1c5a086c24d23cdf",
+      "symbol": "INFO",
+      "rows": 666,
+      "parent_failure_sha256": "2505a07242f03bff8f8afd8a19c4002592061f4953631146c0830254bea9b9ea",
+      "reason_code": "invalid_observation_stream",
+      "quarantine": "suffix_from_first_invalid",
+      "first_invalid_session": "2022-02-28",
+      "boundary_observation_sha256": "211d335dd425cc62d6ae98155c02bdf1d474a50cec177064c41ce60c77b36a65",
+      "source_artifacts": [{
+        "path": "data/features/edge_rebuild_swing_technical_panel_20190709_20260708_v1/combined_daily/bars/cda14d0b2d954643.parquet",
+        "sha256": "d1da30903aa98df2a9f094bbd791d9fc85ec8cdd7264bb5c431b52bb8f79120c"
+      }],
+      "reviewed_evidence": [{
+        "path": "data/reports/swing_predictor_source_failure_observations.json",
+        "sha256": "70c6f85029e64ba3354ba04b5aa936c2147272f2f527ca9757517b3d31178060"
+      }],
+      "detail": "The bounded 947-row stream reports volume=0 and OHLC=108.05 on 2022-02-28 and 2022-03-01. Replay must validate the entire earlier prefix and reproduce the pinned first-invalid row on 2022-02-28. Rebuild only earlier decisions with canonical owners and retain the unavailable suffix. No bar deletion, imputation, source admission or additional exclusion is approved."
+    },
+    {
+      "group_key": "b24f006cafc0a83eebdce972fb9286209c7bb9c899179a827294c0eec40de63a",
+      "security_id": "sp500-historical:3514645f887a53008cd6fecd",
+      "symbol": "SBNY",
+      "rows": 307,
+      "parent_failure_sha256": "c6a12f9469450bf33bbd52adcbd14532845710a65f0474af8aa0030f3349c7b9",
+      "reason_code": "invalid_observation_stream",
+      "quarantine": "suffix_from_first_invalid",
+      "first_invalid_session": "2023-03-13",
+      "boundary_observation_sha256": "8297ac3fd4b4f335b2a1b9b26f86f00645a28d547e6bca385f891c7926e2be85",
+      "source_artifacts": [{
+        "path": "data/features/edge_rebuild_swing_technical_panel_20190709_20260708_v1/combined_daily/bars/688d14f5a6d3b317.parquet",
+        "sha256": "0a0d4b618ea89f30adf3f6dde505765be0435fed16573a68d622662acb00658a"
+      }],
+      "reviewed_evidence": [{
+        "path": "data/reports/swing_predictor_source_failure_observations.json",
+        "sha256": "70c6f85029e64ba3354ba04b5aa936c2147272f2f527ca9757517b3d31178060"
+      }],
+      "detail": "The bounded 309-row stream reports volume=0 and OHLC=70.00 on 2023-03-13 and 2023-03-14. Replay must validate the entire earlier prefix and reproduce the pinned first-invalid row on 2023-03-13. Rebuild only earlier decisions with canonical owners and retain the unavailable suffix. No bar deletion, imputation, source admission or additional exclusion is approved."
+    }
+  ]
+}

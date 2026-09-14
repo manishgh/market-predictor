@@ -9,13 +9,14 @@ from typing import Any
 
 import typer
 
-from market_predictor.edge_rebuild.swing_history_collection import load_complete_swing_history_collection
+from market_predictor.evidence.io import inside
 from market_predictor.heavy_jobs import HEAVY_JOB_BUSY_EXIT_CODE, HeavyJobBusyError
 from market_predictor.swing.contracts.holding_materialization import FixedHoldingBatch
+from market_predictor.swing.datasets.history_archive import load_complete_swing_history_collection
 from market_predictor.swing.datasets.holding_materialization import materialize_fixed_holdings
 from market_predictor.swing.datasets.initial_fit_raw_share_plan import verified_initial_fit_raw_share_plan
 from market_predictor.swing.datasets.symbol_corrected_sources import reconstruct_symbol_corrected_sources
-from market_predictor.swing.datasets.symbol_corrections import inside, pinned_object
+from market_predictor.swing.datasets.symbol_corrections import pinned_object
 
 
 @contextmanager

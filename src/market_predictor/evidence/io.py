@@ -26,6 +26,13 @@ def write_json_object(path: Path, value: dict[str, Any] | Any) -> None:
         encoding="utf-8",
     )
 
+def inside(root: Path, relative: str | Path) -> Path:
+    result = (root / relative).resolve()
+    if result == root.resolve() or not result.is_relative_to(root.resolve()):
+        raise DataReadinessError("symbol correction path escapes repository or targets root")
+    return result
+
+
 def resolve_inside_authority(root: Path, raw: object) -> Path:
     path = (root / str(raw)).resolve()
     try:

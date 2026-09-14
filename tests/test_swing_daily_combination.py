@@ -230,7 +230,7 @@ def test_identity_refuses_same_ticker_for_two_securities_on_one_session() -> Non
         }
     )
     with pytest.raises(DataReadinessError, match="multiple securities"):
-        module._expected_ticker_sessions(
+        module.expected_ticker_sessions(
             "AAA",
             memberships=memberships,
             benchmark_tickers=("SPY",),
@@ -256,7 +256,7 @@ def test_xlc_contiguous_pre_inception_prefix_is_accepted() -> None:
     assert record["pre_inception_missing_session_count"] == 15
     assert record["missing_session_count"] == 15
 
-    expected = module._expected_ticker_sessions(
+    expected = module.expected_ticker_sessions(
         "XLC",
         memberships=pd.DataFrame(),
         benchmark_tickers=("XLC",),
@@ -386,8 +386,8 @@ def test_preflight_retains_sparse_gaps_as_bound_session_abstentions(
     assert gap_audit["gaps"][0]["missing_sessions"] == [
         session.isoformat() for session in sorted(missing)
     ]
-    abstentions = module._session_abstentions_by_ticker(gap_audit)
-    exact_expected = module._expected_ticker_sessions(
+    abstentions = module.session_abstentions_by_ticker(gap_audit)
+    exact_expected = module.expected_ticker_sessions(
         "AAA",
         memberships=memberships,
         benchmark_tickers=(),

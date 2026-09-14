@@ -1,0 +1,29 @@
+{
+  "schema": "market_predictor.issuer_news_identity_alignment",
+  "preparation": {
+    "path": "data/research/swing_initial_fit_monthly_news_inputs/_manifest.json",
+    "sha256": "a97a981ddaf42e1fceb8def06c17d35bc45915417e61d05cade9a90f40719197"
+  },
+  "source_registry": {
+    "path": "data/reports/security_business_label_coverage_sp500_20210709_20260708_v1.parquet",
+    "sha256": "c569a76cc5c529bf8f4e011e4624908bf60d1f175b20ba9548989f0fae9ef810",
+    "manifest_sha256": "91b060d9936d9b11cfccdefbf1e3e19ad48f8157d32073e6fa1d0605c7784b45"
+  },
+  "source_memberships": {
+    "path": "data/canonical/swing_memberships_verified_20190709_20260708_v2.parquet",
+    "sha256": "0e222a234dbfbc600dc12e25bec2eb4b75782b46e720d1df4d6a2ae541cdd656",
+    "manifest_sha256": "2e6fdee421f14f85a76e4b2c60638c13fd7376415c46427ac166e336e0ae2b4b"
+  },
+  "target_membership_authority": {
+    "path": "data/canonical/index_membership/sp500_memberships_20180529_20260708_v1/_authority.json",
+    "sha256": "d12e7f1fc5d056fde68bda8337de5db3b2fd856fa3bb53f7e360d4a16d5bc49a"
+  },
+  "target_sec_identity_authority": {
+    "path": "data/canonical/sec_identity/sec_identity_20190709_20260708_v2/_authority.json",
+    "sha256": "b419f69233fa940d73926455fd63b2edc8723d3d3fe10b7f2bb857de421e0636"
+  },
+  "symbol_corrections": {
+    "path": "configs/swing_symbol_corrections.toml",
+    "sha256": "be63ad9460f80cf87a377b903971c5415bcfefdf5d457308a9a9028d2b5488e3"
+  }
+}

@@ -29,11 +29,52 @@ from market_predictor.swing.catalyst_lineage import (
     _verify_coverage_semantics,
     _verify_feature_inventory,
     build_catalyst_lineage,
+    validate_observed_article_coverage,
     verify_completed_catalyst_lineage,
 )
 
 
 class SwingCatalystLineageTests(unittest.TestCase):
+    def test_declared_blindspot_cannot_have_certified_or_missing_coverage_flags(self) -> None:
+        base = {"security_id": "security:wdc", "coverage_state": "coverage_blindspot",
+                "missingness_known": False, "training_eligible": False}
+        validate_observed_article_coverage(pd.DataFrame([base]), {"security:wdc"})
+        for field, value in (("coverage_state", "observed_complete"), ("missingness_known", True),
+                             ("training_eligible", True), ("missingness_known", None), ("training_eligible", None)):
+            with self.subTest(field=field, value=value), self.assertRaisesRegex(DataReadinessError, "certifies"):
+                validate_observed_article_coverage(pd.DataFrame([{**base, field: value}]), {"security:wdc"})
+
+    def test_observed_blindspot_events_survive_with_unknown_coverage(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            fixture = _Fixture(Path(temporary))
+            fixture.publish()
+            for path in (fixture.audit_path, fixture.attribution / "_manifest.json", fixture.sentiment / "_manifest.json"):
+                payload = json.loads(path.read_text(encoding="utf-8"))
+                payload["coverage_blindspot_security_ids"] = ["security:wdc"]
+                path.write_text(json.dumps(payload), encoding="utf-8")
+            result = fixture.build()
+            self.assertEqual(result["relation_rows"], 1)
+            self.assertEqual(result["excluded_security_ids"], [])
+            coverage, _ = load_canonical_artifact(
+                fixture.output / "source_coverage.parquet", expected_type="catalyst_source_coverage", allow_research=True,
+            )
+            self.assertTrue(coverage["coverage_state"].eq("coverage_blindspot").all())
+            self.assertFalse(coverage["missingness_known"].astype(bool).any())
+            verify_completed_catalyst_lineage(fixture.output)
+
+    def test_rejects_source_coverage_admission_or_legacy_exclusion(self) -> None:
+        for field, value in (("source_coverage_admitted", True), ("excluded_security_ids", ["security:wdc"]),
+                             ("scope_policy", "legacy")):
+            with self.subTest(field=field), tempfile.TemporaryDirectory() as temporary:
+                fixture = _Fixture(Path(temporary))
+                fixture.publish()
+                path = fixture.sentiment / "_manifest.json"
+                payload = json.loads(path.read_text(encoding="utf-8"))
+                payload[field] = value
+                path.write_text(json.dumps(payload), encoding="utf-8")
+                with self.assertRaisesRegex(DataReadinessError, "scope policy"):
+                    fixture.build()
+
     def test_replays_direct_event_and_excludes_unrelated_sentiment(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             fixture = _Fixture(Path(temporary))
@@ -611,6 +652,9 @@ class _Fixture:
                     "status": "complete",
                     "production_ready": False,
                     "excluded_security_ids": [],
+                    "scope_policy": "observed_articles_not_coverage_admission",
+                    "coverage_blindspot_security_ids": [],
+                    "source_coverage_admitted": False,
                     "artifacts": [
                         {
                             "chunk_id": "chunk-1",
@@ -647,6 +691,9 @@ class _Fixture:
                     "request_sha256": "sentiment-request",
                     "total_rows": len(sentiment_frame),
                     "excluded_security_ids": [],
+                    "scope_policy": "observed_articles_not_coverage_admission",
+                    "coverage_blindspot_security_ids": [],
+                    "source_coverage_admitted": False,
                     "artifacts": [
                         {
                             "chunk_id": "chunk-1",

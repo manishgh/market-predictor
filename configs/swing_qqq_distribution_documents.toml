@@ -1,0 +1,9 @@
+schema_version = "market_predictor.official_document_inventory"
+maximum_response_bytes = 1048576
+attempts_per_document_per_run = 1
+
+[[documents]]
+document_id = "qqq_special_distribution_53847"
+url = "https://www.miaxglobal.com/sites/default/files/alert-files/QQQ_Distribution_53847.pdf"
+purpose = "OCC December 26 2023 QQQ special cash distribution notice: review ex-date and record-date scope only. The January 15 payable date conflicts with provider January 16; neither cash receipt nor claim valuation is admitted."
+expected_media = "pdf"

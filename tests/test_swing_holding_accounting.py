@@ -60,6 +60,24 @@ def _sale(at: datetime = ENDS[1], **changes: Any) -> ExecutionEvent:
     })
 
 
+def test_fixed_forecast_does_not_manufacture_a_managed_exit() -> None:
+    fixed = replay_holding(_spec(policy="fixed_horizon"))
+    benchmark = replay_holding(_spec(policy="fixed_horizon", security_id="SPY"))
+    target = project_holding_targets(fixed, None, benchmarks=(benchmark,))
+    assert target.fixed_horizon_net_return == pytest.approx(0.088)
+    assert target.benchmarks[0].fixed_horizon_excess_return == pytest.approx(-0.002)
+    assert target.managed_horizon_net_return is None
+    assert target.managed_exit_timestamp is None
+    assert target.benchmarks[0].managed_horizon_excess_return is None
+
+
+def test_fixed_only_comparison_still_rejects_different_research_contract() -> None:
+    fixed = replay_holding(_spec(policy="fixed_horizon"))
+    benchmark = replay_holding(_spec(policy="fixed_horizon", security_id="SPY", research_contract_sha256="d" * 64))
+    with pytest.raises(ValueError, match="research contract"):
+        project_holding_targets(fixed, None, benchmarks=(benchmark,))
+
+
 def _payment(claim: str, at: datetime, amount: float = 1.0, **changes: Any) -> PaymentEvent:
     return PaymentEvent(**{
         "event_id": "pay:" + claim, "effective_at": at, "order": 1, "evidence": _evidence(at),

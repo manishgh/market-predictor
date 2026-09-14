@@ -31,7 +31,7 @@ from market_predictor.sources.sec import SecSource
 
 _HOSTS = frozenset({
     "www.sec.gov", "data.sec.gov", "ir.amd.com", "investors.bbwinc.com", "investors.fiserv.com",
-    "www.nasdaqtrader.com", "infomemo.theocc.com", "www.fdic.gov",
+    "www.nasdaqtrader.com", "infomemo.theocc.com", "www.fdic.gov", "www.miaxglobal.com",
 })
 _SHA = r"^[0-9a-f]{64}$"
 _MAX_METADATA_BYTES = 1024 * 1024
@@ -55,6 +55,8 @@ class OfficialDocument(_Contract):
                 or parts.password or parts.port not in {None, 443} or parts.fragment
                 or value != value.strip() or any(ord(char) < 33 for char in value)):
             raise ValueError("document requires an exact public official HTTPS URL without credentials or fragments")
+        if parts.hostname == "www.miaxglobal.com" and not re.fullmatch(r"/sites/default/files/alert-files/[A-Za-z0-9_-]+\.pdf", parts.path):
+            raise ValueError("MIAX evidence must be a published exchange alert PDF")
         # Only the two official bulletin endpoints in this inventory use queries.
         if parts.query and not (
             (parts.hostname == "infomemo.theocc.com" and re.fullmatch(r"number=\d+", parts.query))

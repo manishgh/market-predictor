@@ -22,6 +22,7 @@ from market_predictor.canonical.store import (
 from market_predictor.catalysts.issuer_events.attribution_history import (
     ATTRIBUTION_MANIFEST_SCHEMA,
     ATTRIBUTION_REQUEST_SCHEMA,
+    ATTRIBUTION_SCOPE_POLICY,
     attribute_alpaca_news_history,
     load_event_attribution_history,
 )
@@ -32,6 +33,38 @@ from market_predictor.core.errors import DataReadinessError
 
 
 class SwingEventAttributionHistoryTests(unittest.TestCase):
+    def test_unknown_coverage_keeps_observed_articles_with_empty_business_labels(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            authority, result = _publish_authority(Path(temporary), blindspots=["security:wdc"], empty_labels=True)
+            loaded = load_event_attribution_history(authority)
+            self.assertEqual(result["requested_chunks"], 1)
+            self.assertEqual(result["relation_rows"], 1)
+            self.assertEqual(result["excluded_security_ids"], [])
+            self.assertEqual(result["coverage_blindspot_security_ids"], ["security:wdc"])
+            self.assertEqual(loaded.request["scope_policy"], ATTRIBUTION_SCOPE_POLICY)
+            self.assertIs(loaded.request["source_coverage_admitted"], False)
+            self.assertIs(result["source_coverage_admitted"], False)
+            self.assertIs(result["production_ready"], False)
+
+    def test_rejects_rehashed_coverage_admission_or_exclusion_policy(self) -> None:
+        from market_predictor.catalysts.issuer_events.attribution_history import _json_sha256
+
+        for key, value in (("scope_policy", "exclude_blindspots"), ("source_coverage_admitted", True),
+            ("excluded_security_ids", ["security:wdc"]), ("coverage_blindspot_security_ids", [])):
+            with self.subTest(key=key), tempfile.TemporaryDirectory() as temporary:
+                authority, _ = _publish_authority(Path(temporary), blindspots=["security:wdc"])
+                request = _read_json(authority / "_request.json")
+                request.pop("request_sha256")
+                request[key] = value
+                digest = _json_sha256(request)
+                _write_json(authority / "_request.json", {**request, "request_sha256": digest})
+                manifest = _read_json(authority / "_manifest.json")
+                manifest["request_sha256"] = digest
+                manifest[key] = value
+                _write_root_payloads(authority, manifest)
+                with self.assertRaises(DataReadinessError):
+                    load_event_attribution_history(authority)
+
     def test_persisted_schema_identities_are_frozen(self) -> None:
         self.assertEqual(ATTRIBUTION_REQUEST_SCHEMA, "swing.event_attribution_request.v1")
         self.assertEqual(ATTRIBUTION_MANIFEST_SCHEMA, "swing.event_attribution_manifest.v1")
@@ -175,7 +208,9 @@ class SwingEventAttributionHistoryTests(unittest.TestCase):
                     load_event_attribution_history(authority_dir)
 
 
-def _publish_authority(root: Path) -> tuple[Path, dict[str, object]]:
+def _publish_authority(root: Path, *, blindspots: list[str] | None = None,
+    empty_labels: bool = False,
+) -> tuple[Path, dict[str, object]]:
     collection = root / "collection"
     events_path = collection / "events" / "chunk-1.parquet"
     labels_path = root / "labels.parquet"
@@ -193,7 +228,7 @@ def _publish_authority(root: Path) -> tuple[Path, dict[str, object]]:
         production_ready=False,
     )
     write_canonical_artifact(
-        _labels(),
+        _labels().iloc[:0] if empty_labels else _labels(),
         labels_path,
         artifact_type="security_business_labels",
         audit=_audit(1),
@@ -240,7 +275,7 @@ def _publish_authority(root: Path) -> tuple[Path, dict[str, object]]:
         {
             "passed": True,
             "request_sha256": collection_request_sha256,
-            "coverage_blindspot_security_ids": [],
+            "coverage_blindspot_security_ids": blindspots or [],
         },
     )
     authority_dir = root / "relations"

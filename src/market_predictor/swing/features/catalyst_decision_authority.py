@@ -32,12 +32,22 @@ from market_predictor.canonical.store import (
 )
 from market_predictor.core.errors import DataReadinessError
 from market_predictor.resources import assert_memory_budget, memory_audit, release_process_memory
+from market_predictor.swing.catalyst_lineage import (
+    validate_observed_article_coverage,
+    validate_observed_article_scope,
+)
 from market_predictor.swing.contracts import MINIMUM_SWING_DECISION_DATE
+from market_predictor.swing.features.catalyst_decision_identity import (
+    load_decision_identity,
+    verify_decision_identity_pin,
+    verify_decision_keys,
+)
 
 LINEAGE_MANIFEST_SCHEMA: Final = "swing.catalyst_lineage_manifest.v2"
-DECISION_REQUEST_SCHEMA: Final = "edge_rebuild.catalyst_decision_request.v1"
-DECISION_AUTHORITY_SCHEMA: Final = "edge_rebuild.catalyst_decision_authority.v5"
-DECISION_MANIFEST_SCHEMA: Final = "edge_rebuild.catalyst_decision_manifest.v5"
+DECISION_REQUEST_SCHEMA: Final = "edge_rebuild.catalyst_decision_request.v3"
+DECISION_AUTHORITY_SCHEMA: Final = "edge_rebuild.catalyst_decision_authority.v7"
+DECISION_MANIFEST_SCHEMA: Final = "edge_rebuild.catalyst_decision_manifest.v7"
+TEXT_DUPLICATE_POLICY: Final = "exact_event_integrity_earliest_available_text_instance"
 DECISION_ARTIFACT_TYPE: Final = "edge_rebuild_catalyst_decisions"
 COVERAGE_ARTIFACT_TYPE: Final = "edge_rebuild_catalyst_coverage"
 WINDOWS: Final[Mapping[str, pd.Timedelta]] = {
@@ -55,6 +65,7 @@ RANKING_SOURCE_FAMILIES: Final = TRACKED_SOURCE_FAMILIES
 COVERAGE_FLAG_COLUMNS: Final = tuple(f"source_coverage_known_{family}_{window}" for family in RANKING_SOURCE_FAMILIES for window in WINDOWS)
 MAXIMUM_PROCESS_MEMORY_GIB: Final = 4.0
 MEMORY_GUARD_HEADROOM_GIB: Final = 0.5
+IDENTITY_POLICY: Final = "canonical_decisions_event_tickers_decision_window_content"
 
 _EVENT_PROJECTION: Final = (
     "event_id",
@@ -109,6 +120,7 @@ class CatalystDecisionAuthority:
 class _VerifiedLineage:
     directory: Path
     manifest: Mapping[str, object]
+    request: Mapping[str, object]
     manifest_sha256: str
     request_sha256: str
     lineage_sha256: str
@@ -228,12 +240,15 @@ def publish_catalyst_decision_authority(
     maximum_process_memory_gib: float = MAXIMUM_PROCESS_MEMORY_GIB,
     memory_guard_headroom_gib: float = MEMORY_GUARD_HEADROOM_GIB,
     production_ready: bool = False,
+    canonical_decisions: Mapping[str, str] | None = None,
     progress: Callable[[Mapping[str, object]], None] | None = None,
 ) -> CatalystDecisionAuthority:
     """Verify, merge, aggregate, and atomically publish catalyst lineage evidence."""
 
     _validate_memory_policy(maximum_process_memory_gib, memory_guard_headroom_gib)
     roots = _normalized_lineage_directories(lineage_directories)
+    decision_pin = dict(canonical_decisions) if canonical_decisions is not None else None
+    canonical = load_decision_identity(decision_pin, production_ready=production_ready)
     if output_directory.exists():
         raise DataReadinessError(f"catalyst decision authority is immutable: {output_directory}")
     output_directory.parent.mkdir(parents=True, exist_ok=True)
@@ -257,6 +272,8 @@ def publish_catalyst_decision_authority(
                     require_production_ready=production_ready,
                 )
                 verified.append(lineage)
+                if decision_pin is not None and lineage.request.get("decisions_sha256") != decision_pin["sha256"]:
+                    raise DataReadinessError("catalyst lineage belongs to another canonical decision authority")
                 coverage = lineage.coverage.copy()
                 coverage["source_lineage_sha256"] = lineage.lineage_sha256
                 coverage_frames.append(coverage)
@@ -266,6 +283,7 @@ def publish_catalyst_decision_authority(
                         database,
                         lineage=lineage,
                         record=record,
+                        canonical_decisions=canonical,
                     )
                     assignment_rows_read += read_count
                     retained_rows_read += retained_count
@@ -301,11 +319,14 @@ def publish_catalyst_decision_authority(
             require_completion_by_decision=production_ready,
         )
         _validate_decision_window(decisions)
+        if canonical is not None:
+            verify_decision_keys(decisions, canonical)
         scorer_identity = _scorer_identity_record(scorer_identities)
         request = _request_payload(
             verified,
             scorer_identity=scorer_identity,
             production_ready=production_ready,
+            canonical_decisions=decision_pin,
         )
         request_sha256 = _json_sha256(request)
         lineage_set_sha256 = _json_sha256(request["source_lineages"])
@@ -445,6 +466,11 @@ def load_catalyst_decision_authority(
     request = manifest.get("request")
     if not isinstance(request, dict) or _json_sha256(request) != manifest.get("request_sha256"):
         raise DataReadinessError("catalyst decision request hash does not verify")
+    if (request.get("schema") != DECISION_REQUEST_SCHEMA or request.get("identity_policy") != IDENTITY_POLICY
+            or request.get("text_duplicate_policy") != TEXT_DUPLICATE_POLICY
+            or request.get("identity_implementation") != _identity_implementation() or "canonical_decisions" not in request):
+        raise DataReadinessError("catalyst decision identity policy differs")
+    canonical = load_decision_identity(request["canonical_decisions"], production_ready=production_ready)
     if _json_sha256(request.get("source_lineages")) != manifest.get("source_lineage_set_sha256"):
         raise DataReadinessError("catalyst decision source lineage set does not verify")
     scorer_identity = request.get("sentiment_scorer_identity")
@@ -477,6 +503,8 @@ def load_catalyst_decision_authority(
         allow_research=not production_ready,
     )
     _validate_decision_window(decisions)
+    if canonical is not None:
+        verify_decision_keys(decisions, canonical)
     artifacts = manifest.get("artifacts")
     if not isinstance(artifacts, dict):
         raise DataReadinessError("catalyst decision artifact inventory is malformed")
@@ -516,6 +544,9 @@ def load_catalyst_decision_authority(
         raise DataReadinessError(
             "catalyst decision authority changed while it was loaded"
         )
+    verify_decision_identity_pin(request["canonical_decisions"])
+    if request["identity_implementation"] != _identity_implementation():
+        raise DataReadinessError("catalyst identity implementation changed during loading")
     return CatalystDecisionAuthority(
         directory=directory.resolve(),
         decisions=decisions,
@@ -541,6 +572,7 @@ def _verify_lineage(
     ):
         raise DataReadinessError(f"catalyst lineage is incomplete: {directory}")
     request_file = _json_object(directory / "_request.json")
+    blindspots = validate_observed_article_scope(request_file, request_file, manifest)
     declared_request_sha256 = _required_sha256(manifest, "request_sha256")
     request_sha256 = str(request_file.pop("request_sha256", ""))
     if (
@@ -578,6 +610,7 @@ def _verify_lineage(
     ):
         raise DataReadinessError(f"catalyst source coverage lineage mismatch: {directory}")
     _validate_source_coverage(coverage)
+    validate_observed_article_coverage(coverage, blindspots)
     records = _artifact_records(manifest)
     if (
         sum(_integer(record.get("event_rows"), "event_rows") for record in records)
@@ -600,6 +633,7 @@ def _verify_lineage(
     return _VerifiedLineage(
         directory=directory.resolve(),
         manifest=manifest,
+        request=request_file,
         manifest_sha256=file_sha256(manifest_path),
         request_sha256=declared_request_sha256,
         lineage_sha256=lineage_sha256,
@@ -612,6 +646,7 @@ def _merge_artifact(
     *,
     lineage: _VerifiedLineage,
     record: Mapping[str, object],
+    canonical_decisions: pd.DataFrame | None = None,
 ) -> tuple[int, int, set[str], set[tuple[str, str]]]:
     chunk_id = _required_text(record, "chunk_id")
     event_path = _child_path(lineage.directory, "events", chunk_id)
@@ -663,7 +698,8 @@ def _merge_artifact(
         & assignments["source_family"].fillna("").astype(str).str.lower().str.strip().isin(REQUIRED_MODEL_SOURCE_FAMILIES)
     ].copy()
     if not retained.empty:
-        retained = _attach_verified_event_identity(retained, direct, chunk_id=chunk_id)
+        retained = _attach_verified_event_identity(retained, direct, chunk_id=chunk_id,
+            canonical_decisions=canonical_decisions)
         _insert_assignments(database, retained, lineage.lineage_sha256)
     families = set(retained["source_family"].fillna("").astype(str).str.lower().str.strip())
     families.discard("")
@@ -698,6 +734,7 @@ def _initialize_database(database: sqlite3.Connection) -> None:
             source_event_id TEXT NOT NULL,
             source_security_id TEXT NOT NULL,
             content_identity_sha256 TEXT NOT NULL,
+            event_ticker TEXT NOT NULL,
             source_lineages TEXT NOT NULL
         )
         """
@@ -731,7 +768,7 @@ def _insert_assignments(database: sqlite3.Connection, frame: pd.DataFrame, linea
             continue
         database.execute(
             """
-            INSERT INTO assignments VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO assignments VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 evidence_id,
@@ -751,6 +788,7 @@ def _insert_assignments(database: sqlite3.Connection, frame: pd.DataFrame, linea
                 normalized["source_event_id"],
                 normalized["source_security_id"],
                 normalized["content_identity_sha256"],
+                normalized["event_ticker"],
                 _compact_json([lineage_sha256]),
             ),
         )
@@ -773,6 +811,7 @@ def _aggregate_database(database: sqlite3.Connection, *, source_families: tuple[
         "source_event_id",
         "source_security_id",
         "content_identity_sha256",
+        "event_ticker",
         "source_lineages",
     )
     cursor = database.execute(f"SELECT {', '.join(columns)} FROM assignments ORDER BY decision_id, event_id, window_name")
@@ -840,7 +879,7 @@ def _deduplicate_verified_events(frame: pd.DataFrame) -> pd.DataFrame:
         return frame
     durable_values = (
         "security_id",
-        "ticker",
+        "event_ticker",
         "source_family",
         "feature_available_at_utc",
         "source_event_id",
@@ -859,7 +898,7 @@ def _deduplicate_verified_events(frame: pd.DataFrame) -> pd.DataFrame:
         frame,
         keys=("source_family", "source_event_id", "security_id"),
         values=(
-            "ticker",
+            "event_ticker",
             "feature_available_at_utc",
             "source_security_id",
             "content_identity_sha256",
@@ -868,10 +907,13 @@ def _deduplicate_verified_events(frame: pd.DataFrame) -> pd.DataFrame:
         ),
         description="durable catalyst source-event identity",
     )
+    # Separate publications can share model-input text, not inference/attribution
+    # receipts. Preserve the earliest instance below; exact same-event checks above
+    # still reject conflicting scores. Never average, round or rewrite evidence.
     _reject_identity_conflicts(
         frame,
-        keys=("security_id", "content_identity_sha256"),
-        values=("ticker", "source_security_id", "sentiment_numeric", "relevance"),
+        keys=("decision_id", "window_name", "security_id", "content_identity_sha256"),
+        values=("ticker", "source_security_id"),
         description="catalyst issuer/content identity",
     )
 
@@ -1151,14 +1193,25 @@ def _audit_report(name: str, failures: int, rows: int) -> CanonicalAuditReport:
     )
 
 
+def _identity_implementation() -> dict[str, str]:
+    directory = Path(__file__).parent
+    return {name: file_sha256(directory / name)
+        for name in ("catalyst_decision_authority.py", "catalyst_decision_identity.py")}
+
+
 def _request_payload(
     lineages: Sequence[_VerifiedLineage],
     *,
     scorer_identity: Mapping[str, str] | None,
     production_ready: bool,
+    canonical_decisions: Mapping[str, str] | None,
 ) -> dict[str, object]:
     return {
         "schema": DECISION_REQUEST_SCHEMA,
+        "identity_policy": IDENTITY_POLICY,
+        "text_duplicate_policy": TEXT_DUPLICATE_POLICY,
+        "identity_implementation": _identity_implementation(),
+        "canonical_decisions": canonical_decisions,
         "windows": {name: int(value.total_seconds()) for name, value in WINDOWS.items()},
         "eligibility": {
             "training_eligible": True,
@@ -1254,6 +1307,7 @@ def _normalized_assignment(record: Mapping[str, object]) -> dict[str, object]:
     return {
         "event_id": _value_text(record.get("event_id"), "event_id"),
         "ticker": _value_text(record.get("ticker"), "ticker").upper(),
+        "event_ticker": _value_text(record.get("event_ticker"), "event_ticker").upper(),
         "security_id": _value_text(record.get("security_id"), "security_id"),
         "source_family": _value_text(record.get("source_family"), "source_family").lower(),
         "feature_available_at_utc": available,
@@ -1278,6 +1332,7 @@ def _attach_verified_event_identity(
     direct_events: pd.DataFrame,
     *,
     chunk_id: str,
+    canonical_decisions: pd.DataFrame | None = None,
 ) -> pd.DataFrame:
     identity_columns = (
         "event_id",
@@ -1319,15 +1374,17 @@ def _attach_verified_event_identity(
     assignment_available = pd.to_datetime(output["feature_available_at_utc"], utc=True)
     if bool(
         output["security_id"].astype(str).ne(output["event_security_id"].astype(str)).any()
-        or output["ticker"].astype(str).str.upper().ne(output["event_ticker"].astype(str).str.upper()).any()
         or output["source_family"].astype(str).str.lower().ne(output["event_source_family"].astype(str).str.lower()).any()
         or assignment_available.ne(event_available).any()
     ):
         raise DataReadinessError(f"catalyst assignment conflicts with event identity: {chunk_id}")
+    if canonical_decisions is not None:
+        verify_decision_keys(output, canonical_decisions)
+    elif output["ticker"].astype(str).str.upper().ne(output["event_ticker"].astype(str).str.upper()).any():
+        raise DataReadinessError("rename-spanning catalyst requires pinned canonical decisions")
     return output.drop(
         columns=[
             "event_security_id",
-            "event_ticker",
             "event_source_family",
             "event_feature_available_at_utc",
         ]

@@ -28,6 +28,10 @@ from market_predictor.catalysts.issuer_events.attribution import (
     RELATION_COLUMNS,
     build_event_security_relations,
 )
+from market_predictor.catalysts.issuer_events.identity_publication import (
+    validate_issuer_event_scope,
+    verify_issuer_identity_inputs,
+)
 from market_predictor.catalysts.issuer_events.news_history_contracts import (
     NEWS_HISTORY_MANIFEST_SCHEMA,
 )
@@ -36,6 +40,7 @@ from market_predictor.resources import assert_memory_budget, release_process_mem
 
 ATTRIBUTION_REQUEST_SCHEMA = "swing.event_attribution_request.v1"
 ATTRIBUTION_MANIFEST_SCHEMA = "swing.event_attribution_manifest.v1"
+ATTRIBUTION_SCOPE_POLICY = "observed_articles_not_coverage_admission"
 _RELATION_CHANNELS = (
     "direct_issuer",
     "business_exposure",
@@ -91,20 +96,19 @@ def attribute_alpaca_news_history(
         expected_type="security_business_label_coverage",
         allow_research=True,
     )
+    verify_issuer_identity_inputs(labels, identities, label_manifest, identity_manifest)
     artifacts_raw = collection.get("artifacts")
     if not isinstance(artifacts_raw, list):
         raise DataReadinessError("news collection manifest has no artifact inventory")
     artifacts = [{str(key): value for key, value in item.items()} for item in artifacts_raw if isinstance(item, dict)]
     if len(artifacts) != len(artifacts_raw):
         raise DataReadinessError("news collection artifact inventory is malformed")
-    excluded_raw = collection_audit.get(
-        "coverage_blindspot_security_ids",
-        [],
-    )
-    if not isinstance(excluded_raw, list):
-        raise DataReadinessError("collection audit blindspot identities are malformed")
-    excluded_security_ids = tuple(sorted(str(value) for value in excluded_raw))
-    eligible = [artifact for artifact in artifacts if str(artifact.get("security_id", "")) not in excluded_security_ids]
+    blindspots = sorted(set(_string_list(
+        collection_audit.get("coverage_blindspot_security_ids", []),
+        "collection audit coverage_blindspot_security_ids",
+    )))
+    # Article attribution is independent of source completeness and cohort selection.
+    eligible = artifacts
     request = {
         "schema": ATTRIBUTION_REQUEST_SCHEMA,
         "collection_manifest_path": str(collection_manifest_path.resolve()),
@@ -114,15 +118,20 @@ def attribute_alpaca_news_history(
         "collection_audit_sha256": file_sha256(collection_audit_path),
         "business_labels_path": str(business_labels_path.resolve()),
         "business_labels_sha256": str(label_manifest["artifact_sha256"]),
+        "business_labels_manifest_sha256": file_sha256(manifest_path_for(business_labels_path)),
         "security_identities_path": str(
             security_identities_path.resolve()
         ),
         "security_identities_sha256": str(
             identity_manifest["artifact_sha256"]
         ),
+        "security_identities_manifest_sha256": file_sha256(manifest_path_for(security_identities_path)),
         "attribution_policy_version": ATTRIBUTION_POLICY_VERSION,
         "attribution_policy_sha256": ATTRIBUTION_POLICY_SHA256,
-        "excluded_security_ids": list(excluded_security_ids),
+        "scope_policy": ATTRIBUTION_SCOPE_POLICY,
+        "coverage_blindspot_security_ids": blindspots,
+        "source_coverage_admitted": False,
+        "excluded_security_ids": [],
         "production_ready": False,
     }
     request_sha256 = _json_sha256(request)
@@ -176,6 +185,7 @@ def attribute_alpaca_news_history(
             )
             if str(event_manifest["artifact_sha256"]) != source_sha256:
                 raise DataReadinessError(f"source event hash mismatch for {chunk_id}")
+            validate_issuer_event_scope(events, identities, identity_manifest)
             relations = build_event_security_relations(
                 events,
                 labels,
@@ -246,7 +256,10 @@ def attribute_alpaca_news_history(
         "observed_chunks": len(records),
         "skipped_chunks": skipped,
         "failed_chunks": failures,
-        "excluded_security_ids": list(excluded_security_ids),
+        "scope_policy": ATTRIBUTION_SCOPE_POLICY,
+        "coverage_blindspot_security_ids": blindspots,
+        "source_coverage_admitted": False,
+        "excluded_security_ids": [],
         "relation_rows": sum(_required_record_int(item, "rows") for item in records),
         "channel_counts": channel_counts,
         "artifacts": records,
@@ -304,23 +317,22 @@ def load_event_attribution_history(
         or request_payload.get("production_ready") is not False
         or request_payload.get("attribution_policy_version") != ATTRIBUTION_POLICY_VERSION
         or request_payload.get("attribution_policy_sha256") != ATTRIBUTION_POLICY_SHA256
+        or request_payload.get("scope_policy") != ATTRIBUTION_SCOPE_POLICY
+        or request_payload.get("source_coverage_admitted") is not False
     ):
         raise DataReadinessError("event attribution request hash or policy does not verify")
 
     source_records = _verify_source_lineage(request_payload)
-    excluded = _string_list(
-        request_payload.get("excluded_security_ids"),
-        "request excluded_security_ids",
-    )
-    if excluded != sorted(excluded) or len(excluded) != len(set(excluded)):
-        raise DataReadinessError("event attribution excluded security identities do not verify")
-    if manifest.get("excluded_security_ids") != excluded:
-        raise DataReadinessError("event attribution exclusion lineage does not verify")
-    eligible_sources = {
-        chunk_id: record
-        for chunk_id, record in source_records.items()
-        if str(record.get("security_id", "")) not in set(excluded)
-    }
+    if (
+        request_payload.get("excluded_security_ids") != []
+        or manifest.get("excluded_security_ids") != []
+        or manifest.get("scope_policy") != ATTRIBUTION_SCOPE_POLICY
+        or manifest.get("source_coverage_admitted") is not False
+        or manifest.get("coverage_blindspot_security_ids")
+        != request_payload.get("coverage_blindspot_security_ids")
+    ):
+        raise DataReadinessError("event attribution coverage policy does not verify")
+    eligible_sources = source_records
 
     artifact_records = _artifact_records(manifest)
     records_by_chunk = {
@@ -545,14 +557,14 @@ def _verify_source_lineage(
     ):
         raise DataReadinessError("event attribution collection audit hash does not verify")
     audit = _json_object(audit_path)
-    excluded = _string_list(
-        audit.get("coverage_blindspot_security_ids"),
+    blindspots = _string_list(
+        audit.get("coverage_blindspot_security_ids", []),
         "collection audit coverage_blindspot_security_ids",
     )
     if (
         audit.get("passed") is not True
         or audit.get("request_sha256") != collection_request_sha256
-        or excluded != request.get("excluded_security_ids")
+        or sorted(set(blindspots)) != request.get("coverage_blindspot_security_ids")
     ):
         raise DataReadinessError("event attribution collection audit lineage does not verify")
 
@@ -560,7 +572,7 @@ def _verify_source_lineage(
         request.get("business_labels_path"),
         "business labels path",
     )
-    _, labels_manifest = load_canonical_artifact(
+    labels, labels_manifest = load_canonical_artifact(
         labels_path,
         expected_type="security_business_labels",
         allow_research=True,
@@ -571,12 +583,14 @@ def _verify_source_lineage(
         "request",
     ):
         raise DataReadinessError("event attribution business-label hash does not verify")
+    if file_sha256(manifest_path_for(labels_path)) != request.get("business_labels_manifest_sha256"):
+        raise DataReadinessError("event attribution business-label manifest does not verify")
 
     identities_path = _resolved_path(
         request.get("security_identities_path"),
         "security identities path",
     )
-    _, identities_manifest = load_canonical_artifact(
+    identities, identities_manifest = load_canonical_artifact(
         identities_path,
         expected_type="security_business_label_coverage",
         allow_research=True,
@@ -587,6 +601,9 @@ def _verify_source_lineage(
         "request",
     ):
         raise DataReadinessError("event attribution security-identity hash does not verify")
+    if file_sha256(manifest_path_for(identities_path)) != request.get("security_identities_manifest_sha256"):
+        raise DataReadinessError("event attribution security-identity manifest does not verify")
+    verify_issuer_identity_inputs(labels, identities, labels_manifest, identities_manifest)
 
     raw_records = collection.get("artifacts")
     if not isinstance(raw_records, list):
@@ -615,6 +632,7 @@ def _verify_source_lineage(
             expected_type="events",
             allow_research=True,
         )
+        validate_issuer_event_scope(events, identities, identities_manifest)
         inputs = source_manifest.get("inputs")
         if (
             source_manifest.get("production_ready") is not False

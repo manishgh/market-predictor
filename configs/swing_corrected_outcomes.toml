@@ -1,0 +1,246 @@
+schema_version = "market_predictor.corrected_outcomes"
+scope = "partial_source_bounded_initial_fit_research"
+decision_start = "2019-07-09"
+numerical_end = "2024-05-28"
+cost_prepaid_fraction = 0.002
+dividend_policy = "evidenced_marks_only_no_inferred_receivables"
+managed_policy = "unavailable"
+batch_rows = 64
+promotion_eligible = false
+action_archive = "data/raw/swing_full_cohort_corporate_actions"
+action_audit_sha256 = "04553f69998bd4a6034c04ffef95238aad9b516eaa0cf0ad6849dc034fedf40c"
+source_selection = { path = "data/reports/swing_symbol_corrected_sources.json", sha256 = "01153e33e8b6a161c04fde2dbea8021eeea369fef6988868c38b49f0e0c065ee" }
+parent_config = { path = "configs/swing_initial_fit_raw_share_plan.toml", sha256 = "cfef6ddf203c8a4496b2527154f86d37fac1706e2e4bd489562bc3d38543eb54" }
+action_config = { path = "configs/swing_full_cohort_corporate_actions.toml", sha256 = "0d81b536625c08b6b8422d26f83e571ed4758e9aaef893d952017a467806808d" }
+symbol_corrections = { path = "configs/swing_symbol_corrections.toml", sha256 = "be63ad9460f80cf87a377b903971c5415bcfefdf5d457308a9a9028d2b5488e3" }
+research_contract = { path = "configs/swing_research.toml", sha256 = "411d1d5e745a038fb1e4f16433eb7df6411f4c74c95264d9878ec64b9d0e42d9" }
+simulation_policy = { path = "configs/swing_trade_simulation.toml", sha256 = "3754e89ece9e46beabe4e5a82504daa27085ffff8d7858fd158c9abbe520a5b2" }
+
+# Temporal non-entitlement review only. Provider payable_date stays 2024-01-16;
+# OCC states 2024-01-15. Neither is admitted as an observed cash payment.
+# Explicit ex-distribution cutoff: only entry < ex_date <= horizon can own this claim.
+[[reviewed_cash_distribution_scopes]]
+action_id = "6e3ba6ba-8d29-42fd-8023-8928105fcd9b"
+symbol = "QQQ"
+family = "cash_dividends"
+entitlement_basis = "reviewed_cash_ex_distribution_cutoff"
+record_sha256 = "3f4fd42d35f7c615e74aea512a51f7f1d7ba5d7947547709bdaa9ef4a8c2a8e1"
+ex_date = "2023-12-27"
+record_date = "2023-12-28"
+official_payable_date = "2024-01-15"
+inventory = { path = "configs/swing_qqq_distribution_documents.toml", sha256 = "e4498bcd8edb7c9a4d7d8467d63ca802f66cb8cd98fbf2d37de1daa55d742f1b" }
+archive = "data/raw/swing_qqq_distribution_exchange_documents"
+report_sha256 = "7ef2defdf7b853aafe5a2211cd35d7b48c385b38ce7a1922bcdeeebc48be391c"
+document_id = "qqq_special_distribution_53847"
+document = { path = "data/raw/swing_qqq_distribution_exchange_documents/documents/qqq_special_distribution_53847/c77b25688052444486cc9db58e84531b/body-ebf0b32861a03aa88a2bdf125119cbc38b25fab74cce347b402dac289f8a4d20.bin", sha256 = "ebf0b32861a03aa88a2bdf125119cbc38b25fab74cce347b402dac289f8a4d20" }
+record_locator = "OCC 53847 page 1 distribution paragraph; ex/record scope corroborates provider, payable date conflicts"
+
+[[decision_corrections]]
+security_id = "cik:0001415404"
+parent_ticker = "ECHO"
+ticker = "SATS"
+first_session = "2019-07-09"
+last_session = "2024-05-28"
+document_ids = ["echostar_pre_window_symbol", "echostar_end_window_symbol", "echo_global_competing_owner"]
+
+[[decision_corrections]]
+security_id = "cik:0000798354"
+parent_ticker = "FI"
+ticker = "FISV"
+first_session = "2019-07-09"
+last_session = "2023-06-06"
+document_ids = ["fiserv_pre_window_symbol", "fiserv_transfer_completion"]
+
+[[decision_corrections]]
+security_id = "cik:0000798354"
+parent_ticker = "FISV"
+ticker = "FI"
+first_session = "2023-06-07"
+last_session = "2024-05-28"
+document_ids = ["fiserv_transfer_completion", "fiserv_post_transfer_symbol"]
+
+# These dates are blocking boundaries, never inferred conversion/settlement terms.
+# Replaced old classes remain blocked after completion; membership cannot restore them.
+[[official_windows]]
+security_id = "sp500-historical:dce126626e1cbbffa655be67"
+first_session = "2022-12-22"
+last_session = "2024-05-28"
+record_locator = "abiomed_merger_completion Item 2.01"
+reason = "unknown_cvr_and_payment"
+document = { path = "data/raw/swing_cash_merger_completion_documents/documents/abiomed_merger_completion/c460717482d44a908a4e56c0e79d8ca9/body-4cceb151cbeb2f3c0368e996a23dcc1cb658b2bc730dd33466ca862bc2845ab4.bin", sha256 = "4cceb151cbeb2f3c0368e996a23dcc1cb658b2bc730dd33466ca862bc2845ab4" }
+
+[[official_windows]]
+security_id = "sp500-historical:089a869095e510fa466d0746"
+first_session = "2023-10-13"
+last_session = "2024-05-28"
+record_locator = "activision_merger_completion Item 2.01"
+reason = "cash_merger_payment_unproven"
+document = { path = "data/raw/swing_cash_merger_completion_documents/documents/activision_merger_completion/4fc3bf28f5c04349b6b163985500b746/body-4953b64acd5eaba8398f68c43b219d7eb4294e1c6c712f82e04577a612c5bcbf.bin", sha256 = "4953b64acd5eaba8398f68c43b219d7eb4294e1c6c712f82e04577a612c5bcbf" }
+
+[[official_windows]]
+security_id = "sp500-historical:03b394e23455c9e52f6f9635"
+first_session = "2021-01-07"
+last_session = "2024-05-28"
+record_locator = "tiffany_merger_completion Item 2.01"
+reason = "cash_merger_payment_unproven"
+document = { path = "data/raw/swing_cash_merger_completion_documents/documents/tiffany_merger_completion/a7306d36f9c64090a22f2fbbd20623a2/body-38c28cfa07f0421b4019f5b593e8c85c504df97c28c8ab274453907380327cd6.bin", sha256 = "38c28cfa07f0421b4019f5b593e8c85c504df97c28c8ab274453907380327cd6" }
+
+[[official_windows]]
+security_id = "sp500-historical:52b87459a9a3e503634aaf4d"
+first_session = "2022-10-27"
+last_session = "2024-05-28"
+record_locator = "TWTR completion 8-K Item 2.01; effective October 27, not provider October 28"
+reason = "official_effective_date_conflicts_and_payment_unproven"
+document = { path = "data/raw/sec_identity_evidence_20260802/TWTR_0001193125-22-272772_d411753d8k.htm", sha256 = "60bfc50d97605692296877358a8150695e9ec7ae13a2df2bed331ddd1f33a653" }
+
+[[official_windows]]
+security_id = "cik:0001415404"
+first_session = "2019-09-10"
+last_session = "2019-09-10"
+record_locator = "echostar_bss_completion Transaction and Two-Way Trading"
+reason = "distribution_due_bills_and_delivery_unproven"
+document = { path = "data/raw/swing_share_transition_completion_documents/documents/echostar_bss_completion/a7689354ff654b02ae644fd2c3a8dfd2/body-e97eb4458d2f58d433ff776062f526d963cad34068e2e113e834c292c06b6853.bin", sha256 = "e97eb4458d2f58d433ff776062f526d963cad34068e2e113e834c292c06b6853" }
+
+[[official_windows]]
+security_id = "sp500-historical:b9da4e8e0c995f2aac62cacc"
+first_session = "2019-08-08"
+last_session = "2024-05-28"
+record_locator = "anadarko_merger_completion Item 2.01"
+reason = "successor_delivery_and_payment_unproven"
+document = { path = "data/raw/swing_share_transition_completion_documents/documents/anadarko_merger_completion/791f5e2ac14b466f9302e571f674148b/body-4b008292a9e5fc15322e5bb1e84a870ead9bde61960bebf865de32f3534bdacc.bin", sha256 = "4b008292a9e5fc15322e5bb1e84a870ead9bde61960bebf865de32f3534bdacc" }
+
+[[official_windows]]
+security_id = "sp500-historical:1162a39672a4eb6ba315dc35"
+first_session = "2020-04-03"
+last_session = "2024-05-28"
+record_locator = "raytheon_merger_completion Item 2.01"
+reason = "successor_delivery_and_class_sequence_unproven"
+document = { path = "data/raw/swing_share_transition_completion_documents/documents/raytheon_merger_completion/3856d7ff777a49a6a19c5bf5f0487bb7/body-74735d2c7c9d3f34b54bda7dde420982b85955e1f4cad12c98f981cc74c24c2d.bin", sha256 = "74735d2c7c9d3f34b54bda7dde420982b85955e1f4cad12c98f981cc74c24c2d" }
+
+[[official_windows]]
+security_id = "sp500-historical:007ad5a651d0e9db02771208"
+first_session = "2019-12-04"
+last_session = "2024-05-28"
+record_locator = "viacom_cbs_merger_completion Item 2.01 Class B exchange"
+reason = "successor_delivery_and_fractional_cash_unproven"
+document = { path = "data/raw/swing_share_transition_completion_documents/documents/viacom_cbs_merger_completion/d5fd426e93fe4969a516c04aa37fb893/body-fd07ab214b2922806cf2fb006ce21ee9b3cc81add73e063c30be46bf824ce3d3.bin", sha256 = "fd07ab214b2922806cf2fb006ce21ee9b3cc81add73e063c30be46bf824ce3d3" }
+
+[[official_windows]]
+security_id = "cik:0000813828"
+first_session = "2019-12-04"
+last_session = "2019-12-05"
+record_locator = "viacom_cbs_merger_completion CBS Class B unchanged; listing transition"
+reason = "corporate_transition_requires_interpretation"
+document = { path = "data/raw/swing_share_transition_completion_documents/documents/viacom_cbs_merger_completion/d5fd426e93fe4969a516c04aa37fb893/body-fd07ab214b2922806cf2fb006ce21ee9b3cc81add73e063c30be46bf824ce3d3.bin", sha256 = "fd07ab214b2922806cf2fb006ce21ee9b3cc81add73e063c30be46bf824ce3d3" }
+
+[[official_windows]]
+security_id = "cik:0001437107"
+first_session = "2022-04-08"
+last_session = "2022-04-11"
+record_locator = "discovery_warner_completion Item 2.01 and WBD listing transition"
+reason = "reclassification_and_share_delivery_unproven"
+document = { path = "data/raw/swing_share_transition_completion_documents/documents/discovery_warner_completion/19d92945bc744278aae253da29d57f60/body-00606b52e6a128d58b79bc1ae8fb09ad8e1423c915bb2eab6f53c818ecd50c0d.bin", sha256 = "00606b52e6a128d58b79bc1ae8fb09ad8e1423c915bb2eab6f53c818ecd50c0d" }
+
+[[official_windows]]
+security_id = "sp500-historical:7ba2ac7f1ba475611cb72856"
+first_session = "2022-06-08"
+last_session = "2024-05-28"
+record_locator = "cerner_merger_completion Item 2.01"
+reason = "cash_merger_payment_unproven"
+document = { path = "data/raw/swing_remaining_merger_completion_documents/documents/cerner_merger_completion/03c8710813cd4c74aa6c23b70ed4e53e/body-fb4514bfb044aa78b14fcad1e8a22c164c5338ea06551f08a6d1c33fcd76005a.bin", sha256 = "fb4514bfb044aa78b14fcad1e8a22c164c5338ea06551f08a6d1c33fcd76005a" }
+
+[[official_windows]]
+security_id = "sp500-historical:06bae2877eeca0aaf6da58d3"
+first_session = "2021-07-21"
+last_session = "2024-05-28"
+record_locator = "alexion_merger_completion Item 2.01"
+reason = "ads_election_delivery_and_payment_unproven"
+document = { path = "data/raw/swing_remaining_merger_completion_documents/documents/alexion_merger_completion/dd3f5900632d41f4a08a482e2b5d9422/body-80b5b4c106b9bc8144698721cca4c7f7af4afa604f87dc1afcef3610eee583f2.bin", sha256 = "80b5b4c106b9bc8144698721cca4c7f7af4afa604f87dc1afcef3610eee583f2" }
+
+[[official_windows]]
+security_id = "sp500-historical:4a0a574d417474d08903f40e"
+first_session = "2021-12-14"
+last_session = "2024-05-28"
+record_locator = "kansas_city_merger_completion Item 2.01"
+reason = "successor_delivery_and_payment_unproven"
+document = { path = "data/raw/swing_remaining_merger_completion_documents/documents/kansas_city_merger_completion/14d9e98c6185459a9ad91da90c3acf41/body-e3f200bcd3260f92d4d75dfcdae5cae7b087fea364b889afc4edb1d52175b401.bin", sha256 = "e3f200bcd3260f92d4d75dfcdae5cae7b087fea364b889afc4edb1d52175b401" }
+
+[[official_windows]]
+security_id = "sp500-historical:3c26a60436814820e567be2a"
+first_session = "2021-05-14"
+last_session = "2024-05-28"
+record_locator = "flir_merger_completion Item 2.01; approximately stated clock"
+reason = "effective_clock_delivery_and_payment_unproven"
+document = { path = "data/raw/swing_remaining_merger_completion_documents/documents/flir_merger_completion/d71fe97ac6b44a579438a6680e64b3ae/body-baea5120109c0929c55770839b162336d8d0bd0bfbae8f7faedec805483542f1.bin", sha256 = "baea5120109c0929c55770839b162336d8d0bd0bfbae8f7faedec805483542f1" }
+
+[[official_windows]]
+security_id = "sp500-historical:e344309d31df413f060e5d44"
+first_session = "2021-08-26"
+last_session = "2024-05-28"
+record_locator = "maxim_merger_completion Item 2.01"
+reason = "successor_delivery_and_fractional_cash_unproven"
+document = { path = "data/raw/swing_remaining_merger_completion_documents/documents/maxim_merger_completion/775bf2dd22984f50aae54b41a4877ab8/body-57febc5762dadd16fa56be46cfc75269f727ee59264e2f023a6af8148b2a3414.bin", sha256 = "57febc5762dadd16fa56be46cfc75269f727ee59264e2f023a6af8148b2a3414" }
+
+[[official_windows]]
+security_id = "sp500-historical:3630f8fcc1aa888bc6305b78"
+first_session = "2021-01-15"
+last_session = "2024-05-28"
+record_locator = "concho_merger_completion Item 2.01; cessation-text year inconsistency retained"
+reason = "successor_delivery_and_clock_conflict"
+document = { path = "data/raw/swing_remaining_merger_completion_documents/documents/concho_merger_completion/2113613367c34813a51b701da082e1cf/body-0f5104aa3a4f1c1cdcb4a33c0453026d8ccb815b9c99c3a67565926de1688d70.bin", sha256 = "0f5104aa3a4f1c1cdcb4a33c0453026d8ccb815b9c99c3a67565926de1688d70" }
+
+[[official_windows]]
+security_id = "sp500-historical:3a987add09215ebdeb70d8b4"
+first_session = "2021-04-15"
+last_session = "2024-05-28"
+record_locator = "varian_merger_completion Item 2.01"
+reason = "cash_merger_payment_unproven"
+document = { path = "data/raw/swing_remaining_merger_completion_documents/documents/varian_merger_completion/06f0e466a9984f76a854f586948d97a6/body-dcba5fe86d336e0dbbfc84e28f3821486e56e1df0220fa1dad35b71c464acec9.bin", sha256 = "dcba5fe86d336e0dbbfc84e28f3821486e56e1df0220fa1dad35b71c464acec9" }
+
+[[official_windows]]
+security_id = "sp500-historical:b014ab2a87e8ebdc1f6cd856"
+first_session = "2022-10-03"
+last_session = "2024-05-28"
+record_locator = "duke_merger_completion Item 2.01"
+reason = "successor_delivery_and_fractional_cash_unproven"
+document = { path = "data/raw/swing_remaining_merger_completion_documents/documents/duke_merger_completion/d6dcd84e07574d5d8580259d66632c16/body-46b30e57f1a44845ac5a3098f5e778b07ecf813bd0c86f5305620ec1dcc98f7a.bin", sha256 = "46b30e57f1a44845ac5a3098f5e778b07ecf813bd0c86f5305620ec1dcc98f7a" }
+
+[[official_windows]]
+security_id = "cusip:N59465109"
+first_session = "2020-11-16"
+last_session = "2024-05-28"
+record_locator = "mylan_combination_completion Item 2.01"
+reason = "conversion_clock_and_delivery_unproven"
+document = { path = "data/raw/swing_remaining_merger_completion_documents/documents/mylan_combination_completion/40619b1138b34063b19db200c9ae6dbc/body-5bf950141ce69ceca5cdb172b405ca6d847d8606241f2025cd691ed150624176.bin", sha256 = "5bf950141ce69ceca5cdb172b405ca6d847d8606241f2025cd691ed150624176" }
+
+[[official_windows]]
+security_id = "sp500-historical:183d197c1c5a086c24d23cdf"
+first_session = "2022-02-28"
+last_session = "2024-05-28"
+record_locator = "ihs_markit_merger_completion Item 2.01"
+reason = "successor_delivery_and_fractional_cash_unproven"
+document = { path = "data/raw/swing_remaining_merger_completion_documents/documents/ihs_markit_merger_completion/4f44e478de7a467482b4622e421241fa/body-3bc6bead9c71443eed470b248e0a8d706855edf815a385445eee7ddd59aa9453.bin", sha256 = "3bc6bead9c71443eed470b248e0a8d706855edf815a385445eee7ddd59aa9453" }
+
+[[official_windows]]
+security_id = "sp500-historical:d49a0385024665e83cf5fbb9"
+first_session = "2022-04-01"
+last_session = "2024-05-28"
+record_locator = "peoples_united_merger_completion Item 2.01; April 1 not suspension April 4"
+reason = "official_effective_date_and_delivery_unproven"
+document = { path = "data/raw/swing_remaining_merger_completion_documents/documents/peoples_united_merger_completion/fbf3b3893ad6407996913afdf039dbc1/body-8836155a09e22b02be35f4aadde3687cf10626daae7928564e4ca17ca028b64f.bin", sha256 = "8836155a09e22b02be35f4aadde3687cf10626daae7928564e4ca17ca028b64f" }
+
+[[official_windows]]
+security_id = "sp500-historical:698ef29bd088f87c3341d74a"
+first_session = "2022-12-14"
+last_session = "2024-05-28"
+record_locator = "Fortune Brands Items 1.01/2.01 completed distribution; 5.03 FBIN December 15"
+reason = "distribution_and_old_class_namespace_unadmitted"
+document = { path = "data/raw/sec_identity_evidence_20260802/FBHS_0001193125-22-306146_d420098d8k.htm", sha256 = "6e1da8ad04373a9f97c4106c6c7695538a8b79cac7c1a4625e92afc8e011478a" }
+
+[[official_windows]]
+security_id = "sp500-historical:29d9b35fd5c50ee0f79ccc71"
+first_session = "2023-03-10"
+last_session = "2024-05-28"
+record_locator = "SVB March 10 8-K subsidiary receivership; no common recovery valuation"
+reason = "halted_old_class_recovery_unavailable"
+document = { path = "data/raw/sec_identity_evidence_20260802/SIVB_0001193125-23-070254_d487554d8k.htm", sha256 = "da08544d05b1ffbce352e7038052a0dc180938a050627cd7ec7b432a49909fab" }

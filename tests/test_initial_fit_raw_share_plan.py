@@ -17,15 +17,15 @@ from market_predictor.canonical.store import file_sha256
 from market_predictor.commands import swing_collection as collection_commands
 from market_predictor.commands import swing_research as research_commands
 from market_predictor.core.errors import DataReadinessError
-from market_predictor.edge_rebuild import swing_history_collection as history_collection
-from market_predictor.edge_rebuild.swing_history_collection import (
+from market_predictor.evidence.hashing import json_sha256
+from market_predictor.heavy_jobs import HEAVY_JOB_BUSY_EXIT_CODE, HeavyJobBusyError, heavy_job_lease
+from market_predictor.swing.datasets import history_archive as history_collection
+from market_predictor.swing.datasets import initial_fit_raw_share_plan as planner
+from market_predictor.swing.datasets.history_archive import (
     SwingDailyPage,
     collect_swing_history_plan,
     load_complete_swing_history_collection,
 )
-from market_predictor.evidence.hashing import json_sha256
-from market_predictor.heavy_jobs import HEAVY_JOB_BUSY_EXIT_CODE, HeavyJobBusyError, heavy_job_lease
-from market_predictor.swing.datasets import initial_fit_raw_share_plan as planner
 from market_predictor.swing.datasets.history_plan_publication import AUTHORITY_SCHEMA, DAILY_BAR_UNITS_FILE, PLAN_SCHEMA
 from market_predictor.swing.datasets.holding_observation_requirements import IDENTITY_COLUMNS, MEMBERSHIP_COLUMNS
 from tests.test_swing_history_collection import _test_transport_response

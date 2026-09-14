@@ -1,0 +1,11 @@
+schema_version = "market_predictor.official_document_inventory"
+maximum_response_bytes = 16777216
+attempts_per_document_per_run = 1
+
+# Already retained in sec_identity_evidence_20260802. The action scope pins those
+# bytes separately; this inventory neither asserts a new receipt nor admits returns.
+[[documents]]
+document_id = "fortune_brands_separation_completion"
+url = "https://www.sec.gov/Archives/edgar/data/1519751/000119312522306146/d420098d8k.htm"
+purpose = "Retained completion filing: Items 1.01/2.01 report MasterBrand separation on December 14 2022; Item 5.03 reports FBIN trading from December 15 open. Query-source identity only, not due-bill, delivery, payment or valuation admission."
+expected_media = "html"

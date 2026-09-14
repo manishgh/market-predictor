@@ -1,0 +1,42 @@
+{
+  "schema": "swing.initial_fit_monthly_lineage_preparation.v1",
+  "decisions": {
+    "path": "configs/swing_corrected_outcomes.toml",
+    "sha256": "ded3b30af1185c7ab0759fa5f81c559c37c590419751c942b61ab479e67c2348"
+  },
+  "policy": {
+    "path": "configs/catalyst_lineage.toml",
+    "sha256": "b9d5d25b9b5dcd453a3b014e4946d6b29a3cf85dea75333b997cf95eb51466a0"
+  },
+  "sources": {
+    "early": {
+      "kind": "derived",
+      "directory": "data/research/issuer_initial_fit_early_saved_v1",
+      "manifest_sha256": "a6c11d649e1d2a38c8b28dba7db9ee092431f2d581f0da9e0b7c64f8e59bc2f0"
+    },
+    "later": {
+      "kind": "derived",
+      "directory": "data/research/issuer_initial_fit_later_saved_v1",
+      "manifest_sha256": "445c3c53e94f73de37dd44d2488bd2cd2dea603cd6a3719472fa0afd6b23dce3"
+    },
+    "corrected": {
+      "kind": "corrected",
+      "collection": {
+        "directory": "data/raw/swing_issuer_news_corrections",
+        "manifest_sha256": "4da07ce57bf864845b79b0043816e49c104dc047eb81a30372ad952519f855d8"
+      },
+      "attribution": {
+        "directory": "data/research/swing_issuer_news_corrections_attribution_v1",
+        "manifest_sha256": "ccf3a5ea9a8c057672579be230ece1a7aabac7f4067f12beba3c98d411cbf93e"
+      },
+      "sentiment": {
+        "directory": "data/research/swing_issuer_news_corrections_sentiment_finbert_v1",
+        "manifest_sha256": "be8cc77ca15fb79555d11ffd36f3737a0a1142a81fa987a7c6465821cb1aad6f"
+      },
+      "audit": {
+        "path": "data/reports/swing_issuer_news_corrections_audit.json",
+        "sha256": "b4875e7cbf3334a346fff3047b5202c0c21a0801c473e01fcd9d7110bd202ecb"
+      }
+    }
+  }
+}

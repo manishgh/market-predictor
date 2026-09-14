@@ -12,16 +12,12 @@ import pandas as pd
 from market_predictor.canonical.store import file_sha256
 from market_predictor.core.errors import DataReadinessError
 from market_predictor.evidence.hashing import json_sha256
-from market_predictor.evidence.io import resolve_inside_authority, write_json_object
+from market_predictor.evidence.io import inside, resolve_inside_authority, write_json_object
 from market_predictor.locking import file_lock
 from market_predictor.resources import assert_memory_budget
-from market_predictor.swing.datasets.symbol_corrections import (
-    ArchiveLoader,
-    SymbolCorrectionPolicy,
-    inside,
-    pinned_object,
-)
+from market_predictor.swing.datasets.symbol_corrections import ArchiveLoader, pinned_object
 from market_predictor.swing.labels.holding_paths import holding_calendar, validate_outcome_observations
+from market_predictor.universe.symbol_correction_policy import SymbolCorrectionPolicy
 
 
 def _segment(archive: Path, artifact: dict[str, Any], start: date, end: date, *, replacement: bool) -> dict[str, Any]:

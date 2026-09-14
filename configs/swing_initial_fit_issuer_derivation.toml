@@ -1,0 +1,19 @@
+schema = "swing.initial_fit_issuer_derivation_config.v1"
+start_utc = "2019-07-09T00:00:00Z"
+cutoff_utc = "2024-05-28T22:00:00Z"
+
+[source_identity]
+business_labels_manifest_sha256 = "4f6e3c92242af1cc5c3473c1fa1a7be3dab8fa72f85cd4a33e5cc3dd66f68482"
+security_identities_manifest_sha256 = "91b060d9936d9b11cfccdefbf1e3e19ad48f8157d32073e6fa1d0605c7784b45"
+
+[sources.early]
+attribution_dir = "data/research/alpaca_news_20190709_20210708_v1_attribution_v2_strict"
+attribution_manifest_sha256 = "66c881906b8e0188f165d1833b994e8d94903874e1d99692ae0467bc88c101f6"
+sentiment_dir = "data/research/alpaca_news_20190709_20210708_v1_sentiment_finbert_cuda_v1"
+sentiment_manifest_sha256 = "24128683e2adaf2e0b0bbf10c268767ceb4e2b9127a05e88650450b51debc1de"
+
+[sources.later]
+attribution_dir = "data/research/alpaca_news_20210709_20260708_v1_attribution_v2_strict"
+attribution_manifest_sha256 = "c100dc102936bc8bccae95b83569e3ef30bf4542ccd12e3a1d37dbbc763f781d"
+sentiment_dir = "data/research/alpaca_news_20210709_20260708_v1_sentiment_finbert_cuda_v1"
+sentiment_manifest_sha256 = "a2b1d2aefa8f80c87de32d7522abaddc49d981579e978fd6cec459299a632b53"

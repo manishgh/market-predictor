@@ -1,0 +1,9 @@
+schema_version = "market_predictor.official_document_inventory"
+maximum_response_bytes = 262144
+attempts_per_document_per_run = 1
+
+[[documents]]
+document_id = "fiserv_pre_window_filing_index"
+url = "https://www.sec.gov/Archives/edgar/data/798354/000119312519186646/0001193125-19-186646-index.html"
+purpose = "Filing Date for the retained Fiserv pre-window 8-K; report date and signature date are not filing publication evidence."
+expected_media = "html"

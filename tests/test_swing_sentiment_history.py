@@ -29,6 +29,7 @@ from market_predictor.core.errors import DataReadinessError
 from market_predictor.sources.alpaca import AlpacaNewsPage
 from market_predictor.swing.sentiment_history import (
     SENTIMENT_AVAILABILITY_POLICY,
+    _metadata_by_security_and_ticker,
     score_alpaca_news_history,
 )
 
@@ -66,6 +67,16 @@ class _DeterministicScorer:
 
 
 class SwingSentimentHistoryTests(unittest.TestCase):
+    def test_identity_only_metadata_does_not_invent_business_segments(self) -> None:
+        frame = pd.DataFrame([{"security_id": "cik:0001415404", "ticker": "SATS",
+                               "company": "EchoStar Corporation", "sector": "", "industry": ""}])
+        with self.assertRaisesRegex(DataReadinessError, "ambiguous company"):
+            _metadata_by_security_and_ticker(frame)
+        metadata = _metadata_by_security_and_ticker(frame, identity_only=True)[("cik:0001415404", "SATS")]
+        self.assertEqual(metadata.company, "EchoStar Corporation")
+        self.assertEqual(metadata.sector, "")
+        self.assertEqual(metadata.industry, "")
+
     def test_partial_failure_resumes_without_rescoring_completed_chunk(
         self,
     ) -> None:
@@ -160,7 +171,7 @@ class SwingSentimentHistoryTests(unittest.TestCase):
                     execution_device="cpu",
                 )
 
-    def test_audit_coverage_blindspot_is_excluded_before_scoring(self) -> None:
+    def test_audit_blindspot_observed_articles_are_scored_without_coverage_admission(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             collection_dir, audit_path, universe_path = _archive(root)
@@ -184,12 +195,16 @@ class SwingSentimentHistoryTests(unittest.TestCase):
             )
 
             self.assertEqual(result["status"], "complete")
-            self.assertEqual(result["requested_chunks"], 1)
-            self.assertEqual(result["excluded_chunks"], 1)
+            self.assertEqual(result["requested_chunks"], 2)
+            self.assertEqual(result["excluded_chunks"], 0)
             self.assertEqual(
                 result["excluded_security_ids"],
-                ["security:bbb"],
+                [],
             )
+            self.assertEqual(result["coverage_blindspot_security_ids"], ["security:bbb"])
+            self.assertEqual(result["scope_policy"], "observed_articles_not_coverage_admission")
+            self.assertIs(result["source_coverage_admitted"], False)
+            self.assertEqual(result["total_rows"], 2)
             self.assertEqual(scorer.calls, 1)
 
     def test_cross_shard_batch_scores_once_and_preserves_chunk_artifacts(

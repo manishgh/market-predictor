@@ -10,10 +10,9 @@ import pandas as pd
 
 from market_predictor.canonical.store import file_sha256
 from market_predictor.core.errors import DataReadinessError
-from market_predictor.evidence.io import resolve_inside_authority
+from market_predictor.evidence.io import inside, resolve_inside_authority
 from market_predictor.swing.contracts.holding_accounting import EvidenceReference
 from market_predictor.swing.contracts.holding_materialization import PositionSourceBinding
-from market_predictor.swing.datasets.symbol_corrections import inside
 from market_predictor.swing.labels.holding_paths import validate_outcome_observations
 
 RAW_COLUMNS = ["security_id", "ticker", "session_date", "bar_start_utc", "open", "high", "low", "close",

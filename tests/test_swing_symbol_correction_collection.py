@@ -13,7 +13,7 @@ import pytest
 
 from market_predictor.canonical.store import file_sha256
 from market_predictor.core.errors import DataReadinessError
-from market_predictor.edge_rebuild import swing_history_collection as collector
+from market_predictor.swing.datasets import history_archive as collector
 from tests.test_swing_history_collection import _FakeSource, _json, _plan, _reauthorize_plan, _write_json
 
 SCOPE = "historical_symbol_correction"

@@ -18,7 +18,6 @@ from market_predictor.canonical.store import (
 )
 from market_predictor.core.errors import DataReadinessError
 from market_predictor.edge_rebuild.swing_daily_combination import (
-    CUTOFF_DATE,
     VerifiedCombinedInputs,
     prepare_combined_daily_store,
     verify_combined_swing_inputs,
@@ -38,6 +37,7 @@ from market_predictor.resources import (
 )
 from market_predictor.swing.contracts import MINIMUM_SWING_DECISION_DATE
 from market_predictor.swing.contracts.research_cohort import SwingResearchCohort
+from market_predictor.swing.datasets.session_requirements import CUTOFF_DATE
 from market_predictor.swing.features.panel import (
     MANAGED_PATH_COST_POLICY,
     SWING_FEATURE_PANEL_SCHEMA,

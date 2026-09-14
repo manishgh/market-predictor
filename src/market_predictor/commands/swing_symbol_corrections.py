@@ -9,25 +9,22 @@ import typer
 from market_predictor.canonical.store import file_sha256
 from market_predictor.config import get_settings
 from market_predictor.core.errors import DataReadinessError
-from market_predictor.edge_rebuild.swing_history_collection import (
+from market_predictor.evidence.io import inside
+from market_predictor.heavy_jobs import HEAVY_JOB_BUSY_EXIT_CODE, HeavyJobBusyError
+from market_predictor.sources.alpaca import AlpacaSource
+from market_predictor.swing.datasets.history_archive import (
     AlpacaSwingDailyPageSource,
     SwingDailyPageSource,
     collect_swing_history_plan,
     load_complete_swing_history_collection,
 )
-from market_predictor.heavy_jobs import HEAVY_JOB_BUSY_EXIT_CODE, HeavyJobBusyError
-from market_predictor.sources.alpaca import AlpacaSource
 from market_predictor.swing.datasets.initial_fit_raw_share_plan import verified_initial_fit_raw_share_plan
 from market_predictor.swing.datasets.symbol_corrected_sources import (
     publish_or_verify_symbol_corrected_sources,
     reconstruct_symbol_corrected_sources,
 )
-from market_predictor.swing.datasets.symbol_corrections import (
-    inside,
-    load_symbol_correction_policy,
-    pinned_object,
-    publish_symbol_correction_plan,
-)
+from market_predictor.swing.datasets.symbol_corrections import pinned_object, publish_symbol_correction_plan
+from market_predictor.universe.symbol_correction_policy import load_symbol_correction_policy
 
 
 def register_symbol_correction_commands(app: typer.Typer, console: Any) -> None:

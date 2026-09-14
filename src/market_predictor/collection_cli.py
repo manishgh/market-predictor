@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from market_predictor.cli import app as source_app
 from market_predictor.cli_surface import filtered_app
+from market_predictor.commands.swing_corrected_outcomes import register_corrected_outcome_commands
+from market_predictor.commands.swing_feature_history import register_feature_history_commands
 
 COLLECTION_COMMANDS = frozenset(
     {
@@ -39,6 +41,9 @@ app = filtered_app(
     allowed_commands=COLLECTION_COMMANDS,
     help_text="Collect and export raw Market Predictor source data.",
 )
+
+register_corrected_outcome_commands(app)
+register_feature_history_commands(app)
 
 
 if __name__ == "__main__":

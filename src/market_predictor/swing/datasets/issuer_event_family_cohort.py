@@ -31,6 +31,7 @@ from market_predictor.canonical.store import (
 )
 from market_predictor.catalysts.issuer_events import family_evidence as issuer_family_evidence
 from market_predictor.catalysts.issuer_events.attribution_history import (
+    EventAttributionHistory,
     load_event_attribution_history,
 )
 from market_predictor.catalysts.issuer_events.classification import (
@@ -299,6 +300,7 @@ def publish_swing_issuer_family_cohort(
     decisions_path: Path,
     policy_path: Path,
     output_directory: Path,
+    _verified_derived_attribution: EventAttributionHistory | None = None,
 ) -> SwingIssuerFamilyCohort:
     """Publish normalized family cohorts from original events and issuer relations."""
 
@@ -309,7 +311,12 @@ def publish_swing_issuer_family_cohort(
     collection_manifest_path = collection_dir / "_manifest.json"
     attribution_manifest_path = attribution_dir / "_manifest.json"
     collection = _complete_research_manifest(collection_manifest_path, "news collection")
-    attribution_history = load_event_attribution_history(attribution_dir)
+    if _verified_derived_attribution is not None:
+        if collection.get("derivation_only") is not True:
+            raise DataReadinessError("derived family attribution requires an explicitly verified derivation")
+        attribution_history = _verified_derived_attribution
+    else:
+        attribution_history = load_event_attribution_history(attribution_dir)
     identity_path = Path(
         _required_text(
             attribution_history.request,
@@ -363,12 +370,9 @@ def publish_swing_issuer_family_cohort(
         _required_text(record, "chunk_id"): record
         for record in attribution_history.artifact_records
     }
-    excluded = _text_set(collection_audit.get("coverage_blindspot_security_ids", []))
-    expected_relations = {
-        chunk_id
-        for chunk_id, record in source_records.items()
-        if str(record.get("security_id", "")) not in excluded
-    }
+    blindspots = _text_set(collection_audit.get("coverage_blindspot_security_ids", []))
+    coverage_status = dict(zip(source_coverage["chunk_id"].astype(str), source_coverage["status"].astype(str), strict=True))
+    expected_relations = set(source_records)
     if set(relation_records) != expected_relations:
         raise DataReadinessError("event attribution inventory does not match eligible news chunks")
 
@@ -453,7 +457,8 @@ def publish_swing_issuer_family_cohort(
                 source_events,
                 direct_relations,
                 policy=policy,
-                coverage_known=True,
+                coverage_known=(str(source_record.get("security_id", "")) not in blindspots
+                                and coverage_status.get(chunk_id) == "observed"),
             )
             classified = family_chunk.loc[
                 family_chunk["classification_state"].astype(str).eq("classified")
@@ -541,7 +546,7 @@ def publish_swing_issuer_family_cohort(
         family_coverage = _build_family_coverage(
             source_coverage,
             relation_chunk_ids=set(relation_records),
-            blind_security_ids=excluded,
+            blind_security_ids=blindspots,
             policy=policy,
             collection_completed_at=collection.get("completed_at_utc"),
         )

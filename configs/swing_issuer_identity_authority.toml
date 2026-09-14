@@ -1,0 +1,32 @@
+schema_version = "market_predictor.issuer_identity_publication.v1"
+correction_policy = "configs/swing_symbol_corrections.toml"
+correction_policy_sha256 = "be63ad9460f80cf87a377b903971c5415bcfefdf5d457308a9a9028d2b5488e3"
+query_scope = "configs/swing_issuer_news_corrections.json"
+query_scope_sha256 = "2e0cd0279dbeb1ac5a3c4224bdd4a8de78c0c5b603d08f14a0da2f86f1c1e3ed"
+publication_inventory = "configs/swing_issuer_identity_publication_documents.toml"
+publication_archive = "data/raw/swing_issuer_identity_publication_documents"
+publication_report_sha256 = "63313a9bc9a92325a2f3c181aec20e86e3df62f38f0ab56f863ced6d22ac53e7"
+availability_policy = "filing_date_next_day_new_york_publication_proxy"
+production_ready = false
+
+[[issuers]]
+security_id = "cik:0001415404"
+ticker = "SATS"
+company = "EchoStar Corporation"
+aliases = ["EchoStar Corporation", "EchoStar"]
+security_class = "Class A common stock"
+identity_document_id = "echostar_pre_window_symbol"
+publication_document_id = "echostar_pre_window_symbol"
+publication_date_kind = "as_filed_cover"
+record_locator = "S-4 cover filing date; Summary / Parties to the Transaction and NASDAQ listing discussion. DISH is the filer, not the target issuer. CIK and reviewed interval are bound separately to the correction policy."
+
+[[issuers]]
+security_id = "cik:0000798354"
+ticker = "FISV"
+company = "Fiserv, Inc."
+aliases = ["Fiserv, Inc.", "Fiserv"]
+security_class = "Common Stock, par value $0.01 per share"
+identity_document_id = "fiserv_pre_window_symbol"
+publication_document_id = "fiserv_pre_window_filing_index"
+publication_date_kind = "sec_filing_index"
+record_locator = "8-K cover exact registrant name and Section 12(b) common-stock / FISV registration row; SEC accession index Filing Date. Report date and acquisition clocks are not publication evidence."

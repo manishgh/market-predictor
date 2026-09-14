@@ -73,6 +73,7 @@ def inventory(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]
     }
     _config(fixture)
     monkeypatch.setattr(collector, "heavy_job_runtime_dir", lambda: tmp_path / "runtime")
+    monkeypatch.setattr(collector, "assert_system_memory_available", lambda: None)
 
     def no_network(*args: Any, **kwargs: Any) -> Any:
         pytest.fail("synthetic collection must never access the network")
@@ -517,3 +518,68 @@ def test_typed_memory_budget_exception_from_fetch_stops_all_tickers(inventory: d
     assert calls == ["AAA"]
     assert not list(inventory["output"].glob("reports/*.json"))
     assert not list(inventory["output"].glob("tickers/*/*/receipt.json"))
+
+
+def test_original_implementation_identity_replays_and_resumes_without_repinning(
+    inventory: dict[str, Any], monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    current = collector._implementation()
+    original = {key: value for key, value in current.items()
+        if key not in {"swing/datasets/corporate_action_scope.py", "core/system_memory.py"}}
+    monkeypatch.setattr(collector, "_implementation", lambda: original)
+    def partial(params: dict[str, Any], bound: int) -> HttpByteResponse:
+        if params["symbols"] == "AAA":
+            raise requests.ConnectionError("synthetic retry")
+        return _empty(params, bound)
+    report = _run(inventory, partial)
+    request_path = inventory["output"] / "_request.json"
+    original_bytes = request_path.read_bytes()
+    monkeypatch.setattr(collector, "_implementation", lambda: current)
+    metadata: dict[str, Any] = {}
+    replay = collector.collect_holding_corporate_actions(inventory["root"], inventory["config"], inventory["output"],
+        expected_audit_sha256=report["audit_sha256"], replay_metadata=metadata)
+    assert replay == report
+    assert metadata["acquisition_implementation_files"] == original
+    assert metadata["replay_implementation_files"] == current
+    assert metadata["audit_sha256"] == report["audit_sha256"]
+    assert _run(inventory, _empty, report["audit_sha256"])["acquired_tickers"] == 2
+    assert request_path.read_bytes() == original_bytes
+
+
+def test_rehashed_original_implementation_cannot_evade_external_audit_pin(inventory: dict[str, Any]) -> None:
+    report = _run(inventory, _empty)
+    path = inventory["output"] / "_request.json"
+    request = _read(path)
+    request["implementation_files"]["sources/http.py"] = "a" * 64
+    _resign(path, request, "request_sha256")
+    with pytest.raises(DataReadinessError):
+        _run(inventory, _forbidden, report["audit_sha256"])
+
+
+def test_system_pressure_stops_scheduling_and_publishes_resumable_partial_audit(
+    inventory: dict[str, Any], monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    probes = []
+    calls = []
+    def guard() -> None:
+        probes.append(1)
+        if len(probes) == 3:
+            raise errors.MemoryBudgetError("synthetic system pressure")
+    def fetch(params: dict[str, Any], bound: int) -> HttpByteResponse:
+        calls.append(params["symbols"])
+        return _page(params, {"cash_dividends": [{"id": "first"}]}, "next")
+    monkeypatch.setattr(collector, "assert_system_memory_available", guard)
+    metadata: dict[str, Any] = {}
+    with pytest.raises(errors.MemoryBudgetError, match="system pressure"):
+        collector.collect_holding_corporate_actions(inventory["root"], inventory["config"], inventory["output"],
+            fetch=fetch, replay_metadata=metadata)
+    assert calls == ["AAA"]
+    paths = list(inventory["output"].glob("reports/*.json"))
+    assert len(paths) == 1
+    report = _read(paths[0])
+    assert report["audit_sha256"] == metadata["audit_sha256"]
+    assert report["status"] == "incomplete"
+    assert len(_read(_attempt(inventory) / "receipt.json")["pages"]) == 1
+    monkeypatch.setattr(collector, "assert_system_memory_available", lambda: None)
+    assert _run(inventory, expected=report["audit_sha256"]) == report
+    assert _run(inventory, _empty, report["audit_sha256"])["acquired_tickers"] == 2
