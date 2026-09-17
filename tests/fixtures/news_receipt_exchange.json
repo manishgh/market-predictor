@@ -1,0 +1,155 @@
+{
+  "description": "Synthetic protocol tests only; not provider observations or trading evidence.",
+  "cases": [
+    {
+      "name": "historical_news_observed_now",
+      "valid": true,
+      "manifest_utf8": "{\"schema_version\":\"alpaca.news_http_receipt.v1\",\"producer\":\"market_predictor\",\"producer_revision\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"endpoint\":\"alpaca.news\",\"transport\":\"http\",\"status_code\":200,\"byte_representation\":\"decoded_http_body_utf8\",\"availability_basis\":\"observed_receipt\",\"request\":{\"symbol\":\"MSFT\",\"start_utc\":\"2019-07-09T00:00:00.000000Z\",\"end_utc\":\"2019-07-10T00:00:00.000000Z\",\"page_token\":null,\"include_content\":true,\"limit\":50},\"received_at_utc\":\"2026-09-17T10:00:00.000000Z\",\"payload_sha256\":\"b67bc80e400f0b326c6811c8000ce3a7bdb174729a19ed9d1db1a1950ea3c00b\",\"payload_bytes\":175}",
+      "payload_utf8": "{\"news\":[{\"id\":101,\"headline\":\"Synthetic contract fixture\",\"created_at\":\"2019-07-09T13:00:00Z\",\"updated_at\":\"2019-07-09T13:01:00Z\",\"symbols\":[\"MSFT\"]}],\"next_page_token\":null}"
+    },
+    {
+      "name": "changed_producer",
+      "valid": true,
+      "manifest_utf8": "{\"schema_version\":\"alpaca.news_http_receipt.v1\",\"producer\":\"trading_flow\",\"producer_revision\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"endpoint\":\"alpaca.news\",\"transport\":\"http\",\"status_code\":200,\"byte_representation\":\"decoded_http_body_utf8\",\"availability_basis\":\"observed_receipt\",\"request\":{\"symbol\":\"MSFT\",\"start_utc\":\"2019-07-09T00:00:00.000000Z\",\"end_utc\":\"2019-07-10T00:00:00.000000Z\",\"page_token\":null,\"include_content\":true,\"limit\":50},\"received_at_utc\":\"2026-09-17T10:00:00.000000Z\",\"payload_sha256\":\"b67bc80e400f0b326c6811c8000ce3a7bdb174729a19ed9d1db1a1950ea3c00b\",\"payload_bytes\":175}",
+      "payload_utf8": "{\"news\":[{\"id\":101,\"headline\":\"Synthetic contract fixture\",\"created_at\":\"2019-07-09T13:00:00Z\",\"updated_at\":\"2019-07-09T13:01:00Z\",\"symbols\":[\"MSFT\"]}],\"next_page_token\":null}"
+    },
+    {
+      "name": "missing_body_not_synthesized",
+      "valid": true,
+      "manifest_utf8": "{\"schema_version\":\"alpaca.news_http_receipt.v1\",\"producer\":\"market_predictor\",\"producer_revision\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"endpoint\":\"alpaca.news\",\"transport\":\"http\",\"status_code\":200,\"byte_representation\":\"decoded_http_body_utf8\",\"availability_basis\":\"observed_receipt\",\"request\":{\"symbol\":\"MSFT\",\"start_utc\":\"2019-07-09T00:00:00.000000Z\",\"end_utc\":\"2019-07-10T00:00:00.000000Z\",\"page_token\":null,\"include_content\":false,\"limit\":50},\"received_at_utc\":\"2026-09-17T10:00:00.000000Z\",\"payload_sha256\":\"b67bc80e400f0b326c6811c8000ce3a7bdb174729a19ed9d1db1a1950ea3c00b\",\"payload_bytes\":175}",
+      "payload_utf8": "{\"news\":[{\"id\":101,\"headline\":\"Synthetic contract fixture\",\"created_at\":\"2019-07-09T13:00:00Z\",\"updated_at\":\"2019-07-09T13:01:00Z\",\"symbols\":[\"MSFT\"]}],\"next_page_token\":null}"
+    },
+    {
+      "name": "unknown_schema",
+      "valid": false,
+      "manifest_utf8": "{\"schema_version\":\"other\",\"producer\":\"market_predictor\",\"producer_revision\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"endpoint\":\"alpaca.news\",\"transport\":\"http\",\"status_code\":200,\"byte_representation\":\"decoded_http_body_utf8\",\"availability_basis\":\"observed_receipt\",\"request\":{\"symbol\":\"MSFT\",\"start_utc\":\"2019-07-09T00:00:00.000000Z\",\"end_utc\":\"2019-07-10T00:00:00.000000Z\",\"page_token\":null,\"include_content\":true,\"limit\":50},\"received_at_utc\":\"2026-09-17T10:00:00.000000Z\",\"payload_sha256\":\"b67bc80e400f0b326c6811c8000ce3a7bdb174729a19ed9d1db1a1950ea3c00b\",\"payload_bytes\":175}",
+      "payload_utf8": "{\"news\":[{\"id\":101,\"headline\":\"Synthetic contract fixture\",\"created_at\":\"2019-07-09T13:00:00Z\",\"updated_at\":\"2019-07-09T13:01:00Z\",\"symbols\":[\"MSFT\"]}],\"next_page_token\":null}"
+    },
+    {
+      "name": "unknown_metadata",
+      "valid": false,
+      "manifest_utf8": "{\"schema_version\":\"alpaca.news_http_receipt.v1\",\"producer\":\"market_predictor\",\"producer_revision\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"endpoint\":\"alpaca.news\",\"transport\":\"http\",\"status_code\":200,\"byte_representation\":\"decoded_http_body_utf8\",\"availability_basis\":\"observed_receipt\",\"request\":{\"symbol\":\"MSFT\",\"start_utc\":\"2019-07-09T00:00:00.000000Z\",\"end_utc\":\"2019-07-10T00:00:00.000000Z\",\"page_token\":null,\"include_content\":true,\"limit\":50},\"received_at_utc\":\"2026-09-17T10:00:00.000000Z\",\"payload_sha256\":\"b67bc80e400f0b326c6811c8000ce3a7bdb174729a19ed9d1db1a1950ea3c00b\",\"payload_bytes\":175,\"authentication\":\"forbidden-field\"}",
+      "payload_utf8": "{\"news\":[{\"id\":101,\"headline\":\"Synthetic contract fixture\",\"created_at\":\"2019-07-09T13:00:00Z\",\"updated_at\":\"2019-07-09T13:01:00Z\",\"symbols\":[\"MSFT\"]}],\"next_page_token\":null}"
+    },
+    {
+      "name": "wrong_digest",
+      "valid": false,
+      "manifest_utf8": "{\"schema_version\":\"alpaca.news_http_receipt.v1\",\"producer\":\"market_predictor\",\"producer_revision\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"endpoint\":\"alpaca.news\",\"transport\":\"http\",\"status_code\":200,\"byte_representation\":\"decoded_http_body_utf8\",\"availability_basis\":\"observed_receipt\",\"request\":{\"symbol\":\"MSFT\",\"start_utc\":\"2019-07-09T00:00:00.000000Z\",\"end_utc\":\"2019-07-10T00:00:00.000000Z\",\"page_token\":null,\"include_content\":true,\"limit\":50},\"received_at_utc\":\"2026-09-17T10:00:00.000000Z\",\"payload_sha256\":\"0000000000000000000000000000000000000000000000000000000000000000\",\"payload_bytes\":175}",
+      "payload_utf8": "{\"news\":[{\"id\":101,\"headline\":\"Synthetic contract fixture\",\"created_at\":\"2019-07-09T13:00:00Z\",\"updated_at\":\"2019-07-09T13:01:00Z\",\"symbols\":[\"MSFT\"]}],\"next_page_token\":null}"
+    },
+    {
+      "name": "wrong_length",
+      "valid": false,
+      "manifest_utf8": "{\"schema_version\":\"alpaca.news_http_receipt.v1\",\"producer\":\"market_predictor\",\"producer_revision\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"endpoint\":\"alpaca.news\",\"transport\":\"http\",\"status_code\":200,\"byte_representation\":\"decoded_http_body_utf8\",\"availability_basis\":\"observed_receipt\",\"request\":{\"symbol\":\"MSFT\",\"start_utc\":\"2019-07-09T00:00:00.000000Z\",\"end_utc\":\"2019-07-10T00:00:00.000000Z\",\"page_token\":null,\"include_content\":true,\"limit\":50},\"received_at_utc\":\"2026-09-17T10:00:00.000000Z\",\"payload_sha256\":\"b67bc80e400f0b326c6811c8000ce3a7bdb174729a19ed9d1db1a1950ea3c00b\",\"payload_bytes\":174}",
+      "payload_utf8": "{\"news\":[{\"id\":101,\"headline\":\"Synthetic contract fixture\",\"created_at\":\"2019-07-09T13:00:00Z\",\"updated_at\":\"2019-07-09T13:01:00Z\",\"symbols\":[\"MSFT\"]}],\"next_page_token\":null}"
+    },
+    {
+      "name": "tampered_body",
+      "valid": false,
+      "manifest_utf8": "{\"schema_version\":\"alpaca.news_http_receipt.v1\",\"producer\":\"market_predictor\",\"producer_revision\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"endpoint\":\"alpaca.news\",\"transport\":\"http\",\"status_code\":200,\"byte_representation\":\"decoded_http_body_utf8\",\"availability_basis\":\"observed_receipt\",\"request\":{\"symbol\":\"MSFT\",\"start_utc\":\"2019-07-09T00:00:00.000000Z\",\"end_utc\":\"2019-07-10T00:00:00.000000Z\",\"page_token\":null,\"include_content\":true,\"limit\":50},\"received_at_utc\":\"2026-09-17T10:00:00.000000Z\",\"payload_sha256\":\"b67bc80e400f0b326c6811c8000ce3a7bdb174729a19ed9d1db1a1950ea3c00b\",\"payload_bytes\":175}",
+      "payload_utf8": "{\"news\":[{\"id\":101,\"headline\":\"Synthetic contract fixture\",\"created_at\":\"2019-07-09T13:00:00Z\",\"updated_at\":\"2019-07-09T13:01:00Z\",\"symbols\":[\"MSFT\"]}],\"next_page_token\":null} "
+    },
+    {
+      "name": "missing_receipt_clock",
+      "valid": false,
+      "manifest_utf8": "{\"schema_version\":\"alpaca.news_http_receipt.v1\",\"producer\":\"market_predictor\",\"producer_revision\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"endpoint\":\"alpaca.news\",\"transport\":\"http\",\"status_code\":200,\"byte_representation\":\"decoded_http_body_utf8\",\"availability_basis\":\"observed_receipt\",\"request\":{\"symbol\":\"MSFT\",\"start_utc\":\"2019-07-09T00:00:00.000000Z\",\"end_utc\":\"2019-07-10T00:00:00.000000Z\",\"page_token\":null,\"include_content\":true,\"limit\":50},\"payload_sha256\":\"b67bc80e400f0b326c6811c8000ce3a7bdb174729a19ed9d1db1a1950ea3c00b\",\"payload_bytes\":175}",
+      "payload_utf8": "{\"news\":[{\"id\":101,\"headline\":\"Synthetic contract fixture\",\"created_at\":\"2019-07-09T13:00:00Z\",\"updated_at\":\"2019-07-09T13:01:00Z\",\"symbols\":[\"MSFT\"]}],\"next_page_token\":null}"
+    },
+    {
+      "name": "naive_clock",
+      "valid": false,
+      "manifest_utf8": "{\"schema_version\":\"alpaca.news_http_receipt.v1\",\"producer\":\"market_predictor\",\"producer_revision\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"endpoint\":\"alpaca.news\",\"transport\":\"http\",\"status_code\":200,\"byte_representation\":\"decoded_http_body_utf8\",\"availability_basis\":\"observed_receipt\",\"request\":{\"symbol\":\"MSFT\",\"start_utc\":\"2019-07-09T00:00:00.000000Z\",\"end_utc\":\"2019-07-10T00:00:00.000000Z\",\"page_token\":null,\"include_content\":true,\"limit\":50},\"received_at_utc\":\"2026-09-17T10:00:00.000000\",\"payload_sha256\":\"b67bc80e400f0b326c6811c8000ce3a7bdb174729a19ed9d1db1a1950ea3c00b\",\"payload_bytes\":175}",
+      "payload_utf8": "{\"news\":[{\"id\":101,\"headline\":\"Synthetic contract fixture\",\"created_at\":\"2019-07-09T13:00:00Z\",\"updated_at\":\"2019-07-09T13:01:00Z\",\"symbols\":[\"MSFT\"]}],\"next_page_token\":null}"
+    },
+    {
+      "name": "nanosecond_clock",
+      "valid": false,
+      "manifest_utf8": "{\"schema_version\":\"alpaca.news_http_receipt.v1\",\"producer\":\"market_predictor\",\"producer_revision\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"endpoint\":\"alpaca.news\",\"transport\":\"http\",\"status_code\":200,\"byte_representation\":\"decoded_http_body_utf8\",\"availability_basis\":\"observed_receipt\",\"request\":{\"symbol\":\"MSFT\",\"start_utc\":\"2019-07-09T00:00:00.000000Z\",\"end_utc\":\"2019-07-10T00:00:00.000000Z\",\"page_token\":null,\"include_content\":true,\"limit\":50},\"received_at_utc\":\"2026-09-17T10:00:00.000000001Z\",\"payload_sha256\":\"b67bc80e400f0b326c6811c8000ce3a7bdb174729a19ed9d1db1a1950ea3c00b\",\"payload_bytes\":175}",
+      "payload_utf8": "{\"news\":[{\"id\":101,\"headline\":\"Synthetic contract fixture\",\"created_at\":\"2019-07-09T13:00:00Z\",\"updated_at\":\"2019-07-09T13:01:00Z\",\"symbols\":[\"MSFT\"]}],\"next_page_token\":null}"
+    },
+    {
+      "name": "request_reversed",
+      "valid": false,
+      "manifest_utf8": "{\"schema_version\":\"alpaca.news_http_receipt.v1\",\"producer\":\"market_predictor\",\"producer_revision\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"endpoint\":\"alpaca.news\",\"transport\":\"http\",\"status_code\":200,\"byte_representation\":\"decoded_http_body_utf8\",\"availability_basis\":\"observed_receipt\",\"request\":{\"symbol\":\"MSFT\",\"start_utc\":\"2019-07-10T00:00:00.000000Z\",\"end_utc\":\"2019-07-10T00:00:00.000000Z\",\"page_token\":null,\"include_content\":true,\"limit\":50},\"received_at_utc\":\"2026-09-17T10:00:00.000000Z\",\"payload_sha256\":\"b67bc80e400f0b326c6811c8000ce3a7bdb174729a19ed9d1db1a1950ea3c00b\",\"payload_bytes\":175}",
+      "payload_utf8": "{\"news\":[{\"id\":101,\"headline\":\"Synthetic contract fixture\",\"created_at\":\"2019-07-09T13:00:00Z\",\"updated_at\":\"2019-07-09T13:01:00Z\",\"symbols\":[\"MSFT\"]}],\"next_page_token\":null}"
+    },
+    {
+      "name": "receipt_before_request_end",
+      "valid": false,
+      "manifest_utf8": "{\"schema_version\":\"alpaca.news_http_receipt.v1\",\"producer\":\"market_predictor\",\"producer_revision\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"endpoint\":\"alpaca.news\",\"transport\":\"http\",\"status_code\":200,\"byte_representation\":\"decoded_http_body_utf8\",\"availability_basis\":\"observed_receipt\",\"request\":{\"symbol\":\"MSFT\",\"start_utc\":\"2019-07-09T00:00:00.000000Z\",\"end_utc\":\"2019-07-10T00:00:00.000000Z\",\"page_token\":null,\"include_content\":true,\"limit\":50},\"received_at_utc\":\"2019-07-09T10:00:00.000000Z\",\"payload_sha256\":\"b67bc80e400f0b326c6811c8000ce3a7bdb174729a19ed9d1db1a1950ea3c00b\",\"payload_bytes\":175}",
+      "payload_utf8": "{\"news\":[{\"id\":101,\"headline\":\"Synthetic contract fixture\",\"created_at\":\"2019-07-09T13:00:00Z\",\"updated_at\":\"2019-07-09T13:01:00Z\",\"symbols\":[\"MSFT\"]}],\"next_page_token\":null}"
+    },
+    {
+      "name": "publication_proxy_mislabeled",
+      "valid": false,
+      "manifest_utf8": "{\"schema_version\":\"alpaca.news_http_receipt.v1\",\"producer\":\"market_predictor\",\"producer_revision\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"endpoint\":\"alpaca.news\",\"transport\":\"http\",\"status_code\":200,\"byte_representation\":\"decoded_http_body_utf8\",\"availability_basis\":\"provider_publication_proxy\",\"request\":{\"symbol\":\"MSFT\",\"start_utc\":\"2019-07-09T00:00:00.000000Z\",\"end_utc\":\"2019-07-10T00:00:00.000000Z\",\"page_token\":null,\"include_content\":true,\"limit\":50},\"received_at_utc\":\"2026-09-17T10:00:00.000000Z\",\"payload_sha256\":\"b67bc80e400f0b326c6811c8000ce3a7bdb174729a19ed9d1db1a1950ea3c00b\",\"payload_bytes\":175}",
+      "payload_utf8": "{\"news\":[{\"id\":101,\"headline\":\"Synthetic contract fixture\",\"created_at\":\"2019-07-09T13:00:00Z\",\"updated_at\":\"2019-07-09T13:01:00Z\",\"symbols\":[\"MSFT\"]}],\"next_page_token\":null}"
+    },
+    {
+      "name": "wrong_endpoint",
+      "valid": false,
+      "manifest_utf8": "{\"schema_version\":\"alpaca.news_http_receipt.v1\",\"producer\":\"market_predictor\",\"producer_revision\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"endpoint\":\"https://example.com/news\",\"transport\":\"http\",\"status_code\":200,\"byte_representation\":\"decoded_http_body_utf8\",\"availability_basis\":\"observed_receipt\",\"request\":{\"symbol\":\"MSFT\",\"start_utc\":\"2019-07-09T00:00:00.000000Z\",\"end_utc\":\"2019-07-10T00:00:00.000000Z\",\"page_token\":null,\"include_content\":true,\"limit\":50},\"received_at_utc\":\"2026-09-17T10:00:00.000000Z\",\"payload_sha256\":\"b67bc80e400f0b326c6811c8000ce3a7bdb174729a19ed9d1db1a1950ea3c00b\",\"payload_bytes\":175}",
+      "payload_utf8": "{\"news\":[{\"id\":101,\"headline\":\"Synthetic contract fixture\",\"created_at\":\"2019-07-09T13:00:00Z\",\"updated_at\":\"2019-07-09T13:01:00Z\",\"symbols\":[\"MSFT\"]}],\"next_page_token\":null}"
+    },
+    {
+      "name": "failed_http",
+      "valid": false,
+      "manifest_utf8": "{\"schema_version\":\"alpaca.news_http_receipt.v1\",\"producer\":\"market_predictor\",\"producer_revision\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"endpoint\":\"alpaca.news\",\"transport\":\"http\",\"status_code\":500,\"byte_representation\":\"decoded_http_body_utf8\",\"availability_basis\":\"observed_receipt\",\"request\":{\"symbol\":\"MSFT\",\"start_utc\":\"2019-07-09T00:00:00.000000Z\",\"end_utc\":\"2019-07-10T00:00:00.000000Z\",\"page_token\":null,\"include_content\":true,\"limit\":50},\"received_at_utc\":\"2026-09-17T10:00:00.000000Z\",\"payload_sha256\":\"b67bc80e400f0b326c6811c8000ce3a7bdb174729a19ed9d1db1a1950ea3c00b\",\"payload_bytes\":175}",
+      "payload_utf8": "{\"news\":[{\"id\":101,\"headline\":\"Synthetic contract fixture\",\"created_at\":\"2019-07-09T13:00:00Z\",\"updated_at\":\"2019-07-09T13:01:00Z\",\"symbols\":[\"MSFT\"]}],\"next_page_token\":null}"
+    },
+    {
+      "name": "oversized_page",
+      "valid": false,
+      "manifest_utf8": "{\"schema_version\":\"alpaca.news_http_receipt.v1\",\"producer\":\"market_predictor\",\"producer_revision\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"endpoint\":\"alpaca.news\",\"transport\":\"http\",\"status_code\":200,\"byte_representation\":\"decoded_http_body_utf8\",\"availability_basis\":\"observed_receipt\",\"request\":{\"symbol\":\"MSFT\",\"start_utc\":\"2019-07-09T00:00:00.000000Z\",\"end_utc\":\"2019-07-10T00:00:00.000000Z\",\"page_token\":null,\"include_content\":true,\"limit\":51},\"received_at_utc\":\"2026-09-17T10:00:00.000000Z\",\"payload_sha256\":\"b67bc80e400f0b326c6811c8000ce3a7bdb174729a19ed9d1db1a1950ea3c00b\",\"payload_bytes\":175}",
+      "payload_utf8": "{\"news\":[{\"id\":101,\"headline\":\"Synthetic contract fixture\",\"created_at\":\"2019-07-09T13:00:00Z\",\"updated_at\":\"2019-07-09T13:01:00Z\",\"symbols\":[\"MSFT\"]}],\"next_page_token\":null}"
+    },
+    {
+      "name": "string_limit",
+      "valid": false,
+      "manifest_utf8": "{\"schema_version\":\"alpaca.news_http_receipt.v1\",\"producer\":\"market_predictor\",\"producer_revision\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"endpoint\":\"alpaca.news\",\"transport\":\"http\",\"status_code\":200,\"byte_representation\":\"decoded_http_body_utf8\",\"availability_basis\":\"observed_receipt\",\"request\":{\"symbol\":\"MSFT\",\"start_utc\":\"2019-07-09T00:00:00.000000Z\",\"end_utc\":\"2019-07-10T00:00:00.000000Z\",\"page_token\":null,\"include_content\":true,\"limit\":\"50\"},\"received_at_utc\":\"2026-09-17T10:00:00.000000Z\",\"payload_sha256\":\"b67bc80e400f0b326c6811c8000ce3a7bdb174729a19ed9d1db1a1950ea3c00b\",\"payload_bytes\":175}",
+      "payload_utf8": "{\"news\":[{\"id\":101,\"headline\":\"Synthetic contract fixture\",\"created_at\":\"2019-07-09T13:00:00Z\",\"updated_at\":\"2019-07-09T13:01:00Z\",\"symbols\":[\"MSFT\"]}],\"next_page_token\":null}"
+    },
+    {
+      "name": "empty_page_token",
+      "valid": false,
+      "manifest_utf8": "{\"schema_version\":\"alpaca.news_http_receipt.v1\",\"producer\":\"market_predictor\",\"producer_revision\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"endpoint\":\"alpaca.news\",\"transport\":\"http\",\"status_code\":200,\"byte_representation\":\"decoded_http_body_utf8\",\"availability_basis\":\"observed_receipt\",\"request\":{\"symbol\":\"MSFT\",\"start_utc\":\"2019-07-09T00:00:00.000000Z\",\"end_utc\":\"2019-07-10T00:00:00.000000Z\",\"page_token\":\"\",\"include_content\":true,\"limit\":50},\"received_at_utc\":\"2026-09-17T10:00:00.000000Z\",\"payload_sha256\":\"b67bc80e400f0b326c6811c8000ce3a7bdb174729a19ed9d1db1a1950ea3c00b\",\"payload_bytes\":175}",
+      "payload_utf8": "{\"news\":[{\"id\":101,\"headline\":\"Synthetic contract fixture\",\"created_at\":\"2019-07-09T13:00:00Z\",\"updated_at\":\"2019-07-09T13:01:00Z\",\"symbols\":[\"MSFT\"]}],\"next_page_token\":null}"
+    },
+    {
+      "name": "unknown_request_field",
+      "valid": false,
+      "manifest_utf8": "{\"schema_version\":\"alpaca.news_http_receipt.v1\",\"producer\":\"market_predictor\",\"producer_revision\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"endpoint\":\"alpaca.news\",\"transport\":\"http\",\"status_code\":200,\"byte_representation\":\"decoded_http_body_utf8\",\"availability_basis\":\"observed_receipt\",\"request\":{\"symbol\":\"MSFT\",\"start_utc\":\"2019-07-09T00:00:00.000000Z\",\"end_utc\":\"2019-07-10T00:00:00.000000Z\",\"page_token\":null,\"include_content\":true,\"limit\":50,\"secret\":\"forbidden-field\"},\"received_at_utc\":\"2026-09-17T10:00:00.000000Z\",\"payload_sha256\":\"b67bc80e400f0b326c6811c8000ce3a7bdb174729a19ed9d1db1a1950ea3c00b\",\"payload_bytes\":175}",
+      "payload_utf8": "{\"news\":[{\"id\":101,\"headline\":\"Synthetic contract fixture\",\"created_at\":\"2019-07-09T13:00:00Z\",\"updated_at\":\"2019-07-09T13:01:00Z\",\"symbols\":[\"MSFT\"]}],\"next_page_token\":null}"
+    },
+    {
+      "name": "duplicate_manifest_key",
+      "valid": false,
+      "manifest_utf8": "{\"producer\":\"trading_flow\",\"schema_version\":\"alpaca.news_http_receipt.v1\",\"producer\":\"market_predictor\",\"producer_revision\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"endpoint\":\"alpaca.news\",\"transport\":\"http\",\"status_code\":200,\"byte_representation\":\"decoded_http_body_utf8\",\"availability_basis\":\"observed_receipt\",\"request\":{\"symbol\":\"MSFT\",\"start_utc\":\"2019-07-09T00:00:00.000000Z\",\"end_utc\":\"2019-07-10T00:00:00.000000Z\",\"page_token\":null,\"include_content\":true,\"limit\":50},\"received_at_utc\":\"2026-09-17T10:00:00.000000Z\",\"payload_sha256\":\"b67bc80e400f0b326c6811c8000ce3a7bdb174729a19ed9d1db1a1950ea3c00b\",\"payload_bytes\":175}",
+      "payload_utf8": "{\"news\":[{\"id\":101,\"headline\":\"Synthetic contract fixture\",\"created_at\":\"2019-07-09T13:00:00Z\",\"updated_at\":\"2019-07-09T13:01:00Z\",\"symbols\":[\"MSFT\"]}],\"next_page_token\":null}"
+    },
+    {
+      "name": "huge_integer",
+      "valid": false,
+      "manifest_utf8": "{\"schema_version\":\"alpaca.news_http_receipt.v1\",\"producer\":\"market_predictor\",\"producer_revision\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"endpoint\":\"alpaca.news\",\"transport\":\"http\",\"status_code\":200,\"byte_representation\":\"decoded_http_body_utf8\",\"availability_basis\":\"observed_receipt\",\"request\":{\"symbol\":\"MSFT\",\"start_utc\":\"2019-07-09T00:00:00.000000Z\",\"end_utc\":\"2019-07-10T00:00:00.000000Z\",\"page_token\":null,\"include_content\":true,\"limit\":50},\"received_at_utc\":\"2026-09-17T10:00:00.000000Z\",\"payload_sha256\":\"2af6d5d960184af8f71ec7badad9519d92a15e583ba98f93ac5254fac5f81867\",\"payload_bytes\":421}",
+      "payload_utf8": "{\"news\":[{\"value\":9999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999}]}"
+    },
+    {
+      "name": "escaped_lone_surrogate",
+      "valid": false,
+      "manifest_utf8": "{\"schema_version\":\"alpaca.news_http_receipt.v1\",\"producer\":\"market_predictor\",\"producer_revision\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"endpoint\":\"alpaca.news\",\"transport\":\"http\",\"status_code\":200,\"byte_representation\":\"decoded_http_body_utf8\",\"availability_basis\":\"observed_receipt\",\"request\":{\"symbol\":\"MSFT\",\"start_utc\":\"2019-07-09T00:00:00.000000Z\",\"end_utc\":\"2019-07-10T00:00:00.000000Z\",\"page_token\":null,\"include_content\":true,\"limit\":50},\"received_at_utc\":\"2026-09-17T10:00:00.000000Z\",\"payload_sha256\":\"b285464cdc24cbde5f5cdb4d4f7ed9e606088dac206c80e60bab9145af5226a3\",\"payload_bytes\":32}",
+      "payload_utf8": "{\"news\":[{\"headline\":\"\\ud800\"}]}"
+    },
+    {
+      "name": "deeply_nested_body",
+      "valid": false,
+      "manifest_utf8": "{\"schema_version\":\"alpaca.news_http_receipt.v1\",\"producer\":\"market_predictor\",\"producer_revision\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"endpoint\":\"alpaca.news\",\"transport\":\"http\",\"status_code\":200,\"byte_representation\":\"decoded_http_body_utf8\",\"availability_basis\":\"observed_receipt\",\"request\":{\"symbol\":\"MSFT\",\"start_utc\":\"2019-07-09T00:00:00.000000Z\",\"end_utc\":\"2019-07-10T00:00:00.000000Z\",\"page_token\":null,\"include_content\":true,\"limit\":50},\"received_at_utc\":\"2026-09-17T10:00:00.000000Z\",\"payload_sha256\":\"cf3fa0a5f156507b49bfc1d201a7e912351a014e0147b68918e3c6f95d44f4bd\",\"payload_bytes\":152}",
+      "payload_utf8": "{\"news\":[{\"value\":[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[0]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]}]}"
+    },
+    {
+      "name": "malformed_utf8_in_string",
+      "valid": false,
+      "manifest_utf8": "{\"schema_version\":\"alpaca.news_http_receipt.v1\",\"producer\":\"market_predictor\",\"producer_revision\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"endpoint\":\"alpaca.news\",\"transport\":\"http\",\"status_code\":200,\"byte_representation\":\"decoded_http_body_utf8\",\"availability_basis\":\"observed_receipt\",\"request\":{\"symbol\":\"MSFT\",\"start_utc\":\"2019-07-09T00:00:00.000000Z\",\"end_utc\":\"2019-07-10T00:00:00.000000Z\",\"page_token\":null,\"include_content\":true,\"limit\":50},\"received_at_utc\":\"2026-09-17T10:00:00.000000Z\",\"payload_sha256\":\"f271ee857bd1c4effd6029a995bc201159a9229c01bd41041ab50405f37180b4\",\"payload_bytes\":27}",
+      "payload_base64": "eyJuZXdzIjpbeyJoZWFkbGluZSI6Iv8ifV19"
+    }
+  ]
+}

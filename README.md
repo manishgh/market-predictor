@@ -1,7 +1,7 @@
 # Market Predictor
 
-Market Predictor builds causal prediction intelligence for swing and intraday
-research. It owns data curation, feature construction, model training, temporal
+Market Predictor builds causal prediction intelligence for long-only swing and a
+separate planned investment cohort. It owns data curation, feature construction, model training, temporal
 validation, outcome evaluation, and model governance.
 
 It does **not** own alerts, orders, positions, portfolio risk, or execution. Those
@@ -10,6 +10,34 @@ responsibilities belong to `trading_flow`.
 The system is not deployed. There are no supported legacy models or compatibility
 paths. Serving fails closed until a model passes validation and is published in a
 hash-verified promoted bundle.
+
+## Unified Product Boundary
+
+The prediction HTTP surface is swing-only: `POST /v1/predictions/swing` accepts
+`mode: "swing"` and `horizon: "auto"` or `"10b"` (ten trading sessions).
+Intraday/unified prediction routes are removed, not redirected. Investment replay
+is a historical swing-prediction simulation, not a long-term investment forecast;
+its public `model_view` must be `swing`. The research workbench lists only swing.
+
+TradingFlow owns screening/UI, watchlists, holdings, final risk, approvals and
+execution. Its current client consumes ten-session swing evidence. An unavailable
+or research-only model never becomes an order recommendation through integration.
+Dedicated internal intraday CLI/training/release paths still require reference-audited
+retirement; this HTTP checkpoint does not claim their deletion. Retain minute/hourly
+bars used for swing entry timing and all immutable historical research evidence.
+
+The first shared-data building block is a bounded Alpaca news HTTP receipt exchange
+with matching Python/C# validation fixtures. It preserves exact provider response
+bytes, query identity and original receipt time. File imports require a separately
+trusted manifest hash. This is not yet shared collector ownership, normalized
+issuer attribution, full-content coverage, or model admission. See
+[the architecture](docs/catalyst_confirmation_architecture.md#raw-news-receipt-exchange)
+and [implementation guide](docs/implementation_guide.md#news-receipt-exchange).
+
+Unification verification (September 17): 4,372 Python tests passed, ten skipped;
+Ruff and strict mypy passed. TradingFlow's offline suite passed 1,482 tests; its
+live Alpaca integration check remains unverified. Independent plan and code/ML
+reviews closed with no unresolved findings in this bounded scope.
 
 ## Verified State
 
@@ -496,8 +524,8 @@ artifact paths, pins, pending source issues and verification results are maintai
 in `docs/reviews/active_edge_rebuild_handoff.md`. Do not substitute a current file's
 hash for an independently reviewed source identity just to make a resume succeed.
 
-The local research workbench inventories four configured experiments: baseline and
-event-driven variants for swing and intraday. It reports the real training
+The local research workbench inventories two configured swing experiments:
+technical and technical-with-catalyst. It reports the real training
 state of every experiment. A `no_candidate` result remains unavailable rather than
 being replaced by a fallback model.
 

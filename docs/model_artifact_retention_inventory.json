@@ -31,14 +31,19 @@
           "path": "data/models/swing/technical",
           "promotion_permitted": false,
           "status": "candidate"
-        },
+        }
+      ],
+      "regeneration": "Retained byte-for-byte; no regeneration was performed during the path migration."
+    },
+    {
+      "action": "retain_as_historical_evidence",
+      "reason": "Dedicated intraday entries were removed from the public research catalog on 2026-09-17. Preserve the original artifacts and hashes; this decision does not authorize deletion or renewed serving.",
+      "artifacts": [
         {
           "authority_sha256": "15146756ffc0c0e4e529456290ff7f117410fb8ae1a0fa73dee90b481ef18d44",
           "bytes": 216368,
           "candidate_sha256": null,
-          "direct_references": [
-            "configs/research_model_catalog.toml"
-          ],
+          "direct_references": [],
           "legacy_path": "data/models/intraday_v5_with_catalyst",
           "manifest_sha256": "fdf0b317e00ec1704b4141125786fa8451de0c06f1df057b22f5bd2c14f5166d",
           "model_id": "intraday_technical_with_catalyst",
@@ -50,9 +55,7 @@
           "authority_sha256": "15e87d739d7b30ef2eb1596df78c8df21e52adf83cc954331708d5ea06a065ab",
           "bytes": 216342,
           "candidate_sha256": null,
-          "direct_references": [
-            "configs/research_model_catalog.toml"
-          ],
+          "direct_references": [],
           "legacy_path": "data/models/intraday_v5_no_catalyst",
           "manifest_sha256": "db54dc22ecdf7dd5bb9c443ab88a56900562b3022f8fffbec63ba28004ea59a5",
           "model_id": "intraday_technical",

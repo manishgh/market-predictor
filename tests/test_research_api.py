@@ -57,7 +57,7 @@ def test_canonical_api_module_is_not_shadowed() -> None:
     assert Path(market_predictor.api.__file__).name == "api.py"
 
 
-def test_catalog_reports_all_four_models_and_real_artifact_states(tmp_path: Path) -> None:
+def test_catalog_reports_only_swing_models_and_real_artifact_states(tmp_path: Path) -> None:
     catalog = _write_catalog(tmp_path)
     _write_candidate(tmp_path / "data/models/swing/technical")
     for relative in (
@@ -77,13 +77,11 @@ def test_catalog_reports_all_four_models_and_real_artifact_states(tmp_path: Path
     assert set(states) == {
         "swing_technical_with_catalyst",
         "swing_technical",
-        "intraday_technical_with_catalyst",
-        "intraday_technical",
     }
     assert states["swing_technical"].research_scoring_available is True
     assert states["swing_technical"].promotion_permitted is False
-    assert states["intraday_technical"].training_status == "no_candidate"
-    assert states["intraday_technical"].research_scoring_available is False
+    assert states["swing_technical_with_catalyst"].training_status == "no_candidate"
+    assert states["swing_technical_with_catalyst"].research_scoring_available is False
 
 
 def test_scoring_preserves_real_feature_values_and_remains_non_actionable(
@@ -207,15 +205,17 @@ def test_http_catalog_and_unavailable_model_are_explicit(tmp_path: Path) -> None
 
     catalog_response = client.get("/v1/research/models")
     assert catalog_response.status_code == 200
-    assert len(catalog_response.json()["models"]) == 4
+    assert len(catalog_response.json()["models"]) == 2
     assert catalog_response.json()["actionable"] is False
 
     prediction_response = client.post(
         "/v1/research/predict",
-        json={"model_id": "intraday_technical", "tickers": ["MSFT"]},
+        json={"model_id": "swing_technical_with_catalyst", "tickers": ["MSFT"]},
     )
     assert prediction_response.status_code == 409
     assert "no candidate passed" in prediction_response.json()["detail"]
+    for retired_id in ("intraday_technical", "intraday_technical_with_catalyst"):
+        assert client.post("/v1/research/predict", json={"model_id": retired_id, "tickers": ["MSFT"]}).status_code == 404
 
 
 def test_ui_has_no_hardcoded_ticker_values_or_mock_feature_language() -> None:
@@ -253,19 +253,6 @@ mode = "swing"
 uses_catalyst = false
 artifact_directory = "data/models/swing/technical"
 
-[[models]]
-id = "intraday_technical_with_catalyst"
-label = "Intraday - Technical and Catalyst"
-mode = "intraday"
-uses_catalyst = true
-artifact_directory = "data/models/intraday/technical_with_catalyst"
-
-[[models]]
-id = "intraday_technical"
-label = "Intraday - Technical"
-mode = "intraday"
-uses_catalyst = false
-artifact_directory = "data/models/intraday/technical"
 """.strip()
         + "\n",
         encoding="utf-8",

@@ -2,7 +2,7 @@
 
 Status: active
 
-Last updated: 2026-09-14
+Last updated: 2026-09-17
 
 Repository: `C:\project\market-predictor`
 
@@ -14,16 +14,21 @@ This is the only active execution plan. Exact artifact state is recorded in
 
 ## Objective And Boundary
 
-Current research priority, requested 2026-09-07: **long-only swing stock selection
-with verifiable net outperformance of buy-and-hold SPY**. Intraday development and
-unrelated structural cleanup are paused, not deleted or declared complete. This is
-a research and implementation plan; no profitable candidate is asserted.
+Current product scope: **long-only swing (roughly one to three weeks) and a
+separate, future open-ended investment cohort**, with verifiable net performance
+against buy-and-hold SPY. Dedicated day-trading strategies and training are being
+retired by user instruction, not maintained for compatibility. Minute/hourly bars
+needed for swing entry timing, protection and causal evidence remain supported.
+No profitable or production-admitted candidate is asserted.
 
-The repository's existing supported horizons remain:
+The existing research horizons are:
 
 - **Swing:** ten-session stock direction, managed return, and excess return against
   SPY, QQQ, and the point-in-time sector benchmark.
-- **Intraday:** thirty-minute managed outcome from completed intraday evidence.
+- **Historical intraday:** thirty-minute artifacts are historical research, not
+  the unified product. Their raw evidence and hash-bound provenance are retained.
+- **Investment:** holding is open-ended, but a finite forecast/label horizon still
+  requires approval; do not substitute the swing model or invent a sell deadline.
 
 This repository produces predictions, abstentions, explanations, benchmark
 comparisons, and matured outcomes. It does not produce alerts, orders, positions,
@@ -34,9 +39,57 @@ Offline portfolio accounting is necessary to evaluate predictions. It is not liv
 portfolio management: alerts, orders, final position sizing, and execution remain
 outside this repository.
 
+## Unified Product Implementation
+
+Current checkpoint: **swing-only product boundary and evidence exchange**
+(`in progress`). This changed user requirement supersedes the previously paused
+intraday scope. Two bounded deliverables share one verification checkpoint:
+
+1. Remove intraday/unified prediction HTTP routes and intraday research catalog
+   entries. Public requests accept only the existing swing horizon. TradingFlow's
+   latest working-tree client already requests swing. Retain promotion, identity,
+   authentication and abstention checks. No redirects or compatibility aliases.
+2. Implement one bounded Alpaca raw-news HTTP receipt exchange: exact body bytes,
+   recorded query identity, original receive clock and independently pinned file
+   import, with shared valid/invalid Python/C# fixtures. Do not add a parallel
+   normalized news/bar schema. It is a transport/import foundation, not a running
+   shared collector, normalized attribution, new feature or model admission.
+
+Exit gates: removed routes absent from OpenAPI and return 404; unsupported modes
+and horizons fail before inference; research catalog exposes only swing; missing
+models remain unavailable; both languages agree on fixture acceptance and causal
+cutoffs; malformed/tampered evidence fails closed. Run focused tests, independent
+plan and diff reviews, full Python tests, Ruff/mypy and relevant C# verification.
+Preserve raw archives, immutable research artifacts, account state and all unrelated
+TradingFlow working-tree changes. Do not start provider streams or broker jobs.
+
+Implementation verification completed 2026-09-17: 4,372 Python tests passed,
+ten skipped, 271 warnings; Ruff and strict mypy passed (412 source files).
+TradingFlow's offline suite passed 1,482 tests, excluding its unavailable live
+Alpaca integration test. Both independent reviewers closed their supported findings.
+The first full Python run exposed one missed active-model inventory reference;
+the inventory now retains intraday artifacts as historical evidence, without
+changing their bytes or hashes. The final full run passed after that correction.
+Git checkpoint closure remains the last operation for this bounded checkpoint.
+
+Program order after this checkpoint:
+- Finish reference-audited retirement of internal intraday-only CLI/training paths.
+- Connect the evidence exchange to one designated collector per source and durable
+  replay; retain TradingFlow ownership of the live market stream.
+- Cohort-specific portfolio lots, risk, approvals and holding policies in TradingFlow.
+- Full-content news/SEC attribution, verified company relationships and cited RAG.
+- Causal feature/outcome publications, sequential fits and funded SPY evaluation.
+- Admitted forecast serving, candidate/holding watcher, portable process roles and
+  end-to-end paper verification. Actual Azure/GCP deployment remains separate.
+
+Long-term forecast horizon and numerical allocation/risk budgets remain explicit
+user decisions, not implementation defaults. Detailed approved product rationale
+is in the unified investment product proposal; this remains the sole execution plan.
+
 ## Long-Only Swing Research And Implementation Plan
 
-Current step: **complete the bounded swing return-model comparisons** (`in progress`).
+Research step: **complete the bounded swing return-model comparisons** (`pending`
+while the unified product boundary is implemented).
 The user's combined implement/verify/train checkpoint is complete in `07963cc`
 (pushed): two existing-technical specifications, 16 independent fold/scope fits
 and two final research models. Four specifications still need the distinct

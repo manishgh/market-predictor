@@ -13,17 +13,3 @@ label = "Swing - Technical"
 mode = "swing"
 uses_catalyst = false
 artifact_directory = "data/models/swing/technical"
-
-[[models]]
-id = "intraday_technical_with_catalyst"
-label = "Intraday - Technical and Catalyst"
-mode = "intraday"
-uses_catalyst = true
-artifact_directory = "data/models/intraday/technical_with_catalyst"
-
-[[models]]
-id = "intraday_technical"
-label = "Intraday - Technical"
-mode = "intraday"
-uses_catalyst = false
-artifact_directory = "data/models/intraday/technical"

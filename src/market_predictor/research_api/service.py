@@ -37,7 +37,7 @@ class RegisteredResearchFeatureSource:
         self._store = LiveFeatureStore(repository_root)
 
     def load(self, mode: str, *, as_of: datetime) -> pd.DataFrame:
-        if mode not in {"swing", "intraday"}:
+        if mode != "swing":
             raise ValueError(f"unsupported research feature mode: {mode}")
         try:
             return self._store.load(

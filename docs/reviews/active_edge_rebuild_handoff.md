@@ -1,7 +1,7 @@
 # Active Edge Rebuild Handoff
 
 Status: active
-Last updated: 2026-09-14
+Last updated: 2026-09-17
 Repository: `C:\project\market-predictor`
 Branch: `er-intraday-refactoring`
 Last completed implementation checkpoint: `07963cc` (pushed).
@@ -9,6 +9,62 @@ Source-collection checkpoint: `19698d6` (pushed).
 The combined historical outcome/features delivery is verified and committed.
 
 ## Current State
+
+The unification program has started. Current checkpoint: swing-only public admission
+plus one cross-language raw-news receipt exchange. Implementation and verification
+are complete locally; Git closure is pending. Do not claim a push yet.
+
+Public prediction routes now admit only swing `auto`/`10b`; removed intraday/unified
+routes are not aliases. Public replay is swing-only. Research catalog has only two
+swing experiments. TradingFlow's latest dirty tree already removed predictor mode
+selection; this task tightens its response horizon/model checks and updates fixtures.
+No research regressor was installed as a promoted model. All saved data, features,
+targets, outcome contracts and training inputs remain untouched.
+
+Raw Alpaca news receipt exchange lives in `evidence/news_exchange.py` and
+`sources/news_exchange.py`. C# peers are `TradingFlow.Contracts/Evidence/NewsReceipt.cs`
+and `TradingFlow.Data/Evidence/Collection/NewsReceiptImporter.cs`. Exact raw body,
+original receive time, query and independently pinned manifest identity are retained.
+This is not shared collection scheduling, normalized admission, SEC/bar exchange or
+cloud deployment. Specification: architecture section Raw News Receipt Exchange.
+
+Two independent reviewers, Kierkegaard (`01a0ae90-c0ec-7fc3-b6f3-2f916481993d`)
+and Aquinas (`01a0ae90-c14a-7492-80f9-898be724f0b3`), completed plan and scoped
+code/design/ML reviews. Supported findings were fixed and both closed without
+remaining findings; both agents are shut down. Later verification adjusted the
+wire endpoint to the stable `alpaca.news` identifier to preserve TradingFlow's
+central endpoint-resolver rule, and updated its additional ranking test fixture.
+
+Focused Python checks passed 68; expanded C# checks passed 72 with zero build
+warnings/errors. TradingFlow's full offline suite passed 1,482 tests serially,
+excluding its live-provider `AlpacaCandlePipelineIntegrationTests`, which could not
+complete in this environment. Its cancellation test failed under the first parallel
+full run but passed isolated and in the serial full suite without code changes.
+Ruff and strict mypy passed (412 sources). The first full Python run passed 4,371
+tests with ten skips and found one missed inventory reference: intraday models
+were still listed as active workbench artifacts in the retention inventory. Only
+that inventory document changed; files and hashes remain preserved. All 73 focused
+closure tests then passed. The final full run passed **4,372 tests, ten skips and
+271 warnings in 1,808.26 seconds** (session 16644, exit zero);
+log `data/runtime/unification-verified-full-20260917.log`, JUnit
+`.test-tmp/unification-verified-full-20260917.xml`. Ruff and strict mypy passed
+again after the full run. No test, Python, dotnet or TradingFlow process remains;
+no provider collection, model training or broker runtime was started by this task.
+Identical shared fixture SHA256:
+`700611f47f133bd728f9e863af7f76c5d20ee24e31e335b06a9ca8f8f936942e`
+(both copies verified). These are synthetic tests, not provider observations.
+
+TradingFlow was already `main` ahead of origin by ten commits, with hundreds of
+uncommitted changes. Preserve that work; do not stage/commit/push its whole tree.
+This task adds the receipt files and focused edits to its predictor client/tests,
+Data/Tests project references and evidence architecture. No broker runtime started.
+
+Internal dedicated intraday CLI, training, release and serving implementations are
+still executable and require reference-audited retirement. Shared minute/hourly
+bars and existing swing `intraday_return` features must remain. Open-ended investment
+needs a separately approved finite forecast horizon and risk budgets.
+
+## Verified Swing Models (Unchanged)
 
 The requested implement/verify/train checkpoint is complete in `07963cc`.
 Regularized linear regression and shallow boosted trees predict ten-session net
@@ -313,7 +369,14 @@ the frozen numeric training boundary or authorize promotion.
 
 ## Next Actions
 
-Exact next checkpoint: complete the distinct technical-relationship and qualified issuer/SEC reaction feature profiles for the four remaining bounded return specifications.
+Exact next checkpoint: finish verification and commit the swing-only public boundary
+and raw-news receipt exchange, then audit and retire remaining dedicated intraday
+entry points without deleting shared swing evidence. Continue the canonical unified
+program order; do not resume training merely because an HTTP contract is complete.
+
+Retained research follow-up after the unified boundary: complete the distinct
+technical-relationship and qualified issuer/SEC reaction feature profiles for the
+four remaining bounded return specifications.
 
 1. Existing technical training is complete: preserve its immutable artifacts as
    the two baseline specifications. Do not retrain them or tune settings after

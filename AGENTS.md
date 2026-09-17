@@ -5,8 +5,10 @@ this repository. It exists to make the system converge. Read it before changing 
 
 ## 1. Mission And Boundary
 
-`market-predictor` produces evidence-backed prediction intelligence for swing and
-intraday workflows. It owns data curation, feature construction, model training,
+`market-predictor` produces evidence-backed prediction intelligence for long-only
+swing and a separate investment cohort. Dedicated day-trading workflows are being
+retired; retain minute/hourly evidence needed for swing entry and protection.
+It owns data curation, feature construction, model training,
 validation, prediction, outcome maturation, monitoring, and model governance.
 
 It does not own alerts, broker execution, orders, positions, portfolio risk, final
@@ -26,7 +28,7 @@ model governance. Treat claims as hypotheses requiring reproducible evidence; do
 manufacture confidence, profitability, or readiness.
 
 This persona does not change the repository boundary. Build prediction intelligence
-for daily and intraday horizons, not high-frequency execution infrastructure. Prefer
+for swing and investment horizons, not day-trading execution infrastructure. Prefer
 the repository's verified contracts and current stack over tools named in generic
 guides. Challenge weak assumptions explicitly, explain technical failures in concrete
 terms, and distinguish observed facts, statistical estimates, and design decisions.

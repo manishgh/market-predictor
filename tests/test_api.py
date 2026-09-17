@@ -57,7 +57,11 @@ class FailingPredictionService(StubPredictionService):
 
 
 class StubReplayService:
+    def __init__(self) -> None:
+        self.calls = 0
+
     def replay(self, request: InvestmentReplayRequest) -> InvestmentReplayResponse:
+        self.calls += 1
         now = datetime.now(UTC)
         return InvestmentReplayResponse(
             snapshot_id=request.snapshot_id,
@@ -100,11 +104,11 @@ class PredictionApiTests(unittest.TestCase):
                 "prediction_model_unavailable",
             )
 
-    def test_swing_endpoint_forces_swing_mode(self) -> None:
+    def test_swing_endpoint_defaults_to_swing_mode(self) -> None:
         service = StubPredictionService()
         client = TestClient(create_app(service))  # type: ignore[arg-type]
 
-        response = client.post("/v1/predictions/swing", json={"tickers": ["msft"], "mode": "unified"})
+        response = client.post("/v1/predictions/swing", json={"tickers": ["msft"]})
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["mode"], "swing")
@@ -112,6 +116,48 @@ class PredictionApiTests(unittest.TestCase):
         assert service.last_request is not None
         self.assertEqual(service.last_request.mode, "swing")
         self.assertEqual(service.last_request.tickers, ["MSFT"])
+
+    def test_unsupported_product_requests_do_not_invoke_inference(self) -> None:
+        service = StubPredictionService()
+        client = TestClient(create_app(service))  # type: ignore[arg-type]
+        for field, value in (
+            ("mode", "intraday"), ("mode", "unified"),
+            ("horizon", "30m"), ("horizon", "5d"), ("horizon", "10d"),
+            ("horizon", "next_week"), ("horizon", "10B"),
+        ):
+            with self.subTest(field=field, value=value):
+                response = client.post("/v1/predictions/swing", json={"tickers": ["MSFT"], field: value})
+                self.assertEqual(response.status_code, 422)
+                self.assertIsNone(service.last_request)
+        response = client.post("/v1/predictions/swing", json={"tickers": ["MSFT"], "mode": "swing", "horizon": "10b"})
+        self.assertEqual(response.status_code, 200)
+
+    def test_retired_routes_are_not_public_and_replay_is_swing_only(self) -> None:
+        replay = StubReplayService()
+        client = TestClient(create_app(StubPredictionService(), replay))  # type: ignore[arg-type]
+        schema = client.get("/openapi.json").json()
+        for path in ("/v1/predictions/intraday", "/v1/predictions/unified"):
+            self.assertNotIn(path, schema["paths"])
+            self.assertEqual(client.post(path, json={"tickers": ["MSFT"]}).status_code, 404)
+        request_schema = schema["components"]["schemas"]["SwingPredictionRequest"]["properties"]
+        self.assertEqual(request_schema["mode"]["const"], "swing")
+        self.assertEqual(set(request_schema["horizon"]["enum"]), {"auto", "10b"})
+        response = client.post("/v1/replays/investment", json={
+            "snapshot_id": "a" * 64, "ticker": "MSFT", "model_view": "intraday",
+        })
+        self.assertEqual(response.status_code, 422)
+        self.assertEqual(replay.calls, 0)
+        response = client.post("/v1/replays/investment", json={
+            "snapshot_id": "a" * 64, "ticker": "MSFT", "model_view": "swing",
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(replay.calls, 1)
+
+    def test_public_api_rejects_intraday_route_configuration(self) -> None:
+        service = StubPredictionService()
+        service.routes = {"intraday": {}}  # type: ignore[attr-defined]
+        with self.assertRaisesRegex(ValueError, "only swing"):
+            create_app(service)  # type: ignore[arg-type]
 
     def test_prediction_request_rejects_timezone_free_as_of(self) -> None:
         client = TestClient(create_app(StubPredictionService()))  # type: ignore[arg-type]

@@ -2,7 +2,7 @@
 
 Status: current edge-rebuild path
 
-Last updated: 2026-09-14
+Last updated: 2026-09-17
 
 Read `AGENTS.md`, `docs/active_edge_rebuild_plan.md`, and
 `docs/reviews/active_edge_rebuild_handoff.md` first. Command `--help` output and code
@@ -18,6 +18,39 @@ contracts are authoritative.
 
 No edge model is active. Production scoring must fail closed until a compatible
 promoted atomic bundle exists.
+
+### Public Swing Admission
+
+`serving/requests.py` defines the public swing prediction and replay requests.
+`api.py` exposes only the swing route and rejects retired route configuration.
+`research_api/catalog.py` and `configs/research_model_catalog.toml` limit the
+catalog-driven workbench to two swing experiments. Internal historical contracts
+and remaining executable intraday code are not a compatibility promise or complete
+retirement; the active plan tracks their removal separately.
+
+### News Receipt Exchange
+
+- `evidence/news_exchange.py`: immutable envelope validation, exact byte hashes,
+  bounded pinned file import and receipt-time cutoff checks.
+- `sources/news_exchange.py`: `fetch_news_receipt(source, request,
+  producer_revision=...)` wraps the existing observed Alpaca transport. It verifies
+  recorded query identity and preserves the actual response bytes/time. No provider
+  parser or historical pinned helper was modified.
+- TradingFlow `Contracts/Evidence/NewsReceipt.cs`: matching C# wire validation.
+- TradingFlow `Data/Evidence/Collection/NewsReceiptImporter.cs`: bounded read-only
+  import with an independently supplied receipt hash. It does not fabricate a
+  TradingFlow collection job, publish normalized evidence or submit orders.
+- Both projects' `news_receipt_exchange.json` fixtures cover valid receipts,
+  timing, hash, size, query/schema boundaries, malformed UTF-8, duplicate keys and
+  numeric/depth limits. They are synthetic tests, never source evidence.
+
+Python file import is `read_news_receipt(manifest_path, payload_path,
+expected_receipt_sha256=trusted_pin)`. C# is
+`NewsReceiptImporter.Read(manifestPath, payloadPath, trustedPin)`.
+Pass the publisher's independently trusted pin, not a hash derived from an
+untrusted import at read time. No machine-specific path is embedded in the wire
+format. Azure/GCP storage adapters and actual shared collector wiring are not
+claimed by this local contract implementation.
 
 ### Incremental Source Collection
 

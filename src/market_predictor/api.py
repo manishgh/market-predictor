@@ -35,6 +35,7 @@ from market_predictor.serving.prediction_service import (
     serving_routes_from_config,
     swing_live_input_provider_from_config,
 )
+from market_predictor.serving.requests import SwingInvestmentReplayRequest, SwingPredictionRequest
 from market_predictor.telemetry import RuntimeTelemetry
 
 try:
@@ -79,6 +80,9 @@ def create_app(
             inference_memory_reservation_gib=settings.runtime_inference_memory_reservation_gib,
             reject_unknown_memory=settings.runtime_reject_unknown_memory,
         )
+    configured_routes = getattr(prediction_service, "routes", {})
+    if set(configured_routes).difference({"swing"}):
+        raise ValueError("The public API accepts only swing serving routes.")
     configured_security = security_config
     if configured_security is None:
         configured_security = (
@@ -118,7 +122,7 @@ def create_app(
     app = FastAPI(
         title="Market Predictor API",
         version="0.1.0",
-        description="Production prediction API for swing and intraday market models.",
+        description="Prediction intelligence for long-only swing; no order execution.",
         lifespan=lifespan,
         docs_url=None if configured_security.mode == "entra" else "/docs",
         redoc_url=None,
@@ -290,34 +294,16 @@ def create_app(
         return runtime_telemetry.snapshot()
 
     @app.post("/v1/predictions/swing", response_model=PredictionResponse)
-    def predict_swing(request: PredictionRequest, http_request: Request) -> PredictionResponse:
+    def predict_swing(request: SwingPredictionRequest, http_request: Request) -> PredictionResponse:
         return _run_prediction(
             prediction_service,
-            _with_request_context(request, http_request, mode="swing"),
-            runtime_telemetry,
-            http_request,
-        )
-
-    @app.post("/v1/predictions/intraday", response_model=PredictionResponse)
-    def predict_intraday(request: PredictionRequest, http_request: Request) -> PredictionResponse:
-        return _run_prediction(
-            prediction_service,
-            _with_request_context(request, http_request, mode="intraday"),
-            runtime_telemetry,
-            http_request,
-        )
-
-    @app.post("/v1/predictions/unified", response_model=PredictionResponse)
-    def predict_unified(request: PredictionRequest, http_request: Request) -> PredictionResponse:
-        return _run_prediction(
-            prediction_service,
-            _with_request_context(request, http_request, mode="unified"),
+            _with_request_context(request, http_request),
             runtime_telemetry,
             http_request,
         )
 
     @app.post("/v1/replays/investment", response_model=InvestmentReplayResponse)
-    def replay_investment(request: InvestmentReplayRequest) -> InvestmentReplayResponse:
+    def replay_investment(request: SwingInvestmentReplayRequest) -> InvestmentReplayResponse:
         if configured_replay_service is None:
             raise PredictionReadinessError
         return _run_replay(configured_replay_service, request, runtime_telemetry)
@@ -366,9 +352,9 @@ def _run_replay(
         raise PredictionDependencyError from exc
 
 
-def _with_request_context(request: PredictionRequest, http_request: Request, *, mode: str) -> PredictionRequest:
+def _with_request_context(request: PredictionRequest, http_request: Request) -> PredictionRequest:
     correlation_id = request.correlation_id or _state_correlation_id(http_request)
-    return request.model_copy(update={"mode": mode, "correlation_id": correlation_id})
+    return request.model_copy(update={"correlation_id": correlation_id})
 
 
 def _request_correlation_id(value: str | None) -> str:
@@ -432,8 +418,6 @@ def _boundary_error(
 def _required_scope(method: str, path: str) -> str | None:
     return {
         ("POST", "/v1/predictions/swing"): "predictions.read",
-        ("POST", "/v1/predictions/intraday"): "predictions.read",
-        ("POST", "/v1/predictions/unified"): "predictions.read",
         ("GET", "/v1/operations/health"): "operations.read",
         ("GET", "/v1/metrics"): "metrics.read",
         ("POST", "/v1/replays/investment"): "replay.execute",

@@ -1,7 +1,7 @@
 # Catalyst-Confirmation Prediction Architecture
 
 Status: design authority
-Last updated: 2026-09-14
+Last updated: 2026-09-17
 
 This document defines stable component boundaries. Current progress and blockers are
 in `active_edge_rebuild_plan.md` and `reviews/active_edge_rebuild_handoff.md`.
@@ -28,6 +28,68 @@ flowchart LR
 ```
 
 There is no fallback from the active path to legacy models or schemas.
+
+### Unified Product Scope
+
+The public HTTP/workbench product is long-only swing, with `auto` resolving to the
+existing ten-session horizon (`10b`). Intraday/unified prediction endpoints and
+intraday research catalog entries are removed. Conflicting modes/horizons are
+rejected, never coerced into swing. Public investment replay accepts swing only.
+Historical response/artifact types are not permissions to expose retired workflows.
+Remaining internal intraday CLI/training/release deletion is a separate audited task.
+Shared minute/hourly evidence and swing features such as `intraday_return` remain.
+
+Open-ended investing is an approved product cohort, not an implemented forecast.
+Its finite training target and user-approved holding/risk policy are still required.
+TradingFlow remains the sole portfolio/risk/approval/order owner; predictions and
+research receipts cannot grant execution authority. No profitable model is asserted.
+
+### Raw News Receipt Exchange
+
+The portable `alpaca.news_http_receipt.v1` envelope wraps exact **decoded HTTP body
+bytes**, before article normalization. It does not replace canonical bar/event
+contracts or existing evidence hashes. Python owns the contract specification here;
+both repositories carry identical `news_receipt_exchange.json` golden fixtures.
+
+Required envelope fields: `schema_version`, `producer`, `producer_revision`,
+`endpoint`, `transport`, `status_code`, `byte_representation`, `availability_basis`,
+`request`, `received_at_utc`, `payload_sha256`, `payload_bytes`. Producer is
+`market_predictor` or `trading_flow`; revision is a 40-character lowercase Git hash.
+Endpoint identifier is `alpaca.news`, meaning the observed Alpaca
+`https://data.alpaca.markets/v1beta1/news` transport; consumers do not use it as
+a configurable network destination. Transport is `http`,
+status 200, representation `decoded_http_body_utf8`, basis `observed_receipt`.
+The request binds symbol, start/end, nullable page token, include-content flag and
+page limit (1-50). No arbitrary headers, credentials, URLs or local paths are carried.
+The producer adapter checks the actual recorded query, including sort and duplicate
+parameters. Missing original receipt evidence or a changed endpoint is rejected.
+
+Wire clocks use UTC `YYYY-MM-DDTHH:mm:ss.ffffffZ`; consumers do not round
+nanosecond clocks. Start precedes end; receive time cannot precede request end.
+Manifest is limited to 16 KiB, body to 8 MiB, JSON nesting to 64. Strict UTF-8,
+unique keys, finite binary64-range numbers and a bounded news array are required.
+Original numeric tokens and body bytes are preserved, not reserialized or rounded.
+Page tokens are nullable or 1-2048 printable non-space ASCII characters.
+
+Payload SHA256 covers producer bytes, not a consumer's JSON serialization.
+Receipt identity is SHA256 of the exact manifest bytes. File import requires an
+**independently supplied expected receipt SHA256** before payload interpretation;
+computing that pin from the same untrusted file defeats the integrity check.
+Structural validation alone does not authenticate a provider, producer revision or
+timestamp. Trust distribution/signing and collection-job publication remain separate.
+The importer is read-only and repeated reads preserve the same identity and clock.
+
+An old article collected today is observable only from today's original receipt.
+Article publication/revision clocks remain in the raw body; they are not substituted
+for receive time. `include_content=true` is request intent, not proof that every
+article body exists. Missing bodies are preserved; no neutral sentiment is invented.
+The raw receipt makes no issuer/security-identity, coverage completeness, causal
+feature or trading-admission claim. Normalization must establish those separately.
+
+This checkpoint neither starts a collector nor migrates source ownership. TradingFlow
+keeps its fenced live market stream. Candle exchange, SEC exchange, collector replay,
+durable publication and normalized imports remain explicitly unimplemented parts of
+the broader program. Local files are import adapters, not shared cloud coordination.
 
 ## Incremental Source Acquisition
 

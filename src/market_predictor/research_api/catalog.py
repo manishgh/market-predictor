@@ -12,8 +12,6 @@ EXPECTED_MODEL_IDS = frozenset(
     {
         "swing_technical_with_catalyst",
         "swing_technical",
-        "intraday_technical_with_catalyst",
-        "intraday_technical",
     }
 )
 
@@ -22,7 +20,7 @@ EXPECTED_MODEL_IDS = frozenset(
 class ResearchModelSpec:
     model_id: str
     label: str
-    mode: Literal["swing", "intraday"]
+    mode: Literal["swing"]
     uses_catalyst: bool
     artifact_directory: Path
 
@@ -74,7 +72,7 @@ def load_research_model_specs(
         if (
             model_id not in EXPECTED_MODEL_IDS
             or not label
-            or mode not in {"swing", "intraday"}
+            or mode != "swing"
             or not isinstance(uses_catalyst, bool)
             or relative_directory.is_absolute()
             or ".." in relative_directory.parts
@@ -89,7 +87,7 @@ def load_research_model_specs(
         specs[model_id] = ResearchModelSpec(
             model_id=model_id,
             label=label,
-            mode=cast(Literal["swing", "intraday"], mode),
+            mode=cast(Literal["swing"], mode),
             uses_catalyst=uses_catalyst,
             artifact_directory=root / relative_directory,
         )
