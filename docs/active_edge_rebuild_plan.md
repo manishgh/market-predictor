@@ -41,9 +41,21 @@ outside this repository.
 
 ## Unified Product Implementation
 
-Current checkpoint: **swing-only product boundary and evidence exchange**
-(`in progress`). This changed user requirement supersedes the previously paused
-intraday scope. Two bounded deliverables share one verification checkpoint:
+Current checkpoint: **reference-audited retirement of internal day-trading entry
+points** (`in progress`). Inventory only: 72 files remain in the intraday package;
+CLI training, promotion and collection registrations still exist. No deletion or
+relocation has started. Freeze the dependency/reference inventory first, including
+artifact-retention inventories, shared minute/hourly consumers and training code pins.
+Exit gates: dedicated executable paths removed without aliases; shared swing data
+and features preserved; CLI/package checks and swing replay/regression evidence pass.
+
+### Completed Swing Public Boundary And News Receipt Exchange
+
+Market Predictor implementation `1fe9533` is pushed. Both bounded deliverables below
+are implemented and locally verified across Python/C#. TradingFlow's corresponding
+changes remain in its existing uncommitted working tree, not in that Python commit;
+do not stage or publish unrelated TradingFlow work. This changed user requirement
+supersedes the previously paused intraday scope:
 
 1. Remove intraday/unified prediction HTTP routes and intraday research catalog
    entries. Public requests accept only the existing swing horizon. TradingFlow's
@@ -70,7 +82,9 @@ Alpaca integration test. Both independent reviewers closed their supported findi
 The first full Python run exposed one missed active-model inventory reference;
 the inventory now retains intraday artifacts as historical evidence, without
 changing their bytes or hashes. The final full run passed after that correction.
-Git checkpoint closure remains the last operation for this bounded checkpoint.
+Both review agents and all owned verification processes are closed. This checkpoint
+does not certify full intraday retirement, common collector operation, cloud readiness
+or an admitted profitable model.
 
 Program order after this checkpoint:
 - Finish reference-audited retirement of internal intraday-only CLI/training paths.

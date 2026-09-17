@@ -4,15 +4,17 @@ Status: active
 Last updated: 2026-09-17
 Repository: `C:\project\market-predictor`
 Branch: `er-intraday-refactoring`
-Last completed implementation checkpoint: `07963cc` (pushed).
+Last completed implementation checkpoint: `1fe9533` (pushed).
+Last completed model-training checkpoint: `07963cc` (pushed).
 Source-collection checkpoint: `19698d6` (pushed).
 The combined historical outcome/features delivery is verified and committed.
 
 ## Current State
 
-The unification program has started. Current checkpoint: swing-only public admission
-plus one cross-language raw-news receipt exchange. Implementation and verification
-are complete locally; Git closure is pending. Do not claim a push yet.
+The first unification checkpoint is implemented, verified and pushed for Market
+Predictor in `1fe9533`: swing-only public admission plus one cross-language raw-news
+receipt exchange. Corresponding TradingFlow changes are locally verified but remain
+uncommitted with its pre-existing work; no TradingFlow commit/push is claimed.
 
 Public prediction routes now admit only swing `auto`/`10b`; removed intraday/unified
 routes are not aliases. Public replay is swing-only. Research catalog has only two
@@ -49,7 +51,7 @@ closure tests then passed. The final full run passed **4,372 tests, ten skips an
 log `data/runtime/unification-verified-full-20260917.log`, JUnit
 `.test-tmp/unification-verified-full-20260917.xml`. Ruff and strict mypy passed
 again after the full run. No test, Python, dotnet or TradingFlow process remains;
-no provider collection, model training or broker runtime was started by this task.
+no collection service, saved-data model training or broker runtime was started.
 Identical shared fixture SHA256:
 `700611f47f133bd728f9e863af7f76c5d20ee24e31e335b06a9ca8f8f936942e`
 (both copies verified). These are synthetic tests, not provider observations.
@@ -369,10 +371,15 @@ the frozen numeric training boundary or authorize promotion.
 
 ## Next Actions
 
-Exact next checkpoint: finish verification and commit the swing-only public boundary
-and raw-news receipt exchange, then audit and retire remaining dedicated intraday
-entry points without deleting shared swing evidence. Continue the canonical unified
-program order; do not resume training merely because an HTTP contract is complete.
+Exact next checkpoint: reference-audit and retire remaining dedicated intraday
+entry points without deleting shared swing evidence. Inventory has started only:
+72 files exist under `intraday/`; `cli.py` registers `commands/intraday_model.py`
+and `commands/intraday_specialists.py`, and `collection_cli.py` exposes specialist
+collection. Also inspect internal serving, release configuration and artifact-retention
+inventories. Do not delete minute/hourly transports or the swing `intraday_return`
+feature. Do not silently repin immutable training evidence after moving source code.
+Continue the canonical unified program order; do not resume training merely because
+an HTTP contract is complete.
 
 Retained research follow-up after the unified boundary: complete the distinct
 technical-relationship and qualified issuer/SEC reaction feature profiles for the
