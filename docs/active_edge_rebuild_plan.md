@@ -41,8 +41,12 @@ outside this repository.
 
 ## Unified Product Implementation
 
-Current checkpoint: **reference-audited retirement of internal day-trading entry
-points** (`in progress`). This bounded checkpoint removes dedicated day-trading
+Current checkpoint: **shared Alpaca-news collection ownership and durable replay**
+(`in progress`). Design inventory only; no new collector has started.
+
+### Completed Day-Trading Command Retirement
+
+Implementation `9c32ce1` is pushed. This bounded checkpoint removes dedicated day-trading
 command adapters, not every internal historical implementation in one change.
 Remove training, promotion, setup, dataset and specialist-collection commands,
 including the old cross-sectional command group. Move its shared S&P collection
@@ -70,7 +74,7 @@ Independent plan review: Pauli and Newton approved this bounded adapter scope.
 Newton verified 26 training, 67 predictor-replay and 26 outcome-replay pins; none
 directly binds an edited command adapter. Mixed strategy contracts stay untouched.
 
-Implementation and verification complete, awaiting commit: 44 removed commands,
+Implementation and verification complete: 44 removed commands,
 nine deleted adapters; two shared S&P commands moved unchanged. Focused checks
 passed 117 and 24 admission tests. Final full suite: 4,441 passed, ten skipped,
 269 warnings in 1,743.58 seconds; session 86175 exited zero. Ruff and strict mypy
@@ -78,6 +82,37 @@ passed again (405 sources). Replacement reviewers Ramanujan and Curie completed
 the interrupted diff review without blocking findings and are closed. No owned
 worker remains. The saved model's three root manifests and 26 directly bound
 code/config pins match their original hashes. No data, feature or model changes.
+
+### Shared News Collection Ownership And Durable Replay
+
+Next bounded deliverable: connect the existing raw-news receipt contract to one
+designated collection owner and reproducible consumer import. This is design
+inventory only, not a functioning shared collector. Before edits, review both
+repositories' current collection lifecycles and freeze the ownership/configuration
+and provenance contract with two independent reviewers.
+
+- Reuse `sources/news_exchange.py` and the existing Alpaca observed transport;
+  preserve original response bytes, query identity and actual receipt clocks.
+- Give each logical page attempt durable identity. Commit progress only after its
+  receipt is durably published; resume must verify the saved identity and content.
+  Failure of one ticker/window must not corrupt another or create false coverage.
+- Use a single configured collector owner; TradingFlow remains owner of its fenced
+  live market stream. Do not create a second collector merely to satisfy each app.
+- Consumers import genuine observation provenance and pinned receipts, never
+  manufactured collection-plan/attempt hashes. Existing historical availability
+  limitations remain explicit; importing old news today is not old first-seen proof.
+- Keep process roles and storage boundaries cloud-portable. Local coordination is
+  not a distributed lease; unsupported multi-host ownership must fail explicitly.
+  Actual cloud deployment remains outside this checkpoint.
+- Test duplicate workers, interruption/restart, partial writes, repeated pagination,
+  rate-limit failures, tampered receipts, bounded memory, clock preservation and
+  Python/C# fixture parity. Do not run provider/broker jobs before the design gate.
+
+Review starting points: `catalysts/issuer_events/alpaca_news_collection.py`,
+`sources/news_exchange.py`, `evidence/news_exchange.py`, and TradingFlow's
+`docs/research/evidence-repository-design.md` plus its actual collection/import
+implementations. Protect pinned historical helpers; inventory remaining mixed
+intraday domain dependencies before moving shared prospective source ownership.
 
 ### Completed Swing Public Boundary And News Receipt Exchange
 
@@ -116,10 +151,10 @@ Both review agents and all owned verification processes are closed. This checkpo
 does not certify full intraday retirement, common collector operation, cloud readiness
 or an admitted profitable model.
 
-Program order after this checkpoint:
-- Finish reference-audited retirement of internal intraday-only CLI/training paths.
+Program order after command retirement:
 - Connect the evidence exchange to one designated collector per source and durable
-  replay; retain TradingFlow ownership of the live market stream.
+  replay; retain TradingFlow ownership of the live market stream. Move or retire
+  remaining mixed historical domain code only after its consumers/pins are audited.
 - Cohort-specific portfolio lots, risk, approvals and holding policies in TradingFlow.
 - Full-content news/SEC attribution, verified company relationships and cited RAG.
 - Causal feature/outcome publications, sequential fits and funded SPY evaluation.

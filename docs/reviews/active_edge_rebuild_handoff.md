@@ -4,15 +4,15 @@ Status: active
 Last updated: 2026-09-19
 Repository: `C:\project\market-predictor`
 Branch: `er-intraday-refactoring`
-Last completed implementation checkpoint: `1fe9533` (pushed).
+Last completed implementation checkpoint: `9c32ce1` (pushed).
 Last completed model-training checkpoint: `07963cc` (pushed).
 Source-collection checkpoint: `19698d6` (pushed).
 The combined historical outcome/features delivery is verified and committed.
 
 ## Current State
 
-The interrupted CLI-retirement implementation has passed final verification;
-it is awaiting commit. It removes 44 dedicated day-trading commands and nine
+The interrupted CLI-retirement implementation is verified and pushed in `9c32ce1`.
+It removes 44 dedicated day-trading commands and nine
 adapters, relocates unchanged S&P source handlers to `commands/sp500_sources.py`,
 and adds swing-only CLI publication/activation admission in `serving/admission.py`.
 Shared price/news transports, pinned domain code, raw/model artifacts and TradingFlow
@@ -39,6 +39,8 @@ on resumption. Full pytest passed 4,441 tests, ten skipped, 269 warnings in
 The saved training artifact's root manifest/request/checkpoint hashes and all
 26 directly bound code/config pins match the original evidence. No source
 collection or model training was started.
+Post-verification continuity/CLI/architecture checks passed another 16 tests.
+This is a closed command-adapter checkpoint, not full internal domain retirement.
 
 ### Previous Completed Unification Checkpoint
 
@@ -402,11 +404,13 @@ the frozen numeric training boundary or authorize promotion.
 
 ## Next Actions
 
-Exact next checkpoint: commit the verified CLI-retirement checkpoint, then freeze
-shared Alpaca-news collection ownership and durable replay. Session 86175 exited
-zero; do not resume it or repeat training. Current changed paths are the CLI registries,
-command adapters, serving admission and scoped tests/docs. No historical domain
-package or artifact was deleted. Keep shared minute/hourly transports and swing
+Exact next checkpoint: freeze and implement shared Alpaca-news collection ownership
+and durable replay. Start from the bounded design inventory in the active plan;
+no collector code or provider job has started. Recheck TradingFlow's dirty tree
+before touching its files and use two scoped independent reviewers. Session 86175
+exited zero; do not resume it or repeat training. CLI retirement is committed in
+`9c32ce1`, including registry, adapter, admission and scoped test/doc changes.
+No historical domain package or artifact was deleted. Keep shared minute/hourly transports and swing
 `intraday_return`; never silently repin training evidence after moving source code.
 Do not resume training merely because an HTTP or CLI boundary is complete.
 
