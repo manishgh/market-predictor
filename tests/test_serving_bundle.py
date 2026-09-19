@@ -22,6 +22,9 @@ from market_predictor.serving.bundle import (
     verify_serving_bundle,
 )
 from tests.r4_fixtures import test_signing_material as signing_material_for_test
+from tests.support.swing_release import promoted_swing_candidate
+from tests.test_feature_store import _frame as swing_frame
+from tests.test_feature_store import _publish as publish_swing_features
 from tests.test_serving_context import _promoted_intraday_model, _publish_intraday
 
 
@@ -29,16 +32,25 @@ class ServingBundleTests(unittest.TestCase):
     def test_cli_publishes_complete_bundle(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
-            repository, trust_store, release_id, feature_path = _inputs(root, "cli")
+            repository = root / "repository"
+            _, trust_store, _ = signing_material_for_test()
+            model, evidence = promoted_swing_candidate(root / "source", "cli-bundle")
+            release = publish_local_release(repository, model_path=model,
+                evidence_manifest_path=evidence, activate=False,
+                attestation_trust_store_path=trust_store)
+            release_id = str(release["release_id"])
+            store = LiveFeatureStore(root)
+            publish_swing_features(store, swing_frame(), _timestamp())
+            feature_path, _ = store.paths("swing")
 
             result = CliRunner().invoke(
                 app,
                 [
                     "publish-serving-bundle",
                     "--mode",
-                    "intraday",
+                    "swing",
                     "--horizon",
-                    "60m",
+                    "10b",
                     "--model-release-id",
                     release_id,
                     "--feature-snapshot",

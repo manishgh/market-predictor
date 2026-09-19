@@ -22,9 +22,12 @@ its public `model_view` must be `swing`. The research workbench lists only swing
 TradingFlow owns screening/UI, watchlists, holdings, final risk, approvals and
 execution. Its current client consumes ten-session swing evidence. An unavailable
 or research-only model never becomes an order recommendation through integration.
-Dedicated internal intraday CLI/training/release paths still require reference-audited
-retirement; this HTTP checkpoint does not claim their deletion. Retain minute/hourly
-bars used for swing entry timing and all immutable historical research evidence.
+Dedicated day-trading commands are removed: training, promotion, setup, dataset and
+specialist collection, including the old cross-sectional command group. Production
+commands publish swing features/bundles only and reject retired release activation
+or rollback. Shared minute/hourly bars and immutable historical evidence remain.
+Internal mixed historical domain implementations are not yet fully removed; they
+are not supported day-trading entry points or compatibility promises.
 
 The first shared-data building block is a bounded Alpaca news HTTP receipt exchange
 with matching Python/C# validation fixtures. It preserves exact provider response
@@ -34,10 +37,11 @@ issuer attribution, full-content coverage, or model admission. See
 [the architecture](docs/catalyst_confirmation_architecture.md#raw-news-receipt-exchange)
 and [implementation guide](docs/implementation_guide.md#news-receipt-exchange).
 
-Unification verification (September 17): 4,372 Python tests passed, ten skipped;
-Ruff and strict mypy passed. TradingFlow's offline suite passed 1,482 tests; its
-live Alpaca integration check remains unverified. Independent plan and code/ML
-reviews closed with no unresolved findings in this bounded scope.
+CLI-retirement verification (September 19): 4,441 Python tests passed, ten skipped;
+Ruff and strict mypy passed (405 sources). Independent plan and scoped code/design
+reviews closed without blocking findings. Saved model evidence is unchanged.
+TradingFlow's preceding September 17 offline suite passed 1,482 tests; it was not
+changed or retested in this checkpoint. Its live Alpaca check remains unverified.
 
 ## Verified State
 

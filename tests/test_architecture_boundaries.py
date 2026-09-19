@@ -94,7 +94,7 @@ class ArchitectureBoundaryTests(unittest.TestCase):
                 "build-intraday-dataset",
                 "train-intraday-model",
                 "promote-intraday-model",
-            }.issubset(research_commands)
+            }.isdisjoint(research_commands)
         )
         self.assertTrue(
             {

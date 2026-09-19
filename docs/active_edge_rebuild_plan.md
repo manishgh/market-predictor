@@ -2,7 +2,7 @@
 
 Status: active
 
-Last updated: 2026-09-17
+Last updated: 2026-09-19
 
 Repository: `C:\project\market-predictor`
 
@@ -42,12 +42,42 @@ outside this repository.
 ## Unified Product Implementation
 
 Current checkpoint: **reference-audited retirement of internal day-trading entry
-points** (`in progress`). Inventory only: 72 files remain in the intraday package;
-CLI training, promotion and collection registrations still exist. No deletion or
-relocation has started. Freeze the dependency/reference inventory first, including
-artifact-retention inventories, shared minute/hourly consumers and training code pins.
-Exit gates: dedicated executable paths removed without aliases; shared swing data
-and features preserved; CLI/package checks and swing replay/regression evidence pass.
+points** (`in progress`). This bounded checkpoint removes dedicated day-trading
+command adapters, not every internal historical implementation in one change.
+Remove training, promotion, setup, dataset and specialist-collection commands,
+including the old cross-sectional command group. Move its shared S&P collection
+and event-extraction commands unchanged into `commands/sp500_sources.py`.
+Restrict production feature/bundle publication to swing; reject retired model
+activation before changing an active pointer. No compatibility aliases.
+
+Preserve shared minute/hourly transports, prospective news/SIP evidence, canonical
+bar availability clocks, swing `intraday_return`, raw archives, immutable artifacts
+and all training code pins. Reference-bound internal domain modules remain until
+their consumers can be removed or migrated without rewriting historical evidence.
+TradingFlow's unrelated dirty tree is outside this checkpoint.
+
+Exit gates: retired commands absent and fail as unknown commands; retained swing,
+source and S&P commands remain; unsupported production modes/models fail before
+publication or activation; independent plan/diff reviews, focused poison tests,
+CLI/package checks, full pytest, Ruff and strict mypy pass. No provider or broker
+job starts. Rejected activation leaves active pointers unchanged. Local publication
+prechecks the promoted candidate and publishes without activation; it rechecks the
+exact immutable release before activation. A concurrent source replacement may
+leave rejected, nonactive evidence, which must not be silently deleted. Historical
+release verification stays read-only and does not confer current admission.
+
+Independent plan review: Pauli and Newton approved this bounded adapter scope.
+Newton verified 26 training, 67 predictor-replay and 26 outcome-replay pins; none
+directly binds an edited command adapter. Mixed strategy contracts stay untouched.
+
+Implementation and verification complete, awaiting commit: 44 removed commands,
+nine deleted adapters; two shared S&P commands moved unchanged. Focused checks
+passed 117 and 24 admission tests. Final full suite: 4,441 passed, ten skipped,
+269 warnings in 1,743.58 seconds; session 86175 exited zero. Ruff and strict mypy
+passed again (405 sources). Replacement reviewers Ramanujan and Curie completed
+the interrupted diff review without blocking findings and are closed. No owned
+worker remains. The saved model's three root manifests and 26 directly bound
+code/config pins match their original hashes. No data, feature or model changes.
 
 ### Completed Swing Public Boundary And News Receipt Exchange
 

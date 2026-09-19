@@ -1,16 +1,10 @@
 from __future__ import annotations
 
 import unittest
-from pathlib import Path
-from tempfile import TemporaryDirectory
 
 import numpy as np
 import pandas as pd
-from typer.testing import CliRunner
 
-from market_predictor.canonical.audits import CanonicalAuditCheck, CanonicalAuditReport
-from market_predictor.canonical.store import load_canonical_artifact, write_canonical_artifact
-from market_predictor.cli import app
 from market_predictor.intraday.audits import audit_intraday_dataset
 from market_predictor.intraday.contracts import (
     INTRADAY_MODEL_FEATURES,
@@ -182,104 +176,6 @@ class IntradayDatasetV1Tests(unittest.TestCase):
         self.assertEqual(cost_check["status"], "fail")
         self.assertGreater(int(cost_check["failures"]), 0)
 
-    def test_cli_publishes_hash_verified_intraday_dataset(self) -> None:
-        decisions, one_minute, benchmarks, events, collections = _inputs()
-        with TemporaryDirectory() as temp_dir:
-            root = Path(temp_dir)
-            inputs = {
-                "decisions": (decisions, root / "decisions.parquet"),
-                "one_minute": (one_minute, root / "one_minute.parquet"),
-                "benchmarks": (benchmarks, root / "benchmarks.parquet"),
-                "events": (events, root / "events.parquet"),
-                "collections": (collections, root / "collections.parquet"),
-            }
-            artifact_types = {
-                "decisions": "decisions",
-                "one_minute": "bars",
-                "benchmarks": "bars",
-                "events": "events",
-                "collections": "source_collections",
-            }
-            for name, (frame, path) in inputs.items():
-                write_canonical_artifact(
-                    frame,
-                    path,
-                    artifact_type=artifact_types[name],
-                    audit=_passing_audit(len(frame)),
-                )
-            config_path = root / "config.json"
-            config_path.write_text(
-                """{
-                    "horizon_minutes": 5,
-                    "decision_stride_bars": 1,
-                    "min_five_minute_bars": 50,
-                    "min_one_minute_bars": 50,
-                    "minimum_cross_section": 2,
-                    "first_decision_minute_et": 600,
-                    "last_decision_minute_et": 945
-                }""",
-                encoding="utf-8",
-            )
-            output = root / "intraday_dataset.parquet"
-            result = CliRunner().invoke(
-                app,
-                [
-                    "build-intraday-dataset",
-                    "--decisions",
-                    str(inputs["decisions"][1]),
-                    "--one-minute-bars",
-                    str(inputs["one_minute"][1]),
-                    "--benchmark-bars",
-                    str(inputs["benchmarks"][1]),
-                    "--global-events",
-                    str(inputs["events"][1]),
-                    "--global-source-collections",
-                    str(inputs["collections"][1]),
-                    "--config",
-                    str(config_path),
-                    "--out",
-                    str(output),
-                ],
-            )
-            self.assertEqual(result.exit_code, 0, msg=f"{result.output}\n{result.exception}")
-            frame, manifest = load_canonical_artifact(output, expected_type="intraday_dataset")
-            self.assertGreater(int(frame["label_eligible"].sum()), 0)
-            self.assertTrue(manifest["production_ready"])
-            self.assertEqual(len(manifest["inputs"]), 5)
-
-            live_output = root / "intraday_live_features.parquet"
-            live_result = CliRunner().invoke(
-                app,
-                [
-                    "build-intraday-live-features",
-                    "--decisions",
-                    str(inputs["decisions"][1]),
-                    "--one-minute-bars",
-                    str(inputs["one_minute"][1]),
-                    "--benchmark-bars",
-                    str(inputs["benchmarks"][1]),
-                    "--global-events",
-                    str(inputs["events"][1]),
-                    "--global-source-collections",
-                    str(inputs["collections"][1]),
-                    "--config",
-                    str(config_path),
-                    "--out",
-                    str(live_output),
-                ],
-            )
-            self.assertEqual(
-                live_result.exit_code,
-                0,
-                msg=f"{live_result.output}\n{live_result.exception}",
-            )
-            live_frame, live_manifest = load_canonical_artifact(
-                live_output,
-                expected_type="intraday_inference_features",
-            )
-            self.assertEqual(live_frame["decision_time_utc"].nunique(), 1)
-            self.assertNotIn("path_outcome", live_frame)
-            self.assertTrue(live_manifest["production_ready"])
 
     def test_builds_exact_completed_bar_features_and_one_minute_labels(self) -> None:
         decisions, one_minute, benchmarks, events, collections = _inputs()
@@ -482,17 +378,3 @@ def _aggregate_five_minute(one_minute: pd.DataFrame) -> pd.DataFrame:
     ).reset_index()
     output["timeframe"] = "5m"
     return output.drop(columns=["session", "slot"])
-
-
-def _passing_audit(rows: int) -> CanonicalAuditReport:
-    return CanonicalAuditReport(
-        checks=(
-            CanonicalAuditCheck(
-                name="synthetic_input",
-                status="pass",
-                failures=0,
-                rows_checked=rows,
-                detail="synthetic canonical input",
-            ),
-        )
-    )

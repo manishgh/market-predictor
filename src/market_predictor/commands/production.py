@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import cast
 
 import typer
 from rich.console import Console
@@ -11,7 +10,6 @@ from market_predictor.feature_store import LiveFeatureStore, LiveFeatureStoreCon
 from market_predictor.live_features import (
     LIVE_ARTIFACT_TYPES,
     LIVE_SCHEMA_VERSIONS,
-    LiveMode,
 )
 
 
@@ -43,7 +41,7 @@ def register_production_commands(app: typer.Typer, console: Console) -> None:
 
     @app.command("publish-live-features")
     def publish_live_features(
-        mode: str = typer.Option(..., help="Feature mode: swing or intraday."),
+        mode: str = typer.Option(..., help="Feature mode: swing."),
         input_path: Path = typer.Option(
             ...,
             help="Canonical inference feature artifact to publish.",
@@ -56,26 +54,21 @@ def register_production_commands(app: typer.Typer, console: Console) -> None:
         """Atomically publish an integrity-checked feature snapshot."""
 
         normalized_mode = mode.strip().lower()
-        if normalized_mode not in {"swing", "intraday"}:
-            raise typer.BadParameter("mode must be swing or intraday")
-        live_mode = cast(LiveMode, normalized_mode)
-        expected_type = LIVE_ARTIFACT_TYPES[live_mode]
+        if normalized_mode != "swing":
+            raise typer.BadParameter("mode must be swing")
+        expected_type = LIVE_ARTIFACT_TYPES["swing"]
         frame, canonical_manifest = load_canonical_artifact(
             input_path,
             expected_type=expected_type,
             allow_research=False,
         )
-        schema_column = (
-            "swing_feature_schema_version"
-            if normalized_mode == "swing"
-            else "intraday_feature_schema_version"
-        )
+        schema_column = "swing_feature_schema_version"
         schemas = (
             set(frame[schema_column].astype(str).unique())
             if schema_column in frame
             else set()
         )
-        expected_schema = LIVE_SCHEMA_VERSIONS[live_mode]
+        expected_schema = LIVE_SCHEMA_VERSIONS["swing"]
         if schemas != {expected_schema}:
             raise typer.BadParameter(
                 f"canonical {normalized_mode} features do not match schema "
@@ -90,11 +83,10 @@ def register_production_commands(app: typer.Typer, console: Console) -> None:
             Path("."),
             LiveFeatureStoreConfig(
                 swing_path=live_dir / "features/swing.parquet",
-                intraday_path=live_dir / "features/intraday.parquet",
             ),
         )
         manifest = store.publish(
-            live_mode,
+            "swing",
             frame,
             price_feed=next(iter(feeds)),
             feature_schema_version=expected_schema,

@@ -1,7 +1,7 @@
 # Catalyst-Confirmation Prediction Architecture
 
 Status: design authority
-Last updated: 2026-09-17
+Last updated: 2026-09-19
 
 This document defines stable component boundaries. Current progress and blockers are
 in `active_edge_rebuild_plan.md` and `reviews/active_edge_rebuild_handoff.md`.
@@ -36,8 +36,20 @@ existing ten-session horizon (`10b`). Intraday/unified prediction endpoints and
 intraday research catalog entries are removed. Conflicting modes/horizons are
 rejected, never coerced into swing. Public investment replay accepts swing only.
 Historical response/artifact types are not permissions to expose retired workflows.
-Remaining internal intraday CLI/training/release deletion is a separate audited task.
+Dedicated day-trading CLI adapters are removed, including their training, promotion,
+dataset and specialist-collection commands. Shared S&P source commands remain in
+`commands/sp500_sources.py`. Mixed internal research and historical artifact-verifier
+implementations remain reference-bound; this is not full domain-package retirement.
 Shared minute/hourly evidence and swing features such as `intraday_return` remain.
+
+Production CLI admission is separate from historical verification. Feature/bundle
+publication requires swing (`10b` for bundles). Candidate publication verifies a
+promoted swing manifest, publishes without activation, then verifies the exact
+released manifest bytes/type before activating. Local and bundle activation/rollback
+apply the same product boundary without bypassing attestation, integrity or previous-
+generation checks. A concurrent source replacement may leave a rejected, nonactive
+immutable release, never permission to activate it. Historical `verify`/`show` commands
+are read-only; their success is not current product admission.
 
 Open-ended investing is an approved product cohort, not an implemented forecast.
 Its finite training target and user-approved holding/risk policy are still required.

@@ -19,31 +19,18 @@ from market_predictor.azure_store import AzureBlobStore
 from market_predictor.canonical.contracts import SourceCollection
 from market_predictor.commands.canonical_data import register_canonical_data_commands
 from market_predictor.commands.edge_rebuild import register_edge_rebuild_commands
-from market_predictor.commands.intraday_model import register_intraday_model_commands
-from market_predictor.commands.intraday_specialists import (
-    register_intraday_specialist_commands,
-)
 from market_predictor.commands.market_context import collect_gdelt_market_context_events
-from market_predictor.commands.readiness import register_readiness_commands
+from market_predictor.commands.sp500_sources import register_sp500_source_commands
 from market_predictor.commands.strategy_governance import (
     register_strategy_governance_commands,
 )
 from market_predictor.commands.swing_collection import register_swing_collection_commands
 from market_predictor.commands.swing_holding_materialization import register_holding_materialization_commands
 from market_predictor.commands.swing_research import register_swing_research_commands
-from market_predictor.commands.v3_data import register_v3_data_commands
-from market_predictor.commands.v3_evaluation import register_v3_evaluation_commands
-from market_predictor.commands.v3_features import register_v3_feature_commands
-from market_predictor.commands.v3_labels import register_v3_label_commands
-from market_predictor.commands.v3_models import register_v3_model_commands
-from market_predictor.commands.v3_readiness import register_v3_readiness_commands
 from market_predictor.config import Settings, get_settings
 from market_predictor.data_quality import sanitize_events_frame
 from market_predictor.features import add_finbert, add_finbert_with_scorer, events_to_frame
 from market_predictor.global_context import score_flashpoints
-from market_predictor.intraday_confirmation import build_intraday_decision_report
-from market_predictor.intraday_enrichment import build_enriched_intraday_dataset
-from market_predictor.intraday_universe import build_intraday_candidate_universe
 from market_predictor.price import fetch_daily_prices, fetch_intraday_prices
 from market_predictor.promotion_audit import (
     ProfitabilityAuditConfig,
@@ -56,7 +43,7 @@ from market_predictor.sources.alpaca import AlpacaSource
 from market_predictor.sources.finviz import FinvizSource
 from market_predictor.sources.sec import SecSource
 
-app = typer.Typer(help="Build and serve audited swing and intraday market predictions.")
+app = typer.Typer(help="Build and serve audited long-only swing market predictions.")
 console = Console()
 DEFAULT_MARKET_CONTEXT_PATH = Path("data/external/market_context/market_context_events_scored.parquet")
 register_strategy_governance_commands(app, console)
@@ -65,15 +52,7 @@ register_edge_rebuild_commands(app, console)
 register_swing_collection_commands(app, console)
 register_holding_materialization_commands(app, console)
 register_swing_research_commands(app, console)
-register_intraday_model_commands(app, console)
-register_intraday_specialist_commands(app, console)
-register_readiness_commands(app, console)
-register_v3_data_commands(app, console)
-register_v3_feature_commands(app, console)
-register_v3_evaluation_commands(app, console)
-register_v3_label_commands(app, console)
-register_v3_model_commands(app, console)
-register_v3_readiness_commands(app, console)
+register_sp500_source_commands(app, console)
 
 
 def _parse_tickers(tickers: str | None, fallback: list[str]) -> list[str]:
@@ -592,46 +571,6 @@ def download_finviz_screeners(
     console.print(result.head(80))
 
 
-@app.command("build-intraday-universe")
-def build_intraday_universe_command(
-    raw: Path = typer.Option(
-        Path("data/external/finviz/nasdaq200/nasdaq_liquid_raw_20260707.csv"),
-        help="Raw Finviz export CSV.",
-    ),
-    out: Path = typer.Option(
-        Path("data/universe/intraday_nasdaq_activity_latest.csv"),
-        help="Ranked intraday candidate CSV.",
-    ),
-    tickers_out: Path = typer.Option(
-        Path("data/universe/intraday_nasdaq_activity_latest_tickers.txt"),
-        help="Comma-separated ticker output.",
-    ),
-    top_n: int = typer.Option(200, help="Number of candidates to keep."),
-    min_price: float = typer.Option(2.0, help="Minimum stock price."),
-    min_volume: int = typer.Option(500_000, help="Minimum current volume."),
-    min_abs_change_pct: float = typer.Option(0.5, help="Minimum absolute day change percent."),
-    min_market_cap_m: float = typer.Option(100.0, help="Minimum market cap in millions."),
-) -> None:
-    """Rank NASDAQ Finviz rows for volatile/high-volume intraday candidates."""
-    if not raw.exists():
-        raise typer.BadParameter(f"Missing raw Finviz CSV: {raw}")
-    frame = pd.read_csv(raw)
-    candidates = build_intraday_candidate_universe(
-        frame,
-        top_n=top_n,
-        min_price=min_price,
-        min_volume=min_volume,
-        min_abs_change_pct=min_abs_change_pct,
-        min_market_cap_m=min_market_cap_m,
-    )
-    if candidates.empty:
-        raise typer.BadParameter("No intraday candidates matched the requested filters.")
-    out.parent.mkdir(parents=True, exist_ok=True)
-    tickers_out.parent.mkdir(parents=True, exist_ok=True)
-    candidates.to_csv(out, index=False)
-    tickers_out.write_text(",".join(candidates["ticker"].astype(str)), encoding="utf-8")
-    console.print({"raw_rows": len(frame), "candidates": len(candidates), "out": str(out)})
-    console.print(candidates.head(50))
 
 
 @app.command("collect-swing")
@@ -906,100 +845,8 @@ def score_flashpoints_command(
     console.print(f"Wrote flashpoint scores to {out}")
 
 
-@app.command("build-intraday-enriched-dataset")
-def build_intraday_enriched_dataset_command(
-    input_path: Path = typer.Option(..., "--input", help="5m entry/exit dataset parquet."),
-    out: Path = typer.Option(..., help="Output enriched training parquet."),
-    audit_out: Path = typer.Option(..., help="Output enrichment audit CSV."),
-    candidates: Path | None = typer.Option(None, help="Optional Finviz intraday candidate CSV."),
-    one_minute_dir: Path | None = typer.Option(None, help="Optional 1m OHLCV parquet directory."),
-    benchmark_dir: Path | None = typer.Option(None, help="Optional 5m benchmark OHLCV directory containing QQQ/SPY."),
-    event_dirs: str | None = typer.Option(None, help="Comma-separated event directories containing SYMBOL_events.parquet files."),
-    market_context: Path | None = typer.Option(
-        DEFAULT_MARKET_CONTEXT_PATH,
-        help="Optional global market-context events parquet for intraday catalyst features.",
-    ),
-    setup_only: bool = typer.Option(True, help="Keep only rows passing setup-candidate filters."),
-    min_setup_score: float = typer.Option(2.0, help="Minimum setup-candidate score when setup-only is true."),
-) -> None:
-    """Create setup-filtered, market-relative, 1m-confirmed intraday training rows."""
-    if not input_path.exists():
-        raise typer.BadParameter(f"Missing input dataset: {input_path}")
-    frame = pd.read_parquet(input_path)
-    candidate_frame = pd.read_csv(candidates) if candidates is not None and candidates.exists() else None
-    enriched, audit = build_enriched_intraday_dataset(
-        frame,
-        candidates=candidate_frame,
-        one_minute_dir=one_minute_dir,
-        benchmark_dir=benchmark_dir,
-        event_dirs=_parse_path_list(event_dirs),
-        market_context_path=market_context,
-        setup_only=setup_only,
-        min_setup_score=min_setup_score,
-    )
-    out.parent.mkdir(parents=True, exist_ok=True)
-    audit_out.parent.mkdir(parents=True, exist_ok=True)
-    enriched.to_parquet(out, index=False)
-    audit.to_csv(audit_out, index=False)
-    summary = {
-        "input_rows": len(frame),
-        "input_tickers": int(frame["ticker"].nunique()) if "ticker" in frame.columns else 0,
-        "output_rows": len(enriched),
-        "output_tickers": int(enriched["ticker"].nunique()) if not enriched.empty else 0,
-        "setup_only": setup_only,
-        "min_setup_score": min_setup_score,
-        "event_dirs": event_dirs,
-        "market_context": str(market_context) if market_context else None,
-        "target_entry_success_rate": float(pd.to_numeric(enriched.get("target_entry_success_12b"), errors="coerce").mean())
-        if not enriched.empty and "target_entry_success_12b" in enriched.columns
-        else None,
-        "out": str(out),
-        "audit": str(audit_out),
-    }
-    console.print(summary)
-    console.print(audit.sort_values("rows", ascending=False).head(30))
 
 
-@app.command("build-intraday-decision-report")
-def build_intraday_decision_report_command(
-    scores: Path = typer.Option(..., help="Latest 5m entry/exit score CSV."),
-    one_minute_dir: Path = typer.Option(..., help="Directory containing 1m OHLCV parquet files."),
-    candidates: Path | None = typer.Option(None, help="Optional Finviz intraday candidate CSV."),
-    out: Path = typer.Option(Path("data/reports/intraday_decision_latest.csv"), help="Output decision report CSV."),
-) -> None:
-    """Merge 5m entry model scores with latest 1m confirmation features."""
-    if not scores.exists():
-        raise typer.BadParameter(f"Missing scores CSV: {scores}")
-    if not one_minute_dir.exists():
-        raise typer.BadParameter(f"Missing 1m directory: {one_minute_dir}")
-    score_frame = pd.read_csv(scores)
-    candidate_frame = pd.read_csv(candidates) if candidates is not None and candidates.exists() else None
-    report = build_intraday_decision_report(
-        scores=score_frame,
-        one_minute_dir=one_minute_dir,
-        candidates=candidate_frame,
-    )
-    out.parent.mkdir(parents=True, exist_ok=True)
-    report.to_csv(out, index=False)
-    display_cols = [
-        col
-        for col in [
-            "ticker",
-            "intraday_decision",
-            "entry_model_probability",
-            "entry_model_rank",
-            "one_minute_confirmation_signal",
-            "one_minute_dist_vwap",
-            "one_minute_return_15m",
-            "one_minute_volume_burst_15m",
-            "above_opening_range",
-            "intraday_theme",
-            "intraday_candidate_score",
-        ]
-        if col in report.columns
-    ]
-    console.print(report[display_cols].head(80))
-    console.print(f"Wrote intraday decision report to {out}")
 
 
 @app.command("collect-market-context")

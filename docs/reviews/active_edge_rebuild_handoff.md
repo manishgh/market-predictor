@@ -1,7 +1,7 @@
 # Active Edge Rebuild Handoff
 
 Status: active
-Last updated: 2026-09-17
+Last updated: 2026-09-19
 Repository: `C:\project\market-predictor`
 Branch: `er-intraday-refactoring`
 Last completed implementation checkpoint: `1fe9533` (pushed).
@@ -10,6 +10,37 @@ Source-collection checkpoint: `19698d6` (pushed).
 The combined historical outcome/features delivery is verified and committed.
 
 ## Current State
+
+The interrupted CLI-retirement implementation has passed final verification;
+it is awaiting commit. It removes 44 dedicated day-trading commands and nine
+adapters, relocates unchanged S&P source handlers to `commands/sp500_sources.py`,
+and adds swing-only CLI publication/activation admission in `serving/admission.py`.
+Shared price/news transports, pinned domain code, raw/model artifacts and TradingFlow
+files are unchanged. Historical release verification remains read-only. A concurrent
+source swap may leave a rejected immutable release, never an active retired model.
+
+Prior plan reviewers Pauli and Newton approved the bounded adapter scope; their
+sessions were unavailable after restart. Replacement consolidated reviewers
+Ramanujan (`01a0bac4-46d6-70f3-ae13-b8912d8476fb`) and Curie
+(`01a0bac4-476f-7271-93c3-045eaa20242b`) found no blocking issues and are closed.
+Ramanujan checked 336 registration/help cases and unchanged S&P handler ASTs.
+Curie's nonblocking test suggestions were added: positive swing-bundle CLI
+activation/rollback, wrong trust and tampered attestation rejection. The first
+positive bundle test correctly failed on its stale July fixture; its clock is now
+fixed in the test only, without changing runtime freshness checks.
+
+Focused verification passed 117 tests before interruption and 24 admission tests
+on resumption. Full pytest passed 4,441 tests, ten skipped, 269 warnings in
+1,743.58 seconds; session 86175 exited zero. Ruff and strict mypy passed again
+(405 sources). No owned Python/test worker remains. Log:
+`data/runtime/swing-command-retirement-full-20260919.log`; JUnit:
+`.test-tmp/swing-command-retirement-full-20260919.xml`. Memory fell from 87% to
+69.5% before the run; subsequent sampled use stayed between 67.9% and 70.9%.
+The saved training artifact's root manifest/request/checkpoint hashes and all
+26 directly bound code/config pins match the original evidence. No source
+collection or model training was started.
+
+### Previous Completed Unification Checkpoint
 
 The first unification checkpoint is implemented, verified and pushed for Market
 Predictor in `1fe9533`: swing-only public admission plus one cross-language raw-news
@@ -61,10 +92,10 @@ uncommitted changes. Preserve that work; do not stage/commit/push its whole tree
 This task adds the receipt files and focused edits to its predictor client/tests,
 Data/Tests project references and evidence architecture. No broker runtime started.
 
-Internal dedicated intraday CLI, training, release and serving implementations are
-still executable and require reference-audited retirement. Shared minute/hourly
-bars and existing swing `intraday_return` features must remain. Open-ended investment
-needs a separately approved finite forecast horizon and risk budgets.
+Internal mixed historical training/release/serving domain implementations remain;
+CLI retirement is not full package deletion. Shared minute/hourly bars and existing
+swing `intraday_return` features must remain. Open-ended investment needs a separately
+approved finite forecast horizon and risk budgets.
 
 ## Verified Swing Models (Unchanged)
 
@@ -371,15 +402,13 @@ the frozen numeric training boundary or authorize promotion.
 
 ## Next Actions
 
-Exact next checkpoint: reference-audit and retire remaining dedicated intraday
-entry points without deleting shared swing evidence. Inventory has started only:
-72 files exist under `intraday/`; `cli.py` registers `commands/intraday_model.py`
-and `commands/intraday_specialists.py`, and `collection_cli.py` exposes specialist
-collection. Also inspect internal serving, release configuration and artifact-retention
-inventories. Do not delete minute/hourly transports or the swing `intraday_return`
-feature. Do not silently repin immutable training evidence after moving source code.
-Continue the canonical unified program order; do not resume training merely because
-an HTTP contract is complete.
+Exact next checkpoint: commit the verified CLI-retirement checkpoint, then freeze
+shared Alpaca-news collection ownership and durable replay. Session 86175 exited
+zero; do not resume it or repeat training. Current changed paths are the CLI registries,
+command adapters, serving admission and scoped tests/docs. No historical domain
+package or artifact was deleted. Keep shared minute/hourly transports and swing
+`intraday_return`; never silently repin training evidence after moving source code.
+Do not resume training merely because an HTTP or CLI boundary is complete.
 
 Retained research follow-up after the unified boundary: complete the distinct
 technical-relationship and qualified issuer/SEC reaction feature profiles for the

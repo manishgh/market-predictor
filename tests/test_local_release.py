@@ -30,13 +30,14 @@ from tests.r4_fixtures import (
     synthetic_identity_metrics,
 )
 from tests.r4_fixtures import test_signing_material as signing_material_for_test
+from tests.support.swing_release import promoted_swing_candidate
 
 
 class LocalReleaseTests(unittest.TestCase):
     def test_cli_publishes_without_activation_when_requested(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
-            model, evidence = _promoted_candidate(root / "source", "cli")
+            model, evidence = promoted_swing_candidate(root / "source", "cli")
             release_root = root / "repository"
             _, trust_store, _ = signing_material_for_test()
 

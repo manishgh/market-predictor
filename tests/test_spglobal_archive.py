@@ -14,7 +14,7 @@ from urllib.parse import urlencode
 import pytest
 from typer.testing import CliRunner
 
-import market_predictor.commands.v3_readiness as command_module
+import market_predictor.commands.sp500_sources as command_module
 import market_predictor.sources.spglobal.archive as archive_module
 from market_predictor.collection_cli import app as collection_app
 from market_predictor.core.errors import DataReadinessError

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from datetime import datetime
 from pathlib import Path
-from typing import cast
 
 import typer
 from rich.console import Console
@@ -14,6 +13,11 @@ from market_predictor.release import (
     publish_local_release,
     rollback_local_release,
     verify_local_release,
+)
+from market_predictor.serving.admission import (
+    require_swing_bundle,
+    require_swing_candidate,
+    require_swing_release,
 )
 from market_predictor.serving.bundle import (
     activate_serving_bundle,
@@ -47,15 +51,22 @@ def register_release_commands(app: typer.Typer, console: Console) -> None:
     ) -> None:
         """Publish a content-addressed local release."""
 
-        console.print(
-            publish_local_release(
-                release_root,
-                model_path=model,
-                evidence_manifest_path=evidence_manifest,
-                activate=activate,
+        require_swing_candidate(model, attestation_trust_store)
+        release = publish_local_release(
+            release_root,
+            model_path=model,
+            evidence_manifest_path=evidence_manifest,
+            activate=False,
+            attestation_trust_store_path=attestation_trust_store,
+        )
+        release_id = str(release["release_id"])
+        require_swing_release(release_root, release_id, attestation_trust_store)
+        if activate:
+            release["active_pointer"] = activate_local_release(
+                release_root, release_id,
                 attestation_trust_store_path=attestation_trust_store,
             )
-        )
+        console.print(release)
 
     @app.command("verify-local-release")
     def verify_local_release_command(
@@ -93,6 +104,7 @@ def register_release_commands(app: typer.Typer, console: Console) -> None:
     ) -> None:
         """Atomically move the active pointer to a verified release."""
 
+        require_swing_release(release_root, release_id, attestation_trust_store)
         console.print(
             activate_local_release(
                 release_root,
@@ -118,6 +130,7 @@ def register_release_commands(app: typer.Typer, console: Console) -> None:
     ) -> None:
         """Roll back to a complete, verified prior release."""
 
+        require_swing_release(release_root, release_id, attestation_trust_store)
         console.print(
             rollback_local_release(
                 release_root,
@@ -148,8 +161,8 @@ def register_release_commands(app: typer.Typer, console: Console) -> None:
 
     @app.command("publish-serving-bundle")
     def publish_serving_bundle_command(
-        mode: str = typer.Option(..., help="Serving mode: swing or intraday."),
-        horizon: str = typer.Option(..., help="Canonical route horizon."),
+        mode: str = typer.Option(..., help="Serving mode: swing."),
+        horizon: str = typer.Option(..., help="Canonical route horizon: 10b."),
         model_release_id: str = typer.Option(
             ...,
             help="Verified immutable model-release id.",
@@ -178,6 +191,8 @@ def register_release_commands(app: typer.Typer, console: Console) -> None:
         """Publish one immutable model, policy, calibration, and feature bundle."""
 
         live_mode = _serving_mode(mode)
+        if horizon.strip().lower() != "10b":
+            raise typer.BadParameter("horizon must be 10b")
         console.print(
             publish_serving_bundle(
                 release_root,
@@ -231,6 +246,7 @@ def register_release_commands(app: typer.Typer, console: Console) -> None:
     ) -> None:
         """Atomically move the active pointer to one verified serving bundle."""
 
+        require_swing_bundle(release_root, bundle_id.strip().lower(), attestation_trust_store)
         console.print(
             activate_serving_bundle(
                 release_root,
@@ -256,6 +272,7 @@ def register_release_commands(app: typer.Typer, console: Console) -> None:
     ) -> None:
         """Roll back atomically to the verified immediately previous bundle."""
 
+        require_swing_bundle(release_root, bundle_id.strip().lower(), attestation_trust_store)
         console.print(
             rollback_serving_bundle(
                 release_root,
@@ -287,6 +304,6 @@ def register_release_commands(app: typer.Typer, console: Console) -> None:
 
 def _serving_mode(value: str) -> LiveMode:
     normalized = value.strip().lower()
-    if normalized not in {"swing", "intraday"}:
-        raise typer.BadParameter("mode must be swing or intraday")
-    return cast(LiveMode, normalized)
+    if normalized != "swing":
+        raise typer.BadParameter("mode must be swing")
+    return "swing"

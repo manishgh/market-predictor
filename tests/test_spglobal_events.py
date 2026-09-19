@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 from typer.testing import CliRunner
 
-import market_predictor.commands.v3_readiness as command_module
+import market_predictor.commands.sp500_sources as command_module
 import market_predictor.universe.sp500.index_change_events as event_module
 from market_predictor.core.errors import DataReadinessError
 from market_predictor.research_cli import app as research_app
