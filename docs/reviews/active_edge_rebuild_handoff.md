@@ -11,6 +11,21 @@ The combined historical outcome/features delivery is verified and committed.
 
 ## Current State
 
+Latest approved policy: localized/module changes use focused tests plus applicable
+lint/types/build checks; component checkpoints add affected integration, integrity
+and causality checks; release checkpoints run the full suite and applicable model
+replay/expensive regressions. Both AGENTS files carry the policy, including a
+documentation-only exception. Do not repeat the 4,488-case suite for these policy
+edits and do not start a test-count audit or deletion project. Historical full-run
+results below remain valid evidence for their original commits only.
+C# remains the desk language and Python the ML language. The recommendation to
+centralize shared provider ingestion in C# still needs a concrete ownership/cutover
+decision; no collector was moved or disabled in this documentation change.
+Verification for this policy-only change: two continuity checks and both repository
+diff checks passed; a scoped independent policy review found no actionable issue
+and is closed. No runtime tests beyond document checks, lint/types, builds, full
+suite, model replay or test inventory ran because executable behavior is unchanged.
+
 The latest instruction starts shared implementation for both swing and long-term
 investment. Remaining intraday retirement and full retained-model replay are
 explicitly deferred; ten historical source-pin mismatches remain reuse blockers,

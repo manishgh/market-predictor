@@ -15,6 +15,11 @@ It does not own alerts, broker execution, orders, positions, portfolio risk, fin
 position sizing, or user notification delivery. Those responsibilities belong to
 `trading_flow`. Do not add them here.
 
+Keep the trading desk in C# and the ML engine in Python. Shared data contracts do
+not require both applications to use the same language. Provider collection ownership
+must be explicitly agreed and migrated; this boundary does not transfer an existing
+collector or prevent Python from reading analytical datasets directly.
+
 The system is not yet deployed. Do not preserve obsolete implementations, aliases,
 schemas, or compatibility layers unless a currently deployed consumer is identified
 with reproducible evidence.
@@ -106,7 +111,7 @@ For each checkpoint:
 2. Implement and run focused tests.
 3. Run one consolidated code/ML review against the frozen exit gates.
 4. Fix supported findings.
-5. Run the full verification battery and close the checkpoint.
+5. Run the verification required by section 3.11 for this change and close the checkpoint.
 
 Independent reviewers may be used, but duplicate or speculative findings must be
 deduplicated into one evidence-backed list. Do not chain unlimited reviews that each
@@ -185,8 +190,9 @@ Keep the repository documentation small and authoritative:
 5. Never delete raw provider data, canonical authorities, accepted model bundles, or
    hash-bound evidence as routine cleanup. Their removal requires an explicit retention
    decision recorded in the active handoff.
-6. Before committing documentation cleanup, run a repository reference scan and the
-   affected governance tests. Broken links or dangling evidence paths are failures.
+6. Before committing documentation cleanup, check changed references and run any
+   affected document/governance checks under section 3.11. Broken links or dangling
+   evidence paths are failures; prose-only edits do not require runtime governance tests.
 
 The current continuity set is exactly the documents named in section 3.7. The current
 feature audit is `docs/reviews/feature_engineering_audit_20260801.md`; replace its
@@ -235,6 +241,39 @@ abstention.
   feature, train, serve, or document them as available dependencies.
 - No model training may begin until all required causal source, feature, and label
   authorities pass coverage validation, immutable replay, and lineage verification.
+
+### 3.11 Risk-Based Verification
+
+Select verification by affected behavior and consumers, not by the total test count.
+Record the selected tier, commands, results and deliberately unrun checks in the
+checkpoint/handoff. A normal commit or component checkpoint is not a release.
+
+1. **Every code change:** run targeted tests for the changed functions/modules and
+   affected direct consumers, plus Ruff and strict mypy over the affected Python
+   packages. Small, localized and module-level edits do not require the full suite.
+2. **Component checkpoint:** also run affected integration, data-integrity,
+   point-in-time causality and contract tests. Shared wire/schema changes require
+   the affected Python and C# consumer/parity tests. Changes to features, labels,
+   accounting, costs or admission require their relevant poison/regression tests
+   immediately, even when the code diff is small.
+3. **Release checkpoint:** run the full suite, applicable model replay and expensive
+   end-to-end regressions against the final code. Release means a deployable product
+   release, model/strategy promotion or activation, or an explicitly requested
+   end-to-end readiness review. External evidence that is unavailable stays blocked;
+   passing software tests never substitutes for real promotion requirements.
+
+For documentation-only edits, run relevant document/contract checks and
+`git diff --check`; code lint/types, compilation and model runs are not required
+when no executable code, configuration or generated contracts changed. Changes to
+executable examples, machine-consumed contracts or governance-bound evidence still
+require their affected checks.
+Broaden the selected tests when dependency analysis or a failure establishes a wider
+impact; state why. Do not run the full suite reflexively or narrow coverage merely
+to avoid a known failure. Retest the affected behavior after the final relevant edit.
+This policy supersedes older blanket full-suite-per-checkpoint instructions in
+plans/handoffs; historical test results remain factual records, not current mandates.
+Do not inventory, consolidate or delete tests just to reduce their count without a
+separate request. Model/data admission invariants elsewhere in this file still apply.
 
 ## 4. Mandatory ML And Trading Invariants
 
@@ -336,12 +375,15 @@ For every checkpoint:
 
 1. Inspect `git status`, recent commits, current tests, and authoritative docs.
 2. Preserve unrelated user changes. Never reset or revert them.
-3. Write or update the failing/poison test before or with the fix.
+3. For behavior changes, write or update the failing/poison test before or with the
+   fix; apply section 3.11's documentation-only exception to prose edits.
 4. Change contracts before consumers and consumers before documentation.
 5. Update the vertical feature acceptance matrix before model training.
-6. Run focused tests after each subsystem.
-7. Run repository-wide Ruff and strict mypy.
-8. Run the complete unit test suite once after the final code change.
+6. Select and record the verification tier under section 3.11; run focused tests.
+7. Run affected-package Ruff and strict mypy for code changes; use repository-wide
+   checks for release checkpoints or demonstrated cross-package impact.
+8. Run affected integration/integrity/causality checks at component checkpoints;
+   reserve the full suite and applicable expensive replay for release checkpoints.
 9. Check `git diff --check`, process state, and memory.
 10. Update README, architecture, implementation guide, and handoff only where behavior
    actually changed.
@@ -358,8 +400,8 @@ A code checkpoint is complete only when:
 
 - the frozen exit gates are satisfied;
 - focused and poison tests pass;
-- the full suite passes after the last code change;
-- repository-wide Ruff and strict mypy pass;
+- the selected section 3.11 verification tier passes after the final relevant edit;
+- applicable lint/type checks pass and any unrun broader checks are explicit;
 - documentation describes actual behavior and current limitations;
 - no secret or generated credential is present;
 - no worker remains running;

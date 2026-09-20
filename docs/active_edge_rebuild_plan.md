@@ -41,6 +41,16 @@ outside this repository.
 
 ## Unified Product Implementation
 
+Verification policy update (September 20): both repositories' `AGENTS.md` now use
+targeted code checks, affected component integration/integrity/causality checks,
+and full suites plus applicable expensive replay at release checkpoints only.
+This supersedes older blanket full-suite checkpoint gates in this document, not
+their recorded results or model admission rules. No test inventory/deletion is
+requested. This update is documentation-only; use continuity checks and diff checks.
+Keep C# for the desk and Python for ML. C# ownership of shared provider ingestion
+is a recommendation for the next design discussion, not a completed or authorized
+collector migration; the current Python collector and wire contracts are unchanged.
+
 Current checkpoint: **TradingFlow shared-receipt consumption design** (`in progress`).
 Design entry only; consumer implementation has not started. The raw collector is
 complete and pushed in `94aa1c4`. Next, freeze authenticated/trusted receipt
