@@ -1,7 +1,7 @@
 # Catalyst-Confirmation Prediction Architecture
 
 Status: design authority
-Last updated: 2026-09-19
+Last updated: 2026-09-20
 
 This document defines stable component boundaries. Current progress and blockers are
 in `active_edge_rebuild_plan.md` and `reviews/active_edge_rebuild_handoff.md`.
@@ -41,6 +41,15 @@ dataset and specialist-collection commands. Shared S&P source commands remain in
 `commands/sp500_sources.py`. Mixed internal research and historical artifact-verifier
 implementations remain reference-bound; this is not full domain-package retirement.
 Shared minute/hourly evidence and swing features such as `intraday_return` remain.
+
+Historical model retention is restricted to completed swing training with persisted,
+integrity-checked model artifacts. Rejected/no-candidate receipts may remain solely
+for existing evidence references. Removed intraday helpers are not preserved as
+runtime dependencies for these records. Read-only retained-run integrity checks
+do not execute historical implementations or deserialize estimators. They report
+source drift separately and cannot confer current replay, promotion or serving
+eligibility. Contract migration must issue separate swing-only verification evidence
+binding original artifacts and current semantics, never mutate historical hashes.
 
 Production CLI admission is separate from historical verification. Feature/bundle
 publication requires swing (`10b` for bundles). Candidate publication verifies a

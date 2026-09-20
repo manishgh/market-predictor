@@ -18,7 +18,7 @@ def test_research_catalog_matches_retained_behavior_named_artifacts() -> None:
     retained = next(
         group
         for group in inventory["artifact_groups"]
-        if group["action"] == "retain_and_use_for_non_actionable_research"
+        if group["action"] == "retain_catalog_references_pending_swing_reverification"
     )
 
     expected = {
@@ -62,6 +62,25 @@ def test_retained_concrete_paths_have_one_retention_decision() -> None:
     concrete_paths = [path for path in concrete_paths if "*" not in path]
 
     assert len(concrete_paths) == len(set(concrete_paths))
+
+
+def test_approved_swing_retention_separates_models_from_rejection_evidence() -> None:
+    inventory = _inventory()
+    decision = inventory["swing_only_retention_decision"]
+    assert {"intraday", "failed", "interrupted", "no_candidate", "rejected_without_accepted_candidate"}.issubset(
+        decision["excluded_as_models"]
+    )
+    historical = next(
+        group for group in inventory["artifact_groups"]
+        if "models/swing/ks3_specialists_20210709_20260708_v4" in group.get("paths", [])
+    )
+    assert historical["action"] == "retain_referenced_rejection_metadata_only"
+    assert historical["accepted_development_candidates"] == 0
+    assert historical["promotion_permitted"] is False
+    assert historical["current_replay_verified"] is False
+    catalog = next(group for group in inventory["artifact_groups"] if "artifacts" in group)
+    assert catalog["reuse_authorized"] is False
+    assert not any(group["action"] == "retain_and_use_for_non_actionable_research" for group in inventory["artifact_groups"])
 
 
 def _inventory() -> dict[str, Any]:

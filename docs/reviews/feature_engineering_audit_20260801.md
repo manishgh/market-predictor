@@ -1,8 +1,17 @@
 # Current Feature Engineering Audit
 
-Last updated: 2026-09-14
+Last updated: 2026-09-20
 
 ## Current Long-Only Swing Campaign
+
+Current retention verification: the completed technical return run retains both
+final models and 16 evaluation fits with matching original artifact hashes.
+`data/reports/swing_retained_run_integrity.json` records 256 matching source pins
+and ten current implementation mismatches. This preserves historical completion;
+it does not reverify causality, numerical replay or current-contract eligibility.
+The acceptance evidence below describes the original run. Fresh swing-only
+contract verification is required before reuse. No new features or model fits
+were produced by the retirement cleanup.
 
 ### Fixed-Horizon Training Requirements
 

@@ -12,10 +12,6 @@ from market_predictor.modeling.ranking_economics import (
     evaluate_ranking_economics,
     fit_disjoint_calibrator,
 )
-from market_predictor.research.intraday_cross_sectional.candidate_evaluation import (
-    CrossSectionalPromotionGateConfig,
-    evaluate_candidate_acceptance,
-)
 
 
 class CrossSectionalRankingEconomicsTests(unittest.TestCase):
@@ -99,33 +95,6 @@ class CrossSectionalRankingEconomicsTests(unittest.TestCase):
             ),
         )
         self.assertEqual(report["ranking_groups"], report["selected_decision_groups"] * 2)
-
-    def test_promotion_evidence_rejects_missing_and_unstable_results(self) -> None:
-        missing = evaluate_candidate_acceptance(
-            ranking_audit=None,
-            holdout_metrics=None,
-            calibration_audits=None,
-        )
-        self.assertFalse(missing["passed"])
-        weak_ranking = {
-            "readiness_failures": [],
-            "selected_sessions": 30,
-            "selected_trades": 200,
-            "mean_ndcg_at_k": 0.7,
-            "average_trade_return": 0.01,
-            "average_trade_return_interval": {"low": -0.005},
-            "profit_factor": 1.5,
-            "max_drawdown": 0.1,
-        }
-        result = evaluate_candidate_acceptance(
-            ranking_audit=weak_ranking,
-            holdout_metrics={"mean_ndcg_at_k": 0.6},
-            calibration_audits={"downside_classifier": {"after": {"expected_calibration_error": 0.05}}},
-            config=CrossSectionalPromotionGateConfig(),
-        )
-        self.assertFalse(result["passed"])
-        self.assertTrue(any("average return CI" in failure for failure in result["failures"]))
-
 
 def _prediction_frame() -> pd.DataFrame:
     rows: list[dict[str, object]] = []

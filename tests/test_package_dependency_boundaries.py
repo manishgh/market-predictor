@@ -64,6 +64,11 @@ CATALYSTS_ALLOWED_DEPENDENCIES = (
     "market_predictor.universe",
 )
 REMOVED_PRODUCTION_MODULES = (
+    "market_predictor.intraday_confirmation",
+    "market_predictor.intraday_enrichment",
+    "market_predictor.intraday_catalysts",
+    "market_predictor.intraday_universe",
+    "market_predictor.research.intraday_cross_sectional",
     "market_predictor.catalysts.issuer_events.initial_fit_derivation",
     "market_predictor.catalysts.issuer_events.monthly_authority",
     "market_predictor.catalysts.issuer_events.monthly_preparation",
@@ -456,6 +461,12 @@ def test_removed_production_modules_have_no_imports_or_files() -> None:
     )
     assert not remaining_files, "Removed production files still exist:\n" + "\n".join(remaining_files)
     assert not violations, "Removed production imports remain:\n" + "\n".join(sorted(violations))
+
+
+def test_retired_day_trading_helpers_and_research_have_no_source_files() -> None:
+    for name in ("intraday_confirmation", "intraday_enrichment", "intraday_catalysts", "intraday_universe"):
+        assert not (PACKAGE_ROOT / f"{name}.py").exists()
+    assert not list((PACKAGE_ROOT / "research" / "intraday_cross_sectional").glob("*.py"))
 
 
 @pytest.mark.parametrize(

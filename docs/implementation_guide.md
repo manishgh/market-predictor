@@ -2,7 +2,7 @@
 
 Status: current edge-rebuild path
 
-Last updated: 2026-09-19
+Last updated: 2026-09-20
 
 Read `AGENTS.md`, `docs/active_edge_rebuild_plan.md`, and
 `docs/reviews/active_edge_rebuild_handoff.md` first. Command `--help` output and code
@@ -38,6 +38,17 @@ replacement race can leave a rejected, nonactive artifact, retained as evidence.
 `commands/production.py` rejects non-swing feature publication before reading data.
 Internal historical domain contracts are not a compatibility promise or complete
 package retirement; they remain until reference-safe removal is implemented.
+
+The unconsumed `research/intraday_cross_sectional` package and four root intraday
+helpers are deleted. Shared ranking/calibration regression tests remain.
+`swing/training/retained_runs.py` verifies a completed historical return experiment:
+three independently supplied root hashes, exactly 16 fold/scope fits plus two final
+models, bounded payload hashes, and reported source-pin discrepancies. It does not
+deserialize models, replay features or admit old contracts for current use.
+The research CLI exposes `verify-retained-swing-run` with `--root`, a root-relative
+`--directory`, `--manifest-sha256`, `--request-sha256` and `--checkpoint-sha256`.
+It emits JSON only and never changes the original run. Use hashes from the retained
+inventory, not hashes freshly calculated from an untrusted artifact directory.
 
 ### News Receipt Exchange
 

@@ -13,22 +13,59 @@ The combined historical outcome/features delivery is verified and committed.
 
 The latest September 20 instruction requests complete intraday removal from
 Market Predictor, beyond the closed public/CLI boundary. Dependency/design review
-is complete on `unified-swing-product`; implementation awaits the disposition
-decision below. Only the active plan and this handoff have changed. Two scoped
-agents reviewed historical contract pins and shared collector ownership and are
-closed. Saved swing training/readiness/replay currently bind
+is complete on `unified-swing-product`; the user approved retention of successful
+swing runs and fresh swing-only verification. The first implementation slice removes
+14 unused intraday source files and 12 exclusive test files, preserving five shared
+ranking tests. Removal/import guards were added. An artifact-audit/implementation
+agent and an independent design/code reviewer completed and are closed.
+Saved swing training/readiness/replay currently bind
 the mixed strategy contract; prospective news collection uses an intraday dataset
 as its security namespace. Resolve these explicitly before deleting packages.
-No historical evidence, source implementation or model has yet changed in this
-checkpoint. Shared subdaily swing evidence remains in scope to preserve.
+No raw data or original model/evidence bytes have changed. Shared subdaily swing
+evidence remains in scope to preserve. Full package/contract retirement is not done.
 
-Decision requested through the UI: preserve saved mixed-contract artifacts as
-historical evidence, introduce a swing-only active contract, and require fresh
-verification/rebuilding before reuse. Await that answer before changing pinned
-contracts or deleting protected implementation. This need not force retraining if
-fresh verification establishes equivalent usable data. The four unused root
-intraday helpers also have source pins in the protected KS3 swing specialist
-request, so their lack of runtime consumers alone is not deletion clearance.
+Approved decision: retain only completed swing runs with persisted, integrity-checked
+models. Failed/interrupted/no-candidate outputs do not qualify as reusable models.
+Retain reference-bound rejection metadata only until references are consolidated.
+Completion is not profitability or promotion. Fresh swing-only verification before
+reuse must be separate from original receipts; no silent repinning or forced
+retraining when equivalent usable inputs can be established.
+
+KS3 disposition: its run completed, but all 24 candidates were rejected and none
+accepted. Its referenced metadata remains unchanged, not current replay evidence.
+The four root helper source pins no longer require executable source retention.
+Original bytes are recoverable from Git commit
+`a080913ce109f6e8e2107f99def2678e1ece03b7`; no snapshots were fabricated or restored.
+
+New read-only verifier: `swing/training/retained_runs.py`, research command
+`verify-retained-swing-run`. Real verification passed all 18 units and the three
+independently pinned root hashes. Report:
+`data/reports/swing_retained_run_integrity.json`, SHA256
+`fd9eb78c3217b130b955544e241372b1094048014ac5ed503a5202f0c626137d`.
+Of 266 direct source pins, 256 match and ten implementation files differ.
+This is historical file integrity only; current replay, numerical equivalence and
+causality remain explicitly unverified, and serving/promotion remain false.
+
+Other inventory results: August swing candidates v1/v2/v3 are `no_candidate`;
+broker-action research roots completed without development candidates. A later
+permission-scoped read resolved the older model access failures: candidate_v3,
+candidate_v3_fixed, candidate_v4 and swing_candidate_v12 contain no-candidate
+evaluation/card evidence, not model binaries. Both retired intraday catalog entries
+also contain no-candidate reports only. The swing technical catalog candidate's
+externally pinned manifest and all three files (model, evaluation, model card)
+pass hashes and sizes. Preserve that older completed candidate alongside the two
+return models; its current-contract replay remains unverified. The swing catalyst
+catalog entry has no candidate. Old catalog reuse permission is superseded pending
+swing verification. No original artifact directory was deleted in this slice.
+
+Final verification passed: 4,442 tests, ten skipped, 268 warnings in 1,742.89
+seconds (session 87759, exit zero); repository Ruff and strict mypy pass, 388 source
+files. Logs: `data/runtime/swing-retained-cleanup-20260920.log` and
+`.test-tmp/swing-retained-cleanup-20260920.xml`. Consolidated independent review
+closed after fixing two supported findings (policy source-pin coverage and obsolete
+catalog reuse permission). Aristotle's implementation agent and Euclid's independent
+review agent are closed. No Python/dotnet test worker remains. No provider, training,
+broker or deployment process ran. System memory samples stayed below 75%.
 
 Reviewed collector migration: reuse independent S&P membership authorities to
 publish a universe-owned namespace, replacing the bar-dataset dependency for new
@@ -42,8 +79,8 @@ saved pins in 10/26 training source/config entries, 16/67 predictor current
 source/config entries, and 4/26 outcome current implementation entries. These
 counts exclude historical/archive implementation mappings. The predictor and
 outcome current-byte comparison gates will reject those discrepancies; the exact
-training-admission impact has not been established. No source was edited by this
-retirement checkpoint, and every inspected working file matches its HEAD blob.
+training-admission impact has not been established. These discrepancies predate the
+unused-source cleanup; its edits did not change those retained-run source pins.
 
 Across these requests and the joined dataset, 23 distinct source mismatches were
 found. Eighteen are confirmed newline-only; five remain unclassified:
@@ -62,8 +99,8 @@ repin old manifests or normalize historical objects into a pass. New publication
 must freeze LF source before hashing and preserve the exact executed source bytes.
 This finding supersedes any assumption that all saved current-byte pins still
 match merely because Git is clean. No dataset or model loss was established.
-Continuity tests pass (2); no implementation/full-suite pass is claimed for this
-design-only checkpoint. No task-owned worker remains.
+The preceding design-only checkpoint passed two continuity tests. This is historical
+evidence, not verification of the current implementation changes.
 
 September 20 preservation: Market Predictor `main` and `origin/main` were
 fast-forwarded to `18e07d1` (191 commits). TradingFlow's existing source work was
@@ -474,15 +511,16 @@ the frozen numeric training boundary or authorize promotion.
 
 ## Next Actions
 
-Exact next checkpoint: obtain the requested historical-only artifact disposition,
-resolve current-source pin discrepancies, then migrate retained shared
-sources and remove dedicated day-trading consumers in the active plan's order.
+Exact next checkpoint: migrate retained shared collection to a verified independent
+security namespace, resolve current-source pin discrepancies, then remove the
+remaining dedicated day-trading consumers in the active plan's order.
 Both main branches are preserved remotely and TradingFlow cleanup is closed in
 `cb747da`. Leave its untracked local settings/runtime reports alone. Shared news
 ownership follows retirement; no new provider job has started. Session 86175
 exited zero; do not resume it or repeat training. CLI retirement is committed in
 `9c32ce1`, including registry, adapter, admission and scoped test/doc changes.
-No historical domain package or artifact was deleted. Keep shared minute/hourly transports and swing
+The unused cross-sectional intraday research package and root helpers are removed;
+no raw data or original model artifact is deleted. Keep shared minute/hourly transports and swing
 `intraday_return`; never silently repin training evidence after moving source code.
 Do not resume training merely because an HTTP or CLI boundary is complete.
 

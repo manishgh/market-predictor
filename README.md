@@ -29,6 +29,15 @@ or rollback. Shared minute/hourly bars and immutable historical evidence remain.
 Internal mixed historical domain implementations are not yet fully removed; they
 are not supported day-trading entry points or compatibility promises.
 
+The unused intraday cross-sectional research package and four root helpers are
+removed. Retention now distinguishes completed swing models from rejected or
+unfinished experiments. Referenced rejection receipts remain historical evidence,
+not reusable models. `verify-retained-swing-run` checks a completed return run's
+original manifests and payload hashes without loading estimators; source drift is
+reported explicitly. This check does not certify replay, profitability or serving.
+Fresh verification under the active swing-only strategy contract remains required
+before historical models can be reused; original manifests must not be repinned.
+
 The first shared-data building block is a bounded Alpaca news HTTP receipt exchange
 with matching Python/C# validation fixtures. It preserves exact provider response
 bytes, query identity and original receipt time. File imports require a separately
@@ -37,11 +46,12 @@ issuer attribution, full-content coverage, or model admission. See
 [the architecture](docs/catalyst_confirmation_architecture.md#raw-news-receipt-exchange)
 and [implementation guide](docs/implementation_guide.md#news-receipt-exchange).
 
-CLI-retirement verification (September 19): 4,441 Python tests passed, ten skipped;
-Ruff and strict mypy passed (405 sources). Independent plan and scoped code/design
-reviews closed without blocking findings. Saved model evidence is unchanged.
-TradingFlow's preceding September 17 offline suite passed 1,482 tests; it was not
-changed or retested in this checkpoint. Its live Alpaca check remains unverified.
+Retained-run cleanup verification (September 20): 4,442 Python tests passed, ten
+skipped; Ruff and strict mypy passed (388 sources). Independent scoped code/design
+review closed without remaining findings. Saved model evidence is unchanged.
+TradingFlow's separately completed September 20 cleanup passed 1,546 offline tests;
+it was not changed or retested in this checkpoint. Its live Alpaca check remains
+unverified. Full internal contract/collector retirement is still incomplete.
 
 ## Verified State
 

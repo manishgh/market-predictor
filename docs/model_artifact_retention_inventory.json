@@ -1,8 +1,35 @@
 {
   "active_serving_pointer_found": false,
+  "swing_only_retention_decision": {
+    "approved_on": "2026-09-20",
+    "model_retention_requires": "Completed swing training, a persisted model, and verified artifact integrity. Completion alone does not prove positive returns or promotion.",
+    "excluded_as_models": ["failed", "interrupted", "no_candidate", "rejected_without_accepted_candidate", "intraday"],
+    "referenced_rejection_metadata": "Keep existing reference-bound rejection receipts until their references are consolidated; they are not retained reusable models and do not require executable intraday helpers.",
+    "successful_model_bytes": "Preserve original bytes and hashes. Fresh swing-only verification must be separate; never rewrite old manifests or silently repin source.",
+    "raw_data": "Preserve provider news, candles and canonical authorities.",
+    "full_retirement_complete": false
+  },
   "artifact_groups": [
     {
-      "action": "retain_and_use_for_non_actionable_research",
+      "action": "retain_completed_swing_models_as_historical_evidence",
+      "paths": ["data/research/swing_technical_return_models_initial_fit"],
+      "status": "complete_research_only",
+      "manifest_sha256": "0a30ef2f8e3b95cee252f8c1d1bb5be3c6b98cddda4e47d68e835ad5c1892551",
+      "request_sha256": "ebfb9de68e24cdb8bece4b5e8581174234f6c22e0521284e5c4a3cfdf2392347",
+      "checkpoint_sha256": "fecd8733f9d812a5060ee098ab11e4e611b57d7043f66d68803e403e123ef598",
+      "final_models": 2,
+      "verified_units": 18,
+      "source_pin_mismatches": 10,
+      "historical_integrity_report": "data/reports/swing_retained_run_integrity.json",
+      "historical_integrity_report_sha256": "fd9eb78c3217b130b955544e241372b1094048014ac5ed503a5202f0c626137d",
+      "current_replay_verified": false,
+      "promotion_permitted": false,
+      "reason": "Both final estimators and 16 evaluation fits pass original artifact integrity. Ten current implementation source pins differ; preserve historical bytes but do not admit resume, replay, serving or promotion."
+    },
+    {
+      "action": "retain_catalog_references_pending_swing_reverification",
+      "reuse_authorized": false,
+      "reason": "Supersedes prior research reuse permission. No-candidate entries are reference-only metadata; other catalog artifacts require fresh integrity and swing-only verification before reuse. Unreadable artifacts are unverified, not presumed failed.",
       "artifacts": [
         {
           "authority_sha256": "6f35f9000ec5eeb2cb1440a87c95a74b79fa082edbe8f21e5fa162eb4c539dff",
@@ -30,6 +57,9 @@
           "model_id": "swing_technical",
           "path": "data/models/swing/technical",
           "promotion_permitted": false,
+          "historical_integrity_verified_on": "2026-09-20",
+          "verified_manifest_files": ["candidate.joblib", "evaluation.json", "model_card.json"],
+          "current_replay_verified": false,
           "status": "candidate"
         }
       ],
@@ -78,11 +108,21 @@
       "paths": [
         "models/edge_rebuild_intraday_candidate_20260802_v1",
         "models/edge_rebuild_swing_candidate_20260802_v2",
-        "models/ks4_intraday_specialists_causal_v4_20260728",
-        "models/swing/ks3_specialists_20210709_20260708_v4"
+        "models/ks4_intraday_specialists_causal_v4_20260728"
       ],
       "promotion_permitted": false,
       "status": "historical_hash_bound_evidence"
+    },
+    {
+      "action": "retain_referenced_rejection_metadata_only",
+      "paths": ["models/swing/ks3_specialists_20210709_20260708_v4"],
+      "direct_references": ["docs/evidence/ks3_swing_specialist_replay_20260727.json", "docs/strategy_execution_ledger.json"],
+      "status": "completed_research_zero_accepted_models",
+      "rejected_candidates": 24,
+      "accepted_development_candidates": 0,
+      "promotion_permitted": false,
+      "current_replay_verified": false,
+      "reason": "The run completed but has no accepted model. Original receipts remain unchanged; recorded source pins are historical declarations, not executable dependencies. Original helper bytes exist in Git commit a080913ce109f6e8e2107f99def2678e1ece03b7."
     },
     {
       "action": "retain_until_active_plan_replay_claims_are_consolidated",

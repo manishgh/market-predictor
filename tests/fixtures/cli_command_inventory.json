@@ -95,6 +95,7 @@
     "train-swing-returns",
     "validate-strategy-execution-ledger",
     "validate-strategy-research-contracts",
-    "verify-events"
+    "verify-events",
+    "verify-retained-swing-run"
   ]
 }
