@@ -1,15 +1,30 @@
 # Active Edge Rebuild Handoff
 
 Status: active
-Last updated: 2026-09-19
+Last updated: 2026-09-20
 Repository: `C:\project\market-predictor`
-Branch: `er-intraday-refactoring`
+Branch: `unified-swing-product`
 Last completed implementation checkpoint: `9c32ce1` (pushed).
 Last completed model-training checkpoint: `07963cc` (pushed).
 Source-collection checkpoint: `19698d6` (pushed).
 The combined historical outcome/features delivery is verified and committed.
 
 ## Current State
+
+September 20 preservation: Market Predictor `main` and `origin/main` were
+fast-forwarded to `18e07d1` (191 commits). TradingFlow's existing source work was
+committed and pushed on `main` as `9d50bc1`; local settings, runtime files and data
+were excluded. Both repositories now use `unified-swing-product`. This preservation
+step alone did not assert fresh verification. TradingFlow cleanup subsequently
+completed and was merged/pushed on `main` as `cb747da`: remaining day-trading design
+workflows removed, swing tests restored, new reservations and fresh entry dispatch
+restricted to swing. Existing broker adoption, reconciliation, exits and protection
+remain. Verification: 97 focused C# tests, 1,546 full offline C# tests and four
+prototype-state tests passed; independent review has no blocking findings. Live
+Alpaca integration was excluded; no provider/broker requests ran. Local C# report:
+`.test-tmp/swing-retirement/swing-retirement.trx`. Both review agents are closed;
+no task-owned test/runtime process remains. No Market Predictor source, model, raw
+evidence or historical pin changed. Its two continuity-document tests passed.
 
 The interrupted CLI-retirement implementation is verified and pushed in `9c32ce1`.
 It removes 44 dedicated day-trading commands and nine
@@ -46,8 +61,8 @@ This is a closed command-adapter checkpoint, not full internal domain retirement
 
 The first unification checkpoint is implemented, verified and pushed for Market
 Predictor in `1fe9533`: swing-only public admission plus one cross-language raw-news
-receipt exchange. Corresponding TradingFlow changes are locally verified but remain
-uncommitted with its pre-existing work; no TradingFlow commit/push is claimed.
+receipt exchange. Corresponding TradingFlow changes were locally verified and
+subsequently preserved with its pre-existing work in `9d50bc1` on September 20.
 
 Public prediction routes now admit only swing `auto`/`10b`; removed intraday/unified
 routes are not aliases. Public replay is swing-only. Research catalog has only two
@@ -89,10 +104,11 @@ Identical shared fixture SHA256:
 `700611f47f133bd728f9e863af7f76c5d20ee24e31e335b06a9ca8f8f936942e`
 (both copies verified). These are synthetic tests, not provider observations.
 
-TradingFlow was already `main` ahead of origin by ten commits, with hundreds of
-uncommitted changes. Preserve that work; do not stage/commit/push its whole tree.
-This task adds the receipt files and focused edits to its predictor client/tests,
-Data/Tests project references and evidence architecture. No broker runtime started.
+TradingFlow was previously `main` ahead of origin by ten commits, with hundreds of
+uncommitted changes. The user's September 20 preservation request authorized the
+source checkpoint `9d50bc1`, including the receipt files, predictor client/tests,
+project references and evidence architecture. Secrets/runtime files were excluded.
+No broker runtime started.
 
 Internal mixed historical training/release/serving domain implementations remain;
 CLI retirement is not full package deletion. Shared minute/hourly bars and existing
@@ -405,9 +421,10 @@ the frozen numeric training boundary or authorize promotion.
 ## Next Actions
 
 Exact next checkpoint: freeze and implement shared Alpaca-news collection ownership
-and durable replay. Start from the bounded design inventory in the active plan;
-no collector code or provider job has started. Recheck TradingFlow's dirty tree
-before touching its files and use two scoped independent reviewers. Session 86175
+and durable replay on `unified-swing-product`. Both main branches are preserved
+remotely and TradingFlow cleanup is closed in `cb747da`. Recheck current trees;
+leave TradingFlow's untracked local settings and runtime reports alone. No new
+collector code or provider job has started. Session 86175
 exited zero; do not resume it or repeat training. CLI retirement is committed in
 `9c32ce1`, including registry, adapter, admission and scoped test/doc changes.
 No historical domain package or artifact was deleted. Keep shared minute/hourly transports and swing

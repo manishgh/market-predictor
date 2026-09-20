@@ -2,11 +2,11 @@
 
 Status: active
 
-Last updated: 2026-09-19
+Last updated: 2026-09-20
 
 Repository: `C:\project\market-predictor`
 
-Branch: `er-intraday-refactoring`
+Branch: `unified-swing-product`
 
 This is the only active execution plan. Exact artifact state is recorded in
 `docs/reviews/active_edge_rebuild_handoff.md`; statistical rules are defined in
@@ -43,6 +43,28 @@ outside this repository.
 
 Current checkpoint: **shared Alpaca-news collection ownership and durable replay**
 (`in progress`). Design inventory only; no new collector has started.
+
+### Completed Main Preservation And TradingFlow Retirement
+
+On September 20, Market Predictor `main` was fast-forwarded to `18e07d1` (191
+commits). TradingFlow's existing source work was preserved in `9d50bc1`, then its
+remaining day-trading cleanup was merged and pushed on `main` as `cb747da`.
+Both repositories use fresh `unified-swing-product` branches. Local settings,
+runtime files, databases and market/model artifacts were excluded from Git changes.
+
+TradingFlow's dedicated strategy/config/runtime paths are retired; remaining
+design workflows were removed and shared swing regression coverage restored.
+New risk reservations must be swing; durable dispatch also rejects unsupported or
+missing risk horizons before a fresh entry POST. Existing broker-order adoption,
+reconciliation, exits and protection remain available. Independent review found no
+blocking issue. Verification: 97 focused C# tests, 1,546 full offline C# tests and
+four prototype-state tests passed. The live Alpaca integration test was excluded;
+no provider or broker requests ran. Both review agents are closed.
+
+Market Predictor code and pinned evidence remain unchanged. Its internal historical
+domain retirement still requires the separately reviewed contract/collector
+migration, not a blanket package deletion; this checkpoint does not claim that work
+complete. Shared news collection resumes next from the inventory below.
 
 ### Completed Day-Trading Command Retirement
 
@@ -118,8 +140,9 @@ intraday domain dependencies before moving shared prospective source ownership.
 
 Market Predictor implementation `1fe9533` is pushed. Both bounded deliverables below
 are implemented and locally verified across Python/C#. TradingFlow's corresponding
-changes remain in its existing uncommitted working tree, not in that Python commit;
-do not stage or publish unrelated TradingFlow work. This changed user requirement
+changes were initially in its uncommitted working tree, not in that Python commit.
+They are now preserved in TradingFlow `9d50bc1` under the user's September 20 merge
+instruction. This changed user requirement
 supersedes the previously paused intraday scope:
 
 1. Remove intraday/unified prediction HTTP routes and intraday research catalog
