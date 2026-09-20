@@ -41,7 +41,13 @@ outside this repository.
 
 ## Unified Product Implementation
 
-Current checkpoint: **shared news collection for swing and investment** (`in progress`).
+Current checkpoint: **TradingFlow shared-receipt consumption design** (`in progress`).
+Design entry only; consumer implementation has not started. The raw collector is
+complete and pushed in `94aa1c4`. Next, freeze authenticated/trusted receipt
+discovery, exact publication verification, durable acknowledgements and idempotent
+consumer import with independent review before editing TradingFlow runtime code.
+Existing desk feeds stay unchanged until that cutover is explicitly verified;
+raw import cannot fabricate normalized evidence, model admission or order authority.
 The user approved deferring remaining intraday retirement and retained-model replay
 to unblock this implementation. Historical source-pin mismatches still prohibit
 reuse; no admission gate is weakened. Both product cohorts share raw evidence,
@@ -218,7 +224,7 @@ code/config pins match their original hashes. No data, feature or model changes.
 
 ### Shared News Collection Ownership And Durable Replay
 
-Current bounded deliverable: connect the existing raw-news receipt contract to one
+Completed bounded deliverable: connect the existing raw-news receipt contract to one
 designated local collection owner and reproducible consumer import. Preserve the
 existing Python/C# receipt wire format. Raw symbol queries are not issuer identity,
 point-in-time feature authority, evidence of complete provider coverage, or model
@@ -240,7 +246,9 @@ parity, repository lint/types/full Python regression, independent code/design
 review, updated continuity. No live provider/broker jobs, training, raw-data
 deletion, investment horizon invention, cloud deployment or promotion in scope.
 
-Implementation and full verification are complete; Git checkpoint closure follows.
+Implementation `94aa1c4` is pushed; full verification and scoped review are complete.
+TradingFlow's matching documentation is saved locally as `afaafc0`, not pushed;
+its repository requires explicit authorization for GitHub synchronization.
 Focused checks pass: 101 collection/transport/CLI tests, 232 CLI/package/continuity
 tests, 27 existing C# receipt tests; repository Ruff and strict mypy pass (392
 source files). Consolidated independent review closed after preventing HTTP

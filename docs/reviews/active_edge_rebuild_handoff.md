@@ -4,7 +4,7 @@ Status: active
 Last updated: 2026-09-20
 Repository: `C:\project\market-predictor`
 Branch: `unified-swing-product`
-Last completed implementation checkpoint: `fe0ed86` (pushed).
+Last completed implementation checkpoint: `94aa1c4` (pushed).
 Last completed model-training checkpoint: `07963cc` (pushed).
 Source-collection checkpoint: `19698d6` (pushed).
 The combined historical outcome/features delivery is verified and committed.
@@ -17,12 +17,14 @@ explicitly deferred; ten historical source-pin mismatches remain reuse blockers,
 not blockers on independent raw-news collection. No investment model or execution
 admission is claimed. Its finite forecast horizons still need a separate decision.
 
-Shared collection implementation is verified and awaits its Git checkpoint: new modules are
+Shared collection implementation is verified and pushed in `94aa1c4`: new modules are
 `evidence/news_collection.py`, `sources/news_collection.py`,
 `sources/news_collection_settings.py`, and `commands/news_collection.py` under the
 package. Deployment config is `configs/shared_news_collection.toml`; collection CLI,
 observed Alpaca transport, receipt adapter, focused tests and current docs changed.
 TradingFlow has only a scoped evidence-repository design update, no C# code edits.
+That update is local commit `afaafc0`, not pushed, following its no-unrequested-sync
+rule. Both repositories remain on `unified-swing-product`; no new merge to main ran.
 Existing untracked TradingFlow local settings and runtime reports are untouched.
 101 focused Python, 232 CLI/package/continuity and 27 C# receipt tests passed;
 repository Ruff and strict mypy (392 sources) pass. Independent review closed after
@@ -539,10 +541,20 @@ the frozen numeric training boundary or authorize promotion.
 
 ## Next Actions
 
-Exact next checkpoint: implement and verify shared raw-news collection ownership,
-durable attempt/receipt publication and restart for swing and investment. Keep
-existing Python/C# receipt bytes unchanged; raw queries need no intraday dataset.
-Issuer identity and historical feature admission remain separate downstream gates.
+Exact next checkpoint: freeze and independently review TradingFlow shared-receipt
+discovery, trusted publication verification, durable acknowledgement and idempotent
+consumer import, then implement that bounded integration. The raw collector is
+complete; do not rebuild it or start a duplicate provider collector. Keep existing
+Python/C# receipt bytes unchanged. Issuer identity, normalized evidence admission,
+investment model horizons and trading admission remain separate downstream gates.
+
+Read `evidence/news_collection.py`, `sources/news_collection.py`,
+`sources/news_collection_settings.py` and `commands/news_collection.py`, plus
+TradingFlow's `NewsReceiptImporter.cs` and the raw-exchange section of its
+`docs/research/evidence-repository-design.md`. Consumer integration must bind real
+publication/attempt evidence, never fabricate old EvidenceSourceObservation hashes
+or treat receipt time as historical article availability. Review the existing desk
+REST/news-stream consumers before any cutover. No runtime migration is complete yet.
 Both main branches are preserved remotely and TradingFlow cleanup is closed in
 `cb747da`. Leave its untracked local settings/runtime reports alone. Shared news
 ownership now precedes deferred retirement; no new provider job has started. Session 86175
