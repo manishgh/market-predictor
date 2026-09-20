@@ -4,7 +4,7 @@ Status: active
 Last updated: 2026-09-20
 Repository: `C:\project\market-predictor`
 Branch: `unified-swing-product`
-Last completed implementation checkpoint: `9c32ce1` (pushed).
+Last completed implementation checkpoint: `fe0ed86` (pushed).
 Last completed model-training checkpoint: `07963cc` (pushed).
 Source-collection checkpoint: `19698d6` (pushed).
 The combined historical outcome/features delivery is verified and committed.
@@ -14,7 +14,8 @@ The combined historical outcome/features delivery is verified and committed.
 The latest September 20 instruction requests complete intraday removal from
 Market Predictor, beyond the closed public/CLI boundary. Dependency/design review
 is complete on `unified-swing-product`; the user approved retention of successful
-swing runs and fresh swing-only verification. The first implementation slice removes
+swing runs and fresh swing-only verification. The first implementation slice is
+complete and pushed in `fe0ed86`. It removes
 14 unused intraday source files and 12 exclusive test files, preserving five shared
 ranking tests. Removal/import guards were added. An artifact-audit/implementation
 agent and an independent design/code reviewer completed and are closed.
