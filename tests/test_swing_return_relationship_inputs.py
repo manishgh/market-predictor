@@ -4,6 +4,7 @@ from __future__ import annotations
 import copy
 import json
 import shutil
+from datetime import date
 from types import SimpleNamespace
 from typing import Any
 
@@ -20,6 +21,7 @@ from market_predictor.swing.contracts.return_feature_profiles import RETURN_RELA
 from market_predictor.swing.contracts.return_training import ReturnTrainingPolicy
 from market_predictor.swing.datasets import return_relationship_verification as verifier
 from market_predictor.swing.labels.fixed_horizon_readiness import CONTEXT_COLUMNS, RETURN_COLUMNS
+from tests import test_swing_return_relationship_publication as publication_tests
 from tests.test_swing_feature_history_plan import evidence as evidence
 from tests.test_swing_return_relationship_publication import publication_fixture as publication_fixture
 from tests.test_swing_training_readiness import REPO, _json
@@ -27,7 +29,10 @@ from tests.test_swing_training_readiness import REPO, _json
 
 @pytest.fixture
 def relationship_admission(publication_fixture: dict[str, Any], monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
-    state = publication_fixture
+    return _admit_relationship(publication_fixture, monkeypatch)
+
+
+def _admit_relationship(state: dict[str, Any], monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
     root = state["root"]
     package = root / "src/market_predictor"
     for name in (*readiness.IMPLEMENTATION_PATHS, *readiness.RELATIONSHIP_IMPLEMENTATION_PATHS, *verifier.IMPLEMENTATION_PATHS):
@@ -92,6 +97,40 @@ def test_real_relationship_publication_to_124_column_loader(relationship_admissi
     assert any(name.endswith("/swing_return_inputs.py") for name in data.pins)
 
 
+def test_missing_source_clock_publication_replays_and_loads_124_columns(
+    evidence: dict[str, Any], monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    original_bars = publication_tests._bars
+
+    def missing_stock_ingestion(sessions: tuple[date, ...], ticker: str) -> pd.DataFrame:
+        frame = original_bars(sessions, ticker)
+        if ticker != "SPY":
+            frame["ingested_at_utc"] = pd.Series(pd.NaT, index=frame.index, dtype="datetime64[ns, UTC]")
+        return frame
+
+    # Generate missing-clock source bytes before the real fixture hashes its authorities.
+    monkeypatch.setattr(publication_tests, "_bars", missing_stock_ingestion)
+    state = _admit_relationship(publication_fixture.__wrapped__(evidence, monkeypatch), monkeypatch)
+    data = loader.load_return_inputs(state["root"], state["training_policy"])
+    verified = verifier.verify_return_relationship_publication(state["root"], state["publication"])
+    assert data.features.shape == (354, 124)
+    assert tuple(data.features.columns) == verified.model_columns
+    assert data.features.dtypes.eq(np.dtype("float32")).all()
+    assert data.features[list(RETURN_RELATIONSHIP_COLUMNS)].isna().all(axis=None)
+    assert state["receipt"]["status"] == "passed"
+    assert state["receipt"]["additions_source_replayed"] is True
+    assert state["report"]["baseline_numerical_replayed"] is False
+    assert len(verified.months) == 59
+    directory = (state["root"] / state["publication"].path).parent
+    for record in verified.months.values():
+        frame = pd.read_parquet(directory / record["profiles"]["technical_relationships"]["path"])
+        for name in RETURN_RELATIONSHIP_COLUMNS:
+            clock = frame[f"available_at_{name}"]
+            assert clock.dtype == pd.DatetimeTZDtype(unit="ns", tz="UTC")
+            assert clock.isna().all()
+            assert frame[f"missing_reason_{name}"].eq("missing_required_bar_clock").all()
+
+
 def test_relationship_loader_rejects_current_code_changed_after_readiness(relationship_admission: dict[str, Any]) -> None:
     state = relationship_admission
     source = state["root"] / "src/market_predictor/research/swing_return_inputs.py"
@@ -101,8 +140,9 @@ def test_relationship_loader_rejects_current_code_changed_after_readiness(relati
         loader.load_return_inputs(state["root"], state["training_policy"])
 
 
+@pytest.mark.parametrize("mutation", ["value", "future_clock"])
 def test_rehashed_addition_value_rejected_by_fresh_source_replay(
-    publication_fixture: dict[str, Any], monkeypatch: pytest.MonkeyPatch,
+    publication_fixture: dict[str, Any], monkeypatch: pytest.MonkeyPatch, mutation: str,
 ) -> None:
     state = publication_fixture
     root = state["root"]
@@ -121,7 +161,11 @@ def test_rehashed_addition_value_rejected_by_fresh_source_replay(
     name = RETURN_RELATIONSHIP_COLUMNS[0]
     positions = frame.index[frame[name].notna()]
     assert len(positions), "source fixture must expose at least one verifiable relationship value"
-    frame.loc[positions[0], name] += np.float32(0.125)
+    if mutation == "value":
+        frame.loc[positions[0], name] += np.float32(0.125)
+    else:
+        frame.loc[positions[0], f"available_at_{name}"] = (
+            frame.loc[positions[0], "decision_time_utc"] + pd.Timedelta(nanoseconds=1))
     frame.to_parquet(path, index=False)
     sidecar_path = manifest_path_for(path)
     sidecar = json.loads(sidecar_path.read_text())
@@ -129,6 +173,8 @@ def test_rehashed_addition_value_rejected_by_fresh_source_replay(
     child["sha256"] = file_sha256(path)
     child["manifest_sha256"] = _json(sidecar_path, sidecar)
     publication = SourcePin(path=state["publication"].path, sha256=_json(manifest_path, manifest))
-    with pytest.raises(DataReadinessError, match="source replay"):
+    diagnostic = ("relationship source replay values, clocks or reasons differ" if mutation == "value"
+        else f"relationship future or missing clock: {name}")
+    with pytest.raises(DataReadinessError, match=f"^{diagnostic}$"):
         verifier.verify_return_relationship_rows(root, publication, root / "data/reports/poison.json")
     assert not (root / "data/reports/poison.json").exists()

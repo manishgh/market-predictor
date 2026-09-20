@@ -7,6 +7,7 @@ from pathlib import Path
 import exchange_calendars as xcals
 import numpy as np
 import pandas as pd
+import pyarrow.dataset as ds
 import pytest
 from pydantic import ValidationError
 
@@ -283,6 +284,58 @@ def test_empty_but_schema_present_stock_history_preserves_null_decisions(inputs:
     result = _build(inputs)
     assert len(result.rows) == len(inputs.decisions)
     assert result.rows[list(RETURN_RELATIONSHIP_COLUMNS)].isna().all(axis=None)
+
+
+@pytest.mark.parametrize("source", ["stocks", "spy"])
+@pytest.mark.parametrize("null_group_first", [True, False])
+def test_all_null_clocks_preserve_utc_ns_through_group_and_monthly_parquet(
+    inputs: Inputs, tmp_path: Path, source: str, null_group_first: bool,
+) -> None:
+    inputs.decisions["decision_time_utc"] = inputs.decisions.decision_time_utc.dt.as_unit("us")
+    inputs.baseline.rows["decision_time_utc"] = inputs.decisions.decision_time_utc
+    populated = _build(inputs).rows
+    other_decisions = inputs.decisions.assign(security_id="security-b", ticker="BBB")
+    other_decisions["decision_id"] += "-b"
+    other_base = inputs.baseline.rows.assign(security_id="security-b", ticker="BBB")
+    other_base["decision_id"] += "-b"
+    missing_inputs = replace(inputs, decisions=other_decisions,
+        baseline=replace(inputs.baseline, rows=other_base),
+        stocks=inputs.stocks.assign(security_id="security-b", ticker="BBB"))
+    setattr(missing_inputs, source, getattr(missing_inputs, source).iloc[:0])
+    missing = _build(missing_inputs).rows
+    clocks = [f"available_at_{name}" for name in RETURN_RELATIONSHIP_COLUMNS]
+    affected = RETURN_RELATIONSHIP_COLUMNS if source == "stocks" else RETURN_RELATIONSHIP_COLUMNS[2:]
+    assert missing[[f"available_at_{name}" for name in affected]].isna().all(axis=None)
+    assert populated[clocks].notna().any().all()
+    for name in clocks:
+        assert missing[name].dtype == pd.DatetimeTZDtype(unit="ns", tz="UTC")
+    preserved = other_base.columns.drop("feature_profile")
+    pd.testing.assert_frame_equal(missing[preserved], other_base[preserved], check_exact=True)
+    assert missing.decision_time_utc.dtype == pd.DatetimeTZDtype(unit="us", tz="UTC")
+
+    groups = [missing, populated] if null_group_first else [populated, missing]
+    paths = []
+    for index, frame in enumerate(groups):
+        path = tmp_path / f"group-{index}.parquet"
+        frame.to_parquet(path, index=False)
+        pd.testing.assert_frame_equal(pd.read_parquet(path), frame, check_exact=True)
+        paths.append(str(path))
+    expected = pd.concat(groups, ignore_index=True)
+    projection = ["decision_id", "decision_time_utc", *RETURN_RELATIONSHIP_COLUMNS, *clocks,
+        *(f"missing_reason_{name}" for name in RETURN_RELATIONSHIP_COLUMNS)]
+    projected = ds.dataset(paths, format="parquet").to_table(columns=projection).to_pandas()
+    pd.testing.assert_frame_equal(projected, expected[projection], check_exact=True)
+    month_keys = pd.to_datetime(expected.session_date_et).dt.strftime("%Y-%m")
+    monthly_paths = []
+    for month, monthly in expected.groupby(month_keys, sort=True):
+        path = tmp_path / f"month-{month}.parquet"
+        monthly = monthly.reset_index(drop=True)
+        monthly.to_parquet(path, index=False)
+        pd.testing.assert_frame_equal(pd.read_parquet(path), monthly, check_exact=True)
+        monthly_paths.append(str(path))
+    actual = ds.dataset(monthly_paths, format="parquet").to_table(columns=projection).to_pandas()
+    pd.testing.assert_frame_equal(actual.sort_values("decision_id").reset_index(drop=True),
+        expected[projection].sort_values("decision_id").reset_index(drop=True), check_exact=True)
 
 
 def test_baseline_missingness_is_not_imputed(inputs: Inputs) -> None:

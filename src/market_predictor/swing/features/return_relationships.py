@@ -221,7 +221,7 @@ def _transform_security(stock: pd.DataFrame, spy: pd.DataFrame, decisions: pd.Da
         values[unavailable] = np.nan
         clocks[unavailable] = np.iinfo(np.int64).min
         result[name] = values.astype(np.float32)
-        result[f"available_at_{name}"] = pd.to_datetime(clocks, utc=True)
+        result[f"available_at_{name}"] = pd.to_datetime(clocks, utc=True).as_unit("ns")
         result[f"missing_reason_{name}"] = reasons
     return result
 
@@ -312,7 +312,7 @@ def build_return_relationship_profile(
         pieces.append(_transform_security(stock, spy, decisions))
     derived = pd.concat(pieces, ignore_index=True).set_index("decision_id").loc[rows.decision_id]
     for name in additions:
-        rows[name] = derived[name].to_numpy()
+        rows[name] = derived[name].array
     # Preserve baseline values and clocks; only the profile identity changes.
     rows["feature_profile"] = RETURN_RELATIONSHIP_PROFILE
     names = (*baseline.model_columns, *RETURN_RELATIONSHIP_COLUMNS)
