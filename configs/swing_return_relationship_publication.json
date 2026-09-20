@@ -1,0 +1,32 @@
+{
+  "schema_version": "market_predictor.return_relationship_publication_config",
+  "parent_publication": {
+    "path": "data/features/swing_corrected_initial_fit_research/_manifest.json",
+    "sha256": "63574b3b55cd30adaebf62b4040f92a2030e6dbb17772014afb3e3c168158256"
+  },
+  "parent_saved_row_verification": {
+    "path": "data/reports/swing_initial_fit_join_verification.json",
+    "sha256": "3e4a3c9dd241b9776fc368e7856e45d4bff0ed3cd0ef1431750fa94b16ce53b0"
+  },
+  "feature_config": {
+    "path": "configs/swing_corrected_research_features.toml",
+    "sha256": "ec5b806f9555397fc3a55b8fcdbc0bf5cbbba4bf0b42b72b8ae4ebf66194e0b7"
+  },
+  "predictor_failure_facts": {
+    "path": "configs/swing_predictor_failure_facts.json",
+    "sha256": "1a59f10180bd93082189476006fd5575b5f3fbb1ee48734c92247d17b642d64b"
+  },
+  "strategy_contract": {
+    "path": "configs/edge_rebuild_strategy_contract.toml",
+    "sha256": "02a087be6b9eff4971770026ca75dce3978f8f9e2028c1f21d027daefec9c0e7"
+  },
+  "feature_plan_snapshot": {
+    "path": "data/evidence/symbol_policy_owner_migration/implementation/_manifest.json",
+    "sha256": "152fbf5931c7a5c1a2cefd3e5efb36d073f367e6ed9d057f260070a92bf07293"
+  },
+  "source_start": "2018-05-29",
+  "source_end": "2024-05-28",
+  "decision_start": "2019-07-09",
+  "decision_end": "2024-05-28",
+  "maximum_system_used_percent": 90.0
+}

@@ -14,11 +14,13 @@ from market_predictor.core.system_memory import assert_system_memory_available, 
 from market_predictor.edge_rebuild.temporal_manifest import build_temporal_schedule, load_temporal_manifest_config
 from market_predictor.evidence.hashing import json_sha256
 from market_predictor.evidence.io import inside, write_json_object
-from market_predictor.heavy_jobs import heavy_job_lease
+from market_predictor.heavy_jobs import heavy_job_lease, heavy_job_runtime_dir
 from market_predictor.modeling.strategy_contract import load_strategy_contract
 from market_predictor.resources import assert_memory_budget, release_process_memory
 from market_predictor.swing.contracts.research import load_swing_research_contract
+from market_predictor.swing.contracts.return_feature_profiles import RETURN_RELATIONSHIP_PROFILE
 from market_predictor.swing.contracts.training_readiness import TrainingReadinessPolicy
+from market_predictor.swing.datasets.return_relationship_verification import validate_return_relationship_receipt
 from market_predictor.swing.datasets.symbol_corrections import pinned_object
 from market_predictor.swing.features.panel import swing_model_feature_columns
 from market_predictor.swing.labels.fixed_horizon_readiness import CONTEXT_COLUMNS, RETURN_COLUMNS, fixed_horizon_readiness
@@ -28,6 +30,10 @@ IMPLEMENTATION_PATHS = (
     "swing/contracts/training_readiness.py", "swing/contracts/research.py",
     "swing/features/panel.py", "edge_rebuild/temporal_manifest.py", "modeling/strategy_contract.py",
     "canonical/store.py", "canonical/cutoffs.py",
+)
+RELATIONSHIP_IMPLEMENTATION_PATHS = (
+    "research/swing_return_inputs.py", "swing/contracts/return_training.py",
+    "swing/datasets/return_relationship_verification.py", "swing/contracts/return_feature_profiles.py",
 )
 
 
@@ -58,7 +64,10 @@ def audit_swing_training_readiness(*, root: Path, config: Path, config_sha256: s
         raise DataReadinessError("training readiness output must be below data/reports")
     if output.exists():
         raise FileExistsError(f"immutable report already exists: {output}")
-    with heavy_job_lease("audit-swing-training-readiness", runtime_dir=root / "data/runtime", config_path=config):
+    runtime = heavy_job_runtime_dir()
+    if not runtime.is_absolute():
+        runtime = root / runtime
+    with heavy_job_lease("audit-swing-training-readiness", runtime_dir=runtime, config_path=config):
         policy = TrainingReadinessPolicy.model_validate(pinned_object(config, config_sha256))
         _guard(policy)
         return _audit(root, policy, config, config_sha256, output)
@@ -77,11 +86,25 @@ def _audit(root: Path, policy: TrainingReadinessPolicy, config: Path, config_sha
         source = Path(__file__).parents[1] / name
         pins[source.relative_to(root).as_posix()] = file_sha256(source)
     _verify(root, pins)
+    relationship = policy.published_profile == RETURN_RELATIONSHIP_PROFILE
     publication_path = inside(root, policy.publication.path)
     manifest = pinned_object(publication_path, policy.publication.sha256)
     request_path = publication_path.parent / "_request.json"
     request = pinned_object(request_path, manifest["request_sha256"])
     pins[request_path.relative_to(root).as_posix()] = manifest["request_sha256"]
+    receipt = pinned_object(inside(root, policy.saved_row_verification.path), policy.saved_row_verification.sha256)
+    verified = validate_return_relationship_receipt(root, policy.publication, receipt) if relationship else None
+    if verified is not None:
+        for name, digest in receipt["source_files"].items():
+            if name in pins and pins[name] != digest:
+                raise DataReadinessError("conflicting current relationship readiness pins")
+            pins[name] = digest
+        for name in RELATIONSHIP_IMPLEMENTATION_PATHS:
+            source = Path(__file__).parents[1] / name
+            key, digest = source.relative_to(root).as_posix(), file_sha256(source)
+            if key in pins and pins[key] != digest:
+                raise DataReadinessError("relationship readiness implementation changed")
+            pins[key] = digest
     provenance = request.get("source_files")
     if not isinstance(provenance, dict):
         raise DataReadinessError("publication provenance must bind source policies")
@@ -89,15 +112,15 @@ def _audit(root: Path, policy: TrainingReadinessPolicy, config: Path, config_sha
         name = inside(root, source_pin.path).relative_to(root).as_posix()
         if provenance.get(name) != source_pin.sha256:
             raise DataReadinessError("readiness policy differs from publication provenance")
-    if (manifest.get("schema") != "market_predictor.research_join" or manifest.get("status") != "complete_research_only"
+    if not relationship and (manifest.get("schema") != "market_predictor.research_join"
+            or manifest.get("status") != "complete_research_only"
             or manifest.get("training_eligible") is not False or manifest.get("promotion_eligible") is not False
             or manifest.get("exclusions_added") != [] or request.get("schema") != "market_predictor.research_join_request"
             or request.get("historical_first_seen_proven") is not False or request.get("managed_outcomes_available") is not False
             or request.get("profiles") != ["technical_market", "catalyst_full"]
             or type(manifest.get("rows")) is not int or manifest["rows"] != request.get("rows")):
         raise DataReadinessError("unsupported or incomplete research publication")
-    receipt = pinned_object(inside(root, policy.saved_row_verification.path), policy.saved_row_verification.sha256)
-    if (receipt.get("manifest_sha256") != policy.publication.sha256 or receipt.get("status") != "passed"
+    if not relationship and (receipt.get("manifest_sha256") != policy.publication.sha256 or receipt.get("status") != "passed"
             or receipt.get("scope") != "published_join_population_clocks_original_targets"
             or receipt.get("matched_profile_population") is not True or receipt.get("original_outcome_values_exact") is not True
             or receipt.get("outcome_filtered_rows") != 0 or receipt.get("unique_decisions") != manifest["rows"]
@@ -129,13 +152,15 @@ def _audit(root: Path, policy: TrainingReadinessPolicy, config: Path, config_sha
     for month in months:
         _guard(policy)
         record = manifest["months"][month]
-        if set(record["profiles"]) != {"technical_market", "catalyst_full"}:
+        profiles = {RETURN_RELATIONSHIP_PROFILE} if relationship else {"technical_market", "catalyst_full"}
+        if set(record["profiles"]) != profiles:
             raise DataReadinessError("profile inventory differs")
         monthly[month] = {}
         reference: pd.DataFrame | None = None
         masks: dict[str, pd.DataFrame] = {}
         for profile, child in record["profiles"].items():
-            columns = tuple(swing_model_feature_columns(contract=strategy, catalyst=profile == "catalyst_full"))
+            columns = (verified.model_columns if verified is not None else
+                tuple(swing_model_feature_columns(contract=strategy, catalyst=profile == "catalyst_full")))
             if (child["model_columns"] != list(columns) or child["path"] != f"{month}/{profile}.parquet"
                     or child["audit"].get("training_eligible") is not False
                     or child["audit"].get("promotion_eligible") is not False):
@@ -149,7 +174,8 @@ def _audit(root: Path, policy: TrainingReadinessPolicy, config: Path, config_sha
             pins.update(child_pins)
             _verify(root, child_pins)
             projected = list(dict.fromkeys((*CONTEXT_COLUMNS, *RETURN_COLUMNS, *columns, *clocks.values())))
-            frame, sidecar = load_canonical_artifact(path, expected_type="swing_research_join", allow_research=True, columns=projected)
+            artifact_type = "swing_return_relationships" if relationship else "swing_research_join"
+            frame, sidecar = load_canonical_artifact(path, expected_type=artifact_type, allow_research=True, columns=projected)
             if (sidecar["inputs"] != {"request_sha256": manifest["request_sha256"]}
                     or sidecar["production_ready"] is not False or len(frame) != record["rows"]
                     or json_sha256(sorted(frame.decision_id)) != record["decision_ids_sha256"]):
@@ -182,8 +208,9 @@ def _audit(root: Path, policy: TrainingReadinessPolicy, config: Path, config_sha
             _verify(root, child_pins)
             del frame, identity
             release_process_memory()
-        monthly[month]["paired_complete_case_supervision"] = int(
-            (masks["technical_market"].complete_case_supervision & masks["catalyst_full"].complete_case_supervision).sum())
+        if not relationship:
+            monthly[month]["paired_complete_case_supervision"] = int(
+                (masks["technical_market"].complete_case_supervision & masks["catalyst_full"].complete_case_supervision).sum())
         del masks, reference
     if observed != set(sessions) or any(total["rows"] != manifest["rows"] for total in totals.values()):
         raise DataReadinessError("initial-fit session or row population differs")
@@ -207,6 +234,12 @@ def _audit(root: Path, policy: TrainingReadinessPolicy, config: Path, config_sha
         "missing_model_values": {key: dict(value) for key, value in missing.items()},
         "year_sector_counts": {key: {group: dict(counts) for group, counts in value.items()} for key, value in groups.items()},
         "interpretation": "Supervised-label and complete-case counts are diagnostics, not an opportunity selection or training permission."}
+    if verified is not None:
+        report.update(published_profile=RETURN_RELATIONSHIP_PROFILE, profile_sha256=request["profile_sha256"],
+            model_columns=list(verified.model_columns), availability_columns=verified.availability_columns,
+            saved_row_verification_sha256=policy.saved_row_verification.sha256, serving_eligible=False,
+            additions_source_replayed=True, baseline_numerical_replayed=False,
+            baseline_evidence_scope="inherited_original_evidence_with_exact_saved_row_parity_not_new_numerical_replay")
     output.parent.mkdir(parents=True, exist_ok=True)
     write_json_object(output, report)
     return {**report, "report_sha256": file_sha256(output)}

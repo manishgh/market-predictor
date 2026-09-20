@@ -15,11 +15,18 @@ from market_predictor.edge_rebuild.temporal_manifest import build_temporal_sched
 from market_predictor.evidence.hashing import json_sha256
 from market_predictor.evidence.io import inside
 from market_predictor.modeling.strategy_contract import load_strategy_contract
-from market_predictor.research.swing_training_readiness import _guard, _verify
+from market_predictor.research.swing_training_readiness import (
+    IMPLEMENTATION_PATHS,
+    RELATIONSHIP_IMPLEMENTATION_PATHS,
+    _guard,
+    _verify,
+)
 from market_predictor.resources import release_process_memory
 from market_predictor.swing.contracts.research import load_swing_research_contract
+from market_predictor.swing.contracts.return_feature_profiles import RETURN_RELATIONSHIP_PROFILE
 from market_predictor.swing.contracts.return_training import ReturnTrainingPolicy
 from market_predictor.swing.contracts.training_readiness import TrainingReadinessPolicy
+from market_predictor.swing.datasets.return_relationship_verification import validate_return_relationship_receipt
 from market_predictor.swing.datasets.symbol_corrections import pinned_object
 from market_predictor.swing.features.panel import swing_model_feature_columns
 from market_predictor.swing.labels.fixed_horizon_readiness import CONTEXT_COLUMNS, RETURN_COLUMNS, fixed_horizon_readiness
@@ -45,6 +52,29 @@ def load_return_inputs(root: Path, policy: ReturnTrainingPolicy) -> ReturnInputs
         policy.readiness_config.sha256))
     _guard(memory_policy)
     _verify(root, pins)
+    if memory_policy.published_profile != policy.published_profile:
+        raise DataReadinessError("return request and readiness profile differ")
+    relationship = policy.published_profile == RETURN_RELATIONSHIP_PROFILE
+    verified = None
+    if relationship:
+        for name in (*IMPLEMENTATION_PATHS, *RELATIONSHIP_IMPLEMENTATION_PATHS):
+            source = Path(__file__).parents[1] / name
+            if pins.get(source.relative_to(root).as_posix()) != file_sha256(source):
+                raise DataReadinessError("return relationship readiness lacks current executed-code pin")
+        receipt_pin = memory_policy.saved_row_verification
+        if pins.get(receipt_pin.path) != receipt_pin.sha256:
+            raise DataReadinessError("relationship readiness omits independent saved-row receipt")
+        receipt = pinned_object(inside(root, receipt_pin.path), receipt_pin.sha256)
+        verified = validate_return_relationship_receipt(root, memory_policy.publication, receipt)
+        if (report.get("published_profile") != policy.published_profile
+                or report.get("profile_sha256") != verified.request["profile_sha256"]
+                or report.get("model_columns") != list(verified.model_columns)
+                or report.get("availability_columns") != verified.availability_columns
+                or report.get("saved_row_verification_sha256") != receipt_pin.sha256
+                or report.get("serving_eligible") is not False or report.get("additions_source_replayed") is not True
+                or report.get("baseline_numerical_replayed") is not False
+                or any(pins.get(name) != digest for name, digest in receipt["source_files"].items())):
+            raise DataReadinessError("return relationship profile or current evidence differs")
     if (report.get("schema") != "market_predictor.swing_training_readiness" or report.get("status") != "diagnostic_complete"
             or report.get("scope") != "initial_fit_fixed_horizon_diagnostics" or report.get("rows_removed") != 0
             or report.get("training_eligible") is not False or report.get("promotion_eligible") is not False
@@ -66,7 +96,8 @@ def load_return_inputs(root: Path, policy: ReturnTrainingPolicy) -> ReturnInputs
             or strategy.validation.unseen_ticker_holdout_fraction != policy.holdout_fraction
             or temporal.label_horizon_sessions != policy.embargo_sessions):
         raise DataReadinessError("return-training temporal or holdout boundary differs")
-    names = tuple(swing_model_feature_columns(contract=strategy, catalyst=False))
+    names = (verified.model_columns if verified is not None else
+        tuple(swing_model_feature_columns(contract=strategy, catalyst=False)))
     publication_path = inside(root, memory_policy.publication.path)
     manifest = pinned_object(publication_path, memory_policy.publication.sha256)
     request = pinned_object(publication_path.parent / "_request.json", manifest["request_sha256"])
@@ -89,7 +120,7 @@ def load_return_inputs(root: Path, policy: ReturnTrainingPolicy) -> ReturnInputs
         _guard(memory_policy)
         record = manifest["months"][month]
         child = record["profiles"][policy.published_profile]
-        if child["model_columns"] != list(names) or child["path"] != f"{month}/technical_market.parquet":
+        if child["model_columns"] != list(names) or child["path"] != f"{month}/{policy.published_profile}.parquet":
             raise DataReadinessError("return model input order or month path differs")
         path = inside(publication_path.parent, child["path"])
         clocks = {name: f"available_at_{name}" for name in names}
@@ -98,7 +129,8 @@ def load_return_inputs(root: Path, policy: ReturnTrainingPolicy) -> ReturnInputs
         for source, digest in ((path, child["sha256"]), (manifest_path_for(path), child["manifest_sha256"])):
             if pins.get(source.relative_to(root).as_posix()) != digest or file_sha256(source) != digest:
                 raise DataReadinessError("return input child not bound by readiness receipt")
-        frame, sidecar = load_canonical_artifact(path, expected_type="swing_research_join", allow_research=True,
+        artifact_type = "swing_return_relationships" if relationship else "swing_research_join"
+        frame, sidecar = load_canonical_artifact(path, expected_type=artifact_type, allow_research=True,
             columns=list(dict.fromkeys((*CONTEXT_COLUMNS, *RETURN_COLUMNS, *names, *clocks.values()))))
         if (sidecar["production_ready"] is not False or sidecar["inputs"] != {"request_sha256": manifest["request_sha256"]}
                 or len(frame) != record["rows"] or json_sha256(sorted(frame.decision_id)) != record["decision_ids_sha256"]

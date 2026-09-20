@@ -1,9 +1,9 @@
 """Frozen two-specification initial-fit research request."""
 from __future__ import annotations
 
-from typing import Literal
+from typing import Literal, Self
 
-from pydantic import Field
+from pydantic import Field, model_validator
 
 from market_predictor.swing.contracts.holding_accounting import HoldingContract
 from market_predictor.swing.contracts.holding_materialization import SourcePin
@@ -37,8 +37,8 @@ class ReturnTrainingPolicy(HoldingContract):
     scope: Literal["initial_fit_research_only"]
     readiness: SourcePin
     readiness_config: SourcePin
-    feature_profile: Literal["existing_technical"]
-    published_profile: Literal["technical_market"]
+    feature_profile: Literal["existing_technical", "technical_relationships"]
+    published_profile: Literal["technical_market", "technical_relationships"]
     target: Literal["spy_fixed_horizon_excess_return"]
     folds: Literal[4]
     minimum_train_sessions: Literal[503]
@@ -51,3 +51,10 @@ class ReturnTrainingPolicy(HoldingContract):
     final_fit: Literal["two_models_all_initial_fit_supervision"]
     linear: LinearReturnSettings
     boosted: BoostedReturnSettings
+
+    @model_validator(mode="after")
+    def coherent_profile(self) -> Self:
+        expected = "technical_market" if self.feature_profile == "existing_technical" else "technical_relationships"
+        if self.published_profile != expected:
+            raise ValueError("return feature profile and publication profile differ")
+        return self

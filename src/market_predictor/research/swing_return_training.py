@@ -14,7 +14,7 @@ from market_predictor.canonical.store import file_sha256
 from market_predictor.core.errors import DataReadinessError
 from market_predictor.evidence.hashing import json_sha256
 from market_predictor.evidence.io import inside, write_json_object
-from market_predictor.heavy_jobs import heavy_job_lease
+from market_predictor.heavy_jobs import heavy_job_lease, heavy_job_runtime_dir
 from market_predictor.research.swing_return_inputs import ReturnInputs, load_return_inputs
 from market_predictor.research.swing_training_readiness import _guard, _verify
 from market_predictor.resources import assert_peak_memory_budget, memory_audit, release_process_memory
@@ -37,7 +37,10 @@ def train_swing_returns(*, root: Path, config: Path, config_sha256: str, output:
     config, output = inside(root, config), inside(root, output)
     if not output.is_relative_to(root / "data/research"):
         raise DataReadinessError("return research output must be below data/research, never the serving registry")
-    with heavy_job_lease("train-swing-returns", runtime_dir=root / "data/runtime", config_path=config):
+    runtime = heavy_job_runtime_dir()
+    if not runtime.is_absolute():
+        runtime = root / runtime
+    with heavy_job_lease("train-swing-returns", runtime_dir=runtime, config_path=config):
         policy = ReturnTrainingPolicy.model_validate(pinned_object(config, config_sha256))
         data = load_return_inputs(root, policy)
         _training_guard(data)

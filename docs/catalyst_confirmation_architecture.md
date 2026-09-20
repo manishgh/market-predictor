@@ -325,8 +325,18 @@ month, and report publication. The existing shared guard receives a free-byte
 threshold equivalent to the configured percentage, not a second restriction.
 Shared source-collection defaults and hash-bound replay dependencies are unchanged.
 
-`research/swing_return_inputs.py` admits only the verified initial-fit technical
-publication for the strict return-training contract. `swing/training` owns the
+The immutable `technical_relationships` derivative appends four inputs to the
+unchanged initial-fit baseline. Separate source/parent, storage, publication and
+row-verification modules under `swing/datasets/return_relationship_*` preserve
+population, labels and missingness; only the profile identity changes. Independent
+verification replays additions from physical sources before readiness. Historical
+baseline numerical evidence is inherited, not claimed to have been reexecuted;
+current code and data dependencies remain independently pinned and checked.
+
+`research/swing_return_inputs.py` admits the verified initial-fit baseline or named
+124-column relationship publication for the strict return-training contract. A
+matching fresh readiness receipt is mandatory; arbitrary feature profiles are
+rejected. `swing/training` owns the
 two return estimators, training-only missingness encoding, weighted transforms,
 calendar-fold masks and research artifact verification. `research/swing_return_training.py`
 orchestrates sequential fits under the shared lease and percentage/peak-memory

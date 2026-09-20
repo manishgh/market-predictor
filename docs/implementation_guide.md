@@ -210,6 +210,31 @@ selection, input hashes and calendars, but contains no accounting/performance re
 The command returns nonzero for a blocked report. Do not overwrite that receipt or
 drop incomplete outcomes and rerun the same control as if its population were unchanged.
 
+### Historical Relationship Publication
+
+`swing/contracts/return_relationship_publication.py` defines the named derivative
+scope and verified metadata descriptor. `swing/datasets/return_relationship_parent.py`
+checks the accepted immutable parent; ancestral code remains explicitly uncertified
+provenance rather than a claim that today's code reproduced it. Current executed
+dependencies and consumed source bytes are checked independently.
+
+The adjacent `return_relationship_sources.py` binds coherent stock/SPY inventories,
+corrected FI/SATS streams and quarantines. `return_relationship_rows.py` reads bounded
+physical evidence and calls the shared four-feature transform. Storage uses eight
+staging buckets, immutable group/month artifacts and pinned restart state instead
+of holding hundreds of writers or creating thousands of per-symbol/day files.
+`return_relationship_publication.py` orchestrates publication; `return_relationship_integrity.py`
+owns its bounded metadata, memory and current-code checks, including package initializers.
+
+`return_relationship_verification.py` independently replays the four additions from
+sources and compares every inherited column exactly, except the explicit profile
+identity. It does not claim a new numerical replay of the baseline. Existing
+readiness and return-input owners consume only this named 124-column contract with
+fresh evidence. Learner settings, dates, purging, costs, imputation and weights are
+unchanged. `commands/swing_return_relationships.py` contains CLI adapters only.
+These are research operations with one common configured runtime lease, a 90%
+system-memory limit and the existing 5 GiB process guard; tests isolate their leases.
+
 ## Source Roles
 
 ### Retained Holding-Identity Preflight

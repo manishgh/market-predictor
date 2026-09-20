@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -89,18 +91,19 @@ class CliSurfaceTests(unittest.TestCase):
         self.assertTrue({"--lineage-dir", "--out-dir", "--production-ready"}.issubset(catalyst_options))
 
     def test_global_collection_rejects_invalid_window_before_model_load(self) -> None:
-        result = CliRunner().invoke(
-            collection_app,
-            [
-                "collect-edge-live-global-context",
-                "--start",
-                "2026-08-01T10:00:00Z",
-                "--end",
-                "2026-08-01T09:00:00Z",
-                "--out-dir",
-                "unused-invalid-gdelt-output",
-            ],
-        )
+        with tempfile.TemporaryDirectory() as runtime, patch.dict(os.environ, {"MARKET_PREDICTOR_RUNTIME_DIR": runtime}):
+            result = CliRunner().invoke(
+                collection_app,
+                [
+                    "collect-edge-live-global-context",
+                    "--start",
+                    "2026-08-01T10:00:00Z",
+                    "--end",
+                    "2026-08-01T09:00:00Z",
+                    "--out-dir",
+                    "unused-invalid-gdelt-output",
+                ],
+            )
 
         self.assertNotEqual(result.exit_code, 0)
         self.assertIn("reversed", result.output)

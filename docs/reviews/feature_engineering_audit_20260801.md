@@ -1,13 +1,14 @@
 # Current Feature Engineering Audit
 
-Last updated: 2026-09-20
+Last updated: 2026-09-21
 
 ## Current Long-Only Swing Campaign
 
-Current retention verification: the completed technical return run retains both
+Last recorded retention verification: the completed technical return run retains both
 final models and 16 evaluation fits with matching original artifact hashes.
 `data/reports/swing_retained_run_integrity.json` records 256 matching source pins
-and ten current implementation mismatches. This preserves historical completion;
+and ten implementation mismatches at that audit. Subsequent implementation changes
+have not been recounted by that retained report. This preserves historical completion;
 it does not reverify causality, numerical replay or current-contract eligibility.
 The acceptance evidence below describes the original run. Fresh swing-only
 contract verification is required before reuse. No new features or model fits
@@ -24,7 +25,7 @@ causal inputs and an explicit research-only training contract.
 | Planned profile | Source, batch and feature order | Fixed-horizon labels | Training consumer and experiment | Live, promotion and API |
 | --- | --- | --- | --- | --- |
 | existing_technical | Verified corrected publication: technical_market, 120 ordered inputs and availability clocks | Original outcomes replayed; exact costs/comparisons/global maturity audited; inner fitting purges actual maturity independently | Verified implementation 07963cc: 16 real temporal/transfer fits and two final models completed; 4,329 full tests passed, 10 skipped | Not applicable to this offline research experiment; artifact loader explicitly rejects serving/promotion purpose |
-| technical_relationships | Shared batch/live callable adds four ordered momentum, volume-response and market-regime relationships to the unchanged 120 baseline inputs; 131 focused regressions pass. Historical publication and source-authority acceptance remain blocked, so calculation alone grants no admission | Must reuse matched independently admitted labels | Not trained; cannot duplicate existing_technical under another name | Not authorized |
+| technical_relationships | Shared transform plus immutable derivative publisher and independent addition-source replay implemented; 22 source tests and 104 readiness/integration tests pass. Real 59-month publication/verification remain unrun, so historical acceptance is still blocked | Synthetic full-chain checks preserve original labels, metadata and eligibility; real matched-history verification is still required | Named 124-column profile wired to the unchanged two learners; no new fit yet | Not authorized |
 | technical_relationships_issuer_reaction | Blocked: catalyst_full has aggregate news features, not qualified issuer/SEC event-reaction inputs; SEC/Finviz coverage is unknown here | Must reuse matched independently admitted labels | Not trained; counts and sentiment cannot substitute for the promised reaction feature contract | Not authorized |
 
 September 20 component evidence: `return_feature_profiles.py` freezes formulas,
@@ -35,6 +36,18 @@ Ruff and strict mypy pass. Physical Alpaca/SIP daily metadata, exchange-session
 alignment, ingestion ordering, future-clock rejection, truncated-prefix parity,
 missing sessions, multiple security identities and float32 overflow are tested.
 These are local transformation checks, not a full-history verification or fit.
+
+September 21 implementation adds bounded source readers, eight-bucket staging,
+immutable monthly publication, pinned restart verification and an independent
+source-to-value replay for the additions. The real synthetic pipeline reaches a
+354-row, 124-column loader and rejects rehashed altered features. Lease contention,
+initializer pinning, corrected FI/SATS histories and WTW/ATVI/INFO/SBNY quarantine
+paths are covered. Final changed-file Ruff and strict mypy over 15 modules pass.
+Historical baseline numerical correctness is explicitly inherited from accepted
+parent evidence; this is not a new baseline numerical replay or benign-drift claim.
+No completed-model reuse, real-history admission, profitability or promotion follows
+from these software checks. The unrelated active SEC collector must release the
+normal workspace lease before actual materialization/training starts.
 
 Readiness command: `audit-swing-training-readiness`, configuration
 `configs/swing_training_readiness.json`. Its scope is bounded initial-fit

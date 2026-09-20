@@ -195,6 +195,33 @@ run, supply `--resume-checkpoint-sha256` with an independently verified checkpoi
 hash. Inputs, implementation, configuration and runtime must still match; completed
 fits are verified, not overwritten. Do not rerun the completed experiment by default.
 
+### Additional Swing Relationships
+
+The named `technical_relationships` profile appends four causal momentum,
+stock/SPY response and market-regime features to the original 120 inputs. It
+preserves the existing decisions, labels and eligibility; missing additional
+values remain unavailable, not zero. The 252-session lag needs 253 positions.
+
+The pipeline now supports immutable publication, independent source-to-value
+verification, a separately pinned readiness report, and the same two return
+learners with 124 ordered inputs. Software support is not evidence of a completed
+historical run or improved returns. See the active handoff for actual execution.
+Do not use the existing baseline training config for this comparison or rerun its
+completed models. Create derivative readiness/training configs only after their
+real prerequisite artifact hashes exist.
+
+```powershell
+$configPin = (Get-FileHash configs/swing_return_relationship_publication.json -Algorithm SHA256).Hash.ToLowerInvariant()
+.venv\Scripts\python.exe -B -m market_predictor.research_cli materialize-swing-return-relationships --root . --config configs/swing_return_relationship_publication.json --expected-config-sha256 $configPin --output data/features/swing_return_relationships_initial_fit
+```
+
+Subsequent stages are `verify-swing-return-relationships`,
+`audit-swing-training-readiness`, and `train-swing-returns`, with independently
+checked input pins. Partial publication requires its checkpoint pin to resume.
+All four stages use one configured workspace lease; never point real work at a
+different runtime directory to bypass an active collector. Research artifacts
+cannot authorize serving, promotion or trading.
+
 ### Source Collection
 
 Portable Python entry points (run from the repository root). The provided configs

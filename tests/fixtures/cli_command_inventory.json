@@ -74,6 +74,7 @@
     "materialize-swing-fixed-holdings",
     "materialize-swing-research-dataset",
     "materialize-swing-research-predictors",
+    "materialize-swing-return-relationships",
     "plan-edge-rebuild-swing-history",
     "plan-swing-initial-fit-raw-prices",
     "publish-edge-catalyst-authority",
@@ -97,6 +98,7 @@
     "validate-strategy-execution-ledger",
     "validate-strategy-research-contracts",
     "verify-events",
-    "verify-retained-swing-run"
+    "verify-retained-swing-run",
+    "verify-swing-return-relationships"
   ]
 }

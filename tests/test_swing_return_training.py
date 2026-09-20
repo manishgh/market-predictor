@@ -31,6 +31,7 @@ REPO = Path(__file__).resolve().parents[1]
 
 @pytest.fixture
 def training(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
+    monkeypatch.setenv("MARKET_PREDICTOR_RUNTIME_DIR", str(tmp_path / "data/runtime"))
     package = tmp_path / "src/market_predictor"
     for name in owner.IMPLEMENTATION:
         target = package / name
