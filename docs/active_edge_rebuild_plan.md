@@ -55,11 +55,90 @@ committed locally only. Two continuity checks and scoped diff/reference review
 passed. Independent policy review closed with no actionable findings; no full
 suite, build, model replay or test-count audit was run for this prose-only update.
 
-Current checkpoint: **TradingFlow shared-receipt consumption design** (`in progress`).
-Design entry only; consumer implementation has not started. The raw collector is
-complete and pushed in `94aa1c4`. Next, freeze authenticated/trusted receipt
-discovery, exact publication verification, durable acknowledgements and idempotent
-consumer import with independent review before editing TradingFlow runtime code.
+Completed checkpoint: **Shared evidence consumption and swing feature preparation**.
+Implementation: Market Predictor `a6c1294` pushed; TradingFlow `8525f80` local-only.
+September 20 continuation: the user authorizes parallel implementation, with
+independent plan, design and code reviewers. Freeze each module before editing;
+integrate and commit independently owned modules sequentially. This is a component
+checkpoint, not a release or permission to repeat the full suite.
+
+Bounded workstreams and exit gates:
+
+- TradingFlow: trusted-plan discovery, exact publication verification, idempotent
+  raw receipt import and durable acknowledgement. Verify real Python/C# fixture
+  parity, tamper rejection, incomplete attempts, duplicates and restart recovery.
+  Existing receipt wire bytes, desk feeds and collector ownership stay unchanged.
+- Market Predictor: inventory distinct relationship/reaction feature gaps and
+  freeze exact module/column/source scope before implementation. Verify causal
+  boundaries, unavailable-versus-zero semantics and batch/live parity for changed
+  transformations. Readiness code alone does not establish historical coverage.
+- Integration: consolidate independent findings, run targeted component checks,
+  preserve unrelated files and protected evidence, and record each partial result.
+  Failure leaves data/model admission false; rollback is a scoped Git revert, never
+  mutation of original receipts or historical model pins.
+
+Downstream order remains feature publication/acceptance, four remaining bounded
+return specifications trained sequentially, funded policy evaluation, then new
+prospective evidence. No re-fitting the two completed baselines, widening the six
+specification budget, unseen-test claim or promotion from software tests.
+Investment forecast targets remain undecided pending the separate user question;
+neither proposed 63 nor 252 sessions is approved by this continuation. Unrelated
+shared-data and swing implementation proceeds without waiting for that decision.
+Plan review approved this boundary; detailed module design review precedes edits.
+
+Frozen Python module slice (independent design approved):
+`swing/contracts/return_feature_profiles.py` and
+`swing/features/return_relationships.py`, with focused profile tests. Append four
+ordered, raw relationships to the unchanged 120 baseline inputs: close[t-21] /
+close[t-126] - 1; close[t-21] / close[t-252] - 1; current volume divided by the
+mean of the preceding 20 sessions times stock-minus-SPY same-session open/close
+return; and five-session stock-minus-SPY return times SPY's 60-session return.
+Use full exchange-session indexing, not surviving-row offsets; the 252-lag input
+needs 253 session positions. Missing history stays null with a reason. Bind
+security, feed, adjustment/vintage and consumed availability clocks. One transform
+serves batch/current-decision calls with unchanged baseline values and population.
+This closes only transformation/local-input checks, not historical publication,
+training or serving acceptance. Qualified issuer/SEC reaction needs a separate
+content/availability-qualified transform; no all-null placeholder counts as done.
+
+Frozen C# design: an explicit local import operation trusts a configured publication
+root plus an independently pinned plan (a hash alone does not authenticate a
+mutable root). Verify the complete existing attempt chain under the producer lock
+before importing received results. An atomically published, byte-preserving inbox
+bundle is its acknowledgement; receipt existence without a committed result is
+not importable. Restart verifies prior bundles rather than overwriting them.
+Collection completeness stays separate from imported-page count. No provider,
+normalized catalog, model or trading admission side effects are permitted.
+
+Current checkpoint: **Publish historical relationship features and fit their two learners** (`in progress`).
+Plan/design freeze is being completed before implementation. Reuse the immutable
+59-month, 586,305-row initial-fit baseline; publish a separate derivative with
+unchanged baseline values, labels, eligibility and population plus four columns.
+Separate historical provenance from newly executed source/code verification: old
+readiness pins are stale, so produce fresh evidence without rewriting old receipts
+or weakening their verifiers. Adapt bounded source metadata readers, then publish
+and verify monthly artifacts, then use the unchanged two learners/settings and
+folds with the named 124-column profile. Parallel source/publication and training
+integration ownership must have an agreed interface; actual heavy runs serialize.
+Exit gates include exact parent parity, causal clocks, security/basis lineage,
+tamper/restart rejection, fresh readiness and sequential fits within memory limits.
+Any failure leaves the candidate unavailable; no silent exclusion or source repair.
+Later validation/test materialization, qualified issuer-reaction inputs, funded
+policy evaluation and prospective promotion remain distinct unfinished work.
+
+Component verification now passes: 79 focused C# tests, 131 focused Python feature
+tests, 14 independent feature regressions, and four fixture/real-process/continuity
+checks. The real Python publication is imported by the built C# CLI; lock contention,
+owner-process death, idempotent restart and tamper refusal are exercised. The first
+interop run exposed stale CLI dependency metadata; a normal restore/rebuild fixed
+it without changing package versions or weakening checks. Ruff and strict mypy
+pass for the changed feature modules. Physical power-loss durability is unverified;
+the current inbox adapter explicitly requires a Windows fixed local disk. No full
+suite, provider download, model fit or admission ran at this component checkpoint.
+
+The raw collector is complete and pushed in `94aa1c4`; the new C# raw importer
+preserves its bytes and ownership. Automatic polling and normalized catalog/feed
+integration are not implemented by this explicit import operation.
 Existing desk feeds stay unchanged until that cutover is explicitly verified;
 raw import cannot fabricate normalized evidence, model admission or order authority.
 The user approved deferring remaining intraday retirement and retained-model replay

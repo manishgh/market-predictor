@@ -4,12 +4,47 @@ Status: active
 Last updated: 2026-09-20
 Repository: `C:\project\market-predictor`
 Branch: `unified-swing-product`
-Last completed implementation checkpoint: `94aa1c4` (pushed).
+Last completed implementation checkpoint: `a6c1294` (pushed).
 Last completed model-training checkpoint: `07963cc` (pushed).
 Source-collection checkpoint: `19698d6` (pushed).
 The combined historical outcome/features delivery is verified and committed.
 
 ## Current State
+
+September 20 parallel implementation checkpoint is verified: Market Predictor
+`a6c1294` is pushed; TradingFlow `8525f80` is local-only (no unrequested remote
+sync). Separate workers implemented C# raw publication import and Python's four
+incremental relationship features. Independent plan, design/ML and code reviews
+closed supported findings; the user authorized three reviewer roles despite
+TradingFlow's older two-reviewer default. Two implementation workers and the
+design/code reviewers are closed. The plan reviewer is preparing the next bounded
+publication/training contract. Heavy jobs remain sequential under the 90% system
+memory limit; observed samples were about 70-72%, not a continuous measurement.
+
+Verification: 79 C# receipt/import/CLI tests; 131 Python feature/integration tests;
+14 independent feature regressions; four Python producer/fixture/real C# process/
+continuity checks; changed-file Ruff and strict mypy pass. Review fixed baseline
+120-column/160-clock compatibility, physical source/availability validation and
+CLI rejection handling. The real-process test initially failed because the CLI
+dependency manifest omitted Contracts; normal dependency restore/rebuild resolved
+it. Sandbox restore failed network/cache access, then the scoped normal-cache
+restore succeeded. No package versions changed. The final interoperability check
+proves byte parity, producer lock contention, abrupt test-owner death recovery,
+idempotent import and corruption refusal on this Windows local disk. Physical
+power-loss and cloud/shared-filesystem durability are not established.
+
+Completed command sessions (do not resume): C# final tests `36271`; failed restore
+`82525`; successful interop run exited zero with four passes. Interop environment:
+`TRADINGFLOW_NEWS_CLI_DLL=C:\project\trading_flow\src\TradingFlow.Cli\bin\Debug\net10.0\TradingFlow.Cli.dll`.
+Its focused test is `tests/test_news_collection_consumer_interop.py`; feature JUnit
+is `.test-tmp/return-relationships-20260920-worker/focused-reviewed.xml`. Full suites
+were deliberately not repeated at this component checkpoint. No provider calls,
+model fitting, broker actions, data deletion or deployment ran.
+
+Limits: the C# operation imports explicit raw publications only, not a polling
+service or normalized catalog/feed migration. The Python transform is not yet a
+historical publication or admitted model input. Investment forecast horizons still
+await the user's decision; swing and shared-data work do not wait on that decision.
 
 Latest approved policy: localized/module changes use focused tests plus applicable
 lint/types/build checks; component checkpoints add affected integration, integrity
@@ -558,12 +593,26 @@ the frozen numeric training boundary or authorize promotion.
 
 ## Next Actions
 
-Exact next checkpoint: freeze and independently review TradingFlow shared-receipt
-discovery, trusted publication verification, durable acknowledgement and idempotent
-consumer import, then implement that bounded integration. The raw collector is
-complete; do not rebuild it or start a duplicate provider collector. Keep existing
-Python/C# receipt bytes unchanged. Issuer identity, normalized evidence admission,
-investment model horizons and trading admission remain separate downstream gates.
+Exact next checkpoint: publish the four relationship features over the saved
+initial-fit baseline, then generate fresh readiness evidence and train its two
+unchanged learners sequentially. Freeze the derivative contract and divide source/
+publication and readiness/training implementation into non-overlapping ownership.
+Preserve every original baseline value, decision and label; do not retrain the two
+baseline models or rewrite old pins. Initial-fit scope is 59 months, 586,305 rows,
+July 2019-May 2024, not the later validation/test publications. The raw collector
+and explicit C# importer are complete; do not rebuild them or start duplicate
+provider collection. Investment targets and trading admission remain separate.
+
+Plan review found old readiness evidence has five current implementation-pin
+mismatches and is not admitted by the existing training loader. This requires a
+new saved-row/source verification and readiness report, not rewriting old hashes.
+The old model request's ten mismatches do not prohibit a new independently verified
+derivative experiment. Preserve existing replay verifiers unchanged. The saved
+combined daily source contains availability/source/ingestion metadata but its
+reader drops those columns: fix the bounded adapter, do not redownload everything.
+Corrected FI/SATS streams and WTW/ATVI/INFO/SBNY unavailable boundaries must remain
+explicit. Missing added features stay null with reasons; no additional exclusions,
+shortened warmup, date/weight/cost changes or invented source clocks.
 
 Read `evidence/news_collection.py`, `sources/news_collection.py`,
 `sources/news_collection_settings.py` and `commands/news_collection.py`, plus
