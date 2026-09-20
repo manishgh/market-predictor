@@ -11,6 +11,60 @@ The combined historical outcome/features delivery is verified and committed.
 
 ## Current State
 
+The latest September 20 instruction requests complete intraday removal from
+Market Predictor, beyond the closed public/CLI boundary. Dependency/design review
+is complete on `unified-swing-product`; implementation awaits the disposition
+decision below. Only the active plan and this handoff have changed. Two scoped
+agents reviewed historical contract pins and shared collector ownership and are
+closed. Saved swing training/readiness/replay currently bind
+the mixed strategy contract; prospective news collection uses an intraday dataset
+as its security namespace. Resolve these explicitly before deleting packages.
+No historical evidence, source implementation or model has yet changed in this
+checkpoint. Shared subdaily swing evidence remains in scope to preserve.
+
+Decision requested through the UI: preserve saved mixed-contract artifacts as
+historical evidence, introduce a swing-only active contract, and require fresh
+verification/rebuilding before reuse. Await that answer before changing pinned
+contracts or deleting protected implementation. This need not force retraining if
+fresh verification establishes equivalent usable data. The four unused root
+intraday helpers also have source pins in the protected KS3 swing specialist
+request, so their lack of runtime consumers alone is not deletion clearance.
+
+Reviewed collector migration: reuse independent S&P membership authorities to
+publish a universe-owned namespace, replacing the bar-dataset dependency for new
+polls. Transport stays in `sources`, receipt/session evidence in `evidence`, stock
+identity in `universe/sp500`, and analyst classification in `catalysts/issuer_events`.
+No new compatibility alias or silent rewrite of old polling chains is allowed.
+Exact ordering, preservation rules and exit tests are in the active plan.
+
+Additional pre-implementation finding: raw current-source hashes differ from
+saved pins in 10/26 training source/config entries, 16/67 predictor current
+source/config entries, and 4/26 outcome current implementation entries. These
+counts exclude historical/archive implementation mappings. The predictor and
+outcome current-byte comparison gates will reject those discrepancies; the exact
+training-admission impact has not been established. No source was edited by this
+retirement checkpoint, and every inspected working file matches its HEAD blob.
+
+Across these requests and the joined dataset, 23 distinct source mismatches were
+found. Eighteen are confirmed newline-only; five remain unclassified:
+`canonical/store.py`, `evidence/io.py`, `swing/catalyst_lineage.py`,
+`swing/datasets/history_archive.py`, and
+`swing/features/catalyst_decision_authority.py` (relative to the package root).
+For the strategy contract, the original protected snapshot has 500 CRLF among
+503 newlines and normalizes exactly to today's LF source. Original digest
+`8bfd58784543aa945247be5a4c42f5830a87afbc63ce6ad0da3065dee82d9b61` differs from
+current `1027c7f033874efb7ad307e958838fd055f273c3176a570150ba9618bbdd1afc`.
+This explains that byte mismatch, not numerical replay equivalence or admission.
+
+Resolve these as part of approved migration: compare exact preserved inputs,
+record equivalence separately, and verify/rebuild under the new contract. Never
+repin old manifests or normalize historical objects into a pass. New publication
+must freeze LF source before hashing and preserve the exact executed source bytes.
+This finding supersedes any assumption that all saved current-byte pins still
+match merely because Git is clean. No dataset or model loss was established.
+Continuity tests pass (2); no implementation/full-suite pass is claimed for this
+design-only checkpoint. No task-owned worker remains.
+
 September 20 preservation: Market Predictor `main` and `origin/main` were
 fast-forwarded to `18e07d1` (191 commits). TradingFlow's existing source work was
 committed and pushed on `main` as `9d50bc1`; local settings, runtime files and data
@@ -420,11 +474,12 @@ the frozen numeric training boundary or authorize promotion.
 
 ## Next Actions
 
-Exact next checkpoint: freeze and implement shared Alpaca-news collection ownership
-and durable replay on `unified-swing-product`. Both main branches are preserved
-remotely and TradingFlow cleanup is closed in `cb747da`. Recheck current trees;
-leave TradingFlow's untracked local settings and runtime reports alone. No new
-collector code or provider job has started. Session 86175
+Exact next checkpoint: obtain the requested historical-only artifact disposition,
+resolve current-source pin discrepancies, then migrate retained shared
+sources and remove dedicated day-trading consumers in the active plan's order.
+Both main branches are preserved remotely and TradingFlow cleanup is closed in
+`cb747da`. Leave its untracked local settings/runtime reports alone. Shared news
+ownership follows retirement; no new provider job has started. Session 86175
 exited zero; do not resume it or repeat training. CLI retirement is committed in
 `9c32ce1`, including registry, adapter, admission and scoped test/doc changes.
 No historical domain package or artifact was deleted. Keep shared minute/hourly transports and swing

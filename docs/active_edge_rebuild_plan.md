@@ -41,8 +41,75 @@ outside this repository.
 
 ## Unified Product Implementation
 
-Current checkpoint: **shared Alpaca-news collection ownership and durable replay**
-(`in progress`). Design inventory only; no new collector has started.
+Current checkpoint: **complete dedicated intraday retirement** (`in progress`).
+The September 20 user instruction explicitly extends the completed HTTP/CLI and
+TradingFlow cleanup to all remaining Market Predictor implementation. This is a
+changed requirement, not a reopening of previously passed tests without cause.
+
+Frozen scope and order:
+
+1. Inventory executable consumers and hash-bound evidence. Resolve how historical
+   mixed strategy contracts remain verifiable before changing their bytes.
+2. Move retained observed news/SIP/history collection to source/evidence ownership;
+   replace its intraday training-dataset identity dependency with a verified
+   security authority. Preserve original receipt clocks and resume semantics.
+3. Make current strategy, prediction, release, outcome, monitoring and research
+   governance contracts swing-only. Remove retired modes rather than add aliases;
+   changed semantic identities require explicit new versions and fail-closed
+   admission of incompatible historical artifacts.
+4. Delete dedicated intraday models, training, datasets, labels, features,
+   specialist research, unused configurations and their exclusive tests only after
+   retained consumers are migrated. Preserve shared swing regression coverage.
+5. Update README, architecture, implementation guide, feature audit and continuity
+   documents in place. Historical evidence is not an active implementation guide.
+6. Run import/reference scans, CLI/API rejection tests, causal/lineage and swing
+   regression tests, full pytest, Ruff and strict mypy; independently review the
+   consolidated diff and push only verified checkpoints.
+
+Preserve raw news/candles, model binaries and hash-bound research artifacts. The
+swing open-to-close feature named `intraday_return` and minute/hourly transport
+are not day-trading strategies. No broker/provider job, data deletion, model
+retraining, cloud deployment or promotion is implied. Do not silently repin old
+manifests, execute archived code as a fallback, or turn historical research into
+current admission. Contract-migration decisions that invalidate saved swing
+acceptance must be made explicit before implementation.
+
+Exit gates: no active dedicated day-trading imports, CLI/API paths, model modes,
+strategy configs or current design recommendations; retained subdaily swing
+evidence and causal contracts pass regression tests; incompatible retired
+artifacts fail before activation. Rollback uses the preserved Git checkpoint,
+never mutation or deletion of protected evidence. Shared news collection ownership
+resumes after this cleanup; no new collector has started.
+
+Independent design findings (September 20):
+
+- The mixed strategy contract hashes both strategies. Removing its intraday fields
+  changes identity even when swing parameters are identical. Saved swing
+  publications cannot be made current by simply replacing their recorded hashes.
+  User approval has been requested to retain those publications as historical
+  evidence and require fresh verification before reuse. Rebuild or retrain only
+  when verification cannot establish equivalent usable inputs, not automatically.
+- Four otherwise unused root helpers (`intraday_confirmation`,
+  `intraday_enrichment`, `intraday_catalysts`, `intraday_universe`) are pinned by
+  the protected KS3 swing specialist request. Preserve their referenced bytes or
+  establish the approved historical-only disposition before deleting them.
+- Independent S&P membership authorities exist, but the prospective news
+  collector currently verifies an intraday bar dataset to obtain its namespace.
+  A new universe-owned namespace must pin membership and asset identities,
+  intervals, observation cutoffs and extension lineage. No silent conversion of
+  previous polling chains to the new schema.
+- Ownership: Alpaca transport in `sources`; immutable receipt/attempt/generation
+  and SIP-session plan verification in `evidence`; membership/security identity
+  in `universe/sp500`; analyst event classification in `catalysts/issuer_events`.
+  Commands compose these layers. Do not move universe/model imports wholesale
+  into `sources`, whose package boundary prohibits them.
+- Collector tests must cover namespace substitution, ticker reuse, future
+  membership, asset conflicts, exact receipt clocks, tampering, interrupted
+  publication, duplicates and resume. Preserve SIP and completed-session checks.
+
+No implementation deletion is authorized by this design finding alone. The
+material historical-contract disposition question is pending; this checkpoint is
+not complete and no production readiness is claimed.
 
 ### Completed Main Preservation And TradingFlow Retirement
 
