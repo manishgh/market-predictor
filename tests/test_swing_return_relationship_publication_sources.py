@@ -1,6 +1,8 @@
 """Small physical-source fixtures for corrected ownership and nullable quarantine."""
 from __future__ import annotations
 
+import hashlib
+import json
 from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
@@ -15,11 +17,13 @@ from market_predictor.evidence.hashing import json_sha256
 from market_predictor.swing.contracts.holding_materialization import SourcePin
 from market_predictor.swing.contracts.return_feature_profiles import RETURN_RELATIONSHIP_COLUMNS
 from market_predictor.swing.datasets.predictor_abstention_derivation import ReviewedPredictorFailure
+from market_predictor.swing.datasets.return_relationship_integrity import check_files, pins, read_object
 from market_predictor.swing.datasets.return_relationship_rows import PHYSICAL_COLUMNS, read_stock
+from market_predictor.swing.datasets.return_relationship_sources import _collection_metadata
 from tests.test_swing_return_feature_profiles import Inputs, _build
 from tests.test_swing_return_feature_profiles import contract as contract
 from tests.test_swing_return_feature_profiles import inputs as inputs
-from tests.test_swing_return_relationship_publication import _canonical
+from tests.test_swing_return_relationship_publication import _canonical, _collection_fixture
 from tests.test_swing_training_readiness import _json
 
 
@@ -141,3 +145,103 @@ def test_physical_missing_session_is_not_compressed_into_lag_positions(tmp_path:
     assert result[list(RETURN_RELATIONSHIP_COLUMNS[:3])].isna().all(axis=None)
     assert pd.notna(result.iloc[-1][RETURN_RELATIONSHIP_COLUMNS[3]])
     assert len(result) == len(inputs.decisions)
+
+
+COLLECTION_FILES = {
+    "pre_collection": {"_request.json": "request_sha256", "_manifest.json": "manifest_sha256",
+        "_authority.json": "authority_sha256"},
+    "post_collection": {"_request.json": "request_file_sha256", "_manifest.json": "manifest_sha256",
+        "_status.json": "status_sha256", "_source_collections.parquet": "source_collections_sha256"},
+}
+COLLECTION_FILE_CASES = [(family, name, field) for family, fields in COLLECTION_FILES.items() for name, field in fields.items()]
+
+
+@pytest.mark.parametrize("family", COLLECTION_FILES)
+def test_collection_metadata_accepts_transitive_pins_without_direct_parent_entries(tmp_path: Path, family: str) -> None:
+    record = _collection_fixture(tmp_path, family)
+    parent_path = tmp_path / "data/panel/_request.json"
+    parent_digest = _json(parent_path, dict(combined_daily_inputs={family: record}))
+    inherited = {parent_path.relative_to(tmp_path).as_posix(): parent_digest}
+    panel = read_object(parent_path, inherited[parent_path.relative_to(tmp_path).as_posix()])
+    request, bound = _collection_metadata(tmp_path, panel["combined_daily_inputs"][family], family)
+    directory = Path(record["directory"])
+    assert bound == {(directory / name).relative_to(tmp_path).as_posix(): record[field]
+        for name, field in COLLECTION_FILES[family].items()}
+    assert not set(inherited).intersection(bound)
+    check_files(tmp_path, pins(tmp_path, inherited, bound))
+    payload = {key: value for key, value in request.items() if key != "request_sha256"}
+    compact = json_sha256(payload)
+    ordinary = hashlib.sha256(json.dumps(payload, sort_keys=True).encode("utf-8")).hexdigest()
+    assert compact != ordinary
+    assert request["request_sha256"] == (compact if family == "pre_collection" else ordinary)
+    assert record[COLLECTION_FILES[family]["_request.json"]] != request["request_sha256"]
+
+
+@pytest.mark.parametrize("family,name,field", COLLECTION_FILE_CASES)
+@pytest.mark.parametrize("poison", ["file", "pin", "missing_pin"])
+def test_collection_metadata_rejects_changed_file_or_missing_or_altered_pin(tmp_path: Path, family: str,
+    name: str, field: str, poison: str,
+) -> None:
+    record = _collection_fixture(tmp_path, family)
+    if poison == "file":
+        path = Path(record["directory"]) / name
+        path.write_bytes(path.read_bytes() + b" ")
+    elif poison == "pin":
+        record[field] = "f" * 64
+    else:
+        del record[field]
+    with pytest.raises(DataReadinessError):
+        _collection_metadata(tmp_path, record, family)
+
+
+@pytest.mark.parametrize("family,name,key,value", [
+    ("pre_collection", "_request.json", "request_sha256", "f" * 64),
+    ("pre_collection", "_manifest.json", "request_sha256", "f" * 64),
+    ("pre_collection", "_manifest.json", "failed_units", ["failed-synthetic-unit"]),
+    ("pre_collection", "_manifest.json", "unattempted_units", ["synthetic-unit"]),
+    ("pre_collection", "_manifest.json", "plan_hashes", {}),
+    ("pre_collection", "_authority.json", "request_sha256", "f" * 64),
+    ("pre_collection", "_authority.json", "plan_authority_sha256", "f" * 64),
+    ("pre_collection", "_authority.json", "plan_units_sha256", "f" * 64),
+    ("pre_collection", "_authority.json", "unit_set_sha256", "f" * 64),
+    ("pre_collection", "_authority.json", "universe_sha256", "f" * 64),
+    ("post_collection", "_request.json", "request_sha256", "f" * 64),
+    ("post_collection", "_manifest.json", "request_sha256", "f" * 64),
+    ("post_collection", "_status.json", "schema", "unsupported-collection"),
+    ("post_collection", "_status.json", "observed_symbols", 1),
+    ("post_collection", "_status.json", "failed_symbols", {"AAA": "failure"}),
+    ("post_collection", "_status.json", "source_collections_sha256", "f" * 64),
+])
+def test_collection_metadata_rejects_rehashed_identity_or_authority_poison(tmp_path: Path, family: str,
+    name: str, key: str, value: Any,
+) -> None:
+    record = _collection_fixture(tmp_path, family)
+    directory = Path(record["directory"])
+    field = COLLECTION_FILES[family][name]
+    document = read_object(directory / name, record[field])
+    document[key] = value
+    record[field] = _json(directory / name, document)
+    if family == "pre_collection" and name == "_manifest.json":
+        authority = read_object(directory / "_authority.json", record["authority_sha256"])
+        authority["artifact_sha256"] = record["manifest_sha256"]
+        record["authority_sha256"] = _json(directory / "_authority.json", authority)
+    with pytest.raises(DataReadinessError):
+        _collection_metadata(tmp_path, record, family)
+
+
+@pytest.mark.parametrize("family,field", [("pre_collection", "unit_set_sha256"), ("pre_collection", "universe_sha256"),
+    ("post_collection", "request_identity_sha256")])
+def test_collection_metadata_rejects_changed_parent_identity(tmp_path: Path, family: str, field: str) -> None:
+    record = _collection_fixture(tmp_path, family)
+    record[field] = "f" * 64
+    with pytest.raises(DataReadinessError):
+        _collection_metadata(tmp_path, record, family)
+
+
+@pytest.mark.parametrize("family", COLLECTION_FILES)
+def test_collection_metadata_conflicting_direct_parent_pin_is_not_overwritten(tmp_path: Path, family: str) -> None:
+    record = _collection_fixture(tmp_path, family)
+    _, bound = _collection_metadata(tmp_path, record, family)
+    inherited = {next(iter(bound)): "f" * 64}
+    with pytest.raises(DataReadinessError, match="pins conflict"):
+        pins(tmp_path, inherited, bound)

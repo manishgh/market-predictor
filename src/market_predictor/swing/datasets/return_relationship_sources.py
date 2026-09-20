@@ -1,6 +1,7 @@
 """Complete inventory binding for the saved adjusted histories and reviewed absences."""
 from __future__ import annotations
 
+import hashlib
 import json
 import tomllib
 from dataclasses import dataclass
@@ -47,11 +48,68 @@ def _toml(root: Path, path: str, digest: str) -> dict[str, Any]:
     return tomllib.loads(inside(root, path).read_text(encoding="utf-8"))
 
 
-def _bound(root: Path, inherited: dict[str, str], path: Path) -> tuple[dict[str, Any], dict[str, str]]:
-    name = inside(root, path).relative_to(root).as_posix()
-    if name not in inherited:
-        raise DataReadinessError(f"relationship authority is not bound by parent evidence: {name}")
-    return read_object(path, inherited[name]), {name: inherited[name]}
+def _collection_metadata(root: Path, record: dict[str, Any], family: str) -> tuple[dict[str, Any], dict[str, str]]:
+    """Follow metadata byte pins in the already verified combined-panel request."""
+    if family not in {"pre_collection", "post_collection"}:
+        raise DataReadinessError("relationship collection family is unsupported")
+    directory = inside(root, record["directory"])
+    pre = family == "pre_collection"
+    fields = {"_request.json": "request_sha256" if pre else "request_file_sha256",
+        "_manifest.json": "manifest_sha256"}
+    fields.update({"_authority.json": "authority_sha256"} if pre else {
+        "_status.json": "status_sha256", "_source_collections.parquet": "source_collections_sha256"})
+    if any(not isinstance(record.get(field), str) for field in fields.values()):
+        raise DataReadinessError("relationship collection metadata lacks inherited byte pins")
+    bound = pins(root, {inside(directory, name).relative_to(root).as_posix(): record[field]
+        for name, field in fields.items()})
+    check_files(root, bound)
+    metadata = {name: read_object(inside(directory, name), record[field])
+        for name, field in fields.items() if name.endswith(".json")}
+    request, manifest = metadata["_request.json"], metadata["_manifest.json"]
+    payload = {key: value for key, value in request.items() if key != "request_sha256"}
+    # These two existing collection protocols use different JSON identity encodings.
+    identity = json_sha256(payload) if pre else hashlib.sha256(
+        json.dumps(payload, sort_keys=True).encode("utf-8")).hexdigest()
+    if (request.get("request_sha256") != identity or manifest.get("request_sha256") != identity
+            or request.get("adjustment") != "all" or request.get("price_feed") != "sip"
+            or request.get("provider" if pre else "source") != "alpaca"
+            or request.get("timeframe") != ("1Day" if pre else "1d")):
+        raise DataReadinessError("relationship collection identity or source basis differs")
+    if pre:
+        authority = metadata["_authority.json"]
+        plan_hashes = request.get("plan_hashes")
+        if (request.get("schema") != "edge_rebuild.swing_history_collection.v1"
+                or manifest.get("schema") != request["schema"]
+                or manifest.get("status") not in {"complete", "complete_with_unavailable"}
+                or manifest.get("failed_units") != [] or manifest.get("unattempted_units") != []
+                or not isinstance(plan_hashes, dict) or manifest.get("plan_hashes") != plan_hashes
+                or authority.get("schema") != "edge_rebuild.swing_history_collection_authority.v1"
+                or authority.get("state") != "complete" or authority.get("artifact") != "_manifest.json"
+                or authority.get("artifact_sha256") != record["manifest_sha256"]
+                or authority.get("request_sha256") != identity):
+            raise DataReadinessError("relationship pre-collection authority differs")
+        for key in ("authority", "units"):
+            if not plan_hashes.get(key + "_sha256") or authority.get("plan_" + key + "_sha256") != plan_hashes[key + "_sha256"]:
+                raise DataReadinessError("relationship pre-collection plan binding differs")
+        for key in ("unit_set_sha256", "universe_sha256"):
+            if not record.get(key) or any(value.get(key) != record[key] for value in (manifest, authority)):
+                raise DataReadinessError("relationship pre-collection population binding differs")
+        if request.get("universe_sha256") != record["universe_sha256"]:
+            raise DataReadinessError("relationship pre-collection request universe differs")
+    else:
+        status = metadata["_status.json"]
+        if request.get("schema") != "swing.daily_history_collection.v1" or record.get("request_identity_sha256") != identity:
+            raise DataReadinessError("relationship post-collection request identity differs")
+        for terminal in (status, manifest):
+            if (terminal.get("schema") != "swing.daily_history_manifest.v1"
+                    or terminal.get("status") not in {"complete", "complete_with_gaps"}
+                    or terminal.get("request_sha256") != identity or terminal.get("failed_symbols") != {}
+                    or terminal.get("source_collections_sha256") != record["source_collections_sha256"]):
+                raise DataReadinessError("relationship post-collection terminal metadata differs")
+        for key in ("status", "requested_symbols", "observed_symbols", "unavailable_symbols", "skipped_symbols"):
+            if status.get(key) != manifest.get(key):
+                raise DataReadinessError("relationship post-collection status and manifest disagree")
+    return request, bound
 
 
 def verify_source_context(root: Path, policy: ReturnRelationshipPublicationPolicy,
@@ -90,12 +148,8 @@ def verify_source_context(root: Path, policy: ReturnRelationshipPublicationPolic
         raise DataReadinessError("relationship combined source basis or collection boundaries differ")
     for family in ("pre_collection", "post_collection"):
         record = inputs[family]
-        collection = inside(root, record["directory"])
-        request, bound = _bound(root, inherited, collection / "_request.json")
-        source = pins(root, source, bound)
-        if request.get("adjustment") != "all" or request.get("price_feed") != "sip":
-            raise DataReadinessError("relationship combined ancestry has incompatible adjustment/feed")
-        _, bound = _bound(root, inherited, collection / "_manifest.json")
+        _, bound = _collection_metadata(root, record, family)
+        pins(root, inherited, bound)
         source = pins(root, source, bound)
     corrected_directory = inside(root, feature.adjusted_archive_authority.path).parent
     corrected_authority = read_object(inside(root, feature.adjusted_archive_authority.path), feature.adjusted_archive_authority.sha256)

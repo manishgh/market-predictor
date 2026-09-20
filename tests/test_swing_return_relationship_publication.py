@@ -1,6 +1,8 @@
 """Synthetic bounded authorities; no provider calls or production evidence."""
 from __future__ import annotations
 
+import hashlib
+import json
 import shutil
 from dataclasses import replace
 from datetime import date, datetime, timedelta
@@ -69,16 +71,57 @@ def _feature_config(root: Path, values: dict[str, Any]) -> Path:
     return path
 
 
+def _collection_fixture(root: Path, family: str) -> dict[str, Any]:
+    """Protocol-faithful metadata only; never a replayable provider archive."""
+    path = root / "data/raw" / family
+    path.mkdir(parents=True)
+    if family == "pre_collection":
+        plan_hashes = dict(request_sha256="1" * 64, manifest_sha256="2" * 64,
+            authority_sha256="3" * 64, units_sha256="4" * 64)
+        payload = dict(schema="edge_rebuild.swing_history_collection.v1", provider="alpaca", timeframe="1Day",
+            adjustment="all", price_feed="sip", plan_hashes=plan_hashes, universe_sha256="7" * 64,
+            plan_directory=str(root / "synthetic-pre-plan"), plan_schema="edge_rebuild.swing_history_plan.v1",
+            provider_unit_set_sha256=json_sha256([]), provider_symbols={}, transport_receipts_required=True,
+            workers=2, maximum_memory_gib=4.0)
+        identity = json_sha256(payload)
+        request_pin = _json(path / "_request.json", {**payload, "request_sha256": identity})
+        unit_set = json_sha256([])
+        manifest_pin = _json(path / "_manifest.json", dict(schema=payload["schema"], status="complete",
+            request_sha256=identity, plan_hashes=plan_hashes, universe_sha256=payload["universe_sha256"],
+            failed_units=[], unattempted_units=[], unavailable_units=[], unavailable_security_fraction=0.0,
+            requested_units=0, terminal_units=0, observed_units=0, unit_artifacts=[], total_rows=0, unit_set_sha256=unit_set))
+        authority_pin = _json(path / "_authority.json", dict(schema="edge_rebuild.swing_history_collection_authority.v1",
+            state="complete", artifact="_manifest.json", artifact_sha256=manifest_pin, request_sha256=identity,
+            plan_authority_sha256=plan_hashes["authority_sha256"], plan_units_sha256=plan_hashes["units_sha256"],
+            universe_sha256=payload["universe_sha256"], unit_set_sha256=unit_set))
+        return dict(directory=str(path), request_sha256=request_pin, manifest_sha256=manifest_pin,
+            authority_sha256=authority_pin, unit_set_sha256=unit_set, universe_sha256=payload["universe_sha256"])
+    assert family == "post_collection"
+    payload = dict(schema="swing.daily_history_collection.v1", source="alpaca", timeframe="1d",
+        adjustment="all", price_feed="sip", start_date="2019-07-09", end_date="2026-07-08")
+    identity = hashlib.sha256(json.dumps(payload, sort_keys=True).encode("utf-8")).hexdigest()
+    request_pin = _json(path / "_request.json", {**payload, "request_sha256": identity})
+    ledger = path / "_source_collections.parquet"
+    pd.DataFrame([dict(collection_id="alpaca-synthetic-test", ticker="AAA", source_family="alpaca_daily_bars",
+        requested_start_utc=pd.Timestamp("2019-07-09", tz="UTC"), requested_end_utc=pd.Timestamp("2026-07-08", tz="UTC"),
+        status="observed_empty", row_count=0)]).to_parquet(ledger, index=False)
+    ledger_pin = file_sha256(ledger)
+    status = dict(schema="swing.daily_history_manifest.v1", status="complete_with_gaps", request_sha256=identity,
+        requested_symbols=1, observed_symbols=0, unavailable_symbols=["AAA"], failed_symbols={}, skipped_symbols=[],
+        source_collections_sha256=ledger_pin)
+    status_pin = _json(path / "_status.json", status)
+    manifest_pin = _json(path / "_manifest.json", {**status, "artifacts": [], "artifact_count": 0, "total_rows": 0})
+    return dict(directory=str(path), request_file_sha256=request_pin, request_identity_sha256=identity,
+        manifest_sha256=manifest_pin, status_sha256=status_pin, source_collections_sha256=ledger_pin)
+
+
 def _combined(root: Path, strategy: Any, sessions: tuple[date, ...]) -> dict[str, Any]:
     directory = root / "data/features/source"
     combined = directory / "combined_daily"
     combined.mkdir(parents=True)
     lineage: dict[str, Any] = {"membership_authority": {"universe_sha256": "7" * 64}}
     for family in ("pre_collection", "post_collection"):
-        path = root / "data/raw" / family
-        _json(path / "_request.json", dict(adjustment="all", price_feed="sip"))
-        _json(path / "_manifest.json", dict(schema="synthetic_test_collection"))
-        lineage[family] = {"directory": str(path), "manifest_sha256": file_sha256(path / "_manifest.json")}
+        lineage[family] = _collection_fixture(root, family)
     combined_inputs = {**lineage, "source": "alpaca", "timeframe": "1Day", "adjustment": "all", "price_feed": "sip",
         "start_date": "2018-05-29", "pre_end_date": "2019-07-08", "post_start_date": "2019-07-09"}
     request = dict(request_sha256="a" * 64, strategy_contract_sha256=strategy.sha256(), combined_daily_inputs=combined_inputs)
@@ -102,7 +145,9 @@ def _combined(root: Path, strategy: Any, sessions: tuple[date, ...]) -> dict[str
         strategy_contract_sha256=strategy.sha256(), source=dict(combined_daily_authority_sha256=owner_pin)))
     _json(directory / "final/_authority.json", dict(state="complete", artifact_sha256=final_pin,
         request_sha256=request["request_sha256"], strategy_contract_sha256=strategy.sha256()))
-    return dict(directory=directory, artifacts=artifacts)
+    transitive = {path.relative_to(root).as_posix() for family in ("pre_collection", "post_collection")
+        for path in Path(lineage[family]["directory"]).iterdir()}
+    return dict(directory=directory, artifacts=artifacts, transitive_metadata_paths=transitive)
 
 
 def _frames(strategy: Any) -> tuple[dict[str, pd.DataFrame], tuple[date, ...], list[str]]:
@@ -199,7 +244,9 @@ def publication_fixture(evidence: dict[str, Any], monkeypatch: pytest.MonkeyPatc
     _json(root / "data/features/predictors/_manifest.json", dict(schema="market_predictor.research_predictors", rows=len(population),
         groups=groups, derivation=dict(approved_failure_facts=_pin(root, facts_path))))
     source_files = {path.relative_to(root).as_posix(): file_sha256(path) for path in root.rglob("*")
-        if path.is_file() and not path.is_relative_to(root / "src") and not path.name.endswith(".lock")}
+        if path.is_file() and not path.is_relative_to(root / "src") and not path.name.endswith(".lock")
+        and path.relative_to(root).as_posix() not in combined["transitive_metadata_paths"]}
+    assert not set(source_files).intersection(combined["transitive_metadata_paths"])
     joined = root / "data/features/join"
     request_pin = _json(joined / "_request.json", dict(schema="market_predictor.research_join_request", rows=len(population),
         historical_first_seen_proven=False, cohort_sha256="c" * 64, source_files=source_files, decision_source_files={}))
