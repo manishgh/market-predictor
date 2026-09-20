@@ -50,6 +50,10 @@ requested. This update is documentation-only; use continuity checks and diff che
 Keep C# for the desk and Python for ML. C# ownership of shared provider ingestion
 is a recommendation for the next design discussion, not a completed or authorized
 collector migration; the current Python collector and wire contracts are unchanged.
+Policy checkpoint: Market Predictor `bbbfe46` is pushed; TradingFlow `5217fad` is
+committed locally only. Two continuity checks and scoped diff/reference review
+passed. Independent policy review closed with no actionable findings; no full
+suite, build, model replay or test-count audit was run for this prose-only update.
 
 Current checkpoint: **TradingFlow shared-receipt consumption design** (`in progress`).
 Design entry only; consumer implementation has not started. The raw collector is

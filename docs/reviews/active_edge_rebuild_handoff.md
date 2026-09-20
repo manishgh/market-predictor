@@ -25,6 +25,8 @@ Verification for this policy-only change: two continuity checks and both reposit
 diff checks passed; a scoped independent policy review found no actionable issue
 and is closed. No runtime tests beyond document checks, lint/types, builds, full
 suite, model replay or test inventory ran because executable behavior is unchanged.
+Policy commits: Market Predictor `bbbfe46` is pushed; TradingFlow `5217fad` is
+local-only under its explicit-sync rule. Runtime implementation remains `94aa1c4`.
 
 The latest instruction starts shared implementation for both swing and long-term
 investment. Remaining intraday retirement and full retained-model replay are
