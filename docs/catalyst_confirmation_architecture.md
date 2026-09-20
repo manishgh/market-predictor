@@ -128,9 +128,16 @@ Transport failures stop only the affected window; corrupt evidence aborts the ru
 Token cycles and exhausted budgets are incomplete, not empty successful coverage.
 Offline replay is read-only and never requires credentials. Transport responses are
 capped at 8 MiB and new requests stop at configured system memory pressure (90%).
-Trusted receipt references can be passed to the existing C# importer; automated
-discovery, acknowledgement, normalized admission, candle/SEC exchange and cloud
-coordination remain separate implementation work. No live provider job has run as
+TradingFlow's explicit `import-shared-news` command discovers received results only
+inside one independently pinned plan under an operator-trusted local root. It
+verifies all existing attempts under the producer lock before copying exact bytes
+to a separate atomic inbox. A bundle-bound acknowledgement preserves source
+receipt time and records import time separately. Restart verifies immutable prior
+bundles; it never overwrites corrupted imports or imports orphan receipts without
+committed results. Whole-publication limits include already imported pages.
+This adapter currently requires a Windows fixed local disk; a hash does not
+authenticate the root's writers. Automatic polling, normalized admission,
+candle/SEC exchange and cloud coordination remain separate work. No provider job ran as
 part of this checkpoint. Swing and investment share raw collection only; investment
 targets and execution admission are not supplied by the ten-session swing model.
 

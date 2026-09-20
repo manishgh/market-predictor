@@ -24,8 +24,17 @@ causal inputs and an explicit research-only training contract.
 | Planned profile | Source, batch and feature order | Fixed-horizon labels | Training consumer and experiment | Live, promotion and API |
 | --- | --- | --- | --- | --- |
 | existing_technical | Verified corrected publication: technical_market, 120 ordered inputs and availability clocks | Original outcomes replayed; exact costs/comparisons/global maturity audited; inner fitting purges actual maturity independently | Verified implementation 07963cc: 16 real temporal/transfer fits and two final models completed; 4,329 full tests passed, 10 skipped | Not applicable to this offline research experiment; artifact loader explicitly rejects serving/promotion purpose |
-| technical_relationships | Blocked: the distinct additional momentum/regime relationships are not a published profile; existing RSI/OBV relationships must not be counted again | Must reuse matched independently admitted labels | Not trained; cannot duplicate existing_technical under another name | Not authorized |
+| technical_relationships | Shared batch/live callable adds four ordered momentum, volume-response and market-regime relationships to the unchanged 120 baseline inputs; 131 focused regressions pass. Historical publication and source-authority acceptance remain blocked, so calculation alone grants no admission | Must reuse matched independently admitted labels | Not trained; cannot duplicate existing_technical under another name | Not authorized |
 | technical_relationships_issuer_reaction | Blocked: catalyst_full has aggregate news features, not qualified issuer/SEC event-reaction inputs; SEC/Finviz coverage is unknown here | Must reuse matched independently admitted labels | Not trained; counts and sentiment cannot substitute for the promised reaction feature contract | Not authorized |
+
+September 20 component evidence: `return_feature_profiles.py` freezes formulas,
+ordering, source semantics and missingness; `return_relationships.py` preserves
+the real baseline's 120 values and 160 availability mappings. Fourteen independent
+regressions cover the reviewed baseline/source fixes; the worker's 131-test slice,
+Ruff and strict mypy pass. Physical Alpaca/SIP daily metadata, exchange-session
+alignment, ingestion ordering, future-clock rejection, truncated-prefix parity,
+missing sessions, multiple security identities and float32 overflow are tested.
+These are local transformation checks, not a full-history verification or fit.
 
 Readiness command: `audit-swing-training-readiness`, configuration
 `configs/swing_training_readiness.json`. Its scope is bounded initial-fit

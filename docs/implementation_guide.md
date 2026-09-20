@@ -69,6 +69,13 @@ inventory, not hashes freshly calculated from an untrusted artifact directory.
 - TradingFlow `Data/Evidence/Collection/NewsReceiptImporter.cs`: bounded read-only
   import with an independently supplied receipt hash. It does not fabricate a
   TradingFlow collection job, publish normalized evidence or submit orders.
+- TradingFlow `Data/Evidence/Collection/SharedNews`: verifies the complete pinned
+  producer attempt chain and retains exact received-result bundles in an atomic
+  inbox. A committed inbox bundle is the durable acknowledgement; incomplete
+  attempts and corrupted prior imports cannot be acknowledged as successful.
+- TradingFlow `Cli/SharedNewsImportCommand.cs`: explicit offline import with
+  configured trusted root, independent plan pin, disjoint inbox and whole-publication
+  bounds. This does not migrate collection ownership or desk feeds.
 - Both projects' `news_receipt_exchange.json` fixtures cover valid receipts,
   timing, hash, size, query/schema boundaries, malformed UTF-8, duplicate keys and
   numeric/depth limits. They are synthetic tests, never source evidence.
@@ -78,8 +85,15 @@ expected_receipt_sha256=trusted_pin)`. C# is
 `NewsReceiptImporter.Read(manifestPath, payloadPath, trustedPin)`.
 Pass the publisher's independently trusted pin, not a hash derived from an
 untrusted import at read time. No machine-specific path is embedded in the wire
-format. Automatic TradingFlow discovery/import acknowledgement and Azure/GCP storage
-adapters are not implemented by this local collector.
+format. The explicit C# consumer supports Windows fixed local disks with the same
+producer byte-range lock; it requires read/write access to the existing lock but
+does not rewrite source evidence. The operator must independently trust the source
+root's writers. A plan pin is not authentication of subsequently published results.
+Automatic polling, normalized admission and Azure/GCP adapters are not implemented.
+The additional shared `news_collection_exchange.json` fixture is checked against
+the real Python publisher, not only separate serializers. To run the optional
+cross-process test, build TradingFlow CLI, set `TRADINGFLOW_NEWS_CLI_DLL` to its
+absolute DLL path, then run `tests/test_news_collection_consumer_interop.py`.
 
 The command is `market-predictor-collect collect-shared-news --plan <plan.json>
 --expected-plan-sha256 <trusted-plan-pin> --config configs/shared_news_collection.toml`.

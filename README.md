@@ -45,7 +45,10 @@ trusted manifest hash. `market-predictor-collect collect-shared-news` adds one
 configured local owner, immutable attempt/receipt publication and verified restart.
 Its raw data serves both swing and open-ended investment; it does not enable an
 investment model, normalized issuer attribution, full-content coverage or model
-admission. TradingFlow automatic import/feed migration is not implemented yet. See
+admission. TradingFlow now has an explicit `import-shared-news` command for a
+trusted, pinned local publication; it retains exact bytes with durable,
+idempotent acknowledgements. Automatic polling/feed migration and normalized
+catalog admission remain unimplemented. See
 [the architecture](docs/catalyst_confirmation_architecture.md#raw-news-receipt-exchange)
 and [implementation guide](docs/implementation_guide.md#news-receipt-exchange).
 
