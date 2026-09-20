@@ -86,6 +86,8 @@ def test_exchange_calls_observed_transport_and_preserves_exact_bytes() -> None:
     source.fetch_news_page_observed.assert_called_once_with(
         "MSFT", saved.manifest.request.start_utc, saved.manifest.request.end_utc,
         page_token=None, include_content=True, limit=50,
+        maximum_body_bytes=MAX_PAYLOAD_BYTES,
+        allow_redirects=False,
     )
 
 

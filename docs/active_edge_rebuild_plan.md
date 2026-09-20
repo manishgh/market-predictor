@@ -15,7 +15,7 @@ This is the only active execution plan. Exact artifact state is recorded in
 ## Objective And Boundary
 
 Current product scope: **long-only swing (roughly one to three weeks) and a
-separate, future open-ended investment cohort**, with verifiable net performance
+separate open-ended investment cohort**, with verifiable net performance
 against buy-and-hold SPY. Dedicated day-trading strategies and training are being
 retired by user instruction, not maintained for compatibility. Minute/hourly bars
 needed for swing entry timing, protection and causal evidence remain supported.
@@ -41,7 +41,13 @@ outside this repository.
 
 ## Unified Product Implementation
 
-Current checkpoint: **complete dedicated intraday retirement** (`in progress`).
+Current checkpoint: **shared news collection for swing and investment** (`in progress`).
+The user approved deferring remaining intraday retirement and retained-model replay
+to unblock this implementation. Historical source-pin mismatches still prohibit
+reuse; no admission gate is weakened. Both product cohorts share raw evidence,
+not a forecast target: investment training and execution are not implemented yet.
+
+Deferred checkpoint: **complete dedicated intraday retirement**.
 The September 20 user instruction explicitly extends the completed HTTP/CLI and
 TradingFlow cleanup to all remaining Market Predictor implementation. This is a
 changed requirement, not a reopening of previously passed tests without cause.
@@ -87,7 +93,7 @@ strategy configs or current design recommendations; retained subdaily swing
 evidence and causal contracts pass regression tests; incompatible retired
 artifacts fail before activation. Rollback uses the preserved Git checkpoint,
 never mutation or deletion of protected evidence. Shared news collection ownership
-resumes after this cleanup; no new collector has started.
+is now authorized before the remaining cleanup; no live collector has started.
 
 Independent design findings (September 20):
 
@@ -115,12 +121,10 @@ Independent design findings (September 20):
   membership, asset conflicts, exact receipt clocks, tampering, interrupted
   publication, duplicates and resume. Preserve SIP and completed-session checks.
 
-The historical-contract disposition is approved. Begin with the bounded retention
-and unused-module slice: verify completed-run inventories, preserve exact pinned
-source evidence where needed, remove unconsumed day-trading helpers/research and
-their exclusive tests, and retain shared swing tests. Consumer migration and the
-swing-only current-contract verification remain required before full closure.
-This checkpoint is not complete and no production readiness is claimed.
+The approved bounded retention and unused-module slice is complete below. Consumer
+migration and swing-only current-contract replay remain required before full
+retirement/reuse closure, but are now deferred rather than blocking the new raw
+collector. Full retirement is not complete and no production readiness is claimed.
 
 ### Completed Retention And Unused-Code Slice
 
@@ -214,11 +218,42 @@ code/config pins match their original hashes. No data, feature or model changes.
 
 ### Shared News Collection Ownership And Durable Replay
 
-Next bounded deliverable: connect the existing raw-news receipt contract to one
-designated collection owner and reproducible consumer import. This is design
-inventory only, not a functioning shared collector. Before edits, review both
-repositories' current collection lifecycles and freeze the ownership/configuration
-and provenance contract with two independent reviewers.
+Current bounded deliverable: connect the existing raw-news receipt contract to one
+designated local collection owner and reproducible consumer import. Preserve the
+existing Python/C# receipt wire format. Raw symbol queries are not issuer identity,
+point-in-time feature authority, evidence of complete provider coverage, or model
+admission. Do not require an intraday dataset merely to preserve HTTP observations.
+One local root coordinates cooperating workers; this is not multi-host fencing.
+Swing and investment consume the same raw evidence without sharing model targets.
+
+Frozen implementation: a strict independently pinned plan defines windows, owner,
+producer revision and page/attempt budgets. Record a logical transport attempt
+before fetching (the HTTP client may retry internally), publish original receipt
+bytes atomically, then commit the receipt-bound attempt result. Recover progress
+only from verified results. Preserve indeterminate attempts after interruption;
+exactly-once provider execution across a crash is not promised. Bound reads and
+pagination, reject cycles, isolate request failures, and fail closed on corruption.
+The collection CLI must support no-network verification of an existing run.
+
+Exit gates: focused restart/ownership/tamper/CLI tests, existing Python/C# receipt
+parity, repository lint/types/full Python regression, independent code/design
+review, updated continuity. No live provider/broker jobs, training, raw-data
+deletion, investment horizon invention, cloud deployment or promotion in scope.
+
+Implementation and full verification are complete; Git checkpoint closure follows.
+Focused checks pass: 101 collection/transport/CLI tests, 232 CLI/package/continuity
+tests, 27 existing C# receipt tests; repository Ruff and strict mypy pass (392
+source files). Consolidated independent review closed after preventing HTTP
+redirects before they are followed and restricting transport-failure classification
+to actual request errors. Partial-write, owner-substitution and mapped-drive tests
+were added. Both agents are closed. No live provider/broker request was made.
+Final full regression: 4,488 passed, ten skipped, 268 warnings in 2,902.59 seconds.
+Log: `data/runtime/shared-news-final-20260920.log`; JUnit:
+`.test-tmp/shared-news-final-20260920.xml`. The 90% watchdog sampled a 68.51% peak;
+both test and watchdog processes exited zero. An earlier background launch had
+setup errors and was stopped. A subsequent direct run caught a CLI memory-rejection
+exit-code regression; explicit MemoryBudgetError handling was restored before the
+successful final full run. No failure was waived or counted as passing.
 
 - Reuse `sources/news_exchange.py` and the existing Alpaca observed transport;
   preserve original response bytes, query identity and actual receipt clocks.

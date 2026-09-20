@@ -6,7 +6,13 @@ import hashlib
 import json
 from urllib.parse import parse_qsl, urlsplit
 
-from market_predictor.evidence.news_exchange import NewsHttpReceipt, NewsPageRequest, ValidatedNewsReceipt, validate_news_receipt
+from market_predictor.evidence.news_exchange import (
+    MAX_PAYLOAD_BYTES,
+    NewsHttpReceipt,
+    NewsPageRequest,
+    ValidatedNewsReceipt,
+    validate_news_receipt,
+)
 from market_predictor.sources.alpaca import AlpacaSource
 
 
@@ -14,6 +20,8 @@ def fetch_news_receipt(source: AlpacaSource, request: NewsPageRequest, *, produc
     page = source.fetch_news_page_observed(
         request.symbol, request.start_utc, request.end_utc,
         page_token=request.page_token, include_content=request.include_content, limit=request.limit,
+        maximum_body_bytes=MAX_PAYLOAD_BYTES,
+        allow_redirects=False,
     )
     if page.raw_body is None or page.retrieved_at_utc is None or page.status_code != 200:
         raise ValueError("news exchange requires original successful HTTP receipt evidence")

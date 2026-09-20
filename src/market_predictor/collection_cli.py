@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from market_predictor.cli import app as source_app
 from market_predictor.cli_surface import filtered_app
+from market_predictor.commands.news_collection import register_news_collection_commands
 from market_predictor.commands.swing_corrected_outcomes import register_corrected_outcome_commands
 from market_predictor.commands.swing_feature_history import register_feature_history_commands
 
@@ -41,6 +42,7 @@ app = filtered_app(
 
 register_corrected_outcome_commands(app)
 register_feature_history_commands(app)
+register_news_collection_commands(app)
 
 
 if __name__ == "__main__":

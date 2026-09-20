@@ -81,6 +81,13 @@ class AlpacaSourceTests(unittest.TestCase):
         self.assertEqual(page.news[0]["id"], 1)
         self.assertEqual(page.final_url, final_url)
         self.assertEqual(page.redirect_chain, redirect_chain)
+        self.assertEqual(client.get_bytes_with_metadata.call_args.kwargs["maximum_body_bytes"], 16 * 1024 * 1024)
+
+        source.fetch_news_page_observed(
+            "AAPL", datetime(2026, 8, 15, 9, tzinfo=UTC), datetime(2026, 8, 15, 11, tzinfo=UTC),
+            maximum_body_bytes=8 * 1024 * 1024,
+        )
+        self.assertEqual(client.get_bytes_with_metadata.call_args.kwargs["maximum_body_bytes"], 8 * 1024 * 1024)
 
     def test_prospective_asset_snapshot_preserves_asset_id_and_http_body(self) -> None:
         source = AlpacaSource(

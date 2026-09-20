@@ -107,10 +107,32 @@ article body exists. Missing bodies are preserved; no neutral sentiment is inven
 The raw receipt makes no issuer/security-identity, coverage completeness, causal
 feature or trading-admission claim. Normalization must establish those separately.
 
-This checkpoint neither starts a collector nor migrates source ownership. TradingFlow
-keeps its fenced live market stream. Candle exchange, SEC exchange, collector replay,
-durable publication and normalized imports remain explicitly unimplemented parts of
-the broader program. Local files are import adapters, not shared cloud coordination.
+The raw REST collection path uses `evidence/news_collection.py` and the existing
+observed Alpaca transport. One configured local root holds an immutable owner marker
+and `runs/<plan_sha256>` directories. A nonqueueing root lock covers recovery,
+fetching and publication across plans. This is cooperating single-host ownership,
+not account-wide or distributed fencing. TradingFlow retains its live market stream
+and existing desk news feeds until their separate consumer migration.
+
+An independently pinned plan binds exact symbol/time windows, producer revision,
+page and attempt budgets. Each logical transport invocation publishes an immutable
+intent first. Exact v1 receipt files are fsynced and published with an atomic
+same-filesystem directory move; the receipt-pinned result is committed last.
+Restart verifies plan, request, attempt order, result binding and every committed
+receipt before fetching anything. Missing results remain indeterminate, including
+complete receipt bundles interrupted before result publication. Their bytes are
+retained; a retry creates a distinct attempt, never an earlier observation clock.
+HTTP retries can occur inside a logical attempt, so exactly-once HTTP is not claimed.
+
+Transport failures stop only the affected window; corrupt evidence aborts the run.
+Token cycles and exhausted budgets are incomplete, not empty successful coverage.
+Offline replay is read-only and never requires credentials. Transport responses are
+capped at 8 MiB and new requests stop at configured system memory pressure (90%).
+Trusted receipt references can be passed to the existing C# importer; automated
+discovery, acknowledgement, normalized admission, candle/SEC exchange and cloud
+coordination remain separate implementation work. No live provider job has run as
+part of this checkpoint. Swing and investment share raw collection only; investment
+targets and execution admission are not supplied by the ten-session swing model.
 
 ## Incremental Source Acquisition
 

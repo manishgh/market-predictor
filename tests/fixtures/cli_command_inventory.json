@@ -11,6 +11,7 @@
     "collect-edge-rebuild-swing-history",
     "collect-edge-sec-filings",
     "collect-market-context",
+    "collect-shared-news",
     "collect-sp500-official-source-archive",
     "collect-swing",
     "collect-swing-corrected-feature-history",

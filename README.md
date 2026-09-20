@@ -41,17 +41,26 @@ before historical models can be reused; original manifests must not be repinned.
 The first shared-data building block is a bounded Alpaca news HTTP receipt exchange
 with matching Python/C# validation fixtures. It preserves exact provider response
 bytes, query identity and original receipt time. File imports require a separately
-trusted manifest hash. This is not yet shared collector ownership, normalized
-issuer attribution, full-content coverage, or model admission. See
+trusted manifest hash. `market-predictor-collect collect-shared-news` adds one
+configured local owner, immutable attempt/receipt publication and verified restart.
+Its raw data serves both swing and open-ended investment; it does not enable an
+investment model, normalized issuer attribution, full-content coverage or model
+admission. TradingFlow automatic import/feed migration is not implemented yet. See
 [the architecture](docs/catalyst_confirmation_architecture.md#raw-news-receipt-exchange)
 and [implementation guide](docs/implementation_guide.md#news-receipt-exchange).
 
-Retained-run cleanup verification (September 20): 4,442 Python tests passed, ten
-skipped; Ruff and strict mypy passed (388 sources). Independent scoped code/design
-review closed without remaining findings. Saved model evidence is unchanged.
-TradingFlow's separately completed September 20 cleanup passed 1,546 offline tests;
-it was not changed or retested in this checkpoint. Its live Alpaca check remains
-unverified. Full internal contract/collector retirement is still incomplete.
+Remaining internal intraday cleanup and retained-model replay are deferred by user
+approval so shared product implementation can proceed. Source-hash mismatches still
+block historical model reuse. An investment position may be held without a fixed
+exit date, but investment forecast/label horizons need a separate approved contract;
+the ten-session swing predictor must never be relabelled as investment advice.
+
+Shared-collection verification (September 20): 4,488 Python tests passed, ten
+skipped; Ruff and strict mypy passed (392 sources). Independent scoped code/design
+review closed after supported transport findings were fixed. TradingFlow's 27
+receipt tests passed; its C# source was unchanged. Saved models remain unchanged,
+with no promotion. Live provider collection was not run. Full internal retirement
+and historical-model replay remain deferred, not certified by these tests.
 
 ## Verified State
 

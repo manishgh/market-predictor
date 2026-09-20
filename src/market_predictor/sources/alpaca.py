@@ -393,6 +393,8 @@ class AlpacaSource:
         page_token: str | None = None,
         include_content: bool = True,
         limit: int = 50,
+        maximum_body_bytes: int = 16 * 1024 * 1024,
+        allow_redirects: bool = True,
     ) -> AlpacaNewsPage:
         if start.tzinfo is None or end.tzinfo is None:
             raise ValueError("Alpaca news bounds must be timezone-aware")
@@ -414,6 +416,8 @@ class AlpacaSource:
             self.news_url,
             params=params,
             headers=self.headers,
+            maximum_body_bytes=maximum_body_bytes,
+            allow_redirects=allow_redirects,
         )
         try:
             payload = json.loads(response.body.decode("utf-8"))

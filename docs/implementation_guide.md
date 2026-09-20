@@ -57,7 +57,14 @@ inventory, not hashes freshly calculated from an untrusted artifact directory.
 - `sources/news_exchange.py`: `fetch_news_receipt(source, request,
   producer_revision=...)` wraps the existing observed Alpaca transport. It verifies
   recorded query identity and preserves the actual response bytes/time. No provider
-  parser or historical pinned helper was modified.
+  parser was replaced; the observed transport now accepts a response-byte budget.
+- `evidence/news_collection.py`: strict plan/attempt/result contracts, immutable
+  local publication, exclusive root ownership and verified pagination/restart.
+- `sources/news_collection.py`: classifies observed transport failures separately
+  from receipt-integrity errors; logical attempts may contain HTTP retries.
+- `sources/news_collection_settings.py`: strict single-host deployment config.
+- `commands/news_collection.py`: collection/offline verification CLI, memory guard,
+  lazy credentials and deterministic transport cleanup; no training or execution.
 - TradingFlow `Contracts/Evidence/NewsReceipt.cs`: matching C# wire validation.
 - TradingFlow `Data/Evidence/Collection/NewsReceiptImporter.cs`: bounded read-only
   import with an independently supplied receipt hash. It does not fabricate a
@@ -71,8 +78,40 @@ expected_receipt_sha256=trusted_pin)`. C# is
 `NewsReceiptImporter.Read(manifestPath, payloadPath, trustedPin)`.
 Pass the publisher's independently trusted pin, not a hash derived from an
 untrusted import at read time. No machine-specific path is embedded in the wire
-format. Azure/GCP storage adapters and actual shared collector wiring are not
-claimed by this local contract implementation.
+format. Automatic TradingFlow discovery/import acknowledgement and Azure/GCP storage
+adapters are not implemented by this local collector.
+
+The command is `market-predictor-collect collect-shared-news --plan <plan.json>
+--expected-plan-sha256 <trusted-plan-pin> --config configs/shared_news_collection.toml`.
+Add `--offline` for no-network verification. Exit 0 means every requested window
+reached a terminal provider page; it does not assert provider news completeness.
+Exit 2 means rejected/incomplete work; exit 75 means another worker owns the root.
+All workers on a host must use the same configured root; different roots do not
+coordinate. Storage is relative to the deployment configuration, not the working
+directory. Only a local filesystem is supported, not shared storage or multi-host
+ownership. Credentials use the existing environment configuration, never the plan.
+
+Create plans through `NewsCollectionPlan` and `NewsCollectionWindow` in
+`evidence.news_collection`. Each window has a unique `window_id` and a
+`NewsPageRequest`: exact symbol, UTC start/end, `page_token=None`, `include_content`
+and `limit` (1-50). Required plan fields are the producer's 40-character Git revision,
+windows and `max_pages_per_window`; `max_attempts_per_page` defaults to three.
+Use `news_collection_plan_bytes(plan)` for canonical bytes and save the separate
+`news_collection_plan_sha256(plan)` pin through a trusted channel. Noncanonical or
+unpinned input is rejected. Plans are immutable; a changed window requires a new
+plan and run under the same owner root, not mutation of old history.
+
+The root contains `owner/owner.json`, a persistent `collection-owner.lock`, and
+`runs/<plan_sha256>/plan/plan.json`. Each window has numbered attempts beneath
+`attempts/<window_id>/`. Intents precede requests; successful attempts contain
+`receipt/manifest.json`, `receipt/payload.json`, then `result/result.json` binding
+the receipt hash. The CLI report provides those paths and trusted publisher pins
+for `NewsReceiptImporter.Read`. Do not treat a hash freshly computed from an
+untrusted import as publisher provenance. Pending directories/attempts after a
+crash are preserved, never treated as successful receipts or silently deleted.
+
+Both swing and open-ended investment use this raw evidence path. It does not make
+their target horizons, model features or trading-admission contracts interchangeable.
 
 ### Incremental Source Collection
 

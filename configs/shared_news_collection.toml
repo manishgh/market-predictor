@@ -1,0 +1,7 @@
+# All cooperating collector workers on this host must use this same root.
+# This is not a distributed lease. Do not copy this configuration to a second
+# active collector host or point it at a shared/network filesystem.
+owner = "market_predictor"
+coordination = "single_host"
+storage_root = "../data/raw/shared_news"
+maximum_system_memory_percent = 90.0

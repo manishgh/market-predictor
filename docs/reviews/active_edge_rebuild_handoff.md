@@ -11,7 +11,34 @@ The combined historical outcome/features delivery is verified and committed.
 
 ## Current State
 
-The latest September 20 instruction requests complete intraday removal from
+The latest instruction starts shared implementation for both swing and long-term
+investment. Remaining intraday retirement and full retained-model replay are
+explicitly deferred; ten historical source-pin mismatches remain reuse blockers,
+not blockers on independent raw-news collection. No investment model or execution
+admission is claimed. Its finite forecast horizons still need a separate decision.
+
+Shared collection implementation is verified and awaits its Git checkpoint: new modules are
+`evidence/news_collection.py`, `sources/news_collection.py`,
+`sources/news_collection_settings.py`, and `commands/news_collection.py` under the
+package. Deployment config is `configs/shared_news_collection.toml`; collection CLI,
+observed Alpaca transport, receipt adapter, focused tests and current docs changed.
+TradingFlow has only a scoped evidence-repository design update, no C# code edits.
+Existing untracked TradingFlow local settings and runtime reports are untouched.
+101 focused Python, 232 CLI/package/continuity and 27 C# receipt tests passed;
+repository Ruff and strict mypy (392 sources) pass. Independent review closed after
+two transport fixes; both agents are closed. Final full-suite verification passed:
+4,488 tests, ten skips, 268 warnings in 2,902.59 seconds (48 minutes 22 seconds).
+The background-launched attempt (session 7390, owned root PID 32832) was stopped
+after setup errors. Direct full run 16391 then caught a CLI memory-rejection exit
+code regression after 2,195 passes; explicit MemoryBudgetError handling is restored
+and all 101 focused tests passed again. That run and watchdog 98342 are finished.
+Final full pytest session 43747 and watchdog 98527 both exited zero. The watchdog
+sampled a 68.51% system-memory peak against the 90% limit. Log:
+`data/runtime/shared-news-final-20260920.log`; JUnit:
+`.test-tmp/shared-news-final-20260920.xml` (4,498 collected, zero errors/failures).
+No live data collection or training started. Do not resume completed processes.
+
+The earlier September 20 instruction requested complete intraday removal from
 Market Predictor, beyond the closed public/CLI boundary. Dependency/design review
 is complete on `unified-swing-product`; the user approved retention of successful
 swing runs and fresh swing-only verification. The first implementation slice is
@@ -512,12 +539,13 @@ the frozen numeric training boundary or authorize promotion.
 
 ## Next Actions
 
-Exact next checkpoint: migrate retained shared collection to a verified independent
-security namespace, resolve current-source pin discrepancies, then remove the
-remaining dedicated day-trading consumers in the active plan's order.
+Exact next checkpoint: implement and verify shared raw-news collection ownership,
+durable attempt/receipt publication and restart for swing and investment. Keep
+existing Python/C# receipt bytes unchanged; raw queries need no intraday dataset.
+Issuer identity and historical feature admission remain separate downstream gates.
 Both main branches are preserved remotely and TradingFlow cleanup is closed in
 `cb747da`. Leave its untracked local settings/runtime reports alone. Shared news
-ownership follows retirement; no new provider job has started. Session 86175
+ownership now precedes deferred retirement; no new provider job has started. Session 86175
 exited zero; do not resume it or repeat training. CLI retirement is committed in
 `9c32ce1`, including registry, adapter, admission and scoped test/doc changes.
 The unused cross-sectional intraday research package and root helpers are removed;
