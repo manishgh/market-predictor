@@ -2,7 +2,7 @@
 
 Status: active
 
-Last updated: 2026-09-20
+Last updated: 2026-09-21
 
 Repository: `C:\project\market-predictor`
 
@@ -111,7 +111,7 @@ Collection completeness stays separate from imported-page count. No provider,
 normalized catalog, model or trading admission side effects are permitted.
 
 Current checkpoint: **Publish historical relationship features and fit their two learners** (`in progress`).
-Plan/design freeze is being completed before implementation. Reuse the immutable
+Plan/design freeze is approved before implementation. Reuse the immutable
 59-month, 586,305-row initial-fit baseline; publish a separate derivative with
 unchanged baseline values, labels, eligibility and population plus four columns.
 Separate historical provenance from newly executed source/code verification: old
@@ -125,6 +125,45 @@ tamper/restart rejection, fresh readiness and sequential fits within memory limi
 Any failure leaves the candidate unavailable; no silent exclusion or source repair.
 Later validation/test materialization, qualified issuer-reaction inputs, funded
 policy evaluation and prospective promotion remain distinct unfinished work.
+
+Software checkpoint `be474b5` is pushed: source publication and training integration
+were implemented in parallel and passed 22 source, 104 admission/integration, and
+24 CLI/continuity checks; changed-file Ruff and strict mypy on 15 modules passed.
+Independent plan/design/code findings closed. Full-history execution then exposed
+one concrete adapter defect before output: raw collection metadata is transitively
+pinned by the panel request, not necessarily directly in its source-file map.
+Reopen only this metadata reader and faithful regression fixtures. Preserve inherited
+byte pins, distinct pre/post semantic identities, feed and authority checks, and
+conflict rejection. Fix `ed3c125` is pushed: real metadata-only verification, 69
+focused source/regression/full-chain tests, Ruff and strict mypy pass; independent
+code review closed. Publication retry is running. Full publication, independent
+row replay, readiness and fits remain pending.
+
+Detailed plan/design review approved implementation with these admission gates:
+the original physical `feature_profile` changes explicitly to
+`technical_relationships`; all other parent columns, including auxiliary clocks,
+remain exact. Publication metadata exposes only the named 124-column contract.
+The publisher owns immutable source/config contracts and monthly artifacts; a
+separate worker owns independent row verification and readiness/training consumers;
+the parent owns thin CLI/configuration integration. Current source/implementation
+pins are always verified. Each historical code mismatch receives an explicit
+disposition; unresolved inherited semantic discrepancies cannot be classified away
+as provenance. Source metadata must prove security and price-vintage compatibility,
+including corrected streams and quarantine boundaries. Added-feature missingness
+must not alter eligibility or the selected fitting/scoring population.
+
+Design adjudication: unlocated original bytes for the five previously listed code
+hashes are not demonstrated data defects and do not require recovering old code
+for this immutable-parent derivative. Record the explicit disposition
+`historical_code_not_reexecuted_or_certified`, retaining original hashes without
+claiming benign drift or equivalence. Baseline numerical correctness is inherited
+from the independently pinned, accepted parent evidence, not newly established by
+column preservation. Verify all consumed data/authorities and every newly executed
+dependency separately; a path's historical presence never exempts its current
+code from checking. Freshly validate the four additions against sources and retain
+current inherited-row clock, maturity and cost checks. Actual contradictions still
+block fitting. Existing historical replay verifiers and retained-model reuse gates
+remain unchanged; old code snapshots are not a blanket prerequisite for this path.
 
 Component verification now passes: 79 focused C# tests, 131 focused Python feature
 tests, 14 independent feature regressions, and four fixture/real-process/continuity

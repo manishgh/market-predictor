@@ -1,15 +1,63 @@
 # Active Edge Rebuild Handoff
 
 Status: active
-Last updated: 2026-09-20
+Last updated: 2026-09-21
 Repository: `C:\project\market-predictor`
 Branch: `unified-swing-product`
-Last completed implementation checkpoint: `a6c1294` (pushed).
+Last completed implementation checkpoint: `ed3c125` (pushed; metadata correction).
 Last completed model-training checkpoint: `07963cc` (pushed).
 Source-collection checkpoint: `19698d6` (pushed).
 The combined historical outcome/features delivery is verified and committed.
 
 ## Current State
+
+September 21 implementation `be474b5` is pushed. Two parallel implementation
+workers completed source publication and verification/readiness/training integration;
+separate plan, design/ML and code reviewers closed supported findings. Four entry
+points share the configured lease, executed package initializers are pinned, and
+corrected/quarantined sources plus partial restart/tamper paths have tests. Modules
+use `return_relationship_`; config is
+`configs/swing_return_relationship_publication.json`. The 124-column profile keeps
+the two frozen learners, splits, costs and population. Verification: 22 source tests,
+104 input/readiness/verification tests (including actual fixture-to-source-replay-to-
+124-column loading), 24 CLI/surface/continuity checks, Ruff and strict mypy on 15
+changed modules passed. No fits ran. Full suites were not repeated.
+
+Concrete reopening: first real materialization, session 57556 / PID 30052, ended
+before creating a publication. `return_relationship_sources.py` incorrectly demanded
+a direct parent source-list entry for collection metadata already transitively
+byte-pinned by the verified panel request. Pre and post collections have different
+wire formats and different semantic JSON hash encodings. Fix scope is that metadata
+lookup only, preserving exact inherited byte pins, terminal identities, source basis
+and conflict rejection. Parent implemented the fix while a worker implemented
+faithful fixtures/regressions. All 69 source/regression/full-chain input tests pass
+in 267.69 seconds; changed-file Ruff and strict mypy pass. Independent code review
+has no remaining findings. Fix `ed3c125` is pushed; worker/reviewer are closed.
+JUnit: `.test-tmp/return-relationship-transitive-final.junit.xml`. No original data,
+historical hashes or learner settings were changed.
+
+The unrelated SEC collector released the normal workspace lease before that run.
+Do not kill unrelated workers or bypass the shared lease. The CLI test that previously
+collided with it now uses a test-only temporary runtime. Real run memory samples were
+73.97%, 71.70% and 68.13%; source inventory was 8,807 files, about 3.404 GiB, zero
+missing. Session 57556 is finished, not resumable. No trained or admitted relationship
+model exists yet. One-group retry session 5377 completed with 1,231 rows and
+checkpoint `7336cb7b08829ca547b1fcb8d91c06025f592a2c846d8a2506a1ba89ede37f48`.
+The nonzero partial-run exit is intentional, not a failed artifact. Full resume
+session 11712 / PID 29520 began from that independently captured pin using
+`data/features/swing_return_relationships_initial_fit`. Next: finish publication,
+independently verify rows, create pinned readiness/training configs, and fit
+sequentially. Never repin an existing publication to changed code.
+
+Design resolution: the five historical source files' original bytes remain
+unlocated, not proven benign or defective. For this accepted immutable-parent
+derivative, disposition is `historical_code_not_reexecuted_or_certified`. Original
+hashes remain provenance; every current executed dependency and consumed data/
+authority is separately checked. Baseline numerical correctness is inherited
+from the original accepted evidence, not newly replayed. Other parent columns
+stay exact except explicit profile identity; four additions receive fresh numeric
+source replay plus clock/missingness verification. This does not authorize old
+model reuse or weaken existing replay verifiers. See the active plan's adjudication.
 
 September 20 parallel implementation checkpoint is verified: Market Predictor
 `a6c1294` is pushed; TradingFlow `8525f80` is local-only (no unrequested remote

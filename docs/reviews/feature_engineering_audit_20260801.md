@@ -46,8 +46,12 @@ paths are covered. Final changed-file Ruff and strict mypy over 15 modules pass.
 Historical baseline numerical correctness is explicitly inherited from accepted
 parent evidence; this is not a new baseline numerical replay or benign-drift claim.
 No completed-model reuse, real-history admission, profitability or promotion follows
-from these software checks. The unrelated active SEC collector must release the
-normal workspace lease before actual materialization/training starts.
+from these software checks. The unrelated SEC collector released the normal lease;
+the first real materialization stopped before publication because a new reader
+incorrectly required directly listed collection pins instead of their verified
+transitive bindings. Reader/fixture correction `ed3c125` passes 69 focused tests,
+Ruff, strict mypy and independent review. Real publication retry is running. Original
+data and evidence hashes remain unchanged; no relationship model has been fitted.
 
 Readiness command: `audit-swing-training-readiness`, configuration
 `configs/swing_training_readiness.json`. Its scope is bounded initial-fit
