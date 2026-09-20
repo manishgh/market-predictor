@@ -25,7 +25,7 @@ causal inputs and an explicit research-only training contract.
 | Planned profile | Source, batch and feature order | Fixed-horizon labels | Training consumer and experiment | Live, promotion and API |
 | --- | --- | --- | --- | --- |
 | existing_technical | Verified corrected publication: technical_market, 120 ordered inputs and availability clocks | Original outcomes replayed; exact costs/comparisons/global maturity audited; inner fitting purges actual maturity independently | Verified implementation 07963cc: 16 real temporal/transfer fits and two final models completed; 4,329 full tests passed, 10 skipped | Not applicable to this offline research experiment; artifact loader explicitly rejects serving/promotion purpose |
-| technical_relationships | Shared transform plus immutable derivative publisher and independent addition-source replay implemented; 22 source tests and 104 readiness/integration tests pass. Real 59-month publication/verification remain unrun, so historical acceptance is still blocked | Synthetic full-chain checks preserve original labels, metadata and eligibility; real matched-history verification is still required | Named 124-column profile wired to the unchanged two learners; no new fit yet | Not authorized |
+| technical_relationships | Real 59-month / 586,305-row publication completed, but independent replay found all-null clock dtype loss. Fix 82842e0 passes 94 transformation/integration tests and independent review; fresh immutable rebuild is running | Original row/label preservation passed publication; full independent source replay remains incomplete | Named 124-column profile wired to the unchanged two learners; no new fit yet | Not authorized |
 | technical_relationships_issuer_reaction | Blocked: catalyst_full has aggregate news features, not qualified issuer/SEC event-reaction inputs; SEC/Finviz coverage is unknown here | Must reuse matched independently admitted labels | Not trained; counts and sentiment cannot substitute for the promised reaction feature contract | Not authorized |
 
 September 20 component evidence: `return_feature_profiles.py` freezes formulas,
@@ -50,8 +50,12 @@ from these software checks. The unrelated SEC collector released the normal leas
 the first real materialization stopped before publication because a new reader
 incorrectly required directly listed collection pins instead of their verified
 transitive bindings. Reader/fixture correction `ed3c125` passes 69 focused tests,
-Ruff, strict mypy and independent review. Real publication retry is running. Original
-data and evidence hashes remain unchanged; no relationship model has been fitted.
+Ruff, strict mypy and independent review. Real publication completed; independent
+verification then rejected an all-null clock dtype mismatch. The builder's NumPy
+assignment discarded the UTC extension dtype. A narrow `.array` and explicit UTC
+nanosecond construction fix (`82842e0`) passes 94 tests plus lint/types and independent
+review; comparisons stay exact. A fresh immutable rebuild is running. Original
+data and the non-admitted publication remain unchanged; no relationship model fits.
 
 Readiness command: `audit-swing-training-readiness`, configuration
 `configs/swing_training_readiness.json`. Its scope is bounded initial-fit

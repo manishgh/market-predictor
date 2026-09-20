@@ -212,7 +212,7 @@ real prerequisite artifact hashes exist.
 
 ```powershell
 $configPin = (Get-FileHash configs/swing_return_relationship_publication.json -Algorithm SHA256).Hash.ToLowerInvariant()
-.venv\Scripts\python.exe -B -m market_predictor.research_cli materialize-swing-return-relationships --root . --config configs/swing_return_relationship_publication.json --expected-config-sha256 $configPin --output data/features/swing_return_relationships_initial_fit
+.venv\Scripts\python.exe -B -m market_predictor.research_cli materialize-swing-return-relationships --root . --config configs/swing_return_relationship_publication.json --expected-config-sha256 $configPin --output data/features/swing_return_relationships_initial_fit_utc_clocks
 ```
 
 Subsequent stages are `verify-swing-return-relationships`,
@@ -221,6 +221,9 @@ checked input pins. Partial publication requires its checkpoint pin to resume.
 All four stages use one configured workspace lease; never point real work at a
 different runtime directory to bypass an active collector. Research artifacts
 cannot authorize serving, promotion or trading.
+The earlier output without `_utc_clocks` is retained as non-admitted evidence:
+independent replay exposed lost UTC dtype for all-missing clocks. Do not overwrite
+or reuse it under changed implementation hashes.
 
 ### Source Collection
 

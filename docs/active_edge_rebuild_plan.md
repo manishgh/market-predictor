@@ -136,7 +136,13 @@ Reopen only this metadata reader and faithful regression fixtures. Preserve inhe
 byte pins, distinct pre/post semantic identities, feed and authority checks, and
 conflict rejection. Fix `ed3c125` is pushed: real metadata-only verification, 69
 focused source/regression/full-chain tests, Ruff and strict mypy pass; independent
-code review closed. Publication retry is running. Full publication, independent
+code review closed. Real publication completed 586,305 rows / 59 months. Independent
+replay then exposed an all-null clock dtype loss from `.to_numpy()` assignment in
+the shared transform (UTC nanoseconds versus naive seconds). Reopen only dtype
+preservation and its serialization/replay tests; keep exact verification, population
+and formulas unchanged. Preserve the non-admitted publication, commit the fix, and
+rebuild separately. UTC dtype fix `82842e0` is pushed with 94 passing focused tests,
+Ruff, strict mypy and independent review; fresh publication is running. Independent
 row replay, readiness and fits remain pending.
 
 Detailed plan/design review approved implementation with these admission gates:

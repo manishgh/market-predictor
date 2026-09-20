@@ -4,7 +4,7 @@ Status: active
 Last updated: 2026-09-21
 Repository: `C:\project\market-predictor`
 Branch: `unified-swing-product`
-Last completed implementation checkpoint: `ed3c125` (pushed; metadata correction).
+Last completed implementation checkpoint: `82842e0` (pushed; UTC clock preservation).
 Last completed model-training checkpoint: `07963cc` (pushed).
 Source-collection checkpoint: `19698d6` (pushed).
 The combined historical outcome/features delivery is verified and committed.
@@ -41,13 +41,24 @@ Do not kill unrelated workers or bypass the shared lease. The CLI test that prev
 collided with it now uses a test-only temporary runtime. Real run memory samples were
 73.97%, 71.70% and 68.13%; source inventory was 8,807 files, about 3.404 GiB, zero
 missing. Session 57556 is finished, not resumable. No trained or admitted relationship
-model exists yet. One-group retry session 5377 completed with 1,231 rows and
-checkpoint `7336cb7b08829ca547b1fcb8d91c06025f592a2c846d8a2506a1ba89ede37f48`.
-The nonzero partial-run exit is intentional, not a failed artifact. Full resume
-session 11712 / PID 29520 began from that independently captured pin using
-`data/features/swing_return_relationships_initial_fit`. Next: finish publication,
-independently verify rows, create pinned readiness/training configs, and fit
-sequentially. Never repin an existing publication to changed code.
+model exists yet. One-group retry session 5377 completed with 1,231 rows, then full
+resume session 11712 completed all 586,305 rows / 551 groups / 59 months at
+`data/features/swing_return_relationships_initial_fit`, manifest
+`1e60e7712cb8a59ebf789f4c19d36af0a480bb7604ee7d65dc22515cfa20dd6b`.
+Independent verification session 8567 and diagnostic 24274 both finished with an
+exact dtype mismatch: `available_at_momentum_126_sessions_excluding_recent_21`
+is persisted `datetime64[ns, UTC]`, but all-null recomputation is `datetime64[s]`.
+The builder's `.to_numpy()` assignment loses extension timestamp dtype; a small
+independent probe reproduced it. No changed price/return value has been observed,
+but full replay has not passed. Preserve this non-admitted publication unchanged.
+Fix `82842e0` preserves `.array` and explicitly constructs UTC nanosecond clocks
+(the new regression caught all-NaT unit inference too). Parallel implementation
+added all-null serialization/integration tests; independent code review closed.
+94 tests passed in 353.95 seconds, JUnit `.test-tmp/relationship-clock-final2.xml`;
+Ruff and strict mypy pass. Both agents are closed. The fresh build is session 33939
+under `data/features/swing_return_relationships_initial_fit_utc_clocks`. After it
+finishes, verify rows, create pinned readiness/training configs and fit sequentially.
+Never repin an existing publication to changed code. All prior sessions are finished.
 
 Design resolution: the five historical source files' original bytes remain
 unlocated, not proven benign or defective. For this accepted immutable-parent
