@@ -166,6 +166,23 @@ or full-content evidence must be reported, never replaced by aggregate counts or
 invented events. Exit: a source-backed contract, historical coverage audit, full
 feature acceptance tests, immutable publication/replay and only then fresh fitting.
 
+Next bounded delivery: **Saved news and filing content inventory**. Reuse the early
+and later initial-fit issuer-news authorities plus corrected issuer-news sources;
+resolve their pinned original records before classifying retained content. Read
+bounded batches under the configured memory/lease rules, restricted to July 9, 2019
+through the existing May 28, 2024 initial-fit cutoff and unchanged cohort identities.
+Report security/ticker, year, source, source paths/hashes, record and distinct-version
+counts, publication/update/availability bounds, attribution status, and counts of
+provider article bodies, summary/headline fallbacks, SEC form metadata and unknown
+content. Nonempty text or text differing from a headline alone does not prove a full
+article. Unknown coverage is not zero news. Preserve provenance for every category;
+the report establishes inventory, not semantic qualification or source admission.
+Exit checks: pinned-input validation, revision/duplicate handling, cutoff exclusion,
+wrong-issuer rejection and stable counts under different batch sizes. This delivery
+does not download sources, change model inputs or fit models. The root baseline
+manifest is now readable with its original hash; 18 nested baseline manifests are
+still unreadable, which does not block this independent delivery.
+
 September 21 bounded source inspection and reaction-measurement contract:
 
 - The early saved Alpaca shard `f91f0fa1d3de638169abab12.parquet` has 18

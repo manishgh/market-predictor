@@ -42,12 +42,16 @@ content coverage. Do not infer earnings/guidance meaning from form-only text or 
 existing broad headline classifier. Full source/version/content qualification and
 per-ticker/year coverage remain outstanding before final feature-column freeze.
 
-Windows access requested: repository read/write is granted for the current turn.
-The earlier baseline result folder remains a separate OS read-access issue:
-`data/research/swing_technical_return_models_initial_fit`. User account
-`DESKTOP-BKHDM0H\manis` needs Read & execute, List folder contents and Read on the
-folder, subfolders and files. No ownership/ACL changes were performed. That paired
-result comparison is unverified, not a blocker on independent feature development.
+Windows access recheck after the user's permission changes: the baseline root
+`data/research/swing_technical_return_models_initial_fit/_manifest.json` is readable
+and its SHA256 matches the recorded
+`0a30ef2f8e3b95cee252f8c1d1bb5be3c6b98cddda4e47d68e835ad5c1892551`.
+All 18 nested baseline unit manifests remain unreadable under
+`regularized_linear_return` and `shallow_boosted_return`. The newer relationship
+root hash and all 18 unit-manifest hashes verify. This check did not reload models,
+verify prediction payloads or establish a paired performance comparison. No ACL,
+ownership or artifact was changed. Do not retry these reads until access changes;
+the baseline comparison does not block the issuer-news/SEC work.
 
 September 21 implementation `be474b5` is pushed. Two parallel implementation
 workers completed source publication and verification/readiness/training integration;
@@ -740,6 +744,11 @@ article/body versions and issuer attribution across the permitted initial-fit ye
 publish ticker/year/source/content coverage, and enumerate genuinely missing SEC
 filing/exhibit documents. Freeze content qualification with development-only precision
 and recall review before joining this measurement into the last model profile.
+Small next implementation: add the bounded saved-evidence content inventory described
+in the active plan. Start from early/later initial-fit news and corrected issuer-news
+authorities, not the entire raw archive. Preserve original source/version hashes and
+separate article bodies, summary/headline fallbacks, SEC metadata and unknown content.
+No downloads, final feature selection or fitting belong to that inventory checkpoint.
 The baseline and relationship profiles are already trained (four of six frozen
 specifications); never rerun or tune them. Freeze source fields, event availability,
 issuer matching, completed reaction windows, exact columns and missingness before
