@@ -4,8 +4,9 @@ Status: active
 Last updated: 2026-09-21
 Repository: `C:\project\market-predictor`
 Branch: `unified-swing-product`
-Last completed implementation checkpoint: `82842e0` (pushed; UTC clock preservation).
-Last completed model-training checkpoint: `07963cc` (pushed).
+Last completed implementation checkpoint: `a8be7cb` (pushed; frozen relationship experiment configs).
+Last completed model-training checkpoint: relationship run on `a8be7cb` (artifact pins below).
+Baseline model-training checkpoint: `07963cc` (pushed; unchanged).
 Source-collection checkpoint: `19698d6` (pushed).
 The combined historical outcome/features delivery is verified and committed.
 
@@ -21,7 +22,7 @@ use `return_relationship_`; config is
 the two frozen learners, splits, costs and population. Verification: 22 source tests,
 104 input/readiness/verification tests (including actual fixture-to-source-replay-to-
 124-column loading), 24 CLI/surface/continuity checks, Ruff and strict mypy on 15
-changed modules passed. No fits ran. Full suites were not repeated.
+changed modules passed. No fits ran at that software checkpoint. Full suites were not repeated.
 
 Concrete reopening: first real materialization, session 57556 / PID 30052, ended
 before creating a publication. `return_relationship_sources.py` incorrectly demanded
@@ -40,8 +41,8 @@ The unrelated SEC collector released the normal workspace lease before that run.
 Do not kill unrelated workers or bypass the shared lease. The CLI test that previously
 collided with it now uses a test-only temporary runtime. Real run memory samples were
 73.97%, 71.70% and 68.13%; source inventory was 8,807 files, about 3.404 GiB, zero
-missing. Session 57556 is finished, not resumable. No trained or admitted relationship
-model exists yet. One-group retry session 5377 completed with 1,231 rows, then full
+missing. Session 57556 is finished, not resumable. One-group retry session 5377
+completed with 1,231 rows, then full
 resume session 11712 completed all 586,305 rows / 551 groups / 59 months at
 `data/features/swing_return_relationships_initial_fit`, manifest
 `1e60e7712cb8a59ebf789f4c19d36af0a480bb7604ee7d65dc22515cfa20dd6b`.
@@ -50,15 +51,56 @@ exact dtype mismatch: `available_at_momentum_126_sessions_excluding_recent_21`
 is persisted `datetime64[ns, UTC]`, but all-null recomputation is `datetime64[s]`.
 The builder's `.to_numpy()` assignment loses extension timestamp dtype; a small
 independent probe reproduced it. No changed price/return value has been observed,
-but full replay has not passed. Preserve this non-admitted publication unchanged.
+and full replay did not pass for that artifact. Preserve it unchanged as non-admitted evidence.
 Fix `82842e0` preserves `.array` and explicitly constructs UTC nanosecond clocks
 (the new regression caught all-NaT unit inference too). Parallel implementation
 added all-null serialization/integration tests; independent code review closed.
 94 tests passed in 353.95 seconds, JUnit `.test-tmp/relationship-clock-final2.xml`;
-Ruff and strict mypy pass. Both agents are closed. The fresh build is session 33939
-under `data/features/swing_return_relationships_initial_fit_utc_clocks`. After it
-finishes, verify rows, create pinned readiness/training configs and fit sequentially.
-Never repin an existing publication to changed code. All prior sessions are finished.
+Ruff and strict mypy pass. Both agents are closed. Fresh build session 33939 finished
+all 586,305 rows / 551 groups / 59 months at
+`data/features/swing_return_relationships_initial_fit_utc_clocks`, manifest
+`e9ec4b628a59f7925fb66a0800194f1a712d617a819d13927860d0b9ab0ef04c`,
+checkpoint `e3da9949c080fea05b240a4e1e10c89f62b81e7b9db8c609d59684c88c5fffea`.
+Independent verifier session 87689 passed all 586,305 rows; receipt
+`data/reports/swing_return_relationships_initial_fit_utc_verification.json`, hash
+`e1067950ace121d13e4b3227d7488540e03e558d205ee07668696801708d1086`.
+All original columns/outcomes are exact and additions are source-replayed; original
+baseline numerical correctness is still inherited, not newly replayed.
+Readiness config `configs/swing_return_relationship_readiness.json`, hash
+`28c0d02bab59f425cc022aab3ba156d71aedf1c1dcaa0fc1d05b5a07696eed9d`,
+is schema-validated. Audit session 62308 passed; report
+`data/reports/swing_return_relationships_initial_fit_readiness.json`, hash
+`3d2b05293cad45b1a699c6d912552067ae5668657c4542d71c0c6b17991c73c3`.
+Readiness covers 545 securities / 1,231 sessions. Original eligibility (479,709)
+and available supervision (378,037) are unchanged; missing features are not a new
+row filter. Training config `configs/swing_return_relationship_training.json`, hash
+`95eed56075440b4eca7ce1a977bcfb4434928175389d75a877d72c0ca487119f`, differs
+from baseline only in feature/profile identity and prerequisite evidence pins.
+Schema validation, six profile-policy tests and independent ML config review pass;
+reviewer closed. Commit `a8be7cb` is pushed. Training session 21604 completed at
+`data/research/swing_relationship_return_models_initial_fit`: 16 inner temporal/
+security-transfer fits and two final models, sequentially. Each final model used
+314,167 rows, with 124 inputs / 248 encoded columns. Peak working memory was
+2.471607 GiB; all sampled system-memory readings stayed below 90%.
+Manifest `7a699020920024ed29b5d8547724f5355fdc2202ca176f11d38f23418bd4666e`,
+request `37199984228033e6ed56b56ea4195cf4fabc58f9beb8818e6a105bbce6b5a3a0`,
+checkpoint `5cda2a3f49270facba3f0e871e937e2b0827572365cc9c4d18fab42a3705fb5c`.
+No portfolio evaluation, outer validation, historical test, serving or promotion
+was performed. Independent review verified the three root pins, all 18 unit/model
+hashes and 16 prediction hashes, frozen config and feature order. No artifact defect
+was found. Baseline request metadata confirms matched folds, input identities and
+holdout assignment; its result manifests remain OS access-denied even after scoped
+read permission and elevated reads. Per-unit baseline identity/metric comparison
+is therefore not independently verified. No ACL or artifact was changed.
+
+Unweighted means of four stored fold diagnostics: temporal daily Spearman is
+0.000704 linear / 0.006304 boosted; transfer is 0.005503 / -0.013526. Mean MSE is
+0.00262038 / 0.00261576 temporal, versus 0.00255703 for zero-excess prediction;
+transfer MSE is 0.00292185 / 0.00293655, versus 0.00286511. The models fitted
+correctly, but this weak ranking/error evidence does not establish useful edge.
+These means are not pooled portfolio statistics or proof of SPY outperformance.
+Never repin artifacts, retrain completed fits, or tune this profile from these
+results. All task-owned reviewers and training/test/data processes are closed.
 
 Design resolution: the five historical source files' original bytes remain
 unlocated, not proven benign or defective. For this accepted immutable-parent
@@ -76,8 +118,8 @@ sync). Separate workers implemented C# raw publication import and Python's four
 incremental relationship features. Independent plan, design/ML and code reviews
 closed supported findings; the user authorized three reviewer roles despite
 TradingFlow's older two-reviewer default. Two implementation workers and the
-design/code reviewers are closed. The plan reviewer is preparing the next bounded
-publication/training contract. Heavy jobs remain sequential under the 90% system
+design/code reviewers are closed. That publication/training contract was completed
+in the September 21 checkpoint above. Heavy jobs remain sequential under the 90% system
 memory limit; observed samples were about 70-72%, not a continuous measurement.
 
 Verification: 79 C# receipt/import/CLI tests; 131 Python feature/integration tests;
@@ -101,8 +143,9 @@ were deliberately not repeated at this component checkpoint. No provider calls,
 model fitting, broker actions, data deletion or deployment ran.
 
 Limits: the C# operation imports explicit raw publications only, not a polling
-service or normalized catalog/feed migration. The Python transform is not yet a
-historical publication or admitted model input. Investment forecast horizons still
+service or normalized catalog/feed migration. The Python transform subsequently
+became a verified research publication/input in the September 21 checkpoint above.
+Investment forecast horizons still
 await the user's decision; swing and shared-data work do not wait on that decision.
 
 Latest approved policy: localized/module changes use focused tests plus applicable
@@ -652,15 +695,17 @@ the frozen numeric training boundary or authorize promotion.
 
 ## Next Actions
 
-Exact next checkpoint: publish the four relationship features over the saved
-initial-fit baseline, then generate fresh readiness evidence and train its two
-unchanged learners sequentially. Freeze the derivative contract and divide source/
-publication and readiness/training implementation into non-overlapping ownership.
-Preserve every original baseline value, decision and label; do not retrain the two
-baseline models or rewrite old pins. Initial-fit scope is 59 months, 586,305 rows,
-July 2019-May 2024, not the later validation/test publications. The raw collector
-and explicit C# importer are complete; do not rebuild them or start duplicate
-provider collection. Investment targets and trading admission remain separate.
+Exact next checkpoint: qualify issuer-news and SEC reaction inputs for the final
+feature profile, using saved initial-fit evidence before requesting any download.
+The baseline and relationship profiles are already trained (four of six frozen
+specifications); never rerun or tune them. Freeze source fields, event availability,
+issuer matching, completed reaction windows, exact columns and missingness before
+coding the third profile. Preserve matched decisions/labels, split dates, weights,
+costs and the approved exclusions. Initial fit remains July 2019-May 2024, not the
+outer validation/test publications. Assign source/attribution and transformation/
+consumer slices to disjoint implementation workers with independent review; heavy
+runs remain sequential. Automatic raw collection ownership migration, investment
+targets and trading admission remain separate decisions.
 
 Plan review found old readiness evidence has five current implementation-pin
 mismatches and is not admitted by the existing training loader. This requires a
@@ -690,9 +735,8 @@ no raw data or original model artifact is deleted. Keep shared minute/hourly tra
 `intraday_return`; never silently repin training evidence after moving source code.
 Do not resume training merely because an HTTP or CLI boundary is complete.
 
-Retained research follow-up after the unified boundary: complete the distinct
-technical-relationship and qualified issuer/SEC reaction feature profiles for the
-four remaining bounded return specifications.
+Retained research follow-up: qualify and implement issuer/SEC reaction inputs for
+the two remaining bounded return specifications. The relationship profile is complete.
 
 1. Existing technical training is complete: preserve its immutable artifacts as
    the two baseline specifications. Do not retrain them or tune settings after
@@ -702,7 +746,7 @@ four remaining bounded return specifications.
    issuer/SEC causal event and reaction availability. Freeze exact columns and
    source semantics before constructing matched histories. Reuse saved evidence;
    aggregate catalyst_full is not the completed reaction profile.
-3. Reuse the verified return estimator/validation/artifact modules for the four
+3. Reuse the verified return estimator/validation/artifact modules for the two
    remaining profile/learner comparisons once their acceptance gates pass. Keep
    chronological masks, dates, holdout assignment, costs and date weights matched.
    No new exclusions or reaction-source claims can be inferred from this fit.

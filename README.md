@@ -124,8 +124,9 @@ list). There are 378,037 usable stock/SPY/QQQ/sector outcome rows; complete-case
 input/outcome intersections are 194,679 technical and 193,125 catalyst rows.
 These are diagnostic counts, not a rule deleting incomplete rows. The audit
 does not itself authorize fitting. The objective-specific return trainer is
-implemented, independently reviewed and trained; new relationship/reaction profiles
-still require implementation. See the current
+implemented, independently reviewed and trained. The 124-column relationship
+profile also completed source replay and both model fits on September 21; the
+qualified issuer/SEC reaction profile is still unimplemented. See the current
 feature audit for precise requirements. Run the immutable saved-data diagnostic:
 
 Implementation `b3b2372` is pushed. The fresh hash-bound receipt passed after RAM
@@ -204,11 +205,18 @@ values remain unavailable, not zero. The 252-session lag needs 253 positions.
 
 The pipeline now supports immutable publication, independent source-to-value
 verification, a separately pinned readiness report, and the same two return
-learners with 124 ordered inputs. Software support is not evidence of a completed
-historical run or improved returns. See the active handoff for actual execution.
+learners with 124 ordered inputs. The real 586,305-row publication and independent
+source replay passed; 16 validation fits and two final models completed, using
+314,167 rows per final fit and 2.47 GiB peak working memory. The saved run is
+`data/research/swing_relationship_return_models_initial_fit`; it is research-only,
+not evidence of funded SPY outperformance or permission to trade.
+Measured ranking remains weak and validation error exceeds predicting zero excess;
+see the feature audit for exact scopes, diagnostics and the old-baseline access limitation.
 Do not use the existing baseline training config for this comparison or rerun its
-completed models. Create derivative readiness/training configs only after their
-real prerequisite artifact hashes exist.
+completed models. The pinned derivative configs are
+`configs/swing_return_relationship_readiness.json` and
+`configs/swing_return_relationship_training.json`. Do not rerun this completed
+experiment or change its settings after viewing the results.
 
 ```powershell
 $configPin = (Get-FileHash configs/swing_return_relationship_publication.json -Algorithm SHA256).Hash.ToLowerInvariant()

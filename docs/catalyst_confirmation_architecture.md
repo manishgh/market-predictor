@@ -332,6 +332,11 @@ population, labels and missingness; only the profile identity changes. Independe
 verification replays additions from physical sources before readiness. Historical
 baseline numerical evidence is inherited, not claimed to have been reexecuted;
 current code and data dependencies remain independently pinned and checked.
+Collection metadata follows the byte hashes in the trusted parent request,
+including distinct request-file and semantic identities. Added clocks explicitly
+retain UTC nanoseconds even when every value is missing; no comparison tolerance
+or timestamp substitution is used. The real 59-month source replay passed and the
+two relationship-profile models completed sequential fitting on September 21.
 
 `research/swing_return_inputs.py` admits the verified initial-fit baseline or named
 124-column relationship publication for the strict return-training contract. A
@@ -347,11 +352,13 @@ Resuming requires a caller-pinned checkpoint; files are published atomically and
 deserialization uses exact hash-verified bytes. Research output is outside the
 serving registry and cannot authorize orders, serving or promotion.
 
-The return experiment contains two fixed learner specifications, each with four
+Each feature profile has two fixed learner specifications, each with four
 calendar folds in two separately fitted scopes and one final research refit.
 The latter includes all eligible initial-fit securities and is not the transfer
 test model. All-empty training columns have an explicit encoding; every input
-gets a missingness flag, preserving 240 encoded columns from 120 original inputs.
+gets a missingness flag: 240 encoded columns for 120 baseline inputs, 248 for
+124 relationship inputs. Both profiles have completed research fits; qualified
+issuer/SEC reaction inputs and their two specifications remain unimplemented.
 Regression outputs are decimal expected excess returns, not probabilities or
 trade recommendations. Scored rows without admitted outcomes remain in coverage
 reports. Date-weighted prediction errors and rank correlations do not replace the
@@ -394,7 +401,8 @@ trained models or completed corporate-action accounting.
 - New long-only research is governed by `configs/swing_research.toml`, separately
   hashed from immutable historical strategy/feature contracts. It targets fixed
   ten-session net SPY excess; managed-exit outcomes are a separate evaluation.
-  Its two regressors and three feature profiles are planned, not trained models.
+  Its two regressors are trained for the baseline and relationship profiles;
+  the third, qualified issuer/SEC reaction profile remains untrained. None is promoted.
 - `swing/contracts/research.py` rejects the known exposed July 2025-June 2026
   final-test interval before the retained trainer loads data. Metadata inventory
   verification does not replay source rows or establish total-return correctness.

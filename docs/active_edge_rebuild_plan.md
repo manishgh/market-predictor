@@ -77,8 +77,8 @@ Bounded workstreams and exit gates:
   Failure leaves data/model admission false; rollback is a scoped Git revert, never
   mutation of original receipts or historical model pins.
 
-Downstream order remains feature publication/acceptance, four remaining bounded
-return specifications trained sequentially, funded policy evaluation, then new
+Downstream order is qualified issuer-reaction publication/acceptance, its two
+remaining specifications trained sequentially, funded policy evaluation, then new
 prospective evidence. No re-fitting the two completed baselines, widening the six
 specification budget, unseen-test claim or promotion from software tests.
 Investment forecast targets remain undecided pending the separate user question;
@@ -110,7 +110,7 @@ not importable. Restart verifies prior bundles rather than overwriting them.
 Collection completeness stays separate from imported-page count. No provider,
 normalized catalog, model or trading admission side effects are permitted.
 
-Current checkpoint: **Publish historical relationship features and fit their two learners** (`in progress`).
+Completed execution checkpoint: **Publish historical relationship features and fit their two learners**.
 Plan/design freeze is approved before implementation. Reuse the immutable
 59-month, 586,305-row initial-fit baseline; publish a separate derivative with
 unchanged baseline values, labels, eligibility and population plus four columns.
@@ -142,8 +142,29 @@ the shared transform (UTC nanoseconds versus naive seconds). Reopen only dtype
 preservation and its serialization/replay tests; keep exact verification, population
 and formulas unchanged. Preserve the non-admitted publication, commit the fix, and
 rebuild separately. UTC dtype fix `82842e0` is pushed with 94 passing focused tests,
-Ruff, strict mypy and independent review; fresh publication is running. Independent
-row replay, readiness and fits remain pending.
+Ruff, strict mypy and independent review. Fresh publication and full independent
+row replay now pass for all 586,305 decisions / 59 months, with unchanged original
+outcomes and exact source-recomputed additions. Readiness passed with unchanged
+eligibility/supervision. Independently reviewed frozen configs `a8be7cb` are pushed;
+all 16 validation fits and two final models completed sequentially. Each final fit
+used 314,167 rows; peak working memory was 2.471607 GiB. Exact artifact pins are in
+the handoff. Independent review verified all 18 model and 16 prediction payloads;
+old baseline result files remain OS access-denied, so a fresh paired comparison is
+unverified. Ranking is weak and mean error exceeds zero-excess prediction. No funded
+SPY outperformance, outer validation, test or promotion is claimed.
+
+Current checkpoint: **Qualify issuer-news and SEC reaction inputs** (`in progress`).
+This starts with source/feature design, not another unrestricted training search.
+Inventory existing initial-fit issuer event content, SEC acceptance times, coverage,
+identity and completed price/volume reaction windows. Freeze exact columns, clocks,
+known-empty/unknown semantics and batch/live transformation ownership before coding.
+Keep the same 586,305 decisions, original labels, weights, costs, splits and approved
+exclusions. Divide source/attribution and transform/consumer work into disjoint
+implementation slices with independent plan, design/ML and code review. Heavy
+materialization, verification and the last two fits remain sequential. Missing SEC
+or full-content evidence must be reported, never replaced by aggregate counts or
+invented events. Exit: a source-backed contract, historical coverage audit, full
+feature acceptance tests, immutable publication/replay and only then fresh fitting.
 
 Detailed plan/design review approved implementation with these admission gates:
 the original physical `feature_profile` changes explicitly to
@@ -606,8 +627,8 @@ worse than predicting zero excess. Transfer error is also worse. Only 64.68% of
 scored decisions have admitted comparison outcomes; no unavailable outcome is
 filled or removed from a claimed portfolio. See the feature audit for all metrics.
 No SPY outperformance, funded-policy evaluation, promotion or live readiness is
-asserted. Next: finish the distinct feature profiles for the four remaining
-specifications, using the original feature design and frozen experiment budget.
+asserted. The relationship profile subsequently completed its two specifications
+on September 21; qualified issuer/SEC reaction now accounts for the remaining two.
 
 ### Combined Evidence, Outcomes And Features Delivery
 
@@ -1292,8 +1313,9 @@ model training. The objective/evidence checkpoint is complete. The old accountin
 control in `6758671` remains historical blocked evidence; it is not the current
 training dataset. Corrected initial-fit outcomes and predictors were subsequently
 replayed and audited, and `07963cc` completed the two technical return specifications.
-Funded policy evaluation and the four additional feature-profile specifications
-remain incomplete. The user-approved whole-security restriction does not waive
+The relationship profile's two specifications completed on September 21 under
+`a8be7cb`; funded policy evaluation and the two issuer-reaction specifications remain
+incomplete. The user-approved whole-security restriction does not waive
 causal, price-basis or accounting gates. Names describe behavior, not serial numbers.
 
 1. **Define the SPY objective and reconcile evidence (`complete`).**
@@ -1340,10 +1362,10 @@ causal, price-basis or accounting gates. Names describe behavior, not serial num
    with economic eligibility false. Do not accept a caller's `passed=true` assertion
    as proof. No speculative bulk collection is required for this code checkpoint.
 
-3. **Complete causal news and reaction features (`aggregate joins complete; distinct reaction profiles pending`).**
+3. **Complete causal news and reaction features (`aggregate joins and technical relationships complete; issuer reaction pending`).**
    The saved monthly Alpaca attribution and aggregate joins are complete. They
-   do not replace the distinct technical-relationship and qualified issuer/SEC
-   reaction profiles required by the remaining four specifications.
+   do not replace qualified issuer/SEC reaction inputs required by the remaining
+   two specifications. The technical-relationship profile is published and trained.
    Audit existing Alpaca/SEC artifacts, broaden eligible issuer categories only after
    development precision/recall evidence, and backfill the accepted feature profiles
    across the existing horizon. Expose the same transforms in batch and inference.
@@ -1356,10 +1378,11 @@ causal, price-basis or accounting gates. Names describe behavior, not serial num
    known-zero versus unknown, SEC acceptance timing, future-poison and batch/live
    parity. No new feature is "done" with batch-only implementation.
 
-4. **Train the six bounded return-model comparisons (`partially complete: two of six specifications`).**
+4. **Train the six bounded return-model comparisons (`partially complete: four of six specifications`).**
    Existing-technical linear and boosted specifications completed in `07963cc`,
    including four chronological folds, independent transfer fits and final models.
-   The four relationship/reaction specifications await their distinct profiles.
+   Relationship linear and boosted specifications subsequently completed under
+   `a8be7cb`; the two issuer-reaction specifications await their distinct profile.
    Use the existing Python stack and shared data IO. Fit models sequentially with a
    workspace lease, bounded projected batches and a 5 GiB process-memory limit.
    Store every development prediction with source/feature/split/model identity.

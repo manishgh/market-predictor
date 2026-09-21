@@ -235,6 +235,17 @@ unchanged. `commands/swing_return_relationships.py` contains CLI adapters only.
 These are research operations with one common configured runtime lease, a 90%
 system-memory limit and the existing 5 GiB process guard; tests isolate their leases.
 
+Real publication, independent replay and readiness now pass for 586,305 decisions
+across 59 months. The pinned readiness/training configurations are
+`configs/swing_return_relationship_readiness.json` and
+`configs/swing_return_relationship_training.json`. Completed models live at
+`data/research/swing_relationship_return_models_initial_fit`, outside serving.
+The two learners retain their original settings and each final fit uses 314,167
+rows; no existing baseline is retrained. Source metadata uses the trusted parent's
+transitive byte pins, and the shared transform preserves UTC nanoseconds for all-null
+clocks. The earlier publication without `_utc_clocks` is non-admitted evidence,
+not a fallback. Funded evaluation and qualified issuer-reaction features remain separate.
+
 ## Source Roles
 
 ### Retained Holding-Identity Preflight

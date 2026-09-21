@@ -25,7 +25,7 @@ causal inputs and an explicit research-only training contract.
 | Planned profile | Source, batch and feature order | Fixed-horizon labels | Training consumer and experiment | Live, promotion and API |
 | --- | --- | --- | --- | --- |
 | existing_technical | Verified corrected publication: technical_market, 120 ordered inputs and availability clocks | Original outcomes replayed; exact costs/comparisons/global maturity audited; inner fitting purges actual maturity independently | Verified implementation 07963cc: 16 real temporal/transfer fits and two final models completed; 4,329 full tests passed, 10 skipped | Not applicable to this offline research experiment; artifact loader explicitly rejects serving/promotion purpose |
-| technical_relationships | Real 59-month / 586,305-row publication completed, but independent replay found all-null clock dtype loss. Fix 82842e0 passes 94 transformation/integration tests and independent review; fresh immutable rebuild is running | Original row/label preservation passed publication; full independent source replay remains incomplete | Named 124-column profile wired to the unchanged two learners; no new fit yet | Not authorized |
+| technical_relationships | Fresh UTC-clock publication and independent source replay pass all 586,305 decisions / 59 months; fix 82842e0 passes 94 focused tests and review | Exact original columns/outcomes preserved; additions independently recomputed, baseline numerical evidence explicitly inherited | Frozen 124-column experiment a8be7cb completed 16 validation fits and two final models; independent artifact audit passed; economic edge not established | Not authorized |
 | technical_relationships_issuer_reaction | Blocked: catalyst_full has aggregate news features, not qualified issuer/SEC event-reaction inputs; SEC/Finviz coverage is unknown here | Must reuse matched independently admitted labels | Not trained; counts and sentiment cannot substitute for the promised reaction feature contract | Not authorized |
 
 September 20 component evidence: `return_feature_profiles.py` freezes formulas,
@@ -54,8 +54,35 @@ Ruff, strict mypy and independent review. Real publication completed; independen
 verification then rejected an all-null clock dtype mismatch. The builder's NumPy
 assignment discarded the UTC extension dtype. A narrow `.array` and explicit UTC
 nanosecond construction fix (`82842e0`) passes 94 tests plus lint/types and independent
-review; comparisons stay exact. A fresh immutable rebuild is running. Original
-data and the non-admitted publication remain unchanged; no relationship model fits.
+review; comparisons stay exact. Fresh publication and all-row source replay passed;
+real readiness passed. Original data and the prior non-admitted publication remain
+unchanged. The independent ML reviewer approved only the two frozen relationship
+specifications; actual fitting completed and does not imply profitability/promotion.
+
+### Relationship Return Results
+
+Completed run: `data/research/swing_relationship_return_models_initial_fit`, manifest
+`7a699020920024ed29b5d8547724f5355fdc2202ca176f11d38f23418bd4666e`.
+Both final models use 314,167 rows; peak working memory was 2.471607 GiB. An
+independent reviewer verified all 18 unit/model hashes and 16 prediction hashes,
+the frozen settings and 124-column order. No outer validation/test or portfolio ran.
+
+The following are unweighted means of four stored fold diagnostics, not pooled
+portfolio returns or significance tests:
+
+| Learner / scope | Mean daily rank correlation | Mean squared error | Zero-excess error |
+| --- | ---: | ---: | ---: |
+| Linear / temporal | 0.000704 | 0.00262038 | 0.00255703 |
+| Linear / unseen security | 0.005503 | 0.00292185 | 0.00286511 |
+| Boosted / temporal | 0.006304 | 0.00261576 | 0.00255703 |
+| Boosted / unseen security | -0.013526 | 0.00293655 | 0.00286511 |
+
+Fitting succeeded, but ranking remains weak and all four mean errors exceed
+predicting zero excess. This does not establish tradable edge. Baseline request
+metadata confirms matching input identities, folds and holdout assignment; baseline
+result files remain OS access-denied, so fresh per-unit baseline comparisons are
+not independently verified. Do not substitute historical summary metrics with
+different aggregation, tune this profile, or claim SPY outperformance.
 
 Readiness command: `audit-swing-training-readiness`, configuration
 `configs/swing_training_readiness.json`. Its scope is bounded initial-fit
@@ -124,8 +151,9 @@ so these conditional diagnostics cannot stand in for full-population economics.
 Both learners have higher aggregate squared error than predicting zero excess,
 and the ranking signal is weak. This is a measured research result, not a runtime
 failure or a promotion result. Do not invert scores, tune thresholds or exclude
-losers after viewing it. The four remaining planned specifications need their
-distinct feature profiles; these models do not silently include news/SEC.
+losers after viewing it. Two relationship specifications subsequently completed;
+the two issuer-reaction specifications still require their distinct qualified
+inputs. Neither completed profile silently includes news/SEC reaction features.
 
 Real audit completed successfully on September 14:
 `data/reports/swing_initial_fit_training_readiness_percentage_only.json`, SHA256
