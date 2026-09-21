@@ -338,6 +338,14 @@ retain UTC nanoseconds even when every value is missing; no comparison tolerance
 or timestamp substitution is used. The real 59-month source replay passed and the
 two relationship-profile models completed sequential fitting on September 21.
 
+The separate `swing/features/issuer_reaction.py` component measures the first full
+XNYS session whose open strictly follows verified event availability. Missing bars
+never shift that window. Stock-minus-SPY open/close return and lagged-volume ratio
+have independent availability and missingness; observed event, identity and bar
+semantics are all required for live construction. The hashed contract is in
+`swing/contracts/issuer_reaction.py`. This reusable measurement does not establish
+content qualification, causal attribution, a final training profile or admission.
+
 `research/swing_return_inputs.py` admits the verified initial-fit baseline or named
 124-column relationship publication for the strict return-training contract. A
 matching fresh readiness receipt is mandatory; arbitrary feature profiles are

@@ -203,6 +203,15 @@ September 21 bounded source inspection and reaction-measurement contract:
   Broad headline earnings/guidance rules and form-only SEC flags are not substitutes
   for qualified issuer content. No existing population, labels, splits or fits change.
 
+Component closure: `8e24d45` is pushed. The shared measurement and source contract
+pass 276 focused reaction, inherited relationship and continuity tests (33.41 seconds,
+RuntimeWarnings treated as errors), changed-file Ruff and strict mypy. Independent
+review findings are closed. Integration preserved retrospective proxy availability
+instead of treating download time as a historical clock, and accepts zero-volume
+sessions when the complete baseline mean is positive. No archive publication or
+fits ran. Continue with original-content/version inventory and per-ticker/year
+coverage; this is not completion of the final profile's admission checkpoint.
+
 Detailed plan/design review approved implementation with these admission gates:
 the original physical `feature_profile` changes explicitly to
 `technical_relationships`; all other parent columns, including auxiliary clocks,

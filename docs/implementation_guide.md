@@ -246,6 +246,15 @@ transitive byte pins, and the shared transform preserves UTC nanoseconds for all
 clocks. The earlier publication without `_utc_clocks` is non-admitted evidence,
 not a fallback. Funded evaluation and qualified issuer-reaction features remain separate.
 
+`swing/contracts/issuer_reaction.py` binds the next component's event/version,
+identity and price sources; `swing/features/issuer_reaction.py` owns the shared
+completed-session measurement. It preserves event/decision rows and returns
+stock-minus-SPY open/close reaction and lagged-volume ratio with independent nulls
+and exact clocks. It reuses existing physical daily-bar validation, not another
+collector or estimator. Historical proxy inputs cannot enter live construction.
+Content/source admission, final model feature joins and training are not implemented
+by this function; the caller must establish those authorities separately.
+
 ## Source Roles
 
 ### Retained Holding-Identity Preflight

@@ -218,6 +218,11 @@ completed models. The pinned derivative configs are
 `configs/swing_return_relationship_training.json`. Do not rerun this completed
 experiment or change its settings after viewing the results.
 
+The next issuer-reaction component now has a tested shared post-event session
+measurement. It is not yet a news/SEC training profile: original content/version
+qualification, coverage and final feature joins remain required before the last
+two model specifications can train. See the active plan and feature audit.
+
 ```powershell
 $configPin = (Get-FileHash configs/swing_return_relationship_publication.json -Algorithm SHA256).Hash.ToLowerInvariant()
 .venv\Scripts\python.exe -B -m market_predictor.research_cli materialize-swing-return-relationships --root . --config configs/swing_return_relationship_publication.json --expected-config-sha256 $configPin --output data/features/swing_return_relationships_initial_fit_utc_clocks

@@ -28,6 +28,18 @@ causal inputs and an explicit research-only training contract.
 | technical_relationships | Fresh UTC-clock publication and independent source replay pass all 586,305 decisions / 59 months; fix 82842e0 passes 94 focused tests and review | Exact original columns/outcomes preserved; additions independently recomputed, baseline numerical evidence explicitly inherited | Frozen 124-column experiment a8be7cb completed 16 validation fits and two final models; independent artifact audit passed; economic edge not established | Not authorized |
 | technical_relationships_issuer_reaction | Blocked: catalyst_full has aggregate news features, not qualified issuer/SEC event-reaction inputs; SEC/Finviz coverage is unknown here | Must reuse matched independently admitted labels | Not trained; counts and sentiment cannot substitute for the promised reaction feature contract | Not authorized |
 
+September 21 source-qualification component: shared issuer reaction measurements
+are implemented in `8e24d45`, separately from final model-profile admission. The new source
+contract binds event/version, issuer identity and existing price authorities, with
+separate availability semantics for event, identity and bars. It adds no training
+columns or fits. Bounded source inspection confirms mixed headline/body Alpaca
+text and SEC form-level metadata; sparse corporate-action HTML documents are not a
+cohort-wide filing-content archive. Full-content/version qualification, per-ticker/
+year coverage, exact final columns and immutable publication/replay remain required.
+The component passed 276 focused reaction, relationship-regression and continuity
+tests, changed-file Ruff and strict mypy. Independent plan/design/code findings are
+closed. This software evidence does not admit event content or any model input.
+
 September 20 component evidence: `return_feature_profiles.py` freezes formulas,
 ordering, source semantics and missingness; `return_relationships.py` preserves
 the real baseline's 120 values and 160 availability mappings. Fourteen independent

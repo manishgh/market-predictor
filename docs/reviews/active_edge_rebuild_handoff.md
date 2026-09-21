@@ -4,13 +4,50 @@ Status: active
 Last updated: 2026-09-21
 Repository: `C:\project\market-predictor`
 Branch: `unified-swing-product`
-Last completed implementation checkpoint: `a8be7cb` (pushed; frozen relationship experiment configs).
+Last completed implementation checkpoint: `8e24d45` (pushed; completed-session issuer measurements).
 Last completed model-training checkpoint: relationship run on `a8be7cb` (artifact pins below).
 Baseline model-training checkpoint: `07963cc` (pushed; unchanged).
 Source-collection checkpoint: `19698d6` (pushed).
 The combined historical outcome/features delivery is verified and committed.
 
 ## Current State
+
+September 21 next component `8e24d45` is pushed. Separate implementation/test
+workers built `swing/contracts/issuer_reaction.py` and
+`swing/features/issuer_reaction.py`; plan, design/ML and code reviewers checked
+the bounded scope. The shared measurement selects the first official XNYS open
+strictly after event availability, never a later surviving bar. It returns
+independently nullable stock-minus-SPY open/close reaction and a lagged-20-session
+volume ratio, with exact UTC nanosecond availability and explicit missing reasons.
+This is a low-level component, not an admitted profile, collector or model fit.
+Event/identity/source qualification remains caller-owned. All three source families
+must have observed semantics for live construction; historical ingestion does not
+replace the declared research-proxy availability clock.
+
+Integration corrected two implementation deviations before data use: retrospective
+ingestion was included in proxy feature clocks, and every lagged volume was required
+positive rather than their mean. Tests cover both. The hash wording was made exact;
+a NumPy overflow-comparison warning was also removed without changing the threshold.
+Final verification: 276 focused reaction/relationship-regression/continuity tests
+passed in 33.41 seconds with RuntimeWarnings treated as errors; changed-file Ruff
+and strict mypy passed. JUnit: `.test-tmp/issuer-reaction-final.xml`.
+No full suite, provider request, archive-wide audit, publication or training ran.
+Memory samples were 71.39% and 70.76%, not a continuous measurement. All six spawned
+workers/reviewers and task-owned command processes are closed.
+
+Bounded inventory: the early Alpaca sample contains both actual article HTML and
+headline-only text. The broad SEC archive contains form metadata/submissions JSON,
+not filing/exhibit bodies; sparse retained corporate-action HTML is not cohort-wide
+content coverage. Do not infer earnings/guidance meaning from form-only text or the
+existing broad headline classifier. Full source/version/content qualification and
+per-ticker/year coverage remain outstanding before final feature-column freeze.
+
+Windows access requested: repository read/write is granted for the current turn.
+The earlier baseline result folder remains a separate OS read-access issue:
+`data/research/swing_technical_return_models_initial_fit`. User account
+`DESKTOP-BKHDM0H\manis` needs Read & execute, List folder contents and Read on the
+folder, subfolders and files. No ownership/ACL changes were performed. That paired
+result comparison is unverified, not a blocker on independent feature development.
 
 September 21 implementation `be474b5` is pushed. Two parallel implementation
 workers completed source publication and verification/readiness/training integration;
@@ -697,6 +734,12 @@ the frozen numeric training boundary or authorize promotion.
 
 Exact next checkpoint: qualify issuer-news and SEC reaction inputs for the final
 feature profile, using saved initial-fit evidence before requesting any download.
+The completed-session measurement component is implemented and tested in `8e24d45`;
+do not rebuild it or mistake it for final feature admission. Next inventory original
+article/body versions and issuer attribution across the permitted initial-fit years,
+publish ticker/year/source/content coverage, and enumerate genuinely missing SEC
+filing/exhibit documents. Freeze content qualification with development-only precision
+and recall review before joining this measurement into the last model profile.
 The baseline and relationship profiles are already trained (four of six frozen
 specifications); never rerun or tune them. Freeze source fields, event availability,
 issuer matching, completed reaction windows, exact columns and missingness before
