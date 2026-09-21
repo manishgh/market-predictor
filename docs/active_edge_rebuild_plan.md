@@ -166,6 +166,43 @@ or full-content evidence must be reported, never replaced by aggregate counts or
 invented events. Exit: a source-backed contract, historical coverage audit, full
 feature acceptance tests, immutable publication/replay and only then fresh fitting.
 
+September 21 bounded source inspection and reaction-measurement contract:
+
+- The early saved Alpaca shard `f91f0fa1d3de638169abab12.parquet` has 18
+  records; eight have text different from the title. Some retained text is article
+  HTML, some is only a headline. This is a sample, not cohort-wide content coverage.
+- The SEC archive manifest/footer reports 689,467 form-metadata events, 624 issuer
+  coverage records and 877 saved submissions responses. Canonical SEC text is
+  generated form metadata, not filing/exhibit content. Sparse saved corporate-action
+  documents do contain original HTML but cannot establish full-universe coverage.
+  Acceptance-plus-policy-lag is a research proxy, not historical receipt evidence.
+- Implement a shared **post-event session measurement** first, without registering
+  a training profile or qualifying content. Select the first official XNYS session
+  whose open is strictly after event availability, before inspecting available bars.
+  At-open equality selects the following session. Never skip missing selected bars.
+- Return two independently nullable measurements: stock open-to-close return minus
+  SPY open-to-close return; and stock volume divided by its previous 20 complete
+  exchange-session volumes' mean. The latter excludes the reaction session and
+  requires a positive denominator. Missing SPY does not invalidate supported volume.
+- Preserve each event/decision row and its selected session boundaries. Require the
+  completed session and every consumed event/identity/bar clock at or before the
+  original decision. Use exact UTC nanosecond maxima and explicit missing reasons;
+  reject malformed identity, duplicate bars, incompatible feed/price basis and
+  contradictory clocks. Live construction rejects historical proxy semantics.
+- This is availability-anchored price/volume measurement, not proof of an event's
+  causal market effect. Event source/version and identity authorities remain
+  caller-verified; measurement alone proves neither source nor feature admission.
+- Component exit tests cover open equality and +/-1 ns, intraday/after-close news,
+  holidays/DST/early closes, incomplete and missing selected sessions, lagged-volume
+  gaps, independent missingness, future/pre-release poison, and batch/single parity.
+  Contract and transform workers have disjoint ownership from test implementation;
+  independent plan, design/ML and code reviews precede closure. Heavy runs stay serial.
+- This bounded component does not complete the overall checkpoint. Cohort-wide
+  content/coverage audit, content-qualified event extraction, source admission,
+  final ordered feature columns, immutable replay and the last two fits still follow.
+  Broad headline earnings/guidance rules and form-only SEC flags are not substitutes
+  for qualified issuer content. No existing population, labels, splits or fits change.
+
 Detailed plan/design review approved implementation with these admission gates:
 the original physical `feature_profile` changes explicitly to
 `technical_relationships`; all other parent columns, including auxiliary clocks,
