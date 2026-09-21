@@ -1,0 +1,29 @@
+{
+  "schema_version": "market_predictor.swing_return_training",
+  "scope": "initial_fit_research_only",
+  "readiness": {
+    "path": "data/reports/swing_return_relationships_initial_fit_readiness.json",
+    "sha256": "3d2b05293cad45b1a699c6d912552067ae5668657c4542d71c0c6b17991c73c3"
+  },
+  "feature_profile": "technical_relationships",
+  "readiness_config": {
+    "path": "configs/swing_return_relationship_readiness.json",
+    "sha256": "28c0d02bab59f425cc022aab3ba156d71aedf1c1dcaa0fc1d05b5a07696eed9d"
+  },
+  "published_profile": "technical_relationships",
+  "target": "spy_fixed_horizon_excess_return",
+  "folds": 4,
+  "minimum_train_sessions": 503,
+  "embargo_sessions": 10,
+  "holdout_fraction": 0.2,
+  "holdout_assignment": "unseeded_sha256_security_id_first_64_bits",
+  "missingness": "training_median_all_empty_zero_all_column_indicators",
+  "weighting": "equal_date_total_mean_row_one",
+  "preprocessing_scope": "separately_fitted_per_fold_and_evaluation_scope",
+  "final_fit": "two_models_all_initial_fit_supervision",
+  "linear": {"alpha": 1.0, "fit_intercept": true, "solver": "lsqr", "tol": 0.000001, "max_iter": 10000},
+  "boosted": {"objective": "reg:squarederror", "tree_method": "hist", "max_depth": 3,
+    "n_estimators": 200, "learning_rate": 0.05, "reg_lambda": 10.0, "reg_alpha": 0.0,
+    "min_child_weight": 1.0, "subsample": 1.0, "colsample_bytree": 1.0,
+    "n_jobs": 1, "random_state": 42}
+}
