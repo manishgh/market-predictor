@@ -214,6 +214,28 @@ fields are labelled `blank`/`non_text`, never counted as a provider body.
 Implementation pins are an explicit semantic list because the relationship closure
 pinner is itself hash-bound to closed evidence. No C# consumer exists.
 
+Component closure: `7a9334c` is pushed. Final verification: 197 targeted inventory,
+CLI-surface, command/architecture-boundary and continuity tests passed in 30.49
+seconds with RuntimeWarnings as errors (JUnit `.test-tmp/content-inventory-final.xml`);
+changed-file Ruff and strict mypy pass. Read-only probes with the approved guard
+verified five real chunks across all three archives, including the largest
+initial-fit chunks (TSLA 28 pages / 1,350 rows; TSLA 130 pages / 6,456 rows in 13-18
+seconds). No publication, download, cohort pass or fit ran. The design/ML and
+code/.NET reviewers verified closure of every finding; three P3 closure notes
+(out-of-range discarded clock, non-text fields, `chosen_field` wording) were fixed.
+This closes only single-chunk verification, not the delivery's cohort inventory.
+
+Next bounded slice (design must be frozen and reviewed before code): a leased,
+resumable cohort inventory reusing this reader. Enumerate chunks only from pinned
+authorities: the early/later initial-fit derivations' `_source_children.json` and
+the corrections archive request. Classify every request work unit as observed,
+known-empty or failed/unknown from the request and source ledger; missing artifacts
+are never zero news. Map query identities to approved cohort securities through
+existing pinned identity authorities (archive formats differ), deduplicate stories
+across archives on source family and `provider_story_id`, and assign years from row
+clocks, never chunk totals. SEC form-metadata counts and missing filing/exhibit
+enumeration remain a separate following slice.
+
 September 21 bounded source inspection and reaction-measurement contract:
 
 - The early saved Alpaca shard `f91f0fa1d3de638169abab12.parquet` has 18

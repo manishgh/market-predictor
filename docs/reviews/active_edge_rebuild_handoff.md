@@ -1,16 +1,43 @@
 # Active Edge Rebuild Handoff
 
 Status: active
-Last updated: 2026-09-21
+Last updated: 2026-09-22
 Repository: `C:\project\market-predictor`
 Branch: `unified-swing-product`
-Last completed implementation checkpoint: `8e24d45` (pushed; completed-session issuer measurements).
+Last completed implementation checkpoint: `7a9334c` (pushed; single-chunk saved issuer content verification).
 Last completed model-training checkpoint: relationship run on `a8be7cb` (artifact pins below).
 Baseline model-training checkpoint: `07963cc` (pushed; unchanged).
 Source-collection checkpoint: `19698d6` (pushed).
 The combined historical outcome/features delivery is verified and committed.
 
 ## Current State
+
+September 22 component `7a9334c` is pushed: `inspect-saved-issuer-content` verifies
+one saved original Alpaca query chunk without downloads. Reader
+`catalysts/issuer_events/content_inventory.py`; leased immutable publisher
+`research/issuer_content_inventory.py`; CLI adapter `commands/issuer_content_inventory.py`.
+It binds the chunk to its one self-hashed `_request.json` work unit (include_content
+and publication-proxy policy required), verifies page hashes/envelopes/pagination,
+reproduces the producer's acceptance filter, retained revision, first-seen page and
+exact `max(published, updated)` availability, and counts discarded raw items by reason.
+Rows published in the initial-fit window are `included` or `version_after_cutoff`;
+outside rows are counts only. Bounds reuse `issuer_news_preparation.FIRST` and
+`initial_fit_issuer_news.LAST_INITIAL_FIT_CUTOFF`; the publisher's 90% guard runs
+inside the reader. Categories are provider body, summary or headline-only fields,
+never proof of full articles, event meaning or issuer relevance.
+
+Two independent reviewers (senior ML design; senior Python/.NET code) reviewed the
+paused implementation in parallel; their deduplicated findings plus two lead-found
+defects (unbounded window, default 85% memory guard) were fixed, and both verified
+closure. No C# consumer exists (searched TradingFlow). Verification: 197 targeted
+tests in 30.49 seconds (JUnit `.test-tmp/content-inventory-final.xml`), changed-file
+Ruff and strict mypy. Test fixtures build chunks through the real producer functions.
+Read-only probes passed on five real chunks across all three archives; the largest
+initial-fit chunk (TSLA, 130 pages, 6,456 rows) took 13-18 seconds, so a cohort pass
+over roughly 485k saved rows is estimated at 15-25 minutes, not measured. No
+publication, cohort pass, download, full suite or fit ran. Both reviewers are closed;
+no task-owned Python process remains. Memory samples ranged 78.7%-87.3%, mostly from
+desktop applications; the default 85% guard failure was observed at 87.3%.
 
 September 21 next component `8e24d45` is pushed. Separate implementation/test
 workers built `swing/contracts/issuer_reaction.py` and
@@ -738,16 +765,19 @@ the frozen numeric training boundary or authorize promotion.
 
 Exact next checkpoint: qualify issuer-news and SEC reaction inputs for the final
 feature profile, using saved initial-fit evidence before requesting any download.
-The completed-session measurement component is implemented and tested in `8e24d45`;
-do not rebuild it or mistake it for final feature admission. Next inventory original
-article/body versions and issuer attribution across the permitted initial-fit years,
-publish ticker/year/source/content coverage, and enumerate genuinely missing SEC
-filing/exhibit documents. Freeze content qualification with development-only precision
-and recall review before joining this measurement into the last model profile.
-Small next implementation: add the bounded saved-evidence content inventory described
-in the active plan. Start from early/later initial-fit news and corrected issuer-news
-authorities, not the entire raw archive. Preserve original source/version hashes and
-separate article bodies, summary/headline fallbacks, SEC metadata and unknown content.
+Single-chunk content verification is complete in `7a9334c`; do not rebuild it.
+Next slice: freeze and independently review the cohort inventory design recorded
+under the active plan's component closure, then implement it by reusing
+`inspect_saved_alpaca_content`. Enumerate chunks only from the pinned early/later
+derivations' `_source_children.json` (under `data/research/issuer_initial_fit_*_saved_v1`)
+and the corrections archive request; classify every request work unit as observed,
+known-empty or failed/unknown; map archive query identities to approved cohort
+securities through existing pinned identity authorities; deduplicate stories across
+archives on source family and `provider_story_id`; assign years from row clocks.
+Publish ticker/year/source/content-category coverage with provenance. SEC
+form-metadata counts and missing filing/exhibit enumeration follow as a separate
+slice. Freeze content qualification with development-only precision and recall
+review before joining the completed-session measurement into the last profile.
 No downloads, final feature selection or fitting belong to that inventory checkpoint.
 The baseline and relationship profiles are already trained (four of six frozen
 specifications); never rerun or tune them. Freeze source fields, event availability,
