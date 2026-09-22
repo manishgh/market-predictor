@@ -183,6 +183,37 @@ does not download sources, change model inputs or fit models. The root baseline
 manifest is now readable with its original hash; 18 nested baseline manifests are
 still unreadable, which does not block this independent delivery.
 
+Bounded implementation freeze for original-content verification: one existing
+Alpaca query chunk at a time, with explicit original event-artifact and sidecar
+hashes, query security/ticker, and start/cutoff. Follow only sidecar-declared raw
+pages; verify byte hashes, envelope hashes, request/chunk identity and pagination.
+Resolve each canonical `(event_id, raw_sha256)` against the provider article object
+using the original serialization, preserving every matching page/index occurrence.
+Verify issuer-query symbol, title/source/URL, publication/update clocks and canonical
+content fallback parity. Label retained provider fields, not full-article completeness
+or event meaning. Reject malformed/conflicting provenance; report records excluded by
+publication or version-availability cutoff separately. Keep historical proxy semantics
+and source-query identities separate from target-cohort attribution. Tests cover hash
+tampering, duplicates/revisions, cutoff poison, wrong symbols and body/fallback states.
+No final feature registration or training is authorized by this component. The
+qualified reaction join additionally requires independent semantic qualification and
+a frozen event-to-decision selection rule; raw-content verification cannot supply them.
+
+Consolidated design/ML and code review (September 22) amended this freeze before
+closure. Bind each chunk to exactly one self-hashed `_request.json` work unit and
+recompute its chunk ID; require `include_content` and the publication-proxy policy,
+so headline-only means the provider returned no body rather than an unrequested one.
+Canonical availability must equal `max(published, updated)` exactly. Reproduce the
+producer's acceptance filter and retained revision, including its first-seen page;
+count discarded raw items by reason instead of rejecting the chunk. Restrict bounds
+to the existing initial-fit issuer-news constants and apply the caller's approved
+90% memory guard inside the reader. Record rows published in the window as
+`included` or `version_after_cutoff` (needed for per-year aggregation); outside rows
+are counts only. Paths are root-relative; whitespace-only and non-text provider
+fields are labelled `blank`/`non_text`, never counted as a provider body.
+Implementation pins are an explicit semantic list because the relationship closure
+pinner is itself hash-bound to closed evidence. No C# consumer exists.
+
 September 21 bounded source inspection and reaction-measurement contract:
 
 - The early saved Alpaca shard `f91f0fa1d3de638169abab12.parquet` has 18

@@ -255,6 +255,33 @@ collector or estimator. Historical proxy inputs cannot enter live construction.
 Content/source admission, final model feature joins and training are not implemented
 by this function; the caller must establish those authorities separately.
 
+`market-predictor-research inspect-saved-issuer-content` verifies one saved original
+Alpaca query chunk, without downloads. Supply `--event-artifact`, `--event-sha256`,
+`--event-manifest`, `--manifest-sha256`, `--security-id`, `--ticker` and a new
+`--output` directly below `data/research`; `--root` defaults to the current directory.
+`--start-utc`/`--cutoff-utc` default to the initial-fit issuer-news window
+(`issuer_news_preparation.FIRST` through `initial_fit_issuer_news.LAST_INITIAL_FIT_CUTOFF`)
+and may only narrow it. The source reader is
+`catalysts/issuer_events/content_inventory.py`; the leased immutable publisher is
+`research/issuer_content_inventory.py`; the CLI adapter is
+`commands/issuer_content_inventory.py`. The reader binds the chunk to its one
+self-hashed `_request.json` work unit (security, ticker, window, `include_content`,
+proxy availability), checks declared page hashes, envelopes and pagination, and
+reproduces the producer's acceptance filter and retained revision for every canonical
+row, including its exact first-seen page and `max(published, updated)` availability.
+Raw items the producer discarded are counted by reason, not rejected. Rows published
+inside the window are recorded as `included` or `version_after_cutoff`; rows published
+outside it are counted only. Each row records provider body, summary or headline-only
+evidence with root-relative page locators. `chosen_field` is the first provider text
+field that is not empty or whitespace (content, summary, headline); body/summary states
+distinguish absent, null, empty, blank and non-text values. It is not the source of the
+canonical `text` column, which keeps the producer's fallback and may hold a blank body. The publisher supplies its 90% system-memory
+guard to the reader. The output is `records.parquet` plus `_manifest.json`. A provider
+body field does not prove complete article content; query-symbol matching does not
+prove direct-issuer relevance. This report is not cohort-wide coverage, SEC content
+qualification, a reaction join or training admission. Existing output directories are
+rejected rather than overwritten.
+
 ## Source Roles
 
 ### Retained Holding-Identity Preflight
