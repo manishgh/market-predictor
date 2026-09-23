@@ -225,7 +225,7 @@ code/.NET reviewers verified closure of every finding; three P3 closure notes
 (out-of-range discarded clock, non-text fields, `chosen_field` wording) were fixed.
 This closes only single-chunk verification, not the delivery's cohort inventory.
 
-Current slice (`in_progress`; design reviewed and amended, September 23):
+Completed slice (`177f6f3`; design reviewed and amended, September 23):
 **initial-fit cohort news content inventory**. Problem: content categories exist per
 query chunk, but feature design needs per-security, per-year coverage in cohort
 identities, with unknown coverage and unattributable queries kept distinct from no news.
@@ -290,6 +290,44 @@ identities, with unknown coverage and unattributable queries kept distinct from 
   stability, resume/tamper of every pin, lease/memory/atomicity.
 - Out of scope: SEC form metadata and missing filing/exhibit documents (next slice),
   semantic content qualification, decision joins, features and fitting.
+
+Slice closure: implementation `177f6f3` is pushed. Independent design/ML and
+code/.NET reviewers reviewed the design and the implementation; every supported
+finding is closed and both verified closure. The declined helper deduplication is
+recorded at `_atomic_json` (27 local copies exist repository-wide; the reference is
+hash-bound and imports estimators). Final verification: 241 targeted inventory, cohort,
+CLI, boundary and continuity tests in 70.65 seconds (JUnit
+`.test-tmp/cohort-inventory-final.xml`); Ruff and strict mypy on nine changed files.
+
+Real run (leased, exit 0, 11:08-11:57 on September 23; first 17 minutes re-verified the
+pinned sources): `data/research/swing_initial_fit_issuer_content_inventory`, manifest
+`ab5482a01575a7a203f0e070c7f2dc93c413930f8296d448cf4aca5122b3ed21`, request
+`a145341955004edfbd2a3e4a40aea52014a75707981ed9e8ae2a12fcea29b3c9`, checkpoint
+`89580031a718959ab07f1d855ca5c2a184f88f86371e8e4c691fe2a8a8bfef12`, log
+`data/runtime/swing_initial_fit_issuer_content_inventory.log`. Memory was not measured
+continuously; the 90% guard ran throughout and never stopped the run.
+
+- All 5,734 ledger units verified: early 4,018 sidecar-pinned, 29 derivation-unavailable,
+  19 verified-empty; later 1,557 and 6; corrections 92 and 13. 469,668 article records.
+- Independent reconciliation: included rows of derivation-observed chunks equal the
+  derivations' own source events exactly (148,784 early; 319,787 later); the 35
+  derivation-unavailable chunks add 356 + 70 rows. Bridged records outside their
+  coverage segment: 0.
+- Cohort coverage: 69.6% of cohort security-time has a verified query; 30.4% is
+  unknown `no_proven_query`. 145 of 586 retained securities have no provable query;
+  141 unbridged legacy query IDs (`sp500-historical`, `cusip`, some `cik:...:ticker`)
+  hold 60,590 unattributed records. This identity gap, not missing downloads, is the
+  largest coverage limit for reaction features.
+- 404,467 distinct attributed stories: 62.35% carry a provider body field, 37.65% are
+  headline-only, none summary-only. Body share rises from 51.7% (2019) to about 65%
+  (2022-2024). Median 107 stories per security per observed year (10th percentile 51).
+  These are query-returned stories, not issuer relevance or qualified content.
+
+Next slice (design must be frozen and reviewed before code): SEC form-metadata counts
+per cohort security and New York year from the pinned SEC archive, and enumeration of
+filing/exhibit documents that are genuinely missing. The unbridged legacy identity gap
+above needs its own evidence-backed identity proof, never ticker guessing; whether to
+pursue it before content qualification is a user decision recorded in the handoff.
 
 September 21 bounded source inspection and reaction-measurement contract:
 

@@ -1,16 +1,50 @@
 # Active Edge Rebuild Handoff
 
 Status: active
-Last updated: 2026-09-22
+Last updated: 2026-09-23
 Repository: `C:\project\market-predictor`
 Branch: `unified-swing-product`
-Last completed implementation checkpoint: `7a9334c` (pushed; single-chunk saved issuer content verification).
+Last completed implementation checkpoint: `177f6f3` (pushed; initial-fit cohort news content inventory).
 Last completed model-training checkpoint: relationship run on `a8be7cb` (artifact pins below).
 Baseline model-training checkpoint: `07963cc` (pushed; unchanged).
 Source-collection checkpoint: `19698d6` (pushed).
 The combined historical outcome/features delivery is verified and committed.
 
 ## Current State
+
+September 23 slice `177f6f3` is pushed and its real run is complete: the initial-fit
+cohort news content inventory. Command `inspect-issuer-content-cohort`; publisher
+`research/issuer_content_cohort_inventory.py`; config
+`configs/swing_issuer_content_cohort_inventory.json` (SHA256
+`7a789f107e84da483af2b1d3e853200198866ffc6cb8afa6a77a0f9e1417c9f7`), which pins
+`configs/swing_initial_fit_monthly_news.json` (sources verified by the unchanged
+`issuer_news_preparation._source`), the source-proven identity manifest and the
+approved population audit file. The closed single-chunk reader gained a page count and
+`verify_saved_alpaca_empty_chunk` (scoped extension; earlier results unchanged).
+
+Artifact: `data/research/swing_initial_fit_issuer_content_inventory`, manifest
+`ab5482a01575a7a203f0e070c7f2dc93c413930f8296d448cf4aca5122b3ed21`, request
+`a145341955004edfbd2a3e4a40aea52014a75707981ed9e8ae2a12fcea29b3c9`, checkpoint
+`89580031a718959ab07f1d855ca5c2a184f88f86371e8e4c691fe2a8a8bfef12`, log
+`data/runtime/swing_initial_fit_issuer_content_inventory.log`. The run held the shared
+lease 11:08-11:57, exit 0; it is complete and immutable, do not resume or rerun it.
+All 5,734 ledger units and 469,668 article records verified; derivation-observed
+included rows equal the derivations' source events exactly (148,784 / 319,787).
+69.6% of cohort security-time has a verified query and 30.4% is unknown: 145 of 586
+retained securities have no provable query because 141 legacy query IDs
+(`sp500-historical`, `cusip`, some `cik:...:ticker`, e.g. BRK-B/BF-B) are not in the
+pinned identity bridge; 60,590 records sit under them unattributed. Of 404,467
+attributed stories, 62.35% carry a provider body field and 37.65% are headline-only.
+Known-empty days mean only that a provider-symbol query returned nothing. Counts are
+query-returned stories, not issuer relevance, content qualification or admission.
+
+Review and verification: senior ML and senior Python/.NET reviewers reviewed the
+design (two P1s: derived-ledger column rewrite and identity-equal attribution) and the
+implementation; all supported findings are closed with verified closure. 241 targeted
+tests passed (JUnit `.test-tmp/cohort-inventory-final.xml`), Ruff and strict mypy on nine
+files. No full suite, download, fit or publication beyond this artifact ran. Memory
+was not measured continuously (90% guard throughout; samples 69-71% afterwards). No
+task-owned Python process remains; both reviewers are idle and hold no work.
 
 September 22 component `7a9334c` is pushed: `inspect-saved-issuer-content` verifies
 one saved original Alpaca query chunk without downloads. Reader
@@ -765,19 +799,14 @@ the frozen numeric training boundary or authorize promotion.
 
 Exact next checkpoint: qualify issuer-news and SEC reaction inputs for the final
 feature profile, using saved initial-fit evidence before requesting any download.
-Single-chunk content verification is complete in `7a9334c`; do not rebuild it.
-Next slice: freeze and independently review the cohort inventory design recorded
-under the active plan's component closure, then implement it by reusing
-`inspect_saved_alpaca_content`. Enumerate chunks only from the pinned early/later
-derivations' `_source_children.json` (under `data/research/issuer_initial_fit_*_saved_v1`)
-and the corrections archive request; classify every request work unit as observed,
-known-empty or failed/unknown; map archive query identities to approved cohort
-securities through existing pinned identity authorities; deduplicate stories across
-archives on source family and `provider_story_id`; assign years from row clocks.
-Publish ticker/year/source/content-category coverage with provenance. SEC
-form-metadata counts and missing filing/exhibit enumeration follow as a separate
-slice. Freeze content qualification with development-only precision and recall
-review before joining the completed-session measurement into the last profile.
+Single-chunk verification (`7a9334c`) and the cohort news inventory (`177f6f3`) are
+complete; do not rebuild them. Next slice: freeze and independently review SEC
+form-metadata counts per cohort security and New York year from the pinned SEC archive,
+plus enumeration of genuinely missing filing/exhibit documents, then implement.
+Open user decision: whether to prove identities for the 141 unbridged legacy query IDs
+(evidence-backed identity work, never ticker guessing) before content qualification.
+Freeze content qualification with development-only precision and recall review before
+joining the completed-session measurement into the last profile.
 No downloads, final feature selection or fitting belong to that inventory checkpoint.
 The baseline and relationship profiles are already trained (four of six frozen
 specifications); never rerun or tune them. Freeze source fields, event availability,
@@ -875,7 +904,7 @@ review details remain in Git; this document records the current continuation.
 
 | Source | Path | Independent pin |
 | --- | --- | --- |
-| Approved population | data/reports/swing_research_cohort/approved_research_population_audit.json | 41de559dd1c415dab60771e10fd489150853a6c2fff07e387d1024b33961efe0 |
+| Approved population | data/reports/swing_research_cohort/approved_research_population_audit.json | c2a7e89b6c360f7ddd704dcd41d4fd8fd6b1b698f1bf7caab9d0de72042d410f (file); internal `audit_sha256` 41de559dd1c415dab60771e10fd489150853a6c2fff07e387d1024b33961efe0 |
 | Holding identity | data/reports/swing_research_cohort/holding_identity_preflight.json | 8f8cdd60ca2f9c1372ceda20d04b7f90eefbfb2336a7f282f30aa97b8c7e723b |
 | Raw initial-fit plan | data/reports/swing_initial_fit_raw_share_plan | d912a997af361c820745e8c850f0fd455ee068397c6d034d2b54c00a475dc22e |
 | Raw initial-fit archive | data/raw/swing_initial_fit_raw_share_daily | 144cab43741f3c74308b53e9322c84ac7eeaca158d3cbd6a1ddb0d7c0fa8d244 |
