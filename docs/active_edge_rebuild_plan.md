@@ -225,16 +225,71 @@ code/.NET reviewers verified closure of every finding; three P3 closure notes
 (out-of-range discarded clock, non-text fields, `chosen_field` wording) were fixed.
 This closes only single-chunk verification, not the delivery's cohort inventory.
 
-Next bounded slice (design must be frozen and reviewed before code): a leased,
-resumable cohort inventory reusing this reader. Enumerate chunks only from pinned
-authorities: the early/later initial-fit derivations' `_source_children.json` and
-the corrections archive request. Classify every request work unit as observed,
-known-empty or failed/unknown from the request and source ledger; missing artifacts
-are never zero news. Map query identities to approved cohort securities through
-existing pinned identity authorities (archive formats differ), deduplicate stories
-across archives on source family and `provider_story_id`, and assign years from row
-clocks, never chunk totals. SEC form-metadata counts and missing filing/exhibit
-enumeration remain a separate following slice.
+Current slice (`in_progress`; design reviewed and amended, September 23):
+**initial-fit cohort news content inventory**. Problem: content categories exist per
+query chunk, but feature design needs per-security, per-year coverage in cohort
+identities, with unknown coverage and unattributable queries kept distinct from no news.
+
+- Inputs: one hash-pinned JSON config, read only after the shared lease is held. It
+  pins `configs/swing_initial_fit_monthly_news.json` (whose `sources` block is verified
+  by the existing `issuer_news_preparation._source`, unchanged), the source-proven
+  identity manifest (pins `identity_bridge.parquet`) and the approved population audit
+  (`load_swing_research_cohort(..., source_root=root)`). No download or archive scan.
+- Work units: only the three pinned ledgers (early 4,066, later 1,563, corrections 105).
+  Derived observed chunks use `_source_children.json` pins re-anchored under the
+  derivation's declared `repository_root` (the run fails closed elsewhere; outputs never
+  contain absolute paths) at the exact `<collection>/events/<chunk>.parquet` path. The 35
+  derivation-unavailable chunks (raw `observed`, reason recorded) and the 92 corrections
+  chunks use artifact pins from their pinned raw collection manifests; their sidecars
+  must declare that artifact and the root request hash. Their evidence levels are
+  `derivation_unavailable_raw_pinned` and `artifact_pinned_sidecar_observed`, reported in
+  separate columns. The 32 `observed_empty` chunks are verified from
+  their saved page (envelope, request/chunk binding, terminal pagination, zero admitted
+  items) as `pages_verified_empty`.
+- Ledger parity for every chunk: reader canonical rows = `original_row_count`, reader
+  window = `original_requested_*`, derived `row_count` = included rows, and pages,
+  provider, accepted, duplicate, invalid-timestamp (clock + title), outside-window and
+  symbol-mismatch counts equal the ledger's producer statistics. Corrections compare
+  its original ledger directly. Coverage segments use the clipped `requested_*` window.
+- Identity reuses `universe/issuer_news_identity.py` unchanged, called per chunk
+  (frame cap 250,000 rows): coverage via `map_news_coverage`, articles via
+  `map_news_relations` at availability time. Attributed means mapped to a cohort target,
+  or an unmapped query ID that already is a cohort ID (`identity_equal`, e.g.
+  GOOG/GOOGL, PARA, VTRS; 128 units). Bridged non-cohort targets and the 1,150 units
+  under unbridged legacy IDs are reported with totals by archive and ID prefix, never
+  assigned; unmapped rows record whether the bridge lacks the query ID or the
+  availability falls outside its span.
+- Outputs below a new `data/research` child: `records/` parts (every recorded article
+  with archive, query and cohort identity, translation status, evidence level and New
+  York publication year; about 50k-row groups); `coverage.parquet`; `security_years.parquet`
+  (each retained cohort security x New York calendar year in the window: query-returned
+  distinct stories on `(source family, provider_story_id)` with included before
+  after-cutoff precedence, included category counts, and interval-union covered time
+  split by evidence level and known-empty, plus unknown `no_proven_query` time; hours
+  before a bridge span opens are unknown, so 2019 rows carry at least four hours).
+  Records, coverage and unit summaries carry `derivation_status`, the provider symbol and
+  `query_identity_resolution` (query identity only). `_manifest.json` holds every pin,
+  implementation hash, unattributed totals in segments, days and distinct query IDs,
+  `known_empty_scope` (a provider-symbol query returned nothing, not proof of no issuer
+  news) and `attribution_status: not_established` (counts are stories returned by the
+  query, not issuer relevance).
+- Resumable leased run with the 90% guard, following `research/swing_return_training.py`:
+  immutable `_request.json`, atomically replaced `_checkpoint.json` listing completed
+  chunk-batch parts with hashes, resume only with an independently supplied checkpoint
+  SHA256, final manifest last. An empty checkpoint follows the request and the final
+  manifest is replaced atomically. Estimated 20-30+ minutes; measured bounded sample:
+  122 real units in 14.5 seconds at about 190 MB process memory.
+- Scoped extension of the closed reader (`7a9334c`), required by this slice's parity and
+  empty-evidence checks: expose the page count and add a verified-empty entry point
+  reusing its request and page verification. Existing results do not change.
+- Exit tests build archives through the real producer and derivation code: every status
+  and evidence level, ledger/reader parity failures, a unit crossing the cutoff,
+  identity-equal attribution, unbridged legacy IDs, corrected-security isolation,
+  unreached cohort securities, conservation of every work unit, overlapping coverage
+  rejection, story deduplication precedence, New Year boundary, part-size and chunk-order
+  stability, resume/tamper of every pin, lease/memory/atomicity.
+- Out of scope: SEC form metadata and missing filing/exhibit documents (next slice),
+  semantic content qualification, decision joins, features and fitting.
 
 September 21 bounded source inspection and reaction-measurement contract:
 

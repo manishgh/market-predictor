@@ -530,3 +530,39 @@ def test_decoded_size_checked_before_row_conversion(monkeypatch: pytest.MonkeyPa
     probe: Any = ParquetProbe()
     with pytest.raises(DataReadinessError, match="decoded Parquet batch"):
         list(inventory._event_batches(probe, ["text"], lambda: None))
+
+
+def _empty(args: dict[str, Any]) -> dict[str, Any]:
+    inputs = _sidecar(args)["inputs"]
+    return {"root": args["root"], "collection": COLLECTION, "chunk_id": inputs["chunk_id"],
+            "collection_request_sha256": inputs["collection_request_sha256"], "security_id": SECURITY, "ticker": "BRK.B",
+            "memory_check": lambda: None}
+
+
+def test_verified_empty_chunk_counts_producer_discards(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    args = _build(tmp_path, monkeypatch, [[_article(symbols=["MSFT"]), _article(id=2, headline=" ")]])
+    summary = inventory.verify_saved_alpaca_empty_chunk(**_empty(args))
+    assert summary["query_chunk_pages"] == 1 and summary["query_chunk_provider_records"] == 2
+    assert summary["query_chunk_discarded_records"] == {"clock": 0, "window": 0, "symbol": 1, "title": 1}
+    assert summary["known_empty_scope"] == "this_query_window_only" and summary["query_window_end_exclusive_utc"]
+    assert any(path.endswith("_request.json") for path in summary["source_files"])
+
+
+@pytest.mark.parametrize("case,message", [("admitted", "contains admitted"), ("early_terminal", "early-terminal"),
+    ("envelope", "envelope hash"), ("identity", "differs from its request work unit"), ("no_pages", "bounded saved pages")])
+def test_verified_empty_chunk_rejects_contradicting_evidence(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, case: str,
+                                                             message: str) -> None:
+    args = _build(tmp_path, monkeypatch, [[_article(symbols=["MSFT"])]])
+    empty = _empty(args)
+    if case == "admitted":
+        _repin_page(args, lambda page: page.update(news=[_article()]))
+    elif case == "early_terminal":
+        _repin_page(args, lambda page: page.update(next_page_token="more"))
+    elif case == "envelope":
+        _repin_page(args, lambda page: page.update(collected_at_utc="2025-01-01T00:00:00+00:00"), envelope=False)
+    elif case == "identity":
+        empty["security_id"] = "query:other"
+    else:
+        shutil.rmtree(_page_path(args).parent)
+    with pytest.raises(DataReadinessError, match=message):
+        inventory.verify_saved_alpaca_empty_chunk(**empty)

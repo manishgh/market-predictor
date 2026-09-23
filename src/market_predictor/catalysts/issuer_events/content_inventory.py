@@ -34,6 +34,7 @@ MAX_DECODED_BATCH_BYTES = 8 * 1024 * 1024
 MAX_DECODED_EVENT_BYTES = 128 * 1024 * 1024
 EVENT_BATCH_ROWS = 1
 MAX_EVENT_ROWS = 25_000
+MAX_EMPTY_CHUNK_PAGES = 16
 PROXY_POLICY = "provider_publication_proxy"
 _CLOCKS = ("published_at_utc", "provider_updated_at_utc", "first_seen_at_utc", "available_at_utc")
 _STRINGS = (
@@ -128,16 +129,18 @@ def _event_batches(parquet: pq.ParquetFile, columns: list[str], memory_check: Me
         del batch
 
 
-def _work_unit(root: Path, artifact: Path, inputs: dict[str, Any], memory_check: MemoryCheck) -> dict[str, Any]:
-    """Bind the chunk to the one request work unit whose query produced it."""
-    chunk, request = inputs.get("chunk_id"), inputs.get("collection_request_sha256")
+def _identity(chunk: Any, request: Any) -> tuple[str, str]:
     _require(isinstance(chunk, str) and re.fullmatch(r"[0-9a-f]{24}", chunk) is not None,
              "original sidecar lacks chunk identity")
     _require(isinstance(request, str) and re.fullmatch(r"[0-9a-f]{64}", request) is not None,
              "original sidecar lacks collection request identity")
-    _require(artifact.name == f"{chunk}.parquet", "original chunk artifact name mismatch")
+    return chunk, request
+
+
+def _work_unit(root: Path, collection: Path, chunk: str, request: str, memory_check: MemoryCheck) -> dict[str, Any]:
+    """Bind the chunk to the one request work unit whose query produced it."""
     memory_check()
-    path = artifact.parent.parent / "_request.json"
+    path = collection / "_request.json"
     raw = _bytes(path)
     payload = parse_strict_json_object(raw, label="original collection request")
     body = {key: value for key, value in payload.items() if key != "request_sha256"}
@@ -190,7 +193,7 @@ def _admission(item: dict[str, Any], unit: dict[str, Any]) -> tuple[str, pd.Time
         raise DataReadinessError("admitted provider update is outside exact UTC nanoseconds") from exc
 
 
-def _pages(root: Path, artifact: Path, inputs: dict[str, Any], unit: dict[str, Any], wanted: set[str],
+def _pages(root: Path, collection: Path, inputs: dict[str, Any], unit: dict[str, Any], wanted: set[str],
            memory_check: MemoryCheck) -> tuple[dict[str, Any], dict[str, tuple[Any, str, pd.Timestamp]], dict[str, Any]]:
     chunk, request = unit["chunk_id"], unit["collection_request_sha256"]
     declared: list[tuple[Path, str]] = []
@@ -199,7 +202,7 @@ def _pages(root: Path, artifact: Path, inputs: dict[str, Any], unit: dict[str, A
             continue
         _require(isinstance(pin, str), "invalid page pin")
         path = inside(root, key)
-        _require(path.parent == artifact.parent.parent / "raw_pages" / chunk
+        _require(path.parent == collection / "raw_pages" / chunk
                  and re.fullmatch(r"page_[0-9]{6}\.json", path.name) is not None, "invalid declared raw-page path")
         declared.append((path, pin))
     declared.sort()
@@ -261,7 +264,7 @@ def _pages(root: Path, artifact: Path, inputs: dict[str, Any], unit: dict[str, A
                 _require(match["item"] == item, "conflicting article hash match")
                 match["locators"].append({"page_path": relative, "page_sha256": pin, "news_index": position})
     return matches, retained, {"source_files": files, "query_chunk_scope": "whole_query_window_not_inventory_window",
-        "query_chunk_provider_records": records, "query_chunk_discarded_records": discarded,
+        "query_chunk_pages": len(declared), "query_chunk_provider_records": records, "query_chunk_discarded_records": discarded,
         "query_chunk_admitted_records": admitted, "query_chunk_admitted_stories": len(retained),
         "query_chunk_admitted_versions": len(versions),
         "query_chunk_duplicate_version_occurrences": admitted - len(versions),
@@ -329,7 +332,10 @@ def inspect_saved_alpaca_content(*, root: Path, event_artifact: SourcePin, event
     inputs = manifest.get("inputs")
     if not isinstance(inputs, dict):
         raise DataReadinessError("missing original event inputs")
-    unit = _work_unit(root, artifact, inputs, memory_check)
+    chunk, request = _identity(inputs.get("chunk_id"), inputs.get("collection_request_sha256"))
+    _require(artifact.name == f"{chunk}.parquet", "original chunk artifact name mismatch")
+    collection = artifact.parent.parent
+    unit = _work_unit(root, collection, chunk, request, memory_check)
     _require(unit["security_id"] == security_id and unit["ticker"] == query_ticker,
              "query identity differs from its request work unit")
     _require(type(manifest.get("rows")) is int and 0 <= manifest["rows"] <= MAX_EVENT_ROWS, "event row limit/declaration invalid")
@@ -347,7 +353,7 @@ def inspect_saved_alpaca_content(*, root: Path, event_artifact: SourcePin, event
             _require(isinstance(raw_hash, str) and re.fullmatch(r"[0-9a-f]{64}", raw_hash) is not None,
                      "invalid canonical raw hash")
             wanted.add(raw_hash)
-    matches, retained, diagnostics = _pages(root, artifact, inputs, unit, wanted, memory_check)
+    matches, retained, diagnostics = _pages(root, collection, inputs, unit, wanted, memory_check)
     rows: list[dict[str, Any]] = []
     event_ids: set[str] = set()
     stories: set[str] = set()
@@ -393,3 +399,30 @@ def inspect_saved_alpaca_content(*, root: Path, event_artifact: SourcePin, event
         "production_eligible": False, "training_eligible": False, "serving_eligible": False,
         "attribution_status": "not_established_by_content_inventory"}
     return result, summary
+
+
+def verify_saved_alpaca_empty_chunk(*, root: Path, collection: Path, chunk_id: str, collection_request_sha256: str,
+                                    security_id: str, ticker: str, memory_check: MemoryCheck) -> dict[str, Any]:
+    """Verify a producer-empty query chunk from its saved pages; the caller owns the lease.
+
+    Page envelopes, request/chunk binding and pagination are verified and the producer's
+    acceptance filter must admit nothing. These pages carry no external pin: they are
+    bound to the pinned request, so zero news is known only for this query window.
+    """
+    root = root.resolve()
+    chunk, request = _identity(chunk_id, collection_request_sha256)
+    collection = inside(root, collection)
+    unit = _work_unit(root, collection, chunk, request, memory_check)
+    _require(unit["security_id"] == security_id and unit["ticker"] == canonical_symbol(normalized_ticker(ticker)),
+             "query identity differs from its request work unit")
+    pages = sorted((collection / "raw_pages" / chunk).glob("page_*.json"))
+    _require(0 < len(pages) <= MAX_EMPTY_CHUNK_PAGES, "producer-empty chunk requires bounded saved pages")
+    inputs = {_relative(root, page): hashlib.sha256(_bytes(page)).hexdigest() for page in pages}
+    _, retained, diagnostics = _pages(root, collection, inputs, unit, set(), memory_check)
+    _require(not retained, "producer-empty chunk contains admitted provider items")
+    diagnostics["source_files"][unit["request_path"]] = unit["request_file_sha256"]
+    return {**diagnostics, "chunk_id": chunk, "collection_request_sha256": request, "query_security_id": security_id,
+            "query_ticker": unit["ticker"], "query_provider_symbol": unit["provider_symbol"],
+            "query_window_start_utc": unit["start"].isoformat(), "query_window_end_exclusive_utc": unit["end"].isoformat(),
+            "include_content_requested": True, "evidence": "saved_pages_bound_to_request_not_externally_pinned",
+            "known_empty_scope": "this_query_window_only"}

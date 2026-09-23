@@ -282,6 +282,26 @@ prove direct-issuer relevance. This report is not cohort-wide coverage, SEC cont
 qualification, a reaction join or training admission. Existing output directories are
 rejected rather than overwritten.
 
+`market-predictor-research inspect-issuer-content-cohort --config
+configs/swing_issuer_content_cohort_inventory.json --config-sha256 <pin> --output
+data/research/<new-name>` inventories every initial-fit work unit of the early/later
+derivations and the corrections archive (publisher
+`research/issuer_content_cohort_inventory.py`). The config pins the monthly news
+config, whose sources are verified by the existing `issuer_news_preparation._source`,
+plus the identity alignment manifest and the approved population audit file. Observed
+chunks use the single-chunk reader with ledger parity (canonical rows, window and
+producer statistics); known-empty chunks are verified from their saved page; the
+derivation-unavailable and corrections chunks use raw-manifest artifact pins with
+observed sidecars bound to that artifact and request. Articles and coverage are
+translated with `map_news_relations`/`map_news_coverage`; only bridged cohort targets
+and query IDs that already are cohort IDs are attributed, everything else is totalled
+as unattributed. Outputs: `parts/` article records with per-unit summaries,
+`coverage.parquet`, `security_years.parquet` (query-returned stories, content
+categories and covered/unknown days per cohort security and New York year) and
+`_manifest.json`. An interrupted run resumes only with `--resume-checkpoint-sha256` of
+its `_checkpoint.json`; a completed output is immutable. Counts are stories returned by
+issuer queries, not issuer relevance or content qualification.
+
 ## Source Roles
 
 ### Retained Holding-Identity Preflight

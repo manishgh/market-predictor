@@ -70,6 +70,7 @@
     "extract-sp500-official-events",
     "finalize-edge-issuer-event-precision-audit",
     "freeze-edge-rebuild-temporal-manifest",
+    "inspect-issuer-content-cohort",
     "inspect-saved-issuer-content",
     "materialize-edge-rebuild-swing-panel",
     "materialize-swing-fixed-holdings",

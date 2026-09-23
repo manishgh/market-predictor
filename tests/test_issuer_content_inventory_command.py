@@ -421,3 +421,28 @@ def test_absolute_source_paths_are_recorded_relative_to_root(arguments: dict[str
 def test_manifest_records_canonical_query_ticker(arguments: dict[str, Any], inspection: Mock) -> None:
     arguments["ticker"] = "brk.b"
     assert inventory.publish_saved_content_inventory(**arguments)["query_ticker"] == "BRK-B"
+
+
+@pytest.mark.parametrize("resume", [None, "c" * 64])
+def test_cohort_cli_wires_config_resume_and_compact_report(monkeypatch: pytest.MonkeyPatch, resume: str | None) -> None:
+    report = dict(status="complete_inventory_only", records_rows=3, manifest_sha256="f" * 64, training_eligible=False,
+                  serving_eligible=False, totals={"test_only": 1})
+    publisher = Mock(return_value=report)
+    monkeypatch.setattr(commands, "publish_cohort_content_inventory", publisher)
+    args = ["inspect-issuer-content-cohort", "--config", "configs/cohort.json", "--config-sha256", "d" * 64,
+            "--output", "data/research/cohort"] + (["--resume-checkpoint-sha256", resume] if resume else [])
+    result = CliRunner().invoke(_app(), args)
+    assert result.exit_code == 0, result.exception
+    publisher.assert_called_once_with(root=Path("."), config=Path("configs/cohort.json"), config_sha256="d" * 64,
+                                      output=Path("data/research/cohort"), resume_checkpoint_sha256=resume)
+    assert json.loads(result.stdout) == {key: report[key] for key in (
+        "status", "records_rows", "manifest_sha256", "training_eligible", "serving_eligible")}
+
+
+@pytest.mark.parametrize(("error", "exit_code"), [(HeavyJobBusyError("lease busy"), 75),
+    (DataReadinessError("parity differs"), 2), (OSError("read failure"), 2), (MemoryBudgetError("memory limit"), 2)])
+def test_cohort_cli_expected_failure_codes(monkeypatch: pytest.MonkeyPatch, error: Exception, exit_code: int) -> None:
+    monkeypatch.setattr(commands, "publish_cohort_content_inventory", Mock(side_effect=error))
+    result = CliRunner().invoke(_app(), ["inspect-issuer-content-cohort", "--config", "c.json", "--config-sha256",
+                                         "d" * 64, "--output", "data/research/cohort"])
+    assert result.exit_code == exit_code and str(error) in result.output
