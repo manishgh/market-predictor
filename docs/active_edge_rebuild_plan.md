@@ -443,9 +443,121 @@ request `7510280c768608da2ebef841de46b4ec2aee4754f63df17230123cb437b24e32`, chec
 - Legacy-proven attribution starts at the membership effective start, a retrospective
   clock; records carry each proof's evidence-complete date. Research evidence only.
 
-Next slice (design must be frozen and reviewed before code): SEC form-metadata counts
-per cohort security and New York year from the pinned SEC archive, and enumeration of
-filing/exhibit documents that are genuinely missing. Content qualification follows.
+Current slice (`in_progress`; design reviewed and consolidated September 24):
+**SEC form inventory and filing-document collection**. Count the SEC filing metadata
+already saved for every approved cohort security and New York year, list which filing
+documents are saved, and (user decision September 24: collect now, leave nothing for
+later) download the documents of 8-Ks carrying item 2.02, 7.01 or 8.01.
+
+- Measured evidence (read-only, September 24): the pinned archive
+  `data/external/sec_filings_20190709_20260708_v1` verifies with the canonical
+  `load_sec_filing_collection` (624 issuers, 877 saved EDGAR submissions responses).
+  All 689,467 canonical events reproduce their `raw_sha256` from the saved raw rows;
+  no saved page listing overlapping the window was left unfetched. The events drop
+  fields the raw rows keep: 8-K item codes, `primaryDocDescription`, filing `size` and
+  XBRL flags. All in-window 8-Ks carry item codes; for cohort securities there are
+  22,067 accessions with 2.02 (9,964), 7.01 (7,453) or 8.01 (7,716). Availability is
+  acceptance plus five minutes or the next XNYS open for late submissions; EDGAR's
+  acceptance clock is genuine UTC (99.68% of non-ownership filings accepted by 17:30 ET
+  carry that New York day's filing date). First observation was August 2, 2026, so all SEC timing is
+  retrospective research evidence. 585 of 586 cohort securities have an SEC identity
+  relation (591 rows, 187 partial; 43 reviewed overrides). Acceptance is often later
+  than the event: 6.2% of cohort 2.02, 21.4% of 7.01 and 36.7% of 8.01 filings are
+  accepted a day or more after their report date. 91,065 in-window raw rows are forms
+  the collector did not request. Saved documents: ten official-document collections
+  (51 corporate-action documents) and the identity-evidence store
+  `data/raw/sec_identity_evidence_20260802` (61 listed documents over 57 accessions,
+  39 of them in-window events); no earnings release is saved. Whole filings are large (cohort 2.02
+  filings total 25.5 GB by EDGAR `size`).
+- Byte-frozen: `sources/sec.py`, `sources/http.py` and `sources/official_documents.py`
+  are in closed evidence's pinned import closure; they are only imported.
+  `catalysts/sec_filings/collection.py` is unpinned and gains the replay.
+
+Inventory (`inspect-sec-form-inventory`):
+
+- Metadata recovery replays the unchanged `SecSource.fetch_cik_filing_history`, one
+  issuer at a time, through an archive-backed client that serves each saved body with
+  its recorded URL, clock and headers; each issuer's records must equal its canonical
+  events by accession identity and `raw_sha256`, so a missing overlapping page, a
+  `filingCount` mismatch or a conflicting duplicate fails. `_rows` on the served
+  bodies supplies only the extra fields and totals of unrequested forms.
+- Scope: events with availability in [2019-07-09 00:00 UTC, 2024-05-28 22:00 UTC],
+  the same inclusive `FIRST`/`LAST_INITIAL_FIT_CUTOFF` rule as the news inventory;
+  accepted-before-but-available-after events are counted separately. Each event is
+  attributed to every cohort security whose pinned SEC identity relation (file equal to
+  the identity alignment manifest's pin, semantic hash equal to the collection
+  request's via `_relation_sha256`) covers its availability and was itself available
+  by then. Share-class duplicates are flagged and never double counted in issuer
+  totals. For `cik:` cohort IDs, same-CIK filings outside the relation are reported as
+  `cik_identity_outside_relation`, separately from unknown identity; neither is
+  attributed. Inside a relation, a zero for a requested form is a verified zero.
+- Each filing row carries form, item codes, report date, acceptance and availability
+  clocks with the availability rule and `retrospective` label, acceptance lag in XNYS
+  sessions after the report date, session position (pre-open, intraday, after-close,
+  non-session), identity policy, share-class flag, EDGAR size, description, XBRL flags
+  and document status. A lagged 8-K is a late record of an event; its first public time
+  must come from other evidence, never from `report_date`. Counts use EDGAR's own form
+  names and item codes, split into same-day and lagged filings; no invented families.
+- Document status: official-document collections are verified from their own pinned
+  `_request.json` (embedded inventory checked against `inventory_sha256`) with the
+  unchanged `verify_official_document_collection`; the identity-evidence store through
+  its pinned inventory CSVs and per-file hashes (`saved_without_receipt`). Matching is
+  by CIK and accession: `primary_document_saved`, `other_filing_document_saved`,
+  `saved_without_receipt` or `not_saved`.
+- Outputs: `filings.parquet`, `security_years.parquet` (per security and New York year:
+  counts by form and item code, relation-covered, CIK-outside-relation and unknown
+  days, document status counts) and `_manifest.json`. The same command in `sealed` mode
+  lists the later-window filings (after the initial-fit cutoff to the archive end,
+  covering validation and historical test) with no per-security statistics, marked
+  sealed until qualification rules are frozen on initial-fit evidence only.
+
+Collector (`collect-sec-filing-documents`, new `catalysts/sec_filings/document_collection.py`):
+
+- Work list: the pinned inventory's cohort 8-K and 8-K/A accessions carrying 2.02,
+  7.01 or 8.01 (initial fit), and separately the sealed later-window list into its own
+  store. Phase one fetches each filing's EDGAR detail page (`{accession}-index.htm`).
+  It is parsed with BeautifulSoup `html.parser` (already a dependency): exactly one
+  document table selected by its exact header, links inside that accession's folder,
+  inline-viewer links resolved to their document; its header (accepted time, filing
+  date, period of report, items) must match the inventory row and its primary document
+  the saved `primaryDocument`, otherwise a recorded rejection. Retrospective header
+  fields (current name, SIC, address) are never point-in-time attributes.
+- Phase two fetches the primary document (its text holds the item disclosures) and
+  every `EX-99` exhibit of that table; never XBRL, graphics or whole-submission files.
+  Each document unit is derived from a verified phase-one receipt and records the index
+  body hash and parsed table row; content type is recorded, and PDF or image exhibits
+  stay unqualified text. Each accession keeps its own clock; amendments are separate.
+- Requests use `SecSource` with a dedicated `SecRequestGovernor` (rate and cooldowns in
+  `_request.json`) and `get_bytes_with_metadata(retries=1, allow_redirects=False,
+  raise_for_status=False, maximum_body_bytes=16 MiB)`. Outcomes: archived (200 and
+  accepted); terminal (404/410, oversize by the client's exact error, index or header
+  rejection); stop-and-resume (403/429, recorded, run ends); retryable (5xx or
+  connection errors) up to three attempts per unit across runs; at most one archived
+  attempt per unit.
+- Storage: immutable shards (a zip of bodies named by accession, sequence and body
+  hash, plus a parquet of self-hashed receipt rows), staged then renamed; an atomically
+  replaced checkpoint lists shard hashes; a resume re-hashes shards and final
+  verification checks every member. An immutable self-hashed `_request.json` binds the
+  inventory manifest, work-list hash and governor settings. Heavy-job lease for the
+  whole run (initial fit about four hours), memory guard every 500 requests. Retrieval
+  time (2026) is first observation, never historical availability; EDGAR filings are
+  immutable after acceptance.
+- The completion manifest lists, per selected filing and document, archived, failed or
+  rejected outcomes; filings outside the selected items stay `not_requested`.
+
+- Exit tests: inventory fixtures written through the real collector path with an
+  HTTP-level fake SEC client; replay with tampered, missing, duplicated and extra raw
+  rows, a `filingCount` mismatch and an unfetched overlapping page; relation clipping,
+  late relation availability, partial relations, a security with none and CIK outside
+  relation; share classes; window, inclusive cutoff and late-submission boundaries;
+  lag and session position; item parsing; document matching including the evidence
+  store and an unverifiable collection; issuer-order stability; sealed mode. Collector:
+  real EDGAR detail pages from a small leased pilot (2019 without inline XBRL, 2024
+  with viewer links, 8-K/A, several EX-99, none) committed as fixtures; header and
+  primary-document mismatches; foreign and malformed links; each outcome state;
+  shard tampering; resume; stop on 403/429; no request outside the work list in either
+  phase; pins, lease and immutability.
+- Out of scope: content qualification, event meaning, features and fitting.
 
 September 21 bounded source inspection and reaction-measurement contract:
 

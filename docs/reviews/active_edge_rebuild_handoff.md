@@ -874,14 +874,20 @@ feature profile, using saved initial-fit evidence before requesting any download
 Single-chunk verification (`7a9334c`), the cohort news inventory (`177f6f3`) and the
 legacy identity proofs with the inventory rerun (`4844b3f`) are complete; do not
 rebuild them. Content qualification uses the rerun inventory
-(`..._with_legacy_proofs`) and must keep the weaker CUSIP-chain basis separable. Next slice: freeze and independently review SEC
-form-metadata counts per cohort security and New York year from the pinned SEC archive,
-plus enumeration of genuinely missing filing/exhibit documents, then implement.
-The user chose (September 23) to prove the 141 unbridged legacy query identities first;
-that slice is closed, so the SEC slice is next.
+(`..._with_legacy_proofs`) and must keep the weaker CUSIP-chain basis separable.
+Current slice: SEC form inventory and filing-document collection. Its design is
+reviewed and consolidated in the plan (September 24; no blockers from either
+reviewer). The user decided on September 24 to collect now and leave nothing for
+later: documents of cohort 8-Ks carrying item 2.02, 7.01 or 8.01 in the initial fit
+(22,067 accessions: EDGAR detail page, primary document and every EX-99 exhibit), and
+the same selection after the initial-fit cutoff into a sealed store that is not read
+or summarized until qualification rules are frozen on initial-fit evidence. Implement
+the inventory first (replay through the unchanged SEC client), then the collector
+(pilot of 5-8 accessions for real test fixtures, then the full initial-fit run of
+about four hours under the shared lease, then the sealed run).
 Freeze content qualification with development-only precision and recall review before
 joining the completed-session measurement into the last profile.
-No downloads, final feature selection or fitting belong to that inventory checkpoint.
+No final feature selection or fitting belongs to the SEC slice.
 The baseline and relationship profiles are already trained (four of six frozen
 specifications); never rerun or tune them. Freeze source fields, event availability,
 issuer matching, completed reaction windows, exact columns and missingness before
