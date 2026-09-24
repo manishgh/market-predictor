@@ -1,16 +1,68 @@
 # Active Edge Rebuild Handoff
 
 Status: active
-Last updated: 2026-09-23
+Last updated: 2026-09-24
 Repository: `C:\project\market-predictor`
 Branch: `unified-swing-product`
-Last completed implementation checkpoint: `177f6f3` (pushed; initial-fit cohort news content inventory).
+Last completed implementation checkpoint: `4844b3f` (pushed; legacy news-query identity proofs).
 Last completed model-training checkpoint: relationship run on `a8be7cb` (artifact pins below).
 Baseline model-training checkpoint: `07963cc` (pushed; unchanged).
 Source-collection checkpoint: `19698d6` (pushed).
 The combined historical outcome/features delivery is verified and committed.
 
 ## Current State
+
+September 24 slice `4844b3f` is pushed and its proof run is complete: legacy
+news-query identity proofs, which the user chose on September 23 to finish before
+content qualification. Command `prove-legacy-query-identities`; leased immutable
+publisher `research/legacy_query_identity_proofs.py`; pure builder and translation
+`universe/legacy_query_identity.py`; config
+`configs/swing_legacy_query_identity_proofs.json` (SHA256
+`25852b8a748d95ffa33dc0ba952767ad44b4b59a3b77927a6538363d4fef43c6`). Artifact
+`data/research/swing_legacy_query_identity_proofs`, manifest
+`84ffb55398f3db016ce9e0af9dea8aa9de54c559f5d9a1959cca2396d92712d3`, log
+`data/runtime/swing_legacy_query_identity_proofs.log`, exit 0; it is immutable.
+165 legacy IDs are proven in 184 rows over 165 target securities, with no partly
+proven spell: 110 `company_ticker_hash_reproduced`, 5 `sp500_spell_events_reproduced`
+(OGN, PENN, POOL and post-window AMTM and SOLS), 22 `cik_equal` (BRK-B, BF-B and 20 additions
+after May 2024) and 28 weaker `cusip_chain_end_ticker_match`. Five are rejected with
+reasons: CUK, FLT and FBHS/FBIN have no candidate; Fiserv `cusip:337738108`
+contradicts Alpaca transition `45fd1861` (FISV to FI on 2023-06-07); EchoStar is a
+corrected security. All 141 previously unbridged initial-fit query IDs are covered:
+137 proven, 4 rejected. The target membership authority carries latest tickers back
+to 2018, so no rule attributes by comparing historical tickers with it. The minting
+parser `symbol_changes_from_transitions` drops old tickers ending in V as when-issued
+symbols, which is how the legacy build missed Fiserv's change; the chain check reads
+the pinned transitions directly. Proof availability is the membership effective start
+(`retrospective_membership_effective_proxy`); proofs are research evidence only.
+
+Review: the senior ML and senior Python/.NET reviewers reviewed the design; one
+blocker was accepted (the frozen ticker-uniqueness rule would have given Trane's IR
+news to Ingersoll Rand) and replaced. Closure reviews found no blockers; the major
+finding (a CUSIP match on a rejoined target's earlier row) and the minor findings
+(closed-row deletion evidence, share-class guard wording, transition-file origin,
+evidence-date definition, rejection-reason validation, remainder totals, inventory
+clock labelling, missing differential branches and guard test) are fixed. The ML
+reviewer applied both passes to the completed inventory: 59,487 of 60,592 unresolved
+records become legacy-proven, the 1,105 left all belong to rejected IDs, and no new
+attributed-coverage overlap appears. Verification: 204 targeted tests (new builder,
+publisher, inventory, command and CLI tests plus the protected bridge tests), Ruff
+and strict mypy on the eight changed Python files, and a read-only real-bridge parity
+run (bridge 445 rows, SHA256 `d3ab16ed...`): the generic passes equal
+`map_news_relations`/`map_news_coverage` on all 5,736 coverage segments and 469,668
+saved records (1,405.7 seconds). No full suite, download or fit ran.
+
+Open observation outside this slice, not investigated: the target authority shows
+retained `cik:0001699150` (the new Ingersoll Rand) as an S&P member with ticker IR from
+2018-05-29, while the legacy transitions show IR belonged to Ingersoll-Rand plc (now
+Trane) until 2020-03-02, so that security's 2018-2020 cohort membership and prices may
+belong to another company.
+
+In progress: the full cohort inventory rerun with
+`configs/swing_issuer_content_cohort_inventory_with_legacy_proofs.json` (SHA256
+`315ae1afb7cea133e4ce27efa63b3f8b002d6a45a2aa549877b45341780b422f`) into
+`data/research/swing_initial_fit_issuer_content_inventory_with_legacy_proofs`. The
+completed inventory below and its config stay immutable historical evidence.
 
 September 23 slice `177f6f3` is pushed and its real run is complete: the initial-fit
 cohort news content inventory. Command `inspect-issuer-content-cohort`; publisher
@@ -803,8 +855,9 @@ Single-chunk verification (`7a9334c`) and the cohort news inventory (`177f6f3`) 
 complete; do not rebuild them. Next slice: freeze and independently review SEC
 form-metadata counts per cohort security and New York year from the pinned SEC archive,
 plus enumeration of genuinely missing filing/exhibit documents, then implement.
-Open user decision: whether to prove identities for the 141 unbridged legacy query IDs
-(evidence-backed identity work, never ticker guessing) before content qualification.
+The user chose (September 23) to prove the 141 unbridged legacy query identities first:
+proofs are published; the inventory rerun with them must complete and be recorded
+before the SEC slice starts.
 Freeze content qualification with development-only precision and recall review before
 joining the completed-session measurement into the last profile.
 No downloads, final feature selection or fitting belong to that inventory checkpoint.

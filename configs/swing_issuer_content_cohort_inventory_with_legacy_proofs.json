@@ -1,0 +1,19 @@
+{
+  "schema": "market_predictor.issuer_content_cohort_inventory_config",
+  "monthly_news_config": {
+    "path": "configs/swing_initial_fit_monthly_news.json",
+    "sha256": "2a9ac2ae30bcddc75b89ce713d811a8d8fe59e3ed186d5e90f81115df901b2b1"
+  },
+  "identity_manifest": {
+    "path": "data/research/swing_initial_fit_source_proven_news/_manifest.json",
+    "sha256": "e150475190fe0efbafecb115cd5f08bb7acb58576b2661b680fad832ffc00d98"
+  },
+  "legacy_identity_proofs": {
+    "path": "data/research/swing_legacy_query_identity_proofs/_manifest.json",
+    "sha256": "84ffb55398f3db016ce9e0af9dea8aa9de54c559f5d9a1959cca2396d92712d3"
+  },
+  "approved_population": {
+    "path": "data/reports/swing_research_cohort/approved_research_population_audit.json",
+    "sha256": "c2a7e89b6c360f7ddd704dcd41d4fd8fd6b1b698f1bf7caab9d0de72042d410f"
+  }
+}

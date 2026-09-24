@@ -329,7 +329,8 @@ filing/exhibit documents that are genuinely missing. The unbridged legacy identi
 above needs its own evidence-backed identity proof, never ticker guessing; whether to
 pursue it before content qualification is a user decision recorded in the handoff.
 
-Current slice (`in_progress`; design reviewed and consolidated September 23):
+Current slice (`in_progress`; design reviewed September 23; implementation `4844b3f`
+pushed and proofs published September 24; the inventory rerun remains):
 **legacy issuer-query identity proofs**. The user decided on September 23 to prove
 these identities before content qualification. Problem: 141 legacy query IDs (113
 `sp500-historical`, 26 `cusip`, 2 `cik:...:ticker`) hold 60,590 initial-fit records that
