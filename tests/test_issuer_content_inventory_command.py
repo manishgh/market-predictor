@@ -446,3 +446,26 @@ def test_cohort_cli_expected_failure_codes(monkeypatch: pytest.MonkeyPatch, erro
     result = CliRunner().invoke(_app(), ["inspect-issuer-content-cohort", "--config", "c.json", "--config-sha256",
                                          "d" * 64, "--output", "data/research/cohort"])
     assert result.exit_code == exit_code and str(error) in result.output
+
+
+def test_proof_cli_wires_config_and_compact_report(monkeypatch: pytest.MonkeyPatch) -> None:
+    report = dict(status="complete", totals={"proof_rows": 2}, manifest_sha256="f" * 64, training_eligible=False,
+                  serving_eligible=False, source_files={"test_only": "a" * 64})
+    publisher = Mock(return_value=report)
+    monkeypatch.setattr(commands, "publish_legacy_query_identity_proofs", publisher)
+    result = CliRunner().invoke(_app(), ["prove-legacy-query-identities", "--config", "configs/proofs.json",
+                                         "--config-sha256", "d" * 64, "--output", "data/research/proofs"])
+    assert result.exit_code == 0, result.exception
+    publisher.assert_called_once_with(root=Path("."), config=Path("configs/proofs.json"), config_sha256="d" * 64,
+                                      output=Path("data/research/proofs"))
+    assert json.loads(result.stdout) == {key: report[key] for key in (
+        "status", "totals", "manifest_sha256", "training_eligible", "serving_eligible")}
+
+
+@pytest.mark.parametrize(("error", "exit_code"), [(HeavyJobBusyError("lease busy"), 75),
+    (DataReadinessError("lineage differs"), 2), (FileExistsError("immutable proofs"), 2)])
+def test_proof_cli_expected_failure_codes(monkeypatch: pytest.MonkeyPatch, error: Exception, exit_code: int) -> None:
+    monkeypatch.setattr(commands, "publish_legacy_query_identity_proofs", Mock(side_effect=error))
+    result = CliRunner().invoke(_app(), ["prove-legacy-query-identities", "--config", "c.json", "--config-sha256",
+                                         "d" * 64, "--output", "data/research/proofs"])
+    assert result.exit_code == exit_code and str(error) in result.output

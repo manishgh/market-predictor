@@ -17,14 +17,17 @@ from market_predictor.core.errors import DataReadinessError
 from market_predictor.evidence.hashing import json_sha256
 from market_predictor.heavy_jobs import HeavyJobBusyError, heavy_job_lease
 from market_predictor.research import issuer_content_cohort_inventory as cohort
+from market_predictor.research.legacy_query_identity_proofs import SCHEMA as PROOF_SCHEMA
 from market_predictor.swing.contracts.research_cohort import ResearchSecurityExclusion, SwingResearchCohort
 from market_predictor.swing.datasets.issuer_news_preparation import _source
 from market_predictor.universe.issuer_news_identity import map_news_coverage, map_news_relations
+from market_predictor.universe.legacy_query_identity import PROOF_COLUMNS
 from tests.support.alpaca_news_archive import article, collect, corrected_spec, derive, saved_authority
 
 AAA, BBB, CCC, DDD, EEE, FFF = (("AAA", "cik:0000000001:ticker:AAA"), ("BBB", "cik:0000000002"),
     ("CCC", "sp500-historical:ccc"), ("DDD", "cik:0000000004:ticker:DDD"), ("EEE", "cik:0000000005:ticker:EEE"),
     ("FFF", "cik:0000000006"))
+GGG = ("GGG", "sp500-historical:ggg")
 COHORT = ("cik:0000000001", "cik:0000000002", "cik:0000000005", "cik:0000000006", "cik:0000000007")
 
 
@@ -38,7 +41,8 @@ def _early_news(symbol: str, start: datetime, _end: datetime) -> list[list[dict[
              "BBB": [[article(201, "2019-09-01T15:00:00Z", symbols=["BBB"])]],
              "CCC": [[article(301, "2019-09-02T15:00:00Z", symbols=["CCC"])]],
              "DDD": [[article(401, "2019-09-03T15:00:00Z", symbols=["DDD"])]],
-             "EEE": [[article(501, "2019-09-04T15:00:00Z", symbols=["EEE"])]]}
+             "EEE": [[article(501, "2019-09-04T15:00:00Z", symbols=["EEE"])]],
+             "GGG": [[article(801, "2019-10-01T15:00:00Z", symbols=["GGG"])]]}
     return items.get(symbol, [])
 
 
@@ -72,6 +76,30 @@ def _bridge(root: Path) -> dict[str, str]:
     return {"path": manifest.relative_to(root).as_posix(), "sha256": file_sha256(manifest)}
 
 
+def _proofs(root: Path, identity: dict[str, str], *, bridge_sha256: str | None = None) -> dict[str, str]:
+    """Published-shape legacy proofs: CCC reaches cohort cik:7 from August 2019, GGG a non-cohort security."""
+    start, august = pd.Timestamp("2019-07-09T04:00:00Z"), pd.Timestamp("2019-08-01T04:00:00Z")
+    frame = pd.DataFrame([
+        {"source_security_id": CCC[1], "ticker": "CCC", "target_security_id": "cik:0000000007", "effective_from_utc": august,
+         "effective_to_utc": pd.NaT, "available_at_utc": august, "legacy_spell_from_utc": start, "legacy_spell_to_utc": pd.NaT,
+         "proof_kind": "company_ticker_hash_reproduced", "evidence_json": "{}", "evidence_complete_date": "2019-06-03",
+         "proof_row_sha256": "1" * 64},
+        {"source_security_id": GGG[1], "ticker": "GGG", "target_security_id": "cik:0000000009", "effective_from_utc": start,
+         "effective_to_utc": pd.NaT, "available_at_utc": start, "legacy_spell_from_utc": start, "legacy_spell_to_utc": pd.NaT,
+         "proof_kind": "cusip_chain_end_ticker_match", "evidence_json": "{}", "evidence_complete_date": "2026-07-08",
+         "proof_row_sha256": "2" * 64}], columns=PROOF_COLUMNS)
+    for column in ("effective_from_utc", "effective_to_utc", "available_at_utc", "legacy_spell_from_utc", "legacy_spell_to_utc"):
+        frame[column] = pd.to_datetime(frame[column], utc=True)
+    path = root / "data/research/proofs/proofs.parquet"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    frame.to_parquet(path, index=False)
+    manifest = path.parent / "_manifest.json"
+    manifest.write_text(json.dumps({"schema": PROOF_SCHEMA, "status": "complete", "proofs_sha256": file_sha256(path),
+        "availability_basis": "retrospective_membership_effective_proxy",
+        "source_files": {identity["path"]: bridge_sha256 or identity["sha256"]}}), encoding="utf-8")
+    return {"path": manifest.relative_to(root).as_posix(), "sha256": file_sha256(manifest)}
+
+
 def _population(root: Path) -> Path:
     """A valid approved-population audit for the real cohort loader, with one pinned source file."""
     source = root / "data/reports/population_source.txt"
@@ -93,7 +121,7 @@ def _population(root: Path) -> Path:
 
 def _world(root: Path, monkeypatch: pytest.MonkeyPatch, *, corrected: tuple[tuple[str, str], ...] = (FFF,)) -> dict[str, Any]:
     root.mkdir(parents=True, exist_ok=True)
-    early = collect(root, monkeypatch, "early_news", [AAA, BBB, CCC, DDD, EEE], _early_news,
+    early = collect(root, monkeypatch, "early_news", [AAA, BBB, CCC, DDD, EEE, GGG], _early_news,
                     start=date(2019, 7, 9), end=date(2020, 7, 8), chunk_days=183)
     later = collect(root, monkeypatch, "later_news", [AAA, BBB], _later_news,
                     start=date(2023, 7, 11), end=date(2024, 7, 10), chunk_days=366)
@@ -107,9 +135,10 @@ def _world(root: Path, monkeypatch: pytest.MonkeyPatch, *, corrected: tuple[tupl
     monthly.write_text(json.dumps({"sources": sources}), encoding="utf-8")
     population = _population(root)
     config = root / "configs/cohort.json"
+    identity = _bridge(root)
     config.write_text(json.dumps({"schema": cohort.CONFIG_SCHEMA,
         "monthly_news_config": {"path": "configs/monthly.json", "sha256": file_sha256(monthly)},
-        "identity_manifest": _bridge(root),
+        "identity_manifest": identity, "legacy_identity_proofs": _proofs(root, identity),
         "approved_population": {"path": "data/reports/population.json", "sha256": file_sha256(population)}}), encoding="utf-8")
     return {"root": root, "config": config, "config_sha256": file_sha256(config)}
 
@@ -143,15 +172,20 @@ def test_statuses_attribution_coverage_and_years(world: dict[str, Any]) -> None:
     totals = report["totals"]
     assert totals["units"] == {"corrected/observed/artifact_pinned_sidecar_observed": 1,
         "corrected/observed_empty/pages_verified_empty": 1, "early/observed/derivation_unavailable_raw_pinned": 1,
-        "early/observed/sidecar_pinned": 5, "early/observed_empty/pages_verified_empty": 4,
+        "early/observed/sidecar_pinned": 6, "early/observed_empty/pages_verified_empty": 5,
         "later/observed/sidecar_pinned": 1, "later/observed_empty/pages_verified_empty": 1}
     assert totals["derivation_unavailable"] == {"old_attribution_or_sentiment_not_published": 1}
-    assert totals["cohort_securities_with_proven_query"] == 4 and totals["cohort_securities_without_proven_query"] == 1
+    assert totals["cohort_securities_with_proven_query"] == 5 and totals["cohort_securities_without_proven_query"] == 0
     # Story 103 is attributed at its availability while its publication precedes the bridge span.
-    assert totals["bridged_included_records_outside_their_coverage_segment"] == 1
-    assert {key.split("/")[1] for key in totals["unattributed_records"]} == {"bridged_non_cohort", "no_proven_identity"}
-    # CCC and DDD never resolve; AAA, DDD and EEE queries also start before their bridge span opens.
-    assert totals["unattributed_query_ids"] == {"bridged_non_cohort": 1, "no_proven_identity": 1, "outside_bridge_span": 3}
+    assert totals["translated_included_records_outside_their_coverage_segment"] == 1
+    assert {key.split("/")[1] for key in totals["unattributed_records"]} == {"bridged_non_cohort", "proven_legacy_non_cohort"}
+    # Queries open at 00:00 UTC, spells at New York midnight: CCC and GGG are unproven until their proofs open, and
+    # AAA, DDD and EEE until their bridge spans open.
+    assert totals["unattributed_query_ids"] == {"bridged_non_cohort": 1, "no_proven_identity": 2, "outside_bridge_span": 3,
+                                                "proven_legacy_non_cohort": 1}
+    assert totals["legacy_proven_query_ids"] == {"proven_legacy_identity": 1, "proven_legacy_non_cohort": 1}
+    assert totals["attributed_records_by_basis"]["early/company_ticker_hash_reproduced/included"] == 1
+    assert set(totals["attributed_coverage_days_by_basis"]) == {"cik_bridge", "identity_equal", "company_ticker_hash_reproduced"}
     assert sum(totals["unattributed_coverage_days"].values()) > 0 and set(report["evidence_levels"]) == set(cohort._EVIDENCE)
     assert report["known_empty_scope"] == cohort.KNOWN_EMPTY_SCOPE
     for flag in ("training_eligible", "serving_eligible", "promotion_eligible"):
@@ -160,15 +194,29 @@ def test_statuses_attribution_coverage_and_years(world: dict[str, Any]) -> None:
     records, coverage, years = _frames(world, "complete")
     by_story = dict(zip(records.provider_story_id, records.query_identity_resolution, strict=True))
     assert by_story == {"101": "bridged", "102": "bridged", "103": "bridged", "201": "identity_equal", "250": "identity_equal",
-        "301": "no_proven_identity", "401": "bridged_non_cohort", "501": "bridged", "601": "bridged", "602": "bridged",
-        "701": "identity_equal"}
+        "301": "proven_legacy_identity", "401": "bridged_non_cohort", "501": "bridged", "601": "bridged", "602": "bridged",
+        "701": "identity_equal", "801": "proven_legacy_non_cohort"}
+    proven = records.loc[records.provider_story_id.eq("301")].iloc[0]
+    assert (proven.cohort_security_id, proven.attribution_basis, proven.identity_legacy_proof_row_sha256,
+            proven.identity_legacy_proof_evidence_complete_date) == (
+        "cik:0000000007", "company_ticker_hash_reproduced", "1" * 64, "2019-06-03")
+    assert records.loc[records.provider_story_id.eq("101"), "identity_legacy_proof_evidence_complete_date"].isna().all()
+    assert report["legacy_proof_availability_basis"] == "retrospective_membership_effective_proxy"
+    outside = records.loc[records.provider_story_id.eq("801")].iloc[0]
+    assert pd.isna(outside.cohort_security_id) and pd.isna(outside.attribution_basis)
+    assert outside.identity_legacy_proof_kind == "cusip_chain_end_ticker_match"
+    assert records.loc[records.query_identity_resolution.eq("bridged"), "attribution_basis"].eq("cik_bridge").all()
     assert records.loc[records.provider_story_id.eq("102"), "publication_year_new_york"].item() == 2019
     assert records.loc[records.provider_story_id.eq("602"), "inventory_status"].item() == "version_after_cutoff"
     assert "603" not in set(records.provider_story_id)
     locators = [entry["page_path"] for value in records.raw_record_locators_json for entry in json.loads(value)]
     assert locators and not any(Path(path).is_absolute() or "\\" in path for path in locators)
-    assert set(coverage.query_identity_resolution) == {"bridged", "outside_bridge_span", "identity_equal",
-                                                       "bridged_non_cohort", "no_proven_identity"}
+    assert set(coverage.query_identity_resolution) == set(cohort.RESOLUTIONS)
+    ccc = coverage.loc[coverage.identity_original_security_id.eq(CCC[1])].sort_values("requested_start_utc")
+    assert ccc.query_identity_resolution.tolist()[:2] == ["no_proven_identity", "proven_legacy_identity"]
+    assert ccc.requested_start_utc.iloc[1] == pd.Timestamp("2019-08-01T04:00:00Z")
+    assert (ccc.requested_end_utc - ccc.requested_start_utc).sum() == (
+        ccc.identity_original_requested_end_utc.drop_duplicates() - ccc.identity_original_requested_start_utc.drop_duplicates()).sum()
     assert coverage.query_provider_symbol.notna().all() and "unavailable_saved_evidence" in set(coverage.derivation_status)
     summaries = [unit for path in (world["root"] / "data/research/complete/parts").glob("*.units.json")
                  for unit in json.loads(path.read_text())["units"]]
@@ -179,8 +227,15 @@ def test_statuses_attribution_coverage_and_years(world: dict[str, Any]) -> None:
     assert aaa.at[2019, "covered_sidecar_pinned_days"] + aaa.at[2019, "unknown_no_proven_query_days"] == pytest.approx(
         aaa.at[2019, "window_days"])
     assert aaa.at[2020, "covered_pages_verified_empty_days"] > 0
-    unreached = years.loc[years.cohort_security_id.eq("cik:0000000007")]
-    assert (unreached.unknown_no_proven_query_days == unreached.window_days).all() and unreached.query_returned_stories.eq(0).all()
+    legacy = years.set_index(["cohort_security_id", "year_new_york"]).loc["cik:0000000007"]
+    assert (legacy.at[2019, "included_stories"], legacy.at[2019, "included_stories_by_company_ticker_hash_reproduced"]) == (1, 1)
+    assert legacy.at[2019, "covered_by_company_ticker_hash_reproduced_days"] == pytest.approx(
+        legacy.at[2019, "covered_sidecar_pinned_days"] + legacy.at[2019, "covered_pages_verified_empty_days"])
+    assert legacy.at[2019, "unknown_no_proven_query_days"] > 22
+    assert legacy.at[2022, "unknown_no_proven_query_days"] == legacy.at[2022, "window_days"]
+    basis_days = years[[f"covered_by_{basis}_days" for basis in cohort.BASES]].sum(axis=1)
+    evidence_days = years[[f"covered_{name}_days" for name in cohort._EVIDENCE]].sum(axis=1)
+    assert basis_days.to_numpy() == pytest.approx(evidence_days.to_numpy())
     eee = years.loc[years.cohort_security_id.eq("cik:0000000005")]
     assert eee.covered_derivation_unavailable_raw_pinned_days.sum() > 0 and eee.covered_artifact_pinned_sidecar_observed_days.eq(0).all()
     assert set(years.attribution_status) == {"not_established"} and len(years) == len(COHORT) * 6
@@ -308,7 +363,7 @@ def test_overlapping_attributed_coverage_is_rejected(tmp_path: Path, monkeypatch
     "data/research/identity/identity_bridge.parquet", "data/research/identity/identity_bridge.parquet.manifest.json",
     "data/reports/population.json", "data/reports/population_source.txt", "data/research/early_derived/_manifest.json",
     "data/research/early_derived/_source_children.json", "data/raw/early_news/_manifest.json",
-    "data/research/corrected_saved/audit.json"])
+    "data/research/corrected_saved/audit.json", "data/research/proofs/_manifest.json", "data/research/proofs/proofs.parquet"])
 def test_every_input_pin_is_verified_before_any_part(world: dict[str, Any], target: str) -> None:
     path, output = world["root"] / target, world["root"] / "data/research" / f"tamper-{Path(target).name}"
     original = path.read_bytes()
@@ -429,13 +484,18 @@ def test_story_precedence_prefers_included_then_archive_order() -> None:
         "cohort_security_id": ["cik:0000000001"] * 2, "source_family": ["alpaca"] * 2, "provider_story_id": ["9", "9"],
         "inventory_status": ["version_after_cutoff", "included"], "content_category": ["headline_only", "provider_body_field"],
         "published_at_utc": pd.to_datetime(["2020-03-01T15:00:00Z", "2021-03-01T15:00:00Z"], utc=True),
-        "publication_year_new_york": [2020, 2021]})
+        "publication_year_new_york": [2020, 2021], "attribution_basis": ["cik_bridge", "cik_bridge"]})
     coverage = pd.DataFrame({"cohort_security_id": ["cik:0000000001"], "evidence": ["sidecar_pinned"], "ticker": ["AAA"],
+        "attribution_basis": ["cik_bridge"],
         "requested_start_utc": pd.to_datetime(["2020-01-01T00:00:00Z"], utc=True),
         "requested_end_utc": pd.to_datetime(["2021-06-01T00:00:00Z"], utc=True)})
     years = cohort._security_years(records, coverage, ("cik:0000000001",)).set_index("year_new_york")
     assert (years.at[2021, "included_stories"], years.at[2021, "included_provider_body_field"]) == (1, 1)
     assert years.loc[[2020], "query_returned_stories"].item() == 0 and years.query_returned_stories.sum() == 1
+    assert (years.at[2021, "included_stories_by_cik_bridge"], years.covered_by_cik_bridge_days.sum()) == (
+        1, pytest.approx(years.covered_sidecar_pinned_days.sum()))
+    with pytest.raises(DataReadinessError, match="lacks its attribution basis"):
+        cohort._security_years(records, coverage.assign(attribution_basis=[pd.NA]), ("cik:0000000001",))
 
 
 def test_coverage_and_corrected_invariants_fail_closed(world: dict[str, Any], monkeypatch: pytest.MonkeyPatch) -> None:
@@ -449,17 +509,17 @@ def test_coverage_and_corrected_invariants_fail_closed(world: dict[str, Any], mo
     with pytest.MonkeyPatch.context() as patch:
         patch.setattr(cohort, "_coverage", record)
         _run(world, "invariant-capture")
-    units, summaries, bridge, members, bridged = captured[0]
+    units, summaries, identities = captured[0]
     missing = dict(list(summaries.items())[1:])
     with pytest.raises(DataReadinessError, match="exactly one verified summary"):
-        coverage(units, missing, bridge, members, bridged)
+        coverage(units, missing, identities)
     outside = [{**units[0], "ledger": {**units[0]["ledger"], "requested_end_utc": pd.Timestamp("2019-01-01T00:00:00Z")}},
                *units[1:]]
     with pytest.raises(DataReadinessError, match="cover part of the initial-fit window"):
-        coverage(outside, summaries, bridge, members, bridged)
+        coverage(outside, summaries, identities)
     monkeypatch.setattr(cohort, "map_news_coverage", lambda frame, table: map_news_coverage(frame, table).iloc[1:])
     with pytest.raises(DataReadinessError, match="lost a ledger unit"):
-        coverage(units, summaries, bridge, members, bridged)
+        coverage(units, summaries, identities)
     monkeypatch.setattr(cohort, "map_news_coverage", map_news_coverage)
     spec = json.loads((world["root"] / "configs/monthly.json").read_text())["sources"]["corrected"]
     source = _source(world["root"], spec)
@@ -467,3 +527,26 @@ def test_coverage_and_corrected_invariants_fail_closed(world: dict[str, Any], mo
     source["records"]["collection"].pop(observed)
     with pytest.raises(DataReadinessError, match="lacks its artifact pin"):
         cohort._corrected_units(world["root"], spec, source, {})
+
+
+def test_resolution_precedence_and_unknown_statuses() -> None:
+    identities = cohort._Identities(pd.DataFrame(), pd.DataFrame(), frozenset({"cik:0000000001", "cik:0000000002"}),
+                                    frozenset({"cik:0000000003:ticker:CCC"}))
+    status = pd.Series(["mapped", "mapped", "unmapped", "legacy_proven", "legacy_proven", "unmapped", "unmapped"])
+    target = pd.Series(["cik:0000000001", "cik:0000000009", "cik:0000000002", "cik:0000000001", "cik:0000000009",
+                        "cik:0000000003:ticker:CCC", "sp500-historical:x"])
+    assert cohort._resolution(status, target, target, identities).tolist() == [
+        "bridged", "bridged_non_cohort", "identity_equal", "proven_legacy_identity", "proven_legacy_non_cohort",
+        "outside_bridge_span", "no_proven_identity"]
+    with pytest.raises(DataReadinessError, match="status is unknown"):
+        cohort._resolution(pd.Series(["guessed"]), target.iloc[:1], target.iloc[:1], identities)
+
+
+def test_proofs_built_against_another_bridge_are_refused(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    built = _world(tmp_path / "repo", monkeypatch)
+    settings = json.loads(built["config"].read_text())
+    settings["legacy_identity_proofs"] = _proofs(built["root"], settings["identity_manifest"], bridge_sha256="0" * 64)
+    built["config"].write_text(json.dumps(settings), encoding="utf-8")
+    with pytest.raises(DataReadinessError, match="another CIK bridge"):
+        cohort.publish_cohort_content_inventory(root=built["root"], config=built["config"],
+            config_sha256=file_sha256(built["config"]), output=built["root"] / "data/research/other-bridge")

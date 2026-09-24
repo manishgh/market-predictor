@@ -302,6 +302,33 @@ categories and covered/unknown days per cohort security and New York year) and
 its `_checkpoint.json`; a completed output is immutable. Counts are stories returned by
 issuer queries, not issuer relevance or content qualification.
 
+The config also pins published legacy identity proofs (below), which must have been
+built against the same identity alignment manifest. Rows the CIK bridge leaves unmapped
+are translated at event time by `map_legacy_query_relations`/`map_legacy_query_coverage`
+and resolve as `proven_legacy_identity` (cohort target) or `proven_legacy_non_cohort`.
+Records and coverage carry `attribution_basis` (`cik_bridge`, `identity_equal` or the
+proof kind); `security_years.parquet` splits included stories and covered days by
+basis so the weaker CUSIP-chain kind stays separable.
+
+`market-predictor-research prove-legacy-query-identities --config
+configs/swing_legacy_query_identity_proofs.json --config-sha256 <pin> --output
+data/research/<new-name>` proves or rejects every legacy query ID that is neither a CIK
+bridge source nor a target membership ID (publisher
+`research/legacy_query_identity_proofs.py`, pure builder
+`universe/legacy_query_identity.py`). It verifies the target membership authority with
+its canonical loader, the S&P event authority with its canonical verifier and raw
+archive (both must be the target authority's recorded parents), the identity alignment
+manifest (whose pins of the target authority and correction policy must equal the
+config's), each derived archive's raw request and the legacy membership file that
+minted its queries, and the Alpaca transition file. Proof kinds, strongest first:
+`company_ticker_hash_reproduced`, `sp500_spell_events_reproduced`, `cik_equal` and the
+weaker `cusip_chain_end_ticker_match`. The target authority carries each security's
+latest ticker back through history, so no rule compares historical tickers with it.
+Rejections (`rejections.parquet`) name a reason per legacy spell; corrected securities
+are rejected because only the corrections archive may supply them. Proof availability
+is the membership effective start (`retrospective_membership_effective_proxy`); proofs
+are research evidence, never training, serving or promotion admission.
+
 ## Source Roles
 
 ### Retained Holding-Identity Preflight

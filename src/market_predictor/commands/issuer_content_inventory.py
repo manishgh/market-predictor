@@ -14,6 +14,7 @@ from market_predictor.core.errors import DataReadinessError
 from market_predictor.heavy_jobs import HEAVY_JOB_BUSY_EXIT_CODE, HeavyJobBusyError
 from market_predictor.research.issuer_content_cohort_inventory import publish_cohort_content_inventory
 from market_predictor.research.issuer_content_inventory import publish_saved_content_inventory
+from market_predictor.research.legacy_query_identity_proofs import publish_legacy_query_identity_proofs
 from market_predictor.swing.datasets.initial_fit_issuer_news import LAST_INITIAL_FIT_CUTOFF
 from market_predictor.swing.datasets.issuer_news_preparation import FIRST
 
@@ -57,3 +58,12 @@ def register_issuer_content_commands(app: typer.Typer) -> None:
         _publish(lambda: publish_cohort_content_inventory(root=root, config=config, config_sha256=config_sha256,
             output=output, resume_checkpoint_sha256=resume_checkpoint_sha256),
             ("status", "records_rows", "manifest_sha256", "training_eligible", "serving_eligible"))
+
+    @app.command("prove-legacy-query-identities")
+    def prove(
+        config: Path = typer.Option(...), config_sha256: str = typer.Option(...), output: Path = typer.Option(...),
+        root: Path = typer.Option(Path(".")),
+    ) -> None:
+        """Prove or reject legacy news-query identities the CIK bridge left unconverted; never admission."""
+        _publish(lambda: publish_legacy_query_identity_proofs(root=root, config=config, config_sha256=config_sha256,
+            output=output), ("status", "totals", "manifest_sha256", "training_eligible", "serving_eligible"))

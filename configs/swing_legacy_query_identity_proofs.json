@@ -1,0 +1,49 @@
+{
+  "schema": "market_predictor.legacy_query_identity_proofs_config",
+  "identity_manifest": {
+    "path": "data/research/swing_initial_fit_source_proven_news/_manifest.json",
+    "sha256": "e150475190fe0efbafecb115cd5f08bb7acb58576b2661b680fad832ffc00d98"
+  },
+  "target_membership_authority": {
+    "path": "data/canonical/index_membership/sp500_memberships_20180529_20260708_v1/_authority.json",
+    "sha256": "d12e7f1fc5d056fde68bda8337de5db3b2fd856fa3bb53f7e360d4a16d5bc49a"
+  },
+  "symbol_corrections": {
+    "path": "configs/swing_symbol_corrections.toml",
+    "sha256": "be63ad9460f80cf87a377b903971c5415bcfefdf5d457308a9a9028d2b5488e3"
+  },
+  "event_authority": {
+    "path": "data/canonical/index_membership/spglobal_events_20180414_20260708_v1/_authority.json",
+    "sha256": "07aa611df56d1b701de0559b89422797625fd66dd4808abd74c087e522e8f3a0"
+  },
+  "event_raw_archive": {
+    "path": "data/raw/index_membership/spglobal_official_20180414_20260708_v1/_authority.json",
+    "sha256": "51a1bad11243d6df00e5ac5bc2acee9abae722326c628dc5d496ac8d560602a1"
+  },
+  "security_transitions": {
+    "path": "data/raw/index_membership/spglobal_20190709_20260708_v3/alpaca_security_transitions.parquet",
+    "sha256": "978f87feebab52cf91ecebbac59a5e873eb12a170ad708e96853fe2fb054e051"
+  },
+  "monthly_news_config": {
+    "path": "configs/swing_initial_fit_monthly_news.json",
+    "sha256": "2a9ac2ae30bcddc75b89ce713d811a8d8fe59e3ed186d5e90f81115df901b2b1"
+  },
+  "archives": {
+    "early": {
+      "collection": "data/raw/alpaca_news_20190709_20210708_v1",
+      "memberships": {
+        "path": "data/canonical/swing_memberships_verified_20190709_20260708_v2.parquet",
+        "sha256": "0e222a234dbfbc600dc12e25bec2eb4b75782b46e720d1df4d6a2ae541cdd656",
+        "manifest_sha256": "2e6fdee421f14f85a76e4b2c60638c13fd7376415c46427ac166e336e0ae2b4b"
+      }
+    },
+    "later": {
+      "collection": "data/raw/alpaca_news_20210709_20260708_v1",
+      "memberships": {
+        "path": "data/canonical/swing_memberships_20190709_20260708_v1.parquet",
+        "sha256": "67a8edb04925f6cb179319e4761f834f404062dfd4f85851ae77ae7f3bb5c9b2",
+        "manifest_sha256": "0c465fba360a0da45285f5ce24ee8143685e2930e3592df601843b61ff800d90"
+      }
+    }
+  }
+}

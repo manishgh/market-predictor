@@ -329,6 +329,92 @@ filing/exhibit documents that are genuinely missing. The unbridged legacy identi
 above needs its own evidence-backed identity proof, never ticker guessing; whether to
 pursue it before content qualification is a user decision recorded in the handoff.
 
+Current slice (`in_progress`; design reviewed and consolidated September 23):
+**legacy issuer-query identity proofs**. The user decided on September 23 to prove
+these identities before content qualification. Problem: 141 legacy query IDs (113
+`sp500-historical`, 26 `cusip`, 2 `cik:...:ticker`) hold 60,590 initial-fit records that
+the CIK-only bridge cannot translate; 145 of 586 cohort securities have no proven query.
+
+- Measured evidence (read-only): legacy IDs are minted as `sha256("ticker|company|spell
+  start")` (`membership_history.py`) and cohort `sp500-historical` IDs as
+  `json_sha256({company, ticker})` (`membership_authority.py`). The canonical company of
+  the S&P event authority that the cohort membership authority pins through
+  `parent_lineage.event_authority_sha256` reproduces both IDs for 110 of 113 unbridged
+  `sp500-historical` IDs. OGN, PENN and POOL reproduce from the addition name (legacy) and
+  the deletion name (cohort) of one spell with identical boundaries. BRK-B/BF-B legacy
+  IDs embed the cohort CIK. The two archives queried different legacy files: early used
+  the verified v2 file, later the v1 file (their raw requests pin 0e222a23... and
+  67a8edb0...); the 140 shared IDs have identical spans, and v1 alone holds Fiserv
+  (`cusip:337738108`, FI from 2019, contradicted by the pinned correction policy and by
+  Alpaca transition `45fd1861`, FISV to FI on 2023-06-07).
+- Review blocker, accepted: the cohort membership authority is not point-in-time for
+  tickers. It carries each security's latest ticker back to 2018 (for example IR for CIK
+  1699150 from 2018-05-29, while legacy IR belonged to `cusip:G8994E103`, now TT, until
+  2020-03-02). The frozen `sp500_point_in_time_ticker_unique` rule would attribute
+  Trane's news to Ingersoll Rand and is withdrawn; no rule attributes by comparing a
+  historical ticker with that authority.
+- Proof kinds, strongest first; each legacy ID resolves to at most one target:
+  (1) `company_ticker_hash_reproduced`: a single-spell `sp500-historical` ID reproduces
+  through the real `_security_identity_for_interval(current=empty, aliases=[])` from a
+  pinned event company and ticker whose `_historical_security_id` is a target security.
+  (2) `sp500_spell_events_reproduced`: the legacy ID reproduces from the addition event
+  that opens its spell, the target ID from the deletion event that closes it, and the
+  legacy spell and target row have identical boundaries. (3) `cik_equal`: a
+  `cik:X:ticker:T` legacy ID whose target `cik:X` carries T wherever they overlap (a
+  share-class guard that can only reject: Discovery's bare CIK is the DISCA line). (4)
+  `cusip_chain_end_ticker_match` (weaker, kept separable): every ticker change inside the
+  chain is exactly one identity-continuous Alpaca transition of that chain (pinned file
+  978f87fe..., read directly: the minting parser drops old tickers ending in V as
+  when-issued symbols, which is how the legacy build missed Fiserv's FISV-to-FI change),
+  no other transition of that chain falls inside it, and exactly one target security
+  carries the chain's last ticker at its own final instant inside the chain's last span,
+  the only instant where a latest-ticker authority is true: its final row only, open at
+  the authority cutoff when the span is open too, or closed where a pinned S&P deletion
+  of that ticker documents the row end.
+- Rejections are recorded per legacy spell, never guessed: unsupported namespace,
+  multiple spells for a hash proof, no candidate, ambiguous candidates, chain contradicts
+  transitions, CIK ticker differs, no membership intersection, and
+  `corrected_security_uses_corrections_archive_only` (targets in the pinned correction
+  policy). Every in-scope spell is either proven or rejected. Scope is every legacy ID
+  that is neither a CIK-bridge source nor already a target ID.
+- Proof rows: source ID, query ticker, target ID, the legacy spell, the intersection
+  with each target row, availability, kind, evidence JSON (event company, action,
+  effective time, source URL and document hash; CIK; or transition IDs and the matched
+  instant), the earliest date sufficient cited evidence existed (defined per kind in the
+  manifest), and a row hash. Availability is
+  labelled `retrospective_membership_effective_proxy` (both authorities set availability
+  to the effective start); proofs are research evidence only. A proof whose target
+  interval overlaps a CIK-bridge row, an identity-equal legacy spell or another proof is
+  an error at publication.
+- Implementation: pure builder and translation in new `universe/legacy_query_identity.py`.
+  `universe/issuer_news_identity.py` stays byte-identical (ten closed artifacts pin it);
+  its primitives are imported, and only the relations and coverage loops are
+  re-expressed as generic passes, tied to the protected functions by a synthetic unit
+  differential and a recorded read-only run over the real CIK bridge, every ledger and
+  every saved record. The legacy pass runs only on rows the CIK pass left
+  unmapped, with status `legacy_proven`, kind and proof hash columns. A leased immutable
+  publisher writes `proofs.parquet`, `rejections.parquet` and `_manifest.json` below
+  `data/research`. It verifies the target authority with its canonical loader, the event
+  authority with its canonical verifier and raw archive (its hash must equal the target
+  authority's lineage), the identity manifest (the CIK bridge, and target-authority and
+  correction pins that must equal its own), each derived archive's raw request and its
+  membership file, and the transition file.
+- Consumer: the cohort inventory module is extended and published from a new config
+  file with the proof pin; the completed inventory and its config stay immutable.
+  Resolution order is bridged, identity-equal, `proven_legacy_identity` or
+  `proven_legacy_non_cohort`, outside bridge span, no proven identity. Records and
+  coverage carry the proof kind and hash; security years and totals split covered days
+  and stories by attribution basis. The whole inventory is rerun into a new output.
+- Exit tests: real minting functions for every ID; tampered company, ticker or start;
+  the IR/TT handoff on a latest-ticker target authority; a Fiserv-like chain that
+  contradicts its transitions and a corrected target; a merger transition of another
+  CUSIP that is not a contradiction; a non-continuous transition (FLT to CPAY) staying
+  split; a name present only in an unpinned authority; the spell-event and CIK kinds;
+  ambiguity; partial intersections; conflicts; differential parity with both protected
+  CIK functions; translation at event time and coverage splits; resolution precedence;
+  pins, lineage, lease, immutability and determinism.
+- Out of scope: content qualification, features and fitting. The SEC slice follows.
+
 September 21 bounded source inspection and reaction-measurement contract:
 
 - The early saved Alpaca shard `f91f0fa1d3de638169abab12.parquet` has 18
