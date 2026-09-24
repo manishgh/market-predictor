@@ -12,7 +12,7 @@ The combined historical outcome/features delivery is verified and committed.
 
 ## Current State
 
-September 24 slice `4844b3f` is pushed and its proof run is complete: legacy
+September 24 slice `4844b3f` is pushed and both of its real runs are complete: legacy
 news-query identity proofs, which the user chose on September 23 to finish before
 content qualification. Command `prove-legacy-query-identities`; leased immutable
 publisher `research/legacy_query_identity_proofs.py`; pure builder and translation
@@ -58,11 +58,31 @@ retained `cik:0001699150` (the new Ingersoll Rand) as an S&P member with ticker 
 Trane) until 2020-03-02, so that security's 2018-2020 cohort membership and prices may
 belong to another company.
 
-In progress: the full cohort inventory rerun with
+Inventory rerun with the proofs (leased, exit 0, 03:57-04:51; completed and immutable,
+do not resume or rerun): config
 `configs/swing_issuer_content_cohort_inventory_with_legacy_proofs.json` (SHA256
-`315ae1afb7cea133e4ce27efa63b3f8b002d6a45a2aa549877b45341780b422f`) into
-`data/research/swing_initial_fit_issuer_content_inventory_with_legacy_proofs`. The
-completed inventory below and its config stay immutable historical evidence.
+`315ae1afb7cea133e4ce27efa63b3f8b002d6a45a2aa549877b45341780b422f`), artifact
+`data/research/swing_initial_fit_issuer_content_inventory_with_legacy_proofs`, manifest
+`3e4f905e8e6da4d3c0331fb358437633765211a59e94e2f6bba6d1b7962e9bda`, request
+`7510280c768608da2ebef841de46b4ec2aee4754f63df17230123cb437b24e32`, checkpoint
+`556d4e11e2ec9f3f3780c19826cd8d6a650264e87192a2c635ed529c00e03acb`, log
+`data/runtime/swing_initial_fit_issuer_content_inventory_with_legacy_proofs.log`.
+All 469,668 records re-verified. Of the 141 formerly unbridged query IDs, 102 reach
+cohort securities, 35 excluded securities (19 inherited, 16 cohort exclusions) and 4
+are rejected; 59,487 records became
+legacy-proven and the 1,105 still unproven all belong to rejected IDs; translated
+included records outside their coverage segment: 0. Cohort securities with a proven
+query rose from 441 to 543 of 586; whole-window verified query time from 69.6% to
+80.9%. Inside each security's S&P membership in the window (read-only check against
+the target authority), unknown query time fell from 14.4% (122,640 security-days) to
+0.44% (3,716); 41 of the 43 unreached securities were never members in the initial-fit
+window and 2 members remain unreached, below the 5% bar. 443,916 attributed stories:
+61.91% provider body field, 38.09% headline-only; the weaker CUSIP-chain basis
+contributes 2,632 stories (0.98% of window days) and stays separable by
+`attribution_basis`. The superseded inventory
+(`data/research/swing_initial_fit_issuer_content_inventory`) and its config stay
+immutable historical evidence. Both reviewers are idle and hold no work; no
+task-owned Python process remains.
 
 September 23 slice `177f6f3` is pushed and its real run is complete: the initial-fit
 cohort news content inventory. Command `inspect-issuer-content-cohort`; publisher
@@ -851,13 +871,14 @@ the frozen numeric training boundary or authorize promotion.
 
 Exact next checkpoint: qualify issuer-news and SEC reaction inputs for the final
 feature profile, using saved initial-fit evidence before requesting any download.
-Single-chunk verification (`7a9334c`) and the cohort news inventory (`177f6f3`) are
-complete; do not rebuild them. Next slice: freeze and independently review SEC
+Single-chunk verification (`7a9334c`), the cohort news inventory (`177f6f3`) and the
+legacy identity proofs with the inventory rerun (`4844b3f`) are complete; do not
+rebuild them. Content qualification uses the rerun inventory
+(`..._with_legacy_proofs`) and must keep the weaker CUSIP-chain basis separable. Next slice: freeze and independently review SEC
 form-metadata counts per cohort security and New York year from the pinned SEC archive,
 plus enumeration of genuinely missing filing/exhibit documents, then implement.
-The user chose (September 23) to prove the 141 unbridged legacy query identities first:
-proofs are published; the inventory rerun with them must complete and be recorded
-before the SEC slice starts.
+The user chose (September 23) to prove the 141 unbridged legacy query identities first;
+that slice is closed, so the SEC slice is next.
 Freeze content qualification with development-only precision and recall review before
 joining the completed-session measurement into the last profile.
 No downloads, final feature selection or fitting belong to that inventory checkpoint.

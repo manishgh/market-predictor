@@ -323,14 +323,11 @@ continuously; the 90% guard ran throughout and never stopped the run.
   (2022-2024). Median 107 stories per security per observed year (10th percentile 51).
   These are query-returned stories, not issuer relevance or qualified content.
 
-Next slice (design must be frozen and reviewed before code): SEC form-metadata counts
-per cohort security and New York year from the pinned SEC archive, and enumeration of
-filing/exhibit documents that are genuinely missing. The unbridged legacy identity gap
-above needs its own evidence-backed identity proof, never ticker guessing; whether to
-pursue it before content qualification is a user decision recorded in the handoff.
+The unbridged legacy identity gap above was closed by the next slice; the user chose on
+September 23 to prove those identities before content qualification.
 
-Current slice (`in_progress`; design reviewed September 23; implementation `4844b3f`
-pushed and proofs published September 24; the inventory rerun remains):
+September 23-24 slice (`closed`; implementation `4844b3f`, design reviewed September 23,
+proofs and inventory rerun published September 24):
 **legacy issuer-query identity proofs**. The user decided on September 23 to prove
 these identities before content qualification. Problem: 141 legacy query IDs (113
 `sp500-historical`, 26 `cusip`, 2 `cik:...:ticker`) hold 60,590 initial-fit records that
@@ -415,6 +412,40 @@ the CIK-only bridge cannot translate; 145 of 586 cohort securities have no prove
   CIK functions; translation at event time and coverage splits; resolution precedence;
   pins, lineage, lease, immutability and determinism.
 - Out of scope: content qualification, features and fitting. The SEC slice follows.
+
+Real runs (leased, exit 0, September 24). Proofs:
+`data/research/swing_legacy_query_identity_proofs`, manifest
+`84ffb55398f3db016ce9e0af9dea8aa9de54c559f5d9a1959cca2396d92712d3`: 165 legacy IDs
+proven (110 company hash, 5 spell events, 22 CIK equality, 28 weaker CUSIP chains) in
+184 rows, none partly proven; 5 rejected (CUK, FLT, FBHS/FBIN no candidate; Fiserv
+chain contradicts its transitions; EchoStar corrected). Inventory rerun (03:57-04:51):
+`data/research/swing_initial_fit_issuer_content_inventory_with_legacy_proofs`, config
+`configs/swing_issuer_content_cohort_inventory_with_legacy_proofs.json` (SHA256
+`315ae1af...`), manifest `3e4f905e8e6da4d3c0331fb358437633765211a59e94e2f6bba6d1b7962e9bda`,
+request `7510280c768608da2ebef841de46b4ec2aee4754f63df17230123cb437b24e32`, checkpoint
+`556d4e11e2ec9f3f3780c19826cd8d6a650264e87192a2c635ed529c00e03acb`, log
+`data/runtime/swing_initial_fit_issuer_content_inventory_with_legacy_proofs.log`.
+
+- Of the 141 unbridged query IDs, 102 now reach cohort securities, 35 reach securities
+  the approved cohort excludes (19 inherited, 16 own exclusions) and 4 are rejected. 59,487 formerly
+  unattributed records are legacy-proven (39,449 into cohort securities); the 1,105 left
+  unproven all sit under the rejected IDs. Translated included records outside their
+  coverage segment: 0.
+- Cohort securities with a proven query: 441 to 543 of 586. Whole-window verified query
+  time: 69.6% to 80.9%. Measured inside each security's S&P membership in the window
+  (read-only check against the target authority), unknown query time falls from 14.4%
+  (122,640 security-days) to 0.44% (3,716); 41 of the 43 unreached securities were never
+  members in the initial-fit window and 2 members remain unreached, below the 5% bar.
+- 443,916 attributed stories (61.91% provider body field, 38.09% headline-only). By
+  basis: CIK bridge 380,266, identity-equal 24,201, company hash 35,842, spell events
+  881, CIK equality 94, and the weaker CUSIP chains 2,632 (0.98% of window days), which
+  stay separable in `security_years.parquet`.
+- Legacy-proven attribution starts at the membership effective start, a retrospective
+  clock; records carry each proof's evidence-complete date. Research evidence only.
+
+Next slice (design must be frozen and reviewed before code): SEC form-metadata counts
+per cohort security and New York year from the pinned SEC archive, and enumeration of
+filing/exhibit documents that are genuinely missing. Content qualification follows.
 
 September 21 bounded source inspection and reaction-measurement contract:
 
