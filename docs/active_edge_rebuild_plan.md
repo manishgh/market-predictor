@@ -81,8 +81,8 @@ Downstream order is qualified issuer-reaction publication/acceptance, its two
 remaining specifications trained sequentially, funded policy evaluation, then new
 prospective evidence. No re-fitting the two completed baselines, widening the six
 specification budget, unseen-test claim or promotion from software tests.
-Investment forecast targets remain undecided pending the separate user question;
-neither proposed 63 nor 252 sessions is approved by this continuation. Unrelated
+Investment forecast targets: on September 25 the user approved both 63 and 252
+exchange sessions as separate targets; allocation and risk budgets remain undecided. Unrelated
 shared-data and swing implementation proceeds without waiting for that decision.
 Plan review approved this boundary; detailed module design review precedes edits.
 
@@ -945,8 +945,10 @@ Program order after command retirement:
 - Admitted forecast serving, candidate/holding watcher, portable process roles and
   end-to-end paper verification. Actual Azure/GCP deployment remains separate.
 
-Long-term forecast horizon and numerical allocation/risk budgets remain explicit
-user decisions, not implementation defaults. Detailed approved product rationale
+Both long-term forecast horizons (63 and 252 sessions) are approved as separate
+targets (September 25); numerical allocation/risk budgets remain explicit user
+decisions, not implementation defaults. TradingFlow's local commits `afaafc0`,
+`5217fad` and `8525f80` were pushed to its feature branch on September 25. Detailed approved product rationale
 is in the unified investment product proposal; this remains the sole execution plan.
 
 ## Long-Only Swing Research And Implementation Plan

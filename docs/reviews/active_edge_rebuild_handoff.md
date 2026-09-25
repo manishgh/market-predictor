@@ -1,16 +1,44 @@
 # Active Edge Rebuild Handoff
 
 Status: active
-Last updated: 2026-09-24
+Last updated: 2026-09-25
 Repository: `C:\project\market-predictor`
 Branch: `unified-swing-product`
-Last completed implementation checkpoint: `4844b3f` (pushed; legacy news-query identity proofs).
+Last completed implementation checkpoint: `319360e` (pushed; SEC form inventory and filing-document collector).
 Last completed model-training checkpoint: relationship run on `a8be7cb` (artifact pins below).
 Baseline model-training checkpoint: `07963cc` (pushed; unchanged).
 Source-collection checkpoint: `19698d6` (pushed).
 The combined historical outcome/features delivery is verified and committed.
 
 ## Current State
+
+September 25 user decisions: both investment forecast horizons, 63 and 252 exchange
+sessions, are approved as separate targets (allocation and risk budgets remain
+undecided). TradingFlow's three local commits (`afaafc0`, `5217fad`, `8525f80`) are
+pushed to its `unified-swing-product` branch (main untouched). The remaining Market
+Predictor intraday retirement runs in parallel with the long SEC download; its heavy
+replay waits for the download, and it must close before the issuer-reaction features
+and the last two fits so they are built on the final swing-only contracts.
+
+SEC slice progress (in progress): implementation `319360e` is pushed after design and
+closure reviews by both reviewers (no blockers; the major closure findings fixed:
+availability-based 8-K timing, enforced sealing, crash-safe shard reopen, joint and
+co-registrant filings, fuller receipts, cooldown-respecting resume). Targeted checks:
+156 affected tests, Ruff and strict mypy on 13 files; a read-only replay reproduced
+all 689,467 filings and every response hash of 624 issuers.
+Publications (config `configs/swing_sec_form_inventory.json`, SHA256
+`26766aba38a513b99075766a6d1d595eaa8a3889281b85763cde94f6e7bc7563`):
+`data/research/swing_initial_fit_sec_form_inventory`, manifest
+`3370d01aa3077eb82f836659ea46d217dc153bafbf35277424570ddba1dd14bd` (389,875 filing
+rows, 387,471 accessions, 543 securities; 22,067 selected 8-K accessions; 3.3 minutes,
+peak process 1.9 GB, system 85.0%); sealed `data/research/swing_later_sealed_sec_form_inventory`,
+manifest `9001af4ef4e52e853164a9281cd01870aeafcab76c8176bebc7d13404df04540` (unread).
+Pilot collection `data/raw/sec_filing_documents_pilot_v1`, manifest
+`52f3ea2fbb76d1846e43a7bc2fea16189d882ac52b34b114fbe105466c71f0ca`: 7 detail pages and
+14 documents archived, no rejection; its pages are pinned fixtures in `1cf57d6`.
+Next: the full initial-fit collection into `data/raw/sec_filing_documents_initial_fit_v1`
+(about four hours under the shared lease; a 403/429 stop resumes only with the printed
+checkpoint hash after SEC's cooldown), then the sealed collection, then closure.
 
 September 24 slice `4844b3f` is pushed and both of its real runs are complete: legacy
 news-query identity proofs, which the user chose on September 23 to finish before
@@ -319,8 +347,8 @@ model fitting, broker actions, data deletion or deployment ran.
 Limits: the C# operation imports explicit raw publications only, not a polling
 service or normalized catalog/feed migration. The Python transform subsequently
 became a verified research publication/input in the September 21 checkpoint above.
-Investment forecast horizons still
-await the user's decision; swing and shared-data work do not wait on that decision.
+Investment forecast horizons were approved on September 25: 63 and 252 exchange
+sessions, as separate targets.
 
 Latest approved policy: localized/module changes use focused tests plus applicable
 lint/types/build checks; component checkpoints add affected integration, integrity
@@ -881,10 +909,9 @@ reviewer). The user decided on September 24 to collect now and leave nothing for
 later: documents of cohort 8-Ks carrying item 2.02, 7.01 or 8.01 in the initial fit
 (22,067 accessions: EDGAR detail page, primary document and every EX-99 exhibit), and
 the same selection after the initial-fit cutoff into a sealed store that is not read
-or summarized until qualification rules are frozen on initial-fit evidence. Implement
-the inventory first (replay through the unchanged SEC client), then the collector
-(pilot of 5-8 accessions for real test fixtures, then the full initial-fit run of
-about four hours under the shared lease, then the sealed run).
+or summarized until qualification rules are frozen on initial-fit evidence. The inventory,
+collector and pilot are done (see Current State); remaining: the full initial-fit
+collection, the sealed collection and slice closure.
 Freeze content qualification with development-only precision and recall review before
 joining the completed-session measurement into the last profile.
 No final feature selection or fitting belongs to the SEC slice.
