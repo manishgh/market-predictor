@@ -36,9 +36,22 @@ manifest `9001af4ef4e52e853164a9281cd01870aeafcab76c8176bebc7d13404df04540` (unr
 Pilot collection `data/raw/sec_filing_documents_pilot_v1`, manifest
 `52f3ea2fbb76d1846e43a7bc2fea16189d882ac52b34b114fbe105466c71f0ca`: 7 detail pages and
 14 documents archived, no rejection; its pages are pinned fixtures in `1cf57d6`.
-Next: the full initial-fit collection into `data/raw/sec_filing_documents_initial_fit_v1`
-(about four hours under the shared lease; a 403/429 stop resumes only with the printed
-checkpoint hash after SEC's cooldown), then the sealed collection, then closure.
+The full initial-fit collection into `data/raw/sec_filing_documents_initial_fit_v1`
+started 10:25 UTC and was deliberately stopped at 16:46 UTC after 18,500 index attempts
+(37 verified shards pinned by its `_checkpoint.json`; lease released; not to be resumed).
+It exposed a data defect: for 93 of 520 issuers observed, the saved EDGAR submissions
+`acceptanceDateTime` is New York wall-clock time labelled UTC (all-or-nothing per issuer,
+exactly the New York offset; 3,033 of 17,847 detail pages rejected as "acceptance time
+differs"), so their canonical acceptance and availability are four to five hours early.
+Only the two SEC form inventories consumed that archive; no feature, training request or
+model did. It also measured about 1.2 requests per second, limited by SEC latency. The
+correction design (per-issuer clock-convention publication from EDGAR detail pages,
+republished inventories, bounded collector concurrency) is in the plan and under ML
+review; the code reviewer is reviewing the intraday-retirement design. The ML reviewer's
+retirement findings (no blockers; add relationship row-verification and readiness
+re-publication, archive the exact mixed strategy-contract bytes, record the still
+unreadable baseline unit manifests, add a retained-evidence existence gate) await
+consolidation with the code review.
 
 September 24 slice `4844b3f` is pushed and both of its real runs are complete: legacy
 news-query identity proofs, which the user chose on September 23 to finish before

@@ -572,6 +572,44 @@ Collector (`collect-sec-filing-documents`, new `catalysts/sec_filings/document_c
   phase; pins, lease and immutability.
 - Out of scope: content qualification, event meaning, features and fitting.
 
+SEC acceptance-clock finding and correction (September 25; design addendum for review):
+
+- The full initial-fit collection (`data/raw/sec_filing_documents_initial_fit_v1`,
+  stopped after 18,500 index attempts; checkpoint pins 37 verified shards) rejected
+  3,033 of 17,847 fetched detail pages because the page's `Accepted` time (EDGAR's own
+  New York clock) differed from the saved submissions `acceptanceDateTime`. Every
+  difference is exactly the New York UTC offset (four hours in daylight time, five in
+  standard time), and it is per issuer: of 520 issuers seen, 93 differ on every filing
+  and 427 on none, uniformly from 2019 to 2024. For those issuers the submissions API
+  labels New York wall-clock time as UTC (for example Skyworks' after-close earnings
+  8-K accepted 16:04 New York time is saved as 16:04Z). Their canonical acceptance and
+  availability are four to five hours too early, a look-ahead risk that the earlier
+  filing-date test could not detect. Only the two SEC form inventories consumed this
+  archive (no feature publication, training request or model); the SEC decision
+  authority built from it inherits the error and must not be consumed uncorrected.
+- Correction: a leased immutable clock-convention publication decides each issuer's
+  convention from EDGAR detail pages, never from guesses: the stopped collection's
+  verified pages plus, for issuers without one, the detail pages of their first and
+  last in-window filings. Every compared filing must differ by zero (`utc`) or by
+  exactly the New York offset at that instant (`new_york_wall_clock_labeled_utc`);
+  any other difference, or a mix, fails the publication. Issuers without a page stay
+  explicitly unknown and their filings are excluded from timing-dependent outputs.
+- The SEC form inventory consumes the convention pin: corrected acceptance, the raw
+  API value and the convention on every row, availability recomputed with the unchanged
+  `conservative_sec_daily_swing_availability`, then windows, session position and
+  report timing from the corrected clock. Both inventories are republished into new
+  outputs; the published ones stay superseded evidence.
+- The collector reads the corrected inventory, so detail-page headers match again; it
+  gains bounded concurrency (a few workers sharing one governor at or below five
+  requests per second) because single-threaded requests measured about 1.2 per second,
+  limited by SEC response latency. Receipts stay per unit and order-independent; the
+  first 403 or 429 still stops every worker and checkpoints. The stopped collection
+  stays immutable evidence and is not resumed.
+- Exit tests: both conventions and DST on real pages; an offset that is neither zero nor
+  New York; an issuer mixing conventions; an issuer without evidence; availability and
+  window changes from the corrected clock (an after-close filing no longer intraday);
+  concurrency with deterministic receipts and a 403 stop under several workers.
+
 September 21 bounded source inspection and reaction-measurement contract:
 
 - The early saved Alpaca shard `f91f0fa1d3de638169abab12.parquet` has 18
@@ -664,7 +702,47 @@ to unblock this implementation. Historical source-pin mismatches still prohibit
 reuse; no admission gate is weakened. Both product cohorts share raw evidence,
 not a forecast target: investment training and execution are not implemented yet.
 
-Deferred checkpoint: **complete dedicated intraday retirement**.
+Deferred checkpoint: **complete dedicated intraday retirement** (resumed September 25
+in parallel with the SEC document collection; step 1 inventory measured, design for
+steps 2-6 frozen below for independent review before code).
+
+Step 1 inventory (read-only, September 25):
+
+- `market_predictor/intraday/` holds 72 modules. Nine source files outside it import
+  it: `commands/edge_rebuild.py` (history-collection contract, prospective SIP-session
+  and broker-action collectors), `governance/outcomes/maturation.py`,
+  `governance/promotion/bundle_contracts.py`, `governance/readiness/audit.py`,
+  `label_reconciliation.py`, `live_features.py`, `serving/model_context.py`,
+  `serving/prediction_service.py` and `strategy_research_contracts.py`; 53 test files
+  import it. Eleven `configs/*intraday*`/one-minute configs exist.
+- Mode-level references outside the package concentrate in about 15 files
+  (`modeling/prediction_selection.py`, `serving/prediction_service.py`,
+  `live_features.py`, `governance/promotion/bundle_contracts.py`,
+  `evidence/readiness_authority.py`, `serving/model_context.py`, drift, readiness and
+  outcome contracts, `core/prediction_contracts.py`, `serving/decision_policy.py`,
+  `strategy_research_contracts.py`). Other mentions are the swing `intraday_return`
+  feature, sub-daily bars or session wording and stay.
+- Closed swing evidence pins `label_reconciliation.py` and `live_features.py` and, through
+  their imports, `intraday/__init__.py` and `intraday/contracts/{__init__,configs,memory}.py`
+  (the two relationship feature publications and the relationship model request).
+  `predictor_replay` compares recorded current-implementation hashes with today's code,
+  so editing those files requires fresh swing-only replay evidence published beside,
+  never over, the historical pins (the approved September 20 policy).
+
+Proposed bounded sub-slices, each with its own design/diff review and checkpoint:
+(a) move the retained prospective SIP-session, broker-action and history-collection
+code and the security-namespace dependency to `sources`/`evidence`/`universe`
+ownership; (b) make serving, prediction selection, decision policy, bundle, readiness,
+outcome and drift contracts swing-only, removing retired modes without aliases and
+failing closed on incompatible historical artifacts; (c) make `live_features.py`,
+`label_reconciliation.py` and the strategy research contracts swing-only, then run the
+swing-only predictor and outcome replays (heavy, after the SEC download releases the
+lease) and publish that evidence separately; (d) delete the intraday package, its
+exclusive tests and configs once no consumer remains; (e) update documentation; (f)
+reference scans, CLI/API rejection, causal/lineage and swing regression, full suite,
+Ruff and strict mypy, consolidated review. All of it closes before the issuer-reaction
+features and the last two fits, so they build on the final swing-only contracts.
+
 The September 20 user instruction explicitly extends the completed HTTP/CLI and
 TradingFlow cleanup to all remaining Market Predictor implementation. This is a
 changed requirement, not a reopening of previously passed tests without cause.
