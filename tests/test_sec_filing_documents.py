@@ -1,0 +1,325 @@
+"""SEC filing-document collection over real EDGAR detail pages and an HTTP-level fake; no network."""
+from __future__ import annotations
+
+import hashlib
+import inspect
+import json
+from collections.abc import Callable
+from datetime import UTC, datetime, timedelta
+from pathlib import Path
+from typing import Any
+
+import pandas as pd
+import pytest
+
+from market_predictor.canonical.store import file_sha256
+from market_predictor.catalysts.sec_filings import document_collection as documents
+from market_predictor.core.errors import DataReadinessError
+from market_predictor.heavy_jobs import HeavyJobBusyError, heavy_job_lease
+from market_predictor.research import sec_filing_documents as collector
+from market_predictor.research.sec_form_inventory import SCHEMA as INVENTORY_SCHEMA
+from market_predictor.sources import http
+from market_predictor.sources.http import HttpByteResponse
+from tests.support.sec_archive import settings
+
+FIXTURES = Path(__file__).parent / "fixtures" / "sec"
+ABT, ABT_CIK = "0001104659-19-040664", "0000001800"
+REAL = (FIXTURES / f"{ABT}-index.htm").read_bytes()
+
+
+def _page(accession: str, cik: str, *, replace: tuple[tuple[str, str], ...] = ()) -> bytes:
+    """The real Abbott detail page re-addressed to another accession and CIK, optionally edited."""
+    text = REAL.decode("utf-8").replace(ABT, accession).replace(ABT.replace("-", ""), accession.replace("-", ""))
+    text = text.replace("/data/1800/", f"/data/{int(cik)}/")
+    for old, new in replace:
+        assert old in text, old
+        text = text.replace(old, new)
+    return text.encode("utf-8")
+
+
+def _filing(accession: str, cik: str, items: str, *, form: str = "8-K", security: str = "cik:x") -> dict[str, Any]:
+    return {"security_id": security, "sec_cik": cik, "accession_number": accession, "sec_form": form, "item_codes": items,
+            "report_date": "2019-07-17", "filing_date": "2019-07-17",
+            "accepted_at_utc": pd.Timestamp("2019-07-17T11:37:35Z"), "primary_document": "a19-12883_18k.htm"}
+
+
+FILINGS = [_filing(ABT, ABT_CIK, "2.02,9.01", security="cik:0000001800"),
+           _filing("0000000002-19-000001", "0000000002", "2.02,9.01"),
+           _filing("0000000003-19-000001", "0000000003", "2.02,9.01"),
+           _filing("0000000004-19-000001", "0000000004", "5.02")]
+
+
+def _url(cik: str, accession: str, name: str) -> str:
+    return f"https://www.sec.gov/Archives/edgar/data/{int(cik)}/{accession.replace('-', '')}/{name}"
+
+
+def _response(url: str, status: int, body: bytes, content_type: str = "text/html",
+              retry_after: str | None = None) -> HttpByteResponse:
+    headers = (("content-type", content_type), *((("retry-after", retry_after),) if retry_after is not None else ()))
+    return HttpByteResponse(body=body, requested_url=url, final_url=url, redirect_chain=(), status_code=status,
+                            retrieved_at_utc=datetime.now(UTC), content_type=content_type, content_encoding=None, etag=None,
+                            last_modified=None, body_length=len(body), sha256=hashlib.sha256(body).hexdigest(),
+                            body_representation="http_entity_encoded", safe_headers=headers)
+
+
+class _Edgar:
+    """Scripted responses per URL, consumed in order; the last one repeats."""
+
+    def __init__(self, scripts: dict[str, list[Callable[[str], HttpByteResponse]]]) -> None:
+        self.scripts = scripts
+        self.urls: list[str] = []
+
+    def __call__(self, url: str) -> HttpByteResponse:
+        self.urls.append(url)
+        script = self.scripts[url]
+        step = script.pop(0) if len(script) > 1 else script[0]
+        return step(url)
+
+
+def _ok(body: bytes, content_type: str = "text/html") -> Callable[[str], HttpByteResponse]:
+    return lambda url: _response(url, 200, body, content_type)
+
+
+def _status(code: int, retry_after: str | None = None) -> Callable[[str], HttpByteResponse]:
+    return lambda url: _response(url, code, b"", retry_after=retry_after)
+
+
+def _oversize(url: str) -> HttpByteResponse:
+    raise RuntimeError(f"{documents.OVERSIZE_MESSAGE}: declared=99999999 limit=16777216")
+
+
+def _scripts() -> dict[str, list[Callable[[str], HttpByteResponse]]]:
+    two, three = "0000000002-19-000001", "0000000003-19-000001"
+    return {
+        documents.index_url(ABT_CIK, ABT): [_ok(REAL)],
+        _url(ABT_CIK, ABT, "a19-12883_18k.htm"): [_ok(b"<html>8-K</html>")],
+        _url(ABT_CIK, ABT, "a19-12883_1ex99d1.htm"): [_status(503), _ok(b"<html>release</html>")],
+        documents.index_url("0000000002", two): [_ok(_page(two, "0000000002"))],
+        _url("0000000002", two, "a19-12883_18k.htm"): [_ok(b"<html>8-K two</html>")],
+        _url("0000000002", two, "a19-12883_1ex99d1.htm"): [_oversize],
+        documents.index_url("0000000003", three): [_status(404)],
+    }
+
+
+def _inventory(root: Path, rows: list[dict[str, Any]] = FILINGS, *, sealed: bool = False) -> dict[str, str]:
+    folder = root / "data/research/sec_inventory"
+    folder.mkdir(parents=True, exist_ok=True)
+    pd.DataFrame(rows).to_parquet(folder / "filings.parquet", index=False)
+    manifest = folder / "_manifest.json"
+    seal = {"sealed_until_rules_frozen": True} if sealed else {}
+    manifest.write_text(json.dumps({"schema": INVENTORY_SCHEMA, "status": "complete",
+                                    "mode": "later_sealed" if sealed else "initial_fit", **seal,
+                                    "artifacts": {"filings.parquet": file_sha256(folder / "filings.parquet")}}), encoding="utf-8")
+    return {"path": manifest.relative_to(root).as_posix(), "sha256": file_sha256(manifest)}
+
+
+@pytest.fixture(autouse=True)
+def _policy(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(collector, "_guard", lambda: None)
+    monkeypatch.delenv("MARKET_PREDICTOR_RUNTIME_DIR", raising=False)
+
+
+def _collect(root: Path, edgar: _Edgar, monkeypatch: pytest.MonkeyPatch, name: str = "sec_documents", **changes: Any
+             ) -> dict[str, Any]:
+    monkeypatch.setattr(collector, "sec_fetch", lambda _settings: edgar)
+    return collector.collect_sec_filing_documents(root=root, inventory=changes.pop("inventory", None) or _inventory(root),
+                                                  output=root / "data/raw" / name, settings=settings(),
+                                                  **changes)
+
+
+def _after_cooldown(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Resume as if SEC's cooldown (at least the configured minimum) has elapsed."""
+    original = documents.collect
+    monkeypatch.setattr(documents, "collect",
+                        lambda **kwargs: original(**kwargs, now=lambda: datetime.now(UTC) + timedelta(hours=2)))
+
+
+def test_real_detail_page_parses_strictly_and_selects_primary_and_ex99() -> None:
+    index = documents.parse_filing_index(REAL, accession=ABT)
+    assert (index.filing_date, index.period_of_report, index.item_codes) == ("2019-07-17", "2019-07-17", ("2.02", "9.01"))
+    assert index.accepted_at_utc == pd.Timestamp("2019-07-17T11:37:35Z")
+    assert [(item.sequence, item.document_type, item.filename) for item in index.documents] == [
+        ("1", "8-K", "a19-12883_18k.htm"), ("2", "EX-99.1", "a19-12883_1ex99d1.htm"), ("3", "GRAPHIC", "g128831mm01i001.gif")]
+    selected = documents.selected_documents(index, "a19-12883_18k.htm")
+    assert [item.sequence for item in selected] == ["1", "2"]
+    unit = {key: str(value) for key, value in documents.work_list(pd.DataFrame(FILINGS[:1])).iloc[0].items()}
+    assert documents.index_rejection(index, unit) is None
+    for key, value, reason in (("accepted_at_utc", "2019-07-17T11:37:36+00:00", "acceptance"), ("filing_date", "2019-07-18", "filing date"),
+                               ("report_date", "2019-07-16", "period"), ("item_codes", "2.02", "item codes"),
+                               ("primary_document", "other.htm", "primary document")):
+        assert reason in str(documents.index_rejection(index, {**unit, key: value}))
+
+
+@pytest.mark.parametrize(("edit", "message"), [
+    (('href="/Archives/edgar/data/1800/000110465919040664/a19-12883_18k.htm"',
+      'href="/Archives/edgar/data/1800/000110465919099999/a19-12883_18k.htm"'), "outside its accession folder"),
+    (('<div class="infoHead">Accepted</div>', '<div class="infoHead">Received</div>'), "acceptance"),
+    (('summary="Document Format Files"', 'summary="Other Files"'), "exactly one document table"),
+    (('<th scope="col">Size</th>', '<th scope="col">Bytes</th>'), "header differs"),
+    (("a19-12883_1ex99d1.htm</a>", "a19-12883_1ex99d1.htm</a></td><td>extra"), "malformed"),
+])
+def test_malformed_or_foreign_detail_pages_raise(edit: tuple[str, str], message: str) -> None:
+    with pytest.raises(DataReadinessError, match=message):
+        documents.parse_filing_index(REAL.decode().replace(*edit).encode(), accession=ABT)
+    with pytest.raises(DataReadinessError, match="another accession"):
+        documents.parse_filing_index(REAL, accession="0001104659-19-000001")
+
+
+def test_inline_viewer_links_resolve_to_their_document() -> None:
+    page = _page(ABT, ABT_CIK, replace=(('href="/Archives/edgar/data/1800/000110465919040664/a19-12883_18k.htm"',
+                                         'href="/ix?doc=/Archives/edgar/data/1800/000110465919040664/a19-12883_18k.htm"'),))
+    assert documents.parse_filing_index(page, accession=ABT).documents[0].filename == "a19-12883_18k.htm"
+
+
+def test_collection_classifies_outcomes_retries_and_verifies(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    edgar = _Edgar(_scripts())
+    report = _collect(tmp_path, edgar, monkeypatch)
+    assert report["status"] == "complete"
+    totals = report["totals"]
+    assert totals["units_by_phase_and_state"] == {"document/archived": 3, "document/oversize": 1, "index/archived": 2,
+                                                  "index/missing": 1}
+    assert totals["documents_by_type_and_state"] == {"EX-99.1/archived": 1, "EX-99.1/oversize": 1, "primary/archived": 2}
+    assert totals["attempts_by_state"]["retryable"] == 1 and totals["archived_content_types"] == {"text/html": 5}
+    assert set(edgar.urls) == set(_scripts()) and "0000000004" not in " ".join(edgar.urls)
+    output = tmp_path / "data/raw/sec_documents"
+    manifest = json.loads((output / "_manifest.json").read_text())
+    store = documents.Store.open(output, manifest["checkpoint_sha256"], manifest["request_sha256"])
+    final, receipts = documents.outcomes(store, documents.work_list(pd.DataFrame(FILINGS)))
+    store.verify(receipts)
+    release = receipts.loc[receipts.unit_id.eq(f"{ABT}/2") & receipts.state.eq("archived")].iloc[0]
+    assert json.loads(release.index_row_json)["document_type"] == "EX-99.1" and int(release.attempt) == 2
+    with pytest.raises(DataReadinessError, match="immutable"):
+        _collect(tmp_path, edgar, monkeypatch, resume_checkpoint_sha256=manifest["checkpoint_sha256"])
+    opened, published = collector.open_sec_document_collection(
+        tmp_path, {"path": "data/raw/sec_documents/_manifest.json", "sha256": report["manifest_sha256"]})
+    assert published["status"] == "complete" and set(opened.shards) == set(store.shards)
+
+
+def test_stop_on_403_then_resume_only_with_pinned_checkpoint(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    scripts = _scripts()
+    scripts[documents.index_url("0000000002", "0000000002-19-000001")].insert(0, _status(403, retry_after="0"))
+    edgar = _Edgar(scripts)
+    stopped = _collect(tmp_path, edgar, monkeypatch)
+    assert stopped["status"] == "stopped" and stopped["stop_status_code"] == 403
+    with pytest.raises(DataReadinessError, match="checkpoint SHA256"):
+        _collect(tmp_path, edgar, monkeypatch)
+    with pytest.raises(DataReadinessError, match="pin differs"):
+        _collect(tmp_path, edgar, monkeypatch, resume_checkpoint_sha256="0" * 64)
+    shard = next((tmp_path / "data/raw/sec_documents/shards").glob("*.zip"))
+    original = shard.read_bytes()
+    shard.write_bytes(original + b" ")
+    with pytest.raises(DataReadinessError, match="shard changed"):
+        _collect(tmp_path, edgar, monkeypatch, resume_checkpoint_sha256=stopped["checkpoint_sha256"])
+    shard.write_bytes(original)
+    _after_cooldown(monkeypatch)
+    resumed = _collect(tmp_path, edgar, monkeypatch, resume_checkpoint_sha256=stopped["checkpoint_sha256"])
+    assert resumed["status"] == "complete"
+    assert resumed["totals"]["attempts_by_state"]["stopped"] == 1
+
+
+def test_request_binds_inventory_pilot_and_work_list(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    edgar = _Edgar(_scripts())
+    pilot = _collect(tmp_path, edgar, monkeypatch, "pilot", pilot_accessions=(ABT,))
+    assert pilot["totals"]["units_by_phase_and_state"] == {"document/archived": 2, "index/archived": 1}
+    with pytest.raises(DataReadinessError, match="not selected filings"):
+        _collect(tmp_path, edgar, monkeypatch, "pilot-bad", pilot_accessions=("0000000004-19-000001",))
+    stopped_scripts = _scripts()
+    stopped_scripts[documents.index_url(ABT_CIK, ABT)].insert(0, _status(429, retry_after="0"))
+    first = _collect(tmp_path, _Edgar(stopped_scripts), monkeypatch, "changing")
+    with pytest.raises(DataReadinessError, match="request differs"):
+        _collect(tmp_path, edgar, monkeypatch, "changing", pilot_accessions=(ABT,),
+                 resume_checkpoint_sha256=first["checkpoint_sha256"])
+    with pytest.raises(DataReadinessError, match="direct child of data/raw"):
+        collector.collect_sec_filing_documents(root=tmp_path, inventory=_inventory(tmp_path),
+                                               output=tmp_path / "data/raw/nested/out")
+
+
+def test_rejected_detail_page_is_kept_and_plans_no_documents(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    scripts = _scripts()
+    scripts[documents.index_url(ABT_CIK, ABT)] = [_ok(REAL.replace(b"2019-07-17 07:37:35", b"2019-07-17 08:37:35"))]
+    report = _collect(tmp_path, _Edgar(scripts), monkeypatch, pilot_accessions=(ABT,))
+    assert report["totals"]["units_by_phase_and_state"] == {"index/rejected": 1}
+
+
+def test_busy_lease_prevents_any_read(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(collector, "_units", lambda *_: pytest.fail("inventory read without the lease"))
+    with heavy_job_lease("test-owner", runtime_dir=tmp_path / "data/runtime"), pytest.raises(HeavyJobBusyError):
+        _collect(tmp_path, _Edgar(_scripts()), monkeypatch, inventory={"path": "x", "sha256": "0" * 64})
+
+
+def test_co_registrant_links_keep_their_filer_folder() -> None:
+    page = _page(ABT, ABT_CIK, replace=(('href="/Archives/edgar/data/1800/000110465919040664/a19-12883_1ex99d1.htm"',
+                                         'href="/Archives/edgar/data/1415404/000110465919040664/a19-12883_1ex99d1.htm"'),))
+    index = documents.parse_filing_index(page, accession=ABT)
+    assert index.documents[1].path == "/Archives/edgar/data/1415404/000110465919040664/a19-12883_1ex99d1.htm"
+
+
+def test_joint_filing_is_one_unit_with_every_filer() -> None:
+    rows = [_filing(ABT, "0000001800", "2.02,9.01"), _filing(ABT, "0000001801", "2.02,9.01")]
+    units = documents.work_list(pd.DataFrame(rows))
+    assert (len(units), units.sec_cik.item(), units.filer_ciks.item()) == (1, "0000001800", "0000001800,0000001801")
+    with pytest.raises(DataReadinessError, match="conflicting"):
+        documents.work_list(pd.DataFrame([rows[0], {**rows[1], "report_date": "2019-07-18"}]))
+
+
+def test_retry_exhaustion_is_a_final_outcome(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    scripts = _scripts()
+    scripts[_url(ABT_CIK, ABT, "a19-12883_1ex99d1.htm")] = [_status(503)]
+    report = _collect(tmp_path, _Edgar(scripts), monkeypatch, pilot_accessions=(ABT,))
+    assert report["totals"]["units_by_phase_and_state"] == {"document/archived": 1, "document/retry_exhausted": 1,
+                                                            "index/archived": 1}
+    assert report["totals"]["attempts_by_state"]["retryable"] == documents.MAXIMUM_ATTEMPTS
+
+
+def test_uncommitted_shard_files_are_removed_on_resume(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    scripts = _scripts()
+    scripts[documents.index_url(ABT_CIK, ABT)].insert(0, _status(429, retry_after="0"))
+    stopped = _collect(tmp_path, _Edgar(scripts), monkeypatch, pilot_accessions=(ABT,))
+    output = tmp_path / "data/raw/sec_documents"
+    for suffix in ("zip", "parquet"):  # A crash after the shard rename but before its checkpoint.
+        (output / "shards" / f"shard-00099.{suffix}").write_bytes(b"uncommitted")
+    (output / ".shard-crashed").mkdir()
+    _after_cooldown(monkeypatch)
+    resumed = _collect(tmp_path, _Edgar(scripts), monkeypatch, pilot_accessions=(ABT,),
+                       resume_checkpoint_sha256=stopped["checkpoint_sha256"])
+    assert resumed["status"] == "complete"
+    assert not (output / "shards/shard-00099.zip").exists() and not (output / ".shard-crashed").exists()
+
+
+def test_rewritten_receipt_is_detected_even_with_a_rewritten_checkpoint(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    report = _collect(tmp_path, _Edgar(_scripts()), monkeypatch, pilot_accessions=(ABT,))
+    output = tmp_path / "data/raw/sec_documents"
+    shard = output / "shards/shard-00000.parquet"
+    frame = pd.read_parquet(shard)
+    frame.loc[0, "content_type"] = "text/plain"
+    frame.to_parquet(shard, index=False)
+    checkpoint = json.loads((output / "_checkpoint.json").read_text())
+    checkpoint["shards"]["shard-00000"]["parquet_sha256"] = file_sha256(shard)
+    (output / "_checkpoint.json").write_text(json.dumps(checkpoint), encoding="utf-8")
+    store = documents.Store.open(output, file_sha256(output / "_checkpoint.json"), report["request_sha256"])
+    with pytest.raises(DataReadinessError, match="receipt differs"):
+        store.verify(store.receipts())
+
+
+def test_cooldown_blocks_an_early_resume(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    scripts = _scripts()
+    scripts[documents.index_url(ABT_CIK, ABT)].insert(0, _status(429, retry_after="3600"))
+    stopped = _collect(tmp_path, _Edgar(scripts), monkeypatch, pilot_accessions=(ABT,))
+    assert stopped["status"] == "stopped" and stopped["stop_status_code"] == 429
+    with pytest.raises(DataReadinessError, match="cooldown has not elapsed"):
+        _collect(tmp_path, _Edgar(scripts), monkeypatch, pilot_accessions=(ABT,),
+                 resume_checkpoint_sha256=stopped["checkpoint_sha256"])
+
+
+def test_oversize_classification_matches_the_pinned_client() -> None:
+    assert documents.OVERSIZE_MESSAGE in inspect.getsource(http._read_bounded_http_entity)
+
+
+def test_sealed_collection_reports_units_only_and_stays_closed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    rows = [{key: value for key, value in row.items() if key != "security_id"} for row in FILINGS]
+    report = _collect(tmp_path, _Edgar(_scripts()), monkeypatch, inventory=_inventory(tmp_path, rows, sealed=True))
+    assert report["sealed_until_rules_frozen"] is True
+    assert set(report["totals"]) == {"units_by_phase_and_state", "attempts_by_state"}
+    with pytest.raises(DataReadinessError, match="sealed"):
+        collector.open_sec_document_collection(
+            tmp_path, {"path": "data/raw/sec_documents/_manifest.json", "sha256": report["manifest_sha256"]})

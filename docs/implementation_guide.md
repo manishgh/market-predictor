@@ -329,6 +329,38 @@ are rejected because only the corrections archive may supply them. Proof availab
 is the membership effective start (`retrospective_membership_effective_proxy`); proofs
 are research evidence, never training, serving or promotion admission.
 
+`market-predictor-research inspect-sec-form-inventory --config
+configs/swing_sec_form_inventory.json --config-sha256 <pin> --output
+data/research/<new-name> [--mode initial_fit|later_sealed]` inventories saved SEC filing
+metadata for the approved cohort (publisher `research/sec_form_inventory.py`, pure logic
+`catalysts/sec_filings/form_inventory.py`). It replays every issuer's saved EDGAR
+submissions responses through the unchanged `SecSource` with an archive-backed client
+(`collection.replay_sec_filing_collection`); the replayed records must equal the
+canonical events and reproduce the recorded response hash, and the replay also recovers
+8-K item codes, document descriptions, sizes and XBRL flags. Filings are attributed
+through the pinned SEC identity relations (bound to the identity alignment manifest and
+the collection request) when the relation covers and was available by the filing's
+availability; same-CIK filings outside a relation are counted separately. Rows carry
+report-date lag in days and XNYS sessions, the acceptance session position and the
+document status against every saved official-document collection (verified from its
+own `_request.json`) and the identity-evidence store. `initial_fit` writes
+`filings.parquet`, `security_years.parquet` and `security_year_counts.parquet`;
+`later_sealed` lists later filings only, sealed until qualification rules are frozen.
+
+`market-predictor-research collect-sec-filing-documents --inventory-manifest
+data/research/<inventory>/_manifest.json --inventory-sha256 <pin> --output
+data/raw/<new-name> [--resume-checkpoint-sha256 <pin>] [--pilot-accession <accession>]`
+collects, for cohort 8-Ks carrying item 2.02, 7.01 or 8.01, each EDGAR detail page,
+then the primary document and every EX-99 exhibit that a verified page names (publisher
+`research/sec_filing_documents.py`, collector `catalysts/sec_filings/document_collection.py`).
+Detail pages are parsed strictly and must match the pinned acceptance time, filing date,
+period of report, item codes and primary document. Requests use a dedicated SEC governor
+with one attempt per call; outcomes are archived, rejected, missing, oversize (16 MiB),
+HTTP error, retryable (up to three attempts) or stopped at the first 403/429. Bodies and
+self-hashed receipts are written to immutable zip/parquet shards listed by an atomically
+replaced checkpoint; a stopped run resumes only with the printed checkpoint hash.
+Retrieval time is first observation, never historical availability.
+
 ## Source Roles
 
 ### Retained Holding-Identity Preflight

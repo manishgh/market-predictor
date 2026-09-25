@@ -10,12 +10,12 @@ import threading
 import tomllib
 import zipfile
 import zlib
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, replace
 from datetime import UTC, date, datetime, time
 from pathlib import Path
-from typing import Final, Protocol
+from typing import Any, Final, Protocol
 from urllib.parse import unquote, urlparse
 from uuid import uuid4
 from zoneinfo import ZoneInfo
@@ -36,8 +36,10 @@ from market_predictor.canonical.store import (
     manifest_path_for,
     write_canonical_artifact,
 )
+from market_predictor.config import Settings
 from market_predictor.core.errors import DataReadinessError
-from market_predictor.sources.sec import SecFilingHistory, SecRawResponse, SecSourceResponseError
+from market_predictor.sources.http import _DEFAULT_MAXIMUM_BODY_BYTES, HttpByteResponse, HttpClient
+from market_predictor.sources.sec import SecFilingHistory, SecRawResponse, SecSource, SecSourceResponseError
 
 SEC_COLLECTION_SCHEMA: Final = "edge_rebuild.sec_filing_collection.v2"
 SEC_COLLECTION_MANIFEST_SCHEMA: Final = "edge_rebuild.sec_filing_collection_manifest.v2"
@@ -520,6 +522,113 @@ def load_sec_filing_collection(directory: Path) -> SecFilingCollection:
     ):
         raise DataReadinessError("SEC collection row lineage does not verify")
     return SecFilingCollection(directory, events, coverage, inventory, manifest, authority)
+
+
+@dataclass(frozen=True, slots=True)
+class ReplayedSecIssuer:
+    """One issuer's filings re-derived from its saved responses by the unchanged SEC client."""
+
+    cik: str
+    history: SecFilingHistory
+    events: pd.DataFrame
+
+
+class _ArchivedSecClient(HttpClient):
+    """Serve one issuer's saved EDGAR bodies with their recorded metadata; an unsaved URL fails."""
+
+    def __init__(self, archive: zipfile.ZipFile, responses: pd.DataFrame) -> None:
+        super().__init__(user_agent="market-predictor/sec-archive-replay")
+        if responses["requested_url"].duplicated().any():
+            raise DataReadinessError("SEC raw responses repeat a requested URL")
+        self._archive = archive
+        self._responses = {str(row.requested_url): row for row in responses.itertuples(index=False)}
+        self.served: list[str] = []
+
+    def get_bytes_with_metadata(
+        self,
+        url: str,
+        *,
+        params: dict[str, Any] | None = None,
+        headers: dict[str, str] | None = None,
+        retries: int = 3,
+        pause: float = 1.0,
+        maximum_body_bytes: int = _DEFAULT_MAXIMUM_BODY_BYTES,
+        allow_redirects: bool = True,
+        raise_for_status: bool = True,
+    ) -> HttpByteResponse:
+        row = self._responses.get(url)
+        if row is None or params:
+            raise RuntimeError(f"SEC response was not archived: {url}")
+        body = self._archive.read(str(row.archive_member))
+        if len(body) != int(row.body_length) or hashlib.sha256(body).hexdigest() != str(row.body_sha256):
+            raise DataReadinessError("SEC raw response body does not verify")
+        if len(body) > maximum_body_bytes:
+            raise RuntimeError(f"SEC archived response exceeds maximum_body_bytes: {url}")
+        self.served.append(url)
+        recorded = json.loads(str(row.safe_headers_json))
+        return HttpByteResponse(
+            body=body,
+            requested_url=str(row.requested_url),
+            final_url=str(row.final_url),
+            redirect_chain=(),
+            status_code=int(row.status_code),
+            retrieved_at_utc=pd.Timestamp(row.retrieved_at_utc).to_pydatetime(),
+            content_type=_optional_text(row.content_type),
+            content_encoding=_optional_text(row.content_encoding),
+            etag=_optional_text(row.etag),
+            last_modified=_optional_text(row.last_modified),
+            body_length=len(body),
+            sha256=str(row.body_sha256),
+            body_representation="http_entity_encoded",
+            safe_headers=tuple(sorted((str(key), str(value)) for key, value in recorded.items())),
+        )
+
+
+def replay_sec_filing_collection(collection: SecFilingCollection, settings: Settings) -> Iterator[ReplayedSecIssuer]:
+    """Re-derive each issuer's filings, one at a time, from its saved responses only.
+
+    The unchanged client walk decides which saved pages overlap the window, reconciles each
+    older page with its ``filingCount`` and rejects conflicting duplicates. Its records must
+    equal the canonical events, every saved response must be served, and the response set
+    must reproduce the recorded hash, so an unsaved overlapping page fails as an unarchived URL.
+    """
+    request = collection.manifest.get("request")
+    if not isinstance(request, Mapping):
+        raise DataReadinessError("SEC filing collection request is malformed")
+    start = pd.Timestamp(str(request["requested_start_utc"])).to_pydatetime()
+    end = pd.Timestamp(str(request["requested_end_utc"])).to_pydatetime()
+    forms = {str(form) for form in request["forms"]}
+    by_issuer = {str(cik): frame for cik, frame in collection.events.groupby(collection.events["sec_cik"].astype(str))}
+    responses_by_issuer = {str(cik): frame for cik, frame in
+                           collection.raw_inventory.groupby(collection.raw_inventory["sec_cik"].astype(str))}
+    with zipfile.ZipFile(collection.directory / "raw_responses.zip") as archive:
+        for coverage in collection.source_collections.sort_values("sec_cik", kind="stable").itertuples(index=False):
+            cik = str(coverage.sec_cik)
+            responses = responses_by_issuer.get(cik, collection.raw_inventory.iloc[:0])
+            client = _ArchivedSecClient(archive, responses)
+            try:
+                history = SecSource(settings, client=client).fetch_cik_filing_history(
+                    cik, start, end, forms=forms, ticker_hint=str(coverage.ticker))
+            except SecSourceResponseError as exc:
+                raise DataReadinessError(f"SEC saved responses do not replay for {cik}: {exc}") from exc
+            finally:
+                client.session.close()
+            issuer = by_issuer.get(cik, collection.events.iloc[:0])
+            replayed = sorted((filing.accession_number, filing.raw_sha256, filing.form, pd.Timestamp(filing.accepted_at_utc))
+                              for filing in history.filings)
+            expected = sorted(zip(issuer["accession_number"].astype(str), issuer["raw_sha256"].astype(str),
+                                  issuer["sec_form"].astype(str), pd.to_datetime(issuer["accepted_at_utc"], utc=True), strict=True))
+            if replayed != expected:
+                raise DataReadinessError(f"SEC replayed filings differ from canonical events for {cik}")
+            if (sorted(client.served) != sorted(responses["requested_url"].astype(str))
+                    or _response_set_sha256(history.raw_responses) != str(coverage.response_sha256)
+                    or list(history.submission_files) != json.loads(str(coverage.submission_files_json))):
+                raise DataReadinessError(f"SEC replayed responses differ from the saved inventory for {cik}")
+            yield ReplayedSecIssuer(cik, history, issuer)
+
+
+def _optional_text(value: object) -> str | None:
+    return None if value is None or (not isinstance(value, str) and pd.isna(value)) else str(value)
 
 
 @dataclass(frozen=True, slots=True)

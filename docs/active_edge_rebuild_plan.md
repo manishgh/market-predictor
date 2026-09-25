@@ -466,8 +466,8 @@ later) download the documents of 8-Ks carrying item 2.02, 7.01 or 8.01.
   accepted a day or more after their report date. 91,065 in-window raw rows are forms
   the collector did not request. Saved documents: ten official-document collections
   (51 corporate-action documents) and the identity-evidence store
-  `data/raw/sec_identity_evidence_20260802` (61 listed documents over 57 accessions,
-  39 of them in-window events); no earnings release is saved. Whole filings are large (cohort 2.02
+  `data/raw/sec_identity_evidence_20260802` (56 saved documents in two inventories whose
+  61 rows include 5 lookups that found no filing); no earnings release is saved. Whole filings are large (cohort 2.02
   filings total 25.5 GB by EDGAR `size`).
 - Byte-frozen: `sources/sec.py`, `sources/http.py` and `sources/official_documents.py`
   are in closed evidence's pinned import closure; they are only imported.
@@ -492,12 +492,17 @@ Inventory (`inspect-sec-form-inventory`):
   `cik_identity_outside_relation`, separately from unknown identity; neither is
   attributed. Inside a relation, a zero for a requested form is a verified zero.
 - Each filing row carries form, item codes, report date, acceptance and availability
-  clocks with the availability rule and `retrospective` label, acceptance lag in XNYS
-  sessions after the report date, session position (pre-open, intraday, after-close,
-  non-session), identity policy, share-class flag, EDGAR size, description, XBRL flags
-  and document status. A lagged 8-K is a late record of an event; its first public time
-  must come from other evidence, never from `report_date`. Counts use EDGAR's own form
-  names and item codes, split into same-day and lagged filings; no invented families.
+  clocks with the availability rule and `retrospective` label, session position
+  (pre-open, intraday, after-close, non-session), identity policy, share-class flag,
+  EDGAR size, description, XBRL flags and document status. 8-K timing is defined from
+  SEC availability (closure review): calendar days from report date to acceptance; XNYS
+  sessions after the report date that opened before availability; whether the report
+  date itself was a session that opened before availability; and a three-way label
+  `post_report_sessions_precede_sec`, `report_session_may_precede_sec` (SEC data alone
+  cannot tell) or `no_post_report_session_before_sec`. An 8-K filed after trading
+  already occurred is a late record of an event; its first public time must come from
+  other evidence, never from `report_date`. Counts use EDGAR's own form names and item
+  codes split by that label; no invented families.
 - Document status: official-document collections are verified from their own pinned
   `_request.json` (embedded inventory checked against `inventory_sha256`) with the
   unchanged `verify_official_document_collection`; the identity-evidence store through
@@ -508,8 +513,12 @@ Inventory (`inspect-sec-form-inventory`):
   counts by form and item code, relation-covered, CIK-outside-relation and unknown
   days, document status counts) and `_manifest.json`. The same command in `sealed` mode
   lists the later-window filings (after the initial-fit cutoff to the archive end,
-  covering validation and historical test) with no per-security statistics, marked
-  sealed until qualification rules are frozen on initial-fit evidence only.
+  covering validation and historical test) keeping only the collector's work-list
+  columns, one row per accession, with an accession count as its only statistic. One
+  guarded loader serves every consumer and refuses a sealed inventory except to the
+  document collector; the collection reader refuses a sealed collection, whose manifest
+  holds unit counts only. The seal lifts only through a pinned record that qualification
+  rules were frozen on initial-fit evidence.
 
 Collector (`collect-sec-filing-documents`, new `catalysts/sec_filings/document_collection.py`):
 
@@ -517,8 +526,9 @@ Collector (`collect-sec-filing-documents`, new `catalysts/sec_filings/document_c
   7.01 or 8.01 (initial fit), and separately the sealed later-window list into its own
   store. Phase one fetches each filing's EDGAR detail page (`{accession}-index.htm`).
   It is parsed with BeautifulSoup `html.parser` (already a dependency): exactly one
-  document table selected by its exact header, links inside that accession's folder,
-  inline-viewer links resolved to their document; its header (accepted time, filing
+  document table selected by its exact header, links inside that accession's folder
+  under any filer's CIK (co-registrants), inline-viewer links resolved to their
+  document; a joint filing is one unit keeping every filer CIK; its header (accepted time, filing
   date, period of report, items) must match the inventory row and its primary document
   the saved `primaryDocument`, otherwise a recorded rejection. Retrospective header
   fields (current name, SIC, address) are never point-in-time attributes.
@@ -531,13 +541,16 @@ Collector (`collect-sec-filing-documents`, new `catalysts/sec_filings/document_c
   `_request.json`) and `get_bytes_with_metadata(retries=1, allow_redirects=False,
   raise_for_status=False, maximum_body_bytes=16 MiB)`. Outcomes: archived (200 and
   accepted); terminal (404/410, oversize by the client's exact error, index or header
-  rejection); stop-and-resume (403/429, recorded, run ends); retryable (5xx or
-  connection errors) up to three attempts per unit across runs; at most one archived
-  attempt per unit.
+  rejection); stop-and-resume (403/429, recorded, run ends, and a resume refuses to send
+  a request before SEC's Retry-After or the configured cooldown, whichever is longer,
+  has elapsed); retryable (5xx or connection errors) up to three attempts per unit;
+  at most one archived attempt per unit. Receipts keep the final URL, redirect chain,
+  retrieval clock and safe headers.
 - Storage: immutable shards (a zip of bodies named by accession, sequence and body
   hash, plus a parquet of self-hashed receipt rows), staged then renamed; an atomically
-  replaced checkpoint lists shard hashes; a resume re-hashes shards and final
-  verification checks every member. An immutable self-hashed `_request.json` binds the
+  replaced checkpoint lists shard hashes and is the commit point: a reopen removes shard
+  files and staging folders the checkpoint does not name, re-hashes shards, and final
+  verification checks every member and receipt hash. An immutable self-hashed `_request.json` binds the
   inventory manifest, work-list hash and governor settings. Heavy-job lease for the
   whole run (initial fit about four hours), memory guard every 500 requests. Retrieval
   time (2026) is first observation, never historical availability; EDGAR filings are

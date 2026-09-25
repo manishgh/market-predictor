@@ -469,3 +469,48 @@ def test_proof_cli_expected_failure_codes(monkeypatch: pytest.MonkeyPatch, error
     result = CliRunner().invoke(_app(), ["prove-legacy-query-identities", "--config", "c.json", "--config-sha256",
                                          "d" * 64, "--output", "data/research/proofs"])
     assert result.exit_code == exit_code and str(error) in result.output
+
+
+@pytest.mark.parametrize("mode", ["initial_fit", "later_sealed"])
+def test_sec_inventory_cli_wires_mode_and_compact_report(monkeypatch: pytest.MonkeyPatch, mode: str) -> None:
+    report = dict(status="complete", mode=mode, manifest_sha256="f" * 64, training_eligible=False, serving_eligible=False,
+                  totals={"test_only": 1})
+    publisher = Mock(return_value=report)
+    monkeypatch.setattr(commands, "publish_sec_form_inventory", publisher)
+    result = CliRunner().invoke(_app(), ["inspect-sec-form-inventory", "--config", "configs/sec.json", "--config-sha256",
+                                         "d" * 64, "--output", "data/research/sec", "--mode", mode])
+    assert result.exit_code == 0, result.exception
+    publisher.assert_called_once_with(root=Path("."), config=Path("configs/sec.json"), config_sha256="d" * 64,
+                                      output=Path("data/research/sec"), mode=mode)
+    assert json.loads(result.stdout) == {key: report[key] for key in (
+        "status", "mode", "manifest_sha256", "training_eligible", "serving_eligible")}
+
+
+def test_sec_inventory_cli_rejects_unknown_mode_and_maps_failures(monkeypatch: pytest.MonkeyPatch) -> None:
+    publisher = Mock(side_effect=HeavyJobBusyError("lease busy"))
+    monkeypatch.setattr(commands, "publish_sec_form_inventory", publisher)
+    arguments = ["inspect-sec-form-inventory", "--config", "c.json", "--config-sha256", "d" * 64, "--output", "data/research/sec"]
+    assert CliRunner().invoke(_app(), [*arguments, "--mode", "validation"]).exit_code == 2
+    publisher.assert_not_called()
+    result = CliRunner().invoke(_app(), arguments)
+    assert result.exit_code == 75 and "lease busy" in result.output
+
+
+@pytest.mark.parametrize(("report", "printed"), [
+    ({"status": "stopped", "checkpoint_sha256": "c" * 64, "stop_status_code": 429, "stopped_unit": "a/index"},
+     {"status", "checkpoint_sha256", "stop_status_code", "stopped_unit"}),
+    ({"status": "complete", "checkpoint_sha256": "c" * 64, "manifest_sha256": "f" * 64, "totals": {"test_only": 1},
+      "shards": {}}, {"status", "checkpoint_sha256", "manifest_sha256", "totals"}),
+])
+def test_sec_document_cli_wires_resume_and_pilot(monkeypatch: pytest.MonkeyPatch, report: dict[str, Any],
+                                                 printed: set[str]) -> None:
+    collector = Mock(return_value=report)
+    monkeypatch.setattr(commands, "collect_sec_filing_documents", collector)
+    result = CliRunner().invoke(_app(), ["collect-sec-filing-documents", "--inventory-manifest", "data/research/sec/_manifest.json",
+                                         "--inventory-sha256", "d" * 64, "--output", "data/raw/sec_documents",
+                                         "--resume-checkpoint-sha256", "c" * 64, "--pilot-accession", "0000000001-19-000001"])
+    assert result.exit_code == 0, result.exception
+    collector.assert_called_once_with(root=Path("."), inventory={"path": "data/research/sec/_manifest.json", "sha256": "d" * 64},
+                                      output=Path("data/raw/sec_documents"), resume_checkpoint_sha256="c" * 64,
+                                      pilot_accessions=("0000000001-19-000001",))
+    assert set(json.loads(result.stdout)) == printed
