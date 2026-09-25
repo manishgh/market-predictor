@@ -610,6 +610,61 @@ SEC acceptance-clock finding and correction (September 25; design addendum for r
   window changes from the corrected clock (an after-close filing no longer intraday);
   concurrency with deterministic receipts and a 403 stop under several workers.
 
+Consolidated review decisions for the clock correction (September 25; they supersede
+the bullets above where they differ):
+
+- Measured, not assumed. EDGAR's own detail pages for HollyFrontier's 10-K, 10-Q and 8-K
+  all read New York wall-clock time, matching its saved labels. The reported form-group
+  mix was a 10-K accepted at 17:31 and dated that day, which EDGAR allows when
+  transmission began by 17:30. Over the saved archive, the page-derived convention
+  leaves fewer filings outside EDGAR's 06:00-22:00 New York weekday hours than the
+  opposite reading for all 520 page-labelled issuers and for 1,619 issuer-form groups;
+  458 groups are uninformative and none is contrary. Genuine out-of-hours acceptances
+  exist (119 filings of page-`utc` issuers, mostly Saturday 424B2 filings), so hours are
+  comparative evidence, never a hard rule. Eighteen of the 93 affected issuers stopped
+  filing before 2024 and the rest file through 2026, so no rule predicts the defect.
+  These read-only diagnostics counted clocks over the whole archive, including the later
+  window, and read no content; the publication's in-data evidence uses only filings
+  dated before the initial-fit cutoff's New York date.
+- One convention per issuer, verified in every form group: a resumable, leased page
+  collection fetches the detail pages of each issuer's first and last archive filing in
+  every form group it has (current reports, periodic reports, ownership forms, other).
+  A detail-page header carries no content, and the sealed collection fetches
+  later-window pages anyway. A page whose acceptance equals the raw value read as UTC
+  classifies `utc`; read as New York wall clock (a DST-ambiguous or nonexistent instant
+  raises), `new_york_wall_clock_labeled_utc`. Neither, disagreeing pages within one
+  issuer, or an in-data comparison contrary to the pages fails the publication. An
+  issuer lacking a classified page in any of its groups stays `unknown`; its filings
+  are excluded from timing outputs and counted.
+- The publication records per issuer the convention, every page comparison and the
+  per-group in-data counts under both readings. The form inventory corrects every row
+  from the raw `acceptanceDateTime` string and keeps the raw value and convention.
+- Consumers. The addendum's statement that only the two inventories consumed these
+  clocks was incomplete. The SEC decision authority (`catalysts/sec_filings/
+  decision_authority.py`, the `publish-edge-sec-filing-authority` command and its test)
+  consumed the uncorrected events, is superseded by the corrected inventory, is pinned
+  by no closed evidence and is deleted. Its artifact
+  `data/canonical/sec_filing_authority_20190709_20260708_v1`, SEC-family catalyst events
+  and the historical `catalyst_full` SEC columns (`source_count_sec_*`,
+  `source_coverage_known_sec_*`, `sec_latest_filing_*`) stay as clock-contaminated
+  historical evidence for the affected issuers and cannot feed new work. Neither
+  retained model consumes an SEC, news or catalyst column (0 of 120 and 0 of 124).
+  `SecFilingCollection` events keep the API's labels as raw evidence, documented as not
+  a timing source. The SEC family inside the pinned catalyst authority is removed in the
+  retirement's evidence re-issue step, where pinned files change with fresh evidence.
+- Prospective and live timing: no live SEC timing path remains after the deletion. The
+  issuer-reaction design must take each new filing's acceptance from its EDGAR detail
+  page (EDGAR's own New York clock), never from `acceptanceDateTime`.
+- Collector: four worker threads, each with its own HTTP session, share one governor
+  at five requests per second. The first 403 or 429 stops new submissions; in-flight
+  attempts finish and are recorded before the checkpoint. The corrected run writes a
+  new output, `data/raw/sec_filing_documents_initial_fit_corrected_clock`.
+- Added exit tests: a real page per convention, a DST-ambiguous raw value, pages that
+  disagree, pages contradicted by in-data counts, an unfetchable group, a corrected
+  after-close 8-K moving from intraday to the next open, a filing moving across the
+  2024-05-28 cutoff, UTC issuers' rows unchanged apart from the new columns, and
+  concurrent collection with a 403 stop.
+
 September 21 bounded source inspection and reaction-measurement contract:
 
 - The early saved Alpaca shard `f91f0fa1d3de638169abab12.parquet` has 18
@@ -742,6 +797,54 @@ exclusive tests and configs once no consumer remains; (e) update documentation; 
 reference scans, CLI/API rejection, causal/lineage and swing regression, full suite,
 Ruff and strict mypy, consolidated review. All of it closes before the issuer-reaction
 features and the last two fits, so they build on the final swing-only contracts.
+
+Consolidated review decisions for the retirement (September 25; they supersede the
+inventory and sub-slices above where they differ):
+
+- Closed evidence pins more intraday-bearing files than listed:
+  `modeling/strategy_contract.py` and `configs/edge_rebuild_strategy_contract.toml`
+  (19 artifacts, including both model requests and all three baseline readiness
+  reports), `label_paths.py` (5 relationship artifacts) and `canonical/joins.py` (14).
+  `load_return_inputs` re-hashes every readiness pin and requires current bytes for
+  implementation files including the strategy contract, so editing any of them makes
+  both model families unloadable.
+- After the user's Windows permission change the baseline's 18 unit folders are
+  readable. Both runs' root manifests match their recorded hashes (`0a30ef2f...` and
+  `7a699020...`), and all 18 unit manifests and 34 files per run reproduce with no extra
+  files. Evidence can therefore be re-issued for both model families, as the approved
+  September 20 policy requires (fresh swing-only evidence beside the historical pins);
+  no pinned file stays frozen and the no-model-modes exit gate stands.
+- Fresh evidence under the new code, published beside the old, must reproduce exactly:
+  readiness reports (479,709 eligible and 378,037 supervised rows, 545 securities,
+  1,231 sessions, model and availability columns, `profile_sha256`); a relationship
+  saved-row receipt over all 586,305 rows (values, dtypes, nulls, UTC nanosecond
+  clocks); `load_return_inputs` reproducing `input_decision_ids_sha256`, rows, feature
+  names, folds and holdouts; every saved unit re-scored on the new-code matrices
+  reproducing its saved prediction payload byte for byte; and the new strategy
+  contract's swing section with the same semantic hash under a new contract version,
+  after the mixed contract's bytes are archived under `configs/lineage/`. The loader
+  accepts old model units only with these receipts; anything else fails closed.
+- Sub-slice constraints: (a) adds modules only and leaves the seven files the SEC
+  collector re-hashes on resume byte-identical until that collection's manifest exists;
+  no branch switch, stash or rebase touching `src/` while it runs; every commit stays
+  importable. (b) keeps the wire `mode` field (value `swing`) and `resolved_horizons`;
+  a schema change runs TradingFlow's `MarketPredictorHttpClientTests` and the Python
+  API contract tests. (c) owns every pinned file (the six listed, the strategy contract,
+  `label_paths.py`, `canonical/joins.py`) with the fresh evidence and removes the SEC
+  family from the pinned catalyst authority. (d) deletes `intraday/__init__.py` and
+  `intraday/contracts/*` only after (c)'s evidence is published.
+- A retained-evidence existence gate precedes any deletion. Kept: the prospective
+  SIP-session collector and its data, minute and hourly transports, selected-session
+  data, `governance/outcomes/maturation.py`, `edge_rebuild/swing_setups.py` and the
+  horizon-generic label code the approved 63- and 252-session investment targets need;
+  `feature_timeframe="1Hour"` changes only under an explicit new version. The commands
+  `collect-edge-prospective-broker-actions` and `collect-edge-prospective-sip-session`
+  stay; `train-edge-swing-broker-specialists` is swing research, not intraday, and stays.
+- The reference-scan baseline for (f) adds the unpinned intraday-bearing modules
+  `universe/sp500/historical_security_namespace.py`, `readiness.py`, `features.py`,
+  `price.py`, `feature_store.py`, `strategy_governance.py`, `governance/drift/policy.py`,
+  `serving/outcome_intents.py`, `serving/bundle.py`, `edge_rebuild/swing_setups.py`,
+  `market_regime.py` and `commands/canonical_data.py`.
 
 The September 20 user instruction explicitly extends the completed HTTP/CLI and
 TradingFlow cleanup to all remaining Market Predictor implementation. This is a

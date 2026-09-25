@@ -43,15 +43,28 @@ It exposed a data defect: for 93 of 520 issuers observed, the saved EDGAR submis
 `acceptanceDateTime` is New York wall-clock time labelled UTC (all-or-nothing per issuer,
 exactly the New York offset; 3,033 of 17,847 detail pages rejected as "acceptance time
 differs"), so their canonical acceptance and availability are four to five hours early.
-Only the two SEC form inventories consumed that archive; no feature, training request or
-model did. It also measured about 1.2 requests per second, limited by SEC latency. The
-correction design (per-issuer clock-convention publication from EDGAR detail pages,
-republished inventories, bounded collector concurrency) is in the plan and under ML
-review; the code reviewer is reviewing the intraday-retirement design. The ML reviewer's
-retirement findings (no blockers; add relationship row-verification and readiness
-re-publication, archive the exact mixed strategy-contract bytes, record the still
-unreadable baseline unit manifests, add a retained-evidence existence gate) await
-consolidation with the code review.
+It also measured about 1.2 requests per second, limited by SEC latency.
+
+Both design reviews are consolidated into the plan (September 25). SEC clock (ML review,
+no blockers): the old SEC decision authority, SEC-family catalyst events and historical
+`catalyst_full` SEC columns also consumed the uncorrected clocks and are recorded as
+contaminated historical evidence; neither retained model uses an SEC, news or catalyst
+column (0 of 120 and 0 of 124, checked in the unit manifests). The reviewer's
+form-group-mix example was refuted by EDGAR's own pages (HollyFrontier's 10-K, 10-Q and
+8-K all read New York time); a read-only comparison against EDGAR's weekday 06:00-22:00
+hours agrees with the page labels for all 520 issuers and 1,619 informative issuer-form
+groups, none contrary (a read-only session diagnostic over the whole archive's clocks;
+no content read). Decisions: per-issuer convention verified by first/last pages in every
+form group plus in-data agreement; delete the superseded SEC decision authority path; four
+collector workers under one five-per-second governor. Retirement (code review, one
+blocker): closed evidence also pins `modeling/strategy_contract.py`, the strategy
+contract TOML, `label_paths.py` and `canonical/joins.py`, which both model families
+re-hash on load. After the user's Windows permission change the 18 baseline unit folders
+are readable; both model runs verify completely against their recorded manifests
+(18 units and 34 files each, no extra files), so evidence is re-issued for both
+families under the approved September 20 policy. Next: implement the SEC clock
+correction, then republish, then the corrected collection; retirement sub-slice (a)
+proceeds alongside under its recorded constraints.
 
 September 24 slice `4844b3f` is pushed and both of its real runs are complete: legacy
 news-query identity proofs, which the user chose on September 23 to finish before
@@ -216,16 +229,13 @@ content coverage. Do not infer earnings/guidance meaning from form-only text or 
 existing broad headline classifier. Full source/version/content qualification and
 per-ticker/year coverage remain outstanding before final feature-column freeze.
 
-Windows access recheck after the user's permission changes: the baseline root
-`data/research/swing_technical_return_models_initial_fit/_manifest.json` is readable
-and its SHA256 matches the recorded
-`0a30ef2f8e3b95cee252f8c1d1bb5be3c6b98cddda4e47d68e835ad5c1892551`.
-All 18 nested baseline unit manifests remain unreadable under
-`regularized_linear_return` and `shallow_boosted_return`. The newer relationship
-root hash and all 18 unit-manifest hashes verify. This check did not reload models,
-verify prediction payloads or establish a paired performance comparison. No ACL,
-ownership or artifact was changed. Do not retry these reads until access changes;
-the baseline comparison does not block the issuer-news/SEC work.
+Windows access recheck on September 25, after the user took ownership and granted
+read access to the baseline folders: every baseline unit is readable. Root manifest
+`0a30ef2f8e3b95cee252f8c1d1bb5be3c6b98cddda4e47d68e835ad5c1892551` and relationship
+root `7a699020920024ed29b5d8547724f5355fdc2202ca176f11d38f23418bd4666e` match their
+recorded hashes; each run's request hash, 18 unit manifests and 34 unit files reproduce,
+and no unit folder holds an unlisted file. This check did not reload models, verify
+prediction payloads or establish a paired performance comparison.
 
 September 21 implementation `be474b5` is pushed. Two parallel implementation
 workers completed source publication and verification/readiness/training integration;
