@@ -4,7 +4,8 @@ Status: active
 Last updated: 2026-09-25
 Repository: `C:\project\market-predictor`
 Branch: `unified-swing-product`
-Last completed implementation checkpoint: `319360e` (pushed; SEC form inventory and filing-document collector).
+Last completed implementation checkpoint: `da5d4c3` (pushed; per-issuer SEC acceptance clock, corrected inventory,
+concurrent collector).
 Last completed model-training checkpoint: relationship run on `a8be7cb` (artifact pins below).
 Baseline model-training checkpoint: `07963cc` (pushed; unchanged).
 Source-collection checkpoint: `19698d6` (pushed).
@@ -62,9 +63,52 @@ contract TOML, `label_paths.py` and `canonical/joins.py`, which both model famil
 re-hash on load. After the user's Windows permission change the 18 baseline unit folders
 are readable; both model runs verify completely against their recorded manifests
 (18 units and 34 files each, no extra files), so evidence is re-issued for both
-families under the approved September 20 policy. Next: implement the SEC clock
-correction, then republish, then the corrected collection; retirement sub-slice (a)
-proceeds alongside under its recorded constraints.
+families under the approved September 20 policy.
+
+SEC clock correction implementation `da5d4c3` is pushed. Pure logic
+`catalysts/sec_filings/acceptance_clock.py`; publisher and page collection
+`research/sec_acceptance_clock.py` (commands `collect-sec-clock-pages`,
+`publish-sec-acceptance-clock`); shared leased runner `research/sec_page_collection.py`.
+The form inventory now requires an `acceptance_clock` config pin, re-reads every saved
+submissions row under the issuer's convention (so the 2019-07-08 rows the archive missed
+are included, marked `archive_event = false`), excludes and counts unknown-convention
+issuers, and reports issuers whose older page for the window's first New York day was
+never fetched (`window_start_coverage`). The collector runs four workers under one
+five-per-second governor. The first 403/429 sets a stop signal that also ends governor
+waits, so nothing is sent afterwards; a failed attempt keeps every other finished
+receipt. The SEC decision authority module, command and test are deleted.
+
+Review outcomes. ML review had no blockers. The forward SEC collector
+(`sec_incremental.py`) was left as a raw-evidence producer: its label windows chain end to
+end and no timing consumer reads its events; its docstring now says so. The SEC family in
+the pinned catalyst authority is removed in retirement sub-slice (c), which precedes any
+new feature build. Code review found one major issue: queued workers slept through SEC's
+cooldown and then sent requests. It is fixed and proved by a real-governor test, which
+under the old sleep never returned within its 15-second limit. The minor issues are fixed:
+receipts kept on failure, an unreadable page makes its group unknown while a foreign page
+fails, sessions are closed. An incomplete older-version collection cannot be resumed
+because the request now binds phases and workers; the stopped
+`sec_filing_documents_initial_fit_v1` was never to be resumed.
+
+This change also fixes `test_package_dependency_boundaries`, which had been failing
+unnoticed since `7a9334c` and `319360e` because it was outside their targeted sets:
+catalysts imported `config.Settings`, the swing `pinned_object` and
+`data_quality._safe_json`. The last is now inlined with byte-identical JSON; the code
+reviewer checked 3,129 real items with 0 mismatches.
+
+Targeted checks after the final edit: 521 tests (SEC inventory, clock, documents,
+collection, incremental, both content inventories, command, CLI, package and
+architecture boundaries), plus 593 earlier across the `edge_rebuild` command consumers
+(only the pre-existing boundary failure). Ruff and strict mypy pass on 12 changed source
+files. The full suite was not run (component checkpoint).
+
+Running now: `collect-sec-clock-pages` into `data/raw/sec_acceptance_clock_pages`
+(archive authority SHA256
+`886d727670582409a8f816ac5b5283ebd6edc0c6e06d143f26c8f691ff2bf661`; about 4,957 detail
+pages; log `data/runtime/sec_acceptance_clock_pages.log`). Next: publish the clock, write
+the corrected inventory config, republish both inventories into new outputs, then run
+the corrected document collection into
+`data/raw/sec_filing_documents_initial_fit_corrected_clock`.
 
 September 24 slice `4844b3f` is pushed and both of its real runs are complete: legacy
 news-query identity proofs, which the user chose on September 23 to finish before

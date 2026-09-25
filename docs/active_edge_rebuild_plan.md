@@ -831,8 +831,11 @@ inventory and sub-slices above where they differ):
   a schema change runs TradingFlow's `MarketPredictorHttpClientTests` and the Python
   API contract tests. (c) owns every pinned file (the six listed, the strategy contract,
   `label_paths.py`, `canonical/joins.py`) with the fresh evidence and removes the SEC
-  family from the pinned catalyst authority. (d) deletes `intraday/__init__.py` and
-  `intraday/contracts/*` only after (c)'s evidence is published.
+  family from the pinned catalyst authority. It also moves `data_quality._safe_json`
+  (pinned by relationship evidence) to one shared helper used by
+  `catalysts/issuer_events/content_inventory.py`, which carries a byte-identical inline copy
+  since the SEC clock slice removed its catalyst-to-`data_quality` import. (d) deletes
+  `intraday/__init__.py` and `intraday/contracts/*` only after (c)'s evidence is published.
 - A retained-evidence existence gate precedes any deletion. Kept: the prospective
   SIP-session collector and its data, minute and hourly transports, selected-session
   data, `governance/outcomes/maturation.py`, `edge_rebuild/swing_setups.py` and the
