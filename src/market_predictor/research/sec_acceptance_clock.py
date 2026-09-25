@@ -35,9 +35,8 @@ from market_predictor.core.errors import DataReadinessError
 from market_predictor.evidence.hashing import json_sha256
 from market_predictor.evidence.io import inside, write_json_object
 from market_predictor.heavy_jobs import heavy_job_lease, heavy_job_runtime_dir
-from market_predictor.research.issuer_content_inventory import _guard
 from market_predictor.research.legacy_query_identity_proofs import pin_file
-from market_predictor.research.sec_page_collection import RUNNER_PATHS, open_collection, run_collection
+from market_predictor.research.sec_page_collection import RUNNER_PATHS, memory_guard, open_collection, run_collection
 from market_predictor.sources.http import HttpClient
 from market_predictor.sources.sec import SecSource
 from market_predictor.swing.datasets.initial_fit_issuer_news import LAST_INITIAL_FIT_CUTOFF
@@ -57,6 +56,10 @@ _FILING_COLUMNS = ["sec_cik", "accession_number", "sec_form", "filing_date", "ac
 def _require(condition: bool, message: str) -> None:
     if not condition:
         raise DataReadinessError(message)
+
+
+def _guard() -> None:
+    memory_guard("SEC acceptance clock")
 
 
 def archive_source(client: HttpClient) -> SecSource:

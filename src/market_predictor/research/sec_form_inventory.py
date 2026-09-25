@@ -30,9 +30,9 @@ from market_predictor.core.errors import DataReadinessError
 from market_predictor.evidence.hashing import json_sha256
 from market_predictor.evidence.io import inside, write_json_object
 from market_predictor.heavy_jobs import heavy_job_lease, heavy_job_runtime_dir
-from market_predictor.research.issuer_content_inventory import _guard
 from market_predictor.research.legacy_query_identity_proofs import pin_file
 from market_predictor.research.sec_acceptance_clock import archive_source, load_sec_acceptance_clock
+from market_predictor.research.sec_page_collection import memory_guard
 from market_predictor.sources.official_documents import OfficialDocumentInventory, verify_official_document_collection
 from market_predictor.swing.contracts.research_cohort import load_swing_research_cohort
 from market_predictor.swing.datasets.initial_fit_issuer_news import LAST_INITIAL_FIT_CUTOFF
@@ -62,6 +62,10 @@ SEALED_RULE = "no statistics or reading until qualification rules are frozen on 
 def _require(condition: bool, message: str) -> None:
     if not condition:
         raise DataReadinessError(message)
+
+
+def _guard() -> None:
+    memory_guard("SEC form inventory")
 
 
 def _records(value: Any, name: str) -> list[dict[str, str]]:

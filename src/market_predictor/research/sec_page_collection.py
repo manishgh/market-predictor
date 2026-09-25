@@ -13,12 +13,13 @@ import pandas as pd
 from market_predictor.canonical.store import file_sha256
 from market_predictor.catalysts.sec_filings import document_collection as documents
 from market_predictor.config import Settings
-from market_predictor.core.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError, MemoryBudgetError
+from market_predictor.core.system_memory import system_memory_snapshot
 from market_predictor.evidence.hashing import json_sha256
 from market_predictor.evidence.io import inside, write_json_object
 from market_predictor.heavy_jobs import heavy_job_lease, heavy_job_runtime_dir
-from market_predictor.research.issuer_content_inventory import _guard
 from market_predictor.research.legacy_query_identity_proofs import pin_file
+from market_predictor.resources import assert_memory_budget
 from market_predictor.sources.http import HttpByteResponse, HttpClient
 from market_predictor.sources.sec import SecRequestGovernor, SecSource
 from market_predictor.swing.datasets.symbol_corrections import pinned_object
@@ -37,6 +38,18 @@ Plan = Callable[[dict[str, str]], tuple[pd.DataFrame, dict[str, Any]]]
 def _require(condition: bool, message: str) -> None:
     if not condition:
         raise DataReadinessError(message)
+
+
+def memory_guard(stage: str) -> None:
+    """The SEC jobs' memory policy: a 5 GiB process budget and system memory below 90 percent."""
+    assert_memory_budget(stage=stage, hard_budget_gib=5.0, headroom_gib=0.75)
+    snapshot = system_memory_snapshot()
+    if snapshot is None or snapshot.used_percent >= 90.0:
+        raise MemoryBudgetError(f"{stage} requires system memory below 90 percent")
+
+
+def _guard() -> None:
+    memory_guard("SEC page collection")
 
 
 class GovernedFetch:

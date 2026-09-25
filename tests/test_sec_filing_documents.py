@@ -16,7 +16,7 @@ import pytest
 
 from market_predictor.canonical.store import file_sha256
 from market_predictor.catalysts.sec_filings import document_collection as documents
-from market_predictor.core.errors import DataReadinessError
+from market_predictor.core.errors import DataReadinessError, MemoryBudgetError
 from market_predictor.heavy_jobs import HeavyJobBusyError, heavy_job_lease
 from market_predictor.research import sec_filing_documents as collector
 from market_predictor.research import sec_page_collection as runner
@@ -446,3 +446,26 @@ def test_a_page_without_an_accession_number_is_distinguished_from_a_foreign_page
         documents.parse_filing_header(b"<html>EDGAR is temporarily unavailable</html>", accession=ABT)
     with pytest.raises(DataReadinessError, match="another accession"):
         documents.parse_filing_header(REAL, accession="0001104659-19-000001")
+
+
+def test_a_failed_memory_check_keeps_the_batch_and_every_in_flight_receipt(tmp_path: Path,
+                                                                          monkeypatch: pytest.MonkeyPatch) -> None:
+    units = _header_units(8)
+    monkeypatch.setattr(documents, "SHARD_ATTEMPTS", 2)
+
+    def fetch(url: str) -> HttpByteResponse:
+        time.sleep(0.02)
+        accession = url.rsplit("/", 1)[1].removesuffix("-index.htm")
+        return _response(url, 200, header_page(accession, "2019-08-01", "2019-08-01 16:05:00"))
+
+    def memory_check() -> None:
+        raise MemoryBudgetError("system memory above the limit")
+
+    store = documents.Store(tmp_path, {})
+    store.write_checkpoint("request")
+    with pytest.raises(MemoryBudgetError):
+        documents.collect(store=store, units=units, fetch=fetch, request_sha256="request", memory_check=memory_check,
+                          cooldowns={403: 1.0, 429: 1.0}, stop=threading.Event(), phases=("header",), workers=3)
+    kept = store.receipts()
+    assert len(kept) >= documents.SHARD_ATTEMPTS and kept.state.eq("archived").all()
+    assert len(kept) < len(units) and not kept.unit_id.duplicated().any()

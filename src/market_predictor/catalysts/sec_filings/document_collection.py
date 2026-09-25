@@ -443,9 +443,13 @@ def _run_pass(pool: ThreadPoolExecutor, pending: list[tuple[dict[str, Any], int]
                 batch.stopped.append(receipt)
                 stop.set()
         if not stop.is_set() and (len(batch.receipts) >= SHARD_ATTEMPTS or batch.buffered >= SHARD_BYTES):
-            memory_check()
             store.flush(batch.receipts, batch.bodies, request_sha256)
             batch = _Pass([], {}, [])
+            try:
+                memory_check()
+            except Exception as error:  # The shard above is kept; drain in-flight attempts, then re-raise.
+                batch.failure = error
+                stop.set()
     return batch
 
 
