@@ -12,6 +12,7 @@ import pandas as pd
 import pytest
 
 from market_predictor.canonical.store import file_sha256
+from market_predictor.catalysts.sec_filings.acceptance_clock import NEW_YORK_LABELED_UTC, UTC_LABEL
 from market_predictor.catalysts.sec_filings.collection import (
     load_sec_filing_collection,
     normalize_sec_identity_relations,
@@ -27,19 +28,21 @@ from market_predictor.catalysts.sec_filings.form_inventory import (
 )
 from market_predictor.core.errors import DataReadinessError
 from market_predictor.heavy_jobs import HeavyJobBusyError, heavy_job_lease
+from market_predictor.research import sec_acceptance_clock as clock_publication
 from market_predictor.research import sec_form_inventory as inventory
-from market_predictor.sources.http import HttpByteResponse
+from market_predictor.sources.http import HttpByteResponse, HttpClient
 from market_predictor.sources.official_documents import (
     OfficialDocument,
     OfficialDocumentInventory,
     collect_official_documents,
 )
+from market_predictor.sources.sec import SecSource
 from tests.support.research_population import write_population
-from tests.support.sec_archive import filing, settings, submissions, write_collection
+from tests.support.sec_archive import PageFake, filing, settings, submissions, true_pages, write_clock, write_collection
 
-A, B, C, D = "0000000001", "0000000002", "0000000003", "0000000004"
+A, B, C, D, E = "0000000001", "0000000002", "0000000003", "0000000004", "0000000005"
 COHORT = ("cik:0000000001", "cik:0000000002:ticker:BBA", "cik:0000000002:ticker:BBB", "cik:0000000003",
-          "sp500-historical:nosec")
+          "cik:0000000005", "sp500-historical:nosec")
 FORMS = ("8-K", "8-K/A", "10-Q", "4")
 SAVED_URL = "https://www.sec.gov/Archives/edgar/data/1/000000000119000001/a-earnings.htm"
 
@@ -58,13 +61,15 @@ def _relations() -> pd.DataFrame:
         _relation("cik:0000000002:ticker:BBB", "BBB", B, policy="reviewed_official_sec_filing_override_v1"),
         _relation("cik:0000000003", "CCC", C, start="2021-01-04T05:00:00Z"),
         _relation("cik:0000000004", "DDD", D),
+        _relation("cik:0000000005", "EEE", E),
     ])
     frame["effective_to_utc"] = pd.to_datetime(frame.effective_to_utc, utc=True)
     return frame
 
 
 def _pages() -> dict[str, dict[str, Any]]:
-    older = [filing("0000000001-19-000001", "8-K", "2019-08-01T20:05:00Z", items="2.02,9.01", report="2019-08-01",
+    older = [filing("0000000001-19-000000", "8-K", "2019-07-08T22:30:00Z", items="2.02", report="2019-07-08"),
+             filing("0000000001-19-000001", "8-K", "2019-08-01T20:05:00Z", items="2.02,9.01", report="2019-08-01",
                     primary="a-earnings.htm", size=5000),
              filing("0000000001-19-000002", "8-K", "2019-08-06T13:00:00Z", items="8.01", report="2019-08-02"),
              filing("0000000001-19-000003", "4", "2019-08-10T15:00:00Z"),
@@ -77,13 +82,29 @@ def _pages() -> dict[str, dict[str, Any]]:
                                                      items="2.02", report="2020-03-02"),
                                               filing("0000000002-20-000002", "8-K/A", "2020-03-05T14:00:00Z",
                                                      items="2.02", report="2020-03-02")])
+    # GAMMA's older page lists only filings dated the day before the window, so the collector never fetched it.
     pages |= submissions(C, "GAMMA INC", [filing("0000000003-20-000001", "8-K", "2020-06-01T14:00:00Z", items="1.01",
                                                  report="2020-05-29"),
                                           filing("0000000003-21-000002", "8-K", "2021-03-01T14:00:00Z", items="2.02",
-                                                 report="2021-03-01", primary="c.htm")])
+                                                 report="2021-03-01", primary="c.htm")],
+                         older=(("CIK0000000003-submissions-001.json", [filing("0000000003-19-000000", "4",
+                                                                               "2019-07-08T15:00:00Z")]),))
+    # DELTA has no readable EDGAR page, so its clock stays unknown in both windows.
     pages |= submissions(D, "DELTA LTD", [filing("0000000004-20-000001", "8-K", "2020-03-02T14:00:00Z", items="8.01",
-                                                 report="2020-03-02")])
+                                                 report="2020-03-02"),
+                                          filing("0000000004-25-000002", "8-K", "2025-03-03T14:00:00Z", items="8.01",
+                                                 report="2025-03-03")])
+    # EPSILON's labels are New York wall-clock time: an after-close earnings 8-K and one accepted at 19:00 on the
+    # initial-fit cutoff day, which the uncorrected label would make available before the cutoff.
+    pages |= submissions(E, "EPSILON INC", [filing("0000000005-20-000001", "8-K", "2020-02-03T16:05:00Z", items="2.02",
+                                                   report="2020-02-03"),
+                                            filing("0000000005-24-000002", "8-K", "2024-05-28T19:00:00Z", items="7.01",
+                                                   report="2024-05-28")])
     return pages
+
+
+def _source(client: HttpClient) -> SecSource:
+    return SecSource(settings(), client=client)
 
 
 def _pin(root: Path, path: Path) -> dict[str, str]:
@@ -129,13 +150,17 @@ def _world(root: Path) -> dict[str, Any]:
     relation_path.parent.mkdir(parents=True)
     relations.to_parquet(relation_path, index=False)
     collection = write_collection(root / "data/external/sec", _pages(), pd.read_parquet(relation_path), FORMS)
+    fake = PageFake(true_pages(_pages(), frozenset({E}), {"0000000004-20-000001": 404, "0000000004-25-000002": 404}))
+    with pytest.MonkeyPatch.context() as patch:
+        acceptance_clock = write_clock(root, collection.directory, fake, patch)
     identity = root / "data/research/identity/_manifest.json"
     identity.parent.mkdir(parents=True)
     identity.write_text(json.dumps({"schema": "market_predictor.issuer_news_identity_alignment",
                                     "source_files": {relation_path.relative_to(root).as_posix(): file_sha256(relation_path)}}),
                         encoding="utf-8")
     config = {"schema": inventory.CONFIG_SCHEMA, "sec_collection": _pin(root, collection.directory / "_authority.json"),
-              "identity_manifest": _pin(root, identity), "sec_identity_relations": _pin(root, relation_path),
+              "acceptance_clock": acceptance_clock, "identity_manifest": _pin(root, identity),
+              "sec_identity_relations": _pin(root, relation_path),
               "approved_population": _pin(root, write_population(root, COHORT)),
               "official_document_collections": [_pin(root, _official(root))],
               "identity_evidence_inventories": [_pin(root, _evidence(root))]}
@@ -153,7 +178,7 @@ def world(tmp_path_factory: pytest.TempPathFactory) -> dict[str, Any]:
 @pytest.fixture(autouse=True)
 def _policy(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(inventory, "_guard", lambda: None)
-    monkeypatch.setattr(inventory, "Settings", settings)
+    monkeypatch.setattr(clock_publication, "Settings", settings)
     monkeypatch.delenv("MARKET_PREDICTOR_RUNTIME_DIR", raising=False)
 
 
@@ -165,19 +190,19 @@ def _run(world: dict[str, Any], name: str, mode: inventory.Mode = "initial_fit",
 
 def test_replay_reproduces_each_issuer_and_detects_divergence(world: dict[str, Any]) -> None:
     collection = load_sec_filing_collection(world["collection"])
-    replayed = list(replay_sec_filing_collection(collection, settings()))
-    assert [issuer.cik for issuer in replayed] == [A, B, C, D]
+    replayed = list(replay_sec_filing_collection(collection, _source))
+    assert [issuer.cik for issuer in replayed] == [A, B, C, D, E]
     assert replayed[0].history.submission_files == ("CIK0000000001.json", "CIK0000000001-submissions-001.json")
     missing_event = dataclasses.replace(collection, events=collection.events.iloc[1:])
     with pytest.raises(DataReadinessError, match="differ from canonical events"):
-        list(replay_sec_filing_collection(missing_event, settings()))
+        list(replay_sec_filing_collection(missing_event, _source))
     page = collection.raw_inventory.requested_url.str.endswith("submissions-001.json")
     missing_page = dataclasses.replace(collection, raw_inventory=collection.raw_inventory.loc[~page])
     with pytest.raises(DataReadinessError, match="do not replay"):
-        list(replay_sec_filing_collection(missing_page, settings()))
+        list(replay_sec_filing_collection(missing_page, _source))
     changed = collection.source_collections.assign(response_sha256="0" * 64)
     with pytest.raises(DataReadinessError, match="differ from the saved inventory"):
-        list(replay_sec_filing_collection(dataclasses.replace(collection, source_collections=changed), settings()))
+        list(replay_sec_filing_collection(dataclasses.replace(collection, source_collections=changed), _source))
 
 
 def test_inventory_attribution_timing_items_and_documents(world: dict[str, Any]) -> None:
@@ -213,9 +238,15 @@ def test_inventory_attribution_timing_items_and_documents(world: dict[str, Any])
     assert totals["accepted_in_window_available_after"] == 1
     assert totals["unrequested_form_rows_in_window"] == {"SC 13G": 1}
     assert totals["cohort_securities_without_sec_identity"] == 1 and totals["share_class_duplicate_rows"] == 4
-    assert totals["accessions"] == 7 and totals["filing_rows"] == 9
+    assert totals["accessions"] == 9 and totals["filing_rows"] == 11
     assert totals["accessions_by_document_status"] == {"primary_document_saved": 1, "other_filing_document_saved": 0,
-                                                       "saved_without_receipt": 1, "not_saved": 5}
+                                                       "saved_without_receipt": 1, "not_saved": 7}
+    assert totals["accessions_by_acceptance_clock"] == {NEW_YORK_LABELED_UTC: 1, UTC_LABEL: 8}
+    assert totals["accessions_outside_archive_events"] == 1
+    assert {key: report["acceptance_clock"][key] for key in ("unknown_issuers", "requested_form_rows_excluded_for_unknown_clock")} == {
+        "unknown_issuers": [D], "requested_form_rows_excluded_for_unknown_clock": 1}
+    assert report["window_start_coverage"]["new_york_date"] == "2019-07-08"
+    assert report["window_start_coverage"]["issuers_with_unsaved_pages"] == {C: ["CIK0000000003-submissions-001.json"]}
     assert totals["current_report_accessions_by_item_and_timing"]["8.01/post_report_sessions_precede_sec"] == 1
     years = pd.read_parquet(root / "security_years.parquet").set_index(["security_id", "year_new_york"])
     gamma = years.loc["cik:0000000003"]
@@ -225,7 +256,7 @@ def test_inventory_attribution_timing_items_and_documents(world: dict[str, Any])
     counts = pd.read_parquet(root / "security_year_counts.parquet")
     alpha = counts.loc[counts.security_id.eq("cik:0000000001") & counts.year_new_york.eq(2019)]
     assert set(zip(alpha.sec_form, alpha.item_code, alpha.report_timing, alpha.filings, strict=True)) == {
-        ("8-K", "2.02", "report_session_may_precede_sec", 1), ("8-K", "9.01", "report_session_may_precede_sec", 1),
+        ("8-K", "2.02", "report_session_may_precede_sec", 2), ("8-K", "9.01", "report_session_may_precede_sec", 1),
         ("8-K", "8.01", "post_report_sessions_precede_sec", 1), ("4", "not_applicable", "not_applicable", 1)}
     manifest = json.loads((root / "_manifest.json").read_text())
     assert manifest["mode"] == "initial_fit" and not manifest["training_eligible"]
@@ -243,20 +274,23 @@ def test_sealed_mode_lists_later_filings_without_statistics(world: dict[str, Any
     root = world["root"] / "data/research/sealed"
     assert sorted(path.name for path in root.iterdir()) == ["_manifest.json", "filings.parquet"]
     filings = pd.read_parquet(root / "filings.parquet")
-    assert set(filings.accession_number) == {"0000000001-24-000006", "0000000001-25-000007"}
+    assert set(filings.accession_number) == {"0000000001-24-000006", "0000000001-25-000007", "0000000005-24-000002"}
     assert list(filings.columns) == list(inventory.SEALED_COLUMNS)
-    assert report["sealed_until_rules_frozen"] is True and "totals" not in report and report["accessions"] == 2
+    assert report["sealed_until_rules_frozen"] is True and "totals" not in report and report["accessions"] == 3
+    assert report["acceptance_clock"]["requested_form_rows_excluded_for_unknown_clock"] == 1
+    assert report["window_start_coverage"]["issuers_with_unsaved_pages"] == {}
     record = {"path": "data/research/sealed/_manifest.json", "sha256": report["manifest_sha256"]}
     with pytest.raises(DataReadinessError, match="sealed"):
         inventory.load_sec_form_inventory(world["root"], record, {})
     opened, _ = inventory.load_sec_form_inventory(world["root"], record, {}, allow_sealed_collection=True)
-    assert len(opened) == 2
+    assert len(opened) == 3
 
 
 @pytest.mark.parametrize("target", ["configs/sec_inventory.json", "data/external/sec/_authority.json",
     "data/research/identity/_manifest.json", "data/canonical/sec_identity/test/sec_identity_relations.parquet",
     "data/reports/population.json", "data/raw/test_documents/_request.json", "data/raw/evidence/filing_proof_inventory.csv",
-    "data/raw/evidence/CCC_0000000003-21-000002_c.htm"])
+    "data/raw/evidence/CCC_0000000003-21-000002_c.htm", "data/research/sec_clock/_manifest.json",
+    "data/research/sec_clock/issuers.parquet"])
 def test_every_pin_is_verified_before_any_output(world: dict[str, Any], target: str) -> None:
     path = world["root"] / target
     original = path.read_bytes()
@@ -304,11 +338,12 @@ def test_busy_lease_prevents_any_source_read(world: dict[str, Any], monkeypatch:
 
 def test_window_boundaries_relation_clock_and_overlap(world: dict[str, Any]) -> None:
     collection = load_sec_filing_collection(world["collection"])
-    alpha = next(replay_sec_filing_collection(collection, settings()))
+    alpha = next(replay_sec_filing_collection(collection, _source))
     relations = normalize_sec_identity_relations(_relations()).assign(identity_policy="policy")
     available = pd.to_datetime(alpha.events.available_at_utc, utc=True).sort_values()
     first, last = available.iloc[0], available.iloc[2]
-    kwargs: dict[str, Any] = {"requested": frozenset(FORMS), "cohort": frozenset(COHORT), "saved": {}}
+    kwargs: dict[str, Any] = {"requested": frozenset(FORMS), "cohort": frozenset(COHORT), "saved": {},
+                              "convention": UTC_LABEL, "lag_minutes": 5}
     inclusive = issuer_inventory(alpha, relations=relations, window=(first, last), **kwargs)
     assert len(inclusive.filings) == 3
     exclusive = issuer_inventory(alpha, relations=relations, window=(first, last - pd.Timedelta(1, "ns")), **kwargs)
@@ -355,3 +390,40 @@ def test_saved_document_parsing_and_status_order() -> None:
     assert document_status([evidence], "a-earnings.htm") == "saved_without_receipt"
     assert document_status([evidence, receipt], "a-earnings.htm") == "other_filing_document_saved"
     assert document_status([], "a-earnings.htm") == "not_saved"
+
+
+def test_corrected_clock_moves_new_york_labelled_filings(world: dict[str, Any]) -> None:
+    """EPSILON labels New York wall-clock time as UTC: its after-close 8-K is not intraday, and a filing accepted at
+    19:00 on the cutoff day belongs to the later window."""
+    _run(world, "clock-initial")
+    filings = pd.read_parquet(world["root"] / "data/research/clock-initial/filings.parquet").set_index("accession_number")
+    earnings = filings.loc["0000000005-20-000001"]
+    assert (earnings.acceptance_raw, earnings.acceptance_clock) == ("2020-02-03T16:05:00.000Z", NEW_YORK_LABELED_UTC)
+    assert earnings.accepted_at_utc == pd.Timestamp("2020-02-03T21:05:00Z")
+    assert earnings.available_at_utc == pd.Timestamp("2020-02-03T21:10:00Z")
+    assert (earnings.acceptance_session_position, earnings.report_timing) == ("after_close", "report_session_may_precede_sec")
+    assert "0000000005-24-000002" not in filings.index
+    edge = filings.loc["0000000001-19-000000"]  # Saved, accepted before the archive's window, available on its first day.
+    assert (bool(edge.archive_event), edge.available_at_utc) == (False, pd.Timestamp("2019-07-09T13:30:00Z"))
+    assert filings.drop(index="0000000001-19-000000").archive_event.all()
+    utc = filings.loc[filings.acceptance_clock.eq(UTC_LABEL)]
+    assert utc.accepted_at_utc.equals(pd.to_datetime(utc.acceptance_raw, utc=True).dt.as_unit("ns").rename("accepted_at_utc"))
+
+
+def test_clock_must_cover_the_same_collection(world: dict[str, Any]) -> None:
+    root, settings_ = world["root"], world["settings"]
+    manifest = json.loads((root / settings_["acceptance_clock"]["path"]).read_text())
+    manifest["sec_collection"] = {**manifest["sec_collection"], "sha256": "0" * 64}
+    other = root / "data/research/other-clock/_manifest.json"
+    other.parent.mkdir(parents=True, exist_ok=True)
+    other.write_text(json.dumps(manifest), encoding="utf-8")
+    (other.parent / "issuers.parquet").write_bytes((root / "data/research/sec_clock/issuers.parquet").read_bytes())
+    path = root / "configs/other-clock.json"
+    path.write_text(json.dumps({**settings_, "acceptance_clock": _pin(root, other)}), encoding="utf-8")
+    with pytest.raises(DataReadinessError, match="another SEC collection"):
+        _run(world, "clock-other", config=path, sha256=file_sha256(path))
+    missing = root / "configs/no-clock.json"
+    missing.write_text(json.dumps({key: value for key, value in settings_.items() if key != "acceptance_clock"}),
+                       encoding="utf-8")
+    with pytest.raises(DataReadinessError, match="configuration differs"):
+        _run(world, "clock-missing", config=missing, sha256=file_sha256(missing))

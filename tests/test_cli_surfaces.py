@@ -110,27 +110,15 @@ class CliSurfaceTests(unittest.TestCase):
 
 
 
-    def test_sec_commands_are_split_between_collection_and_research(self) -> None:
-        runner = CliRunner()
-        collection_help = runner.invoke(
+    def test_sec_filing_collection_is_collection_only(self) -> None:
+        collection_help = CliRunner().invoke(
             collection_app,
             ["collect-edge-sec-filings", "--help"],
             terminal_width=240,
         )
-        authority_help = runner.invoke(
-            research_app,
-            ["publish-edge-sec-filing-authority", "--help"],
-            terminal_width=240,
-        )
         self.assertEqual(collection_help.exit_code, 0, collection_help.output)
-        self.assertEqual(authority_help.exit_code, 0, authority_help.output)
         self.assertIn("--identity-relations", collection_help.output)
-        self.assertIn("--collection-dir", authority_help.output)
-        self.assertIn("--identity-relations", authority_help.output)
-        self.assertNotIn(
-            "publish-edge-sec-filing-authority",
-            command_names(collection_app),
-        )
+        self.assertNotIn("collect-edge-sec-filings", command_names(research_app))
 
     def test_observed_sp500_membership_is_collection_only(self) -> None:
         result = CliRunner().invoke(

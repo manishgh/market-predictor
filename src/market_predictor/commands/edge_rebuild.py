@@ -19,9 +19,6 @@ from market_predictor.catalysts.sec_filings.collection import (
     load_sec_filing_collection_config,
     load_sec_identity_relations,
 )
-from market_predictor.catalysts.sec_filings.decision_authority import (
-    publish_sec_filing_decision_authority,
-)
 from market_predictor.config import get_settings
 from market_predictor.core.errors import DataReadinessError
 from market_predictor.edge_rebuild.swing_broker_specialists import (
@@ -199,40 +196,6 @@ def register_edge_rebuild_commands(app: typer.Typer, console: Any) -> None:
                 "issuers": result.manifest["issuer_count"],
                 "failed_issuers": result.manifest["failed_issuers"],
                 "events": len(result.events),
-                "production_ready": False,
-                "directory": str(result.directory),
-            }
-        )
-
-    @app.command("publish-edge-sec-filing-authority")
-    @serialized_heavy_job("publish-edge-sec-filing-authority")
-    def publish_edge_sec_filing_authority(
-        decisions: Path = typer.Option(..., help="Canonical swing decisions Parquet."),
-        collection_dir: list[Path] = typer.Option(
-            ...,
-            "--collection-dir",
-            help="Immutable SEC collection directory; repeat for each generation.",
-        ),
-        identity_relations: Path = typer.Option(
-            ...,
-            help="Effective-dated security-to-CIK relation Parquet or CSV.",
-        ),
-        out_dir: Path = typer.Option(..., help="New immutable research authority directory."),
-    ) -> None:
-        """Publish research-only accepted-time SEC filing features."""
-
-        result = publish_sec_filing_decision_authority(
-            decisions,
-            collection_dir,
-            identity_relations,
-            out_dir,
-            production_ready=False,
-        )
-        console.print(
-            {
-                "status": "complete",
-                "decisions": result.decision_rows,
-                "coverage_rows": len(result.coverage),
                 "production_ready": False,
                 "directory": str(result.directory),
             }

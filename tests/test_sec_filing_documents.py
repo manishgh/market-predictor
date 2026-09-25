@@ -4,6 +4,8 @@ from __future__ import annotations
 import hashlib
 import inspect
 import json
+import threading
+import time
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -17,10 +19,11 @@ from market_predictor.catalysts.sec_filings import document_collection as docume
 from market_predictor.core.errors import DataReadinessError
 from market_predictor.heavy_jobs import HeavyJobBusyError, heavy_job_lease
 from market_predictor.research import sec_filing_documents as collector
+from market_predictor.research import sec_page_collection as runner
 from market_predictor.research.sec_form_inventory import SCHEMA as INVENTORY_SCHEMA
 from market_predictor.sources import http
 from market_predictor.sources.http import HttpByteResponse
-from tests.support.sec_archive import settings
+from tests.support.sec_archive import header_page, settings
 
 FIXTURES = Path(__file__).parent / "fixtures" / "sec"
 ABT, ABT_CIK = "0001104659-19-040664", "0000001800"
@@ -75,6 +78,9 @@ class _Edgar:
         step = script.pop(0) if len(script) > 1 else script[0]
         return step(url)
 
+    def close(self) -> None:
+        """No session to release."""
+
 
 def _ok(body: bytes, content_type: str = "text/html") -> Callable[[str], HttpByteResponse]:
     return lambda url: _response(url, 200, body, content_type)
@@ -115,13 +121,13 @@ def _inventory(root: Path, rows: list[dict[str, Any]] = FILINGS, *, sealed: bool
 
 @pytest.fixture(autouse=True)
 def _policy(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(collector, "_guard", lambda: None)
+    monkeypatch.setattr(runner, "_guard", lambda: None)
     monkeypatch.delenv("MARKET_PREDICTOR_RUNTIME_DIR", raising=False)
 
 
 def _collect(root: Path, edgar: _Edgar, monkeypatch: pytest.MonkeyPatch, name: str = "sec_documents", **changes: Any
              ) -> dict[str, Any]:
-    monkeypatch.setattr(collector, "sec_fetch", lambda _settings: edgar)
+    monkeypatch.setattr(runner, "sec_fetch", lambda _settings, _stop: edgar)
     return collector.collect_sec_filing_documents(root=root, inventory=changes.pop("inventory", None) or _inventory(root),
                                                   output=root / "data/raw" / name, settings=settings(),
                                                   **changes)
@@ -242,7 +248,7 @@ def test_rejected_detail_page_is_kept_and_plans_no_documents(tmp_path: Path, mon
 
 
 def test_busy_lease_prevents_any_read(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(collector, "_units", lambda *_: pytest.fail("inventory read without the lease"))
+    monkeypatch.setattr(collector, "load_sec_form_inventory", lambda *_, **__: pytest.fail("inventory read without the lease"))
     with heavy_job_lease("test-owner", runtime_dir=tmp_path / "data/runtime"), pytest.raises(HeavyJobBusyError):
         _collect(tmp_path, _Edgar(_scripts()), monkeypatch, inventory={"path": "x", "sha256": "0" * 64})
 
@@ -337,3 +343,106 @@ def test_real_pilot_pages_verify_against_saved_metadata(accession: str) -> None:
     selected = documents.selected_documents(index, expected["unit"]["primary_document"])
     assert sorted([item.sequence, item.document_type, f"{item.path.split('/')[4]}/{item.filename}"] for item in selected) == (
         expected["documents"])
+
+
+def test_header_phase_keeps_any_parseable_detail_page_and_rejects_another_accession() -> None:
+    unit = {"unit_id": f"{ABT}/header", "phase": "header", "sec_cik": ABT_CIK, "accession_number": ABT, "sequence": "header",
+            "document_type": "filing_index", "url": documents.index_url(ABT_CIK, ABT), "index_body_sha256": None,
+            "index_row_json": None, "metadata": {}}
+    kept, body = documents.attempt(unit, lambda url: _response(url, 200, REAL), number=1, now=lambda: datetime.now(UTC))
+    assert (kept["state"], kept["reason"], body) == ("archived", None, REAL)
+    foreign, _ = documents.attempt({**unit, "accession_number": "0001104659-19-000001"},
+                                   lambda url: _response(url, 200, REAL), number=1, now=lambda: datetime.now(UTC))
+    assert (foreign["state"], foreign["reason"]) == ("rejected", "filing index is for another accession")
+    header = documents.parse_filing_header(REAL, accession=ABT)
+    assert (header.filing_date, header.accepted_at_utc) == ("2019-07-17", pd.Timestamp("2019-07-17T11:37:35Z"))
+
+
+class _Session:
+    def __init__(self) -> None:
+        self.closed = False
+
+    def close(self) -> None:
+        self.closed = True
+
+
+class _GovernedTransport:
+    """SEC's client hooks around a scripted, slow response: the real governor paces and blocks every send."""
+
+    def __init__(self, governor: Any, log: dict[str, Any]) -> None:
+        self.governor = governor
+        self.log = log
+        self.session = _Session()
+        log["sessions"].append(self.session)
+
+    def get_bytes_with_metadata(self, url: str, **_: Any) -> HttpByteResponse:
+        self.governor.acquire()
+        self.log["sent"].append(time.monotonic())
+        time.sleep(0.05)
+        accession = url.rsplit("/", 1)[1].removesuffix("-index.htm")
+        blocked = url == self.log["blocked"]
+        response = _response(url, 403, b"") if blocked else _response(url, 200, header_page(accession, "2019-08-01",
+                                                                                               "2019-08-01 16:05:00"))
+        self.governor.observe_response(response.status_code, dict(response.safe_headers))
+        if blocked:
+            self.log["blocked_at"] = time.monotonic()
+        return response
+
+
+def _header_units(count: int) -> pd.DataFrame:
+    accessions = [f"0000000001-19-{number:06d}" for number in range(count)]
+    return pd.DataFrame({"sec_cik": "0000000001", "accession_number": accessions,
+                         "url": [documents.index_url("0000000001", accession) for accession in accessions]})
+
+
+def test_a_403_through_the_real_governor_sends_nothing_more_and_returns_promptly(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    units = _header_units(4 * runner.WORKERS)
+    log: dict[str, Any] = {"sent": [], "sessions": [], "blocked": units.url.iloc[3]}
+    monkeypatch.setattr(runner, "SecSource", lambda _settings, *, governor: type("Source", (), {
+        "client": _GovernedTransport(governor, log)})())
+    store = documents.Store(tmp_path, {})
+    store.write_checkpoint("request")
+    stop = threading.Event()
+    fetch = runner.sec_fetch(settings(), stop)
+    outcome: dict[str, Any] = {}
+    worker = threading.Thread(target=lambda: outcome.update(documents.collect(
+        store=store, units=units, fetch=fetch, request_sha256="request", memory_check=lambda: None,
+        cooldowns={403: runner.FORBIDDEN_COOLDOWN_SECONDS, 429: runner.RATE_LIMIT_COOLDOWN_SECONDS}, stop=stop,
+        phases=("header",), workers=runner.WORKERS)))
+    started = time.monotonic()
+    worker.start()
+    worker.join(timeout=15)
+    assert not worker.is_alive() and time.monotonic() - started < 15
+    assert outcome["status"] == "stopped" and outcome["stop_status_code"] == 403
+    assert all(sent <= log["blocked_at"] for sent in log["sent"])
+    receipts = store.receipts()
+    assert len(receipts) == len(log["sent"]) < len(units) and receipts.state.eq("stopped").sum() == 1
+    fetch.close()
+    assert log["sessions"] and all(session.closed for session in log["sessions"])
+
+
+def test_a_failed_attempt_keeps_every_other_finished_receipt(tmp_path: Path) -> None:
+    units = _header_units(6)
+    bad = units.url.iloc[2]
+
+    def fetch(url: str) -> HttpByteResponse:
+        time.sleep(0.02)
+        accession = url.rsplit("/", 1)[1].removesuffix("-index.htm")
+        page = _response(url, 200, header_page(accession, "2019-08-01", "2019-08-01 16:05:00"))
+        return _response(units.url.iloc[0], 200, page.body) if url == bad else page
+
+    store = documents.Store(tmp_path, {})
+    store.write_checkpoint("request")
+    with pytest.raises(DataReadinessError, match="does not belong"):
+        documents.collect(store=store, units=units, fetch=fetch, request_sha256="request", memory_check=lambda: None,
+                          cooldowns={403: 1.0, 429: 1.0}, stop=threading.Event(), phases=("header",), workers=3)
+    kept = store.receipts()
+    assert not kept.empty and bad not in set(kept.url) and kept.state.eq("archived").all()
+
+
+def test_a_page_without_an_accession_number_is_distinguished_from_a_foreign_page() -> None:
+    with pytest.raises(DataReadinessError, match="lacks its accession number"):
+        documents.parse_filing_header(b"<html>EDGAR is temporarily unavailable</html>", accession=ABT)
+    with pytest.raises(DataReadinessError, match="another accession"):
+        documents.parse_filing_header(REAL, accession="0001104659-19-000001")

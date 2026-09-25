@@ -23,7 +23,6 @@ from market_predictor.catalysts.issuer_events.news_query_scope import SourcePin
 from market_predictor.core.errors import DataReadinessError
 from market_predictor.core.json_integrity import parse_strict_json_object
 from market_predictor.core.symbols import canonical_symbol, normalized_ticker
-from market_predictor.data_quality import _safe_json
 from market_predictor.evidence.hashing import json_sha256
 from market_predictor.evidence.io import inside
 
@@ -247,7 +246,8 @@ def _pages(root: Path, collection: Path, inputs: dict[str, Any], unit: dict[str,
             raise DataReadinessError("page news must be an array")
         for position, item in enumerate(news):
             _require(isinstance(item, dict), "provider article must be an object")
-            raw_hash = hashlib.sha256(_safe_json(item).encode("utf-8")).hexdigest()
+            # The provider collector's raw-article hash: sorted-key ASCII JSON of the parsed object.
+            raw_hash = hashlib.sha256(json.dumps(item, ensure_ascii=True, sort_keys=True, default=str).encode("utf-8")).hexdigest()
             records += 1
             admission = _admission(item, unit)
             if isinstance(admission, str):

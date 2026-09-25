@@ -2,8 +2,10 @@
 
 Phase one fetches each selected filing's EDGAR detail page and checks its header against
 the pinned filing metadata; phase two fetches the primary document and every EX-99 exhibit
-named by a verified page. Bodies live in immutable zip shards beside self-hashed receipt
-rows; an atomically replaced checkpoint lists shard hashes. Retrieval time is first
+named by a verified page. A header phase keeps any filing's detail page whose header parses,
+for checks made later (the acceptance clock). A few workers share one request governor; the
+first 403 or 429 stops new requests. Bodies live in immutable zip shards beside self-hashed
+receipt rows; an atomically replaced checkpoint lists shard hashes. Retrieval time is first
 observation, never historical availability. EDGAR filings are immutable after acceptance.
 """
 from __future__ import annotations
@@ -14,8 +16,10 @@ import os
 import re
 import shutil
 import tempfile
+import threading
 import zipfile
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
+from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -26,11 +30,11 @@ from bs4 import BeautifulSoup, Tag
 
 from market_predictor.canonical.store import file_sha256
 from market_predictor.core.errors import DataReadinessError
+from market_predictor.core.json_integrity import parse_strict_json_object
 from market_predictor.evidence.hashing import json_sha256
 from market_predictor.evidence.io import write_json_object
 from market_predictor.sources.http import HttpByteResponse
 from market_predictor.sources.sec import _retry_after_seconds
-from market_predictor.swing.datasets.symbol_corrections import pinned_object
 
 SELECTED_ITEMS = frozenset({"2.02", "7.01", "8.01"})
 CURRENT_REPORTS = ("8-K", "8-K/A")
@@ -39,6 +43,7 @@ MAXIMUM_ATTEMPTS = 3
 SHARD_ATTEMPTS = 500
 SHARD_BYTES = 256 * 1024 * 1024
 TERMINAL_STATES = frozenset({"archived", "rejected", "missing", "oversize", "http_error"})
+PHASES = ("index", "document", "header")
 RECEIPT_COLUMNS = (
     "unit_id", "phase", "sec_cik", "accession_number", "sequence", "document_type", "url", "attempt", "started_at_utc",
     "completed_at_utc", "state", "reason", "status_code", "final_url", "redirect_chain_json", "retrieved_at_utc",
@@ -62,6 +67,12 @@ Fetch = Callable[[str], HttpByteResponse]
 def _require(condition: bool, message: str) -> None:
     if not condition:
         raise DataReadinessError(message)
+
+
+def _pinned_json(path: Path, sha256: str) -> dict[str, object]:
+    payload = path.read_bytes()
+    _require(hashlib.sha256(payload).hexdigest() == sha256, f"SEC document file pin differs: {path.name}")
+    return parse_strict_json_object(payload, label=path.name)
 
 
 def archive_folder(cik: str, accession: str) -> str:
@@ -102,11 +113,15 @@ class IndexDocument:
 
 
 @dataclass(frozen=True)
-class FilingIndex:
+class FilingHeader:
     filing_date: str
     accepted_at_utc: pd.Timestamp
     period_of_report: str
     item_codes: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class FilingIndex(FilingHeader):
     documents: tuple[IndexDocument, ...]
 
 
@@ -125,19 +140,36 @@ def _document_path(href: str, accession: str) -> tuple[str, str]:
     return path, match[3]
 
 
-def parse_filing_index(body: bytes, *, accession: str) -> FilingIndex:
-    """Parse one EDGAR filing detail page strictly; any other shape raises."""
-    soup = BeautifulSoup(body, "html.parser")
+def _header(soup: BeautifulSoup, accession: str) -> FilingHeader:
     number = soup.find(id="secNum")
-    _require(isinstance(number, Tag) and _text(number).endswith(accession), "filing index is for another accession")
-    header: dict[str, str] = {}
+    if not isinstance(number, Tag):
+        raise DataReadinessError("filing index lacks its accession number")
+    _require(_text(number).endswith(accession), "filing index is for another accession")
+    fields: dict[str, str] = {}
     for head in soup.find_all("div", class_="infoHead"):
         value = head.find_next_sibling("div")
         if not isinstance(value, Tag) or "info" not in (value.get("class") or []):
             raise DataReadinessError("filing index header is malformed")
-        _require(_text(head) not in header, "filing index header repeats a field")
-        header[_text(head)] = value.get_text("\n", strip=True)
-    _require({"Filing Date", "Accepted"} <= set(header), "filing index lacks its filing date or acceptance")
+        _require(_text(head) not in fields, "filing index header repeats a field")
+        fields[_text(head)] = value.get_text("\n", strip=True)
+    _require({"Filing Date", "Accepted"} <= set(fields), "filing index lacks its filing date or acceptance")
+    try:  # EDGAR shows acceptance on its own New York clock.
+        accepted = pd.Timestamp(fields["Accepted"]).tz_localize(_NEW_YORK, ambiguous="raise", nonexistent="raise")
+    except ValueError as error:
+        raise DataReadinessError(f"filing index acceptance is not a New York instant: {fields['Accepted']}") from error
+    return FilingHeader(fields["Filing Date"], accepted.tz_convert("UTC"), fields.get("Period of Report", ""),
+                        tuple(_ITEM.findall(fields.get("Items", ""))))
+
+
+def parse_filing_header(body: bytes, *, accession: str) -> FilingHeader:
+    """Parse one EDGAR filing detail page's header strictly; any other shape raises."""
+    return _header(BeautifulSoup(body, "html.parser"), accession)
+
+
+def parse_filing_index(body: bytes, *, accession: str) -> FilingIndex:
+    """Parse one EDGAR filing detail page and its document table strictly; any other shape raises."""
+    soup = BeautifulSoup(body, "html.parser")
+    header = _header(soup, accession)
     tables = soup.find_all("table", class_="tableFile")
     documents = [table for table in tables if table.get("summary") == "Document Format Files"]
     _require(len(documents) == 1 and all(table.get("summary") in {"Document Format Files", "Data Files"} for table in tables),
@@ -160,9 +192,8 @@ def parse_filing_index(body: bytes, *, accession: str) -> FilingIndex:
         parsed.append(IndexDocument(sequence, description, filename, path, document_type,
                                     int(size) if size.isdigit() else None))
     _require(len({document.sequence for document in parsed}) == len(parsed), "filing index repeats a sequence")
-    accepted = pd.Timestamp(header["Accepted"]).tz_localize(_NEW_YORK).tz_convert("UTC")
-    return FilingIndex(header["Filing Date"], accepted, header.get("Period of Report", ""),
-                       tuple(_ITEM.findall(header.get("Items", ""))), tuple(parsed))
+    return FilingIndex(header.filing_date, header.accepted_at_utc, header.period_of_report, header.item_codes,
+                       tuple(parsed))
 
 
 def index_rejection(index: FilingIndex, unit: Mapping[str, str]) -> str | None:
@@ -209,10 +240,13 @@ def attempt(unit: Mapping[str, Any], fetch: Fetch, *, number: int,
     reason = None
     if status == 200 and response.final_url == unit["url"] and not response.redirect_chain:
         state = "archived"
-        if unit["phase"] == "index":
+        if unit["phase"] in {"index", "header"}:
+            accession = str(unit["accession_number"])
             try:
-                reason = index_rejection(parse_filing_index(response.body, accession=str(unit["accession_number"])),
-                                         unit["metadata"])
+                if unit["phase"] == "index":
+                    reason = index_rejection(parse_filing_index(response.body, accession=accession), unit["metadata"])
+                else:
+                    parse_filing_header(response.body, accession=accession)  # Its consumer judges the page's meaning.
             except DataReadinessError as error:
                 reason = str(error)
             state = "archived" if reason is None else "rejected"
@@ -246,7 +280,7 @@ class Store:
     @classmethod
     def open(cls, output: Path, checkpoint_sha256: str, request_sha256: str) -> Store:
         """Reopen at the pinned checkpoint; files it does not name were never committed and are removed."""
-        checkpoint = pinned_object(output / "_checkpoint.json", checkpoint_sha256)
+        checkpoint = _pinned_json(output / "_checkpoint.json", checkpoint_sha256)
         shards = checkpoint.get("shards")
         if not isinstance(shards, dict) or checkpoint.get("request_sha256") != request_sha256:
             raise DataReadinessError("SEC document checkpoint belongs to another request")
@@ -314,11 +348,16 @@ class Store:
                              f"SEC document body differs: {row.member}")
 
 
-def _index_units(units: pd.DataFrame) -> list[dict[str, Any]]:
-    return [{"unit_id": f"{row['accession_number']}/index", "phase": "index", "sec_cik": row["sec_cik"],
-             "accession_number": row["accession_number"], "sequence": "index", "document_type": "filing_index",
+def _page_units(units: pd.DataFrame, phase: str) -> list[dict[str, Any]]:
+    return [{"unit_id": f"{row['accession_number']}/{phase}", "phase": phase, "sec_cik": row["sec_cik"],
+             "accession_number": row["accession_number"], "sequence": phase, "document_type": "filing_index",
              "url": row["url"], "index_body_sha256": None, "index_row_json": None, "metadata": row}
             for row in units.to_dict("records")]
+
+
+def planned_units(phase: str, store: Store, receipts: pd.DataFrame, units: pd.DataFrame) -> list[dict[str, Any]]:
+    _require(phase in PHASES, f"unknown SEC document phase: {phase}")
+    return document_units(store, receipts, units) if phase == "document" else _page_units(units, phase)
 
 
 def document_units(store: Store, receipts: pd.DataFrame, units: pd.DataFrame) -> list[dict[str, Any]]:
@@ -350,50 +389,108 @@ def _outstanding(units: list[dict[str, Any]], receipts: pd.DataFrame) -> list[tu
             if unit["unit_id"] not in terminal and int(retried.get(unit["unit_id"], 0)) < MAXIMUM_ATTEMPTS]
 
 
-def collect(*, store: Store, units: pd.DataFrame, fetch: Fetch, request_sha256: str, memory_check: Callable[[], None],
-            cooldowns: Mapping[int, float], now: Callable[[], datetime] = lambda: datetime.now(UTC)) -> dict[str, Any]:
-    """Advance both phases, retrying transient failures; stop at the first 403 or 429 after checkpointing.
+def _stop_until(stopped: list[dict[str, Any]], cooldowns: Mapping[int, float]) -> str:
+    """The latest end of SEC's cooldown over every stopped attempt (its Retry-After, else the configured cooldown)."""
+    ends = []
+    for receipt in stopped:
+        headers = json.loads(str(receipt["safe_headers_json"]))
+        wait_seconds = _retry_after_seconds(headers.get("retry-after"), fallback=cooldowns[int(receipt["status_code"])])
+        ends.append(datetime.fromisoformat(str(receipt["completed_at_utc"])) + timedelta(seconds=wait_seconds))
+    return max(ends).isoformat()
 
-    A stopped run records when SEC's cooldown ends (its Retry-After, else the configured cooldown);
-    no request is sent before then, even from a new process.
+
+class RequestsStopped(Exception):
+    """Raised instead of sending a request once the run has stopped."""
+
+
+@dataclass
+class _Pass:
+    receipts: list[dict[str, Any]]
+    bodies: dict[str, bytes]
+    stopped: list[dict[str, Any]]
+    buffered: int = 0
+    failure: Exception | None = None
+
+
+def _run_pass(pool: ThreadPoolExecutor, pending: list[tuple[dict[str, Any], int]], *, store: Store, fetch: Fetch,
+              request_sha256: str, memory_check: Callable[[], None], stop: threading.Event, workers: int,
+              now: Callable[[], datetime]) -> _Pass:
+    """One pass over the outstanding units, flushing full shards. The first stopped attempt or failure sets
+    `stop`: nothing new is submitted, requests not yet sent are cancelled, and every finished attempt is kept."""
+    queue = iter(pending)
+    running: set[Future[tuple[dict[str, Any], bytes | None]]] = set()
+    batch = _Pass([], {}, [])
+    while True:
+        while not stop.is_set() and len(running) < workers and (item := next(queue, None)) is not None:
+            running.add(pool.submit(attempt, item[0], fetch, number=item[1], now=now))
+        if not running:
+            break
+        done, running = wait(running, return_when=FIRST_COMPLETED)
+        for future in done:
+            try:
+                receipt, body = future.result()
+            except RequestsStopped:
+                continue  # Never sent: the unit stays outstanding for a resume.
+            except Exception as error:
+                batch.failure = batch.failure or error
+                stop.set()
+                continue
+            batch.receipts.append(receipt)
+            if body is not None:
+                batch.bodies[str(receipt["member"])] = body
+                batch.buffered += len(body)
+            if receipt["state"] == "stopped":
+                batch.stopped.append(receipt)
+                stop.set()
+        if not stop.is_set() and (len(batch.receipts) >= SHARD_ATTEMPTS or batch.buffered >= SHARD_BYTES):
+            memory_check()
+            store.flush(batch.receipts, batch.bodies, request_sha256)
+            batch = _Pass([], {}, [])
+    return batch
+
+
+def collect(*, store: Store, units: pd.DataFrame, fetch: Fetch, request_sha256: str, memory_check: Callable[[], None],
+            cooldowns: Mapping[int, float], stop: threading.Event, phases: Sequence[str] = ("index", "document"),
+            workers: int = 1, now: Callable[[], datetime] = lambda: datetime.now(UTC)) -> dict[str, Any]:
+    """Advance each phase with `workers` concurrent requests, retrying transient failures.
+
+    The first 403 or 429 sets `stop`: attempts already sent finish and are kept, and `fetch` must
+    then refuse to send (raising `RequestsStopped`), including from a governor wait. The
+    checkpoint records when SEC's cooldown ends; no request is sent before then, even from a new
+    process. `fetch` must be safe to call from several threads.
     """
+    _require(workers >= 1, "SEC document collection needs at least one worker")
     if store.cooldown_until is not None and now() < datetime.fromisoformat(store.cooldown_until):
         raise DataReadinessError(f"SEC cooldown has not elapsed; resume after {store.cooldown_until}")
-    for phase in ("index", "document"):
-        planned = _index_units(units) if phase == "index" else document_units(store, store.receipts(), units)
-        for _ in range(MAXIMUM_ATTEMPTS):
-            pending = _outstanding(planned, store.receipts())
-            if not pending:
-                break
-            receipts: list[dict[str, Any]] = []
-            bodies: dict[str, bytes] = {}
-            buffered = 0
-            for unit, number in pending:
-                receipt, body = attempt(unit, fetch, number=number, now=now)
-                receipts.append(receipt)
-                if body is not None:
-                    bodies[str(receipt["member"])] = body
-                    buffered += len(body)
-                if receipt["state"] == "stopped":
-                    status = int(receipt["status_code"])
-                    headers = json.loads(str(receipt["safe_headers_json"]))
-                    wait = _retry_after_seconds(headers.get("retry-after"), fallback=cooldowns[status])
-                    store.cooldown_until = (datetime.fromisoformat(str(receipt["completed_at_utc"]))
-                                            + timedelta(seconds=wait)).isoformat()
-                    store.flush(receipts, bodies, request_sha256)
-                    return {"status": "stopped", "stop_status_code": receipt["status_code"], "stopped_unit": receipt["unit_id"]}
-                if len(receipts) >= SHARD_ATTEMPTS or buffered >= SHARD_BYTES:
-                    memory_check()
-                    store.flush(receipts, bodies, request_sha256)
-                    receipts, bodies, buffered = [], {}, 0
-            store.flush(receipts, bodies, request_sha256)
+    try:
+        with ThreadPoolExecutor(max_workers=workers, thread_name_prefix="sec-documents") as pool:
+            for phase in phases:
+                planned = planned_units(phase, store, store.receipts(), units)
+                for _ in range(MAXIMUM_ATTEMPTS):
+                    pending = _outstanding(planned, store.receipts())
+                    if not pending:
+                        break
+                    batch = _run_pass(pool, pending, store=store, fetch=fetch, request_sha256=request_sha256,
+                                      memory_check=memory_check, stop=stop, workers=workers, now=now)
+                    if batch.stopped:
+                        store.cooldown_until = _stop_until(batch.stopped, cooldowns)
+                    store.flush(batch.receipts, batch.bodies, request_sha256)
+                    if batch.failure is not None:
+                        raise batch.failure
+                    if batch.stopped:
+                        first = min(batch.stopped, key=lambda receipt: str(receipt["completed_at_utc"]))
+                        return {"status": "stopped", "stop_status_code": first["status_code"],
+                                "stopped_unit": first["unit_id"]}
+    finally:
+        stop.set()  # Wake any governor wait so the pool can shut down.
     return {"status": "complete"}
 
 
-def outcomes(store: Store, units: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
+def outcomes(store: Store, units: pd.DataFrame, phases: Sequence[str] = ("index", "document")
+             ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Each planned unit's final state (retry exhaustion included) and every receipt."""
     receipts = store.receipts()
-    planned = [*_index_units(units), *document_units(store, receipts, units)]
+    planned = [unit for phase in phases for unit in planned_units(phase, store, receipts, units)]
     terminal = receipts.loc[receipts.state.isin(TERMINAL_STATES)]
     _require(not terminal.unit_id.duplicated().any(), "an SEC document unit has more than one terminal attempt")
     final = dict(zip(terminal.unit_id, terminal.state, strict=True))

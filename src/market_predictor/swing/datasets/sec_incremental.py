@@ -5,6 +5,9 @@ identity_relations, identity_relations_sha256, output_root, extension_start.
 Paths are repository-relative (not config-relative). Historical archive reuse is
 byte verification only, never a load of its full filing-event table. Each new
 issuer attempt has its own immutable request, collection and content-pinned result.
+Snapshot windows and event clocks use the submissions API's acceptance label, which is
+New York wall-clock time for some issuers: these are raw evidence, and consumers time
+filings only through the published acceptance clock over every saved row.
 """
 from __future__ import annotations
 

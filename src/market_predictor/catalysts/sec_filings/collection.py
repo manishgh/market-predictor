@@ -1,4 +1,10 @@
-"""Immutable issuer-level SEC filing collection with raw-response replay."""
+"""Immutable issuer-level SEC filing collection with raw-response replay.
+
+Event `accepted_at_utc` and `available_at_utc` keep the submissions API's acceptance label,
+which is New York wall-clock time for some issuers; they are raw evidence, not a timing
+source. Timing consumers re-read `saved_filings` under the published per-issuer clock
+(`catalysts.sec_filings.acceptance_clock`).
+"""
 from __future__ import annotations
 
 import gzip
@@ -36,10 +42,17 @@ from market_predictor.canonical.store import (
     manifest_path_for,
     write_canonical_artifact,
 )
-from market_predictor.config import Settings
 from market_predictor.core.errors import DataReadinessError
 from market_predictor.sources.http import _DEFAULT_MAXIMUM_BODY_BYTES, HttpByteResponse, HttpClient
-from market_predictor.sources.sec import SecFilingHistory, SecRawResponse, SecSource, SecSourceResponseError
+from market_predictor.sources.sec import (
+    SecFilingHistory,
+    SecFilingRecord,
+    SecRawResponse,
+    SecSource,
+    SecSourceResponseError,
+    _filing_record,
+    _rows,
+)
 
 SEC_COLLECTION_SCHEMA: Final = "edge_rebuild.sec_filing_collection.v2"
 SEC_COLLECTION_MANIFEST_SCHEMA: Final = "edge_rebuild.sec_filing_collection_manifest.v2"
@@ -533,6 +546,50 @@ class ReplayedSecIssuer:
     events: pd.DataFrame
 
 
+def _payload(response: SecRawResponse) -> Mapping[str, Any]:
+    if (response.content_encoding or "identity").lower() != "identity":
+        raise DataReadinessError("SEC saved submissions responses must be identity encoded")
+    payload = json.loads(response.body)
+    if not isinstance(payload, Mapping):
+        raise DataReadinessError("SEC saved submissions response is not an object")
+    return payload
+
+
+def saved_filings(history: SecFilingHistory) -> dict[str, tuple[SecFilingRecord, Mapping[str, object]]]:
+    """Every saved submissions row by accession, whatever its form or date, with its raw fields.
+
+    Record acceptance is the API's label, not yet a clock. An accession saved on several pages
+    must carry identical content.
+    """
+    rows: dict[str, tuple[SecFilingRecord, Mapping[str, object]]] = {}
+    for name, response in zip(history.submission_files, history.raw_responses, strict=True):
+        section: Any = _payload(response)
+        section = section.get("filings", section)
+        if isinstance(section, Mapping) and "recent" in section:
+            section = section["recent"]
+        for row in _rows(section, expected_count=None, source_name=name):
+            record = _filing_record(row, ticker=history.ticker, cik=history.cik, company_name=history.company_name,
+                                    submission_file=name)
+            seen = rows.get(record.accession_number)
+            if seen is not None and seen[0].raw_sha256 != record.raw_sha256:
+                raise DataReadinessError(f"SEC saved pages disagree on accession {record.accession_number}")
+            rows.setdefault(record.accession_number, (record, row))
+    return rows
+
+
+def unsaved_submission_pages(history: SecFilingHistory, day: date) -> list[str]:
+    """Older submissions pages listing filings dated `day` that were never fetched; their rows are unknown."""
+    listed: list[Mapping[str, Any]] = []
+    for response in history.raw_responses:
+        section = _payload(response).get("filings")
+        if isinstance(section, Mapping):
+            listed += [descriptor for descriptor in section.get("files", []) if isinstance(descriptor, Mapping)]
+    saved = set(history.submission_files)
+    return sorted(str(descriptor["name"]) for descriptor in listed
+                  if date.fromisoformat(str(descriptor["filingFrom"])) <= day <= date.fromisoformat(str(descriptor["filingTo"]))
+                  and str(descriptor["name"]) not in saved)
+
+
 class _ArchivedSecClient(HttpClient):
     """Serve one issuer's saved EDGAR bodies with their recorded metadata; an unsaved URL fails."""
 
@@ -584,8 +641,11 @@ class _ArchivedSecClient(HttpClient):
         )
 
 
-def replay_sec_filing_collection(collection: SecFilingCollection, settings: Settings) -> Iterator[ReplayedSecIssuer]:
+def replay_sec_filing_collection(collection: SecFilingCollection,
+                                 source: Callable[[HttpClient], SecSource]) -> Iterator[ReplayedSecIssuer]:
     """Re-derive each issuer's filings, one at a time, from its saved responses only.
+
+    `source` builds the unchanged SEC client around the archive-serving HTTP client.
 
     The unchanged client walk decides which saved pages overlap the window, reconciles each
     older page with its ``filingCount`` and rejects conflicting duplicates. Its records must
@@ -607,7 +667,7 @@ def replay_sec_filing_collection(collection: SecFilingCollection, settings: Sett
             responses = responses_by_issuer.get(cik, collection.raw_inventory.iloc[:0])
             client = _ArchivedSecClient(archive, responses)
             try:
-                history = SecSource(settings, client=client).fetch_cik_filing_history(
+                history = source(client).fetch_cik_filing_history(
                     cik, start, end, forms=forms, ticker_hint=str(coverage.ticker))
             except SecSourceResponseError as exc:
                 raise DataReadinessError(f"SEC saved responses do not replay for {cik}: {exc}") from exc

@@ -15,6 +15,7 @@ from market_predictor.heavy_jobs import HEAVY_JOB_BUSY_EXIT_CODE, HeavyJobBusyEr
 from market_predictor.research.issuer_content_cohort_inventory import publish_cohort_content_inventory
 from market_predictor.research.issuer_content_inventory import publish_saved_content_inventory
 from market_predictor.research.legacy_query_identity_proofs import publish_legacy_query_identity_proofs
+from market_predictor.research.sec_acceptance_clock import collect_sec_clock_pages, publish_sec_acceptance_clock
 from market_predictor.research.sec_filing_documents import collect_sec_filing_documents
 from market_predictor.research.sec_form_inventory import MODES, Mode, publish_sec_form_inventory
 from market_predictor.swing.datasets.initial_fit_issuer_news import LAST_INITIAL_FIT_CUTOFF
@@ -69,6 +70,30 @@ def register_issuer_content_commands(app: typer.Typer) -> None:
         """Prove or reject legacy news-query identities the CIK bridge left unconverted; never admission."""
         _publish(lambda: publish_legacy_query_identity_proofs(root=root, config=config, config_sha256=config_sha256,
             output=output), ("status", "totals", "manifest_sha256", "training_eligible", "serving_eligible"))
+
+    @app.command("collect-sec-clock-pages")
+    def collect_clock_pages(
+        collection_authority: Path = typer.Option(...), collection_sha256: str = typer.Option(...),
+        output: Path = typer.Option(...), root: Path = typer.Option(Path(".")),
+        resume_checkpoint_sha256: str | None = typer.Option(None),
+    ) -> None:
+        """Collect EDGAR detail pages of each issuer's first and last archive filing in every form group."""
+        _publish(lambda: collect_sec_clock_pages(
+            root=root, collection={"path": collection_authority.as_posix(), "sha256": collection_sha256}, output=output,
+            resume_checkpoint_sha256=resume_checkpoint_sha256),
+            ("status", "checkpoint_sha256"), ("stop_status_code", "stopped_unit", "manifest_sha256", "totals"))
+
+    @app.command("publish-sec-acceptance-clock")
+    def publish_clock(
+        collection_authority: Path = typer.Option(...), collection_sha256: str = typer.Option(...),
+        pages_manifest: Path = typer.Option(...), pages_sha256: str = typer.Option(...), output: Path = typer.Option(...),
+        root: Path = typer.Option(Path(".")),
+    ) -> None:
+        """Decide each SEC issuer's acceptance-clock convention from EDGAR's own pages; never a guess."""
+        _publish(lambda: publish_sec_acceptance_clock(
+            root=root, collection={"path": collection_authority.as_posix(), "sha256": collection_sha256},
+            pages={"path": pages_manifest.as_posix(), "sha256": pages_sha256}, output=output),
+            ("status", "manifest_sha256", "totals"))
 
     @app.command("inspect-sec-form-inventory")
     def inspect_sec(

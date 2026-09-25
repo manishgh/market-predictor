@@ -329,37 +329,66 @@ are rejected because only the corrections archive may supply them. Proof availab
 is the membership effective start (`retrospective_membership_effective_proxy`); proofs
 are research evidence, never training, serving or promotion admission.
 
-`market-predictor-research inspect-sec-form-inventory --config
-configs/swing_sec_form_inventory.json --config-sha256 <pin> --output
-data/research/<new-name> [--mode initial_fit|later_sealed]` inventories saved SEC filing
-metadata for the approved cohort (publisher `research/sec_form_inventory.py`, pure logic
-`catalysts/sec_filings/form_inventory.py`). It replays every issuer's saved EDGAR
-submissions responses through the unchanged `SecSource` with an archive-backed client
-(`collection.replay_sec_filing_collection`); the replayed records must equal the
-canonical events and reproduce the recorded response hash, and the replay also recovers
-8-K item codes, document descriptions, sizes and XBRL flags. Filings are attributed
+SEC acceptance clocks come first. The submissions API labels some issuers' New York
+wall-clock acceptance as UTC, so every SEC timing consumer uses the published per-issuer
+convention (pure logic `catalysts/sec_filings/acceptance_clock.py`, publisher
+`research/sec_acceptance_clock.py`):
+
+`market-predictor-research collect-sec-clock-pages --collection-authority
+data/external/<sec-archive>/_authority.json --collection-sha256 <pin> --output
+data/raw/<new-name> [--resume-checkpoint-sha256 <pin>]` replays the archive and fetches
+the EDGAR detail page of each issuer's first and last filing in every form group
+(current reports, periodic reports, ownership forms, other), one page per accession.
+
+`market-predictor-research publish-sec-acceptance-clock --collection-authority
+<same> --collection-sha256 <pin> --pages-manifest data/raw/<pages>/_manifest.json
+--pages-sha256 <pin> --output data/research/<new-name>` compares each page's
+`Accepted` time (EDGAR's own New York clock) with the saved raw value and decides
+`utc` or `new_york_wall_clock_labeled_utc` per issuer. Every form group needs a matching
+page, and counts of filings dated before the initial-fit cutoff's New York day that fall
+outside EDGAR's weekday 06:00-22:00 hours must not favour the other reading; a page
+matching neither reading, disagreeing pages or contrary counts fail the publication, and
+an issuer without a readable page in some group stays `unknown`. It writes
+`issuers.parquet`, `pages.parquet` and `in_data_counts.parquet`.
+
+`market-predictor-research inspect-sec-form-inventory --config <config> --config-sha256
+<pin> --output data/research/<new-name> [--mode initial_fit|later_sealed]` inventories
+saved SEC filing metadata for the approved cohort (publisher `research/sec_form_inventory.py`,
+pure logic `catalysts/sec_filings/form_inventory.py`); the config pins the SEC archive and
+its acceptance clock. It replays every issuer's saved EDGAR submissions responses through
+the unchanged `SecSource` with an archive-backed client
+(`collection.replay_sec_filing_collection`); the replayed records must equal the canonical
+events and reproduce the recorded response hash. Rows are every saved submissions row whose
+acceptance, re-read under the issuer's convention, is available inside the window (a row
+saved outside the archive's event window is marked `archive_event = false`); filings of
+`unknown` issuers are excluded and counted, and issuers whose older submissions page for
+the window's first New York day was never fetched are listed under `window_start_coverage`.
+Rows keep the raw acceptance and convention,
+recover 8-K item codes, document descriptions, sizes and XBRL flags, and are attributed
 through the pinned SEC identity relations (bound to the identity alignment manifest and
 the collection request) when the relation covers and was available by the filing's
 availability; same-CIK filings outside a relation are counted separately. Rows carry
 report-date lag in days and XNYS sessions, the acceptance session position and the
-document status against every saved official-document collection (verified from its
-own `_request.json`) and the identity-evidence store. `initial_fit` writes
-`filings.parquet`, `security_years.parquet` and `security_year_counts.parquet`;
-`later_sealed` lists later filings only, sealed until qualification rules are frozen.
+document status against every saved official-document collection (verified from its own
+`_request.json`) and the identity-evidence store. `initial_fit` writes `filings.parquet`,
+`security_years.parquet` and `security_year_counts.parquet`; `later_sealed` lists later
+filings only, sealed until qualification rules are frozen.
 
 `market-predictor-research collect-sec-filing-documents --inventory-manifest
 data/research/<inventory>/_manifest.json --inventory-sha256 <pin> --output
 data/raw/<new-name> [--resume-checkpoint-sha256 <pin>] [--pilot-accession <accession>]`
 collects, for cohort 8-Ks carrying item 2.02, 7.01 or 8.01, each EDGAR detail page,
 then the primary document and every EX-99 exhibit that a verified page names (publisher
-`research/sec_filing_documents.py`, collector `catalysts/sec_filings/document_collection.py`).
-Detail pages are parsed strictly and must match the pinned acceptance time, filing date,
-period of report, item codes and primary document. Requests use a dedicated SEC governor
-with one attempt per call; outcomes are archived, rejected, missing, oversize (16 MiB),
-HTTP error, retryable (up to three attempts) or stopped at the first 403/429. Bodies and
-self-hashed receipts are written to immutable zip/parquet shards listed by an atomically
-replaced checkpoint; a stopped run resumes only with the printed checkpoint hash.
-Retrieval time is first observation, never historical availability.
+`research/sec_filing_documents.py`, shared runner `research/sec_page_collection.py`,
+collector `catalysts/sec_filings/document_collection.py`). Detail pages are parsed
+strictly and must match the pinned acceptance time, filing date, period of report, item
+codes and primary document. Four workers share one SEC governor at five requests per
+second with one attempt per call; outcomes are archived, rejected, missing, oversize
+(16 MiB), HTTP error, retryable (up to three attempts) or stopped at the first 403/429,
+after which in-flight attempts finish and no new request starts. Bodies and self-hashed
+receipts are written to immutable zip/parquet shards listed by an atomically replaced
+checkpoint; a stopped run resumes only with the printed checkpoint hash after SEC's
+cooldown. Retrieval time is first observation, never historical availability.
 
 ## Source Roles
 

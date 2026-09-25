@@ -1,4 +1,5 @@
-"""Leased, immutable inventory of saved SEC filing metadata and saved filing documents."""
+"""Leased, immutable inventory of saved SEC filing metadata and saved filing documents, timed by the published
+per-issuer acceptance clock."""
 from __future__ import annotations
 
 from collections.abc import Iterable
@@ -9,6 +10,7 @@ from uuid import uuid4
 import pandas as pd
 
 from market_predictor.canonical.store import file_sha256
+from market_predictor.catalysts.sec_filings.acceptance_clock import UNKNOWN
 from market_predictor.catalysts.sec_filings.collection import (
     _relation_sha256,
     load_sec_filing_collection,
@@ -24,13 +26,13 @@ from market_predictor.catalysts.sec_filings.form_inventory import (
     saved_document,
     security_years,
 )
-from market_predictor.config import Settings
 from market_predictor.core.errors import DataReadinessError
 from market_predictor.evidence.hashing import json_sha256
 from market_predictor.evidence.io import inside, write_json_object
 from market_predictor.heavy_jobs import heavy_job_lease, heavy_job_runtime_dir
 from market_predictor.research.issuer_content_inventory import _guard
 from market_predictor.research.legacy_query_identity_proofs import pin_file
+from market_predictor.research.sec_acceptance_clock import archive_source, load_sec_acceptance_clock
 from market_predictor.sources.official_documents import OfficialDocumentInventory, verify_official_document_collection
 from market_predictor.swing.contracts.research_cohort import load_swing_research_cohort
 from market_predictor.swing.datasets.initial_fit_issuer_news import LAST_INITIAL_FIT_CUTOFF
@@ -43,11 +45,12 @@ Mode = Literal["initial_fit", "later_sealed"]
 MODES: tuple[Mode, ...] = ("initial_fit", "later_sealed")
 IMPLEMENTATION_PATHS = (
     "research/sec_form_inventory.py", "catalysts/sec_filings/form_inventory.py", "catalysts/sec_filings/collection.py",
+    "catalysts/sec_filings/acceptance_clock.py", "research/sec_acceptance_clock.py",
     "sources/sec.py", "sources/http.py", "sources/official_documents.py", "swing/contracts/research_cohort.py",
     "canonical/store.py", "evidence/hashing.py", "evidence/io.py",
 )
-_KEYS = frozenset({"schema", "sec_collection", "identity_manifest", "sec_identity_relations", "approved_population",
-                   "official_document_collections", "identity_evidence_inventories"})
+_KEYS = frozenset({"schema", "sec_collection", "acceptance_clock", "identity_manifest", "sec_identity_relations",
+                   "approved_population", "official_document_collections", "identity_evidence_inventories"})
 _EVIDENCE_COLUMNS = (("filing_url", "filing_path", "filing_sha256"), ("evidence_url", "evidence_document", "evidence_raw_sha256"))
 _RELATION_KEY = ["security_id", "ticker", "effective_from_utc"]
 # A sealed later-window list keeps only what the document collector needs, one row per accession.
@@ -153,6 +156,7 @@ def _counts(series: pd.Series) -> dict[str, int]:
 def _totals(filings: pd.DataFrame, outside: pd.DataFrame, unrequested: dict[str, int], late: int, cohort: tuple[str, ...],
             relations: pd.DataFrame) -> dict[str, Any]:
     accessions = filings.drop_duplicates("accession_number")
+    clocks = accessions.groupby("acceptance_clock").size()
     current = accessions.loc[accessions.sec_form.isin(CURRENT_REPORTS)]
     items = current.assign(item_code=current.item_codes.str.split(",")).explode("item_code")
     return {
@@ -171,6 +175,8 @@ def _totals(filings: pd.DataFrame, outside: pd.DataFrame, unrequested: dict[str,
         "cik_identity_outside_relation_rows": len(outside),
         "accepted_in_window_available_after": late,
         "unrequested_form_rows_in_window": dict(sorted(unrequested.items())),
+        "accessions_by_acceptance_clock": _counts(clocks),
+        "accessions_outside_archive_events": int((~accessions.archive_event.astype(bool)).sum()),
     }
 
 
@@ -197,6 +203,13 @@ def publish_sec_form_inventory(*, root: Path, config: Path, config_sha256: str, 
                  "SEC collection authority pin differs")
         request = collection.manifest["request"]
         assert isinstance(request, dict)
+        conventions, clock = load_sec_acceptance_clock(root, settings["acceptance_clock"], pins)
+        _require(clock.get("sec_collection") == {"path": settings["sec_collection"]["path"],
+                                                 "sha256": settings["sec_collection"]["sha256"]},
+                 "SEC acceptance clock was published for another SEC collection")
+        _require(set(conventions) == set(collection.source_collections.sec_cik.astype(str)),
+                 "SEC acceptance clock does not cover exactly the collection's issuers")
+        lag_minutes = int(request["dissemination_lag_minutes"])
         relations = _relations(root, settings, request, pins)
         cohort = load_swing_research_cohort(pin_file(root, settings["approved_population"], pins),
                                             source_root=root).retained_security_ids
@@ -210,15 +223,20 @@ def publish_sec_form_inventory(*, root: Path, config: Path, config_sha256: str, 
         rows: list[dict[str, Any]] = []
         outside_rows: list[dict[str, Any]] = []
         unrequested: dict[str, int] = {}
-        late = 0
-        for position, issuer in enumerate(replay_sec_filing_collection(collection, Settings())):
+        late = unknown_clock = 0
+        start_gaps: dict[str, list[str]] = {}
+        for position, issuer in enumerate(replay_sec_filing_collection(collection, archive_source)):
             if position % 25 == 0:
                 _guard()
-            result = issuer_inventory(issuer, requested=requested, relations=relations, cohort=frozenset(cohort),
+            result = issuer_inventory(issuer, convention=conventions[issuer.cik], lag_minutes=lag_minutes,
+                                      requested=requested, relations=relations, cohort=frozenset(cohort),
                                       window=window, saved=saved)
             rows += result.filings
             outside_rows += result.outside_relation
             late += result.available_after_window
+            unknown_clock += result.unknown_clock_rows
+            if result.unsaved_window_start_pages:
+                start_gaps[issuer.cik] = result.unsaved_window_start_pages
             for form, count in result.unrequested_forms.items():
                 unrequested[form] = unrequested.get(form, 0) + count
         _guard()
@@ -245,7 +263,15 @@ def publish_sec_form_inventory(*, root: Path, config: Path, config_sha256: str, 
                 "source_files": dict(sorted(pins.items())), "document_collection_reports": dict(sorted(reports.items())),
                 "implementation_files": {f"market_predictor/{name}": file_sha256(package / name) for name in IMPLEMENTATION_PATHS},
                 "artifacts": {name: file_sha256(staging / name) for name in names},
-                "availability_basis": "sec_daily_swing_conservative_proxy; first observed 2026, retrospective research only",
+                "availability_basis": ("sec_daily_swing_conservative_proxy on the published per-issuer acceptance clock; "
+                                       "first observed 2026, retrospective research only"),
+                "acceptance_clock": {"unknown_issuers": sorted(cik for cik, value in conventions.items() if value == UNKNOWN),
+                                     "requested_form_rows_excluded_for_unknown_clock": unknown_clock,
+                                     "scope": "every row, late and unrequested count excludes unknown-convention issuers"},
+                "window_start_coverage": {
+                    "new_york_date": window[0].tz_convert("America/New_York").date().isoformat(),
+                    "issuers_with_unsaved_pages": dict(sorted(start_gaps.items())),
+                    "meaning": "these issuers may lack filings dated that day and available after the window start"},
                 "count_scope": "EDGAR form names and 8-K item codes; not event meaning or content qualification",
                 "zero_scope": "zero is verified for requested forms only inside an SEC identity relation",
                 "training_eligible": False, "serving_eligible": False, "promotion_eligible": False,

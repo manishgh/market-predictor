@@ -1,13 +1,15 @@
 """Saved SEC filing metadata per cohort security, using EDGAR's own form names and item codes.
 
-Counts are filing metadata, never event meaning. Each filing is attributed through a pinned
-SEC identity relation that covers, and was available by, the filing's availability; time
-outside a relation is unknown identity, not zero filings. An 8-K accepted after its report
-date is a late record of an event whose first public time needs other evidence.
+Counts are filing metadata, never event meaning. Rows are every saved submissions row whose
+acceptance, re-read under the issuer's published clock convention, makes it available inside
+the window; an issuer of unknown convention contributes counted exclusions only. Each filing
+is attributed through a pinned SEC identity relation that covers, and was available by, the
+filing's availability; time outside a relation is unknown identity, not zero filings. An 8-K
+accepted after its report date is a late record of an event whose first public time needs
+other evidence.
 """
 from __future__ import annotations
 
-import json
 import re
 from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass
@@ -16,9 +18,14 @@ from typing import Any
 import exchange_calendars as xcals
 import pandas as pd
 
-from market_predictor.catalysts.sec_filings.collection import ReplayedSecIssuer
+from market_predictor.catalysts.sec_filings.acceptance_clock import CONVENTIONS, UNKNOWN, UTC_LABEL, corrected_acceptance
+from market_predictor.catalysts.sec_filings.collection import (
+    ReplayedSecIssuer,
+    conservative_sec_daily_swing_availability,
+    saved_filings,
+    unsaved_submission_pages,
+)
 from market_predictor.core.errors import DataReadinessError
-from market_predictor.sources.sec import SecFilingHistory, SecRawResponse, _filing_record, _rows
 
 NEW_YORK = "America/New_York"
 CURRENT_REPORTS = frozenset({"8-K", "8-K/A"})
@@ -29,7 +36,8 @@ REPORT_TIMINGS = ("no_post_report_session_before_sec", "report_session_may_prece
                   "unknown", "not_applicable")
 FILING_COLUMNS = (
     "security_id", "sec_cik", "accession_number", "sec_form", "item_codes", "report_date", "filing_date",
-    "accepted_at_utc", "available_at_utc", "availability_rule", "acceptance_session_position", "acceptance_lag_days",
+    "accepted_at_utc", "acceptance_raw", "acceptance_clock", "archive_event", "available_at_utc", "availability_rule",
+    "acceptance_session_position", "acceptance_lag_days",
     "post_report_sessions_before_availability", "report_session_opened_before_availability", "report_timing",
     "identity_policy", "issuer_cohort_securities", "primary_document",
     "primary_document_description", "filing_size_bytes", "is_xbrl", "is_inline_xbrl", "document_status",
@@ -57,6 +65,8 @@ class IssuerInventory:
     outside_relation: list[dict[str, Any]]
     unrequested_forms: dict[str, int]
     available_after_window: int
+    unknown_clock_rows: int
+    unsaved_window_start_pages: list[str]
 
 
 def saved_document(url: str, source: str, *, has_receipt: bool) -> SavedDocument | None:
@@ -66,41 +76,6 @@ def saved_document(url: str, source: str, *, has_receipt: bool) -> SavedDocument
         return None
     digits = match[2]
     return SavedDocument(match[1].zfill(10), f"{digits[:10]}-{digits[10:12]}-{digits[12:]}", match[3], source, has_receipt)
-
-
-def _payload(response: SecRawResponse) -> Mapping[str, Any]:
-    if (response.content_encoding or "identity").lower() != "identity":
-        raise DataReadinessError("SEC saved submissions responses must be identity encoded")
-    payload = json.loads(response.body)
-    if not isinstance(payload, Mapping):
-        raise DataReadinessError("SEC saved submissions response is not an object")
-    return payload
-
-
-def raw_fields(history: SecFilingHistory, requested: Collection[str], window: tuple[pd.Timestamp, pd.Timestamp]
-               ) -> tuple[dict[str, dict[str, Any]], dict[str, int]]:
-    """EDGAR fields the canonical events drop, keyed by raw row hash, and window counts of unrequested forms."""
-    fields: dict[str, dict[str, Any]] = {}
-    unrequested: dict[str, set[str]] = {}
-    for name, response in zip(history.submission_files, history.raw_responses, strict=True):
-        section: Any = _payload(response)
-        section = section.get("filings", section)
-        if isinstance(section, Mapping) and "recent" in section:
-            section = section["recent"]
-        for row in _rows(section, expected_count=None, source_name=name):
-            record = _filing_record(row, ticker=history.ticker, cik=history.cik, company_name=history.company_name,
-                                    submission_file=name)
-            if record.form not in requested:
-                if window[0] <= pd.Timestamp(record.accepted_at_utc) <= window[1]:
-                    unrequested.setdefault(record.form, set()).add(record.accession_number)
-                continue
-            items = tuple(code.strip() for code in str(row.get("items") or "").split(",") if code.strip())
-            fields[record.raw_sha256] = {
-                "item_codes": ",".join(items), "primary_document_description": str(row.get("primaryDocDescription") or ""),
-                "filing_size_bytes": _integer(row.get("size")), "is_xbrl": _flag(row.get("isXBRL")),
-                "is_inline_xbrl": _flag(row.get("isInlineXBRL")),
-            }
-    return fields, {form: len(accessions) for form, accessions in unrequested.items()}
 
 
 def _integer(value: object) -> int | None:
@@ -167,27 +142,50 @@ def document_status(documents: Sequence[SavedDocument], primary_document: str) -
     return "saved_without_receipt" if documents else "not_saved"
 
 
-def issuer_inventory(issuer: ReplayedSecIssuer, *, requested: Collection[str], relations: pd.DataFrame,
-                     cohort: frozenset[str], window: tuple[pd.Timestamp, pd.Timestamp],
+def _available(accepted: pd.Timestamp, form: str, lag_minutes: int) -> tuple[pd.Timestamp, str]:
+    when, rule = conservative_sec_daily_swing_availability(accepted.to_pydatetime(), form, lag_minutes=lag_minutes)
+    return pd.Timestamp(when), rule
+
+
+def _either_reading_in_window(raw: str, form: str, lag_minutes: int, window: tuple[pd.Timestamp, pd.Timestamp]) -> bool:
+    for convention in CONVENTIONS:
+        try:
+            if window[0] <= _available(corrected_acceptance(raw, convention), form, lag_minutes)[0] <= window[1]:
+                return True
+        except DataReadinessError:
+            continue
+    return False
+
+
+def issuer_inventory(issuer: ReplayedSecIssuer, *, convention: str, lag_minutes: int, requested: Collection[str],
+                     relations: pd.DataFrame, cohort: frozenset[str], window: tuple[pd.Timestamp, pd.Timestamp],
                      saved: Mapping[tuple[str, str], Sequence[SavedDocument]]) -> IssuerInventory:
-    """Attribute one replayed issuer's in-window filings to cohort securities; never guess identity."""
-    fields, unrequested = raw_fields(issuer.history, requested, window)
+    """Attribute one replayed issuer's saved filings available in the window to cohort securities;
+    never guess identity or clock."""
     own = relations.loc[relations.sec_cik.eq(issuer.cik) & relations.security_id.isin(cohort)].sort_values(
         ["security_id", "effective_from_utc"], kind="stable").to_dict("records")
     by_id = [security for security in cohort if _cohort_cik(security) == issuer.cik]
-    events = issuer.events
-    available = pd.to_datetime(events.available_at_utc, utc=True)
-    in_window = events.loc[(available >= window[0]) & (available <= window[1])]
-    accepted = pd.to_datetime(events.accepted_at_utc, utc=True)
-    late = int(((accepted >= window[0]) & (accepted <= window[1]) & (available > window[1])).sum())
+    archived = set(issuer.events.accession_number.astype(str))
     filings: list[dict[str, Any]] = []
     outside: list[dict[str, Any]] = []
-    for event in in_window.to_dict("records"):
-        when = pd.Timestamp(event["available_at_utc"])
-        accepted_at = pd.Timestamp(event["accepted_at_utc"])
-        extra = fields.get(str(event["raw_sha256"]))
-        if extra is None:
-            raise DataReadinessError(f"SEC event has no replayed raw row: {event['accession_number']}")
+    unrequested: dict[str, set[str]] = {}
+    late = unknown = 0
+    for accession, (record, row) in sorted(saved_filings(issuer.history).items()):
+        raw = str(row.get("acceptanceDateTime") or "")
+        if convention == UNKNOWN:
+            unknown += record.form in requested and _either_reading_in_window(raw, record.form, lag_minutes, window)
+            continue
+        accepted_at = corrected_acceptance(raw, convention)
+        if convention == UTC_LABEL and accepted_at != pd.Timestamp(record.accepted_at_utc):
+            raise DataReadinessError(f"SEC acceptance re-read differs from the parsed record: {accession}")
+        when, rule = _available(accepted_at, record.form, lag_minutes)
+        if record.form not in requested:
+            if window[0] <= when <= window[1]:
+                unrequested.setdefault(record.form, set()).add(accession)
+            continue
+        late += window[0] <= accepted_at <= window[1] < when
+        if not window[0] <= when <= window[1]:
+            continue
         matches = [relation for relation in own if relation["effective_from_utc"] <= when
                    and (pd.isna(relation["effective_to_utc"]) or when < relation["effective_to_utc"])
                    and relation["available_at_utc"] <= when]
@@ -195,30 +193,36 @@ def issuer_inventory(issuer: ReplayedSecIssuer, *, requested: Collection[str], r
         if len(set(securities)) != len(securities):
             raise DataReadinessError(f"SEC identity relations overlap for one security: {issuer.cik}")
         year = int(when.tz_convert(NEW_YORK).year)
+        form = record.form
         for security in sorted(set(by_id) - set(securities)):
-            outside.append({"security_id": security, "sec_cik": issuer.cik, "sec_form": str(event["sec_form"]),
-                            "year_new_york": year})
-        form = str(event["sec_form"])
-        current = form in CURRENT_REPORTS
-        timing = (report_timing(str(event["report_date"] or ""), accepted_at, when) if current
+            outside.append({"security_id": security, "sec_cik": issuer.cik, "sec_form": form, "year_new_york": year})
+        timing = (report_timing(record.report_date, accepted_at, when) if form in CURRENT_REPORTS
                   else ReportTiming(None, None, None, "not_applicable"))
-        documents = saved.get((issuer.cik, str(event["accession_number"])), ())
+        documents = saved.get((issuer.cik, accession), ())
+        items = tuple(code.strip() for code in str(row.get("items") or "").split(",") if code.strip())
         for relation in matches:
             filings.append({
-                "security_id": relation["security_id"], "sec_cik": issuer.cik,
-                "accession_number": str(event["accession_number"]), "sec_form": form,
-                "report_date": str(event["report_date"] or ""), "filing_date": str(event["filing_date"]),
-                "accepted_at_utc": accepted_at, "available_at_utc": when, "availability_rule": str(event["availability_rule"]),
+                "security_id": relation["security_id"], "sec_cik": issuer.cik, "accession_number": accession,
+                "sec_form": form, "report_date": record.report_date, "filing_date": record.filing_date,
+                "accepted_at_utc": accepted_at, "acceptance_raw": raw, "acceptance_clock": convention,
+                "archive_event": accession in archived, "available_at_utc": when, "availability_rule": rule,
                 "acceptance_session_position": session_position(accepted_at), "acceptance_lag_days": timing.lag_days,
                 "post_report_sessions_before_availability": timing.post_report_sessions,
                 "report_session_opened_before_availability": timing.report_session_opened, "report_timing": timing.label,
                 "identity_policy": relation["identity_policy"], "issuer_cohort_securities": len(matches),
-                "primary_document": str(event["primary_document"]), **extra,
-                "document_status": document_status(documents, str(event["primary_document"])),
+                "primary_document": record.primary_document, "item_codes": ",".join(items),
+                "primary_document_description": str(row.get("primaryDocDescription") or ""),
+                "filing_size_bytes": _integer(row.get("size")), "is_xbrl": _flag(row.get("isXBRL")),
+                "is_inline_xbrl": _flag(row.get("isInlineXBRL")),
+                "document_status": document_status(documents, record.primary_document),
                 "saved_document_sources": ",".join(sorted({document.source for document in documents})),
                 "year_new_york": year,
             })
-    return IssuerInventory(filings, outside, unrequested, late)
+    # A filing available at the window start can be dated the New York day before it; a page of that day never
+    # fetched makes the start incomplete for this issuer.
+    start_pages = unsaved_submission_pages(issuer.history, window[0].tz_convert(NEW_YORK).date())
+    return IssuerInventory(filings, outside, {form: len(values) for form, values in unrequested.items()}, late, unknown,
+                           start_pages)
 
 
 def filings_frame(rows: list[dict[str, Any]]) -> pd.DataFrame:
