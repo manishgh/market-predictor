@@ -849,6 +849,56 @@ inventory and sub-slices above where they differ):
   `serving/outcome_intents.py`, `serving/bundle.py`, `edge_rebuild/swing_setups.py`,
   `market_regime.py` and `commands/canonical_data.py`.
 
+Sub-slice (a) design (September 25; frozen for review before code):
+
+- Measured scope. The three retained collectors are the prospective SIP-session
+  authority (`intraday/datasets/prospective_sip_session.py`), prospective broker actions
+  (`intraday/datasets/prospective_broker_actions.py`) and the Alpaca bar history contract,
+  plan and transport they use (`intraday/contracts/history_collection.py`,
+  `intraday/datasets/history.py`, `intraday/datasets/history_collection.py`). Together they
+  are 6,973 lines. Broker actions also import `bar_dataset.load_complete_intraday_bar_dataset`,
+  which pulls in about 9,700 more lines of intraday bars, features and labels. None of the
+  five files is pinned by closed evidence (checked against 531 manifests and the reports).
+  None hashes its own code. Their last runs are `data/raw/prospective_broker_actions`
+  (poll 2026-08-21, `registry_v2`) and `data/raw/prospective_sip_sessions`
+  (`session_20260820_v1`). No module outside `intraday/` uses
+  `prospective_analyst_revision_horizon`, `selected_session_history`, `benchmark_history` or
+  `one_minute_coverage`, so they go with (d).
+- Ownership. A new production package, `market_predictor/collection/`, holds raw
+  provider-evidence pipelines: plans, transports and prospective source authorities that
+  write immutable collections. Its allowed dependencies are core, evidence, canonical,
+  sources, universe, locking and resources. `sources` cannot hold these pipelines, since
+  sources may not import canonical or universe; `catalysts` may not import locking. The
+  package boundary test gains the package and its allowed list.
+- Moves, with neutral Python names:
+  - `intraday/contracts/history_collection.py` to `collection/alpaca_bars/contracts.py`;
+  - `intraday/datasets/history.py` to `collection/alpaca_bars/plan.py`;
+  - `intraday/datasets/history_collection.py` to `collection/alpaca_bars/transport.py`;
+  - `intraday/datasets/prospective_sip_session.py` to `collection/prospective_sip_session.py`;
+  - `intraday/datasets/prospective_broker_actions.py` to `collection/prospective_broker_actions.py`.
+  Identifiers already written into artifacts stay byte-identical, so every existing
+  collection, poll and registry still loads. Examples are schema strings such as
+  `edge_rebuild.intraday_history.v1` and `edge_rebuild.intraday_bar_dataset.v1`, and
+  request keys. Python names change, for example `IntradayHistoryConfig` becomes
+  `AlpacaBarHistoryConfig`. The reference scans in (f) list these data identifiers as
+  permitted.
+- Security namespace. Broker actions read the A4.3 bar dataset only to fix the security
+  identity namespace through its parent lineage. The collector drops the full-dataset
+  load, and with it every intraday bar, feature and label import, and keeps its own checks
+  of that dataset's authority, manifest, request and parent-lineage hashes. The namespace
+  still comes from the pinned membership authorities and
+  `verify_membership_namespace_extension`. Partition bytes were never used for the
+  namespace.
+- Intraday modules that import a moved file switch to the new path in the same change,
+  so every commit stays importable; (d) deletes them. `commands/edge_rebuild.py` imports
+  from `collection`, and command names and CLI options are unchanged. Configs stay
+  byte-identical. The SEC collector's re-hashed files are untouched.
+- Exit tests: the moved tests run under `tests/test_collection_*.py`; the package
+  boundary test covers the new package; command help works; and a read-only load of the
+  real `registry_v2` and `session_20260820_v1` through the moved loaders proves format
+  continuity. Checks: Ruff and strict mypy on the moved files, and the affected consumers'
+  tests.
+
 The September 20 user instruction explicitly extends the completed HTTP/CLI and
 TradingFlow cleanup to all remaining Market Predictor implementation. This is a
 changed requirement, not a reopening of previously passed tests without cause.
