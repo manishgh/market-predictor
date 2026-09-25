@@ -899,6 +899,46 @@ Sub-slice (a) design (September 25; frozen for review before code):
   continuity. Checks: Ruff and strict mypy on the moved files, and the affected consumers'
   tests.
 
+Consolidated review decisions for sub-slice (a) (September 25; both reviews had no
+blockers; they supersede the design above where they differ):
+
+- Configuration identity. Stored policy hashes (`five_minute_policy_sha256`,
+  `benchmark_policy_sha256`) are `model_dump(mode="json")` hashes, so the moved models keep
+  field names, nesting, defaults and types exactly. Only module, class and function names
+  change. An exit test recomputes both hashes stored in `session_20260820_v1`.
+- Only what the retained collectors and `commands/edge_rebuild.py` use moves.
+  `build_intraday_history_plan`, `_verify_readiness_audit` and
+  `verify_existing_ohlcv_identity` stay in `intraday` for (d), as do the research-only
+  configs (`ExtendedSessionContextConfig`, `SelectedSessionHistoryConfig`,
+  `SelectedSessionOneMinuteConfig`, `BroadIntradayHistoryConfig`) and their plan schemas.
+  `collection` never imports the readiness authority. The moved `json_sha256` copy is
+  replaced by `evidence.hashing.json_sha256`, which is byte-identical.
+- Retained lineage inputs, which (d) and (e) must never delete or edit:
+  - `configs/edge_rebuild_intraday_history.toml` and
+    `configs/edge_rebuild_selected_session_benchmarks.toml` (pinned by the SIP-session
+    request);
+  - the metadata files `_request.json`, `_manifest.json` and `_authority.json` of
+    `data/features/edge_rebuild_intraday_bar_only_causal_20260814_v1`;
+  - the base membership authority `data/canonical/index_membership/sp500_memberships_20180529_20260708_v1`.
+
+  The security namespace itself comes from the membership authorities and
+  `verify_membership_namespace_extension`. The bar-dataset files remain recorded lineage
+  that every broker-action poll re-derives (`intraday_bar_*` hashes and
+  `security_identity_namespace_sha256`), so `registry_v2` continues rather than forking.
+  (d)'s deletion scan exempts this list, which is kept in a checked allowlist.
+- Boundary: `collection` joins `PRODUCTION_PACKAGES` with its own allowed-dependency test,
+  and the five old module paths join `REMOVED_PRODUCTION_MODULES`.
+- Importers updated in the same commit: `commands/edge_rebuild.py` and 16 intraday
+  modules; 5 test files move and 10 switch imports; `docs/implementation_guide.md` paths.
+- Exit tests:
+  - lease-free, low-memory loads of all six polls and both registries through the moved
+    loader, with the namespace function returning exactly each poll's five stored hashes;
+  - a tampered request or lineage is refused;
+  - the next poll's and the next session's requests, built from today's configs, reproduce
+    the recorded namespace and policy hashes;
+  - the four pinned intraday files stay byte-identical to the relationship receipt's hashes;
+  - the ten switched intraday test files still pass.
+
 The September 20 user instruction explicitly extends the completed HTTP/CLI and
 TradingFlow cleanup to all remaining Market Predictor implementation. This is a
 changed requirement, not a reopening of previously passed tests without cause.
