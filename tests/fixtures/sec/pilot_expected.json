@@ -1,0 +1,184 @@
+{
+ "0000002969-24-000008": {
+  "documents": [
+   [
+    "1",
+    "8-K",
+    "2969/apd-20240205.htm"
+   ],
+   [
+    "2",
+    "EX-99.1",
+    "2969/exhibit99131dec23.htm"
+   ]
+  ],
+  "unit": {
+   "accepted_at_utc": "2024-02-05T12:51:13+00:00",
+   "accession_number": "0000002969-24-000008",
+   "filer_ciks": "0000002969",
+   "filing_date": "2024-02-05",
+   "item_codes": "2.02,9.01",
+   "primary_document": "apd-20240205.htm",
+   "report_date": "2024-02-05",
+   "sec_cik": "0000002969",
+   "sec_form": "8-K",
+   "url": "https://www.sec.gov/Archives/edgar/data/2969/000000296924000008/0000002969-24-000008-index.htm"
+  }
+ },
+ "0000004977-21-000120": {
+  "documents": [
+   [
+    "1",
+    "8-K/A",
+    "4977/afl-20210728.htm"
+   ],
+   [
+    "2",
+    "EX-99.1",
+    "4977/aflex991-q22021.htm"
+   ]
+  ],
+  "unit": {
+   "accepted_at_utc": "2021-07-29T10:03:02+00:00",
+   "accession_number": "0000004977-21-000120",
+   "filer_ciks": "0000004977",
+   "filing_date": "2021-07-29",
+   "item_codes": "2.02,9.01",
+   "primary_document": "afl-20210728.htm",
+   "report_date": "2021-07-28",
+   "sec_cik": "0000004977",
+   "sec_form": "8-K/A",
+   "url": "https://www.sec.gov/Archives/edgar/data/4977/000000497721000120/0000004977-21-000120-index.htm"
+  }
+ },
+ "0000899140-21-000452": {
+  "documents": [
+   [
+    "1",
+    "8-K",
+    "11544/b41783973a.htm"
+   ]
+  ],
+  "unit": {
+   "accepted_at_utc": "2021-04-19T14:02:15+00:00",
+   "accession_number": "0000899140-21-000452",
+   "filer_ciks": "0000011544",
+   "filing_date": "2021-04-19",
+   "item_codes": "8.01",
+   "primary_document": "b41783973a.htm",
+   "report_date": "2021-04-19",
+   "sec_cik": "0000011544",
+   "sec_form": "8-K",
+   "url": "https://www.sec.gov/Archives/edgar/data/11544/000089914021000452/0000899140-21-000452-index.htm"
+  }
+ },
+ "0001104659-19-040664": {
+  "documents": [
+   [
+    "1",
+    "8-K",
+    "1800/a19-12883_18k.htm"
+   ],
+   [
+    "2",
+    "EX-99.1",
+    "1800/a19-12883_1ex99d1.htm"
+   ]
+  ],
+  "unit": {
+   "accepted_at_utc": "2019-07-17T11:37:35+00:00",
+   "accession_number": "0001104659-19-040664",
+   "filer_ciks": "0000001800",
+   "filing_date": "2019-07-17",
+   "item_codes": "2.02,9.01",
+   "primary_document": "a19-12883_18k.htm",
+   "report_date": "2019-07-17",
+   "sec_cik": "0000001800",
+   "sec_form": "8-K",
+   "url": "https://www.sec.gov/Archives/edgar/data/1800/000110465919040664/0001104659-19-040664-index.htm"
+  }
+ },
+ "0001104659-22-067640": {
+  "documents": [
+   [
+    "1",
+    "8-K",
+    "1091667/tm2217554d1_8k.htm"
+   ],
+   [
+    "3",
+    "EX-99.1",
+    "1091667/tm2217554d1_ex99-1.htm"
+   ]
+  ],
+  "unit": {
+   "accepted_at_utc": "2022-06-02T20:30:33+00:00",
+   "accession_number": "0001104659-22-067640",
+   "filer_ciks": "0001091667",
+   "filing_date": "2022-06-02",
+   "item_codes": "1.01,2.03,7.01,9.01",
+   "primary_document": "tm2217554d1_8k.htm",
+   "report_date": "2022-05-26",
+   "sec_cik": "0001091667",
+   "sec_form": "8-K",
+   "url": "https://www.sec.gov/Archives/edgar/data/1091667/000110465922067640/0001104659-22-067640-index.htm"
+  }
+ },
+ "0001104659-24-003089": {
+  "documents": [
+   [
+    "1",
+    "8-K",
+    "1001082/tm243082d1_8k.htm"
+   ],
+   [
+    "2",
+    "EX-99.1",
+    "1001082/tm243082d1_ex99-1.htm"
+   ]
+  ],
+  "unit": {
+   "accepted_at_utc": "2024-01-11T01:36:12+00:00",
+   "accession_number": "0001104659-24-003089",
+   "filer_ciks": "0001415404",
+   "filing_date": "2024-01-11",
+   "item_codes": "5.02,8.01,9.01",
+   "primary_document": "tm243082d1_8k.htm",
+   "report_date": "2024-01-08",
+   "sec_cik": "0001415404",
+   "sec_form": "8-K",
+   "url": "https://www.sec.gov/Archives/edgar/data/1415404/000110465924003089/0001104659-24-003089-index.htm"
+  }
+ },
+ "0001104659-24-003878": {
+  "documents": [
+   [
+    "1",
+    "8-K",
+    "1001082/tm243412d1_8k.htm"
+   ],
+   [
+    "2",
+    "EX-99.1",
+    "1001082/tm243412d1_ex99-1.htm"
+   ],
+   [
+    "3",
+    "EX-99.2",
+    "1001082/tm243412d1_ex99-2.htm"
+   ]
+  ],
+  "unit": {
+   "accepted_at_utc": "2024-01-16T11:55:36+00:00",
+   "accession_number": "0001104659-24-003878",
+   "filer_ciks": "0001415404",
+   "filing_date": "2024-01-16",
+   "item_codes": "8.01,9.01",
+   "primary_document": "tm243412d1_8k.htm",
+   "report_date": "2024-01-12",
+   "sec_cik": "0001415404",
+   "sec_form": "8-K",
+   "url": "https://www.sec.gov/Archives/edgar/data/1415404/000110465924003878/0001104659-24-003878-index.htm"
+  }
+ }
+}

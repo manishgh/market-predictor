@@ -323,3 +323,17 @@ def test_sealed_collection_reports_units_only_and_stays_closed(tmp_path: Path, m
     with pytest.raises(DataReadinessError, match="sealed"):
         collector.open_sec_document_collection(
             tmp_path, {"path": "data/raw/sec_documents/_manifest.json", "sha256": report["manifest_sha256"]})
+
+
+PILOT = json.loads((FIXTURES / "pilot_expected.json").read_text(encoding="utf-8"))
+
+
+@pytest.mark.parametrize("accession", sorted(PILOT))
+def test_real_pilot_pages_verify_against_saved_metadata(accession: str) -> None:
+    """Real EDGAR pages: summer and winter clocks, inline XBRL, an 8-K/A, no EX-99, and co-registrant folders."""
+    expected = PILOT[accession]
+    index = documents.parse_filing_index((FIXTURES / f"{accession}-index.htm").read_bytes(), accession=accession)
+    assert documents.index_rejection(index, expected["unit"]) is None
+    selected = documents.selected_documents(index, expected["unit"]["primary_document"])
+    assert sorted([item.sequence, item.document_type, f"{item.path.split('/')[4]}/{item.filename}"] for item in selected) == (
+        expected["documents"])
