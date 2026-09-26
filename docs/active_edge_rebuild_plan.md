@@ -1162,6 +1162,94 @@ both pushed; diff reviews by both reviewers found no blockers):
 - Pre-existing, recorded: broker-action poll `poll_20260816T070948Z` is an incomplete
   attempt and fails identity-audit replay at HEAD.
 
+Swing monitoring and replay correctness design (September 26; frozen for review before code):
+
+The user decided on September 26 to fix every verified monitoring and replay defect above
+now, as one step before retirement sub-slice (c). Measured facts it builds on:
+- No production code writes a promoted swing serving generation (`bundle.json`,
+  `active_generation.json`); only tests do. Nothing is promoted or served today.
+- Every file this step touches is outside all 61 implementation-pin lists, so no closed
+  evidence changes. The six frozen research specifications stay untouched.
+- Intents already exist for every validly scored prediction, selected or not.
+- The strategy contract fixes the live exclusion ceiling at 5%
+  (`data_quality.maximum_security_exclusion_fraction`).
+
+1. Outcomes that can never mature (a stock acquired, delisted or halted mid-horizon).
+   - One shared session helper in `governance/outcomes` gives the close of the Nth XNYS
+     session after a decision session; drift and maturation both use it.
+   - After that close plus `pending_grace_days`, maturation records a terminal
+     `unresolvable` attempt with reason `unavailable_trading` (the research cohort's
+     vocabulary) and the missing sessions, but only when SPY, QQQ and the primary
+     benchmark have their complete path and the stock does not. If a benchmark is also
+     incomplete, our collection is lagging: the outcome stays pending and drift flags it
+     overdue. No return is invented for an unresolvable outcome.
+   - The worker skips terminal intents. Cohorts count `unresolvable_selected_samples`
+     (matured + pending + unresolvable = actionable). Drift is severe when unresolvable
+     outcomes exceed 5% of resolved selected outcomes, the same ceiling serving applies.
+   - Nothing leaves monitoring uncounted: the route's oldest still-pending decision is
+     taken over every stored intent for the route, not only those inside the window.
+2. Report window. Each route's window is aligned to maturity: a decision is included
+   when its horizon's last session closes on or after `generated - lookback_days` (or
+   has not closed yet). A 10-session and a 252-session route then both cover the
+   outcomes that finished in the same lookback period, and pending decisions stay
+   visible. Rows already carry their own window bounds.
+3. Overlap-aware statistics (overlapping holdings are not independent draws).
+   - `independent_decision_groups` counts the largest set of matured decision groups
+     whose holding periods do not overlap: in session order, a group counts when its
+     decision session is at least N sessions after the last counted one.
+   - Drawdown and cumulative return use a realizable overlapping-portfolio curve, the
+     standard construction for overlapping holding periods (Jegadeesh and Titman, 1993):
+     capital is split into N sleeves; sleeve k takes the decision groups whose XNYS
+     session index is k modulo N, so a sleeve never holds two cohorts at once; each
+     sleeve compounds its groups' equal-weight mean net return, holding cash when it has
+     none; the route's equity is the mean of the sleeves, measured at each group's exit.
+     Drawdown is therefore realized at exits, not intra-holding.
+   - Excess-return thresholds become per session (`warning_min_excess_return_per_session`
+     -0.0001, `severe_...` -0.0005, the current ten-session values divided by 10) and
+     are compared with the average excess return divided by N. This changes
+     `drift_policy.toml` and the pin in `default.toml`.
+4. Score-versus-return check (swing had none). For each matured decision group with at
+   least five scored predictions, the Spearman rank correlation between the served
+   probability and the realized net excess return against the sector benchmark (the
+   served target's basis; barrier-hit rates are never used). Over non-overlapping groups:
+   the mean and its t-statistic. Drift warns when the mean is at or below zero and is
+   severe when t <= -2, once `minimum_independent_decision_groups` groups exist.
+5. Monitoring population and coverage.
+   - `PredictionService.predict_swing_cross_section(as_of)` scores every effective
+     point-in-time member; members excluded for incomplete inputs abstain as
+     `live_inputs_incomplete`. Its snapshot records scope `decision_cross_section`.
+   - A production command `register-session-predictions --as-of` records that snapshot,
+     its intents and observations, and a session coverage record: members, scored, and
+     excluded tickers by reason.
+   - The performance report counts the XNYS sessions in each window without a coverage
+     record; drift is not ready when any session older than the grace period is missing.
+     Request snapshots may still be registered; they deduplicate by semantic identity,
+     which includes the cross-section rank, so they cannot bias the rates.
+6. Investment replay.
+   - The swing candidate payload from `train_swing_edge_candidate` records
+     `training_decisions_end_session` and `training_labels_available_through_utc`: the
+     latest decision session and the latest `label_available_at_utc` of the final-fit
+     rows. Labels, not decisions, bound look-ahead: the initial fit's decisions end
+     2024-05-28 but their labels use prices through 2024-06-11.
+   - The promoted bundle becomes `edge_rebuild.promoted_bundle.v3` with both fields;
+     verification requires them to equal the verified model payload's values.
+     `ModelInfo.training_data_end` shows the decision end and a new
+     `training_labels_available_through_utc` carries the instant.
+   - Replay requires that instant to be before the decision time, refuses when it is
+     missing, and drops the date-to-16:00 conversion. "Actionable" is the snapshot's
+     `selected_for_policy`, not a list of signal names.
+   - When a promotion path for the frozen research specifications is built, it must
+     derive the same two values from their pinned training requests as separate
+     evidence; no historical pin is rewritten.
+7. Exit tests: an acquired stock resolves as unresolvable while a lagging benchmark keeps
+   it pending; an old pending decision outside the window still blocks drift; the
+   maturity-aligned window for 10 and 252 sessions; non-overlap counting and the sleeve
+   curve against a hand-computed case (30 daily -2% groups at N=10 give about a 6%
+   drawdown, not 45%); per-session thresholds; the rank-correlation gate with a
+   wrong-signed model; the cross-section command with an excluded member and a missing
+   session; bundle v3 refusal without or with mismatched boundaries; replay refusal at
+   the boundary and acceptance after it; replay actionability from `selected_for_policy`.
+
 The September 20 user instruction explicitly extends the completed HTTP/CLI and
 TradingFlow cleanup to all remaining Market Predictor implementation. This is a
 changed requirement, not a reopening of previously passed tests without cause.

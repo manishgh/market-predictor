@@ -202,11 +202,10 @@ nullable `training_data_end`), the four HEAD defects fixed, and the open replay 
     changed Python files clean; `git diff --check` clean;
   - a scan of every implementation-pin list (61 paths) shows no pinned file changed in
     `7dd6d44` or `ea93712`, so the sealed collector's resume re-hashes unchanged files.
-- Open for the user (one scope decision): the ML review's verified monitoring defects
-  (outcomes that can never mature, report window length, overlap-aware independence and
-  drawdown, a score-versus-return check, cross-section coverage accounting) and the
-  investment replay defects (no training-label boundary in promoted swing artifacts;
-  retired signal names in `ACTIONABLE_SIGNALS`).
+- User decision (September 26): fix the ML review's verified monitoring defects and the
+  investment replay defects now, as one step before (c). The design, "Swing monitoring
+  and replay correctness design", is in the plan and is frozen for both reviewers'
+  design review before any code.
 - TradingFlow follow-ups, both display-only: swing signals read as neutral in the
   advisory model-direction view; the hard-coded `market_predictor.prediction.v1` label.
 
