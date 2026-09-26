@@ -939,6 +939,62 @@ blockers; they supersede the design above where they differ):
   - the four pinned intraday files stay byte-identical to the relationship receipt's hashes;
   - the ten switched intraday test files still pass.
 
+Sub-slice (a) status: implemented in `20799b9` (see the handoff for checks and continuity).
+
+Sub-slice (b) design (September 26; frozen for review before code):
+
+- Measured scope. Outside `intraday/`, about 400 intraday references sit in 21 modules. The
+  largest are:
+  - `governance/readiness/audit.py` (10 intraday functions and classes; imports
+    `intraday` and its specialist modules);
+  - `serving/prediction_service.py` (`predict_intraday`, the unified path and 5 helpers;
+    imports `intraday.model`);
+  - `evidence/readiness_authority.py` (`_validate_current_intraday_source`);
+  - `modeling/prediction_selection.py` (5 intraday selection functions and a `unified`
+    policy entry).
+
+  Smaller ones: `readiness.py` (`assess_intraday_readiness`), `serving/decision_policy.py`
+  (`determine_intraday_signal`), `core/prediction_contracts.py` (`IntradayPrediction`),
+  `governance/promotion/bundle_contracts.py` (`PromotedIntradayBundle`,
+  `validate_intraday_schema`), `governance/outcomes/{contracts,performance,maturation}.py`,
+  `governance/drift/{policy,features}.py`, `serving/{model_context,bundle,outcome_intents,
+  investment_replay}.py`, `governance/promotion/bundle_verification.py`,
+  `strategy_governance.py`, `features.py` and `hypothesis_registry.py`.
+
+  None of the 21 files is pinned by closed evidence (checked against 531 manifests and the reports).
+- Wire contract. `PredictionMode` and `PredictionView` become `Literal["swing"]`, and the
+  request default changes from `unified` to `swing`. `IntradayPrediction`, the row's
+  `intraday` field and the `timeframe="intraday"` option are removed. The prediction
+  contract moves to `market_predictor.prediction.v3` and the evidence contract to its
+  next version, so historical payloads fail closed on their old versions. The `mode`
+  field (value `swing`) and `resolved_horizons` stay. TradingFlow's client already sends
+  `mode="swing"` and validates only `mode`, `models` and `resolved_horizons`, never the
+  contract version, so its `MarketPredictorHttpClientTests` run as a regression check,
+  with no C# change expected.
+- Serving and selection. `predict_intraday`, the unified combination
+  (`determine_final_signal`, `combined_readiness`), intraday scoring, readiness and
+  suppression helpers, `select_intraday_candidates` and related functions,
+  `determine_intraday_signal` and `assess_intraday_readiness` are deleted, with no
+  aliases. A request naming any other mode is a validation error.
+- Governance. The readiness audit and readiness authority verify swing and catalyst
+  sources only; the intraday source slices, proxies, fold capacity and benchmark checks
+  are deleted. Bundle contracts, verification, drift, outcome contracts, performance and
+  maturation keep one swing mode. Stored bundles, outcome intents or drift reports that
+  declare intraday fail closed with an explicit "retired intraday artifact" error.
+  `serving/model_context.py` stops importing `intraday.contracts`.
+- Kept deliberately: the swing `intraday_return` feature, sub-daily bar wording, session
+  labels such as the SEC `intraday` acceptance position, and horizon-generic code the
+  investment targets need.
+- Exit tests:
+  - a request with mode `intraday` or `unified` is rejected;
+  - the default is `swing`;
+  - swing responses keep `mode` and `resolved_horizons`;
+  - historical intraday bundles, outcome intents and drift reports are refused;
+  - readiness passes on swing-only sources;
+  - affected serving, governance, readiness and outcome tests pass, as do the API
+    contract tests and TradingFlow's `MarketPredictorHttpClientTests`;
+  - Ruff and strict mypy pass on the changed files.
+
 The September 20 user instruction explicitly extends the completed HTTP/CLI and
 TradingFlow cleanup to all remaining Market Predictor implementation. This is a
 changed requirement, not a reopening of previously passed tests without cause.
