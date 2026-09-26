@@ -151,7 +151,8 @@ def run_collection(*, root: Path, output: Path, job: str, schema: str, plan: Pla
                       "maximum_body_bytes": documents.MAXIMUM_BODY_BYTES},
             "governor": {"requests_per_second": REQUESTS_PER_SECOND, "forbidden_cooldown_seconds": FORBIDDEN_COOLDOWN_SECONDS,
                          "rate_limit_cooldown_seconds": RATE_LIMIT_COOLDOWN_SECONDS, "workers": WORKERS},
-            "maximum_attempts": documents.MAXIMUM_ATTEMPTS, "shard_attempts": documents.SHARD_ATTEMPTS,
+            "passes_per_run": documents.MAXIMUM_ATTEMPTS, "retry_waits_seconds": list(documents.RETRY_WAITS_SECONDS),
+            "shard_attempts": documents.SHARD_ATTEMPTS,
             "shard_bytes": documents.SHARD_BYTES,
             "implementation_files": {f"market_predictor/{name}": file_sha256(package / name)
                                      for name in (*implementation_paths, *RUNNER_PATHS)},
@@ -184,6 +185,7 @@ def run_collection(*, root: Path, output: Path, job: str, schema: str, plan: Pla
             return {**result, "checkpoint_sha256": checkpoint}
         _guard()
         final, receipts = documents.outcomes(store, units, phases)
+        _require(bool(final.state.isin(documents.TERMINAL_STATES).all()), "a completed SEC page collection lacks outcomes")
         store.verify(receipts)
         report = {
             "schema": schema, "status": "complete", "request_sha256": request["request_sha256"],

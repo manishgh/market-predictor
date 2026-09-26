@@ -21,6 +21,9 @@ from market_predictor.research.sec_form_inventory import MODES, Mode, publish_se
 from market_predictor.swing.datasets.initial_fit_issuer_news import LAST_INITIAL_FIT_CUTOFF
 from market_predictor.swing.datasets.issuer_news_preparation import FIRST
 
+_COLLECTION_OUTCOME = ("stop_status_code", "stopped_unit", "phase", "units_without_final_outcome", "manifest_sha256",
+                       "totals")
+
 
 def _publish(call: Callable[[], dict[str, Any]], keys: tuple[str, ...], optional: tuple[str, ...] = ()) -> None:
     try:
@@ -81,7 +84,7 @@ def register_issuer_content_commands(app: typer.Typer) -> None:
         _publish(lambda: collect_sec_clock_pages(
             root=root, collection={"path": collection_authority.as_posix(), "sha256": collection_sha256}, output=output,
             resume_checkpoint_sha256=resume_checkpoint_sha256),
-            ("status", "checkpoint_sha256"), ("stop_status_code", "stopped_unit", "manifest_sha256", "totals"))
+            ("status", "checkpoint_sha256"), _COLLECTION_OUTCOME)
 
     @app.command("publish-sec-acceptance-clock")
     def publish_clock(
@@ -118,4 +121,4 @@ def register_issuer_content_commands(app: typer.Typer) -> None:
         _publish(lambda: collect_sec_filing_documents(
             root=root, inventory={"path": inventory_manifest.as_posix(), "sha256": inventory_sha256}, output=output,
             resume_checkpoint_sha256=resume_checkpoint_sha256, pilot_accessions=tuple(pilot_accession)),
-            ("status", "checkpoint_sha256"), ("stop_status_code", "stopped_unit", "manifest_sha256", "totals"))
+            ("status", "checkpoint_sha256"), _COLLECTION_OUTCOME)

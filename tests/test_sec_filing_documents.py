@@ -122,6 +122,7 @@ def _inventory(root: Path, rows: list[dict[str, Any]] = FILINGS, *, sealed: bool
 @pytest.fixture(autouse=True)
 def _policy(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(runner, "_guard", lambda: None)
+    monkeypatch.setattr(documents, "RETRY_WAITS_SECONDS", (0.0, 0.0))
     monkeypatch.delenv("MARKET_PREDICTOR_RUNTIME_DIR", raising=False)
 
 
@@ -268,13 +269,44 @@ def test_joint_filing_is_one_unit_with_every_filer() -> None:
         documents.work_list(pd.DataFrame([rows[0], {**rows[1], "report_date": "2019-07-18"}]))
 
 
-def test_retry_exhaustion_is_a_final_outcome(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_units_still_failing_leave_the_run_incomplete_until_a_resume_finishes_them(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     scripts = _scripts()
-    scripts[_url(ABT_CIK, ABT, "a19-12883_1ex99d1.htm")] = [_status(503)]
-    report = _collect(tmp_path, _Edgar(scripts), monkeypatch, pilot_accessions=(ABT,))
-    assert report["totals"]["units_by_phase_and_state"] == {"document/archived": 1, "document/retry_exhausted": 1,
-                                                            "index/archived": 1}
-    assert report["totals"]["attempts_by_state"]["retryable"] == documents.MAXIMUM_ATTEMPTS
+    exhibit = _url(ABT_CIK, ABT, "a19-12883_1ex99d1.htm")
+    scripts[exhibit] = [_status(503)]
+    edgar = _Edgar(scripts)
+    first = _collect(tmp_path, edgar, monkeypatch, pilot_accessions=(ABT,))
+    assert (first["status"], first["phase"], first["units_without_final_outcome"]) == ("incomplete", "document", 1)
+    output = tmp_path / "data/raw/sec_documents"
+    assert not (output / "_manifest.json").exists()
+    assert edgar.urls.count(exhibit) == documents.MAXIMUM_ATTEMPTS
+    scripts[exhibit] = [_ok(b"<html>release</html>")]
+    resumed = _collect(tmp_path, _Edgar(scripts), monkeypatch, pilot_accessions=(ABT,),
+                       resume_checkpoint_sha256=first["checkpoint_sha256"])
+    assert resumed["status"] == "complete"
+    assert resumed["totals"]["units_by_phase_and_state"] == {"document/archived": 2, "index/archived": 1}
+    receipts = pd.concat([pd.read_parquet(path) for path in sorted((output / "shards").glob("*.parquet"))])
+    exhibit_attempts = receipts.loc[receipts.url.eq(exhibit)].sort_values("attempt")
+    assert exhibit_attempts.attempt.astype(int).tolist() == [1, 2, 3, 4]
+    assert exhibit_attempts.state.tolist() == ["retryable"] * 3 + ["archived"]
+
+
+def test_later_passes_wait_before_retrying(tmp_path: Path) -> None:
+    units = _header_units(2)
+    calls: list[str] = []
+
+    def fetch(url: str) -> HttpByteResponse:
+        calls.append(url)
+        return _response(url, 503, b"")
+
+    waits: list[float] = []
+    store = documents.Store(tmp_path, {})
+    store.write_checkpoint("request")
+    result = documents.collect(store=store, units=units, fetch=fetch, request_sha256="request", memory_check=lambda: None,
+                               cooldowns={403: 1.0, 429: 1.0}, stop=threading.Event(), phases=("header",), workers=1,
+                               retry_waits=(7.0, 11.0), sleep=waits.append)
+    assert result == {"status": "incomplete", "phase": "header", "units_without_final_outcome": 2}
+    assert waits == [7.0, 11.0] and len(calls) == 2 * documents.MAXIMUM_ATTEMPTS
 
 
 def test_uncommitted_shard_files_are_removed_on_resume(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

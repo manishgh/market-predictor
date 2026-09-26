@@ -17,6 +17,7 @@ import re
 import shutil
 import tempfile
 import threading
+import time
 import zipfile
 from collections.abc import Callable, Mapping, Sequence
 from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
@@ -39,7 +40,10 @@ from market_predictor.sources.sec import _retry_after_seconds
 SELECTED_ITEMS = frozenset({"2.02", "7.01", "8.01"})
 CURRENT_REPORTS = ("8-K", "8-K/A")
 MAXIMUM_BODY_BYTES = 16 * 1024 * 1024
-MAXIMUM_ATTEMPTS = 3
+MAXIMUM_ATTEMPTS = 3  # Passes per run over units without a final outcome.
+# Waits before the second and third pass: SEC answers some requests with a transient 503 maintenance
+# page, sometimes for minutes, so immediate retries fail together.
+RETRY_WAITS_SECONDS = (60.0, 300.0)
 SHARD_ATTEMPTS = 500
 SHARD_BYTES = 256 * 1024 * 1024
 TERMINAL_STATES = frozenset({"archived", "rejected", "missing", "oversize", "http_error"})
@@ -382,11 +386,10 @@ def document_units(store: Store, receipts: pd.DataFrame, units: pd.DataFrame) ->
 
 
 def _outstanding(units: list[dict[str, Any]], receipts: pd.DataFrame) -> list[tuple[dict[str, Any], int]]:
+    """Units without a final outcome and each one's next attempt number (attempts count across runs)."""
     terminal = set(receipts.loc[receipts.state.isin(TERMINAL_STATES), "unit_id"])
-    retried = receipts.loc[receipts.state.eq("retryable")].groupby("unit_id").size().to_dict()
     tried = receipts.groupby("unit_id").size().to_dict()
-    return [(unit, int(tried.get(unit["unit_id"], 0)) + 1) for unit in units
-            if unit["unit_id"] not in terminal and int(retried.get(unit["unit_id"], 0)) < MAXIMUM_ATTEMPTS]
+    return [(unit, int(tried.get(unit["unit_id"], 0)) + 1) for unit in units if unit["unit_id"] not in terminal]
 
 
 def _stop_until(stopped: list[dict[str, Any]], cooldowns: Mapping[int, float]) -> str:
@@ -455,14 +458,20 @@ def _run_pass(pool: ThreadPoolExecutor, pending: list[tuple[dict[str, Any], int]
 
 def collect(*, store: Store, units: pd.DataFrame, fetch: Fetch, request_sha256: str, memory_check: Callable[[], None],
             cooldowns: Mapping[int, float], stop: threading.Event, phases: Sequence[str] = ("index", "document"),
-            workers: int = 1, now: Callable[[], datetime] = lambda: datetime.now(UTC)) -> dict[str, Any]:
+            workers: int = 1, now: Callable[[], datetime] = lambda: datetime.now(UTC),
+            retry_waits: Sequence[float] | None = None, sleep: Callable[[float], None] = time.sleep) -> dict[str, Any]:
     """Advance each phase with `workers` concurrent requests, retrying transient failures.
 
-    The first 403 or 429 sets `stop`: attempts already sent finish and are kept, and `fetch` must
-    then refuse to send (raising `RequestsStopped`), including from a governor wait. The
-    checkpoint records when SEC's cooldown ends; no request is sent before then, even from a new
-    process. `fetch` must be safe to call from several threads.
+    Each run makes up to `MAXIMUM_ATTEMPTS` passes over units without a final outcome, waiting
+    `RETRY_WAITS_SECONDS` before later passes. Units still without one leave the run `incomplete`:
+    the checkpoint is kept and a later resume gives them fresh passes, so a completed collection
+    holds a final outcome for every unit. The first 403 or 429 sets `stop`: attempts already sent
+    finish and are kept, and `fetch` must then refuse to send (raising `RequestsStopped`),
+    including from a governor wait. The checkpoint records when SEC's cooldown ends; no request is
+    sent before then, even from a new process. `fetch` must be safe to call from several threads.
     """
+    waits = tuple(RETRY_WAITS_SECONDS if retry_waits is None else retry_waits)
+    _require(len(waits) == MAXIMUM_ATTEMPTS - 1, "SEC retry waits must cover every later pass")
     _require(workers >= 1, "SEC document collection needs at least one worker")
     if store.cooldown_until is not None and now() < datetime.fromisoformat(store.cooldown_until):
         raise DataReadinessError(f"SEC cooldown has not elapsed; resume after {store.cooldown_until}")
@@ -470,10 +479,12 @@ def collect(*, store: Store, units: pd.DataFrame, fetch: Fetch, request_sha256: 
         with ThreadPoolExecutor(max_workers=workers, thread_name_prefix="sec-documents") as pool:
             for phase in phases:
                 planned = planned_units(phase, store, store.receipts(), units)
-                for _ in range(MAXIMUM_ATTEMPTS):
+                for number in range(MAXIMUM_ATTEMPTS):
                     pending = _outstanding(planned, store.receipts())
                     if not pending:
                         break
+                    if number:
+                        sleep(waits[number - 1])
                     batch = _run_pass(pool, pending, store=store, fetch=fetch, request_sha256=request_sha256,
                                       memory_check=memory_check, stop=stop, workers=workers, now=now)
                     if batch.stopped:
@@ -485,6 +496,9 @@ def collect(*, store: Store, units: pd.DataFrame, fetch: Fetch, request_sha256: 
                         first = min(batch.stopped, key=lambda receipt: str(receipt["completed_at_utc"]))
                         return {"status": "stopped", "stop_status_code": first["status_code"],
                                 "stopped_unit": first["unit_id"]}
+                pending = _outstanding(planned, store.receipts())
+                if pending:
+                    return {"status": "incomplete", "phase": phase, "units_without_final_outcome": len(pending)}
     finally:
         stop.set()  # Wake any governor wait so the pool can shut down.
     return {"status": "complete"}
@@ -492,15 +506,13 @@ def collect(*, store: Store, units: pd.DataFrame, fetch: Fetch, request_sha256: 
 
 def outcomes(store: Store, units: pd.DataFrame, phases: Sequence[str] = ("index", "document")
              ) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Each planned unit's final state (retry exhaustion included) and every receipt."""
+    """Each planned unit's final state (`outstanding` until it has one) and every receipt."""
     receipts = store.receipts()
     planned = [unit for phase in phases for unit in planned_units(phase, store, receipts, units)]
     terminal = receipts.loc[receipts.state.isin(TERMINAL_STATES)]
     _require(not terminal.unit_id.duplicated().any(), "an SEC document unit has more than one terminal attempt")
     final = dict(zip(terminal.unit_id, terminal.state, strict=True))
-    retried = receipts.loc[receipts.state.eq("retryable")].groupby("unit_id").size().to_dict()
     rows = [{"unit_id": unit["unit_id"], "phase": unit["phase"], "accession_number": unit["accession_number"],
-             "document_type": unit["document_type"],
-             "state": final.get(unit["unit_id"], "retry_exhausted" if int(retried.get(unit["unit_id"], 0)) >= MAXIMUM_ATTEMPTS
-                                else "outstanding")} for unit in planned]
+             "document_type": unit["document_type"], "state": final.get(unit["unit_id"], "outstanding")}
+            for unit in planned]
     return pd.DataFrame(rows, columns=["unit_id", "phase", "accession_number", "document_type", "state"]), receipts

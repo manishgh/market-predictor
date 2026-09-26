@@ -158,6 +158,7 @@ def collect_clock_pages(root: Path, collection: Path, fake: PageFake, monkeypatc
     """Collect clock pages through the real runner over `fake`."""
     monkeypatch.setattr(runner, "sec_fetch", lambda _settings, _stop: fake)
     monkeypatch.setattr(runner, "_guard", lambda: None)
+    monkeypatch.setattr(runner.documents, "RETRY_WAITS_SECONDS", (0.0, 0.0))
     monkeypatch.setattr(clock, "_guard", lambda: None)
     monkeypatch.setattr(clock, "Settings", settings)
     return clock.collect_sec_clock_pages(root=root, collection=collection_pin(root, collection),

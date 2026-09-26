@@ -384,11 +384,15 @@ collector `catalysts/sec_filings/document_collection.py`). Detail pages are pars
 strictly and must match the pinned acceptance time, filing date, period of report, item
 codes and primary document. Four workers share one SEC governor at five requests per
 second with one attempt per call; outcomes are archived, rejected, missing, oversize
-(16 MiB), HTTP error, retryable (up to three attempts) or stopped at the first 403/429,
-after which in-flight attempts finish and no new request starts. Bodies and self-hashed
-receipts are written to immutable zip/parquet shards listed by an atomically replaced
-checkpoint; a stopped run resumes only with the printed checkpoint hash after SEC's
-cooldown. Retrieval time is first observation, never historical availability.
+(16 MiB), HTTP error, retryable, or stopped at the first 403/429, after which in-flight
+attempts finish and no new request starts. Each run makes up to three passes over units
+without a final outcome, waiting one and then five minutes before later passes (SEC serves
+transient 503 maintenance pages); units still without one leave the run `incomplete`, and a
+resume gives them fresh passes, so a completed collection has a final outcome for every
+unit. Bodies and self-hashed receipts are written to immutable zip/parquet shards listed by
+an atomically replaced checkpoint; a stopped or incomplete run resumes only with the printed
+checkpoint hash, after SEC's cooldown when one applies. The same runner collects the
+acceptance-clock pages. Retrieval time is first observation, never historical availability.
 
 ## Source Roles
 
