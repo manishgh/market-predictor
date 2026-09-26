@@ -1,12 +1,13 @@
 # Active Edge Rebuild Handoff
 
 Status: active
-Last updated: 2026-09-25
+Last updated: 2026-09-26
 Repository: `C:\project\market-predictor`
 Branch: `unified-swing-product`
-Last completed implementation checkpoint: `dfd1b76` (pushed; SEC retry passes with resume), after `20799b9`
-(retirement sub-slice (a), collection package), `beaa4eb` (memory-guard batch keeping) and `da5d4c3`
-(per-issuer SEC acceptance clock).
+Last completed implementation checkpoint: `7dd6d44` (pushed; swing-only serving and monitoring,
+retirement sub-slice (b); diff review pending), after `dfd1b76` (SEC retry passes with resume),
+`20799b9` (retirement sub-slice (a), collection package), `beaa4eb` (memory-guard batch keeping) and
+`da5d4c3` (per-issuer SEC acceptance clock).
 Last completed model-training checkpoint: relationship run on `a8be7cb` (artifact pins below).
 Baseline model-training checkpoint: `07963cc` (pushed; unchanged).
 Source-collection checkpoint: `19698d6` (pushed).
@@ -150,17 +151,46 @@ SEC clock page runs (archive authority SHA256
   - Sealed later window, `data/research/swing_later_sealed_sec_form_inventory_corrected_clock`,
     manifest `ae0ed0b688f009485e0f9d0a1e6b0c5ae1e1c7a3d89f648ff7de02e9a1a8807c`: 232,393
     accessions, with no rows excluded for an unknown clock.
-- Running now: `collect-sec-filing-documents` from the corrected initial-fit inventory
-  into `data/raw/sec_filing_documents_initial_fit_corrected_clock` (log
-  `data/runtime/sec_filing_documents_initial_fit_corrected_clock.log`). An `incomplete`
-  result is resumed with its printed checkpoint. Next: the sealed collection, then
-  slice closure.
+- Initial-fit documents, September 26 06:32-10:39 UTC:
+  `data/raw/sec_filing_documents_initial_fit_corrected_clock`, status `complete`, manifest
+  `b3041a07f599e5c7f6a7b86a5991864c81586ba98e68391311fa3e9e84969318`, checkpoint
+  `6a34c2ad833467f809a9c14155c97b9e95f458fa7a8ba5a8a1683b0446855091`:
+  - all 22,066 filing indexes archived;
+  - 45,160 documents archived (22,065 primary, the rest EX-99 exhibits) and 11 over the
+    size limit (1 primary, 10 exhibits), recorded as such;
+  - 67,226 archived attempts (67,073 HTML, 153 PDF, 11.68 GB); 86 retryable attempts all
+    reached a final outcome in later passes.
+- Running now (started 16:56 UTC): the sealed later-window collection from inventory
+  `ae0ed0b6...` into `data/raw/sec_filing_documents_later_sealed_corrected_clock` (log
+  `data/runtime/sec_filing_documents_later_sealed_corrected_clock.log`). It reports unit
+  and attempt counts only and stays unread. An `incomplete` result is resumed with its
+  printed checkpoint. Then slice closure.
 
-Retirement sub-slice (b): both design reviews are consolidated in the plan (`c126c22`,
-no blockers). It now also deletes every unpinned intraday module and the retired ER1
-readiness tooling. Two TradingFlow follow-ups are recorded, both display-only:
-- swing signals read as neutral in the advisory model-direction view;
-- the hard-coded `market_predictor.prediction.v1` label.
+Retirement sub-slice (b) `7dd6d44` is pushed (187 files; designs consolidated in
+`c126c22`; diff review by both reviewers pending). Serving, selection, bundles, readiness,
+outcomes, performance and drift are swing-only; every unpinned intraday module, its tests
+and the retired ER1 readiness tooling are deleted; the four pinned intraday files stay
+for (c). The plan's "Sub-slice (b) implementation record" lists the evidence-backed
+corrections to the review decisions (session-only horizons, exact XNYS overdue limit,
+nullable `training_data_end`), the four HEAD defects fixed, and the open replay defects.
+- Verification tier: component checkpoint (shared contracts and schemas changed).
+  - Affected tests from the import graph plus the config and source-scanning tests,
+    58 files in eight memory-guarded batches: 1,058 passed, 1 skipped, 1 failed. The
+    failure (`test_canonical_cli`'s decision pipeline) happened once while the SEC
+    collection ran; its message was not kept, the batch passed three times afterwards
+    (45 each), and none of its modules changed.
+  - After the last edits: 16 re-affected files 148 passed; package boundaries 221
+    passed; `test_drift_policy` 18 passed.
+  - `mypy --strict src/market_predictor scripts`: 355 files, no issues. Ruff on the 51
+    changed Python files: clean. All 321 package modules import. `git diff --check` clean.
+  - TradingFlow `MarketPredictorHttpClientTests`: 18 passed (no TradingFlow change);
+    build servers shut down afterwards.
+  - Not run: the full suite (not a release checkpoint) and the swing-only predictor and
+    outcome replays, which belong to (c).
+- Open for the user: investment replay cannot run on swing snapshots (no training end
+  recorded in promoted swing artifacts; retired signal names in `ACTIONABLE_SIGNALS`).
+- TradingFlow follow-ups, both display-only: swing signals read as neutral in the
+  advisory model-direction view; the hard-coded `market_predictor.prediction.v1` label.
 
 Retirement sub-slice (a) `20799b9` is pushed, after both design reviews (no blockers;
 consolidated in the plan).
@@ -1058,8 +1088,8 @@ later: documents of cohort 8-Ks carrying item 2.02, 7.01 or 8.01 in the initial 
 (22,067 accessions: EDGAR detail page, primary document and every EX-99 exhibit), and
 the same selection after the initial-fit cutoff into a sealed store that is not read
 or summarized until qualification rules are frozen on initial-fit evidence. The inventory,
-collector and pilot are done (see Current State); remaining: the full initial-fit
-collection, the sealed collection and slice closure.
+collector, pilot and corrected initial-fit collection are done (see Current State);
+remaining: the sealed collection (running) and slice closure.
 Freeze content qualification with development-only precision and recall review before
 joining the completed-session measurement into the last profile.
 No final feature selection or fitting belongs to the SEC slice.

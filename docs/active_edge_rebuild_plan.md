@@ -2,7 +2,7 @@
 
 Status: active
 
-Last updated: 2026-09-21
+Last updated: 2026-09-26
 
 Repository: `C:\project\market-predictor`
 
@@ -658,7 +658,9 @@ the bullets above where they differ):
 - Collector: four worker threads, each with its own HTTP session, share one governor
   at five requests per second. The first 403 or 429 stops new submissions; in-flight
   attempts finish and are recorded before the checkpoint. The corrected run writes a
-  new output, `data/raw/sec_filing_documents_initial_fit_corrected_clock`.
+  new output, `data/raw/sec_filing_documents_initial_fit_corrected_clock`. It completed on
+  September 26 (manifest `b3041a07f599e5c7f6a7b86a5991864c81586ba98e68391311fa3e9e84969318`,
+  a final outcome for every unit); the sealed later-window collection runs next.
 - Added exit tests: a real page per convention, a DST-ambiguous raw value, pages that
   disagree, pages contradicted by in-data counts, an unfetchable group, a corrected
   after-close 8-K moving from intraday to the next open, a filing moving across the
@@ -1071,6 +1073,49 @@ blockers; they supersede the (b) design where they differ):
   - ledger validation;
   - whole-package strict mypy and a module import smoke;
   - `ReadinessInfo` and replay rejecting intraday.
+
+Sub-slice (b) implementation record (September 26; `7dd6d44`, pushed; diff review pending):
+
+- Corrections to the decisions above, each from measured evidence:
+  - Horizons are exchange-session counts only (`b`). The "keep `b` and `d`" decision is
+    superseded: at HEAD swing maturation intents already required `b` and serving
+    already required `10b`, so a `d` horizon could never be served or matured. Request,
+    cohort, drift and store paths accept `[1-9]\d*b`; the day aliases (`tomorrow`,
+    `week`) are removed with `1h`.
+  - The overdue limit is exact rather than estimated: a pending prediction is overdue
+    once the close of its horizon's last XNYS session plus `pending_grace_days` (7) has
+    passed. The weekday estimate (`ceil(sessions * 7/5)`) ignores holidays: after
+    24 July 2025 the 252nd session closes 27 July 2026, eight days after the estimate's
+    353 calendar days, so 252-session outcomes would be flagged before they could mature.
+  - The performance report keeps only decisions inside its lookback window (default 60
+    days). Monitoring the 63- and 252-session investment targets therefore needs a window
+    longer than the horizon; the investment-target design must set it.
+  - `training_data_end` in `models.swing` stays nullable: TradingFlow declares it
+    `string?`, and promoted swing artifacts do not record a training end (see below).
+  - Promotion evidence stays type-agnostic; product admission refuses retired types.
+    Release verification refuses `canonical_intraday` releases and bundle verification
+    refuses `intraday` bundles, each with an explicit retired error, even when their
+    hashes and signatures verify.
+- Also removed: the `curated` data source (swing always reads live inputs) and
+  `ServingRoute.curated_dataset`.
+- Defects found and fixed in this commit, all present at HEAD:
+  - registering outcome intents failed for any snapshot whose request named a ticker
+    outside the live universe (the unscored abstention has no evidence row); unscored
+    tickers are now skipped and a scored prediction without its row still fails;
+  - an empty intent mapping was treated as "not supplied" and recomputed;
+  - the CI container smoke release configured a `5d` swing route, which service startup
+    refuses, so the production-container job could not reach its liveness check;
+  - `publish_serving_bundle` did not validate `mode` at run time.
+- Defects found, not fixed, awaiting the user's scope decision (investment replay, the
+  `/v1/replays/investment` endpoint):
+  - promoted swing artifacts never record a training-data end, so replay refuses every
+    swing snapshot with "model training-data end timestamp is missing" (at HEAD the
+    field came only from the retired intraday manifest's `dataset.last_date`); a fix
+    records the fit boundary in the swing candidate and promoted bundle;
+  - replay's `ACTIONABLE_SIGNALS` hold the retired signal names (`bullish_watch`,
+    `strong_bullish_watch`), while serving emits `positive_setup` for a selected setup.
+- Pre-existing, recorded: broker-action poll `poll_20260816T070948Z` is an incomplete
+  attempt and fails identity-audit replay at HEAD.
 
 The September 20 user instruction explicitly extends the completed HTTP/CLI and
 TradingFlow cleanup to all remaining Market Predictor implementation. This is a
