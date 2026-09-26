@@ -995,6 +995,83 @@ Sub-slice (b) design (September 26; frozen for review before code):
     contract tests and TradingFlow's `MarketPredictorHttpClientTests`;
   - Ruff and strict mypy pass on the changed files.
 
+Consolidated review decisions for sub-slice (b) (September 26; both reviews had no
+blockers; they supersede the (b) design where they differ):
+
+- One atomic commit. It also deletes every intraday module except the four pinned files
+  (`intraday/__init__.py` and `intraday/contracts/{__init__,configs,memory}.py`), together
+  with those modules' exclusive tests. Leftover intraday modules import symbols (b) removes
+  (`model.py`, `evaluation`, `specialist_model.py`, `promotion.py`, `datasets/history.py`).
+  The pinned files import only `intraday.contracts`, and `label_reconciliation.py`,
+  `live_features.py` and `strategy_research_contracts.py` import only that too, so this
+  deletion is safe before (c). (d) then only deletes the four pinned files after (c)'s
+  evidence. Intraday configs are deleted only when no manifest or report outside intraday
+  evidence pins them. The retained allowlist and the mixed strategy contract, which (c)
+  owns, stay. Checks: whole-package strict mypy and an import of every module.
+- Retired ER1 readiness tooling is deleted: `governance/readiness/audit.py`,
+  `governance/readiness/contracts.py`, `evidence/readiness_authority.py` and
+  `configs/prediction_data_readiness.toml`. Nothing calls the audit, and the authority's
+  only reader is the deleted intraday planner. The swing benchmark guarantee is enforced
+  where swing readiness actually runs, in `swing/labels/fixed_horizon_readiness.py`
+  (bound SPY, QQQ and sector components within the fit boundary). The published
+  `data/research/edge_rebuild_readiness_er1_20260728` stays on disk as a record.
+- Wire contract. The design's claim about TradingFlow was wrong. TradingFlow requires:
+  - the response fields `mode`, `predictions`, `errors`, `models`, `resolved_horizons`,
+    `generated_at_utc`, `final_signal`, `readiness_status`, `request_id` and `snapshot_id`;
+  - per ticker, non-null `swing`, `swing.readiness`, `swing.catalyst` and
+    `swing.global_context`, plus `models.swing` with `status`, `model_type`,
+    `schema_version`, `target`, `artifact_sha256` and `training_data_end`;
+  - the swing fields `probability`, `decision_score`, `signal`, `rank`, `return_1d` and
+    `volume_z20`.
+
+  All of them stay. A Python test serializes a real swing `PredictionResponse` and asserts
+  each is present and non-null. The contract becomes `market_predictor.prediction.v3`, and
+  evidence moves from `prediction_evidence.v3` to v4. `SwingPrediction.unified_score` and
+  `ReadinessInfo.intraday_bar_count` are removed. Horizons keep the generic
+  session/day units (`b`, `d`); minute and hour units and the intraday aliases go.
+- Drift. `drift_policy.v3` replaces the two per-view pending-age constants with one limit
+  derived from the prediction's horizon (horizon sessions plus a grace period), so a
+  63- or 252-session outcome is not flagged overdue. `configs/default.toml`'s
+  `drift_policy_sha256` is updated, and a test ties it to the hash of
+  `configs/drift_policy.toml`. The promoted-bundle schema is unchanged.
+- Investment targets will get their own view and policy later rather than widening swing.
+  Generic horizon parsing and cohort horizon fields stay, and nothing new hard-codes
+  `10b` outside the swing route.
+- Retired-intraday refusal. `mode="before"` validators on bundle `mode` and on the `view`
+  of outcome intents, observations, matured outcomes and performance cohorts, plus the
+  outcome repository loaders, raise an explicit retired-intraday error. Drift paths for
+  intraday raise it too. Old prediction v2 and evidence v3 snapshots are refused;
+  nothing of that kind exists locally. `publish-drift-assessment --mode` accepts only
+  `swing`.
+- Also swing-only in this commit:
+  - `governance/outcomes/repository.py`, `commands/outcomes.py`, `release.py`
+    (`canonical_intraday`) and `serving/snapshot_store.py`;
+  - `serving/requests.py`, whose duplicate request contracts merge into the core ones;
+  - `scripts/promotion_fixture.py` and its `tests/r4_fixtures.py` users.
+
+  `feature_store.py`'s intraday path depends on the pinned `live_features.LiveMode`, so it
+  moves to (c). `features.py` changes nothing: its intraday mentions are swing
+  news-session and reaction features.
+- Strategy ledger. `docs/strategy_execution_ledger.json` keeps its 12 intraday entries as
+  historical records. `mode="intraday"` stays valid only in terminal states, and the 4
+  `planned` intraday entries are closed as retired with the retirement as their blocker.
+- TradingFlow follow-ups, outside this slice and recorded for the user:
+  - its advisory model-direction lists recognize only the retired combined signals, so
+    every current swing signal reads as neutral (`UniverseRankService.cs:130-138`);
+  - its result label is hard-coded to `market_predictor.prediction.v1`
+    (`MarketPredictorHttpClient.cs:336,400`).
+
+  Both are display-only; TradingFlow's scores and orders never depend on predictor
+  evidence.
+- Exit tests, beyond the design's:
+  - the TradingFlow field contract;
+  - drift hash equality;
+  - refusal of v2/v3 payloads and of intraday monitoring and outcome records;
+  - `--mode intraday` rejected;
+  - ledger validation;
+  - whole-package strict mypy and a module import smoke;
+  - `ReadinessInfo` and replay rejecting intraday.
+
 The September 20 user instruction explicitly extends the completed HTTP/CLI and
 TradingFlow cleanup to all remaining Market Predictor implementation. This is a
 changed requirement, not a reopening of previously passed tests without cause.
