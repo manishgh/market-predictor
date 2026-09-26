@@ -44,6 +44,9 @@ FILING_COLUMNS = (
     "saved_document_sources", "year_new_york",
 )
 _XNYS = xcals.get_calendar("XNYS")
+# Availability is at most the next XNYS open after acceptance, a few days even across holidays; a
+# filing accepted earlier than this before the window, or after it, can never be available in it.
+AVAILABILITY_LAG_BOUND = pd.Timedelta(days=10)
 _ARCHIVE_URL = re.compile(r"https://www\.sec\.gov/Archives/edgar/data/(\d{1,10})/(\d{18})/([^/?#]+)")
 _CIK_ID = re.compile(r"cik:(\d{10})(?::ticker:[A-Z0-9.-]{1,16})?")
 
@@ -147,10 +150,15 @@ def _available(accepted: pd.Timestamp, form: str, lag_minutes: int) -> tuple[pd.
     return pd.Timestamp(when), rule
 
 
+def _may_be_available(accepted: pd.Timestamp, window: tuple[pd.Timestamp, pd.Timestamp]) -> bool:
+    return bool(window[0] - AVAILABILITY_LAG_BOUND <= accepted <= window[1])
+
+
 def _either_reading_in_window(raw: str, form: str, lag_minutes: int, window: tuple[pd.Timestamp, pd.Timestamp]) -> bool:
     for convention in CONVENTIONS:
         try:
-            if window[0] <= _available(corrected_acceptance(raw, convention), form, lag_minutes)[0] <= window[1]:
+            accepted = corrected_acceptance(raw, convention)
+            if _may_be_available(accepted, window) and window[0] <= _available(accepted, form, lag_minutes)[0] <= window[1]:
                 return True
         except DataReadinessError:
             continue
@@ -178,6 +186,8 @@ def issuer_inventory(issuer: ReplayedSecIssuer, *, convention: str, lag_minutes:
         accepted_at = corrected_acceptance(raw, convention)
         if convention == UTC_LABEL and accepted_at != pd.Timestamp(record.accepted_at_utc):
             raise DataReadinessError(f"SEC acceptance re-read differs from the parsed record: {accession}")
+        if not _may_be_available(accepted_at, window):
+            continue  # Outside every window position; its exchange day may predate the calendar.
         when, rule = _available(accepted_at, record.form, lag_minutes)
         if record.form not in requested:
             if window[0] <= when <= window[1]:

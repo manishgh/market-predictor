@@ -68,7 +68,9 @@ def _relations() -> pd.DataFrame:
 
 
 def _pages() -> dict[str, dict[str, Any]]:
-    older = [filing("0000000001-19-000000", "8-K", "2019-07-08T22:30:00Z", items="2.02", report="2019-07-08"),
+    # A saved row from 2000 predates the exchange calendar and must be skipped, not looked up.
+    older = [filing("0000000001-00-000001", "8-K", "2000-01-19T21:00:00Z", items="2.02", report="2000-01-19"),
+             filing("0000000001-19-000000", "8-K", "2019-07-08T22:30:00Z", items="2.02", report="2019-07-08"),
              filing("0000000001-19-000001", "8-K", "2019-08-01T20:05:00Z", items="2.02,9.01", report="2019-08-01",
                     primary="a-earnings.htm", size=5000),
              filing("0000000001-19-000002", "8-K", "2019-08-06T13:00:00Z", items="8.01", report="2019-08-02"),
