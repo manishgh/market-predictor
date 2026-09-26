@@ -1074,7 +1074,8 @@ blockers; they supersede the (b) design where they differ):
   - whole-package strict mypy and a module import smoke;
   - `ReadinessInfo` and replay rejecting intraday.
 
-Sub-slice (b) implementation record (September 26; `7dd6d44`, pushed; diff review pending):
+Sub-slice (b) implementation record (September 26; `7dd6d44`, review follow-up `ea93712`,
+both pushed; diff reviews by both reviewers found no blockers):
 
 - Corrections to the decisions above, each from measured evidence:
   - Horizons are exchange-session counts only (`b`). The "keep `b` and `d`" decision is
@@ -1083,10 +1084,12 @@ Sub-slice (b) implementation record (September 26; `7dd6d44`, pushed; diff revie
     cohort, drift and store paths accept `[1-9]\d*b`; the day aliases (`tomorrow`,
     `week`) are removed with `1h`.
   - The overdue limit is exact rather than estimated: a pending prediction is overdue
-    once the close of its horizon's last XNYS session plus `pending_grace_days` (7) has
-    passed. The weekday estimate (`ceil(sessions * 7/5)`) ignores holidays: after
-    24 July 2025 the 252nd session closes 27 July 2026, eight days after the estimate's
-    353 calendar days, so 252-session outcomes would be flagged before they could mature.
+    once the close of the horizon's last XNYS session after its recorded decision session
+    (cohorts carry `oldest_pending_decision_session_et`), plus `pending_grace_days` (7),
+    has passed. The weekday estimate (`ceil(sessions * 7/5)`) ignores holidays: after
+    24 July 2025 the 252nd session closes 27 July 2026, but the estimate's limit (353 days
+    plus the grace) ends 19 July, so 252-session outcomes would be flagged eight days
+    before their last session even closed.
   - The performance report keeps only decisions inside its lookback window (default 60
     days). Monitoring the 63- and 252-session investment targets therefore needs a window
     longer than the horizon; the investment-target design must set it.
@@ -1103,15 +1106,57 @@ Sub-slice (b) implementation record (September 26; `7dd6d44`, pushed; diff revie
     outside the live universe (the unscored abstention has no evidence row); unscored
     tickers are now skipped and a scored prediction without its row still fails;
   - an empty intent mapping was treated as "not supplied" and recomputed;
-  - the CI container smoke release configured a `5d` swing route, which service startup
-    refuses, so the production-container job could not reach its liveness check;
+  - the CI container smoke release could not start: it configured a `5d` swing route and,
+    as the code review found, lacked the required gate and drift pins (`7dd6d44` fixed
+    only the route; `ea93712` adds the pins and a test that starts the app from the
+    generated config and checks CI's live 200 and ready 503);
   - `publish_serving_bundle` did not validate `mode` at run time.
+- Review follow-up `ea93712` (code review: one major, ten minor; ML review: six major,
+  finding 4 in part):
+  - requested members dropped for incomplete market or catalyst inputs abstained as
+    `out_of_universe` (present at HEAD); they now abstain as `live_inputs_incomplete`,
+    the live frames carry their point-in-time tickers, and registration reports every
+    unmonitored ticker by reason instead of skipping it silently;
+  - prediction contracts refuse unknown fields, so retired fields are rejected rather
+    than dropped; outcome loaders raise the explicit retired error for stored intraday
+    records;
+  - the overdue check refuses naive times, non-session decision dates and dates past the
+    cached XNYS calendar's end instead of returning False;
+  - the retired release fixture carries `intraday_training_evidence.v1`, and the
+    pre-retirement simulation applies the old schema check rather than skipping it;
+  - unused ranking, action, calibration and readiness code is deleted
+    (`modeling/prediction_selection.py` keeps only the served policy; `readiness.py`
+    goes); shadow hypotheses take session horizons and check the view at run time; a
+    configured intraday route names the retirement;
+  - added tests for superseded observation, outcome and feature-drift versions.
+  Moved to (c): the intraday `feature_path` branch in `serving/bundle.py`, tied to
+  `feature_store`. The whole-package import smoke stays a recorded checkpoint check
+  beside strict mypy rather than a permanent test.
+- Monitoring defects found by the ML review, verified in code, awaiting the user's scope
+  decision (all present at HEAD for the served ten-session route unless noted):
+  - an outcome that can never mature (a stock acquired or delisted mid-horizon) stays
+    `pending` forever, blocks the route once overdue, then leaves the report window and
+    is never counted; a terminal unresolvable outcome is missing;
+  - the report window must exceed the overdue deadline plus the sampling period, not
+    only the horizon (for the 63- and 252-session targets);
+  - `independent_decision_groups` counts overlapping decision groups, and drawdown and
+    cumulative return compound overlapping holding-period returns as if sequential
+    (30 daily groups at -2% read as a 45% drawdown); excess-return thresholds do not
+    scale with the horizon;
+  - swing drift has no check that realized excess return rises with the served score;
+  - monitoring counts only requested tickers, so its rates depend on the request mix;
+    registering the whole scored cross-section per decision session, with members
+    excluded for incomplete inputs counted as a coverage rate, is the complete fix.
 - Defects found, not fixed, awaiting the user's scope decision (investment replay, the
   `/v1/replays/investment` endpoint):
   - promoted swing artifacts never record a training-data end, so replay refuses every
     swing snapshot with "model training-data end timestamp is missing" (at HEAD the
-    field came only from the retired intraday manifest's `dataset.last_date`); a fix
-    records the fit boundary in the swing candidate and promoted bundle;
+    field came only from the retired intraday manifest's `dataset.last_date`). The
+    boundary must be when the training labels became available, not the last decision
+    date: the initial fit's decisions end 2024-05-28 but their ten-session labels use
+    prices through 2024-06-11. A fix records it as an exact UTC instant in the swing
+    candidate and training manifest, copies it into the promoted bundle, verifies it at
+    promotion, and publishes it for the retained runs as separate evidence;
   - replay's `ACTIONABLE_SIGNALS` hold the retired signal names (`bullish_watch`,
     `strong_bullish_watch`), while serving emits `positive_setup` for a selected setup.
 - Pre-existing, recorded: broker-action poll `poll_20260816T070948Z` is an incomplete

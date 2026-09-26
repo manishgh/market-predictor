@@ -4,8 +4,8 @@ Status: active
 Last updated: 2026-09-26
 Repository: `C:\project\market-predictor`
 Branch: `unified-swing-product`
-Last completed implementation checkpoint: `7dd6d44` (pushed; swing-only serving and monitoring,
-retirement sub-slice (b); diff review pending), after `dfd1b76` (SEC retry passes with resume),
+Last completed implementation checkpoint: `ea93712` (pushed; review follow-up closing retirement
+sub-slice (b), after `7dd6d44` swing-only serving and monitoring), after `dfd1b76` (SEC retry passes with resume),
 `20799b9` (retirement sub-slice (a), collection package), `beaa4eb` (memory-guard batch keeping) and
 `da5d4c3` (per-issuer SEC acceptance clock).
 Last completed model-training checkpoint: relationship run on `a8be7cb` (artifact pins below).
@@ -160,11 +160,13 @@ SEC clock page runs (archive authority SHA256
     size limit (1 primary, 10 exhibits), recorded as such;
   - 67,226 archived attempts (67,073 HTML, 153 PDF, 11.68 GB); 86 retryable attempts all
     reached a final outcome in later passes.
-- Running now (started 16:56 UTC): the sealed later-window collection from inventory
-  `ae0ed0b6...` into `data/raw/sec_filing_documents_later_sealed_corrected_clock` (log
-  `data/runtime/sec_filing_documents_later_sealed_corrected_clock.log`). It reports unit
-  and attempt counts only and stays unread. An `incomplete` result is resumed with its
-  printed checkpoint. Then slice closure.
+- Sealed later-window collection from inventory `ae0ed0b6...` into
+  `data/raw/sec_filing_documents_later_sealed_corrected_clock` (reports unit and attempt
+  counts only; stays unread): the first run, 16:56-17:49 UTC, ended `incomplete` with one
+  index unit lacking a final outcome, checkpoint
+  `ed0effec0d6776bc4a11398087b9fe577194faad6b6c3f5734953e76c935fea4`. Running now: the resume
+  with that checkpoint (log `..._later_sealed_corrected_clock_resume1.log`). Then slice
+  closure.
 
 Retirement sub-slice (b) `7dd6d44` is pushed (187 files; designs consolidated in
 `c126c22`; diff review by both reviewers pending). Serving, selection, bundles, readiness,
@@ -187,8 +189,24 @@ nullable `training_data_end`), the four HEAD defects fixed, and the open replay 
     build servers shut down afterwards.
   - Not run: the full suite (not a release checkpoint) and the swing-only predictor and
     outcome replays, which belong to (c).
-- Open for the user: investment replay cannot run on swing snapshots (no training end
-  recorded in promoted swing artifacts; retired signal names in `ACTIONABLE_SIGNALS`).
+- Diff reviews (both reviewers, no blockers) are closed by `ea93712`; the plan's
+  implementation record lists each finding and its fix. Its verification (component
+  checkpoint):
+  - affected tests from the import graph plus the boundary and smoke tests, 30 files:
+    46, 61, 288 passed; the fourth batch failed two `test_swing_live_features` tests that
+    read `excluded_security_ids`, which the change had dropped; it was kept beside the new
+    `excluded_tickers`, and that batch then passed 131 (1 skipped);
+  - the smoke-release test fails with the reviewer's error when the fix is stashed and
+    passes with it;
+  - `mypy --strict src/market_predictor scripts`: 354 files, no issues; Ruff on the 24
+    changed Python files clean; `git diff --check` clean;
+  - a scan of every implementation-pin list (61 paths) shows no pinned file changed in
+    `7dd6d44` or `ea93712`, so the sealed collector's resume re-hashes unchanged files.
+- Open for the user (one scope decision): the ML review's verified monitoring defects
+  (outcomes that can never mature, report window length, overlap-aware independence and
+  drawdown, a score-versus-return check, cross-section coverage accounting) and the
+  investment replay defects (no training-label boundary in promoted swing artifacts;
+  retired signal names in `ACTIONABLE_SIGNALS`).
 - TradingFlow follow-ups, both display-only: swing signals read as neutral in the
   advisory model-direction view; the hard-coded `market_predictor.prediction.v1` label.
 
