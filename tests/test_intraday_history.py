@@ -5,25 +5,22 @@ import pandas as pd
 import pytest
 
 from market_predictor.canonical.store import file_sha256
+from market_predictor.collection.alpaca_bars.contracts import (
+    REGULAR_BAR_HISTORY_SCHEMA,
+    RegularBarHistoryConfig,
+    load_regular_bar_history_config,
+)
+from market_predictor.collection.alpaca_bars.plan import load_complete_bar_plan
 from market_predictor.core.errors import DataReadinessError
-from market_predictor.intraday.contracts.history_collection import (
-    INTRADAY_HISTORY_SCHEMA,
-    IntradayHistoryConfig,
-    load_intraday_history_config,
-)
-from market_predictor.intraday.datasets.history import (
-    _verify_readiness_audit,
-    build_intraday_history_plan,
-    load_complete_intraday_history_plan,
-)
+from market_predictor.intraday.datasets.history import _verify_readiness_audit, build_intraday_history_plan
 
 POLICY_PATH = Path("configs/edge_rebuild_intraday_history.toml")
 
 
 def test_intraday_history_contract_freezes_two_tier_acquisition() -> None:
-    config = load_intraday_history_config(POLICY_PATH)
+    config = load_regular_bar_history_config(POLICY_PATH)
 
-    assert config.schema_version == INTRADAY_HISTORY_SCHEMA
+    assert config.schema_version == REGULAR_BAR_HISTORY_SCHEMA
     assert config.feature_timeframe == "5Min"
     assert config.exact_path_timeframe == "1Min"
     assert config.required_price_feed == "sip"
@@ -37,18 +34,18 @@ def test_intraday_history_contract_freezes_two_tier_acquisition() -> None:
 
 
 def test_intraday_history_contract_rejects_full_path_downgrade() -> None:
-    raw = load_intraday_history_config(POLICY_PATH).model_dump()
+    raw = load_regular_bar_history_config(POLICY_PATH).model_dump()
     raw["exact_path_timeframe"] = "5Min"
 
     with pytest.raises(ValueError, match="one-minute"):
-        IntradayHistoryConfig.model_validate(raw)
+        RegularBarHistoryConfig.model_validate(raw)
 
 
 def test_plan_is_hash_bound_point_in_time_and_selective(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    config = load_intraday_history_config(POLICY_PATH).model_copy(
+    config = load_regular_bar_history_config(POLICY_PATH).model_copy(
         update={
             "target_usable_sessions": 1_000,
             "minimum_usable_sessions": 750,
@@ -141,7 +138,7 @@ def test_plan_is_hash_bound_point_in_time_and_selective(
         output_directory=output,
         config=config,
     )
-    verified = load_complete_intraday_history_plan(output)
+    verified = load_complete_bar_plan(output)
 
     assert result["summary"]["existing_usable_sessions"] == 980
     assert result["summary"]["planned_history_sessions"] == 40
@@ -211,7 +208,7 @@ def test_plan_detects_mutated_artifact(
     unit.write_bytes(unit.read_bytes() + b"changed")
 
     with pytest.raises(DataReadinessError, match="does not verify"):
-        load_complete_intraday_history_plan(output)
+        load_complete_bar_plan(output)
 
 
 def _write_ohlcv_identity(path: Path, symbols: int) -> Path:

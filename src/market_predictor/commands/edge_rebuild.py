@@ -19,6 +19,12 @@ from market_predictor.catalysts.sec_filings.collection import (
     load_sec_filing_collection_config,
     load_sec_identity_relations,
 )
+from market_predictor.collection.alpaca_bars.contracts import load_regular_bar_history_config, load_session_benchmark_config
+from market_predictor.collection.prospective_broker_actions import (
+    collect_prospective_broker_action_poll,
+    publish_prospective_broker_action_generation,
+)
+from market_predictor.collection.prospective_sip_session import collect_prospective_sip_session
 from market_predictor.config import get_settings
 from market_predictor.core.errors import DataReadinessError
 from market_predictor.edge_rebuild.swing_broker_specialists import (
@@ -49,17 +55,6 @@ from market_predictor.governance.issuer_event_precision.sample_authority import 
     publish_issuer_event_precision_sample,
 )
 from market_predictor.heavy_jobs import serialized_heavy_job
-from market_predictor.intraday.contracts.history_collection import (
-    load_intraday_history_config,
-    load_selected_session_benchmark_config,
-)
-from market_predictor.intraday.datasets.prospective_broker_actions import (
-    collect_prospective_broker_action_poll,
-    publish_prospective_broker_action_generation,
-)
-from market_predictor.intraday.datasets.prospective_sip_session import (
-    collect_prospective_sip_session,
-)
 from market_predictor.modeling.strategy_contract import load_strategy_contract
 from market_predictor.sources.alpaca import AlpacaSource
 from market_predictor.sources.gdelt import (
@@ -1092,8 +1087,8 @@ def register_edge_rebuild_commands(app: typer.Typer, console: Any) -> None:
             five_minute_policy_path=five_minute_policy,
             benchmark_policy_path=benchmark_policy,
             output_directory=out_dir,
-            five_minute_config=load_intraday_history_config(five_minute_policy),
-            benchmark_config=load_selected_session_benchmark_config(benchmark_policy),
+            five_minute_config=load_regular_bar_history_config(five_minute_policy),
+            benchmark_config=load_session_benchmark_config(benchmark_policy),
             source_factory=lambda: AlpacaSource(settings),
             maximum_units_this_run=max_units,
         )

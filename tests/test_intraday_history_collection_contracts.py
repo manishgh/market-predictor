@@ -5,26 +5,27 @@ from pathlib import Path
 
 import pytest
 
+from market_predictor.collection.alpaca_bars.contracts import (
+    REGULAR_BAR_HISTORY_SCHEMA,
+    SESSION_BENCHMARK_SCHEMA,
+    AlpacaTransportConfig,
+    RegularBarHistoryConfig,
+    SessionBenchmarkConfig,
+    load_regular_bar_history_config,
+    load_session_benchmark_config,
+)
 from market_predictor.intraday.contracts.history_collection import (
     BROAD_INTRADAY_HISTORY_SCHEMA,
     EXTENDED_CONTEXT_SCHEMA,
-    INTRADAY_HISTORY_SCHEMA,
-    SELECTED_SESSION_BENCHMARK_SCHEMA,
     SELECTED_SESSION_HISTORY_SCHEMA,
     SELECTED_SESSION_ONE_MINUTE_SCHEMA,
     BroadIntradayHistoryConfig,
     ExtendedSessionContextConfig,
-    IntradayHistoryConfig,
-    IntradayTransportConfig,
-    PointInTimeUniverseConfig,
-    SelectedSessionBenchmarkConfig,
     SelectedSessionHistoryConfig,
     SelectedSessionOneMinuteConfig,
     load_broad_intraday_history_config,
     load_collection_transport_config,
     load_extended_session_context_config,
-    load_intraday_history_config,
-    load_selected_session_benchmark_config,
     load_selected_session_history_config,
     load_selected_session_one_minute_config,
 )
@@ -33,17 +34,17 @@ _CONFIG_CASES: tuple[
     tuple[
         str,
         Path,
-        Callable[[Path], IntradayTransportConfig],
-        type[IntradayTransportConfig],
+        Callable[[Path], AlpacaTransportConfig],
+        type[AlpacaTransportConfig],
         str,
     ],
     ...,
 ] = (
     (
-        INTRADAY_HISTORY_SCHEMA,
+        REGULAR_BAR_HISTORY_SCHEMA,
         Path("configs/edge_rebuild_intraday_history.toml"),
-        load_intraday_history_config,
-        IntradayHistoryConfig,
+        load_regular_bar_history_config,
+        RegularBarHistoryConfig,
         "252886fb7b7fcfca19917a1daa8e1ea43d950e006287adca12796525c911a830",
     ),
     (
@@ -68,10 +69,10 @@ _CONFIG_CASES: tuple[
         "0c2896b7e40a5c0afb502c65b6ce167f16705d1b36aa44d0a90c94f2ffe1e318",
     ),
     (
-        SELECTED_SESSION_BENCHMARK_SCHEMA,
+        SESSION_BENCHMARK_SCHEMA,
         Path("configs/edge_rebuild_selected_session_benchmarks.toml"),
-        load_selected_session_benchmark_config,
-        SelectedSessionBenchmarkConfig,
+        load_session_benchmark_config,
+        SessionBenchmarkConfig,
         "4215b3f63b7b5ff0cf30c6415d35362653f4f492510a9cab9a04b971be14c2cf",
     ),
     (
@@ -85,16 +86,12 @@ _CONFIG_CASES: tuple[
 
 
 @pytest.mark.parametrize("model", (
-    IntradayTransportConfig,
-    PointInTimeUniverseConfig,
-    IntradayHistoryConfig,
     ExtendedSessionContextConfig,
     SelectedSessionHistoryConfig,
     SelectedSessionOneMinuteConfig,
-    SelectedSessionBenchmarkConfig,
     BroadIntradayHistoryConfig,
 ))
-def test_intraday_history_contracts_have_one_horizon_owner(model: type[object]) -> None:
+def test_intraday_research_contracts_have_one_owner(model: type[object]) -> None:
     assert model.__module__ == "market_predictor.intraday.contracts.history_collection"
 
 
@@ -102,8 +99,8 @@ def test_intraday_history_contracts_have_one_horizon_owner(model: type[object]) 
 def test_intraday_history_contract_schema_and_hash_are_stable(
     schema: str,
     path: Path,
-    loader: Callable[[Path], IntradayTransportConfig],
-    model: type[IntradayTransportConfig],
+    loader: Callable[[Path], AlpacaTransportConfig],
+    model: type[AlpacaTransportConfig],
     expected_sha256: str,
 ) -> None:
     loaded = loader(path)

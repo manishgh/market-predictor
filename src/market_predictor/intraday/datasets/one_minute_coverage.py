@@ -13,18 +13,14 @@ import pandas as pd
 import pyarrow.parquet as pq
 
 from market_predictor.canonical.store import file_sha256
+from market_predictor.collection.alpaca_bars.plan import load_complete_bar_plan, load_plan_json
+from market_predictor.collection.alpaca_bars.transport import load_complete_bar_collection
 from market_predictor.core.errors import DataReadinessError
+from market_predictor.evidence.hashing import json_sha256
 from market_predictor.intraday.contracts.history_collection import (
     SELECTED_SESSION_ONE_MINUTE_PLAN_SCHEMA,
 )
-from market_predictor.intraday.datasets.history import (
-    json_sha256,
-    load_complete_intraday_history_plan,
-    load_plan_json,
-)
-from market_predictor.intraday.datasets.history_collection import (
-    load_complete_intraday_history_collection,
-)
+from market_predictor.intraday.datasets.history import ACCEPTED_PLAN_SCHEMAS
 from market_predictor.intraday.datasets.selection import (
     load_complete_intraday_selection,
 )
@@ -61,9 +57,9 @@ def publish_selected_session_one_minute_coverage(
 
     if output_directory.exists():
         raise DataReadinessError(f"one-minute coverage output must be new: {output_directory}")
-    plan = load_complete_intraday_history_plan(plan_directory)
+    plan = load_complete_bar_plan(plan_directory, accepted_schemas=ACCEPTED_PLAN_SCHEMAS)
     plan_request = load_plan_json(plan_directory / "_request.json")
-    collection = load_complete_intraday_history_collection(collection_directory)
+    collection = load_complete_bar_collection(collection_directory)
     collection_request = _read_json(collection_directory / "_request.json")
     _require_collection_identity(collection_request, timeframe="1Min")
     selection = plan_request.get("selection")

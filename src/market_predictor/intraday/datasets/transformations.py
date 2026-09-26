@@ -14,13 +14,11 @@ from market_predictor.canonical.store import (
     file_sha256,
 )
 from market_predictor.core.errors import DataReadinessError
+from market_predictor.evidence.hashing import json_sha256
 from market_predictor.intraday.contracts.dataset_schemas import (
     _REQUIRED_BENCHMARKS,
     _SAFE_TICKER,
     _Artifact,
-)
-from market_predictor.intraday.datasets.history import (
-    json_sha256,
 )
 
 

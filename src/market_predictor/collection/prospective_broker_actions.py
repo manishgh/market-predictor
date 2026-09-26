@@ -38,10 +38,7 @@ from market_predictor.canonical.store import (
 from market_predictor.core import path_integrity
 from market_predictor.core.errors import DataReadinessError
 from market_predictor.core.symbols import canonical_symbol
-from market_predictor.intraday.datasets.bar_dataset import (
-    load_complete_intraday_bar_dataset,
-)
-from market_predictor.intraday.datasets.history import json_sha256
+from market_predictor.evidence.hashing import json_sha256
 from market_predictor.locking import LockTimeout, file_lock
 from market_predictor.resources import (
     assert_memory_budget,
@@ -1914,9 +1911,14 @@ def _load_a43_security_namespace(
     membership_root: Path,
     membership_parent: Mapping[str, object],
 ) -> dict[str, str]:
-    """Verify the A4.3 metadata that fixes the security identity namespace."""
+    """Verify the A4.3 metadata that fixes the security identity namespace.
 
-    load_complete_intraday_bar_dataset(root)
+    Only the dataset's self-hashed request, manifest, authority and parent lineage are
+    read; its bars never define the namespace, which comes from the pinned membership
+    authorities below. These metadata files and the base membership authority are
+    retained lineage inputs of every poll.
+    """
+
     request_path = root / "_request.json"
     manifest_path = root / "_manifest.json"
     authority_path = root / "_authority.json"

@@ -10,33 +10,28 @@ from urllib.parse import urlencode
 import pandas as pd
 import pytest
 
-import market_predictor.intraday.datasets.history_collection as history_collection
+import market_predictor.collection.alpaca_bars.transport as history_collection
 from market_predictor.canonical.store import file_sha256
-from market_predictor.core.errors import DataReadinessError
-from market_predictor.intraday.contracts.history_collection import (
-    INTRADAY_HISTORY_PLAN_SCHEMA,
-    load_intraday_history_config,
-)
-from market_predictor.intraday.datasets.history import (
-    PLAN_AUTHORITY_SCHEMA,
-)
-from market_predictor.intraday.datasets.history_collection import (
-    collect_intraday_history,
+from market_predictor.collection.alpaca_bars.contracts import REGULAR_BAR_HISTORY_PLAN_SCHEMA, load_regular_bar_history_config
+from market_predictor.collection.alpaca_bars.plan import REGULAR_BAR_PLAN_AUTHORITY_SCHEMA
+from market_predictor.collection.alpaca_bars.transport import (
+    collect_alpaca_bars,
     discard_incomplete_collection,
-    load_complete_intraday_history_collection,
+    load_complete_bar_collection,
 )
+from market_predictor.core.errors import DataReadinessError
 from market_predictor.sources.alpaca import AlpacaBarsPage
 
 POLICY_PATH = Path("configs/edge_rebuild_intraday_history.toml")
 
 
 def test_intraday_history_collection_has_one_canonical_owner() -> None:
-    owner = "market_predictor.intraday.datasets.history_collection"
+    owner = "market_predictor.collection.alpaca_bars.transport"
 
-    assert history_collection.collect_intraday_history is collect_intraday_history
+    assert history_collection.collect_alpaca_bars is collect_alpaca_bars
     for function in (
-        collect_intraday_history,
-        load_complete_intraday_history_collection,
+        collect_alpaca_bars,
+        load_complete_bar_collection,
         discard_incomplete_collection,
     ):
         assert function.__module__ == owner
@@ -49,14 +44,14 @@ def test_collector_publishes_raw_lineage_and_complete_authority(
     output = tmp_path / "collection"
     source = _FakeAlpacaSource()
 
-    result = collect_intraday_history(
+    result = collect_alpaca_bars(
         plan_directory=plan,
         policy_path=POLICY_PATH,
         output_directory=output,
-        config=load_intraday_history_config(POLICY_PATH),
+        config=load_regular_bar_history_config(POLICY_PATH),
         source_factory=lambda: source,
     )
-    verified = load_complete_intraday_history_collection(output)
+    verified = load_complete_bar_collection(output)
 
     assert result["status"] == "transport_complete"
     assert result["completed_units"] == 1
@@ -85,8 +80,8 @@ def test_collector_resumes_verified_unit_without_network(
 ) -> None:
     plan = _write_plan(tmp_path / "plan")
     output = tmp_path / "collection"
-    config = load_intraday_history_config(POLICY_PATH)
-    first = collect_intraday_history(
+    config = load_regular_bar_history_config(POLICY_PATH)
+    first = collect_alpaca_bars(
         plan_directory=plan,
         policy_path=POLICY_PATH,
         output_directory=output,
@@ -99,7 +94,7 @@ def test_collector_resumes_verified_unit_without_network(
     def unexpected_source() -> _FakeAlpacaSource:
         raise AssertionError("verified resume must not call Alpaca")
 
-    resumed = collect_intraday_history(
+    resumed = collect_alpaca_bars(
         plan_directory=plan,
         policy_path=POLICY_PATH,
         output_directory=output,
@@ -116,8 +111,8 @@ def test_collector_operational_batch_limit_resumes_same_identity(
 ) -> None:
     plan = _write_plan(tmp_path / "plan", unit_count=2)
     output = tmp_path / "collection"
-    config = load_intraday_history_config(POLICY_PATH)
-    first = collect_intraday_history(
+    config = load_regular_bar_history_config(POLICY_PATH)
+    first = collect_alpaca_bars(
         plan_directory=plan,
         policy_path=POLICY_PATH,
         output_directory=output,
@@ -131,7 +126,7 @@ def test_collector_operational_batch_limit_resumes_same_identity(
     assert first["completed_units"] == 1
     assert first["unattempted_units"] == 1
 
-    second = collect_intraday_history(
+    second = collect_alpaca_bars(
         plan_directory=plan,
         policy_path=POLICY_PATH,
         output_directory=output,
@@ -147,11 +142,11 @@ def test_collector_operational_batch_limit_resumes_same_identity(
 def test_collector_fails_closed_on_repeated_page_token(
     tmp_path: Path,
 ) -> None:
-    result = collect_intraday_history(
+    result = collect_alpaca_bars(
         plan_directory=_write_plan(tmp_path / "plan"),
         policy_path=POLICY_PATH,
         output_directory=tmp_path / "collection",
-        config=load_intraday_history_config(POLICY_PATH),
+        config=load_regular_bar_history_config(POLICY_PATH),
         source_factory=_RepeatingTokenSource,
     )
 
@@ -166,9 +161,9 @@ def test_collector_failure_circuit_leaves_units_unattempted(
     tmp_path: Path,
 ) -> None:
     plan = _write_plan(tmp_path / "plan", unit_count=8)
-    config = load_intraday_history_config(POLICY_PATH)
+    config = load_regular_bar_history_config(POLICY_PATH)
 
-    result = collect_intraday_history(
+    result = collect_alpaca_bars(
         plan_directory=plan,
         policy_path=POLICY_PATH,
         output_directory=tmp_path / "collection",
@@ -184,8 +179,8 @@ def test_collector_failure_circuit_leaves_units_unattempted(
 def test_collector_rejects_mutated_resume_unit(tmp_path: Path) -> None:
     plan = _write_plan(tmp_path / "plan")
     output = tmp_path / "collection"
-    config = load_intraday_history_config(POLICY_PATH)
-    result = collect_intraday_history(
+    config = load_regular_bar_history_config(POLICY_PATH)
+    result = collect_alpaca_bars(
         plan_directory=plan,
         policy_path=POLICY_PATH,
         output_directory=output,
@@ -200,7 +195,7 @@ def test_collector_rejects_mutated_resume_unit(tmp_path: Path) -> None:
     (output / "_manifest.json").unlink()
 
     with pytest.raises(DataReadinessError, match="integrity failed"):
-        collect_intraday_history(
+        collect_alpaca_bars(
             plan_directory=plan,
             policy_path=POLICY_PATH,
             output_directory=output,
@@ -213,47 +208,47 @@ def test_complete_authority_rejects_missing_raw_provider_page(
     tmp_path: Path,
 ) -> None:
     output = tmp_path / "collection"
-    result = collect_intraday_history(
+    result = collect_alpaca_bars(
         plan_directory=_write_plan(tmp_path / "plan"),
         policy_path=POLICY_PATH,
         output_directory=output,
-        config=load_intraday_history_config(POLICY_PATH),
+        config=load_regular_bar_history_config(POLICY_PATH),
         source_factory=_FakeAlpacaSource,
     )
     raw_page = output / result["artifacts"][0]["pages"][0]["raw_page_path"]
     raw_page.unlink()
 
     with pytest.raises(DataReadinessError, match="raw provider page"):
-        load_complete_intraday_history_collection(output)
+        load_complete_bar_collection(output)
 
 
 def test_complete_authority_rejects_changed_exact_body(
     tmp_path: Path,
 ) -> None:
     output = tmp_path / "collection"
-    result = collect_intraday_history(
+    result = collect_alpaca_bars(
         plan_directory=_write_plan(tmp_path / "plan"),
         policy_path=POLICY_PATH,
         output_directory=output,
-        config=load_intraday_history_config(POLICY_PATH),
+        config=load_regular_bar_history_config(POLICY_PATH),
         source_factory=_FakeAlpacaSource,
     )
     raw_page = output / result["artifacts"][0]["pages"][0]["raw_page_path"]
     raw_page.write_bytes(raw_page.read_bytes() + b" ")
 
     with pytest.raises(DataReadinessError, match="raw provider page"):
-        load_complete_intraday_history_collection(output)
+        load_complete_bar_collection(output)
 
 
 def test_complete_authority_rejects_changed_transport_sidecar(
     tmp_path: Path,
 ) -> None:
     output = tmp_path / "collection"
-    result = collect_intraday_history(
+    result = collect_alpaca_bars(
         plan_directory=_write_plan(tmp_path / "plan"),
         policy_path=POLICY_PATH,
         output_directory=output,
-        config=load_intraday_history_config(POLICY_PATH),
+        config=load_regular_bar_history_config(POLICY_PATH),
         source_factory=_FakeAlpacaSource,
     )
     sidecar = output / result["artifacts"][0]["pages"][0]["raw_sidecar_path"]
@@ -262,36 +257,36 @@ def test_complete_authority_rejects_changed_transport_sidecar(
     sidecar.write_text(json.dumps(payload), encoding="utf-8")
 
     with pytest.raises(DataReadinessError, match="sidecar changed"):
-        load_complete_intraday_history_collection(output)
+        load_complete_bar_collection(output)
 
 
 def test_complete_authority_rejects_extra_raw_inventory_file(
     tmp_path: Path,
 ) -> None:
     output = tmp_path / "collection"
-    collect_intraday_history(
+    collect_alpaca_bars(
         plan_directory=_write_plan(tmp_path / "plan"),
         policy_path=POLICY_PATH,
         output_directory=output,
-        config=load_intraday_history_config(POLICY_PATH),
+        config=load_regular_bar_history_config(POLICY_PATH),
         source_factory=_FakeAlpacaSource,
     )
     extra = output / "raw_pages" / "unexpected.body"
     extra.write_bytes(b"{}")
 
     with pytest.raises(DataReadinessError, match="inventory changed"):
-        load_complete_intraday_history_collection(output)
+        load_complete_bar_collection(output)
 
 
 def test_complete_authority_rejects_canonical_bar_mutation(
     tmp_path: Path,
 ) -> None:
     output = tmp_path / "collection"
-    result = collect_intraday_history(
+    result = collect_alpaca_bars(
         plan_directory=_write_plan(tmp_path / "plan"),
         policy_path=POLICY_PATH,
         output_directory=output,
-        config=load_intraday_history_config(POLICY_PATH),
+        config=load_regular_bar_history_config(POLICY_PATH),
         source_factory=_FakeAlpacaSource,
     )
     artifact = result["artifacts"][0]
@@ -313,18 +308,18 @@ def test_complete_authority_rejects_canonical_bar_mutation(
     authority_path.write_text(json.dumps(authority), encoding="utf-8")
 
     with pytest.raises(DataReadinessError, match="do not replay"):
-        load_complete_intraday_history_collection(output)
+        load_complete_bar_collection(output)
 
 
 def test_complete_authority_rejects_canonical_availability_mutation(
     tmp_path: Path,
 ) -> None:
     output = tmp_path / "collection"
-    result = collect_intraday_history(
+    result = collect_alpaca_bars(
         plan_directory=_write_plan(tmp_path / "plan"),
         policy_path=POLICY_PATH,
         output_directory=output,
-        config=load_intraday_history_config(POLICY_PATH),
+        config=load_regular_bar_history_config(POLICY_PATH),
         source_factory=_FakeAlpacaSource,
     )
     artifact = result["artifacts"][0]
@@ -335,18 +330,18 @@ def test_complete_authority_rejects_canonical_availability_mutation(
     _resign_collection_artifact(output, artifact, bars_path)
 
     with pytest.raises(DataReadinessError, match="do not replay"):
-        load_complete_intraday_history_collection(output)
+        load_complete_bar_collection(output)
 
 
 def test_complete_authority_rejects_mixed_schema_generations(
     tmp_path: Path,
 ) -> None:
     output = tmp_path / "collection"
-    result = collect_intraday_history(
+    result = collect_alpaca_bars(
         plan_directory=_write_plan(tmp_path / "plan"),
         policy_path=POLICY_PATH,
         output_directory=output,
-        config=load_intraday_history_config(POLICY_PATH),
+        config=load_regular_bar_history_config(POLICY_PATH),
         source_factory=_FakeAlpacaSource,
     )
     artifact = result["artifacts"][0]
@@ -355,23 +350,23 @@ def test_complete_authority_rejects_mixed_schema_generations(
     _resign_collection_artifact(output, artifact, bars_path)
 
     with pytest.raises(DataReadinessError, match="mixes authority schema"):
-        load_complete_intraday_history_collection(output)
+        load_complete_bar_collection(output)
 
 
 def test_complete_authority_rejects_non_alpaca_request_endpoint(
     tmp_path: Path,
 ) -> None:
     output = tmp_path / "collection"
-    collect_intraday_history(
+    collect_alpaca_bars(
         plan_directory=_write_plan(tmp_path / "plan"),
         policy_path=POLICY_PATH,
         output_directory=output,
-        config=load_intraday_history_config(POLICY_PATH),
+        config=load_regular_bar_history_config(POLICY_PATH),
         source_factory=_WrongEndpointSource,
     )
 
     with pytest.raises(DataReadinessError, match="endpoint changed"):
-        load_complete_intraday_history_collection(output)
+        load_complete_bar_collection(output)
 
 
 def _resign_collection_artifact(
@@ -523,7 +518,7 @@ class _AlwaysFailingSource(_FakeAlpacaSource):
 
 
 def _write_plan(path: Path, *, unit_count: int = 1) -> Path:
-    config = load_intraday_history_config(POLICY_PATH)
+    config = load_regular_bar_history_config(POLICY_PATH)
     units_path = path / "units" / "5Min" / "2024-07.parquet"
     units_path.parent.mkdir(parents=True)
     units = [
@@ -557,7 +552,7 @@ def _write_plan(path: Path, *, unit_count: int = 1) -> Path:
         ]
     pd.DataFrame(units).to_parquet(units_path, index=False)
     request_payload = {
-        "schema": INTRADAY_HISTORY_PLAN_SCHEMA,
+        "schema": REGULAR_BAR_HISTORY_PLAN_SCHEMA,
         "policy_sha256": config.sha256(),
         "test": True,
     }
@@ -579,7 +574,7 @@ def _write_plan(path: Path, *, unit_count: int = 1) -> Path:
     manifest_path.write_text(
         json.dumps(
             {
-                "schema": INTRADAY_HISTORY_PLAN_SCHEMA,
+                "schema": REGULAR_BAR_HISTORY_PLAN_SCHEMA,
                 "plan_fingerprint": fingerprint,
                 "policy_sha256": config.sha256(),
                 "files": files,
@@ -591,7 +586,7 @@ def _write_plan(path: Path, *, unit_count: int = 1) -> Path:
     (path / "_authority.json").write_text(
         json.dumps(
             {
-                "schema": PLAN_AUTHORITY_SCHEMA,
+                "schema": REGULAR_BAR_PLAN_AUTHORITY_SCHEMA,
                 "state": "complete",
                 "artifact": "_manifest.json",
                 "artifact_sha256": file_sha256(manifest_path),

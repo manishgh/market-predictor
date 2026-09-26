@@ -13,12 +13,9 @@ import pytest
 
 import market_predictor.intraday.datasets.selection as selection_module
 from market_predictor.canonical.store import file_sha256
+from market_predictor.collection.alpaca_bars.plan import load_plan_json, write_plan_json
 from market_predictor.core.errors import DataReadinessError
-from market_predictor.intraday.datasets.history import (
-    json_sha256,
-    load_plan_json,
-    write_plan_json,
-)
+from market_predictor.evidence.hashing import json_sha256
 from market_predictor.intraday.datasets.selection import (
     build_intraday_selection,
     select_intraday_activations,

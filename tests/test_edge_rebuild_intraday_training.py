@@ -14,11 +14,11 @@ import pytest
 import market_predictor.intraday.datasets.bar_dataset as intraday_bar_dataset
 from market_predictor.canonical.store import file_sha256
 from market_predictor.core.errors import DataReadinessError
+from market_predictor.evidence.hashing import json_sha256
 from market_predictor.intraday.datasets.bar_dataset import (
     INTRADAY_BAR_DATASET_AUTHORITY_SCHEMA,
     INTRADAY_BAR_DATASET_SCHEMA,
 )
-from market_predictor.intraday.datasets.history import json_sha256
 from market_predictor.intraday.features.bar_features import (
     INTRADAY_BAR_FEATURE_SCHEMA_VERSION,
     INTRADAY_BAR_MODEL_FEATURE_COLUMNS,

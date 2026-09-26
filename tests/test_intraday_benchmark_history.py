@@ -7,15 +7,10 @@ import pandas as pd
 import pytest
 
 import market_predictor.intraday.datasets.benchmark_history as benchmark_history
-from market_predictor.intraday.contracts.history_collection import (
-    SelectedSessionBenchmarkConfig,
-    load_selected_session_benchmark_config,
-)
+from market_predictor.collection.alpaca_bars.contracts import SessionBenchmarkConfig, load_session_benchmark_config
+from market_predictor.collection.alpaca_bars.plan import load_complete_bar_plan
 from market_predictor.intraday.datasets.benchmark_history import (
     build_selected_session_benchmark_plan,
-)
-from market_predictor.intraday.datasets.history import (
-    load_complete_intraday_history_plan,
 )
 from market_predictor.modeling.strategy_contract import load_strategy_contract
 
@@ -69,11 +64,11 @@ def test_benchmark_plan_covers_every_session_with_all_benchmarks(
         selection_directory=tmp_path / "selection",
         policy_path=POLICY,
         output_directory=output,
-        config=load_selected_session_benchmark_config(POLICY),
+        config=load_session_benchmark_config(POLICY),
         strategy_contract=contract,
         strategy_contract_path=CONTRACT,
     )
-    verified = load_complete_intraday_history_plan(output)
+    verified = load_complete_bar_plan(output)
     units = pd.read_parquet(output / "units" / "1Min" / "2024-07.parquet")
     symbols = [json.loads(value) for value in units["canonical_symbols_json"]]
 
@@ -89,11 +84,11 @@ def test_benchmark_plan_covers_every_session_with_all_benchmarks(
 
 
 def test_benchmark_contract_requires_qqq_and_every_sector() -> None:
-    config = load_selected_session_benchmark_config(POLICY)
+    config = load_session_benchmark_config(POLICY)
     payload = config.model_dump(mode="python")
     payload["benchmark_tickers"] = tuple(
         value for value in config.benchmark_tickers if value != "QQQ"
     )
 
     with pytest.raises(ValueError, match="SPY, QQQ"):
-        SelectedSessionBenchmarkConfig.model_validate(payload)
+        SessionBenchmarkConfig.model_validate(payload)

@@ -1,4 +1,4 @@
-"""Resumable Alpaca transport for ER1A five-minute history units."""
+"""Resumable Alpaca SIP bar transport for hash-bound plan units, with exact raw-page replay."""
 from __future__ import annotations
 
 import hashlib
@@ -17,13 +17,9 @@ import pandas as pd
 
 from market_predictor.canonical.normalize import canonicalize_bars
 from market_predictor.canonical.store import file_sha256
+from market_predictor.collection.alpaca_bars.contracts import AlpacaTransportConfig
+from market_predictor.collection.alpaca_bars.plan import RETAINED_PLAN_SCHEMAS, load_complete_bar_plan
 from market_predictor.core.errors import DataReadinessError, SchemaMismatchError
-from market_predictor.intraday.contracts.history_collection import (
-    IntradayTransportConfig,
-)
-from market_predictor.intraday.datasets.history import (
-    load_complete_intraday_history_plan,
-)
 from market_predictor.resources import (
     assert_memory_budget,
     assert_peak_memory_budget,
@@ -47,18 +43,19 @@ _SAFE_RATE_HEADERS = {
 SourceFactory = Callable[[], AlpacaSource]
 
 
-def collect_intraday_history(
+def collect_alpaca_bars(
     *,
     plan_directory: Path,
     policy_path: Path,
     output_directory: Path,
-    config: IntradayTransportConfig,
+    config: AlpacaTransportConfig,
     source_factory: SourceFactory,
     maximum_units_this_run: int | None = None,
+    accepted_plan_schemas: Mapping[str, str] = RETAINED_PLAN_SCHEMAS,
 ) -> dict[str, Any]:
-    """Collect every immutable ER1A unit with hash-verified resume."""
+    """Collect every immutable plan unit with hash-verified resume; only the retained plan layers by default."""
 
-    plan = load_complete_intraday_history_plan(plan_directory)
+    plan = load_complete_bar_plan(plan_directory, accepted_schemas=accepted_plan_schemas)
     timeframe = _transport_timeframe(config)
     normalized_timeframe = _canonical_timeframe(timeframe)
     if plan.get("policy_sha256") != config.sha256():
@@ -260,7 +257,7 @@ def _run_bounded_collection(
     pending: list[dict[str, Any]],
     collect_row: Callable[[Mapping[str, Any]], dict[str, Any]],
     completed: dict[str, dict[str, Any]],
-    config: IntradayTransportConfig,
+    config: AlpacaTransportConfig,
 ) -> dict[str, str]:
     failures: dict[str, str] = {}
     rows = iter(pending)
@@ -309,7 +306,7 @@ def _run_bounded_collection(
     return failures
 
 
-def load_complete_intraday_history_collection(
+def load_complete_bar_collection(
     directory: Path,
 ) -> dict[str, Any]:
     request = _load_json(directory / "_request.json")
@@ -410,7 +407,7 @@ def _collect_unit(
     raw_pages_directory: Path,
     plan_fingerprint: str,
     request_sha256: str,
-    config: IntradayTransportConfig,
+    config: AlpacaTransportConfig,
     timeframe: str,
 ) -> dict[str, Any]:
     unit_id = str(row["unit_id"])
@@ -773,7 +770,7 @@ def _verify_raw_pages(root: Path, unit: Mapping[str, Any]) -> None:
             _verify_exact_page_body(path, raw)
 
 
-def _transport_timeframe(config: IntradayTransportConfig) -> str:
+def _transport_timeframe(config: AlpacaTransportConfig) -> str:
     for field in ("history_timeframe", "feature_timeframe", "context_timeframe"):
         value = getattr(config, field, None)
         if value in {"1Min", "5Min"}:
@@ -1270,7 +1267,7 @@ def _json_sha256(value: object) -> str:
     ).hexdigest()
 
 
-def _guard_memory(config: IntradayTransportConfig, stage: str) -> None:
+def _guard_memory(config: AlpacaTransportConfig, stage: str) -> None:
     assert_memory_budget(
         hard_budget_gib=config.maximum_process_memory_gib,
         headroom_gib=config.memory_guard_headroom_gib,

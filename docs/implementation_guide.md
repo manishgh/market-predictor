@@ -538,25 +538,28 @@ estimator without the same governance.
   acquisition planning at exact exchange-session bounds.
 - `intraday/datasets/history_materialization.py`: bounded canonical per-symbol history
   construction, exchange-session segmentation, and source-integrity quarantine.
-- `intraday/datasets/history_collection.py`: bounded, resumable Alpaca/SIP intraday
-  collection with immutable raw-page, canonical-bar, and authority replay.
+- `collection/alpaca_bars/`: the retained Alpaca SIP bar contracts (`contracts.py`; field
+  names, defaults and types are part of every recorded policy hash), hash-bound plans
+  (`plan.py`) and the bounded, resumable transport with immutable raw-page, canonical-bar
+  and authority replay (`transport.py`).
 - `intraday/datasets/benchmark_history.py`: selected-session SPY, QQQ, and sector-ETF
   one-minute acquisition planning at exact exchange-session bounds.
 - `intraday/datasets/broad_intraday_history.py`: research-only broad-universe
   regular-session five-minute acquisition planning with explicit membership limits.
 - `intraday/datasets/extended_session_context.py`: separately bound premarket and
   postmarket five-minute context planning with exact exchange-calendar windows.
-- `intraday/datasets/prospective_sip_session.py`: one closed-session prospective
+- `collection/prospective_sip_session.py`: one closed-session prospective
   authority combining the exact observed S&P cohort at SIP five-minute resolution with
   SPY, QQQ, and all sector ETFs at SIP one-minute resolution. It binds policy files to
   effective configs, shares one request budget across both children, supports
   hash-verified crash recovery, and permits post-open parent finalization only from
   children retrieved before that open. It does not create features, labels, or model
   eligibility.
-- `intraday/datasets/prospective_broker_actions.py`: resumable observed-time Alpaca
+- `collection/prospective_broker_actions.py`: resumable observed-time Alpaca
   broker-action polls and immutable revision generations bound to the A4.3 security
-  namespace. Historical replay exposes identity hashes only and cannot authorize stale
-  bars. Fresh collection requires the current complete bar authority. Cutoff registry
+  namespace. The namespace comes from the pinned membership authorities; the A4.3
+  dataset's self-hashed request, manifest, authority and parent lineage are retained
+  lineage inputs, and its bars are never read. Cutoff registry
   commits follow strict replay, generation publication is atomic, Windows reparse paths
   fail closed, and all poll/generation children remain research-only and ineligible for
   training or serving.

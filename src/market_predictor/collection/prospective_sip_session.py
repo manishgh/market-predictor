@@ -15,30 +15,27 @@ import exchange_calendars as xcals
 import pandas as pd
 
 from market_predictor.canonical.store import file_sha256
-from market_predictor.core.errors import DataReadinessError
-from market_predictor.intraday.contracts.history_collection import (
-    INTRADAY_HISTORY_PLAN_SCHEMA,
-    SELECTED_SESSION_BENCHMARK_PLAN_SCHEMA,
-    IntradayHistoryConfig,
-    IntradayTransportConfig,
-    SelectedSessionBenchmarkConfig,
-    load_intraday_history_config,
-    load_selected_session_benchmark_config,
+from market_predictor.collection.alpaca_bars.contracts import (
+    REGULAR_BAR_HISTORY_PLAN_SCHEMA,
+    SESSION_BENCHMARK_PLAN_SCHEMA,
+    AlpacaTransportConfig,
+    RegularBarHistoryConfig,
+    SessionBenchmarkConfig,
+    load_regular_bar_history_config,
+    load_session_benchmark_config,
 )
-from market_predictor.intraday.datasets.history import (
-    PLAN_AUTHORITY_SCHEMA,
-    SELECTED_SESSION_BENCHMARK_PLAN_AUTHORITY_SCHEMA,
+from market_predictor.collection.alpaca_bars.plan import (
+    REGULAR_BAR_PLAN_AUTHORITY_SCHEMA,
+    SESSION_BENCHMARK_PLAN_AUTHORITY_SCHEMA,
     chunk_request_symbols,
     file_record,
-    load_complete_intraday_history_plan,
+    load_complete_bar_plan,
     request_unit_record,
     stable_identity_hash,
     write_plan_json,
 )
-from market_predictor.intraday.datasets.history_collection import (
-    collect_intraday_history,
-    load_complete_intraday_history_collection,
-)
+from market_predictor.collection.alpaca_bars.transport import collect_alpaca_bars, load_complete_bar_collection
+from market_predictor.core.errors import DataReadinessError
 from market_predictor.resources import (
     assert_memory_budget,
     assert_peak_memory_budget,
@@ -79,8 +76,8 @@ def collect_prospective_sip_session(
     five_minute_policy_path: Path,
     benchmark_policy_path: Path,
     output_directory: Path,
-    five_minute_config: IntradayHistoryConfig,
-    benchmark_config: SelectedSessionBenchmarkConfig,
+    five_minute_config: RegularBarHistoryConfig,
+    benchmark_config: SessionBenchmarkConfig,
     source_factory: SourceFactory,
     maximum_units_this_run: int | None = None,
     now_utc: datetime | None = None,
@@ -203,8 +200,8 @@ def collect_prospective_sip_session(
     benchmark_plan = plans / "benchmarks_1m"
     _publish_or_verify_plan(
         output_directory=five_plan,
-        schema=INTRADAY_HISTORY_PLAN_SCHEMA,
-        authority_schema=PLAN_AUTHORITY_SCHEMA,
+        schema=REGULAR_BAR_HISTORY_PLAN_SCHEMA,
+        authority_schema=REGULAR_BAR_PLAN_AUTHORITY_SCHEMA,
         policy_path=five_minute_policy_path,
         policy_sha256=five_minute_config.sha256(),
         parent_request_sha256=request_sha256,
@@ -222,8 +219,8 @@ def collect_prospective_sip_session(
     )
     _publish_or_verify_plan(
         output_directory=benchmark_plan,
-        schema=SELECTED_SESSION_BENCHMARK_PLAN_SCHEMA,
-        authority_schema=SELECTED_SESSION_BENCHMARK_PLAN_AUTHORITY_SCHEMA,
+        schema=SESSION_BENCHMARK_PLAN_SCHEMA,
+        authority_schema=SESSION_BENCHMARK_PLAN_AUTHORITY_SCHEMA,
         policy_path=benchmark_policy_path,
         policy_sha256=benchmark_config.sha256(),
         parent_request_sha256=request_sha256,
@@ -373,8 +370,8 @@ def _validate_completed_invocation(
     five_minute_policy_path: Path,
     benchmark_policy_path: Path,
     output_directory: Path,
-    five_minute_config: IntradayHistoryConfig,
-    benchmark_config: SelectedSessionBenchmarkConfig,
+    five_minute_config: RegularBarHistoryConfig,
+    benchmark_config: SessionBenchmarkConfig,
     benchmarks: tuple[str, ...],
 ) -> None:
     request = _load_json(output_directory / "_request.json")
@@ -490,24 +487,24 @@ def load_complete_prospective_sip_session(
     _verify_child_plan_identity(
         five_plan,
         parent_request=request,
-        expected_schema=INTRADAY_HISTORY_PLAN_SCHEMA,
+        expected_schema=REGULAR_BAR_HISTORY_PLAN_SCHEMA,
         expected_timeframe="5Min",
         expected_symbols=replayed_symbols,
     )
     _verify_child_plan_identity(
         benchmark_plan,
         parent_request=request,
-        expected_schema=SELECTED_SESSION_BENCHMARK_PLAN_SCHEMA,
+        expected_schema=SESSION_BENCHMARK_PLAN_SCHEMA,
         expected_timeframe="1Min",
         expected_symbols=cast(list[str], request["benchmark_symbols"]),
     )
-    load_complete_intraday_history_plan(five_plan)
-    load_complete_intraday_history_plan(benchmark_plan)
+    load_complete_bar_plan(five_plan)
+    load_complete_bar_plan(benchmark_plan)
     _verify_child_membership_semantics(five_plan, expected=active)
-    full = load_complete_intraday_history_collection(
+    full = load_complete_bar_collection(
         directory / "collections" / "full_cohort_5m"
     )
-    benchmarks = load_complete_intraday_history_collection(
+    benchmarks = load_complete_bar_collection(
         directory / "collections" / "benchmarks_1m"
     )
     _verify_child_collection_lineage(
@@ -609,7 +606,7 @@ def _publish_or_verify_plan(
     fingerprint = _json_sha256(request)
     expected_request = {**request, "plan_fingerprint": fingerprint}
     if output_directory.exists():
-        load_complete_intraday_history_plan(output_directory)
+        load_complete_bar_plan(output_directory)
         if _load_json(output_directory / "_request.json") != expected_request:
             raise DataReadinessError(
                 "prospective SIP child plan differs from the requested session"
@@ -712,14 +709,14 @@ def _collect_or_load_child(
     plan_directory: Path,
     policy_path: Path,
     output_directory: Path,
-    config: IntradayTransportConfig,
+    config: AlpacaTransportConfig,
     source_factory: SourceFactory,
     maximum_units_this_run: int | None,
 ) -> dict[str, Any]:
     if (output_directory / "_authority.json").exists():
-        return load_complete_intraday_history_collection(output_directory)
+        return load_complete_bar_collection(output_directory)
     resolved_plan = plan_directory.resolve()
-    return collect_intraday_history(
+    return collect_alpaca_bars(
         plan_directory=resolved_plan,
         policy_path=policy_path,
         output_directory=output_directory,
@@ -1021,7 +1018,7 @@ def _publish_status(
     status: str,
     full_cohort: Mapping[str, Any],
     benchmarks: Mapping[str, Any] | None,
-    five_minute_config: IntradayHistoryConfig,
+    five_minute_config: RegularBarHistoryConfig,
 ) -> dict[str, Any]:
     payload: dict[str, Any] = {
         "schema": MANIFEST_SCHEMA,
@@ -1165,7 +1162,7 @@ def _symbol_coverage(
     return combined
 
 
-def _guard_memory(config: IntradayHistoryConfig, stage: str) -> None:
+def _guard_memory(config: RegularBarHistoryConfig, stage: str) -> None:
     assert_memory_budget(
         hard_budget_gib=config.maximum_process_memory_gib,
         headroom_gib=config.memory_guard_headroom_gib,
@@ -1179,7 +1176,7 @@ def _guard_memory(config: IntradayHistoryConfig, stage: str) -> None:
 
 
 def _validate_prospective_resource_policy(
-    config: IntradayTransportConfig,
+    config: AlpacaTransportConfig,
 ) -> None:
     if config.maximum_process_memory_gib > 4.0:
         raise DataReadinessError("prospective SIP memory limit exceeds 4 GiB")
@@ -1191,11 +1188,11 @@ def _validate_configs_match_policy_files(
     *,
     five_minute_policy_path: Path,
     benchmark_policy_path: Path,
-    five_minute_config: IntradayHistoryConfig,
-    benchmark_config: SelectedSessionBenchmarkConfig,
+    five_minute_config: RegularBarHistoryConfig,
+    benchmark_config: SessionBenchmarkConfig,
 ) -> None:
-    policy_five_minute = load_intraday_history_config(five_minute_policy_path)
-    policy_benchmark = load_selected_session_benchmark_config(
+    policy_five_minute = load_regular_bar_history_config(five_minute_policy_path)
+    policy_benchmark = load_session_benchmark_config(
         benchmark_policy_path
     )
     if (
@@ -1215,8 +1212,8 @@ def _validate_configs_match_policy_files(
 
 
 def _validate_prospective_configuration_pair(
-    five_minute_config: IntradayHistoryConfig,
-    benchmark_config: SelectedSessionBenchmarkConfig,
+    five_minute_config: RegularBarHistoryConfig,
+    benchmark_config: SessionBenchmarkConfig,
 ) -> tuple[str, ...]:
     if benchmark_config.calendar != five_minute_config.calendar:
         raise DataReadinessError("prospective SIP calendars differ")

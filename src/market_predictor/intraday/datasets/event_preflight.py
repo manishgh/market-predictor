@@ -27,7 +27,7 @@ from market_predictor.catalysts.issuer_events.family_evidence import (
     load_issuer_family_evidence,
 )
 from market_predictor.core.errors import DataReadinessError
-from market_predictor.intraday.datasets.history import json_sha256
+from market_predictor.evidence.hashing import json_sha256
 from market_predictor.intraday.training.training import (
     PublishedIntradayDataset,
     load_published_intraday_dataset,

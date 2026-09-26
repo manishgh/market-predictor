@@ -13,13 +13,14 @@ import pytest
 
 import market_predictor.intraday.datasets.one_minute_coverage as one_minute_coverage
 from market_predictor.canonical.store import file_sha256
+from market_predictor.collection.alpaca_bars.plan import write_plan_json
+from market_predictor.collection.alpaca_bars.transport import collect_alpaca_bars
 from market_predictor.core.errors import DataReadinessError
 from market_predictor.intraday.contracts.history_collection import (
     load_collection_transport_config,
     load_selected_session_one_minute_config,
 )
-from market_predictor.intraday.datasets.history import write_plan_json
-from market_predictor.intraday.datasets.history_collection import collect_intraday_history
+from market_predictor.intraday.datasets.history import ACCEPTED_PLAN_SCHEMAS
 from market_predictor.intraday.datasets.one_minute_coverage import (
     load_complete_one_minute_coverage,
     publish_selected_session_one_minute_coverage,
@@ -259,7 +260,8 @@ def _collect(
         strategy_contract_path=CONTRACT_PATH,
     )
     collection = root / "collection"
-    collect_intraday_history(
+    collect_alpaca_bars(
+        accepted_plan_schemas=ACCEPTED_PLAN_SCHEMAS,
         plan_directory=plan,
         policy_path=POLICY,
         output_directory=collection,

@@ -10,12 +10,9 @@ from urllib.parse import urlencode
 import pandas as pd
 import pytest
 
-import market_predictor.intraday.datasets.prospective_sip_session as module
+import market_predictor.collection.prospective_sip_session as module
+from market_predictor.collection.alpaca_bars.contracts import load_regular_bar_history_config, load_session_benchmark_config
 from market_predictor.core.errors import DataReadinessError
-from market_predictor.intraday.contracts.history_collection import (
-    load_intraday_history_config,
-    load_selected_session_benchmark_config,
-)
 from market_predictor.sources.alpaca import AlpacaBarsPage
 from market_predictor.universe.sp500.observed_membership_authority import (
     ObservedMembershipAuthority,
@@ -31,7 +28,7 @@ COLLECTION_TIME = datetime(2024, 7, 8, 20, 2, tzinfo=UTC)
 
 
 def test_prospective_sip_session_has_one_canonical_owner() -> None:
-    owner = "market_predictor.intraday.datasets.prospective_sip_session"
+    owner = "market_predictor.collection.prospective_sip_session"
 
     assert module.collect_prospective_sip_session.__module__ == owner
     assert module.load_complete_prospective_sip_session.__module__ == owner
@@ -156,7 +153,7 @@ def test_collection_plans_full_cohort_and_exact_benchmarks_from_exact_pages(
     assert planned_benchmarks == module.REQUIRED_BENCHMARKS
     assert len(planned_benchmarks) == 13
     assert request["benchmark_symbols"] == list(
-        load_selected_session_benchmark_config(BENCHMARK_POLICY).normalized_benchmarks()
+        load_session_benchmark_config(BENCHMARK_POLICY).normalized_benchmarks()
     )
     assert {call[0] for call in calls} == {"5Min", "1Min"}
     assert all(call[1] == REGULAR_SESSION for call in calls)
@@ -224,7 +221,7 @@ def test_child_plan_identity_cannot_be_reused_for_another_cohort(
         module._verify_child_plan_identity(
             plan,
             parent_request=parent,
-            expected_schema=module.INTRADAY_HISTORY_PLAN_SCHEMA,
+            expected_schema=module.REGULAR_BAR_HISTORY_PLAN_SCHEMA,
             expected_timeframe="5Min",
             expected_symbols=parent["full_cohort_symbols"],
         )
@@ -261,7 +258,7 @@ def test_loader_recomputes_exchange_calendar_bounds(
 def test_collection_rejects_resource_policy_above_frozen_limits(
     tmp_path: Path,
 ) -> None:
-    config = load_intraday_history_config(FIVE_MINUTE_POLICY).model_copy(
+    config = load_regular_bar_history_config(FIVE_MINUTE_POLICY).model_copy(
         update={"collection_workers": 3}
     )
 
@@ -273,7 +270,7 @@ def test_collection_rejects_resource_policy_above_frozen_limits(
             benchmark_policy_path=BENCHMARK_POLICY,
             output_directory=tmp_path / "output",
             five_minute_config=config,
-            benchmark_config=load_selected_session_benchmark_config(
+            benchmark_config=load_session_benchmark_config(
                 BENCHMARK_POLICY
             ),
             source_factory=lambda: pytest.fail("network must not be called"),
@@ -286,8 +283,8 @@ def test_fresh_collection_rejects_config_not_loaded_from_recorded_policy(
     tmp_path: Path,
     config_name: str,
 ) -> None:
-    five_minute_config = load_intraday_history_config(FIVE_MINUTE_POLICY)
-    benchmark_config = load_selected_session_benchmark_config(BENCHMARK_POLICY)
+    five_minute_config = load_regular_bar_history_config(FIVE_MINUTE_POLICY)
+    benchmark_config = load_session_benchmark_config(BENCHMARK_POLICY)
     if config_name == "five_minute":
         five_minute_config = five_minute_config.model_copy(
             update={"collection_retries": five_minute_config.collection_retries + 1}
@@ -327,8 +324,8 @@ def test_parent_resume_loads_completed_children_without_network(
         five_minute_policy_path=FIVE_MINUTE_POLICY,
         benchmark_policy_path=BENCHMARK_POLICY,
         output_directory=output,
-        five_minute_config=load_intraday_history_config(FIVE_MINUTE_POLICY),
-        benchmark_config=load_selected_session_benchmark_config(BENCHMARK_POLICY),
+        five_minute_config=load_regular_bar_history_config(FIVE_MINUTE_POLICY),
+        benchmark_config=load_session_benchmark_config(BENCHMARK_POLICY),
         source_factory=lambda: pytest.fail("verified child resume must not call Alpaca"),
         now_utc=COLLECTION_TIME,
     )
@@ -350,8 +347,8 @@ def test_parent_resume_after_next_open_uses_completed_children_without_network(
         five_minute_policy_path=FIVE_MINUTE_POLICY,
         benchmark_policy_path=BENCHMARK_POLICY,
         output_directory=output,
-        five_minute_config=load_intraday_history_config(FIVE_MINUTE_POLICY),
-        benchmark_config=load_selected_session_benchmark_config(BENCHMARK_POLICY),
+        five_minute_config=load_regular_bar_history_config(FIVE_MINUTE_POLICY),
+        benchmark_config=load_session_benchmark_config(BENCHMARK_POLICY),
         source_factory=lambda: pytest.fail("completed children must not call Alpaca"),
         now_utc=datetime(2024, 7, 10, tzinfo=UTC),
     )
@@ -378,8 +375,8 @@ def test_parent_resume_after_next_open_rejects_incomplete_children(
             five_minute_policy_path=FIVE_MINUTE_POLICY,
             benchmark_policy_path=BENCHMARK_POLICY,
             output_directory=output,
-            five_minute_config=load_intraday_history_config(FIVE_MINUTE_POLICY),
-            benchmark_config=load_selected_session_benchmark_config(BENCHMARK_POLICY),
+            five_minute_config=load_regular_bar_history_config(FIVE_MINUTE_POLICY),
+            benchmark_config=load_session_benchmark_config(BENCHMARK_POLICY),
             source_factory=lambda: _ExactPageSource(calls, full_grid=True),
             now_utc=datetime(2024, 7, 10, tzinfo=UTC),
         )
@@ -399,8 +396,8 @@ def test_completed_output_replays_after_next_open_without_network(
         five_minute_policy_path=FIVE_MINUTE_POLICY,
         benchmark_policy_path=BENCHMARK_POLICY,
         output_directory=output,
-        five_minute_config=load_intraday_history_config(FIVE_MINUTE_POLICY),
-        benchmark_config=load_selected_session_benchmark_config(BENCHMARK_POLICY),
+        five_minute_config=load_regular_bar_history_config(FIVE_MINUTE_POLICY),
+        benchmark_config=load_session_benchmark_config(BENCHMARK_POLICY),
         source_factory=lambda: pytest.fail("completed replay must not call Alpaca"),
         now_utc=datetime(2024, 7, 10, tzinfo=UTC),
     )
@@ -421,8 +418,8 @@ def test_completed_output_rejects_a_different_session(
             five_minute_policy_path=FIVE_MINUTE_POLICY,
             benchmark_policy_path=BENCHMARK_POLICY,
             output_directory=output,
-            five_minute_config=load_intraday_history_config(FIVE_MINUTE_POLICY),
-            benchmark_config=load_selected_session_benchmark_config(BENCHMARK_POLICY),
+            five_minute_config=load_regular_bar_history_config(FIVE_MINUTE_POLICY),
+            benchmark_config=load_session_benchmark_config(BENCHMARK_POLICY),
             source_factory=lambda: pytest.fail("mismatch must not call Alpaca"),
         )
 
@@ -443,8 +440,8 @@ def test_completed_output_rejects_a_different_membership_parent(
             five_minute_policy_path=FIVE_MINUTE_POLICY,
             benchmark_policy_path=BENCHMARK_POLICY,
             output_directory=output,
-            five_minute_config=load_intraday_history_config(FIVE_MINUTE_POLICY),
-            benchmark_config=load_selected_session_benchmark_config(BENCHMARK_POLICY),
+            five_minute_config=load_regular_bar_history_config(FIVE_MINUTE_POLICY),
+            benchmark_config=load_session_benchmark_config(BENCHMARK_POLICY),
             source_factory=lambda: pytest.fail("mismatch must not call Alpaca"),
         )
 
@@ -467,12 +464,12 @@ def test_completed_output_rejects_different_policy_bytes_or_config(
             five_minute_policy_path=changed_policy,
             benchmark_policy_path=BENCHMARK_POLICY,
             output_directory=output,
-            five_minute_config=load_intraday_history_config(FIVE_MINUTE_POLICY),
-            benchmark_config=load_selected_session_benchmark_config(BENCHMARK_POLICY),
+            five_minute_config=load_regular_bar_history_config(FIVE_MINUTE_POLICY),
+            benchmark_config=load_session_benchmark_config(BENCHMARK_POLICY),
             source_factory=lambda: pytest.fail("mismatch must not call Alpaca"),
         )
 
-    changed_config = load_intraday_history_config(FIVE_MINUTE_POLICY).model_copy(
+    changed_config = load_regular_bar_history_config(FIVE_MINUTE_POLICY).model_copy(
         update={"collection_retries": 3}
     )
     with pytest.raises(DataReadinessError, match="differs from its policy file"):
@@ -483,7 +480,7 @@ def test_completed_output_rejects_different_policy_bytes_or_config(
             benchmark_policy_path=BENCHMARK_POLICY,
             output_directory=output,
             five_minute_config=changed_config,
-            benchmark_config=load_selected_session_benchmark_config(BENCHMARK_POLICY),
+            benchmark_config=load_session_benchmark_config(BENCHMARK_POLICY),
             source_factory=lambda: pytest.fail("mismatch must not call Alpaca"),
         )
 
@@ -506,8 +503,8 @@ def test_unit_limited_parent_run_resumes_without_duplicate_requests(
         five_minute_policy_path=FIVE_MINUTE_POLICY,
         benchmark_policy_path=BENCHMARK_POLICY,
         output_directory=output,
-        five_minute_config=load_intraday_history_config(FIVE_MINUTE_POLICY),
-        benchmark_config=load_selected_session_benchmark_config(BENCHMARK_POLICY),
+        five_minute_config=load_regular_bar_history_config(FIVE_MINUTE_POLICY),
+        benchmark_config=load_session_benchmark_config(BENCHMARK_POLICY),
         source_factory=lambda: _ExactPageSource(calls, full_grid=True),
         now_utc=COLLECTION_TIME,
     )
@@ -534,8 +531,8 @@ def test_unit_limit_is_shared_across_stock_and_benchmark_children(
         five_minute_policy_path=FIVE_MINUTE_POLICY,
         benchmark_policy_path=BENCHMARK_POLICY,
         output_directory=output,
-        five_minute_config=load_intraday_history_config(FIVE_MINUTE_POLICY),
-        benchmark_config=load_selected_session_benchmark_config(BENCHMARK_POLICY),
+        five_minute_config=load_regular_bar_history_config(FIVE_MINUTE_POLICY),
+        benchmark_config=load_session_benchmark_config(BENCHMARK_POLICY),
         source_factory=lambda: _ExactPageSource(calls, full_grid=True),
         maximum_units_this_run=1,
         now_utc=COLLECTION_TIME,
@@ -550,8 +547,8 @@ def test_unit_limit_is_shared_across_stock_and_benchmark_children(
         five_minute_policy_path=FIVE_MINUTE_POLICY,
         benchmark_policy_path=BENCHMARK_POLICY,
         output_directory=output,
-        five_minute_config=load_intraday_history_config(FIVE_MINUTE_POLICY),
-        benchmark_config=load_selected_session_benchmark_config(BENCHMARK_POLICY),
+        five_minute_config=load_regular_bar_history_config(FIVE_MINUTE_POLICY),
+        benchmark_config=load_session_benchmark_config(BENCHMARK_POLICY),
         source_factory=lambda: _ExactPageSource(calls, full_grid=True),
         maximum_units_this_run=1,
         now_utc=COLLECTION_TIME,
@@ -695,8 +692,8 @@ def _publish_authority(
         five_minute_policy_path=FIVE_MINUTE_POLICY,
         benchmark_policy_path=BENCHMARK_POLICY,
         output_directory=output,
-        five_minute_config=load_intraday_history_config(FIVE_MINUTE_POLICY),
-        benchmark_config=load_selected_session_benchmark_config(BENCHMARK_POLICY),
+        five_minute_config=load_regular_bar_history_config(FIVE_MINUTE_POLICY),
+        benchmark_config=load_session_benchmark_config(BENCHMARK_POLICY),
         source_factory=source_factory,
         maximum_units_this_run=maximum_units_this_run,
         now_utc=COLLECTION_TIME,

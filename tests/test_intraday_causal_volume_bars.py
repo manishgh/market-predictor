@@ -11,11 +11,11 @@ import pandas.testing as pdt
 import pytest
 
 from market_predictor.core.errors import DataReadinessError
+from market_predictor.evidence.hashing import json_sha256
 from market_predictor.intraday.datasets.bar_dataset import (
     _source_file_sha256,
     _transformation_identity,
 )
-from market_predictor.intraday.datasets.history import json_sha256
 from market_predictor.intraday.datasets.volume_bars import (
     AUDIT_COLUMNS,
     VOLUME_BAR_COLUMNS,

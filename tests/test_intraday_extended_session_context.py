@@ -9,27 +9,21 @@ import pytest
 
 import market_predictor.intraday.datasets.extended_session_context as context_module
 from market_predictor.canonical.store import file_sha256
+from market_predictor.collection.alpaca_bars.contracts import REGULAR_BAR_HISTORY_PLAN_SCHEMA, load_regular_bar_history_config
+from market_predictor.collection.alpaca_bars.plan import REGULAR_BAR_PLAN_AUTHORITY_SCHEMA
+from market_predictor.collection.alpaca_bars.transport import HISTORY_AUTHORITY_SCHEMA, HISTORY_COLLECTION_SCHEMA
 from market_predictor.core.errors import DataReadinessError
+from market_predictor.evidence.hashing import json_sha256
 from market_predictor.intraday.contracts.history_collection import (
     EXTENDED_CONTEXT_PLAN_SCHEMA,
-    INTRADAY_HISTORY_PLAN_SCHEMA,
     POSTMARKET_SEGMENT,
     PREMARKET_SEGMENT,
     load_extended_session_context_config,
-    load_intraday_history_config,
 )
 from market_predictor.intraday.datasets.extended_session_context import (
     build_extended_session_context_plan,
 )
-from market_predictor.intraday.datasets.history import (
-    EXTENDED_CONTEXT_PLAN_AUTHORITY_SCHEMA,
-    PLAN_AUTHORITY_SCHEMA,
-    json_sha256,
-)
-from market_predictor.intraday.datasets.history_collection import (
-    HISTORY_AUTHORITY_SCHEMA,
-    HISTORY_COLLECTION_SCHEMA,
-)
+from market_predictor.intraday.datasets.history import EXTENDED_CONTEXT_PLAN_AUTHORITY_SCHEMA
 
 CONTEXT_POLICY = Path("configs/edge_rebuild_extended_session_context.toml")
 HISTORY_POLICY = Path("configs/edge_rebuild_intraday_history.toml")
@@ -56,7 +50,7 @@ def test_extended_session_context_has_one_canonical_owner() -> None:
 def test_frozen_er1a_policy_identity_is_unchanged() -> None:
     """The published ER1A plan records this hash; refactors may not move it."""
 
-    config = load_intraday_history_config(HISTORY_POLICY)
+    config = load_regular_bar_history_config(HISTORY_POLICY)
 
     assert config.sha256() == FROZEN_ER1A_POLICY_SHA256
 
@@ -395,7 +389,7 @@ def _write_regular_layer(
     plan_dir = root / f"regular_plan{suffix}"
     collection_dir = root / f"regular_collection{suffix}"
     request: dict[str, Any] = {
-        "schema": INTRADAY_HISTORY_PLAN_SCHEMA,
+        "schema": REGULAR_BAR_HISTORY_PLAN_SCHEMA,
         "variant": suffix,
         "membership": {
             "path": str(root / MEMBERSHIPS),
@@ -413,9 +407,9 @@ def _write_regular_layer(
         encoding="utf-8",
     )
     manifest = {
-        "schema": INTRADAY_HISTORY_PLAN_SCHEMA,
+        "schema": REGULAR_BAR_HISTORY_PLAN_SCHEMA,
         "plan_fingerprint": fingerprint,
-        "policy_sha256": load_intraday_history_config(HISTORY_POLICY).sha256(),
+        "policy_sha256": load_regular_bar_history_config(HISTORY_POLICY).sha256(),
         "summary": {
             "first_history_session": first_session,
             "last_history_session": LAST_SESSION,
@@ -437,7 +431,7 @@ def _write_regular_layer(
     (plan_dir / "_authority.json").write_text(
         json.dumps(
             {
-                "schema": PLAN_AUTHORITY_SCHEMA,
+                "schema": REGULAR_BAR_PLAN_AUTHORITY_SCHEMA,
                 "state": "complete",
                 "artifact": "_manifest.json",
                 "artifact_sha256": file_sha256(plan_dir / "_manifest.json"),

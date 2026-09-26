@@ -14,6 +14,7 @@ PRODUCTION_PACKAGES = (
     "sources",
     "evidence",
     "universe",
+    "collection",
     "catalysts",
     "modeling",
     "swing",
@@ -45,6 +46,16 @@ UNIVERSE_ALLOWED_DEPENDENCIES = (
     "market_predictor.locking",
     "market_predictor.resources",
 )
+COLLECTION_ALLOWED_DEPENDENCIES = (
+    "market_predictor.canonical",
+    "market_predictor.collection",
+    "market_predictor.core",
+    "market_predictor.evidence",
+    "market_predictor.locking",
+    "market_predictor.resources",
+    "market_predictor.sources",
+    "market_predictor.universe",
+)
 SOURCES_ALLOWED_DEPENDENCIES = (
     "market_predictor.config",
     "market_predictor.core",
@@ -64,6 +75,9 @@ CATALYSTS_ALLOWED_DEPENDENCIES = (
     "market_predictor.universe",
 )
 REMOVED_PRODUCTION_MODULES = (
+    "market_predictor.intraday.datasets.history_collection",
+    "market_predictor.intraday.datasets.prospective_sip_session",
+    "market_predictor.intraday.datasets.prospective_broker_actions",
     "market_predictor.intraday_confirmation",
     "market_predictor.intraday_enrichment",
     "market_predictor.intraday_catalysts",
@@ -413,6 +427,20 @@ def test_universe_package_uses_only_approved_dependency_layers() -> None:
             violations.append(f"{relative_path}:{node.lineno}: {imported_name}")
 
     assert not violations, "Universe dependency violations:\n" + "\n".join(sorted(violations))
+
+
+def test_collection_package_uses_only_approved_dependency_layers() -> None:
+    violations: list[str] = []
+    for path in (PACKAGE_ROOT / "collection").rglob("*.py"):
+        for node, imported_name in _module_imports(path):
+            if not imported_name.startswith("market_predictor."):
+                continue
+            if _matches_any_dependency(imported_name, COLLECTION_ALLOWED_DEPENDENCIES):
+                continue
+            relative_path = path.relative_to(PACKAGE_ROOT.parent)
+            violations.append(f"{relative_path}:{node.lineno}: {imported_name}")
+
+    assert not violations, "Collection dependency violations:\n" + "\n".join(sorted(violations))
 
 
 def test_source_package_uses_only_approved_dependency_layers() -> None:

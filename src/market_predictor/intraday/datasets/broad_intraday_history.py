@@ -18,21 +18,24 @@ import pyarrow.compute as pc
 import pyarrow.parquet as pq
 
 from market_predictor.canonical.store import file_sha256
+from market_predictor.collection.alpaca_bars.plan import (
+    chunk_request_symbols,
+    file_record,
+    load_complete_bar_plan,
+    request_unit_record,
+    stable_identity_hash,
+    write_plan_json,
+)
 from market_predictor.core.errors import DataReadinessError
+from market_predictor.evidence.hashing import json_sha256
 from market_predictor.intraday.contracts.history_collection import (
     BROAD_INTRADAY_HISTORY_PLAN_SCHEMA,
     BroadIntradayHistoryConfig,
 )
 from market_predictor.intraday.datasets.history import (
+    ACCEPTED_PLAN_SCHEMAS,
     BROAD_INTRADAY_HISTORY_PLAN_AUTHORITY_SCHEMA,
-    chunk_request_symbols,
     expected_five_minute_bars,
-    file_record,
-    json_sha256,
-    load_complete_intraday_history_plan,
-    request_unit_record,
-    stable_identity_hash,
-    write_plan_json,
 )
 from market_predictor.resources import (
     assert_memory_budget,
@@ -214,7 +217,7 @@ def build_broad_intraday_history_plan(
 def load_complete_broad_intraday_history_plan(directory: Path) -> dict[str, Any]:
     """Verify the generic transport authority and broad-plan restrictions."""
 
-    manifest = load_complete_intraday_history_plan(directory)
+    manifest = load_complete_bar_plan(directory, accepted_schemas=ACCEPTED_PLAN_SCHEMAS)
     acquisition = manifest.get("acquisition")
     if (
         manifest.get("schema") != BROAD_INTRADAY_HISTORY_PLAN_SCHEMA

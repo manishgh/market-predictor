@@ -11,7 +11,6 @@ from typing import Any
 from urllib.parse import urlencode
 
 import pandas as pd
-import pyarrow.parquet as pq
 import pytest
 
 from market_predictor.canonical.audits import (
@@ -19,15 +18,8 @@ from market_predictor.canonical.audits import (
     CanonicalAuditReport,
 )
 from market_predictor.canonical.store import file_sha256, write_canonical_artifact
-from market_predictor.core.errors import DataReadinessError
-from market_predictor.intraday.datasets import bar_dataset
-from market_predictor.intraday.datasets import prospective_broker_actions as prospective
-from market_predictor.intraday.datasets.bar_dataset import (
-    _arrow_schema_record,
-    _transformation_identity,
-)
-from market_predictor.intraday.datasets.history import json_sha256
-from market_predictor.intraday.datasets.prospective_broker_actions import (
+from market_predictor.collection import prospective_broker_actions as prospective
+from market_predictor.collection.prospective_broker_actions import (
     _build_source_collections,
     _require_membership_authority_progression,
     _require_membership_observed_before_poll,
@@ -36,9 +28,9 @@ from market_predictor.intraday.datasets.prospective_broker_actions import (
     load_prospective_broker_action_poll,
     publish_prospective_broker_action_generation,
 )
-from market_predictor.intraday.datasets.prospective_broker_actions import (
-    collect_prospective_broker_action_poll as _collect_prospective_poll,
-)
+from market_predictor.collection.prospective_broker_actions import collect_prospective_broker_action_poll as _collect_prospective_poll
+from market_predictor.core.errors import DataReadinessError
+from market_predictor.evidence.hashing import json_sha256
 from market_predictor.sources.alpaca import AlpacaAssetSnapshot, AlpacaNewsPage
 from market_predictor.universe.sp500.historical_security_namespace import (
     verify_historical_security_namespace,
@@ -51,7 +43,7 @@ OBSERVED_AT = datetime(2026, 8, 15, 12, 0, tzinfo=UTC)
 
 
 def test_prospective_broker_action_evidence_has_one_canonical_owner() -> None:
-    owner = "market_predictor.intraday.datasets.prospective_broker_actions"
+    owner = "market_predictor.collection.prospective_broker_actions"
 
     assert prospective.ProspectivePoll.__module__ == owner
     assert prospective.ProspectiveGeneration.__module__ == owner
@@ -61,12 +53,11 @@ def test_prospective_broker_action_evidence_has_one_canonical_owner() -> None:
     assert prospective.load_prospective_broker_action_generation.__module__ == owner
 
 
-def test_historical_namespace_replay_does_not_authorize_stale_training_rows(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_the_namespace_needs_only_the_a43_metadata_chain(tmp_path: Path) -> None:
+    """Bars never define the namespace: a dataset holding only its self-hashed metadata anchors a poll."""
     membership = _membership_authority(tmp_path)
     dataset = _a43_dataset(membership)
+    assert sorted(path.name for path in dataset.iterdir()) == ["_authority.json", "_manifest.json", "_request.json"]
     poll = tmp_path / "poll"
     collect_prospective_broker_action_poll(
         membership_authority_directory=membership,
@@ -77,15 +68,6 @@ def test_historical_namespace_replay_does_not_authorize_stale_training_rows(
         observed_at_utc=OBSERVED_AT,
         clock=_Clock(),
     )
-    original = _transformation_identity()
-    monkeypatch.setattr(
-        bar_dataset,
-        "_transformation_identity",
-        lambda: {**original, "sha256": "f" * 64},
-    )
-
-    with pytest.raises(DataReadinessError, match="matching complete authority"):
-        bar_dataset.load_complete_intraday_bar_dataset(dataset)
     assert load_prospective_broker_action_poll(poll).directory == poll.resolve()
 
 
@@ -2094,7 +2076,7 @@ def _a43_dataset(membership: Path) -> Path:
         "strategy_contract_file_sha256": "c" * 64,
         "strategy_contract_sha256": "d" * 64,
     }
-    transformation = _transformation_identity()
+    transformation = {"name": "recorded_intraday_bar_transformation", "sha256": "e" * 64}
     request_payload = {
         "schema": "edge_rebuild.intraday_bar_dataset.v1",
         "benchmark_collection_directory": str(membership.resolve()),
@@ -2128,40 +2110,22 @@ def _a43_dataset(membership: Path) -> Path:
         root / "_request.json",
         {**request_payload, "request_sha256": request_sha256},
     )
-    unit_root = root / "sessions" / "session_date_et=2026-08-14"
-    unit_root.mkdir(parents=True)
-    rows_path = unit_root / "rows.parquet"
-    pd.DataFrame(
-        {
-            "session_date_et": pd.Series(dtype="string"),
-            "ticker": pd.Series(dtype="string"),
-            "decision_time_utc": pd.Series(dtype="datetime64[ns, UTC]"),
-            "dataset_eligible": pd.Series(dtype="bool"),
-        }
-    ).to_parquet(rows_path, index=False)
-    _write_json(unit_root / "audit.json", {"status": "pass"})
-    parquet = pq.ParquetFile(rows_path)
-    parquet_schema = _arrow_schema_record(parquet.schema_arrow)
-    session_request_sha256 = json_sha256(
-        {"session_date_et": "2026-08-14", "request_sha256": request_sha256}
-    )
-    unit = {
+    # Metadata only: the namespace reads the recorded unit inventory, never the unit files.
+    units: list[dict[str, object]] = [{
         "schema": "edge_rebuild.intraday_bar_dataset_session_unit.v1",
         "state": "complete",
         "session_date_et": "2026-08-14",
         "request_sha256": request_sha256,
         "transformation_sha256": transformation["sha256"],
-        "session_request_sha256": session_request_sha256,
+        "session_request_sha256": json_sha256({"session_date_et": "2026-08-14", "request_sha256": request_sha256}),
         "rows": 0,
         "dataset_eligible_rows": 0,
         "ticker_count": 0,
-        "rows_sha256": file_sha256(rows_path),
-        "audit_sha256": file_sha256(unit_root / "audit.json"),
-        "parquet_schema": parquet_schema,
-        "parquet_schema_sha256": json_sha256(parquet_schema),
-    }
-    _write_json(unit_root / "_unit.json", unit)
-    units = [unit]
+        "rows_sha256": "0" * 64,
+        "audit_sha256": "1" * 64,
+        "parquet_schema": [],
+        "parquet_schema_sha256": json_sha256([]),
+    }]
     manifest = {
         **{**request_payload, "request_sha256": request_sha256},
         "state": "complete",

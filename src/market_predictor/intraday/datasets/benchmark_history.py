@@ -12,21 +12,17 @@ import exchange_calendars as xcals
 import pandas as pd
 
 from market_predictor.canonical.store import file_sha256
-from market_predictor.core.errors import DataReadinessError
-from market_predictor.intraday.contracts.history_collection import (
-    REGULAR_SEGMENT,
-    SELECTED_SESSION_BENCHMARK_PLAN_SCHEMA,
-    SelectedSessionBenchmarkConfig,
-)
-from market_predictor.intraday.datasets.history import (
-    SELECTED_SESSION_BENCHMARK_PLAN_AUTHORITY_SCHEMA,
+from market_predictor.collection.alpaca_bars.contracts import REGULAR_SEGMENT, SESSION_BENCHMARK_PLAN_SCHEMA, SessionBenchmarkConfig
+from market_predictor.collection.alpaca_bars.plan import (
+    SESSION_BENCHMARK_PLAN_AUTHORITY_SCHEMA,
     chunk_request_symbols,
     file_record,
-    json_sha256,
     request_unit_record,
     stable_identity_hash,
     write_plan_json,
 )
+from market_predictor.core.errors import DataReadinessError
+from market_predictor.evidence.hashing import json_sha256
 from market_predictor.intraday.datasets.selected_session_history import (
     verify_selected_stock_sessions,
 )
@@ -43,7 +39,7 @@ def build_selected_session_benchmark_plan(
     selection_directory: Path,
     policy_path: Path,
     output_directory: Path,
-    config: SelectedSessionBenchmarkConfig,
+    config: SessionBenchmarkConfig,
     strategy_contract: StrategyContract,
     strategy_contract_path: Path,
 ) -> dict[str, Any]:
@@ -66,7 +62,7 @@ def build_selected_session_benchmark_plan(
             "benchmark plan requires selection under the active intraday contract"
         )
     request: dict[str, Any] = {
-        "schema": SELECTED_SESSION_BENCHMARK_PLAN_SCHEMA,
+        "schema": SESSION_BENCHMARK_PLAN_SCHEMA,
         "policy_path": str(policy_path),
         "policy_file_sha256": file_sha256(policy_path),
         "policy_sha256": config.sha256(),
@@ -176,7 +172,7 @@ def build_selected_session_benchmark_plan(
         write_plan_json(temporary / "_request.json", request)
         files.append(file_record(temporary / "_request.json", temporary, 1))
         manifest: dict[str, Any] = {
-            "schema": SELECTED_SESSION_BENCHMARK_PLAN_SCHEMA,
+            "schema": SESSION_BENCHMARK_PLAN_SCHEMA,
             "created_at_utc": datetime.now(UTC).isoformat(),
             "plan_fingerprint": plan_fingerprint,
             "policy_sha256": config.sha256(),
@@ -214,7 +210,7 @@ def build_selected_session_benchmark_plan(
         write_plan_json(
             temporary / "_authority.json",
             {
-                "schema": SELECTED_SESSION_BENCHMARK_PLAN_AUTHORITY_SCHEMA,
+                "schema": SESSION_BENCHMARK_PLAN_AUTHORITY_SCHEMA,
                 "state": "complete",
                 "artifact": "_manifest.json",
                 "artifact_sha256": file_sha256(temporary / "_manifest.json"),
@@ -229,7 +225,7 @@ def build_selected_session_benchmark_plan(
         raise
 
 
-def _assert_memory(config: SelectedSessionBenchmarkConfig, stage: str) -> None:
+def _assert_memory(config: SessionBenchmarkConfig, stage: str) -> None:
     assert_memory_budget(
         hard_budget_gib=config.maximum_process_memory_gib,
         headroom_gib=config.memory_guard_headroom_gib,

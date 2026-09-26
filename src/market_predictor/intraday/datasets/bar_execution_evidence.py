@@ -13,6 +13,7 @@ from typing import Any, Final, cast
 
 from market_predictor.canonical.store import file_sha256
 from market_predictor.core.errors import DataReadinessError
+from market_predictor.evidence.hashing import json_sha256
 from market_predictor.intraday.contracts.lineage import (
     DEFAULT_INTRADAY_CONTRACT_LINEAGE_PATH,
 )
@@ -22,7 +23,6 @@ from market_predictor.intraday.datasets.bar_dataset import (
     load_complete_intraday_bar_dataset,
     publish_intraday_bar_dataset,
 )
-from market_predictor.intraday.datasets.history import json_sha256
 from market_predictor.modeling.strategy_contract import StrategyContract
 from market_predictor.resources import memory_audit
 

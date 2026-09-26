@@ -23,30 +23,30 @@ import exchange_calendars as xcals
 import pandas as pd
 
 from market_predictor.canonical.store import file_sha256
+from market_predictor.collection.alpaca_bars.contracts import REGULAR_BAR_HISTORY_PLAN_SCHEMA
+from market_predictor.collection.alpaca_bars.plan import (
+    chunk_request_symbols,
+    file_record,
+    load_complete_bar_plan,
+    load_plan_json,
+    request_unit_record,
+    stable_identity_hash,
+    write_plan_json,
+)
+from market_predictor.collection.alpaca_bars.transport import load_complete_bar_collection
 from market_predictor.core.errors import DataReadinessError
+from market_predictor.evidence.hashing import json_sha256
 from market_predictor.intraday.contracts.history_collection import (
     EXTENDED_CONTEXT_PLAN_SCHEMA,
-    INTRADAY_HISTORY_PLAN_SCHEMA,
     POSTMARKET_SEGMENT,
     PREMARKET_SEGMENT,
     ExtendedSessionContextConfig,
 )
 from market_predictor.intraday.datasets.history import (
     EXTENDED_CONTEXT_PLAN_AUTHORITY_SCHEMA,
-    chunk_request_symbols,
     expected_five_minute_bars,
-    file_record,
     iter_point_in_time_sessions,
-    json_sha256,
-    load_complete_intraday_history_plan,
-    load_plan_json,
-    request_unit_record,
-    stable_identity_hash,
     verify_point_in_time_memberships,
-    write_plan_json,
-)
-from market_predictor.intraday.datasets.history_collection import (
-    load_complete_intraday_history_collection,
 )
 from market_predictor.resources import (
     assert_memory_budget,
@@ -262,15 +262,15 @@ def _verify_regular_session_layer(
 ) -> dict[str, object]:
     """Bind ER1B to a frozen ER1A plan and a completed ER1A transport."""
 
-    plan = load_complete_intraday_history_plan(
+    plan = load_complete_bar_plan(
         plan_directory,
         accepted_schemas={
-            INTRADAY_HISTORY_PLAN_SCHEMA: (
+            REGULAR_BAR_HISTORY_PLAN_SCHEMA: (
                 "edge_rebuild.intraday_history_plan_authority.v1"
             )
         },
     )
-    collection = load_complete_intraday_history_collection(collection_directory)
+    collection = load_complete_bar_collection(collection_directory)
     plan_request = load_plan_json(plan_directory / "_request.json")
     fingerprint = str(plan["plan_fingerprint"])
     if collection.get("plan_fingerprint") != fingerprint:

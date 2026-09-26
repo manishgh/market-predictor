@@ -1,20 +1,29 @@
-"""Frozen ER1A/ER1B historical intraday acquisition contracts."""
+"""Intraday-research acquisition contracts, retired with the intraday package.
+
+The retained Alpaca bar contracts live in `market_predictor.collection.alpaca_bars.contracts`.
+"""
 from __future__ import annotations
 
-import hashlib
-import json
 import tomllib
 from collections.abc import Callable
 from datetime import date, time
 from pathlib import Path
-from typing import Self, TypeVar
+from typing import Self
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import model_validator
 
+from market_predictor.collection.alpaca_bars.contracts import (
+    REGULAR_BAR_HISTORY_SCHEMA,
+    REGULAR_SEGMENT,
+    SESSION_BENCHMARK_SCHEMA,
+    AlpacaTransportConfig,
+    PointInTimeUniverseConfig,
+    load_regular_bar_history_config,
+    load_session_benchmark_config,
+    load_transport_config,
+)
 from market_predictor.core.errors import DataReadinessError
 
-INTRADAY_HISTORY_SCHEMA = "edge_rebuild.intraday_history.v1"
-INTRADAY_HISTORY_PLAN_SCHEMA = "edge_rebuild.intraday_history_plan.v1"
 EXTENDED_CONTEXT_SCHEMA = "edge_rebuild.extended_session_context.v1"
 EXTENDED_CONTEXT_PLAN_SCHEMA = "edge_rebuild.extended_session_context_plan.v1"
 SELECTED_SESSION_HISTORY_SCHEMA = "edge_rebuild.selected_session_history.v1"
@@ -25,129 +34,13 @@ SELECTED_SESSION_ONE_MINUTE_SCHEMA = (
 SELECTED_SESSION_ONE_MINUTE_PLAN_SCHEMA = (
     "edge_rebuild.selected_session_one_minute_plan.v1"
 )
-SELECTED_SESSION_BENCHMARK_SCHEMA = (
-    "edge_rebuild.selected_session_benchmark_one_minute.v1"
-)
-SELECTED_SESSION_BENCHMARK_PLAN_SCHEMA = (
-    "edge_rebuild.selected_session_benchmark_one_minute_plan.v1"
-)
 BROAD_INTRADAY_HISTORY_SCHEMA = "edge_rebuild.broad_intraday_history.v1"
 BROAD_INTRADAY_HISTORY_PLAN_SCHEMA = (
     "edge_rebuild.broad_intraday_history_plan.v1"
 )
-REGULAR_SEGMENT = "regular"
 PREMARKET_SEGMENT = "premarket"
 POSTMARKET_SEGMENT = "postmarket"
 EXTENDED_SEGMENTS = (PREMARKET_SEGMENT, POSTMARKET_SEGMENT)
-
-
-class FrozenModel(BaseModel):
-    model_config = ConfigDict(extra="forbid", frozen=True)
-
-
-class IntradayTransportConfig(FrozenModel):
-    """Provider identity and transport limits shared by every ER1 collection."""
-
-    schema_version: str
-    provider: str
-    calendar: str
-    required_price_feed: str
-    required_adjustment: str
-    maximum_expected_rows_per_unit: int = Field(ge=1_000, le=10_000)
-    maximum_symbols_per_unit: int = Field(ge=1, le=50)
-    collection_workers: int = Field(ge=1, le=4)
-    collection_retries: int = Field(ge=1, le=10)
-    request_timeout_seconds: float = Field(ge=10, le=300)
-    maximum_pages_per_unit: int = Field(ge=1, le=10)
-    maximum_failures_before_stop: int = Field(ge=1, le=20)
-    intraday_finalization_delay_seconds: int = Field(ge=0, le=300)
-    maximum_process_memory_gib: float = Field(ge=1, le=5)
-    memory_guard_headroom_gib: float = Field(ge=0.5, le=2)
-
-    @model_validator(mode="after")
-    def validate_transport_contract(self) -> Self:
-        if self.provider.strip().lower() != "alpaca":
-            raise ValueError("ER1 provider must be Alpaca")
-        if self.calendar != "XNYS":
-            raise ValueError("ER1 calendar must be XNYS")
-        if self.required_price_feed.strip().lower() != "sip":
-            raise ValueError("ER1 volume features require SIP")
-        if self.required_adjustment.strip().lower() != "all":
-            raise ValueError("ER1 adjustment identity must be all")
-        if self.maximum_pages_per_unit != 4:
-            raise ValueError("ER1 page budget must remain four")
-        if self.maximum_symbols_per_unit != 50:
-            raise ValueError("ER1 Alpaca units must remain capped at 50 symbols")
-        if self.maximum_failures_before_stop != 5:
-            raise ValueError("ER1 failure circuit must remain five")
-        if self.intraday_finalization_delay_seconds != 60:
-            raise ValueError("ER1 finalization delay must remain 60 seconds")
-        if self.memory_guard_headroom_gib >= self.maximum_process_memory_gib:
-            raise ValueError("memory headroom must be below the hard budget")
-        return self
-
-    def sha256(self) -> str:
-        payload = json.dumps(
-            self.model_dump(mode="json"),
-            sort_keys=True,
-            separators=(",", ":"),
-        ).encode()
-        return hashlib.sha256(payload).hexdigest()
-
-
-class PointInTimeUniverseConfig(IntradayTransportConfig):
-    """Transport plus the cross-section a whole-universe plan enumerates.
-
-    A plan that walks the point-in-time universe on every session needs a floor
-    on how many securities that cross-section may contain, and needs benchmarks
-    added to each request. A plan that requests an already-selected handful of
-    stock-sessions has neither obligation, so both live here rather than on the
-    shared transport contract.
-    """
-
-    minimum_session_cross_section: int = Field(ge=300)
-    benchmark_tickers: tuple[str, ...]
-
-    @model_validator(mode="after")
-    def validate_universe_contract(self) -> Self:
-        normalized = self.normalized_benchmarks()
-        if (
-            "SPY" not in normalized
-            or "QQQ" not in normalized
-            or len(normalized) != len(set(normalized))
-            or any(not ticker for ticker in normalized)
-        ):
-            raise ValueError(
-                "benchmark tickers must be unique and include SPY and QQQ"
-            )
-        return self
-
-    def normalized_benchmarks(self) -> tuple[str, ...]:
-        return tuple(
-            ticker.strip().upper() for ticker in self.benchmark_tickers
-        )
-
-
-class IntradayHistoryConfig(PointInTimeUniverseConfig):
-    """The frozen ER1A regular-session history contract."""
-
-    feature_timeframe: str
-    exact_path_timeframe: str
-    target_usable_sessions: int = Field(ge=1_000)
-    minimum_usable_sessions: int = Field(ge=750)
-    feature_warmup_sessions: int = Field(ge=20, le=100)
-
-    @model_validator(mode="after")
-    def validate_history_contract(self) -> Self:
-        if self.schema_version != INTRADAY_HISTORY_SCHEMA:
-            raise ValueError("unsupported ER1A intraday-history schema")
-        if self.feature_timeframe != "5Min":
-            raise ValueError("ER1A feature discovery must use five-minute bars")
-        if self.exact_path_timeframe != "1Min":
-            raise ValueError("ER1A exact labels must use one-minute bars")
-        if self.minimum_usable_sessions > self.target_usable_sessions:
-            raise ValueError("minimum sessions cannot exceed target sessions")
-        return self
 
 
 class ExtendedSessionContextConfig(PointInTimeUniverseConfig):
@@ -184,7 +77,7 @@ class ExtendedSessionContextConfig(PointInTimeUniverseConfig):
         return _exchange_clock_time(self.postmarket_end_et, "postmarket_end_et")
 
 
-class SelectedSessionHistoryConfig(IntradayTransportConfig):
+class SelectedSessionHistoryConfig(AlpacaTransportConfig):
     """The frozen contract for bars covering only selected stock-sessions.
 
     The two whole-universe layers request every point-in-time member on every
@@ -214,7 +107,7 @@ class SelectedSessionHistoryConfig(IntradayTransportConfig):
         return self
 
 
-class SelectedSessionOneMinuteConfig(IntradayTransportConfig):
+class SelectedSessionOneMinuteConfig(AlpacaTransportConfig):
     """Exact-path and volume-bar input for the screened stock-sessions."""
 
     history_timeframe: str
@@ -233,51 +126,7 @@ class SelectedSessionOneMinuteConfig(IntradayTransportConfig):
         return self
 
 
-class SelectedSessionBenchmarkConfig(IntradayTransportConfig):
-    """One-minute market and sector paths for selected decision sessions."""
-
-    history_timeframe: str
-    session_segments: tuple[str, ...]
-    benchmark_tickers: tuple[str, ...]
-
-    @model_validator(mode="after")
-    def validate_benchmark_contract(self) -> Self:
-        if self.schema_version != SELECTED_SESSION_BENCHMARK_SCHEMA:
-            raise ValueError("unsupported selected-session benchmark schema")
-        if self.history_timeframe != "1Min":
-            raise ValueError("selected-session benchmarks require one-minute bars")
-        if tuple(self.session_segments) != (REGULAR_SEGMENT,):
-            raise ValueError(
-                "selected-session benchmarks cover exactly the regular session"
-            )
-        normalized = self.normalized_benchmarks()
-        required = {
-            "SPY",
-            "QQQ",
-            "XLB",
-            "XLC",
-            "XLE",
-            "XLF",
-            "XLI",
-            "XLK",
-            "XLP",
-            "XLRE",
-            "XLU",
-            "XLV",
-            "XLY",
-        }
-        if set(normalized) != required or len(normalized) != len(set(normalized)):
-            raise ValueError(
-                "benchmark tickers must contain SPY, QQQ, and all eleven "
-                "Select Sector SPDR funds exactly once"
-            )
-        return self
-
-    def normalized_benchmarks(self) -> tuple[str, ...]:
-        return tuple(ticker.strip().upper() for ticker in self.benchmark_tickers)
-
-
-class BroadIntradayHistoryConfig(IntradayTransportConfig):
+class BroadIntradayHistoryConfig(AlpacaTransportConfig):
     """Bounded five-minute acquisition policy for the broad research universe."""
 
     history_timeframe: str
@@ -322,9 +171,6 @@ class BroadIntradayHistoryConfig(IntradayTransportConfig):
         return tuple(value.strip().upper() for value in self.explicit_fund_exclusions)
 
 
-ConfigT = TypeVar("ConfigT", bound=IntradayTransportConfig)
-
-
 def _exchange_clock_time(value: str, field: str) -> time:
     try:
         hour, minute = (int(part) for part in value.strip().split(":"))
@@ -333,27 +179,10 @@ def _exchange_clock_time(value: str, field: str) -> time:
         raise ValueError(f"{field} must be an exact HH:MM exchange time") from exc
 
 
-def _load_config(path: Path, model: type[ConfigT], label: str) -> ConfigT:
-    try:
-        raw = tomllib.loads(path.read_text(encoding="utf-8"))
-    except (OSError, tomllib.TOMLDecodeError) as exc:
-        raise DataReadinessError(
-            f"{label} policy is unreadable: {path}"
-        ) from exc
-    try:
-        return model.model_validate(raw)
-    except ValueError as exc:
-        raise DataReadinessError(f"{label} policy is invalid: {path}") from exc
-
-
-def load_intraday_history_config(path: Path) -> IntradayHistoryConfig:
-    return _load_config(path, IntradayHistoryConfig, "ER1A intraday-history")
-
-
 def load_extended_session_context_config(
     path: Path,
 ) -> ExtendedSessionContextConfig:
-    return _load_config(
+    return load_transport_config(
         path,
         ExtendedSessionContextConfig,
         "ER1B extended-session context",
@@ -363,7 +192,7 @@ def load_extended_session_context_config(
 def load_selected_session_history_config(
     path: Path,
 ) -> SelectedSessionHistoryConfig:
-    return _load_config(
+    return load_transport_config(
         path,
         SelectedSessionHistoryConfig,
         "selected-session history",
@@ -373,42 +202,32 @@ def load_selected_session_history_config(
 def load_selected_session_one_minute_config(
     path: Path,
 ) -> SelectedSessionOneMinuteConfig:
-    return _load_config(
+    return load_transport_config(
         path,
         SelectedSessionOneMinuteConfig,
         "selected-session one-minute history",
     )
 
 
-def load_selected_session_benchmark_config(
-    path: Path,
-) -> SelectedSessionBenchmarkConfig:
-    return _load_config(
-        path,
-        SelectedSessionBenchmarkConfig,
-        "selected-session benchmark one-minute history",
-    )
-
-
 def load_broad_intraday_history_config(path: Path) -> BroadIntradayHistoryConfig:
-    return _load_config(
+    return load_transport_config(
         path,
         BroadIntradayHistoryConfig,
         "broad intraday history",
     )
 
 
-_TRANSPORT_CONFIG_LOADERS: dict[str, Callable[[Path], IntradayTransportConfig]] = {
-    INTRADAY_HISTORY_SCHEMA: load_intraday_history_config,
+_TRANSPORT_CONFIG_LOADERS: dict[str, Callable[[Path], AlpacaTransportConfig]] = {
+    REGULAR_BAR_HISTORY_SCHEMA: load_regular_bar_history_config,
     EXTENDED_CONTEXT_SCHEMA: load_extended_session_context_config,
     SELECTED_SESSION_HISTORY_SCHEMA: load_selected_session_history_config,
     SELECTED_SESSION_ONE_MINUTE_SCHEMA: load_selected_session_one_minute_config,
-    SELECTED_SESSION_BENCHMARK_SCHEMA: load_selected_session_benchmark_config,
+    SESSION_BENCHMARK_SCHEMA: load_session_benchmark_config,
     BROAD_INTRADAY_HISTORY_SCHEMA: load_broad_intraday_history_config,
 }
 
 
-def load_collection_transport_config(path: Path) -> IntradayTransportConfig:
+def load_collection_transport_config(path: Path) -> AlpacaTransportConfig:
     """Load whichever collection policy the file itself declares.
 
     The collector is generic across plan layers, so the layer must be named

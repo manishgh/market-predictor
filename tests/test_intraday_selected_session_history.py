@@ -11,6 +11,8 @@ import pandas as pd
 import pytest
 
 import market_predictor.intraday.datasets.selected_session_history as selected_session_history
+from market_predictor.collection.alpaca_bars.plan import load_complete_bar_plan
+from market_predictor.collection.alpaca_bars.transport import collect_alpaca_bars, load_complete_bar_collection
 from market_predictor.core.errors import DataReadinessError
 from market_predictor.intraday.contracts.history_collection import (
     SELECTED_SESSION_PLAN_SCHEMA,
@@ -18,13 +20,7 @@ from market_predictor.intraday.contracts.history_collection import (
     load_selected_session_history_config,
     load_selected_session_one_minute_config,
 )
-from market_predictor.intraday.datasets.history import (
-    load_complete_intraday_history_plan,
-)
-from market_predictor.intraday.datasets.history_collection import (
-    collect_intraday_history,
-    load_complete_intraday_history_collection,
-)
+from market_predictor.intraday.datasets.history import ACCEPTED_PLAN_SCHEMAS
 from market_predictor.intraday.datasets.history_materialization import (
     selected_ticker_sessions,
     session_bounds_for,
@@ -152,7 +148,7 @@ def test_plan_requests_one_unit_per_session_at_real_session_bounds(
         strategy_contract=load_strategy_contract(STRATEGY_CONTRACT_PATH),
         strategy_contract_path=STRATEGY_CONTRACT_PATH,
     )
-    verified = load_complete_intraday_history_plan(plan_dir)
+    verified = load_complete_bar_plan(plan_dir, accepted_schemas=ACCEPTED_PLAN_SCHEMAS)
     units = pd.concat(
         [pd.read_parquet(p) for p in (plan_dir / "units" / "5Min").glob("*.parquet")],
         ignore_index=True,
@@ -189,14 +185,15 @@ def test_generic_collector_accepts_the_registered_plan_schema(
     )
     output = tmp_path / "collection"
 
-    result = collect_intraday_history(
+    result = collect_alpaca_bars(
+        accepted_plan_schemas=ACCEPTED_PLAN_SCHEMAS,
         plan_directory=plan_dir,
         policy_path=POLICY,
         output_directory=output,
         config=load_collection_transport_config(POLICY),
         source_factory=_FakeAlpacaSource,
     )
-    verified = load_complete_intraday_history_collection(output)
+    verified = load_complete_bar_collection(output)
 
     assert result["status"] == "transport_complete"
     assert result["completed_units"] == 2
@@ -216,7 +213,7 @@ def test_one_minute_plan_uses_real_bounds_and_row_bounded_chunks(
         strategy_contract=load_strategy_contract(STRATEGY_CONTRACT_PATH),
         strategy_contract_path=STRATEGY_CONTRACT_PATH,
     )
-    verified = load_complete_intraday_history_plan(plan_dir)
+    verified = load_complete_bar_plan(plan_dir, accepted_schemas=ACCEPTED_PLAN_SCHEMAS)
     units = pd.read_parquet(plan_dir / "units" / "1Min" / "2024-07.parquet")
 
     assert verified["schema"] == "edge_rebuild.selected_session_one_minute_plan.v1"
@@ -241,7 +238,8 @@ def test_generic_collector_collects_one_minute_plan(tmp_path: Path) -> None:
     source = _FakeAlpacaSource(expected_timeframe="1Min")
     output = tmp_path / "one-minute-collection"
 
-    result = collect_intraday_history(
+    result = collect_alpaca_bars(
+        accepted_plan_schemas=ACCEPTED_PLAN_SCHEMAS,
         plan_directory=plan_dir,
         policy_path=ONE_MINUTE_POLICY,
         output_directory=output,
@@ -270,7 +268,8 @@ def test_one_minute_collection_rejects_subminute_timestamps(
         strategy_contract_path=STRATEGY_CONTRACT_PATH,
     )
 
-    result = collect_intraday_history(
+    result = collect_alpaca_bars(
+        accepted_plan_schemas=ACCEPTED_PLAN_SCHEMAS,
         plan_directory=plan_dir,
         policy_path=ONE_MINUTE_POLICY,
         output_directory=tmp_path / "collection",

@@ -14,27 +14,21 @@ from market_predictor.canonical.store import (
     file_sha256,
     load_canonical_artifact,
 )
+from market_predictor.collection.alpaca_bars.contracts import SESSION_BENCHMARK_PLAN_SCHEMA
+from market_predictor.collection.alpaca_bars.plan import load_complete_bar_plan, load_plan_json
+from market_predictor.collection.alpaca_bars.transport import load_complete_bar_collection
 from market_predictor.core.errors import DataReadinessError
 from market_predictor.intraday.contracts.dataset_schemas import (
     _REQUIRED_BENCHMARKS,
     MAXIMUM_SECURITY_EXCLUSION_FRACTION,
     _VerifiedInputs,
 )
-from market_predictor.intraday.contracts.history_collection import (
-    SELECTED_SESSION_BENCHMARK_PLAN_SCHEMA,
-    SELECTED_SESSION_ONE_MINUTE_PLAN_SCHEMA,
-)
+from market_predictor.intraday.contracts.history_collection import SELECTED_SESSION_ONE_MINUTE_PLAN_SCHEMA
 from market_predictor.intraday.contracts.lineage import (
     DEFAULT_INTRADAY_CONTRACT_LINEAGE_PATH,
     require_intraday_contract_lineage,
 )
-from market_predictor.intraday.datasets.history import (
-    load_complete_intraday_history_plan,
-    load_plan_json,
-)
-from market_predictor.intraday.datasets.history_collection import (
-    load_complete_intraday_history_collection,
-)
+from market_predictor.intraday.datasets.history import ACCEPTED_PLAN_SCHEMAS
 from market_predictor.intraday.datasets.io import (
     _PARQUET_FILE,
     _existing_directory,
@@ -105,7 +99,7 @@ def _verify_inputs(
     )
     selection = _normalize_selection(selection)
 
-    stock_manifest = load_complete_intraday_history_collection(stock_collection_directory)
+    stock_manifest = load_complete_bar_collection(stock_collection_directory)
     stock_request = _load_json(stock_collection_directory / "_request.json")
     _require_collection_request(stock_request, timeframe="1Min", label="stock")
     coverage_manifest = load_complete_one_minute_coverage(stock_coverage_directory)
@@ -140,7 +134,7 @@ def _verify_inputs(
     ):
         raise DataReadinessError("coverage canonical five-minute parent lineage differs")
     stock_plan_directory = _existing_directory(coverage_manifest.get("plan_path"), "stock plan")
-    stock_plan = load_complete_intraday_history_plan(stock_plan_directory)
+    stock_plan = load_complete_bar_plan(stock_plan_directory, accepted_schemas=ACCEPTED_PLAN_SCHEMAS)
     stock_plan_request = _load_json(stock_plan_directory / "_request.json")
     stock_plan_contract_identity = require_intraday_contract_lineage(
         observed_contract_sha256=stock_plan_request.get(
@@ -162,11 +156,11 @@ def _verify_inputs(
         raise DataReadinessError("stock collection does not descend from its verified 1m plan")
     _require_selection_lineage(stock_plan.get("selection"), selection_identity, "stock plan")
 
-    benchmark_manifest = load_complete_intraday_history_collection(benchmark_collection_directory)
+    benchmark_manifest = load_complete_bar_collection(benchmark_collection_directory)
     benchmark_request = _load_json(benchmark_collection_directory / "_request.json")
     _require_collection_request(benchmark_request, timeframe="1Min", label="benchmark")
     benchmark_plan_directory = _existing_directory(benchmark_request.get("plan_path"), "benchmark plan")
-    benchmark_plan = load_complete_intraday_history_plan(benchmark_plan_directory)
+    benchmark_plan = load_complete_bar_plan(benchmark_plan_directory, accepted_schemas=ACCEPTED_PLAN_SCHEMAS)
     benchmark_plan_request = _load_json(benchmark_plan_directory / "_request.json")
     benchmark_contract_identity = require_intraday_contract_lineage(
         observed_contract_sha256=benchmark_plan_request.get(
@@ -180,7 +174,7 @@ def _verify_inputs(
         lineage_path=intraday_contract_lineage_path,
     )
     if (
-        benchmark_plan.get("schema") != SELECTED_SESSION_BENCHMARK_PLAN_SCHEMA
+        benchmark_plan.get("schema") != SESSION_BENCHMARK_PLAN_SCHEMA
         or benchmark_manifest.get("plan_fingerprint") != benchmark_plan.get("plan_fingerprint")
         or benchmark_request.get("plan_manifest_sha256") != file_sha256(benchmark_plan_directory / "_manifest.json")
     ):
