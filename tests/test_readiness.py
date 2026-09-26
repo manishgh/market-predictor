@@ -7,7 +7,6 @@ from market_predictor.readiness import (
     VALID,
     WARN,
     assess_daily_readiness,
-    assess_intraday_readiness,
 )
 
 
@@ -48,21 +47,6 @@ class PredictionReadinessTests(unittest.TestCase):
         self.assertIn("news/candle mismatches detected: 2", reasons)
         self.assertIn("stale cache", reasons)
 
-    def test_intraday_readiness_uses_intraday_warmup(self) -> None:
-        readiness = assess_intraday_readiness(
-            intraday_bar_count=130,
-            latest_price_timestamp="2026-07-09T15:55:00-04:00",
-            price_feed="sip",
-            benchmark_present=True,
-            market_context_present=True,
-            model_status="promoted",
-        )
-
-        self.assertEqual(readiness.status, VALID)
-        self.assertEqual(readiness.timeframe, "intraday")
-        self.assertEqual(readiness.intraday_bar_count, 130)
-        self.assertEqual(readiness.daily_bar_count, 0)
-
     def test_unknown_feed_tier_warns_and_iex_invalidates_volume_features(self) -> None:
         unknown = assess_daily_readiness(
             daily_bar_count=260,
@@ -71,9 +55,9 @@ class PredictionReadinessTests(unittest.TestCase):
             benchmark_present=True,
             market_context_present=True,
         )
-        partial = assess_intraday_readiness(
-            intraday_bar_count=130,
-            latest_price_timestamp="2026-07-09T15:55:00-04:00",
+        partial = assess_daily_readiness(
+            daily_bar_count=260,
+            latest_price_date="2026-07-07",
             price_feed="iex",
             benchmark_present=True,
             market_context_present=True,

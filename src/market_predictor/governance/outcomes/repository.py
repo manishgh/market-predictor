@@ -12,9 +12,9 @@ from market_predictor.core.json_integrity import parse_strict_json_object
 from market_predictor.core.prediction_contracts import PredictionConflictError
 from market_predictor.governance.outcomes.contracts import (
     MaturationAttemptV1,
-    MaturedOutcomeV2,
-    PredictionMaturationIntentV2,
-    PredictionMonitoringObservationV1,
+    MaturedOutcomeV3,
+    PredictionMaturationIntentV3,
+    PredictionMonitoringObservationV2,
     content_sha256,
     monitoring_observation_from_intent,
 )
@@ -31,8 +31,8 @@ class OutcomeRepository:
 
     def record_intent(
         self,
-        intent: PredictionMaturationIntentV2,
-    ) -> PredictionMaturationIntentV2:
+        intent: PredictionMaturationIntentV3,
+    ) -> PredictionMaturationIntentV3:
         path = self._key_path("intents", intent.maturation_key)
         semantic_path = self._key_path(
             "semantic",
@@ -68,8 +68,8 @@ class OutcomeRepository:
 
     def record_observation(
         self,
-        observation: PredictionMonitoringObservationV1,
-    ) -> PredictionMonitoringObservationV1:
+        observation: PredictionMonitoringObservationV2,
+    ) -> PredictionMonitoringObservationV2:
         if observation.maturation_key is not None:
             try:
                 intent = self.load_intent(observation.maturation_key)
@@ -97,10 +97,10 @@ class OutcomeRepository:
 
     def record_outcome(
         self,
-        outcome: MaturedOutcomeV2,
+        outcome: MaturedOutcomeV3,
         *,
         evidence_rows: list[dict[str, object]],
-    ) -> MaturedOutcomeV2:
+    ) -> MaturedOutcomeV3:
         actual_evidence_sha = content_sha256(evidence_rows)
         if actual_evidence_sha != outcome.evidence_sha256:
             raise PredictionConflictError
@@ -141,19 +141,19 @@ class OutcomeRepository:
             )
         return outcome
 
-    def load_intent(self, maturation_key: str) -> PredictionMaturationIntentV2:
+    def load_intent(self, maturation_key: str) -> PredictionMaturationIntentV3:
         intent = self._load_model(
             self._key_path("intents", maturation_key),
-            PredictionMaturationIntentV2,
+            PredictionMaturationIntentV3,
         )
         if intent.maturation_key != maturation_key:
             raise PredictionConflictError
         return intent
 
-    def load_outcome(self, maturation_key: str) -> MaturedOutcomeV2:
+    def load_outcome(self, maturation_key: str) -> MaturedOutcomeV3:
         outcome = self._load_model(
             self._key_path("outcomes", maturation_key),
-            MaturedOutcomeV2,
+            MaturedOutcomeV3,
         )
         if outcome.maturation_key != maturation_key:
             raise PredictionConflictError
@@ -181,19 +181,19 @@ class OutcomeRepository:
             raise PredictionConflictError
         return value
 
-    def intents(self) -> list[PredictionMaturationIntentV2]:
+    def intents(self) -> list[PredictionMaturationIntentV3]:
         root = self.root / "intents"
         if not root.exists():
             return []
         return [self.load_intent(path.stem) for path in sorted(root.glob("*/*.json"))]
 
-    def observations(self) -> list[PredictionMonitoringObservationV1]:
+    def observations(self) -> list[PredictionMonitoringObservationV2]:
         root = self.root / "observations"
         if not root.exists():
             return []
-        observations: list[PredictionMonitoringObservationV1] = []
+        observations: list[PredictionMonitoringObservationV2] = []
         for path in sorted(root.glob("*/*.json")):
-            observation = self._load_model(path, PredictionMonitoringObservationV1)
+            observation = self._load_model(path, PredictionMonitoringObservationV2)
             if observation.observation_id != path.stem:
                 raise PredictionConflictError
             if observation.maturation_key is not None:
@@ -209,7 +209,7 @@ class OutcomeRepository:
     def has_outcome(self, maturation_key: str) -> bool:
         return self._key_path("outcomes", maturation_key).exists()
 
-    def outcomes(self) -> list[MaturedOutcomeV2]:
+    def outcomes(self) -> list[MaturedOutcomeV3]:
         root = self.root / "outcomes"
         if not root.exists():
             return []
@@ -280,8 +280,8 @@ def _semantic_record_key(
 
 
 def _assert_outcome_matches_intent(
-    outcome: MaturedOutcomeV2,
-    intent: PredictionMaturationIntentV2,
+    outcome: MaturedOutcomeV3,
+    intent: PredictionMaturationIntentV3,
 ) -> None:
     try:
         label_cost_value = intent.label_policy["round_trip_cost_bps"]

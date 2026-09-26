@@ -2,22 +2,32 @@ from __future__ import annotations
 
 import json
 import tempfile
+import tomllib
 import unittest
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from pydantic import ValidationError
+from typer.testing import CliRunner
 
+from market_predictor.commands.configuration import load_typed_config
+from market_predictor.core.errors import DataReadinessError
 from market_predictor.core.prediction_contracts import PredictionConflictError
-from market_predictor.governance.drift.features import FEATURE_DRIFT_REPORT_VERSION
+from market_predictor.governance.drift.features import (
+    FEATURE_DRIFT_REPORT_VERSION,
+    validate_feature_drift_report,
+)
 from market_predictor.governance.drift.policy import (
-    DriftAssessmentV2,
-    DriftPolicyV2,
+    DriftAssessmentV3,
+    DriftPolicyV3,
     DriftStateStore,
     evaluate_drift,
 )
 from market_predictor.governance.outcomes.contracts import content_sha256
 from market_predictor.modeling.feature_reference import feature_reference_names_sha256
+from market_predictor.production_cli import app
+
+ROOT = Path(__file__).resolve().parents[1]
 
 
 class DriftPolicyTests(unittest.TestCase):
@@ -29,23 +39,14 @@ class DriftPolicyTests(unittest.TestCase):
         self.label_policy_sha = "d" * 64
         self.execution_policy_sha = "e" * 64
         self.feature_names_sha = feature_reference_names_sha256(["x"])
-        self.policy = DriftPolicyV2(
+        self.policy = DriftPolicyV3(
             minimum_matured_samples=10,
             minimum_independent_decision_groups=5,
         )
 
     def test_stable_and_warning_performance_remain_actionable(self) -> None:
         stable = self._evaluate(self._report(samples=20))
-        warning = self._evaluate(
-            self._report(
-                samples=20,
-                opportunity_brier=0.30,
-                view="intraday",
-                horizon="60m",
-            ),
-            mode="intraday",
-            horizon="60m",
-        )
+        warning = self._evaluate(self._report(samples=20, drawdown=0.20))
 
         self.assertEqual(
             (stable.state, stable.actionability),
@@ -87,26 +88,12 @@ class DriftPolicyTests(unittest.TestCase):
             ("unavailable", "not_ready"),
         )
 
-    def test_intraday_downside_degradation_is_severe(self) -> None:
+    def test_overdue_unmatured_predictions_fail_closed(self) -> None:
         assessment = self._evaluate(
             self._report(
                 samples=20,
-                view="intraday",
-                horizon="60m",
-                downside_brier=0.40,
-            ),
-            mode="intraday",
-            horizon="60m",
-        )
-
-        self.assertEqual(
-            (assessment.state, assessment.actionability),
-            ("severe", "not_ready"),
-        )
-
-    def test_overdue_unmatured_predictions_fail_closed(self) -> None:
-        assessment = self._evaluate(
-            self._report(samples=20, pending_age_minutes=40_000)
+                oldest_pending=self.now - timedelta(minutes=40_000),
+            )
         )
 
         self.assertEqual(
@@ -114,6 +101,51 @@ class DriftPolicyTests(unittest.TestCase):
             ("unavailable", "not_ready"),
         )
         self.assertIn("selected_policy_outcomes_overdue", assessment.reasons)
+
+    def test_pending_deadline_counts_exchange_sessions_across_holidays(self) -> None:
+        # 3 July 2026 is an XNYS holiday. The tenth session after 1 July closes on
+        # 16 July and after 2 July on 17 July; each deadline adds the 7-day grace.
+        before_holiday = datetime(2026, 7, 1, 22, 0, tzinfo=UTC)
+        on_holiday_eve = datetime(2026, 7, 2, 22, 0, tzinfo=UTC)
+        tenth_close = datetime(2026, 7, 17, 20, 0, tzinfo=UTC)
+
+        overdue = self._evaluate(self._report(samples=20, oldest_pending=before_holiday))
+        pending = self._evaluate(self._report(samples=20, oldest_pending=on_holiday_eve))
+
+        self.assertIn("selected_policy_outcomes_overdue", overdue.reasons)
+        self.assertEqual((pending.state, pending.actionability), ("stable", "actionable"))
+        deadline = tenth_close + timedelta(days=7)
+        self.assertFalse(self.policy.outcome_overdue("10b", on_holiday_eve, deadline))
+        self.assertTrue(
+            self.policy.outcome_overdue("10b", on_holiday_eve, deadline + timedelta(microseconds=1))
+        )
+
+    def test_pending_deadline_scales_to_investment_horizons(self) -> None:
+        decision = datetime(2025, 7, 24, 22, 0, tzinfo=UTC)
+        # An annual horizon needs a performance window longer than a year.
+        ten_session = self._evaluate(
+            self._report(samples=20, oldest_pending=decision, lookback_days=400)
+        )
+        annual = self._evaluate(
+            self._report(samples=20, horizon="252b", oldest_pending=decision, lookback_days=400),
+            horizon="252b",
+        )
+
+        self.assertIn("selected_policy_outcomes_overdue", ten_session.reasons)
+        self.assertEqual((annual.state, annual.actionability), ("stable", "actionable"))
+        # The 252nd session after 24 July 2025 closes on 27 July 2026; 353 calendar
+        # days, the weekday-only estimate, would fall eight days before it.
+        deadline = datetime(2026, 7, 27, 20, 0, tzinfo=UTC) + timedelta(days=7)
+        self.assertFalse(self.policy.outcome_overdue("252b", decision, deadline))
+        self.assertTrue(
+            self.policy.outcome_overdue("252b", decision, deadline + timedelta(microseconds=1))
+        )
+
+    def test_pending_deadline_requires_a_session_horizon_and_calendar(self) -> None:
+        with self.assertRaisesRegex(ValueError, "not a session count"):
+            self.policy.outcome_overdue("10d", self.now - timedelta(days=30), self.now)
+        with self.assertRaisesRegex(DataReadinessError, "no XNYS session closed"):
+            self.policy.outcome_overdue("10b", datetime(1990, 1, 2, 22, 0, tzinfo=UTC), self.now)
 
     def test_future_performance_evidence_is_rejected_without_clock_tolerance(self) -> None:
         assessment = self._evaluate(
@@ -157,10 +189,68 @@ class DriftPolicyTests(unittest.TestCase):
 
     def test_policy_rejects_inverted_thresholds(self) -> None:
         with self.assertRaises(ValidationError):
-            DriftPolicyV2(
-                warning_opportunity_brier_score=0.4,
-                severe_opportunity_brier_score=0.3,
+            DriftPolicyV3(warning_max_drawdown=0.3, severe_max_drawdown=0.2)
+        with self.assertRaises(ValidationError):
+            DriftPolicyV3.model_validate({"maximum_pending_age_minutes_swing": 30_240})
+
+    def test_configured_policy_matches_serving_pin(self) -> None:
+        policy = load_typed_config(ROOT / "configs" / "drift_policy.toml", DriftPolicyV3)
+        default = tomllib.loads((ROOT / "configs" / "default.toml").read_text(encoding="utf-8"))
+
+        self.assertEqual(policy, DriftPolicyV3())
+        self.assertEqual(policy.sha256(), default["prediction_serving"]["drift_policy_sha256"])
+
+    def test_retired_intraday_and_day_horizons_are_refused(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            store = DriftStateStore(Path(temp_dir))
+            with self.assertRaisesRegex(ValueError, "intraday drift state is retired"):
+                store.load("intraday", "60m", self.release_id)
+            with self.assertRaisesRegex(ValueError, "horizon is invalid"):
+                store.load("swing", "10d", self.release_id)
+        with self.assertRaises(ValidationError):
+            validate_feature_drift_report(
+                self._feature_report("stable", mode="intraday", horizon="60m")
             )
+        for horizon in ("60m", "10d"):
+            with self.subTest(horizon=horizon), self.assertRaises(ValidationError):
+                self._evaluate(self._report(samples=20, horizon=horizon), horizon=horizon)
+
+    def test_cli_assesses_swing_routes_only(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            result = CliRunner().invoke(
+                app,
+                [
+                    "publish-drift-assessment", "--mode", "intraday", "--horizon", "60m",
+                    "--model-release-id", self.release_id, "--model-artifact-sha256", self.model_sha,
+                    "--prediction-policy-sha256", self.prediction_policy_sha,
+                    "--label-policy-sha256", self.label_policy_sha,
+                    "--execution-policy-sha256", self.execution_policy_sha,
+                    "--feature-reference-profile-sha256", "9" * 64,
+                    "--feature-reference-names-sha256", self.feature_names_sha,
+                    "--feature-drift-report", str(root / "absent.json"),
+                    "--drift-dir", str(root / "drift"),
+                ],
+            )
+
+            self.assertEqual(result.exit_code, 2)
+            self.assertIn("only swing routes are assessed", result.output)
+            self.assertFalse((root / "drift").exists())
+
+    def test_superseded_assessment_versions_are_refused(self) -> None:
+        current = self._evaluate(self._report(samples=20)).model_dump(mode="json")
+        for version in (
+            "market_predictor.drift_assessment.v1",
+            "market_predictor.drift_assessment.v2",
+        ):
+            content = {
+                **{key: value for key, value in current.items() if key != "assessment_id"},
+                "contract_version": version,
+            }
+            with self.subTest(version=version), self.assertRaises(ValidationError):
+                DriftAssessmentV3.model_validate(
+                    {**content, "assessment_id": content_sha256(content)}
+                )
 
     def test_state_store_round_trip_and_tamper_detection(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -188,7 +278,7 @@ class DriftPolicyTests(unittest.TestCase):
         valid["actionability"] = "actionable"
 
         with self.assertRaisesRegex(ValidationError, "state and actionability"):
-            DriftAssessmentV2.model_validate(
+            DriftAssessmentV3.model_validate(
                 {**valid, "assessment_id": content_sha256(valid)}
             )
 
@@ -352,12 +442,11 @@ class DriftPolicyTests(unittest.TestCase):
         report: dict[str, object],
         *,
         feature_status: str = "stable",
-        mode: str = "swing",
         horizon: str = "10b",
         evaluated_at: datetime | None = None,
     ):
         return evaluate_drift(
-            mode=mode,
+            mode="swing",
             horizon=horizon,
             model_release_id=self.release_id,
             model_artifact_sha256=self.model_sha,
@@ -366,11 +455,7 @@ class DriftPolicyTests(unittest.TestCase):
             execution_policy_sha256=self.execution_policy_sha,
             feature_reference_profile_sha256="9" * 64,
             feature_reference_names_sha256=self.feature_names_sha,
-            feature_drift=self._feature_report(
-                feature_status,
-                mode=mode,
-                horizon=horizon,
-            ),
+            feature_drift=self._feature_report(feature_status, horizon=horizon),
             performance_report=report,
             policy=self.policy,
             evaluated_at=evaluated_at or self.now,
@@ -437,25 +522,18 @@ class DriftPolicyTests(unittest.TestCase):
         self,
         *,
         samples: int,
-        opportunity_brier: float = 0.20,
-        downside_brier: float = 0.20,
         excess: float = 0.01,
         qqq_excess: float = 0.01,
         sector_excess: float = 0.01,
         drawdown: float = 0.05,
         generated_at: datetime | None = None,
-        view: str = "swing",
         horizon: str = "10b",
-        pending_age_minutes: int | None = None,
+        oldest_pending: datetime | None = None,
+        lookback_days: int = 60,
     ) -> dict[str, object]:
         generated = generated_at or self.now
-        window_start = generated - timedelta(days=60)
-        pending_count = int(pending_age_minutes is not None)
-        oldest_pending = (
-            generated - timedelta(minutes=pending_age_minutes)
-            if pending_age_minutes is not None
-            else None
-        )
+        window_start = generated - timedelta(days=lookback_days)
+        pending_count = int(oldest_pending is not None)
         total_predictions = samples + pending_count
         row_identity: dict[str, object] = {
             "model_release_id": self.release_id,
@@ -467,7 +545,7 @@ class DriftPolicyTests(unittest.TestCase):
             "source_intent_ids_sha256": "1" * 64,
             "source_observation_ids_sha256": "6" * 64,
             "source_outcome_ids_sha256": "2" * 64,
-            "view": view,
+            "view": "swing",
             "horizon": horizon,
             "cohort_type": "all",
             "cohort_value": "all",
@@ -503,17 +581,6 @@ class DriftPolicyTests(unittest.TestCase):
             "decision_score_p90": 0.70,
             "mean_selected_rank": 1.0,
             "selected_rank_p90": 1.0,
-            "opportunity_observed_rate": 0.55 if view == "intraday" else None,
-            "opportunity_brier_score": opportunity_brier if view == "intraday" else None,
-            "opportunity_calibration_error": 0.05 if view == "intraday" else None,
-            "mean_downside_probability": 0.30 if view == "intraday" else None,
-            "downside_observed_rate": 0.25 if view == "intraday" else None,
-            "downside_brier_score": (
-                downside_brier if view == "intraday" else None
-            ),
-            "downside_calibration_error": (
-                0.05 if view == "intraday" else None
-            ),
             "average_net_return": 0.01,
             "average_excess_return_vs_spy": excess,
             "average_excess_return_vs_qqq": qqq_excess,
@@ -540,10 +607,10 @@ class DriftPolicyTests(unittest.TestCase):
         }
         report_identity: dict[str, object] = {
             "contract_version": (
-                "market_predictor.selected_policy_performance.v2"
+                "market_predictor.selected_policy_performance.v3"
             ),
             "generated_at_utc": generated.isoformat().replace("+00:00", "Z"),
-            "lookback_days": 60,
+            "lookback_days": lookback_days,
             "minimum_matured_samples": 10,
             "window_start_utc": window_start.isoformat().replace(
                 "+00:00",

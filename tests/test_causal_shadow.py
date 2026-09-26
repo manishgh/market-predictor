@@ -26,9 +26,7 @@ class CausalShadowTests(unittest.TestCase):
             root = Path(temp_dir)
             model = root / "candidate.joblib"
             model.write_bytes(b"candidate")
-            metrics = synthetic_identity_metrics(
-                model_type="canonical_swing",
-                model_run_id="causal-shadow-test",
+            metrics = synthetic_identity_metrics(model_run_id="causal-shadow-test",
             )
             context = trust_context_for_candidate(
                 root / "governance",
@@ -78,9 +76,7 @@ class CausalShadowTests(unittest.TestCase):
             root = Path(temp_dir)
             model = root / "candidate.joblib"
             model.write_bytes(b"candidate")
-            metrics = synthetic_identity_metrics(
-                model_type="canonical_swing",
-                model_run_id="causal-shadow-poison",
+            metrics = synthetic_identity_metrics(model_run_id="causal-shadow-poison",
             )
             context = trust_context_for_candidate(
                 root / "governance",
@@ -126,9 +122,7 @@ class CausalShadowTests(unittest.TestCase):
             root = Path(temp_dir)
             model = root / "candidate.joblib"
             model.write_bytes(b"candidate")
-            metrics = synthetic_identity_metrics(
-                model_type="canonical_swing",
-                model_run_id="causal-shadow-gap",
+            metrics = synthetic_identity_metrics(model_run_id="causal-shadow-gap",
             )
             context = trust_context_for_candidate(
                 root / "governance",

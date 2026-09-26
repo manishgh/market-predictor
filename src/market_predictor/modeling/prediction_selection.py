@@ -1,18 +1,17 @@
-"""Canonical prediction ranking, selection, and action policy.
+"""Canonical swing prediction ranking, selection, and action policy.
 
-This module is the single source of truth for how model probabilities become a
-ranked, selected, and labelled trading view. Serving (``prediction_service``),
-offline evaluation (``swing.evaluation`` / ``intraday.evaluation``), and
-promotion all import these functions so that the policy evaluated for promotion
-is byte-for-byte the policy that is served.
+This module is the single source of truth for how swing model probabilities become
+a ranked, selected, and labelled view. Serving (``prediction_service``), offline
+evaluation (``swing.evaluation``) and promotion all import these functions so that
+the policy evaluated for promotion is byte-for-byte the policy that is served.
 
 Scope: ranking score, deterministic selection, and action labels only.
 Executable fills, slippage, participation, and capital allocation belong to
 ``execution_policy`` and are intentionally excluded here.
 
-The policy is immutable and content-addressed: :data:`PREDICTION_POLICY_SHA256`
-changes if and only if the declarative semantics below change, and that hash is
-bound into promotion evidence and prediction snapshots as identity.
+:class:`SwingPredictionPolicy` is immutable and content-addressed: its hash changes
+if and only if its declarative semantics change, and that hash is bound into
+promotion evidence and prediction snapshots as identity.
 """
 from __future__ import annotations
 
@@ -20,31 +19,16 @@ import hashlib
 import json
 import math
 from collections.abc import Mapping, Sequence
-from typing import Any, Literal, Self
+from typing import Literal, Self
 
 import numpy as np
 import pandas as pd
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-PREDICTION_POLICY_ID = "market_predictor.prediction_policy.v2"
-
 # --- Swing action thresholds (probability of the model's positive target) ---
 SWING_STRONG = 0.65
 SWING_WATCH = 0.55
 SWING_LOW = 0.40
-
-# --- Intraday action thresholds (opportunity / downside probabilities) ---
-INTRADAY_DOWNSIDE_VETO = 0.55
-INTRADAY_ENTRY = 0.70
-INTRADAY_ENTRY_MAX_DOWNSIDE = 0.35
-INTRADAY_WATCH = 0.55
-INTRADAY_WATCH_MAX_DOWNSIDE = 0.45
-INTRADAY_LOW = 0.40
-INTRADAY_AVOID_DOWNSIDE = 0.50
-
-# Default eligibility ceiling for the intraday *selected* set. This is the
-# tradeable-set bound used by economics; it is stricter than the labelling veto.
-INTRADAY_SELECTION_DOWNSIDE_CEILING = INTRADAY_WATCH_MAX_DOWNSIDE
 
 # Rank sentinel for rows that cannot be scored. Sorts last under descending rank.
 UNSCORABLE_SCORE = float("-inf")
@@ -63,20 +47,6 @@ def swing_decision_score(model_probability: float | None) -> float:
     return value if value is not None else UNSCORABLE_SCORE
 
 
-def intraday_decision_score(opportunity: float | None, downside: float | None) -> float:
-    """Intraday score is ``opportunity * (1 - downside)``.
-
-    Both probabilities are required; a missing input yields the unscorable
-    sentinel so the row can never outrank a genuinely scored candidate.
-    """
-
-    opp = finite_or_none(opportunity)
-    down = finite_or_none(downside)
-    if opp is None or down is None:
-        return UNSCORABLE_SCORE
-    return opp * (1.0 - down)
-
-
 # --------------------------------------------------------------------------- #
 # Vectorized scores (frame-aligned pd.Series)
 # --------------------------------------------------------------------------- #
@@ -84,33 +54,6 @@ def swing_decision_scores(frame: pd.DataFrame, *, probability_column: str) -> pd
     values = pd.to_numeric(frame[probability_column], errors="coerce")
     finite = np.isfinite(values.to_numpy(dtype=float, na_value=np.nan))
     return values.where(finite, other=UNSCORABLE_SCORE).astype(float)
-
-
-def intraday_decision_scores(
-    frame: pd.DataFrame,
-    *,
-    opportunity_column: str,
-    downside_column: str,
-) -> pd.Series:
-    opp = pd.to_numeric(frame[opportunity_column], errors="coerce")
-    down = pd.to_numeric(frame[downside_column], errors="coerce")
-    score = opp * (1.0 - down)
-    valid = np.isfinite(opp.to_numpy(dtype=float, na_value=np.nan)) & np.isfinite(
-        down.to_numpy(dtype=float, na_value=np.nan)
-    )
-    return score.where(valid, other=UNSCORABLE_SCORE).astype(float)
-
-
-def intraday_selection_eligible(
-    frame: pd.DataFrame,
-    *,
-    downside_column: str,
-    downside_ceiling: float = INTRADAY_SELECTION_DOWNSIDE_CEILING,
-) -> pd.Series:
-    """Rows eligible for the intraday *selected* (tradeable) set."""
-
-    down = pd.to_numeric(frame[downside_column], errors="coerce")
-    return down.le(downside_ceiling) & down.notna()
 
 
 # --------------------------------------------------------------------------- #
@@ -147,67 +90,6 @@ def select_top_k_per_group(
     return selected.rename(columns={_SCORE_WORK_COLUMN: DECISION_SCORE_COLUMN})
 
 
-def select_swing_candidates(
-    frame: pd.DataFrame,
-    *,
-    policy: PredictionSelectionPolicy,
-    probability_column: str,
-    group_column: str = "decision_group_id",
-) -> pd.DataFrame:
-    """Apply the bound swing policy used by evaluation and serving."""
-
-    score = swing_decision_scores(frame, probability_column=probability_column)
-    return select_top_k_per_group(
-        frame,
-        score=score,
-        group_column=group_column,
-        top_k=policy.swing_top_k,
-        tie_breakers=SWING_SELECTION_TIE_BREAKERS,
-        eligible=pd.Series(np.isfinite(score), index=frame.index),
-    )
-
-
-def select_intraday_candidates(
-    frame: pd.DataFrame,
-    *,
-    policy: PredictionSelectionPolicy,
-    opportunity_column: str,
-    downside_column: str,
-    group_column: str = "decision_group_id",
-    session_column: str = "session_date_et",
-    decision_time_column: str = "decision_time_utc",
-) -> pd.DataFrame:
-    """Apply eligibility, per-group top-k, and the bound per-session cap."""
-
-    score = intraday_decision_scores(
-        frame,
-        opportunity_column=opportunity_column,
-        downside_column=downside_column,
-    )
-    eligible = intraday_selection_eligible(
-        frame,
-        downside_column=downside_column,
-        downside_ceiling=policy.intraday_downside_ceiling,
-    ) & pd.Series(np.isfinite(score), index=frame.index)
-    selected = select_top_k_per_group(
-        frame,
-        score=score,
-        group_column=group_column,
-        top_k=policy.intraday_top_k,
-        tie_breakers=INTRADAY_SELECTION_TIE_BREAKERS,
-        eligible=eligible,
-    )
-    return (
-        selected.sort_values(
-            [session_column, decision_time_column, DECISION_SCORE_COLUMN],
-            ascending=[True, True, False],
-            kind="stable",
-        )
-        .groupby(session_column, sort=False)
-        .head(policy.intraday_max_trades_per_session)
-    )
-
-
 # --------------------------------------------------------------------------- #
 # Action labels (identical to the serving signal semantics)
 # --------------------------------------------------------------------------- #
@@ -221,22 +103,6 @@ def swing_action(probability: float | None) -> str:
         return "bullish_watch"
     if value <= SWING_LOW:
         return "low_probability"
-    return "neutral"
-
-
-def intraday_action(opportunity: float | None, downside: float | None) -> str:
-    opp = finite_or_none(opportunity)
-    down = finite_or_none(downside)
-    if opp is None or down is None:
-        return "not_scored"
-    if down >= INTRADAY_DOWNSIDE_VETO:
-        return "avoid_entry_downside_risk"
-    if opp >= INTRADAY_ENTRY and down <= INTRADAY_ENTRY_MAX_DOWNSIDE:
-        return "entry_candidate"
-    if opp >= INTRADAY_WATCH and down <= INTRADAY_WATCH_MAX_DOWNSIDE:
-        return "watch_for_confirmation"
-    if opp <= INTRADAY_LOW or down > INTRADAY_AVOID_DOWNSIDE:
-        return "avoid_entry"
     return "neutral"
 
 
@@ -349,7 +215,7 @@ def _ndcg_at_k(selected_relevance: np.ndarray, group_positives: float, k: int) -
 
 
 # --------------------------------------------------------------------------- #
-# Calibration metrics (shared by swing and intraday)
+# Calibration metrics
 # --------------------------------------------------------------------------- #
 def expected_calibration_error(
     target: pd.Series,
@@ -437,11 +303,6 @@ def _reliability_line(y: np.ndarray, p: np.ndarray, bins: int) -> tuple[float, f
 # --------------------------------------------------------------------------- #
 # Immutable, content-addressed policy identity
 # --------------------------------------------------------------------------- #
-SWING_SELECTION_TIE_BREAKERS: tuple[tuple[str, bool], ...] = (("ticker", True),)
-INTRADAY_SELECTION_TIE_BREAKERS: tuple[tuple[str, bool], ...] = (
-    ("intraday_downside_probability", True),
-    ("ticker", True),
-)
 
 
 def _policy_sha256(payload: Mapping[str, object]) -> str:
@@ -521,127 +382,4 @@ def parse_swing_prediction_policy(
         raise ValueError("swing prediction policy semantics are not canonical")
     if expected_sha256 is not None and policy.sha256() != expected_sha256:
         raise ValueError("swing prediction policy does not match its bound hash")
-    return policy
-
-
-class PredictionSelectionPolicy(BaseModel):
-    """Material ranking and selection parameters bound to model evidence."""
-
-    model_config = ConfigDict(extra="forbid", frozen=True)
-
-    contract_version: Literal["market_predictor.prediction_policy.v2"] = (
-        "market_predictor.prediction_policy.v2"
-    )
-    swing_top_k: int = Field(default=10, ge=1, le=100)
-    intraday_top_k: int = Field(default=10, ge=1, le=100)
-    intraday_downside_ceiling: float = Field(
-        default=INTRADAY_SELECTION_DOWNSIDE_CEILING,
-        ge=0,
-        le=1,
-    )
-    intraday_max_trades_per_session: int = Field(default=10, ge=1, le=100)
-
-    def specification(self) -> dict[str, object]:
-        return {
-            "contract_version": self.contract_version,
-            "policy_id": PREDICTION_POLICY_ID,
-            "actionable_readiness": "valid",
-            "unscorable_score": "negative_infinity",
-            "swing": {
-                "decision_score": "model_probability",
-                "selection": "top_k_per_decision_group_by_decision_score",
-                "eligibility": "readiness=valid_and_model_probability_is_finite",
-                "top_k": self.swing_top_k,
-                "tie_breakers": ["decision_score:desc", "ticker:asc"],
-                "action_thresholds": {
-                    "strong_at_or_above": SWING_STRONG,
-                    "watch_at_or_above": SWING_WATCH,
-                    "low_at_or_below": SWING_LOW,
-                },
-            },
-            "intraday": {
-                "decision_score": "opportunity_probability*(1-downside_probability)",
-                "selection": "top_k_per_decision_group_by_decision_score_among_eligible",
-                "eligibility": (
-                    "readiness=valid_and_probabilities_are_finite_and_"
-                    "downside_probability<=selection_downside_ceiling"
-                ),
-                "top_k": self.intraday_top_k,
-                "selection_downside_ceiling": self.intraday_downside_ceiling,
-                "max_trades_per_session": self.intraday_max_trades_per_session,
-                "tie_breakers": [
-                    "decision_score:desc",
-                    "downside_probability:asc",
-                    "ticker:asc",
-                ],
-                "action_thresholds": {
-                    "avoid_downside_at_or_above": INTRADAY_DOWNSIDE_VETO,
-                    "entry_opportunity_at_or_above": INTRADAY_ENTRY,
-                    "entry_max_downside": INTRADAY_ENTRY_MAX_DOWNSIDE,
-                    "watch_opportunity_at_or_above": INTRADAY_WATCH,
-                    "watch_max_downside": INTRADAY_WATCH_MAX_DOWNSIDE,
-                    "avoid_opportunity_at_or_below": INTRADAY_LOW,
-                    "avoid_downside_above": INTRADAY_AVOID_DOWNSIDE,
-                },
-            },
-            "unified": {
-                "high_conviction_swing_at_or_above": SWING_STRONG,
-                "watch_swing_at_or_above": SWING_WATCH,
-                "intraday_support_opportunity_at_or_above": INTRADAY_WATCH,
-                "intraday_support_max_downside": INTRADAY_WATCH_MAX_DOWNSIDE,
-                "intraday_only_at_or_above": SWING_STRONG,
-                "intraday_only_max_downside": SWING_LOW,
-                "swing_wait_intraday_below": 0.50,
-            },
-            "catalyst_role": "explanation_only",
-        }
-
-    def sha256(self) -> str:
-        return _policy_sha256(self.specification())
-
-
-DEFAULT_PREDICTION_POLICY = PredictionSelectionPolicy()
-PREDICTION_POLICY_SHA256 = DEFAULT_PREDICTION_POLICY.sha256()
-
-
-def prediction_policy_identity(
-    policy: PredictionSelectionPolicy = DEFAULT_PREDICTION_POLICY,
-) -> dict[str, object]:
-    """Complete policy identity recorded in models, evidence, and releases."""
-
-    return {
-        "prediction_policy_id": PREDICTION_POLICY_ID,
-        "prediction_policy_sha256": policy.sha256(),
-        "prediction_policy": policy.specification(),
-    }
-
-
-def parse_prediction_policy(
-    payload: Mapping[str, Any],
-    *,
-    expected_sha256: str | None = None,
-) -> PredictionSelectionPolicy:
-    """Validate a complete stored specification and its optional bound hash."""
-
-    swing = payload.get("swing")
-    intraday = payload.get("intraday")
-    if not isinstance(swing, Mapping) or not isinstance(intraday, Mapping):
-        raise ValueError("prediction policy is missing swing or intraday semantics")
-    policy = PredictionSelectionPolicy.model_validate(
-        {
-            "contract_version": payload.get("contract_version"),
-            "swing_top_k": swing.get("top_k"),
-            "intraday_top_k": intraday.get("top_k"),
-            "intraday_downside_ceiling": intraday.get(
-                "selection_downside_ceiling"
-            ),
-            "intraday_max_trades_per_session": intraday.get(
-                "max_trades_per_session"
-            ),
-        }
-    )
-    if dict(payload) != policy.specification():
-        raise ValueError("prediction policy semantics do not match the supported contract")
-    if expected_sha256 is not None and policy.sha256() != expected_sha256:
-        raise ValueError("prediction policy payload does not match its bound hash")
     return policy

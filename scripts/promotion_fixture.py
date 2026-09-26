@@ -24,20 +24,17 @@ from market_predictor.execution_policy import (
     round_trip_cost_bps,
 )
 from market_predictor.governance.outcomes.contracts import (
-    MaturedOutcomeV2,
-    PredictionMaturationIntentV2,
+    MaturedOutcomeV3,
+    PredictionMaturationIntentV3,
     content_sha256,
     maturation_key_sha256,
     semantic_prediction_sha256,
 )
 from market_predictor.governance.outcomes.repository import OutcomeRepository
 from market_predictor.hypothesis_registry import declare_hypothesis
-from market_predictor.intraday.contracts import IntradayDatasetConfig
 from market_predictor.modeling.prediction_selection import (
     SwingPredictionPolicy,
-    parse_prediction_policy,
     parse_swing_prediction_policy,
-    prediction_policy_identity,
 )
 from market_predictor.modeling.strategy_contract import load_strategy_contract
 from market_predictor.promotion_attestation import (
@@ -68,7 +65,6 @@ from market_predictor.swing.contracts.outcome_policy import (
 
 def synthetic_identity_metrics(
     *,
-    model_type: str,
     model_run_id: str,
     validation_split: str = "session_purged_walk_forward_and_ticker_holdout",
 ) -> dict[str, Any]:
@@ -88,20 +84,18 @@ def synthetic_identity_metrics(
         "folds_causally_ordered": True,
         "execution_policy_sha256": EXECUTION_POLICY_SHA256,
         "dataset_sha256": "9" * 64,
-        **prediction_policy_identity(),
+        "universe_identity_sha256": "5" * 64,
     }
-    if model_type == "canonical_swing":
-        metrics["universe_identity_sha256"] = "5" * 64
-        swing_policy = SwingPredictionPolicy(
-            horizon_sessions=10,
-            minimum_probability=0.5,
-            maximum_predictions_per_decision=10,
-            target_maximum_sector_weight=1.0,
-            hard_maximum_sector_weight=1.0,
-            minimum_distinct_sectors=1,
-        )
-        metrics["prediction_policy"] = swing_policy.specification()
-        metrics["prediction_policy_sha256"] = swing_policy.sha256()
+    swing_policy = SwingPredictionPolicy(
+        horizon_sessions=10,
+        minimum_probability=0.5,
+        maximum_predictions_per_decision=10,
+        target_maximum_sector_weight=1.0,
+        hard_maximum_sector_weight=1.0,
+        minimum_distinct_sectors=1,
+    )
+    metrics["prediction_policy"] = swing_policy.specification()
+    metrics["prediction_policy_sha256"] = swing_policy.sha256()
     return metrics
 
 
@@ -114,6 +108,11 @@ def trust_context_for_candidate(
     hypothesis_suffix: str = "001",
     improvements: list[float] | None = None,
 ) -> PromotionTrustContext:
+    """Shadow evidence is swing-shaped whatever the declared model type.
+
+    Promotion evidence is type-agnostic; product admission refuses retired types, so
+    tests declare a retired type only to prove that refusal.
+    """
     signing_key, trust_store, signer_id = test_signing_material()
     run_id = str(metrics["model_run_id"])
     safe_run_id = "".join(character if character.isalnum() or character in "._-" else "-" for character in run_id)
@@ -146,10 +145,8 @@ def trust_context_for_candidate(
         baseline_artifact_sha256=baseline_sha,
         prediction_policy_sha256=str(metrics["prediction_policy_sha256"]),
         execution_policy_sha256=str(metrics["execution_policy_sha256"]),
-        shadow_view=(
-            "swing" if model_type == "canonical_swing" else "intraday"
-        ),
-        shadow_horizon=("10b" if model_type == "canonical_swing" else "60m"),
+        shadow_view="swing",
+        shadow_horizon="10b",
         shadow_decision_group_ids=decisions,
         shadow_minimum_tickers_per_group=1,
         objective="Synthetic test declaration for the immutable promotion trust path.",
@@ -158,22 +155,14 @@ def trust_context_for_candidate(
     outcome_repository = OutcomeRepository(root / "outcomes")
     _write_synthetic_shadow_outcomes(
         outcome_repository,
-        model_type=model_type,
         candidate_sha=file_sha256(model_path),
         baseline_sha=baseline_sha,
         decisions=decisions,
         candidate_returns=values,
-        prediction_policy=(
-            parse_swing_prediction_policy(
-                metrics["prediction_policy"],
-                expected_sha256=str(metrics["prediction_policy_sha256"]),
-            ).specification()
-            if model_type == "canonical_swing"
-            else parse_prediction_policy(
-                metrics["prediction_policy"],
-                expected_sha256=str(metrics["prediction_policy_sha256"]),
-            ).specification()
-        ),
+        prediction_policy=parse_swing_prediction_policy(
+            metrics["prediction_policy"],
+            expected_sha256=str(metrics["prediction_policy_sha256"]),
+        ).specification(),
         prediction_policy_sha=str(metrics["prediction_policy_sha256"]),
     )
     bundle = write_causal_shadow_bundle(
@@ -204,7 +193,6 @@ def trust_context_for_candidate(
 def _write_synthetic_shadow_outcomes(
     repository: OutcomeRepository,
     *,
-    model_type: str,
     candidate_sha: str,
     baseline_sha: str,
     decisions: tuple[str, ...],
@@ -212,20 +200,14 @@ def _write_synthetic_shadow_outcomes(
     prediction_policy: dict[str, object],
     prediction_policy_sha: str,
 ) -> None:
-    view = "swing" if model_type == "canonical_swing" else "intraday"
-    horizon = "10b" if view == "swing" else "60m"
-    if view == "swing":
-        swing_contract = load_strategy_contract(
-            Path(__file__).resolve().parents[1]
-            / "configs"
-            / "edge_rebuild_strategy_contract.toml"
-        ).swing
-        label_policy = swing_outcome_policy(swing_contract)
-        label_policy_sha = swing_outcome_policy_sha256(swing_contract)
-    else:
-        label_config = IntradayDatasetConfig()
-        label_policy = label_config.label_policy()
-        label_policy_sha = label_config.label_config_sha256()
+    view, horizon = "swing", "10b"
+    swing_contract = load_strategy_contract(
+        Path(__file__).resolve().parents[1]
+        / "configs"
+        / "edge_rebuild_strategy_contract.toml"
+    ).swing
+    label_policy = swing_outcome_policy(swing_contract)
+    label_policy_sha = swing_outcome_policy_sha256(swing_contract)
     for index, (group_id, candidate_return) in enumerate(
         zip(decisions, candidate_returns, strict=True)
     ):
@@ -280,9 +262,9 @@ def _synthetic_intent(
     label_policy_sha: str,
     prediction_policy: dict[str, object],
     prediction_policy_sha: str,
-) -> PredictionMaturationIntentV2:
+) -> PredictionMaturationIntentV3:
     base: dict[str, object] = {
-        "contract_version": "market_predictor.maturation_intent.v2",
+        "contract_version": "market_predictor.maturation_intent.v3",
         "ticker": "TEST",
         "canonical_security_id": "security:TEST",
         "view": view,
@@ -305,7 +287,6 @@ def _synthetic_intent(
         "liquidity_bucket": "high",
         "price_feed": "SIP",
         "probability": 0.75,
-        "downside_probability": 0.1 if view == "intraday" else None,
         "calibration_bin": 7,
         "signal": "bullish_watch",
         "rank": 1,
@@ -316,7 +297,7 @@ def _synthetic_intent(
         "decision_atr": 1.0,
     }
     semantic = semantic_prediction_sha256(base)
-    return PredictionMaturationIntentV2.model_validate(
+    return PredictionMaturationIntentV3.model_validate(
         {
             **base,
             "snapshot_id": snapshot_id,
@@ -330,11 +311,11 @@ def _synthetic_intent(
 
 
 def _synthetic_outcome(
-    intent: PredictionMaturationIntentV2,
+    intent: PredictionMaturationIntentV3,
     *,
     net_return: float,
     evidence: list[dict[str, object]],
-) -> MaturedOutcomeV2:
+) -> MaturedOutcomeV3:
     entry = intent.decision_time_utc + timedelta(minutes=5)
     exit_time = entry + timedelta(minutes=30)
     available = exit_time + timedelta(minutes=1)
@@ -352,7 +333,7 @@ def _synthetic_outcome(
     )
     gross_return = net_return + execution_cost_bps / 10_000.0
     base = {
-        "contract_version": "market_predictor.matured_outcome.v2",
+        "contract_version": "market_predictor.matured_outcome.v3",
         "maturation_key": intent.maturation_key,
         "semantic_prediction_id": intent.semantic_prediction_id,
         "snapshot_id": intent.snapshot_id,
@@ -382,8 +363,6 @@ def _synthetic_outcome(
             if net_return < 0
             else "timeout"
         ),
-        "opportunity_target": int(net_return > 0) if intent.view == "intraday" else None,
-        "downside_target": int(net_return < 0) if intent.view == "intraday" else None,
         "spy_return": 0.0,
         "qqq_return": 0.0,
         "sector_return": 0.0,
@@ -392,7 +371,7 @@ def _synthetic_outcome(
         "excess_return_vs_sector": net_return,
         "evidence_sha256": content_sha256(evidence),
     }
-    return MaturedOutcomeV2.model_validate(
+    return MaturedOutcomeV3.model_validate(
         {
             **base,
             "outcome_id": content_sha256(base),
@@ -416,9 +395,7 @@ def authorize_candidate_for_test(model_path: Path, metrics: dict[str, Any]) -> P
     evidence_manifest.write_text(
         json.dumps(
             {
-                "schema": (
-                    "intraday_training_evidence.v1" if manifest["model_type"] == "canonical_intraday" else "swing_training_evidence.v1"
-                ),
+                "schema": "swing_training_evidence.v1",
                 "model_run_id": metrics["model_run_id"],
                 "model_artifact_sha256": manifest["artifact_sha256"],
                 "files": {

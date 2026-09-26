@@ -11,7 +11,7 @@ from pydantic import ValidationError
 from market_predictor.core.prediction_contracts import (
     GlobalContextInfo,
     PredictionConflictError,
-    PredictionEvidenceV3,
+    PredictionEvidenceV4,
     PredictionRequest,
     PredictionResponse,
 )
@@ -98,7 +98,7 @@ def _response(cutoff: datetime) -> PredictionResponse:
         request_id=request_id,
         mode="swing",
         horizon="10b",
-        evidence=PredictionEvidenceV3(
+        evidence=PredictionEvidenceV4(
             request_id=request_id,
             correlation_id="correlation-1",
             prediction_cutoff_utc=cutoff,

@@ -175,7 +175,7 @@ if (-not $decisions -or -not $derivedDir -or -not $derivedManifestSha -or -not $
 
 [consumer_inventory]
 strict_loader = ["attribution_history.load_event_attribution_history", "issuer_event_family_cohort.publish_swing_issuer_family_cohort", "issuer_event_precision.sample_authority._strict_attribution_context"]
-new_scope_required = ["swing.sentiment_history.score_alpaca_news_history", "swing.catalyst_lineage.build_catalyst_lineage", "swing.catalyst_lineage.verify_completed_catalyst_lineage", "swing.features.catalyst_decision_authority._verify_lineage", "governance.readiness.audit"]
+new_scope_required = ["swing.sentiment_history.score_alpaca_news_history", "swing.catalyst_lineage.build_catalyst_lineage", "swing.catalyst_lineage.verify_completed_catalyst_lineage", "swing.features.catalyst_decision_authority._verify_lineage"]
 historical_structural_replay_not_strict_attribution_replay = ["evidence.issuer_family_combined_envelope", "catalysts.issuer_events.family_evidence", "intraday.datasets.event_preflight"]
 retained_config_not_repointed = "configs/swing_research_evidence.toml"
 new_join_owner = "main:swing.features.research_join"

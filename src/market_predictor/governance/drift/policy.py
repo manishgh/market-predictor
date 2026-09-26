@@ -9,6 +9,8 @@ from pathlib import Path
 from typing import Literal, Self
 from uuid import uuid4
 
+import exchange_calendars as xcals
+import pandas as pd
 from pydantic import (
     BaseModel,
     ConfigDict,
@@ -22,37 +24,39 @@ from market_predictor.core.errors import DataReadinessError
 from market_predictor.core.json_integrity import parse_strict_json_object
 from market_predictor.core.prediction_contracts import PredictionConflictError
 from market_predictor.governance.drift.features import validate_feature_drift_report
-from market_predictor.governance.outcomes.contracts import content_sha256
+from market_predictor.governance.outcomes.contracts import (
+    SWING_HORIZON_PATTERN,
+    content_sha256,
+    swing_horizon_sessions,
+)
 from market_predictor.governance.outcomes.performance import validate_performance_report
 from market_predictor.locking import file_lock
 
-DRIFT_ASSESSMENT_VERSION = "market_predictor.drift_assessment.v2"
+DRIFT_ASSESSMENT_VERSION = "market_predictor.drift_assessment.v3"
 SHA256_PATTERN = r"^[0-9a-f]{64}$"
+# Longer than any XNYS closure, so the window always holds the decision session.
+_DECISION_SESSION_LOOKBACK = pd.Timedelta(days=14)
 
 
-class DriftPolicyV2(BaseModel):
+class DriftPolicyV3(BaseModel):
+    """Selected-policy drift gates for swing routes of any session horizon."""
+
     model_config = ConfigDict(extra="forbid", frozen=True, allow_inf_nan=False)
 
-    contract_version: Literal["market_predictor.drift_policy.v2"] = (
-        "market_predictor.drift_policy.v2"
+    contract_version: Literal["market_predictor.drift_policy.v3"] = (
+        "market_predictor.drift_policy.v3"
     )
     minimum_matured_samples: int = Field(default=30, ge=1)
     minimum_independent_decision_groups: int = Field(default=10, ge=1)
     maximum_report_age_minutes: int = Field(default=1_440, ge=1)
     maximum_last_matured_age_minutes: int = Field(default=10_080, ge=1)
-    maximum_pending_age_minutes_swing: int = Field(default=30_240, ge=1)
-    maximum_pending_age_minutes_intraday: int = Field(default=1_440, ge=1)
+    # Calendar days after the close of a prediction's last horizon session before it is overdue.
+    pending_grace_days: int = Field(default=7, ge=0)
     minimum_feature_drift_live_rows: int = Field(default=30, ge=1)
     standardized_shift_warning: float = Field(default=2.0, gt=0)
     standardized_shift_severe: float = Field(default=4.0, gt=0)
     missing_rate_delta_warning: float = Field(default=0.20, gt=0, le=1)
     missing_rate_delta_severe: float = Field(default=0.50, gt=0, le=1)
-    warning_opportunity_brier_score: float = Field(default=0.25, ge=0, le=1)
-    severe_opportunity_brier_score: float = Field(default=0.35, ge=0, le=1)
-    warning_downside_brier_score: float = Field(default=0.25, ge=0, le=1)
-    severe_downside_brier_score: float = Field(default=0.35, ge=0, le=1)
-    warning_calibration_error: float = Field(default=0.12, ge=0, le=1)
-    severe_calibration_error: float = Field(default=0.20, ge=0, le=1)
     warning_min_excess_return: float = -0.001
     severe_min_excess_return: float = -0.005
     warning_max_drawdown: float = Field(default=0.15, ge=0, le=1)
@@ -62,21 +66,6 @@ class DriftPolicyV2(BaseModel):
     @model_validator(mode="after")
     def ordered_thresholds(self) -> Self:
         pairs = (
-            (
-                self.warning_opportunity_brier_score,
-                self.severe_opportunity_brier_score,
-                "opportunity Brier",
-            ),
-            (
-                self.warning_downside_brier_score,
-                self.severe_downside_brier_score,
-                "downside Brier",
-            ),
-            (
-                self.warning_calibration_error,
-                self.severe_calibration_error,
-                "calibration error",
-            ),
             (
                 self.warning_max_drawdown,
                 self.severe_max_drawdown,
@@ -107,16 +96,34 @@ class DriftPolicyV2(BaseModel):
     def sha256(self) -> str:
         return content_sha256(self.model_dump(mode="json"))
 
+    def outcome_overdue(self, horizon: str, decision_time: datetime, now: datetime) -> bool:
+        """Whether the horizon's last XNYS session closed more than the grace period before now."""
+        sessions = swing_horizon_sessions(horizon)
+        closes = xcals.get_calendar("XNYS").closes
+        decision = pd.Timestamp(decision_time).tz_convert("UTC")
+        # Session labels are dates; a label past now's date never closes before now, so it cannot trip the check.
+        first_label = decision.tz_localize(None).normalize() - _DECISION_SESSION_LOOKBACK
+        last_label = pd.Timestamp(now).tz_convert("UTC").tz_localize(None).normalize()
+        window = closes.loc[first_label:last_label]
+        completed = window.index[window <= decision]
+        if completed.empty:
+            raise DataReadinessError(f"no XNYS session closed before the pending decision at {decision_time.isoformat()}")
+        later = window.loc[window.index > completed[-1]]
+        if len(later) < sessions:
+            return False
+        deadline = later.iloc[sessions - 1].to_pydatetime() + timedelta(days=self.pending_grace_days)
+        return bool(now > deadline)
 
-class DriftAssessmentV2(BaseModel):
+
+class DriftAssessmentV3(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True, allow_inf_nan=False)
 
-    contract_version: Literal["market_predictor.drift_assessment.v2"] = (
-        "market_predictor.drift_assessment.v2"
+    contract_version: Literal["market_predictor.drift_assessment.v3"] = (
+        "market_predictor.drift_assessment.v3"
     )
     assessment_id: str = Field(pattern=SHA256_PATTERN)
-    mode: Literal["swing", "intraday"]
-    horizon: str = Field(pattern=r"^[1-9]\d*(?:m|d|b)$")
+    mode: Literal["swing"]
+    horizon: str = Field(pattern=SWING_HORIZON_PATTERN)
     model_release_id: str = Field(pattern=SHA256_PATTERN)
     model_artifact_sha256: str = Field(pattern=SHA256_PATTERN)
     prediction_policy_sha256: str = Field(pattern=SHA256_PATTERN)
@@ -210,9 +217,9 @@ def evaluate_drift(
     feature_reference_names_sha256: str,
     feature_drift: dict[str, object] | None,
     performance_report: dict[str, object] | None,
-    policy: DriftPolicyV2,
+    policy: DriftPolicyV3,
     evaluated_at: datetime | None = None,
-) -> DriftAssessmentV2:
+) -> DriftAssessmentV3:
     now = _utc(evaluated_at or datetime.now(UTC))
     route_identity = {
         "model_release_id": model_release_id,
@@ -415,7 +422,7 @@ def evaluate_drift(
             else None
         ),
     }
-    return DriftAssessmentV2.model_validate(
+    return DriftAssessmentV3.model_validate(
         {**content, "assessment_id": content_sha256(content)}
     )
 
@@ -424,7 +431,7 @@ class DriftStateStore:
     def __init__(self, root: Path) -> None:
         self.root = root.resolve()
 
-    def publish(self, assessment: DriftAssessmentV2) -> DriftAssessmentV2:
+    def publish(self, assessment: DriftAssessmentV3) -> DriftAssessmentV3:
         path = self._path(
             assessment.mode,
             assessment.horizon,
@@ -447,28 +454,30 @@ class DriftStateStore:
         mode: str,
         horizon: str,
         model_release_id: str,
-    ) -> DriftAssessmentV2:
+    ) -> DriftAssessmentV3:
         path = self._path(mode, horizon, model_release_id)
         if not path.exists():
             raise DataReadinessError("route drift assessment is unavailable")
         return self._load_path(path)
 
     @staticmethod
-    def _load_path(path: Path) -> DriftAssessmentV2:
+    def _load_path(path: Path) -> DriftAssessmentV3:
         try:
             loaded = parse_strict_json_object(
                 path.read_bytes(),
                 label="route drift assessment",
             )
-            assessment = DriftAssessmentV2.model_validate(loaded)
+            assessment = DriftAssessmentV3.model_validate(loaded)
         except (OSError, ValueError, ValidationError) as exc:
             raise PredictionConflictError from exc
         return assessment
 
     def _path(self, mode: str, horizon: str, release_id: str) -> Path:
-        if mode not in {"swing", "intraday"}:
+        if mode == "intraday":
+            raise ValueError("intraday drift state is retired; only swing routes are assessed")
+        if mode != "swing":
             raise ValueError("drift state mode is invalid")
-        if not re.fullmatch(r"[1-9]\d*(?:m|d|b)", horizon):
+        if not re.fullmatch(SWING_HORIZON_PATTERN, horizon):
             raise ValueError("drift state horizon is invalid")
         if not re.fullmatch(SHA256_PATTERN, release_id):
             raise ValueError("drift state release identity is invalid")
@@ -514,7 +523,7 @@ def _performance_state(
     row: dict[str, object] | None,
     *,
     performance_report: dict[str, object] | None,
-    policy: DriftPolicyV2,
+    policy: DriftPolicyV3,
     now: datetime,
     reasons: list[str],
 ) -> tuple[str, str]:
@@ -543,12 +552,7 @@ def _performance_state(
             row.get("oldest_pending_decision_time_utc"),
             "oldest_pending_decision_time_utc",
         )
-        maximum_pending_age = (
-            policy.maximum_pending_age_minutes_intraday
-            if row.get("view") == "intraday"
-            else policy.maximum_pending_age_minutes_swing
-        )
-        if now - oldest_pending > timedelta(minutes=maximum_pending_age):
+        if policy.outcome_overdue(str(row.get("horizon")), oldest_pending, now):
             reasons.append("selected_policy_outcomes_overdue")
             return "unavailable", "not_ready"
     samples = _as_int(
@@ -578,35 +582,6 @@ def _performance_state(
     ):
         reasons.append("last_matured_outcome_stale")
         return "stale", "not_ready"
-    opportunity_brier = (
-        _as_float(
-            row.get("opportunity_brier_score"),
-            "opportunity_brier_score",
-        )
-        if row.get("view") == "intraday"
-        else 0.0
-    )
-    opportunity_calibration = (
-        _as_float(
-            row.get("opportunity_calibration_error"),
-            "opportunity_calibration_error",
-        )
-        if row.get("view") == "intraday"
-        else 0.0
-    )
-    downside_brier = (
-        _as_float(row.get("downside_brier_score"), "downside_brier_score")
-        if row.get("view") == "intraday"
-        else 0.0
-    )
-    downside_calibration = (
-        _as_float(
-            row.get("downside_calibration_error"),
-            "downside_calibration_error",
-        )
-        if row.get("view") == "intraday"
-        else 0.0
-    )
     excess_by_benchmark = {
         "spy": _as_float(
             row.get("average_excess_return_vs_spy"),
@@ -624,11 +599,7 @@ def _performance_state(
     weakest_excess = min(excess_by_benchmark.values())
     drawdown = _as_float(row.get("max_drawdown"), "max_drawdown")
     severe = (
-        opportunity_brier >= policy.severe_opportunity_brier_score
-        or downside_brier >= policy.severe_downside_brier_score
-        or opportunity_calibration >= policy.severe_calibration_error
-        or downside_calibration >= policy.severe_calibration_error
-        or weakest_excess <= policy.severe_min_excess_return
+        weakest_excess <= policy.severe_min_excess_return
         or drawdown >= policy.severe_max_drawdown
     )
     if severe:
@@ -640,11 +611,7 @@ def _performance_state(
         reasons.append("selected_policy_performance_severe")
         return "severe", "not_ready"
     warning = (
-        opportunity_brier >= policy.warning_opportunity_brier_score
-        or downside_brier >= policy.warning_downside_brier_score
-        or opportunity_calibration >= policy.warning_calibration_error
-        or downside_calibration >= policy.warning_calibration_error
-        or weakest_excess <= policy.warning_min_excess_return
+        weakest_excess <= policy.warning_min_excess_return
         or drawdown >= policy.warning_max_drawdown
     )
     if warning:

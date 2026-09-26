@@ -5,8 +5,6 @@ import hashlib
 import json
 from pathlib import Path
 
-import market_predictor.intraday.features.bar_labels as intraday_bar_labels
-import market_predictor.intraday.features.labels as intraday_labels
 import market_predictor.modeling.label_outcomes as label_outcomes
 import market_predictor.swing.labels.barrier_and_rank as swing_barrier_labels
 
@@ -50,7 +48,7 @@ def test_label_outcomes_has_the_only_top_level_definitions() -> None:
 
 
 def test_consumers_do_not_reexport_label_outcomes() -> None:
-    consumers = (intraday_bar_labels, intraday_labels, swing_barrier_labels)
+    consumers = (swing_barrier_labels,)
     assert not any(
         hasattr(module, outcome_name)
         for module in consumers

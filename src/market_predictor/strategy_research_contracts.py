@@ -55,6 +55,7 @@ HypothesisState = Literal[
     "reference_rejected",
     "data_blocked",
     "deferred",
+    "retired",
     "candidate_rejected",
     "candidate_passed",
     "promoted",

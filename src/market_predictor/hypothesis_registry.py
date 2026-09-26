@@ -28,7 +28,7 @@ def declare_hypothesis(
     baseline_artifact_sha256: str,
     prediction_policy_sha256: str,
     execution_policy_sha256: str,
-    shadow_view: Literal["swing", "intraday"],
+    shadow_view: Literal["swing"],
     shadow_horizon: str,
     shadow_decision_group_ids: tuple[str, ...],
     shadow_minimum_tickers_per_group: int,

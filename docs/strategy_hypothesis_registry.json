@@ -168,7 +168,7 @@
       "hypothesis_id": "RISK.REALIZED_VOLATILITY.60M.V1.H1",
       "item_id": "RISK.REALIZED_VOLATILITY.60M.V1",
       "primary_outcome": "Next-60-minute realized variance and downstream risk-selection economics.",
-      "state": "planned"
+      "state": "retired"
     },
     {
       "claim": "Time-of-day-adjusted GARCH(1,1) improves 60-minute conditional-variance forecasts and risk selection over realized volatility and ATR.",
@@ -178,7 +178,7 @@
       "hypothesis_id": "RISK.GARCH.60M.V1.H1",
       "item_id": "RISK.GARCH.60M.V1",
       "primary_outcome": "Next-60-minute conditional variance and downstream risk ablation.",
-      "state": "planned"
+      "state": "retired"
     },
     {
       "claim": "Asymmetric EGARCH shock response improves 60-minute conditional-risk forecasts over symmetric GARCH(1,1).",
@@ -188,7 +188,7 @@
       "hypothesis_id": "RISK.EGARCH.60M.V1.H1",
       "item_id": "RISK.EGARCH.60M.V1",
       "primary_outcome": "Next-60-minute conditional variance and asymmetric downside-risk calibration.",
-      "state": "planned"
+      "state": "retired"
     },
     {
       "claim": "Daily GARCH improves one- and five-session conditional-variance forecasts and swing risk selection over realized volatility and ATR.",
@@ -208,7 +208,7 @@
       "hypothesis_id": "RISK.HAR_RV.60M.V1.H1",
       "item_id": "RISK.HAR_RV.60M.V1",
       "primary_outcome": "Next-60-minute realized variance and downstream risk ablation.",
-      "state": "planned"
+      "state": "retired"
     },
     {
       "claim": "Calibrated downside, median, and upside return quantiles improve selection or abstention over binary probability alone.",

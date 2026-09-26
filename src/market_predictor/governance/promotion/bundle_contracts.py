@@ -1,4 +1,4 @@
-"""Canonical contracts for promoted swing and intraday model bundles."""
+"""Canonical contract for promoted swing model bundles; intraday bundles are retired and refused."""
 
 from __future__ import annotations
 
@@ -6,13 +6,12 @@ import hashlib
 import json
 from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
-from typing import Annotated, Final, Literal, overload
+from typing import Final, Literal
 
 from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
-    TypeAdapter,
     ValidationError,
     field_validator,
     model_validator,
@@ -25,12 +24,6 @@ from market_predictor.core.errors import (
     ArtifactIntegrityError,
     PromotionGateError,
     SchemaMismatchError,
-)
-from market_predictor.intraday.features.features import (
-    CAUSAL_INTRADAY_MODEL_FEATURE_COLUMNS,
-)
-from market_predictor.intraday.features.features import (
-    FEATURE_SCHEMA_VERSION as INTRADAY_FEATURE_SCHEMA_VERSION,
 )
 from market_predictor.modeling.strategy_contract import StrategyContract
 from market_predictor.swing.features.catalyst_decision_authority import (
@@ -193,31 +186,6 @@ class PromotedSwingBundle(_PromotedBundleBase):
         return self
 
 
-class PromotedIntradayBundle(_PromotedBundleBase):
-    """Governed identity for a promoted thirty-minute intraday model."""
-
-    mode: Literal["intraday"]
-    strategy_id: Literal["intraday"]
-    horizon_minutes: Literal[30]
-    feature_profile: Literal["technical_market"]
-    catalyst_policy: Literal["confirmation_overlay"]
-
-    @model_validator(mode="after")
-    def validate_intraday_schema(self) -> PromotedIntradayBundle:
-        if self.feature_schema_version != INTRADAY_FEATURE_SCHEMA_VERSION:
-            raise ValueError(f"intraday bundle requires feature schema {INTRADAY_FEATURE_SCHEMA_VERSION}")
-        if self.model_source_families:
-            raise ValueError("intraday estimator is technical-only; catalyst sources are overlay-only")
-        return self
-
-
-PromotedBundle = Annotated[
-    PromotedSwingBundle | PromotedIntradayBundle,
-    Field(discriminator="mode"),
-]
-_PROMOTED_BUNDLE_ADAPTER: Final[TypeAdapter[PromotedBundle]] = TypeAdapter(PromotedBundle)
-
-
 def ordered_values_sha256(values: Sequence[str]) -> str:
     """Hash an ordered string contract without platform-dependent formatting."""
 
@@ -241,69 +209,35 @@ def canonical_payload_sha256(payload: Mapping[str, object]) -> str:
     return hashlib.sha256(encoded).hexdigest()
 
 
-@overload
 def validate_promoted_bundle(
     payload: Mapping[str, object],
     *,
     strategy_contract: StrategyContract,
-    expected_mode: Literal["swing"],
-) -> PromotedSwingBundle: ...
-
-
-@overload
-def validate_promoted_bundle(
-    payload: Mapping[str, object],
-    *,
-    strategy_contract: StrategyContract,
-    expected_mode: Literal["intraday"],
-) -> PromotedIntradayBundle: ...
-
-
-@overload
-def validate_promoted_bundle(
-    payload: Mapping[str, object],
-    *,
-    strategy_contract: StrategyContract,
-    expected_mode: None = None,
-) -> PromotedSwingBundle | PromotedIntradayBundle: ...
-
-
-def validate_promoted_bundle(
-    payload: Mapping[str, object],
-    *,
-    strategy_contract: StrategyContract,
-    expected_mode: Literal["swing", "intraday"] | None = None,
-) -> PromotedSwingBundle | PromotedIntradayBundle:
-    """Parse and bind a promoted bundle to the active frozen strategy contract."""
+) -> PromotedSwingBundle:
+    """Parse and bind a promoted swing bundle to the active frozen strategy contract."""
 
     if payload.get("model_status") != "promoted" or payload.get("promotion_permitted") is not True:
         raise PromotionGateError("only explicitly promoted models may be served")
     mode = payload.get("mode")
-    if mode not in {"swing", "intraday"}:
-        raise SchemaMismatchError("serving bundle mode must be swing or intraday")
-    if expected_mode is not None and mode != expected_mode:
-        raise SchemaMismatchError(f"expected a {expected_mode} serving bundle, received {mode}")
+    if mode == "intraday":
+        raise SchemaMismatchError("intraday serving bundles are retired; only swing bundles are served")
+    if mode != "swing":
+        raise SchemaMismatchError("serving bundle mode must be swing")
     try:
-        bundle = _PROMOTED_BUNDLE_ADAPTER.validate_python(payload)
+        bundle = PromotedSwingBundle.model_validate(payload)
     except ValidationError as exc:
-        horizon = "10 sessions" if mode == "swing" else "30 minutes"
-        raise SchemaMismatchError(f"invalid {mode} promoted bundle; required horizon is {horizon}: {exc}") from exc
+        raise SchemaMismatchError(f"invalid swing promoted bundle; required horizon is 10 sessions: {exc}") from exc
 
     if bundle.strategy_contract_schema_version != strategy_contract.schema_version:
         raise ArtifactIntegrityError("bundle strategy contract schema is stale")
     if bundle.strategy_contract_sha256 != strategy_contract.sha256():
         raise ArtifactIntegrityError("bundle does not bind the active strategy contract")
-    expected_strategy_id = strategy_contract.swing.strategy_id if bundle.mode == "swing" else strategy_contract.intraday.strategy_id
-    if bundle.strategy_id != expected_strategy_id:
+    if bundle.strategy_id != strategy_contract.swing.strategy_id:
         raise ArtifactIntegrityError("bundle strategy identity is stale")
-    expected_features = (
-        swing_model_feature_columns(
-            contract=strategy_contract,
-            catalyst=bundle.feature_profile == "catalyst_full",
-        )
-        if bundle.mode == "swing"
-        else CAUSAL_INTRADAY_MODEL_FEATURE_COLUMNS
+    expected_features = swing_model_feature_columns(
+        contract=strategy_contract,
+        catalyst=bundle.feature_profile == "catalyst_full",
     )
     if bundle.ordered_feature_columns != expected_features:
-        raise SchemaMismatchError(f"{bundle.mode} bundle feature columns do not match the active {bundle.feature_profile} estimator schema")
+        raise SchemaMismatchError(f"swing bundle feature columns do not match the active {bundle.feature_profile} estimator schema")
     return bundle

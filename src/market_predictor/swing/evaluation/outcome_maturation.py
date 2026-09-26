@@ -163,8 +163,6 @@ def evaluate_swing_maturation(
             if barrier_label == STOP_HIT
             else "timeout"
         ),
-        opportunity_target=None,
-        downside_target=None,
         spy_return=pair_return(benchmark_pairs[spy_ticker]),
         qqq_return=pair_return(benchmark_pairs[qqq_ticker]),
         sector_return=pair_return(benchmark_pairs[intent.primary_benchmark]),

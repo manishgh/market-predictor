@@ -5,7 +5,7 @@ from datetime import datetime
 import pandas as pd
 
 from market_predictor.core.errors import DataReadinessError
-from market_predictor.governance.outcomes.contracts import MaturedOutcomeV2
+from market_predictor.governance.outcomes.contracts import MaturedOutcomeV3
 from market_predictor.governance.outcomes.maturation import (
     maturation_attempt,
     mature_prediction,
@@ -63,7 +63,7 @@ def mature_pending_intents(
             repository.record_attempt(attempt)
             summary["blocked"] += 1
             continue
-        if isinstance(result, MaturedOutcomeV2):
+        if isinstance(result, MaturedOutcomeV3):
             repository.record_outcome(result, evidence_rows=evidence)
             summary["matured"] += 1
         else:

@@ -514,10 +514,9 @@ def _validate_evidence_schema(
     *,
     model_type: str,
 ) -> None:
-    expected = {
-        "canonical_swing": "swing_training_evidence.v1",
-        "canonical_intraday": "intraday_training_evidence.v1",
-    }.get(model_type)
+    if model_type == "canonical_intraday":
+        raise DataReadinessError("intraday model releases are retired; only swing releases are accepted")
+    expected = {"canonical_swing": "swing_training_evidence.v1"}.get(model_type)
     if expected is None or evidence.get("schema") != expected:
         raise DataReadinessError("release evidence schema does not match the model type")
 

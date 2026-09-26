@@ -5,12 +5,14 @@ import unittest
 from datetime import UTC, datetime
 from pathlib import Path
 
+from pydantic import ValidationError
+
 from market_predictor.core.errors import DataReadinessError
 from market_predictor.core.prediction_contracts import PredictionConflictError
 from market_predictor.governance.outcomes.contracts import (
-    MaturedOutcomeV2,
-    PredictionMaturationIntentV2,
-    PredictionMonitoringObservationV1,
+    MaturedOutcomeV3,
+    PredictionMaturationIntentV3,
+    PredictionMonitoringObservationV2,
     content_sha256,
     maturation_key_sha256,
     monitoring_observation_from_intent,
@@ -20,15 +22,21 @@ from market_predictor.governance.outcomes.contracts import (
 from market_predictor.governance.outcomes.performance import (
     build_performance_cohorts,
     load_performance_report,
+    validate_performance_report,
     write_performance_report,
 )
 from market_predictor.governance.outcomes.repository import OutcomeRepository
-from market_predictor.intraday.contracts import IntradayDatasetConfig
-from market_predictor.modeling.prediction_selection import (
-    DEFAULT_PREDICTION_POLICY,
-    PREDICTION_POLICY_SHA256,
-)
 from tests.test_outcome_repository import _intent, _outcome
+
+RETIRED_CALIBRATION_FIELDS = (
+    "opportunity_observed_rate",
+    "opportunity_brier_score",
+    "opportunity_calibration_error",
+    "mean_downside_probability",
+    "downside_observed_rate",
+    "downside_brier_score",
+    "downside_calibration_error",
+)
 
 
 class PerformanceMonitoringTests(unittest.TestCase):
@@ -42,7 +50,7 @@ class PerformanceMonitoringTests(unittest.TestCase):
                 exclude={"outcome_id"},
             )
             base["entry_time_utc"] = intent.decision_time_utc
-            outcome = MaturedOutcomeV2.model_validate(
+            outcome = MaturedOutcomeV3.model_validate(
                 {**base, "outcome_id": content_sha256(base)}
             )
             repository.record_intent(intent)
@@ -117,8 +125,8 @@ class PerformanceMonitoringTests(unittest.TestCase):
             self.assertEqual(row["pending_selected_samples"], 0)
             self.assertEqual(row["evidence_status"], "sufficient")
             self.assertAlmostEqual(row["selection_rate"], 2 / 3)
-            self.assertIsNone(row["opportunity_brier_score"])
-            self.assertIsNone(row["opportunity_calibration_error"])
+            self.assertEqual(row["mean_decision_score"], row["mean_probability"])
+            self.assertFalse(set(RETIRED_CALIBRATION_FIELDS).intersection(row))
             self.assertAlmostEqual(row["average_net_return"], 0.025)
             self.assertAlmostEqual(row["average_excess_return_vs_spy"], 0.01)
             self.assertAlmostEqual(row["win_rate"], 0.5)
@@ -240,58 +248,8 @@ class PerformanceMonitoringTests(unittest.TestCase):
             self.assertEqual(row["pending_selected_samples"], 1)
             self.assertEqual(row["matured_selected_samples"], 0)
             self.assertEqual(row["evidence_status"], "insufficient_evidence")
-            self.assertIsNone(row["opportunity_brier_score"])
             self.assertEqual(report["source_intent_ids"], [pending.maturation_key])
             self.assertEqual(report["source_outcome_ids"], [])
-
-    def test_intraday_reports_downside_calibration_separately(self) -> None:
-        with tempfile.TemporaryDirectory() as temp_dir:
-            repository = OutcomeRepository(Path(temp_dir))
-            first = _intraday_intent_variant(
-                "NVDA",
-                "1",
-                opportunity_probability=0.8,
-                downside_probability=0.2,
-            )
-            second = _intraday_intent_variant(
-                "AMD",
-                "2",
-                opportunity_probability=0.6,
-                downside_probability=0.4,
-            )
-            _record(
-                repository,
-                first,
-                target=1,
-                downside_target=0,
-                net_return=0.03,
-                excess_return=0.02,
-            )
-            _record(
-                repository,
-                second,
-                target=0,
-                downside_target=1,
-                net_return=-0.02,
-                excess_return=-0.03,
-            )
-
-            report = build_performance_cohorts(
-                repository,
-                generated_at=datetime(2026, 8, 2, tzinfo=UTC),
-                minimum_samples=2,
-            )
-            row = next(
-                item
-                for item in report["rows"]
-                if item["cohort_type"] == "all"
-            )
-
-            self.assertEqual(row["view"], "intraday")
-            self.assertAlmostEqual(row["opportunity_brier_score"], 0.20)
-            self.assertAlmostEqual(row["downside_brier_score"], 0.20)
-            self.assertAlmostEqual(row["mean_downside_probability"], 0.30)
-            self.assertAlmostEqual(row["downside_observed_rate"], 0.50)
 
     def test_persisted_report_round_trip_rejects_mutation(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -354,7 +312,7 @@ class PerformanceMonitoringTests(unittest.TestCase):
             )
             base.pop("semantic_prediction_id")
             base["semantic_prediction_id"] = monitoring_semantic_sha256(base)
-            invalid = PredictionMonitoringObservationV1.model_validate(
+            invalid = PredictionMonitoringObservationV2.model_validate(
                 {**base, "observation_id": content_sha256(base)}
             )
             repository.record_observation(invalid)
@@ -410,6 +368,41 @@ class PerformanceMonitoringTests(unittest.TestCase):
             with self.assertRaises(PredictionConflictError):
                 write_performance_report(path, conflicting)
 
+    def test_retired_views_fields_and_versions_are_refused(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repository = OutcomeRepository(Path(temp_dir))
+            _record(
+                repository,
+                _intent_variant("MSFT", "1", probability=0.8),
+                target=1,
+                net_return=0.10,
+                excess_return=0.08,
+            )
+            report = build_performance_cohorts(
+                repository,
+                generated_at=datetime(2026, 8, 2, tzinfo=UTC),
+                minimum_samples=1,
+            )
+        row = report["rows"][0]
+        for changes in (
+            {"view": "intraday", "horizon": "60m"},
+            {"horizon": "10d"},
+            {"opportunity_brier_score": 0.2},
+        ):
+            # Re-hash both identities so only the retired value is wrong.
+            changed = {key: value for key, value in {**row, **changes}.items() if key != "cohort_id"}
+            changed["cohort_id"] = content_sha256(changed)
+            candidate = {key: value for key, value in report.items() if key != "report_id"}
+            candidate["rows"] = [changed]
+            candidate["report_id"] = content_sha256(candidate)
+            with self.subTest(changes=changes), self.assertRaises(ValidationError) as raised:
+                validate_performance_report(candidate)
+            self.assertNotIn("identity", str(raised.exception))
+        with self.assertRaises(ValidationError):
+            validate_performance_report(
+                {**report, "contract_version": "market_predictor.selected_policy_performance.v2"}
+            )
+
 
 def _intent_variant(
     ticker: str,
@@ -418,7 +411,7 @@ def _intent_variant(
     probability: float,
     decision_time: datetime | None = None,
     selected: bool = True,
-) -> PredictionMaturationIntentV2:
+) -> PredictionMaturationIntentV3:
     base = _intent().model_dump(
         mode="python",
         exclude={"maturation_key", "semantic_prediction_id", "snapshot_id"},
@@ -443,52 +436,7 @@ def _intent_variant(
     )
     semantic_id = semantic_prediction_sha256(base)
     snapshot_id = snapshot_character * 64
-    return PredictionMaturationIntentV2.model_validate(
-        {
-            **base,
-            "semantic_prediction_id": semantic_id,
-            "snapshot_id": snapshot_id,
-            "maturation_key": maturation_key_sha256(snapshot_id, semantic_id),
-        }
-    )
-
-
-def _intraday_intent_variant(
-    ticker: str,
-    snapshot_character: str,
-    *,
-    opportunity_probability: float,
-    downside_probability: float,
-) -> PredictionMaturationIntentV2:
-    config = IntradayDatasetConfig()
-    base = _intent().model_dump(
-        mode="python",
-        exclude={"maturation_key", "semantic_prediction_id", "snapshot_id"},
-    )
-    decision = datetime(2026, 7, 24, 14, 0, tzinfo=UTC)
-    base.update(
-        {
-            "ticker": ticker,
-            "canonical_security_id": f"security:{ticker}",
-            "view": "intraday",
-            "horizon": "60m",
-            "decision_time_utc": decision,
-            "decision_session_et": decision.date(),
-            "decision_group_id": decision.isoformat(),
-            "probability": opportunity_probability,
-            "downside_probability": downside_probability,
-            "calibration_bin": min(9, int(opportunity_probability * 10)),
-            "label_policy": config.label_policy(),
-            "label_policy_sha256": config.label_config_sha256(),
-            "prediction_policy": DEFAULT_PREDICTION_POLICY.specification(),
-            "prediction_policy_sha256": PREDICTION_POLICY_SHA256,
-            "decision_atr": 1.0,
-            "signal": "entry_candidate",
-        }
-    )
-    semantic_id = semantic_prediction_sha256(base)
-    snapshot_id = snapshot_character * 64
-    return PredictionMaturationIntentV2.model_validate(
+    return PredictionMaturationIntentV3.model_validate(
         {
             **base,
             "semantic_prediction_id": semantic_id,
@@ -500,10 +448,9 @@ def _intraday_intent_variant(
 
 def _record(
     repository: OutcomeRepository,
-    intent: PredictionMaturationIntentV2,
+    intent: PredictionMaturationIntentV3,
     *,
     target: int,
-    downside_target: int | None = None,
     net_return: float,
     excess_return: float,
 ) -> None:
@@ -517,8 +464,6 @@ def _record(
     label_cost_fraction = float(base["label_round_trip_cost_bps"]) / 10_000.0
     base.update(
         {
-            "opportunity_target": target if intent.view == "intraday" else None,
-            "downside_target": downside_target if intent.view == "intraday" else None,
             "net_return": net_return,
             "gross_return": gross_return,
             "label_net_return": gross_return - label_cost_fraction,
@@ -531,14 +476,9 @@ def _record(
             "excess_return_vs_qqq": excess_return,
             "excess_return_vs_sector": excess_return,
             "evidence_sha256": content_sha256(evidence),
-            "entry_time_utc": (
-                intent.decision_time_utc
-                if intent.view == "intraday"
-                else base["entry_time_utc"]
-            ),
         }
     )
-    outcome = MaturedOutcomeV2.model_validate(
+    outcome = MaturedOutcomeV3.model_validate(
         {**base, "outcome_id": content_sha256(base)}
     )
     repository.record_intent(intent)

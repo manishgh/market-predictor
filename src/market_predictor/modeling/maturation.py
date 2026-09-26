@@ -51,8 +51,6 @@ class MaturedPath:
     mfe: float
     mae: float
     path_outcome: str
-    opportunity_target: int | None
-    downside_target: int | None
     spy_return: float
     qqq_return: float
     sector_return: float
@@ -81,50 +79,6 @@ def daily_path(
     return rows.loc[sessions].reset_index(), []
 
 
-def intraday_path(
-    bars: pd.DataFrame,
-    *,
-    ticker: str,
-    expected_starts: list[datetime],
-    session: object,
-    bar_minutes: int,
-) -> tuple[pd.DataFrame, list[str]]:
-    ticker_rows = bars[bars["ticker"].eq(ticker)].set_index("bar_start_utc")
-    missing = [
-        f"{ticker}:{start.isoformat()}"
-        for start in expected_starts
-        if pd.Timestamp(start) not in ticker_rows.index
-    ]
-    if missing:
-        return pd.DataFrame(), missing
-    selected = ticker_rows.loc[pd.DatetimeIndex(expected_starts)].copy()
-    selected.index.name = "bar_start_utc"
-    selected = selected.reset_index()
-    durations = selected["bar_end_utc"] - selected["bar_start_utc"]
-    expected_duration = pd.Timedelta(minutes=bar_minutes)
-    invalid_duration = durations.ne(expected_duration)
-    if bool(invalid_duration.any()):
-        missing.extend(
-            f"{ticker}:{start.isoformat()}:wrong_bar_duration"
-            for start in pd.to_datetime(
-                selected.loc[invalid_duration, "bar_start_utc"],
-                utc=True,
-            )
-        )
-        return pd.DataFrame(), missing
-    wrong_session = selected["session_date_et"].ne(session)
-    if bool(wrong_session.any()):
-        missing.extend(
-            f"{ticker}:{start.isoformat()}:cross_session"
-            for start in pd.to_datetime(
-                selected.loc[wrong_session, "bar_start_utc"],
-                utc=True,
-            )
-        )
-        return pd.DataFrame(), missing
-    return selected, []
-
-
 def one_daily_row(
     bars: pd.DataFrame,
     *,
@@ -133,27 +87,6 @@ def one_daily_row(
 ) -> pd.Series | None:
     rows = bars[bars["ticker"].eq(ticker) & bars["session_date_et"].eq(session)]
     return rows.iloc[0] if len(rows) == 1 else None
-
-
-def one_intraday_row(
-    bars: pd.DataFrame,
-    *,
-    ticker: str,
-    start: datetime,
-    bar_minutes: int,
-) -> pd.Series | None:
-    rows = bars[
-        bars["ticker"].eq(ticker)
-        & bars["bar_start_utc"].eq(pd.Timestamp(start))
-    ]
-    if len(rows) != 1:
-        return None
-    row = rows.iloc[0]
-    if row["bar_end_utc"] - row["bar_start_utc"] != pd.Timedelta(
-        minutes=bar_minutes
-    ):
-        return None
-    return row
 
 
 def pair_return(pair: tuple[pd.Series, pd.Series]) -> float:

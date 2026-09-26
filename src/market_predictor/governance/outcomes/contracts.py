@@ -4,6 +4,7 @@ import hashlib
 import json
 import math
 import re
+from collections.abc import Mapping
 from datetime import UTC, date, datetime
 from typing import Literal, Self
 
@@ -15,28 +16,41 @@ from market_predictor.execution_policy import (
     round_trip_cost_bps,
 )
 from market_predictor.label_policy import policy_sha256
-from market_predictor.modeling.prediction_selection import (
-    parse_prediction_policy,
-    parse_swing_prediction_policy,
-)
+from market_predictor.modeling.prediction_selection import parse_swing_prediction_policy
 
 SHA256_PATTERN = r"^[0-9a-f]{64}$"
+# Swing horizons count exchange sessions, such as 10b, 63b or 252b.
+SWING_HORIZON_PATTERN = r"^[1-9]\d*b$"
+RETIRED_INTRADAY = "intraday prediction records are retired; only swing records are accepted"
+
+
+def refuse_retired_intraday(data: object) -> object:
+    if isinstance(data, Mapping) and data.get("view") == "intraday":
+        raise ValueError(RETIRED_INTRADAY)
+    return data
 
 
 class FrozenContract(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True, allow_inf_nan=False)
 
 
-class PredictionMonitoringObservationV1(FrozenContract):
-    contract_version: Literal["market_predictor.prediction_observation.v1"] = (
-        "market_predictor.prediction_observation.v1"
+class _SwingViewContract(FrozenContract):
+    @model_validator(mode="before")
+    @classmethod
+    def refuse_retired_view(cls, data: object) -> object:
+        return refuse_retired_intraday(data)
+
+
+class PredictionMonitoringObservationV2(_SwingViewContract):
+    contract_version: Literal["market_predictor.prediction_observation.v2"] = (
+        "market_predictor.prediction_observation.v2"
     )
     observation_id: str = Field(pattern=SHA256_PATTERN)
     semantic_prediction_id: str = Field(pattern=SHA256_PATTERN)
     snapshot_id: str = Field(pattern=SHA256_PATTERN)
     ticker: str = Field(min_length=1, max_length=16)
-    view: Literal["swing", "intraday"]
-    horizon: str = Field(pattern=r"^[1-9]\d*(?:m|d|b)$")
+    view: Literal["swing"]
+    horizon: str = Field(pattern=SWING_HORIZON_PATTERN)
     decision_time_utc: datetime
     decision_session_et: date
     decision_group_id: str = Field(min_length=1, max_length=256)
@@ -51,7 +65,6 @@ class PredictionMonitoringObservationV1(FrozenContract):
     market_cap_bucket: str = Field(min_length=1, max_length=64)
     liquidity_bucket: str = Field(min_length=1, max_length=64)
     probability: float | None = Field(default=None, ge=0.0, le=1.0)
-    downside_probability: float | None = Field(default=None, ge=0.0, le=1.0)
     calibration_bin: int | None = Field(default=None, ge=0, le=9)
     signal: str = Field(min_length=1, max_length=128)
     rank: int | None = Field(default=None, ge=1)
@@ -86,8 +99,6 @@ class PredictionMonitoringObservationV1(FrozenContract):
             raise ValueError("observation actionability is inconsistent")
         if self.actionable and self.probability is None:
             raise ValueError("actionable observation requires probability")
-        if self.view == "intraday" and self.probability is not None and self.downside_probability is None:
-            raise ValueError("scored intraday observation requires downside probability")
         if self.probability is None and self.calibration_bin is not None:
             raise ValueError("unscored observation cannot have a calibration bin")
         if self.probability is not None and self.calibration_bin != min(int(self.probability * 10), 9):
@@ -114,17 +125,17 @@ class PredictionMonitoringObservationV1(FrozenContract):
         return self
 
 
-class PredictionMaturationIntentV2(FrozenContract):
-    contract_version: Literal["market_predictor.maturation_intent.v2"] = (
-        "market_predictor.maturation_intent.v2"
+class PredictionMaturationIntentV3(_SwingViewContract):
+    contract_version: Literal["market_predictor.maturation_intent.v3"] = (
+        "market_predictor.maturation_intent.v3"
     )
     maturation_key: str = Field(pattern=SHA256_PATTERN)
     semantic_prediction_id: str = Field(pattern=SHA256_PATTERN)
     snapshot_id: str = Field(pattern=SHA256_PATTERN)
     ticker: str = Field(min_length=1, max_length=16)
     canonical_security_id: str = Field(min_length=1, max_length=128)
-    view: Literal["swing", "intraday"]
-    horizon: str = Field(pattern=r"^[1-9]\d*(?:m|d|b)$")
+    view: Literal["swing"]
+    horizon: str = Field(pattern=SWING_HORIZON_PATTERN)
     decision_time_utc: datetime
     decision_session_et: date
     decision_group_id: str = Field(min_length=1, max_length=256)
@@ -143,7 +154,6 @@ class PredictionMaturationIntentV2(FrozenContract):
     liquidity_bucket: str = Field(min_length=1, max_length=64)
     price_feed: str = Field(min_length=1, max_length=32)
     probability: float = Field(ge=0.0, le=1.0)
-    downside_probability: float | None = Field(default=None, ge=0.0, le=1.0)
     calibration_bin: int = Field(ge=0, le=9)
     signal: str = Field(min_length=1, max_length=128)
     rank: int | None = Field(default=None, ge=1)
@@ -167,44 +177,23 @@ class PredictionMaturationIntentV2(FrozenContract):
 
     @model_validator(mode="after")
     def validate_identity(self) -> Self:
-        if self.view == "swing":
-            if (
-                self.prediction_policy.get("contract_version")
-                != "market_predictor.swing_prediction_policy.v1"
-            ):
-                raise ValueError("swing intent requires the swing prediction policy")
-            prediction_policy = parse_swing_prediction_policy(
-                self.prediction_policy,
-                expected_sha256=self.prediction_policy_sha256,
-            )
-            horizon = _horizon_amount(self.horizon, unit="b", view="swing")
-            if (
-                self.label_policy.get("policy")
-                != "market_predictor.swing_outcome_policy.v1"
-                or self.label_policy.get("horizon_sessions") != horizon
-                or prediction_policy.horizon_sessions != horizon
-            ):
-                raise ValueError("swing intent policy horizons are inconsistent")
-            if self.downside_probability is not None:
-                raise ValueError("swing intent cannot contain downside probability")
-        else:
-            if (
-                self.prediction_policy.get("contract_version")
-                != "market_predictor.prediction_policy.v2"
-            ):
-                raise ValueError("intraday intent requires the intraday prediction policy")
-            parse_prediction_policy(
-                self.prediction_policy,
-                expected_sha256=self.prediction_policy_sha256,
-            )
-            horizon = _horizon_amount(self.horizon, unit="m", view="intraday")
-            if (
-                self.label_policy.get("policy") != "intraday_label.v2"
-                or self.label_policy.get("horizon_minutes") != horizon
-            ):
-                raise ValueError("intraday intent policy horizon is inconsistent")
-            if self.downside_probability is None:
-                raise ValueError("intraday intent requires downside probability")
+        if (
+            self.prediction_policy.get("contract_version")
+            != "market_predictor.swing_prediction_policy.v1"
+        ):
+            raise ValueError("swing intent requires the swing prediction policy")
+        prediction_policy = parse_swing_prediction_policy(
+            self.prediction_policy,
+            expected_sha256=self.prediction_policy_sha256,
+        )
+        horizon = _horizon_amount(self.horizon, unit="b", view="swing")
+        if (
+            self.label_policy.get("policy")
+            != "market_predictor.swing_outcome_policy.v1"
+            or self.label_policy.get("horizon_sessions") != horizon
+            or prediction_policy.horizon_sessions != horizon
+        ):
+            raise ValueError("swing intent policy horizons are inconsistent")
         if policy_sha256(self.label_policy) != self.label_policy_sha256:
             raise ValueError("label policy hash does not match its payload")
         if content_sha256(self.prediction_policy) != self.prediction_policy_sha256:
@@ -254,17 +243,17 @@ class MaturationAttemptV1(FrozenContract):
         return self
 
 
-class MaturedOutcomeV2(FrozenContract):
-    contract_version: Literal["market_predictor.matured_outcome.v2"] = (
-        "market_predictor.matured_outcome.v2"
+class MaturedOutcomeV3(_SwingViewContract):
+    contract_version: Literal["market_predictor.matured_outcome.v3"] = (
+        "market_predictor.matured_outcome.v3"
     )
     outcome_id: str = Field(pattern=SHA256_PATTERN)
     maturation_key: str = Field(pattern=SHA256_PATTERN)
     semantic_prediction_id: str = Field(pattern=SHA256_PATTERN)
     snapshot_id: str = Field(pattern=SHA256_PATTERN)
     ticker: str
-    view: Literal["swing", "intraday"]
-    horizon: str
+    view: Literal["swing"]
+    horizon: str = Field(pattern=SWING_HORIZON_PATTERN)
     entry_time_utc: datetime
     exit_time_utc: datetime
     label_available_at_utc: datetime
@@ -281,9 +270,7 @@ class MaturedOutcomeV2(FrozenContract):
     net_return: float
     mfe: float
     mae: float
-    path_outcome: Literal["positive", "negative", "target_first", "stop_first", "timeout"]
-    opportunity_target: int | None = Field(default=None, ge=0, le=1)
-    downside_target: int | None = Field(default=None, ge=0, le=1)
+    path_outcome: Literal["target_first", "stop_first", "timeout"]
     spy_return: float
     qqq_return: float
     sector_return: float
@@ -312,16 +299,6 @@ class MaturedOutcomeV2(FrozenContract):
             raise ValueError("matured_at_utc must equal deterministic label availability")
         if self.label_available_at_utc < self.exit_time_utc:
             raise ValueError("outcome cannot be available before its exit")
-        if self.view == "swing":
-            if self.path_outcome not in {"target_first", "stop_first", "timeout"}:
-                raise ValueError("swing outcome must use managed barrier semantics")
-            if self.opportunity_target is not None or self.downside_target is not None:
-                raise ValueError("swing outcome cannot contain intraday calibration targets")
-        else:
-            if self.path_outcome not in {"target_first", "stop_first", "timeout"}:
-                raise ValueError("intraday outcome must use managed barrier semantics")
-            if self.opportunity_target is None or self.downside_target is None:
-                raise ValueError("intraday outcome requires both calibration targets")
         expected_gross = self.exit_price / self.entry_price - 1.0
         expected_label_net = (
             expected_gross - self.label_round_trip_cost_bps / 10_000.0
@@ -381,6 +358,13 @@ def semantic_prediction_sha256(intent_without_key: dict[str, object]) -> str:
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
+def swing_horizon_sessions(horizon: str) -> int:
+    """The exchange-session count of a swing horizon such as 10b."""
+    if re.fullmatch(SWING_HORIZON_PATTERN, horizon) is None:
+        raise ValueError(f"swing horizon is not a session count: {horizon}")
+    return int(horizon[:-1])
+
+
 def _horizon_amount(horizon: str, *, unit: str, view: str) -> int:
     match = re.fullmatch(rf"([1-9]\d*){re.escape(unit)}", horizon)
     if match is None:
@@ -418,10 +402,10 @@ def content_sha256(value: object) -> str:
 
 
 def monitoring_observation_from_intent(
-    intent: PredictionMaturationIntentV2,
-) -> PredictionMonitoringObservationV1:
+    intent: PredictionMaturationIntentV3,
+) -> PredictionMonitoringObservationV2:
     content: dict[str, object] = {
-        "contract_version": "market_predictor.prediction_observation.v1",
+        "contract_version": "market_predictor.prediction_observation.v2",
         "semantic_prediction_id": intent.semantic_prediction_id,
         "snapshot_id": intent.snapshot_id,
         "ticker": intent.ticker,
@@ -441,7 +425,6 @@ def monitoring_observation_from_intent(
         "market_cap_bucket": intent.market_cap_bucket,
         "liquidity_bucket": intent.liquidity_bucket,
         "probability": intent.probability,
-        "downside_probability": intent.downside_probability,
         "calibration_bin": intent.calibration_bin,
         "signal": intent.signal,
         "rank": intent.rank,
@@ -452,7 +435,7 @@ def monitoring_observation_from_intent(
         "catalyst_status": intent.catalyst_status,
         "maturation_key": intent.maturation_key,
     }
-    return PredictionMonitoringObservationV1.model_validate(
+    return PredictionMonitoringObservationV2.model_validate(
         {**content, "observation_id": content_sha256(content)}
     )
 

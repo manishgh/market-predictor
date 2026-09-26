@@ -11,7 +11,7 @@ from market_predictor.canonical.store import load_canonical_artifact
 from market_predictor.commands.configuration import load_typed_config
 from market_predictor.core.json_integrity import parse_strict_json_object
 from market_predictor.governance.drift.policy import (
-    DriftPolicyV2,
+    DriftPolicyV3,
     DriftStateStore,
     evaluate_drift,
 )
@@ -144,8 +144,8 @@ def register_outcome_commands(app: typer.Typer, console: Any) -> None:
 
     @app.command("publish-drift-assessment")
     def publish_drift_assessment(
-        mode: str = typer.Option(..., help="Prediction view: swing or intraday."),
-        horizon: str = typer.Option(..., help="Canonical route horizon, such as 5d or 60m."),
+        mode: str = typer.Option("swing", help="Prediction view; only swing is served (intraday is retired)."),
+        horizon: str = typer.Option(..., help="Canonical route horizon in days or sessions, such as 10b."),
         model_release_id: str = typer.Option(
             ...,
             help="Active model release SHA-256 identity.",
@@ -197,14 +197,16 @@ def register_outcome_commands(app: typer.Typer, console: Any) -> None:
     ) -> None:
         """Evaluate and atomically publish one release-specific route drift state."""
 
+        if mode.strip().lower() != "swing":
+            raise typer.BadParameter("only swing routes are assessed; intraday prediction is retired")
         timestamp = evaluated_at or datetime.now(UTC)
         if timestamp.utcoffset() is None:
             raise typer.BadParameter("evaluated-at must be timezone-aware")
         feature_drift = _load_json_object(feature_drift_report)
         report = load_performance_report(performance_report)
-        policy = load_typed_config(policy_config, DriftPolicyV2)
+        policy = load_typed_config(policy_config, DriftPolicyV3)
         assessment = evaluate_drift(
-            mode=mode.strip().lower(),
+            mode="swing",
             horizon=horizon.strip().lower(),
             model_release_id=model_release_id.strip().lower(),
             model_artifact_sha256=model_artifact_sha256.strip().lower(),

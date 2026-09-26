@@ -16,15 +16,12 @@ from market_predictor.core.prediction_contracts import (
 from market_predictor.serving.snapshot_store import PredictionSnapshotStore
 from market_predictor.sources.alpaca import AlpacaSource
 
-ACTIONABLE_SIGNALS = {
-    "swing": {
-        "bullish_watch",
-        "bullish_watch_confirmed",
-        "strong_bullish_watch",
-        "strong_bullish_watch_confirmed",
-    },
-    "intraday": {"entry_candidate", "entry_candidate_confirmed"},
-}
+ACTIONABLE_SIGNALS = frozenset({
+    "bullish_watch",
+    "bullish_watch_confirmed",
+    "strong_bullish_watch",
+    "strong_bullish_watch_confirmed",
+})
 ReplayReadinessStatus = Literal["valid", "warn", "invalid"]
 ReplayStatus = Literal["completed", "not_entered", "invalid"]
 
@@ -52,9 +49,9 @@ class AlpacaReplayPriceProvider:
         *,
         timeframe: str,
     ) -> pd.DataFrame:
-        if timeframe == "1Day":
-            return self.source.fetch_daily_bars(ticker, start, end)
-        return self.source.fetch_intraday_bars(ticker, start, end, timeframe=timeframe)
+        if timeframe != "1Day":
+            raise ValueError("swing replay uses daily bars only")
+        return self.source.fetch_daily_bars(ticker, start, end)
 
 
 class InvestmentReplayService:
@@ -102,7 +99,7 @@ class InvestmentReplayService:
                 model=model,
             )
 
-        if not request.force_entry and signal not in ACTIONABLE_SIGNALS[request.model_view]:
+        if not request.force_entry and signal not in ACTIONABLE_SIGNALS:
             return _response(
                 request=request,
                 decision_time=decision_time,
@@ -115,7 +112,7 @@ class InvestmentReplayService:
             )
 
         assert model is not None
-        timeframe = model.bar_timeframe or ("1Day" if request.model_view == "swing" else "5Min")
+        timeframe = model.bar_timeframe or "1Day"
         start = decision_time - timedelta(days=2)
         fetch_end = evaluation_time + timedelta(days=2 if timeframe == "1Day" else 1)
         try:

@@ -1,72 +1,57 @@
 from __future__ import annotations
 
-import tempfile
-import unittest
-from datetime import timedelta
 from pathlib import Path
 
-import pandas as pd
+import pytest
 
+from market_predictor.core.errors import DataReadinessError
 from market_predictor.core.prediction_contracts import PredictionRequest
-from market_predictor.feature_store import LiveFeatureStore
 from market_predictor.governance.outcomes.repository import OutcomeRepository
-from market_predictor.serving.outcome_intents import register_snapshot_intents
-from tests.test_prediction_service import (
-    _intraday_frame,
-    _intraday_service,
-    _publish_live_intraday,
-    _write_intraday_model,
+from market_predictor.serving.outcome_intents import (
+    monitoring_observations_from_response,
+    register_snapshot_intents,
 )
+from tests.support.swing_serving import NOW, swing_serving
 
 
-class OutcomeIntentIntegrationTests(unittest.TestCase):
-    def test_registers_identity_complete_live_snapshot_for_maturation(self) -> None:
-        with tempfile.TemporaryDirectory() as temp_dir:
-            root = Path(temp_dir)
-            model = root / "intraday.joblib"
-            frame = _intraday_frame("MSFT", rows=150)
-            _write_intraday_model(model)
-            generated = (
-                pd.to_datetime(frame["decision_time_utc"], utc=True)
-                .max()
-                .to_pydatetime()
-                + timedelta(minutes=1)
-            )
-            store = LiveFeatureStore(root)
-            _publish_live_intraday(store, frame, generated)
-            service = _intraday_service(
-                root,
-                dataset=None,
-                model=model,
-                data_source="live",
-                live_feature_store=store,
-            )
-            response = service.predict(
-                PredictionRequest(
-                    tickers=["MSFT"],
-                    mode="intraday",
-                    as_of=generated,
-                )
-            )
-            assert response.snapshot_id is not None
-            repository = OutcomeRepository(root / "data/outcomes")
+def test_registers_identity_complete_swing_snapshot_for_maturation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    serving = swing_serving(tmp_path, monkeypatch, enforce_drift=False, persist_snapshots=True)
+    response = serving.service.predict(
+        PredictionRequest(tickers=["T000", "T059", "MISSING"], as_of=NOW)
+    )
+    assert response.snapshot_id is not None
+    repository = OutcomeRepository(tmp_path / "data/outcomes")
 
-            intents = register_snapshot_intents(
-                service.snapshot_store,
-                repository,
-                response.snapshot_id,
-            )
+    intents = register_snapshot_intents(
+        serving.service.snapshot_store,
+        repository,
+        response.snapshot_id,
+    )
 
-            self.assertEqual(len(intents), 1)
-            intent = intents[0]
-            self.assertEqual(intent.ticker, "MSFT")
-            self.assertEqual(intent.view, "intraday")
-            self.assertEqual(intent.model_release_id, "e" * 64)
-            self.assertEqual(
-                repository.load_intent(intent.maturation_key),
-                intent,
-            )
+    assert {intent.ticker for intent in intents} == {"T000", "T059"}
+    for intent in intents:
+        assert (intent.view, intent.horizon) == ("swing", "10b")
+        assert intent.model_release_id == response.models["swing"].release_id
+        assert repository.load_intent(intent.maturation_key) == intent
+    # MISSING is outside the live universe: it abstains unscored, so nothing is monitored.
+    observations = monitoring_observations_from_response(response, snapshot_id=response.snapshot_id)
+    assert {(observation.ticker, observation.view) for observation in observations} == {
+        ("T000", "swing"),
+        ("T059", "swing"),
+    }
 
 
-if __name__ == "__main__":
-    unittest.main()
+def test_scored_prediction_without_evidence_row_is_refused(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    serving = swing_serving(tmp_path, monkeypatch, enforce_drift=False)
+    response = serving.service.predict(PredictionRequest(tickers=["T000"], as_of=NOW))
+    assert response.evidence is not None
+    stripped = response.model_copy(
+        update={"evidence": response.evidence.model_copy(update={"row_feature_availability": []})}
+    )
+
+    with pytest.raises(DataReadinessError, match="has no evidence row"):
+        monitoring_observations_from_response(stripped, snapshot_id="a" * 64, intents={})

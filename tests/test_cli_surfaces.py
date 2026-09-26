@@ -179,7 +179,6 @@ class CliSurfaceTests(unittest.TestCase):
             "market_predictor.research_cli",
             "market_predictor.sentiment",
             "market_predictor.sources.finviz",
-            "market_predictor.intraday.promotion",
             "azure",
             "bs4",
             "torch",

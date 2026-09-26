@@ -1,4 +1,4 @@
-"""Governed orchestration for causal prediction-outcome maturation."""
+"""Governed orchestration for causal swing prediction-outcome maturation."""
 
 from __future__ import annotations
 
@@ -15,19 +15,16 @@ from market_predictor.execution_policy import (
 )
 from market_predictor.governance.outcomes.contracts import (
     MaturationAttemptV1,
-    MaturedOutcomeV2,
-    PredictionMaturationIntentV2,
+    MaturedOutcomeV3,
+    PredictionMaturationIntentV3,
     content_sha256,
-)
-from market_predictor.intraday.evaluation.outcome_maturation import (
-    evaluate_intraday_maturation,
 )
 from market_predictor.modeling.maturation import MaturedPath, PendingPath
 from market_predictor.swing.evaluation.outcome_maturation import (
     evaluate_swing_maturation,
 )
 
-MaturationResult: TypeAlias = MaturationAttemptV1 | MaturedOutcomeV2
+MaturationResult: TypeAlias = MaturationAttemptV1 | MaturedOutcomeV3
 _BAR_COLUMNS = {
     "ticker",
     "bar_start_utc",
@@ -45,7 +42,7 @@ _BAR_COLUMNS = {
 
 
 def mature_prediction(
-    intent: PredictionMaturationIntentV2,
+    intent: PredictionMaturationIntentV3,
     bars: pd.DataFrame,
     *,
     observed_as_of: datetime,
@@ -57,13 +54,9 @@ def mature_prediction(
         observed_as_of=observed,
         source_artifact_sha256=source_artifact_sha256,
         required_price_feed=intent.price_feed,
-        required_timeframe="1d" if intent.view == "swing" else "1m",
+        required_timeframe="1d",
     )
-    evaluated = (
-        evaluate_swing_maturation(intent, data)
-        if intent.view == "swing"
-        else evaluate_intraday_maturation(intent, data, observed_at=observed)
-    )
+    evaluated = evaluate_swing_maturation(intent, data)
     if isinstance(evaluated, PendingPath):
         return (
             maturation_attempt(
@@ -79,7 +72,7 @@ def mature_prediction(
 
 
 def maturation_attempt(
-    intent: PredictionMaturationIntentV2,
+    intent: PredictionMaturationIntentV3,
     *,
     observed_as_of: datetime,
     status: str,
@@ -104,9 +97,9 @@ def maturation_attempt(
 
 
 def _outcome_from_path(
-    intent: PredictionMaturationIntentV2,
+    intent: PredictionMaturationIntentV3,
     path: MaturedPath,
-) -> MaturedOutcomeV2:
+) -> MaturedOutcomeV3:
     assert intent.decision_atr is not None
     participation = 0.0
     execution_cost_bps = round_trip_cost_bps(
@@ -117,7 +110,7 @@ def _outcome_from_path(
     )
     net_return = path.gross_return - execution_cost_bps / 10_000.0
     base = {
-        "contract_version": "market_predictor.matured_outcome.v2",
+        "contract_version": "market_predictor.matured_outcome.v3",
         "maturation_key": intent.maturation_key,
         "semantic_prediction_id": intent.semantic_prediction_id,
         "snapshot_id": intent.snapshot_id,
@@ -141,8 +134,6 @@ def _outcome_from_path(
         "mfe": path.mfe,
         "mae": path.mae,
         "path_outcome": path.path_outcome,
-        "opportunity_target": path.opportunity_target,
-        "downside_target": path.downside_target,
         "spy_return": path.spy_return,
         "qqq_return": path.qqq_return,
         "sector_return": path.sector_return,
@@ -151,7 +142,7 @@ def _outcome_from_path(
         "excess_return_vs_sector": net_return - path.sector_return,
         "evidence_sha256": content_sha256(path.evidence_rows),
     }
-    return MaturedOutcomeV2.model_validate(
+    return MaturedOutcomeV3.model_validate(
         {**base, "outcome_id": content_sha256(base)}
     )
 

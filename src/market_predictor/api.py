@@ -35,7 +35,7 @@ from market_predictor.serving.prediction_service import (
     serving_routes_from_config,
     swing_live_input_provider_from_config,
 )
-from market_predictor.serving.requests import SwingInvestmentReplayRequest, SwingPredictionRequest
+from market_predictor.serving.requests import SwingPredictionRequest
 from market_predictor.telemetry import RuntimeTelemetry
 
 try:
@@ -303,7 +303,7 @@ def create_app(
         )
 
     @app.post("/v1/replays/investment", response_model=InvestmentReplayResponse)
-    def replay_investment(request: SwingInvestmentReplayRequest) -> InvestmentReplayResponse:
+    def replay_investment(request: InvestmentReplayRequest) -> InvestmentReplayResponse:
         if configured_replay_service is None:
             raise PredictionReadinessError
         return _run_replay(configured_replay_service, request, runtime_telemetry)

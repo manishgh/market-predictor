@@ -5,14 +5,13 @@ from zoneinfo import ZoneInfo
 
 from market_predictor.core.errors import DataReadinessError
 from market_predictor.core.prediction_contracts import (
-    IntradayPrediction,
     PredictionResponse,
     PredictionRowEvidenceV1,
     SwingPrediction,
 )
 from market_predictor.governance.outcomes.contracts import (
-    PredictionMaturationIntentV2,
-    PredictionMonitoringObservationV1,
+    PredictionMaturationIntentV3,
+    PredictionMonitoringObservationV2,
     content_sha256,
     maturation_key_sha256,
     monitoring_semantic_sha256,
@@ -28,10 +27,10 @@ def register_snapshot_intents(
     snapshot_store: PredictionSnapshotStore,
     outcome_repository: OutcomeRepository,
     snapshot_id: str,
-) -> list[PredictionMaturationIntentV2]:
+) -> list[PredictionMaturationIntentV3]:
     _, response, _ = snapshot_store.load(snapshot_id)
     intents = maturation_intents_from_response(response, snapshot_id=snapshot_id)
-    intent_by_view: dict[tuple[str, str], PredictionMaturationIntentV2] = {
+    intent_by_view: dict[tuple[str, str], PredictionMaturationIntentV3] = {
         (intent.ticker, intent.view): intent for intent in intents
     }
     observations = monitoring_observations_from_response(
@@ -49,13 +48,13 @@ def maturation_intents_from_response(
     response: PredictionResponse,
     *,
     snapshot_id: str,
-) -> list[PredictionMaturationIntentV2]:
+) -> list[PredictionMaturationIntentV3]:
     evidence = response.evidence
     if evidence is None:
         raise DataReadinessError("prediction snapshot has no point-in-time evidence")
     if evidence.identity_status != "complete":
         raise DataReadinessError("only identity-complete live predictions can mature")
-    intents: list[PredictionMaturationIntentV2] = []
+    intents: list[PredictionMaturationIntentV3] = []
     for prediction in response.predictions:
         if (
             prediction.swing is not None
@@ -71,20 +70,6 @@ def maturation_intents_from_response(
                     prediction=prediction.swing,
                 )
             )
-        if (
-            prediction.intraday is not None
-            and prediction.intraday.opportunity_probability is not None
-            and prediction.intraday.readiness.status == "valid"
-        ):
-            intents.append(
-                _intent(
-                    response,
-                    snapshot_id=snapshot_id,
-                    ticker=prediction.ticker,
-                    view="intraday",
-                    prediction=prediction.intraday,
-                )
-            )
     return intents
 
 
@@ -92,38 +77,41 @@ def monitoring_observations_from_response(
     response: PredictionResponse,
     *,
     snapshot_id: str,
-    intents: dict[tuple[str, str], PredictionMaturationIntentV2] | None = None,
-) -> list[PredictionMonitoringObservationV1]:
+    intents: dict[tuple[str, str], PredictionMaturationIntentV3] | None = None,
+) -> list[PredictionMonitoringObservationV2]:
     evidence = response.evidence
     if evidence is None or evidence.identity_status != "complete":
         raise DataReadinessError(
             "only identity-complete live predictions can be monitored"
         )
-    intent_map = intents or {
-        (intent.ticker, intent.view): intent
-        for intent in maturation_intents_from_response(
-            response,
-            snapshot_id=snapshot_id,
-        )
-    }
-    observations: list[PredictionMonitoringObservationV1] = []
+    intent_map = (
+        intents
+        if intents is not None
+        else {
+            (intent.ticker, intent.view): intent
+            for intent in maturation_intents_from_response(response, snapshot_id=snapshot_id)
+        }
+    )
+    scored = {(row.ticker, row.view) for row in evidence.row_feature_availability}
+    observations: list[PredictionMonitoringObservationV2] = []
     for prediction in response.predictions:
-        for view, model_prediction in (
-            ("swing", prediction.swing),
-            ("intraday", prediction.intraday),
-        ):
-            if model_prediction is None or response.models.get(view) is None:
-                continue
-            observations.append(
-                _observation(
-                    response,
-                    snapshot_id=snapshot_id,
-                    ticker=prediction.ticker,
-                    view=view,
-                    prediction=model_prediction,
-                    intent=intent_map.get((prediction.ticker, view)),
-                )
+        if prediction.swing is None or response.models.get("swing") is None:
+            continue
+        if (prediction.ticker, "swing") not in scored:
+            # A ticker outside the live universe was never scored, so the model made no decision to monitor.
+            if prediction.swing.probability is not None or prediction.swing.readiness.status == "valid":
+                raise DataReadinessError(f"scored swing prediction for {prediction.ticker} has no evidence row")
+            continue
+        observations.append(
+            _observation(
+                response,
+                snapshot_id=snapshot_id,
+                ticker=prediction.ticker,
+                view="swing",
+                prediction=prediction.swing,
+                intent=intent_map.get((prediction.ticker, "swing")),
             )
+        )
     if not observations:
         raise DataReadinessError("prediction snapshot has no model views to monitor")
     return observations
@@ -135,9 +123,9 @@ def _observation(
     snapshot_id: str,
     ticker: str,
     view: str,
-    prediction: SwingPrediction | IntradayPrediction,
-    intent: PredictionMaturationIntentV2 | None,
-) -> PredictionMonitoringObservationV1:
+    prediction: SwingPrediction,
+    intent: PredictionMaturationIntentV3 | None,
+) -> PredictionMonitoringObservationV2:
     evidence = response.evidence
     assert evidence is not None
     model = response.models[view]
@@ -162,7 +150,7 @@ def _observation(
         raise DataReadinessError(
             f"{view} monitoring identity is incomplete: {', '.join(missing)}"
         )
-    probability, downside = _optional_probabilities(prediction)
+    probability = prediction.probability
     horizon = model.resolved_horizon or response.resolved_horizons.get(view)
     if not horizon:
         raise DataReadinessError(f"{view} monitoring horizon is missing")
@@ -172,7 +160,7 @@ def _observation(
         else row.decision_time_utc.astimezone(_EASTERN).date()
     )
     content: dict[str, object] = {
-        "contract_version": "market_predictor.prediction_observation.v1",
+        "contract_version": "market_predictor.prediction_observation.v2",
         "snapshot_id": snapshot_id,
         "ticker": ticker,
         "view": view,
@@ -191,7 +179,6 @@ def _observation(
         "market_cap_bucket": str(row.market_cap_bucket),
         "liquidity_bucket": str(row.liquidity_bucket),
         "probability": probability,
-        "downside_probability": downside,
         "calibration_bin": min(int(probability * 10), 9) if probability is not None else None,
         "signal": prediction.signal,
         "rank": prediction.rank,
@@ -209,7 +196,7 @@ def _observation(
         if intent is not None
         else monitoring_semantic_sha256(content)
     )
-    return PredictionMonitoringObservationV1.model_validate(
+    return PredictionMonitoringObservationV2.model_validate(
         {**content, "observation_id": content_sha256(content)}
     )
 
@@ -220,8 +207,8 @@ def _intent(
     snapshot_id: str,
     ticker: str,
     view: str,
-    prediction: SwingPrediction | IntradayPrediction,
-) -> PredictionMaturationIntentV2:
+    prediction: SwingPrediction,
+) -> PredictionMaturationIntentV3:
     evidence = response.evidence
     assert evidence is not None
     model = response.models.get(view)
@@ -255,7 +242,9 @@ def _intent(
         raise DataReadinessError(
             f"{view} maturation identity is incomplete: {', '.join(missing)}"
         )
-    probability, downside = _probabilities(prediction)
+    probability = prediction.probability
+    if probability is None:
+        raise DataReadinessError("maturation requires a model probability")
     horizon = model.resolved_horizon or response.resolved_horizons.get(view)
     if not horizon:
         raise DataReadinessError(f"{view} maturation horizon is missing")
@@ -265,7 +254,7 @@ def _intent(
         else row.decision_time_utc.astimezone(_EASTERN).date()
     )
     base: dict[str, object] = {
-        "contract_version": "market_predictor.maturation_intent.v2",
+        "contract_version": "market_predictor.maturation_intent.v3",
         "ticker": ticker,
         "canonical_security_id": str(row.canonical_security_id),
         "view": view,
@@ -288,7 +277,6 @@ def _intent(
         "liquidity_bucket": str(row.liquidity_bucket),
         "price_feed": str(row.price_feed).upper(),
         "probability": probability,
-        "downside_probability": downside,
         "calibration_bin": min(int(probability * 10), 9),
         "signal": prediction.signal,
         "rank": prediction.rank,
@@ -301,7 +289,7 @@ def _intent(
         "decision_atr": row.decision_atr,
     }
     semantic_id = semantic_prediction_sha256(base)
-    return PredictionMaturationIntentV2.model_validate(
+    return PredictionMaturationIntentV3.model_validate(
         {
             **base,
             "snapshot_id": snapshot_id,
@@ -323,24 +311,3 @@ def _row_evidence(
             f"expected one {view} evidence row for {ticker}; found {len(matches)}"
         )
     return matches[0]
-
-
-def _probabilities(
-    prediction: SwingPrediction | IntradayPrediction,
-) -> tuple[float, float | None]:
-    probability, downside = _optional_probabilities(prediction)
-    if probability is None:
-        raise DataReadinessError("maturation requires a model probability")
-    return probability, downside
-
-
-def _optional_probabilities(
-    prediction: SwingPrediction | IntradayPrediction,
-) -> tuple[float | None, float | None]:
-    if isinstance(prediction, SwingPrediction):
-        probability = prediction.probability
-        downside = None
-    else:
-        probability = prediction.opportunity_probability
-        downside = prediction.downside_probability
-    return probability, downside

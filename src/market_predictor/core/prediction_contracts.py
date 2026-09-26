@@ -7,9 +7,10 @@ from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-PredictionMode = Literal["swing", "intraday", "unified"]
-PredictionView = Literal["swing", "intraday"]
-PredictionDataSource = Literal["curated", "live"]
+# Swing is the only prediction mode; the intraday and unified modes are retired and fail validation.
+PredictionMode = Literal["swing"]
+PredictionView = PredictionMode
+PredictionDataSource = Literal["live"]
 
 
 class _PredictionContract(BaseModel):
@@ -90,18 +91,6 @@ class PredictionDependencyError(PredictionServiceError):
     retryable = True
     public_message = "A required prediction dependency is unavailable."
 
-_HORIZON_ALIASES = {
-    "tomorrow": "1d",
-    "next_day": "1d",
-    "next-day": "1d",
-    "1w": "5d",
-    "week": "5d",
-    "next_week": "5d",
-    "next-week": "5d",
-    "1h": "60m",
-}
-
-
 class PredictionRequest(_PredictionContract):
     """Typed request used by CLI, API, and tests.
 
@@ -112,7 +101,7 @@ class PredictionRequest(_PredictionContract):
     model_config = ConfigDict(extra="forbid")
 
     tickers: list[str] = Field(..., min_length=1, max_length=100)
-    mode: PredictionMode = "unified"
+    mode: PredictionMode = "swing"
     horizon: str = "auto"
     requested_models: list[str] | None = None
     as_of: datetime | None = None
@@ -137,10 +126,10 @@ class PredictionRequest(_PredictionContract):
     @field_validator("horizon")
     @classmethod
     def normalize_horizon(cls, horizon: str) -> str:
-        normalized = _HORIZON_ALIASES.get(horizon.strip().lower(), horizon.strip().lower())
-        if normalized == "auto" or re.fullmatch(r"[1-9]\d*(?:m|h|d|b)", normalized):
+        normalized = horizon.strip().lower()
+        if normalized == "auto" or re.fullmatch(r"[1-9]\d*b", normalized):
             return normalized
-        raise ValueError("horizon must be auto or a positive duration such as 30m, 1h, 1d, 5d, or 12b")
+        raise ValueError("horizon must be auto or a positive exchange-session count such as 10b")
 
     @field_validator("as_of")
     @classmethod
@@ -224,11 +213,11 @@ class PredictionRowEvidenceV1(_PredictionContract):
         return value.astimezone(UTC)
 
 
-class PredictionEvidenceV3(_PredictionContract):
-    """Immutable identities and point-in-time evidence for one served response."""
+class PredictionEvidenceV4(_PredictionContract):
+    """Immutable identities and point-in-time evidence for one served swing response."""
 
-    contract_version: Literal["market_predictor.prediction_evidence.v3"] = (
-        "market_predictor.prediction_evidence.v3"
+    contract_version: Literal["market_predictor.prediction_evidence.v4"] = (
+        "market_predictor.prediction_evidence.v4"
     )
     request_id: str = Field(..., min_length=1, max_length=128)
     correlation_id: str = Field(..., min_length=1, max_length=128)
@@ -287,12 +276,12 @@ class PredictionEvidenceV3(_PredictionContract):
         value: dict[str, str],
     ) -> dict[str, str]:
         if any(
-            view not in {"swing", "intraday"}
+            view != "swing"
             or not re.fullmatch(r"[0-9a-f]{64}", digest)
             for view, digest in value.items()
         ):
             raise ValueError(
-                "serving bundle identities must be mode-to-SHA-256 mappings"
+                "serving bundle identities must be swing-to-SHA-256 mappings"
             )
         return value
 
@@ -303,12 +292,12 @@ class PredictionEvidenceV3(_PredictionContract):
         value: dict[str, str],
     ) -> dict[str, str]:
         if any(
-            view not in {"swing", "intraday"}
+            view != "swing"
             or not re.fullmatch(r"[0-9a-f]{64}", digest)
             for view, digest in value.items()
         ):
             raise ValueError(
-                "view prediction policy identities must be mode-to-SHA-256 mappings"
+                "view prediction policy identities must be swing-to-SHA-256 mappings"
             )
         return value
 
@@ -327,9 +316,8 @@ class PredictionApiErrorEnvelope(_PredictionContract):
 class ReadinessInfo(_PredictionContract):
     status: Literal["valid", "warn", "invalid"]
     reasons: list[str] = Field(default_factory=list)
-    timeframe: Literal["daily", "intraday"] = "daily"
+    timeframe: Literal["daily"] = "daily"
     daily_bar_count: int = 0
-    intraday_bar_count: int = 0
     required_bar_count: int = 0
     latest_price_date: str | None = None
     price_feed: str = "unknown"
@@ -390,7 +378,6 @@ class SwingPrediction(_PredictionContract):
     model_prediction: int | None = None
     classifier_score: float | None = None
     regressor_score: float | None = None
-    unified_score: float | None = None
     signal: str
     action: Literal[
         "watch_for_entry",
@@ -444,52 +431,16 @@ class SwingPrediction(_PredictionContract):
         return self
 
 
-class IntradayPrediction(_PredictionContract):
-    ticker: str
-    date: str | None = None
-    opportunity_probability: float | None = None
-    downside_probability: float | None = None
-    decision_score: float | None = None
-    opportunity_prediction: int | None = None
-    downside_prediction: int | None = None
-    classifier_score: float | None = None
-    regressor_score: float | None = None
-    unified_score: float | None = None
-    signal: str
-    rank: int | None = None
-    selection_eligible: bool = False
-    selected_for_policy: bool = False
-    close: float | None = None
-    return_15m: float | None = None
-    relative_volume: float | None = None
-    rsi_14: float | None = None
-    macd_signal_diff: float | None = None
-    entry_stop_pct: float | None = None
-    entry_target_pct: float | None = None
-    catalyst: CatalystConfirmationInfo = Field(default_factory=CatalystConfirmationInfo)
-    readiness: ReadinessInfo
-    drivers: dict[str, float | int | str | None] = Field(default_factory=dict)
-
-    @model_validator(mode="after")
-    def validate_selection(self) -> IntradayPrediction:
-        if self.selected_for_policy and (
-            not self.selection_eligible or self.readiness.status != "valid"
-        ):
-            raise ValueError("selected intraday prediction must be eligible and ready")
-        return self
-
-
-class UnifiedTickerPrediction(_PredictionContract):
+class TickerPrediction(_PredictionContract):
     ticker: str
     final_signal: str
     readiness_status: Literal["valid", "warn", "invalid"]
     swing: SwingPrediction | None = None
-    intraday: IntradayPrediction | None = None
     errors: list[str] = Field(default_factory=list)
 
 
 class PredictionResponse(_PredictionContract):
-    contract_version: Literal["market_predictor.prediction.v2"] = "market_predictor.prediction.v2"
+    contract_version: Literal["market_predictor.prediction.v3"] = "market_predictor.prediction.v3"
     request_id: str = Field(default_factory=lambda: str(uuid4()))
     generated_at_utc: datetime = Field(default_factory=lambda: datetime.now(UTC))
     mode: PredictionMode
@@ -497,9 +448,9 @@ class PredictionResponse(_PredictionContract):
     horizon: str
     resolved_horizons: dict[str, str] = Field(default_factory=dict)
     models: dict[str, ModelInfo] = Field(default_factory=dict)
-    predictions: list[UnifiedTickerPrediction] = Field(default_factory=list)
+    predictions: list[TickerPrediction] = Field(default_factory=list)
     errors: list[str] = Field(default_factory=list)
-    evidence: PredictionEvidenceV3 | None = None
+    evidence: PredictionEvidenceV4 | None = None
     snapshot_id: str | None = None
     snapshot_sha256: str | None = None
 

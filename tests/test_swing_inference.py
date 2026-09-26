@@ -30,10 +30,6 @@ from market_predictor.governance.promotion.bundle_verification import (
     resolve_verified_bundle_root,
     validate_file_backed_promoted_bundle,
 )
-from market_predictor.intraday.features.features import (
-    CAUSAL_INTRADAY_MODEL_FEATURE_COLUMNS,
-    FEATURE_SCHEMA_VERSION,
-)
 from market_predictor.modeling.feature_reference import (
     feature_reference_names_sha256,
     feature_reference_profile_sha256,
@@ -106,9 +102,8 @@ def test_swing_inference_rejects_missing_or_unbound_thresholds(
     thresholds: dict[str, float] | None,
 ) -> None:
     bundle = validate_promoted_bundle(
-        _base_bundle(mode="swing"),
+        _base_bundle(),
         strategy_contract=CONTRACT,
-        expected_mode="swing",
     )
     features = bundle.ordered_feature_columns
     feature_reference = _feature_reference(features)
@@ -158,15 +153,15 @@ def _feature_reference(features: tuple[str, ...]) -> dict[str, dict[str, object]
     }
 
 
-def _base_bundle(*, mode: str) -> dict[str, object]:
-    features = swing_model_feature_columns(contract=CONTRACT, catalyst=False) if mode == "swing" else CAUSAL_INTRADAY_MODEL_FEATURE_COLUMNS
+def _base_bundle() -> dict[str, object]:
+    features = swing_model_feature_columns(contract=CONTRACT, catalyst=False)
     overlays = ("alpaca", "sec", "finviz")
     model_sources: tuple[str, ...] = ()
     global_sources = ("alpaca", "gdelt")
     payload: dict[str, object] = {
         "schema_version": "edge_rebuild.promoted_bundle.v2",
-        "mode": mode,
-        "model_id": f"{mode}-promoted-001",
+        "mode": "swing",
+        "model_id": "swing-promoted-001",
         "model_status": "promoted",
         "promotion_permitted": True,
         "model_artifact_path": "model/model.bin",
@@ -194,28 +189,13 @@ def _base_bundle(*, mode: str) -> dict[str, object]:
         "global_authority_schema_version": "edge_rebuild.global_event_authority.v1",
         "global_source_families": global_sources,
         "global_source_families_sha256": ordered_values_sha256(global_sources),
+        "strategy_id": CONTRACT.swing.strategy_id,
+        "horizon_sessions": 10,
+        "model_family": "swing_baseline",
+        "feature_schema_version": SWING_FEATURE_PANEL_SCHEMA,
+        "feature_profile": "technical_market",
+        "catalyst_policy": "confirmation_overlay",
     }
-    if mode == "swing":
-        payload.update(
-            {
-                "strategy_id": CONTRACT.swing.strategy_id,
-                "horizon_sessions": 10,
-                "model_family": "swing_baseline",
-                "feature_schema_version": SWING_FEATURE_PANEL_SCHEMA,
-                "feature_profile": "technical_market",
-                "catalyst_policy": "confirmation_overlay",
-            }
-        )
-    else:
-        payload.update(
-            {
-                "strategy_id": CONTRACT.intraday.strategy_id,
-                "horizon_minutes": 30,
-                "feature_schema_version": FEATURE_SCHEMA_VERSION,
-                "feature_profile": "technical_market",
-                "catalyst_policy": "confirmation_overlay",
-            }
-        )
     return payload
 
 
@@ -260,9 +240,7 @@ def _publish_signed_swing_generation(
         "marker": marker,
     }
     joblib.dump(payload, model_path)
-    metrics = synthetic_identity_metrics(
-        model_type="canonical_swing",
-        model_run_id=candidate_id,
+    metrics = synthetic_identity_metrics(model_run_id=candidate_id,
     )
     training = pd.DataFrame(
         {
@@ -287,7 +265,7 @@ def _publish_signed_swing_generation(
     attestation_path = promotion_attestation_path_for(model_path)
     attestation = json.loads(attestation_path.read_text(encoding="utf-8"))
     approver = attestation["approver_principal"]
-    bundle_payload = _base_bundle(mode="swing")
+    bundle_payload = _base_bundle()
     bundle_payload.update(
         {
             "model_id": candidate_id,
@@ -304,7 +282,6 @@ def _publish_signed_swing_generation(
     bundle = validate_promoted_bundle(
         bundle_payload,
         strategy_contract=CONTRACT,
-        expected_mode="swing",
     )
     generation_id = bundle.sha256()
     generation = repository / "generations" / generation_id
@@ -356,7 +333,6 @@ def test_governance_verifies_file_backed_swing_bundle_with_explicit_authority(
         strategy_contract=CONTRACT,
         attestation_trust_store_path=trust_store,
         promotion_gate_policy_sha256=TEST_GATE_POLICY_SHA256,
-        expected_mode="swing",
     )
 
     assert bundle.model_id == "governance-owned-swing"
@@ -393,54 +369,45 @@ def test_governance_swing_verification_requires_explicit_authority(
             strategy_contract=CONTRACT,
             attestation_trust_store_path=configured_trust_store,
             promotion_gate_policy_sha256=policy_hash,
-            expected_mode="swing",
         )
 
 
-def test_validates_strict_swing_and_intraday_promoted_bundles() -> None:
+def test_validates_strict_swing_promoted_bundle() -> None:
     swing = validate_promoted_bundle(
-        _base_bundle(mode="swing"),
+        _base_bundle(),
         strategy_contract=CONTRACT,
-        expected_mode="swing",
-    )
-    intraday = validate_promoted_bundle(
-        _base_bundle(mode="intraday"),
-        strategy_contract=CONTRACT,
-        expected_mode="intraday",
     )
 
     assert swing.horizon_sessions == 10
     assert swing.model_family == "swing_baseline"
     assert swing.catalyst_policy == "confirmation_overlay"
-    assert intraday.horizon_minutes == 30
-    assert intraday.catalyst_policy == "confirmation_overlay"
     assert len(swing.sha256()) == 64
 
 
-@pytest.mark.parametrize(
-    ("mode", "horizon_field", "legacy_horizon"),
-    (("swing", "horizon_sessions", 5), ("intraday", "horizon_minutes", 60)),
-)
-def test_rejects_legacy_five_day_and_sixty_minute_artifacts(
-    mode: str,
-    horizon_field: str,
-    legacy_horizon: int,
-) -> None:
-    payload = _base_bundle(mode=mode)
-    payload[horizon_field] = legacy_horizon
+def test_rejects_retired_intraday_bundle() -> None:
+    payload = {**_base_bundle(), "mode": "intraday", "horizon_minutes": 30}
+    payload.pop("horizon_sessions")
+
+    with pytest.raises(SchemaMismatchError, match="intraday serving bundles are retired"):
+        validate_promoted_bundle(payload, strategy_contract=CONTRACT)
+
+
+def test_rejects_legacy_five_session_artifact() -> None:
+    payload = _base_bundle()
+    payload["horizon_sessions"] = 5
 
     with pytest.raises(SchemaMismatchError, match="required horizon"):
         validate_promoted_bundle(payload, strategy_contract=CONTRACT)
 
 
 def test_rejects_candidate_or_unbound_bundle() -> None:
-    candidate = _base_bundle(mode="swing")
+    candidate = _base_bundle()
     candidate["model_status"] = "candidate"
     candidate["promotion_permitted"] = False
     with pytest.raises(PromotionGateError, match="promoted"):
         validate_promoted_bundle(candidate, strategy_contract=CONTRACT)
 
-    stale = _base_bundle(mode="swing")
+    stale = _base_bundle()
     stale["strategy_contract_sha256"] = "c" * 64
     with pytest.raises(ArtifactIntegrityError, match="active strategy contract"):
         validate_promoted_bundle(stale, strategy_contract=CONTRACT)
@@ -459,16 +426,15 @@ def test_rejects_unbound_swing_feature_or_catalyst_contract(
     field: str,
     value: object,
 ) -> None:
-    payload = _base_bundle(mode="swing")
+    payload = _base_bundle()
     payload[field] = value
 
     with pytest.raises(SchemaMismatchError):
         validate_promoted_bundle(payload, strategy_contract=CONTRACT)
 
 
-@pytest.mark.parametrize("mode", ("swing", "intraday"))
-def test_rejects_self_hashed_features_that_differ_from_active_schema(mode: str) -> None:
-    payload = _base_bundle(mode=mode)
+def test_rejects_self_hashed_features_that_differ_from_active_schema() -> None:
+    payload = _base_bundle()
     ordered = payload["ordered_feature_columns"]
     assert isinstance(ordered, tuple)
     wrong = tuple(reversed(ordered))
@@ -477,30 +443,6 @@ def test_rejects_self_hashed_features_that_differ_from_active_schema(mode: str) 
 
     with pytest.raises(SchemaMismatchError, match="active .* estimator schema"):
         validate_promoted_bundle(payload, strategy_contract=CONTRACT)
-
-
-def test_file_backed_bundle_verifies_model_and_promotion_evidence(tmp_path: Path) -> None:
-    root = tmp_path / "bundle"
-    model_path = root / "model" / "model.bin"
-    evidence_path = root / "promotion" / "evidence.json"
-    model_path.parent.mkdir(parents=True)
-    evidence_path.parent.mkdir(parents=True)
-    model_path.write_bytes(b"verified model")
-    evidence_path.write_text('{"promotion":"passed"}', encoding="utf-8")
-    payload = _base_bundle(mode="intraday")
-    payload["model_artifact_sha256"] = file_sha256(model_path)
-    payload["promotion_evidence_sha256"] = file_sha256(evidence_path)
-
-    bundle = validate_file_backed_promoted_bundle(
-        payload,
-        bundle_root=root,
-        strategy_contract=CONTRACT,
-        attestation_trust_store_path=TRUST_STORE,
-        expected_mode="intraday",
-    )
-
-    assert bundle.model_artifact_path == "model/model.bin"
-    assert bundle.promotion_evidence_path == "promotion/evidence.json"
 
 
 def test_signed_swing_generation_is_cached_and_pointer_rollover_is_loaded(
@@ -650,7 +592,7 @@ def test_file_backed_bundle_rejects_artifact_path_escape(
 ) -> None:
     root = tmp_path / "bundle"
     root.mkdir()
-    payload = _base_bundle(mode="intraday")
+    payload = _base_bundle()
     payload["model_artifact_path"] = invalid_path
 
     with pytest.raises(ArtifactIntegrityError, match="path"):
@@ -712,7 +654,7 @@ def test_file_backed_bundle_rejects_missing_and_tampered_artifacts(
     evidence_path.parent.mkdir(parents=True)
     model_path.write_bytes(b"original model")
     evidence_path.write_text("{}", encoding="utf-8")
-    payload = _base_bundle(mode="swing")
+    payload = _base_bundle()
     payload["model_artifact_sha256"] = file_sha256(model_path)
     payload["promotion_evidence_sha256"] = file_sha256(evidence_path)
 

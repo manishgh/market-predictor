@@ -45,6 +45,7 @@ def publish_serving_bundle(
 ) -> dict[str, Any]:
     """Publish an immutable model/feature serving generation."""
 
+    mode = _live_mode(mode)
     repository = _repository_root(root)
     generated = _utc(generated_at or datetime.now(UTC))
     release = verify_local_release(
@@ -417,8 +418,7 @@ def _model_identity(
 ) -> dict[str, str]:
     metrics_raw = manifest.get("metrics")
     metrics = metrics_raw if isinstance(metrics_raw, dict) else {}
-    expected_model_type = "canonical_swing" if mode == "swing" else "canonical_intraday"
-    if manifest.get("model_type") != expected_model_type:
+    if manifest.get("model_type") != "canonical_swing":
         raise DataReadinessError("serving bundle model type is incompatible with its mode")
     target = str(manifest.get("target_col") or "")
     if not _target_matches_horizon(target, horizon):
@@ -569,19 +569,15 @@ def _load_active_pointer(path: Path) -> dict[str, Any]:
 
 def _live_mode(value: object) -> LiveMode:
     normalized = str(value or "").strip().lower()
-    if normalized not in {"swing", "intraday"}:
+    if normalized == "intraday":
+        raise DataReadinessError("intraday serving bundles are retired; only swing bundles are served")
+    if normalized != "swing":
         raise DataReadinessError("serving bundle mode is invalid")
-    return normalized  # type: ignore[return-value]
+    return "swing"
 
 
 def _target_matches_horizon(target: str, horizon: str) -> bool:
-    normalized = target.lower()
-    canonical = horizon.strip().lower()
-    if canonical == "5d":
-        return "next_week" in normalized or "_5d" in normalized
-    if canonical == "1d":
-        return "next_day" in normalized or "_1d" in normalized
-    return f"_{canonical}" in normalized
+    return f"_{horizon.strip().lower()}" in target.lower()
 
 
 def _feature_manifest_path(path: Path) -> Path:

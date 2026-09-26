@@ -38,15 +38,13 @@ def build_smoke_release(output: Path) -> None:
             "model_type": SWING_MODEL_TYPE,
             "features": features,
             "model": estimator,
-            "target_col": "target_net_positive_5d",
+            "target_col": "target_net_positive_10b",
         },
         model_path,
     )
     model_run_id = "container-smoke-swing"
     metrics = {
-        **synthetic_identity_metrics(
-            model_type=SWING_MODEL_TYPE,
-            model_run_id=model_run_id,
+        **synthetic_identity_metrics(model_run_id=model_run_id,
         ),
         "roc_auc": 0.75,
     }
@@ -55,14 +53,14 @@ def build_smoke_release(output: Path) -> None:
             "ticker": ["AAA", "BBB", "CCC", "DDD"],
             "date": pd.date_range("2026-01-05", periods=4, freq="B"),
             "return_1d": [-0.02, -0.01, 0.01, 0.02],
-            "target_net_positive_5d": [0, 0, 1, 1],
+            "target_net_positive_10b": [0, 0, 1, 1],
         }
     )
     write_model_manifest(
         model_path=model_path,
         model_type=SWING_MODEL_TYPE,
         schema_version=SWING_MODEL_SCHEMA_VERSION,
-        target_col="target_net_positive_5d",
+        target_col="target_net_positive_10b",
         features=features,
         training_data=training,
         metrics=metrics,
@@ -85,7 +83,7 @@ def build_smoke_release(output: Path) -> None:
                 "[prediction_serving]",
                 'attestation_trust_store = "/smoke/attestation_trust_store.json"',
                 "",
-                '[prediction_serving.routes.swing."5d"]',
+                '[prediction_serving.routes.swing."10b"]',
                 'release_repository = "/smoke/releases"',
                 'bar_timeframe = "1Day"',
                 "estimated_resident_gib = 0.5",

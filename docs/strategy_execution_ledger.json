@@ -268,7 +268,7 @@
       "state": "deferred"
     },
     {
-      "blocker": null,
+      "blocker": "Intraday prediction was retired on 2026-09-26; swing is the only served mode, so this intraday risk model will not be built.",
       "checkpoint_id": "KS6",
       "display_name": "Realized Volatility / ATR Baseline",
       "evidence_paths": [],
@@ -280,10 +280,10 @@
         "out-of-sample forecast loss",
         "risk and abstention ablation"
       ],
-      "state": "planned"
+      "state": "retired"
     },
     {
-      "blocker": null,
+      "blocker": "Intraday prediction was retired on 2026-09-26; swing is the only served mode, so this intraday risk model will not be built.",
       "checkpoint_id": "KS6",
       "display_name": "GARCH(1,1) Intraday Volatility",
       "evidence_paths": [],
@@ -295,10 +295,10 @@
         "QLIKE improvement over realized volatility and ATR",
         "economic drawdown or abstention improvement"
       ],
-      "state": "planned"
+      "state": "retired"
     },
     {
-      "blocker": null,
+      "blocker": "Intraday prediction was retired on 2026-09-26; swing is the only served mode, so this intraday risk model will not be built.",
       "checkpoint_id": "KS6",
       "display_name": "Exponential GARCH Intraday Volatility",
       "evidence_paths": [],
@@ -310,7 +310,7 @@
         "QLIKE improvement over GARCH(1,1)",
         "economic risk-selection ablation"
       ],
-      "state": "planned"
+      "state": "retired"
     },
     {
       "blocker": null,
@@ -328,7 +328,7 @@
       "state": "planned"
     },
     {
-      "blocker": null,
+      "blocker": "Intraday prediction was retired on 2026-09-26; swing is the only served mode, so this intraday risk model will not be built.",
       "checkpoint_id": "KS6",
       "display_name": "HAR-RV Intraday Volatility",
       "evidence_paths": [],
@@ -340,7 +340,7 @@
         "out-of-sample forecast calibration",
         "comparison with ATR and GARCH"
       ],
-      "state": "planned"
+      "state": "retired"
     },
     {
       "blocker": null,

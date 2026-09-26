@@ -7,27 +7,16 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-import joblib
-import pandas as pd
 from typer.testing import CliRunner
 
 from market_predictor.core.errors import DataReadinessError
-from market_predictor.intraday.contracts import (
-    INTRADAY_MODEL_SCHEMA_VERSION,
-    INTRADAY_MODEL_TYPE,
-)
 from market_predictor.production_cli import app
-from market_predictor.registry import write_model_manifest
 from market_predictor.release import (
     activate_local_release,
     load_active_local_release,
     publish_local_release,
     rollback_local_release,
     verify_local_release,
-)
-from tests.r4_fixtures import (
-    authorize_candidate_for_test,
-    synthetic_identity_metrics,
 )
 from tests.r4_fixtures import test_signing_material as signing_material_for_test
 from tests.support.swing_release import promoted_swing_candidate
@@ -68,7 +57,7 @@ class LocalReleaseTests(unittest.TestCase):
     def test_publishes_complete_release_before_switching_active_pointer(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
-            model, evidence = _promoted_candidate(root / "source", "first")
+            model, evidence = promoted_swing_candidate(root / "source", "first")
             release_root = root / "repository"
 
             published = publish_local_release(
@@ -104,7 +93,7 @@ class LocalReleaseTests(unittest.TestCase):
     def test_partial_release_never_replaces_active_pointer(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
-            model, evidence = _promoted_candidate(root / "source", "complete")
+            model, evidence = promoted_swing_candidate(root / "source", "complete")
             release_root = root / "repository"
             complete = publish_local_release(
                 release_root,
@@ -126,7 +115,7 @@ class LocalReleaseTests(unittest.TestCase):
     def test_release_mutation_invalidates_verification_and_activation(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
-            model, evidence = _promoted_candidate(root / "source", "mutated")
+            model, evidence = promoted_swing_candidate(root / "source", "mutated")
             release_root = root / "repository"
             published = publish_local_release(
                 release_root,
@@ -153,7 +142,7 @@ class LocalReleaseTests(unittest.TestCase):
     def test_release_manifest_metadata_mutation_invalidates_identity(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
-            model, evidence = _promoted_candidate(root / "source", "manifest")
+            model, evidence = promoted_swing_candidate(root / "source", "manifest")
             release_root = root / "repository"
             published = publish_local_release(
                 release_root,
@@ -178,11 +167,11 @@ class LocalReleaseTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             release_root = root / "repository"
-            first_model, first_evidence = _promoted_candidate(
+            first_model, first_evidence = promoted_swing_candidate(
                 root / "source",
                 "first",
             )
-            second_model, second_evidence = _promoted_candidate(
+            second_model, second_evidence = promoted_swing_candidate(
                 root / "source",
                 "second",
             )
@@ -216,7 +205,7 @@ class LocalReleaseTests(unittest.TestCase):
             release_root = root / "repository"
             releases: list[str] = []
             for marker in ("one", "two"):
-                model, evidence = _promoted_candidate(root / "source", marker)
+                model, evidence = promoted_swing_candidate(root / "source", marker)
                 published = publish_local_release(
                     release_root,
                     model_path=model,
@@ -245,41 +234,6 @@ class LocalReleaseTests(unittest.TestCase):
                 active["pointer"]["previous_release_id"],
                 next(release_id for release_id in releases if release_id != active_id),
             )
-
-
-def _promoted_candidate(root: Path, marker: str) -> tuple[Path, Path]:
-    root.mkdir(parents=True, exist_ok=True)
-    model = root / f"intraday-{marker}.joblib"
-    joblib.dump({"marker": marker}, model)
-    model_run_id = f"release-{marker}"
-    metrics = {
-        **synthetic_identity_metrics(
-            model_type=INTRADAY_MODEL_TYPE,
-            model_run_id=model_run_id,
-        ),
-        "roc_auc": 0.75,
-    }
-    training = pd.DataFrame(
-        {
-            "ticker": ["AAA", "BBB"],
-            "date": pd.date_range("2026-01-01", periods=2),
-            "return_1d": [0.01, -0.01],
-            "target_before_stop_60m": [1, 0],
-        }
-    )
-    write_model_manifest(
-        model_path=model,
-        model_type=INTRADAY_MODEL_TYPE,
-        schema_version=INTRADAY_MODEL_SCHEMA_VERSION,
-        target_col="target_before_stop_60m",
-        features=["return_1d"],
-        training_data=training,
-        metrics=metrics,
-        validation_split="session_purged_walk_forward_and_ticker_holdout",
-        extra={"model_run_id": model_run_id},
-    )
-    evidence = authorize_candidate_for_test(model, metrics)
-    return model, evidence
 
 
 def _timestamp() -> datetime:

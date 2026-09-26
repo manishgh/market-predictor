@@ -16,9 +16,9 @@ from market_predictor.execution_policy import (
 )
 from market_predictor.governance.outcomes.contracts import (
     MaturationAttemptV1,
-    MaturedOutcomeV2,
-    PredictionMaturationIntentV2,
-    PredictionMonitoringObservationV1,
+    MaturedOutcomeV3,
+    PredictionMaturationIntentV3,
+    PredictionMonitoringObservationV2,
     content_sha256,
     maturation_key_sha256,
     monitoring_observation_from_intent,
@@ -47,7 +47,7 @@ class OutcomeRepositoryTests(unittest.TestCase):
         }
         semantic = semantic_prediction_sha256(valid)
         with self.assertRaisesRegex(ValidationError, "swing prediction policy"):
-            PredictionMaturationIntentV2.model_validate(
+            PredictionMaturationIntentV3.model_validate(
                 {
                     **valid,
                     "semantic_prediction_id": semantic,
@@ -64,11 +64,12 @@ class OutcomeRepositoryTests(unittest.TestCase):
             mode="python",
             exclude={"outcome_id"},
         )
-        valid.update({"path_outcome": "positive", "opportunity_target": 1})
-        with self.assertRaisesRegex(ValidationError, "managed barrier semantics"):
-            MaturedOutcomeV2.model_validate(
-                {**valid, "outcome_id": content_sha256(valid)}
-            )
+        for legacy in ({"path_outcome": "positive"}, {"opportunity_target": 1}, {"downside_target": 0}):
+            changed = {**valid, **legacy}
+            with self.subTest(legacy=legacy), self.assertRaises(ValidationError):
+                MaturedOutcomeV3.model_validate(
+                    {**changed, "outcome_id": content_sha256(changed)}
+                )
 
     def test_swing_intent_rejects_mismatched_label_horizon(self) -> None:
         valid = _intent().model_dump(
@@ -82,7 +83,7 @@ class OutcomeRepositoryTests(unittest.TestCase):
         semantic = semantic_prediction_sha256(valid)
 
         with self.assertRaisesRegex(ValidationError, "policy horizons"):
-            PredictionMaturationIntentV2.model_validate(
+            PredictionMaturationIntentV3.model_validate(
                 {
                     **valid,
                     "semantic_prediction_id": semantic,
@@ -103,7 +104,7 @@ class OutcomeRepositoryTests(unittest.TestCase):
         valid["matured_at_utc"] = invalid_time
 
         with self.assertRaisesRegex(ValidationError, "before its exit"):
-            MaturedOutcomeV2.model_validate(
+            MaturedOutcomeV3.model_validate(
                 {**valid, "outcome_id": content_sha256(valid)}
             )
 
@@ -117,7 +118,7 @@ class OutcomeRepositoryTests(unittest.TestCase):
         valid["excess_return_vs_spy"] = 0.50
 
         with self.assertRaisesRegex(ValidationError, "benchmark excess return"):
-            MaturedOutcomeV2.model_validate(
+            MaturedOutcomeV3.model_validate(
                 {**valid, "outcome_id": content_sha256(valid)}
             )
 
@@ -177,7 +178,7 @@ class OutcomeRepositoryTests(unittest.TestCase):
                 exclude={"outcome_id"},
             )
             conflicting_content["mfe"] = 0.08
-            conflicting = MaturedOutcomeV2.model_validate(
+            conflicting = MaturedOutcomeV3.model_validate(
                 {
                     **conflicting_content,
                     "outcome_id": content_sha256(conflicting_content),
@@ -199,7 +200,7 @@ class OutcomeRepositoryTests(unittest.TestCase):
             )
             content["label_round_trip_cost_bps"] = 5.0
             content["label_net_return"] = float(content["gross_return"]) - 0.0005
-            outcome = MaturedOutcomeV2.model_validate(
+            outcome = MaturedOutcomeV3.model_validate(
                 {**content, "outcome_id": content_sha256(content)}
             )
 
@@ -274,7 +275,7 @@ class OutcomeRepositoryTests(unittest.TestCase):
             )
             content["probability"] = 0.99
             content["calibration_bin"] = 9
-            tampered = PredictionMonitoringObservationV1.model_validate(
+            tampered = PredictionMonitoringObservationV2.model_validate(
                 {**content, "observation_id": content_sha256(content)}
             )
 
@@ -290,7 +291,7 @@ class OutcomeRepositoryTests(unittest.TestCase):
             content = observation.model_dump(mode="python", exclude={"observation_id"})
             content["probability"] = 0.99
             content["calibration_bin"] = 9
-            tampered = PredictionMonitoringObservationV1.model_validate(
+            tampered = PredictionMonitoringObservationV2.model_validate(
                 {**content, "observation_id": content_sha256(content)}
             )
             path = (
@@ -326,7 +327,7 @@ class OutcomeRepositoryTests(unittest.TestCase):
             content["excess_return_vs_spy"] = net_return - float(content["spy_return"])
             content["excess_return_vs_qqq"] = net_return - float(content["qqq_return"])
             content["excess_return_vs_sector"] = net_return - float(content["sector_return"])
-            tampered = MaturedOutcomeV2.model_validate(
+            tampered = MaturedOutcomeV3.model_validate(
                 {**content, "outcome_id": content_sha256(content)}
             )
             path = (
@@ -341,7 +342,7 @@ class OutcomeRepositoryTests(unittest.TestCase):
                 repository.load_outcome(intent.maturation_key)
 
 
-def _intent(snapshot_id: str = "1" * 64) -> PredictionMaturationIntentV2:
+def _intent(snapshot_id: str = "1" * 64) -> PredictionMaturationIntentV3:
     strategy = load_strategy_contract(
         ROOT / "configs" / "edge_rebuild_strategy_contract.toml"
     )
@@ -356,7 +357,7 @@ def _intent(snapshot_id: str = "1" * 64) -> PredictionMaturationIntentV2:
     )
     decision = datetime(2026, 7, 24, 22, 0, tzinfo=UTC)
     base: dict[str, object] = {
-        "contract_version": "market_predictor.maturation_intent.v2",
+        "contract_version": "market_predictor.maturation_intent.v3",
         "ticker": "MSFT",
         "canonical_security_id": "security:MSFT",
         "view": "swing",
@@ -379,7 +380,6 @@ def _intent(snapshot_id: str = "1" * 64) -> PredictionMaturationIntentV2:
         "liquidity_bucket": "high",
         "price_feed": "SIP",
         "probability": 0.7,
-        "downside_probability": None,
         "calibration_bin": 7,
         "signal": "strong_bullish_watch",
         "rank": 1,
@@ -390,7 +390,7 @@ def _intent(snapshot_id: str = "1" * 64) -> PredictionMaturationIntentV2:
         "decision_atr": 1.0,
     }
     semantic = semantic_prediction_sha256(base)
-    return PredictionMaturationIntentV2.model_validate(
+    return PredictionMaturationIntentV3.model_validate(
         {
             **base,
             "snapshot_id": snapshot_id,
@@ -400,7 +400,7 @@ def _intent(snapshot_id: str = "1" * 64) -> PredictionMaturationIntentV2:
     )
 
 
-def _attempt(intent: PredictionMaturationIntentV2) -> MaturationAttemptV1:
+def _attempt(intent: PredictionMaturationIntentV3) -> MaturationAttemptV1:
     base = {
         "contract_version": "market_predictor.maturation_attempt.v1",
         "maturation_key": intent.maturation_key,
@@ -416,9 +416,9 @@ def _attempt(intent: PredictionMaturationIntentV2) -> MaturationAttemptV1:
 
 
 def _outcome(
-    intent: PredictionMaturationIntentV2,
+    intent: PredictionMaturationIntentV3,
     evidence: list[dict[str, object]],
-) -> MaturedOutcomeV2:
+) -> MaturedOutcomeV3:
     entry = datetime(2026, 7, 27, 13, 30, tzinfo=UTC)
     exit_time = datetime(2026, 7, 31, 20, 0, tzinfo=UTC)
     available = exit_time + timedelta(minutes=15)
@@ -431,7 +431,7 @@ def _outcome(
     label_cost_bps = float(intent.label_policy["round_trip_cost_bps"])
     net_return = 0.05 - execution_cost_bps / 10_000.0
     base = {
-        "contract_version": "market_predictor.matured_outcome.v2",
+        "contract_version": "market_predictor.matured_outcome.v3",
         "maturation_key": intent.maturation_key,
         "semantic_prediction_id": intent.semantic_prediction_id,
         "snapshot_id": intent.snapshot_id,
@@ -455,8 +455,6 @@ def _outcome(
         "mfe": 0.07,
         "mae": -0.02,
         "path_outcome": "timeout",
-        "opportunity_target": 0 if intent.view == "intraday" else None,
-        "downside_target": 0 if intent.view == "intraday" else None,
         "spy_return": 0.01,
         "qqq_return": 0.012,
         "sector_return": 0.008,
@@ -465,7 +463,7 @@ def _outcome(
         "excess_return_vs_sector": net_return - 0.008,
         "evidence_sha256": content_sha256(evidence),
     }
-    return MaturedOutcomeV2.model_validate(
+    return MaturedOutcomeV3.model_validate(
         {**base, "outcome_id": content_sha256(base)}
     )
 

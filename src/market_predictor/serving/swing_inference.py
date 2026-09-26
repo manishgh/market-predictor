@@ -166,7 +166,6 @@ class SwingModelGenerationCache:
                 attestation_trust_store_path=attestation_trust_store_path,
                 promotion_gate_policy_sha256=promotion_gate_policy_sha256,
                 maximum_model_bytes=maximum_model_bytes,
-                expected_mode="swing",
             )
             if bundle.sha256() != pointer["generation_id"]:
                 raise ArtifactIntegrityError("active swing generation identity does not match its bundle")

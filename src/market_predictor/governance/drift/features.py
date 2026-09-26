@@ -9,10 +9,10 @@ import numpy as np
 import pandas as pd
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from market_predictor.governance.outcomes.contracts import content_sha256
+from market_predictor.governance.outcomes.contracts import SWING_HORIZON_PATTERN, content_sha256
 from market_predictor.modeling.feature_reference import feature_reference_names_sha256
 
-FEATURE_DRIFT_REPORT_VERSION = "market_predictor.feature_drift_report.v1"
+FEATURE_DRIFT_REPORT_VERSION = "market_predictor.feature_drift_report.v2"
 _SHA256_PATTERN = r"^[0-9a-f]{64}$"
 
 
@@ -24,15 +24,22 @@ class FeatureDriftRow(BaseModel):
     missing_rate_delta: float | None = Field(default=None, ge=0, le=1)
 
 
-class FeatureDriftReportV1(BaseModel):
+class FeatureDriftReportV2(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True, allow_inf_nan=False)
 
-    contract_version: Literal["market_predictor.feature_drift_report.v1"] = (
-        "market_predictor.feature_drift_report.v1"
+    @model_validator(mode="before")
+    @classmethod
+    def refuse_retired_mode(cls, data: object) -> object:
+        if isinstance(data, dict) and data.get("mode") == "intraday":
+            raise ValueError("intraday feature-drift reports are retired; only swing routes are assessed")
+        return data
+
+    contract_version: Literal["market_predictor.feature_drift_report.v2"] = (
+        "market_predictor.feature_drift_report.v2"
     )
     report_id: str = Field(pattern=_SHA256_PATTERN)
-    mode: Literal["swing", "intraday"]
-    horizon: str = Field(pattern=r"^[1-9]\d*(?:m|d|b)$")
+    mode: Literal["swing"]
+    horizon: str = Field(pattern=SWING_HORIZON_PATTERN)
     model_release_id: str = Field(pattern=_SHA256_PATTERN)
     model_artifact_sha256: str = Field(pattern=_SHA256_PATTERN)
     feature_artifact_set_sha256: str = Field(pattern=_SHA256_PATTERN)
@@ -145,7 +152,7 @@ def audit_feature_drift(
     frame: pd.DataFrame,
     reference: dict[str, Any] | None,
     *,
-    mode: Literal["swing", "intraday"],
+    mode: Literal["swing"],
     horizon: str,
     model_release_id: str,
     model_artifact_sha256: str,
@@ -288,11 +295,11 @@ def audit_feature_drift(
 
 
 def validate_feature_drift_report(value: object) -> dict[str, object]:
-    return FeatureDriftReportV1.model_validate(value).model_dump(mode="json")
+    return FeatureDriftReportV2.model_validate(value).model_dump(mode="json")
 
 
 def _validated_report(content: dict[str, object]) -> dict[str, object]:
-    report = FeatureDriftReportV1.model_validate(
+    report = FeatureDriftReportV2.model_validate(
         {**content, "report_id": content_sha256(content)}
     )
     return report.model_dump(mode="json")

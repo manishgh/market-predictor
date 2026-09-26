@@ -16,15 +16,17 @@ from market_predictor.core.errors import DataReadinessError
 from market_predictor.core.json_integrity import parse_strict_json_object
 from market_predictor.core.prediction_contracts import PredictionConflictError
 from market_predictor.governance.outcomes.contracts import (
-    MaturedOutcomeV2,
-    PredictionMaturationIntentV2,
-    PredictionMonitoringObservationV1,
+    SWING_HORIZON_PATTERN,
+    MaturedOutcomeV3,
+    PredictionMaturationIntentV3,
+    PredictionMonitoringObservationV2,
     content_sha256,
+    refuse_retired_intraday,
 )
 from market_predictor.governance.outcomes.repository import OutcomeRepository
 from market_predictor.locking import file_lock
 
-PERFORMANCE_REPORT_VERSION = "market_predictor.selected_policy_performance.v2"
+PERFORMANCE_REPORT_VERSION = "market_predictor.selected_policy_performance.v3"
 SHA256_PATTERN = r"^[0-9a-f]{64}$"
 _IDENTITY_COLUMNS = [
     "model_release_id",
@@ -37,8 +39,13 @@ _IDENTITY_COLUMNS = [
 ]
 
 
-class SelectedPolicyCohortV2(BaseModel):
+class SelectedPolicyCohortV3(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True, allow_inf_nan=False)
+
+    @model_validator(mode="before")
+    @classmethod
+    def refuse_retired_view(cls, data: object) -> object:
+        return refuse_retired_intraday(data)
 
     cohort_id: str = Field(pattern=SHA256_PATTERN)
     model_release_id: str = Field(pattern=SHA256_PATTERN)
@@ -50,8 +57,8 @@ class SelectedPolicyCohortV2(BaseModel):
     source_intent_ids_sha256: str = Field(pattern=SHA256_PATTERN)
     source_observation_ids_sha256: str = Field(pattern=SHA256_PATTERN)
     source_outcome_ids_sha256: str = Field(pattern=SHA256_PATTERN)
-    view: Literal["swing", "intraday"]
-    horizon: str = Field(pattern=r"^[1-9]\d*(?:m|d|b)$")
+    view: Literal["swing"]
+    horizon: str = Field(pattern=SWING_HORIZON_PATTERN)
     cohort_type: Literal[
         "all",
         "market_regime",
@@ -84,17 +91,6 @@ class SelectedPolicyCohortV2(BaseModel):
     decision_score_p90: float | None = None
     mean_selected_rank: float | None = Field(default=None, ge=1)
     selected_rank_p90: float | None = Field(default=None, ge=1)
-    opportunity_observed_rate: float | None = Field(default=None, ge=0, le=1)
-    opportunity_brier_score: float | None = Field(default=None, ge=0, le=1)
-    opportunity_calibration_error: float | None = Field(
-        default=None,
-        ge=0,
-        le=1,
-    )
-    mean_downside_probability: float | None = Field(default=None, ge=0, le=1)
-    downside_observed_rate: float | None = Field(default=None, ge=0, le=1)
-    downside_brier_score: float | None = Field(default=None, ge=0, le=1)
-    downside_calibration_error: float | None = Field(default=None, ge=0, le=1)
     average_net_return: float | None = None
     average_excess_return_vs_spy: float | None = None
     average_excess_return_vs_qqq: float | None = None
@@ -194,36 +190,18 @@ class SelectedPolicyCohortV2(BaseModel):
                 raise ValueError("unmatured selected-policy cohort has outcome evidence")
         elif any(value is None for value in economic_outcome_fields):
             raise ValueError("matured selected-policy cohort lacks outcome evidence")
-        opportunity_fields = (
-            self.opportunity_observed_rate,
-            self.opportunity_brier_score,
-            self.opportunity_calibration_error,
-        )
-        downside_fields = (
-            self.mean_downside_probability,
-            self.downside_observed_rate,
-            self.downside_brier_score,
-            self.downside_calibration_error,
-        )
-        if self.view == "intraday" and self.matured_selected_samples > 0:
-            if any(value is None for value in opportunity_fields):
-                raise ValueError("intraday cohort lacks opportunity calibration evidence")
-            if any(value is None for value in downside_fields):
-                raise ValueError("intraday cohort lacks downside calibration evidence")
-        elif any(value is not None for value in (*opportunity_fields, *downside_fields)):
-            raise ValueError("swing or unmatured cohort has calibration evidence")
         content = self.model_dump(mode="json", exclude={"cohort_id"})
         if content_sha256(content) != self.cohort_id:
             raise ValueError("selected-policy cohort identity is invalid")
         return self
 
 
-class SelectedPolicyPerformanceReportV2(BaseModel):
+class SelectedPolicyPerformanceReportV3(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True, allow_inf_nan=False)
 
     contract_version: Literal[
-        "market_predictor.selected_policy_performance.v2"
-    ] = "market_predictor.selected_policy_performance.v2"
+        "market_predictor.selected_policy_performance.v3"
+    ] = "market_predictor.selected_policy_performance.v3"
     report_id: str = Field(pattern=SHA256_PATTERN)
     generated_at_utc: datetime
     lookback_days: int = Field(ge=1)
@@ -233,7 +211,7 @@ class SelectedPolicyPerformanceReportV2(BaseModel):
     source_intent_ids: tuple[str, ...]
     source_observation_ids: tuple[str, ...]
     source_outcome_ids: tuple[str, ...]
-    rows: tuple[SelectedPolicyCohortV2, ...]
+    rows: tuple[SelectedPolicyCohortV3, ...]
 
     @field_validator(
         "generated_at_utc",
@@ -377,7 +355,7 @@ def build_performance_cohorts(
                     window_end=generated,
                 )
                 rows.append(
-                    SelectedPolicyCohortV2.model_validate(row).model_dump(
+                    SelectedPolicyCohortV3.model_validate(row).model_dump(
                         mode="json"
                     )
                 )
@@ -402,7 +380,7 @@ def build_performance_cohorts(
         "source_outcome_ids": sorted(source_outcome_ids),
         "rows": rows,
     }
-    report = SelectedPolicyPerformanceReportV2.model_validate(
+    report = SelectedPolicyPerformanceReportV3.model_validate(
         {
             **report_identity,
             "report_id": content_sha256(report_identity),
@@ -412,7 +390,7 @@ def build_performance_cohorts(
 
 
 def validate_performance_report(value: object) -> dict[str, object]:
-    report = SelectedPolicyPerformanceReportV2.model_validate(value)
+    report = SelectedPolicyPerformanceReportV3.model_validate(value)
     return report.model_dump(mode="json")
 
 
@@ -452,12 +430,12 @@ def write_performance_report(
 
 def _canonical_observations(
     repository: OutcomeRepository,
-    observations: list[PredictionMonitoringObservationV1],
-) -> list[PredictionMonitoringObservationV1]:
-    grouped: dict[str, list[PredictionMonitoringObservationV1]] = {}
+    observations: list[PredictionMonitoringObservationV2],
+) -> list[PredictionMonitoringObservationV2]:
+    grouped: dict[str, list[PredictionMonitoringObservationV2]] = {}
     for observation in observations:
         grouped.setdefault(observation.semantic_prediction_id, []).append(observation)
-    canonical: list[PredictionMonitoringObservationV1] = []
+    canonical: list[PredictionMonitoringObservationV2] = []
     for semantic_id, group in grouped.items():
         canonical_key = repository.semantic_canonical_key(semantic_id)
         candidates = (
@@ -520,10 +498,10 @@ def _fsync_directory(path: Path) -> None:
 
 def _matured_selected_outcome(
     repository: OutcomeRepository,
-    intent: PredictionMaturationIntentV2,
+    intent: PredictionMaturationIntentV3,
     *,
     generated_at: datetime,
-) -> MaturedOutcomeV2 | None:
+) -> MaturedOutcomeV3 | None:
     if not intent.actionable:
         return None
     if not repository.has_outcome(intent.maturation_key):
@@ -538,14 +516,7 @@ def _matured_selected_outcome(
         or outcome.ticker != intent.ticker
         or outcome.view != intent.view
         or outcome.horizon != intent.horizon
-        or (
-            intent.view == "swing"
-            and outcome.entry_time_utc <= intent.decision_time_utc
-        )
-        or (
-            intent.view == "intraday"
-            and outcome.entry_time_utc != intent.decision_time_utc
-        )
+        or outcome.entry_time_utc <= intent.decision_time_utc
     ):
         raise DataReadinessError(
             "selected-policy outcome identity does not match its intent"
@@ -554,15 +525,9 @@ def _matured_selected_outcome(
 
 
 def _monitoring_record(
-    observation: PredictionMonitoringObservationV1,
-    outcome: MaturedOutcomeV2 | None,
+    observation: PredictionMonitoringObservationV2,
+    outcome: MaturedOutcomeV3 | None,
 ) -> dict[str, object]:
-    decision_score: float | None
-    if observation.view == "intraday" and observation.probability is not None:
-        downside = cast(float, observation.downside_probability)
-        decision_score = observation.probability * (1.0 - downside)
-    else:
-        decision_score = observation.probability
     return {
         "observation_id": observation.observation_id,
         "maturation_key": observation.maturation_key,
@@ -583,18 +548,11 @@ def _monitoring_record(
         "decision_group_id": observation.decision_group_id,
         "decision_time_utc": observation.decision_time_utc,
         "probability": observation.probability,
-        "downside_probability": observation.downside_probability,
-        "decision_score": decision_score,
+        "decision_score": observation.probability,
         "rank": observation.rank,
         "selection_eligible": observation.selection_eligible,
         "selected_for_policy": observation.selected_for_policy,
         "actionable": observation.actionable,
-        "opportunity_target": (
-            outcome.opportunity_target if outcome is not None else None
-        ),
-        "downside_target": (
-            outcome.downside_target if outcome is not None else None
-        ),
         "net_return": outcome.net_return if outcome is not None else None,
         "excess_return_vs_spy": (
             outcome.excess_return_vs_spy if outcome is not None else None
@@ -643,10 +601,7 @@ def _cohort_row(
     observation_ids = sorted(ordered["observation_id"].astype(str))
     outcome_ids = sorted(matured["outcome_id"].astype(str))
     score_metrics = _score_metrics(selected)
-    outcome_metrics = _outcome_metrics(
-        matured,
-        view=str(identity["view"]),
-    )
+    outcome_metrics = _outcome_metrics(matured)
     content: dict[str, object] = {
         **{
             column: str(identity[column])
@@ -730,19 +685,8 @@ def _score_metrics(selected: pd.DataFrame) -> dict[str, float | None]:
     }
 
 
-def _outcome_metrics(
-    matured: pd.DataFrame,
-    *,
-    view: str,
-) -> dict[str, object]:
+def _outcome_metrics(matured: pd.DataFrame) -> dict[str, object]:
     empty: dict[str, object] = {
-        "opportunity_observed_rate": None,
-        "opportunity_brier_score": None,
-        "opportunity_calibration_error": None,
-        "mean_downside_probability": None,
-        "downside_observed_rate": None,
-        "downside_brier_score": None,
-        "downside_calibration_error": None,
         "average_net_return": None,
         "average_excess_return_vs_spy": None,
         "average_excess_return_vs_qqq": None,
@@ -793,59 +737,7 @@ def _outcome_metrics(
             matured["matured_at_utc"].max()
         ),
     }
-    calibrated = matured.dropna(subset=["opportunity_target"])
-    if not calibrated.empty:
-        probability = calibrated["probability"].to_numpy(float)
-        opportunity = calibrated["opportunity_target"].to_numpy(float)
-        result.update(
-            {
-                "opportunity_observed_rate": float(np.mean(opportunity)),
-                "opportunity_brier_score": float(
-                    np.mean(np.square(probability - opportunity))
-                ),
-                "opportunity_calibration_error": _expected_calibration_error(
-                    probability,
-                    opportunity,
-                ),
-            }
-        )
-    if view == "intraday":
-        downside_probability = matured["downside_probability"].to_numpy(float)
-        downside = matured["downside_target"].to_numpy(float)
-        result.update(
-            {
-                "mean_downside_probability": float(
-                    np.mean(downside_probability)
-                ),
-                "downside_observed_rate": float(np.mean(downside)),
-                "downside_brier_score": float(
-                    np.mean(np.square(downside_probability - downside))
-                ),
-                "downside_calibration_error": _expected_calibration_error(
-                    downside_probability,
-                    downside,
-                ),
-            }
-        )
     return result
-
-
-def _expected_calibration_error(
-    probability: np.ndarray,
-    target: np.ndarray,
-) -> float:
-    bins = np.minimum((probability * 10).astype(int), 9)
-    total = len(probability)
-    error = 0.0
-    for bin_index in range(10):
-        mask = bins == bin_index
-        count = int(mask.sum())
-        if count:
-            error += (count / total) * abs(
-                float(np.mean(probability[mask]))
-                - float(np.mean(target[mask]))
-            )
-    return float(error)
 
 
 def _quantile(values: np.ndarray, quantile: float) -> float:

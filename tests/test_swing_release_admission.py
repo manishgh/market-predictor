@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import shutil
 from datetime import datetime, tzinfo
 from pathlib import Path
 from unittest.mock import patch
@@ -12,18 +13,18 @@ import pytest
 from typer.testing import CliRunner
 
 import market_predictor.commands.release as release_commands
+import market_predictor.release as release_module
 import market_predictor.serving.admission as admission
 from market_predictor.core.errors import DataReadinessError
 from market_predictor.feature_store import LiveFeatureStore
 from market_predictor.production_cli import app
 from market_predictor.promotion_attestation import promotion_attestation_path_for
 from market_predictor.release import publish_local_release, verify_local_release
-from market_predictor.serving.bundle import publish_serving_bundle
+from market_predictor.serving.bundle import SERVING_BUNDLE_MANIFEST, publish_serving_bundle
 from tests.r4_fixtures import test_signing_material as signing_material_for_test
-from tests.support.swing_release import promoted_swing_candidate
+from tests.support.swing_release import promoted_swing_candidate, retired_intraday_candidate
 from tests.test_feature_store import _frame as swing_frame
 from tests.test_feature_store import _publish as publish_swing_features
-from tests.test_local_release import _promoted_candidate as historical_intraday_candidate
 from tests.test_serving_bundle import _inputs as historical_bundle_inputs
 from tests.test_serving_bundle import _timestamp as bundle_timestamp
 
@@ -94,7 +95,7 @@ def test_serving_horizon_is_checked_before_io(tmp_path: Path) -> None:
 
 @pytest.mark.parametrize("activation", ("--activate", "--no-activate"))
 def test_intraday_publication_rejected_without_output(tmp_path: Path, activation: str) -> None:
-    model, evidence = historical_intraday_candidate(tmp_path / "source", "rejected")
+    model, evidence = retired_intraday_candidate(tmp_path / "source", "rejected")
     repository = tmp_path / "repository"
     result = CliRunner().invoke(app, [*_publish_args(model, evidence, repository), activation])
     assert isinstance(result.exception, DataReadinessError)
@@ -103,11 +104,13 @@ def test_intraday_publication_rejected_without_output(tmp_path: Path, activation
 
 
 @pytest.mark.parametrize("command", ("activate-local-release", "rollback-local-release"))
-def test_historical_release_cannot_change_active_pointer(tmp_path: Path, command: str) -> None:
-    model, evidence = historical_intraday_candidate(tmp_path / "source", "historical")
+def test_historical_release_cannot_change_active_pointer(
+    tmp_path: Path, command: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    model, evidence = retired_intraday_candidate(tmp_path / "source", "historical")
     _, trust, _ = signing_material_for_test()
     repository = tmp_path / "repository"
-    release = publish_local_release(repository, model_path=model, evidence_manifest_path=evidence, attestation_trust_store_path=trust)
+    release = _pre_retirement_release(repository, model, evidence, trust, monkeypatch)
     pointer = repository / "active_release.json"
     before = pointer.read_bytes()
     result = CliRunner().invoke(
@@ -115,55 +118,95 @@ def test_historical_release_cannot_change_active_pointer(tmp_path: Path, command
         [command, "--release-id", str(release["release_id"]), "--release-root", str(repository), "--attestation-trust-store", str(trust)],
     )
     assert isinstance(result.exception, DataReadinessError)
-    assert "requires a swing model" in str(result.exception)
+    assert "intraday model releases are retired" in str(result.exception)
     assert pointer.read_bytes() == before
-    assert (
-        verify_local_release(repository, str(release["release_id"]), attestation_trust_store_path=trust)["release_id"]
-        == release["release_id"]
-    )
+    with pytest.raises(DataReadinessError, match="intraday model releases are retired"):
+        verify_local_release(repository, str(release["release_id"]), attestation_trust_store_path=trust)
+
+
+def _pre_retirement_release(
+    repository: Path, model: Path, evidence: Path, trust: Path, monkeypatch: pytest.MonkeyPatch
+) -> dict[str, object]:
+    """Publish as the code did before retirement, when day-trading evidence was accepted."""
+    with monkeypatch.context() as patched:
+        patched.setattr(release_module, "_validate_evidence_schema", lambda *_args, **_kwargs: None)
+        return publish_local_release(
+            repository, model_path=model, evidence_manifest_path=evidence, attestation_trust_store_path=trust
+        )
 
 
 @pytest.mark.parametrize("command", ("activate-serving-bundle", "rollback-serving-bundle"))
 def test_historical_bundle_cannot_change_active_pointer(tmp_path: Path, command: str) -> None:
     repository, trust, release_id, features = historical_bundle_inputs(tmp_path, "historical")
-    bundle = publish_serving_bundle(
+    swing = publish_serving_bundle(
         repository,
-        mode="intraday",
-        horizon="60m",
+        mode="swing",
+        horizon="10b",
         model_release_id=release_id,
         feature_path=features,
         attestation_trust_store_path=trust,
         generated_at=bundle_timestamp(),
     )
+    historical = _rehashed_intraday_bundle(repository, str(swing["bundle_id"]))
     pointer = repository / "active_serving_bundle.json"
     before = pointer.read_bytes()
     result = CliRunner().invoke(
-        app, [command, "--bundle-id", str(bundle["bundle_id"]), "--release-root", str(repository), "--attestation-trust-store", str(trust)]
+        app, [command, "--bundle-id", historical, "--release-root", str(repository), "--attestation-trust-store", str(trust)]
     )
     assert isinstance(result.exception, DataReadinessError)
-    assert "requires swing with horizon 10b" in str(result.exception)
+    assert "intraday serving bundles are retired" in str(result.exception)
     assert pointer.read_bytes() == before
+
+
+def test_intraday_bundle_publication_is_refused_before_io(tmp_path: Path) -> None:
+    with pytest.raises(DataReadinessError, match="intraday serving bundles are retired"):
+        publish_serving_bundle(
+            tmp_path / "repository",
+            mode="intraday",  # type: ignore[arg-type]
+            horizon="60m",
+            model_release_id="a" * 64,
+            feature_path=tmp_path / "absent.parquet",
+            attestation_trust_store_path=tmp_path / "absent.json",
+        )
+    assert not list(tmp_path.iterdir())
+
+
+def _rehashed_intraday_bundle(repository: Path, bundle_id: str) -> str:
+    """A self-consistent bundle as a pre-retirement day-trading publication recorded it."""
+    bundles = repository / "serving_bundles"
+    bundle = json.loads((bundles / bundle_id / SERVING_BUNDLE_MANIFEST).read_bytes())
+    identity = {key: value for key, value in bundle.items() if key != "bundle_id"}
+    identity.update({"mode": "intraday", "horizon": "60m"})
+    historical = hashlib.sha256(
+        json.dumps(identity, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+    shutil.copytree(bundles / bundle_id, bundles / historical)
+    (bundles / historical / SERVING_BUNDLE_MANIFEST).write_text(
+        json.dumps({**identity, "bundle_id": historical}), encoding="utf-8"
+    )
+    return historical
 
 
 def test_source_replacement_cannot_activate_retired_model(tmp_path: Path) -> None:
     swing, swing_evidence = promoted_swing_candidate(tmp_path / "swing", "before-race")
-    intraday, intraday_evidence = historical_intraday_candidate(tmp_path / "intraday", "after-race")
+    intraday, intraday_evidence = retired_intraday_candidate(tmp_path / "intraday", "after-race")
     repository = tmp_path / "repository"
 
     def replaced_source(root, **kwargs):
         assert kwargs["activate"] is False
-        return publish_local_release(
-            root,
-            model_path=intraday,
-            evidence_manifest_path=intraday_evidence,
-            activate=False,
-            attestation_trust_store_path=kwargs["attestation_trust_store_path"],
-        )
+        with patch.object(release_module, "_validate_evidence_schema"):
+            return publish_local_release(
+                root,
+                model_path=intraday,
+                evidence_manifest_path=intraday_evidence,
+                activate=False,
+                attestation_trust_store_path=kwargs["attestation_trust_store_path"],
+            )
 
     with patch.object(release_commands, "publish_local_release", side_effect=replaced_source):
         result = CliRunner().invoke(app, _publish_args(swing, swing_evidence, repository))
     assert isinstance(result.exception, DataReadinessError)
-    assert "requires a swing model" in str(result.exception)
+    assert "intraday model releases are retired" in str(result.exception)
     assert not (repository / "active_release.json").exists()
     # Rejected immutable evidence remains inspectable; no automatic cleanup.
     assert len(list((repository / "releases").glob("*/release.json"))) == 1

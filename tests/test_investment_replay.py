@@ -15,7 +15,7 @@ from market_predictor.core.prediction_contracts import (
     PredictionResponse,
     ReadinessInfo,
     SwingPrediction,
-    UnifiedTickerPrediction,
+    TickerPrediction,
 )
 from market_predictor.serving.investment_replay import InvestmentReplayService
 from market_predictor.serving.snapshot_store import PredictionSnapshotStore
@@ -187,7 +187,7 @@ def _snapshot(
         resolved_horizons={"swing": "10b"},
         models={"swing": model},
         predictions=[
-            UnifiedTickerPrediction(
+            TickerPrediction(
                 ticker="MSFT",
                 final_signal=signal,
                 readiness_status=readiness_status,  # type: ignore[arg-type]

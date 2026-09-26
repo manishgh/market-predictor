@@ -183,6 +183,11 @@ class StrategyCheckpoint(FrozenContract):
         return self
 
 
+_BLOCKER_STATES = frozenset({"data_blocked", "deferred", "retired"})
+# Intraday entries stay as records of what was tried or closed; none can be planned or pass.
+_HISTORICAL_INTRADAY_STATES = frozenset({"reference_rejected", "data_blocked", "deferred", "retired", "candidate_rejected"})
+
+
 class CatalogEntry(FrozenContract):
     item_id: str = Field(min_length=1, max_length=128)
     display_name: str = Field(min_length=1, max_length=200)
@@ -194,6 +199,7 @@ class CatalogEntry(FrozenContract):
         "reference_rejected",
         "data_blocked",
         "deferred",
+        "retired",
         "candidate_rejected",
         "candidate_passed",
         "promoted",
@@ -233,10 +239,12 @@ class CatalogEntry(FrozenContract):
             raise ValueError("SWING strategy must use swing mode")
         if self.item_id.startswith("INTRADAY.") and self.mode != "intraday":
             raise ValueError("INTRADAY strategy must use intraday mode")
-        if self.state in {"data_blocked", "deferred"} and self.blocker is None:
-            raise ValueError("blocked or deferred catalog entry requires a blocker")
-        if self.state not in {"data_blocked", "deferred"} and self.blocker is not None:
-            raise ValueError("only blocked or deferred catalog entries may carry blocker")
+        if self.mode == "intraday" and self.state not in _HISTORICAL_INTRADAY_STATES:
+            raise ValueError("intraday catalog entries are historical records; intraday prediction is retired")
+        if self.state in _BLOCKER_STATES and self.blocker is None:
+            raise ValueError("blocked, deferred or retired catalog entry requires a blocker")
+        if self.state not in _BLOCKER_STATES and self.blocker is not None:
+            raise ValueError("only blocked, deferred or retired catalog entries may carry blocker")
         if self.state in {
             "reference_rejected",
             "candidate_rejected",

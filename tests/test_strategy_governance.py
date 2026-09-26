@@ -12,6 +12,7 @@ from market_predictor.core.errors import (
     DataReadinessError,
 )
 from market_predictor.strategy_governance import (
+    CatalogEntry,
     StrategyExecutionLedger,
     validate_strategy_execution_ledger,
 )
@@ -43,6 +44,38 @@ class StrategyGovernanceTests(unittest.TestCase):
         self.assertEqual(by_id["RISK.GARCH.5D.V1"].checkpoint_id, "KS6")
         self.assertEqual(by_id["RISK.EGARCH.60M.V1"].checkpoint_id, "KS6")
         self.assertIn("QLIKE", " ".join(by_id["RISK.GARCH.60M.V1"].required_evidence))
+
+    def test_intraday_risk_models_are_retired_with_a_blocker(self) -> None:
+        ledger = StrategyExecutionLedger.model_validate_json(
+            LEDGER_PATH.read_text(encoding="utf-8")
+        )
+        intraday = [entry for entry in ledger.catalog if entry.mode == "intraday"]
+
+        self.assertEqual(len(intraday), 12)
+        self.assertFalse([entry.item_id for entry in intraday if entry.state == "planned"])
+        retired = {entry.item_id: entry for entry in intraday if entry.state == "retired"}
+        self.assertEqual(
+            set(retired),
+            {
+                "RISK.REALIZED_VOLATILITY.60M.V1",
+                "RISK.GARCH.60M.V1",
+                "RISK.EGARCH.60M.V1",
+                "RISK.HAR_RV.60M.V1",
+            },
+        )
+        self.assertTrue(all(entry.blocker for entry in retired.values()))
+
+    def test_intraday_entries_are_historical_records_only(self) -> None:
+        payload = json.loads(LEDGER_PATH.read_text(encoding="utf-8"))
+        entry = next(item for item in payload["catalog"] if item["item_id"] == "RISK.GARCH.60M.V1")
+        for state in ("planned", "candidate_passed", "promoted"):
+            with self.subTest(state=state), self.assertRaisesRegex(ValidationError, "intraday prediction is retired"):
+                CatalogEntry.model_validate({**entry, "state": state, "blocker": None})
+        with self.assertRaisesRegex(ValidationError, "requires a blocker"):
+            CatalogEntry.model_validate({**entry, "state": "retired", "blocker": None})
+        swing = next(item for item in payload["catalog"] if item["item_id"] == "RISK.GARCH.5D.V1")
+        with self.assertRaisesRegex(ValidationError, "may carry blocker"):
+            CatalogEntry.model_validate({**swing, "state": "planned", "blocker": "not applicable"})
 
     def test_completed_checkpoint_cannot_omit_evidence(self) -> None:
         payload = json.loads(LEDGER_PATH.read_text(encoding="utf-8"))

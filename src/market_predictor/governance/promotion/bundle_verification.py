@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from pathlib import Path, PurePosixPath
-from typing import Literal, overload
 
 from market_predictor.canonical.store import file_sha256
 from market_predictor.core import path_integrity
@@ -14,7 +13,6 @@ from market_predictor.core.errors import (
     PromotionGateError,
 )
 from market_predictor.governance.promotion.bundle_contracts import (
-    PromotedIntradayBundle,
     PromotedSwingBundle,
     validate_promoted_bundle,
 )
@@ -28,7 +26,6 @@ from market_predictor.swing.contracts.model_artifact import (
 )
 
 
-@overload
 def validate_file_backed_promoted_bundle(
     payload: Mapping[str, object],
     *,
@@ -38,55 +35,12 @@ def validate_file_backed_promoted_bundle(
     promotion_gate_policy_sha256: str | None = None,
     maximum_model_bytes: int | None = None,
     maximum_evidence_bytes: int = 1024 * 1024,
-    expected_mode: Literal["swing"],
-) -> PromotedSwingBundle: ...
-
-
-@overload
-def validate_file_backed_promoted_bundle(
-    payload: Mapping[str, object],
-    *,
-    bundle_root: Path,
-    strategy_contract: StrategyContract,
-    attestation_trust_store_path: Path | None = None,
-    promotion_gate_policy_sha256: str | None = None,
-    maximum_model_bytes: int | None = None,
-    maximum_evidence_bytes: int = 1024 * 1024,
-    expected_mode: Literal["intraday"],
-) -> PromotedIntradayBundle: ...
-
-
-@overload
-def validate_file_backed_promoted_bundle(
-    payload: Mapping[str, object],
-    *,
-    bundle_root: Path,
-    strategy_contract: StrategyContract,
-    attestation_trust_store_path: Path | None = None,
-    promotion_gate_policy_sha256: str | None = None,
-    maximum_model_bytes: int | None = None,
-    maximum_evidence_bytes: int = 1024 * 1024,
-    expected_mode: None = None,
-) -> PromotedSwingBundle | PromotedIntradayBundle: ...
-
-
-def validate_file_backed_promoted_bundle(
-    payload: Mapping[str, object],
-    *,
-    bundle_root: Path,
-    strategy_contract: StrategyContract,
-    attestation_trust_store_path: Path | None = None,
-    promotion_gate_policy_sha256: str | None = None,
-    maximum_model_bytes: int | None = None,
-    maximum_evidence_bytes: int = 1024 * 1024,
-    expected_mode: Literal["swing", "intraday"] | None = None,
-) -> PromotedSwingBundle | PromotedIntradayBundle:
-    """Validate bundle metadata, artifacts, and signed promotion authorization."""
+) -> PromotedSwingBundle:
+    """Validate swing bundle metadata, artifacts, and signed promotion authorization."""
 
     bundle = validate_promoted_bundle(
         payload,
         strategy_contract=strategy_contract,
-        expected_mode=expected_mode,
     )
     root = resolve_verified_bundle_root(bundle_root)
     artifacts = (
@@ -130,8 +84,6 @@ def validate_file_backed_promoted_bundle(
             raise ArtifactIntegrityError(f"{label} changed while its serving hash was being verified")
         if observed_sha256 != expected_sha256:
             raise ArtifactIntegrityError(f"{label} artifact SHA256 does not verify")
-    if bundle.mode != "swing":
-        return bundle
     if attestation_trust_store_path is None:
         raise PromotionGateError("a configured promotion attestation trust store is required")
     if promotion_gate_policy_sha256 is None:

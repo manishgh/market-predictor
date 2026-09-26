@@ -15,8 +15,8 @@ import pandas as pd
 from market_predictor.core.errors import DataReadinessError
 from market_predictor.core.prediction_contracts import PredictionConflictError
 from market_predictor.governance.outcomes.contracts import (
-    MaturedOutcomeV2,
-    PredictionMaturationIntentV2,
+    MaturedOutcomeV3,
+    PredictionMaturationIntentV3,
 )
 from market_predictor.governance.outcomes.repository import OutcomeRepository
 from market_predictor.hypothesis_registry import TEST_CLOCK_ENV
@@ -270,13 +270,13 @@ def _derive_source_rows(
 
 
 def _workload_intents(
-    intents: Sequence[PredictionMaturationIntentV2],
+    intents: Sequence[PredictionMaturationIntentV3],
     *,
     artifact_sha256: str,
     view: str,
     horizon: str,
     expected_groups: Sequence[str],
-) -> list[PredictionMaturationIntentV2]:
+) -> list[PredictionMaturationIntentV3]:
     selected = [
         intent
         for intent in intents
@@ -302,8 +302,8 @@ def _workload_intents(
 
 
 def _validate_intent_pair(
-    candidate: PredictionMaturationIntentV2,
-    baseline: PredictionMaturationIntentV2,
+    candidate: PredictionMaturationIntentV3,
+    baseline: PredictionMaturationIntentV3,
     *,
     hypothesis: dict[str, Any],
 ) -> None:
@@ -336,9 +336,9 @@ def _validate_intent_pair(
 
 def _side_record(
     repository: OutcomeRepository,
-    intent: PredictionMaturationIntentV2,
+    intent: PredictionMaturationIntentV3,
 ) -> dict[str, Any]:
-    outcome: MaturedOutcomeV2 | None = None
+    outcome: MaturedOutcomeV3 | None = None
     if intent.selected_for_policy:
         try:
             outcome = repository.load_outcome(intent.maturation_key)
