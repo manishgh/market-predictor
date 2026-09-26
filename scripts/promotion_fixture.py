@@ -62,6 +62,9 @@ from market_predictor.swing.contracts.outcome_policy import (
     swing_outcome_policy_sha256,
 )
 
+# The gate configuration every synthetic promotion is attested against.
+TEST_GATE_CONFIG: dict[str, Any] = {"test_fixture": True}
+
 
 def synthetic_identity_metrics(
     *,
@@ -379,7 +382,12 @@ def _synthetic_outcome(
     )
 
 
-def authorize_candidate_for_test(model_path: Path, metrics: dict[str, Any]) -> Path:
+def authorize_candidate_for_test(
+    model_path: Path,
+    metrics: dict[str, Any],
+    *,
+    evidence_schema: str = "swing_training_evidence.v1",
+) -> Path:
     root = model_path.parent / f".{model_path.name}.promotion-test"
     manifest = load_model_manifest(model_path)
     context = trust_context_for_candidate(
@@ -395,7 +403,7 @@ def authorize_candidate_for_test(model_path: Path, metrics: dict[str, Any]) -> P
     evidence_manifest.write_text(
         json.dumps(
             {
-                "schema": "swing_training_evidence.v1",
+                "schema": evidence_schema,
                 "model_run_id": metrics["model_run_id"],
                 "model_artifact_sha256": manifest["artifact_sha256"],
                 "files": {
@@ -413,7 +421,7 @@ def authorize_candidate_for_test(model_path: Path, metrics: dict[str, Any]) -> P
         model_path=model_path,
         evidence_manifest_path=evidence_manifest,
         metrics=metrics,
-        gate_config={"test_fixture": True},
+        gate_config=TEST_GATE_CONFIG,
         context=context,
     )
     if outcome.attestation is None:

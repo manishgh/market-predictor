@@ -186,7 +186,7 @@ class PredictionMaturationIntentV3(_SwingViewContract):
             self.prediction_policy,
             expected_sha256=self.prediction_policy_sha256,
         )
-        horizon = _horizon_amount(self.horizon, unit="b", view="swing")
+        horizon = swing_horizon_sessions(self.horizon)
         if (
             self.label_policy.get("policy")
             != "market_predictor.swing_outcome_policy.v1"
@@ -363,13 +363,6 @@ def swing_horizon_sessions(horizon: str) -> int:
     if re.fullmatch(SWING_HORIZON_PATTERN, horizon) is None:
         raise ValueError(f"swing horizon is not a session count: {horizon}")
     return int(horizon[:-1])
-
-
-def _horizon_amount(horizon: str, *, unit: str, view: str) -> int:
-    match = re.fullmatch(rf"([1-9]\d*){re.escape(unit)}", horizon)
-    if match is None:
-        raise ValueError(f"{view} intent horizon has the wrong unit")
-    return int(match.group(1))
 
 
 def maturation_key_sha256(snapshot_id: str, semantic_prediction_id: str) -> str:

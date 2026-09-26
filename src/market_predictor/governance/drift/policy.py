@@ -4,7 +4,7 @@ import json
 import math
 import os
 import re
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Literal, Self
 from uuid import uuid4
@@ -34,8 +34,6 @@ from market_predictor.locking import file_lock
 
 DRIFT_ASSESSMENT_VERSION = "market_predictor.drift_assessment.v3"
 SHA256_PATTERN = r"^[0-9a-f]{64}$"
-# Longer than any XNYS closure, so the window always holds the decision session.
-_DECISION_SESSION_LOOKBACK = pd.Timedelta(days=14)
 
 
 class DriftPolicyV3(BaseModel):
@@ -51,6 +49,7 @@ class DriftPolicyV3(BaseModel):
     maximum_report_age_minutes: int = Field(default=1_440, ge=1)
     maximum_last_matured_age_minutes: int = Field(default=10_080, ge=1)
     # Calendar days after the close of a prediction's last horizon session before it is overdue.
+    # Maturation cannot finish before that close, so the grace covers collection and weekends.
     pending_grace_days: int = Field(default=7, ge=0)
     minimum_feature_drift_live_rows: int = Field(default=30, ge=1)
     standardized_shift_warning: float = Field(default=2.0, gt=0)
@@ -96,19 +95,20 @@ class DriftPolicyV3(BaseModel):
     def sha256(self) -> str:
         return content_sha256(self.model_dump(mode="json"))
 
-    def outcome_overdue(self, horizon: str, decision_time: datetime, now: datetime) -> bool:
-        """Whether the horizon's last XNYS session closed more than the grace period before now."""
+    def outcome_overdue(self, horizon: str, decision_session: date, now: datetime) -> bool:
+        """Whether the horizon's last XNYS session after the decision closed more than the grace before now."""
+        if now.utcoffset() is None:
+            raise ValueError("overdue checks require a timezone-aware time")
         sessions = swing_horizon_sessions(horizon)
         closes = xcals.get_calendar("XNYS").closes
-        decision = pd.Timestamp(decision_time).tz_convert("UTC")
-        # Session labels are dates; a label past now's date never closes before now, so it cannot trip the check.
-        first_label = decision.tz_localize(None).normalize() - _DECISION_SESSION_LOOKBACK
-        last_label = pd.Timestamp(now).tz_convert("UTC").tz_localize(None).normalize()
-        window = closes.loc[first_label:last_label]
-        completed = window.index[window <= decision]
-        if completed.empty:
-            raise DataReadinessError(f"no XNYS session closed before the pending decision at {decision_time.isoformat()}")
-        later = window.loc[window.index > completed[-1]]
+        decision = pd.Timestamp(decision_session)
+        # A session closes on its own UTC date, so labels after now's UTC date have not closed.
+        today = pd.Timestamp(now).tz_convert("UTC").tz_localize(None).normalize()
+        if decision not in closes.index:
+            raise DataReadinessError(f"pending decision session is not an XNYS session: {decision_session}")
+        if today > closes.index[-1]:
+            raise DataReadinessError(f"the XNYS calendar ends {closes.index[-1].date()}, before {today.date()}")
+        later = closes.loc[decision + pd.Timedelta(days=1) : today]
         if len(later) < sessions:
             return False
         deadline = later.iloc[sessions - 1].to_pydatetime() + timedelta(days=self.pending_grace_days)
@@ -548,11 +548,8 @@ def _performance_state(
         "pending_selected_samples",
     )
     if pending > 0:
-        oldest_pending = _timestamp(
-            row.get("oldest_pending_decision_time_utc"),
-            "oldest_pending_decision_time_utc",
-        )
-        if policy.outcome_overdue(str(row.get("horizon")), oldest_pending, now):
+        oldest_session = date.fromisoformat(str(row.get("oldest_pending_decision_session_et")))
+        if policy.outcome_overdue(str(row.get("horizon")), oldest_session, now):
             reasons.append("selected_policy_outcomes_overdue")
             return "unavailable", "not_ready"
     samples = _as_int(

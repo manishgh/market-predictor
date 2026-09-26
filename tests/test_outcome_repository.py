@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import tempfile
 import unittest
 from concurrent.futures import ThreadPoolExecutor
@@ -8,6 +9,7 @@ from pathlib import Path
 
 from pydantic import ValidationError
 
+from market_predictor.core.errors import DataReadinessError
 from market_predictor.core.prediction_contracts import PredictionConflictError
 from market_predictor.execution_policy import (
     DEFAULT_EXECUTION_POLICY,
@@ -15,6 +17,7 @@ from market_predictor.execution_policy import (
     round_trip_cost_bps,
 )
 from market_predictor.governance.outcomes.contracts import (
+    RETIRED_INTRADAY,
     MaturationAttemptV1,
     MaturedOutcomeV3,
     PredictionMaturationIntentV3,
@@ -56,6 +59,31 @@ class OutcomeRepositoryTests(unittest.TestCase):
                     ),
                 }
             )
+
+    def test_superseded_observation_and_outcome_versions_are_refused(self) -> None:
+        intent = _intent()
+        observation = monitoring_observation_from_intent(intent).model_dump(mode="python", exclude={"observation_id"})
+        outcome = _outcome(intent, [{"ticker": "MSFT"}]).model_dump(mode="python", exclude={"outcome_id"})
+        for model, content, key, version in (
+            (PredictionMonitoringObservationV2, observation, "observation_id", "market_predictor.prediction_observation.v1"),
+            (MaturedOutcomeV3, outcome, "outcome_id", "market_predictor.matured_outcome.v2"),
+        ):
+            changed = {**content, "contract_version": version}
+            with self.subTest(version=version), self.assertRaises(ValidationError):
+                model.model_validate({**changed, key: content_sha256(changed)})
+
+    def test_loaders_name_stored_retired_intraday_records(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repository = OutcomeRepository(Path(temp_dir))
+            intent = _intent()
+            repository.record_intent(intent)
+            path = next((Path(temp_dir) / "intents").glob("*/*.json"))
+            stored = json.loads(path.read_text(encoding="utf-8"))
+            path.write_text(json.dumps({**stored, "view": "intraday", "horizon": "5m"}), encoding="utf-8")
+
+            for load in (repository.intents, lambda: repository.load_intent(intent.maturation_key)):
+                with self.assertRaisesRegex(DataReadinessError, RETIRED_INTRADAY):
+                    load()
 
     def test_swing_outcome_rejects_legacy_path_and_calibration_target(self) -> None:
         intent = _intent()

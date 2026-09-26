@@ -10,6 +10,7 @@ from typing import Any, Literal
 from uuid import uuid4
 
 from market_predictor.core.errors import DataReadinessError
+from market_predictor.governance.outcomes.contracts import SWING_HORIZON_PATTERN
 from market_predictor.locking import file_lock
 
 HYPOTHESIS_SCHEMA = "market_predictor.promotion_hypothesis.v1"
@@ -46,8 +47,10 @@ def declare_hypothesis(
     _require_sha256(baseline_artifact_sha256, "baseline_artifact_sha256")
     _require_sha256(prediction_policy_sha256, "prediction_policy_sha256")
     _require_sha256(execution_policy_sha256, "execution_policy_sha256")
-    if not re.fullmatch(r"^[1-9]\d*(?:m|d|b)$", shadow_horizon):
-        raise ValueError("shadow_horizon is invalid")
+    if shadow_view != "swing":
+        raise ValueError(f"shadow_view must be swing; intraday prediction is retired: {shadow_view}")
+    if not re.fullmatch(SWING_HORIZON_PATTERN, shadow_horizon):
+        raise ValueError("shadow_horizon must be an exchange-session count such as 10b")
     groups = tuple(group.strip() for group in shadow_decision_group_ids)
     if (
         len(groups) < 2

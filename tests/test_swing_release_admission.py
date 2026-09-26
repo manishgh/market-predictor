@@ -124,12 +124,24 @@ def test_historical_release_cannot_change_active_pointer(
         verify_local_release(repository, str(release["release_id"]), attestation_trust_store_path=trust)
 
 
+_PRE_RETIREMENT_EVIDENCE_SCHEMAS = {
+    "canonical_swing": "swing_training_evidence.v1",
+    "canonical_intraday": "intraday_training_evidence.v1",
+}
+
+
+def _pre_retirement_evidence_check(evidence: dict[str, object], *, model_type: str) -> None:
+    expected = _PRE_RETIREMENT_EVIDENCE_SCHEMAS.get(model_type)
+    if expected is None or evidence.get("schema") != expected:
+        raise DataReadinessError("release evidence schema does not match the model type")
+
+
 def _pre_retirement_release(
     repository: Path, model: Path, evidence: Path, trust: Path, monkeypatch: pytest.MonkeyPatch
 ) -> dict[str, object]:
-    """Publish as the code did before retirement, when day-trading evidence was accepted."""
+    """Publish with the evidence check as it was before retirement, when day-trading releases were accepted."""
     with monkeypatch.context() as patched:
-        patched.setattr(release_module, "_validate_evidence_schema", lambda *_args, **_kwargs: None)
+        patched.setattr(release_module, "_validate_evidence_schema", _pre_retirement_evidence_check)
         return publish_local_release(
             repository, model_path=model, evidence_manifest_path=evidence, attestation_trust_store_path=trust
         )
@@ -194,7 +206,7 @@ def test_source_replacement_cannot_activate_retired_model(tmp_path: Path) -> Non
 
     def replaced_source(root, **kwargs):
         assert kwargs["activate"] is False
-        with patch.object(release_module, "_validate_evidence_schema"):
+        with patch.object(release_module, "_validate_evidence_schema", _pre_retirement_evidence_check):
             return publish_local_release(
                 root,
                 model_path=intraday,

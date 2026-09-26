@@ -24,14 +24,15 @@ def test_registers_identity_complete_swing_snapshot_for_maturation(
     assert response.snapshot_id is not None
     repository = OutcomeRepository(tmp_path / "data/outcomes")
 
-    intents = register_snapshot_intents(
+    registration = register_snapshot_intents(
         serving.service.snapshot_store,
         repository,
         response.snapshot_id,
     )
 
-    assert {intent.ticker for intent in intents} == {"T000", "T059"}
-    for intent in intents:
+    assert {intent.ticker for intent in registration.intents} == {"T000", "T059"}
+    assert registration.unmonitored_tickers == {"out_of_universe": ["MISSING"]}
+    for intent in registration.intents:
         assert (intent.view, intent.horizon) == ("swing", "10b")
         assert intent.model_release_id == response.models["swing"].release_id
         assert repository.load_intent(intent.maturation_key) == intent
@@ -40,6 +41,31 @@ def test_registers_identity_complete_swing_snapshot_for_maturation(
     assert {(observation.ticker, observation.view) for observation in observations} == {
         ("T000", "swing"),
         ("T059", "swing"),
+    }
+
+
+def test_members_with_incomplete_inputs_are_reported_not_called_out_of_universe(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    serving = swing_serving(
+        tmp_path, monkeypatch, enforce_drift=False, persist_snapshots=True, excluded_tickers=("T060",)
+    )
+    response = serving.service.predict(PredictionRequest(tickers=["T000", "T060", "MISSING"], as_of=NOW))
+    assert response.snapshot_id is not None
+    reasons = {
+        prediction.ticker: prediction.swing.abstention_reasons
+        for prediction in response.predictions
+        if prediction.swing is not None
+    }
+
+    registration = register_snapshot_intents(
+        serving.service.snapshot_store, OutcomeRepository(tmp_path / "data/outcomes"), response.snapshot_id
+    )
+
+    assert reasons == {"T000": [], "T060": ["live_inputs_incomplete"], "MISSING": ["out_of_universe"]}
+    assert registration.unmonitored_tickers == {
+        "live_inputs_incomplete": ["T060"],
+        "out_of_universe": ["MISSING"],
     }
 
 

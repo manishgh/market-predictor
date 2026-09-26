@@ -154,6 +154,7 @@ REMOVED_PRODUCTION_MODULES = (
     "market_predictor.symbols",
     # Day-trading prediction retirement; intraday.contracts stays pinned until its evidence is re-issued.
     "market_predictor.evidence.readiness_authority",
+    "market_predictor.readiness",
     "market_predictor.governance.readiness",
     "market_predictor.serving.decision_policy",
     "market_predictor.serving.model_context",

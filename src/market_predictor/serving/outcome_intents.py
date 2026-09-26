@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import date
 from zoneinfo import ZoneInfo
 
@@ -21,13 +22,22 @@ from market_predictor.governance.outcomes.repository import OutcomeRepository
 from market_predictor.serving.snapshot_store import PredictionSnapshotStore
 
 _EASTERN = ZoneInfo("America/New_York")
+# Abstentions the model never scored: outside the live universe, or a member whose inputs were incomplete.
+UNMONITORED_ABSTENTIONS = (["out_of_universe"], ["live_inputs_incomplete"])
+
+
+@dataclass(frozen=True, slots=True)
+class SnapshotRegistration:
+    intents: list[PredictionMaturationIntentV3]
+    # Requested tickers the model never scored, by abstention reason; they have no observation.
+    unmonitored_tickers: dict[str, list[str]]
 
 
 def register_snapshot_intents(
     snapshot_store: PredictionSnapshotStore,
     outcome_repository: OutcomeRepository,
     snapshot_id: str,
-) -> list[PredictionMaturationIntentV3]:
+) -> SnapshotRegistration:
     _, response, _ = snapshot_store.load(snapshot_id)
     intents = maturation_intents_from_response(response, snapshot_id=snapshot_id)
     intent_by_view: dict[tuple[str, str], PredictionMaturationIntentV3] = {
@@ -41,7 +51,13 @@ def register_snapshot_intents(
     recorded = [outcome_repository.record_intent(intent) for intent in intents]
     for observation in observations:
         outcome_repository.record_observation(observation)
-    return recorded
+    observed = {observation.ticker for observation in observations}
+    unmonitored: dict[str, list[str]] = {}
+    for prediction in response.predictions:
+        if prediction.swing is not None and prediction.ticker not in observed:
+            reason = "+".join(prediction.swing.abstention_reasons)
+            unmonitored.setdefault(reason, []).append(prediction.ticker)
+    return SnapshotRegistration(recorded, {reason: sorted(tickers) for reason, tickers in sorted(unmonitored.items())})
 
 
 def maturation_intents_from_response(
@@ -98,8 +114,8 @@ def monitoring_observations_from_response(
         if prediction.swing is None or response.models.get("swing") is None:
             continue
         if (prediction.ticker, "swing") not in scored:
-            # A ticker outside the live universe was never scored, so the model made no decision to monitor.
-            if prediction.swing.probability is not None or prediction.swing.readiness.status == "valid":
+            # An unscored abstention carries no model decision; the caller reports it as unmonitored.
+            if prediction.swing.abstention_reasons not in UNMONITORED_ABSTENTIONS:
                 raise DataReadinessError(f"scored swing prediction for {prediction.ticker} has no evidence row")
             continue
         observations.append(

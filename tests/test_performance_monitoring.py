@@ -10,6 +10,7 @@ from pydantic import ValidationError
 from market_predictor.core.errors import DataReadinessError
 from market_predictor.core.prediction_contracts import PredictionConflictError
 from market_predictor.governance.outcomes.contracts import (
+    RETIRED_INTRADAY,
     MaturedOutcomeV3,
     PredictionMaturationIntentV3,
     PredictionMonitoringObservationV2,
@@ -246,6 +247,7 @@ class PerformanceMonitoringTests(unittest.TestCase):
 
             self.assertEqual(row["total_predictions"], 1)
             self.assertEqual(row["pending_selected_samples"], 1)
+            self.assertEqual(row["oldest_pending_decision_session_et"], "2026-07-24")
             self.assertEqual(row["matured_selected_samples"], 0)
             self.assertEqual(row["evidence_status"], "insufficient_evidence")
             self.assertEqual(report["source_intent_ids"], [pending.maturation_key])
@@ -398,6 +400,8 @@ class PerformanceMonitoringTests(unittest.TestCase):
             with self.subTest(changes=changes), self.assertRaises(ValidationError) as raised:
                 validate_performance_report(candidate)
             self.assertNotIn("identity", str(raised.exception))
+            if changes.get("view") == "intraday":
+                self.assertIn(RETIRED_INTRADAY, str(raised.exception))
         with self.assertRaises(ValidationError):
             validate_performance_report(
                 {**report, "contract_version": "market_predictor.selected_policy_performance.v2"}

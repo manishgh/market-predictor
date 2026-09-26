@@ -73,7 +73,9 @@ class SwingLiveFeatureFrames:
     as_of_utc: pd.Timestamp
     decision_time_utc: pd.Timestamp
     session_date_et: date
+    # Point-in-time members left out because their market or catalyst inputs were incomplete.
     excluded_security_ids: tuple[str, ...] = ()
+    excluded_tickers: tuple[str, ...] = ()
     schema_version: str = SWING_LIVE_SCHEMA_VERSION
 
 
@@ -340,11 +342,12 @@ def build_live_swing_features(
         live_manifest_path=live_manifest_path,
         expected_live_manifest_sha256=expected_live_manifest_sha256,
     )
-    expected = _effective_membership_security_ids(
+    members = _effective_membership_tickers(
         point_in_time_memberships,
         decision_time=_expected_swing_decision_time(cutoff),
         contract=contract,
     )
+    expected = tuple(sorted(members))
     _reject_future_evidence(
         stock_daily_bars,
         label="stock daily bars",
@@ -460,6 +463,7 @@ def build_live_swing_features(
         decision_time_utc=pd.Timestamp(decision_times.iloc[0]),
         session_date_et=sessions.iloc[0],
         excluded_security_ids=excluded_security_ids,
+        excluded_tickers=tuple(sorted(members[security_id] for security_id in excluded_security_ids)),
     )
     _verify_live_feature_bindings(
         catalyst_authority_directory=catalyst_authority_directory,
@@ -667,12 +671,13 @@ def _model_frame(
     return frame
 
 
-def _effective_membership_security_ids(
+def _effective_membership_tickers(
     memberships: pd.DataFrame,
     *,
     decision_time: pd.Timestamp,
     contract: StrategyContract,
-) -> tuple[str, ...]:
+) -> dict[str, str]:
+    """Each effective member's point-in-time ticker, by security identity."""
     required = {
         "ticker",
         "security_id",
@@ -705,11 +710,11 @@ def _effective_membership_security_ids(
         raise DataReadinessError("effective point-in-time membership is empty or invalid")
     if bool(current.duplicated("ticker").any()) or bool(current.duplicated("security_id").any()):
         raise DataReadinessError("effective point-in-time membership has ambiguous ticker/security identity")
-    normalized = tuple(sorted(current["security_id"].astype(str)))
+    tickers = dict(zip(current["security_id"].astype(str), current["ticker"].astype(str), strict=True))
     minimum = contract.labels.minimum_cross_section_for_ranking
-    if len(normalized) < minimum:
-        raise DataReadinessError(f"expected swing cross-section is below the frozen minimum: {len(normalized)} < {minimum}")
-    return normalized
+    if len(tickers) < minimum:
+        raise DataReadinessError(f"expected swing cross-section is below the frozen minimum: {len(tickers)} < {minimum}")
+    return tickers
 
 
 def _expected_swing_decision_time(cutoff: pd.Timestamp) -> pd.Timestamp:

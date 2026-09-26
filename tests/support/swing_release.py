@@ -12,18 +12,23 @@ from tests.r4_fixtures import authorize_candidate_for_test, synthetic_identity_m
 # The retired day-trading model identity, as historical candidate manifests record it.
 RETIRED_INTRADAY_MODEL_TYPE = "canonical_intraday"
 RETIRED_INTRADAY_SCHEMA_VERSION = "intraday.model.v1"
+RETIRED_INTRADAY_EVIDENCE_SCHEMA = "intraday_training_evidence.v1"
 
 
 def promoted_swing_candidate(root: Path, marker: str) -> tuple[Path, Path]:
-    return _signed_candidate(root, marker, SWING_MODEL_TYPE, SWING_MODEL_SCHEMA_VERSION)
+    return _signed_candidate(root, marker, SWING_MODEL_TYPE, SWING_MODEL_SCHEMA_VERSION, "swing_training_evidence.v1")
 
 
 def retired_intraday_candidate(root: Path, marker: str) -> tuple[Path, Path]:
     """A verifiable signed candidate that declares the retired day-trading model type."""
-    return _signed_candidate(root, marker, RETIRED_INTRADAY_MODEL_TYPE, RETIRED_INTRADAY_SCHEMA_VERSION)
+    return _signed_candidate(
+        root, marker, RETIRED_INTRADAY_MODEL_TYPE, RETIRED_INTRADAY_SCHEMA_VERSION, RETIRED_INTRADAY_EVIDENCE_SCHEMA
+    )
 
 
-def _signed_candidate(root: Path, marker: str, model_type: str, schema_version: str) -> tuple[Path, Path]:
+def _signed_candidate(
+    root: Path, marker: str, model_type: str, schema_version: str, evidence_schema: str
+) -> tuple[Path, Path]:
     root.mkdir(parents=True, exist_ok=True)
     model = root / f"{model_type}-{marker}.joblib"
     joblib.dump({"test_fixture": marker}, model)
@@ -48,4 +53,4 @@ def _signed_candidate(root: Path, marker: str, model_type: str, schema_version: 
         validation_split="session_purged_walk_forward_and_ticker_holdout",
         extra={"model_run_id": run_id},
     )
-    return model, authorize_candidate_for_test(model, metrics)
+    return model, authorize_candidate_for_test(model, metrics, evidence_schema=evidence_schema)

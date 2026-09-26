@@ -42,7 +42,6 @@ from market_predictor.modeling.feature_reference import (
 )
 from market_predictor.modeling.prediction_selection import SwingPredictionPolicy
 from market_predictor.modeling.strategy_contract import StrategyContract, load_strategy_contract
-from market_predictor.readiness import INVALID, VALID
 from market_predictor.resources import assert_memory_budget, memory_audit
 from market_predictor.serving.routes import ServingRoute
 from market_predictor.serving.snapshot_store import PredictionSnapshotStore
@@ -101,6 +100,8 @@ def serving_routes_from_config(config: Mapping[str, Any]) -> dict[str, dict[str,
     routes: dict[str, dict[str, ServingRoute]] = {}
     for mode, raw_mode_routes in route_config.items():
         normalized_mode = str(mode).strip().lower()
+        if normalized_mode == "intraday":
+            raise ValueError("intraday prediction is retired; only swing routes are served")
         if normalized_mode not in DEFAULT_MODE_HORIZONS:
             raise ValueError(f"unsupported configured prediction mode: {mode}")
         if not isinstance(raw_mode_routes, dict):
@@ -334,6 +335,7 @@ class PredictionService:
                 bundle_sha256=bundle.sha256(),
                 threshold=engine.threshold,
                 selected_security_ids=selected_ids,
+                excluded_tickers=frozenset(live.excluded_tickers),
                 contract=contract,
                 model_as_of_utc=bundle.promoted_at_utc,
                 data_as_of_utc=inputs.generated_at_utc,
@@ -673,6 +675,7 @@ def _edge_swing_predictions(
     bundle_sha256: str,
     threshold: float,
     selected_security_ids: set[str],
+    excluded_tickers: frozenset[str],
     contract: StrategyContract,
     model_as_of_utc: datetime,
     data_as_of_utc: datetime,
@@ -695,7 +698,9 @@ def _edge_swing_predictions(
                     ticker=ticker,
                     signal="abstain",
                     action="abstain",
-                    abstention_reasons=["out_of_universe"],
+                    abstention_reasons=[
+                        "live_inputs_incomplete" if ticker in excluded_tickers else "out_of_universe"
+                    ],
                     model_id=bundle.model_id,
                     serving_bundle_sha256=bundle_sha256,
                     model_as_of_utc=model_as_of_utc,
@@ -704,8 +709,12 @@ def _edge_swing_predictions(
                     classifier_score=None,
                     regressor_score=None,
                     readiness=ReadinessInfo(
-                        status=INVALID,
-                        reasons=["Ticker is absent from the verified live reference universe."],
+                        status="invalid",
+                        reasons=[
+                            "Market or catalyst inputs for this member are incomplete at the decision."
+                            if ticker in excluded_tickers
+                            else "Ticker is absent from the verified live reference universe."
+                        ],
                         daily_bar_count=0,
                         required_bar_count=contract.swing.minimum_warmup_sessions,
                         price_feed="sip",
@@ -784,7 +793,7 @@ def _edge_swing_predictions(
                 model_id=bundle.model_id,
                 serving_bundle_sha256=bundle_sha256,
                 readiness=ReadinessInfo(
-                    status=VALID,
+                    status="valid",
                     timeframe="daily",
                     daily_bar_count=int(_required_edge_float(row, "daily_bar_count")),
                     required_bar_count=contract.swing.minimum_warmup_sessions,

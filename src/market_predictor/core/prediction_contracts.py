@@ -14,7 +14,8 @@ PredictionDataSource = Literal["live"]
 
 
 class _PredictionContract(BaseModel):
-    model_config = ConfigDict(allow_inf_nan=False)
+    # Unknown fields are refused, so a payload carrying retired fields is never silently accepted.
+    model_config = ConfigDict(allow_inf_nan=False, extra="forbid")
 
 class PredictionServiceError(Exception):
     """Base class for stable, non-leaking service failures."""
@@ -97,8 +98,6 @@ class PredictionRequest(_PredictionContract):
     Training and collection stay outside this contract. Model artifacts,
     feature sources, and promotion policy are owned by the server.
     """
-
-    model_config = ConfigDict(extra="forbid")
 
     tickers: list[str] = Field(..., min_length=1, max_length=100)
     mode: PredictionMode = "swing"

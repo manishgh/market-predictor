@@ -140,6 +140,7 @@ def swing_serving(
     monkeypatch: pytest.MonkeyPatch,
     *,
     generation_cache: type[GenerationCache] = GenerationCache,
+    excluded_tickers: tuple[str, ...] = (),
     **service_options: Any,
 ) -> SwingServing:
     """Build the promoted swing service; drift enforcement stays on unless disabled."""
@@ -225,6 +226,7 @@ def swing_serving(
     live = live_frames(
         technical_features=features,
         catalyst_features=swing_model_feature_columns(contract=contract, catalyst=True),
+        excluded_tickers=excluded_tickers,
     )
     monkeypatch.setattr(service_module, "build_live_swing_features", lambda *_args, **_kwargs: live)
     options: dict[str, Any] = {
@@ -301,6 +303,7 @@ def live_frames(
     *,
     technical_features: tuple[str, ...],
     catalyst_features: tuple[str, ...],
+    excluded_tickers: tuple[str, ...] = (),
 ) -> SwingLiveFeatureFrames:
     identities: list[dict[str, object]] = []
     context_rows: list[dict[str, object]] = []
@@ -356,4 +359,5 @@ def live_frames(
         as_of_utc=pd.Timestamp(NOW),
         decision_time_utc=DECISION,
         session_date_et=DECISION.tz_convert("America/New_York").date(),
+        excluded_tickers=excluded_tickers,
     )

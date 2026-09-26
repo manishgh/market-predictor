@@ -343,6 +343,8 @@ def test_incomplete_same_session_cross_section_excludes_one_security(
     result = _build(contract)
 
     assert len(result.excluded_security_ids) == 1
+    assert len(result.excluded_tickers) == 1
+    assert result.excluded_tickers[0] not in set(result.context["ticker"])
     assert len(result.catalyst_full) == SECURITY_COUNT - 1
 
 
@@ -390,6 +392,7 @@ def test_excludes_one_under_warm_security_and_rejects_naive_cutoff(
     result = _build(contract)
 
     assert result.excluded_security_ids == ("security-001",)
+    assert result.excluded_tickers == ("T001",)
 
     with pytest.raises(DataReadinessError, match="timezone-aware"):
         _build(contract, as_of_utc="2026-07-08 22:05:00")

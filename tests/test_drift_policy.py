@@ -4,8 +4,9 @@ import json
 import tempfile
 import tomllib
 import unittest
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 from pydantic import ValidationError
 from typer.testing import CliRunner
@@ -28,6 +29,7 @@ from market_predictor.modeling.feature_reference import feature_reference_names_
 from market_predictor.production_cli import app
 
 ROOT = Path(__file__).resolve().parents[1]
+NEW_YORK = ZoneInfo("America/New_York")
 
 
 class DriftPolicyTests(unittest.TestCase):
@@ -115,9 +117,9 @@ class DriftPolicyTests(unittest.TestCase):
         self.assertIn("selected_policy_outcomes_overdue", overdue.reasons)
         self.assertEqual((pending.state, pending.actionability), ("stable", "actionable"))
         deadline = tenth_close + timedelta(days=7)
-        self.assertFalse(self.policy.outcome_overdue("10b", on_holiday_eve, deadline))
+        self.assertFalse(self.policy.outcome_overdue("10b", date(2026, 7, 2), deadline))
         self.assertTrue(
-            self.policy.outcome_overdue("10b", on_holiday_eve, deadline + timedelta(microseconds=1))
+            self.policy.outcome_overdue("10b", date(2026, 7, 2), deadline + timedelta(microseconds=1))
         )
 
     def test_pending_deadline_scales_to_investment_horizons(self) -> None:
@@ -133,19 +135,25 @@ class DriftPolicyTests(unittest.TestCase):
 
         self.assertIn("selected_policy_outcomes_overdue", ten_session.reasons)
         self.assertEqual((annual.state, annual.actionability), ("stable", "actionable"))
-        # The 252nd session after 24 July 2025 closes on 27 July 2026; 353 calendar
-        # days, the weekday-only estimate, would fall eight days before it.
+        # The 252nd session after 24 July 2025 closes on 27 July 2026. The weekday
+        # estimate's limit, 353 days plus the grace, ends 19 July: eight days too early.
         deadline = datetime(2026, 7, 27, 20, 0, tzinfo=UTC) + timedelta(days=7)
-        self.assertFalse(self.policy.outcome_overdue("252b", decision, deadline))
+        self.assertFalse(self.policy.outcome_overdue("252b", date(2025, 7, 24), deadline))
         self.assertTrue(
-            self.policy.outcome_overdue("252b", decision, deadline + timedelta(microseconds=1))
+            self.policy.outcome_overdue("252b", date(2025, 7, 24), deadline + timedelta(microseconds=1))
         )
 
     def test_pending_deadline_requires_a_session_horizon_and_calendar(self) -> None:
         with self.assertRaisesRegex(ValueError, "not a session count"):
-            self.policy.outcome_overdue("10d", self.now - timedelta(days=30), self.now)
-        with self.assertRaisesRegex(DataReadinessError, "no XNYS session closed"):
-            self.policy.outcome_overdue("10b", datetime(1990, 1, 2, 22, 0, tzinfo=UTC), self.now)
+            self.policy.outcome_overdue("10d", date(2026, 6, 24), self.now)
+        with self.assertRaisesRegex(ValueError, "timezone-aware"):
+            self.policy.outcome_overdue("10b", date(2026, 6, 24), self.now.replace(tzinfo=None))
+        with self.assertRaisesRegex(DataReadinessError, "not an XNYS session"):
+            self.policy.outcome_overdue("10b", date(2026, 7, 3), self.now)
+        with self.assertRaisesRegex(DataReadinessError, "not an XNYS session"):
+            self.policy.outcome_overdue("10b", date(1990, 1, 2), self.now)
+        with self.assertRaisesRegex(DataReadinessError, "XNYS calendar ends"):
+            self.policy.outcome_overdue("252b", date(2026, 6, 24), datetime(2099, 1, 2, tzinfo=UTC))
 
     def test_future_performance_evidence_is_rejected_without_clock_tolerance(self) -> None:
         assessment = self._evaluate(
@@ -207,10 +215,17 @@ class DriftPolicyTests(unittest.TestCase):
                 store.load("intraday", "60m", self.release_id)
             with self.assertRaisesRegex(ValueError, "horizon is invalid"):
                 store.load("swing", "10d", self.release_id)
-        with self.assertRaises(ValidationError):
+        with self.assertRaisesRegex(ValidationError, "intraday"):
             validate_feature_drift_report(
                 self._feature_report("stable", mode="intraday", horizon="60m")
             )
+        superseded = self._feature_report("stable")
+        superseded["contract_version"] = "market_predictor.feature_drift_report.v1"
+        superseded["report_id"] = content_sha256(
+            {key: value for key, value in superseded.items() if key != "report_id"}
+        )
+        with self.assertRaises(ValidationError):
+            validate_feature_drift_report(superseded)
         for horizon in ("60m", "10d"):
             with self.subTest(horizon=horizon), self.assertRaises(ValidationError):
                 self._evaluate(self._report(samples=20, horizon=horizon), horizon=horizon)
@@ -562,6 +577,11 @@ class DriftPolicyTests(unittest.TestCase):
             "pending_selected_samples": pending_count,
             "oldest_pending_decision_time_utc": (
                 oldest_pending.isoformat().replace("+00:00", "Z")
+                if oldest_pending is not None
+                else None
+            ),
+            "oldest_pending_decision_session_et": (
+                oldest_pending.astimezone(NEW_YORK).date().isoformat()
                 if oldest_pending is not None
                 else None
             ),

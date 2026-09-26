@@ -114,7 +114,7 @@ class InvestmentReplayService:
         assert model is not None
         timeframe = model.bar_timeframe or "1Day"
         start = decision_time - timedelta(days=2)
-        fetch_end = evaluation_time + timedelta(days=2 if timeframe == "1Day" else 1)
+        fetch_end = evaluation_time + timedelta(days=2)
         try:
             frames = {
                 ticker: self.price_provider.fetch(ticker, start, fetch_end, timeframe=timeframe)

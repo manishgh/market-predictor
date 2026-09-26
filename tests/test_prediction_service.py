@@ -80,6 +80,15 @@ def test_serving_routes_reject_every_horizon_but_ten_sessions(horizon: str) -> N
         serving_routes_from_config(_route_config(horizon))
 
 
+def test_serving_routes_name_retired_intraday_configuration() -> None:
+    config = _route_config("10b")
+    routes = config["prediction_serving"]["routes"]  # type: ignore[index]
+    routes["intraday"] = {"60m": {"release_repository": "models/intraday"}}  # type: ignore[index]
+
+    with pytest.raises(ValueError, match="intraday prediction is retired"):
+        serving_routes_from_config(config)
+
+
 def test_service_accepts_swing_routes_only(tmp_path: Path) -> None:
     route = ServingRoute(repository=tmp_path, attestation_trust_store=tmp_path / "trust.json", drift_policy_sha256="b" * 64)
     for routes in ({"intraday": {"60m": route}}, {"swing": {"10b": route}, "intraday": {"60m": route}}):
@@ -106,6 +115,26 @@ def test_retired_readiness_and_replay_views_are_refused() -> None:
         ReadinessInfo(status="valid", timeframe="intraday")
     with pytest.raises(ValidationError):
         InvestmentReplayRequest(snapshot_id="a" * 64, ticker="MSFT", model_view="intraday")
+
+
+def test_retired_fields_are_refused_not_dropped(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    serving = swing_serving(tmp_path, monkeypatch, enforce_drift=False)
+    payload = serving.service.predict(PredictionRequest(tickers=["T000"], as_of=NOW)).model_dump(mode="json")
+    [ticker] = payload["predictions"]
+    swing = ticker["swing"]
+
+    for changed in (
+        {**payload, "predictions": [{**ticker, "intraday": None}]},
+        {**payload, "predictions": [{**ticker, "unified_score": 0.5}]},
+        {**payload, "predictions": [{**ticker, "swing": {**swing, "unified_score": 0.5}}]},
+        {**payload, "predictions": [{**ticker, "swing": {**swing, "readiness": {**swing["readiness"], "intraday_bar_count": 0}}}]},
+    ):
+        with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
+            PredictionResponse.model_validate(changed)
+    with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
+        ReadinessInfo(status="valid", intraday_bar_count=10)
 
 
 def test_superseded_response_and_evidence_versions_are_refused(

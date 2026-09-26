@@ -8,9 +8,11 @@ from uuid import uuid4
 
 from pydantic import BaseModel, ValidationError
 
+from market_predictor.core.errors import DataReadinessError
 from market_predictor.core.json_integrity import parse_strict_json_object
 from market_predictor.core.prediction_contracts import PredictionConflictError
 from market_predictor.governance.outcomes.contracts import (
+    RETIRED_INTRADAY,
     MaturationAttemptV1,
     MaturedOutcomeV3,
     PredictionMaturationIntentV3,
@@ -242,6 +244,8 @@ class OutcomeRepository:
         try:
             return model.model_validate(_load_object(path))
         except ValidationError as exc:
+            if any(RETIRED_INTRADAY in str(error.get("msg", "")) for error in exc.errors()):
+                raise DataReadinessError(f"{RETIRED_INTRADAY}: {path}") from exc
             raise PredictionConflictError from exc
 
     def _key_path(self, collection: str, digest: str) -> Path:

@@ -41,7 +41,7 @@ def register_outcome_commands(app: typer.Typer, console: Any) -> None:
     ) -> None:
         """Freeze maturation intents from one identity-complete live snapshot."""
 
-        intents = register_snapshot_intents(
+        registration = register_snapshot_intents(
             PredictionSnapshotStore(snapshot_dir),
             OutcomeRepository(outcome_dir),
             snapshot_id,
@@ -50,10 +50,11 @@ def register_outcome_commands(app: typer.Typer, console: Any) -> None:
             json.dumps(
                 {
                     "snapshot_id": snapshot_id,
-                    "registered_intents": len(intents),
+                    "registered_intents": len(registration.intents),
                     "maturation_keys": [
-                        intent.maturation_key for intent in intents
+                        intent.maturation_key for intent in registration.intents
                     ],
+                    "unmonitored_tickers": registration.unmonitored_tickers,
                 },
                 sort_keys=True,
             )
@@ -145,7 +146,7 @@ def register_outcome_commands(app: typer.Typer, console: Any) -> None:
     @app.command("publish-drift-assessment")
     def publish_drift_assessment(
         mode: str = typer.Option("swing", help="Prediction view; only swing is served (intraday is retired)."),
-        horizon: str = typer.Option(..., help="Canonical route horizon in days or sessions, such as 10b."),
+        horizon: str = typer.Option(..., help="Route horizon in exchange sessions, such as 10b."),
         model_release_id: str = typer.Option(
             ...,
             help="Active model release SHA-256 identity.",

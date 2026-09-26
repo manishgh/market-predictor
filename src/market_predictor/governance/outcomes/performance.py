@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import math
 import os
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Literal, Self, cast
 from uuid import uuid4
@@ -77,6 +77,7 @@ class SelectedPolicyCohortV3(BaseModel):
     matured_selected_samples: int = Field(ge=0)
     pending_selected_samples: int = Field(ge=0)
     oldest_pending_decision_time_utc: datetime | None = None
+    oldest_pending_decision_session_et: date | None = None
     independent_decision_groups: int = Field(ge=0)
     evidence_status: Literal["sufficient", "insufficient_evidence"]
     selection_rate: float = Field(ge=0, le=1)
@@ -134,9 +135,8 @@ class SelectedPolicyCohortV3(BaseModel):
             != self.actionable_predictions
         ):
             raise ValueError("selected-policy maturation counts are inconsistent")
-        if (self.pending_selected_samples > 0) != (
-            self.oldest_pending_decision_time_utc is not None
-        ):
+        pending_evidence = (self.oldest_pending_decision_time_utc, self.oldest_pending_decision_session_et)
+        if any((self.pending_selected_samples > 0) != (value is not None) for value in pending_evidence):
             raise ValueError("selected-policy pending timestamp is inconsistent")
         if self.window_start_utc >= self.window_end_utc:
             raise ValueError("selected-policy report window is invalid")
@@ -547,6 +547,7 @@ def _monitoring_record(
         "calibration_bin": observation.calibration_bin,
         "decision_group_id": observation.decision_group_id,
         "decision_time_utc": observation.decision_time_utc,
+        "decision_session_et": observation.decision_session_et,
         "probability": observation.probability,
         "decision_score": observation.probability,
         "rank": observation.rank,
@@ -623,6 +624,11 @@ def _cohort_row(
         "pending_selected_samples": actionable_count - matured_count,
         "oldest_pending_decision_time_utc": (
             _timestamp_text(pending["decision_time_utc"].min())
+            if not pending.empty
+            else None
+        ),
+        "oldest_pending_decision_session_et": (
+            pending["decision_session_et"].min().isoformat()
             if not pending.empty
             else None
         ),
