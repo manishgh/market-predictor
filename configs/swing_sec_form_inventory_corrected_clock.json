@@ -1,0 +1,75 @@
+{
+  "schema": "market_predictor.sec_form_inventory_config",
+  "sec_collection": {
+    "path": "data/external/sec_filings_20190709_20260708_v1/_authority.json",
+    "sha256": "886d727670582409a8f816ac5b5283ebd6edc0c6e06d143f26c8f691ff2bf661"
+  },
+  "acceptance_clock": {
+    "path": "data/research/sec_acceptance_clock/_manifest.json",
+    "sha256": "51da245ea4227a6d6a0b18a1753d22d9290232e7a71c335e11fddfdafe69c4e1"
+  },
+  "identity_manifest": {
+    "path": "data/research/swing_initial_fit_source_proven_news/_manifest.json",
+    "sha256": "e150475190fe0efbafecb115cd5f08bb7acb58576b2661b680fad832ffc00d98"
+  },
+  "sec_identity_relations": {
+    "path": "data/canonical/sec_identity/sec_identity_20190709_20260708_v2/sec_identity_relations.parquet",
+    "sha256": "507043d1d60d9b17db26727a5aeff9bfa23ae2962cc9d80d5637a1ba000a9720"
+  },
+  "approved_population": {
+    "path": "data/reports/swing_research_cohort/approved_research_population_audit.json",
+    "sha256": "c2a7e89b6c360f7ddd704dcd41d4fd8fd6b1b698f1bf7caab9d0de72042d410f"
+  },
+  "official_document_collections": [
+    {
+      "path": "data/raw/swing_aiv_distribution_documents/_request.json",
+      "sha256": "a2fce941391f7e4e40b58397d4251a31849838f5788ca9a754aa1d279ec00cea"
+    },
+    {
+      "path": "data/raw/swing_cash_merger_completion_documents/_request.json",
+      "sha256": "5755302484540d8773d500d8cb22315379c2a15742d75087e39e6c927d91d177"
+    },
+    {
+      "path": "data/raw/swing_holding_source_documents/_request.json",
+      "sha256": "3f04b94992c31d4e1b4f0d7460f3da416a5b792a1dbd63a18b1c804716676537"
+    },
+    {
+      "path": "data/raw/swing_issuer_identity_publication_documents/_request.json",
+      "sha256": "875488d2a563339342751adc492e7b3a0938596fe6f4ce1572fe9234923f3e4b"
+    },
+    {
+      "path": "data/raw/swing_qqq_distribution_documents/_request.json",
+      "sha256": "f737704c58638f231bbf895700f6c3d547539f2acff0d66d9884efa56c331f9e"
+    },
+    {
+      "path": "data/raw/swing_qqq_distribution_exchange_documents/_request.json",
+      "sha256": "f9994909bced17e99ea2d4a5324abb100f733e503f9d41d151cdc6f6e1be80ee"
+    },
+    {
+      "path": "data/raw/swing_remaining_merger_completion_documents/_request.json",
+      "sha256": "d8c874441a2b41583a01cbb6927a7fa199fdf17957ea7d3581d812eb1dc44028"
+    },
+    {
+      "path": "data/raw/swing_share_transition_completion_documents/_request.json",
+      "sha256": "43c6842c6e313208f1323e5aa09ed01dbf29a37ff4214a550cc6a8e024ef35f2"
+    },
+    {
+      "path": "data/raw/swing_symbol_correction_documents/_request.json",
+      "sha256": "a6426dda00f292e2a3716e701d68cc5d83e38089e0f8fa683c0487f68a919782"
+    },
+    {
+      "path": "data/raw/swing_transfer_identity_documents/_request.json",
+      "sha256": "60789e2ee61a3c8bca88d615704cec99a87f3e1d37e3894ea584d1d1e89f74b9"
+    }
+  ],
+  "identity_evidence_inventories": [
+    {
+      "path": "data/raw/sec_identity_evidence_20260802/filing_proof_inventory.csv",
+      "sha256": "3fd4c995eb25dc2b6f15062196590345c64cb2e9bca8cfb64ee7fba60e39aa21"
+    },
+    {
+      "path": "data/raw/sec_identity_evidence_20260802/targeted_remaining_proof_inventory.csv",
+      "sha256": "5fcf569b4f1591686254b474a1865c637a21ea7d4db1ecb5f585ade7d40a1db7"
+    }
+  ]
+}

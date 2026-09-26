@@ -121,13 +121,46 @@ SEC clock page runs (archive authority SHA256
 - `dfd1b76` spaces later passes by one and then five minutes. Units still without a final
   outcome leave a run `incomplete`, and a resume with the printed checkpoint gives them
   fresh passes, so a completed collection has a final outcome for every unit.
-- Running now: `collect-sec-clock-pages` into
-  `data/raw/sec_acceptance_clock_pages_spaced_retries` (log
-  `data/runtime/sec_acceptance_clock_pages_spaced_retries.log`).
+- September 26 01:31-01:52 UTC: `data/raw/sec_acceptance_clock_pages_spaced_retries`
+  completed with manifest
+  `3905e8acf99fe386d9a7b9edd1fd4ed06ec163aa2486cab7f5dea4ccb9d8687b`: all 4,957 pages
+  archived on the first pass, with no retries.
+- Clock `data/research/sec_acceptance_clock`, manifest
+  `51da245ea4227a6d6a0b18a1753d22d9290232e7a71c335e11fddfdafe69c4e1`:
+  - 511 issuers `utc` (628,266 archive filings);
+  - 113 `new_york_wall_clock_labeled_utc` (61,201 filings);
+  - none unknown; no page disagreement or contrary in-data count.
 
-Next: publish the clock, write the corrected inventory config, republish both
-inventories into new outputs, then run the corrected document collection into
-`data/raw/sec_filing_documents_initial_fit_corrected_clock`.
+  The 113 equals the earlier diagnostic: 93 identified from pages plus 20 from in-data
+  counts.
+- Corrected inventories: config `configs/swing_sec_form_inventory_corrected_clock.json`
+  (SHA256 `a5f793807dbd1e907be199e5315b6a4809b35786972b63d48a055d8b516b30b4`). The first
+  attempt failed on a saved row from 2000, before the exchange calendar starts;
+  `cc4cfe9` skips rows that can never be available in the window.
+  - Initial fit, `data/research/swing_initial_fit_sec_form_inventory_corrected_clock`,
+    manifest `3ca7750689e42249d35c2cb68751b459060ac8ff694b4c2168f19878f91b4b07`, against
+    the superseded counts:
+    - 389,876 rows (389,875 before) and 387,472 accessions;
+    - 36,536 accessions re-timed from New York labels;
+    - 4 saved rows outside the archive's events, included;
+    - acceptance positions: intraday 131,469 (153,868 before), after close 232,191
+      (206,183), pre-open 22,515 (26,123);
+    - 22,066 selected 8-K units (22,067 before);
+    - one issuer with an unsaved page for 2019-07-08.
+  - Sealed later window, `data/research/swing_later_sealed_sec_form_inventory_corrected_clock`,
+    manifest `ae0ed0b688f009485e0f9d0a1e6b0c5ae1e1c7a3d89f648ff7de02e9a1a8807c`: 232,393
+    accessions, with no rows excluded for an unknown clock.
+- Running now: `collect-sec-filing-documents` from the corrected initial-fit inventory
+  into `data/raw/sec_filing_documents_initial_fit_corrected_clock` (log
+  `data/runtime/sec_filing_documents_initial_fit_corrected_clock.log`). An `incomplete`
+  result is resumed with its printed checkpoint. Next: the sealed collection, then
+  slice closure.
+
+Retirement sub-slice (b): both design reviews are consolidated in the plan (`c126c22`,
+no blockers). It now also deletes every unpinned intraday module and the retired ER1
+readiness tooling. Two TradingFlow follow-ups are recorded, both display-only:
+- swing signals read as neutral in the advisory model-direction view;
+- the hard-coded `market_predictor.prediction.v1` label.
 
 Retirement sub-slice (a) `20799b9` is pushed, after both design reviews (no blockers;
 consolidated in the plan).
