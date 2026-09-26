@@ -4,8 +4,9 @@ Status: active
 Last updated: 2026-09-25
 Repository: `C:\project\market-predictor`
 Branch: `unified-swing-product`
-Last completed implementation checkpoint: `da5d4c3` (pushed; per-issuer SEC acceptance clock, corrected inventory,
-concurrent collector).
+Last completed implementation checkpoint: `dfd1b76` (pushed; SEC retry passes with resume), after `20799b9`
+(retirement sub-slice (a), collection package), `beaa4eb` (memory-guard batch keeping) and `da5d4c3`
+(per-issuer SEC acceptance clock).
 Last completed model-training checkpoint: relationship run on `a8be7cb` (artifact pins below).
 Baseline model-training checkpoint: `07963cc` (pushed; unchanged).
 Source-collection checkpoint: `19698d6` (pushed).
@@ -102,13 +103,60 @@ architecture boundaries), plus 593 earlier across the `edge_rebuild` command con
 (only the pre-existing boundary failure). Ruff and strict mypy pass on 12 changed source
 files. The full suite was not run (component checkpoint).
 
-Running now: `collect-sec-clock-pages` into `data/raw/sec_acceptance_clock_pages`
-(archive authority SHA256
-`886d727670582409a8f816ac5b5283ebd6edc0c6e06d143f26c8f691ff2bf661`; about 4,957 detail
-pages; log `data/runtime/sec_acceptance_clock_pages.log`). Next: publish the clock, write
-the corrected inventory config, republish both inventories into new outputs, then run
-the corrected document collection into
+SEC clock page runs (archive authority SHA256
+`886d727670582409a8f816ac5b5283ebd6edc0c6e06d143f26c8f691ff2bf661`, 4,957 detail pages):
+
+- September 25 16:18 UTC: the memory guard stopped the first attempt at 90% system memory
+  before any page was saved (request hash `3bf06857...`, empty checkpoint; the empty
+  directory was removed). The guard then discarded an unsaved batch; `beaa4eb` now saves
+  the batch and in-flight attempts before re-raising, and SEC jobs name themselves in the
+  guard message.
+- 20:14-21:42 UTC: `data/raw/sec_acceptance_clock_pages` completed with manifest
+  `3f2c71e4298fa764d97ea9b963a7e4c398345c16de3e225b9feeb032cbb877a5`: 4,690 pages archived,
+  267 exhausted after three passes. 1,147 of 1,243 retryable attempts were HTTP 503 bodies
+  reading "SEC.gov is undergoing maintenance", and 96 were connection failures. First
+  attempts failed 12.1%; the back-to-back later passes failed 63-71%. The gaps would have
+  left 12 of 624 issuers unknown (4,850 archive filings). It stays as evidence of the
+  maintenance pattern and is not the clock's input.
+- `dfd1b76` spaces later passes by one and then five minutes. Units still without a final
+  outcome leave a run `incomplete`, and a resume with the printed checkpoint gives them
+  fresh passes, so a completed collection has a final outcome for every unit.
+- Running now: `collect-sec-clock-pages` into
+  `data/raw/sec_acceptance_clock_pages_spaced_retries` (log
+  `data/runtime/sec_acceptance_clock_pages_spaced_retries.log`).
+
+Next: publish the clock, write the corrected inventory config, republish both
+inventories into new outputs, then run the corrected document collection into
 `data/raw/sec_filing_documents_initial_fit_corrected_clock`.
+
+Retirement sub-slice (a) `20799b9` is pushed, after both design reviews (no blockers;
+consolidated in the plan).
+- **What moved.** `market_predictor/collection/` now owns the retained collectors:
+  - `alpaca_bars/contracts.py`, `plan.py` and `transport.py`;
+  - `prospective_sip_session.py` and `prospective_broker_actions.py`;
+  - `retained_inputs.py`, which lists the configs and lineage data that (d) and (e)
+    must keep.
+- **Identity preserved.** Config field names are unchanged, and the recorded policy
+  hashes reproduce (test plus a fixture of the last session's request). Broker actions
+  read only the A4.3 metadata chain.
+- **What stays in intraday.** Intraday research modules keep their plan layers through
+  an explicit `accepted_plan_schemas` argument. `bar_dataset.py` stays byte-identical,
+  because its source is part of the recorded A4.3 transformation identity. Rewriting its
+  import had broken a frozen-identity test, so the rewrite was reverted and an explicit
+  re-export was added.
+- **Checks.** Ruff and strict mypy on 27 changed source files. 799 affected tests ran
+  (collection, intraday, CLI, package and architecture boundaries, and the
+  edge_rebuild-importing swing tests). Their only failure was that frozen identity, now
+  fixed; 301 tests then passed on recheck, and the SEC and command tests passed 149.
+- **Real-data continuity, read-only:**
+  - the three completed polls that load at HEAD also load through the moved code,
+    re-deriving their six namespace and bar-lineage hashes;
+  - `session_20260820_v1` loads;
+  - the four pinned intraday files match the relationship receipt.
+- **Pre-existing defect, unrelated to the move.** `poll_20260816T070948Z` fails strict
+  replay ("prospective identity audit does not replay") at HEAD too; recorded, not
+  investigated in this slice. `poll_20260815T163000Z` and `poll_20260816T070535Z` are
+  unfinished attempts with no authority.
 
 September 24 slice `4844b3f` is pushed and both of its real runs are complete: legacy
 news-query identity proofs, which the user chose on September 23 to finish before
