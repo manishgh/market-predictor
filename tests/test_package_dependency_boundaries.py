@@ -36,8 +36,8 @@ GOVERNANCE_FORBIDDEN_DEPENDENCIES = (
 )
 INTRADAY_FORBIDDEN_DEPENDENCIES = ("market_predictor.governance",)
 SERVING_FORBIDDEN_DEPENDENCIES = ("market_predictor.edge_rebuild",)
-# Governance session arithmetic calls into swing maturation; swing importing it would form a cycle.
-SWING_FORBIDDEN_DEPENDENCIES = ("market_predictor.edge_rebuild", "market_predictor.governance.outcomes.sessions")
+# Governance maturation calls into swing evaluation; any swing import of governance would form a cycle.
+SWING_FORBIDDEN_DEPENDENCIES = ("market_predictor.edge_rebuild", "market_predictor.governance")
 UNIVERSE_ALLOWED_DEPENDENCIES = (
     "market_predictor.core",
     "market_predictor.evidence",
@@ -313,6 +313,21 @@ def test_production_dependency_direction_is_enforced(
                 relative_path = path.relative_to(PACKAGE_ROOT.parent)
                 violations.append(f"{relative_path}:{node.lineno}: {imported_name}")
     assert not violations, f"{package_name} dependency violations:\n" + "\n".join(sorted(violations))
+
+
+@pytest.mark.parametrize(
+    "statement",
+    (
+        "import market_predictor.governance.outcomes.sessions",
+        "from market_predictor.governance.outcomes import sessions",
+        "from market_predictor.governance.outcomes.sessions import horizon_last_close",
+        "from market_predictor.governance import outcomes",
+        "import market_predictor.governance",
+    ),
+)
+def test_swing_governance_guard_recognizes_every_import_form(statement: str) -> None:
+    imported_names = tuple(name for node in ast.walk(ast.parse(statement)) for name in _imported_names(node))
+    assert any(_matches_any_dependency(name, SWING_FORBIDDEN_DEPENDENCIES) for name in imported_names)
 
 
 @pytest.mark.parametrize(

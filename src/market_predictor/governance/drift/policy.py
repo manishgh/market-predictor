@@ -5,6 +5,7 @@ import math
 import os
 import re
 from datetime import UTC, date, datetime, timedelta
+from fractions import Fraction
 from pathlib import Path
 from typing import Literal, Self
 from uuid import uuid4
@@ -28,7 +29,11 @@ from market_predictor.governance.outcomes.contracts import (
     swing_horizon_sessions,
 )
 from market_predictor.governance.outcomes.performance import validate_performance_report
-from market_predictor.governance.outcomes.sessions import fewest_sessions_in_window, outcome_overdue
+from market_predictor.governance.outcomes.sessions import (
+    fewest_sessions_in_window,
+    most_sessions_in_window,
+    outcome_overdue,
+)
 from market_predictor.locking import file_lock
 
 DRIFT_ASSESSMENT_VERSION = "market_predictor.drift_assessment"
@@ -112,10 +117,16 @@ class DriftPolicy(BaseModel):
         )
 
     def lookback_supports_minimum(self, lookback_days: int, horizon: str) -> bool:
-        """Whether every window of this length can hold the minimum evidence, allowing lag and failures."""
+        """Whether every window of this length can hold the minimum evidence.
+
+        From the fewest sessions any such window holds, it removes the sessions whose outcomes
+        may still be legitimately pending (within the grace) and the registration failures
+        the policy tolerates, computed exactly so a share like 0.9 cannot round the wrong way.
+        """
         sessions = fewest_sessions_in_window(lookback_days)
-        tolerated_failures = math.floor((1 - self.minimum_registered_session_share) * sessions)
-        usable = sessions - 1 - tolerated_failures
+        pending = most_sessions_in_window(max(1, self.pending_grace_days))
+        tolerated_failures = math.floor((1 - Fraction(str(self.minimum_registered_session_share))) * sessions)
+        usable = sessions - pending - tolerated_failures
         return usable >= self.minimum_independent_decision_groups * swing_horizon_sessions(horizon)
 
 

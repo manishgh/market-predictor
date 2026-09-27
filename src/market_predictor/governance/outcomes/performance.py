@@ -265,6 +265,14 @@ class SelectedPolicyPerformanceReport(BaseModel):
             != self.window_end_utc - timedelta(days=self.lookback_days)
         ):
             raise ValueError("selected-policy report window is inconsistent")
+        route_starts: dict[tuple[str, ...], datetime] = {}
+        for row in self.rows:
+            route = tuple(str(getattr(row, column)) for column in _IDENTITY_COLUMNS)
+            route_starts[route] = min(route_starts.get(route, self.window_start_utc), row.first_decision_time_utc)
+        for row in self.rows:
+            route = tuple(str(getattr(row, column)) for column in _IDENTITY_COLUMNS)
+            if row.window_end_utc != self.window_end_utc or row.window_start_utc != route_starts[route]:
+                raise ValueError("selected-policy cohort window does not follow the route's included decisions")
         content = self.model_dump(mode="json", exclude={"report_id"})
         if content_sha256(content) != self.report_id:
             raise ValueError("selected-policy report identity is invalid")
@@ -294,10 +302,12 @@ def build_performance_cohorts(
     intents: dict[str, PredictionMaturationIntent] = {}
     observations: list[PredictionMonitoringObservation] = []
     for session in repository.sessions():
-        if not any(
-            _matures_in_window(session, horizon, window_start, generated)
+        included = {
+            horizon
             for horizon in repository.session_horizons(session)
-        ):
+            if _matures_in_window(session, horizon, window_start, generated)
+        }
+        if not included:
             continue
         for stored in repository.session_intents(session):
             if repository.semantic_canonical_key(stored.semantic_prediction_id, session) == stored.maturation_key:
@@ -305,8 +315,7 @@ def build_performance_cohorts(
         observations.extend(
             observation
             for observation in repository.session_observations(session)
-            if observation.decision_time_utc <= generated
-            and _matures_in_window(session, observation.horizon, window_start, generated)
+            if observation.decision_time_utc <= generated and observation.horizon in included
         )
     route_oldest_pending = _route_oldest_pending(repository, generated=generated)
     for observation in _canonical_observations(repository, observations):
@@ -339,6 +348,10 @@ def build_performance_cohorts(
             "exit_time_utc",
         ):
             frame[column] = pd.to_datetime(frame[column], errors="coerce", utc=True)
+        route_starts = {
+            tuple(str(value) for value in key): start.to_pydatetime()
+            for key, start in frame.groupby(_IDENTITY_COLUMNS, dropna=False)["decision_time_utc"].min().items()
+        }
         cohort_specs = [
             ("all", None),
             ("market_regime", "market_regime"),
@@ -364,9 +377,6 @@ def build_performance_cohorts(
                 )
                 identity = dict(zip(group_columns, values, strict=True))
                 route = tuple(str(identity[column]) for column in _IDENTITY_COLUMNS)
-                route_rows = frame
-                for column, value in zip(_IDENTITY_COLUMNS, route, strict=True):
-                    route_rows = route_rows.loc[route_rows[column].astype(str).eq(value)]
                 row = _cohort_row(
                     group,
                     identity=identity,
@@ -378,7 +388,7 @@ def build_performance_cohorts(
                     ),
                     minimum_samples=minimum_samples,
                     # A route's rows span its included decisions, which may precede the outcome window.
-                    window_start=min(window_start, route_rows["decision_time_utc"].min().to_pydatetime()),
+                    window_start=min(window_start, route_starts[route]),
                     window_end=generated,
                     route_oldest_pending=route_oldest_pending.get(route) if cohort_type == "all" else None,
                 )
@@ -552,6 +562,10 @@ def _matured_selected_outcome(
     return outcome
 
 
+def _earliest(*sessions: date | None) -> date:
+    return min(session for session in sessions if session is not None)
+
+
 def _matures_in_window(decision_session: date, horizon: str, window_start: datetime, generated: datetime) -> bool:
     last_close = horizon_last_close(decision_session, swing_horizon_sessions(horizon), through=generated)
     return last_close is None or last_close >= window_start
@@ -684,7 +698,12 @@ def _cohort_row(
             else None
         ),
         "route_oldest_pending_decision_session_et": (
-            route_oldest_pending.isoformat() if route_oldest_pending is not None else None
+            _earliest(
+                route_oldest_pending,
+                None if pending.empty else pending["decision_session_et"].min(),
+            ).isoformat()
+            if cohort_type == "all" and (route_oldest_pending is not None or not pending.empty)
+            else None
         ),
         "independent_decision_groups": int(
             matured["decision_group_id"].nunique()

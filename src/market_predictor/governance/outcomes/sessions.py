@@ -52,15 +52,13 @@ def outcome_overdue(decision_session: date, sessions: int, *, now: datetime, gra
     return close is not None and now > close + grace
 
 
-def session_index(session: date) -> int:
-    """The position of an XNYS session in the calendar, for spacing sessions exactly."""
-    closes = _closes()
-    return int(closes.index.get_loc(_session(session, closes)))
+def _window_session_counts(lookback_days: int) -> np.ndarray:
+    """Sessions in every `lookback_days` window lying inside the calendar.
 
-
-@cache
-def fewest_sessions_in_window(lookback_days: int) -> int:
-    """The fewest XNYS sessions any `lookback_days` calendar-day window of the calendar holds."""
+    The default XNYS calendar spans about twenty years back to one year ahead of process
+    start, so these counts can change slowly as that range rolls; they only relax unless a
+    new market closure occurs.
+    """
     if lookback_days < 1:
         raise ValueError("lookback_days must be positive")
     labels = _closes().index.to_numpy(dtype="datetime64[D]")
@@ -68,4 +66,16 @@ def fewest_sessions_in_window(lookback_days: int) -> int:
     days = np.arange(labels[0] + np.timedelta64(lookback_days, "D"), labels[-1] + np.timedelta64(1, "D"))
     ends = np.searchsorted(labels, days, side="right")
     starts = np.searchsorted(labels, days - np.timedelta64(lookback_days, "D"), side="right")
-    return int((ends - starts).min())
+    return ends - starts
+
+
+@cache
+def fewest_sessions_in_window(lookback_days: int) -> int:
+    """The fewest XNYS sessions any `lookback_days` calendar-day window holds."""
+    return int(_window_session_counts(lookback_days).min())
+
+
+@cache
+def most_sessions_in_window(lookback_days: int) -> int:
+    """The most XNYS sessions any `lookback_days` calendar-day window holds."""
+    return int(_window_session_counts(lookback_days).max())

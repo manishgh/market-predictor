@@ -277,8 +277,106 @@ class PerformanceMonitoringTests(unittest.TestCase):
 
             self.assertEqual(row["total_predictions"], 1)
             self.assertEqual(report["source_intent_ids"], [finishing.maturation_key])
-            self.assertEqual(row["window_start_utc"], "2026-06-26T22:00:00Z")
             self.assertEqual(report["window_start_utc"], "2026-07-03T00:00:00Z")
+            # Every cohort of the route spans the route's included decisions.
+            self.assertEqual({item["window_start_utc"] for item in report["rows"]}, {"2026-06-26T22:00:00Z"})
+
+    def test_window_includes_a_horizon_ending_exactly_at_its_start(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repository = OutcomeRepository(Path(temp_dir))
+            # The tenth session after 2 July 2026 closes 17 July 20:00 UTC (3 July is a holiday).
+            on_edge = _intent_variant("MSFT", "1", probability=0.8, decision_time=datetime(2026, 7, 2, 22, 0, tzinfo=UTC))
+            before = _intent_variant("AAPL", "2", probability=0.8, decision_time=datetime(2026, 7, 1, 22, 0, tzinfo=UTC))
+            repository.record_intent(on_edge)
+            repository.record_intent(before)
+
+            report = build_performance_cohorts(
+                repository,
+                generated_at=datetime(2026, 7, 17, 20, 0, tzinfo=UTC) + timedelta(days=30),
+                minimum_samples=1,
+                lookback_days=30,
+            )
+
+            self.assertEqual(report["source_intent_ids"], [on_edge.maturation_key])
+
+    def test_backdated_report_counts_later_outcomes_as_pending(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repository = OutcomeRepository(Path(temp_dir))
+            # Its outcome matures on 31 July, after the report time.
+            matured_later = _intent_variant("MSFT", "1", probability=0.8)
+            _record(repository, matured_later, target=1, net_return=0.02, excess_return=0.01)
+            still_pending = _intent_variant(
+                "AAPL", "2", probability=0.8, decision_time=datetime(2026, 7, 27, 22, 0, tzinfo=UTC)
+            )
+            repository.record_intent(still_pending)
+
+            report = build_performance_cohorts(
+                repository,
+                generated_at=datetime(2026, 7, 30, tzinfo=UTC),
+                minimum_samples=1,
+            )
+            row = next(item for item in report["rows"] if item["cohort_type"] == "all")
+
+            self.assertEqual(row["pending_selected_samples"], 2)
+            self.assertEqual(row["route_oldest_pending_decision_session_et"], "2026-07-24")
+
+    def test_route_oldest_pending_counts_selected_decisions_before_the_report_per_release(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repository = OutcomeRepository(Path(temp_dir))
+            unselected = _intent_variant(
+                "TSLA", "1", probability=0.3, selected=False, decision_time=datetime(2026, 3, 2, 22, 0, tzinfo=UTC)
+            )
+            selected = _intent_variant(
+                "NVDA", "2", probability=0.8, decision_time=datetime(2026, 5, 4, 22, 0, tzinfo=UTC)
+            )
+            future = _intent_variant(
+                "AMD", "3", probability=0.8, decision_time=datetime(2026, 8, 10, 22, 0, tzinfo=UTC)
+            )
+            other_release = _intent_variant(
+                "META", "4", probability=0.8, release="b" * 64, decision_time=datetime(2026, 4, 6, 22, 0, tzinfo=UTC)
+            )
+            for intent in (unselected, selected, future, other_release):
+                repository.record_intent(intent)
+            for release in ("a", "b"):
+                recent = _intent_variant(
+                    f"R{release.upper()}", "5", probability=0.8, release=release * 64,
+                    decision_time=datetime(2026, 7, 10, 22, 0, tzinfo=UTC),
+                )
+                _record(repository, recent, target=1, net_return=0.02, excess_return=0.01)
+
+            report = build_performance_cohorts(
+                repository,
+                generated_at=datetime(2026, 8, 2, tzinfo=UTC),
+                minimum_samples=1,
+                lookback_days=30,
+            )
+            oldest = {
+                row["model_release_id"]: row["route_oldest_pending_decision_session_et"]
+                for row in report["rows"]
+                if row["cohort_type"] == "all"
+            }
+
+            self.assertEqual(oldest, {"a" * 64: "2026-05-04", "b" * 64: "2026-04-06"})
+
+    def test_report_refuses_a_row_window_that_breaks_the_route_rule(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repository = OutcomeRepository(Path(temp_dir))
+            _record(repository, _intent_variant("MSFT", "1", probability=0.8), target=1, net_return=0.02, excess_return=0.01)
+            report = build_performance_cohorts(
+                repository,
+                generated_at=datetime(2026, 8, 2, tzinfo=UTC),
+                minimum_samples=1,
+            )
+        row = next(item for item in report["rows"] if item["cohort_type"] == "sector")
+        changed = {key: value for key, value in row.items() if key != "cohort_id"}
+        changed["window_start_utc"] = "2026-07-01T00:00:00Z"
+        changed["cohort_id"] = content_sha256(changed)
+        candidate = {key: value for key, value in report.items() if key != "report_id"}
+        candidate["rows"] = [changed if item is row else item for item in report["rows"]]
+        candidate["report_id"] = content_sha256(candidate)
+
+        with self.assertRaisesRegex(ValidationError, "does not follow the route"):
+            validate_performance_report(candidate)
 
     def test_route_oldest_pending_spans_every_stored_intent(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -502,6 +600,7 @@ def _intent_variant(
     probability: float,
     decision_time: datetime | None = None,
     selected: bool = True,
+    release: str = "a" * 64,
 ) -> PredictionMaturationIntent:
     base = _intent().model_dump(
         mode="python",
@@ -512,6 +611,7 @@ def _intent_variant(
         {
             "ticker": ticker,
             "canonical_security_id": f"security:{ticker}",
+            "model_release_id": release,
             "probability": probability,
             "calibration_bin": min(9, int(probability * 10)),
             "decision_time_utc": decision,

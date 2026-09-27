@@ -108,7 +108,7 @@ def register_outcome_commands(app: typer.Typer, console: Any) -> None:
         lookback_days: int = typer.Option(
             180,
             min=1,
-            help="Rolling decision window in calendar days.",
+            help="Calendar days of outcomes: decisions whose horizon ends in this window, or is still open.",
         ),
         generated_at: datetime | None = typer.Option(
             None,

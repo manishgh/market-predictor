@@ -7,9 +7,10 @@ import pytest
 from market_predictor.core.errors import DataReadinessError
 from market_predictor.governance.drift.policy import DriftPolicy
 from market_predictor.governance.outcomes.sessions import (
+    fewest_sessions_in_window,
     horizon_last_close,
+    most_sessions_in_window,
     outcome_overdue,
-    session_index,
 )
 from market_predictor.swing.labels.holding_paths import holding_calendar
 
@@ -69,14 +70,28 @@ def test_refuses_naive_times_non_sessions_and_dates_past_the_calendar() -> None:
         horizon_last_close(date(2026, 7, 2), 0, through=datetime(2026, 8, 1, tzinfo=UTC))
 
 
-def test_session_index_skips_holidays() -> None:
-    assert session_index(date(2026, 7, 6)) - session_index(date(2026, 7, 2)) == 1
-    assert session_index(date(2026, 7, 17)) - session_index(date(2026, 7, 2)) == 10
+def test_window_session_counts_match_the_calendar() -> None:
+    # Measured over the calendar's range; they only relax as that range rolls forward.
+    assert fewest_sessions_in_window(150) == 99
+    assert fewest_sessions_in_window(180) == 120
+    assert most_sessions_in_window(7) == 5
 
 
-def test_default_lookback_holds_the_minimum_and_the_old_one_did_not() -> None:
+def test_lookback_check_allows_pending_outcomes_and_tolerated_failures() -> None:
     policy = DriftPolicy()
 
-    # Every 180-day window holds at least 120 sessions; a 150-day window can hold 99.
-    assert policy.lookback_supports_minimum(180, "10b")
+    # 170 days: 112 sessions - 5 still within the grace - 5 tolerated failures = 102 >= 100.
+    assert policy.lookback_supports_minimum(170, "10b")
+    # 160 days: 106 - 5 - 5 = 96 < 100; the old 150-day default was further short.
+    assert not policy.lookback_supports_minimum(160, "10b")
     assert not policy.lookback_supports_minimum(150, "10b")
+    assert policy.lookback_supports_minimum(180, "10b")
+
+
+def test_tolerated_failures_use_exact_arithmetic() -> None:
+    # A 94-day window holds at least 60 sessions. Exactly, 10% of 60 is 6 tolerated failures,
+    # leaving 60 - 5 - 6 = 49 < 50. In floats (1 - 0.9) * 60 is 5.999..., which floors to 5
+    # and would wrongly leave 50.
+    assert fewest_sessions_in_window(94) == 60
+    policy = DriftPolicy(minimum_registered_session_share=0.9, minimum_independent_decision_groups=5)
+    assert not policy.lookback_supports_minimum(94, "10b")
