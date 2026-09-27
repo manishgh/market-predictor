@@ -1,0 +1,568 @@
+{
+  "contract_version": "market_predictor.prediction.v3",
+  "data_source": "live",
+  "errors": [],
+  "evidence": {
+    "contract_version": "market_predictor.prediction_evidence.v4",
+    "correlation_id": "00000000-0000-4000-8000-000000000000",
+    "feature_artifacts": {
+      "swing": {
+        "artifact_sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "feature_schema_version": "market_predictor.swing_panel.independent_holding_paths",
+        "mode": "swing",
+        "source_artifact_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "source_artifact_type": "swing_live_inputs"
+      }
+    },
+    "identity_gaps": [],
+    "identity_status": "complete",
+    "model_artifact_sha256": {
+      "swing": "f32a3da348a67e97e567e2279d06777e757601052c7e366694104d33404211ad"
+    },
+    "model_release_ids": {
+      "swing": "9ffa3b7b6a5209599466472a5d1741394ebd084359fca4c77badcf60252f56dd"
+    },
+    "prediction_cutoff_utc": "2026-07-08T22:00:00Z",
+    "release_id": "9ffa3b7b6a5209599466472a5d1741394ebd084359fca4c77badcf60252f56dd",
+    "request_id": "00000000-0000-4000-8000-000000000000",
+    "resolved_horizons": {
+      "swing": "10b"
+    },
+    "row_feature_availability": [
+      {
+        "canonical_security_id": "SEC-000",
+        "decision_atr": 2.0,
+        "decision_group_id": "2026-07-08T22:00:00+00:00",
+        "decision_time_utc": "2026-07-08T22:00:00Z",
+        "feature_available_at_utc": "2026-07-08T22:00:00Z",
+        "liquidity_bucket": "liquid",
+        "market_cap_bucket": "large_cap",
+        "market_regime": "risk_on",
+        "price_feed": "sip",
+        "primary_benchmark": "XL0",
+        "sector": "Sector-0",
+        "session_date_et": "2026-07-08",
+        "ticker": "T000",
+        "view": "swing"
+      },
+      {
+        "canonical_security_id": "SEC-059",
+        "decision_atr": 2.0,
+        "decision_group_id": "2026-07-08T22:00:00+00:00",
+        "decision_time_utc": "2026-07-08T22:00:00Z",
+        "feature_available_at_utc": "2026-07-08T22:00:00Z",
+        "liquidity_bucket": "liquid",
+        "market_cap_bucket": "large_cap",
+        "market_regime": "risk_on",
+        "price_feed": "sip",
+        "primary_benchmark": "XL9",
+        "sector": "Sector-9",
+        "session_date_et": "2026-07-08",
+        "ticker": "T059",
+        "view": "swing"
+      }
+    ],
+    "serving_bundle_sha256": "af8758ac48fce165ea44df4bd0e66ec8f288456e4001741b3c0e5e9c2dbbfb9b",
+    "serving_policy_id": "market_predictor.swing_prediction_policy.v1",
+    "serving_policy_sha256": "5a6cb3245023dee422a695c3da1977e7949f83a9d32c00a28bce6c0a1ce66b46",
+    "source_watermarks": {
+      "swing": {
+        "alpaca_news_available_at_utc": "2026-07-08T22:00:00+00:00",
+        "benchmark_daily_bars_available_at_utc": "2026-07-08T22:00:00+00:00",
+        "membership_available_at_utc": "2026-07-08T22:00:00+00:00",
+        "stock_daily_bars_available_at_utc": "2026-07-08T22:00:00+00:00"
+      }
+    },
+    "view_prediction_cutoffs_utc": {
+      "swing": "2026-07-08T22:00:00Z"
+    },
+    "view_prediction_policy_sha256": {
+      "swing": "5a6cb3245023dee422a695c3da1977e7949f83a9d32c00a28bce6c0a1ce66b46"
+    },
+    "view_serving_bundle_ids": {
+      "swing": "9ffa3b7b6a5209599466472a5d1741394ebd084359fca4c77badcf60252f56dd"
+    }
+  },
+  "generated_at_utc": "2026-07-08T22:05:00Z",
+  "horizon": "10b",
+  "mode": "swing",
+  "models": {
+    "swing": {
+      "artifact_sha256": "f32a3da348a67e97e567e2279d06777e757601052c7e366694104d33404211ad",
+      "bar_timeframe": "1Day",
+      "created_at_utc": "2026-07-08T20:00:00+00:00",
+      "execution_policy_sha256": "2249656b0c0943003864850de6b2254e0fa091e45106ac3dd7ae23eddc425e2d",
+      "feature_reference_names_sha256": "ce653e388a2dae1c482245db3e1e3c2b3eddf59ed486ec845346abc89bad85fa",
+      "feature_reference_profile_sha256": "f1bf8db1c9cfa1086381418aecb01ddb99527b6cfe7a1335de20db3c82e6cdd7",
+      "label_policy": {
+        "atr_lookback_bars": 14,
+        "atr_timeframe": "1Day",
+        "broad_benchmark": "SPY",
+        "decision_cutoff": "bar_close",
+        "entry_reference": "next_session_open",
+        "exit_rule": "target_stop_timeout",
+        "growth_benchmark": "QQQ",
+        "horizon_sessions": 10,
+        "policy": "market_predictor.swing_outcome_policy.v1",
+        "round_trip_cost_bps": 20.0,
+        "same_bar_barrier_resolution": "stop_first",
+        "sector_benchmark": "point_in_time_sector_etf",
+        "stop_atr_multiple": 1.5,
+        "target_atr_multiple": 3.0
+      },
+      "label_policy_sha256": "0e39d3d82c0facb2d73f5ebadf8ab724a4cd06f138c84d9b5f0cb0875630ee4b",
+      "model_type": "ten_session_sector_relative_swing_classifier",
+      "path": "models/swing/generations/9ffa3b7b6a5209599466472a5d1741394ebd084359fca4c77badcf60252f56dd/model/model.joblib",
+      "prediction_policy": {
+        "contract_version": "market_predictor.swing_prediction_policy.v1",
+        "decision_score": "model_probability",
+        "eligibility": "readiness=valid_and_model_probability_is_finite_and_model_probability>=minimum_probability",
+        "hard_maximum_sector_weight": 0.3333333333333333,
+        "horizon_sessions": 10,
+        "maximum_predictions_per_decision": 25,
+        "minimum_distinct_sectors": 3,
+        "minimum_probability": 0.6,
+        "policy_id": "market_predictor.swing_prediction_policy.v1",
+        "role": "prediction_intelligence_only_no_alerts_or_execution",
+        "selection": "probability_rank_with_adaptive_sector_constraints",
+        "target_maximum_sector_weight": 0.2,
+        "tie_breakers": [
+          "model_probability:desc",
+          "security_id:asc"
+        ]
+      },
+      "prediction_policy_sha256": "5a6cb3245023dee422a695c3da1977e7949f83a9d32c00a28bce6c0a1ce66b46",
+      "release_id": "9ffa3b7b6a5209599466472a5d1741394ebd084359fca4c77badcf60252f56dd",
+      "resolved_horizon": "10b",
+      "schema_version": "market_predictor.swing_panel.independent_holding_paths",
+      "serving_bundle_id": "9ffa3b7b6a5209599466472a5d1741394ebd084359fca4c77badcf60252f56dd",
+      "status": "promoted",
+      "target": "top_sector_relative_quantile_of_managed_barrier_net_return",
+      "training_data_end": null,
+      "training_data_start": null,
+      "validation_split": "purged_walk_forward_with_locked_final_test"
+    }
+  },
+  "predictions": [
+    {
+      "errors": [],
+      "final_signal": "positive_setup",
+      "readiness_status": "valid",
+      "swing": {
+        "abstention_reasons": [],
+        "action": "watch_for_entry",
+        "benchmark_context": [
+          {
+            "benchmark_return_20d": 0.04,
+            "benchmark_return_5d": 0.01,
+            "excess_return_20d": 0.04,
+            "excess_return_5d": 0.019999999999999997,
+            "role": "broad_market",
+            "stock_return_20d": 0.08,
+            "stock_return_5d": 0.03,
+            "symbol": "SPY"
+          },
+          {
+            "benchmark_return_20d": 0.05,
+            "benchmark_return_5d": 0.015,
+            "excess_return_20d": 0.03,
+            "excess_return_5d": 0.015,
+            "role": "growth_market",
+            "stock_return_20d": 0.08,
+            "stock_return_5d": 0.03,
+            "symbol": "QQQ"
+          },
+          {
+            "benchmark_return_20d": 0.06,
+            "benchmark_return_5d": 0.02,
+            "excess_return_20d": 0.020000000000000004,
+            "excess_return_5d": 0.009999999999999998,
+            "role": "sector",
+            "stock_return_20d": 0.08,
+            "stock_return_5d": 0.03,
+            "symbol": "XL0"
+          }
+        ],
+        "catalyst": {
+          "direction": "positive",
+          "event_count": 2,
+          "material_event_count": 2,
+          "minutes_since_latest": 60.0,
+          "reasons": [
+            "Alpaca ticker news is incorporated in the promoted estimator."
+          ],
+          "relevance": 0.8,
+          "score": 0.32000000000000006,
+          "sentiment": 0.4,
+          "source_diversity": 1,
+          "status": "confirmed"
+        },
+        "classifier_score": 0.72,
+        "close": 100.0,
+        "data_as_of_utc": "2026-07-08T22:05:00Z",
+        "date": "2026-07-08",
+        "decision_score": 0.72,
+        "drivers": {
+          "atr_pct_14": 0.02,
+          "decision_time_utc": "2026-07-08T22:00:00+00:00",
+          "model_probability": 0.72,
+          "primary_benchmark": "XL0",
+          "promoted_probability_threshold": 0.6,
+          "relative_return_20d_vs_spy": 0.04,
+          "return_20d": 0.08,
+          "sector": "Sector-0"
+        },
+        "event_count": 2.0,
+        "expected_horizon": "up to 10 trading sessions",
+        "feature_schema_version": "market_predictor.swing_panel.independent_holding_paths",
+        "global_context": {
+          "active_flashpoints": [],
+          "negative_impact": 0.0,
+          "net_impact": 0.0,
+          "positive_impact": 0.0
+        },
+        "lineage": {
+          "catalyst_authority_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "live_input_manifest_sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+          "model_artifact_sha256": "f32a3da348a67e97e567e2279d06777e757601052c7e366694104d33404211ad",
+          "serving_bundle_sha256": "9ffa3b7b6a5209599466472a5d1741394ebd084359fca4c77badcf60252f56dd",
+          "strategy_contract_sha256": "39213ad6bd5c1f09f30065f737ffecadf05bbb0ae81b81f2ffda7a343967e972"
+        },
+        "managed_risk": {
+          "atr_fraction_of_latest_close": 0.02,
+          "entry_reference": "next_session_open",
+          "exit_rule": "target_stop_timeout",
+          "maximum_holding_sessions": 10,
+          "price_levels_available": false,
+          "round_trip_cost_bps": 20.0,
+          "stop_atr_multiple": 1.5,
+          "stop_distance_fraction": 0.03,
+          "target_atr_multiple": 3.0,
+          "target_distance_fraction": 0.06
+        },
+        "model_as_of_utc": "2026-07-08T20:00:00Z",
+        "model_id": "swing-promoted-test",
+        "model_prediction": 1,
+        "monitor_theme": null,
+        "news_count": 2.0,
+        "probability": 0.72,
+        "rank": 1,
+        "readiness": {
+          "benchmark_status": "SPY, QQQ, and sector context available",
+          "daily_bar_count": 300,
+          "latest_price_date": "2026-07-08",
+          "market_context_status": "separate overlay; not used by estimator",
+          "model_status": "promoted",
+          "price_feed": "sip",
+          "reasons": [],
+          "required_bar_count": 250,
+          "source_status": "Alpaca SIP/all and Alpaca catalyst coverage verified",
+          "status": "valid",
+          "timeframe": "daily"
+        },
+        "regressor_score": null,
+        "return_1d": 0.01,
+        "selected_for_policy": true,
+        "selection_eligible": true,
+        "sentiment_mean": 0.4,
+        "serving_bundle_sha256": "9ffa3b7b6a5209599466472a5d1741394ebd084359fca4c77badcf60252f56dd",
+        "signal": "positive_setup",
+        "ticker": "T000",
+        "volume_z20": 1.2
+      },
+      "ticker": "T000"
+    },
+    {
+      "errors": [],
+      "final_signal": "ranked_candidate",
+      "readiness_status": "valid",
+      "swing": {
+        "abstention_reasons": [],
+        "action": "observe_ranked_candidate",
+        "benchmark_context": [
+          {
+            "benchmark_return_20d": 0.04,
+            "benchmark_return_5d": 0.01,
+            "excess_return_20d": 0.04,
+            "excess_return_5d": 0.019999999999999997,
+            "role": "broad_market",
+            "stock_return_20d": 0.08,
+            "stock_return_5d": 0.03,
+            "symbol": "SPY"
+          },
+          {
+            "benchmark_return_20d": 0.05,
+            "benchmark_return_5d": 0.015,
+            "excess_return_20d": 0.03,
+            "excess_return_5d": 0.015,
+            "role": "growth_market",
+            "stock_return_20d": 0.08,
+            "stock_return_5d": 0.03,
+            "symbol": "QQQ"
+          },
+          {
+            "benchmark_return_20d": 0.06,
+            "benchmark_return_5d": 0.02,
+            "excess_return_20d": 0.020000000000000004,
+            "excess_return_5d": 0.009999999999999998,
+            "role": "sector",
+            "stock_return_20d": 0.08,
+            "stock_return_5d": 0.03,
+            "symbol": "XL9"
+          }
+        ],
+        "catalyst": {
+          "direction": "positive",
+          "event_count": 2,
+          "material_event_count": 2,
+          "minutes_since_latest": 60.0,
+          "reasons": [
+            "Alpaca ticker news is incorporated in the promoted estimator."
+          ],
+          "relevance": 0.8,
+          "score": 0.32000000000000006,
+          "sentiment": 0.4,
+          "source_diversity": 1,
+          "status": "confirmed"
+        },
+        "classifier_score": 0.72,
+        "close": 100.0,
+        "data_as_of_utc": "2026-07-08T22:05:00Z",
+        "date": "2026-07-08",
+        "decision_score": 0.72,
+        "drivers": {
+          "atr_pct_14": 0.02,
+          "decision_time_utc": "2026-07-08T22:00:00+00:00",
+          "model_probability": 0.72,
+          "primary_benchmark": "XL9",
+          "promoted_probability_threshold": 0.6,
+          "relative_return_20d_vs_spy": 0.04,
+          "return_20d": 0.08,
+          "sector": "Sector-9"
+        },
+        "event_count": 2.0,
+        "expected_horizon": "up to 10 trading sessions",
+        "feature_schema_version": "market_predictor.swing_panel.independent_holding_paths",
+        "global_context": {
+          "active_flashpoints": [],
+          "negative_impact": 0.0,
+          "net_impact": 0.0,
+          "positive_impact": 0.0
+        },
+        "lineage": {
+          "catalyst_authority_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "live_input_manifest_sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+          "model_artifact_sha256": "f32a3da348a67e97e567e2279d06777e757601052c7e366694104d33404211ad",
+          "serving_bundle_sha256": "9ffa3b7b6a5209599466472a5d1741394ebd084359fca4c77badcf60252f56dd",
+          "strategy_contract_sha256": "39213ad6bd5c1f09f30065f737ffecadf05bbb0ae81b81f2ffda7a343967e972"
+        },
+        "managed_risk": {
+          "atr_fraction_of_latest_close": 0.02,
+          "entry_reference": "next_session_open",
+          "exit_rule": "target_stop_timeout",
+          "maximum_holding_sessions": 10,
+          "price_levels_available": false,
+          "round_trip_cost_bps": 20.0,
+          "stop_atr_multiple": 1.5,
+          "stop_distance_fraction": 0.03,
+          "target_atr_multiple": 3.0,
+          "target_distance_fraction": 0.06
+        },
+        "model_as_of_utc": "2026-07-08T20:00:00Z",
+        "model_id": "swing-promoted-test",
+        "model_prediction": 1,
+        "monitor_theme": null,
+        "news_count": 2.0,
+        "probability": 0.72,
+        "rank": 60,
+        "readiness": {
+          "benchmark_status": "SPY, QQQ, and sector context available",
+          "daily_bar_count": 300,
+          "latest_price_date": "2026-07-08",
+          "market_context_status": "separate overlay; not used by estimator",
+          "model_status": "promoted",
+          "price_feed": "sip",
+          "reasons": [],
+          "required_bar_count": 250,
+          "source_status": "Alpaca SIP/all and Alpaca catalyst coverage verified",
+          "status": "valid",
+          "timeframe": "daily"
+        },
+        "regressor_score": null,
+        "return_1d": 0.01,
+        "selected_for_policy": false,
+        "selection_eligible": true,
+        "sentiment_mean": 0.4,
+        "serving_bundle_sha256": "9ffa3b7b6a5209599466472a5d1741394ebd084359fca4c77badcf60252f56dd",
+        "signal": "ranked_candidate",
+        "ticker": "T059",
+        "volume_z20": 1.2
+      },
+      "ticker": "T059"
+    },
+    {
+      "errors": [
+        "live_inputs_incomplete"
+      ],
+      "final_signal": "abstain",
+      "readiness_status": "invalid",
+      "swing": {
+        "abstention_reasons": [
+          "live_inputs_incomplete"
+        ],
+        "action": "abstain",
+        "benchmark_context": [],
+        "catalyst": {
+          "direction": "none",
+          "event_count": 0,
+          "material_event_count": 0,
+          "minutes_since_latest": null,
+          "reasons": [],
+          "relevance": 0.0,
+          "score": 0.0,
+          "sentiment": 0.0,
+          "source_diversity": 0,
+          "status": "absent"
+        },
+        "classifier_score": null,
+        "close": null,
+        "data_as_of_utc": "2026-07-08T22:05:00Z",
+        "date": null,
+        "decision_score": null,
+        "drivers": {},
+        "event_count": null,
+        "expected_horizon": "up to 10 trading sessions",
+        "feature_schema_version": "market_predictor.swing_panel.independent_holding_paths",
+        "global_context": {
+          "active_flashpoints": [],
+          "negative_impact": 0.0,
+          "net_impact": 0.0,
+          "positive_impact": 0.0
+        },
+        "lineage": {
+          "catalyst_authority_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "live_input_manifest_sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+          "model_artifact_sha256": "f32a3da348a67e97e567e2279d06777e757601052c7e366694104d33404211ad"
+        },
+        "managed_risk": null,
+        "model_as_of_utc": "2026-07-08T20:00:00Z",
+        "model_id": "swing-promoted-test",
+        "model_prediction": null,
+        "monitor_theme": null,
+        "news_count": null,
+        "probability": null,
+        "rank": null,
+        "readiness": {
+          "benchmark_status": "unknown",
+          "daily_bar_count": 0,
+          "latest_price_date": null,
+          "market_context_status": "unknown",
+          "model_status": "promoted",
+          "price_feed": "sip",
+          "reasons": [
+            "Market or catalyst inputs for this member are incomplete at the decision."
+          ],
+          "required_bar_count": 250,
+          "source_status": "unavailable",
+          "status": "invalid",
+          "timeframe": "daily"
+        },
+        "regressor_score": null,
+        "return_1d": null,
+        "selected_for_policy": false,
+        "selection_eligible": false,
+        "sentiment_mean": null,
+        "serving_bundle_sha256": "9ffa3b7b6a5209599466472a5d1741394ebd084359fca4c77badcf60252f56dd",
+        "signal": "abstain",
+        "ticker": "T060",
+        "volume_z20": null
+      },
+      "ticker": "T060"
+    },
+    {
+      "errors": [
+        "out_of_universe"
+      ],
+      "final_signal": "abstain",
+      "readiness_status": "invalid",
+      "swing": {
+        "abstention_reasons": [
+          "out_of_universe"
+        ],
+        "action": "abstain",
+        "benchmark_context": [],
+        "catalyst": {
+          "direction": "none",
+          "event_count": 0,
+          "material_event_count": 0,
+          "minutes_since_latest": null,
+          "reasons": [],
+          "relevance": 0.0,
+          "score": 0.0,
+          "sentiment": 0.0,
+          "source_diversity": 0,
+          "status": "absent"
+        },
+        "classifier_score": null,
+        "close": null,
+        "data_as_of_utc": "2026-07-08T22:05:00Z",
+        "date": null,
+        "decision_score": null,
+        "drivers": {},
+        "event_count": null,
+        "expected_horizon": "up to 10 trading sessions",
+        "feature_schema_version": "market_predictor.swing_panel.independent_holding_paths",
+        "global_context": {
+          "active_flashpoints": [],
+          "negative_impact": 0.0,
+          "net_impact": 0.0,
+          "positive_impact": 0.0
+        },
+        "lineage": {
+          "catalyst_authority_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "live_input_manifest_sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+          "model_artifact_sha256": "f32a3da348a67e97e567e2279d06777e757601052c7e366694104d33404211ad"
+        },
+        "managed_risk": null,
+        "model_as_of_utc": "2026-07-08T20:00:00Z",
+        "model_id": "swing-promoted-test",
+        "model_prediction": null,
+        "monitor_theme": null,
+        "news_count": null,
+        "probability": null,
+        "rank": null,
+        "readiness": {
+          "benchmark_status": "unknown",
+          "daily_bar_count": 0,
+          "latest_price_date": null,
+          "market_context_status": "unknown",
+          "model_status": "promoted",
+          "price_feed": "sip",
+          "reasons": [
+            "Ticker is absent from the verified live reference universe."
+          ],
+          "required_bar_count": 250,
+          "source_status": "unavailable",
+          "status": "invalid",
+          "timeframe": "daily"
+        },
+        "regressor_score": null,
+        "return_1d": null,
+        "selected_for_policy": false,
+        "selection_eligible": false,
+        "sentiment_mean": null,
+        "serving_bundle_sha256": "9ffa3b7b6a5209599466472a5d1741394ebd084359fca4c77badcf60252f56dd",
+        "signal": "abstain",
+        "ticker": "MISSING",
+        "volume_z20": null
+      },
+      "ticker": "MISSING"
+    }
+  ],
+  "request_id": "00000000-0000-4000-8000-000000000000",
+  "resolved_horizons": {
+    "swing": "10b"
+  },
+  "snapshot_id": null,
+  "snapshot_sha256": null
+}

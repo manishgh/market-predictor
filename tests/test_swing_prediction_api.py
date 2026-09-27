@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+import os
 from pathlib import Path
 
 import pytest
@@ -15,6 +17,8 @@ from market_predictor.core.prediction_contracts import (
 )
 from market_predictor.serving.outcome_intents import maturation_intents_from_response
 from tests.support.swing_serving import NOW, UnavailableInputs, swing_serving
+
+ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_promoted_ten_session_swing_api_returns_human_contract(
@@ -167,3 +171,42 @@ def test_serialized_swing_response_carries_every_tradingflow_field(
     _require(swing["global_context"], _REQUIRED_GLOBAL, "swing.global_context")
     for section, fields in _NULLABLE.items():
         assert set(fields) <= set(swing[section]), f"swing.{section} lacks {fields}"
+
+
+CONTRACT_FIXTURE = ROOT / "tests" / "fixtures" / "contracts" / "swing_prediction_response.v3.json"
+_FIXED_ID = "00000000-0000-4000-8000-000000000000"
+
+
+def _contract_payload(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict[str, object]:
+    """A served response with its per-call values fixed, as TradingFlow receives it."""
+    serving = swing_serving(tmp_path, monkeypatch, enforce_drift=False, excluded_tickers=("T060",))
+    with TestClient(create_app(serving.service)) as client:
+        response = client.post(
+            "/v1/predictions/swing",
+            json={"tickers": ["T000", "T059", "T060", "MISSING"], "as_of": NOW.isoformat()},
+        )
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    payload["request_id"] = _FIXED_ID
+    payload["generated_at_utc"] = NOW.isoformat().replace("+00:00", "Z")
+    payload["evidence"]["request_id"] = _FIXED_ID
+    payload["evidence"]["correlation_id"] = _FIXED_ID
+    model = payload["models"]["swing"]
+    model["path"] = Path(model["path"]).relative_to(tmp_path).as_posix()
+    return payload
+
+
+def test_contract_fixture_matches_the_served_response(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The shared fixture TradingFlow parses; regenerate it deliberately when the contract changes."""
+    payload = _contract_payload(tmp_path, monkeypatch)
+    text = json.dumps(payload, indent=2, sort_keys=True) + "\n"
+    if os.environ.get("MARKET_PREDICTOR_WRITE_CONTRACT_FIXTURE") == "1":
+        CONTRACT_FIXTURE.parent.mkdir(parents=True, exist_ok=True)
+        CONTRACT_FIXTURE.write_bytes(text.encode("utf-8"))
+    assert CONTRACT_FIXTURE.read_bytes().decode("utf-8") == text, (
+        "the served swing response changed; update docs/contracts/prediction_api.md, regenerate the "
+        "fixture with MARKET_PREDICTOR_WRITE_CONTRACT_FIXTURE=1 and tell TradingFlow"
+    )
