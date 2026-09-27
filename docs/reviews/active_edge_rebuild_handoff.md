@@ -229,7 +229,13 @@ nullable `training_data_end`), the four HEAD defects fixed, and the open replay 
 - Naming (user, September 27): `43e1fd2` removes version numbers from class names and
   from every record identifier nothing persisted depends on. The user then clarified that
   the public API stays versioned: the response keeps `contract_version` =
-  `market_predictor.prediction.v3` and the `/v1/` routes, restored in the next commit. Verification: 55 affected test files
+  `market_predictor.prediction.v3` and the `/v1/` routes, restored in `2acd36c`.
+- TradingFlow (Astra) had already integrated the unversioned response; the contract's
+  change log is now append-only with a "correction" entry (fixture `360206c2...`, which
+  also drops the version from `market_predictor.swing_outcome_policy`), and the
+  TradingFlow handoff opens with the required action. Both re-reviews of the consolidated
+  monitoring design found no blocker; their decisions are in the plan ("Second-round
+  review decisions"), and part (1) starts next. Verification: 55 affected test files
   in seven batches, all passed except `test_canonical_cli`, whose lease clash is fixed in
   `c628aea` (it passes while the real lease is held); strict mypy (354 files) and Ruff
   clean; no pinned file changed; no stored data used a renamed identifier.

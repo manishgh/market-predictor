@@ -1356,6 +1356,71 @@ and follow the naming rule: no versions, old records refused by strict validatio
   a repository scale budget; refusal of records in the old shapes; replay at the exact
   boundary and on an early-close day; the session-helper dependency rule.
 
+Second-round review decisions for swing monitoring and replay (September 27; neither
+review found a blocker; these complete the consolidated decisions above):
+
+- Sufficiency. Effective periods count registered cross-section sessions whose outcomes
+  have matured; a session with no selection is a valid zero-exposure period and counts.
+  The lookback defaults to 180 days: every rolling window from 2019 to mid-2026 holds 120
+  to 127 XNYS sessions, while a 150-day window can hold as few as 99 (measured). The
+  validator requires the fewest sessions in any window, minus one for the maturation lag,
+  minus the failures the policy's registration share tolerates (95%), to reach
+  minimum x N. Evidence minimums are keyed by horizon with only `10b` defined; drift
+  refuses any other horizon.
+- Standard errors. Hansen-Hodrick (equal weights, N-1 lags), exact for N-session overlap,
+  with Newey-West at 2N lags as the positive-definite fallback. Newey-West at N-1 lags
+  recovers only 67% of the variance at N=10 (computed), which would make t <= -2 behave
+  like t <= -1.64.
+- Curve. The canonical funded ledger (`swing/evaluation/ledger.build_funded_swing_ledger`),
+  the capital model the promotion evidence was selected on, replaces independent sleeves.
+  It takes the matured selected outcomes and their stored daily path marks; an
+  unresolvable position is held at its last observed close. The drawdown thresholds are
+  checked against the locked-test ledger drawdown before part (4) closes.
+- Symbol changes and cessation. The outcome-bar collection also fetches Alpaca security
+  transitions (`AlpacaSource.fetch_security_transitions`) for each pending horizon and
+  follows name changes. `unresolvable` needs positive cessation evidence (a merger or
+  reorganization transition, or a point-in-time membership removal) together with an
+  empty receipt; an empty receipt alone stays pending and overdue for operator action.
+  The worker re-attempts unresolvable intents when new transitions or receipts arrive;
+  attempts are ordered by append sequence; a matured outcome is never superseded.
+- Population. Request snapshots are audit-only: they are never registered as intents or
+  observations, and `register-outcome-intents` accepts only `decision_cross_section`
+  snapshots. First-writer canonicalization then cannot prefer a request.
+- Registration lease. Registration takes a dedicated monitoring-registration lease, the
+  admission lease and the memory guard, not the workspace heavy-job lease, so a
+  multi-day research job cannot block nightly registration.
+- Session records. Route activation is the first XNYS session whose decision cutoff is at
+  or after the active generation's `promoted_at_utc`, per release. An identical rerun
+  compares route, release, session, member-set hash, counts by reason and the snapshot's
+  content hash without `recorded_at_utc`. A `failed` record may be replaced by
+  `registered` from a retry within the same session; an operator may write a late
+  `failed` record with reason `not_run`.
+- Identities. Cohort and report identities also bind the session-record ids and the ids
+  of the deciding attempts.
+- Rank check. Outcomes without a full fixed-horizon path (prefix-resolved or
+  unresolvable) are excluded and its coverage is reported; sectors are weighted equally
+  within a decision group. The fixed-horizon sector excess is the trainer's declared
+  economic target (`future_excess_return_10d_vs_sector`, `swing_training.py`); a
+  non-gating diagnostic on the managed net return (the estimator's label) keeps any
+  divergence visible. The fixed-horizon fields and `holding_sessions` join the outcome
+  record in part (2).
+- Unresolvable. The ceiling counts selected outcomes. The sensitivity uses -30% for
+  NYSE/AMEX and -55% for Nasdaq removals (Shumway and Warther, 1999), the evidenced cash
+  rate for cash mergers, and -100% for worthless removals.
+- Sector peer floor. Drops cascaded by an input exclusion are recorded as such and count
+  toward the 5% ceiling. `sector_peer_floor` is a new public abstention reason, so the
+  API becomes `market_predictor.prediction.v4` when it lands in part (3), through the
+  contract change log.
+- Replay keeps the model-availability check (promoted at or before the request's as-of)
+  beside the label boundary, and exposes the boundary in its response.
+- Repository partitioning also covers the semantic-canonical lookup path.
+- Order: (1) sessions, overdue and maturity windows; (5) repository partitioning;
+  (2) outcome evidence; (3) registration and population; (4) inference, curve and rank
+  check; (6) replay.
+- Consequence to state plainly: with fail-closed serving, a newly promoted release stays
+  warming, with clients refused, for at least 100 matured sessions plus N plus the grace,
+  about five and a half months, and again after every re-promotion.
+
 The September 20 user instruction explicitly extends the completed HTTP/CLI and
 TradingFlow cleanup to all remaining Market Predictor implementation. This is a
 changed requirement, not a reopening of previously passed tests without cause.

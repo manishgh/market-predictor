@@ -5,6 +5,15 @@ Counterpart: the Market Predictor developer working in `C:\project\market-predic
 The two developers never message each other directly; the user relays, and these files
 are the shared record.
 
+## Action required (2026-09-27 correction)
+
+TradingFlow integrated the "later" change-log entry, which removed the API version.
+The user then clarified that the public API stays versioned, so the current contract is
+the "correction" entry: read `contract_version`, accept only
+`market_predictor.prediction.v3`, and re-pin the fixture to SHA-256
+`360206c2440e4fb39bac210a50b12c6d233e4f49a140fd356e5d283b034536cb`. The routes under
+`/v1/` never changed. Acknowledge the correction in your notes file.
+
 ## Files
 
 Read-only for TradingFlow (owned by Market Predictor):
@@ -47,7 +56,7 @@ names carry no version number (`V2`, `.v3`, `_v1`), in TradingFlow as in
 
 1. Contract test from the golden fixture.
    - Copy the fixture into the TradingFlow test project and record its source path and
-     SHA-256 (`2bd15ce6629025cd9e53f0541475e94969a2d90d6579f213e55d0ce417273c78`) beside it.
+     SHA-256 (`360206c2440e4fb39bac210a50b12c6d233e4f49a140fd356e5d283b034536cb`) beside it.
    - Parse it through the production deserializer and `Validate` path of
      `MarketPredictorHttpClient` for each of the four tickers, asserting the expected
      result: `T000` and `T059` available; `T060` and `MISSING` available with swing

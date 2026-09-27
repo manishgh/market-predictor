@@ -136,12 +136,26 @@ From the swing monitoring and replay correctness design, under review:
 
 ## Change log
 
-- 2026-09-27 (later): the API keeps `contract_version` = `market_predictor.prediction.v3`.
-  Nested records lost their versions: `evidence.contract` is
-  `market_predictor.prediction_evidence` and `models.swing.prediction_policy.contract` is
-  `market_predictor.swing_prediction_policy` (both were `contract_version` with a version).
-  The fixture is renamed `swing_prediction_response.json`, SHA-256
-  `2bd15ce6629025cd9e53f0541475e94969a2d90d6579f213e55d0ce417273c78`.
+Entries are append-only history, newest first; the newest entry is the current contract.
+
+- 2026-09-27 (correction, current): the user clarified that the public API stays
+  versioned. The response field is `contract_version` again, value
+  `market_predictor.prediction.v3`; routes stay under `/v1/`. This reverses the
+  response-level change in the entry below. The nested records keep that entry's
+  change: `evidence.contract` is `market_predictor.prediction_evidence` and
+  `models.swing.prediction_policy.contract` is `market_predictor.swing_prediction_policy`,
+  and `models.swing.label_policy.policy` becomes `market_predictor.swing_outcome_policy`.
+  Renaming those nested fields under v3 is a recorded pre-production exception to the
+  change rules: they are internal identities that TradingFlow does not read. Fixture
+  `swing_prediction_response.json`, SHA-256
+  `360206c2440e4fb39bac210a50b12c6d233e4f49a140fd356e5d283b034536cb`.
+  TradingFlow action: read `contract_version`, accept only `market_predictor.prediction.v3`,
+  and re-pin the fixture to this hash.
+- 2026-09-27 (later, superseded by the correction above): versions removed. The response
+  field `contract_version` was renamed `contract` holding `market_predictor.prediction`;
+  evidence and prediction-policy records carried `contract` without a version. Fixture
+  `swing_prediction_response.json`, SHA-256
+  `b62f577dbd9ca1a09c9959d5da84df0db9040d8e6b3c17d26eabfcb4f369f1cf`.
 - 2026-09-27: `market_predictor.prediction.v3` published as this document with its
   golden fixture. Relative to the v1 TradingFlow knew: intraday and unified views,
   `unified_score` and `readiness.intraday_bar_count` are removed; horizons are
