@@ -275,8 +275,18 @@ nullable `training_data_end`), the four HEAD defects fixed, and the open replay 
     and 1.1 GiB of Python heap, within the 5 GiB process budget.
   - The first run (`a9c1b89`) reported 249 s and 397 s, but it timed the report under
     `tracemalloc`, which slows every allocation; those timings are not comparable.
-- Diff review of `c39c68a` and `157f330` is requested from both reviewers; then part
-  (2b), outcome evidence: receipts, cessation and `unresolvable`.
+- Diff reviews of `c39c68a` and `157f330`: no blocker and no major from either. Their
+  findings are fixed in `1ef0a7f` (details in the plan's monitoring record): maturation
+  checks only the rows it uses; an early exit before an unproven gap stays pending; the
+  ATR is stored as a fraction, so later splits no longer move the stop and target; and
+  the outcome contract ties timeouts and holding periods together. Verification: the
+  25 import-affected test files, 318 passed, plus the dependency and architecture boundary tests, 230 passed; strict mypy (355 files) and Ruff clean.
+- Next: the part (2b) design (outcome-bar collection with receipts, cessation evidence,
+  `unresolvable`, the attempt order), reviewed before code.
+- Open decision for the user: no production code publishes the swing live-input
+  generation (daily bars and point-in-time memberships behind
+  `active_generation.json`), so registration (part 3) cannot run on real data until a
+  publisher exists; it is not yet scheduled in the plan.
 - TradingFlow follow-ups, both display-only: swing signals read as neutral in the
   advisory model-direction view; the hard-coded `market_predictor.prediction.v1` label.
 

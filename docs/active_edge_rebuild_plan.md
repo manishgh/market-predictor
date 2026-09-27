@@ -1462,6 +1462,43 @@ Monitoring implementation record (September 27):
   stock's missing sessions. Outcomes record `holding_sessions` and, when the stock's
   whole path is observed, the fixed-horizon net return and sector excess (next open to
   the Nth close after the label cost), the trainer's economic target.
+- Part (2a) review fixes `1ef0a7f` (both diff reviews of `c39c68a` and `157f330`: no
+  blocker, no major; the ML review confirmed the fixed-horizon return equals the
+  trainer's label term by term).
+  - Maturation checks only the rows it uses. The stock's path ends at the first session
+    without exactly one valid bar, and benchmarks are checked at entry, at exit and, for
+    the fixed-horizon return, on session N. Before, an invalid bar anywhere on the path
+    held the outcome, so early exits were dropped more often than late ones.
+  - A target or stop reached before a gap matures only when the gap's first session is
+    proven to have no usable bar (`proven_stock_gaps`). The bars artifact proves none, so
+    until part (2b)'s receipts such outcomes stay pending, and collection lag can never
+    leave an early exit without its fixed-horizon return (outcomes are immutable).
+  - The intent stores the ATR as a fraction of the decision close
+    (`managed_risk.atr_fraction_of_latest_close`, already in every scored prediction, so
+    the API is unchanged). Maturation applies it to the decision close of the bars it
+    matures on, so a split or dividend adjustment after the decision no longer moves the
+    stop and target. Outcomes record the fraction and that decision close.
+  - Contract checks: a timeout carries a fixed-horizon return equal to its label net
+    return; the exit is the (holding - 1)th session after the entry; the repository
+    checks that the entry opens the session after the decision.
+  - Also: a trainer-parity test (`add_exact_swing_labels`); a pending entry that vanishes
+    during a registration rerun is written again; `mature-outcomes` exits 1 while
+    registrations are unfinished; the outcome commands' time options accept an offset
+    (Typer's default formats carry none, and the commands refuse times without one, so
+    these options could never be used); the report's duplicate outcome-identity check is
+    removed, since the repository checks it on load; test signing keys live in a fresh
+    folder per process (a reused process ID had picked up keys under the retired schema
+    name).
+  - Answered without a change: maturation already refuses bars not fully adjusted
+    (`_prepare_bars`).
+  - Part (2b) design inputs from these reviews: a receipt proves a gap only when
+    requested after the horizon's last close plus the grace; requests follow name
+    changes; a response without a usable bar counts as empty; a duplicated stock row is a
+    data defect, not a gap; an unusable session inside the path, with later valid bars
+    and no exit before it, needs a terminal state of its own.
+  - Part (3): the session record surfaces unfinished registrations. Part (4): the managed
+    excess (net of the execution cost) and the fixed-horizon excess (net of the label
+    cost) are never compared or combined.
 - Carried forward from the part (1) reviews:
   - Until part (4), sufficiency still counts distinct matured decision groups (10) while
     the lookback check already assumes part (4)'s effective periods (10 x N sessions);
