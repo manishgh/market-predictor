@@ -1421,6 +1421,31 @@ review found a blocker; these complete the consolidated decisions above):
   warming, with clients refused, for at least 100 matured sessions plus N plus the grace,
   about five and a half months, and again after every re-promotion.
 
+Monitoring implementation record (September 27):
+
+- Part (1) `e9526f1`, review fixes `2f05100` (both diff reviews: no blocker, no major).
+  The lookback check subtracts the sessions whose outcomes may still sit within the grace
+  (at most 5 in any 7 days) and the tolerated failures, computed exactly: 170 and 180 days
+  pass, 150 and 160 fail. The route-wide oldest pending decision is the earlier of the
+  pending index and the window's own pending decisions, so a backdated report stays
+  consistent; for decisions older than the window, a backdated report sees pending state
+  as of its build time (the index is current state). Swing may not import governance.
+- Part (5) `a9c1b89`: records are partitioned by decision session with a pending index;
+  reports open only the partitions their window reaches (a test records the opened
+  sessions); maturation walks only the index. The design's "year of cross-sections" test
+  became a partition-bounded read test plus a measured benchmark (see the handoff), since
+  writing 121,000 intents takes hours.
+- Carried forward from the part (1) reviews:
+  - Until part (4), sufficiency still counts distinct matured decision groups (10) while
+    the lookback check already assumes part (4)'s effective periods (10 x N sessions);
+    the check is deliberately the stricter one. Parts (1) to (4) must all land before any
+    promotion.
+  - Part (2) must exclude terminal `unresolvable` intents from pending, or each would
+    block its route forever.
+  - Part (4) decides whether non-selected pending intents gate (the rank check needs
+    them), and computes outcome metrics and sufficiency only over decisions whose
+    deadline has passed, so the newest edge is not conditioned on fast maturation.
+
 The September 20 user instruction explicitly extends the completed HTTP/CLI and
 TradingFlow cleanup to all remaining Market Predictor implementation. This is a
 changed requirement, not a reopening of previously passed tests without cause.

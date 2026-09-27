@@ -243,8 +243,12 @@ nullable `training_data_end`), the four HEAD defects fixed, and the open replay 
   lookback default with a window check (150 days refused: its fewest sessions are 99);
   only `10b` has evidence minimums. New drift pin `c64ca881...`. Verification: 18
   import-affected test files plus the boundary and smoke tests, 433 passed; strict mypy
-  (355 files) and Ruff clean. Diff review requested from both reviewers; next part (5),
-  repository partitioning. Verification: 55 affected test files
+  (355 files) and Ruff clean. Both diff reviews found no blocker and no major; their
+  minors are fixed in `2f05100` (444 affected tests passed, strict mypy and Ruff clean).
+- Monitoring part (5) `a9c1b89`: session partitions and a pending index (511 affected
+  tests passed, strict mypy and Ruff clean). A background benchmark measures report and
+  pending-scan cost against history length; its result goes here. Diff review of part (5)
+  follows; then part (2), outcome evidence. Verification: 55 affected test files
   in seven batches, all passed except `test_canonical_cli`, whose lease clash is fixed in
   `c628aea` (it passes while the real lease is held); strict mypy (354 files) and Ruff
   clean; no pinned file changed; no stored data used a renamed identifier.
