@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import math
 import os
+from collections.abc import Iterable
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Literal, Self, cast
@@ -22,8 +23,10 @@ from market_predictor.governance.outcomes.contracts import (
     PredictionMonitoringObservation,
     content_sha256,
     refuse_retired_intraday,
+    swing_horizon_sessions,
 )
 from market_predictor.governance.outcomes.repository import OutcomeRepository
+from market_predictor.governance.outcomes.sessions import horizon_last_close
 from market_predictor.locking import file_lock
 
 PERFORMANCE_REPORT_VERSION = "market_predictor.selected_policy_performance"
@@ -78,6 +81,8 @@ class SelectedPolicyCohort(BaseModel):
     pending_selected_samples: int = Field(ge=0)
     oldest_pending_decision_time_utc: datetime | None = None
     oldest_pending_decision_session_et: date | None = None
+    # Over every stored intent of the route, not only this window: nothing leaves monitoring uncounted.
+    route_oldest_pending_decision_session_et: date | None = None
     independent_decision_groups: int = Field(ge=0)
     evidence_status: Literal["sufficient", "insufficient_evidence"]
     selection_rate: float = Field(ge=0, le=1)
@@ -138,6 +143,14 @@ class SelectedPolicyCohort(BaseModel):
         pending_evidence = (self.oldest_pending_decision_time_utc, self.oldest_pending_decision_session_et)
         if any((self.pending_selected_samples > 0) != (value is not None) for value in pending_evidence):
             raise ValueError("selected-policy pending timestamp is inconsistent")
+        if self.cohort_type != "all" and self.route_oldest_pending_decision_session_et is not None:
+            raise ValueError("only the route's all cohort carries its oldest pending decision")
+        if (
+            self.route_oldest_pending_decision_session_et is not None
+            and self.oldest_pending_decision_session_et is not None
+            and self.route_oldest_pending_decision_session_et > self.oldest_pending_decision_session_et
+        ):
+            raise ValueError("the route's oldest pending decision cannot follow the window's")
         if self.window_start_utc >= self.window_end_utc:
             raise ValueError("selected-policy report window is invalid")
         if not (
@@ -264,7 +277,7 @@ def build_performance_cohorts(
     *,
     generated_at: datetime | None = None,
     minimum_samples: int = 30,
-    lookback_days: int = 60,
+    lookback_days: int = 180,
 ) -> dict[str, object]:
     if minimum_samples < 1:
         raise ValueError("minimum_samples must be positive")
@@ -282,11 +295,15 @@ def build_performance_cohorts(
         if repository.semantic_canonical_key(intent.semantic_prediction_id)
         == intent.maturation_key
     }
+    # Maturity-aligned: a decision belongs to the window when its horizon's last session closes
+    # inside it, or has not closed yet, so every horizon covers the outcomes of the same period.
     observations = [
         observation
         for observation in repository.observations()
-        if window_start <= observation.decision_time_utc <= generated
+        if observation.decision_time_utc <= generated
+        and _matures_in_window(observation.decision_session_et, observation.horizon, window_start, generated)
     ]
+    route_oldest_pending = _route_oldest_pending(repository, intents.values(), generated=generated)
     for observation in _canonical_observations(repository, observations):
         intent = (
             intents.get(observation.maturation_key)
@@ -341,6 +358,10 @@ def build_performance_cohorts(
                     else (group_values,)
                 )
                 identity = dict(zip(group_columns, values, strict=True))
+                route = tuple(str(identity[column]) for column in _IDENTITY_COLUMNS)
+                route_rows = frame
+                for column, value in zip(_IDENTITY_COLUMNS, route, strict=True):
+                    route_rows = route_rows.loc[route_rows[column].astype(str).eq(value)]
                 row = _cohort_row(
                     group,
                     identity=identity,
@@ -351,8 +372,10 @@ def build_performance_cohorts(
                         else str(identity[cohort_column])
                     ),
                     minimum_samples=minimum_samples,
-                    window_start=window_start,
+                    # A route's rows span its included decisions, which may precede the outcome window.
+                    window_start=min(window_start, route_rows["decision_time_utc"].min().to_pydatetime()),
                     window_end=generated,
+                    route_oldest_pending=route_oldest_pending.get(route) if cohort_type == "all" else None,
                 )
                 rows.append(
                     SelectedPolicyCohort.model_validate(row).model_dump(
@@ -524,6 +547,28 @@ def _matured_selected_outcome(
     return outcome
 
 
+def _matures_in_window(decision_session: date, horizon: str, window_start: datetime, generated: datetime) -> bool:
+    last_close = horizon_last_close(decision_session, swing_horizon_sessions(horizon), through=generated)
+    return last_close is None or last_close >= window_start
+
+
+def _route_oldest_pending(
+    repository: OutcomeRepository,
+    intents: Iterable[PredictionMaturationIntent],
+    *,
+    generated: datetime,
+) -> dict[tuple[str, ...], date]:
+    """The oldest decision session of each route's selected intents that have no outcome yet."""
+    oldest: dict[tuple[str, ...], date] = {}
+    for intent in intents:
+        if not intent.actionable or intent.decision_time_utc > generated or repository.has_outcome(intent.maturation_key):
+            continue
+        route = tuple(str(getattr(intent, column)) for column in _IDENTITY_COLUMNS)
+        if route not in oldest or intent.decision_session_et < oldest[route]:
+            oldest[route] = intent.decision_session_et
+    return oldest
+
+
 def _monitoring_record(
     observation: PredictionMonitoringObservation,
     outcome: MaturedOutcome | None,
@@ -580,6 +625,7 @@ def _cohort_row(
     minimum_samples: int,
     window_start: datetime,
     window_end: datetime,
+    route_oldest_pending: date | None,
 ) -> dict[str, object]:
     ordered = group.sort_values(
         ["decision_time_utc", "decision_group_id", "observation_id"],
@@ -631,6 +677,9 @@ def _cohort_row(
             pending["decision_session_et"].min().isoformat()
             if not pending.empty
             else None
+        ),
+        "route_oldest_pending_decision_session_et": (
+            route_oldest_pending.isoformat() if route_oldest_pending is not None else None
         ),
         "independent_decision_groups": int(
             matured["decision_group_id"].nunique()

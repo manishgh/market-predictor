@@ -106,7 +106,7 @@ def register_outcome_commands(app: typer.Typer, console: Any) -> None:
             help="Minimum matured outcomes required for sufficient evidence.",
         ),
         lookback_days: int = typer.Option(
-            60,
+            180,
             min=1,
             help="Rolling decision window in calendar days.",
         ),

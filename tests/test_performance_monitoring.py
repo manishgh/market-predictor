@@ -253,6 +253,57 @@ class PerformanceMonitoringTests(unittest.TestCase):
             self.assertEqual(report["source_intent_ids"], [pending.maturation_key])
             self.assertEqual(report["source_outcome_ids"], [])
 
+    def test_window_is_aligned_to_when_outcomes_finish(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repository = OutcomeRepository(Path(temp_dir))
+            # Window 3 Jul - 2 Aug. A 26 June decision finishes its ten sessions on 13 July;
+            # a 1 June decision finished on 15 June, before the window.
+            finishing = _intent_variant(
+                "MSFT", "1", probability=0.8, decision_time=datetime(2026, 6, 26, 22, 0, tzinfo=UTC)
+            )
+            finished = _intent_variant(
+                "AAPL", "2", probability=0.8, decision_time=datetime(2026, 6, 1, 22, 0, tzinfo=UTC)
+            )
+            for intent in (finishing, finished):
+                _record(repository, intent, target=1, net_return=0.02, excess_return=0.01)
+
+            report = build_performance_cohorts(
+                repository,
+                generated_at=datetime(2026, 8, 2, tzinfo=UTC),
+                minimum_samples=1,
+                lookback_days=30,
+            )
+            row = next(item for item in report["rows"] if item["cohort_type"] == "all")
+
+            self.assertEqual(row["total_predictions"], 1)
+            self.assertEqual(report["source_intent_ids"], [finishing.maturation_key])
+            self.assertEqual(row["window_start_utc"], "2026-06-26T22:00:00Z")
+            self.assertEqual(report["window_start_utc"], "2026-07-03T00:00:00Z")
+
+    def test_route_oldest_pending_spans_every_stored_intent(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repository = OutcomeRepository(Path(temp_dir))
+            stuck = _intent_variant(
+                "TSLA", "1", probability=0.8, decision_time=datetime(2026, 3, 2, 22, 0, tzinfo=UTC)
+            )
+            repository.record_intent(stuck)
+            recent = _intent_variant(
+                "MSFT", "2", probability=0.8, decision_time=datetime(2026, 7, 10, 22, 0, tzinfo=UTC)
+            )
+            _record(repository, recent, target=1, net_return=0.02, excess_return=0.01)
+
+            report = build_performance_cohorts(
+                repository,
+                generated_at=datetime(2026, 8, 2, tzinfo=UTC),
+                minimum_samples=1,
+                lookback_days=30,
+            )
+            rows = {row["cohort_type"]: row for row in report["rows"] if row["cohort_type"] in {"all", "sector"}}
+
+            self.assertEqual(rows["all"]["pending_selected_samples"], 0)
+            self.assertEqual(rows["all"]["route_oldest_pending_decision_session_et"], "2026-03-02")
+            self.assertIsNone(rows["sector"]["route_oldest_pending_decision_session_et"])
+
     def test_persisted_report_round_trip_rejects_mutation(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)

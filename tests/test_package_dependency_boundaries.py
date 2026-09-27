@@ -36,7 +36,8 @@ GOVERNANCE_FORBIDDEN_DEPENDENCIES = (
 )
 INTRADAY_FORBIDDEN_DEPENDENCIES = ("market_predictor.governance",)
 SERVING_FORBIDDEN_DEPENDENCIES = ("market_predictor.edge_rebuild",)
-SWING_FORBIDDEN_DEPENDENCIES = ("market_predictor.edge_rebuild",)
+# Governance session arithmetic calls into swing maturation; swing importing it would form a cycle.
+SWING_FORBIDDEN_DEPENDENCIES = ("market_predictor.edge_rebuild", "market_predictor.governance.outcomes.sessions")
 UNIVERSE_ALLOWED_DEPENDENCIES = (
     "market_predictor.core",
     "market_predictor.evidence",

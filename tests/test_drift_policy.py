@@ -123,18 +123,11 @@ class DriftPolicyTests(unittest.TestCase):
         )
 
     def test_pending_deadline_scales_to_investment_horizons(self) -> None:
-        decision = datetime(2025, 7, 24, 22, 0, tzinfo=UTC)
-        # An annual horizon needs a performance window longer than a year.
-        ten_session = self._evaluate(
-            self._report(samples=20, oldest_pending=decision, lookback_days=400)
-        )
-        annual = self._evaluate(
-            self._report(samples=20, horizon="252b", oldest_pending=decision, lookback_days=400),
-            horizon="252b",
-        )
+        # Evidence minimums exist only for the ten-session route; others fail closed.
+        annual = self._evaluate(self._report(samples=20, horizon="252b"), horizon="252b")
 
-        self.assertIn("selected_policy_outcomes_overdue", ten_session.reasons)
-        self.assertEqual((annual.state, annual.actionability), ("stable", "actionable"))
+        self.assertEqual((annual.state, annual.actionability), ("unavailable", "not_ready"))
+        self.assertIn("no_evidence_policy_for_horizon", annual.reasons)
         # The 252nd session after 24 July 2025 closes on 27 July 2026. The weekday
         # estimate's limit, 353 days plus the grace, ends 19 July: eight days too early.
         deadline = datetime(2026, 7, 27, 20, 0, tzinfo=UTC) + timedelta(days=7)
@@ -142,6 +135,36 @@ class DriftPolicyTests(unittest.TestCase):
         self.assertTrue(
             self.policy.outcome_overdue("252b", date(2025, 7, 24), deadline + timedelta(microseconds=1))
         )
+
+    def test_pending_decision_outside_the_window_still_blocks(self) -> None:
+        # Nothing pending inside the window, but a year-old selected prediction never matured.
+        assessment = self._evaluate(
+            self._report(samples=20, route_oldest_pending=datetime(2025, 7, 24, 22, 0, tzinfo=UTC))
+        )
+
+        self.assertEqual((assessment.state, assessment.actionability), ("unavailable", "not_ready"))
+        self.assertIn("selected_policy_outcomes_overdue", assessment.reasons)
+
+    def test_window_too_short_for_the_minimum_is_refused(self) -> None:
+        policy = DriftPolicy()
+        short = evaluate_drift(
+            mode="swing",
+            horizon="10b",
+            model_release_id=self.release_id,
+            model_artifact_sha256=self.model_sha,
+            prediction_policy_sha256=self.prediction_policy_sha,
+            label_policy_sha256=self.label_policy_sha,
+            execution_policy_sha256=self.execution_policy_sha,
+            feature_reference_profile_sha256="9" * 64,
+            feature_reference_names_sha256=self.feature_names_sha,
+            feature_drift=self._feature_report("stable"),
+            performance_report=self._report(samples=40, lookback_days=150),
+            policy=policy,
+            evaluated_at=self.now,
+        )
+
+        self.assertEqual((short.state, short.actionability), ("unavailable", "not_ready"))
+        self.assertIn("performance_window_too_short", short.reasons)
 
     def test_pending_deadline_requires_a_session_horizon_and_calendar(self) -> None:
         with self.assertRaisesRegex(ValueError, "not a session count"):
@@ -544,7 +567,8 @@ class DriftPolicyTests(unittest.TestCase):
         generated_at: datetime | None = None,
         horizon: str = "10b",
         oldest_pending: datetime | None = None,
-        lookback_days: int = 60,
+        lookback_days: int = 180,
+        route_oldest_pending: datetime | None = None,
     ) -> dict[str, object]:
         generated = generated_at or self.now
         window_start = generated - timedelta(days=lookback_days)
@@ -583,6 +607,11 @@ class DriftPolicyTests(unittest.TestCase):
             "oldest_pending_decision_session_et": (
                 oldest_pending.astimezone(NEW_YORK).date().isoformat()
                 if oldest_pending is not None
+                else None
+            ),
+            "route_oldest_pending_decision_session_et": (
+                (route_oldest_pending or oldest_pending).astimezone(NEW_YORK).date().isoformat()
+                if (route_oldest_pending or oldest_pending) is not None
                 else None
             ),
             "independent_decision_groups": samples,

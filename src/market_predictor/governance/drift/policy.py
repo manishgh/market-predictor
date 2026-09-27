@@ -9,8 +9,6 @@ from pathlib import Path
 from typing import Literal, Self
 from uuid import uuid4
 
-import exchange_calendars as xcals
-import pandas as pd
 from pydantic import (
     BaseModel,
     ConfigDict,
@@ -30,6 +28,7 @@ from market_predictor.governance.outcomes.contracts import (
     swing_horizon_sessions,
 )
 from market_predictor.governance.outcomes.performance import validate_performance_report
+from market_predictor.governance.outcomes.sessions import fewest_sessions_in_window, outcome_overdue
 from market_predictor.locking import file_lock
 
 DRIFT_ASSESSMENT_VERSION = "market_predictor.drift_assessment"
@@ -51,6 +50,10 @@ class DriftPolicy(BaseModel):
     # Calendar days after the close of a prediction's last horizon session before it is overdue.
     # Maturation cannot finish before that close, so the grace covers collection and weekends.
     pending_grace_days: int = Field(default=7, ge=0)
+    # Evidence minimums are defined per horizon; only the served ten-session route has them.
+    evidence_horizons: tuple[str, ...] = ("10b",)
+    # The share of sessions a route must register; the rest is tolerated failure.
+    minimum_registered_session_share: float = Field(default=0.95, gt=0, le=1)
     minimum_feature_drift_live_rows: int = Field(default=30, ge=1)
     standardized_shift_warning: float = Field(default=2.0, gt=0)
     standardized_shift_severe: float = Field(default=4.0, gt=0)
@@ -86,6 +89,10 @@ class DriftPolicy(BaseModel):
                 raise ValueError(
                     f"warning {name} threshold cannot exceed severe threshold"
                 )
+        if not self.evidence_horizons or any(
+            re.fullmatch(SWING_HORIZON_PATTERN, horizon) is None for horizon in self.evidence_horizons
+        ):
+            raise ValueError("evidence horizons must be exchange-session counts such as 10b")
         if self.warning_min_excess_return < self.severe_min_excess_return:
             raise ValueError(
                 "warning excess-return threshold cannot be below severe threshold"
@@ -97,22 +104,19 @@ class DriftPolicy(BaseModel):
 
     def outcome_overdue(self, horizon: str, decision_session: date, now: datetime) -> bool:
         """Whether the horizon's last XNYS session after the decision closed more than the grace before now."""
-        if now.utcoffset() is None:
-            raise ValueError("overdue checks require a timezone-aware time")
-        sessions = swing_horizon_sessions(horizon)
-        closes = xcals.get_calendar("XNYS").closes
-        decision = pd.Timestamp(decision_session)
-        # A session closes on its own UTC date, so labels after now's UTC date have not closed.
-        today = pd.Timestamp(now).tz_convert("UTC").tz_localize(None).normalize()
-        if decision not in closes.index:
-            raise DataReadinessError(f"pending decision session is not an XNYS session: {decision_session}")
-        if today > closes.index[-1]:
-            raise DataReadinessError(f"the XNYS calendar ends {closes.index[-1].date()}, before {today.date()}")
-        later = closes.loc[decision + pd.Timedelta(days=1) : today]
-        if len(later) < sessions:
-            return False
-        deadline = later.iloc[sessions - 1].to_pydatetime() + timedelta(days=self.pending_grace_days)
-        return bool(now > deadline)
+        return outcome_overdue(
+            decision_session,
+            swing_horizon_sessions(horizon),
+            now=now,
+            grace=timedelta(days=self.pending_grace_days),
+        )
+
+    def lookback_supports_minimum(self, lookback_days: int, horizon: str) -> bool:
+        """Whether every window of this length can hold the minimum evidence, allowing lag and failures."""
+        sessions = fewest_sessions_in_window(lookback_days)
+        tolerated_failures = math.floor((1 - self.minimum_registered_session_share) * sessions)
+        usable = sessions - 1 - tolerated_failures
+        return usable >= self.minimum_independent_decision_groups * swing_horizon_sessions(horizon)
 
 
 class DriftAssessment(BaseModel):
@@ -543,15 +547,18 @@ def _performance_state(
     if now - generated > timedelta(minutes=policy.maximum_report_age_minutes):
         reasons.append("performance_report_stale")
         return "stale", "not_ready"
-    pending = _as_int(
-        row.get("pending_selected_samples"),
-        "pending_selected_samples",
-    )
-    if pending > 0:
-        oldest_session = date.fromisoformat(str(row.get("oldest_pending_decision_session_et")))
-        if policy.outcome_overdue(str(row.get("horizon")), oldest_session, now):
-            reasons.append("selected_policy_outcomes_overdue")
-            return "unavailable", "not_ready"
+    horizon = str(row.get("horizon"))
+    if horizon not in policy.evidence_horizons:
+        reasons.append("no_evidence_policy_for_horizon")
+        return "unavailable", "not_ready"
+    if not policy.lookback_supports_minimum(_as_int(performance_report.get("lookback_days"), "lookback_days"), horizon):
+        reasons.append("performance_window_too_short")
+        return "unavailable", "not_ready"
+    # The route-wide oldest pending decision: one that left the window still blocks.
+    oldest = row.get("route_oldest_pending_decision_session_et")
+    if oldest is not None and policy.outcome_overdue(horizon, date.fromisoformat(str(oldest)), now):
+        reasons.append("selected_policy_outcomes_overdue")
+        return "unavailable", "not_ready"
     samples = _as_int(
         row.get("matured_selected_samples"),
         "matured_selected_samples",
