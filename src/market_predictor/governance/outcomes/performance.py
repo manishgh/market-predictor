@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import math
 import os
+from collections.abc import Mapping
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Literal, Self, cast
@@ -300,6 +301,7 @@ def build_performance_cohorts(
     # inside it, or has not closed yet, so every horizon covers the outcomes of the same period.
     # Only the session partitions that can hold such decisions are read.
     intents: dict[str, PredictionMaturationIntent] = {}
+    canonical_keys: dict[str, str] = {}
     observations: list[PredictionMonitoringObservation] = []
     for session in repository.sessions():
         included = {
@@ -309,16 +311,18 @@ def build_performance_cohorts(
         }
         if not included:
             continue
-        for stored in repository.session_intents(session):
-            if repository.semantic_canonical_key(stored.semantic_prediction_id, session) == stored.maturation_key:
-                intents[stored.maturation_key] = stored
+        # Each intent is loaded and validated once per report.
+        stored = {intent.maturation_key: intent for intent in repository.session_intents(session)}
+        session_keys = repository.session_canonical_keys(session, stored)
+        canonical_keys.update(session_keys)
+        intents.update((key, stored[key]) for key in session_keys.values())
         observations.extend(
             observation
-            for observation in repository.session_observations(session)
+            for observation in repository.session_observations(session, stored)
             if observation.decision_time_utc <= generated and observation.horizon in included
         )
     route_oldest_pending = _route_oldest_pending(repository, generated=generated)
-    for observation in _canonical_observations(repository, observations):
+    for observation in _canonical_observations(canonical_keys, observations):
         intent = (
             intents.get(observation.maturation_key)
             if observation.maturation_key is not None
@@ -467,7 +471,7 @@ def write_performance_report(
 
 
 def _canonical_observations(
-    repository: OutcomeRepository,
+    canonical_keys: Mapping[str, str],
     observations: list[PredictionMonitoringObservation],
 ) -> list[PredictionMonitoringObservation]:
     grouped: dict[str, list[PredictionMonitoringObservation]] = {}
@@ -475,7 +479,7 @@ def _canonical_observations(
         grouped.setdefault(observation.semantic_prediction_id, []).append(observation)
     canonical: list[PredictionMonitoringObservation] = []
     for semantic_id, group in grouped.items():
-        canonical_key = repository.semantic_canonical_key(semantic_id, group[0].decision_session_et)
+        canonical_key = canonical_keys.get(semantic_id)
         candidates = (
             [item for item in group if item.maturation_key == canonical_key]
             if canonical_key is not None

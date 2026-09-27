@@ -21,6 +21,29 @@ from scripts.promotion_fixture import (
 
 
 class CausalShadowTests(unittest.TestCase):
+    def test_groups_that_are_not_decision_times_are_refused(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            model = root / "candidate.joblib"
+            model.write_bytes(b"candidate")
+            context = trust_context_for_candidate(
+                root / "governance",
+                model_path=model,
+                metrics=synthetic_identity_metrics(model_run_id="causal-shadow-groups"),
+                model_type="canonical_swing",
+                improvements=[0.02, 0.01, 0.03, 0.015],
+            )
+            hypothesis = load_hypothesis(context.hypothesis_registry_root, context.hypothesis_id)
+            # A declaration from outside `declare_hypothesis` whose groups name no session.
+            workload = {**hypothesis["shadow_workload"], "decision_group_ids": ["2026-07-10", "group-b"]}
+
+            with self.assertRaisesRegex(DataReadinessError, "decision times"):
+                load_causal_shadow_bundle(
+                    context.shadow_bundle_path,
+                    repository=OutcomeRepository(context.outcome_repository_root),
+                    hypothesis={**hypothesis, "shadow_workload": workload},
+                )
+
     def test_bundle_reproduces_from_paired_matured_rows(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)

@@ -419,13 +419,20 @@ class PerformanceMonitoringTests(unittest.TestCase):
                     _intent_variant(f"T{index:03d}", "1", probability=0.8, decision_time=decision)
                 )
             opened: list[date] = []
+            loads: dict[str, int] = {}
             original = repository.session_intents
+            original_load = repository.load_intent
 
             def recording(session: date) -> list[PredictionMaturationIntent]:
                 opened.append(session)
                 return original(session)
 
+            def counting(maturation_key: str, session: date) -> PredictionMaturationIntent:
+                loads[maturation_key] = loads.get(maturation_key, 0) + 1
+                return original_load(maturation_key, session)
+
             repository.session_intents = recording  # type: ignore[method-assign]
+            repository.load_intent = counting  # type: ignore[method-assign]
             build_performance_cohorts(
                 repository,
                 generated_at=datetime(2026, 8, 2, tzinfo=UTC),
@@ -435,6 +442,8 @@ class PerformanceMonitoringTests(unittest.TestCase):
 
             # 30 days of outcomes plus the ten-session horizon: about 30 of 145 partitions.
             self.assertLess(len(opened), 40)
+            # Each intent is loaded once by its partition read and once more by the pending scan.
+            self.assertEqual(max(loads.values()), 2)
             self.assertGreaterEqual(min(opened), date(2026, 6, 15))
             self.assertEqual(len(repository.sessions()), len(sessions))
 

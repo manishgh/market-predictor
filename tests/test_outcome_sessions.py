@@ -7,6 +7,7 @@ import pytest
 from market_predictor.core.errors import DataReadinessError
 from market_predictor.governance.drift.policy import DriftPolicy
 from market_predictor.governance.outcomes.sessions import (
+    decision_group_session,
     fewest_sessions_in_window,
     horizon_last_close,
     most_sessions_in_window,
@@ -15,6 +16,15 @@ from market_predictor.governance.outcomes.sessions import (
 from market_predictor.swing.labels.holding_paths import holding_calendar
 
 GRACE = timedelta(days=7)
+
+
+def test_decision_group_session_is_the_new_york_date_of_its_decision_time() -> None:
+    assert decision_group_session("2026-07-10T22:00:00+00:00") == date(2026, 7, 10)
+    # 02:00 UTC on 11 July is 22:00 on 10 July in New York.
+    assert decision_group_session("2026-07-11T02:00:00+00:00") == date(2026, 7, 10)
+    for group in ("2026-07-10T22:00:00", "2026-07-10", "group-a"):
+        with pytest.raises(ValueError):
+            decision_group_session(group)
 
 
 def test_last_close_counts_sessions_after_the_decision_across_a_holiday() -> None:

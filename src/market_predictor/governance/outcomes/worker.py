@@ -5,12 +5,13 @@ from datetime import datetime
 import pandas as pd
 
 from market_predictor.core.errors import DataReadinessError
-from market_predictor.governance.outcomes.contracts import MaturedOutcome
+from market_predictor.governance.outcomes.contracts import MaturedOutcome, swing_horizon_sessions
 from market_predictor.governance.outcomes.maturation import (
     maturation_attempt,
     mature_prediction,
 )
 from market_predictor.governance.outcomes.repository import OutcomeRepository
+from market_predictor.governance.outcomes.sessions import horizon_last_close
 
 
 def mature_pending_intents(
@@ -20,34 +21,44 @@ def mature_pending_intents(
     observed_as_of: datetime,
     source_artifact_sha256: str,
 ) -> dict[str, int]:
-    """Mature every canonical intent in the pending index; history is never scanned."""
+    """Mature the pending index's canonical intents whose horizon has closed; history is never scanned.
+
+    The summary counts index entries by what happened to them. An entry is left in place while
+    its horizon is open or while its registration has not yet written the semantic record (the
+    registration rerun completes it); an entry whose semantic record names another intent can
+    never be canonical and is dropped.
+    """
     summary = {
-        "intents": 0,
+        "index_entries": 0,
+        "horizon_open": 0,
         "matured": 0,
         "pending": 0,
         "blocked": 0,
-        "duplicate_semantic": 0,
+        "registration_incomplete": 0,
+        "not_canonical_dropped": 0,
         "already_matured": 0,
     }
     for maturation_key, session in repository.pending():
-        summary["intents"] += 1
+        summary["index_entries"] += 1
         if repository.has_outcome(maturation_key, session):
             repository.drop_pending(maturation_key, session)
             summary["already_matured"] += 1
             continue
         intent = repository.load_intent(maturation_key, session)
         canonical_key = repository.semantic_canonical_key(intent.semantic_prediction_id, session)
-        if canonical_key != intent.maturation_key:
-            attempt = maturation_attempt(
-                intent,
-                observed_as_of=observed_as_of,
-                status="blocked",
-                reasons=("duplicate_semantic_prediction",),
-            )
-            repository.record_attempt(attempt, decision_session=session)
-            summary["duplicate_semantic"] += 1
+        if canonical_key is None:
+            summary["registration_incomplete"] += 1
+            continue
+        if canonical_key != maturation_key:
+            repository.drop_pending(maturation_key, session)
+            summary["not_canonical_dropped"] += 1
             continue
         try:
+            # An outcome is taken only once the horizon has closed, so a target or stop reached
+            # earlier still records the fixed-horizon return over the whole path.
+            if horizon_last_close(session, swing_horizon_sessions(intent.horizon), through=observed_as_of) is None:
+                summary["horizon_open"] += 1
+                continue
             result, evidence = mature_prediction(
                 intent,
                 bars,

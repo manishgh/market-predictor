@@ -1,14 +1,19 @@
 from __future__ import annotations
 
+import itertools
 import json
 import tempfile
 import unittest
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
+from typing import Any
+from unittest import mock
 
 from pydantic import ValidationError
 
+import market_predictor.governance.outcomes.repository as repository_module
 from market_predictor.core.errors import DataReadinessError
 from market_predictor.core.prediction_contracts import PredictionConflictError
 from market_predictor.execution_policy import (
@@ -102,12 +107,142 @@ class OutcomeRepositoryTests(unittest.TestCase):
             self.assertEqual(repository.sessions(), (session,))
             self.assertEqual(repository.session_horizons(session), frozenset({"10b"}))
 
+            # A canonical entry without an outcome is never dropped.
+            with self.assertRaises(PredictionConflictError):
+                repository.drop_pending(first.maturation_key, session)
+
             evidence = [{"ticker": "MSFT"}]
             repository.record_outcome(first, _outcome(first, evidence), evidence_rows=evidence)
-
             self.assertEqual(repository.pending(), [])
+
+            # A later occurrence, or a rerun of the canonical one, never indexes it again.
+            repository.record_intent(first)
+            repository.record_intent(_intent(snapshot_id="3" * 64))
+            self.assertEqual(repository.pending(), [])
+
+    def test_registration_rerun_repairs_a_crash_at_every_write(self) -> None:
+        real_write = repository_module._write_json_durable
+        written: list[Path] = []
+
+        def counting(path: Path, value: object) -> None:
+            written.append(path)
+            real_write(path, value)
+
+        with tempfile.TemporaryDirectory() as temp_dir, mock.patch.object(
+            repository_module, "_write_json_durable", counting
+        ):
+            OutcomeRepository(Path(temp_dir)).record_intent(_intent())
+        # Intent, horizons, observation, index entry and semantic record.
+        self.assertEqual([path.parent.name for path in written], ["intents", "2026-07-24", "observations", "pending", "semantic"])
+
+        for failing in range(len(written)):
+            with self.subTest(crash_before=written[failing].parent.name), tempfile.TemporaryDirectory() as temp_dir:
+                repository = OutcomeRepository(Path(temp_dir))
+                intent = _intent()
+                session = intent.decision_session_et
+
+                with mock.patch.object(
+                    repository_module, "_write_json_durable", _crash_before(real_write, failing)
+                ), self.assertRaises(OSError):
+                    repository.record_intent(intent)
+                repository.record_intent(intent)
+
+                self.assertEqual(repository.pending(), [(intent.maturation_key, session)])
+                self.assertEqual(
+                    repository.semantic_canonical_key(intent.semantic_prediction_id, session), intent.maturation_key
+                )
+                self.assertEqual(repository.session_horizons(session), frozenset({"10b"}))
+                self.assertEqual(
+                    repository.session_observations(session, {intent.maturation_key: intent}),
+                    [monitoring_observation_from_intent(intent)],
+                )
+
+        # A semantic record without its index entry (the order before this repair) is also restored.
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repository = OutcomeRepository(Path(temp_dir))
+            intent = _intent()
+            repository.record_intent(intent)
+            (Path(temp_dir) / "pending" / f"{intent.maturation_key}.json").unlink()
+
+            repository.record_intent(intent)
+
+            self.assertEqual(repository.pending(), [(intent.maturation_key, intent.decision_session_et)])
+
+    def test_pending_index_holds_only_current_entries(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repository = OutcomeRepository(Path(temp_dir))
+            intent = _intent()
+            repository.record_intent(intent)
+            evidence = [{"ticker": "MSFT"}]
+            repository.record_outcome(intent, _outcome(intent, evidence), evidence_rows=evidence)
+
+            self.assertEqual(list((Path(temp_dir) / "pending").iterdir()), [])
+
+    def test_concurrent_registration_indexes_one_canonical_occurrence(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repository = OutcomeRepository(Path(temp_dir))
+            occurrences = [_intent(snapshot_id=f"{digit:x}" * 64) for digit in range(1, 9)]
+            session = occurrences[0].decision_session_et
+
+            with ThreadPoolExecutor(max_workers=8) as executor:
+                list(executor.map(repository.record_intent, occurrences))
+                list(executor.map(lambda horizon: repository._record_horizon(session, horizon), [f"{n}b" for n in range(1, 17)]))
+
+            canonical = repository.semantic_canonical_key(occurrences[0].semantic_prediction_id, session)
+            self.assertIn(canonical, {intent.maturation_key for intent in occurrences})
+            self.assertEqual(repository.pending(), [(canonical, session)])
+            self.assertEqual(len(repository.session_intents(session)), len(occurrences))
+            self.assertEqual(repository.session_horizons(session), frozenset(f"{n}b" for n in range(1, 17)))
+
+    def test_flat_layout_is_refused(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            (Path(temp_dir) / "outcomes").mkdir()
+
+            with self.assertRaisesRegex(DataReadinessError, "flat layout"):
+                OutcomeRepository(Path(temp_dir))
+
+    def test_sessions_skip_plain_files_and_refuse_unknown_directories(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repository = OutcomeRepository(Path(temp_dir))
+            intent = _intent()
+            repository.record_intent(intent)
+            (Path(temp_dir) / "sessions" / "desktop.ini").write_text("", encoding="utf-8")
+
+            self.assertEqual(repository.sessions(), (intent.decision_session_et,))
+
+            (Path(temp_dir) / "sessions" / "misc").mkdir()
             with self.assertRaises(PredictionConflictError):
-                repository.drop_pending(repeated.maturation_key, session)
+                repository.sessions()
+
+    def test_attempt_is_filed_only_under_its_intent_session(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repository = OutcomeRepository(Path(temp_dir))
+            intent = _intent()
+            attempt = _attempt(intent)
+
+            with self.assertRaises(PredictionConflictError):
+                repository.record_attempt(attempt, decision_session=intent.decision_session_et)
+            repository.record_intent(intent)
+            with self.assertRaises(PredictionConflictError):
+                repository.record_attempt(attempt, decision_session=intent.decision_session_et + timedelta(days=3))
+            repository.record_attempt(attempt, decision_session=intent.decision_session_et)
+
+    def test_reads_and_replacements_retry_a_file_held_open_elsewhere(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repository = OutcomeRepository(Path(temp_dir))
+            intent = _intent()
+            session = intent.decision_session_et
+
+            with mock.patch.object(repository_module.time, "sleep"):
+                with mock.patch.object(repository_module.os, "replace", _held_open(repository_module.os.replace, 2)):
+                    repository.record_intent(intent)
+                with mock.patch.object(Path, "read_bytes", _held_open(Path.read_bytes, 2)):
+                    self.assertEqual(repository.session_horizons(session), frozenset({"10b"}))
+                # A file still held open after every retry is a conflict, never a partial read.
+                with mock.patch.object(Path, "read_bytes", _held_open(Path.read_bytes, 5)), self.assertRaises(
+                    PredictionConflictError
+                ):
+                    repository.session_horizons(session)
 
     def test_lookups_are_bound_to_the_decision_session(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -373,7 +508,7 @@ class OutcomeRepositoryTests(unittest.TestCase):
             path.write_text(tampered.model_dump_json(indent=2), encoding="utf-8")
 
             with self.assertRaises(PredictionConflictError):
-                repository.session_observations(intent.decision_session_et)
+                repository.session_observations(intent.decision_session_et, {intent.maturation_key: intent})
 
     def test_outcome_read_rebinds_execution_inputs_to_intent(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -411,6 +546,31 @@ class OutcomeRepositoryTests(unittest.TestCase):
 
             with self.assertRaises(PredictionConflictError):
                 repository.load_outcome(intent.maturation_key, intent.decision_session_et)
+
+
+def _crash_before(write: Callable[[Path, object], None], failing: int) -> Callable[[Path, object], None]:
+    """`write`, stopped as a crash would stop it before its `failing`-th call (counted from zero)."""
+    calls = itertools.count()
+
+    def call(path: Path, value: object) -> None:
+        if next(calls) == failing:
+            raise OSError("simulated crash")
+        write(path, value)
+
+    return call
+
+
+def _held_open(operation: Callable[..., Any], refusals: int) -> Callable[..., Any]:
+    """`operation`, refused as Windows refuses a file another process holds open, `refusals` times."""
+    remaining = [refusals]
+
+    def call(*args: Any, **kwargs: Any) -> Any:
+        if remaining[0] > 0:
+            remaining[0] -= 1
+            raise PermissionError("file is held open by another process")
+        return operation(*args, **kwargs)
+
+    return call
 
 
 def _intent(snapshot_id: str = "1" * 64) -> PredictionMaturationIntent:

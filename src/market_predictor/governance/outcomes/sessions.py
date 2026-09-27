@@ -9,6 +9,7 @@ import exchange_calendars as xcals
 import numpy as np
 import pandas as pd
 
+from market_predictor.canonical.cutoffs import NEW_YORK
 from market_predictor.core.errors import DataReadinessError
 
 
@@ -44,6 +45,18 @@ def horizon_last_close(decision_session: date, sessions: int, *, through: dateti
         return None
     close: datetime = later.iloc[sessions - 1].to_pydatetime()
     return close if close <= through else None
+
+
+def decision_group_session(decision_group_id: str) -> date:
+    """The decision session of a decision group, which is identified by its decision time.
+
+    The swing decision cutoff falls on the session's own New York date, so that date is the
+    session. A group id that is not a timezone-aware time raises ValueError.
+    """
+    decision_time = datetime.fromisoformat(decision_group_id)
+    if decision_time.utcoffset() is None:
+        raise ValueError(f"decision group is not a timezone-aware decision time: {decision_group_id}")
+    return decision_time.astimezone(NEW_YORK).date()
 
 
 def outcome_overdue(decision_session: date, sessions: int, *, now: datetime, grace: timedelta) -> bool:

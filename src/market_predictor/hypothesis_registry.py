@@ -11,6 +11,7 @@ from uuid import uuid4
 
 from market_predictor.core.errors import DataReadinessError
 from market_predictor.governance.outcomes.contracts import SWING_HORIZON_PATTERN
+from market_predictor.governance.outcomes.sessions import decision_group_session
 from market_predictor.locking import file_lock
 
 HYPOTHESIS_SCHEMA = "market_predictor.promotion_hypothesis"
@@ -60,6 +61,12 @@ def declare_hypothesis(
         raise ValueError(
             "shadow workload requires at least two unique decision groups"
         )
+    # Shadow evidence reads each group's decision session, named by the group's decision time.
+    try:
+        for group in groups:
+            decision_group_session(group)
+    except ValueError as exc:
+        raise ValueError("shadow decision groups must be timezone-aware decision times") from exc
     if shadow_minimum_tickers_per_group < 1:
         raise ValueError(
             "shadow_minimum_tickers_per_group must be positive"

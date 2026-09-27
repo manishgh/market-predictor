@@ -94,6 +94,16 @@ class R4TrustChainTests(unittest.TestCase):
                     declared_at=_declared_at(),
                 )
 
+    def test_hypothesis_groups_must_be_decision_times(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            for groups in (
+                ("2026-07-10", "2026-07-13T20:00:00+00:00"),
+                ("2026-07-10T20:00:00", "2026-07-13T20:00:00+00:00"),
+                ("group-a", "group-b"),
+            ):
+                with self.subTest(groups=groups), self.assertRaisesRegex(ValueError, "timezone-aware decision times"):
+                    _declare(Path(tmp), groups=groups)
+
     def test_shadow_fingerprint_is_one_use_and_failed_family_is_retired(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -360,6 +370,12 @@ def _declare(
     root: Path,
     *,
     candidate_sha: str = "c" * 64,
+    groups: tuple[str, ...] = (
+        "2026-07-10T20:00:00+00:00",
+        "2026-07-13T20:00:00+00:00",
+        "2026-07-14T20:00:00+00:00",
+        "2026-07-15T20:00:00+00:00",
+    ),
 ) -> dict[str, object]:
     signing_material_for_test()
     return declare_hypothesis(
@@ -374,12 +390,7 @@ def _declare(
         execution_policy_sha256="8" * 64,
         shadow_view="swing",
         shadow_horizon="10b",
-        shadow_decision_group_ids=(
-            "2026-07-10T20:00:00+00:00",
-            "2026-07-13T20:00:00+00:00",
-            "2026-07-14T20:00:00+00:00",
-            "2026-07-15T20:00:00+00:00",
-        ),
+        shadow_decision_group_ids=groups,
         shadow_minimum_tickers_per_group=1,
         objective="Improve benchmark-relative top-k swing return.",
         declared_at=_declared_at(),

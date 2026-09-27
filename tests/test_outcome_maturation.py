@@ -185,8 +185,8 @@ class OutcomeMaturationTests(unittest.TestCase):
             )
 
             # A repeated occurrence is never indexed as pending, so the worker never visits it.
-            self.assertEqual((summary["intents"], summary["matured"]), (1, 1))
-            self.assertEqual(summary["duplicate_semantic"], 0)
+            self.assertEqual((summary["index_entries"], summary["matured"]), (1, 1))
+            self.assertEqual(summary["not_canonical_dropped"], 0)
             self.assertTrue(repository.has_outcome(first.maturation_key, first.decision_session_et))
             self.assertFalse(repository.has_outcome(duplicate.maturation_key, duplicate.decision_session_et))
             self.assertEqual(repository.pending(), [])
@@ -213,6 +213,48 @@ class OutcomeMaturationTests(unittest.TestCase):
             )
 
             self.assertEqual((summary["already_matured"], summary["matured"]), (1, 0))
+            self.assertEqual(repository.pending(), [])
+
+    def test_worker_waits_for_the_horizon_to_close_without_recording_attempts(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            repository = OutcomeRepository(Path(temp_dir))
+            intent = swing_intent()
+            repository.record_intent(intent)
+
+            # The tenth session after July 24 closes on August 7.
+            summary = mature_pending_intents(
+                repository,
+                _swing_bars(),
+                observed_as_of=datetime(2026, 8, 7, 19, 0, tzinfo=UTC),
+                source_artifact_sha256="9" * 64,
+            )
+
+            self.assertEqual((summary["horizon_open"], summary["pending"], summary["matured"]), (1, 0, 0))
+            self.assertEqual(repository.pending(), [(intent.maturation_key, intent.decision_session_et)])
+            self.assertFalse((Path(temp_dir) / "sessions" / "2026-07-24" / "attempts").exists())
+
+    def test_worker_leaves_an_unfinished_registration_and_drops_an_entry_that_lost_the_race(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            repository = OutcomeRepository(Path(temp_dir))
+            first = swing_intent(snapshot_id="1" * 64)
+            repository.record_intent(first)
+            session = first.decision_session_et
+            # Registration stopped after the index entry, before the semantic record.
+            (Path(temp_dir) / "sessions" / session.isoformat() / "semantic" / f"{first.semantic_prediction_id}.json").unlink()
+            observed = datetime(2026, 8, 8, 12, 0, tzinfo=UTC)
+
+            summary = mature_pending_intents(repository, _swing_bars(), observed_as_of=observed, source_artifact_sha256="9" * 64)
+            self.assertEqual((summary["registration_incomplete"], summary["matured"]), (1, 0))
+            self.assertEqual(repository.pending(), [(first.maturation_key, session)])
+
+            # Another occurrence registers before the rerun and becomes canonical.
+            later = swing_intent(snapshot_id="2" * 64)
+            repository.record_intent(later)
+            summary = mature_pending_intents(repository, _swing_bars(), observed_as_of=observed, source_artifact_sha256="9" * 64)
+
+            self.assertEqual((summary["not_canonical_dropped"], summary["matured"]), (1, 1))
+            self.assertTrue(repository.has_outcome(later.maturation_key, session))
+            self.assertFalse(repository.has_outcome(first.maturation_key, session))
             self.assertEqual(repository.pending(), [])
 
     def test_retired_intraday_and_superseded_intents_are_refused(self) -> None:

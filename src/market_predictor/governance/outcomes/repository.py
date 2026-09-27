@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 import os
+import time
+from collections.abc import Callable, Mapping
 from datetime import date
 from pathlib import Path
 from typing import Any, TypeVar
@@ -24,8 +26,14 @@ from market_predictor.governance.outcomes.contracts import (
 from market_predictor.locking import file_lock
 
 T = TypeVar("T", bound=BaseModel)
+R = TypeVar("R")
 _PENDING = "pending"
 _SESSIONS = "sessions"
+# Top-level collections of the layout before records were partitioned by decision session.
+_FLAT_LAYOUT = ("intents", "observations", "semantic", "outcomes", "evidence", "attempts")
+# Windows refuses to open or replace a file another process holds open; such a refusal is
+# retried after these pauses (seconds) before it is final.
+_SHARING_RETRY_PAUSES = (0.05, 0.1, 0.2, 0.4)
 
 
 class OutcomeRepository:
@@ -38,6 +46,12 @@ class OutcomeRepository:
 
     def __init__(self, root: Path) -> None:
         self.root = root.resolve()
+        flat = [name for name in _FLAT_LAYOUT if (self.root / name).is_dir()]
+        if flat:
+            raise DataReadinessError(
+                f"outcome repository {self.root} holds the flat layout ({', '.join(flat)}); "
+                "records must be partitioned by decision session"
+            )
 
     def record_intent(
         self,
@@ -52,8 +66,8 @@ class OutcomeRepository:
             "canonical_maturation_key": intent.maturation_key,
         }
         with file_lock(semantic_path):
-            canonical = not semantic_path.exists()
-            if not canonical:
+            canonical_key = intent.maturation_key
+            if semantic_path.exists():
                 canonical_key = _semantic_record_key(
                     _load_object(semantic_path),
                     intent.semantic_prediction_id,
@@ -67,10 +81,13 @@ class OutcomeRepository:
             self._write_idempotent(path, intent)
             self._record_horizon(session, intent.horizon)
             self.record_observation(monitoring_observation_from_intent(intent))
-            if canonical:
-                _write_json_durable(semantic_path, semantic_record)
+            if canonical_key == intent.maturation_key:
+                # The index entry is durable before the semantic record, and a rerun restores
+                # one that a crash lost, so a canonical intent without an outcome is always indexed.
                 if not self.has_outcome(intent.maturation_key, session):
                     self._write_pending(intent.maturation_key, session)
+                if not semantic_path.exists():
+                    _write_json_durable(semantic_path, semantic_record)
         return intent
 
     def record_observation(
@@ -85,8 +102,9 @@ class OutcomeRepository:
                 raise PredictionConflictError from exc
             if monitoring_observation_from_intent(intent) != observation:
                 raise PredictionConflictError
-        self._write_idempotent(self._path(session, "observations", observation.observation_id), observation)
+        # The horizon is recorded first, so a report never misses a stored observation.
         self._record_horizon(session, observation.horizon)
+        self._write_idempotent(self._path(session, "observations", observation.observation_id), observation)
         return observation
 
     def record_attempt(
@@ -96,6 +114,13 @@ class OutcomeRepository:
         decision_session: date,
     ) -> MaturationAttempt:
         key = _digest(attempt.maturation_key)
+        # Attempts carry no session, so the stored intent confirms the partition.
+        try:
+            intent = self.load_intent(key, decision_session)
+        except FileNotFoundError as exc:
+            raise PredictionConflictError from exc
+        if intent.semantic_prediction_id != attempt.semantic_prediction_id:
+            raise PredictionConflictError
         path = self._partition(decision_session) / "attempts" / key / f"{_digest(attempt.attempt_id)}.json"
         self._write_idempotent(path, attempt)
         return attempt
@@ -181,7 +206,8 @@ class OutcomeRepository:
             return ()
         sessions = []
         for path in root.iterdir():
-            if path.name.startswith("."):
+            # Plain files (an operating-system file such as desktop.ini) are not partitions.
+            if path.name.startswith(".") or not path.is_dir():
                 continue
             try:
                 sessions.append(date.fromisoformat(path.name))
@@ -205,7 +231,16 @@ class OutcomeRepository:
             return []
         return [self.load_intent(path.stem, session) for path in sorted(root.glob("*.json"))]
 
-    def session_observations(self, session: date) -> list[PredictionMonitoringObservation]:
+    def session_observations(
+        self,
+        session: date,
+        intents: Mapping[str, PredictionMaturationIntent],
+    ) -> list[PredictionMonitoringObservation]:
+        """The partition's observations, each checked against its intent in `intents`.
+
+        `intents` holds the partition's intents by maturation key (from `session_intents`),
+        so no intent is loaded twice.
+        """
         root = self._partition(session) / "observations"
         if not root.exists():
             return []
@@ -215,14 +250,30 @@ class OutcomeRepository:
             if observation.observation_id != path.stem or observation.decision_session_et != session:
                 raise PredictionConflictError
             if observation.maturation_key is not None:
-                try:
-                    intent = self.load_intent(observation.maturation_key, session)
-                except (FileNotFoundError, PredictionConflictError) as exc:
-                    raise PredictionConflictError from exc
-                if observation != monitoring_observation_from_intent(intent):
+                intent = intents.get(observation.maturation_key)
+                if intent is None or observation != monitoring_observation_from_intent(intent):
                     raise PredictionConflictError
             observations.append(observation)
         return observations
+
+    def session_canonical_keys(
+        self,
+        session: date,
+        intents: Mapping[str, PredictionMaturationIntent],
+    ) -> dict[str, str]:
+        """Each semantic prediction's canonical maturation key, checked against `intents`."""
+        root = self._partition(session) / "semantic"
+        if not root.exists():
+            return {}
+        keys: dict[str, str] = {}
+        for path in sorted(root.glob("*.json")):
+            semantic_prediction_id = _digest(path.stem)
+            key = _semantic_record_key(_load_object(path), semantic_prediction_id)
+            intent = intents.get(key)
+            if intent is None or intent.semantic_prediction_id != semantic_prediction_id:
+                raise PredictionConflictError
+            keys[semantic_prediction_id] = key
+        return keys
 
     def pending(self) -> list[tuple[str, date]]:
         """Canonical intents without an outcome, as (maturation key, decision session)."""
@@ -243,20 +294,28 @@ class OutcomeRepository:
         return entries
 
     def drop_pending(self, maturation_key: str, session: date) -> None:
-        """Remove an index entry whose outcome is already durable."""
+        """Remove an index entry whose outcome is durable, or whose semantic record names another intent."""
         if not self.has_outcome(maturation_key, session):
-            raise PredictionConflictError
+            intent = self.load_intent(maturation_key, session)
+            canonical_key = self.semantic_canonical_key(intent.semantic_prediction_id, session)
+            if canonical_key is None or canonical_key == maturation_key:
+                raise PredictionConflictError
         self._pending_path(maturation_key).unlink(missing_ok=True)
 
     def _write_pending(self, maturation_key: str, session: date) -> None:
-        self._write_plain_idempotent(
-            self._pending_path(maturation_key),
-            {
-                "schema": "market_predictor.pending_outcome",
-                "maturation_key": maturation_key,
-                "decision_session_et": session.isoformat(),
-            },
-        )
+        # Written only under the intent's semantic lock, so it takes no lock of its own and
+        # the index directory holds nothing but current entries.
+        path = self._pending_path(maturation_key)
+        entry = {
+            "schema": "market_predictor.pending_outcome",
+            "maturation_key": maturation_key,
+            "decision_session_et": session.isoformat(),
+        }
+        if path.exists():
+            if _load_object(path) != entry:
+                raise PredictionConflictError
+            return
+        _write_json_durable(path, entry)
 
     def _record_horizon(self, session: date, horizon: str) -> None:
         path = self._partition(session) / "horizons.json"
@@ -316,10 +375,19 @@ def _digest(value: str) -> str:
     return value
 
 
+def _retry_sharing(operation: Callable[[], R]) -> R:
+    for pause in _SHARING_RETRY_PAUSES:
+        try:
+            return operation()
+        except PermissionError:
+            time.sleep(pause)
+    return operation()
+
+
 def _load_object(path: Path) -> dict[str, Any]:
     try:
         loaded = parse_strict_json_object(
-            path.read_bytes(),
+            _retry_sharing(path.read_bytes),
             label="outcome repository artifact",
         )
     except (OSError, ValueError) as exc:
@@ -400,7 +468,7 @@ def _write_json_durable(path: Path, value: object) -> None:
             handle.write(encoded)
             handle.flush()
             os.fsync(handle.fileno())
-        os.replace(temporary, path)
+        _retry_sharing(lambda: os.replace(temporary, path))
         _fsync_directory(path.parent)
     finally:
         temporary.unlink(missing_ok=True)

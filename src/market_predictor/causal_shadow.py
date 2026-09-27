@@ -19,6 +19,7 @@ from market_predictor.governance.outcomes.contracts import (
     PredictionMaturationIntent,
 )
 from market_predictor.governance.outcomes.repository import OutcomeRepository
+from market_predictor.governance.outcomes.sessions import decision_group_session
 from market_predictor.hypothesis_registry import TEST_CLOCK_ENV
 from market_predictor.locking import file_lock
 from market_predictor.modeling.ranking_economics import session_block_interval
@@ -200,10 +201,10 @@ def _derive_source_rows(
     minimum_tickers = int(workload.get("minimum_tickers_per_group") or 0)
     candidate_sha = str(hypothesis.get("candidate_artifact_sha256") or "")
     baseline_sha = str(hypothesis.get("baseline_artifact_sha256") or "")
-    # Each frozen decision group is a decision time; its partition is that time's New York date.
-    sessions = sorted(
-        {pd.Timestamp(group).tz_convert("America/New_York").date() for group in expected_groups}
-    )
+    try:
+        sessions = sorted({decision_group_session(group) for group in expected_groups})
+    except ValueError as exc:
+        raise DataReadinessError(f"hypothesis decision groups must be decision times: {exc}") from exc
     intents = [intent for session in sessions for intent in repository.session_intents(session)]
     candidate = _workload_intents(
         intents,
