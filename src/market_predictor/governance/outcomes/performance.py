@@ -548,22 +548,9 @@ def _matured_selected_outcome(
         return None
     if not repository.has_outcome(intent.maturation_key, intent.decision_session_et):
         return None
+    # The repository checks the outcome against this intent as it loads it.
     outcome = repository.load_outcome(intent.maturation_key, intent.decision_session_et)
-    if outcome.matured_at_utc > generated_at:
-        return None
-    if (
-        outcome.maturation_key != intent.maturation_key
-        or outcome.semantic_prediction_id != intent.semantic_prediction_id
-        or outcome.snapshot_id != intent.snapshot_id
-        or outcome.ticker != intent.ticker
-        or outcome.view != intent.view
-        or outcome.horizon != intent.horizon
-        or outcome.entry_time_utc <= intent.decision_time_utc
-    ):
-        raise DataReadinessError(
-            "selected-policy outcome identity does not match its intent"
-        )
-    return outcome
+    return None if outcome.matured_at_utc > generated_at else outcome
 
 
 def _earliest(*sessions: date | None) -> date:

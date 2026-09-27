@@ -23,7 +23,7 @@ class MaturationIntent(Protocol):
     def decision_session_et(self) -> date: ...
 
     @property
-    def decision_atr(self) -> float | None: ...
+    def decision_atr_fraction(self) -> float: ...
 
     @property
     def label_policy(self) -> dict[str, object]: ...
@@ -43,6 +43,7 @@ class MaturedPath:
     entry_time: datetime
     exit_time: datetime
     label_available: datetime
+    decision_close: float
     entry_price: float
     exit_price: float
     gross_return: float
@@ -63,35 +64,6 @@ class MaturedPath:
 
 
 PathEvaluation = PendingPath | MaturedPath
-
-
-def daily_path(
-    bars: pd.DataFrame,
-    *,
-    ticker: str,
-    sessions: list[object],
-) -> tuple[pd.DataFrame, list[str]]:
-    ticker_rows = bars[bars["ticker"].eq(ticker)]
-    counts = ticker_rows.groupby("session_date_et").size()
-    missing = [
-        f"{ticker}:{session}"
-        for session in sessions
-        if int(counts.get(session, 0)) != 1
-    ]
-    if missing:
-        return pd.DataFrame(), missing
-    rows = ticker_rows.set_index("session_date_et")
-    return rows.loc[sessions].reset_index(), []
-
-
-def one_daily_row(
-    bars: pd.DataFrame,
-    *,
-    ticker: str,
-    session: object,
-) -> pd.Series | None:
-    rows = bars[bars["ticker"].eq(ticker) & bars["session_date_et"].eq(session)]
-    return rows.iloc[0] if len(rows) == 1 else None
 
 
 def pair_return(pair: tuple[pd.Series, pd.Series]) -> float:

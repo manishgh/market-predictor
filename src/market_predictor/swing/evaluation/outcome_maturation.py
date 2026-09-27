@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+from datetime import date
+from itertools import takewhile
+
 import pandas as pd
 
 from market_predictor.core.errors import DataReadinessError
@@ -12,10 +16,8 @@ from market_predictor.modeling.maturation import (
     MaturedPath,
     PathEvaluation,
     PendingPath,
-    daily_path,
     evidence_rows,
     max_available,
-    one_daily_row,
     pair_return,
     policy_float,
     policy_int,
@@ -33,11 +35,19 @@ from market_predictor.swing.labels.holding_paths import holding_calendar, valida
 def evaluate_swing_maturation(
     intent: MaturationIntent,
     bars: pd.DataFrame,
+    *,
+    proven_stock_gaps: frozenset[date],
 ) -> PathEvaluation:
+    """Evaluate the managed exit and the fixed-horizon return on the stock's usable path.
+
+    The stock's path runs over its consecutive sessions from entry that each hold exactly
+    one valid bar. A target or stop reached on that path matures once the path is complete,
+    or once its first unusable session is in `proven_stock_gaps`; until then the outcome
+    waits, because the missing sessions may still arrive. Benchmarks are checked only on
+    the rows the returns use.
+    """
     policy = intent.label_policy
     require_policy(policy, "policy", "market_predictor.swing_outcome_policy")
-    if intent.decision_atr is None:
-        raise DataReadinessError("swing intent has no decision ATR")
     horizon = policy_int(policy, "horizon_sessions")
     spy_ticker = str(policy["broad_benchmark"]).upper()
     qqq_ticker = str(policy["growth_benchmark"]).upper()
@@ -49,36 +59,27 @@ def evaluate_swing_maturation(
     )
     if intent.decision_session_et not in observed_sessions:
         return PendingPath(reasons=("decision_session_not_observed",))
-    sessions: list[object] = list(holding_calendar(intent.decision_session_et, max(observed_sessions)))
+    sessions: list[date] = list(holding_calendar(intent.decision_session_et, max(observed_sessions)))
     decision_index = sessions.index(intent.decision_session_et)
     if decision_index + horizon >= len(sessions):
         return PendingPath(reasons=("horizon_not_complete",))
     path_sessions = sessions[decision_index + 1 : decision_index + horizon + 1]
-    required_tickers = {intent.ticker, spy_ticker, qqq_ticker, intent.primary_benchmark}
-    decision_row = one_daily_row(bars, ticker=intent.ticker, session=intent.decision_session_et)
+    decision_row = _usable_rows(bars, ticker=intent.ticker, sessions=[intent.decision_session_et]).get(
+        intent.decision_session_et
+    )
     if decision_row is None:
         return PendingPath(
             reasons=("required_bar_path_incomplete",),
             missing_intervals=(f"{intent.ticker}:{intent.decision_session_et}:decision",),
         )
-    # The stock's observed consecutive sessions from entry; a gap ends the prefix.
-    prefix_sessions = _observed_prefix(bars, ticker=intent.ticker, sessions=path_sessions)
-    missing_stock = tuple(f"{intent.ticker}:{session}" for session in path_sessions[len(prefix_sessions) :])
-    observations = validate_outcome_observations(bars.loc[
-        bars["session_date_et"].isin([intent.decision_session_et, *prefix_sessions])
-        & bars["ticker"].isin(required_tickers)
-    ])
-    invalid = observations.loc[~observations["outcome_observation_valid"]]
-    if not invalid.empty:
-        return PendingPath(
-            reasons=("required_bar_path_incomplete",),
-            missing_intervals=tuple(sorted(f"{row.ticker}:{row.session_date_et}:invalid_observation" for row in invalid.itertuples())),
-        )
+    usable = _usable_rows(bars, ticker=intent.ticker, sessions=path_sessions)
+    prefix_sessions = list(takewhile(usable.__contains__, path_sessions))
+    gap_sessions = path_sessions[len(prefix_sessions) :]
+    missing_stock = tuple(f"{intent.ticker}:{session}" for session in gap_sessions)
     if not prefix_sessions:
         return PendingPath(reasons=("required_bar_path_incomplete",), missing_intervals=missing_stock)
-    entry_session = path_sessions[0]
-    stock_path, _ = daily_path(bars, ticker=intent.ticker, sessions=prefix_sessions)
-    missing: list[str] = []
+    stock_path = pd.DataFrame([usable[session] for session in prefix_sessions]).reset_index(drop=True)
+    decision_close = float(decision_row["close"])
     barrier_bars = pd.concat(
         [pd.DataFrame([decision_row]), stock_path],
         ignore_index=True,
@@ -89,7 +90,8 @@ def evaluate_swing_maturation(
         pd.DataFrame(
             {
                 "session": [intent.decision_session_et],
-                "atr": [intent.decision_atr],
+                # The ATR in the price basis of these bars.
+                "atr": [intent.decision_atr_fraction * decision_close],
             }
         ),
         spec=BarrierSpec(
@@ -100,28 +102,30 @@ def evaluate_swing_maturation(
         ),
     ).iloc[0]
     if pd.isna(resolved["exit_session"]) or pd.isna(resolved["exit_price"]):
-        if missing_stock:
+        if gap_sessions:
             # No target or stop was reached before the gap, so the outcome needs the missing sessions.
             return PendingPath(reasons=("required_bar_path_incomplete",), missing_intervals=missing_stock)
         return PendingPath(reasons=("managed_path_unresolved",))
+    if gap_sessions and gap_sessions[0] not in proven_stock_gaps:
+        # The exit is known, but the fixed-horizon return may still become observable.
+        return PendingPath(reasons=("required_bar_path_incomplete",), missing_intervals=missing_stock)
     exit_session = pd.Timestamp(resolved["exit_session"]).date()
     holding_sessions = int(resolved["holding_sessions"])
-    if holding_sessions < 1 or holding_sessions > horizon:
+    if holding_sessions < 1 or holding_sessions > len(prefix_sessions):
         raise DataReadinessError("managed swing holding period is invalid")
-    if holding_sessions > len(prefix_sessions):
-        raise DataReadinessError("managed swing exit lies beyond the observed path")
     realized_path = stock_path.iloc[:holding_sessions].copy()
+    entry_session = path_sessions[0]
     benchmark_tickers = (spy_ticker, qqq_ticker, intent.primary_benchmark)
     benchmark_pairs: dict[str, tuple[pd.Series, pd.Series]] = {}
+    missing: list[str] = []
     for ticker in benchmark_tickers:
-        entry = one_daily_row(bars, ticker=ticker, session=entry_session)
-        exit_row = one_daily_row(bars, ticker=ticker, session=exit_session)
-        if entry is None:
+        benchmark_rows = _usable_rows(bars, ticker=ticker, sessions=[entry_session, exit_session])
+        if entry_session not in benchmark_rows:
             missing.append(f"{ticker}:{entry_session}:entry")
-        if exit_row is None:
+        if exit_session not in benchmark_rows:
             missing.append(f"{ticker}:{exit_session}:exit")
-        if entry is not None and exit_row is not None:
-            benchmark_pairs[ticker] = (entry, exit_row)
+        if entry_session in benchmark_rows and exit_session in benchmark_rows:
+            benchmark_pairs[ticker] = (benchmark_rows[entry_session], benchmark_rows[exit_session])
     if missing:
         return PendingPath(
             reasons=("required_bar_path_incomplete",),
@@ -145,11 +149,10 @@ def evaluate_swing_maturation(
     )
     fixed_net: float | None = None
     fixed_sector: float | None = None
-    if len(prefix_sessions) == horizon:
+    if not gap_sessions:
         last_session = path_sessions[-1]
-        sector_entry = one_daily_row(bars, ticker=intent.primary_benchmark, session=entry_session)
-        sector_last = one_daily_row(bars, ticker=intent.primary_benchmark, session=last_session)
-        if sector_entry is None or sector_last is None:
+        sector_last = _usable_rows(bars, ticker=intent.primary_benchmark, sessions=[last_session]).get(last_session)
+        if sector_last is None:
             return PendingPath(
                 reasons=("required_bar_path_incomplete",),
                 missing_intervals=(f"{intent.primary_benchmark}:{last_session}:fixed_horizon",),
@@ -162,7 +165,7 @@ def evaluate_swing_maturation(
             round_trip_cost_bps=round_trip_cost_bps,
         )
         fixed_net = float(fixed.net_return[0])
-        fixed_sector = pair_return((sector_entry, sector_last))
+        fixed_sector = pair_return((benchmark_pairs[intent.primary_benchmark][0], sector_last))
         evidence_frames.extend([stock_path.iloc[holding_sessions:], pd.DataFrame([sector_last])])
     rows = evidence_rows(evidence_frames)
     barrier_label = int(resolved["barrier_label"])
@@ -170,6 +173,7 @@ def evaluate_swing_maturation(
         entry_time=timestamp(stock_path.iloc[0]["bar_start_utc"]),
         exit_time=timestamp(realized_path.iloc[-1]["bar_end_utc"]),
         label_available=max_available(evidence_frames),
+        decision_close=decision_close,
         entry_price=entry_price,
         exit_price=exit_price,
         gross_return=float(evaluated.gross_return[0]),
@@ -194,12 +198,11 @@ def evaluate_swing_maturation(
     )
 
 
-def _observed_prefix(bars: pd.DataFrame, *, ticker: str, sessions: list[object]) -> list[object]:
-    """The path sessions from entry that each hold exactly one bar for the ticker, up to a gap."""
-    counts = bars.loc[bars["ticker"].eq(ticker)].groupby("session_date_et").size()
-    prefix: list[object] = []
-    for session in sessions:
-        if int(counts.get(session, 0)) != 1:
-            break
-        prefix.append(session)
-    return prefix
+def _usable_rows(bars: pd.DataFrame, *, ticker: str, sessions: Sequence[date]) -> dict[date, pd.Series]:
+    """Each session's bar for the ticker, when the session holds exactly one bar and it is valid."""
+    rows = bars.loc[bars["ticker"].eq(ticker) & bars["session_date_et"].isin(list(sessions))]
+    if rows.empty:
+        return {}
+    valid = validate_outcome_observations(rows)["outcome_observation_valid"]
+    single = rows.groupby("session_date_et")["ticker"].transform("size").eq(1)
+    return {row["session_date_et"]: row for _, row in rows.loc[valid & single].iterrows()}

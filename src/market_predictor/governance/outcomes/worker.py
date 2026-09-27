@@ -64,6 +64,9 @@ def mature_pending_intents(
                 bars,
                 observed_as_of=observed_as_of,
                 source_artifact_sha256=source_artifact_sha256,
+                # A stock gap is proven only by a settled request that returned no usable bar;
+                # the bars artifact records no requests, so it proves none.
+                proven_stock_gaps=frozenset(),
             )
         except (DataReadinessError, KeyError, TypeError, ValueError) as exc:
             attempt = maturation_attempt(

@@ -7,7 +7,6 @@ from pathlib import Path
 
 from pydantic import ValidationError
 
-from market_predictor.core.errors import DataReadinessError
 from market_predictor.core.prediction_contracts import PredictionConflictError
 from market_predictor.governance.outcomes.contracts import (
     RETIRED_INTRADAY,
@@ -41,28 +40,16 @@ RETIRED_CALIBRATION_FIELDS = (
 
 
 class PerformanceMonitoringTests(unittest.TestCase):
-    def test_rejects_outcome_entered_before_its_prediction_decision(self) -> None:
+    def test_rejects_outcome_entered_on_its_decision_session(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             repository = OutcomeRepository(Path(temp_dir))
             intent = _intent_variant("MSFT", "1", probability=0.8)
             evidence = [{"ticker": intent.ticker}]
-            base = _outcome(intent, evidence).model_dump(
-                mode="python",
-                exclude={"outcome_id"},
-            )
-            base["entry_time_utc"] = intent.decision_time_utc
-            outcome = MaturedOutcome.model_validate(
-                {**base, "outcome_id": content_sha256(base)}
-            )
+            early = _outcome(intent, evidence, entry_offset=0)
             repository.record_intent(intent)
-            repository.record_outcome(intent, outcome, evidence_rows=evidence)
 
-            with self.assertRaisesRegex(DataReadinessError, "does not match"):
-                build_performance_cohorts(
-                    repository,
-                    generated_at=datetime(2026, 8, 2, tzinfo=UTC),
-                    minimum_samples=1,
-                )
+            with self.assertRaises(PredictionConflictError):
+                repository.record_outcome(intent, early, evidence_rows=evidence)
 
     def test_aggregates_calibration_economics_and_drawdown(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -110,7 +97,7 @@ class PerformanceMonitoringTests(unittest.TestCase):
 
             report = build_performance_cohorts(
                 repository,
-                generated_at=datetime(2026, 8, 2, tzinfo=UTC),
+                generated_at=datetime(2026, 8, 10, tzinfo=UTC),
                 minimum_samples=2,
             )
             row = next(
@@ -161,7 +148,7 @@ class PerformanceMonitoringTests(unittest.TestCase):
 
             report = build_performance_cohorts(
                 repository,
-                generated_at=datetime(2026, 8, 2, tzinfo=UTC),
+                generated_at=datetime(2026, 8, 10, tzinfo=UTC),
                 minimum_samples=1,
             )
             row = next(
@@ -198,7 +185,7 @@ class PerformanceMonitoringTests(unittest.TestCase):
 
             report = build_performance_cohorts(
                 repository,
-                generated_at=datetime(2026, 8, 2, tzinfo=UTC),
+                generated_at=datetime(2026, 8, 10, tzinfo=UTC),
                 minimum_samples=2,
             )
             row = next(
@@ -515,7 +502,7 @@ class PerformanceMonitoringTests(unittest.TestCase):
 
             report = build_performance_cohorts(
                 repository,
-                generated_at=datetime(2026, 8, 2, tzinfo=UTC),
+                generated_at=datetime(2026, 8, 10, tzinfo=UTC),
                 minimum_samples=1,
             )
             row = next(

@@ -11,6 +11,7 @@ from uuid import uuid4
 
 from pydantic import BaseModel, ValidationError
 
+from market_predictor.canonical.cutoffs import NEW_YORK
 from market_predictor.core.errors import DataReadinessError
 from market_predictor.core.json_integrity import parse_strict_json_object
 from market_predictor.core.prediction_contracts import PredictionConflictError
@@ -23,6 +24,7 @@ from market_predictor.governance.outcomes.contracts import (
     content_sha256,
     monitoring_observation_from_intent,
 )
+from market_predictor.governance.outcomes.sessions import session_after
 from market_predictor.locking import file_lock
 
 T = TypeVar("T", bound=BaseModel)
@@ -311,8 +313,9 @@ class OutcomeRepository:
             "maturation_key": maturation_key,
             "decision_session_et": session.isoformat(),
         }
-        if path.exists():
-            if _load_object(path) != entry:
+        existing = _load_object_if_present(path)
+        if existing is not None:
+            if existing != entry:
                 raise PredictionConflictError
             return
         _write_json_durable(path, entry)
@@ -384,6 +387,21 @@ def _retry_sharing(operation: Callable[[], R]) -> R:
     return operation()
 
 
+def _load_object_if_present(path: Path) -> dict[str, Any] | None:
+    """The stored object, or None when the file is absent, including when it vanishes mid-read."""
+    try:
+        payload = _retry_sharing(path.read_bytes)
+    except FileNotFoundError:
+        return None
+    except OSError as exc:
+        raise PredictionConflictError from exc
+    try:
+        loaded = parse_strict_json_object(payload, label="outcome repository artifact")
+    except ValueError as exc:
+        raise PredictionConflictError from exc
+    return {str(key): value for key, value in loaded.items()}
+
+
 def _load_object(path: Path) -> dict[str, Any]:
     try:
         loaded = parse_strict_json_object(
@@ -432,9 +450,11 @@ def _assert_outcome_matches_intent(
         or outcome.view != intent.view
         or outcome.horizon != intent.horizon
         or outcome.execution_policy_sha256 != intent.execution_policy_sha256
-        or outcome.decision_atr != intent.decision_atr
+        or outcome.decision_atr_fraction != intent.decision_atr_fraction
         or outcome.label_round_trip_cost_bps != float(label_cost_value)
         or outcome.execution_participation_fraction != 0.0
+        # Entry is the open of the first session after the decision.
+        or outcome.entry_time_utc.astimezone(NEW_YORK).date() != session_after(intent.decision_session_et, 1)
     ):
         raise PredictionConflictError
 

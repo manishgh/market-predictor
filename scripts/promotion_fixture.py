@@ -2,14 +2,18 @@
 
 from __future__ import annotations
 
+import atexit
 import json
 import os
+import shutil
 import tempfile
 from base64 import b64encode
 from datetime import UTC, datetime, timedelta
+from functools import cache
 from pathlib import Path
 from typing import Any
 
+import exchange_calendars as xcals
 import jwt
 import pandas as pd
 from cryptography.hazmat.primitives import serialization
@@ -31,6 +35,7 @@ from market_predictor.governance.outcomes.contracts import (
     semantic_prediction_sha256,
 )
 from market_predictor.governance.outcomes.repository import OutcomeRepository
+from market_predictor.governance.outcomes.sessions import session_after
 from market_predictor.hypothesis_registry import declare_hypothesis
 from market_predictor.modeling.prediction_selection import (
     SwingPredictionPolicy,
@@ -298,7 +303,7 @@ def _synthetic_intent(
         "selected_for_policy": True,
         "actionable": True,
         "catalyst_status": "confirmed",
-        "decision_atr": 1.0,
+        "decision_atr_fraction": 0.01,
     }
     semantic = semantic_prediction_sha256(base)
     return PredictionMaturationIntent.model_validate(
@@ -320,8 +325,10 @@ def _synthetic_outcome(
     net_return: float,
     evidence: list[dict[str, object]],
 ) -> MaturedOutcome:
-    entry = intent.decision_time_utc + timedelta(minutes=5)
-    exit_time = entry + timedelta(minutes=30)
+    # Entry at the next session's open; exit at the tenth session's close.
+    calendar = xcals.get_calendar("XNYS")
+    entry = calendar.session_open(pd.Timestamp(session_after(intent.decision_session_et, 1))).to_pydatetime()
+    exit_time = calendar.session_close(pd.Timestamp(session_after(intent.decision_session_et, 10))).to_pydatetime()
     available = exit_time + timedelta(minutes=1)
     label_cost_value = intent.label_policy["round_trip_cost_bps"]
     if isinstance(label_cost_value, bool) or not isinstance(
@@ -331,7 +338,7 @@ def _synthetic_outcome(
     label_cost_bps = float(label_cost_value)
     execution_cost_bps = round_trip_cost_bps(
         price=100.0,
-        atr_pct=float(intent.decision_atr or 0.0) / 100.0,
+        atr_pct=intent.decision_atr_fraction,
         participation=0.0,
         policy=DEFAULT_EXECUTION_POLICY,
     )
@@ -354,7 +361,8 @@ def _synthetic_outcome(
         "label_round_trip_cost_bps": label_cost_bps,
         "label_net_return": gross_return - label_cost_bps / 10_000.0,
         "execution_policy_sha256": intent.execution_policy_sha256,
-        "decision_atr": intent.decision_atr,
+        "decision_atr_fraction": intent.decision_atr_fraction,
+        "decision_close": 100.0,
         "execution_participation_fraction": 0.0,
         "execution_cost_bps": execution_cost_bps,
         "net_return": net_return,
@@ -374,8 +382,9 @@ def _synthetic_outcome(
         "excess_return_vs_qqq": net_return,
         "excess_return_vs_sector": net_return,
         "holding_sessions": 10,
-        "fixed_horizon_net_return": net_return,
-        "fixed_horizon_excess_return_vs_sector": net_return,
+        # The fixed-horizon return is net of the label cost, like a timeout's label return.
+        "fixed_horizon_net_return": gross_return - label_cost_bps / 10_000.0,
+        "fixed_horizon_excess_return_vs_sector": gross_return - label_cost_bps / 10_000.0,
         "evidence_sha256": content_sha256(evidence),
     }
     return MaturedOutcome.model_validate(
@@ -433,9 +442,16 @@ def authorize_candidate_for_test(
     return evidence_manifest
 
 
+@cache
+def _signing_root() -> Path:
+    """One fresh folder per process, removed at exit, so no run reuses another run's keys."""
+    root = Path(tempfile.mkdtemp(prefix="market-predictor-signing-"))
+    atexit.register(shutil.rmtree, root, ignore_errors=True)
+    return root
+
+
 def test_signing_material() -> tuple[Path, Path, str]:
-    root = Path(tempfile.gettempdir()) / f"market-predictor-r4-signing-{os.getpid()}"
-    root.mkdir(parents=True, exist_ok=True)
+    root = _signing_root()
     key_path = root / "test-ed25519-private.pem"
     trust_store_path = root / "test-attestation-trust.json"
     signer_id = "test-ci-signer"

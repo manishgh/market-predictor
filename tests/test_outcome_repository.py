@@ -11,6 +11,8 @@ from pathlib import Path
 from typing import Any
 from unittest import mock
 
+import exchange_calendars as xcals
+import pandas as pd
 from pydantic import ValidationError
 
 import market_predictor.governance.outcomes.repository as repository_module
@@ -33,6 +35,7 @@ from market_predictor.governance.outcomes.contracts import (
     semantic_prediction_sha256,
 )
 from market_predictor.governance.outcomes.repository import OutcomeRepository
+from market_predictor.governance.outcomes.sessions import session_after
 from market_predictor.label_policy import policy_sha256
 from market_predictor.modeling.prediction_selection import SwingPredictionPolicy
 from market_predictor.modeling.strategy_contract import load_strategy_contract
@@ -167,6 +170,53 @@ class OutcomeRepositoryTests(unittest.TestCase):
             repository.record_intent(intent)
 
             self.assertEqual(repository.pending(), [(intent.maturation_key, intent.decision_session_et)])
+
+    def test_index_entry_that_vanishes_during_a_rerun_is_written_again(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repository = OutcomeRepository(Path(temp_dir))
+            intent = _intent()
+            repository.record_intent(intent)
+            entry = Path(temp_dir) / "pending" / f"{intent.maturation_key}.json"
+            real_read = Path.read_bytes
+
+            def vanishing(path: Path) -> bytes:
+                # The outcome writer removes the entry between the rerun's existence check and its read.
+                if path == entry:
+                    path.unlink()
+                    raise FileNotFoundError(path)
+                return real_read(path)
+
+            with mock.patch.object(Path, "read_bytes", vanishing):
+                repository.record_intent(intent)
+
+            self.assertEqual(repository.pending(), [(intent.maturation_key, intent.decision_session_et)])
+
+    def test_outcome_entry_must_open_the_session_after_the_decision(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repository = OutcomeRepository(Path(temp_dir))
+            intent = _intent()
+            repository.record_intent(intent)
+            evidence = [{"ticker": "MSFT"}]
+            late = _outcome(intent, evidence, entry_offset=2)
+
+            with self.assertRaises(PredictionConflictError):
+                repository.record_outcome(intent, late, evidence_rows=evidence)
+
+    def test_outcome_holding_period_and_timeout_bind_their_fixed_horizon_values(self) -> None:
+        intent = _intent()
+        content = _outcome(intent, [{"ticker": "MSFT"}]).model_dump(mode="python", exclude={"outcome_id"})
+        cases = {
+            "exit before its holding period": {"exit_time_utc": content["exit_time_utc"] - timedelta(days=1)},
+            "timeout without the fixed horizon": {
+                "fixed_horizon_net_return": None,
+                "fixed_horizon_excess_return_vs_sector": None,
+            },
+            "timeout with another fixed-horizon return": {"fixed_horizon_net_return": 0.01},
+        }
+        for name, changes in cases.items():
+            changed = {**content, **changes}
+            with self.subTest(name), self.assertRaises(ValidationError):
+                MaturedOutcome.model_validate({**changed, "outcome_id": content_sha256(changed)})
 
     def test_pending_index_holds_only_current_entries(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -402,6 +452,8 @@ class OutcomeRepositoryTests(unittest.TestCase):
             )
             content["label_round_trip_cost_bps"] = 5.0
             content["label_net_return"] = float(content["gross_return"]) - 0.0005
+            content["fixed_horizon_net_return"] = content["label_net_return"]
+            content["fixed_horizon_excess_return_vs_sector"] = float(content["label_net_return"]) - float(content["sector_return"])
             outcome = MaturedOutcome.model_validate(
                 {**content, "outcome_id": content_sha256(content)}
             )
@@ -519,10 +571,10 @@ class OutcomeRepositoryTests(unittest.TestCase):
             repository.record_intent(intent)
             repository.record_outcome(intent, outcome, evidence_rows=evidence)
             content = outcome.model_dump(mode="python", exclude={"outcome_id"})
-            content["decision_atr"] = 0.01
+            content["decision_atr_fraction"] = 0.02
             execution_cost_bps = round_trip_cost_bps(
                 price=float(content["entry_price"]),
-                atr_pct=0.01 / float(content["entry_price"]),
+                atr_pct=0.02 * float(content["decision_close"]) / float(content["entry_price"]),
                 participation=0.0,
                 policy=DEFAULT_EXECUTION_POLICY,
             )
@@ -618,7 +670,8 @@ def _intent(snapshot_id: str = "1" * 64) -> PredictionMaturationIntent:
         "selected_for_policy": True,
         "actionable": True,
         "catalyst_status": "confirmed",
-        "decision_atr": 1.0,
+        # An ATR of 1.0 on MSFT's decision close of 100.25 in the maturation bar fixture.
+        "decision_atr_fraction": 1.0 / 100.25,
     }
     semantic = semantic_prediction_sha256(base)
     return PredictionMaturationIntent.model_validate(
@@ -649,13 +702,19 @@ def _attempt(intent: PredictionMaturationIntent) -> MaturationAttempt:
 def _outcome(
     intent: PredictionMaturationIntent,
     evidence: list[dict[str, object]],
+    *,
+    entry_offset: int = 1,
 ) -> MaturedOutcome:
-    entry = datetime(2026, 7, 27, 13, 30, tzinfo=UTC)
-    exit_time = datetime(2026, 7, 31, 20, 0, tzinfo=UTC)
+    """A ten-session timeout entered `entry_offset` sessions after the decision."""
+    calendar = xcals.get_calendar("XNYS")
+    entry_session = session_after(intent.decision_session_et, entry_offset)
+    entry = calendar.session_open(pd.Timestamp(entry_session)).to_pydatetime()
+    exit_time = calendar.session_close(pd.Timestamp(session_after(entry_session, 9))).to_pydatetime()
     available = exit_time + timedelta(minutes=15)
+    decision_close = 100.25
     execution_cost_bps = round_trip_cost_bps(
         price=100.0,
-        atr_pct=float(intent.decision_atr or 0.0) / 100.0,
+        atr_pct=intent.decision_atr_fraction * decision_close / 100.0,
         participation=0.0,
         policy=DEFAULT_EXECUTION_POLICY,
     )
@@ -679,7 +738,8 @@ def _outcome(
         "label_round_trip_cost_bps": label_cost_bps,
         "label_net_return": 0.05 - label_cost_bps / 10_000.0,
         "execution_policy_sha256": intent.execution_policy_sha256,
-        "decision_atr": intent.decision_atr,
+        "decision_atr_fraction": intent.decision_atr_fraction,
+        "decision_close": decision_close,
         "execution_participation_fraction": 0.0,
         "execution_cost_bps": execution_cost_bps,
         "net_return": net_return,

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from typing import TypeAlias
 
 import numpy as np
@@ -47,7 +47,13 @@ def mature_prediction(
     *,
     observed_as_of: datetime,
     source_artifact_sha256: str,
+    proven_stock_gaps: frozenset[date],
 ) -> tuple[MaturationResult, list[dict[str, object]]]:
+    """Mature one intent on `bars`.
+
+    `proven_stock_gaps` holds the sessions in which the stock is proven to have no usable
+    bar; a target or stop reached before such a session matures without waiting for it.
+    """
     observed = _aware_utc(observed_as_of)
     data = _prepare_bars(
         bars,
@@ -56,7 +62,7 @@ def mature_prediction(
         required_price_feed=intent.price_feed,
         required_timeframe="1d",
     )
-    evaluated = evaluate_swing_maturation(intent, data)
+    evaluated = evaluate_swing_maturation(intent, data, proven_stock_gaps=proven_stock_gaps)
     if isinstance(evaluated, PendingPath):
         return (
             maturation_attempt(
@@ -100,11 +106,10 @@ def _outcome_from_path(
     intent: PredictionMaturationIntent,
     path: MaturedPath,
 ) -> MaturedOutcome:
-    assert intent.decision_atr is not None
     participation = 0.0
     execution_cost_bps = round_trip_cost_bps(
         price=path.entry_price,
-        atr_pct=intent.decision_atr / path.entry_price,
+        atr_pct=intent.decision_atr_fraction * path.decision_close / path.entry_price,
         participation=participation,
         policy=DEFAULT_EXECUTION_POLICY,
     )
@@ -127,7 +132,8 @@ def _outcome_from_path(
         "label_round_trip_cost_bps": path.label_round_trip_cost_bps,
         "label_net_return": path.label_net_return,
         "execution_policy_sha256": intent.execution_policy_sha256,
-        "decision_atr": intent.decision_atr,
+        "decision_atr_fraction": intent.decision_atr_fraction,
+        "decision_close": path.decision_close,
         "execution_participation_fraction": participation,
         "execution_cost_bps": execution_cost_bps,
         "net_return": net_return,

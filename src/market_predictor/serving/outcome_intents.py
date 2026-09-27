@@ -302,7 +302,7 @@ def _intent(
         and prediction.selected_for_policy
         and prediction.signal != "not_ready",
         "catalyst_status": prediction.catalyst.status,
-        "decision_atr": row.decision_atr,
+        "decision_atr_fraction": _decision_atr_fraction(prediction),
     }
     semantic_id = semantic_prediction_sha256(base)
     return PredictionMaturationIntent.model_validate(
@@ -327,3 +327,9 @@ def _row_evidence(
             f"expected one {view} evidence row for {ticker}; found {len(matches)}"
         )
     return matches[0]
+
+
+def _decision_atr_fraction(prediction: SwingPrediction) -> float:
+    if prediction.managed_risk is None:
+        raise DataReadinessError(f"maturation requires the managed risk context for {prediction.ticker}")
+    return prediction.managed_risk.atr_fraction_of_latest_close

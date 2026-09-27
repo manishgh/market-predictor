@@ -17,6 +17,8 @@ from market_predictor.governance.outcomes.contracts import (
 from market_predictor.governance.outcomes.maturation import mature_prediction
 from market_predictor.governance.outcomes.repository import OutcomeRepository
 from market_predictor.governance.outcomes.worker import mature_pending_intents
+from market_predictor.swing.contracts import SwingDatasetConfig
+from market_predictor.swing.labels import add_exact_swing_labels
 from market_predictor.swing.labels.barrier_and_rank import (
     BarrierSpec,
     apply_triple_barrier,
@@ -31,6 +33,7 @@ class OutcomeMaturationTests(unittest.TestCase):
         result, evidence = mature_prediction(
             swing_intent(), bars, observed_as_of=datetime(2026, 8, 8, 12, tzinfo=UTC),
             source_artifact_sha256="9" * 64,
+            proven_stock_gaps=frozenset(),
         )
         self.assertEqual(result.status, "pending")
         self.assertEqual(evidence, [])
@@ -46,6 +49,7 @@ class OutcomeMaturationTests(unittest.TestCase):
                 bars,
                 observed_as_of=datetime(2026, 8, 8, 12, 0, tzinfo=UTC),
                 source_artifact_sha256="9" * 64,
+                proven_stock_gaps=frozenset(),
             )
 
     def test_swing_remains_pending_then_matures_on_exact_session_path(self) -> None:
@@ -57,12 +61,14 @@ class OutcomeMaturationTests(unittest.TestCase):
             bars,
             observed_as_of=datetime(2026, 7, 30, 22, 0, tzinfo=UTC),
             source_artifact_sha256="9" * 64,
+            proven_stock_gaps=frozenset(),
         )
         matured, evidence = mature_prediction(
             intent,
             bars,
             observed_as_of=datetime(2026, 8, 8, 12, 0, tzinfo=UTC),
             source_artifact_sha256="9" * 64,
+            proven_stock_gaps=frozenset(),
         )
 
         self.assertEqual(pending.status, "pending")
@@ -89,7 +95,7 @@ class OutcomeMaturationTests(unittest.TestCase):
             pd.DataFrame(
                 {
                     "session": [intent.decision_session_et],
-                    "atr": [intent.decision_atr],
+                    "atr": [intent.decision_atr_fraction * 100.25],
                 }
             ),
             spec=BarrierSpec(
@@ -106,6 +112,7 @@ class OutcomeMaturationTests(unittest.TestCase):
             bars,
             observed_as_of=datetime(2026, 8, 8, 12, 0, tzinfo=UTC),
             source_artifact_sha256="9" * 64,
+            proven_stock_gaps=frozenset(),
         )
 
         self.assertIsInstance(matured, MaturedOutcome)
@@ -122,21 +129,121 @@ class OutcomeMaturationTests(unittest.TestCase):
         )
         self.assertEqual(matured.path_outcome, "target_first")
 
-    def test_stop_before_a_gap_matures_without_the_fixed_horizon(self) -> None:
+    def test_stop_before_a_gap_waits_until_the_gap_is_proven(self) -> None:
         intent = swing_intent()
         bars = _swing_bars()
         msft = bars["ticker"].eq("MSFT")
         bars.loc[msft & bars["session_date_et"].eq(date(2026, 7, 28)), "low"] = 50.0
         bars = bars.loc[~(msft & bars["session_date_et"].ge(date(2026, 7, 30)))].copy()
+        observed = datetime(2026, 8, 8, 12, 0, tzinfo=UTC)
+
+        # The missing sessions may simply not be collected yet, and the outcome is immutable.
+        pending, _ = mature_prediction(
+            intent, bars, observed_as_of=observed, source_artifact_sha256="9" * 64, proven_stock_gaps=frozenset()
+        )
+        self.assertEqual((pending.status, pending.reasons), ("pending", ("required_bar_path_incomplete",)))
+        self.assertIn("MSFT:2026-07-30", pending.missing_intervals)
 
         matured, _ = mature_prediction(
-            intent, bars, observed_as_of=datetime(2026, 8, 8, 12, 0, tzinfo=UTC), source_artifact_sha256="9" * 64
+            intent,
+            bars,
+            observed_as_of=observed,
+            source_artifact_sha256="9" * 64,
+            proven_stock_gaps=frozenset({date(2026, 7, 30)}),
         )
-
         assert isinstance(matured, MaturedOutcome)
         self.assertEqual((matured.path_outcome, matured.holding_sessions), ("stop_first", 2))
         self.assertIsNone(matured.fixed_horizon_net_return)
         self.assertIsNone(matured.fixed_horizon_excess_return_vs_sector)
+
+    def test_unusable_bars_after_an_early_exit_do_not_hold_the_outcome(self) -> None:
+        intent = swing_intent()
+        bars = _swing_bars()
+        bars.loc[bars["ticker"].eq("MSFT") & bars["session_date_et"].eq(date(2026, 7, 28)), "low"] = 50.0
+        # Benchmarks the managed return does not use, after the exit on July 28.
+        for ticker, session in (("QQQ", date(2026, 7, 31)), ("SPY", date(2026, 8, 4))):
+            bars.loc[bars["ticker"].eq(ticker) & bars["session_date_et"].eq(session), "volume"] = 0
+
+        matured, _ = mature_prediction(
+            intent, bars, observed_as_of=datetime(2026, 8, 8, 12, 0, tzinfo=UTC),
+            source_artifact_sha256="9" * 64, proven_stock_gaps=frozenset(),
+        )
+
+        assert isinstance(matured, MaturedOutcome)
+        self.assertEqual((matured.path_outcome, matured.holding_sessions), ("stop_first", 2))
+        self.assertIsNotNone(matured.fixed_horizon_net_return)
+
+    def test_an_unusable_stock_bar_ends_the_path_like_a_missing_one(self) -> None:
+        intent = swing_intent()
+        bars = _swing_bars()
+        msft = bars["ticker"].eq("MSFT")
+        bars.loc[msft & bars["session_date_et"].eq(date(2026, 7, 28)), "low"] = 50.0
+        bars.loc[msft & bars["session_date_et"].eq(date(2026, 8, 4)), "volume"] = 0
+        observed = datetime(2026, 8, 8, 12, 0, tzinfo=UTC)
+
+        pending, _ = mature_prediction(
+            intent, bars, observed_as_of=observed, source_artifact_sha256="9" * 64, proven_stock_gaps=frozenset()
+        )
+        self.assertEqual(pending.missing_intervals, ("MSFT:2026-08-04", "MSFT:2026-08-05", "MSFT:2026-08-06", "MSFT:2026-08-07"))
+        matured, _ = mature_prediction(
+            intent,
+            bars,
+            observed_as_of=observed,
+            source_artifact_sha256="9" * 64,
+            proven_stock_gaps=frozenset({date(2026, 8, 4)}),
+        )
+        assert isinstance(matured, MaturedOutcome)
+        self.assertIsNone(matured.fixed_horizon_net_return)
+
+    def test_a_later_split_adjustment_leaves_the_outcome_unchanged(self) -> None:
+        intent = swing_intent()
+        bars = _swing_bars()
+        split = bars.copy()
+        # Bars collected after a 2-for-1 split are all halved; the served ATR fraction is not.
+        split.loc[split["ticker"].eq("MSFT"), ["open", "high", "low", "close"]] /= 2.0
+        observed = datetime(2026, 8, 8, 12, 0, tzinfo=UTC)
+
+        results = [
+            mature_prediction(
+                intent, frame, observed_as_of=observed, source_artifact_sha256="9" * 64, proven_stock_gaps=frozenset()
+            )[0]
+            for frame in (bars, split)
+        ]
+
+        original, adjusted = results
+        assert isinstance(original, MaturedOutcome) and isinstance(adjusted, MaturedOutcome)
+        self.assertEqual(
+            (adjusted.path_outcome, adjusted.holding_sessions), (original.path_outcome, original.holding_sessions)
+        )
+        self.assertAlmostEqual(adjusted.gross_return, original.gross_return)
+        self.assertAlmostEqual(adjusted.execution_cost_bps, original.execution_cost_bps)
+
+    def test_fixed_horizon_returns_equal_the_trainer_labels(self) -> None:
+        intent = swing_intent()
+        bars = _swing_bars().assign(security_id=lambda frame: "security:" + frame["ticker"])
+        matured, _ = mature_prediction(
+            intent, bars, observed_as_of=datetime(2026, 8, 8, 12, 0, tzinfo=UTC),
+            source_artifact_sha256="9" * 64, proven_stock_gaps=frozenset(),
+        )
+        stock = bars.loc[bars["ticker"].eq("MSFT")]
+        decisions = stock.loc[stock["session_date_et"].eq(intent.decision_session_et)].assign(
+            decision_group_id="group", feature_eligible=True, primary_benchmark="XLK",
+            membership_effective_to_utc=pd.NaT, atr_pct_14=intent.decision_atr_fraction,
+        )
+        labels = add_exact_swing_labels(
+            decisions,
+            bars.loc[~bars["ticker"].eq("MSFT")],
+            SwingDatasetConfig(horizon_sessions=10, round_trip_cost_bps=float(intent.label_policy["round_trip_cost_bps"])),
+            outcome_bars=stock,
+        ).iloc[0]
+
+        assert isinstance(matured, MaturedOutcome)
+        self.assertAlmostEqual(matured.fixed_horizon_net_return or 0.0, float(labels["future_net_return_10d"]), places=12)
+        self.assertAlmostEqual(
+            matured.fixed_horizon_excess_return_vs_sector or 0.0,
+            float(labels["future_excess_return_10d_vs_sector"]),
+            places=12,
+        )
 
     def test_gap_before_any_barrier_stays_pending_on_the_stock(self) -> None:
         intent = swing_intent()
@@ -145,7 +252,8 @@ class OutcomeMaturationTests(unittest.TestCase):
         bars = bars.loc[~(msft & bars["session_date_et"].ge(date(2026, 7, 29)))].copy()
 
         pending, evidence = mature_prediction(
-            intent, bars, observed_as_of=datetime(2026, 8, 8, 12, 0, tzinfo=UTC), source_artifact_sha256="9" * 64
+            intent, bars, observed_as_of=datetime(2026, 8, 8, 12, 0, tzinfo=UTC),
+            source_artifact_sha256="9" * 64, proven_stock_gaps=frozenset(),
         )
 
         self.assertEqual(pending.status, "pending")
@@ -156,7 +264,8 @@ class OutcomeMaturationTests(unittest.TestCase):
     def test_fixed_horizon_returns_follow_the_trainer_target(self) -> None:
         intent = swing_intent()
         matured, _ = mature_prediction(
-            intent, _swing_bars(), observed_as_of=datetime(2026, 8, 8, 12, 0, tzinfo=UTC), source_artifact_sha256="9" * 64
+            intent, _swing_bars(), observed_as_of=datetime(2026, 8, 8, 12, 0, tzinfo=UTC),
+            source_artifact_sha256="9" * 64, proven_stock_gaps=frozenset(),
         )
 
         assert isinstance(matured, MaturedOutcome)

@@ -10,11 +10,14 @@ from typing import Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from market_predictor.canonical.cutoffs import NEW_YORK
+from market_predictor.core.errors import DataReadinessError
 from market_predictor.execution_policy import (
     DEFAULT_EXECUTION_POLICY,
     EXECUTION_POLICY_SHA256,
     round_trip_cost_bps,
 )
+from market_predictor.governance.outcomes.sessions import session_after
 from market_predictor.label_policy import policy_sha256
 from market_predictor.modeling.prediction_selection import parse_swing_prediction_policy
 
@@ -161,7 +164,9 @@ class PredictionMaturationIntent(_SwingViewContract):
     selected_for_policy: bool
     actionable: bool
     catalyst_status: str = Field(min_length=1, max_length=32)
-    decision_atr: float | None = Field(default=None, gt=0)
+    # ATR as a fraction of the decision close. Maturation applies it to the decision close of
+    # the bars it matures on, so a later split or dividend adjustment rescales both alike.
+    decision_atr_fraction: float = Field(gt=0)
 
     @field_validator("decision_time_utc")
     @classmethod
@@ -211,8 +216,6 @@ class PredictionMaturationIntent(_SwingViewContract):
             raise ValueError("semantic prediction identity is invalid")
         if maturation_key_sha256(self.snapshot_id, semantic) != self.maturation_key:
             raise ValueError("maturation key is invalid")
-        if self.decision_atr is None:
-            raise ValueError(f"{self.view} maturation requires decision ATR")
         return self
 
 
@@ -264,7 +267,9 @@ class MaturedOutcome(_SwingViewContract):
     label_round_trip_cost_bps: float = Field(ge=0, le=500)
     label_net_return: float
     execution_policy_sha256: str = Field(pattern=SHA256_PATTERN)
-    decision_atr: float = Field(gt=0)
+    decision_atr_fraction: float = Field(gt=0)
+    # The decision session's close in the price basis of the matured path.
+    decision_close: float = Field(gt=0)
     execution_participation_fraction: float = Field(ge=0, le=1)
     execution_cost_bps: float = Field(ge=0)
     net_return: float
@@ -312,7 +317,7 @@ class MaturedOutcome(_SwingViewContract):
             raise ValueError("matured outcome uses an unsupported execution policy")
         expected_execution_cost_bps = round_trip_cost_bps(
             price=self.entry_price,
-            atr_pct=self.decision_atr / self.entry_price,
+            atr_pct=self.decision_atr_fraction * self.decision_close / self.entry_price,
             participation=self.execution_participation_fraction,
             policy=DEFAULT_EXECUTION_POLICY,
         )
@@ -350,6 +355,19 @@ class MaturedOutcome(_SwingViewContract):
             raise ValueError("matured outcome holding period is inconsistent with its horizon")
         if (self.fixed_horizon_net_return is None) != (self.fixed_horizon_excess_return_vs_sector is None):
             raise ValueError("matured outcome fixed-horizon returns must be recorded together")
+        # A timeout exits at the Nth close: the fixed-horizon interval, net of the same label cost.
+        if self.path_outcome == "timeout" and (
+            self.fixed_horizon_net_return is None
+            or not math.isclose(self.fixed_horizon_net_return, self.label_net_return, abs_tol=1e-12)
+        ):
+            raise ValueError("matured timeout must carry its fixed-horizon return")
+        entry_session = self.entry_time_utc.astimezone(NEW_YORK).date()
+        try:
+            exit_session = session_after(entry_session, self.holding_sessions - 1)
+        except DataReadinessError as exc:
+            raise ValueError(f"matured outcome entry is not an exchange session: {exc}") from exc
+        if self.exit_time_utc.astimezone(NEW_YORK).date() != exit_session:
+            raise ValueError("matured outcome exit session is inconsistent with its holding period")
         content = self.model_dump(mode="json", exclude={"outcome_id"})
         if content_sha256(content) != self.outcome_id:
             raise ValueError("matured outcome identity is invalid")

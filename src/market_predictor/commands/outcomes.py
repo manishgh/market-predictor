@@ -25,6 +25,9 @@ from market_predictor.governance.outcomes.worker import mature_pending_intents
 from market_predictor.serving.outcome_intents import register_snapshot_intents
 from market_predictor.serving.snapshot_store import PredictionSnapshotStore
 
+# Typer's default datetime formats carry no offset, which the commands refuse.
+_AWARE_FORMATS = ["%Y-%m-%dT%H:%M:%S%z"]
+
 
 def register_outcome_commands(app: typer.Typer, console: Any) -> None:
     @app.command("register-outcome-intents")
@@ -72,7 +75,8 @@ def register_outcome_commands(app: typer.Typer, console: Any) -> None:
         ),
         observed_as_of: datetime | None = typer.Option(
             None,
-            help="Timezone-aware observation cutoff; defaults to current UTC.",
+            formats=_AWARE_FORMATS,
+            help="Timezone-aware observation cutoff, such as 2026-08-08T12:00:00+00:00; defaults to current UTC.",
         ),
     ) -> None:
         """Mature canonical semantic predictions at their frozen label horizon."""
@@ -89,6 +93,13 @@ def register_outcome_commands(app: typer.Typer, console: Any) -> None:
             source_artifact_sha256=source_sha,
         )
         console.print(json.dumps(summary, sort_keys=True))
+        if summary["registration_incomplete"]:
+            # Each keeps its route overdue until its registration is rerun.
+            console.print(
+                f"{summary['registration_incomplete']} registrations stopped before their semantic record; "
+                "rerun them to complete the pending index"
+            )
+            raise typer.Exit(code=1)
 
     @app.command("build-outcome-performance-report")
     def build_outcome_performance_report(
@@ -112,7 +123,8 @@ def register_outcome_commands(app: typer.Typer, console: Any) -> None:
         ),
         generated_at: datetime | None = typer.Option(
             None,
-            help="Timezone-aware report timestamp; defaults to current UTC.",
+            formats=_AWARE_FORMATS,
+            help="Timezone-aware report timestamp, such as 2026-08-08T12:00:00+00:00; defaults to current UTC.",
         ),
     ) -> None:
         """Build immutable release/view/horizon performance cohorts."""
@@ -193,7 +205,8 @@ def register_outcome_commands(app: typer.Typer, console: Any) -> None:
         ),
         evaluated_at: datetime | None = typer.Option(
             None,
-            help="Timezone-aware assessment timestamp; defaults to current UTC.",
+            formats=_AWARE_FORMATS,
+            help="Timezone-aware assessment timestamp, such as 2026-08-08T12:00:00+00:00; defaults to current UTC.",
         ),
     ) -> None:
         """Evaluate and atomically publish one release-specific route drift state."""

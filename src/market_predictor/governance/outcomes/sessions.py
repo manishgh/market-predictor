@@ -30,6 +30,18 @@ def _session(decision_session: date, closes: pd.Series) -> pd.Timestamp:
     return label
 
 
+def session_after(session: date, count: int) -> date:
+    """The XNYS session `count` sessions after `session`, itself an XNYS session."""
+    if count < 0:
+        raise ValueError("a session offset cannot be negative")
+    closes = _closes()
+    position = int(closes.index.get_loc(_session(session, closes))) + count
+    if position >= len(closes):
+        raise DataReadinessError(f"the XNYS calendar ends {closes.index[-1].date()}, before {count} sessions after {session}")
+    later: date = closes.index[position].date()
+    return later
+
+
 def horizon_last_close(decision_session: date, sessions: int, *, through: datetime) -> datetime | None:
     """The close of the Nth XNYS session after the decision session, or None if not closed by `through`."""
     if sessions < 1:
