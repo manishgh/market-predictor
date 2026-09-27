@@ -235,7 +235,16 @@ nullable `training_data_end`), the four HEAD defects fixed, and the open replay 
   also drops the version from `market_predictor.swing_outcome_policy`), and the
   TradingFlow handoff opens with the required action. Both re-reviews of the consolidated
   monitoring design found no blocker; their decisions are in the plan ("Second-round
-  review decisions"), and part (1) starts next. Verification: 55 affected test files
+  review decisions"), and part (1) starts next.
+- Monitoring part (1) `e9526f1` (sessions, overdue, maturity-aligned windows): a shared
+  XNYS session helper with a parity test against the pinned holding calendar; windows
+  include a decision when its horizon's last close falls inside them or has not closed;
+  the route-wide oldest pending decision blocks drift even outside the window; 180-day
+  lookback default with a window check (150 days refused: its fewest sessions are 99);
+  only `10b` has evidence minimums. New drift pin `c64ca881...`. Verification: 18
+  import-affected test files plus the boundary and smoke tests, 433 passed; strict mypy
+  (355 files) and Ruff clean. Diff review requested from both reviewers; next part (5),
+  repository partitioning. Verification: 55 affected test files
   in seven batches, all passed except `test_canonical_cli`, whose lease clash is fixed in
   `c628aea` (it passes while the real lease is held); strict mypy (354 files) and Ruff
   clean; no pinned file changed; no stored data used a renamed identifier.
