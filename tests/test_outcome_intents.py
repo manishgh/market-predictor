@@ -35,7 +35,7 @@ def test_registers_identity_complete_swing_snapshot_for_maturation(
     for intent in registration.intents:
         assert (intent.view, intent.horizon) == ("swing", "10b")
         assert intent.model_release_id == response.models["swing"].release_id
-        assert repository.load_intent(intent.maturation_key) == intent
+        assert repository.load_intent(intent.maturation_key, intent.decision_session_et) == intent
     # MISSING is outside the live universe: it abstains unscored, so nothing is monitored.
     observations = monitoring_observations_from_response(response, snapshot_id=response.snapshot_id)
     assert {(observation.ticker, observation.view) for observation in observations} == {

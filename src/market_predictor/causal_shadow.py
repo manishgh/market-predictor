@@ -200,7 +200,11 @@ def _derive_source_rows(
     minimum_tickers = int(workload.get("minimum_tickers_per_group") or 0)
     candidate_sha = str(hypothesis.get("candidate_artifact_sha256") or "")
     baseline_sha = str(hypothesis.get("baseline_artifact_sha256") or "")
-    intents = repository.intents()
+    # Each frozen decision group is a decision time; its partition is that time's New York date.
+    sessions = sorted(
+        {pd.Timestamp(group).tz_convert("America/New_York").date() for group in expected_groups}
+    )
+    intents = [intent for session in sessions for intent in repository.session_intents(session)]
     candidate = _workload_intents(
         intents,
         artifact_sha256=candidate_sha,
@@ -341,7 +345,7 @@ def _side_record(
     outcome: MaturedOutcome | None = None
     if intent.selected_for_policy:
         try:
-            outcome = repository.load_outcome(intent.maturation_key)
+            outcome = repository.load_outcome(intent.maturation_key, intent.decision_session_et)
         except PredictionConflictError as exc:
             raise DataReadinessError(
                 "causal shadow outcomes do not reproduce"

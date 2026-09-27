@@ -89,7 +89,7 @@ class CausalShadowTests(unittest.TestCase):
                 context.hypothesis_id,
             )
             outcome_path = next(
-                context.outcome_repository_root.glob("outcomes/*/*.json")
+                context.outcome_repository_root.glob("sessions/*/outcomes/*.json")
             )
             outcome = json.loads(outcome_path.read_text(encoding="utf-8"))
             outcome["net_return"] = float(outcome["net_return"]) + 0.50
@@ -135,7 +135,7 @@ class CausalShadowTests(unittest.TestCase):
                 context.hypothesis_id,
             )
             intent_path = next(
-                context.outcome_repository_root.glob("intents/*/*.json")
+                context.outcome_repository_root.glob("sessions/*/intents/*.json")
             )
             intent_path.unlink()
 

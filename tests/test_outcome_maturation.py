@@ -137,10 +137,36 @@ class OutcomeMaturationTests(unittest.TestCase):
                 source_artifact_sha256="9" * 64,
             )
 
-            self.assertEqual(summary["matured"], 1)
-            self.assertEqual(summary["duplicate_semantic"], 1)
-            self.assertTrue(repository.has_outcome(first.maturation_key))
-            self.assertFalse(repository.has_outcome(duplicate.maturation_key))
+            # A repeated occurrence is never indexed as pending, so the worker never visits it.
+            self.assertEqual((summary["intents"], summary["matured"]), (1, 1))
+            self.assertEqual(summary["duplicate_semantic"], 0)
+            self.assertTrue(repository.has_outcome(first.maturation_key, first.decision_session_et))
+            self.assertFalse(repository.has_outcome(duplicate.maturation_key, duplicate.decision_session_et))
+            self.assertEqual(repository.pending(), [])
+
+    def test_worker_drops_an_index_entry_whose_outcome_is_already_durable(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            repository = OutcomeRepository(Path(temp_dir))
+            intent = swing_intent()
+            repository.record_intent(intent)
+            mature_pending_intents(
+                repository,
+                _swing_bars(),
+                observed_as_of=datetime(2026, 8, 8, 12, 0, tzinfo=UTC),
+                source_artifact_sha256="9" * 64,
+            )
+            # Simulate a crash between writing the outcome and removing its index entry.
+            repository._write_pending(intent.maturation_key, intent.decision_session_et)
+
+            summary = mature_pending_intents(
+                repository,
+                _swing_bars(),
+                observed_as_of=datetime(2026, 8, 9, 12, 0, tzinfo=UTC),
+                source_artifact_sha256="9" * 64,
+            )
+
+            self.assertEqual((summary["already_matured"], summary["matured"]), (1, 0))
+            self.assertEqual(repository.pending(), [])
 
     def test_retired_intraday_and_superseded_intents_are_refused(self) -> None:
         payload = swing_intent().model_dump(mode="python")

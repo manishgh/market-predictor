@@ -77,13 +77,51 @@ class OutcomeRepositoryTests(unittest.TestCase):
             repository = OutcomeRepository(Path(temp_dir))
             intent = _intent()
             repository.record_intent(intent)
-            path = next((Path(temp_dir) / "intents").glob("*/*.json"))
+            path = next((Path(temp_dir) / "sessions").glob("*/intents/*.json"))
             stored = json.loads(path.read_text(encoding="utf-8"))
             path.write_text(json.dumps({**stored, "view": "intraday", "horizon": "5m"}), encoding="utf-8")
 
-            for load in (repository.intents, lambda: repository.load_intent(intent.maturation_key)):
+            for load in (
+                lambda: repository.session_intents(intent.decision_session_et),
+                lambda: repository.load_intent(intent.maturation_key, intent.decision_session_et),
+            ):
                 with self.assertRaisesRegex(DataReadinessError, RETIRED_INTRADAY):
                     load()
+
+    def test_pending_index_follows_canonical_intents_until_their_outcome(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repository = OutcomeRepository(Path(temp_dir))
+            first = _intent(snapshot_id="1" * 64)
+            repeated = _intent(snapshot_id="2" * 64)
+            repository.record_intent(first)
+            repository.record_intent(repeated)
+            session = first.decision_session_et
+
+            # A repeated occurrence of the same prediction is never canonical, so never pending.
+            self.assertEqual(repository.pending(), [(first.maturation_key, session)])
+            self.assertEqual(repository.sessions(), (session,))
+            self.assertEqual(repository.session_horizons(session), frozenset({"10b"}))
+
+            evidence = [{"ticker": "MSFT"}]
+            repository.record_outcome(first, _outcome(first, evidence), evidence_rows=evidence)
+
+            self.assertEqual(repository.pending(), [])
+            with self.assertRaises(PredictionConflictError):
+                repository.drop_pending(repeated.maturation_key, session)
+
+    def test_lookups_are_bound_to_the_decision_session(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repository = OutcomeRepository(Path(temp_dir))
+            intent = _intent()
+            repository.record_intent(intent)
+            other_session = intent.decision_session_et + timedelta(days=3)
+
+            with self.assertRaises(FileNotFoundError):
+                repository.load_intent(intent.maturation_key, other_session)
+            self.assertIsNone(
+                repository.semantic_canonical_key(intent.semantic_prediction_id, other_session)
+            )
+            self.assertFalse(repository.has_outcome(intent.maturation_key, other_session))
 
     def test_swing_outcome_rejects_legacy_path_and_calibration_target(self) -> None:
         intent = _intent()
@@ -159,15 +197,15 @@ class OutcomeRepositoryTests(unittest.TestCase):
             outcome = _outcome(intent, evidence)
 
             repository.record_intent(intent)
-            repository.record_attempt(attempt)
-            first = repository.record_outcome(outcome, evidence_rows=evidence)
-            second = repository.record_outcome(outcome, evidence_rows=evidence)
+            repository.record_attempt(attempt, decision_session=intent.decision_session_et)
+            first = repository.record_outcome(intent, outcome, evidence_rows=evidence)
+            second = repository.record_outcome(intent, outcome, evidence_rows=evidence)
 
             self.assertEqual(first, second)
-            self.assertEqual(repository.load_intent(intent.maturation_key), intent)
-            self.assertEqual(repository.load_outcome(intent.maturation_key), outcome)
+            self.assertEqual(repository.load_intent(intent.maturation_key, intent.decision_session_et), intent)
+            self.assertEqual(repository.load_outcome(intent.maturation_key, intent.decision_session_et), outcome)
             self.assertEqual(
-                repository.semantic_canonical_key(intent.semantic_prediction_id),
+                repository.semantic_canonical_key(intent.semantic_prediction_id, intent.decision_session_et),
                 intent.maturation_key,
             )
 
@@ -183,6 +221,7 @@ class OutcomeRepositoryTests(unittest.TestCase):
                 results = list(
                     executor.map(
                         lambda _: repository.record_outcome(
+                            intent,
                             outcome,
                             evidence_rows=evidence,
                         ),
@@ -199,7 +238,7 @@ class OutcomeRepositoryTests(unittest.TestCase):
             evidence = [{"ticker": "MSFT"}]
             outcome = _outcome(intent, evidence)
             repository.record_intent(intent)
-            repository.record_outcome(outcome, evidence_rows=evidence)
+            repository.record_outcome(intent, outcome, evidence_rows=evidence)
 
             conflicting_content = outcome.model_dump(
                 mode="python",
@@ -214,7 +253,7 @@ class OutcomeRepositoryTests(unittest.TestCase):
             )
 
             with self.assertRaises(PredictionConflictError):
-                repository.record_outcome(conflicting, evidence_rows=evidence)
+                repository.record_outcome(intent, conflicting, evidence_rows=evidence)
 
     def test_outcome_cost_policy_must_match_its_intent(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -233,7 +272,7 @@ class OutcomeRepositoryTests(unittest.TestCase):
             )
 
             with self.assertRaises(PredictionConflictError):
-                repository.record_outcome(outcome, evidence_rows=evidence)
+                repository.record_outcome(intent, outcome, evidence_rows=evidence)
 
     def test_repository_rejects_duplicate_json_keys_and_nonfinite_values(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -241,19 +280,20 @@ class OutcomeRepositoryTests(unittest.TestCase):
             intent = _intent()
             path = (
                 Path(temp_dir)
+                / "sessions"
+                / intent.decision_session_et.isoformat()
                 / "intents"
-                / intent.maturation_key[:2]
                 / f"{intent.maturation_key}.json"
             )
             path.parent.mkdir(parents=True)
 
             path.write_text('{"ticker":"MSFT","ticker":"AAPL"}', encoding="utf-8")
             with self.assertRaises(PredictionConflictError):
-                repository.load_intent(intent.maturation_key)
+                repository.load_intent(intent.maturation_key, intent.decision_session_et)
 
             path.write_text('{"probability":NaN}', encoding="utf-8")
             with self.assertRaises(PredictionConflictError):
-                repository.load_intent(intent.maturation_key)
+                repository.load_intent(intent.maturation_key, intent.decision_session_et)
 
     def test_repeated_snapshot_occurrences_share_one_semantic_identity(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -266,7 +306,7 @@ class OutcomeRepositoryTests(unittest.TestCase):
 
             self.assertNotEqual(first.maturation_key, second.maturation_key)
             self.assertEqual(
-                repository.semantic_canonical_key(first.semantic_prediction_id),
+                repository.semantic_canonical_key(first.semantic_prediction_id, first.decision_session_et),
                 first.maturation_key,
             )
 
@@ -277,8 +317,9 @@ class OutcomeRepositoryTests(unittest.TestCase):
             repository.record_intent(intent)
             path = (
                 Path(temp_dir)
+                / "sessions"
+                / intent.decision_session_et.isoformat()
                 / "semantic"
-                / intent.semantic_prediction_id[:2]
                 / f"{intent.semantic_prediction_id}.json"
             )
             payload = path.read_text(encoding="utf-8").replace(
@@ -288,7 +329,7 @@ class OutcomeRepositoryTests(unittest.TestCase):
             path.write_text(payload, encoding="utf-8")
 
             with self.assertRaises(PredictionConflictError):
-                repository.semantic_canonical_key(intent.semantic_prediction_id)
+                repository.semantic_canonical_key(intent.semantic_prediction_id, intent.decision_session_et)
             with self.assertRaises(PredictionConflictError):
                 repository.record_intent(intent)
 
@@ -324,14 +365,15 @@ class OutcomeRepositoryTests(unittest.TestCase):
             )
             path = (
                 Path(temp_dir)
+                / "sessions"
+                / observation.decision_session_et.isoformat()
                 / "observations"
-                / observation.observation_id[:2]
                 / f"{observation.observation_id}.json"
             )
             path.write_text(tampered.model_dump_json(indent=2), encoding="utf-8")
 
             with self.assertRaises(PredictionConflictError):
-                repository.observations()
+                repository.session_observations(intent.decision_session_et)
 
     def test_outcome_read_rebinds_execution_inputs_to_intent(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -340,7 +382,7 @@ class OutcomeRepositoryTests(unittest.TestCase):
             evidence = [{"ticker": "MSFT"}]
             outcome = _outcome(intent, evidence)
             repository.record_intent(intent)
-            repository.record_outcome(outcome, evidence_rows=evidence)
+            repository.record_outcome(intent, outcome, evidence_rows=evidence)
             content = outcome.model_dump(mode="python", exclude={"outcome_id"})
             content["decision_atr"] = 0.01
             execution_cost_bps = round_trip_cost_bps(
@@ -360,14 +402,15 @@ class OutcomeRepositoryTests(unittest.TestCase):
             )
             path = (
                 Path(temp_dir)
+                / "sessions"
+                / intent.decision_session_et.isoformat()
                 / "outcomes"
-                / intent.maturation_key[:2]
                 / f"{intent.maturation_key}.json"
             )
             path.write_text(tampered.model_dump_json(indent=2), encoding="utf-8")
 
             with self.assertRaises(PredictionConflictError):
-                repository.load_outcome(intent.maturation_key)
+                repository.load_outcome(intent.maturation_key, intent.decision_session_et)
 
 
 def _intent(snapshot_id: str = "1" * 64) -> PredictionMaturationIntent:

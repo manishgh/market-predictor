@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 import math
 import os
-from collections.abc import Iterable
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Literal, Self, cast
@@ -289,21 +288,27 @@ def build_performance_cohorts(
     source_intent_ids: set[str] = set()
     source_observation_ids: set[str] = set()
     source_outcome_ids: set[str] = set()
-    intents = {
-        intent.maturation_key: intent
-        for intent in repository.intents()
-        if repository.semantic_canonical_key(intent.semantic_prediction_id)
-        == intent.maturation_key
-    }
     # Maturity-aligned: a decision belongs to the window when its horizon's last session closes
     # inside it, or has not closed yet, so every horizon covers the outcomes of the same period.
-    observations = [
-        observation
-        for observation in repository.observations()
-        if observation.decision_time_utc <= generated
-        and _matures_in_window(observation.decision_session_et, observation.horizon, window_start, generated)
-    ]
-    route_oldest_pending = _route_oldest_pending(repository, intents.values(), generated=generated)
+    # Only the session partitions that can hold such decisions are read.
+    intents: dict[str, PredictionMaturationIntent] = {}
+    observations: list[PredictionMonitoringObservation] = []
+    for session in repository.sessions():
+        if not any(
+            _matures_in_window(session, horizon, window_start, generated)
+            for horizon in repository.session_horizons(session)
+        ):
+            continue
+        for stored in repository.session_intents(session):
+            if repository.semantic_canonical_key(stored.semantic_prediction_id, session) == stored.maturation_key:
+                intents[stored.maturation_key] = stored
+        observations.extend(
+            observation
+            for observation in repository.session_observations(session)
+            if observation.decision_time_utc <= generated
+            and _matures_in_window(session, observation.horizon, window_start, generated)
+        )
+    route_oldest_pending = _route_oldest_pending(repository, generated=generated)
     for observation in _canonical_observations(repository, observations):
         intent = (
             intents.get(observation.maturation_key)
@@ -460,7 +465,7 @@ def _canonical_observations(
         grouped.setdefault(observation.semantic_prediction_id, []).append(observation)
     canonical: list[PredictionMonitoringObservation] = []
     for semantic_id, group in grouped.items():
-        canonical_key = repository.semantic_canonical_key(semantic_id)
+        canonical_key = repository.semantic_canonical_key(semantic_id, group[0].decision_session_et)
         candidates = (
             [item for item in group if item.maturation_key == canonical_key]
             if canonical_key is not None
@@ -527,9 +532,9 @@ def _matured_selected_outcome(
 ) -> MaturedOutcome | None:
     if not intent.actionable:
         return None
-    if not repository.has_outcome(intent.maturation_key):
+    if not repository.has_outcome(intent.maturation_key, intent.decision_session_et):
         return None
-    outcome = repository.load_outcome(intent.maturation_key)
+    outcome = repository.load_outcome(intent.maturation_key, intent.decision_session_et)
     if outcome.matured_at_utc > generated_at:
         return None
     if (
@@ -554,14 +559,14 @@ def _matures_in_window(decision_session: date, horizon: str, window_start: datet
 
 def _route_oldest_pending(
     repository: OutcomeRepository,
-    intents: Iterable[PredictionMaturationIntent],
     *,
     generated: datetime,
 ) -> dict[tuple[str, ...], date]:
     """The oldest decision session of each route's selected intents that have no outcome yet."""
     oldest: dict[tuple[str, ...], date] = {}
-    for intent in intents:
-        if not intent.actionable or intent.decision_time_utc > generated or repository.has_outcome(intent.maturation_key):
+    for maturation_key, session in repository.pending():
+        intent = repository.load_intent(maturation_key, session)
+        if not intent.actionable or intent.decision_time_utc > generated or repository.has_outcome(maturation_key, session):
             continue
         route = tuple(str(getattr(intent, column)) for column in _IDENTITY_COLUMNS)
         if route not in oldest or intent.decision_session_et < oldest[route]:

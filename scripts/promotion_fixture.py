@@ -245,6 +245,7 @@ def _write_synthetic_shadow_outcomes(
                 }
             ]
             repository.record_outcome(
+                intent,
                 _synthetic_outcome(
                     intent,
                     net_return=net_return,

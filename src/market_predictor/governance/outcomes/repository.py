@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+from datetime import date
 from pathlib import Path
 from typing import Any, TypeVar
 from uuid import uuid4
@@ -23,10 +24,17 @@ from market_predictor.governance.outcomes.contracts import (
 from market_predictor.locking import file_lock
 
 T = TypeVar("T", bound=BaseModel)
+_PENDING = "pending"
+_SESSIONS = "sessions"
 
 
 class OutcomeRepository:
-    """Durable immutable local repository for live prediction validation."""
+    """Durable immutable local repository for live prediction validation.
+
+    Records are partitioned by decision session, so a report reads only the sessions its
+    window covers. A pending index names each canonical intent that has no outcome yet,
+    so maturation and overdue checks never scan history.
+    """
 
     def __init__(self, root: Path) -> None:
         self.root = root.resolve()
@@ -35,172 +43,180 @@ class OutcomeRepository:
         self,
         intent: PredictionMaturationIntent,
     ) -> PredictionMaturationIntent:
-        path = self._key_path("intents", intent.maturation_key)
-        semantic_path = self._key_path(
-            "semantic",
-            intent.semantic_prediction_id,
-        )
+        session = intent.decision_session_et
+        path = self._path(session, "intents", intent.maturation_key)
+        semantic_path = self._path(session, "semantic", intent.semantic_prediction_id)
         semantic_record = {
             "schema": "market_predictor.semantic_prediction",
             "semantic_prediction_id": intent.semantic_prediction_id,
             "canonical_maturation_key": intent.maturation_key,
         }
         with file_lock(semantic_path):
-            if semantic_path.exists():
+            canonical = not semantic_path.exists()
+            if not canonical:
                 canonical_key = _semantic_record_key(
                     _load_object(semantic_path),
                     intent.semantic_prediction_id,
                 )
                 try:
-                    canonical_intent = self.load_intent(canonical_key)
+                    canonical_intent = self.load_intent(canonical_key, session)
                 except (FileNotFoundError, PredictionConflictError) as exc:
                     raise PredictionConflictError from exc
-                if (
-                    canonical_intent.semantic_prediction_id
-                    != intent.semantic_prediction_id
-                ):
+                if canonical_intent.semantic_prediction_id != intent.semantic_prediction_id:
                     raise PredictionConflictError
-                self._write_idempotent(path, intent)
-                self.record_observation(monitoring_observation_from_intent(intent))
-            else:
-                self._write_idempotent(path, intent)
-                self.record_observation(monitoring_observation_from_intent(intent))
+            self._write_idempotent(path, intent)
+            self._record_horizon(session, intent.horizon)
+            self.record_observation(monitoring_observation_from_intent(intent))
+            if canonical:
                 _write_json_durable(semantic_path, semantic_record)
+                if not self.has_outcome(intent.maturation_key, session):
+                    self._write_pending(intent.maturation_key, session)
         return intent
 
     def record_observation(
         self,
         observation: PredictionMonitoringObservation,
     ) -> PredictionMonitoringObservation:
+        session = observation.decision_session_et
         if observation.maturation_key is not None:
             try:
-                intent = self.load_intent(observation.maturation_key)
+                intent = self.load_intent(observation.maturation_key, session)
             except (FileNotFoundError, PredictionConflictError) as exc:
                 raise PredictionConflictError from exc
             if monitoring_observation_from_intent(intent) != observation:
                 raise PredictionConflictError
-        path = self._key_path("observations", observation.observation_id)
-        self._write_idempotent(path, observation)
+        self._write_idempotent(self._path(session, "observations", observation.observation_id), observation)
+        self._record_horizon(session, observation.horizon)
         return observation
 
     def record_attempt(
         self,
         attempt: MaturationAttempt,
+        *,
+        decision_session: date,
     ) -> MaturationAttempt:
-        path = (
-            self.root
-            / "attempts"
-            / attempt.maturation_key[:2]
-            / attempt.maturation_key
-            / f"{attempt.attempt_id}.json"
-        )
+        key = _digest(attempt.maturation_key)
+        path = self._partition(decision_session) / "attempts" / key / f"{_digest(attempt.attempt_id)}.json"
         self._write_idempotent(path, attempt)
         return attempt
 
     def record_outcome(
         self,
+        intent: PredictionMaturationIntent,
         outcome: MaturedOutcome,
         *,
         evidence_rows: list[dict[str, object]],
     ) -> MaturedOutcome:
-        actual_evidence_sha = content_sha256(evidence_rows)
-        if actual_evidence_sha != outcome.evidence_sha256:
+        if content_sha256(evidence_rows) != outcome.evidence_sha256:
             raise PredictionConflictError
+        session = intent.decision_session_et
         try:
-            intent = self.load_intent(outcome.maturation_key)
+            stored = self.load_intent(outcome.maturation_key, session)
         except (FileNotFoundError, PredictionConflictError) as exc:
             raise PredictionConflictError from exc
+        if stored != intent:
+            raise PredictionConflictError
         _assert_outcome_matches_intent(outcome, intent)
-        evidence_path = self._key_path("evidence", outcome.evidence_sha256)
-        outcome_path = self._key_path("outcomes", outcome.maturation_key)
+        evidence_path = self._path(session, "evidence", outcome.evidence_sha256)
+        outcome_path = self._path(session, "outcomes", outcome.maturation_key)
+        evidence: dict[str, object] = {
+            "schema": "market_predictor.outcome_evidence",
+            "evidence_sha256": outcome.evidence_sha256,
+            "rows": evidence_rows,
+        }
         with file_lock(outcome_path):
             if outcome_path.exists():
-                existing = self.load_outcome(outcome.maturation_key)
-                if existing != outcome:
+                existing = self.load_outcome(outcome.maturation_key, session)
+                if existing != outcome or not evidence_path.exists() or _load_object(evidence_path) != evidence:
                     raise PredictionConflictError
-                expected_evidence = {
-                    "schema": "market_predictor.outcome_evidence",
-                    "evidence_sha256": outcome.evidence_sha256,
-                    "rows": evidence_rows,
-                }
-                if (
-                    not evidence_path.exists()
-                    or _load_object(evidence_path) != expected_evidence
-                ):
-                    raise PredictionConflictError
-                return existing
-            self._write_plain_idempotent(
-                evidence_path,
-                {
-                    "schema": "market_predictor.outcome_evidence",
-                    "evidence_sha256": outcome.evidence_sha256,
-                    "rows": evidence_rows,
-                },
-            )
-            _write_json_durable(
-                outcome_path,
-                outcome.model_dump(mode="json"),
-            )
+            else:
+                self._write_plain_idempotent(evidence_path, evidence)
+                _write_json_durable(outcome_path, outcome.model_dump(mode="json"))
+            # The outcome is durable before the index entry goes; a crash in between leaves a
+            # stale entry that maturation drops on its next pass.
+            self._pending_path(outcome.maturation_key).unlink(missing_ok=True)
         return outcome
 
-    def load_intent(self, maturation_key: str) -> PredictionMaturationIntent:
-        intent = self._load_model(
-            self._key_path("intents", maturation_key),
-            PredictionMaturationIntent,
-        )
-        if intent.maturation_key != maturation_key:
+    def load_intent(self, maturation_key: str, session: date) -> PredictionMaturationIntent:
+        intent = self._load_model(self._path(session, "intents", maturation_key), PredictionMaturationIntent)
+        if intent.maturation_key != maturation_key or intent.decision_session_et != session:
             raise PredictionConflictError
         return intent
 
-    def load_outcome(self, maturation_key: str) -> MaturedOutcome:
-        outcome = self._load_model(
-            self._key_path("outcomes", maturation_key),
-            MaturedOutcome,
-        )
+    def load_outcome(self, maturation_key: str, session: date) -> MaturedOutcome:
+        outcome = self._load_model(self._path(session, "outcomes", maturation_key), MaturedOutcome)
         if outcome.maturation_key != maturation_key:
             raise PredictionConflictError
         try:
-            intent = self.load_intent(maturation_key)
+            intent = self.load_intent(maturation_key, session)
         except (FileNotFoundError, PredictionConflictError) as exc:
             raise PredictionConflictError from exc
         _assert_outcome_matches_intent(outcome, intent)
         _validate_evidence_record(
-            _load_object(self._key_path("evidence", outcome.evidence_sha256)),
+            _load_object(self._path(session, "evidence", outcome.evidence_sha256)),
             outcome.evidence_sha256,
         )
         return outcome
 
-    def semantic_canonical_key(self, semantic_prediction_id: str) -> str | None:
-        path = self._key_path("semantic", semantic_prediction_id)
+    def has_outcome(self, maturation_key: str, session: date) -> bool:
+        return self._path(session, "outcomes", maturation_key).exists()
+
+    def semantic_canonical_key(self, semantic_prediction_id: str, session: date) -> str | None:
+        path = self._path(session, "semantic", semantic_prediction_id)
         if not path.exists():
             return None
         value = _semantic_record_key(_load_object(path), semantic_prediction_id)
         try:
-            canonical = self.load_intent(value)
+            canonical = self.load_intent(value, session)
         except (FileNotFoundError, PredictionConflictError) as exc:
             raise PredictionConflictError from exc
         if canonical.semantic_prediction_id != semantic_prediction_id:
             raise PredictionConflictError
         return value
 
-    def intents(self) -> list[PredictionMaturationIntent]:
-        root = self.root / "intents"
+    def sessions(self) -> tuple[date, ...]:
+        """Every decision session with stored records, in order."""
+        root = self.root / _SESSIONS
+        if not root.exists():
+            return ()
+        sessions = []
+        for path in root.iterdir():
+            if path.name.startswith("."):
+                continue
+            try:
+                sessions.append(date.fromisoformat(path.name))
+            except ValueError as exc:
+                raise PredictionConflictError from exc
+        return tuple(sorted(sessions))
+
+    def session_horizons(self, session: date) -> frozenset[str]:
+        path = self._partition(session) / "horizons.json"
+        if not path.exists():
+            return frozenset()
+        loaded = _load_object(path)
+        horizons = loaded.get("horizons")
+        if loaded.get("schema") != "market_predictor.session_horizons" or not isinstance(horizons, list):
+            raise PredictionConflictError
+        return frozenset(str(horizon) for horizon in horizons)
+
+    def session_intents(self, session: date) -> list[PredictionMaturationIntent]:
+        root = self._partition(session) / "intents"
         if not root.exists():
             return []
-        return [self.load_intent(path.stem) for path in sorted(root.glob("*/*.json"))]
+        return [self.load_intent(path.stem, session) for path in sorted(root.glob("*.json"))]
 
-    def observations(self) -> list[PredictionMonitoringObservation]:
-        root = self.root / "observations"
+    def session_observations(self, session: date) -> list[PredictionMonitoringObservation]:
+        root = self._partition(session) / "observations"
         if not root.exists():
             return []
         observations: list[PredictionMonitoringObservation] = []
-        for path in sorted(root.glob("*/*.json")):
+        for path in sorted(root.glob("*.json")):
             observation = self._load_model(path, PredictionMonitoringObservation)
-            if observation.observation_id != path.stem:
+            if observation.observation_id != path.stem or observation.decision_session_et != session:
                 raise PredictionConflictError
             if observation.maturation_key is not None:
                 try:
-                    intent = self.load_intent(observation.maturation_key)
+                    intent = self.load_intent(observation.maturation_key, session)
                 except (FileNotFoundError, PredictionConflictError) as exc:
                     raise PredictionConflictError from exc
                 if observation != monitoring_observation_from_intent(intent):
@@ -208,14 +224,59 @@ class OutcomeRepository:
             observations.append(observation)
         return observations
 
-    def has_outcome(self, maturation_key: str) -> bool:
-        return self._key_path("outcomes", maturation_key).exists()
-
-    def outcomes(self) -> list[MaturedOutcome]:
-        root = self.root / "outcomes"
+    def pending(self) -> list[tuple[str, date]]:
+        """Canonical intents without an outcome, as (maturation key, decision session)."""
+        root = self.root / _PENDING
         if not root.exists():
             return []
-        return [self.load_outcome(path.stem) for path in sorted(root.glob("*/*.json"))]
+        entries = []
+        for path in sorted(root.glob("*.json")):
+            loaded = _load_object(path)
+            key = str(loaded.get("maturation_key") or "")
+            if loaded.get("schema") != "market_predictor.pending_outcome" or key != path.stem:
+                raise PredictionConflictError
+            try:
+                session = date.fromisoformat(str(loaded.get("decision_session_et")))
+            except ValueError as exc:
+                raise PredictionConflictError from exc
+            entries.append((_digest(key), session))
+        return entries
+
+    def drop_pending(self, maturation_key: str, session: date) -> None:
+        """Remove an index entry whose outcome is already durable."""
+        if not self.has_outcome(maturation_key, session):
+            raise PredictionConflictError
+        self._pending_path(maturation_key).unlink(missing_ok=True)
+
+    def _write_pending(self, maturation_key: str, session: date) -> None:
+        self._write_plain_idempotent(
+            self._pending_path(maturation_key),
+            {
+                "schema": "market_predictor.pending_outcome",
+                "maturation_key": maturation_key,
+                "decision_session_et": session.isoformat(),
+            },
+        )
+
+    def _record_horizon(self, session: date, horizon: str) -> None:
+        path = self._partition(session) / "horizons.json"
+        with file_lock(path):
+            horizons = set(self.session_horizons(session))
+            if horizon in horizons:
+                return
+            _write_json_durable(
+                path,
+                {"schema": "market_predictor.session_horizons", "horizons": sorted({*horizons, horizon})},
+            )
+
+    def _partition(self, session: date) -> Path:
+        return self.root / _SESSIONS / session.isoformat()
+
+    def _path(self, session: date, collection: str, digest: str) -> Path:
+        return self._partition(session) / collection / f"{_digest(digest)}.json"
+
+    def _pending_path(self, maturation_key: str) -> Path:
+        return self.root / _PENDING / f"{_digest(maturation_key)}.json"
 
     def _write_idempotent(self, path: Path, value: BaseModel) -> None:
         expected = value.model_dump(mode="json")
@@ -248,10 +309,11 @@ class OutcomeRepository:
                 raise DataReadinessError(f"{RETIRED_INTRADAY}: {path}") from exc
             raise PredictionConflictError from exc
 
-    def _key_path(self, collection: str, digest: str) -> Path:
-        if len(digest) != 64 or any(character not in "0123456789abcdef" for character in digest):
-            raise ValueError("repository identity must be a lowercase SHA-256 value")
-        return self.root / collection / digest[:2] / f"{digest}.json"
+
+def _digest(value: str) -> str:
+    if len(value) != 64 or any(character not in "0123456789abcdef" for character in value):
+        raise ValueError("repository identity must be a lowercase SHA-256 value")
+    return value
 
 
 def _load_object(path: Path) -> dict[str, Any]:

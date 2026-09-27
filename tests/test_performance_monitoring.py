@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import tempfile
 import unittest
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
 from pydantic import ValidationError
@@ -55,7 +55,7 @@ class PerformanceMonitoringTests(unittest.TestCase):
                 {**base, "outcome_id": content_sha256(base)}
             )
             repository.record_intent(intent)
-            repository.record_outcome(outcome, evidence_rows=evidence)
+            repository.record_outcome(intent, outcome, evidence_rows=evidence)
 
             with self.assertRaisesRegex(DataReadinessError, "does not match"):
                 build_performance_cohorts(
@@ -304,6 +304,42 @@ class PerformanceMonitoringTests(unittest.TestCase):
             self.assertEqual(rows["all"]["route_oldest_pending_decision_session_et"], "2026-03-02")
             self.assertIsNone(rows["sector"]["route_oldest_pending_decision_session_et"])
 
+    def test_report_reads_only_the_partitions_its_window_can_reach(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repository = OutcomeRepository(Path(temp_dir))
+            sessions = [
+                day
+                for day in (date(2026, 1, 2) + timedelta(days=offset) for offset in range(212))
+                if day.weekday() < 5 and day not in {date(2025, 9, 1), date(2025, 11, 27), date(2025, 12, 25),
+                                                     date(2026, 1, 1), date(2026, 1, 19), date(2026, 2, 16),
+                                                     date(2026, 4, 3), date(2026, 5, 25), date(2026, 6, 19),
+                                                     date(2026, 7, 3)}
+            ]
+            for index, session in enumerate(sessions):
+                decision = datetime.combine(session, datetime.min.time(), tzinfo=UTC) + timedelta(hours=22)
+                repository.record_intent(
+                    _intent_variant(f"T{index:03d}", "1", probability=0.8, decision_time=decision)
+                )
+            opened: list[date] = []
+            original = repository.session_intents
+
+            def recording(session: date) -> list[PredictionMaturationIntent]:
+                opened.append(session)
+                return original(session)
+
+            repository.session_intents = recording  # type: ignore[method-assign]
+            build_performance_cohorts(
+                repository,
+                generated_at=datetime(2026, 8, 2, tzinfo=UTC),
+                minimum_samples=1,
+                lookback_days=30,
+            )
+
+            # 30 days of outcomes plus the ten-session horizon: about 30 of 145 partitions.
+            self.assertLess(len(opened), 40)
+            self.assertGreaterEqual(min(opened), date(2026, 6, 15))
+            self.assertEqual(len(repository.sessions()), len(sessions))
+
     def test_persisted_report_round_trip_rejects_mutation(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
@@ -537,7 +573,7 @@ def _record(
         {**base, "outcome_id": content_sha256(base)}
     )
     repository.record_intent(intent)
-    repository.record_outcome(outcome, evidence_rows=evidence)
+    repository.record_outcome(intent, outcome, evidence_rows=evidence)
 
 
 if __name__ == "__main__":
