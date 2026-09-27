@@ -149,7 +149,7 @@ def test_superseded_response_and_evidence_versions_are_refused(
     assert PredictionResponse.model_validate(payload) == response
     for version in ("market_predictor.prediction.v1", "market_predictor.prediction.v2"):
         with pytest.raises(ValidationError):
-            PredictionResponse.model_validate({**payload, "contract": version})
+            PredictionResponse.model_validate({**payload, "contract_version": version})
     for version in ("market_predictor.prediction_evidence.v2", "market_predictor.prediction_evidence.v3"):
         with pytest.raises(ValidationError):
             PredictionEvidence.model_validate({**evidence, "contract": version})

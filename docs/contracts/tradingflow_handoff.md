@@ -37,27 +37,26 @@ Owned by TradingFlow (create it; Market Predictor reads it):
   code changes; verify under its Risk-Based Verification policy.
 - Do not implement anything listed under Pending changes until it moves to the
   Change log.
-- No version names (user rule, September 27). Nothing is in production, so no class,
-  type, record schema, file or identifier gets a version number (`V2`, `.v3`, `_v1`),
-  in TradingFlow as in Market Predictor. Only the public API may be versioned, and only
-  once it is in production. Names bound in already-published, hash-pinned evidence stay
-  as recorded.
+- Versions (user rule, September 27). Only the public API is versioned (contract `market_predictor.prediction.v3`, routes
+under `/v1/`). Models are not final, so model, record, class, file and other internal
+names carry no version number (`V2`, `.v3`, `_v1`), in TradingFlow as in
+  Market Predictor. Names bound in already-published, hash-pinned evidence stay as
+  recorded.
 
 ## Tasks
 
 1. Contract test from the golden fixture.
    - Copy the fixture into the TradingFlow test project and record its source path and
-     SHA-256 (`b62f577dbd9ca1a09c9959d5da84df0db9040d8e6b3c17d26eabfcb4f369f1cf`) beside it.
+     SHA-256 (`2bd15ce6629025cd9e53f0541475e94969a2d90d6579f213e55d0ce417273c78`) beside it.
    - Parse it through the production deserializer and `Validate` path of
      `MarketPredictorHttpClient` for each of the four tickers, asserting the expected
      result: `T000` and `T059` available; `T060` and `MISSING` available with swing
      evidence, `final_signal` `abstain` and their abstention reason in `Errors`.
    - Add a local check that the copy equals the source file when
      `C:\project\market-predictor` exists, so a regenerated fixture cannot drift silently.
-2. Contract name. `MarketPredictorHttpClient.cs` lines 336 and 400 hard-code
-   `market_predictor.prediction.v1`. Read the response's `contract` field, accept only
-   `market_predictor.prediction`, treat anything else as `incompatible`, and carry no
-   version in TradingFlow's own names for it.
+2. Contract version. `MarketPredictorHttpClient.cs` lines 336 and 400 hard-code
+   `market_predictor.prediction.v1`. Read `contract_version` from the response, accept
+   only `market_predictor.prediction.v3`, and treat anything else as `incompatible`.
 3. Signal vocabulary. `UniverseRankService.cs` (`SupportiveSignals`, `OpposedSignals`,
    about lines 130-150) lists retired names and the action `watch_for_entry`, so every
    current signal reads as neutral. Map the current `final_signal` values from the

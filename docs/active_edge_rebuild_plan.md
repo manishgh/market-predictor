@@ -14,12 +14,12 @@ This is the only active execution plan. Exact artifact state is recorded in
 
 ## Objective And Boundary
 
-Naming rule (user, September 27): nothing is in production, so no class, type, record
-schema, file or identifier carries a version number (`V3`, `.v3`, `_v1`) in either
-repository. Old-format records are refused by strict validation (unknown fields
-forbidden, required fields), not by version literals. Only the public API may be
-versioned, and only once it is in production. Names bound in closed, hash-pinned
-evidence stay as recorded.
+Naming rule (user, September 27): Only the public API is versioned (contract `market_predictor.prediction.v3`, routes
+under `/v1/`). Models are not final, so model, record, class, file and other internal
+names carry no version number (`V3`, `.v3`, `_v1`) in either repository.
+Old-format records are refused by strict validation (unknown fields forbidden, required
+fields), not by version literals. Names bound in closed, hash-pinned evidence stay as
+recorded.
 
 Current product scope: **long-only swing (roughly one to three weeks) and a
 separate open-ended investment cohort**, with verifiable net performance

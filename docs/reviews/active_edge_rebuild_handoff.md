@@ -227,8 +227,9 @@ nullable `training_data_end`), the four HEAD defects fixed, and the open replay 
   helper and the replay-boundary edits are kept aside in the session scratchpad, not in
   the tree.
 - Naming (user, September 27): `43e1fd2` removes version numbers from class names and
-  from every record identifier nothing persisted depends on; the API contract is
-  `market_predictor.prediction`, field `contract`. Verification: 55 affected test files
+  from every record identifier nothing persisted depends on. The user then clarified that
+  the public API stays versioned: the response keeps `contract_version` =
+  `market_predictor.prediction.v3` and the `/v1/` routes, restored in the next commit. Verification: 55 affected test files
   in seven batches, all passed except `test_canonical_cli`, whose lease clash is fixed in
   `c628aea` (it passes while the real lease is held); strict mypy (354 files) and Ruff
   clean; no pinned file changed; no stored data used a renamed identifier.

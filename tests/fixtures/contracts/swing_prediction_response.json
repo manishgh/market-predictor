@@ -1,5 +1,5 @@
 {
-  "contract": "market_predictor.prediction",
+  "contract_version": "market_predictor.prediction.v3",
   "data_source": "live",
   "errors": [],
   "evidence": {
