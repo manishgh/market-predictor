@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import os
 import unittest
 from datetime import UTC, datetime
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from unittest.mock import patch
 
 import pandas as pd
 from click.utils import strip_ansi
@@ -17,7 +19,11 @@ from market_predictor.cli import app
 class CanonicalCliTests(unittest.TestCase):
     def test_production_decision_pipeline_uses_verified_point_in_time_inputs(self) -> None:
         runner = CliRunner()
-        with TemporaryDirectory() as temp_dir:
+        # The decision build takes the heavy-job workspace lease; a private runtime directory
+        # keeps this test from contending with a real job that holds the workspace's lease.
+        with TemporaryDirectory() as temp_dir, patch.dict(
+            os.environ, {"MARKET_PREDICTOR_RUNTIME_DIR": str(Path(temp_dir) / "runtime")}
+        ):
             root = Path(temp_dir)
             raw_bars = root / "raw_bars.parquet"
             raw_events = root / "raw_events.parquet"
